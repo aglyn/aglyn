@@ -47,7 +47,11 @@ import {
  *    `dedupeKey`, so a caller that runs again finds what it wrote rather
  *    than writing it twice;
  *  - a record whose log is full, or a workspace whose plan carries no record
- *    system, is refused — answered, never thrown.
+ *    system, is refused — answered, never thrown;
+ *  - a caller that knows a record only as the owner handed it over — a kind
+ *    and an id carried on a link — or knows only the person's address is
+ *    answered with the record the owner finds for it, on that site, or
+ *    refused with a 404 when it finds none.
  *
  * A single-implementation contract: a workspace keeps one record system.
  *
@@ -60,10 +64,14 @@ import {
  */
 
 /**
- * The record an entry is filed on, as the owner links them: the person (a
- * contact, or a lead not yet one) and the company they work for. What else
- * the record system groups them under is its own, and it links an entry
- * there itself.
+ * The record an entry is filed on: the person (a contact, or a lead not yet
+ * one) and the company they work for, as the owner links them — or, from a
+ * caller that holds no id of the owner's, how to find the record.
+ *
+ * The ids win where given, and are filed on as named. Otherwise `record`,
+ * then `email`: the owner looks the record up as the entry's site sees it,
+ * links whatever it groups that record under itself, and refuses the entry
+ * with a 404 when it finds nothing.
  */
 export interface PluginRecordLink {
   contactId?: string
@@ -75,6 +83,20 @@ export interface PluginRecordLink {
    * it becomes.
    */
   leadId?: string
+  /**
+   * A record the owner handed the caller, by its kind and id in the owner's
+   * own words, and carried back unread (AGL-2660): the record a booking link
+   * was dropped from, through the zone the owner drew it in. A kind the
+   * owner does not keep, or a record the site cannot see, is passed over for
+   * `email` rather than refused.
+   */
+  record?: { kind: string; id: string } | null
+  /**
+   * The person at this address, as the entry's site knows them: what the
+   * entry lands on when nothing above names a record the owner finds — a
+   * booking taken off the widget cold.
+   */
+  email?: string | null
 }
 
 /** Where an entry is filed, and by which plugin. */
@@ -131,8 +153,12 @@ export interface PluginRecordTaskRequest extends PluginRecordEntryContext {
   kind: PluginRecordTaskKind
   /** When it is due, epoch ms. */
   dueAtMs: number
-  /** The member it is for, or `''` for nobody. */
-  assigneeUid: string
+  /**
+   * The member it is for, `''` for nobody, or `null` for whoever holds the
+   * record it lands on — the caller that found the record by `record` or
+   * `email` does not know who that is.
+   */
+  assigneeUid: string | null
   /** The member who made it happen, or `''` when nobody did. */
   createdByUid: string
 }

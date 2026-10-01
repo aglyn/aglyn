@@ -29,6 +29,10 @@ import {
   type PluginRecordIndex,
 } from '@aglyn/aglyn/plugin-manager/plugin-record-index'
 import { registerPluginRecordEmailStateWriter } from '@aglyn/aglyn/plugin-manager/plugin-record-email-state'
+import {
+  registerPluginRecordTimelineWriter,
+  type PluginRecordTimelineWriter,
+} from '@aglyn/aglyn/plugin-manager/plugin-record-timeline'
 import { registerPluginRecordWrittenListener } from '@aglyn/aglyn/plugin-manager/plugin-record-written'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { summarizeConsentGroupChange } from './model/consent-group-summary'
@@ -61,6 +65,28 @@ export const crmPipelineRecordIndex: PluginRecordIndex = {
   async get(request) {
     const { pipelineRecordIndex } = await import('./server/pipeline-record-index')
     return pipelineRecordIndex.get(request)
+  },
+}
+
+/**
+ * The CRM's writer on the record-timeline seam (AGL-2981), deferred: the
+ * writer and the Admin SDK it brings load with the first entry filed.
+ */
+export const crmRecordTimelineWriter: PluginRecordTimelineWriter = {
+  async logActivity(request) {
+    const { createCrmRecordTimelineWriter, defaultCrmRecordTimelineDeps } =
+      await import('./server/record-timeline')
+    return createCrmRecordTimelineWriter(defaultCrmRecordTimelineDeps()).logActivity(request)
+  },
+  async createTask(request) {
+    const { createCrmRecordTimelineWriter, defaultCrmRecordTimelineDeps } =
+      await import('./server/record-timeline')
+    return createCrmRecordTimelineWriter(defaultCrmRecordTimelineDeps()).createTask(request)
+  },
+  async recordEmailDelivery(request) {
+    const { createCrmRecordTimelineWriter, defaultCrmRecordTimelineDeps } =
+      await import('./server/record-timeline')
+    return createCrmRecordTimelineWriter(defaultCrmRecordTimelineDeps()).recordEmailDelivery!(request)
   },
 }
 
@@ -146,6 +172,12 @@ export function registerCrmServerDeclarations(): void {
     },
     { pluginId: BUNDLE_ID },
   )
+  // The record timeline writer (AGL-2981), here as well as in the API
+  // surfaces so a door in either app reaches it: a booking confirmed on the
+  // tenant, or by the payment webhook, files its meeting and follow-up
+  // through it (AGL-2660). Deferred like the rest; an API registration
+  // replaces this one with the same writer, loaded eagerly.
+  registerPluginRecordTimelineWriter(crmRecordTimelineWriter, { pluginId: BUNDLE_ID })
   // Sharing rules (AGL-3336), re-evaluated after every server write of a
   // lead, a contact, a company or a deal: the core tells its record-written
   // listeners from the list-field restamp every such writer ends with, in

@@ -110,7 +110,9 @@ describe('a booking link from a CRM record', () => {
   })
 
   it('sends no reference for a value that is not one', async () => {
-    openAt('?service=svc-free&crm=company%3Ax')
+    // Which kinds a record system keeps is its own to say when the booking is
+    // filed; what the widget refuses is a value that could not be a record.
+    openAt('?service=svc-free&crm=contact%3Aa%2Fb')
     render(<Booking />)
     await screen.findByText(/Intro consultation · 15 min/)
     await bookThroughTheLink()

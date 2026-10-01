@@ -1071,9 +1071,9 @@ already decided the capture is the workspace's to record.
 ## Record timeline — `plugin-record-timeline` (`/server`)
 
 A plugin that sends mail or books meetings files what happened on the
-contact, company or deal it happened with — an email sent, a reply read, a
-task for a person — without writing the record system's documents or
-importing its plugin. The record system registers one writer (a slot), and a
+person or the company it happened with — an email sent, a reply read, a
+meeting booked, a task for a person — without writing the record system's
+documents or importing its plugin. The record system registers one writer (a slot), and a
 caller asks for it:
 
 ```ts
@@ -1088,10 +1088,19 @@ await records?.writer.logActivity({
 
 | API | Semantics |
 | --- | --- |
-| `registerPluginRecordTimelineWriter(writer, { pluginId? })` | The record system's writer. A single-implementation contract: a second plugin's writer throws naming both, and the incumbent keeps serving. The CRM registers it from its console API surface. |
+| `registerPluginRecordTimelineWriter(writer, { pluginId? })` | The record system's writer. A single-implementation contract: a second plugin's writer throws naming both, and the incumbent keeps serving. The CRM registers it from its server declarations, so a door in either app reaches it. |
 | `pluginRecordTimelineWriter()` | The writer with its owner, or `null` when no plugin keeps records — a caller then files nothing. |
 | `writer.logActivity(request)` | An activity on a record, scoped like one a member made on `hostId`. An `email` is filed ONCE per `Message-ID`, under the id the capture address files a copy of the same message by; any other kind once per the caller's `dedupeKey`. |
-| `writer.createTask(request)` | A task for `assigneeUid`, due at `dueAtMs`, filed once per `dedupeKey`. |
+| `writer.createTask(request)` | A task for `assigneeUid` (`''` for nobody, `null` for whoever holds the record it lands on), due at `dueAtMs`, filed once per `dedupeKey`. |
+
+A caller that holds no id of the record system's names how to find the
+record instead: `link: { record: { kind, id }, email }`. `record` is one the
+record system handed it — the record a booking link was dropped from,
+through the zone the owner drew the link in — carried back unread; `email`
+is the person's address. The owner files on the record it finds, as
+`hostId` sees it: the named record first, then the person at the address,
+and answers `404` when neither finds one. A kind it does not keep, or a
+record the site cannot see, falls through to the address.
 
 Both answer `{ ok: true, id, created }` — `created: false` for an entry a
 previous call, or a copy through another door, already filed — or a refusal

@@ -52,15 +52,13 @@ import { bookingsBillingWebhookHandler } from './server/billing-webhook'
 import { bookingAnalyticsHandler } from './server/booking-analytics'
 import { registerBookingFigureReader } from './server/booking-figures'
 import { bookingRefundHandler } from './server/refund'
-// The booking's way back to the CRM record (AGL-2660): the reference a
-// booking link carried, and the meeting a free booking files on landing.
-// The leaf, not the barrel: this library's specs substitute the barrel
-// wholesale, and a parser that vanished under them would fail every
-// booking they take.
+// The booking's way back to the record it was booked from (AGL-2660): the
+// reference a booking link carried, and the meeting a free booking files on
+// landing.
 import {
-  formatCrmBookingRef,
-  parseCrmBookingRef,
-} from '@aglyn/aglyn/app-utils/crm-booking'
+  formatBookingRecordRef,
+  parseBookingRecordRef,
+} from './model/booking-record'
 import { fileBookingOnCrm } from './server/booking-crm'
 
 // Settings schema (AGL-428): registered here too so server-only loads
@@ -291,10 +289,10 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
   // consent to be emailed marketing, so this is only set when the visitor
   // checked it.
   const marketingConsent = req.body?.marketingConsent === true
-  // The CRM record the booking link named (AGL-2660), kept on the row so
-  // the booking can be attributed to it even when the visitor books with
-  // a different address. Parsed, never stored raw: this is a public door.
-  const crmRef = parseCrmBookingRef(req.body?.crmRef)
+  // The record the booking link named (AGL-2660), kept on the row so the
+  // booking can be attributed to it even when the visitor books with a
+  // different address. Parsed, never stored raw: this is a public door.
+  const crmRef = parseBookingRecordRef(req.body?.crmRef)
   if (!hostId || !serviceId || !Number.isFinite(startsAtMs) || !startsAtMs) {
     return res.status(400).json({ error: 'Invalid booking request' })
   }
@@ -531,7 +529,7 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
         endsAtMs,
         status: paid ? 'pendingPayment' : 'confirmed',
         ...(paid && { expiresAtMs: Date.now() + 15 * 60_000 }),
-        ...(crmRef ? { crmRef: formatCrmBookingRef(crmRef) } : {}),
+        ...(crmRef ? { crmRef: formatBookingRecordRef(crmRef) } : {}),
         createdAt: FieldValue.serverTimestamp(),
       })
       return bookingRef.id
@@ -829,7 +827,7 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
         email,
         startsAtMs,
         endsAtMs,
-        ...(crmRef ? { crmRef: formatCrmBookingRef(crmRef) } : {}),
+        ...(crmRef ? { crmRef: formatBookingRecordRef(crmRef) } : {}),
       },
       service,
     })

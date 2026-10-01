@@ -818,8 +818,9 @@ export interface CrmActivity extends CrmScoped {
   deliveryDetail?: string
   /**
    * `hosts/{hostId}/bookings/{bookingId}` — the booking a `meeting` was
-   * filed from (AGL-2660), so a row the Bookings plugin wrote can be told
-   * from one a person logged, and a booking is never filed twice.
+   * filed from (AGL-2660), on the rows filed before a booking reached the
+   * record through the record-timeline seam. A booking's meeting is now an
+   * entry keyed by the booking, and `sourcePluginId` names who filed it.
    */
   bookingId?: string
   /**

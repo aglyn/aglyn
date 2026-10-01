@@ -55,7 +55,7 @@ describe('bookingLinkFor', () => {
         site: { subdomain: 'acme' },
         service,
         path: '/book',
-        crmRef: { kind: 'contact', id: 'contact-1' },
+        recordRef: { kind: 'contact', id: 'contact-1' },
       }),
     ).toBe('https://acme.aglyn.app/book?service=service-1&crm=contact%3Acontact-1')
   })

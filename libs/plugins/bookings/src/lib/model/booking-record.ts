@@ -16,15 +16,17 @@
  */
 
 /**
- * THE BOOKING DOOR BETWEEN THE CRM AND BOOKINGS (AGL-2660) — the pure half.
+ * WHAT A BOOKING CARRIES BACK TO THE RECORD IT CAME FROM (AGL-2660).
  *
  * A rep drops a booking link into an email from a record; the visitor books
  * through it; the booking comes back to the record as a meeting on its
- * timeline and, when the service asks for one, a follow-up task. The two
- * plugins never import each other's server code, so everything both sides
- * must agree on — the query key the link carries, the shape of the record
- * reference inside it, the wording of the meeting and the task, the day the
- * task falls due — lives here, in the library both already read.
+ * timeline and, when the service asks for one, a follow-up task. The record
+ * system draws the "Book a meeting" zone and hands it the record by its kind
+ * and id; this plugin builds the link, carries the record on it, and files
+ * the meeting back through the core's record-timeline seam, where the owner
+ * finds the record. Neither plugin imports the other: what this module holds
+ * — the link's query keys, the wire form of the record it carries, and the
+ * words and the day of what is filed — is this plugin's own.
  */
 
 import {
@@ -40,9 +42,10 @@ import {
  * and they book with a personal one — and a booking that could only be
  * matched by address would then land on nobody. The widget copies the value
  * onto the booking request, the booking row keeps it as `crmRef`, and the
- * server files the meeting under the record it names.
+ * server hands it to the record system to file the meeting under. The key
+ * is the one links already sent carry, so it is never renamed.
  */
-export const CRM_BOOKING_REF_PARAM = 'crm'
+export const BOOKING_RECORD_PARAM = 'crm'
 
 /**
  * The query key that preselects a service in the booking widget:
@@ -51,26 +54,23 @@ export const CRM_BOOKING_REF_PARAM = 'crm'
  */
 export const BOOKING_SERVICE_PARAM = 'service'
 
-/** The three records a booking link can be dropped from. */
-export const CRM_BOOKING_REF_KINDS = ['contact', 'lead', 'deal'] as const
-
-export type CrmBookingRefKind = (typeof CRM_BOOKING_REF_KINDS)[number]
-
-export interface CrmBookingRef {
-  kind: CrmBookingRefKind
+/** A record of the record system's, by its kind and id in its own words. */
+export interface BookingRecordRef {
+  kind: string
   id: string
 }
 
 /**
- * What a record id may look like inside the reference. A contact's and a
- * deal's ids are Firestore-minted; a lead's is a person key (hex). Nothing
- * legitimate carries a slash or a space, and a value that does is not a
- * reference the server should go looking for.
+ * What a kind and an id may look like inside the reference: a lowercase
+ * word, and an id with nothing a path or a query could be built from. The
+ * value arrives on a public, unauthenticated request; which kinds a record
+ * system keeps is its own to say when the booking is filed.
  */
+const REF_KIND_PATTERN = /^[a-z][a-z-]{0,31}$/
 const REF_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/
 
 /** `contact:abc` — the wire form of a reference. */
-export function formatCrmBookingRef(ref: CrmBookingRef): string {
+export function formatBookingRecordRef(ref: BookingRecordRef): string {
   return `${ref.kind}:${ref.id}`
 }
 
@@ -78,18 +78,17 @@ export function formatCrmBookingRef(ref: CrmBookingRef): string {
  * The reference a query value names, or `null` for anything that is not one.
  *
  * Strict on purpose: the value arrives on a public, unauthenticated booking
- * request, so an unknown kind or a malformed id is dropped rather than
- * stored — a booking still lands, it simply matches by address instead.
+ * request, so a malformed one is dropped rather than stored — a booking
+ * still lands, and is matched by the booker's address instead.
  */
-export function parseCrmBookingRef(raw: unknown): CrmBookingRef | null {
+export function parseBookingRecordRef(raw: unknown): BookingRecordRef | null {
   if (typeof raw !== 'string') return null
   const separator = raw.indexOf(':')
   if (separator <= 0) return null
   const kind = raw.slice(0, separator)
   const id = raw.slice(separator + 1)
-  if (!(CRM_BOOKING_REF_KINDS as readonly string[]).includes(kind)) return null
-  if (!REF_ID_PATTERN.test(id)) return null
-  return { kind: kind as CrmBookingRefKind, id }
+  if (!REF_KIND_PATTERN.test(kind) || !REF_ID_PATTERN.test(id)) return null
+  return { kind, id }
 }
 
 /** The slot, as the meeting entry and the task print it. */
@@ -118,7 +117,7 @@ function formatSlot(startsAtMs: number, timezone: string): string {
  * one is not misled. The body, not the subject: `subject` is the field a
  * sent email carries, and the timeline draws it as one.
  */
-export function crmBookingMeetingBody(input: {
+export function bookingMeetingBody(input: {
   serviceName: string
   startsAtMs: number
   timezone?: string | null
@@ -129,7 +128,7 @@ export function crmBookingMeetingBody(input: {
 }
 
 /** The title of the task a service files when it asks for a follow-up. */
-export function crmBookingFollowUpTitle(serviceName: string): string {
+export function bookingFollowUpTitle(serviceName: string): string {
   const service = String(serviceName ?? '').trim() || 'the booking'
   return `Follow up after ${service}`
 }
@@ -156,7 +155,7 @@ function weekdayIn(atMs: number, timezone: string): number {
  * the task is due "about this time tomorrow", and an hour either way is not
  * a fact the task keeps.
  */
-export function crmBookingFollowUpDueMs(
+export function bookingFollowUpDueMs(
   endsAtMs: number,
   timezone?: string | null,
 ): number {

@@ -79,10 +79,6 @@ export * from './crm'
 // the dialog fill it in by. Pure like `crm`, and beside it because a
 // template is scoped the way a task is.
 export * from './crm-email-templates'
-// The booking door's shared vocabulary (AGL-2660): the query keys a booking
-// link carries, the record reference inside it, and the wording and due
-// date of what a booking files back on the record.
-export * from './crm-booking'
 // A person's privacy erasure from one workspace (AGL-2623): the request's
 // shape and id, the marker a record carries while it waits, and the lists
 // the dialog and the docs share. Pure like `crm`; the sweep is server-side.

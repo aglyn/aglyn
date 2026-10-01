@@ -14,28 +14,68 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
-import { getOrgForHost } from '@aglyn/tenant-data-admin'
-// The leaf, not the barrel: this library's specs substitute the barrel
-// wholesale, and the writer must reach the real filing logic under them.
+import { isHostPluginEnabled } from '@aglyn/aglyn/plugin-manager/enabled-plugins'
 import {
-  type CrmBookingRecordOutcome,
-  recordCrmBooking,
-} from '@aglyn/tenant-data-admin/server/crm-booking-activity'
+  pluginRecordTimelineWriter,
+  type PluginRecordWrite,
+} from '@aglyn/aglyn/plugin-manager/plugin-record-timeline'
+import { getOrgForHost } from '@aglyn/tenant-data-admin'
+import { BUNDLE_ID } from '../constants/bundle-common'
+import {
+  bookingFollowUpDueMs,
+  bookingFollowUpTitle,
+  bookingMeetingBody,
+  parseBookingRecordRef,
+} from '../model/booking-record'
 import type { HostBookingService } from '../model'
 
+/** What became of a booking's filing on the workspace's records. */
+export type BookingRecordOutcome =
+  | {
+      filed: false
+      reason:
+        /** No plugin keeps records for this workspace. */
+        | 'no-record-system'
+        /** The plugin that keeps records does not run on this site. */
+        | 'record-system-off'
+        /** The service asks for neither a meeting nor a follow-up. */
+        | 'nothing-to-file'
+        /** A read threw before anything was asked; logged. */
+        | 'failed'
+    }
+  | {
+      filed: true
+      /** The record system's answer for the meeting, or `null` when none was asked for. */
+      meeting: PluginRecordWrite | null
+      /** Its answer for the follow-up, or `null` when the service asks for none. */
+      followUp: PluginRecordWrite | null
+    }
+
 /**
- * THE BOOKING'S WAY BACK TO THE CRM (AGL-2660) — the plugin's half.
+ * THE BOOKING'S WAY BACK TO THE RECORD IT CAME FROM (AGL-2660).
  *
  * Two doors write a confirmed booking: the create route, for a free
  * service, and the payment webhook, for a paid one once the charge clears.
  * Both call this with what they hold — the row as written and, when they
- * already read it, the service — and it gathers the rest (the owning org,
- * the service's two switches) and hands the filing to the shared writer.
+ * already read it, the service — and it files what the service asks for on
+ * the workspace's records, through the core's record-timeline seam:
  *
- * **Never throws**: the guest has their slot whatever the CRM did, so a
- * failure here is an outcome the caller may log, never an error into the
- * request or the webhook.
+ *  - a `meeting` entry at the slot, naming the service and the time in the
+ *    service's own zone, unless the service switched it off;
+ *  - a follow-up task one business day after the slot, for whoever holds
+ *    the record, when the service asks for one.
+ *
+ * The record is the record system's to find: the one the booking link was
+ * dropped from (`crmRef`, carried back as it was handed over), otherwise the
+ * person at the booker's address, as this site sees them. Both entries are
+ * keyed by the booking, so the webhook's redeliveries and a second door file
+ * nothing twice; a full activity log refuses the meeting and still takes the
+ * follow-up. Nothing is filed on a site that has switched the record system
+ * off, and the record system refuses a plan without it.
+ *
+ * **Never throws**: the guest has their slot whatever the record system did,
+ * so a failure here is an outcome the caller may log, never an error into
+ * the request or the webhook.
  */
 export async function fileBookingOnCrm(
   firestore: FirebaseFirestore.Firestore,
@@ -47,42 +87,73 @@ export async function fileBookingOnCrm(
     /** The service, when the caller already read it. Read here otherwise. */
     service?: HostBookingService | null
   },
-): Promise<CrmBookingRecordOutcome> {
+): Promise<BookingRecordOutcome> {
   const { hostId, bookingId, booking } = input
   try {
+    const records = pluginRecordTimelineWriter()
+    if (!records) return { filed: false, reason: 'no-record-system' }
     const owner = await getOrgForHost(hostId)
     if (!owner?.orgId) return { filed: false, reason: 'failed' }
+    const hostRef = firestore.collection('hosts').doc(hostId)
+    const host = (await hostRef.get()).data() as
+      | { disabledPlugins?: string[]; enabledPlugins?: string[] }
+      | undefined
+    if (!isHostPluginEnabled(owner.org as never, host ?? null, records.pluginId)) {
+      return { filed: false, reason: 'record-system-off' }
+    }
     const serviceId = String(booking['serviceId'] ?? '')
     const service =
       input.service !== undefined
         ? input.service
         : serviceId
-          ? ((
-              await firestore
-                .collection('hosts')
-                .doc(hostId)
-                .collection('services')
-                .doc(serviceId)
-                .get()
-            ).data() as HostBookingService | undefined) ?? null
+          ? ((await hostRef.collection('services').doc(serviceId).get()).data() as
+              | HostBookingService
+              | undefined) ?? null
           : null
-    return await recordCrmBooking(firestore, {
-      hostId,
-      org: owner.org as Record<string, unknown>,
+    const wantsMeeting = service?.crmMeetingActivity !== false
+    const wantsFollowUp = service?.crmFollowUpTask === true
+    if (!wantsMeeting && !wantsFollowUp) return { filed: false, reason: 'nothing-to-file' }
+
+    const serviceName = String(service?.name ?? booking['serviceName'] ?? '').trim()
+    const timezone = service?.timezone || undefined
+    const startsAtMs = Number(booking['startsAtMs'] ?? 0)
+    const endsAtMs = Number(booking['endsAtMs'] ?? 0)
+    const context = {
       orgId: owner.orgId,
-      booking: {
-        id: bookingId,
-        serviceId,
-        serviceName: String(booking['serviceName'] ?? ''),
+      hostId,
+      link: {
+        record: parseBookingRecordRef(booking['crmRef']),
         email: String(booking['email'] ?? ''),
-        startsAtMs: Number(booking['startsAtMs'] ?? 0),
-        endsAtMs: Number(booking['endsAtMs'] ?? 0),
-        crmRef: typeof booking['crmRef'] === 'string' ? booking['crmRef'] : null,
       },
-      service,
-    })
+      sourcePluginId: BUNDLE_ID,
+    }
+
+    const meeting = wantsMeeting
+      ? await records.writer.logActivity({
+          ...context,
+          kind: 'meeting',
+          // When it HAPPENS, which is the slot — not when it was booked.
+          atMs: startsAtMs,
+          body: bookingMeetingBody({ serviceName, startsAtMs, timezone }),
+          byUid: '',
+          dedupeKey: `booking:${bookingId}`,
+        })
+      : null
+    const followUp = wantsFollowUp
+      ? await records.writer.createTask({
+          ...context,
+          dedupeKey: `booking-follow-up:${bookingId}`,
+          title: bookingFollowUpTitle(serviceName),
+          kind: 'todo',
+          dueAtMs: bookingFollowUpDueMs(endsAtMs, timezone),
+          // Whoever holds the record the booking lands on.
+          assigneeUid: null,
+          createdByUid: '',
+        })
+      : null
+    return { filed: true, meeting, followUp }
   } catch (error) {
-    console.error('[bookings] the CRM filing failed', hostId, bookingId, error)
+    console.error('[bookings] the booking could not be filed on its record', hostId, bookingId, error)
     return { filed: false, reason: 'failed' }
   }
 }

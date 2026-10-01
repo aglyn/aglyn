@@ -18,16 +18,16 @@
 // Leaf paths, not the barrel: this model is read by the client bundle and
 // the `/server` entry alike, and either barrel would drag the other's
 // surface into a bundle that has no use for it.
-import {
-  BOOKING_SERVICE_PARAM,
-  CRM_BOOKING_REF_PARAM,
-  type CrmBookingRef,
-  formatCrmBookingRef,
-} from '@aglyn/aglyn/app-utils/crm-booking'
 import { hostPublicOrigin } from '@aglyn/aglyn/app-utils/host-naming'
 // The leaf entry: the package root extends the Firestore SDK's `Timestamp`,
 // and this model is read on published pages.
 import { zonedDateTime } from '@aglyn/shared-util-timestamp/zoned-time'
+import {
+  BOOKING_RECORD_PARAM,
+  BOOKING_SERVICE_PARAM,
+  type BookingRecordRef,
+  formatBookingRecordRef,
+} from './booking-record'
 
 /**
  * Bookings v1 (AGL-159): services with weekly availability windows and
@@ -220,8 +220,8 @@ export interface BookingLinkInput {
   service: { id: string }
   /** The site's `bookingPath` setting; the root when unset. */
   path?: string | null
-  /** The CRM record the link is dropped from, when there is one. */
-  crmRef?: CrmBookingRef | null
+  /** The record the link is dropped from, when there is one. */
+  recordRef?: BookingRecordRef | null
 }
 
 /**
@@ -233,7 +233,7 @@ export interface BookingLinkInput {
  * and nothing narrower. The Bookings plugin renders no route of its own
  * either; the widget is a block the site owner placed on a page, so the
  * link is that page (the `bookingPath` setting) with the service
- * preselected and, when dropped from a CRM record, the record carried
+ * preselected and, when dropped from a record, the record carried
  * along so the booking can be attributed even when the booker uses a
  * different address.
  */
@@ -241,6 +241,6 @@ export function bookingLinkFor(input: BookingLinkInput): string | null {
   const origin = hostPublicOrigin(input.site)
   if (!origin) return null
   const query = new URLSearchParams({ [BOOKING_SERVICE_PARAM]: input.service.id })
-  if (input.crmRef) query.set(CRM_BOOKING_REF_PARAM, formatCrmBookingRef(input.crmRef))
+  if (input.recordRef) query.set(BOOKING_RECORD_PARAM, formatBookingRecordRef(input.recordRef))
   return `${origin}${normalizeBookingPath(input.path)}?${query.toString()}`
 }

@@ -26,8 +26,9 @@
  * is filed — to the filing after a FREE booking lands. A value that is not
  * a reference is neither stored nor forwarded: this is a public door.
  *
- * The filing itself is doubled here; what it writes is held in
- * `crm-booking-activity.spec.ts` in the admin library.
+ * The filing itself is doubled here; what it asks the record system for is
+ * held in `server/booking-crm.spec.ts`, and what the CRM files for it in the
+ * CRM's record-timeline spec.
  */
 
 jest.mock('@aglyn/aglyn/server', () => ({
