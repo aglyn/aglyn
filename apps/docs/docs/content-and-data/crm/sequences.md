@@ -81,6 +81,12 @@ administrators included. Connecting the same Google account again updates the
 mailbox you already have and keeps its settings. Each member can connect up to
 five mailboxes.
 
+If Mailboxes says the Google account does not have Gmail turned on, the
+account exists but Gmail is not running for it yet. A Google Workspace user
+created that day can take up to a day before Gmail is ready; otherwise the
+Workspace administrator turns Gmail on for the account. Then connect again.
+Nothing was saved by the attempt that was refused.
+
 If Mailboxes says connecting a Google mailbox isn't configured, your deployment
 has no Google OAuth client set up. On a self-hosted install, see
 [Environment variables](../../developers/self-hosting-environment.md#sequences).

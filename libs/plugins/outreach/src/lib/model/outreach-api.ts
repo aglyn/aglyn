@@ -66,6 +66,10 @@ export type OutreachRouteRefusalReason =
   | 'contact-not-found'
   | 'link-domain-refused'
   | 'rate-limited'
+  /** The Google account has no Gmail service: off for it, or not yet provisioned. */
+  | 'mail-service-unavailable'
+  /** Google refused the account itself, such as an administrator barring Gmail API access. */
+  | 'google-refused'
   | 'google-unavailable'
   | 'curation-unavailable'
   | 'curation-refused'

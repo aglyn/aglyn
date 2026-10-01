@@ -53,6 +53,10 @@ export type OutreachApiRefusalReason =
   | 'reconnect-required'
   | 'invalid-settings'
   | 'rate-limited'
+  /** The Google account has no Gmail service: off for it, or not yet provisioned. */
+  | 'mail-service-unavailable'
+  /** Google refused the account itself, such as an administrator barring Gmail API access. */
+  | 'google-refused'
   | 'google-unavailable'
 
 export interface OutreachApiRefusal {
