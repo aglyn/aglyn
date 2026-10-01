@@ -229,8 +229,51 @@ A campaign or automation release covers **exactly the content that was held**.
 If the merchant edits it, the screen checks it again and a new row may appear.
 Other email and pages are keyed on the site and the signals that held, because
 their words change with every recipient or render. A rejection does not lock the
-workspace. If the content is phishing, lock the org at
-[Lockdown](./lockdown.md) as well, which stops every outbound path.
+workspace. A held page from a workspace less than 14 days old has already placed
+a security hold (below). For any other workspace, if the content is phishing,
+lock the org at [Lockdown](./lockdown.md) as well, which stops every outbound path.
+
+### The automatic security hold {#security-hold}
+
+When the screen **holds** a page (not when it only flags a live one) and the
+workspace is less than 14 days old, the platform also locks the account behind it.
+The two document-share harvesters found on 2026-10-01 were each one page in a
+days-old workspace, and nothing stopped the same account publishing the next one.
+
+| Lock | Reason | Notes |
+| -- | -- | -- |
+| The workspace | `security` | Members are signed out and every site goes down, exactly as a staff lock does. |
+| The site that served the page | `security`, `takedown` | Stays down through a store outage that would fail an ordinary lock open. |
+| The account that published the page | `security` | The version's author, else the page's, else the workspace owner. Only an account that is a member of the workspace is ever locked. |
+
+- **It is a hold, not a ban.** The reason is always `security`, never `abuse`. A false
+  positive costs the customer a support email, not their account.
+- **It goes through the staff lock path.** Sessions are revoked, the owners get the
+  standard lock notice (the workspace's and the account's; the site's is recorded in
+  the console without a second email), and each lock writes an `adminAudit` row. The
+  rows name the actor `system:page-screen`, and their note names the page, the version,
+  the signal and the `HS-…` row.
+- **It does not cancel billing.** The subscription is not canceled and the sites'
+  money is not paused, because a lift cannot undo a cancel. Those happen when you
+  re-place the lock as `abuse`, where the console ticks both.
+- **Staff are told once.** The **Automatic security hold on a new workspace** operator
+  alert names the site, the page, the signal and the locks, and opens the row. The
+  row itself gains a `securityHold` record of what was placed.
+- **Once per workspace.** A second held page from the same workspace does not lock,
+  email or alert again. A workspace whose hold you lifted is not held automatically
+  again: its next held page waits for you as usual.
+- **Never the house, never staff.** The workspace that owns the platform's marketing
+  site, a workspace owned by a staff account, and staff accounts are never held.
+- **Established workspaces are unchanged.** Their page is held or flagged as before,
+  with no automatic lock.
+
+The page review only records the hold (`securityHolds/{orgId}`), because it runs on
+the published-site runtime, which has no lock path. The console places it on the
+fifteen-minute tick (`/api/admin/security-holds`), and at the end of any console sweep
+that held a page. **To confirm it**, decide the row as usual, then re-place the
+workspace and account locks as `abuse` at [Lockdown](./lockdown.md). **To lift it**,
+lift the three locks there: the org, the site and the user, each by the id the alert
+and the row name.
 
 ### Names and domains {#names-and-domains}
 

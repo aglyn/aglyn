@@ -52,6 +52,9 @@
  *   site's cache and the next render serves it) or mark it actioned to
  *   REJECT (it stays unserved; any later version carrying the same signals
  *   is refused without a new row).
+ * - A hold from a workspace in its first fortnight also asks for an
+ *   automatic `security` hold on the workspace, the site and the publishing
+ *   account (`page-security-hold.ts`, AGL-3450), which the console places.
  * - Keyed on the SIGNALS, as the send seam's rows are: a composed page
  *   carries per-render values (dates, collection rows) that no content hash
  *   would survive, while what makes it phishing does not change between
@@ -107,6 +110,7 @@ import firebaseAdmin from './firebase-admin'
 import { describeHeldPage, type HostedPageContext } from './held-page-subject'
 import { notifyRiskEvent } from './risk-notice'
 import { orgAgeDays } from './org-age'
+import { requestPageSecurityHold } from './page-security-hold'
 import { getHostDocAdmin, getOrgForHost } from './organizations'
 import {
   canonicalJson,
@@ -323,6 +327,25 @@ export async function reviewHostedPage(
       url,
       reportedHostname: flagged,
     })
+    // A hold from a workspace in its first fortnight also holds the
+    // workspace, the site and the account that published it (AGL-3450).
+    if (state === 'held') {
+      await requestPageSecurityHold({
+        orgId: orgId ?? '',
+        org,
+        hostId: request.hostId,
+        screenId: request.screenId,
+        versionId: request.versionId,
+        reviewId,
+        reference,
+        signals,
+        ageDays,
+        pageLabel: label,
+        pageUrl: url,
+        siteName: typeof host?.['name'] === 'string' ? host['name'] : null,
+        nowMs,
+      })
+    }
     pageMemo.set(reviewId, { state, atMs: nowMs })
     return state === 'released'
       ? { outcome: 'serve' }

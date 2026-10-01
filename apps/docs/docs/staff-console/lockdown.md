@@ -69,6 +69,14 @@ its address can never sign up again, and after the lock notice it is sent nothin
 at all — see [A ban stops all mail](#ban-mail). Its notice says the account is
 closed for a Terms of Service violation, and never says which one.
 
+**Nothing places `abuse` automatically.** The one lock the platform places by itself
+for content is the page screen's **automatic security hold**: a held phishing page
+from a workspace less than 14 days old locks that workspace, its site (as a
+`takedown`) and the publishing account, all as `security`. Its audit rows name the
+actor `system:page-screen`. Confirm it by re-placing the workspace and account locks
+as `abuse` here, or lift all three if it is a false positive. See
+[the automatic security hold](./abuse-reports.md#security-hold).
+
 ## Modes: full, or read-only {#read-only-mode}
 
 Every lock is armed in one of two **modes**. The dropdown sits beside the reason
@@ -1625,6 +1633,12 @@ time-boxed lock from an indefinite one nobody came back to, and on a lift it
 says whether a time-boxed lock was released early or a forgotten one was
 cleaned up. A `null` in any of those three means the lock genuinely carried no
 reason, no message, or no expiry.
+
+Two locks are placed by the platform rather than a person, and their rows say so
+with a `system:` actor and `after.automated: true`: the billing sweep below
+(`system:billing-auto-lock`), and the page screen's automatic security hold
+(`system:page-screen`), whose note names the page, the version, the signal and the
+abuse row.
 
 Billing locks for lapsed subscriptions are **manual by default**. The automated
 30-days-past-due sweep exists but ships disabled; it is enabled by setting the

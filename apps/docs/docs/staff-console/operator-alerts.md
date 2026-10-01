@@ -85,6 +85,7 @@ alerts.
 | Area | Alert | Tier |
 |---|---|---|
 | Security | Urgent abuse, fraud or risk alert: phishing, card testing, a flagged payment, a held phishing email | Must |
+| Security | An automatic security hold on a new workspace that published a phishing page | Must |
 | Billing | Card dispute with no owner; billing webhook half applied | Must |
 | Billing | Subscription dispute lost; Stripe billing a workspace that does not exist; a closed month's metered usage not reported to Stripe | Must |
 | Billing | Billing webhook failing its signature check; a delivery that moved nothing | Must |

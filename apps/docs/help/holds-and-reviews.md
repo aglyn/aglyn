@@ -86,6 +86,11 @@ The latest version of a page was held before visitors saw it.
 - **Redirects.** A redirect that sends visitors to another website can be held the same
   way, and is named by the path it answers. While it is held it does not redirect: visitors
   see whatever your site has at that address. Check where it points in **Redirects**.
+- **New workspaces.** In a workspace's first two weeks, a held page also places a
+  precautionary security hold on the workspace, its site and the account that published
+  the page, until our review team has looked at it. You get the usual notice for each
+  lock, and [Your workspace, a site, a domain or your account is locked](#locked) says
+  what to do. Reply to the notice or contact support if you think it is a mistake.
 
 ### Where you see it {#where-held-pages-show}
 

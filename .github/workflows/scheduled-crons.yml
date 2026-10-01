@@ -282,6 +282,12 @@ on:
           # POST works it. Safe by hand — every alert it raises is deduped and
           # the digest is claimed once per day.
           - /api/admin/operator-alerts/tick
+          # The automatic security holds (AGL-3450), the same as the
+          # fifteen-minute `consoleFastCrons` tick: places every hold the page
+          # screen asked for. A GET reports the pending holds and places
+          # nothing. Safe by hand — each hold is claimed once and a placed
+          # one is never placed again.
+          - /api/admin/security-holds
       force:
         # Only /api/admin/reverify-plugin-versions reads this (AGL-1086). A
         # stored verdict is skipped while it is current, which is what makes

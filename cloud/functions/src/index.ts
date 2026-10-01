@@ -367,6 +367,15 @@ const CONSOLE_FAST_CRON_ROUTES: readonly string[] = [
    * operator digest once its hour has passed.
    */
   '/api/admin/operator-alerts/tick',
+  /*
+   * The automatic security holds (AGL-3450). The page screen runs where a
+   * page is composed — mostly the published-site runtime, which may not hold
+   * the lockdown path — so a held page from a young workspace only RECORDS
+   * the hold, and this places it: the workspace, the site and the account,
+   * as `security`. Fifteen minutes is how long a held phisher's account can
+   * keep working before it is locked; the page itself is already held.
+   */
+  '/api/admin/security-holds',
 ]
 
 /** What one POST to a cron route settled as. */
