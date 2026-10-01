@@ -116,6 +116,7 @@
 import {
   METERED_BILLED_RATES_USD,
   METERED_MARKUP,
+  METERED_OVERAGE_COST_USD,
   METERED_UNIT_RATES_USD,
   meteredIncludedAllowance,
 } from '../utils/usage-metering'
@@ -128,6 +129,7 @@ import {
   NET_MARGIN_FLOOR_PCT,
   NET_MARGIN_WARN_BAND_PCT,
   ORG_COGS_UNIT_RATES_USD,
+  PAGE_VIEW_CDN_REQUEST_COST_USD,
   PLAN_ENTITLEMENTS,
   PLAN_PRICING,
   SELF_SERVE_PLANS,
@@ -1135,6 +1137,51 @@ describe('what full utilization costs against each price, and where it stops cle
   })
 
   /**
+   * PAST THE CDN'S REQUEST ALLOWANCE, IF THE BANDS CARRIED IT (AGL-1879).
+   *
+   * Not a mutation of the constants, and not the shipped model either: the
+   * question this change surfaced and does not answer. A billed view now
+   * carries `PAGE_VIEW_CDN_REQUEST_COST_USD` as well as its weight, because
+   * the hosting plan's 10,000,000 included requests are about 175,000 views
+   * of the measured page a month, platform-wide. The INCLUDED bands are still
+   * sized on weight alone — the pair `check:page-view-rate` holds — so a
+   * gigabyte inside a band is modeled at $0.16724 where, once the platform is
+   * past that allowance, it costs about $0.28670.
+   *
+   * Pinned as the ladder at that cost, so the owner of band sizing reads the
+   * figure here rather than re-deriving it, and so a band or price change
+   * that answers it moves these numbers in the same commit.
+   */
+  it('PAST THE REQUEST ALLOWANCE: the included bands are not priced for it', () => {
+    const WITH_REQUESTS_PER_GB =
+      VIEWS_PER_GB *
+      (ORG_COGS_UNIT_RATES_USD.perPageView + PAGE_VIEW_CDN_REQUEST_COST_USD)
+    expect(WITH_REQUESTS_PER_GB).toBeCloseTo(0.2867, 4)
+    expect(
+      Object.fromEntries(
+        PAID.map((plan) => [
+          plan,
+          [
+            Number((marginAtCostPerGb(plan, WITH_REQUESTS_PER_GB, 'month') * 100).toFixed(1)),
+            Number((marginAtCostPerGb(plan, WITH_REQUESTS_PER_GB, 'year') * 100).toFixed(1)),
+          ],
+        ]),
+      ),
+    ).toEqual({
+      starter: [27.7, -9.7],
+      pro: [4.3, -35.5],
+      business: [13, -20.6],
+      scale: [14.7, -17.3],
+      advanced: [15.6, -11.6],
+      agency: [6.6, -15],
+    })
+    // The monthly price still clears zero on every tier at 100% of every
+    // band; the annual price does not on any. The shipped ladder, on weight
+    // alone, is the one the rest of this file pins.
+    expect(COST_PER_GB_USD).toBeCloseTo(0.16724, 5)
+  })
+
+  /**
    * PRO, ONE AXIS AT A TIME.
    *
    * The decomposition is pinned as numbers so a change that moved several of
@@ -1239,8 +1286,13 @@ describe('what full utilization costs against each price, and where it stops cle
     // pass-through; contacts and email sends carry retail rates. Asserted as
     // pairs, because each half is only correct with the other.
     expect(PLAN_PRICING.pro.meteredInfraPassThrough).toBe(true)
+    // A billed view costs its weight AND its CDN requests, and is billed at
+    // that cost x the markup.
+    expect(METERED_OVERAGE_COST_USD.perPageView).toBe(
+      METERED_UNIT_RATES_USD.perPageView + PAGE_VIEW_CDN_REQUEST_COST_USD,
+    )
     expect(METERED_BILLED_RATES_USD.perPageView).toBe(
-      METERED_UNIT_RATES_USD.perPageView * METERED_MARKUP,
+      METERED_OVERAGE_COST_USD.perPageView * METERED_MARKUP,
     )
     expect(METERED_BILLED_RATES_USD.perPageView).toBeGreaterThan(0)
     // The line where the pass-through starts billing IS the band, read from
@@ -1773,10 +1825,12 @@ describe("Free's bandwidth band, and everything derived from it", () => {
    * run up before staff looked at it grew with the traffic. At 10x that tail
    * was $2,374 a month on Agency at the measured page weight.
    *
-   * The 2026-09-09 re-peg removed the loss — 1,000 views now bill $0.21
-   * against about $0.16 — and the ceiling stays at 3x anyway. It was never a
-   * margin instrument: a scraper or a hotlinked asset bills the account holder
-   * for traffic they did not ask for, and the cap is what bounds that.
+   * The 2026-09-09 re-peg removed the loss on weight, and AGL-1879 removed it
+   * on requests — 1,000 views now bill $0.36 against about $0.28 once the
+   * CDN's request allowance is spent — and the ceiling stays at 3x anyway. It
+   * was never a margin instrument: a scraper or a hotlinked asset bills the
+   * account holder for traffic they did not ask for, and the cap is what
+   * bounds that.
    */
   it('the abuse CEILING is 3x the band, floored, from the entitlement', () => {
     expect(BANDWIDTH_ABUSE_CEILING_MULTIPLE).toBe(3)
@@ -1828,11 +1882,13 @@ describe('the infra pass-through is priced by a different rule', () => {
     // The collision between that promise and a 50% retail floor is a pricing
     // decision, not something a test may resolve by moving a rate.
     const margin =
-      (METERED_UNIT_RATES_USD.perPageView * METERED_MARKUP -
-        METERED_UNIT_RATES_USD.perPageView) /
-      (METERED_UNIT_RATES_USD.perPageView * METERED_MARKUP)
+      (METERED_BILLED_RATES_USD.perPageView -
+        METERED_OVERAGE_COST_USD.perPageView) /
+      METERED_BILLED_RATES_USD.perPageView
     expect(margin).toBeCloseTo(0.2308, 4)
     expect(METERED_MARKUP).toBe(1.3)
+    // $0.36 per 1,000, the published figure, from a billed view's cost.
+    expect(Math.round(METERED_BILLED_RATES_USD.perPageView * 1000 * 100) / 100).toBe(0.36)
   })
 
   it('carries the three pass-through rates as published', () => {

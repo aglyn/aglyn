@@ -60,7 +60,12 @@ export const DECISION_LOG_PATH = 'docs/DECISION_LOG.md'
  * though one is a cost table, because the published metered rate is
  * `cost × METERED_MARKUP` — moving the cost moves the price. That is the whole
  * lesson of 2026-08-09, when wrong unit costs made the "cost + 30%" claim
- * false without anyone editing a price.
+ * false without anyone editing a price. `PAGE_VIEW_CDN_REQUEST_COST_USD` is
+ * here for the same reason: it is the second cost term of a billed page view.
+ *
+ * `optionalScalars` are scalars a ref may not carry at all. Absent reads as
+ * absent rather than unreadable, so the constant's arrival against an older
+ * base is itself a move the log must record, and its removal is too.
  */
 export const WATCHED = Object.freeze([
   Object.freeze({
@@ -72,6 +77,7 @@ export const WATCHED = Object.freeze([
       'EVENT_CALENDAR_ADDON_MONTHLY_USD',
       'POS_REGISTER_ADDON_MONTHLY_USD',
     ]),
+    optionalScalars: Object.freeze(['PAGE_VIEW_CDN_REQUEST_COST_USD']),
   }),
   Object.freeze({
     path: 'apps/console/utils/usage-metering.ts',
@@ -191,6 +197,16 @@ export function priceSurface(sources) {
       }
     }
     for (const name of spec.scalars) {
+      const m = src.match(new RegExp(`export const ${name}\\s*=\\s*(-?[\\d._]+)`))
+      if (!m) {
+        unreadable.push({ key: `${name}`, detail: `could not be parsed in ${spec.path}` })
+        continue
+      }
+      values[name] = Number(m[1].replace(/_/g, ''))
+    }
+    for (const name of spec.optionalScalars ?? []) {
+      const declared = new RegExp(`export const ${name}\\b`).test(src)
+      if (!declared) continue
       const m = src.match(new RegExp(`export const ${name}\\s*=\\s*(-?[\\d._]+)`))
       if (!m) {
         unreadable.push({ key: `${name}`, detail: `could not be parsed in ${spec.path}` })

@@ -219,14 +219,25 @@ test('publishedMeteredRates reproduces the figures on /pricing', () => {
       perFormSubmission: 0.00005,
     },
     1.3,
+    0.00011538462,
   )
   assert.equal(p.storagePerGbMonth, 0.0338)
-  // The page-view rate is pinned so this product is round: $0.00016153846 ×
-  // 1.3 × 1,000 is $0.209999998, and the cent it rounds to is the figure the
-  // page states. A conversion that carried the tail through would publish a
-  // price no invoice ever shows.
-  assert.equal(p.perThousandPageViews, 0.21)
+  // A billed page view is its weight plus its CDN requests, pinned so the
+  // product is round: ($0.00016153846 + $0.00011538462) × 1.3 × 1,000 is
+  // $0.360000004, and the cent it rounds to is the figure the page states. A
+  // conversion that carried the tail through would publish a price no
+  // invoice ever shows.
+  assert.equal(p.perThousandPageViews, 0.36)
   assert.equal(p.perThousandFormSubmissions, 0.065)
+})
+
+test('publishedMeteredRates without the request term is the weight-only price, and NaN without either', () => {
+  const rates = { storagePerGbMonth: 0.026, perPageView: 0.00016153846, perFormSubmission: 0.00005 }
+  // The figure /pricing carried before the request term: what a caller that
+  // passed zero would reproduce, which the LOCKED pin then refuses.
+  assert.equal(publishedMeteredRates(rates, 1.3, 0).perThousandPageViews, 0.21)
+  // Omitted entirely it is not a number, so it can match no pinned price.
+  assert.ok(Number.isNaN(publishedMeteredRates(rates, 1.3).perThousandPageViews))
 })
 
 test('parseUnitRates returns null when the table cannot be found', () => {

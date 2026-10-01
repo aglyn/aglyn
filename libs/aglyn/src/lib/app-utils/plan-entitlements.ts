@@ -2385,6 +2385,59 @@ export const INFRA_COGS_PER_SITE_USD = 2
 export const METERED_MARKUP = 1.3
 
 /**
+ * What the CDN requests behind ONE page view cost once the platform is past
+ * its hosting plan's included request allowance, in USD per view
+ * (AGL-1879). A page view billed past a plan's band is priced at
+ * `(perPageView + this) × METERED_MARKUP` — $0.36 per 1,000.
+ *
+ * ## Why a page view needs a second cost term
+ *
+ * `perPageView` prices what a view WEIGHS: the bytes it transfers at the
+ * CDN's per-GB rate, plus the Firestore reads behind the render. The CDN also
+ * charges per REQUEST once the team's monthly allowance is spent — Vercel Pro
+ * includes 10,000,000 a month, then bills $2.00 per million in its cheapest
+ * region and up to $3.20 elsewhere. A cold load of `aglyn.com/` makes 57
+ * first-party requests to settle (`tools/tenant-page-budget.json`,
+ * `wireCalibration.measuredAgainst`), so the allowance is about 175,000 views
+ * of that page a month, platform-wide — less than one Pro plan's 125 GB band
+ * — where the 1 TB transfer allowance lasts about 1.4 million. The request
+ * allowance runs out first, and past it a view costs:
+ *
+ * |                                   | weight     | requests  | cost / 1k | at $0.21 | at $0.36 |
+ * |-----------------------------------|------------|-----------|-----------|----------|----------|
+ * | the page as measured (748.5 KB)   | $0.119378  | $0.114000 | $0.2334   | −11%     | +35%     |
+ * | the priced basis (1012.8 KB)      | $0.161538  | $0.114000 | $0.2755   | −31%     | +23%     |
+ *
+ * at $2.00 per million requests. A weight-only rate therefore billed the
+ * overage below cost from the 175,000th view of any month onward.
+ *
+ * ## The figure
+ *
+ * $0.00011538462 is 57.7 requests at $2.00 per million — the measured 57,
+ * with the basis set ABOVE the measurement as the weight basis is — pinned so
+ * the billed price lands on a whole cent: ($0.161538 + $0.115385) × 1.3 is
+ * $0.36 per 1,000. Published as "Our cost $0.276923 / You pay $0.36", the
+ * "at cost + 30%" claim stays true of the cost a billed view actually incurs.
+ *
+ * ## ⛔ Not in {@link ORG_COGS_UNIT_RATES_USD}, deliberately
+ *
+ * `perPageView` is half of a pair with `ESTIMATED_PAGE_TRANSFER_BYTES` — one
+ * page weight in dollars and in bytes — and `npm run check:page-view-rate`
+ * recovers that weight from the rate. A per-request charge is not
+ * proportional to weight, so folding it into `perPageView` would make the
+ * gate read a 1,736 KB page nobody serves, and would re-price every
+ * `bandwidthGb` band through the cost of a gigabyte. Whether the INCLUDED
+ * bands should carry the request charge is a band-sizing question with its
+ * own owner; `tier-margin-floor.spec.ts` pins what the ladder reads if they
+ * do. This term prices only the views a customer is billed for.
+ *
+ * Lives HERE, beside the markup, for the reason the markup does: the
+ * `/pricing` generator publishes the cost column from it and cannot import
+ * anything under `apps/console`.
+ */
+export const PAGE_VIEW_CDN_REQUEST_COST_USD = 0.00011538462
+
+/**
  * Monthly unit costs for the meters the rollup already records (AGL-1134).
  *
  * These are OUR costs, not prices — the org is billed at cost × 1.30
@@ -2407,6 +2460,11 @@ export const METERED_MARKUP = 1.3
  * infrastructure pass-through, and the customer is charged those figures
  * times `METERED_MARKUP`. They therefore appear in `METERED_UNIT_RATES_USD`
  * as well, with identical values, and must be changed in both places at once.
+ * A page view billed past its band also carries
+ * {@link PAGE_VIEW_CDN_REQUEST_COST_USD}, which neither table holds: it is
+ * the per-request CDN charge past the hosting plan's allowance, and this
+ * table's `perPageView` is the weight-proportional cost the bands are sized
+ * against.
  *
  * Everything else here is a cost-model input ONLY. `dataStoragePerGbMonth`,
  * `perApiRequest`, `perContactMonth` and `perEmailSend` price what an org
@@ -5196,11 +5254,13 @@ export function bandwidthGbFromPageViews(pageViews: number): number {
  * It is a CAP, not a price, and it is lower than {@link
  * FORM_ABUSE_CEILING_MULTIPLE} because bandwidth is the largest cost line the
  * platform carries and the one a stranger can spend on the customer's behalf.
- * Past the band every 1,000 views bills $0.21 against about $0.16 of real
- * cost, so the tail is no longer a loss — but a scraper, a hotlinked asset or
- * a botnet still bills the account holder for traffic they did not ask for,
- * and the ceiling is what bounds that before staff look at it. At 10× the
- * band that tail was open-ended on Agency; at 3× it is bounded.
+ * Past the band every 1,000 views bills $0.36 against about $0.28 of real
+ * cost once the CDN's request allowance is spent
+ * ({@link PAGE_VIEW_CDN_REQUEST_COST_USD}), so the tail is not a loss — but a
+ * scraper, a hotlinked asset or a botnet still bills the account holder for
+ * traffic they did not ask for, and the ceiling is what bounds that before
+ * staff look at it. At 10× the band that tail was open-ended on Agency; at 3×
+ * it is bounded.
  */
 export const BANDWIDTH_ABUSE_CEILING_MULTIPLE = 3
 

@@ -391,17 +391,18 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
 
   it('publishes the metered rates, to six decimals where needed', () => {
     // $0.0338/GB-mo and $0.065/1k form submissions locked 2026-08-18; page
-    // views re-pegged to $0.21/1k on 2026-09-09 (AGL-2711). Asserted on the
+    // views re-pegged to $0.21/1k on 2026-09-09 (AGL-2711), then $0.36/1k
+    // once a billed view carried its CDN requests (AGL-1879). Asserted on the
     // generator's OUTPUT rather than on the constants, because two-decimal
     // formatting would round the cost and the +30% columns into agreement and
     // publish a table that looks internally consistent while stating neither
     // figure.
     //
-    // The page-view row is where that formatting earns its keep, and where
-    // the ORDER of the rounding does too. Its cost is $0.161538 / 1k — the
-    // rate is pinned so the PRICE is round, which leaves the cost a long
-    // decimal — and the price beside it must still read $0.21. Rounding the
-    // cost first and marking up the rounded figure publishes $0.209999.
+    // The page-view row is where that formatting earns its keep. Its cost is
+    // $0.276923 / 1k — weight plus requests, pinned so the PRICE is round,
+    // which leaves the cost a long decimal — and the price beside it must
+    // still read $0.36, computed from the unrounded cost rather than from the
+    // six-decimal figure printed beside it.
     resetFixtures()
     const run = check()
     assert.equal(run.status, 0)
@@ -412,8 +413,8 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
         ['Media & file storage', '$0.026 / GB-mo', '$0.0338 / GB-mo'],
         [
           'Page views (bandwidth + reads)',
-          '$0.161538 / 1k views',
-          '$0.21 / 1k views',
+          '$0.276923 / 1k views',
+          '$0.36 / 1k views',
         ],
         ['Form submissions', '$0.05 / 1k', '$0.065 / 1k'],
       ],

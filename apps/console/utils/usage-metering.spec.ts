@@ -18,6 +18,7 @@
 import {
   ORG_COGS_UNIT_RATES_USD,
   METERED_MARKUP as MARKUP_FROM_LIB,
+  PAGE_VIEW_CDN_REQUEST_COST_USD,
   resolveOrgEntitlements,
 } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import {
@@ -25,7 +26,9 @@ import {
   billsOrgLibraryStorage,
   ESTIMATED_PAGE_TRANSFER_BYTES,
   estimateMonthlyUsageCost,
+  METERED_BILLED_RATES_USD,
   METERED_MARKUP,
+  METERED_OVERAGE_COST_USD,
   METERED_UNIT_RATES_USD,
   meteredIncludedAllowance,
   pageViewsFromBandwidthGb,
@@ -243,6 +246,42 @@ describe('estimateMonthlyUsageCost', () => {
     expect(estimate.costUsd).toBeGreaterThan(estimate.billableCostUsd)
   })
 
+  /**
+   * A page view past the band bills its weight AND its CDN requests (AGL-1879)
+   * — $0.36 per 1,000 — while `costUsd`, the COGS figure the cost model
+   * shares, still prices every view on weight alone.
+   */
+  it('bills page views past the band at $0.36 per 1,000', () => {
+    const included = meteredIncludedAllowance(starter)
+    const estimate = estimateMonthlyUsageCost(
+      [
+        {
+          storageBytes: 0,
+          // Rounded up so the band subtracts to a whole 100,000 past it.
+          pageViews: Math.ceil(included.pageViews) + 100_000,
+          formSubmissions: 0,
+        },
+      ],
+      starter,
+    )
+    expect(estimate.billablePageViews).toBeCloseTo(
+      Math.ceil(included.pageViews) - included.pageViews + 100_000,
+      6,
+    )
+    // Pinned as LITERALS: 100,000 views × $0.36 / 1,000 = $36.00, from a
+    // cost of 100,000 × $0.000276923 = $27.69.
+    const views = estimate.billablePageViews
+    expect(estimate.billableCostUsd).toBeCloseTo(views * 0.00027692308, 8)
+    expect(estimate.billedCents).toBe(Math.round(views * 0.00036 * 100))
+    expect(estimate.billedCents).toBe(3600)
+    expect(estimate.billableUsdByMeter.pageViews).toBeCloseTo(views * 0.00036, 6)
+    // COGS stays on weight: every view, at the shared unit rate.
+    expect(estimate.costUsd).toBeCloseTo(
+      estimate.pageViews * ORG_COGS_UNIT_RATES_USD.perPageView,
+      8,
+    )
+  })
+
   it('charges nothing at exactly the included amount', () => {
     const included = meteredIncludedAllowance(starter)
     const estimate = estimateMonthlyUsageCost(
@@ -333,7 +372,7 @@ describe('the billed rate table and the COGS rate table (AGL-2194)', () => {
   })
 
   /**
-   * The published rate set: $0.0338/GB-mo, $0.21/1k page views, $0.065/1k form
+   * The published rate set: $0.0338/GB-mo, $0.36/1k page views, $0.065/1k form
    * submissions. Those are the CUSTOMER-facing figures, so they are asserted
    * post-markup — the form the published page states and the form a customer
    * can check. `published-pricing-table-parity.spec.ts` pins the same three
@@ -345,7 +384,8 @@ describe('the billed rate table and the COGS rate table (AGL-2194)', () => {
    * Two of the three are where the Sept-1 lock put them. The page-view rate
    * was re-pegged on 2026-09-09 (AGL-2711) when the weight reduction the
    * standing decision preferred landed and the page still measured far above
-   * the 627 KB the rate was calibrated for.
+   * the 627 KB the rate was calibrated for, and a billed view took on its CDN
+   * requests on 2026-10-01 (AGL-1879): $0.21 → $0.36.
    */
   it('prices the published rate set after markup', () => {
     const per1k = (rate: number) =>
@@ -355,8 +395,24 @@ describe('the billed rate table and the COGS rate table (AGL-2194)', () => {
         METERED_UNIT_RATES_USD.storagePerGbMonth * METERED_MARKUP * 10_000,
       ) / 10_000,
     ).toBe(0.0338)
-    expect(per1k(METERED_UNIT_RATES_USD.perPageView)).toBe(0.21)
+    expect(per1k(METERED_OVERAGE_COST_USD.perPageView)).toBe(0.36)
     expect(per1k(METERED_UNIT_RATES_USD.perFormSubmission)).toBe(0.065)
+    // The page-view price is the weight term plus the request term, and the
+    // weight term alone is the figure /pricing carried before.
+    expect(METERED_OVERAGE_COST_USD.perPageView).toBe(
+      METERED_UNIT_RATES_USD.perPageView + PAGE_VIEW_CDN_REQUEST_COST_USD,
+    )
+    expect(per1k(METERED_UNIT_RATES_USD.perPageView)).toBe(0.21)
+    // And the billed table is that sum marked up, the figure the Billing
+    // card prints.
+    expect(Math.round(METERED_BILLED_RATES_USD.perPageView * 1000 * 100) / 100).toBe(0.36)
+    // Storage and form submissions carry no second term.
+    expect(METERED_OVERAGE_COST_USD.storagePerGbMonth).toBe(
+      METERED_UNIT_RATES_USD.storagePerGbMonth,
+    )
+    expect(METERED_OVERAGE_COST_USD.perFormSubmission).toBe(
+      METERED_UNIT_RATES_USD.perFormSubmission,
+    )
   })
 
   /** The re-export is the same binding, not a second 1.3 that can drift. */

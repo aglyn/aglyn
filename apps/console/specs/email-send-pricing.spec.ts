@@ -61,6 +61,7 @@
 import {
   METERED_BILLED_RATES_USD,
   METERED_MARKUP,
+  METERED_OVERAGE_COST_USD,
   METERED_UNIT_RATES_USD,
 } from '../utils/usage-metering'
 import {
@@ -430,10 +431,11 @@ describe('the billed rate and the cost rate are different numbers', () => {
     // The three pass-through rates earn 23% by construction — they are cost x
     // 1.30, and "at cost + 30%" is a published promise. A guard that swept
     // them in would be red on shipped, correct, PUBLISHED prices, and the
-    // cheapest way to get it green would be to change one of them.
+    // cheapest way to get it green would be to change one of them. The cost
+    // is a BILLED view's, weight and CDN requests both.
     const passThroughMargin =
       (METERED_BILLED_RATES_USD.perPageView -
-        METERED_UNIT_RATES_USD.perPageView) /
+        METERED_OVERAGE_COST_USD.perPageView) /
       METERED_BILLED_RATES_USD.perPageView
     expect(passThroughMargin).toBeCloseTo(0.2308, 4)
     expect(passThroughMargin).toBeLessThan(0.5)
@@ -473,7 +475,7 @@ describe('the billed rate and the cost rate are different numbers', () => {
     }
     expect(METERED_MARKUP).toBe(1.3)
     expect(METERED_BILLED_RATES_USD.storagePerGbMonth).toBeCloseTo(0.0338, 6)
-    expect(METERED_BILLED_RATES_USD.perPageView * 1000).toBeCloseTo(0.21, 6)
+    expect(METERED_BILLED_RATES_USD.perPageView * 1000).toBeCloseTo(0.36, 6)
     expect(METERED_BILLED_RATES_USD.perFormSubmission * 1000).toBeCloseTo(
       0.065,
       6,

@@ -297,11 +297,17 @@ export function compareUnitRateTables(metered, cogs) {
 /**
  * What `/pricing` publishes for the three meters: unit cost × markup, scaled
  * to the unit the page quotes.
+ *
+ * A billed page view costs its weight (`perPageView`) AND the CDN requests
+ * behind it (`PAGE_VIEW_CDN_REQUEST_COST_USD`, AGL-1879), so the page-view
+ * figure takes both. Required rather than defaulted: a caller that forgot it
+ * would reproduce the weight-only price and call it published.
  */
-export function publishedMeteredRates(rates, markup) {
+export function publishedMeteredRates(rates, markup, pageViewCdnRequestCostUsd) {
   return {
     storagePerGbMonth: cents(rates.storagePerGbMonth * markup * 10000) / 10000,
-    perThousandPageViews: cents(rates.perPageView * markup * 1000 * 10000) / 10000,
+    perThousandPageViews:
+      cents((rates.perPageView + pageViewCdnRequestCostUsd) * markup * 1000 * 10000) / 10000,
     perThousandFormSubmissions: cents(rates.perFormSubmission * markup * 1000 * 10000) / 10000,
   }
 }

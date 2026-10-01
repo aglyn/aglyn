@@ -1140,8 +1140,8 @@
       {
         "label": "Page views (bandwidth + reads)",
         "unit": "/ 1k views",
-        "ourCost": "$0.161538 / 1k views",
-        "youPay": "$0.21 / 1k views"
+        "ourCost": "$0.276923 / 1k views",
+        "youPay": "$0.36 / 1k views"
       },
       {
         "label": "Form submissions",

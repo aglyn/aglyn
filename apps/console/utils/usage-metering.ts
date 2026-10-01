@@ -23,6 +23,7 @@
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation'
 import {
   METERED_MARKUP,
+  PAGE_VIEW_CDN_REQUEST_COST_USD,
   bandwidthGbFromPageViews,
   pageViewsFromBandwidthGb,
   planMetersInfraOverage,
@@ -65,7 +66,10 @@ export { METERED_MARKUP } from '@aglyn/aglyn/app-utils/plan-entitlements'
  * The published terms are "at cost + 30%", and the markup is applied to the
  * figures in THIS table, so a wrong rate here does not make us expensive, it
  * makes the published claim false. Corrected 2026-08-09 (AGL-1280); the
- * page-view rate re-pegged 2026-09-09 (AGL-2711).
+ * page-view rate re-pegged 2026-09-09 (AGL-2711). A page view billed past its
+ * band also carries `PAGE_VIEW_CDN_REQUEST_COST_USD` — see
+ * {@link METERED_OVERAGE_COST_USD} — which this table does not, because
+ * `perPageView` here is the weight-proportional cost the COGS table shares.
  *
  * **Validated against LIST rates, not an invoice**, because no paid month
  * exists to measure: GCP's July 2026 invoice (5653085482) totalled **$0.03**
@@ -114,8 +118,29 @@ export const METERED_UNIT_RATES_USD = {
 }
 
 /**
- * What a customer is CHARGED per unit past the included band: the table above
- * times {@link METERED_MARKUP}.
+ * What one unit PAST the included band costs us — the basis the markup is
+ * applied to, in USD.
+ *
+ * Storage and form submissions are the unit rates above. A page view past the
+ * band also carries the CDN's per-request charge (AGL-1879): the platform's
+ * request allowance is spent long before its transfer allowance, so a billed
+ * view costs its weight AND its requests. See
+ * `PAGE_VIEW_CDN_REQUEST_COST_USD` for the measurement and the arithmetic.
+ *
+ * `costUsd` on the rollup stays on {@link METERED_UNIT_RATES_USD}, the table
+ * the COGS model shares; this one prices only what is billed.
+ */
+export const METERED_OVERAGE_COST_USD = {
+  storagePerGbMonth: METERED_UNIT_RATES_USD.storagePerGbMonth,
+  perPageView:
+    METERED_UNIT_RATES_USD.perPageView + PAGE_VIEW_CDN_REQUEST_COST_USD,
+  perFormSubmission: METERED_UNIT_RATES_USD.perFormSubmission,
+}
+
+/**
+ * What a customer is CHARGED per unit past the included band: the overage
+ * cost above times {@link METERED_MARKUP} — $0.0338/GB-month, $0.36 per 1,000
+ * page views, $0.065 per 1,000 form submissions.
  *
  * The rate above is our cost; this is the published price, and they are three
  * decimal places apart. A billing surface that printed the cost table would be
@@ -123,7 +148,6 @@ export const METERED_UNIT_RATES_USD = {
  * customer-facing figure is the product, not the input.
  *
  * Derived rather than written out, so a rate correction moves both together.
- * There is exactly one rate table in this file and it is the one above.
  *
  * ⛔ **Three meters, and email is not a fourth.** Every figure in this table
  * is a cost passed through at `METERED_MARKUP`, and the published sentence
@@ -135,9 +159,9 @@ export const METERED_UNIT_RATES_USD = {
  * COGS model reads and no customer surface does.
  */
 export const METERED_BILLED_RATES_USD = {
-  storagePerGbMonth: METERED_UNIT_RATES_USD.storagePerGbMonth * METERED_MARKUP,
-  perPageView: METERED_UNIT_RATES_USD.perPageView * METERED_MARKUP,
-  perFormSubmission: METERED_UNIT_RATES_USD.perFormSubmission * METERED_MARKUP,
+  storagePerGbMonth: METERED_OVERAGE_COST_USD.storagePerGbMonth * METERED_MARKUP,
+  perPageView: METERED_OVERAGE_COST_USD.perPageView * METERED_MARKUP,
+  perFormSubmission: METERED_OVERAGE_COST_USD.perFormSubmission * METERED_MARKUP,
 }
 
 /**
@@ -330,7 +354,12 @@ export interface UsageCostEstimate {
    * views and the spike detector all mean "what did this org cost us".
    */
   costUsd: number
-  /** Raw infra cost of the billable excess only. */
+  /**
+   * What the billable excess costs us, before markup — priced on
+   * {@link METERED_OVERAGE_COST_USD}, so a billed page view carries its CDN
+   * requests as well as its weight. It can therefore exceed the matching
+   * share of `costUsd`, which prices every view on weight alone.
+   */
   billableCostUsd: number
   /**
    * What each meter contributes to the charge, in USD AFTER markup.
@@ -394,7 +423,7 @@ export function estimateMonthlyUsageCost(
     0,
     formSubmissions - included.formSubmissions,
   )
-  const priced = (
+  const costed = (
     storage: number,
     views: number,
     submissions: number,
@@ -402,6 +431,14 @@ export function estimateMonthlyUsageCost(
     storage * METERED_UNIT_RATES_USD.storagePerGbMonth +
     views * METERED_UNIT_RATES_USD.perPageView +
     submissions * METERED_UNIT_RATES_USD.perFormSubmission
+  const priced = (
+    storage: number,
+    views: number,
+    submissions: number,
+  ): number =>
+    storage * METERED_OVERAGE_COST_USD.storagePerGbMonth +
+    views * METERED_OVERAGE_COST_USD.perPageView +
+    submissions * METERED_OVERAGE_COST_USD.perFormSubmission
   const billableCostUsd = included.metered
     ? priced(billableStorageGb, billablePageViews, billableFormSubmissions)
     : 0
@@ -423,7 +460,7 @@ export function estimateMonthlyUsageCost(
     billableStorageGb,
     billablePageViews,
     billableFormSubmissions,
-    costUsd: priced(storageGb, pageViews, formSubmissions),
+    costUsd: costed(storageGb, pageViews, formSubmissions),
     billableCostUsd,
     billableUsdByMeter: {
       storage: billableShareUsd(billableStorageGb, 0, 0),

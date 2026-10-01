@@ -92,6 +92,57 @@ introduce a price or an entitlement the account owner has not chosen.
 
 ---
 
+## 2026-10-01 — Page-view overage $0.21 → $0.36 per 1k: a billed page view carries its CDN requests
+
+- **Decided by:** the account owner, 2026-10-01, on AGL-1879, shown that past the hosting plan's 10,000,000 included CDN requests a month the $0.21 line is billed below cost, and asked whether to raise it to $0.36 per 1,000.
+- **Scope:** pricing
+- **Evidence:** `PAGE_VIEW_CDN_REQUEST_COST_USD` = 0.00011538462 in `libs/aglyn/src/lib/app-utils/plan-entitlements.ts` (new); `METERED_OVERAGE_COST_USD.perPageView` = `perPageView` + that term, and `METERED_BILLED_RATES_USD` = the overage cost × `METERED_MARKUP`, in `apps/console/utils/usage-metering.ts`, which `estimateMonthlyUsageCost` bills on; `METERED_UNIT_RATES_USD.perPageView` and `ORG_COGS_UNIT_RATES_USD.perPageView` both still 0.00016153846; published `$0.21 / 1,000` → **`$0.36 / 1,000`** (cost column $0.161538 → $0.276923), regenerated into `tools/marketing/pricing-copy/tables.json`; the Sept-1 pin in `tools/scripts/check-pricing-drift.mjs` moved with this entry; `check:decision-log` watches the new constant; the band ladder past the request allowance pinned in `apps/console/specs/tier-margin-floor.spec.ts`; the same-dated entry in Drive → Pricing & Packaging → 05-Pricing-Decision-Log; AGL-1879.
+
+**A charged price moves.** Every 1,000 page views past a plan's included band
+bills $0.36 instead of $0.21. No plan price, band or other meter moves, and no
+Stripe object changes: the `aglyn_metered_usage` meter carries the month's
+billed cents and both metered prices are $0.01 a unit.
+
+**Why.** `perPageView` prices what a view weighs — transfer plus the reads
+behind a render — and never priced what it REQUESTS, because the team has been
+inside the CDN's included request allowance. Past 10M requests a month the CDN
+bills $2.00 per million in its cheapest region and up to $3.20 elsewhere. A
+cold load of the published page makes 57 requests, so the allowance is about
+175,000 views a month across the whole platform, which runs out long before
+the transfer allowance does. Past it, at $2.00 per million, a billed view
+costs $0.2334 per 1,000 at the page as measured and $0.2755 at the 1012.8 KB
+basis the rate is priced for: −11% and −31% at $0.21, +35% and +23% at $0.36.
+
+**Why $0.36.** It is the priced basis plus its requests, at cost + 30%,
+rounded up to the cent: ($0.161538 + $0.114) × 1.3 = $0.3582. The request
+term is pinned at 57.7 requests at $2.00 per million against the measured 57,
+so ($0.161538 + $0.115385) × 1.3 is exactly $0.36, and `/pricing` reads "Our
+cost $0.276923 / You pay $0.36" — the "at cost + 30%" claim stays true of what
+a billed view costs.
+
+**Why a separate term, and not a bigger `perPageView`.** The two rate tables
+stay identical; what they carry is the weight term, half of a pair with
+`ESTIMATED_PAGE_TRANSFER_BYTES` that `check:page-view-rate` recovers a page
+weight from. Folding a per-request charge into it would have the gate read a
+1,736 KB page nobody serves and re-price every bandwidth band through the cost
+of a gigabyte — a band-sizing change this decision does not make.
+
+**What it leaves open.** The included bands are still sized on weight alone,
+$0.16724 per GB. Past the request allowance a GB of included bandwidth costs
+$0.28670, and at 100% of every band the annual ladder reads −9.7% (Starter)
+to −35.5% (Pro) while the monthly ladder stays positive. That is a question
+for whoever sizes the bands; the figures are pinned where the next band change
+will move them.
+
+**Existing subscribers.** ToS §4.7: a price change on an existing
+subscription "generally takes effect at your next renewal term", with the
+legally required minimum notice where law requires it. The rollup prices the
+month it closes at the deployed rate, so the first month billed at $0.36 is
+the first closed month rolled up after the production deploy. Live Stripe
+held no legitimate paying subscription when this was decided.
+
+---
+
 ## 2026-09-29 — Sequences is not sold: it stays internal to Aglyn's own organization and available to self-hosted installs
 
 - **Decided by:** the account owner on 2026-09-29 (AGL-3409), closing the packaging question AGL-2976 left open: Sequences is not offered on aglyn.com-hosted workspaces at any price. It stays in use by Aglyn's own organization through its per-org grant, and is available to self-hosted installs, which bring their own Google Workspace OAuth client with an Internal consent screen.
