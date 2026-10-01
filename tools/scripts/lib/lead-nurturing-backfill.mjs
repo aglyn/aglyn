@@ -31,7 +31,7 @@
 //    document id) holds the lead, and the send's site holds the lead.
 //
 // The runtime makes the same move on every new send — `markOutreachLeadNurturing`
-// in the outreach plugin, `nurtureReachedLeads` in `@aglyn/tenant-data-admin`
+// in the outreach plugin, `nurtureReachedLeads` in the CRM plugin
 // — so this converges the leads reached before either existed.
 
 /** `CRM_LEAD_STATUSES`, restated: a `.mjs` under tools/ cannot import the TypeScript that owns it. */

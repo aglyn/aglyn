@@ -21,7 +21,9 @@
  * A lead nobody has touched, once a campaign email has been delivered to
  * it, moves from New to Nurturing: automated email is reaching it, so the
  * CRM digest must not count it as unworked, but no person has engaged yet.
- * Sequences make the same move from their own send job.
+ * Sequences make the same move from their own send job. A sender reaches
+ * this through the record email-state seam's `reached`
+ * (`stampRecordEmailReach`), never by importing the CRM.
  *
  * Found by address rather than by audience: a lead's document id IS the
  * `personKey` of its address (`orgs/{orgId}/leads/{personKey}`, AGL-3275),
@@ -76,7 +78,7 @@ export async function nurtureReachedLeads(
         moved += writes
       }
     } catch (error) {
-      console.error('[campaign] the reached leads could not be marked nurturing', input.orgId, error)
+      console.error('[crm] the reached leads could not be marked nurturing', input.orgId, error)
     }
   }
   return moved
