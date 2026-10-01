@@ -1455,6 +1455,35 @@ recognizes its own by it; every other handler ignores the event. They are
 awaited in the route rather than deferred, because a plugin's decision about
 whether a workspace may keep spending must not lag the payment that settled it.
 
+## Site beacons — `plugin-site-beacons` (`/server`)
+
+A published page reports what visitors did through one collector, and the
+collector owns what every beacon owes before anything is counted: the host must
+exist, a lockdown refuses it silently, and the per-address rate limit applies.
+What a plugin's site runtime reports beyond a pageview — an announcement bar
+seen, a popup dismissed — is the plugin's to count, in its own documents. It
+claims the body FIELD that marks its beacons, from `serverDeclarations`, and
+imports its counting code on the first beacon:
+
+```ts
+registerPluginSiteBeacon(
+  {
+    field: 'tasting',
+    count: async (request) => (await import('./server/tasting-beacon')).count(request),
+  },
+  { pluginId: 'cellar' },
+)
+```
+
+| API | Semantics |
+| --- | --- |
+| `registerPluginSiteBeacon({ field, count }, { pluginId? })` | Claims a field. One owner per field: a second plugin throws naming both and the incumbent keeps it; the owner registering again replaces its own. |
+| `count({ hostId, day, dayExpiresAt, body })` | One beacon, after the collector's gates. `day` is the collector's UTC day bucket and `dayExpiresAt` the platform's retention for that day's analytics document — an owner that writes there stamps it. `body` is what the browser sent: validate every field read. The collector answers 204 and counts no pageview; a throw is logged, never surfaced. |
+| `pluginSiteBeaconFor(body)` | The owner of a beacon, or `null` when no claimed field holds a non-empty string. |
+
+The site runtime posts with `sendAnalyticsBeacon({ hostId, tasting: 'poured' })`.
+Marketing's announcement bar and popup are the first: `{ overlay, overlayId? }`.
+
 ## A meter line a plugin bills itself — `plugin-metered-lines` (`/server`)
 
 The monthly usage sweep prices several lines into one figure and posts it as a

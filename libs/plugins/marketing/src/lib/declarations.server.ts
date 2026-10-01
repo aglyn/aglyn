@@ -18,14 +18,30 @@
 // The seam from its own module, not the plugin-manager barrel: boot needs the
 // registry and nothing else, and the barrel reaches the client contexts.
 import { registerOperatorAlerts } from '@aglyn/aglyn/plugin-manager/operator-alerts'
+import { registerPluginSiteBeacon } from '@aglyn/aglyn/plugin-manager/plugin-site-beacons'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { MARKETING_OPERATOR_ALERTS } from './constants/operator-alerts'
 
 /**
  * The marketing plugin's server declarations: the light registrations core
  * reads at boot, before any surface loads — its operator alerts (AGL-3377),
- * so Staff → Operator alerts lists them before the first one is raised.
+ * so Staff → Operator alerts lists them before the first one is raised, and
+ * its overlay beacons, which the site collector hands it on any published
+ * page. The counting code and the Admin SDK load with the first beacon.
  */
 export function registerMarketingServerDeclarations(): void {
   registerOperatorAlerts(MARKETING_OPERATOR_ALERTS, { pluginId: BUNDLE_ID })
+  registerPluginSiteBeacon(
+    {
+      field: 'overlay',
+      async count(request) {
+        const [{ countOverlayBeacon }, { default: firebaseAdmin }] = await Promise.all([
+          import('./server/overlay-beacon'),
+          import('@aglyn/tenant-data-admin/server/firebase-admin'),
+        ])
+        await countOverlayBeacon(request, firebaseAdmin.app().firestore())
+      },
+    },
+    { pluginId: BUNDLE_ID },
+  )
 }

@@ -30,6 +30,7 @@ The plugin declares four registrars in `plugins.config.json`, plus a `site` modu
 **Server**, exported from `@aglyn/plugins-marketing/server`:
 
 - `registerMarketingApi` (the `tenantApi` registrar): the `experiments/track` beacon, which counts exposures and conversions for a running experiment and can finish a test whose auto-winner rule is met, and a site page enricher (`registerSitePageEnricher`) that adds overlays, automations and experiments to a page's data.
+- From its server declarations, the site collector's `overlay` beacons (`registerPluginSiteBeacon`): each bar and popup event the site runtime reports is counted into the site's day document and the overlay's own counters, after the collector's host and lockdown gates.
 - `registerMarketingConsoleApi` (the `consoleApi` registrar): `campaigns/send`, `campaigns/manage`, `campaigns/recipients`, `campaigns/process-scheduled`, `lists/materialize`, and the delivery events webhook at `email/events`. It also registers the campaign draft writer on the core's resource-drafts seam and figure readers for campaign and experiment results.
 
 **Exports from `.`**

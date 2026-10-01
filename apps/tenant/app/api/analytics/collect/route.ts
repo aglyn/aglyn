@@ -26,6 +26,7 @@ import {
   notifyStaff,
 } from '@aglyn/tenant-data-admin'
 import { emitHostEvent } from '@aglyn/tenant-runtime'
+import { pluginSiteBeaconFor } from '@aglyn/aglyn/plugin-manager/plugin-site-beacons'
 import { FieldValue } from 'firebase-admin/firestore'
 
 export const dynamic = 'force-dynamic'
@@ -771,60 +772,18 @@ export async function POST(request: Request): Promise<Response> {
     const freeze = await beaconFreeze(hostId)
     if (freeze === 'all') return noContent()
 
-    // Overlay events (AGL-200): impressions/dismissals/clicks for the
-    // announcement bar and popup count into the same day doc under an
-    // `overlays` map — they are NOT pageviews, so return early.
-    const overlay = String(body.overlay ?? '')
-    if (overlay) {
-      const OVERLAY_EVENTS = [
-        'barImpression',
-        'popupImpression',
-        'popupDismiss',
-        'popupClick',
-        'barClick',
-        'barDismiss',
-      ]
-      if (OVERLAY_EVENTS.includes(overlay)) {
-        const day = new Date().toISOString().slice(0, 10)
-        await firebaseAdmin
-          .app()
-          .firestore()
-          .collection('hosts')
-          .doc(hostId)
-          .collection('analytics')
-          .doc(day)
-          .set(
-            {
-              overlays: { [overlay]: FieldValue.increment(1) },
-              // Retention (AGL-1844): a day doc created by overlay events
-              // alone must still carry its expiry stamp.
-              expiresAt: analyticsDayExpiresAt(day),
-            },
-            { merge: true },
-          )
-        // Per-overlay attribution (AGL-271): marketing-hub overlay docs
-        // carry their own lifetime counters so the console can show
-        // engagement per bar/popup, not just the host-wide totals.
-        const overlayId = String(body.overlayId ?? '')
-        if (overlayId && overlayId.length <= 64) {
-          const statKey = overlay.endsWith('Impression')
-            ? 'impressions'
-            : overlay.endsWith('Click')
-              ? 'clicks'
-              : 'dismissals'
-          // update(), not set(): beacons from stale cached pages must not
-          // resurrect a deleted overlay as a stats-only stray doc.
-          await firebaseAdmin
-            .app()
-            .firestore()
-            .collection('hosts')
-            .doc(hostId)
-            .collection('overlays')
-            .doc(overlayId)
-            .update({ [`stats.${statKey}`]: FieldValue.increment(1) })
-            .catch(() => undefined)
-        }
-      }
+    // A plugin's own beacon (an overlay's impression, click or dismissal):
+    // counted by the plugin that registered its field, after the host and
+    // lockdown gates above, and never a pageview — so it returns early. A
+    // counter that fails is logged and the visitor still gets the 204.
+    const pluginBeacon = pluginSiteBeaconFor(body)
+    if (pluginBeacon) {
+      const day = new Date().toISOString().slice(0, 10)
+      await pluginBeacon.beacon
+        .count({ hostId, day, dayExpiresAt: analyticsDayExpiresAt(day), body })
+        .catch((error) =>
+          console.error(`[analytics] ${pluginBeacon.pluginId} beacon failed`, error),
+        )
       return noContent()
     }
 
@@ -856,7 +815,7 @@ export async function POST(request: Request): Promise<Response> {
      *
      * ## Not a pageview
      *
-     * Returns early like the overlay and form branches. Folding it in would
+     * Returns early like the plugin-beacon and form branches. Folding it in would
      * double-count traffic on every page that places a video — and `total` is
      * the ONLY field `/api/billing/report-usage` reads out of a day doc, so
      * returning here is also what makes these counters structurally incapable
@@ -919,16 +878,16 @@ export async function POST(request: Request): Promise<Response> {
      * A form document carried counters for what ARRIVED and nothing for what
      * was offered, so completion, abandonment and conversion were all rates
      * over a population nobody had counted. They are counted here, on the
-     * beacon that already exists, in exactly the `overlays` shape one branch
-     * above: a per-form `update` keyed by the event, plus the same key under
+     * beacon that already exists, in exactly the shape the overlay counters use:
+     * a per-form `update` keyed by the event, plus the same key under
      * the month the submit route files submissions under, so a rate is taken
      * over months both counters were live for.
      *
      * ⛔ `update`, never `set`. A beacon from a stale cached page naming a
      * deleted form must not resurrect it as a stats-only stray document —
-     * the rule the overlay branch states and the submit route repeats.
+     * the rule the overlay counter states and the submit route repeats.
      *
-     * NOT a pageview, so it returns early like the overlay and dwell
+     * NOT a pageview, so it returns early like the plugin-beacon and dwell
      * branches: folding it in would double the site's traffic count on every
      * page that places a form.
      *
