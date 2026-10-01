@@ -52,7 +52,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   },
 }))
 
-import { storefrontProcessingCostCents } from '@aglyn/aglyn/server'
+import { saleProcessingCostCents } from '@aglyn/aglyn/server'
 import type { RevenueSourceRequest } from '@aglyn/aglyn/plugin-manager/plugin-revenue-sources'
 import {
   marketplaceListingAttribution,
@@ -121,7 +121,7 @@ describe('marketplace commission', () => {
     // Marketplace charges carry no application fee, so this cost is real and
     // unrecovered. Derived from the same helper the storefront path uses.
     expect(out.estimatedProcessingCostCents).toBe(
-      storefrontProcessingCostCents(10000),
+      saleProcessingCostCents(10000),
     )
     expect(out.estimatedProcessingCostCents).toBeGreaterThan(0)
   })
@@ -291,7 +291,7 @@ describe('the marketplace’s revenue source', () => {
       ['Marketplace sales (buyer gross)', 10_000, false],
       ['— less publisher payouts', 8_000, true],
     ])
-    const cost = storefrontProcessingCostCents(10_000)
+    const cost = saleProcessingCostCents(10_000)
     expect(answer.notes[0].label).toBe(
       `~$${(cost / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} of card processing on marketplace sales is NOT recovered — the commission above is gross of it`,
     )

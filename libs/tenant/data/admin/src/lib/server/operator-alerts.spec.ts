@@ -292,6 +292,26 @@ describe('raiseOperatorAlert (AGL-3377)', () => {
     expect(consoleWrites[0].options).toEqual({})
   })
 
+  it('stamps each alert with its level on the console notification (AGL-3437)', async () => {
+    await raiseOperatorAlert('billing.usageNotReported', { context: { orgId: 'o1' } })
+    await raiseOperatorAlert('system.healthDegraded', { context: { check: 'Ways in' } })
+    await raiseOperatorAlert('system.healthRecovered', { context: { check: 'Ways in' } })
+    await raiseOperatorAlert('system.healthRecovered', {
+      context: { check: 'Ways in' },
+      level: 'info',
+    })
+    expect(consoleWrites.map((write) => write.payload['level'])).toEqual([
+      // A must-know with no level of its own is red…
+      'critical',
+      // …a degraded check is amber, not red…
+      'warning',
+      // …a recovery is good news…
+      'success',
+      // …and a caller's own judgement wins.
+      'info',
+    ])
+  })
+
   it('an unregistered type is still told, never dropped', async () => {
     const result = await raiseOperatorAlert('nobody.registeredThis', { subject: 'Something broke', body: 'details' })
     expect(result.outcome).toBe('delivered')

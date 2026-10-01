@@ -26,6 +26,7 @@
 import {
   currentMonth,
   monthIsClosed,
+  rollupIsFinal,
   previousMonth,
 } from './billing-month'
 
@@ -107,5 +108,24 @@ describe('monthIsClosed — may this month be invoiced?', () => {
     const firstInstant = new Date('2026-09-01T00:00:00.000Z')
     expect(monthIsClosed('2026-08', firstInstant)).toBe(true)
     expect(monthIsClosed('2026-09', firstInstant)).toBe(false)
+  })
+})
+
+describe('rollupIsFinal — does this rollup carry the closed figure? (AGL-3442)', () => {
+  it('is true once the rollup was computed after its month ended', () => {
+    // Aglyn LLC's September rollup, as the closed-month sweep left it.
+    expect(rollupIsFinal('2026-09', new Date('2026-10-01T02:00:08.859Z'))).toBe(true)
+    expect(rollupIsFinal('2026-09', new Date('2026-10-01T00:00:00.000Z'))).toBe(true)
+  })
+
+  it('is false for the running figure the in-progress sweep wrote', () => {
+    expect(rollupIsFinal('2026-09', new Date('2026-09-30T07:00:08.000Z'))).toBe(false)
+    expect(rollupIsFinal('2026-09', new Date('2026-09-30T23:59:59.999Z'))).toBe(false)
+  })
+
+  it('is false, failing closed, with no usable computedAt', () => {
+    for (const bad of [null, undefined, new Date('not a date'), 0, 'server-time']) {
+      expect(rollupIsFinal('2026-09', bad as never)).toBe(false)
+    }
   })
 })

@@ -30,6 +30,9 @@
  *   lock serves on its notice page (`lockdownNotice`) — except a feature
  *   pause staff wrote nothing for, whose served words are a member's
  *   mid-task "try again shortly", and which names what is paused instead;
+ * - for a feature pause, each lever by its customer name, never the staff
+ *   checklist's label, and every lever one request paused in ONE notice
+ *   (the AI pause is two levers and one staff action);
  * - what the lock affects: the sites, whether everyone was signed out, a
  *   canceled subscription, paused renewals and payouts;
  * - how to appeal: reply, or write to the support address;
@@ -46,7 +49,7 @@
 
 import { createHash } from 'crypto'
 import {
-  lockdownFeatureLabel,
+  lockdownFeaturesCustomerText,
   lockdownNotice,
   type LockdownFeatureKey,
   type LockdownReasonCode,
@@ -122,6 +125,8 @@ export function lockdownAffectedText(input: {
   action: 'lock' | 'unlock'
   scope: string
   mode?: string | null
+  /** When the lock ends on its own, if staff set an end. */
+  untilMs?: number | null
   effects?: LockdownNoticeEffects
 }): string {
   const effects = input.effects ?? {}
@@ -151,8 +156,14 @@ export function lockdownAffectedText(input: {
         parts.push('you are signed out and cannot sign in')
         break
       case 'feature':
-        // A staff pause, not an outage: it holds until it is lifted.
-        parts.push('it stays off until our team turns it back on')
+        // A staff pause, not an outage: it holds until it is lifted, or
+        // until the end staff set. Said of "the pause", so it reads the same
+        // for one lever or several.
+        parts.push(
+          input.untilMs
+            ? `the pause ends on its own at ${new Date(input.untilMs).toUTCString()}, or sooner if our team lifts it`
+            : 'the pause holds until our team lifts it',
+        )
         break
     }
     if (effects.sessionsRevoked && input.scope !== 'user') {
@@ -179,7 +190,7 @@ export function lockdownAffectedText(input: {
         parts.push('the domain serves your site again')
         break
       case 'feature':
-        parts.push('the feature is back on')
+        parts.push('everything the pause stopped works again')
         break
       case 'host':
         // A site lock signs nobody out, so there is no "sign in again".
@@ -206,6 +217,8 @@ async function subjectFor(
   scope: string,
   targetId: string,
   orgId: string | null,
+  /** A feature lock's levers; absent means `targetId` alone. */
+  features: readonly string[] = [targetId],
 ): Promise<{ orgId: string | null; hostId: string | null; label: string; path: string | null }> {
   if (scope === 'org') {
     // By name: a resend that covers an account and its workspaces lists each.
@@ -247,7 +260,7 @@ async function subjectFor(
     return {
       orgId,
       hostId: null,
-      label: lockdownFeatureLabel(targetId as LockdownFeatureKey),
+      label: lockdownFeaturesCustomerText(features),
       path: null,
     }
   }
@@ -266,6 +279,11 @@ export async function sendLockdownOwnerNotice(input: {
   targetId: string
   /** A feature lock's workspace; absent on a platform-wide feature lock. */
   orgId?: string | null
+  /**
+   * Every lever one feature request pulled, when it pulled several: one
+   * notice names them all. Absent means `targetId` alone.
+   */
+  targetIds?: readonly string[]
   /** False when staff unticked "Email the owners". */
   emailOwners: boolean
   lock?: {
@@ -283,13 +301,22 @@ export async function sendLockdownOwnerNotice(input: {
   // workspace, so there is nobody in particular to write to.
   if (!kinds || (input.scope === 'feature' && !input.orgId)) return null
   const kind = kinds[input.action]
+  const features =
+    input.scope === 'feature'
+      ? input.targetIds?.length
+        ? [...new Set(input.targetIds)]
+        : [input.targetId]
+      : []
   const step: LockdownOwnerNoticeStep = {
     attempted: false,
     confirmed: false,
     kind,
     scope: input.scope,
     targetId: input.targetId,
-    reference: lockdownNoticeReference(input.scope, input.targetId),
+    reference: lockdownNoticeReference(
+      input.scope,
+      features.length > 1 ? features.join('+') : input.targetId,
+    ),
     recipients: 0,
     emailed: 0,
     emailFailed: 0,
@@ -302,6 +329,7 @@ export async function sendLockdownOwnerNotice(input: {
       input.scope,
       input.targetId,
       input.orgId ?? null,
+      features,
     )
     // The customer-facing words the lock SERVES: staff's message, or the
     // per-reason default beneath it.
@@ -319,11 +347,20 @@ export async function sendLockdownOwnerNotice(input: {
     // A feature's served body is what a member meets mid-task ("please try
     // again shortly"), which a staff pause that holds until it is lifted
     // makes false in an owner's inbox. With no message from staff, the
-    // owners read what is paused, and when it is expected back if staff set
-    // a time.
+    // owners read what each lever serves as its title, and when it is
+    // expected back if staff set a time.
     const message =
       served && input.scope === 'feature' && !input.lock?.message?.trim()
-        ? `${served.title.replace(/[.\s]+$/, '')}.${
+        ? `${features
+            .map((feature) =>
+              lockdownNotice({
+                scope: 'feature',
+                feature: feature as LockdownFeatureKey,
+                reason: (input.lock?.reason || 'manual') as LockdownReasonCode,
+              }).title.replace(/[.\s]+$/, ''),
+            )
+            .map((title) => `${title}.`)
+            .join(' ')}${
             input.lock?.untilMs
               ? ` Expected back by ${new Date(input.lock.untilMs).toUTCString()}.`
               : ''
@@ -344,6 +381,7 @@ export async function sendLockdownOwnerNotice(input: {
           action: input.action,
           scope: input.scope,
           mode: input.lock?.mode ?? null,
+          untilMs: input.lock?.untilMs ?? null,
           effects: input.effects,
         }),
         scope: input.scope,

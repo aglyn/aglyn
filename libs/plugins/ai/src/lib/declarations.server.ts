@@ -31,15 +31,11 @@ import {
   listUsageAlertContributors,
   registerUsageAlertContributor,
 } from '@aglyn/aglyn/plugin-manager/usage-alert-contributors'
-import { pluginMeteredLineOwner } from '@aglyn/aglyn/plugin-manager/plugin-metered-lines'
+import { registerPluginUsageMeter } from '@aglyn/aglyn/plugin-manager/plugin-usage-meters'
 import { registerOperatorAlerts } from '@aglyn/aglyn/plugin-manager/operator-alerts'
-import { AI_PLUGIN_ID } from './constants'
+import { AI_PLUGIN_ID, AI_USAGE_METER_ID } from './constants'
 import { AI_PROVIDER_UNAVAILABLE } from './operator-alerts'
 import { registerAiDeclarations } from './declarations'
-import {
-  AI_OVERAGE_METER_LINE_ID,
-  registerAiOverageMeteredLine,
-} from './billing/ai-overage-cutover'
 
 /** The provider-spend staff alerts' contributor id under the plugin. */
 const AI_USAGE_ALERTS_ID = 'provider-spend'
@@ -136,13 +132,24 @@ export function registerAiServerDeclarations(): void {
       { pluginId: AI_PLUGIN_ID },
     )
   }
-  // The meter line the plugin bills for itself from the cutover month
-  // (AGL-3011). Registered at boot because the monthly usage sweep is a core
-  // cron; the claim reads its own cutover month on every call, so it is
-  // inert until the month is configured.
-  if (pluginMeteredLineOwner(AI_OVERAGE_METER_LINE_ID) !== AI_PLUGIN_ID) {
-    registerAiOverageMeteredLine()
-  }
+  // The plugin's meter in the monthly usage sweep: the month's provider spend
+  // onto the rollup, the credits past the band onto the invoice, and — from
+  // the cutover month (AGL-3011) — the close-out of what the plugin invoices
+  // itself. Registered at boot because the sweep is a core cron, and declared
+  // in `usageAxes` so the sweep refuses to bill a month without it. The same
+  // registration again replaces itself.
+  registerPluginUsageMeter({
+    pluginId: AI_PLUGIN_ID,
+    id: AI_USAGE_METER_ID,
+    measure: async (context) => {
+      const { measureAiMonth } = await import('./billing/ai-month-meter')
+      return measureAiMonth(context)
+    },
+    closeMonth: async (context) => {
+      const { closeAiMonth } = await import('./billing/ai-month-meter')
+      await closeAiMonth(context)
+    },
+  })
   if (!listPluginUserErasers().includes(AI_PLUGIN_ID)) {
     registerPluginUserEraser(
       async (request) => {
@@ -168,6 +175,10 @@ export function registerAiServerDeclarations(): void {
       evaluate: async (context) => {
         const { evaluateAiUsageAlerts } = await import('./usage/ai-usage-alerts')
         await evaluateAiUsageAlerts(context)
+      },
+      quotaChecks: async (context) => {
+        const { aiQuotaChecks } = await import('./usage/ai-quota-checks')
+        return aiQuotaChecks(context)
       },
     })
   }

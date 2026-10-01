@@ -70,12 +70,14 @@
 import {
   assessDmarc,
   assessSendingRecords,
+  headerSafeText,
   isPlatformSendingDomain,
   isSharedSendingDomain,
   normalizeLocalPart,
   normalizeSendingDomain,
   resolveSendingIdentity,
   safeProviderDetail,
+  SENDING_FROM_NAME_MAX,
   SENDING_SUBDOMAIN,
   sendingDnsRecords,
   sendingTrackingHost,
@@ -91,7 +93,11 @@ import {
   type SendingIdentityVerdict,
   type SendingVerification,
 } from '@aglyn/shared-util-email'
-import { lockdownMode } from '@aglyn/aglyn/server'
+import {
+  lockdownMode,
+  resolveBrandingProfile,
+  resolveHostToken,
+} from '@aglyn/aglyn/server'
 import firebaseAdmin from './firebase-admin'
 import { lookupCaa, lookupMx, lookupTxt } from './dns-probe'
 import { getOrgForHost } from './organizations'
@@ -911,10 +917,51 @@ export async function hostSendingIdentity(
         ? ((snapshot.data() as Record<string, unknown>) ?? null)
         : null,
     }),
+    /*
+     * THE NAME THE SITE SENDS UNDER (AGL-3442), from the same two documents,
+     * so it costs no read. `sendEmail` puts it where a sender passed the
+     * org's branding default; the address above is untouched.
+     */
+    ...siteSenderNames({
+      org: (owner?.org as Record<string, unknown> | undefined) ?? null,
+      host: snapshot?.exists
+        ? ((snapshot.data() as Record<string, unknown>) ?? null)
+        : null,
+    }),
   }
 
   cache?.set(id, verdict)
   return verdict
+}
+
+/**
+ * The display name one site's mail leaves under, and the org default it
+ * replaces (AGL-3442).
+ *
+ * The site's business name — what its emails render as
+ * `{{host.businessName}}`, which is its SEO entity name or else its display
+ * name — and the org's branding default when the site has neither, which is
+ * "Aglyn" for an org without white-label. The name sent is flattened as every
+ * sender name is, because it reaches a `From:` header and the site's owner
+ * typed it. The default is kept exactly as `resolveBrandingProfile` returns
+ * it, because `sendEmail` recognizes it by comparing it with what a sender
+ * passed, and senders pass that value unchanged.
+ */
+export function siteSenderNames(input: {
+  org: Record<string, unknown> | null
+  host: Record<string, unknown> | null
+}): Pick<SendingIdentityVerdict, 'fromName' | 'brandFromName'> {
+  const brandFromName = String(
+    resolveBrandingProfile(input.org as never).fromName ?? '',
+  ).trim()
+  const siteName = headerSafeText(
+    resolveHostToken('businessName', input.host as never),
+    SENDING_FROM_NAME_MAX,
+  )
+  return {
+    fromName: siteName || headerSafeText(brandFromName, SENDING_FROM_NAME_MAX),
+    brandFromName,
+  }
 }
 
 /**

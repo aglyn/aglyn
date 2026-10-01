@@ -9,14 +9,13 @@ How a version number is decided, written, and attached to a deployed commit
 
 Not per-app and not per-lib:
 
-- **Nothing here is published yet.** Every `@aglyn/*` lib `package.json`
-  carries the root version — `release:prepare --write` writes it into all of
-  them, and `check:lib-boundaries` refuses one that disagrees — so the number a
-  lib will publish under is the number of the commit it came from. The one
-  exception is `@aglyn/cli`, already on the registry at its own number. The
-  publish pipeline itself is the "Later" half of
-  [docs/PACKAGES.md](PACKAGES.md); until it lands, `nx release` and changesets
-  have nothing to coordinate.
+- **Every lib publishes under that one number.** Every `@aglyn/*` lib
+  `package.json` carries the root version — `release:prepare --write` writes
+  it into all of them, and `check:lib-boundaries` refuses one that disagrees —
+  so the number a lib publishes under is the number of the commit it came
+  from, and `publish-packages.yml` puts them on npm when that commit reaches
+  `production` ([docs/PACKAGES.md](PACKAGES.md#publishing)). The one exception
+  is `@aglyn/cli`, which keeps its own number on the registry.
 - **One SHA ships everything.** Only the `production` branch deploys
   ([docs/VERCEL_DEPLOYMENTS.md](VERCEL_DEPLOYMENTS.md), AGL-522), and console,
   tenant and docs all build from that one commit. Three app versions off one
@@ -279,7 +278,7 @@ Force-push and deletion are blocked on `main` and `production` both. `main` is
 deliberately **not** PR-gated — many agents land on it continuously and
 requiring a PR there would stop the work rather than protect it.
 
-Three settings are deliberate and worth knowing before you tighten them:
+Four settings are deliberate and worth knowing before you tighten them:
 
 - **`ci` is the only nx-ci check required**, not the individual jobs. A matrix
   publishes one check name per leg (`test (1)` … `test (8)`), so requiring
@@ -289,6 +288,16 @@ Three settings are deliberate and worth knowing before you tighten them:
 - **`selfhost-images` is NOT required**, because its `pull_request` trigger is
   path-filtered. On a PR touching none of those paths it never reports, and a
   required check that never reports is the same permanent-pending trap.
+- **`Consumer proof` is NOT required either** (AGL-3201). On the promotion
+  PR it packs the libs from the PR's tree, installs them into each example
+  under `examples/consumers/` outside the checkout, builds, checks and opens
+  them in Chrome — the one point a broken package can still be stopped, since
+  a published version is final. It installs from npm and drives a browser, so
+  it can fail or stall for reasons outside the code, and a required check that
+  does not report is the permanent-pending trap again. Read it on the PR: a
+  red one means the release would publish packages a consumer cannot use. The
+  same proof runs again after the publish, from the registry, as a job in
+  `publish-packages.yml` ([docs/PACKAGES.md](PACKAGES.md#proving-a-package-installs)).
 - **`enforce_admins` is off and `required_approving_review_count` is 0.**
   Requiring an approval would block a solo operator outright — GitHub will not
   let you approve your own PR — and enforcing admins with no second admin makes

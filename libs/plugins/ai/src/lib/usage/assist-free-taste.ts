@@ -19,7 +19,7 @@ import { FieldValue } from 'firebase-admin/firestore'
 import {
   assistUsdFromCredits,
   type AssistRefusedBy,
-} from '@aglyn/aglyn/app-utils/assist-credits'
+} from './assist-credits'
 import { resolveEffectivePlan } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { FREE_AI_TASTE_CREDITS_PER_MONTH } from '../plan-entitlements'
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'

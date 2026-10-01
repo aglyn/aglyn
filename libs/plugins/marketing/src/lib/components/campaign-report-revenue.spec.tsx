@@ -36,7 +36,7 @@ import type {
 } from '@aglyn/shared-ui-email-campaigns/model/campaign-report'
 import type {
   CampaignRevenueRollup,
-} from '@aglyn/shared-ui-email-campaigns/model/campaign-revenue'
+} from '../model/campaign-revenue'
 
 /** What each `useFirestoreDoc` call answers, keyed by document path. */
 const mockDocs = new Map<string, unknown>()

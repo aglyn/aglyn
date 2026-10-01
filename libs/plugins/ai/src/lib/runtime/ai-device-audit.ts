@@ -26,7 +26,7 @@ import type { AiInventoryTheme } from '../model/ai-site-inventory'
  * Rule 12 is held on the tree: no fixed width, and a Grid of columns is a
  * container of items full width on a phone (`detectUnresponsiveGrids`). What a
  * tree cannot show is what renders: a Stack that stays a row on a phone, a
- * line of copy wider than the screen. `tools/scripts/record-ai-page-axe.mts`
+ * line of copy wider than the screen. `libs/plugins/ai/scripts/record-ai-page-axe.mts`
  * renders each golden page and each rendered eval answer at the switcher's
  * five devices — through `devicePreviewWidth` and the canvas's own pinned
  * theme, in a real browser — and records what it measured here, in the

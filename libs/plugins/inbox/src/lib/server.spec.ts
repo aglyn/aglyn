@@ -44,6 +44,7 @@ jest.mock('firebase-admin/firestore', () => ({
 
 jest.mock('@aglyn/shared-util-email', () => ({
   sendEmail: (...args: unknown[]) => sendEmail(...args),
+  messageFromName: jest.requireActual('@aglyn/shared-util-email').messageFromName,
 }))
 
 jest.mock('@aglyn/aglyn/server', () => ({
@@ -338,6 +339,29 @@ describe('what is recorded', () => {
       sentByUid: 'editor-uid',
       providerMessageId: 'msg-1',
     })
+  })
+
+  it('records the name the reply left under — the site’s, not the org default', async () => {
+    // `hostSendingIdentity` names the site (AGL-3442), and `sendEmail` puts
+    // that name where the route passed the org's branding default. The stored
+    // reply says what the visitor actually saw.
+    const admin = jest.requireMock('@aglyn/tenant-data-admin')
+    const identity = jest.spyOn(admin, 'hostSendingIdentity').mockResolvedValue({
+      from: 'hello@site.mail.aglyn.app',
+      source: 'custom',
+      domain: 'site.mail.aglyn.app',
+      summary: 'Sending as hello@site.mail.aglyn.app.',
+      refusal: null,
+      fromName: 'Lumen Studio',
+      brandFromName: 'Aglyn',
+    })
+    try {
+      const out = await reply(GOOD_BODY)
+      const stored = docs.get(`hosts/host1/formSubmissions/sub1/replies/${out.body.replyId}`)
+      expect(stored).toMatchObject({ fromName: 'Lumen Studio' })
+    } finally {
+      identity.mockRestore()
+    }
   })
 
   it('marks the submission replied and read in one write', async () => {

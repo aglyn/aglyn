@@ -408,7 +408,7 @@ describe('INGRESS AND report-usage TELL THE SAME STORY', () => {
 
     const gate = mediaStorageGate({ org, usedMb: scopeMb })
     const rollup = estimateMonthlyUsageCost(
-      [{ storageBytes: orgWideBytes, pageViews: 0, formSubmissions: 0 }],
+      [{ storageBytes: orgWideBytes, pageViews: 0 }],
       org,
     )
 
@@ -452,7 +452,6 @@ describe('INGRESS AND report-usage TELL THE SAME STORY', () => {
         {
           storageBytes: (included + 1024) * MB,
           pageViews: 0,
-          formSubmissions: 0,
         },
       ],
       { plan: 'pro' } as any,

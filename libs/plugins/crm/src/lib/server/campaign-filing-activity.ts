@@ -24,6 +24,7 @@ import {
   type CrmActivityLink,
 } from '@aglyn/aglyn/app-utils/crm'
 import { countCrmActivitiesForRecord } from '@aglyn/tenant-data-admin/server/crm-records'
+import { readOrgContainers } from '@aglyn/tenant-data-admin/server/org-containers'
 import { createHash } from 'crypto'
 import { FieldValue } from 'firebase-admin/firestore'
 import { BUNDLE_ID } from '../constants/bundle-common'
@@ -96,7 +97,7 @@ export function campaignFilingActivityId(key: string): string {
 const ALREADY_EXISTS = 6
 
 /**
- * The names of an org's campaigns (`orgs/{orgId}/emailCampaigns`), by id,
+ * The names of an org's campaigns — the `campaign` container kind — by id,
  * for the entries that name them. A container that is gone answers its id,
  * so the entry still says which.
  */
@@ -107,12 +108,8 @@ export async function orgCampaignRefs(
 ): Promise<CampaignFilingRef[]> {
   if (!campaignIds.length) return []
   if (!orgId) return campaignIds.map((id) => ({ id, name: id }))
-  const containers = firestore.collection('orgs').doc(orgId).collection('emailCampaigns')
-  const found = await firestore.getAll(...campaignIds.map((id) => containers.doc(id)))
-  return campaignIds.map((id, index) => ({
-    id,
-    name: String(found[index]?.get('name') ?? '').trim() || id,
-  }))
+  const found = await readOrgContainers(firestore, 'campaign', orgId, campaignIds)
+  return found.map((container) => ({ id: container.id, name: container.name || container.id }))
 }
 
 /** Files one entry per campaign; answers how many were written. */

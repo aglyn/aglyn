@@ -30,7 +30,7 @@ import {
   type ContactSource,
   marketingConsentFieldsForGroup,
   mergeContactInteraction,
-  normalizeCampaignIds,
+  normalizeContainerIds,
   readContactFacet,
   normalizeContactEmail,
   ORG_SCOPE_TOKEN,
@@ -600,7 +600,7 @@ export async function upsertHostContact(
      * from a public endpoint's document read and every reader of the stored
      * array goes through the same coercion.
      */
-    const campaignIds = normalizeCampaignIds(options.campaignIds ?? [])
+    const campaignIds = normalizeContainerIds(options.campaignIds ?? [])
     /*
      * THE CUSTOM FIELD VALUES THIS CAPTURE CARRIES, as one nested map.
      *
@@ -757,11 +757,11 @@ export async function upsertHostContact(
                * form and later the summer one is in both pushes, and an
                * assignment that overwrote would take a campaign a merchant
                * filed them under back out with nothing on screen to say so —
-               * the reason `campaign-membership.ts` made the field an array
+               * the reason `container-membership.ts` made the field an array
                * and the automation step has always used `arrayUnion`.
                *
                * Nested under the group id rather than written at
-               * `contactCampaignFieldPath`, because this is a merge-`set`: a
+               * `contactContainerFieldPath`, because this is a merge-`set`: a
                * `set` treats a dotted string as a literal field NAME and would
                * mint a top-level key with dots in it. Only `update()` reads
                * dots as a path. The nested form is what Firestore deep-merges,

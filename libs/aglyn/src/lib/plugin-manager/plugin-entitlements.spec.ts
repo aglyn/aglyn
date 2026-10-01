@@ -54,6 +54,7 @@ const AI = {
     {
       key: 'ai-generate',
       label: 'AI generation',
+      customerName: 'AI generation',
       staffBypass: true,
       notice: { title: 'AI generation is paused', body: 'Try again shortly.' },
       apiPaths: { prefixes: ['ai/generate'] },
@@ -77,6 +78,7 @@ const BACKUPS = {
     {
       key: 'backups',
       label: 'Backups',
+      customerName: 'backups',
       staffBypass: false,
       notice: { title: 'Backups are paused', body: 'Restores still work.' },
       apiPaths: { exact: ['backups/snapshot'] },
@@ -130,6 +132,7 @@ describe('registerPluginEntitlements', () => {
         {
           key: 'vaults',
           label: 'Vaults',
+          customerName: 'vaults',
           staffBypass: false,
           notice: { title: 'v', body: 'v' },
         },
@@ -141,6 +144,7 @@ describe('registerPluginEntitlements', () => {
         {
           key: 'pos',
           label: 'Point of sale',
+          customerName: 'point of sale',
           staffBypass: false,
           notice: { title: 'p', body: 'p' },
         },

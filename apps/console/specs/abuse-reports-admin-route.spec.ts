@@ -53,6 +53,8 @@ const mockVerifyIdToken = jest.fn()
 
 const state: {
   reports: Record<string, Record<string, unknown>>
+  /** `riskNotices/{id}`, read in one batch for their delivery (AGL-3441). */
+  notices: Record<string, Record<string, unknown>>
   audit: Record<string, unknown>[]
   lastQuery: {
     wheres?: Array<[string, string, unknown]>
@@ -60,7 +62,13 @@ const state: {
     limit?: number
     counted?: boolean
   }
-} = { reports: {}, audit: [], lastQuery: {} }
+} = { reports: {}, notices: {}, audit: [], lastQuery: {} }
+
+/** A dotted field read, as `DocumentSnapshot.get` does it. */
+const readPath = (data: Record<string, unknown> | undefined, path: string): unknown =>
+  path
+    .split('.')
+    .reduce<unknown>((value, key) => (value as Record<string, unknown> | undefined)?.[key], data)
 
 const stamp = (millis: number) => ({ toMillis: () => millis })
 
@@ -184,7 +192,22 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
       firestore: () => ({
         // The list cursor is a document path, read back to start after it.
         doc: (path: string) => docHandle(path.split('/').pop() as string),
+        getAll: async (...refs: Array<{ id: string; collection: string }>) =>
+          refs.map((ref) => {
+            if (ref.collection !== 'riskNotices') {
+              throw new Error(`getAll is only modelled for riskNotices, not ${ref.collection}`)
+            }
+            const data = state.notices[ref.id]
+            return {
+              id: ref.id,
+              exists: data != null,
+              get: (path: string) => readPath(data, path),
+            }
+          }),
         collection: (name: string) => {
+          if (name === 'riskNotices') {
+            return { doc: (id: string) => ({ id, collection: name }) }
+          }
           if (name === 'adminAudit') {
             return {
               add: async (row: Record<string, unknown>) => {
@@ -212,6 +235,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   // `tenant-data-admin`; here the route's contract with it is what is asked.
   decideHeldOutboundSend: (...args: unknown[]) => mockDecideHeldOutboundSend(...args),
   closeRiskNotice: (...args: unknown[]) => mockCloseRiskNotice(...args),
+  RISK_NOTICE_COLLECTION: 'riskNotices',
 }))
 
 // The REAL catalog and status helpers are spread in below — stubbing them
@@ -327,6 +351,7 @@ beforeEach(() => {
       },
     },
   }
+  state.notices = {}
   state.audit = []
   state.lastQuery = {}
   mockVerifyIdToken.mockReset()
@@ -863,6 +888,52 @@ describe('a Stripe fraud signal the billing webhook filed (AGL-3356)', () => {
     })
     // Not a held send: closing it decides nothing about one.
     expect(row.heldSend).toBeNull()
+  })
+
+  describe('what the owners were actually sent (AGL-3441)', () => {
+    const BANNED = {
+      recipients: 1,
+      emailed: 0,
+      emailFailed: 1,
+      inApp: 1,
+      emailSkipped: null,
+      digested: false,
+    }
+    beforeEach(() => {
+      state.reports[SIGNAL_ID]['riskNotice'] = {
+        kind: 'billing-payment-flagged',
+        noticeId: 'notice-1',
+        ownersNotifiedAtMs: 5000,
+        itemLabel: 'your subscription payment',
+      }
+      // The banned owner's send, refused by the AGL-3420 suppression.
+      state.notices['notice-1'] = { delivery: { owners: BANNED, staff: { alerted: true } } }
+    })
+
+    it('carries the notice’s delivery record on the row, the list and the save', async () => {
+      asSuper()
+      const one = (await (await get(`?id=${SIGNAL_ID}`)).json()).report
+      expect(one.riskNotice).toMatchObject({ ownersNotifiedAtMs: 5000, ownersDelivery: BANNED })
+
+      const listed = (await (await get()).json()).reports.find(
+        (report: any) => report.id === SIGNAL_ID,
+      )
+      expect(listed.riskNotice.ownersDelivery).toEqual(BANNED)
+
+      const saved = await (
+        await post({ id: SIGNAL_ID, status: 'actioned', resolution: 'Dispute accepted.' })
+      ).json()
+      expect(saved.report.status).toBe('actioned')
+      expect(saved.report.riskNotice.ownersDelivery).toEqual(BANNED)
+    })
+
+    it('reports a notice with no delivery record as unknown, never as delivered', async () => {
+      asSupport()
+      state.notices['notice-1'] = {}
+      const { report } = await (await get(`?id=${SIGNAL_ID}`)).json()
+      expect(report.riskNotice.ownersNotifiedAtMs).toBe(5000)
+      expect(report.riskNotice.ownersDelivery).toBeNull()
+    })
   })
 })
 

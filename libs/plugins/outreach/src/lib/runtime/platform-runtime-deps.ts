@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { EMAIL_TOPIC_SALES } from '@aglyn/aglyn/app-utils/email-topics'
+import { SALES_TOPIC_ID } from '../model/sales-topic'
 import { platformMailDnsResolver } from '@aglyn/tenant-data-admin/server/email-deliverability'
 import { checkEntitlement } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { isPluginEnabled } from '@aglyn/aglyn/plugin-manager/enabled-plugins'
@@ -26,7 +26,7 @@ import {
 } from '@aglyn/tenant-data-admin/server/campaign-conversion-attribution'
 import { recordEmailCampaignTouch } from '@aglyn/tenant-data-admin/server/email-delivery-log'
 import { suppressEmail } from '@aglyn/tenant-data-admin/server/email-suppression'
-import { recordTopicOptOut } from '@aglyn/tenant-data-admin/server/email-topic-confirmation'
+import { recordTopicOptOut } from '@aglyn/tenant-data-admin/server/topic-subscriptions'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin/server/firebase-admin'
 import { getLockdownVerdict } from '@aglyn/tenant-data-admin/server/lockdown'
 import { sendOrgMemberNotice } from '@aglyn/tenant-data-admin/server/org-member-notice'
@@ -111,7 +111,7 @@ export function platformOutreachRuntimeDeps(): OutreachRuntimeDeps {
     timeline: () => pluginRecordTimelineWriter()?.writer ?? null,
     logOrgActivity: (orgId, actor, action, target) => logOrgActivity(orgId, actor, action, target),
     async optOutOfSalesTopic({ hostId, email }) {
-      await recordTopicOptOut(hostId, email, EMAIL_TOPIC_SALES, { firestore: firestore() })
+      await recordTopicOptOut(hostId, email, SALES_TOPIC_ID, { firestore: firestore() })
     },
     async suppressBouncedEmail({ email, hostId }) {
       // The runtime stamps the record itself, with the richer verdict — the

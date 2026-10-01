@@ -27,11 +27,11 @@
  * test that asserted a function's return value would have passed on every day
  * this hole was open. It is that the CALL SITE refuses.
  *
- * ## The two-plan pair, and why 150,000
+ * ## The two-plan pair, and why 105,000
  *
  * Free's ceiling is `BANDWIDTH_ABUSE_CEILING_FLOOR` = 100,000 page views
- * (3× its 2 GB band is only ~10,486, so the floor wins and gives a hobby
- * site real headroom). Starter's is 3× its 50 GB band = 262,144. 150,000
+ * (3× its 2 GB band is only ~6,212, so the floor wins and gives a hobby
+ * site real headroom). Starter's is 3× its 35 GB band = 108,709. 105,000
  * views sits between the two, so the same count on the two plans takes
  * opposite branches — the negative control is the same number, not a smaller
  * one.
@@ -201,13 +201,13 @@ const tripFor = (plan: string, pageViews: number, month = MONTH) => {
 }
 
 describe('the ceiling arithmetic the loader is driven by', () => {
-  it('separates the two plans at the same count — 150,000 views', () => {
-    const free = tripFor('free', 150_000)
-    const starter = tripFor('starter', 150_000)
+  it('separates the two plans at the same count — 105,000 views', () => {
+    const free = tripFor('free', 105_000)
+    const starter = tripFor('starter', 105_000)
     expect(free.ceiling).toBe(100_000)
     expect(free.exceeded).toBe(true)
     expect(free.degraded).toBe(true)
-    expect(starter.ceiling).toBe(155_299)
+    expect(starter.ceiling).toBe(108_709)
     expect(starter.exceeded).toBe(false)
     // The metered plan never degrades even past its OWN ceiling.
     expect(tripFor('starter', 1_000_000).exceeded).toBe(true)
@@ -233,7 +233,7 @@ describe('the ceiling arithmetic the loader is driven by', () => {
     for (let i = 1; i < ladder.length; i++) {
       expect(ladder[i]).toBeGreaterThanOrEqual(ladder[i - 1])
     }
-    expect(ladder[ladder.length - 1]).toBe(9_566_392)
+    expect(ladder[ladder.length - 1]).toBe(4_907_435)
     expect(Number.isFinite(ladder[ladder.length - 1])).toBe(true)
     const contracted = Aglyn.checkBandwidthAbuseCeiling(
       { plan: 'enterprise', entitlements: { bandwidthGb: Aglyn.UNLIMITED } } as never,
@@ -265,7 +265,7 @@ describe('the tenant loader refuses a contained FREE site (AGL-2155)', () => {
   })
 
   it('THE BRANCH: a free host past the ceiling is actually refused', async () => {
-    const trip = tripFor('free', 150_000)
+    const trip = tripFor('free', 105_000)
     expect(trip.exceeded).toBe(true) // the premise, stated
     mockGetHost.mockResolvedValue({
       host: { ...HOST, bandwidthCeiling: trip },
@@ -281,8 +281,8 @@ describe('the tenant loader refuses a contained FREE site (AGL-2155)', () => {
     expect(result.revalidate).toBe(60)
   })
 
-  it('THE NEGATIVE CONTROL: a PAYING host at the same 150,000 serves normally', async () => {
-    const trip = tripFor('starter', 150_000)
+  it('THE NEGATIVE CONTROL: a PAYING host at the same 105,000 serves normally', async () => {
+    const trip = tripFor('starter', 105_000)
     expect(trip.exceeded).toBe(false)
     // Nothing would have been written at all; planting it anyway is the
     // stronger test — even a flag that somehow existed must not degrade a
@@ -349,7 +349,7 @@ describe('the tenant loader refuses a contained FREE site (AGL-2155)', () => {
         ...HOST,
         suspendedAt: Date.now(),
         suspendedReasonCode: 'security',
-        bandwidthCeiling: tripFor('free', 150_000),
+        bandwidthCeiling: tripFor('free', 105_000),
       },
       error: null,
     })
@@ -363,7 +363,7 @@ describe('an UPGRADE lifts the containment the same month (AGL-3432)', () => {
   // notice says "or sooner if the owner upgrades". The flag's `degraded` is
   // written once, at trip time, while the org was free — so the promise only
   // holds if the reader re-derives from the org's CURRENT plan.
-  const freeTrip = () => ({ ...HOST, bandwidthCeiling: tripFor('free', 150_000) })
+  const freeTrip = () => ({ ...HOST, bandwidthCeiling: tripFor('free', 105_000) })
 
   it('a site tripped on Free serves again once its org is on a metered plan', async () => {
     mockGetHost.mockResolvedValue({ host: freeTrip(), error: null })

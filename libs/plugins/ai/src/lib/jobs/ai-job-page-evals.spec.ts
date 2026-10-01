@@ -104,7 +104,7 @@ jest.mock('./ai-jobs', () => ({
 
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { assistCreditsFromUsd } from '@aglyn/aglyn/app-utils/assist-credits'
+import { assistCreditsFromUsd } from '../usage/assist-credits'
 import { decodeStoredNodes } from '@aglyn/aglyn/app-utils/stored-nodes'
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
 import { aiPagePlanRefusal } from '../model/ai-page-job'

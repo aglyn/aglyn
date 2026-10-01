@@ -222,7 +222,7 @@ describe('DIMENSION BY DIMENSION: every band blown, every charge zero', () => {
     // `included.metered ?` ternary in `estimateMonthlyUsageCost` — the free
     // org was billed $8.45, which is the whole failure in one number.
     const estimate = estimateMonthlyUsageCost(
-      [{ storageBytes: 250 * GB, pageViews: 0, formSubmissions: 0 }],
+      [{ storageBytes: 250 * GB, pageViews: 0, meters: { formSubmissions: 0 } }],
       freeOrg(),
     )
     expect(estimate.billableStorageGb).toBeCloseTo(249.756, 2) // measured…
@@ -240,7 +240,7 @@ describe('DIMENSION BY DIMENSION: every band blown, every charge zero', () => {
     // reverted or failed open — which they do on purpose, on every unreadable
     // org doc.
     const estimate = estimateMonthlyUsageCost(
-      [{ storageBytes: 0, pageViews: 1_000_000, formSubmissions: 0 }],
+      [{ storageBytes: 0, pageViews: 1_000_000, meters: { formSubmissions: 0 } }],
       freeOrg(),
     )
     expect(estimate.billablePageViews).toBeGreaterThan(900_000)
@@ -259,9 +259,16 @@ describe('DIMENSION BY DIMENSION: every band blown, every charge zero', () => {
     expect(contained.ceiling).toBe(BANDWIDTH_ABUSE_CEILING_FLOOR)
     expect(contained.exceeded).toBe(true)
     expect(bandwidthCeilingDegradesRender(freeOrg())).toBe(true)
-    // POSITIVE CONTROL: the paid plan is not contained at the same count —
-    // its overage bills, which is the whole difference.
-    expect(checkBandwidthAbuseCeiling(paidOrg(), 150_000).exceeded).toBe(false)
+    // POSITIVE CONTROL: at the count that contains a free site — the floor
+    // itself — the paid plan is not contained, because its ceiling is three
+    // times a band that sits above the floor, and its overage bills, which is
+    // the whole difference.
+    expect(
+      checkBandwidthAbuseCeiling(freeOrg(), BANDWIDTH_ABUSE_CEILING_FLOOR).exceeded,
+    ).toBe(true)
+    expect(
+      checkBandwidthAbuseCeiling(paidOrg(), BANDWIDTH_ABUSE_CEILING_FLOOR).exceeded,
+    ).toBe(false)
     expect(bandwidthCeilingDegradesRender(paidOrg())).toBe(false)
     // …and free UNDER the ceiling is untouched: a hobby site with real
     // traffic must not meet a wall dressed up as an abuse control.
@@ -270,10 +277,10 @@ describe('DIMENSION BY DIMENSION: every band blown, every charge zero', () => {
 
   it('form submissions: 500× the band, still $0', () => {
     const estimate = estimateMonthlyUsageCost(
-      [{ storageBytes: 0, pageViews: 0, formSubmissions: 10_000 }],
+      [{ storageBytes: 0, pageViews: 0, meters: { formSubmissions: 10_000 } }],
       freeOrg(),
     )
-    expect(estimate.billableFormSubmissions).toBe(10_000 - 20)
+    expect(estimate.billableMeters.formSubmissions).toBe(10_000 - 20)
     expect(estimate.billedCents).toBe(0)
   })
 
@@ -338,7 +345,7 @@ describe("THE INVOICE: every band blown at once, and it is exactly zero", () => 
           // meter far past every band.
           storageBytes: 250 * GB,
           pageViews: 1_000_000,
-          formSubmissions: 10_000,
+          meters: { formSubmissions: 10_000 },
         },
       ],
       org as never,
@@ -387,15 +394,21 @@ describe("THE INVOICE: every band blown at once, and it is exactly zero", () => 
     // So: assert the usage IS measured and IS past the band on the free org,
     // and that only the pricing step zeroes it.
     const estimate = estimateMonthlyUsageCost(
-      [{ storageBytes: 250 * GB, pageViews: 1_000_000, formSubmissions: 10_000 }],
+      [
+        {
+          storageBytes: 250 * GB,
+          pageViews: 1_000_000,
+          meters: { formSubmissions: 10_000 },
+        },
+      ],
       freeOrg(),
     )
     expect(estimate.storageGb).toBeCloseTo(250, 6)
     expect(estimate.pageViews).toBe(1_000_000)
-    expect(estimate.formSubmissions).toBe(10_000)
+    expect(estimate.meters.formSubmissions).toBe(10_000)
     expect(estimate.billableStorageGb).toBeGreaterThan(249)
     expect(estimate.billablePageViews).toBeGreaterThan(900_000)
-    expect(estimate.billableFormSubmissions).toBe(9_980)
+    expect(estimate.billableMeters.formSubmissions).toBe(9_980)
     // COGS is real and truthful — under-reporting our own cost is what makes
     // the discount guardrail too generous, so free's zero must NOT reach here.
     expect(estimate.costUsd).toBeGreaterThan(100)

@@ -17,9 +17,9 @@
 
 import { FieldValue, type DocumentReference, type Firestore } from 'firebase-admin/firestore'
 import {
-  parseCampaignTouch,
-  type CampaignTouch,
-} from '@aglyn/aglyn/app-utils/campaign-touch'
+  parseUtmTouch,
+  type UtmTouch,
+} from '@aglyn/aglyn/app-utils/utm-touch'
 /*
  * Stamped from the REVENUE join's constants, aliased at the import.
  *
@@ -60,7 +60,7 @@ const defaultFirestore = () => firebaseAdmin.app().firestore()
  * a form, sign up, book or check out. There is no address to look up until
  * the very moment being attributed.
  *
- * So the touch is carried on the VISITOR (`campaign-touch.ts`) and attached
+ * So the touch is carried on the VISITOR (`utm-touch.ts`) and attached
  * here, at each moment they become somebody. What is NOT rebuilt is the
  * model: the same seven-day window, the same last-click rule, the same
  * `model`/`windowDays` stamped onto every record so a report can say what it
@@ -242,7 +242,7 @@ export async function resolveCampaignTouch(
     // The window is enforced inside the parser, so an expired or
     // future-dated wire value answers null here exactly as it does in the
     // browser that decided whether to send it.
-    const web: CampaignTouch | null = parseCampaignTouch(
+    const web: UtmTouch | null = parseUtmTouch(
       options.wire,
       convertedAtMs,
     )

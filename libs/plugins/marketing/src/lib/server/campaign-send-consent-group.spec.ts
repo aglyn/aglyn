@@ -206,7 +206,7 @@ jest.mock('@aglyn/shared-util-email', () => ({
 }))
 
 import { createHash } from 'crypto'
-import { DEFAULT_CAMPAIGN_TOPIC_ID } from '@aglyn/aglyn/app-utils/email-topics'
+import { DEFAULT_SUBSCRIPTION_TOPIC_ID } from '@aglyn/aglyn/app-utils/subscription-topics'
 import { performCampaignSend } from './campaign-send'
 
 // ---------------------------------------------------------------------------
@@ -312,7 +312,7 @@ describe('an opt-out on a sibling site withholds the campaign', () => {
     store.set(`hosts/${SITE_B}/topicOptOuts/${keyFor(LEFT)}`, {
       email: LEFT,
       topics: {
-        [DEFAULT_CAMPAIGN_TOPIC_ID]: {
+        [DEFAULT_SUBSCRIPTION_TOPIC_ID]: {
           optedOutAt: { seconds: 1 },
           resubscribedAt: null,
         },
@@ -351,7 +351,7 @@ describe('the sites outside the group', () => {
     store.set(`hosts/${SITE_C}/topicOptOuts/${keyFor(LEFT)}`, {
       email: LEFT,
       topics: {
-        [DEFAULT_CAMPAIGN_TOPIC_ID]: {
+        [DEFAULT_SUBSCRIPTION_TOPIC_ID]: {
           optedOutAt: { seconds: 1 },
           resubscribedAt: null,
         },

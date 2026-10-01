@@ -66,7 +66,11 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-import { METERED_MARKUP, METERED_UNIT_RATES_USD } from '../utils/usage-metering'
+import {
+  METERED_BILLED_RATES_USD,
+  METERED_MARKUP,
+  METERED_UNIT_RATES_USD,
+} from '../utils/usage-metering'
 import {
   AI_ADDON_CREDITS_PER_MONTH,
   PLAN_ENTITLEMENTS,
@@ -218,8 +222,9 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
      * `storagePerHostMb` and `bandwidthGb` are per-tier bands whose cost was
      * never multiplied against the tier's price. Bandwidth is the largest
      * single line item on every plan above Pro — a GB of it costs $0.167 of
-     * measured cost, `ESTIMATED_PAGE_TRANSFER_BYTES` divided into a gigabyte
-     * and priced at `perPageView` — so Agency's 20 TB alone was $3,495/month
+     * weight, `ESTIMATED_PAGE_TRANSFER_BYTES` divided into a gigabyte and
+     * priced at `perPageView`, before the CDN requests the same views make
+     * (the bandwidth row below) — so Agency's 20 TB alone was $3,495/month
      * against a $799 subscription at the $0.175 a GB then in force.
      * `tier-margin-floor.spec.ts` carries the model and the resulting figures.
      */
@@ -229,25 +234,54 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
     })
 
     /**
-     * RE-TRANSCRIBED 2026-09-07 from the republish that carried the resized
-     * bands (screen `v0clP6xQl-`, version `5PkGJBlRra`): the cells read
-     * "2 GB · 50 GB · 125 GB · 185 GB · 290 GB · 345 GB · 1.54 TB", and the
-     * Scale room-to-grow strip reads "290 GB bandwidth". Terabytes are
-     * decimal and shown to the gigabyte — 1,540 GB is "1.54 TB", not the
-     * "1.5 TB" of a band 40 GB smaller.
+     * PINNED APART ON PURPOSE (AGL-3444, 2026-10-01).
      *
-     * Free's is the one band on that tier that can never be metered — there
-     * is no subscription to bill an overage onto, so it is a pure give at
-     * $0.167 a GB. Every paid band was resized on 2026-09-07 to hold the
-     * platform's invariant at the ANNUAL price, net of Stripe's fee, with
-     * the CRM seat and one-to-one email terms counted: at 225 · 400 · 700 ·
-     * 1,000 · 3,000 GB every tier from Pro up runs 21–40% under water at that
-     * price with every band at 100% (`tier-margin-floor.spec.ts` carries the
-     * model and the mutation that proves it).
+     * Every paid band is sized so the tier holds the platform's invariant —
+     * the ANNUAL price, net of Stripe's fee, every band at 100%, the CRM
+     * seat and one-to-one email terms counted — with each included gigabyte
+     * carrying its CDN requests past the hosting plan's allowance, at the
+     * dearest region's $3.20 per million (`tier-margin-floor.spec.ts`
+     * carries the model and the mutations that prove it). Free's band is the
+     * one that can never be metered — there is no subscription to bill an
+     * overage onto — so it is a give, and it does not move.
+     *
+     * The page — transcribed from the live `/pricing` on 2026-10-01, screen
+     * `v0clP6xQl-` — still reads "2 GB · 50 GB · 125 GB · 185 GB · 290 GB ·
+     * 345 GB · 1.54 TB" in the compare table (cells `C3oFLVp_Ct`,
+     * `xyyWBGRcwZ`, `57wlzIAcAq`, `P9rbaJ3Wmd`, `11Bq-jNDQh`, `IjzIRIwOGn`),
+     * and the Scale room-to-grow strip (`_99Id5AtWv`) reads "290 GB
+     * bandwidth". That is the PAGE AHEAD of the code — it promises more than
+     * the code includes — so the page is republished with the production
+     * promotion that carries these bands, in the same pass as the page-view
+     * rate below.
+     *
+     * When it is: set `PUBLISHED` to the code's figures, delete the gap case,
+     * and record the version id here. Terabytes are decimal and shown to the
+     * gigabyte, so no band on the ladder reads in TB any more: 790 GB is
+     * "790 GB".
      */
-    it('Bandwidth / mo — 2 · 50 · 125 · 185 · 290 · 345 GB · 1.54 TB', () => {
+    describe('Bandwidth / mo — the page reads 2 · 50 · 125 · 185 · 290 · 345 GB · 1.54 TB, the code includes 2 · 35 · 60 · 90 · 145 · 175 · 790 GB', () => {
+      /** What the live page says, in GB. */
       const PUBLISHED: Row = [2, 50, 125, 185, 290, 345, 1540]
-      expect(quotaColumn('bandwidthGb')).toEqual(PUBLISHED)
+      /** What the code includes, in GB — a literal, so the pin cannot be `x === x`. */
+      const INCLUDED: Row = [2, 35, 60, 90, 145, 175, 790]
+
+      it('the code includes 2 · 35 · 60 · 90 · 145 · 175 · 790 GB', () => {
+        expect(quotaColumn('bandwidthGb')).toEqual(INCLUDED)
+      })
+
+      it('GAP: the page has not caught up — republish it, then fold this back into one row', () => {
+        expect(quotaColumn('bandwidthGb')).not.toEqual(PUBLISHED)
+        // Free is the one cell that agrees; every paid cell on the page is
+        // LARGER than the band the code includes, which is the direction a
+        // customer can point at.
+        expect(quotaColumn('bandwidthGb')[0]).toBe(PUBLISHED[0])
+        for (let column = 1; column < PUBLISHED.length; column++) {
+          expect(
+            `${PUBLISHED_COLUMNS[column]}: ${quotaColumn('bandwidthGb')[column] < PUBLISHED[column]}`,
+          ).toBe(`${PUBLISHED_COLUMNS[column]}: true`)
+        }
+      })
     })
 
     it.each([
@@ -1075,10 +1109,39 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
       expect(METERED_MARKUP).toBe(1.3)
     })
 
-    it('Page views (bandwidth + reads) — $0.21 / 1,000', () => {
-      expect(
-        METERED_UNIT_RATES_USD.perPageView * METERED_MARKUP * 1000,
-      ).toBeCloseTo(0.21, 6)
+    /**
+     * PINNED APART ON PURPOSE (AGL-1879, 2026-10-01).
+     *
+     * A billed page view now carries the CDN's per-request charge past the
+     * hosting plan's allowance as well as its weight, so the code bills $0.36
+     * per 1,000 while the page — transcribed from the live `/pricing` on
+     * 2026-10-01, screen `v0clP6xQl-` — still reads "$0.21 / 1,000". That is
+     * the code AHEAD of the page, the direction `docs/PRICING_SURFACES.md`
+     * calls urgent, so the page is republished with the production promotion
+     * that carries this rate.
+     *
+     * When it is: set `PUBLISHED` to 0.36, delete the gap case, and record the
+     * version id here. Until then the gap is named rather than hidden, the way
+     * the campaign-email row carried its gap until its republish.
+     */
+    describe('Page views (bandwidth + reads) — the page reads $0.21, the code bills $0.36', () => {
+      /** What the live page says, per 1,000 views. */
+      const PUBLISHED = 0.21
+
+      it('the code bills $0.36 / 1,000: weight plus CDN requests, at cost + 30%', () => {
+        expect(METERED_BILLED_RATES_USD.perPageView * 1000).toBeCloseTo(0.36, 6)
+      })
+
+      it('GAP: the page has not caught up — republish it, then fold this back into one row', () => {
+        expect(
+          Math.round(METERED_BILLED_RATES_USD.perPageView * 1000 * 100) / 100,
+        ).not.toBe(PUBLISHED)
+        // The figure the page carries is the weight term alone, marked up —
+        // what the meter billed before the request term existed.
+        expect(
+          Math.round(METERED_UNIT_RATES_USD.perPageView * METERED_MARKUP * 1000 * 100) / 100,
+        ).toBe(PUBLISHED)
+      })
     })
 
     /**
@@ -1129,7 +1192,7 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
      * `npm run check:page-view-rate` holds the peg; this asserts the two
      * agree, so the record cannot drift from the rate it describes.
      */
-    it('the $0.21 basis covers the page, by the margin that was signed off', () => {
+    it('the weight basis covers the page, by the margin that was signed off', () => {
       const { wireCalibration } = JSON.parse(
         readFileSync(
           join(__dirname, '..', '..', '..', 'tools', 'tenant-page-budget.json'),
@@ -1167,8 +1230,8 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
         METERED_UNIT_RATES_USD.perPageView * wireCalibration.acceptedWeightRatio,
         6,
       )
-      // Rounded the way a published figure is: the basis lands on $0.21 per
-      // 1,000, which is what the page states.
+      // Rounded the way a published figure is: the weight basis lands on $0.21
+      // per 1,000. A billed view adds the CDN request term to it.
       expect(
         Math.round(
           ((0.0001 * wireCalibration.pricedForKb) / 627) *

@@ -23,7 +23,7 @@ import {
   installUtmForwarding,
   setUtmForwardingConsent,
 } from '@aglyn/aglyn/app-utils/utm-forwarding'
-import { setCampaignTouchConsent } from '@aglyn/aglyn/app-utils/campaign-touch'
+import { setUtmTouchConsent } from '@aglyn/aglyn/app-utils/utm-touch'
 import { setPageFirstTouchStorage } from '@aglyn/shared-util-first-touch/first-touch-page'
 import { installWebVitalsReporting } from '@aglyn/aglyn/app-utils/web-vitals-rum'
 import { analyticsMayEmit } from '@aglyn/aglyn/app-utils/analytics-environment'
@@ -465,7 +465,7 @@ export default function SiteAnalytics({
   // Carry the campaign to the moment the visitor identifies themselves. The
   // UTM labels on the beacon above are a page-view label and go no further,
   // so on their own they cannot say which campaign produced a form, a lead, a
-  // contact or a booking. `campaign-touch.ts` remembers the arrival for the
+  // contact or a booking. `utm-touch.ts` remembers the arrival for the
   // attribution window and the conversion doors attach it.
   //
   // The SAME resolved boolean the tag and the console hop are gated on, handed
@@ -477,7 +477,7 @@ export default function SiteAnalytics({
   // A visitor who converts on the page they landed on needs none of this: the
   // labels are still on the address bar and the door reads them there, with
   // nothing written to the device and nothing to consent to.
-  setCampaignTouchConsent(analyticsStorageAllowed)
+  setUtmTouchConsent(analyticsStorageAllowed)
   // And to the first-touch capture (AGL-3289), where the page includes it —
   // only the platform's own sites do. Keeping the first visit across the walk
   // to the sign-up is the same `analytics_storage`, so it takes the same

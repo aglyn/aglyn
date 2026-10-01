@@ -127,8 +127,9 @@ export interface PluginContactCaptureRequest {
   interaction: PluginContactInteraction
   /**
    * An explicit marketing opt-in the capture surface carried, recorded against
-   * `hostId`. Absent is not consent, and filing a capture under a campaign is
-   * not consent either.
+   * `hostId`: consent to the MARKETING send purpose (`marketing-consent.ts`),
+   * whichever plugin's mail later asks for it. Absent is not consent, and
+   * filing a capture under a container is not consent either.
    */
   marketingConsent?: boolean
   /**
@@ -141,8 +142,12 @@ export interface PluginContactCaptureRequest {
   disclosedConsentGroup?: string
   /** Tags the silo puts on this capture; the owner adds, never replaces. */
   tags?: readonly string[]
-  /** The campaigns the capture SURFACE is filed under — the merchant's own act. */
-  campaignIds?: readonly string[]
+  /**
+   * What the capture SURFACE is filed under — the merchant's own act — by
+   * container kind (`plugin-containers.ts`): `{ [kind]: ids }`. The owner
+   * files the person under the kinds it keeps. Filing is not consent.
+   */
+  containers?: Readonly<Record<string, readonly string[]>>
   /** Money the capture was worth, in cents, where the silo took some. */
   purchaseCents?: number
   /** The currency {@link purchaseCents} is in, lowercase, when the silo knows. */

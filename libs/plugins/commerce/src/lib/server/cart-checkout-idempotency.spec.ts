@@ -19,7 +19,7 @@ import type {
   PluginApiRequest,
   PluginApiResponse,
 } from '@aglyn/aglyn/server'
-import { storefrontProcessingCostCents } from '@aglyn/aglyn/server'
+import { saleProcessingCostCents } from '@aglyn/aglyn/server'
 import { cartCheckoutHandler } from './cart-checkout'
 
 /**
@@ -572,7 +572,7 @@ describe('a coupon and a gift card both reach the session (AGL-2112)', () => {
     // (160 × 0.9 = 144, then 144 × 4000/8000). Stripe's own cost on the 3200¢
     // the card actually runs for is added on top since AGL-2152 — subtracted
     // out here so the scaling is still what is under test.
-    const expected = 64 + storefrontProcessingCostCents(3200)
+    const expected = 64 + saleProcessingCostCents(3200)
     expect(
       sessionCalls()[0].params.get(
         'payment_intent_data[application_fee_amount]',
@@ -628,7 +628,7 @@ describe('a product doc with no type (AGL-2251)', () => {
         'payment_intent_data[application_fee_amount]',
       ),
     )
-    expect(sent - storefrontProcessingCostCents(8000)).toBe(0)
+    expect(sent - saleProcessingCostCents(8000)).toBe(0)
     expect(sessionCalls()[0].params.get('metadata[feeCents]')).toBe(
       String(sent),
     )
@@ -651,7 +651,7 @@ describe('a product doc with no type (AGL-2251)', () => {
       sessionCalls()[0].params.get(
         'payment_intent_data[application_fee_amount]',
       ),
-    ).toBe(String(160 + storefrontProcessingCostCents(8000)))
+    ).toBe(String(160 + saleProcessingCostCents(8000)))
   })
 })
 
@@ -698,7 +698,7 @@ describe('a platform fee that rounds to zero (AGL-2256)', () => {
 
   it('still takes a cent of TAKE rather than dropping it entirely', async () => {
     await post()
-    const expected = 1 + storefrontProcessingCostCents(98)
+    const expected = 1 + saleProcessingCostCents(98)
     expect(
       sessionCalls()[0].params.get(
         'payment_intent_data[application_fee_amount]',
@@ -725,7 +725,7 @@ describe('a platform fee that rounds to zero (AGL-2256)', () => {
         'payment_intent_data[application_fee_amount]',
       ),
     )
-    expect(sent - storefrontProcessingCostCents(98)).toBe(0)
+    expect(sent - saleProcessingCostCents(98)).toBe(0)
     expect(sessionCalls()[0].params.get('metadata[feeCents]')).toBe(
       String(sent),
     )
@@ -751,7 +751,7 @@ describe('a platform fee that rounds to zero (AGL-2256)', () => {
       sessionCalls()[0].params.get(
         'payment_intent_data[application_fee_amount]',
       ),
-    ).toBe(String(80 + storefrontProcessingCostCents(8000)))
+    ).toBe(String(80 + saleProcessingCostCents(8000)))
   })
 })
 

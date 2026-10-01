@@ -46,13 +46,12 @@
     "warning": "^4.0.3"
   },
   "peerDependencies": {
-    "@mui/base": "5.0.0-beta.70",
     "@mui/material": "^9.3.1",
     "@mui/styles": "^6.4.8",
     "@mui/system": "^9.2.0",
     "@mui/utils": "^9.2.0",
     "@mui/x-data-grid": "^9.12.0",
-    "next": "16.3.3",
+    "next": "^16.3.3",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
   },

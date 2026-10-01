@@ -38,7 +38,8 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   },
 }))
 
-import { renderOwnerRiskNotice } from '@aglyn/shared-util-email/risk-notice-catalog'
+import { renderOwnerRiskNotice, riskPayoutDelayText } from '@aglyn/shared-util-email/risk-notice-catalog'
+import { YOUNG_PUBLISHER_DAYS, YOUNG_PUBLISHER_PAYOUT_DELAY_DAYS } from '../model/publisher-risk'
 import {
   applyPublisherPayoutPolicy,
   isOrgMember,
@@ -148,7 +149,7 @@ const sale = (overrides: Record<string, unknown> = {}) => ({
 const payoutWrites = () => stripeCalls.filter((call) => call.method === 'POST')
 
 describe("a young publisher's payouts", () => {
-  it('are held on the connected account, once, and the publisher is told without the rule', async () => {
+  it('are held on the connected account, once, and the publisher is told the schedule', async () => {
     expect(
       await applyPublisherPayoutPolicy({ firestore, publisherOrgId: 'org-pub', ageDays: 3, stripeKey: KEY, nowMs: NOW }),
     ).toBe('applied')
@@ -159,12 +160,23 @@ describe("a young publisher's payouts", () => {
       }),
     ])
     expect(docs.get('publisherProfiles/org-pub')).toMatchObject({ payoutDelayDays: 14 })
+    // The schedule rides on the notice in the policy's own numbers
+    // (AGL-3442), so the copy can never drift from what Stripe was told.
     expect(mockPublisherNotices).toEqual([
-      expect.objectContaining({ kind: 'publisher-payouts-held', orgId: 'org-pub' }),
+      expect.objectContaining({
+        kind: 'publisher-payouts-held',
+        orgId: 'org-pub',
+        payout: { delayDays: YOUNG_PUBLISHER_PAYOUT_DELAY_DAYS, untilWorkspaceAgeDays: YOUNG_PUBLISHER_DAYS },
+      }),
     ])
-    // The words the publisher reads never carry the delay the rule set.
-    const told = renderOwnerRiskNotice('publisher-payouts-held', {})
-    expect([told.meaning, ...told.steps].join(' ')).not.toMatch(/\d/)
+    const told = renderOwnerRiskNotice('publisher-payouts-held', {
+      'payout.delay': riskPayoutDelayText(mockPublisherNotices[0]['payout']),
+    })
+    expect(told.summary).toContain(
+      `moved to an extended schedule: each payout reaches your bank ${YOUNG_PUBLISHER_PAYOUT_DELAY_DAYS} days after the sale, ` +
+        `until your workspace is ${YOUNG_PUBLISHER_DAYS} days old.`,
+    )
+    expect(told.meaning).toMatch(/^Nothing is withheld or charged\./)
     // A second sale changes nothing.
     expect(
       await applyPublisherPayoutPolicy({ firestore, publisherOrgId: 'org-pub', ageDays: 4, stripeKey: KEY, nowMs: NOW }),

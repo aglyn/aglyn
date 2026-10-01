@@ -17,7 +17,7 @@
 
 import { sendAnalyticsBeacon } from '@aglyn/aglyn/app-utils/analytics-beacon'
 import { trackEventBeforeNavigation } from '@aglyn/aglyn/app-utils/analytics-events'
-import { campaignTouchField } from '@aglyn/aglyn/app-utils/campaign-touch'
+import { utmTouchField } from '@aglyn/aglyn/app-utils/utm-touch'
 import * as Aglyn from '@aglyn/aglyn'
 import {
   mdiEmailFastOutline,
@@ -440,7 +440,7 @@ const Form = forwardRef<HTMLFormElement, FormProps>((props, ref) => {
             // Absent entirely for direct traffic — never a placeholder, so
             // the server can tell "arrived from nowhere" from "this door does
             // not report".
-            ...campaignTouchField(),
+            ...utmTouchField(),
           }),
         })
         if (response.ok) {

@@ -53,9 +53,9 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 }))
 
 import {
-  STOREFRONT_PROCESSING_FIXED_CENTS,
+  SALE_PROCESSING_FIXED_CENTS,
   resolveTransactionFeeCents,
-  storefrontProcessingCostCents,
+  saleProcessingCostCents,
 } from '@aglyn/aglyn/server'
 import type { RevenueSourceRequest } from '@aglyn/aglyn/plugin-manager/plugin-revenue-sources'
 import {
@@ -99,7 +99,7 @@ describe('storefront commission excludes the processing pass-through', () => {
     // the same two helpers that CHARGED the fee, so a change to either rate
     // moves both sides of this assertion together.
     expect(out.commissionCents).toBe(
-      fee - storefrontProcessingCostCents(chargeCents),
+      fee - saleProcessingCostCents(chargeCents),
     )
     // The whole fee is still reported, and it is strictly larger. If the code
     // reported the fee as earnings this would be an equality.
@@ -108,7 +108,7 @@ describe('storefront commission excludes the processing pass-through', () => {
     // Specifically, at least Stripe's fixed 30¢ smaller — the component a
     // percentage-only model would silently keep as margin.
     expect(out.applicationFeeCents - out.commissionCents).toBeGreaterThanOrEqual(
-      STOREFRONT_PROCESSING_FIXED_CENTS,
+      SALE_PROCESSING_FIXED_CENTS,
     )
   })
 
@@ -140,7 +140,7 @@ describe('storefront commission excludes the processing pass-through', () => {
     // `application_fee_percent`. Reporting that fee whole would book Stripe's
     // charge as margin on every cycle, the AGL-2152 mistake over again.
     const chargeCents = 20000
-    const passThrough = storefrontProcessingCostCents(chargeCents)
+    const passThrough = saleProcessingCostCents(chargeCents)
     const out = commerceSettledSummary([
       {
         id: 'o1',
@@ -339,7 +339,7 @@ describe('the storefront’s revenue source', () => {
 
   it('states the take, the fee and the pass-through apart, and counts subscription cycles', async () => {
     const chargeCents = 20_000
-    const passThrough = storefrontProcessingCostCents(chargeCents)
+    const passThrough = saleProcessingCostCents(chargeCents)
     mockSwept.docs = [
       docOf('o1', { amountCents: chargeCents, feeCents: 400 + passThrough, subscriptionId: 'sub_1' }, 'host-a'),
     ]

@@ -103,9 +103,12 @@ function collectionRef(path: string): any {
     path,
     doc: (id?: string) => docRef(`${path}/${id ?? `auto-${++autoId}`}`),
     count: () => countQuery(path),
-    // The campaign directory's one read (AGL-3254): the collection whole.
-    limit: () => ({
-      get: async () => ({ docs: childPaths(path).map((child) => snapshot(child)) }),
+    // The campaign directory's one read (AGL-3254): the collection whole, as
+    // a projection of the fields a container record carries.
+    select: () => ({
+      limit: () => ({
+        get: async () => ({ docs: childPaths(path).map((child) => snapshot(child)) }),
+      }),
     }),
   }
 }

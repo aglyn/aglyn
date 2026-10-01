@@ -29,7 +29,7 @@ import {
   assistFreeTasteRefusalText,
   assistHardCapRefusalText,
   assistRefusedByHardCap,
-} from '@aglyn/aglyn/app-utils/assist-credits'
+} from '../usage/assist-credits'
 import {
   AI_JOB_TERMINAL_STATUSES,
   type AiJob,

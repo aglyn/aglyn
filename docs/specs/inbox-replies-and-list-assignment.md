@@ -256,12 +256,12 @@ built, because the shape is the one this section specified.
 
 | Piece | Where |
 | --- | --- |
-| Pure policy — what basis an enrollment may carry | `libs/plugins/inbox/src/lib/model/list-assignment-policy.ts` |
+| Pure policy — what basis an enrollment may carry | `libs/aglyn/src/lib/app-utils/enrollment-basis.ts` |
 | `POST inbox/assign-list`, and `POST inbox/list-options` for the readout | `libs/plugins/inbox/src/lib/server.ts` |
 | The card, inside the submission reader and beneath the reply | `libs/plugins/inbox/src/lib/components/submission-list-assignment.component.tsx` |
 | The basis on the membership, and the refusal backstop | `libs/tenant/data/admin/src/lib/server/list-members.ts` |
 
-Assertions: `list-assignment-policy.spec.ts` (13),
+Assertions: `enrollment-basis.spec.ts` (13),
 `server-assign-list.spec.ts` (25),
 `submission-list-assignment.spec.tsx` (9), and the end-to-end
 `apps/console/specs/an-enrollment-is-not-a-license-to-send.spec.ts` (5), which

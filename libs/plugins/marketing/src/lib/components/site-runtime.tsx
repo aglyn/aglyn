@@ -22,7 +22,7 @@ import {
   trackAuthoredEvent,
   trackEvent,
 } from '@aglyn/aglyn/app-utils/analytics-events'
-import { campaignTouchField } from '@aglyn/aglyn/app-utils/campaign-touch'
+import { utmTouchField } from '@aglyn/aglyn/app-utils/utm-touch'
 import { type CSSProperties, useEffect, useRef, useState } from 'react'
 import type { SiteRuntimeProps } from '@aglyn/aglyn'
 import * as MarketingModel from '../model'
@@ -900,7 +900,7 @@ function PopupOverlay(props: {
           // The campaign this visitor came from, when they came from one. A
           // popup capture is often a site's highest-converting door, so it
           // reports its campaign for the same reason it reports its lead.
-          ...campaignTouchField(),
+          ...utmTouchField(),
         }),
       })
       // The popup's email capture is a lead, and it reported none: an

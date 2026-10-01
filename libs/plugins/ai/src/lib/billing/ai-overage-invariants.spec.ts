@@ -47,17 +47,12 @@ import {
   aiOverageInvoicedFrom,
 } from './ai-overage-cutover'
 import { maybeChargeAiOverage, closeOutAiOverage } from './ai-overage-charge'
-import {
-  pluginBillsMeteredLine,
-  resetPluginMeteredLinesForTests,
-} from '@aglyn/aglyn/plugin-manager/plugin-metered-lines'
 
 const ORIGINAL = process.env[AI_OVERAGE_INVOICED_FROM_ENV]
 
 afterEach(() => {
   if (ORIGINAL === undefined) delete process.env[AI_OVERAGE_INVOICED_FROM_ENV]
   else process.env[AI_OVERAGE_INVOICED_FROM_ENV] = ORIGINAL
-  resetPluginMeteredLinesForTests()
 })
 
 /** A Firestore that fails loudly if anything reads or writes through it. */
@@ -144,14 +139,5 @@ describe('the charge path is inert before the cutover', () => {
       month: '2026-09',
     })
     expect(answer.skipped).toBe('before-cutover')
-  })
-})
-
-describe('the monthly meter keeps billing until a plugin claims the line', () => {
-  it('leaves an unclaimed line to the sweep', () => {
-    // No claim registered: the sweep bills AI overage exactly as it does
-    // today. This is the state the code ships in — the plugin's claim only
-    // takes effect once its own cutover month is set.
-    expect(pluginBillsMeteredLine('assist-overage', '2026-09')).toBe(false)
   })
 })

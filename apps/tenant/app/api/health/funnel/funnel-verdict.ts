@@ -266,7 +266,7 @@ export function funnelFormFacts(
     fieldNames: declaredFields.map((field) => String(field?.fieldName ?? '')),
     // Read through the shared reader the submit route stamps rows with, so
     // "filed under a campaign" means here exactly what it means there.
-    campaignCount: Aglyn.readCampaignIds(data).length,
+    campaignCount: Aglyn.readContainerIds(data, 'campaign').length,
     published,
     hasDesign: published && hasResolvableDesign(data),
   }

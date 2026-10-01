@@ -53,6 +53,12 @@ const mockSent: Array<Record<string, any>> = []
 let mockResults: Array<Record<string, any>> = []
 /** Rollups stamped `emailedAt`, so "not stamped" is checkable. */
 const mockStamped: string[] = []
+/**
+ * When `report-usage` last computed every rollup, or null for a rollup it
+ * never stamped. Defaults to now, which is after any month this file names,
+ * so every case outside AGL-3442's reads a closed-month figure.
+ */
+let mockComputedAt: Date | null = null
 
 jest.mock('@aglyn/shared-util-email', () => ({
   // The REAL module spread in: `rateLimitedRetryAtMs` is how the route
@@ -120,7 +126,9 @@ function mockFirestore(): any {
                   ? mockStamped.includes(id)
                     ? 'stamped'
                     : undefined
-                  : 0,
+                  : field === 'computedAt'
+                    ? mockComputedAt && { toDate: () => mockComputedAt }
+                    : 0,
               ref: {
                 set: async () => {
                   mockStamped.push(id)
@@ -164,6 +172,7 @@ beforeEach(() => {
   mockStamped.length = 0
   mockResults = []
   mockOrgCount = 0
+  mockComputedAt = new Date()
   process.env.CRON_SECRET = 'cron-secret'
   global.fetch = (async (url: any) => {
     throw new Error(`Blocked outbound request in a spec: ${String(url)}`)
@@ -196,6 +205,47 @@ describe('every summary declares itself BULK', () => {
     const body = await (await post()).json()
     expect(mockSent).toHaveLength(3)
     expect(Object.keys(body.orgs)).toHaveLength(3)
+  })
+})
+
+/**
+ * THE SUMMARY WAITS FOR THE CLOSED-MONTH SWEEP (AGL-3442).
+ *
+ * This route fires hourly from 00:00 UTC on the 1st; `report-usage` sweeps the
+ * closed month at 02:00. Until then each rollup holds the running figure the
+ * in-progress sweep wrote at 07:00 on the month's last day, so the 00:00 and
+ * 01:00 runs mailed numbers the invoice would contradict. Measured on
+ * 2026-10-01: Aglyn LLC's September rollup was computed at 02:00:08 and
+ * mailed at 03:53, in the right order only because GitHub fired late.
+ */
+describe('the summary waits for the closed-month sweep', () => {
+  it('mails nothing from a rollup last computed while its month was open', async () => {
+    mockOrgCount = 3
+    mockComputedAt = new Date('2026-09-30T07:00:08.000Z')
+    const body = await (await post({ month: '2026-09' })).json()
+
+    expect(mockSent).toHaveLength(0)
+    // Unstamped, so the first hourly run after the sweep mails every one.
+    expect(mockStamped).toEqual([])
+    for (const result of Object.values(body.orgs)) {
+      expect(result).toEqual({ skipped: 'usage not final' })
+    }
+  })
+
+  it('mails nothing from a rollup the sweep never stamped', async () => {
+    mockOrgCount = 2
+    mockComputedAt = null
+    await post({ month: '2026-09' })
+    expect(mockSent).toHaveLength(0)
+  })
+
+  it('THE CONTROL: mails once the closed-month sweep has computed it', async () => {
+    // Without this, a route that mailed nobody would pass both cases above.
+    mockOrgCount = 3
+    mockComputedAt = new Date('2026-10-01T02:00:08.000Z')
+    await post({ month: '2026-09' })
+    expect(mockSent).toHaveLength(3)
+    expect(mockStamped).toEqual(['org-000', 'org-001', 'org-002'])
   })
 })
 

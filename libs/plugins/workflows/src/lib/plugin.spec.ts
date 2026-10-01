@@ -16,6 +16,7 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
+import { pluginZone } from '@aglyn/aglyn/plugin-manager/plugin-zones'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { registerWorkflowsConsole } from './plugin'
 
@@ -50,5 +51,24 @@ describe('workflows plugin', () => {
     ])
     // Built from the actions builder's steps, so it takes that plan's flag.
     expect(orgItem?.sections?.[0]?.featureFlag).toBe('actions')
+  })
+})
+
+describe('the zones its Automation page hosts (AGL-2919, AGL-3080)', () => {
+  it('declares each under the id widgets register for, owned here and laid out bare', () => {
+    registerWorkflowsConsole()
+    for (const id of ['hostAutomations', 'automationEditor', 'automationRun']) {
+      const zone = pluginZone(id)
+      // A button beside Add action, one inside an open editor, one on a failed
+      // run's row: the page places each, so a wrapper would add a gap it
+      // already has.
+      expect(`${id}: ${zone?.pluginId} ${zone?.layout} ${zone?.surface}`).toBe(
+        `${id}: ${BUNDLE_ID} bare console`,
+      )
+    }
+    // The shell's catalog no longer names them: the plugin that draws them
+    // says what they are.
+    const catalog = Object.values(Aglyn.CONSOLE_WIDGET_SLOTS) as string[]
+    expect(catalog.filter((id) => id.startsWith('automation') || id === 'hostAutomations')).toEqual([])
   })
 })

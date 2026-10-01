@@ -18,7 +18,7 @@
 import {
   PLAN_PRICING,
   resolveTransactionFeeCents,
-  storefrontProcessingCostCents,
+  saleProcessingCostCents,
 } from '@aglyn/aglyn/server'
 import type { RevenueSection } from '@aglyn/aglyn/plugin-manager/plugin-revenue-sources'
 import {
@@ -291,11 +291,11 @@ describe('the earned total excludes everything that is not Aglyn margin', () => 
     // is out — each its plugin's own figure.
     const sources = [
       earning('marketplace', 2000),
-      earning('commerce', fee - storefrontProcessingCostCents(chargeCents)),
+      earning('commerce', fee - saleProcessingCostCents(chargeCents)),
     ]
     const earned = totalEarnedCents({ subscriptions, sources })
     expect(earned).toBe(
-      10000 + 2000 + (fee - storefrontProcessingCostCents(chargeCents)),
+      10000 + 2000 + (fee - saleProcessingCostCents(chargeCents)),
     )
     // Each exclusion asserted as a strict inequality, so a regression that
     // folded any of them in fails here rather than merely shifting a total.

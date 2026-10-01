@@ -472,7 +472,7 @@ export function readParams(
  *
  * So a colon in either id is refused outright, on every form. It costs
  * nothing real: campaign ids come from `createResourceUid()`, which is
- * `nanoid`'s `A-Za-z0-9_-` alphabet, and `isEmailTopicId` refuses a colon at
+ * `nanoid`'s `A-Za-z0-9_-` alphabet, and `isSubscriptionTopicId` refuses a colon at
  * the point a topic is created.
  *
  * A `tid` with no `cid` is refused for the same reason — the empty middle

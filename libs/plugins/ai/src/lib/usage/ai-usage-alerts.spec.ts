@@ -26,7 +26,7 @@
  * words on their own.
  */
 
-import { resolveAssistCreditBudget } from '@aglyn/aglyn/app-utils/assist-credits'
+import { resolveAssistCreditBudget } from './assist-credits'
 import { aiAddonName } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import {
@@ -93,9 +93,17 @@ function fakeSweep(options: {
     month: MONTH,
     spend: {
       meteredUsd: 0,
-      assistUsd: options.assistUsd,
+      // This plugin's own line, as its spend-line declaration names it.
+      lines: [
+        {
+          id: 'assist',
+          pluginId: 'ai',
+          label: 'Assist',
+          usd: options.assistUsd,
+          billed: false,
+        },
+      ],
       totalUsd: 0,
-      assistBilled: false,
       meteredFresh: false,
     },
     guards: options.guards ?? {},

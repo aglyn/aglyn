@@ -65,7 +65,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   // a picker whose value is not among its options draws blank, and a save
   // from that screen would erase the reference. The site it was asked for is
   // recorded, because that is the site whose people the filters read.
-  useHostCampaigns: (hostId: string) => {
+  useSiteContainerOptions: (_kind: string, hostId: string) => {
     campaignsAskedFor.push(hostId)
     return SITE_CAMPAIGNS
   },

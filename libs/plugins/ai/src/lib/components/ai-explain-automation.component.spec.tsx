@@ -46,7 +46,7 @@ jest.mock('@aglyn/shared-util-http/authorized-token', () => ({
   authorizedFetch: (_user: unknown, url: string, init?: RequestInit) => mockFetch(url, init),
 }))
 
-import type { ConsoleAutomationTarget } from '@aglyn/aglyn/plugin-manager/feature-plugins'
+import type { ConsoleAutomationTarget } from './ai-automation-zones'
 import {
   AI_AUTOMATION_EXPLAIN_COPY,
   AiExplainAutomation,

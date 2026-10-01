@@ -40,7 +40,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => {
     error: null,
   }
   return {
-    useHostCampaigns: () => campaigns,
+    useSiteContainerOptions: () => campaigns,
     useOrgMemberOptions: () => team,
   }
 })
@@ -150,7 +150,7 @@ describe('one keystroke on the audience rule form (AGL-3423)', () => {
   const expectOnlyTheFieldTypedIn = () => {
     expect(counter.rendered('Autocomplete')).toBe(0)
     expect(counter.rendered('RuleCompaniesField')).toBe(0)
-    expect(counter.rendered('CampaignPicker')).toBe(0)
+    expect(counter.rendered('ContainerPicker')).toBe(0)
   }
 
   it('draws only the tags typed into, and never the company chips', async () => {

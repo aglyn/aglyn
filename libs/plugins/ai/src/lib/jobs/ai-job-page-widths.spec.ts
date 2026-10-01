@@ -48,7 +48,7 @@ import {
  *
  * The audit is a RECORDED fixture, not a run: rendering the pages through the
  * component bundles and laying them out in a browser takes minutes, so
- * `tools/scripts/record-ai-page-axe.mts` renders each page at each device of
+ * `libs/plugins/ai/scripts/record-ai-page-axe.mts` renders each page at each device of
  * the switcher — the width `devicePreviewWidth` gives it on the site theme's
  * breakpoints, with the theme and every element pinned to that width as the
  * canvas pins them — and writes what the browser measured. These hold the
@@ -99,7 +99,7 @@ const gridContainers = (answer: AiGoldenSection): number =>
 describe('the golden pages at every device width (AGL-3020)', () => {
   it('renders every golden page the page step builds from a site, from the answers they hold now', () => {
     expect(recorded.pages.map((page) => page.id)).toEqual(GOLDEN_PAGES.map((fixture) => fixture.id))
-    // Re-record with: node tools/scripts/record-ai-page-axe.mts
+    // Re-record with: node libs/plugins/ai/scripts/record-ai-page-axe.mts
     expect(GOLDEN_PAGES.filter((fixture) => pageOf(fixture).answers !== fingerprint(fixture)).map((fixture) => fixture.id)).toEqual([])
     expect(recorded.pages.every((page) => page.markupChars > 0)).toBe(true)
   })

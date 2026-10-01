@@ -16,10 +16,10 @@
  */
 
 /**
- * The staff org usage table draws plugin columns between Forms and Cost
- * (AGL-2984): each column's header in the head row, its cell in every month
- * row with `{ month, orgId }`, and the detail line under a month spanning the
- * core columns and the contributed ones together. Proven with two plugins
+ * The staff org usage table draws plugin columns between the metered bands
+ * and Cost (AGL-2984): each column's header in the head row, its cell in every
+ * month row with `{ month, orgId }`, and the detail line under a month
+ * spanning the core columns and the contributed ones together. Proven with two plugins
  * that have nothing to do with each other — a backups quota and a reviews
  * count.
  */
@@ -71,17 +71,19 @@ const headers = () =>
   screen.getAllByRole('columnheader').map((cell) => cell.textContent)
 
 describe('plugin columns on the staff org usage table (AGL-2984)', () => {
-  it('keeps five core columns of its own', () => {
+  it('keeps its own columns, and one for each metered band, by its label', () => {
+    // The forms plugin's submissions are the one metered band today; its
+    // column is the band's declared label, read from the compiled catalog.
     expect(STAFF_ORG_USAGE_COLUMNS).toEqual([
       'Month',
       'Page views',
       'Storage GB',
-      'Forms',
+      'Form submissions',
       'Cost',
     ])
   })
 
-  it('draws two plugins’ headers between Forms and Cost, in registration order', () => {
+  it('draws two plugins’ headers between the metered bands and Cost, in registration order', () => {
     render(
       <StaffOrgUsageTable
         months={[month('2026-08')]}
@@ -93,7 +95,7 @@ describe('plugin columns on the staff org usage table (AGL-2984)', () => {
       'Month',
       'Page views',
       'Storage GB',
-      'Forms',
+      'Form submissions',
       'Backups (GB)',
       'Reviews@org-1',
       'Cost',
@@ -145,7 +147,7 @@ describe('plugin columns on the staff org usage table (AGL-2984)', () => {
       'Month',
       'Page views',
       'Storage GB',
-      'Forms',
+      'Form submissions',
       'Cost',
     ])
     expect(container.querySelector('td[colspan]')?.getAttribute('colspan')).toBe(

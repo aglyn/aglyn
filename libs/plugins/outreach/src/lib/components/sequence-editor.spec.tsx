@@ -67,7 +67,7 @@ let mockCampaigns: Array<{ value: string; label: string }>
 const mockCampaignReads: Array<{ orgId: unknown; enabled: unknown }> = []
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useUser: () => ({ data: { uid: 'uid-rep', email: 'avery@example.com' } }),
-  useOrgCampaigns: (orgId: unknown, options?: { enabled?: boolean }) => {
+  useOrgContainerOptions: (_kind: string, orgId: unknown, options?: { enabled?: boolean }) => {
     mockCampaignReads.push({ orgId, enabled: options?.enabled })
     return { options: mockCampaigns, truncated: false, ready: true }
   },

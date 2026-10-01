@@ -24,7 +24,7 @@ import {
   assistCreditsFromUsd,
   assistFreeTasteRefusalText,
   assistOwnControlRefusalText,
-} from '@aglyn/aglyn/app-utils/assist-credits'
+} from '../usage/assist-credits'
 import { resolveEffectivePlan } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { aiOverageReservationRefusal } from '../billing/ai-overage-gate'
 import { aiAllotmentRefusalText } from '../model/ai-allotments'

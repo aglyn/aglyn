@@ -16,14 +16,22 @@
  */
 
 /**
- * Staff alerts a plugin contributes to the usage-alerts sweep (AGL-2984).
+ * Alerts a plugin contributes to the usage-alerts sweep (AGL-2984).
  *
  * The usage-alerts cron walks every org, reads its usage once, and sends
  * core's own alerts: the plan quotas, the customer's budget and the free
  * plan's bandwidth cap. A plugin that meters a cost or enforces a ceiling
  * core knows nothing about registers a contributor here from its
- * `serverDeclarations` entry, and the sweep hands the contributor each org's
- * reading after the budget alert and before the bandwidth cap.
+ * `serverDeclarations` entry, in either or both of two shapes:
+ *
+ * - `quotaChecks` answers the bands the WORKSPACE is warned about — a used
+ *   figure against a limit, how often it may be announced, what happens at
+ *   it, and the words for approaching and reaching it. The sweep runs them
+ *   after its own quota checks, through the same approach threshold, guards
+ *   and both channels, so a plugin's band warns exactly as a platform band
+ *   does.
+ * - `evaluate` decides STAFF alerts, and the sweep hands it each org's
+ *   reading after the budget alert and before the bandwidth cap.
  *
  * THE PIPELINE IS THE SWEEP'S. A contributor decides whether an alert is due
  * and what it says; the context does everything else:
@@ -59,6 +67,7 @@
  * one org's alerts in a different order per process.
  */
 
+import type { NotificationLevel } from '../app-utils/notifications'
 import type {
   OrgSpendBreakdown,
   UsageAlertGuard,
@@ -79,6 +88,12 @@ export interface UsageStaffAlert {
   link: string
   /** The email's tag and log label. */
   emailContext: string
+  /**
+   * How loud the bell draws it (AGL-3437). A contributor's threshold is its
+   * own unit, not a percentage, so only the contributor can say; absent, the
+   * `billing.usage` default answers.
+   */
+  level?: NotificationLevel
 }
 
 /** What the sweep hands a contributor for one org. */
@@ -103,13 +118,70 @@ export interface UsageAlertContext {
   alertStaff: (alert: UsageStaffAlert) => Promise<void>
 }
 
+/**
+ * One band a workspace is warned about as it approaches and reaches it — the
+ * shape of a plugin's quota check.
+ *
+ * The sweep owns everything past the numbers and the words: the approach
+ * percentage, the guard under `key`, the first-sweep seeding, both channels,
+ * and the sentence every notice opens with — the workspace, then the figures,
+ * then `noun` ("The Acme workspace has used 2,300 of the 2,750 AI assist
+ * credits your plan includes this month").
+ */
+export interface UsageQuotaCheck {
+  /** The guard key; named for what it measures, never one of core's. */
+  key: string
+  /** How the alert's title names the band: "AI assist credits". */
+  label: string
+  /** What the figures count, in the opening sentence. */
+  noun: string
+  used: number
+  /** `UNLIMITED` or anything not above 0 is skipped. */
+  limit: number
+  /**
+   * How often one threshold may be announced: `crossing` for something the
+   * workspace HAS, announced once when reached and again only after usage
+   * falls back below; `monthly` for a meter that resets on the 1st.
+   */
+  cadence: 'crossing' | 'monthly'
+  /**
+   * What happens at the band, which the notice has to say because the three
+   * call for different actions: `stops` (new use is refused, nothing is
+   * charged), `bills` (it keeps working and starts charging) or `continues`
+   * (nothing is refused and nothing is charged).
+   */
+  outcome: 'stops' | 'bills' | 'continues'
+  /** What is true now, at or past the band. */
+  reached: string
+  /** What will happen at the band, said while approaching it. */
+  approach: string
+  /** Replaces the generic title at 100%, when that would not be true. */
+  reachedTitle?: string
+}
+
+/** What the sweep hands a contributor's quota checks for one org. */
+export interface UsageQuotaContext {
+  orgId: string
+  /** The org document as the sweep read it. */
+  org: Readonly<Record<string, unknown>>
+  /** The `YYYY-MM` month the sweep dedupes against. */
+  month: string
+  /** The org's spend this month, built from the figures the sweep read. */
+  spend: Readonly<OrgSpendBreakdown>
+}
+
 /** A plugin's rule for the usage-alerts sweep. */
 export interface UsageAlertContributor {
   pluginId: string
   /** Unique within the plugin; two plugins may use the same id. */
   id: string
-  /** Evaluates one org, sending only through the context. */
-  evaluate: (context: UsageAlertContext) => Promise<void>
+  /** Evaluates one org's STAFF alerts, sending only through the context. */
+  evaluate?: (context: UsageAlertContext) => Promise<void>
+  /**
+   * The bands the WORKSPACE is warned about, which the sweep runs after its
+   * own through the same thresholds, guards and senders.
+   */
+  quotaChecks?: (context: UsageQuotaContext) => Promise<readonly UsageQuotaCheck[]>
 }
 
 const registrations: UsageAlertContributor[] = []
@@ -131,7 +203,7 @@ function codeUnitOrder(a: string, b: string): number {
  * Registers a contributor. Idempotent per plugin and id: registering the same
  * pair again replaces the earlier contributor in place, so a declarations
  * module evaluated twice does not alert twice. A contributor with no plugin,
- * no id or no `evaluate` throws.
+ * no id, or neither `evaluate` nor `quotaChecks` throws.
  */
 export function registerUsageAlertContributor(
   contributor: UsageAlertContributor,
@@ -141,15 +213,23 @@ export function registerUsageAlertContributor(
   if (!pluginId || !id) {
     throw new Error('a usage alert contributor needs a pluginId and an id')
   }
-  if (typeof contributor.evaluate !== 'function') {
+  const evaluate =
+    typeof contributor.evaluate === 'function' ? contributor.evaluate : undefined
+  const quotaChecks =
+    typeof contributor.quotaChecks === 'function'
+      ? contributor.quotaChecks
+      : undefined
+  if (!evaluate && !quotaChecks) {
     throw new Error(
-      `usage alert contributor "${pluginId}:${id}" has no evaluate function`,
+      `usage alert contributor "${pluginId}:${id}" has neither an evaluate ` +
+        'nor a quotaChecks function',
     )
   }
   const entry: UsageAlertContributor = {
     pluginId,
     id,
-    evaluate: contributor.evaluate,
+    ...(evaluate ? { evaluate } : {}),
+    ...(quotaChecks ? { quotaChecks } : {}),
   }
   const index = registrations.findIndex(
     (existing) => existing.pluginId === pluginId && existing.id === id,

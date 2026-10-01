@@ -32,14 +32,6 @@
  */
 export * from './campaign-report'
 
-/**
- * What a campaign EARNED: the last-click window, the gross/refunded pair and
- * the per-currency buckets that are never added together. Separate from the
- * rate math because it reads a different document and answers the merchant's
- * second question rather than their first.
- */
-export * from './campaign-revenue'
-
 /** Reading one message record — its state, and when it went out. */
 export * from './email-record'
 
@@ -48,11 +40,3 @@ export * from './email-record'
  * rolls its sends into one set of figures.
  */
 export * from './campaign-container'
-
-/**
- * What a campaign CAUSED: the four identify moments, kept apart because one
- * visitor action writes several of them. Separate from the revenue module
- * because it reads a different document and answers what happened to people
- * who were anonymous until the moment being counted.
- */
-export * from './campaign-conversions'

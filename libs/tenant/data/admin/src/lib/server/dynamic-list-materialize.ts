@@ -76,8 +76,8 @@ import {
   normalizeContactEmail,
   normalizeDynamicListRule,
   personKey,
-  readCampaignIds,
-  readContactCampaignIds,
+  readContainerIds,
+  readContactContainerIds,
   readContactFacet,
   type ContactCustomValue,
   type DynamicListCandidate,
@@ -313,7 +313,7 @@ function toCandidate(
           // which is what keeps the group lookup an opt-in cost.
           ...(groupId
             ? {
-                campaignIds: readContactCampaignIds(data, groupId),
+                campaignIds: readContactContainerIds(data, groupId, 'campaign'),
                 ...crmFieldsFromFacet(data, groupId),
               }
             : {}),
@@ -324,7 +324,7 @@ function toCandidate(
           formName: String(data['formName'] ?? ''),
           // At the TOP of a submission, because a submission belongs to one
           // site — the same shape every other host resource carries it in.
-          campaignIds: readCampaignIds(data),
+          campaignIds: readContainerIds(data, 'campaign'),
         }
       : {}),
   }

@@ -24,3 +24,9 @@ export const AI_PLUGIN_ID = 'ai'
 
 /** The `pluginSettings/ai` document's schema id — the same string. */
 export const AI_PLUGIN_SETTINGS_ID = AI_PLUGIN_ID
+
+/**
+ * The plugin's meter in the monthly usage sweep, as its `usageAxes`
+ * declaration names it and its server declarations register it.
+ */
+export const AI_USAGE_METER_ID = 'assist'

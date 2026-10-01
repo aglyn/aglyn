@@ -64,9 +64,9 @@ jest.mock('@aglyn/aglyn/server', () => ({
   resolveTransactionFeeCents: jest.requireActual(
     '../../../../aglyn/src/lib/app-utils/plan-entitlements',
   ).resolveTransactionFeeCents,
-  storefrontProcessingCostCents: jest.requireActual(
+  saleProcessingCostCents: jest.requireActual(
     '../../../../aglyn/src/lib/app-utils/plan-entitlements',
-  ).storefrontProcessingCostCents,
+  ).saleProcessingCostCents,
 }))
 
 jest.mock('@aglyn/tenant-runtime', () => ({
@@ -258,7 +258,7 @@ jest.mock('@aglyn/tenant-data-admin', () => {
 
 import {
   resolveTransactionFeeCents,
-  storefrontProcessingCostCents,
+  saleProcessingCostCents,
 } from '@aglyn/aglyn'
 import { bookHandler } from './server'
 import { standInRecordSystem } from './testing/stand-in-record-system'
@@ -713,7 +713,7 @@ describe('a merchant-set service rate is charged and recorded (AGL-2028)', () =>
     // platform take on the state's money. Derived from the real pricing
     // function, so a rate change moves the expectation with it.
     expect(feeWithTax - feeWithoutTax).toBe(
-      storefrontProcessingCostCents(7950) - storefrontProcessingCostCents(7500),
+      saleProcessingCostCents(7950) - saleProcessingCostCents(7500),
     )
     // NEGATIVE CONTROL: the pro plan takes a non-zero cut on a service, so a
     // fee computed on the TAX-INCLUSIVE base is a larger number. Were these

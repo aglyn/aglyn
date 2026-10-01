@@ -47,11 +47,11 @@
 
 import { readdirSync, readFileSync } from 'fs'
 import { join } from 'path'
+import { bindingMarketplaceFeePct } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import {
   marketplaceMinPriceUsd,
   marketplaceSaleEconomics,
-  bindingMarketplaceFeePct,
-} from '@aglyn/aglyn/app-utils/plan-entitlements'
+} from '../model/listing-price-floor'
 import { PUBLISHER_AGREEMENT_VERSION } from '../model/publisher-agreement'
 import {
   MARKETPLACE_MAX_PRICE_USD,

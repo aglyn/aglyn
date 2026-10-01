@@ -1,7 +1,6 @@
 # @aglyn/shared-ui-email-campaigns
 
-The email-campaign document model and the figures that render it, owned by
-neither of the two plugins that read it.
+The email-campaign document model, owned by none of the plugins that read it.
 
 > Beta. Published from the Aglyn monorepo under the `beta` dist-tag; APIs can change between beta releases.
 
@@ -33,7 +32,7 @@ The boundary is enforced in
 Marketing re-acquires an import of anything this library owns from
 `@aglyn/plugins-email`.
 
-## Two entry points, deliberately
+## The model only
 
 ```typescript
 // Pure. No React, no MUI — safe in a /server handler.
@@ -41,19 +40,12 @@ import {
   campaignReport,
   CAMPAIGN_SEND_CONTAINER_FIELD,
 } from '@aglyn/shared-ui-email-campaigns/model'
-
-// Renders MUI. Console surfaces only.
-import {
-  Figure,
-  RateRow,
-  Section,
-} from '@aglyn/shared-ui-email-campaigns/components/report-figures'
 ```
 
-The package barrel (`@aglyn/shared-ui-email-campaigns`) re-exports the model
-and nothing else, so a webhook handler that needs one stored field name does
-not pull a component graph in behind it. `report-figures` is reachable by
-subpath only — the same barrel discipline `@aglyn/shared-ui-jsx` runs under.
+The library renders nothing. The figure renderers live in
+`@aglyn/shared-ui-jsx`, and the control that files a record under a campaign
+is the core's generic `ContainerPicker` (`@aglyn/tenant-feature-instance`),
+handed the `campaign` kind the Marketing plugin declares.
 
 ## What is here
 
@@ -61,15 +53,14 @@ subpath only — the same barrel discipline `@aglyn/shared-ui-jsx` runs under.
 | --------------------------- | --------------------------------------------------------------------------------- |
 | `model/campaign-container`  | The campaign's window, its lists, its sends, and the rollup across them           |
 | `model/campaign-report`     | The rate math, the population each rate describes, and the link rollup            |
-| `model/campaign-revenue`    | What a campaign earned, per currency, gross and refunded                          |
 | `model/email-record`        | One message: its state, its audience, and when it went out                        |
-| `components/report-figures` | The renderers those figures print through, so a rate always shows its denominator |
-
-`model/campaign-revenue` re-exports the attribution window and model name from
-`@aglyn/shared-util-email`, which is where the writer in `tenant-data-admin`
-takes them from — one definition of the window on both sides of the join.
 
 ## What is not here
+
+What a campaign caused and earned — the conversions it is credited with and
+its revenue per currency. Only the Marketing plugin reads them, so they are
+its model (`libs/plugins/marketing/src/lib/model/`), not a shape two plugins
+share.
 
 Sending. The send loop, the composer, the topic subscriptions and the
 send-time API all stay in `@aglyn/plugins-email`: they are behavior that the

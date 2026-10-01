@@ -179,7 +179,7 @@ const CHOKEPOINTS: Chokepoint[] = [
     feature: '(writer)',
     covers: [],
     file: 'apps/console/app/api/admin/lockdown/route.ts',
-    wiring: ['featureLockdownDocId(targetId)', 'invalidateFeatureLockdownCache()'],
+    wiring: ['featureLockdownDocId(feature)', 'invalidateFeatureLockdownCache()'],
     why: 'the audited writer covers the feature scope and drops the TTL cache',
   },
   {

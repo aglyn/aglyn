@@ -148,6 +148,10 @@ import {
   ABUSE_REPORT_FILTER_HEADERS,
   ABUSE_REPORT_FILTER_OPTIONS,
 } from '../../../../utils/abuse-report-list-query'
+import {
+  ownerNoticeCaption,
+  type RiskNoticeOwnerDelivery,
+} from '../../../../utils/risk-notice-owner-caption'
 
 /**
  * The statutory block, exactly as the route hands it over. `signature` is the
@@ -234,8 +238,16 @@ interface AbuseReportRow {
 interface RiskNoticeRow {
   kind: string
   noticeId: string | null
-  /** When the owners were told; null for a row filed before they were. */
+  /**
+   * When the notice was RAISED; null for a row filed before owner notices
+   * existed. Not proof anything reached them — see `ownersDelivery`.
+   */
   ownersNotifiedAtMs: number | null
+  /**
+   * What the notice's own delivery record says reached the owners
+   * (AGL-3441); null when it carries none or it could not be read.
+   */
+  ownersDelivery: RiskNoticeOwnerDelivery | null
   title: string
   summary: string
   reviewable: boolean
@@ -1032,6 +1044,16 @@ function AdminAbuseReports() {
           delete next[report.id]
           return next
         })
+        // The pinned row is the deep link's snapshot, and the queue cannot
+        // refresh it once it closes: a closed row leaves the default "open or
+        // reviewing" list, so the page fell back to the snapshot and showed
+        // the status it had BEFORE the save (AGL-3441). The route's re-read
+        // replaces it.
+        if (payload.report) {
+          setLinkedReport((current) =>
+            current?.id === report.id ? (payload.report as AbuseReportRow) : current,
+          )
+        }
         await load()
       } catch (error: any) {
         console.error(error)
@@ -1367,6 +1389,10 @@ function AdminAbuseReports() {
                 draft.resolution.trim() === (report.resolution ?? '').trim()
               const severity = report.severity ?? 'normal'
               const urgent = severity === 'urgent'
+              // A closed row keeps its severity chip — that is a fact about
+              // the report — but drops the alarm styling, or a pinned row
+              // reads as open after it has been closed (AGL-3441).
+              const alarming = urgent && !isClosingStatus(report.status)
               // Only for copyright rows, and only when the route actually
               // looked the account up — an absent verdict means UNKNOWN (past
               // the lookup cap), never zero, so it renders nothing rather
@@ -1434,7 +1460,7 @@ function AdminAbuseReports() {
                       : `Report ${report.id}`
                   }
                   sx={
-                    urgent
+                    alarming
                       ? { borderLeft: 4, borderLeftColor: 'error.main' }
                       : undefined
                   }
@@ -1592,8 +1618,8 @@ function AdminAbuseReports() {
 
                     {report.riskNotice ? (
                       <Alert
-                        severity={urgent ? 'warning' : 'info'}
-                        variant={linked ? 'filled' : 'standard'}
+                        severity={alarming ? 'warning' : 'info'}
+                        variant={linked && alarming ? 'filled' : 'standard'}
                       >
                         <Stack spacing={1}>
                           <Typography variant="subtitle2">
@@ -1605,11 +1631,7 @@ function AdminAbuseReports() {
                             {report.riskNotice.summary}
                           </Typography>
                           <Typography variant="caption">
-                            {report.riskNotice.ownersNotifiedAtMs
-                              ? `The workspace's owners and admins were told on ${new Date(
-                                  report.riskNotice.ownersNotifiedAtMs,
-                                ).toLocaleString()}, in the risk notice's own words — never the evidence below.`
-                              : 'Filed before owner notices existed: the workspace was not told about this row.'}
+                            {ownerNoticeCaption(report.riskNotice)}
                           </Typography>
                           <Stack
                             direction="row"

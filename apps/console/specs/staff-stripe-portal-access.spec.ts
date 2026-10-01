@@ -27,9 +27,10 @@ import { join, resolve } from 'node:path'
  * SUPPORT KEEPS A DOOR INTO STRIPE'S OWN VIEW OF A CUSTOMER.
  *
  * The console owns payment methods, invoices and the plan switch in its own
- * design, so the Billing Portal is not a customer surface — sending a paying
- * customer out to a second product to do what this app already does is the
- * thing being removed, not preserved.
+ * design, so the Billing Portal is not a general customer surface. Customers
+ * reach two narrow parts of it, both on the Billing landing and both pinned
+ * below: Outstanding's dunning link, and Update payment method, which opens
+ * the portal's payment-method flow only (AGL-3442).
  *
  * What the portal still holds is the part nobody can reconstruct from our
  * mirrors: raw payment-method state, the dunning attempt history, and the tax
@@ -103,8 +104,13 @@ describe('the staff door into a customer’s Stripe portal', () => {
  * This is a deliberate hold, so it is written down rather than left to be
  * rediscovered. Deleting the portal link from the Outstanding card is the
  * change this guard exists to make someone justify.
+ *
+ * The second door is Update payment method (AGL-3442), the button failed-
+ * payment mail and the past-due banner point at. It opens the portal's
+ * payment-method flow and nothing else of it, and the route refuses any
+ * other flow, so it cannot widen into the plan switch or the cancel funnel.
  */
-describe('the customer-facing portal is confined to dunning recovery', () => {
+describe('the customer-facing portal is confined to dunning recovery and the payment-method flow', () => {
   const OUTSTANDING_CARD =
     'apps/console/components/billing/billing-open-invoices-card.component.tsx'
   const BILLING_PAGE =
@@ -123,6 +129,30 @@ describe('the customer-facing portal is confined to dunning recovery', () => {
     const around = source.slice(Math.max(0, at - 900), at)
     expect(around).toContain('Route.MANAGE_BILLING_SETTINGS')
     expect(around).not.toContain('handleOpenPortal')
+  })
+
+  it('the landing asks for the whole portal once, for Outstanding, and otherwise only for the payment-method flow', () => {
+    const source = read(BILLING_PAGE)
+    const requests = [...source.matchAll(/subscriptionRequest\(\{\s*action: 'portal'([^}]*)\}/g)]
+    // PREMISE: both doors are found, so the assertions below are not vacuous.
+    expect(requests).toHaveLength(2)
+    const flows = requests.map(([, rest]) => rest.replace(/\s+/g, ' ').trim())
+    expect(flows.sort()).toEqual(['', ', flow: PAYMENT_METHOD_UPDATE_FLOW,'])
+    // The whole-portal handler goes to Outstanding and nowhere else.
+    expect(source.match(/handleOpenPortal\(\)/g)).toHaveLength(1)
+    expect(
+      source.slice(source.indexOf('<BillingOpenInvoicesCardComponent')).indexOf(
+        'handleOpenPortal()',
+      ),
+    ).toBeGreaterThan(-1)
+  })
+
+  it('the route opens no portal flow but the payment-method one', () => {
+    const source = read(SUBSCRIPTION_ROUTE)
+    expect(source).toContain("flow !== PAYMENT_METHOD_UPDATE_FLOW")
+    expect(read('apps/console/utils/update-payment-method-link.ts')).toContain(
+      "PAYMENT_METHOD_UPDATE_FLOW = 'payment_method_update'",
+    )
   })
 
   it('no OTHER customer surface grows a portal entry point', () => {

@@ -65,10 +65,11 @@ const COGS_PATH = join(
 
 const args = process.argv.slice(2)
 /*
- * Eight decimals, not six. The rate is pinned so the PUBLISHED figure is round
- * — $0.21 per 1,000 views — which makes the per-view cost a long decimal, and
- * six places round $0.00016153846 to $0.000162, a figure that appears in no
- * file and would send a reader looking for it.
+ * Eight decimals, not six. The weight rate is pinned so its marked-up figure is
+ * round — $0.21 per 1,000 views, before the CDN request term a billed view
+ * adds — which makes the per-view cost a long decimal, and six places round
+ * $0.00016153846 to $0.000162, a figure that appears in no file and would send
+ * a reader looking for it.
  */
 const usd = (n) => `$${n.toFixed(8)}`
 const pct = (n) => `${(n * 100).toFixed(1)}%`

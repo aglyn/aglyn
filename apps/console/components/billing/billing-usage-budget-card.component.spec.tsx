@@ -84,9 +84,17 @@ const BUDGET_SET = {
   month: MONTH,
   spend: {
     meteredUsd: 25,
-    assistCredits: 0,
+    lines: [
+      {
+        id: 'assist',
+        label: 'Assist',
+        billed: false,
+        units: 0,
+        unitLabel: 'Assist credits',
+        usd: null,
+      },
+    ],
     totalUsd: 25,
-    assistBilled: false,
     meteredFresh: true,
   },
   lastAlert: null,
@@ -217,18 +225,21 @@ describe('the spend figure', () => {
   })
 
   /*
-   * ASSIST CONSUMPTION IS SHOWN, AND IT IS SHOWN IN CREDITS.
+   * A PLUGIN'S LINE IS SHOWN, AND IT IS SHOWN IN ITS UNIT.
    *
-   * The figure behind a credit is `assistUsage/{month}.estCostUsd` — our
-   * provider bill at the serving model's list rates. This card used to print
-   * it in dollars, which put our unit cost, and with it our margin, on a
-   * customer's billing page. What a customer consumed is theirs to see; what
-   * it cost us is not.
+   * The figure behind an Assist credit is `assistUsage/{month}.estCostUsd` —
+   * our provider bill at the serving model's list rates. This card used to
+   * print it in dollars, which put our unit cost, and with it our margin, on
+   * a customer's billing page. What a customer consumed is theirs to see; what
+   * it cost us is not, so the server sends the line in credits alone.
    */
   it('renders Assist consumption in credits, and no dollar figure for it', async () => {
     renderCard({
       ...BUDGET_SET,
-      spend: { ...BUDGET_SET.spend, assistCredits: 2300 },
+      spend: {
+        ...BUDGET_SET.spend,
+        lines: [{ ...BUDGET_SET.spend.lines[0]!, units: 2300 }],
+      },
     })
     await waitFor(() =>
       expect(screen.getByText(/2,300 Assist credits used/i)).toBeTruthy(),

@@ -355,10 +355,15 @@ const AdminOverview: NextPageWithLayout<Record<string, never>> = () => {
                               variant="caption"
                               color="text.secondary"
                             >
-                              {`${usage.storageGb.toFixed(2)} GB · ` +
-                                `${usage.pageViews} views · ` +
-                                `${usage.formSubmissions} forms · ` +
-                                `$${usage.costUsd.toFixed(2)}`}
+                              {[
+                                `${usage.storageGb.toFixed(2)} GB`,
+                                `${usage.pageViews} views`,
+                                ...(usage.meters ?? []).map(
+                                  (meter: { noun: string; count: number }) =>
+                                    `${meter.count} ${meter.noun}`,
+                                ),
+                                `$${usage.costUsd.toFixed(2)}`,
+                              ].join(' · ')}
                             </Typography>
                           </Stack>
                         ))}

@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { activeEmailTopics } from '@aglyn/aglyn'
+import { activeSubscriptionTopics } from '@aglyn/aglyn'
 import { useEffect, useMemo } from 'react'
 import { useOrgEmailTopics } from './use-org-email-topics'
 
@@ -41,7 +41,7 @@ export function CampaignTopicOptionsWidget(
   const { hostId, enabled, onTopics } = props
   const { topics } = useOrgEmailTopics(hostId, { enabled })
   const options = useMemo(
-    () => activeEmailTopics(topics).map(({ id, name }) => ({ id, name })),
+    () => activeSubscriptionTopics(topics).map(({ id, name }) => ({ id, name })),
     [topics],
   )
   useEffect(() => {

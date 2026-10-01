@@ -309,6 +309,22 @@ subscription product, Stripe records them and charges no one.
    deliberately above the measurement. `tools/tenant-page-budget.json` carries
    the record and `npm run check:page-view-rate` holds it.
 
+   **A billed page view gained a second cost term on 2026-10-01 (AGL-1879):
+   published $0.21 → $0.36 per 1,000.** `perPageView` prices a view's weight;
+   Vercel also bills CDN requests once the team's 10M included requests are
+   spent ($2.00 per million in the cheapest region), and a cold load of the
+   published page makes 57 of them, so the request allowance runs out at
+   about 175,000 views a month platform-wide — long before the transfer
+   allowance does. `PAGE_VIEW_CDN_REQUEST_COST_USD` in `plan-entitlements.ts`
+   ($0.00011538462, 57.7 requests at $2.00/M) is added to `perPageView` for
+   views billed past a band (`METERED_OVERAGE_COST_USD`), and the sum is
+   marked up 1.3. Neither rate table carries it: the weight term stays
+   identical in both. The included bands are sized with it counted, at the
+   dearest region's $3.20 per million (AGL-3444, `tier-margin-floor.spec.ts`),
+   while the platform COGS model (`orgMonthlyCogsUsd`) still prices views on
+   weight alone. No Stripe object changes — the meter value is cents and both
+   metered prices are $0.01/unit, and no Stripe object carries a band.
+
    **Re-validate this table once a real paid month exists**, i.e. once the
    Vercel team is off Hobby and GCP usage clears the free tier. Until then
    the rates are list-derived estimates, not measurements.
@@ -576,9 +592,9 @@ overage needs an invoice it can pay, and before the cutover there is none.
 3. **Test mode — the drill.**
 
    ```bash
-   node tools/scripts/ai-overage-test-clock-drill.mjs
+   node libs/plugins/ai/scripts/ai-overage-test-clock-drill.mjs
    STRIPE_SECRET_KEY=sk_test_… STRIPE_PRODUCT_AI_OVERAGE=prod_… \
-     node tools/scripts/ai-overage-test-clock-drill.mjs --run
+     node libs/plugins/ai/scripts/ai-overage-test-clock-drill.mjs --run
    ```
 
    Without `--run` it prints the plan and calls nothing. It refuses an

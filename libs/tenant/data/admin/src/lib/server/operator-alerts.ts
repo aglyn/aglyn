@@ -20,8 +20,10 @@ import {
   effectiveOperatorAlertSetting,
   OPERATOR_ALERT_DEFAULT_NOTIFICATION_TYPE,
   OPERATOR_ALERT_TIER_LABELS,
+  operatorAlertLevel,
   renderOperatorAlertTemplate,
   type AglynNotificationType,
+  type NotificationLevel,
   type OperatorAlertContext,
   type OperatorAlertDefinition,
   type OperatorAlertSettings,
@@ -93,6 +95,12 @@ export interface RaiseOperatorAlertOptions {
   subject?: string
   /** The body as written by the caller; overrides the rendered one. */
   body?: string
+  /**
+   * The console notification's level as the caller judged it (AGL-3437);
+   * overrides the definition's. For a caller whose one alert type covers
+   * news of more than one tone.
+   */
+  level?: NotificationLevel
   orgId?: string
   hostId?: string
 }
@@ -504,6 +512,7 @@ export async function raiseOperatorAlert(
         type: alert.notificationType,
         title: alert.title,
         ...(alert.body ? { body: alert.body } : {}),
+        level: options.level ?? operatorAlertLevel(definition),
         ...(alert.link && alert.link.startsWith('/') ? { link: alert.link } : {}),
         ...(alert.orgId ? { orgId: alert.orgId } : {}),
         ...(alert.hostId ? { hostId: alert.hostId } : {}),

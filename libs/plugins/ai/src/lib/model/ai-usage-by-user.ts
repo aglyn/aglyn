@@ -16,7 +16,7 @@
  */
 
 import type { AiJobKind } from './ai-jobs.types'
-import { assistCreditsFromUsd } from '@aglyn/aglyn/app-utils/assist-credits'
+import { assistCreditsFromUsd } from '../usage/assist-credits'
 
 /**
  * PER-USER AI USAGE (AGL-2928): the pure half.

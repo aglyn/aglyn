@@ -117,7 +117,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
     return mockLiveCount
   },
   // The Campaign filter's choices; nothing here opens the Filters panel.
-  useHostCampaigns: () => ({ options: [], truncated: false, ready: false }),
+  useSiteContainerOptions: () => ({ options: [], truncated: false, ready: false }),
 }))
 
 /** What the forms table was last handed. */

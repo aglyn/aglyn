@@ -413,7 +413,8 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     managersPerOrg: 2,
     maxManagersPerOrg: 5,
     maxMembersPerHost: 10,
-    bandwidthGb: 50,
+    // Sized by the same annual-price invariant as Pro's — see that band.
+    bandwidthGb: 35,
     formsPerHost: FORMS_PER_HOST_CEILING,
     variablesPerHost: 25,
     functionsPerHost: 10,
@@ -517,20 +518,25 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     managersPerOrg: 5,
     maxManagersPerOrg: 20,
     maxMembersPerHost: 25,
-    // Page views are the largest term of this tier's modeled COGS — one GB
-    // is 1,035 views at `ESTIMATED_PAGE_TRANSFER_BYTES`, or $0.167 of
-    // measured cost — so the bandwidth band is what decides whether the tier
-    // survives a customer spending the whole allowance it was sold.
+    // Page views are the largest term of this tier's modeled COGS. One GB is
+    // 1,035 views at `ESTIMATED_PAGE_TRANSFER_BYTES`: $0.167 of weight, and
+    // $0.191 of CDN requests once the hosting plan's monthly request
+    // allowance is spent, priced at the dearest region's $3.20 per million
+    // (`PAGE_VIEW_CDN_REQUEST_COST_USD` is the $2.00 figure). So a GB of
+    // included bandwidth costs $0.358, and the bandwidth band is what
+    // decides whether the tier survives a customer spending the whole
+    // allowance it was sold.
     //
     // The invariant the band is sized against is the ANNUAL price ($39 a
     // month) net of Stripe's fee, with every band at 100% and the CRM seat
-    // and one-to-one email terms counted — the 2026-09-07 pricing decision.
-    // At 225 GB that price was 44% under water; 125 GB is what it carries.
+    // and one-to-one email terms counted — the 2026-09-07 pricing decision —
+    // at that all-in gigabyte (AGL-3444). 60 GB is what it carries; every
+    // paid band on the ladder is sized the same way.
     // `tier-margin-floor.spec.ts` holds the model and pins the figure.
     //
     // `meteredInfraPassThrough` is true here, so traffic past the band BILLS
     // at the page-view pass-through rather than being refused or absorbed.
-    bandwidthGb: 125,
+    bandwidthGb: 60,
     formsPerHost: FORMS_PER_HOST_CEILING,
     variablesPerHost: 100,
     functionsPerHost: 50,
@@ -622,7 +628,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     maxManagersPerOrg: 100,
     maxMembersPerHost: 100,
     // Sized by the same annual-price invariant as Pro's — see that band.
-    bandwidthGb: 185,
+    bandwidthGb: 90,
     formsPerHost: FORMS_PER_HOST_CEILING,
     variablesPerHost: 1000,
     functionsPerHost: 250,
@@ -693,7 +699,8 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     managersPerOrg: 25,
     maxManagersPerOrg: 150,
     maxMembersPerHost: 150,
-    bandwidthGb: 290,
+    // Sized by the same annual-price invariant as Pro's — see that band.
+    bandwidthGb: 145,
     formsPerHost: FORMS_PER_HOST_CEILING,
     variablesPerHost: 5000,
     functionsPerHost: 500,
@@ -761,7 +768,8 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     managersPerOrg: 50,
     maxManagersPerOrg: 250,
     maxMembersPerHost: 250,
-    bandwidthGb: 345,
+    // Sized by the same annual-price invariant as Pro's — see that band.
+    bandwidthGb: 175,
     formsPerHost: FORMS_PER_HOST_CEILING,
     variablesPerHost: UNLIMITED,
     functionsPerHost: 1000,
@@ -833,7 +841,8 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     managersPerOrg: 100,
     maxManagersPerOrg: 500,
     maxMembersPerHost: 1000,
-    bandwidthGb: 1540,
+    // Sized by the same annual-price invariant as Pro's — see that band.
+    bandwidthGb: 790,
     formsPerHost: FORMS_PER_HOST_CEILING,
     variablesPerHost: UNLIMITED,
     functionsPerHost: UNLIMITED,
@@ -942,7 +951,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     managersPerOrg: 200,
     maxManagersPerOrg: 1_000,
     maxMembersPerHost: 2_000,
-    bandwidthGb: 3_080,
+    bandwidthGb: 1_580,
     formsPerHost: FORMS_PER_HOST_CEILING,
     variablesPerHost: UNLIMITED,
     functionsPerHost: UNLIMITED,
@@ -2385,6 +2394,67 @@ export const INFRA_COGS_PER_SITE_USD = 2
 export const METERED_MARKUP = 1.3
 
 /**
+ * What the CDN requests behind ONE page view cost once the platform is past
+ * its hosting plan's included request allowance, in USD per view
+ * (AGL-1879). A page view billed past a plan's band is priced at
+ * `(perPageView + this) × METERED_MARKUP` — $0.36 per 1,000.
+ *
+ * ## Why a page view needs a second cost term
+ *
+ * `perPageView` prices what a view WEIGHS: the bytes it transfers at the
+ * CDN's per-GB rate, plus the Firestore reads behind the render. The CDN also
+ * charges per REQUEST once the team's monthly allowance is spent — Vercel Pro
+ * includes 10,000,000 a month, then bills $2.00 per million in its cheapest
+ * region and up to $3.20 elsewhere. A cold load of `aglyn.com/` makes 57
+ * first-party requests to settle (`tools/tenant-page-budget.json`,
+ * `wireCalibration.measuredAgainst`), so the allowance is about 175,000 views
+ * of that page a month, platform-wide — about 169 GB of included bandwidth
+ * — where the 1 TB transfer allowance lasts about 1.4 million. The request
+ * allowance runs out first, and past it a view costs:
+ *
+ * |                                   | weight     | requests  | cost / 1k | at $0.21 | at $0.36 |
+ * |-----------------------------------|------------|-----------|-----------|----------|----------|
+ * | the page as measured (748.5 KB)   | $0.119378  | $0.114000 | $0.2334   | −11%     | +35%     |
+ * | the priced basis (1012.8 KB)      | $0.161538  | $0.114000 | $0.2755   | −31%     | +23%     |
+ *
+ * at $2.00 per million requests. A weight-only rate therefore billed the
+ * overage below cost from the 175,000th view of any month onward.
+ *
+ * ## The figure
+ *
+ * $0.00011538462 is 57.7 requests at $2.00 per million — the measured 57,
+ * with the basis set ABOVE the measurement as the weight basis is — pinned so
+ * the billed price lands on a whole cent: ($0.161538 + $0.115385) × 1.3 is
+ * $0.36 per 1,000. Published as "Our cost $0.276923 / You pay $0.36", the
+ * "at cost + 30%" claim stays true of the cost a billed view actually incurs.
+ *
+ * ## ⛔ Not in {@link ORG_COGS_UNIT_RATES_USD}, deliberately
+ *
+ * `perPageView` is half of a pair with `ESTIMATED_PAGE_TRANSFER_BYTES` — one
+ * page weight in dollars and in bytes — and `npm run check:page-view-rate`
+ * recovers that weight from the rate. A per-request charge is not
+ * proportional to weight, so folding it into `perPageView` would make the
+ * gate read a 1,736 KB page nobody serves. This term prices the views a
+ * customer is billed for, at the cheapest region's $2.00 per million.
+ *
+ * ## The INCLUDED bands carry it too, at the dearest region
+ *
+ * A view inside a plan's band makes the same requests as one past it, and
+ * once the platform is past the allowance the CDN bills them either way. The
+ * `bandwidthGb` bands are therefore sized with this term counted at the
+ * dearest region's $3.20 per million — 1.6× this figure, $0.191 per included
+ * GB on top of the $0.167 of weight — because the margin rule they hold is
+ * stated at any utilization, and a band cannot choose where its visitors
+ * are (AGL-3444). `tier-margin-floor.spec.ts` multiplies it in and pins every
+ * tier at 100% of every band.
+ *
+ * Lives HERE, beside the markup, for the reason the markup does: the
+ * `/pricing` generator publishes the cost column from it and cannot import
+ * anything under `apps/console`.
+ */
+export const PAGE_VIEW_CDN_REQUEST_COST_USD = 0.00011538462
+
+/**
  * Monthly unit costs for the meters the rollup already records (AGL-1134).
  *
  * These are OUR costs, not prices — the org is billed at cost × 1.30
@@ -2407,6 +2477,11 @@ export const METERED_MARKUP = 1.3
  * infrastructure pass-through, and the customer is charged those figures
  * times `METERED_MARKUP`. They therefore appear in `METERED_UNIT_RATES_USD`
  * as well, with identical values, and must be changed in both places at once.
+ * A page view billed past its band also carries
+ * {@link PAGE_VIEW_CDN_REQUEST_COST_USD}, which neither table holds: it is
+ * the per-request CDN charge past the hosting plan's allowance, and this
+ * table's `perPageView` is the weight-proportional half of what a band is
+ * sized against — the request term, at the dearest region, is the other.
  *
  * Everything else here is a cost-model input ONLY. `dataStoragePerGbMonth`,
  * `perApiRequest`, `perContactMonth` and `perEmailSend` price what an org
@@ -3653,10 +3728,10 @@ export function resolveTransactionFeePct(
 }
 
 /**
- * Stripe's processing cost on ONE storefront destination charge, in cents
- * (AGL-2152) — the dearest enabled method's percentage plus the fixed 30¢,
- * rounded UP on the percentage so the answer is never a cent short of what
- * Stripe actually debits.
+ * Stripe's processing cost on ONE destination-charge sale, in cents
+ * (AGL-2152) — a storefront order, a booking deposit — the dearest enabled
+ * method's percentage plus the fixed 30¢, rounded UP on the percentage so the
+ * answer is never a cent short of what Stripe actually debits.
  *
  * WHO PAYS THIS. Every storefront charge is a DESTINATION charge:
  * `payment_intent_data[transfer_data][destination]` names the merchant's
@@ -3682,26 +3757,26 @@ export function resolveTransactionFeePct(
  * decides the set — and per AGL-2343 that configuration has `klarna` and
  * `affirm` on beside the card family. Pricing this at the card rate would be
  * wrong exactly on the orders where it cost the most, which is the same
- * reasoning `marketplaceBreakEvenUsd` already applies to the listing floor;
- * these are deliberately the SAME two constants so the two cannot drift.
+ * reasoning the marketplace listing floor applies; both are defined from the
+ * SAME processing constants so the two cannot drift.
  *
  * THE ONE-LINE LEVER. On a card-family order this over-recovers by the spread
  * between the two rates. Pinning `payment_method_types` on the storefront
  * sessions to the card family would make 2.9% the true binding rate, and
- * `STOREFRONT_PROCESSING_PERCENT` below is then the single identifier to
+ * `SALE_PROCESSING_PERCENT` below is then the single identifier to
  * repoint. That is a product decision about which payment methods a storefront
  * offers, not this one; it is recorded on AGL-2152 and in the Pricing Decision
  * Log so it can be taken deliberately.
  */
-// `STOREFRONT_PROCESSING_PERCENT` and `STOREFRONT_PROCESSING_FIXED_CENTS` are
-// declared beside the marketplace processing constants they are defined from,
-// further down this file — a `const` cannot be read before its declaration is
-// evaluated, and this function is only ever CALLED, never evaluated at import.
-export function storefrontProcessingCostCents(chargeCents: number): number {
+// `SALE_PROCESSING_PERCENT` and `SALE_PROCESSING_FIXED_CENTS` are declared
+// beside the processing constants they are defined from, further down this
+// file — a `const` cannot be read before its declaration is evaluated, and
+// this function is only ever CALLED, never evaluated at import.
+export function saleProcessingCostCents(chargeCents: number): number {
   if (!Number.isFinite(chargeCents) || chargeCents <= 0) return 0
   return (
-    Math.ceil((chargeCents * STOREFRONT_PROCESSING_PERCENT) / 100) +
-    STOREFRONT_PROCESSING_FIXED_CENTS
+    Math.ceil((chargeCents * SALE_PROCESSING_PERCENT) / 100) +
+    SALE_PROCESSING_FIXED_CENTS
   )
 }
 
@@ -3747,7 +3822,7 @@ export function resolveTransactionFeeCents(
   // The `Math.max(1, …)` every door already applied: a rate above zero on
   // goods the shopper pays for is a fee however small it rounds to.
   const take = pct > 0 && base > 0 ? Math.max(1, Math.round((base * pct) / 100)) : 0
-  return Math.min(charge, take + storefrontProcessingCostCents(charge))
+  return Math.min(charge, take + saleProcessingCostCents(charge))
 }
 
 /**
@@ -3756,7 +3831,7 @@ export function resolveTransactionFeeCents(
  *
  * A Stripe Subscription accepts no `application_fee_amount` — only
  * `application_fee_percent`, a rate with at most two decimal places — so the
- * fixed 30¢ that `storefrontProcessingCostCents` adds in cents has to be
+ * fixed 30¢ that `saleProcessingCostCents` adds in cents has to be
  * folded into the rate. `(rate × amount + fixed) ÷ amount` is, with the
  * amount cancelled,
  *
@@ -3773,19 +3848,19 @@ export function resolveTransactionFeeCents(
  * decimal outright, so the only honest direction is over. Integers, because
  * `0.09 * 100` is not `9` in floating point and a percent one ulp above a
  * whole hundredth would round up to the next one. The same two constants as
- * the one-time path, so repointing `STOREFRONT_PROCESSING_PERCENT` moves
+ * the one-time path, so repointing `SALE_PROCESSING_PERCENT` moves
  * both surfaces together. Zero for a charge that is not a charge.
  */
-export function storefrontProcessingPassThroughPercent(
+export function saleProcessingPassThroughPercent(
   amountCents: number,
 ): number {
   const amount =
     Number.isFinite(amountCents) && amountCents > 0 ? Math.round(amountCents) : 0
   if (amount <= 0) return 0
-  const rateHundredths = Math.round(STOREFRONT_PROCESSING_PERCENT * 100)
+  const rateHundredths = Math.round(SALE_PROCESSING_PERCENT * 100)
   // 30¢ ÷ amount is a fraction; × 100 makes it a percent, × 100 again makes
   // it hundredths of one.
-  const fixedHundredths = (STOREFRONT_PROCESSING_FIXED_CENTS * 10_000) / amount
+  const fixedHundredths = (SALE_PROCESSING_FIXED_CENTS * 10_000) / amount
   return Math.min(100, Math.ceil(rateHundredths + fixedHundredths) / 100)
 }
 
@@ -3817,7 +3892,7 @@ export function resolveSubscriptionFeePercent(
     Number.isFinite(amountCents) && amountCents > 0 ? Math.round(amountCents) : 0
   if (amount <= 0) return 0
   const take = resolveTransactionFeePct(org, productType)
-  const passThrough = storefrontProcessingPassThroughPercent(amount)
+  const passThrough = saleProcessingPassThroughPercent(amount)
   return Math.min(
     100,
     (Math.round(take * 100) + Math.round(passThrough * 100)) / 100,
@@ -3887,249 +3962,46 @@ export function bindingMarketplaceFeePct(): number {
 }
 
 /**
- * What one marketplace sale costs the PLATFORM to process (AGL-2343).
+ * What one destination-charge sale costs the PLATFORM to process (AGL-2343):
+ * a storefront order, a booking deposit, a marketplace listing. On a
+ * destination charge Stripe debits its fee from the PLATFORM's balance, so
+ * every surface that sells through the platform's account prices its take
+ * against these.
  *
- * NONE OF THESE IS AN AGLYN PRICE. They are Stripe's published US rates and
- * the Texas rate the platform remits, and they exist only as inputs to a
- * figure shown to a publisher while they type. Nothing is billed from them —
- * the charged amounts are `resolveMarketplaceFeePct` and Stripe's own
- * invoicing — so changing one changes a sentence, never a bill.
- *
- * WHY THE PLATFORM PAYS THE PROCESSING FEE AT ALL. Marketplace checkout is a
- * DESTINATION charge with a fixed `transfer_data[amount]` and deliberately no
- * `application_fee_amount`, so that the sales tax stays with the platform that
- * owes it (AGL-1544). On a destination charge Stripe debits its fee from the
- * PLATFORM's balance, and it is charged on `amount_total` — the listing price
- * plus the tax added on top of it.
- *
- * So a $1 listing at a 20% take rate is a loss: the buyer pays $1.08, the
- * seller is transferred $0.80, $0.08 is owed to the state, Aglyn keeps $0.20
- * and pays Stripe about $0.33. Net −$0.13.
+ * NONE OF THESE IS AN AGLYN PRICE. They are Stripe's published US rates, and
+ * they exist only as inputs to a platform take and to figures a seller reads;
+ * changing one never changes a price list.
  *
  * THE BNPL RATE IS THE ONE THAT BINDS, and it is not hypothetical: the live
  * default payment method configuration has `klarna` and `affirm` enabled
- * alongside `card`, `cashapp`, `link`, `amazon_pay` and `apple_pay`, and the
- * marketplace session pins no `payment_method_types`, so a buyer may pay by
- * either. Break-even is computed from the dearest enabled method, because a
- * figure computed from the cheapest would be wrong exactly when it mattered.
- * IF BNPL IS EVER TURNED OFF FOR MARKETPLACE SESSIONS, this constant is what
- * has to move with it.
+ * alongside `card`, `cashapp`, `link`, `amazon_pay` and `apple_pay`, and no
+ * checkout session pins `payment_method_types`, so a buyer may pay by either.
+ * A cost computed from the cheapest method would be wrong exactly when it
+ * mattered.
  */
-export const MARKETPLACE_PROCESSING_PERCENT_CARD = 2.9
+export const CARD_PROCESSING_PERCENT = 2.9
 /** Klarna/Affirm, roughly. See the note above — this is the binding one. */
-export const MARKETPLACE_PROCESSING_PERCENT_BNPL = 6
+export const BNPL_PROCESSING_PERCENT = 6
 /** Stripe's per-transaction fixed component, in cents. */
-export const MARKETPLACE_PROCESSING_FIXED_CENTS = 30
-/**
- * The tax rate the break-even figure assumes. Tax is added ON TOP of the
- * listing price and enlarges the base Stripe charges its percentage against,
- * so it makes the platform's cost slightly worse; the real rate is whatever
- * `automatic_tax` computes for the buyer's address, and this is the
- * platform's own Texas rate as a representative figure.
- */
-export const MARKETPLACE_ASSUMED_TAX_PERCENT = 8.25
+export const PROCESSING_FIXED_CENTS = 30
 
 /**
- * The processing rate a STOREFRONT destination charge is priced against
- * (AGL-2152), and the one identifier to repoint if the storefront's payment
- * method set changes.
+ * The processing rate a storefront or booking destination charge is priced
+ * against (AGL-2152), and the one identifier to repoint if those sessions'
+ * payment method set changes.
  *
- * Deliberately its OWN name rather than a direct use of the marketplace
- * constants, while being defined as one of them: the two surfaces share
- * Stripe's published rates and today share the platform's payment method
- * configuration, but they are separate product decisions. A future choice to
- * pin `payment_method_types` on storefront sessions to the card family — and
- * so to recover at `MARKETPLACE_PROCESSING_PERCENT_CARD` — must not silently
- * lower the marketplace listing floor, which is derived from the same figure
- * for a different flow.
+ * Deliberately its OWN name rather than a direct use of the binding rate,
+ * while being defined as it: every seller shares Stripe's published rates and
+ * today shares the platform's payment method configuration, but each surface
+ * is a separate product decision. A future choice to pin
+ * `payment_method_types` on storefront sessions to the card family — and so
+ * to recover at `CARD_PROCESSING_PERCENT` — must not silently lower the
+ * marketplace listing floor, which is derived from the binding rate for a
+ * different flow.
  */
-export const STOREFRONT_PROCESSING_PERCENT = MARKETPLACE_PROCESSING_PERCENT_BNPL
+export const SALE_PROCESSING_PERCENT = BNPL_PROCESSING_PERCENT
 /** Stripe's per-transaction fixed component, in cents. Not rate-dependent. */
-export const STOREFRONT_PROCESSING_FIXED_CENTS =
-  MARKETPLACE_PROCESSING_FIXED_CENTS
-
-/** Where the money goes on one sale of a paid listing (AGL-2343). */
-export interface MarketplaceSaleEconomics {
-  /** The listing price. */
-  priceCents: number
-  /** Added on top, and owed to the state. */
-  taxCents: number
-  /** What the buyer is charged. */
-  buyerPaysCents: number
-  /** `transfer_data[amount]` — the seller's share of the pre-tax price. */
-  sellerReceivesCents: number
-  /** The platform's take. */
-  platformFeeCents: number
-  /** Stripe's fee, debited from the platform on a destination charge. */
-  processingCents: number
-  /** `platformFeeCents - processingCents`. Negative is a loss on the sale. */
-  platformNetCents: number
-}
-
-/**
- * The funds flow for one sale, mirroring what `checkout.ts` actually builds
- * (AGL-2343): tax exclusive and on top, a fixed transfer of the seller's share
- * of the PRE-tax price, and Stripe's fee charged on the buyer's total.
- */
-export function marketplaceSaleEconomics(
-  priceUsd: number,
-  feePercent: number,
-  processingPercent: number = MARKETPLACE_PROCESSING_PERCENT_BNPL,
-): MarketplaceSaleEconomics {
-  const priceCents = Math.max(0, Math.round(priceUsd * 100))
-  const taxCents = Math.round(
-    (priceCents * MARKETPLACE_ASSUMED_TAX_PERCENT) / 100,
-  )
-  const buyerPaysCents = priceCents + taxCents
-  const platformFeeCents = Math.round((priceCents * feePercent) / 100)
-  const sellerReceivesCents = priceCents - platformFeeCents
-  // A zero-price listing takes no payment at all, so there is no fee to pay.
-  const processingCents =
-    priceCents === 0
-      ? 0
-      : Math.round(
-          (buyerPaysCents * processingPercent) / 100 +
-            MARKETPLACE_PROCESSING_FIXED_CENTS,
-        )
-  return {
-    priceCents,
-    taxCents,
-    buyerPaysCents,
-    sellerReceivesCents,
-    platformFeeCents,
-    processingCents,
-    platformNetCents: platformFeeCents - processingCents,
-  }
-}
-
-/**
- * The cheapest WHOLE-DOLLAR price at which the platform does not lose money on
- * a sale (AGL-2343).
- *
- * Whole dollars because every publish route rounds `priceUsd` to one, so a
- * fractional break-even is not a price anyone can actually set. Searched
- * rather than solved algebraically so that it can never disagree with
- * `marketplaceSaleEconomics` — the rounding in there is what decides the
- * answer at these amounts, and a closed form would drift from it silently.
- *
- * THIS IS THE ENFORCED FLOOR: `marketplaceMinPriceUsd` returns this figure
- * and every publish door refuses a paid listing under it. Recorded in the Pricing
- * Decision Log and on AGL-2343.
- */
-export function marketplaceBreakEvenUsd(
-  feePercent: number = bindingMarketplaceFeePct(),
-  processingPercent: number = MARKETPLACE_PROCESSING_PERCENT_BNPL,
-): number {
-  // The listing price ceiling is the marketplace plugin's
-  // `MARKETPLACE_MAX_PRICE_USD`, which this library may not import (an app-tier
-  // lib cannot depend on an addon). The loop only needs SOME bound, and the
-  // answer is single digits at every rate the table holds, so a generous local
-  // one costs nothing and cannot drift into a wrong figure.
-  const searchCeilingUsd = 1000
-  for (let priceUsd = 1; priceUsd <= searchCeilingUsd; priceUsd += 1) {
-    if (
-      marketplaceSaleEconomics(priceUsd, feePercent, processingPercent)
-        .platformNetCents >= 0
-    ) {
-      return priceUsd
-    }
-  }
-  return searchCeilingUsd
-}
-
-/**
- * THE MINIMUM PRICE a paid marketplace listing may carry (AGL-2343).
- *
- * The floor is not a chosen round number — it is the break-even price itself,
- * the
- * cheapest whole dollar at which `marketplaceSaleEconomics` stops returning a
- * negative platform net, computed at the take rate that breaks even LATEST and
- * the dearest payment method the live configuration enables. Today that is $3.
- *
- * DERIVED, NEVER RESTATED. A second hand-written copy of this number in a
- * publish route or a form is the artifact that decays into a route refusing a
- * price a form invited, so both the server-side validator
- * (`MARKETPLACE_MIN_PRICE_USD` in the marketplace model) and every price field
- * read this. If the payment method set changes, or the plan table's lowest
- * take rate moves, the floor moves with them on the next call.
- *
- * ZERO IS NOT BELOW THE FLOOR. A free listing takes no payment at all, so it
- * costs nothing to process; the floor is a minimum on PAID listings only.
- */
-export function marketplaceMinPriceUsd(): number {
-  return marketplaceBreakEvenUsd()
-}
-
-/**
- * Whether a price is a PAID price that the floor refuses (AGL-2343) — the one
- * predicate a form uses to mark its price field in error and hold its publish
- * button, so that the button and the server agree about what is publishable.
- *
- * Rounds first because every publish route does, and a form's value is a
- * string mid-type: `'2.6'` is stored as $3 and must read as allowed here, or
- * the button would refuse a price the route accepts.
- */
-export function isBelowMarketplacePriceFloor(priceUsd: unknown): boolean {
-  const price = Math.round(Number(priceUsd) || 0)
-  return price > 0 && price < marketplaceMinPriceUsd()
-}
-
-/**
- * The sentence a publish form shows under its price field when the price is
- * below the floor (AGL-2343), or `undefined` when there is nothing to say.
- *
- * NOT ADVISORY ANY MORE. The same figure is enforced by every publish route
- * through `publishPreconditionRefusal`, so this text has to read as a
- * requirement rather than a warning — a publisher who is told "consider
- * raising it" and then refused has been lied to by the form. It still explains
- * WHY, because a bare minimum with no arithmetic behind it reads as an
- * arbitrary tax on cheap listings.
- *
- * Shared by every publish form rather than written into each, because the
- * figure has to be the same one in all of them and the wording is the only
- * place a publisher ever sees it.
- *
- * Quoted at the take rate that breaks even LATEST, so the sentence holds for a
- * free-plan publisher too.
- */
-export function marketplacePriceCostNote(
-  priceUsd: unknown,
-): string | undefined {
-  const price = Math.round(Number(priceUsd) || 0)
-  const minimum = marketplaceMinPriceUsd()
-  // A free listing takes no payment, so it costs nothing to process and has
-  // nothing to warn about — silence there is the point, not an oversight.
-  if (!isBelowMarketplacePriceFloor(price)) return undefined
-  const { processingCents, platformFeeCents } = marketplaceSaleEconomics(
-    price,
-    bindingMarketplaceFeePct(),
-  )
-  const usd = (cents: number) => `$${(cents / 100).toFixed(2)}`
-  return (
-    `Too low to publish. Processing a $${price} payment costs about ` +
-    `${usd(processingCents)}, more than the ${usd(platformFeeCents)} platform ` +
-    `fee — the sale would lose money. The minimum paid price is ` +
-    `$${minimum}, and a free listing ($0) takes no payment at all.`
-  )
-}
-
-/**
- * The standing helper sentence a price field shows when there is nothing wrong
- * (AGL-2343): the minimum stated up front, so a publisher meets it while
- * typing instead of discovering it as a refusal.
- *
- * A capability that is not surfaced in the console does not count as shipped,
- * and that applies to a REFUSAL as much as to a feature: a floor only a route
- * knows about is a trap.
- *
- * @param suffix whatever else that particular form needs to say, appended.
- */
-export function marketplacePriceFloorHint(suffix?: string): string {
-  return (
-    `0 for free, or $${marketplaceMinPriceUsd()} and up for a paid listing.` +
-    (suffix ? ` ${suffix}` : '')
-  )
-}
+export const SALE_PROCESSING_FIXED_CENTS = PROCESSING_FIXED_CENTS
 
 /**
  * The cheapest plan whose BASE features include `feature`, in ladder order —
@@ -5138,7 +5010,9 @@ export function checkFormSubmissionAbuseCeiling(
  * view costs. They are one physical measurement written in two units, and
  * what every `bandwidthGb` band is actually sized against is neither of them
  * alone but their quotient — `(1 GB ÷ this) × perPageView`, the cost of a
- * gigabyte. That quotient is stable even while the page's weight is not,
+ * gigabyte's WEIGHT, to which the band sizing adds the CDN requests the same
+ * views make ({@link PAGE_VIEW_CDN_REQUEST_COST_USD}). That quotient is
+ * stable even while the page's weight is not,
  * which is precisely why moving one half re-prices every band on the ladder
  * without touching a band: a heavier page costs more per view and buys fewer
  * views per gigabyte, and the two cancel.
@@ -5196,11 +5070,13 @@ export function bandwidthGbFromPageViews(pageViews: number): number {
  * It is a CAP, not a price, and it is lower than {@link
  * FORM_ABUSE_CEILING_MULTIPLE} because bandwidth is the largest cost line the
  * platform carries and the one a stranger can spend on the customer's behalf.
- * Past the band every 1,000 views bills $0.21 against about $0.16 of real
- * cost, so the tail is no longer a loss — but a scraper, a hotlinked asset or
- * a botnet still bills the account holder for traffic they did not ask for,
- * and the ceiling is what bounds that before staff look at it. At 10× the
- * band that tail was open-ended on Agency; at 3× it is bounded.
+ * Past the band every 1,000 views bills $0.36 against $0.28 to $0.35 of
+ * real cost, by region, once the CDN's request allowance is spent
+ * ({@link PAGE_VIEW_CDN_REQUEST_COST_USD}), so the tail is not a loss — but a
+ * scraper, a hotlinked asset or a botnet still bills the account holder for
+ * traffic they did not ask for, and the ceiling is what bounds that before
+ * staff look at it. At 10× the band that tail was open-ended on Agency; at 3×
+ * it is bounded.
  */
 export const BANDWIDTH_ABUSE_CEILING_MULTIPLE = 3
 

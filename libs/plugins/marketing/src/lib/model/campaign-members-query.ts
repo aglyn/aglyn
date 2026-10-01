@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { CAMPAIGN_MEMBERSHIP_FIELD } from '@aglyn/aglyn/app-utils/campaign-membership'
+import { CAMPAIGN_MEMBERSHIP_FIELD } from './campaign-kind'
 import type { ListFilterField } from '@aglyn/shared-ui-jsx/const/list-filter'
 import type { ListFilterClause } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
 import {

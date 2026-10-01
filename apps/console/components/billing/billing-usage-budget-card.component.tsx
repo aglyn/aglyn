@@ -41,13 +41,19 @@ interface UsageBudgetState {
   spend: {
     meteredUsd: number
     /**
-     * Assist consumption in CREDITS, never dollars — the stored figure behind
-     * it is our provider bill, and the server converts it before it crosses
-     * the wire. A dollar field here would be an invitation to render one.
+     * Each plugin's line of the month's spend. A line declared with a unit
+     * arrives in `units` only — the stored figure behind it is the platform's
+     * own cost, and the server converts it before it crosses the wire.
      */
-    assistCredits: number
+    lines: Array<{
+      id: string
+      label: string
+      billed: boolean
+      units: number | null
+      unitLabel: string | null
+      usd: number | null
+    }>
     totalUsd: number
-    assistBilled: boolean
     /** FALSE when no rollup exists for this month yet. */
     meteredFresh: boolean
   }
@@ -320,7 +326,7 @@ export default function BillingUsageBudgetCardComponent({
           <Typography variant="body2">
             <strong>${spend.totalUsd.toFixed(2)}</strong> of metered usage so
             far in {state.month}
-            {spend.assistBilled
+            {spend.lines.some((line) => line.billed)
               ? ` — $${spend.meteredUsd.toFixed(2)} usage`
               : ''}
             {budgetSet && amountUsd != null
@@ -329,25 +335,39 @@ export default function BillingUsageBudgetCardComponent({
             .
           </Typography>
           {/*
-            ASSIST CONSUMPTION, IN CREDITS AND ON ITS OWN LINE.
+            EACH PLUGIN'S LINE, IN ITS OWN UNIT AND ON ITS OWN LINE.
 
             A customer seeing what they consumed is the point of this card. What
-            they may not see is what it cost US — the figure behind a credit is
-            `assistUsage/{month}.estCostUsd`, our provider bill at the serving
-            model's list rates, and publishing it would put our model choice and
-            our margin on a billing page.
+            they may not see is what it cost US — a line declared with a unit
+            stores the platform's own cost (the AI plugin's is its provider bill
+            at the serving model's list rates), and publishing it would put a
+            model choice and a margin on a billing page.
 
             Separate from the dollar sentence above rather than appended to it,
-            because credits are not money and a clause reading "$4.10 usage,
-            2,300 Assist" invites exactly the arithmetic the unit change exists
-            to prevent.
+            because a unit is not money and a clause reading "$4.10 usage,
+            2,300 Assist" invites exactly the arithmetic the unit exists to
+            prevent.
           */}
-          {spend.assistCredits > 0 ? (
-            <Typography variant="body2" color="text.secondary">
-              {spend.assistCredits.toLocaleString()} Assist credits used this
-              month.
-            </Typography>
-          ) : null}
+          {spend.lines.map((line) =>
+            line.units !== null && line.units > 0 ? (
+              <Typography
+                key={line.id}
+                variant="body2"
+                color="text.secondary"
+              >
+                {line.units.toLocaleString()} {line.unitLabel} used this month.
+              </Typography>
+            ) : line.units === null && line.usd !== null && line.usd > 0 ? (
+              <Typography
+                key={line.id}
+                variant="body2"
+                color="text.secondary"
+              >
+                ${line.usd.toFixed(2)} of {line.label} this month
+                {line.billed ? '' : ', not counted toward your budget'}.
+              </Typography>
+            ) : null,
+          )}
           {budgetSet ? (
             <LinearProgress
               variant="determinate"

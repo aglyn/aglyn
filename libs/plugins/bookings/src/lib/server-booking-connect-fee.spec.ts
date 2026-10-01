@@ -78,9 +78,9 @@ jest.mock('@aglyn/aglyn/server', () => ({
   resolveTransactionFeeCents: jest.requireActual(
     '../../../../aglyn/src/lib/app-utils/plan-entitlements',
   ).resolveTransactionFeeCents,
-  storefrontProcessingCostCents: jest.requireActual(
+  saleProcessingCostCents: jest.requireActual(
     '../../../../aglyn/src/lib/app-utils/plan-entitlements',
-  ).storefrontProcessingCostCents,
+  ).saleProcessingCostCents,
 }))
 
 jest.mock('@aglyn/tenant-runtime', () => ({
@@ -259,7 +259,7 @@ import { standInTaxProfile } from './testing/stand-in-tax-profile'
 import { computeOpenSlots } from './model'
 import {
   resolveTransactionFeePct,
-  storefrontProcessingCostCents,
+  saleProcessingCostCents,
 } from '@aglyn/aglyn/server'
 
 const mockAdmin = jest.requireMock('@aglyn/tenant-data-admin') as {
@@ -497,7 +497,7 @@ describe('the take rate is the storefront ladder’s (AGL-2315)', () => {
       const sent = Number(
         params.get('payment_intent_data[application_fee_amount]'),
       )
-      const takeSent = sent - storefrontProcessingCostCents(7500)
+      const takeSent = sent - saleProcessingCostCents(7500)
       // Always emitted now: even a 0% tier owes Stripe for the charge, so
       // there is always a real amount to send.
       expect(params.has('payment_intent_data[application_fee_amount]')).toBe(
@@ -531,7 +531,7 @@ describe('the take rate is the storefront ladder’s (AGL-2315)', () => {
       expect(params.get('payment_intent_data[application_fee_amount]')).toBe(
         String(
           Math.max(1, Math.round((7500 * storefrontPct) / 100)) +
-            storefrontProcessingCostCents(7500),
+            saleProcessingCostCents(7500),
         ),
       )
       stripePosts.length = 0
@@ -549,7 +549,7 @@ describe('the take rate is the storefront ladder’s (AGL-2315)', () => {
     mockAdmin.__state.org = { id: 'org-1', ownerUid: 'owner-1', plan: 'scale' }
     const params = await book()
     expect(params.get('payment_intent_data[application_fee_amount]')).toBe(
-      String(1 + storefrontProcessingCostCents(60)),
+      String(1 + saleProcessingCostCents(60)),
     )
     expect(
       params.get('payment_intent_data[transfer_data][destination]'),
@@ -585,7 +585,7 @@ describe('the take rate is the storefront ladder’s (AGL-2315)', () => {
     }
     const params = await book()
     expect(params.get('payment_intent_data[application_fee_amount]')).toBe(
-      String(375 + storefrontProcessingCostCents(7500)),
+      String(375 + saleProcessingCostCents(7500)),
     )
   })
 
@@ -598,7 +598,7 @@ describe('the take rate is the storefront ladder’s (AGL-2315)', () => {
     }
     const params = await book()
     expect(params.get('payment_intent_data[application_fee_amount]')).toBe(
-      String(75 + storefrontProcessingCostCents(7500)),
+      String(75 + saleProcessingCostCents(7500)),
     )
   })
 })
@@ -622,7 +622,7 @@ describe('the fee BASIS is items-only (AGL-2317)', () => {
     expect(params.has('subscription_data[application_fee_percent]')).toBe(false)
     expect(params.has('application_fee_percent')).toBe(false)
     expect(params.get('payment_intent_data[application_fee_amount]')).toBe(
-      String(375 + storefrontProcessingCostCents(7500)),
+      String(375 + saleProcessingCostCents(7500)),
     )
   })
 
@@ -637,7 +637,7 @@ describe('the fee BASIS is items-only (AGL-2317)', () => {
     // the same charge (AGL-2152). Written as a relationship rather than a
     // literal so that a change to the fixture price cannot make this pass
     // vacuously — and the TAKE half is isolated, which is the basis claim.
-    expect(fee - storefrontProcessingCostCents(unitAmount)).toBe(
+    expect(fee - saleProcessingCostCents(unitAmount)).toBe(
       Math.round(unitAmount * 0.05),
     )
   })

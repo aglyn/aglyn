@@ -22,6 +22,7 @@ import { registerPluginZone } from '@aglyn/aglyn/plugin-manager/plugin-zones'
 import {
   FORM_CONTACT_FIELDS_ZONE,
   FORM_SUBMISSIONS_ZONE,
+  HOST_FORMS_ZONE,
 } from './components/form-zones'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { registerFormsRecordRoutes } from './model/forms-record-routes'
@@ -56,6 +57,18 @@ export function registerFormsConsole(): void {
       surface: 'console',
       description:
         'On one form’s page, beside routing and consent. A widget here decides which of the person’s fields each form field saves to and hands the new declaration to `saveFields`; the page writes the form document, and the widget writes nothing itself.',
+    },
+    { pluginId: BUNDLE_ID },
+  )
+  registerPluginZone(
+    {
+      zone: HOST_FORMS_ZONE,
+      label: 'A site’s Forms page',
+      surface: 'console',
+      // One item in the page's row of actions, beside Create Form.
+      layout: 'bare',
+      description:
+        'On a site’s Forms page, beside Create Form: another way to start a form. A widget here is handed the site and its org and writes nothing through the page.',
     },
     { pluginId: BUNDLE_ID },
   )

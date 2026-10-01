@@ -34,7 +34,7 @@
  * meters nothing. Folding either into the other would make a merchant's
  * ordinary act of answering a customer into an act with consequences they
  * did not choose. The enrollment rule itself is the framework's
- * `list-assignment-policy`, shared with the Emails console's audience card so
+ * `enrollment-basis`, shared with the Emails console's audience card so
  * that both surfaces refuse the same people for the same stated reasons.
  *
  * ## The boundary this feature sits on, stated because the UI must say it too
@@ -129,7 +129,7 @@ import { refusalsOf, withRetainedRefusals } from '@aglyn/aglyn/app-utils/retaine
 // The leaf for the same reason: which sites a group's opt-outs live on is the
 // rule, and a spec's barrel double must not be able to stand in for it.
 import { consentGroupOptOutHosts } from '@aglyn/aglyn/app-utils/consent-groups'
-import { sendEmail } from '@aglyn/shared-util-email'
+import { messageFromName, sendEmail } from '@aglyn/shared-util-email'
 import { FieldValue } from 'firebase-admin/firestore'
 import {
   REPLY_BODY_MAX,
@@ -300,13 +300,14 @@ export const inboxReplyHandler: PluginApiHandler = async (req, res) => {
     // No `priority` either: absent, it resolves to transactional, which the
     // platform governor may never refuse. That is the correct class — a reply
     // is a person answering a person, and it cannot be retried by a sweep.
+    const sendingIdentity = await hostSendingIdentity(hostId)
     const result = await sendEmail({
       to: recipient.email,
       subject,
       text: composeReplyBody({ message, fields, siteName }),
       replyTo,
       fromName: branding.fromName,
-      sendingIdentity: await hostSendingIdentity(hostId),
+      sendingIdentity,
       audience: 'tenant',
       context: REPLY_CONTEXT,
     })
@@ -333,7 +334,10 @@ export const inboxReplyHandler: PluginApiHandler = async (req, res) => {
         // storing them would be storing a copy of a document one field away.
         message,
         replyTo,
-        fromName: branding.fromName,
+        // The name the reply left under — the site's own (AGL-3442).
+        fromName:
+          messageFromName({ fromName: branding.fromName, sendingIdentity }) ??
+          branding.fromName,
         sentByUid: decoded.uid,
         providerMessageId: (result as { id?: string | null }).id ?? null,
         sentAtMs,

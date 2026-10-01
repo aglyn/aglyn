@@ -32,7 +32,7 @@ import { join } from 'node:path'
  * that it is a class rather than an incident: `preset-choice`, `css-gradient`,
  * `css-border`, `form-contact-fields-card`, `lead-convert-dialog`,
  * `settings-section`, the plugin-review page and the form field. The one that
- * was missed — `campaign-picker`, the picker four console surfaces render —
+ * was missed — `container-picker`, the picker every filing surface renders —
  * is what this spec was written for.
  *
  * ## What it does NOT flag

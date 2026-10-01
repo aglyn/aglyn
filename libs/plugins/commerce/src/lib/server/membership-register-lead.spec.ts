@@ -100,6 +100,7 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     // fail an assertion.
     resolveCampaignTouch: async () => null,
     recordVisitorRecordCeilingTrip: async () => undefined,
+    rearmVisitorRecordCeilingNotice: async () => undefined,
     // Recorded, not discarded. A double whose writer returns success and
     // forgets the payload cannot fail on a wrong payload — which is how a
     // lead with no name on it went unnoticed.

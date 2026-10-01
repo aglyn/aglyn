@@ -60,6 +60,7 @@ import {
 } from '../../../../utils/server/immediate-charge'
 import { RETENTION_COLLECTION, RETENTION_KINDS } from '../../_lib/retention'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
+import { PAYMENT_METHOD_UPDATE_FLOW } from '../../../../utils/update-payment-method-link'
 
 // lockdown-423: exempt — managing/reactivating the subscription IS the recovery path out of a
 // billing lock; part of the surface AGL-1501 keeps sessions alive for.
@@ -250,7 +251,10 @@ async function activeSubscription(
  *   plan"). 501 without Stripe env.
  * - `portal`   → a Stripe Billing Portal session URL (AGL-275) for
  *   payment-method management; works even without an active
- *   subscription so past-due orgs can fix their card.
+ *   subscription so past-due orgs can fix their card. With
+ *   `flow: 'payment_method_update'` the session opens straight on Stripe's
+ *   add-a-payment-method step and returns to Billing once it is done
+ *   (AGL-3442); any other `flow` is refused.
  */
 async function handler(request: Request): Promise<Response> {
   const { method, body, headers: rawHeaders } = await pluginRequestFromWeb(request)
@@ -269,9 +273,15 @@ async function handler(request: Request): Promise<Response> {
   if (!idToken) return Response.json({ error: 'Unauthenticated' }, { status: 401 })
   const orgId = String(body?.orgId ?? '')
   const action = String(body?.action ?? '')
+  // The one portal flow a caller may ask for. Named rather than passed
+  // through, so a caller cannot open the subscription-update or cancel flows
+  // that bypass the plan switch and the retention funnel.
+  const flow = body?.flow == null ? null : String(body.flow)
   if (
     !orgId ||
-    !['cancel', 'resume', 'preview', 'switch', 'portal'].includes(action)
+    !['cancel', 'resume', 'preview', 'switch', 'portal'].includes(action) ||
+    (flow !== null &&
+      (action !== 'portal' || flow !== PAYMENT_METHOD_UPDATE_FLOW))
   ) {
     return Response.json({ error: 'Bad request' }, { status: 400 })
   }
@@ -310,16 +320,28 @@ async function handler(request: Request): Promise<Response> {
       // Billing moved under the org slug (AGL-621), so `/org/billing` is a
       // dead route — returning from the portal landed on a 404.
       const orgSlug = org.get('slug') as string | undefined
+      const returnUrl = `${origin}${
+        orgSlug ? buildRoute(Route.MANAGE_BILLING, { orgSlug }) : '/'
+      }`
+      const params = new URLSearchParams({
+        customer: String(customerId),
+        return_url: returnUrl,
+      })
+      if (flow === PAYMENT_METHOD_UPDATE_FLOW) {
+        // Straight to "add a payment method", with the rest of the portal
+        // hidden, and back to Billing the moment it is saved rather than on
+        // to the portal's home page. The new method becomes the customer's
+        // default; the webhook's `customer.updated` branch moves the
+        // subscription onto it, because Stripe's flow does not.
+        params.set('flow_data[type]', PAYMENT_METHOD_UPDATE_FLOW)
+        params.set('flow_data[after_completion][type]', 'redirect')
+        params.set('flow_data[after_completion][redirect][return_url]', returnUrl)
+      }
       const session = await stripeRequest(
         secretKey,
         'POST',
         'billing_portal/sessions',
-        new URLSearchParams({
-          customer: String(customerId),
-          return_url: `${origin}${
-            orgSlug ? buildRoute(Route.MANAGE_BILLING, { orgSlug }) : '/'
-          }`,
-        }),
+        params,
       )
       return Response.json({ url: session.url }, { status: 200 })
     }

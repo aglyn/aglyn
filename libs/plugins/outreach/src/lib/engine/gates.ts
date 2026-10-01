@@ -68,7 +68,7 @@ import {
 } from '@aglyn/aglyn/app-utils/contacts'
 import { isPublicMailboxDomain } from '@aglyn/aglyn/app-utils/crm'
 import { emailStateRefusal, readEmailState } from '@aglyn/aglyn/app-utils/email-state'
-import type { TopicSubscriptionState } from '@aglyn/aglyn/app-utils/email-topics'
+import type { TopicSubscriptionState } from '@aglyn/aglyn/app-utils/subscription-topics'
 import {
   findMemberByEmailAddress,
   type MemberAddresses,

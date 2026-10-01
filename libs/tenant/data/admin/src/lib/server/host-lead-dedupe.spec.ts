@@ -143,7 +143,8 @@ const hostRef: any = {
       ? leadsCollection
       : {
           doc: () => ({
-            get: async () => ({ get: () => 0 }),
+            // A refusal counter nothing has written yet.
+            get: async () => ({ exists: false, get: () => undefined, data: () => undefined }),
             set: async (patch: Record<string, any>) => {
               counterWrites.push(patch)
             },

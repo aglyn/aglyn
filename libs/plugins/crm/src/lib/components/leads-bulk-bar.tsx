@@ -48,9 +48,9 @@ import {
   type CrmLeadStatus,
   crmLeadStatus,
   isCrmLeadOpen,
-  readCampaignIds,
+  readContainerIds,
 } from '@aglyn/aglyn'
-import CampaignPicker from '@aglyn/shared-ui-email-campaigns/components/campaign-picker.component'
+import ContainerPicker from '@aglyn/tenant-feature-instance/components/container-picker'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { Button, MenuItem, TextField } from '@mui/material'
 import { arrayUnion, deleteField, doc, serverTimestamp } from 'firebase/firestore'
@@ -229,7 +229,7 @@ function LeadsBulkBarBody(props: LeadsBulkBarProps) {
       // enroll and the import add one — never in place of it.
       for (const lead of selectedRows) {
         // The union as it will stand, for the list field it moves (AGL-3321).
-        const union = [...new Set([...readCampaignIds(lead), ...campaignIds])]
+        const union = [...new Set([...readContainerIds(lead, 'campaign'), ...campaignIds])]
         writes.push({
           id: lead.$id,
           label: labelOf(lead),
@@ -257,7 +257,7 @@ function LeadsBulkBarBody(props: LeadsBulkBarProps) {
       }))
       for (const lead of selectedRows) {
         if (refused.has(labelOf(lead))) continue
-        const already = readCampaignIds(lead)
+        const already = readContainerIds(lead, 'campaign')
         const filed = named.filter((campaign) => !already.includes(campaign.id))
         // At the organization level each entry carries its own lead's first
         // capturing site, the one the lead's page files as.
@@ -388,7 +388,8 @@ function LeadsBulkBarBody(props: LeadsBulkBarProps) {
               slotProps={{ htmlInput: { maxLength: UNQUALIFY_REASON_MAX } }}
             />
           ) : pending === 'campaign' ? (
-            <CampaignPicker
+            <ContainerPicker
+              kind="campaign"
               options={campaigns.options}
               value={campaignIds}
               onChange={setCampaignIds}

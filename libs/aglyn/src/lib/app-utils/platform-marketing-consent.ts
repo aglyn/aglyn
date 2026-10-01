@@ -68,7 +68,6 @@
  * record, all from this one module.
  */
 
-import { EMAIL_TOPIC_PRODUCT_UPDATES } from './email-topics'
 import {
   MARKETING_CONSENT_FIELD,
   MARKETING_CONSENT_SOURCE_FIELD,
@@ -78,8 +77,10 @@ import { PLATFORM_BRAND_NAME } from './platform-brand'
 
 /**
  * The list the account's answer stands for on the marketing site (AGL-3305):
- * the built-in "Product updates" topic, which is what the platform's own
- * announcements are sent on.
+ * the built-in "Product updates" stream, which is what the platform's own
+ * announcements are sent on. A wire value like every topic id — it keys the
+ * opt-outs already recorded on the marketing host — and the same stream the
+ * built-in catalog offers every site as "Product updates".
  *
  * Named so that "which unsubscribe is about this answer" has one spelling.
  * Leaving this list, or leaving everything the site sends, is a No to the
@@ -87,7 +88,7 @@ import { PLATFORM_BRAND_NAME } from './platform-brand'
  * touch the answer: someone who stops the newsletter has said nothing about
  * product updates.
  */
-export const PLATFORM_MARKETING_TOPIC_ID = EMAIL_TOPIC_PRODUCT_UPDATES
+export const PLATFORM_MARKETING_TOPIC_ID = 'product-updates'
 
 /** The console doors a decision can come through, as the record names them. */
 export const PLATFORM_MARKETING_CONSOLE_SOURCE_KINDS = [

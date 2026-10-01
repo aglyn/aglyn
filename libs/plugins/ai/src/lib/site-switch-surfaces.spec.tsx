@@ -70,11 +70,12 @@ const SITE_ZONES: readonly string[] = [
   CONSOLE_WIDGET_SLOTS.hostFirstRun,
   CONSOLE_WIDGET_SLOTS.hostScreens,
   // Describe it on a site's Templates, Layouts and Forms pages (AGL-3043).
-  // The Forms page is the forms plugin's, which draws its zone through the
-  // shell's slot, so the site's set decides there too.
+  // The Forms page is the forms plugin's, which declares its zone and draws
+  // it through the shell's slot, so the site's set decides there too; a
+  // plain id, since the catalog does not name it.
   CONSOLE_WIDGET_SLOTS.hostTemplates,
   CONSOLE_WIDGET_SLOTS.hostLayouts,
-  CONSOLE_WIDGET_SLOTS.hostForms,
+  'hostForms',
   // And on its Components page (AGL-3051).
   CONSOLE_WIDGET_SLOTS.hostComponents,
   CONSOLE_WIDGET_SLOTS.hostSeo,
@@ -83,10 +84,11 @@ const SITE_ZONES: readonly string[] = [
   CONSOLE_WIDGET_SLOTS.hostMembers,
   CONSOLE_WIDGET_SLOTS.besignerToolbar,
   CONSOLE_WIDGET_SLOTS.besignerInspector,
-  // The Automation page's zones, hosted by the workflows plugin on a site's page.
-  CONSOLE_WIDGET_SLOTS.hostAutomations,
-  CONSOLE_WIDGET_SLOTS.automationEditor,
-  CONSOLE_WIDGET_SLOTS.automationRun,
+  // The Automation page's zones, which the workflows plugin declares and
+  // hosts on a site's page. Plain ids, as the commerce zones below are.
+  'hostAutomations',
+  'automationEditor',
+  'automationRun',
   // The zones the commerce plugin hosts on a site's products pages
   // (AGL-2916). Plain ids: the commerce plugin declares them, so the
   // catalog names none of them.

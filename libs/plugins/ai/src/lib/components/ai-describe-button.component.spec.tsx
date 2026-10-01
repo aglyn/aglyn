@@ -202,11 +202,12 @@ const FORM = ENTRIES[2]
 const COMPONENT = ENTRIES[3]
 
 describe('each entry is on its own page’s zone, gated as the page entry is', () => {
-  it('names each zone in the catalog', () => {
+  it('names each console page zone in the catalog, and leaves the Forms page to its plugin', () => {
     expect(CONSOLE_WIDGET_SLOTS.hostTemplates).toBe('hostTemplates')
     expect(CONSOLE_WIDGET_SLOTS.hostLayouts).toBe('hostLayouts')
-    expect(CONSOLE_WIDGET_SLOTS.hostForms).toBe('hostForms')
     expect(CONSOLE_WIDGET_SLOTS.hostComponents).toBe('hostComponents')
+    // The forms plugin declares `hostForms` itself (`registerPluginZone`).
+    expect('hostForms' in CONSOLE_WIDGET_SLOTS).toBe(false)
   })
 
   it.each(ENTRIES)('registers $widgetId on $zone, alone', (entry) => {

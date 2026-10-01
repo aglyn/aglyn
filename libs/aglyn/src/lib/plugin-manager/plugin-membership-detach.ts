@@ -20,7 +20,7 @@
  *
  * A container — a campaign is the first — is a document other records join
  * by naming it in a membership array on their OWN documents
- * (`app-utils/campaign-membership.ts` says why the edge lives on the
+ * (`app-utils/container-membership.ts` says why the edge lives on the
  * member). When the container is removed, its owner clears the id off every
  * member it can name. A plugin that keeps members of its own where that
  * walk does not reach — records under the org, in collections the owner

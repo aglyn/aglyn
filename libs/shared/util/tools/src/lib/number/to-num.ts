@@ -17,13 +17,7 @@
 
 import { _isNumT } from '../guards/lib/_is-num-t'
 
-type ToNumType = 'int' | 'float' | 'eval'
-type ToNumResult<T extends ToNumType = never> = ConditionalNonDist<
-  T,
-  'eval',
-  any,
-  number
->
+type ToNumType = 'int' | 'float'
 
 export type ToNumOptions<T extends ToNumType = never, N = 0> =
   | { onNaN?: N; type?: 'int'; radix?: number }
@@ -33,8 +27,7 @@ export type ToNumOptions<T extends ToNumType = never, N = 0> =
  * Ensure and parse any value to a number.
  *
  * - If radix, `{type: 'int'}` is provided will use {@link parseInt}
- * - If `{type: 'parse'}` is provided will use {@link parseFloat}
- * - If `{type: 'eval'}` is provided will use {@link eval} and {@link Number}
+ * - If `{type: 'float'}` is provided will use {@link parseFloat}
  * - Otherwise uses {@link Number|Number(val)}
  * - If parsing results in NaN will return {@link onNaN}.
  *
@@ -44,14 +37,13 @@ export type ToNumOptions<T extends ToNumType = never, N = 0> =
 export function toNum<T extends ToNumType, N = 0>(
   val: string | any,
   options?: ToNumOptions<T, N>,
-): ToNumResult<T> | N {
+): number | N {
   const { type, onNaN, radix } = { ...options }
-  let parsed: ToNumResult<T> | N = NaN
+  let parsed: number | N = NaN
 
   if (_isNumT(radix)) parsed = parseInt(val, radix)
   else if (type === 'int') parsed = parseInt(val)
   else if (type === 'float') parsed = parseFloat(val)
-  else if (type === 'eval') parsed = Number(eval(val))
   else if (!type) parsed = Number(val)
   if (isNaN(parsed)) parsed = onNaN ?? 0
 

@@ -83,8 +83,23 @@ import {
 } from '@aglyn/besigner-ui'
 ```
 
-The reference composition is the console's screen editor page in the
-monorepo, under
+Two things have to be in place before the editor mounts, or it throws on
+its first render:
+
+- an editor app: call `initializeBesignerApp()` from `@aglyn/besigner` once;
+- the console theme served as CSS variables: render the editor inside
+  `ThemeCssVarProvider` from `@aglyn/shared-ui-theme`, given
+  `{ light: consoleThemeLight, dark: consoleThemeDark }`. A plain MUI
+  `ThemeProvider` is not enough, because the editor's styles read the theme's
+  CSS variables.
+
+The smallest working composition is the example app in the monorepo,
+[`examples/consumers/besigner-ui`](https://github.com/aglyn/aglyn/tree/main/examples/consumers/besigner-ui):
+a Vite app that installs these packages from npm, registers four element
+types of its own, and mounts the workspace, viewport and canvas. Aglyn's CI
+builds it and opens it in a browser on every release.
+
+The full composition is the console's screen editor page, under
 `apps/console/app/(editor)/[orgSlug]/hosts/[host]/screens/[screenId]/versions/[versionId]/besigner/page.tsx`.
 It wraps the page with `withBesignerContext`, loads the document with
 `useBesignerDocument`, and lays out the workspace, viewport and panels. The

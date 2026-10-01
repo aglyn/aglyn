@@ -40,6 +40,7 @@ import {
   RISK_STAFF_ACTIONS,
   riskKindForAbuseRow,
   riskNoticeEmailKey,
+  riskPayoutDelayText,
 } from './risk-notice-catalog'
 import { RISK_NOTICE_SYSTEM_EMAIL_TEMPLATES, RISK_REVIEW_REQUESTED_EMAIL_KEY } from './risk-notice-emails'
 import { getSystemEmailTemplate } from './system-email-catalog'
@@ -299,11 +300,24 @@ describe('what a notice claims is what happens', () => {
 
   it('names a paused feature without bending it into a sentence ("Media uploads is paused")', () => {
     const paused = renderOwnerRiskNotice('feature-locked', {
-      'item.label': 'Media uploads',
+      'item.label': 'media uploads',
       'workspace.name': 'Harbor View',
     })
-    expect(paused.title).toBe('Paused on Harbor View: Media uploads')
-    expect(paused.summary).toMatch(/paused one feature on Harbor View: Media uploads\./)
+    expect(paused.title).toBe('Paused on Harbor View: media uploads')
+    expect(paused.summary).toMatch(/our team paused media uploads on Harbor View\./)
+    // Two levers paused by one staff action read as one sentence too (AGL-3442).
+    const both = renderOwnerRiskNotice('feature-locked', {
+      'item.label': 'AI assist and AI generation',
+      'workspace.name': 'Harbor View',
+    })
+    expect(both.title).toBe('Paused on Harbor View: AI assist and AI generation')
+    expect(both.summary).toMatch(/our team paused AI assist and AI generation on Harbor View\./)
+    expect(renderOwnerRiskNotice('feature-unlocked', { 'item.label': 'AI assist and AI generation', 'workspace.name': 'Harbor View' }).summary).toMatch(
+      /our team turned AI assist and AI generation back on for Harbor View\.$/,
+    )
+    for (const kind of ['feature-locked', 'feature-unlocked'] as const) {
+      expect(owner(kind)).not.toMatch(/one feature|\b(is|are) (paused|back on)\b/)
+    }
   })
 
   it('names the site a site notice is about, and says "your site" only when it has no name', () => {
@@ -321,5 +335,24 @@ describe('what a notice claims is what happens', () => {
 
   it('keeps a dispute out of the burst digest, which would drop its deadline', () => {
     expect(RISK_NOTICE_CATALOG['sale-dispute'].neverDigest).toBe(true)
+  })
+
+  it('states a new publisher’s payout schedule, and that nothing is withheld or charged (AGL-3442)', () => {
+    const told = renderOwnerRiskNotice('publisher-payouts-held', {
+      'payout.delay': riskPayoutDelayText({ delayDays: 14, untilWorkspaceAgeDays: 30 }),
+    })
+    expect(told.summary).toMatch(
+      /moved to an extended schedule: each payout reaches your bank 14 days after the sale, until your workspace is 30 days old\.$/,
+    )
+    expect(told.meaning).toMatch(/^Nothing is withheld or charged\./)
+    expect(riskPayoutDelayText({ delayDays: 1, untilWorkspaceAgeDays: 30 })).toMatch(/^each payout reaches your bank 1 day after/)
+    // A notice sent without the schedule still reads as a whole sentence.
+    expect(renderOwnerRiskNotice('publisher-payouts-held', {}).summary).toMatch(
+      /extended schedule: each payout waits a set number of days after the sale before it reaches your bank\.$/,
+    )
+  })
+
+  it('keeps a card-testing warning out of the burst digest, which would drop its site (AGL-3442)', () => {
+    expect(RISK_NOTICE_CATALOG['card-testing'].neverDigest).toBe(true)
   })
 })

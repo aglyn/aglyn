@@ -18,7 +18,7 @@
 import {
   ASSIST_HARD_CAP_CONTROL_LOCATION,
   type AssistRefusedBy,
-} from '@aglyn/aglyn/app-utils/assist-credits'
+} from '../usage/assist-credits'
 import { ORG_PERMISSIONS } from '@aglyn/aglyn/app-utils/org-permissions'
 
 /**

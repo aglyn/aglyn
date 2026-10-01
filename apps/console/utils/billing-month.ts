@@ -65,7 +65,7 @@ export function previousMonth(now: Date = new Date()): string {
  * discipline.
  *
  * **Anything that is not a well-formed `YYYY-MM` reads as OPEN.** Fail-closed,
- * the same posture as `billsOrgLibraryStorage` and `billsAssistTokens`: a
+ * the same posture as `billsOrgLibraryStorage` and `billsFromMonth`: a
  * month wrongly withheld reports late and visibly, and a month wrongly
  * metered is a bill nobody can take back.
  */
@@ -76,4 +76,30 @@ export function monthIsClosed(
   const key = String(month ?? '')
   if (!/^\d{4}-\d{2}$/.test(key)) return false
   return key < currentMonth(now)
+}
+
+/**
+ * Whether a usage rollup carries its month's CLOSED figure (AGL-3442): the
+ * one `report-usage` metered the invoice from, rather than the running figure
+ * the in-progress sweep left there while the month was open.
+ *
+ * Read off the rollup's own `computedAt`, which `report-usage` — the only
+ * writer of `orgs/{id}/usage/{month}` — stamps on every sweep. A figure
+ * computed once the month had ended is a closed-month figure, by the same
+ * predicate that decides whether a month may be invoiced. `reportedAt` cannot
+ * answer this: it is stamped only when a meter event was sent, which is never
+ * for an org whose month billed nothing.
+ *
+ * No `computedAt`, or one that is not a date, is NOT final. Fail-closed like
+ * {@link monthIsClosed}: a summary held back an hour is sent by the next run,
+ * and one sent early quotes a figure the invoice will contradict.
+ */
+export function rollupIsFinal(
+  month: string | null | undefined,
+  computedAt: Date | null | undefined,
+): boolean {
+  if (!(computedAt instanceof Date) || Number.isNaN(computedAt.getTime())) {
+    return false
+  }
+  return monthIsClosed(month, computedAt)
 }

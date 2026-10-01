@@ -102,7 +102,9 @@ const LEAD_FUNNEL_HELP = Aglyn.pluginDocsHelp('crmReports', {
  * `visibleTo` is the site's tokens under a site, and `null` at the
  * organization level where an org-wide member reads without a clause. The
  * range stays a single-field one; with the scope clause it composes with the
- * `visibleTo` + `firstSeenAtMs` entry in `cloud/firebase-firestore.indexes.json`.
+ * `visibleTo` + `firstSeenAtMs` entries in `cloud/firebase-firestore.indexes.json`
+ * — the descending one for the window, the ascending one for the counts,
+ * which name no order (AGL-3443).
  */
 function leadsBetween(
   firestore: Firestore,

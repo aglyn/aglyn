@@ -39,7 +39,7 @@
  */
 
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
-import { storefrontProcessingCostCents } from '@aglyn/aglyn/server'
+import { saleProcessingCostCents } from '@aglyn/aglyn/server'
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import {
   groupRevenueAttribution,
@@ -177,7 +177,7 @@ export function marketplaceCommissionCents(
     // The operator's own uncovered cost on this destination charge. The same
     // helper the storefront path recovers with, so the two cannot drift apart.
     processingCost:
-      gross > refunded ? storefrontProcessingCostCents(gross - refunded) : 0,
+      gross > refunded ? saleProcessingCostCents(gross - refunded) : 0,
   }
 }
 

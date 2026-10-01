@@ -51,6 +51,7 @@ import {
   POS_REGISTERS_ADDON_MAX,
   ORG_COGS_UNIT_RATES_USD,
   METERED_MARKUP,
+  PAGE_VIEW_CDN_REQUEST_COST_USD,
 } from '../../libs/aglyn/src/lib/app-utils/plan-entitlements.ts'
 import {
   onboardingSignupHref,
@@ -108,14 +109,16 @@ const mb = (v: number): string => {
 /**
  * Bandwidth in gigabytes. DECIMAL promotion (1 TB = 1000 GB) — note this
  * differs from `mb` above, and the difference is real, not an oversight. The
- * code's bandwidth values are chosen in decimal — 1,540 GB is "1.54 TB" —
- * and dividing by 1024 would render them as "1.5 TB" of a different size.
- * The reconciliation against the frame is what first caught this: every
- * terabyte row disagreed, and the frame was right.
+ * code's bandwidth values are chosen in decimal — a 1,540 GB band reads
+ * "1.54 TB" — and dividing by 1024 would render them as "1.5 TB" of a
+ * different size. The reconciliation against the frame is what first caught
+ * this: every terabyte row disagreed, and the frame was right.
  *
  * Two decimals, trailing zeros dropped: the page shows the band to the
  * gigabyte where the number has one, so 1,540 GB reads "1.54 TB" and 2,500
- * GB reads "2.5 TB", never "1.5 TB" for a band that is not 1,500 GB.
+ * GB reads "2.5 TB", never "1.5 TB" for a band that is not 1,500 GB. Every
+ * self-serve band is under 1,000 GB today, so the TB branch is the one a
+ * band that grows past it would take.
  */
 const gb = (v: number): string => {
   if (v === UNLIMITED) return 'Unlimited'
@@ -636,6 +639,11 @@ const usage = {
  * resolves no `@aglyn/*` path alias and so cannot import anything under
  * `apps/console`; the drift guard is what makes the indirection safe rather
  * than a second source of truth.
+ *
+ * The page-view row's cost is a billed view's cost, `perPageView` plus
+ * `PAGE_VIEW_CDN_REQUEST_COST_USD` — the same sum `METERED_OVERAGE_COST_USD`
+ * prices the invoice on — because the "Our cost" column is the claim the
+ * "+30%" beside it is made against.
  */
 
 /**
@@ -659,9 +667,10 @@ const rate = (v: number): string => {
  * Carried as a multiplier rather than folded into `costUsd` so that BOTH
  * columns are computed from the unrounded rate. Rounding the cost to six
  * decimals and then applying the markup to the rounded figure loses the
- * published price when the cost is not a clean decimal: `perPageView` is
- * pinned so that cost × 1.3 is $0.21 per 1,000 views, and $0.161538 × 1.3
- * rounds to $0.209999, which is the right number rendered as the wrong one.
+ * published price when the cost is not a clean decimal: the page-view weight
+ * cost is pinned so that cost × 1.3 is exactly $0.21 per 1,000 views, and
+ * $0.161538 × 1.3 rounds to $0.209999, which is the right number rendered as
+ * the wrong one.
  */
 const METERED_ROWS: Array<{
   label: string
@@ -677,7 +686,7 @@ const METERED_ROWS: Array<{
   },
   {
     label: 'Page views (bandwidth + reads)',
-    costUsd: ORG_COGS_UNIT_RATES_USD.perPageView,
+    costUsd: ORG_COGS_UNIT_RATES_USD.perPageView + PAGE_VIEW_CDN_REQUEST_COST_USD,
     quotedPer: 1000,
     unit: '/ 1k views',
   },
@@ -1196,6 +1205,30 @@ for (const [label, [why]] of injected('--declare-extra-row', 2)) {
  */
 const FRAME_STALE_CELLS: Record<string, { frame: string; why: string }> = {}
 
+/**
+ * The bandwidth bands re-sized past the CDN's request allowance (AGL-3444):
+ * every paid band is cut to what the annual price carries once an included
+ * gigabyte bears its CDN requests at the dearest region. The four Figma
+ * frames and the live `/pricing` still carry the bands sold until
+ * 2026-10-01; they are redrawn and republished with the promotion that ships
+ * these bands, and then these entries come out.
+ */
+const BANDWIDTH_RESIZE_WHY =
+  'the paid bandwidth bands were re-sized so every tier holds the margin ' +
+  'rule once an included gigabyte carries its CDN requests at the dearest ' +
+  'region (AGL-3444). Redraw the four frames, re-extract, and this entry ' +
+  'comes out.'
+for (const [plan, frame] of [
+  ['Starter', '50 GB'],
+  ['Pro', '125 GB'],
+  ['Business', '185 GB'],
+  ['Scale', '290 GB'],
+  ['Advanced', '345 GB'],
+  ['Agency', '1.54 TB'],
+] as const) {
+  FRAME_STALE_CELLS[`Bandwidth / mo · ${plan}`] = { frame, why: BANDWIDTH_RESIZE_WHY }
+}
+
 /*
  * `--declare-stale-cell='<row> · <plan>|<frame value>'`, repeatable.
  *
@@ -1300,7 +1333,18 @@ const frameMetered = frame.sections
 const FRAME_STALE_METERED: Record<
   string,
   { ourCost: string; youPay: string; why: string }
-> = {}
+> = {
+  'Page views (bandwidth + reads)': {
+    ourCost: '$0.161538 / 1k views',
+    youPay: '$0.21 / 1k views',
+    why:
+      'a billed page view now carries the CDN per-request charge past the ' +
+      "hosting plan's allowance (`PAGE_VIEW_CDN_REQUEST_COST_USD`, AGL-1879), " +
+      'so the published figure is $0.276923 / $0.36 per 1k views. The four ' +
+      'Figma frames still draw the weight-only cost. Redraw them, re-extract, ' +
+      'and this entry comes out.',
+  },
+}
 
 for (const [label, [ourCost, youPay]] of injected('--declare-stale-metered', 3)) {
   FRAME_STALE_METERED[label] = { ourCost, youPay, why: INJECTED_WHY }
@@ -1644,7 +1688,9 @@ columns.finish()
  * writes them as a single ` · `-joined string, which is why the count can
  * disagree as well as the contents.
  *=========================================*/
-const TIERS_STALE: Record<string, Divergence> = {}
+const TIERS_STALE: Record<string, Divergence> = {
+  'Scale · spec 6': { frame: '290 GB bandwidth', why: BANDWIDTH_RESIZE_WHY },
+}
 
 const tierStrip = reconciler('scale strip', TIERS_STALE)
 const TIER_CARDS = [...tiers.rows, tiers.enterprise]
@@ -2204,6 +2250,14 @@ for (const [label, d] of Object.entries(FRAME_STALE_METERED)) {
   console.log(
     `  pass-through exempt: ${label} — frame draws ${d.ourCost} / ${d.youPay}`,
   )
+}
+// …and the stale compare and scale-strip cells, for the same reason: a cell
+// the code has moved past is a published figure the page still carries.
+for (const [key, d] of [
+  ...Object.entries(FRAME_STALE_CELLS),
+  ...Object.entries(TIERS_STALE).map(([k, v]) => [`scale strip · ${k}`, v] as const),
+]) {
+  console.log(`  stale cell: ${key} — frame draws ${d.frame}`)
 }
 // Printed because a reconciler that silently matched NOTHING would report
 // exactly as clean as one that matched everything. A zero here is a failure

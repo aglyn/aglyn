@@ -28,10 +28,14 @@ import {
   readOrgPlanComp,
   resolveEffectivePlan,
 } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import {
+  meteredBandField,
+  meteredPluginBands,
+} from '@aglyn/aglyn/plugin-manager/plugin-usage-axes'
 import { isCronAuthorized } from '../../../../utils/cron-auth'
 import { recordCronBeat } from '../../../../utils/cron-beat'
 import { selectCronChunk } from '../../../../utils/cron-chunk'
-import { previousMonth } from '../../../../utils/billing-month'
+import { previousMonth, rollupIsFinal } from '../../../../utils/billing-month'
 import {
   isEmailConfigured,
   rateLimitedRetryAtMs,
@@ -112,9 +116,10 @@ export function meteredUsageLine(billedUsd: number, reported: boolean): string {
 export const USAGE_EMAIL_CHUNK_SIZE = 100
 
 /**
- * Monthly usage email summary (AGL-98, item 3). Invoke from the same
- * scheduler as `report-usage` (after it, so rollups exist) with
- * `x-cron-secret`. Env-gated on the email provider: without
+ * Monthly usage email summary (AGL-98, item 3). Invoked hourly across the
+ * first two days of the month with `x-cron-secret`; an org is mailed only once
+ * `report-usage` has swept its closed month (AGL-3442), so the order of the
+ * two schedules is not load-bearing. Env-gated on the email provider: without
  * `RESEND_API_KEY` + `USAGE_EMAIL_FROM` the route answers 501 and sends
  * nothing. Per plan-gated tenant with a rollup for the month it emails the
  * account address one summary (storage, page views, form submissions,
@@ -196,6 +201,22 @@ async function handler(request: Request): Promise<Response> {
         results[orgId] = { skipped: 'already emailed' }
         continue
       }
+      // Not before the closed-month sweep has run (AGL-3442). Until then the
+      // rollup holds the running figure the in-progress sweep wrote on the
+      // month's last morning, and a summary quoting it disagrees with the
+      // invoice. This route fires from 00:00 UTC on the 1st and the sweep at
+      // 02:00, so the first runs skip every org; the org is unstamped, and the
+      // first hourly run after its sweep mails it.
+      const computedAt = rollup.get('computedAt')
+      if (
+        !rollupIsFinal(
+          month,
+          typeof computedAt?.toDate === 'function' ? computedAt.toDate() : null,
+        )
+      ) {
+        results[orgId] = { skipped: 'usage not final' }
+        continue
+      }
       // Dark-launch rule: only orgs with an explicit plan get billing
       // email; everyone else isn't metered in any user-visible way yet.
       // A staff comp is an explicit plan too (AGL-3034), and the plan the
@@ -261,7 +282,6 @@ async function handler(request: Request): Promise<Response> {
 
       const storageGb = Number(rollup.get('storageGb') ?? 0)
       const pageViews = Number(rollup.get('pageViews') ?? 0)
-      const formSubmissions = Number(rollup.get('formSubmissions') ?? 0)
       const dataStorageMb = Number(rollup.get('dataStorageMb') ?? 0)
       const dataOverageUsd = Number(rollup.get('dataOverageUsd') ?? 0)
       // `billedCents` is the whole metered bill — infra overage at cost × 1.3
@@ -277,7 +297,13 @@ async function handler(request: Request): Promise<Response> {
         `Plan: ${PLAN_LABELS[plan] ?? plan}`,
         `Storage: ${storageGb.toFixed(2)} GB`,
         `Page views: ${pageViews.toLocaleString('en-US')}`,
-        `Form submissions: ${formSubmissions.toLocaleString('en-US')}`,
+        // Each metered band, by its label, as the rollup counted it.
+        ...meteredPluginBands().map(
+          (band) =>
+            `${band.label}: ${Number(
+              rollup.get(meteredBandField(band)) ?? 0,
+            ).toLocaleString('en-US')}`,
+        ),
         `Dataset storage: ${(dataStorageMb / 1024).toFixed(2)} GB` +
           (dataOverageUsd > 0
             ? ` (overage ${formatUsd(dataOverageUsd)})`

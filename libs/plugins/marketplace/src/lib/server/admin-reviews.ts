@@ -1315,6 +1315,7 @@ async function handler(request: Request): Promise<Response> {
         })
         await notifyOrgAdmins(String(listing.profileId), {
           type: 'marketplace.review',
+          level: approving ? 'success' : 'warning',
           title: approving
             ? `"${listing.displayName}" v${version} approved`
             : `"${listing.displayName}" v${version} was not approved`,
@@ -1462,6 +1463,8 @@ async function handler(request: Request): Promise<Response> {
       if (listing.profileId) {
         await notifyOrgAdmins(String(listing.profileId), {
           type: 'marketplace.review',
+          // Stopped on every site that runs it, which is an outage for them.
+          level: revoking ? 'critical' : 'success',
           title: revoking
             ? `"${listing.displayName}" v${version} was stopped`
             : `"${listing.displayName}" v${version} was allowed to run again`,
@@ -1561,6 +1564,7 @@ async function handler(request: Request): Promise<Response> {
       if (publisherOrgId) {
         await notifyOrgAdmins(publisherOrgId, {
           type: 'marketplace.review',
+          level: 'warning',
           title: `Verification declined for "${listing.displayName}"`,
           // Says plainly that nothing about the listing changed. Without it a
           // publisher reads "declined" as a takedown of the plugin itself.
@@ -1691,6 +1695,7 @@ async function handler(request: Request): Promise<Response> {
         })
         await notifyOrgAdmins(publisherOrgId, {
           type: 'marketplace.review',
+          level: action === 'reject' || action === 'delist' ? 'warning' : 'success',
           title:
             action === 'reject'
               ? `"${listing.displayName}" was rejected`

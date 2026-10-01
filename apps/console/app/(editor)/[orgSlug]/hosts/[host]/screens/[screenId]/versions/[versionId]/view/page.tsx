@@ -17,14 +17,14 @@
 'use client'
 
 import {
-  CAMPAIGN_MEMBERSHIP_FIELD,
-  campaignMembershipUnchanged,
-  campaignMembershipValue,
+  containerMembershipField,
+  containerMembershipUnchanged,
+  containerMembershipValue,
   composeScreenRoutePath,
   blockingRouteOwner,
   HostScreenVisibility,
   normalizeScreenSlug,
-  readCampaignIds,
+  readContainerIds,
   reservedScreenRouteMessage,
   reservedScreenRouteSegment,
   screenRoutePathToUrl,
@@ -108,11 +108,11 @@ import { useParams, useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   useFirestore,
-  useHostCampaigns,
+  useSiteContainerOptions,
   useUser,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
-import CampaignPicker from '@aglyn/shared-ui-email-campaigns/components/campaign-picker.component'
+import ContainerPicker from '@aglyn/tenant-feature-instance/components/container-picker'
 import ScreenAnalyticsCard from '../../../../../../../../../../components/analytics/screen-analytics-card.component'
 import AuthenticatedLayout from '../../../../../../../../../../components/layouts/authenticated.layout'
 import DashboardLayout from '../../../../../../../../../../components/layouts/dashboard.layout'
@@ -953,15 +953,15 @@ function ScreenDetails() {
    * addition. A single scalar the author typed does not have that problem; an
    * array they edited does.
    *=========================================*/
-  const siteCampaigns = useHostCampaigns(hostId, { enabled: Boolean(screen) })
+  const siteCampaigns = useSiteContainerOptions('campaign', hostId, { enabled: Boolean(screen) })
   const storedCampaignIds = useMemo(
-    () => readCampaignIds(screen as Record<string, unknown>),
+    () => readContainerIds(screen as Record<string, unknown>, 'campaign'),
     [screen],
   )
   const [savingCampaigns, setSavingCampaigns] = useState(false)
   const handleCampaignsChange = useCallback(
     async (next: string[]) => {
-      if (campaignMembershipUnchanged(storedCampaignIds, next)) return
+      if (containerMembershipUnchanged(storedCampaignIds, next)) return
       setSavingCampaigns(true)
       const verdict = await writeGuardedBySeed(
         {
@@ -971,7 +971,7 @@ function ScreenDetails() {
         },
         async () => {
           await updateDoc(screenRef, {
-            [CAMPAIGN_MEMBERSHIP_FIELD]: campaignMembershipValue(next),
+            [containerMembershipField('campaign')]: containerMembershipValue(next),
             updatedAt: Timestamp.now(),
           })
           enqueueSnackbar(
@@ -1751,7 +1751,8 @@ function ScreenDetails() {
                     contentBordered="all"
                   >
                     <Stack spacing={1.5}>
-                      <CampaignPicker
+                      <ContainerPicker
+                        kind="campaign"
                         options={siteCampaigns.options}
                         value={storedCampaignIds}
                         onChange={(next) => void handleCampaignsChange(next)}

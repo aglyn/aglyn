@@ -69,11 +69,11 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
     }
   },
   // Which campaign list the page enabled: a site's, or the org's.
-  useHostCampaigns: (hostId: string | undefined, options?: { enabled?: boolean }) => {
+  useSiteContainerOptions: (_kind: string, hostId: string | undefined, options?: { enabled?: boolean }) => {
     if (options?.enabled) rendered['campaigns'] = { level: 'site', hostId: hostId ?? null }
     return { options: [], ready: true, truncated: false }
   },
-  useOrgCampaigns: (orgId: string | null | undefined, options?: { enabled?: boolean }) => {
+  useOrgContainerOptions: (_kind: string, orgId: string | null | undefined, options?: { enabled?: boolean }) => {
     if (options?.enabled) rendered['campaigns'] = { level: 'org', orgId: orgId ?? null }
     return { options: [], ready: true, truncated: false }
   },
