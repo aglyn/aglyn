@@ -21,6 +21,7 @@ content on the marketing site and is written separately.
 
 ### Fixed
 
+- **billing:** the monthly usage summary waits for the closed-month sweep ([AGL-3442](https://linear.app/aglyn/issue/AGL-3442), [AGL-3439](https://linear.app/aglyn/issue/AGL-3439))
 - **branding:** an entitled org that has set no brand mails in the platform's ([AGL-3440](https://linear.app/aglyn/issue/AGL-3440), [AGL-2428](https://linear.app/aglyn/issue/AGL-2428))
 - **crons:** the monthly usage summaries run on Cloud Scheduler, not GitHub Actions ([AGL-3439](https://linear.app/aglyn/issue/AGL-3439), [AGL-3351](https://linear.app/aglyn/issue/AGL-3351))
 - **commerce:** store emails and notices name the store, the order and what is true ([AGL-3432](https://linear.app/aglyn/issue/AGL-3432))
@@ -47,6 +48,10 @@ content on the marketing site and is written separately.
 
 ### Changed
 
+- **marketplace:** the marketplace learns which datasets a workspace installed through the data plugin's list source ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **plugins:** a picker lists another plugin's records through the list source its owner publishes ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **aglyn:** core keeps no copy of the CRM's console addresses ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **data:** the AI reads datasets through the data plugin's index and figure readers ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
 - **bookings:** a booking files its meeting through the record-timeline seam, and finds no CRM in core ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080), [AGL-2660](https://linear.app/aglyn/issue/AGL-2660), [AGL-2981](https://linear.app/aglyn/issue/AGL-2981))
 - **crm:** the CRM's organization hub is served by the console's generic org route ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080), [AGL-2630](https://linear.app/aglyn/issue/AGL-2630), [AGL-2974](https://linear.app/aglyn/issue/AGL-2974))
 - **plugins:** a plugin's quota is labeled by its plugin, and the record timeline files on a person ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080), [AGL-2981](https://linear.app/aglyn/issue/AGL-2981))
@@ -64,9 +69,15 @@ content on the marketing site and is written separately.
 - **workflows:** what only the automation engine reads leaves core actions.ts ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
 - **variables:** a site variable names no workflow; the computing plugin types it ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080), [AGL-129](https://linear.app/aglyn/issue/AGL-129), [AGL-261](https://linear.app/aglyn/issue/AGL-261))
 
-<details>
-<summary>Also in this release: 1 test</summary>
+### Documentation
 
+- **ai:** the dataset figure readers are named as the data plugin's ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+
+<details>
+<summary>Also in this release: 3 test</summary>
+
+- **aglyn:** the spread-question fixture of the docs gate names no plugin seam ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **console:** the record kinds one plugin's picker lists from another have a source once the console boots ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
 - **jsx:** a keystroke-cost spec sets its fresh-registry timeout file-wide ([AGL-3423](https://linear.app/aglyn/issue/AGL-3423))
 
 </details>
