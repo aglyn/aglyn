@@ -233,6 +233,11 @@ describe('form submission abuse ceiling (AGL-1655)', () => {
       expect(mockNotifications.map((entry) => entry.type)).toEqual([
         'content.formSubmission',
       ])
+      // Its body names the form, the site and the page on its own (AGL-3432),
+      // where it used to be the bare fragment "Page: /contact".
+      expect(mockNotifications[0].body).toBe(
+        'Someone submitted “Contact” on {site} (page /contact).',
+      )
     })
   })
 
@@ -276,6 +281,18 @@ describe('form submission abuse ceiling (AGL-1655)', () => {
     // mutes to stop routine form-submission chatter, which is exactly the
     // owner whose form just stopped accepting.
     expect(mockNotifications[0].type).toBe('system.formSubmissionsPaused')
+    // The body stands on its own (AGL-3432): which site — `{site}` is filled
+    // by `notifyHostManagers` — that refused submissions are lost rather than
+    // queued, that none is billed, and the date forms accept again.
+    const reopens = new Date(
+      Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth() + 1, 1),
+    ).toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'UTC' })
+    expect(mockNotifications[0].title).toContain('{site}')
+    expect(mockNotifications[0].body).toMatch(/^Forms on \{site\} stopped accepting submissions/)
+    expect(mockNotifications[0].body).toContain(FORM_ABUSE_CEILING_FLOOR.toLocaleString())
+    expect(mockNotifications[0].body).toContain('refused and not saved')
+    expect(mockNotifications[0].body).toContain('none of them are billed')
+    expect(mockNotifications[0].body).toContain(`accept submissions again on ${reopens}.`)
 
     await submit()
     await submit()

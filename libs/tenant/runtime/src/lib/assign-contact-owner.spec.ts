@@ -32,6 +32,8 @@
 const docs = new Map<string, Record<string, any>>()
 let notified: Array<{ uids: string[]; payload: Record<string, any> }> = []
 let transactionFails = false
+/** Makes the host read behind the site's name throw. */
+let hostReadFails = false
 /** Reads made through the transaction, by path — the roster check budget. */
 let transactionReads: string[] = []
 
@@ -119,6 +121,15 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   firebaseAdmin: { app: () => ({ firestore: () => firestore }) },
   getOrgForHost: async (hostId: string) =>
     hostId === 'orphan' ? null : { orgId: 'org-1', org: docs.get('orgs/org-1') ?? {} },
+  // The site the notification names (AGL-3432): the request-cached host read
+  // and the shared naming rule, the real one rather than a copy of it.
+  getHostDocAdmin: async (hostId: string) => {
+    if (hostReadFails) throw new Error('UNAVAILABLE')
+    return docs.get(`hosts/${hostId}`) ?? null
+  },
+  hostDisplayName: jest.requireActual(
+    '../../../data/admin/src/lib/server/notifications',
+  ).hostDisplayName,
   notifyUsers: async (uids: Iterable<string>, payload: Record<string, any>) => {
     notified.push({ uids: [...uids], payload })
   },
@@ -141,6 +152,7 @@ function seed(crm: Record<string, unknown> = {}, roster = ['uid-sam', 'uid-kim',
   docs.set(ORG, { name: 'Acme', crm })
   for (const uid of roster) docs.set(`${ORG}/members/${uid}`, { role: 'editor' })
   docs.set(CONTACT, { email: EMAIL, name: 'Ada', facets: { [HOST]: { tags: ['vip'] } } })
+  docs.set(`hosts/${HOST}`, { displayName: 'Harbor View', subdomain: 'harborview' })
 }
 
 const capture = (extra: Partial<Parameters<typeof assignOwnerForCapture>[0]> = {}) =>
@@ -149,6 +161,7 @@ const capture = (extra: Partial<Parameters<typeof assignOwnerForCapture>[0]> = {
 beforeEach(() => {
   notified = []
   transactionFails = false
+  hostReadFails = false
   transactionReads = []
   seed()
 })
@@ -183,7 +196,7 @@ describe('the site default owner', () => {
         payload: {
           type: 'content.contactAssigned',
           title: 'Contact assigned to you',
-          body: 'Ada',
+          body: 'Ada was assigned to you as a contact on Harbor View.',
           link: `/${HOST}/crm/contacts/c1`,
           orgId: 'org-1',
           hostId: HOST,
@@ -293,6 +306,7 @@ describe('the lead beside the contact', () => {
     expect(notified[0].payload).toMatchObject({
       type: 'content.leadAssigned',
       title: 'Lead assigned to you',
+      body: 'Ada was assigned to you as a lead on Harbor View.',
       link: `/${HOST}/crm/leads/${personKey(EMAIL)}`,
     })
   })
@@ -379,6 +393,28 @@ describe('a deliberate reassignment', () => {
       reassignContactOwner({ hostId: HOST, contactId: 'c1', email: EMAIL, assign: { roundRobin: true } }),
     ).resolves.toMatchObject({ ownerUid: 'uid-kim', by: 'roundRobin' })
     expect(pointer()).toBe('uid-kim')
+  })
+})
+
+describe('the body stands on its own (AGL-3432)', () => {
+  // The email shows the body to somebody who may never read the subject, and
+  // a member can own records on several sites, so the body says what
+  // happened, to whom, and where.
+  it('names the person by address when the contact has no name, and the site by its address when it has no name', async () => {
+    seed({ hosts: { [HOST]: { defaultOwnerUid: 'uid-sam' } } })
+    docs.set(CONTACT, { email: EMAIL, facets: {} })
+    docs.set(`hosts/${HOST}`, { subdomain: 'harborview' })
+    await capture()
+    expect(notified[0].payload['body']).toBe(
+      'ada@acme.com was assigned to you as a contact on harborview.',
+    )
+  })
+
+  it('still tells the owner when the site cannot be read, without the site clause', async () => {
+    seed({ hosts: { [HOST]: { defaultOwnerUid: 'uid-sam' } } })
+    hostReadFails = true
+    await expect(capture()).resolves.toMatchObject({ outcome: 'assigned', notified: true })
+    expect(notified[0].payload['body']).toBe('Ada was assigned to you as a contact.')
   })
 })
 

@@ -42,6 +42,7 @@
 import {
   PLAN_ENTITLEMENTS,
   bandwidthCapEngaged,
+  checkBandwidthAbuseCeiling,
   pageViewsFromBandwidthGb,
 } from '@aglyn/aglyn/server'
 
@@ -664,6 +665,26 @@ describe('bandwidth abuse ceiling (AGL-2155)', () => {
       'system.bandwidthCapEngaged',
       'system.bandwidthCeilingTripped',
     ])
+    // Each body names the site (`{site}`, filled by `notifyHostManagers`)
+    // and says nothing is charged (AGL-3432). The ceiling is called a safety
+    // ceiling, never what the free plan allows: Free includes a few thousand
+    // views, and 100,000 is the abuse floor.
+    const [cap, ceilingNotice] = mockManagerNotices
+    expect(cap['title']).toContain('{site}')
+    expect(cap['body']).toMatch(/^\{site\} has used the [\d,]+ page views its plan includes this month/)
+    expect(cap['body']).toContain('Nothing is charged')
+    expect(ceilingNotice['title']).toContain('{site}')
+    expect(ceilingNotice['body']).toMatch(/^\{site\} served [\d,]+ page views this month/)
+    expect(ceilingNotice['body']).toContain('the 100,000-view safety ceiling for the month')
+    expect(ceilingNotice['body']).not.toMatch(/free plan allows/i)
+    expect(ceilingNotice['body']).toContain('Nothing is charged.')
+    expect(ceilingNotice['body']).toContain('Upgrading brings it straight back.')
+    // The month boundary is a UTC instant, named as the date it falls on.
+    const rollover = new Date(
+      Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth() + 1, 1),
+    ).toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'UTC' })
+    expect(cap['body']).toContain(`until ${rollover}.`)
+    expect(ceilingNotice['body']).toContain(`until ${rollover}.`)
   })
 
   it('THE NEGATIVE CONTROL: a PAID host at the SAME count is not flagged at all', async () => {
@@ -687,6 +708,26 @@ describe('bandwidth abuse ceiling (AGL-2155)', () => {
     await loadRoute().POST(beacon({ hostId: HOST_ID, path: '/' }))
     expect(flag()).toMatchObject({ ceiling: 155_299, degraded: false })
     expect(mockStaffNotices).toHaveLength(1) // still an incident
+    // The managers are told the site still serves and the overage bills
+    // (AGL-3432), on the plan that meters it.
+    const notice = mockManagerNotices.find((n) => n['type'] === 'system.bandwidthCeilingTripped')
+    expect(notice?.['title']).toBe('Unusual traffic on {site}')
+    expect(notice?.['body']).toMatch(/^\{site\} served [\d,]+ page views this month/)
+    expect(notice?.['body']).toContain('billed as overage')
+  })
+
+  it('a CONTRACTED host past its ceiling is not told its traffic bills as overage', async () => {
+    // Enterprise is neither degraded nor metered: its traffic is paid for by
+    // agreement, so the overage sentence would claim a charge that is not
+    // made (AGL-3432).
+    mockOrgForHost = { $id: 'org-1', plan: 'enterprise' }
+    const { ceiling } = checkBandwidthAbuseCeiling(mockOrgForHost as never, 0)
+    plantMonthViews(ceiling + 1_000)
+    await loadRoute().POST(beacon({ hostId: HOST_ID, path: '/' }))
+    expect(flag()).toMatchObject({ degraded: false })
+    const notice = mockManagerNotices.find((n) => n['type'] === 'system.bandwidthCeilingTripped')
+    expect(notice?.['body']).toContain('It is still serving normally.')
+    expect(notice?.['body']).not.toContain('overage')
   })
 
   it('an org with NO plan resolves as free and is contained', async () => {

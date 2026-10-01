@@ -258,19 +258,33 @@ export async function recordVisitorRecordCeilingTrip(options: {
     )
     if (alreadyRefused === 0) {
       const leads = kind === 'leads'
+      /*
+       * What is refused, said exactly (AGL-3432). A lead door — a form
+       * routed to leads, a booking — stores its own record BEFORE it files
+       * the lead, so at the ceiling the visitor's submission or booking is
+       * still kept and only the new lead is not. A member sign-up is refused
+       * whole: no account is created. `{site}` is the site's name, filled by
+       * `notifyHostManagers` from the host doc it already reads.
+       */
       await notifyHostManagers(hostId, {
         type: 'system.visitorRecordsPaused',
         title: leads
-          ? 'Lead capture paused — this site is at the platform limit'
-          : 'Sign-ups paused — this site is at the platform limit',
-        body:
-          `This site holds ${ceiling.toLocaleString()} ` +
-          `${leads ? 'leads' : 'member accounts'}, which is the platform ` +
-          `safety limit, so further ${leads ? 'leads' : 'sign-ups'} are ` +
-          'being refused. This is not part of your plan — every plan ' +
-          `includes unlimited ${leads ? 'leads' : 'member accounts'}. ` +
-          `Remove some ${leads ? 'leads' : 'members'}, or contact support ` +
-          'if this is real traffic.',
+          ? 'Lead capture paused on {site} — platform limit reached'
+          : 'Sign-ups paused on {site} — platform limit reached',
+        body: leads
+          ? `{site} holds ${ceiling.toLocaleString()} leads, the platform ` +
+            'safety limit, so new people are no longer added as leads. What ' +
+            'they send, such as a form submission or a booking, is still ' +
+            'saved; only the new lead is not. This limit is not part of your ' +
+            'plan — every plan includes unlimited leads — and nothing is ' +
+            'charged. Remove some leads, or contact support if this is real ' +
+            'traffic.'
+          : `{site} has ${ceiling.toLocaleString()} member accounts, the ` +
+            'platform safety limit, so new sign-ups are refused and no ' +
+            'account is created. This limit is not part of your plan — every ' +
+            'plan includes unlimited member accounts — and nothing is ' +
+            'charged. Remove some members, or contact support if this is ' +
+            'real traffic.',
         link: `/${hostId}/inbox`,
       })
     }

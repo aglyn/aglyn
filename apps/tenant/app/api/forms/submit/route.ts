@@ -124,10 +124,25 @@ async function recordAbuseCeilingTrip(
       { merge: true },
     )
     if (alreadyRefused === 0) {
+      // Every fact here is the route's own (AGL-3432): the refusal sits before
+      // every write, so a refused submission is neither stored nor counted
+      // toward the bill, and the counter is month-keyed, so forms accept
+      // again at the UTC month boundary — the same date the inbox notice
+      // prints. `{site}` is the site's name, filled by `notifyHostManagers`.
+      const reopens = Aglyn.formCeilingResetAt().toLocaleDateString('en-US', {
+        month: 'long',
+        day: 'numeric',
+        timeZone: 'UTC',
+      })
       await notifyHostManagers(hostId, {
         type: 'system.formSubmissionsPaused',
-        title: 'Form submissions paused — unusual volume',
-        body: `This site reached ${ceiling} submissions this month, so further submissions are being refused. They are not being billed. Contact support if this is real traffic.`,
+        title: 'Form submissions paused on {site} — unusual volume',
+        body:
+          `Forms on {site} stopped accepting submissions: the site reached ` +
+          `${ceiling.toLocaleString()} this month, the safety limit for ` +
+          'unusual volume. Submissions sent now are refused and not saved, ' +
+          `and none of them are billed. Forms accept submissions again on ` +
+          `${reopens}. Contact support if this is real traffic.`,
         link: `/${hostId}/inbox`,
       })
     }
@@ -849,10 +864,16 @@ export async function POST(request: Request): Promise<Response> {
     // Event trigger (AGL-128/148): field values join the automation
     // scope; action-produced site alerts ride back to the visitor.
     // In-app notification to the site's managers (AGL-259).
+    // The body names the form and the site on its own (AGL-3432): a manager
+    // of several sites reads the email body, not always the subject, and
+    // "Page: /contact" said neither. `{site}` is filled by
+    // `notifyHostManagers` from the host doc it already reads.
     void notifyHostManagers(hostId, {
       type: 'content.formSubmission',
       title: `New form submission — ${resolvedFormName}`,
-      ...(typeof path === 'string' && path ? { body: `Page: ${path}` } : {}),
+      body:
+        `Someone submitted “${resolvedFormName}” on {site}` +
+        (typeof path === 'string' && path ? ` (page ${path.slice(0, 500)}).` : '.'),
       link: `/${hostId}/inbox`,
     })
     const submittedEmail =

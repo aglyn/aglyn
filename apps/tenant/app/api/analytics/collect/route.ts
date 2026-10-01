@@ -412,6 +412,21 @@ const bandwidthTripped = new Map<string, string>()
  */
 const bandwidthCapMemo = new Map<string, string>()
 
+/**
+ * The day a `YYYY-MM` month key rolls over, as a site manager's notice prints
+ * it: "October 1". Both limits here are UTC months, so the date is the UTC
+ * one; read in the Americas the pause lifts on the evening before, never
+ * after the day named.
+ */
+function monthRolloverLabel(month: string): string {
+  const [year, monthIndex] = month.split('-').map(Number)
+  return new Date(Date.UTC(year, monthIndex, 1)).toLocaleDateString('en-US', {
+    month: 'long',
+    day: 'numeric',
+    timeZone: 'UTC',
+  })
+}
+
 /** True on the instance's first beacon for a host, then every Nth. */
 function bandwidthSampleDue(hostId: string): boolean {
   if (bandwidthSeen.size > MAX_TRACKED_BANDWIDTH_HOSTS) bandwidthSeen.clear()
@@ -502,12 +517,21 @@ async function engageFreePlanBandwidthCap(options: {
     // bandwidth alert email — but the sweep is exactly what never ran for
     // these orgs, so without this the first a never-subscribed owner would
     // know of their site being paused is a visitor telling them.
+    //
+    // `{site}` is the site's name, filled by `notifyHostManagers` from the
+    // host doc it already reads (AGL-3432): a manager of several sites must
+    // learn from the body alone which one is down. "Nothing is charged" is
+    // the plan's own rule — the cap engages only on a plan that does not
+    // meter overage — and an upgrade releases it because
+    // `bandwidthCapEngaged` re-derives from the current plan on every read.
     await notifyHostManagers(hostId, {
       type: 'system.bandwidthCapEngaged',
-      title: 'Site paused — monthly traffic limit reached',
-      body: `This site has used the ${Math.round(
+      title: '{site} paused — monthly traffic limit reached',
+      body: `{site} has used the ${Math.round(
         Aglyn.pageViewsFromBandwidthGb(entitlements.bandwidthGb),
-      ).toLocaleString()} page views included with the free plan this month, so it is serving a temporary notice until the start of next month. Upgrade in Billing to bring it straight back.`,
+      ).toLocaleString()} page views its plan includes this month, so visitors see a temporary notice instead of its pages until ${monthRolloverLabel(
+        month,
+      )}. Nothing is charged for the extra traffic. The site comes back on its own then, or as soon as you upgrade in Billing.`,
       link: `/${hostId}`,
     })
   } catch (error) {
@@ -656,14 +680,31 @@ async function evaluateBandwidthLimits(hostId: string): Promise<void> {
       }`,
       link: `/admin/hosts`,
     })
+    // The managers' half names the site through `{site}` (AGL-3432), and
+    // says only what is true of THIS trip. The ceiling is an abuse limit, not
+    // the plan's allowance: Free includes a few thousand views and its
+    // ceiling is the 100,000-view floor, so calling the ceiling "what the
+    // plan allows" would misstate the plan by two orders of magnitude.
+    // "Upgrading brings it straight back" holds because
+    // `bandwidthCeilingDegradesHost` re-derives from the org's current plan.
+    // A paid plan that does not meter overage (a contracted price) is not
+    // degraded either, and its traffic is not billed as overage, so the
+    // non-degraded copy claims a charge only when the plan meters one.
+    const used = ceiling.used.toLocaleString()
     await notifyHostManagers(hostId, {
       type: 'system.bandwidthCeilingTripped',
       title: degraded
-        ? 'Site paused — traffic past the free plan'
-        : 'Unusual traffic on this site',
+        ? '{site} paused — unusual traffic volume'
+        : 'Unusual traffic on {site}',
       body: degraded
-        ? `This site served ${ceiling.used.toLocaleString()} page views this month, past the ${ceiling.ceiling.toLocaleString()} the free plan allows. It is serving a temporary notice until next month. Upgrade to bring it straight back.`
-        : `This site served ${ceiling.used.toLocaleString()} page views this month, well past its plan's included bandwidth. It is still serving normally and the overage bills as usual — contact support if this is not real traffic.`,
+        ? `{site} served ${used} page views this month, past the ${ceiling.ceiling.toLocaleString()}-view safety ceiling for the month, so visitors see a temporary notice instead of its pages until ${monthRolloverLabel(
+            month,
+          )}. Nothing is charged. Upgrading brings it straight back. Contact support if this is not real traffic.`
+        : `{site} served ${used} page views this month, well past what its plan includes. It is still serving normally${
+            Aglyn.planMetersInfraOverage(org as never)
+              ? ', and the traffic past the plan is billed as overage, as usual'
+              : ''
+          }. Contact support if this is not real traffic.`,
       link: `/${hostId}`,
     })
   } catch (error) {

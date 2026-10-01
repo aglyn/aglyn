@@ -323,6 +323,12 @@ describe('a trip is visible to the site owner (AGL-1529)', () => {
     expect(String(mockNotifications[0]['body'])).toContain(
       'not part of your plan',
     )
+    // The body stands on its own (AGL-3432): it names the site — `{site}`,
+    // filled by `notifyHostManagers` — and says the visitor's own submission
+    // is kept, so a refused lead does not read as a lost enquiry.
+    expect(String(mockNotifications[0]['title'])).toContain('{site}')
+    expect(String(mockNotifications[0]['body'])).toMatch(/^\{site\} holds [\d,]+ leads/)
+    expect(String(mockNotifications[0]['body'])).toContain('is still saved; only the new lead is not')
 
     // A second refusal in the same month writes the counter again and stays
     // quiet. A notification per refused bot request is the flood, delivered.
