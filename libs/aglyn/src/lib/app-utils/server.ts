@@ -57,7 +57,6 @@ export * from './lineal-order'
 // a model generated both pass through it.
 export * from './node-definition-sanitizer'
 export * from './console-routes'
-export * from './console-record-links'
 // What a stored screen-link value means, with no React attached — the
 // where-used scan reads these on the server (AGL-703).
 export * from './screen-link-value'

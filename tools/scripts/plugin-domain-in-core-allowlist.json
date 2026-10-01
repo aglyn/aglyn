@@ -315,15 +315,6 @@
       "lane": "marketing"
     },
     {
-      "path": "libs/aglyn/src/lib/app-utils/console-record-links.ts",
-      "rules": [
-        "plugin-id",
-        "domain-exports:crm",
-        "domain-declares:crm"
-      ],
-      "lane": "plugin-id"
-    },
-    {
       "path": "libs/aglyn/src/lib/app-utils/contact-custom-fields.ts",
       "rules": [
         "domain-name"
