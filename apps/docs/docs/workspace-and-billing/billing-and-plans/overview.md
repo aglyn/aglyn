@@ -103,8 +103,10 @@ Nothing here guarantees that a price or feature set will remain the same.
   redesigned plan cards.
 - A **usage-cap banner** appears site-wide at 80% and 100% of a quota, with an upgrade link.
 - Org admins also get an in-app **notification** and an email when sites, pages on a site,
-  storage, datasets, email sends, or [bandwidth](bandwidth.md) crosses 80% or 100%, so nobody
-  has to be watching the console to find out. Each is sent once per crossing: something your
+  storage, datasets, email sends, or [bandwidth](bandwidth.md) crosses 75%, 80%, 90% or 100%,
+  so nobody has to be watching the console to find out. Only the highest step reached is
+  sent — usage that jumps from 70% to 95% gets one 90% notice — and each is sent once per
+  crossing: something your
   workspace has — sites, pages, datasets, stored files and data — is announced when it first
   reaches a threshold and again only if it drops below and reaches it again, and a monthly
   meter — email sends, runs, bandwidth, AI credits — once per threshold each month, because
@@ -140,7 +142,7 @@ share is of the workspace's own credits.
 Beneath that table, **AI allotments** gives a team member, a site collaborator on one
 site, or a whole site a monthly share of the workspace's AI credits. A **hard** allotment
 stops AI requests at the line; a **soft** one keeps them working and notifies the person
-and the owners and admins at 80% and 100%. Select several members or sites to set one
+and the owners and admins at 75%, 80%, 90% and 100%. Select several members or sites to set one
 allotment for all of them, or use **Same for every client site** to give every site the
 same share. An allotment can also limit which models are used, and on Agency and
 Enterprise the organization can restrict models for everyone.
@@ -183,7 +185,7 @@ there.
 :::
 
 :::tip No surprise bills
-Two things prevent one, and they work in different ways. The **alerts** at 80% and 100%
+Two things prevent one, and they work in different ways. The **alerts** at 75%, 80%, 90% and 100%
 of your allowance mean nobody first learns about overage from an invoice. The optional
 **cap** means anyone who wants a hard ceiling can have one, at a number they choose.
 :::
@@ -260,8 +262,8 @@ Each one tells you what to do when it applies; none of them can produce a charge
 ### Alerts on the way there {#ai-credit-alerts}
 
 Workspace owners and admins are notified — in the console and by email — when the month's
-AI assist use passes **80%** of the included credits, and again at **100%**, once per
-threshold per month. The 100% notice says what happens next for your plan: on a plan
+AI assist use passes **75%**, **80%** and **90%** of the included credits, and again at
+**100%** — each step once a month, and only the highest step reached. The 100% notice says what happens next for your plan: on a plan
 that sells credits past the band, that the assistant keeps answering and the extra credits
 are metered at your plan's rate unless you set a stop; on a plan that sells none, that the
 assistant stops until next month or an upgrade. The same warning appears as a banner in

@@ -300,7 +300,6 @@ const screenAlerts = (orgId: string) =>
 
 beforeEach(() => {
   process.env.CRON_SECRET = CRON_SECRET
-  delete process.env.USAGE_ALERT_APPROACH_PCT
   jest.clearAllMocks()
   mockHosts = []
   mockOrgs = []

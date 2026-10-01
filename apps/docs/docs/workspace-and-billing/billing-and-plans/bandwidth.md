@@ -41,7 +41,9 @@ four sites on one Business plan, they share the 185 GB.
 The meter resets on the first of each month, in UTC.
 
 You do not have to be watching it. Organization admins get an in-app notification **and**
-an email at 80% of the allowance and again at 100%, once per threshold per month. What
+an email at 75%, 80% and 90% of the allowance and again at 100% — each step once a month,
+and only the highest step reached, so a busy day that jumps from 70% to 95% sends one 90%
+notice. What
 those messages say depends on your plan, and the difference is the point:
 
 - **On a paid plan** the 100% message reads *"You're past your included monthly bandwidth
@@ -222,9 +224,6 @@ job at `/api/billing/usage-alerts` (gated on `CRON_SECRET`) engages the same cap
 organization-wide and sends the usage emails; a deployment that never invokes it still
 caps, but loses the alerts and the multi-site total — see
 [Self-hosting](../../developers/self-hosting.md).
-
-`USAGE_ALERT_APPROACH_PCT` sets the first alert threshold (default `80`; a value outside
-1–99 falls back to 80).
 
 ## Related
 

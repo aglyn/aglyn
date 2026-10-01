@@ -72,6 +72,33 @@ describe('usageAlertGuardDecision (AGL-3431)', () => {
     expect(monthly(0, { month: MONTH, threshold: 100 })).toEqual({ action: 'none' })
   })
 
+  it('steps through 75, 80, 90 and 100, and lowers a guard to the band usage is in (AGL-3431)', () => {
+    expect(crossing(75)).toMatchObject({ action: 'send', guard: { threshold: 75 } })
+    expect(crossing(80, { month: MONTH, threshold: 75 })).toMatchObject({
+      action: 'send',
+      guard: { threshold: 80 },
+    })
+    expect(crossing(90, { month: MONTH, threshold: 80 })).toMatchObject({
+      action: 'send',
+      guard: { threshold: 90 },
+    })
+    // 90 announced, 85% today: the guard comes down to 80 and nothing is sent.
+    expect(crossing(80, { month: MONTH, threshold: 90 })).toEqual({
+      action: 'rearm',
+      guard: { month: MONTH, threshold: 80 },
+    })
+  })
+
+  it('reads a guard from the old two-step ladder the same way', () => {
+    // 80 held, usage at 83% (band 80): nothing. Usage at 92% (band 90): 90.
+    expect(crossing(80, { month: '2026-09', threshold: 80 })).toEqual({ action: 'none' })
+    expect(crossing(90, { month: '2026-09', threshold: 80 })).toMatchObject({
+      action: 'send',
+      guard: { threshold: 90 },
+    })
+    expect(monthly(90, { month: MONTH, threshold: 80 })).toMatchObject({ action: 'send' })
+  })
+
   it('reads a guard with no threshold as no guard', () => {
     expect(crossing(100, { month: '2026-09' })).toMatchObject({ action: 'send' })
   })
