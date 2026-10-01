@@ -1,7 +1,7 @@
 ---
 sidebar_position: 1
 title: Events Calendar
-description: Keep a schedule of events in the console and publish the ones you choose to any screen, with search-engine event markup.
+description: Keep a schedule of events in the console and publish the ones you choose to any page, with search-engine event markup.
 ---
 
 # Events Calendar
@@ -18,7 +18,7 @@ sequenceDiagram
   participant V as Visitor
   M->>C: Add event (draft)
   M->>C: Set published
-  V->>S: Open a screen with an Event List
+  V->>S: Open a page with an Event List
   S->>S: List published events (upcoming or past)
   S-->>V: Events + schema.org Event markup
 ```
@@ -52,10 +52,10 @@ The public listing filters to published events on the server, so a draft is neve
 to a visitor's browser — it's a safe place to stage next month's schedule.
 :::
 
-## Show events on a screen
+## Show events on a page {#show-events-on-a-screen}
 
 Events reach visitors through the **Event List** canvas element (Data display
-category) — drop it on any screen in the Besigner and set:
+category) — drop it on any page in the Besigner and set:
 
 - **Heading** — a title above the list; empty hides it.
 - **Show** — *Upcoming* (default) or *Past events*.

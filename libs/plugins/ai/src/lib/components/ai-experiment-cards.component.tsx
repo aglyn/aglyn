@@ -173,7 +173,7 @@ export function aiExperimentVariantDrafts(
 export function aiExperimentApplyCopy(target: AiExperimentTarget): string {
   return target === 'email'
     ? 'Each variant above takes its name, subject and body. Nothing is saved until you save the experiment.'
-    : 'Each variant above takes its name. The copy itself is a screen version — make one per variant in the editor and pin it above.'
+    : 'Each variant above takes its name. The copy itself is a page version — make one per variant in the editor and pin it above.'
 }
 
 /**

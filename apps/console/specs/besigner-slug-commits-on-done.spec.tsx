@@ -570,7 +570,7 @@ describe('Screen Properties ▸ Slug · the helper line (AGL-2570)', () => {
     ).toBeNull()
     expect(
       screen.getByText(
-        /Not published — Publish puts this screen at \/alternatives\/webflow/,
+        /Not published — Publish puts this page at \/alternatives\/webflow/,
       ),
     ).toBeTruthy()
   })

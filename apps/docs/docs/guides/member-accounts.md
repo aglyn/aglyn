@@ -1,13 +1,13 @@
 ---
 sidebar_position: 4
 title: Member accounts
-description: Let visitors sign up on your site, design an account page with the Customer account block, gate screens to members, and manage members from the console Users page.
+description: Let visitors sign up on your site, design an account page with the Customer account block, gate pages to members, and manage members from the console Users page.
 ---
 
 # Member accounts
 
 Visitors can become **members** of your published site — sign up, sign in,
-see their orders, and unlock members-only screens. This walkthrough covers the
+see their orders, and unlock members-only pages. This walkthrough covers the
 visitor side (built-in auth pages and the account block) and the console side
 (the Users page and the member drawer).
 
@@ -15,7 +15,7 @@ visitor side (built-in auth pages and the account block) and the console side
 
 :::info Plan availability
 Member signups and the account block work wherever commerce does; gating
-screens to members needs the content-gating feature (**Business** and above) —
+pages to members needs the content-gating feature (**Business** and above) —
 see [Members-only areas](../workspace-and-billing/teams-and-roles/members-only.md).
 :::
 
@@ -54,7 +54,7 @@ everything is reachable again.
 
 Sites that were already using member accounts when this switch arrived keep
 them — the switch was turned on for any site with members, a designated auth
-screen, or a members-only page.
+page, or a members-only page.
 
 ## 2. The built-in sign-in and sign-up pages
 
@@ -89,7 +89,7 @@ a reset email from the member drawer (see
 ## 3. Design an account page
 
 For a richer home for members, add the **Customer account** block (found in
-the **Commerce** group of the element picker) to a screen — conventionally at
+the **Commerce** group of the element picker) to a page — conventionally at
 the slug `account`, which is where commerce gates point anonymous visitors:
 
 - **Signed out**, the block shows sign-in / create-account tabs in place, with
@@ -102,27 +102,27 @@ the slug `account`, which is where commerce gates point anonymous visitors:
 ![The account page on the live site: the Customer account block's signed-out state with sign-in and create-account tabs](/img/guides/members-account-screen.png)
 
 Give the account page the same chrome as the rest of your site by binding a
-**shared layout**: in the screen's Properties, pick one under **Shared
-layout** — the appbar/footer are then maintained once for every bound screen
-(see [screens & layouts](../building-sites/screens-and-layouts/overview.md)).
+**shared layout**: in the page's Properties, pick one under **Shared
+layout** — the appbar/footer are then maintained once for every bound page
+(see [pages & layouts](../building-sites/screens-and-layouts/overview.md)).
 
-## 4. Gate screens to members
+## 4. Gate pages to members {#4-gate-screens-to-members}
 
-To restrict a screen: open its version view, and in the **Page Access** card
+To restrict a page: open its version view, and in the **Page Access** card
 set **Visibility** to **Members only**, then publish. Anonymous visitors get a
 "This page is for members" prompt with sign-in / create-account links instead
 of the content (or your designed 401
-[error screen](../building-sites/site-protection/error-screens.md) if you've
-assigned one). The screen's content is never in the anonymous page source —
+[error page](../building-sites/site-protection/error-screens.md) if you've
+assigned one). The page's content is never in the anonymous page source —
 members fetch it with their session after sign-in.
 
 For one-off protection without accounts, use a
-[per-screen password](../building-sites/site-protection/password-a-screen.md)
+[per-page password](../building-sites/site-protection/password-a-screen.md)
 instead.
 
 ### Gate part of a page, not all of it
 
-Three blocks gate a **region** instead of a whole screen, so one public page
+Three blocks gate a **region** instead of a whole page, so one public page
 can hold both the pitch and the members-only part:
 
 - **Members gate** — a container that shows its children only to entitled
@@ -141,7 +141,7 @@ can hold both the pitch and the members-only part:
   **Heading**, **Empty text** for when there are none, and a cap on how many
   show. Non-members never receive the posts, not merely a hidden copy of them.
 
-A gated region is not a substitute for screen visibility when the whole page
+A gated region is not a substitute for page visibility when the whole page
 is for members — that setting keeps the content out of the anonymous page
 source entirely.
 
@@ -222,4 +222,4 @@ both are recorded in the site's activity log — never the password itself.
 - [Members-only areas](../workspace-and-billing/teams-and-roles/members-only.md)
 - [Commerce end to end](commerce-end-to-end.md)
 - [CRM](../content-and-data/crm/overview.md)
-- [Site protection & error screens](../building-sites/site-protection/overview.md)
+- [Site protection & error pages](../building-sites/site-protection/overview.md)

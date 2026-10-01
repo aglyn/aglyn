@@ -428,7 +428,7 @@ function ScreenDetails() {
   useEffect(() => {
     if (!loadStalled) return
     enqueueSnackbar(
-      "This screen is taking longer than usual to load. If it doesn't " +
+      "This page is taking longer than usual to load. If it doesn't " +
         'appear, your session may need refreshing — sign out and back in.',
       { variant: 'warning', persist: true, allowDuplicate: true },
     )
@@ -494,7 +494,7 @@ function ScreenDetails() {
      */
     const verdict = await writeGuardedBySeed(
       {
-        subject: 'screen details',
+        subject: 'page details',
         unreadable: status === 'error',
         fromCache: screenFromCache,
       },
@@ -509,7 +509,7 @@ function ScreenDetails() {
           updatedAt: Timestamp.now(),
         })
           .then(() => {
-            enqueueSnackbar('Screen updated', {
+            enqueueSnackbar('Page updated', {
               variant: 'success',
               persist: false,
             })
@@ -570,7 +570,7 @@ function ScreenDetails() {
         user,
       }))()
     const confirmed = await confirm({
-      title: 'Delete this screen?',
+      title: 'Delete this page?',
       description: (
         <ArtifactDeleteConfirmDescription
           kind="screen"
@@ -590,7 +590,7 @@ function ScreenDetails() {
         updateDoc(screenRef, { deletedAt: Timestamp.now() }),
         unpublishScreenRoute(firestore, { hostId, screenId, user }),
       ])
-      enqueueSnackbar('Screen deleted', { variant: 'success', persist: false })
+      enqueueSnackbar('Page deleted', { variant: 'success', persist: false })
       logActivity('Deleted screen', {
         type: 'screen',
         id: screenId,
@@ -661,7 +661,7 @@ function ScreenDetails() {
       : undefined
     if (owner && owner !== screenId) {
       return enqueueSnackbar(
-        `Another screen is already published at ${screenRoutePathToUrl(composed as string)}`,
+        `Another page is already published at ${screenRoutePathToUrl(composed as string)}`,
         { variant: 'warning', persist: false },
       )
     }
@@ -711,7 +711,7 @@ function ScreenDetails() {
     const dequeue = queueLoading()
     try {
       await unpublishScreenRoute(firestore, { hostId, screenId, user })
-      enqueueSnackbar('Screen unpublished', {
+      enqueueSnackbar('Page unpublished', {
         variant: 'success',
         persist: false,
       })
@@ -977,7 +977,7 @@ function ScreenDetails() {
           enqueueSnackbar(
             next.length
               ? 'Campaigns updated'
-              : 'This screen is no longer in any campaign',
+              : 'This page is no longer in any campaign',
             { variant: 'success', persist: false },
           )
           logActivity('Changed screen campaigns', {
@@ -1261,7 +1261,7 @@ function ScreenDetails() {
   const details = [
     {
       key: 'id',
-      primary: 'Screen ID:',
+      primary: 'Page ID:',
       secondary: screen?.$id,
       icon: { path: ICON_VARIANT_PRIMARY_KEY.path },
     },
@@ -1315,7 +1315,7 @@ function ScreenDetails() {
             href: buildRoute(Route.HOST_DASHBOARD, { orgSlug,  host }),
           },
           {
-            children: 'Screens',
+            children: 'Pages',
             href: buildRoute(Route.HOST_SCREENS, { orgSlug,  host }),
           },
           {
@@ -1437,7 +1437,7 @@ function ScreenDetails() {
                 children: (
                   <CardDisplay
                     header={'Basic Details'}
-                    help={docsHelp('screens', { anchor: '#screens--routing', excerpt: 'A screen\u2019s name, slug, and where it sits in your site\u2019s routing hierarchy.' })}
+                    help={docsHelp('screens', { anchor: '#screens--routing', excerpt: 'A page\u2019s name, slug, and where it sits in your site\u2019s routing hierarchy.' })}
                     contentGutterY
                     contentBordered="all"
                   >
@@ -1478,7 +1478,7 @@ function ScreenDetails() {
                 children: (
                   <CardDisplay
                     header={'Publishing'}
-                    help={docsHelp('versionsAndPublishing', { anchor: '#scheduled-publishing', excerpt: 'Publish this screen live now or schedule a version to go live at a set time.' })}
+                    help={docsHelp('versionsAndPublishing', { anchor: '#scheduled-publishing', excerpt: 'Publish this page live now or schedule a version to go live at a set time.' })}
                     contentGutterX
                     contentGutterY
                     contentBordered="all"
@@ -1543,10 +1543,10 @@ function ScreenDetails() {
                         {unroutableSchedule ? (
                           <Tooltip
                             title={
-                              'The scheduled publish ran, but this screen has ' +
+                              'The scheduled publish ran, but this page has ' +
                               'no address it could be published at — its slug ' +
                               "(or a parent page's) is missing, or another " +
-                              'screen is already published at that path. Set ' +
+                              'page is already published at that path. Set ' +
                               'the slug below, publish or fix the parent, ' +
                               'then schedule it again.'
                             }
@@ -1567,7 +1567,7 @@ function ScreenDetails() {
                         value={slugValue}
                         onChange={(event) => setSlugInput(event.target.value)}
                         helperText={
-                          'Path the screen is served at ("/" for the home page).'
+                          'Path the page is served at ("/" for the home page).'
                         }
                       />
                       <Stack
@@ -1651,7 +1651,7 @@ function ScreenDetails() {
                 children: (
                   <CardDisplay
                     header={'Page Access'}
-                    help={docsHelp('siteProtection', { anchor: '#per-screen-passwords', excerpt: 'Control who can view this screen \u2014 members-only gating or a password.' })}
+                    help={docsHelp('siteProtection', { anchor: '#per-screen-passwords', excerpt: 'Control who can view this page \u2014 members-only gating or a password.' })}
                     contentGutterX
                     contentGutterY
                     contentBordered="all"
@@ -1731,7 +1731,7 @@ function ScreenDetails() {
                     hostId={hostId}
                     kind="screen"
                     id={screenId}
-                    noun="screen"
+                    noun="page"
                   />
                 ),
               },
@@ -1782,7 +1782,7 @@ function ScreenDetails() {
                 children: (
                   <CardDisplay
                     header={'SEO'}
-                    help={docsHelp('seo', { anchor: '#per-screen-seo', excerpt: 'Per-screen search title, description, and social share image \u2014 overrides the site defaults.' })}
+                    help={docsHelp('seo', { anchor: '#per-screen-seo', excerpt: 'Per-page search title, description, and social share image \u2014 overrides the site defaults.' })}
                     contentGutterX
                     contentGutterY
                     contentBordered="all"
@@ -2076,7 +2076,7 @@ function ScreenDetails() {
                 children: (
                   <CardDisplay
                     header={'Raw JSON'}
-                    help={docsHelp('screens', { excerpt: 'The screen document as stored \u2014 a read-only developer view of its structure.' })}
+                    help={docsHelp('screens', { excerpt: 'The page document as stored \u2014 a read-only developer view of its structure.' })}
                     // Gutters and the content border belong to the CONTENT, so
                     // they come off with it. Left on, a closed card draws an
                     // empty bordered strip under its header \u2014 42px of nothing
@@ -2130,7 +2130,7 @@ function ScreenDetails() {
         maxWidth="xs"
         fullWidth
       >
-        <DialogTitle>{'Edit screen'}</DialogTitle>
+        <DialogTitle>{'Edit page'}</DialogTitle>
         <DialogContent
           sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}
         >

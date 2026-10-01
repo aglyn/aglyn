@@ -75,7 +75,7 @@ export interface LayoutSlotProps extends Omit<BoxProps, 'component'> {
  */
 const SLOT_ACCENT = '#00B0FF'
 /** Shown when a layout hasn't named its slot. */
-export const DEFAULT_SLOT_CAPTION = 'Screen content renders here'
+export const DEFAULT_SLOT_CAPTION = 'Page content renders here'
 
 /**
  * Content outlet for shared layouts: marks where a bound screen's nodes are
@@ -160,7 +160,7 @@ export const schema: Aglyn.ComponentSchema<LayoutSlotProps> = {
   pluginId: BUNDLE_ID,
   displayName: 'Layout Slot',
   description:
-    "Marks where each bound screen's content renders inside this layout. One per layout.",
+    "Marks where each bound page's content renders inside this layout. One per layout.",
   category: Aglyn.ComponentCategory.LAYOUT,
   icon: {
     path: mdiPageLayoutBody.path,
@@ -186,7 +186,7 @@ export const schema: Aglyn.ComponentSchema<LayoutSlotProps> = {
       name: 'component',
       label: 'Component',
       description:
-        'The DOM element the screen content renders inside. Blank is ' +
+        'The DOM element the page content renders inside. Blank is ' +
         '"main" — the page-content landmark assistive tech skips the ' +
         'chrome with. Choose another only if this layout’s slot is not the ' +
         'page’s main content.',

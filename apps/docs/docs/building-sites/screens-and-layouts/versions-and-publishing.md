@@ -1,12 +1,12 @@
 ---
 sidebar_position: 4
 title: Versions & scheduled publishing
-description: Every screen, layout and reusable component keeps named versions — publish one, roll back to an older one, or schedule one to go live.
+description: Every page, layout and reusable component keeps named versions — publish one, roll back to an older one, or schedule one to go live.
 ---
 
 # Versions & scheduled publishing
 
-Screens, layouts, and reusable components all keep **versions**. A version is a named
+Pages, layouts, and reusable components all keep **versions**. A version is a named
 snapshot of the saved document; exactly one version of each is **published** — the one
 your visitors get.
 
@@ -31,19 +31,19 @@ version's created/updated times and a **Published** chip on the live one.
 is symmetrical, so rolling forward again is the same click.
 
 A **save is not a publish.** Saving updates the version you have open; publishing is what
-changes the live site. Publishing a *layout* version reaches every screen bound to that
+changes the live site. Publishing a *layout* version reaches every page bound to that
 layout, so check its **Used by** card first — see [Layouts](layouts.md#used-by). A
 *reusable component* version reaches every page that places it the same way.
 
 ## Scheduled publishing
 
 **Schedule** publishes a version automatically at a chosen future time; the row then
-shows a *"Publishes …"* chip you can clear to cancel. Screens and layouts can be
+shows a *"Publishes …"* chip you can clear to cancel. Pages and layouts can be
 scheduled; a reusable component cannot, so its **Schedule** is disabled — publish that
 version when it is ready.
 
 If a scheduled publish comes due on a plan that no longer includes scheduling — after a
-downgrade, say — it is **skipped and shown as skipped** on the screen's page, never
+downgrade, say — it is **skipped and shown as skipped** on the page's detail view, never
 silently dropped, so you can dismiss it or upgrade and reschedule.
 
 ## Plan requirements
@@ -59,7 +59,7 @@ Gating is enforced where you click:
 
 ## Related
 
-- [Screens](screens.md)
+- [Pages](screens.md)
 - [Layouts](layouts.md)
 - [Reusable components](../besigner/reusable-components.md)
 - [Live co-editing](../besigner/live-co-editing.md)

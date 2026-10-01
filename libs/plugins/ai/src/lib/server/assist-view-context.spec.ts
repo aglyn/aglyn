@@ -510,7 +510,7 @@ describe('the view blocks', () => {
     expect(themed).toContain('no proposable actions')
 
     const unknown = viewScreenBlock(describeView('/acme/nowhere-at-all/deep/path'))
-    expect(unknown).toContain('not in the assistant’s screen index')
+    expect(unknown).toContain('not in the assistant’s index of console pages')
     expect(unknown).toContain('Do not emit an action block')
   })
 

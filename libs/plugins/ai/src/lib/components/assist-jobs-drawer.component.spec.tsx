@@ -553,7 +553,7 @@ describe('a job waiting for a person (AGL-2935)', () => {
     expect(screen.getByText('Reuses the layout Site layout — the site chrome')).toBeTruthy()
     expect(screen.getByText('Creates the component Service card — Nothing lists a service.')).toBeTruthy()
     expect(
-      screen.getByText('Builds the screen Roof repair at /services/roof-repair in Site layout: hero'),
+      screen.getByText('Builds the page Roof repair at /services/roof-repair in Site layout: hero'),
     ).toBeTruthy()
     fireEvent.click(screen.getByText('Confirm plan'))
     expect(await screen.findByText('Confirmed plan')).toBeTruthy()

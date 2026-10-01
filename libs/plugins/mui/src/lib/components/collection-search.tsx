@@ -138,7 +138,7 @@ export const collectionSearchSchema: Aglyn.ComponentSchema<CollectionSearchProps
         label: 'Collection slug',
         description:
           'Content collection this box searches (e.g. "blog"). Leave blank ' +
-          'on a list-template screen to use the collection from the URL.',
+          'on a list-template page to use the collection from the URL.',
         component: Aglyn.FieldComponentType.TEXT_FIELD,
       },
       {

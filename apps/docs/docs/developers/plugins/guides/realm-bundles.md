@@ -84,7 +84,7 @@ revoke; a hard-kill still needs a revocation doc. Signing requires
 
 ## Where realm bundles load
 
-- **Console**: from the org's trusted installs, on the screens that draw
+- **Console**: from the org's trusted installs, on the pages that draw
   what the manifest declares under `contributes.console`.
 - **Besigner**: for a site that runs the plugin, when it declares site
   components or site features, so its elements are in the Elements panel and

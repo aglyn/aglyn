@@ -84,7 +84,7 @@ const SUPPRESSED_SCREEN_LINKS = { suppressNavigation: true }
 export const DEFINITIONS_TIMEOUT_MS = 8000
 
 const KIND_LABEL: Record<PreviewKind, string> = {
-  screen: 'screen',
+  screen: 'page',
   component: 'component',
   layout: 'layout',
   template: 'template',

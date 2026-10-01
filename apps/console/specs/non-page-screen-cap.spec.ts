@@ -381,7 +381,7 @@ describe('non-page screen documents are capped server-side (AGL-1399)', () => {
     routePages()
     const refused = await createScreen({ displayName: 'Sixth' })
     expect(refused.status).toBe(403)
-    expect((await refused.json()).error).toContain('5 screens')
+    expect((await refused.json()).error).toContain('5 pages')
   })
 
   it('counts LIVE documents only, so a soft delete frees a slot', async () => {

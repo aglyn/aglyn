@@ -314,7 +314,7 @@ describe('the screen draft is counted like a create', () => {
     for (let index = 0; index < 3; index += 1) {
       mockDocs.set(`hosts/host-1/screens/draft-${index}`, { displayName: `Draft ${index}` })
     }
-    const refusal = 'Your plan includes 5 screens — upgrade in Billing for more'
+    const refusal = 'Your plan includes 5 pages — upgrade in Billing for more'
     expect(await writeAiDraft(firestore, screenInput({ org: FREE_ORG }))).toEqual({ ok: false, status: 403, error: refusal })
     expect(commits).toEqual([])
     expect(await aiDraftAllowanceRefusal(firestore, { kind: 'screen', hostId: 'host-1', org: FREE_ORG })).toBe(refusal)

@@ -714,7 +714,7 @@ export function AssistSignalsPage(_props: ConsoleStaffPageProps) {
         <RankingFootnote
           shown={report?.ungrounded?.routes?.length ?? 0}
           total={report?.ranked?.ungroundedRoutes ?? 0}
-          noun={{ one: 'screen', many: 'screens' }}
+          noun={{ one: 'console page', many: 'console pages' }}
         />
       </CardDisplay>
 

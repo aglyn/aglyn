@@ -1620,7 +1620,7 @@ export function detectUnrelatedScreenLinks(
     {
       rule: 10,
       code: 'link-unrelated-screen',
-      message: `"${sent[0].label}" links the home page, which does not do what its words say. Link the screen that does, or leave the link out when the site has none.`,
+      message: `"${sent[0].label}" links the home page, which does not do what its words say. Link the page that does, or leave the link out when the site has none.`,
       nodeIds: unique(sent.map((entry) => entry.id)),
     },
   ]
@@ -1703,8 +1703,8 @@ export function detectLinksWithoutDestination(
       code: 'link-fragment',
       message: `${wordsOf(first)} links "${first.value}", an anchor, and no element on a page carries an id an anchor could name, so it goes nowhere. ${
         context.pageSections
-          ? `${toSection} Otherwise give it the "screenId" of a screen the site has that does what its words say, or take it out.`
-          : 'Give it the "screenId" of a screen the site has that does what its words say, or an "href" that is a path on this site or an https: address the brief gives, or take it out.'
+          ? `${toSection} Otherwise give it the "screenId" of a page the site has that does what its words say, or take it out.`
+          : 'Give it the "screenId" of a page the site has that does what its words say, or an "href" that is a path on this site or an https: address the brief gives, or take it out.'
       }`,
       nodeIds: unique(fragments.map((entry) => entry.id)),
     })
@@ -1728,7 +1728,7 @@ export function detectLinksWithoutDestination(
     violations.push({
       rule: 10,
       code: 'link-without-destination',
-      message: `${wordsOf(first)} goes nowhere. Give it the "screenId" of a screen the site has that does what its words say, or an "href" that is a path on this site or an https: address the brief gives.${instead}`,
+      message: `${wordsOf(first)} goes nowhere. Give it the "screenId" of a page the site has that does what its words say, or an "href" that is a path on this site or an https: address the brief gives.${instead}`,
       nodeIds: unique(dead.map((entry) => entry.id)),
     })
   }
@@ -2798,7 +2798,7 @@ export function detectPlanRepeats(
     violations.push({
       rule: 1,
       code: 'plan-section-across-screens',
-      message: `The "${entries[0].section.name}" section is planned on ${screens.size} screens. Plan it as one reusable component and place it on each.`,
+      message: `The "${entries[0].section.name}" section is planned on ${screens.size} pages. Plan it as one reusable component and place it on each.`,
       paths: entries.map((entry) => entry.path),
     })
   }
@@ -2945,10 +2945,10 @@ export function detectPlanLayoutRegions(
       rule: 2,
       code: 'plan-screen-without-layout',
       message: noLayoutToName
-        ? 'A screen names a layout the site does not have, and this job may not create one. Leave the layout empty.'
+        ? 'A page names a layout the site does not have, and this job may not create one. Leave the layout empty.'
         : mayCreateLayout
-          ? "A screen names no layout the site has or the plan creates. Put every screen in the site's layout, or plan one."
-          : 'A screen names no layout the site has, and this job may not create one. Put every screen in a layout the site has.',
+          ? "A page names no layout the site has or the plan creates. Put every page in the site's layout, or plan one."
+          : 'A page names no layout the site has, and this job may not create one. Put every page in a layout the site has.',
       paths: unlaid.map(({ index }) => `screens[${index}].layout`),
     })
   }
@@ -2960,7 +2960,7 @@ export function detectPlanLayoutRegions(
       rule: 2,
       code: 'plan-layout-region-section',
       message:
-        'A screen plans its own header, navigation or footer. Those live in the layout; take the section off the screen.',
+        'A page plans its own header, navigation or footer. Those live in the layout; take the section off the page.',
       paths: regions.map((entry) => entry.path),
     })
   }
@@ -2970,7 +2970,7 @@ export function detectPlanLayoutRegions(
       rule: 2,
       code: 'plan-layout-in-section',
       message:
-        "A section places a layout. A layout frames a whole screen and is never placed inside one: name it as the screen's layout, and take it out of the section's uses.",
+        "A section places a layout. A layout frames a whole page and is never placed inside one: name it as the page's layout, and take it out of the section's uses.",
       paths: placed,
     })
   }
@@ -3035,7 +3035,7 @@ export function detectUntemplatedSimilarPages(
     violations.push({
       rule: 4,
       code: 'plan-similar-pages',
-      message: `${indexes.length} screens share one shape. Plan one template and apply it ${indexes.length} times with each page's copy, or bind it to a collection.`,
+      message: `${indexes.length} pages share one shape. Plan one template and apply it ${indexes.length} times with each page's copy, or bind it to a collection.`,
       paths: indexes.map((index) => `screens[${index}].template`),
     })
   }
@@ -3045,7 +3045,7 @@ export function detectUntemplatedSimilarPages(
       rule: 4,
       code: 'plan-template-in-section',
       message:
-        "A section places a template. A template is applied to a whole screen and is never placed inside one: take it out of the section's uses, and name it as the screen's template only when the whole screen is built from it.",
+        "A section places a template. A template is applied to a whole page and is never placed inside one: take it out of the section's uses, and name it as the page's template only when the whole page is built from it.",
       paths: placed,
     })
   }
@@ -3205,17 +3205,17 @@ export function detectPlanUndeclaredCreations(
     const refused = capabilities ? aiPlanUncreatableKind(plan, kind, capabilities) : null
     const where = section
       ? `${section.name ? `The "${section.name}" section` : 'A section'} places a creation named "${first.name}", but the plan never creates it`
-      : `${screen.title ? `The screen "${screen.title}"` : 'A screen'} applies a template named "${first.name}", but the plan never creates it`
+      : `${screen.title ? `The page "${screen.title}"` : 'A page'} applies a template named "${first.name}", but the plan never creates it`
     let message: string
     if (!refused) {
       const otherwise = section
         ? `place ${aiCreationNoun(kind)} the site already has by its id`
-        : "leave the screen's template empty"
+        : "leave the page's template empty"
       message = `${where}. Declare it in create as ${aiCreationNoun(kind)}, with why nothing the site has will do, or ${otherwise}.`
     } else if (section) {
       message = `${where}, and ${refused.reason}. ${refused.instead} Take it out of the section's uses.`
     } else {
-      message = `${where}, and ${refused.reason}. Leave the screen's template empty, or apply a template the site already has.`
+      message = `${where}, and ${refused.reason}. Leave the page's template empty, or apply a template the site already has.`
     }
     return { rule: 7, code: 'plan-creation-undeclared', message, paths: refs.map((ref) => ref.path) }
   })
@@ -3309,7 +3309,7 @@ export function detectMissingNavAndSeo(
       rule: 10,
       code: 'plan-slug',
       message:
-        'A screen has no usable address. Give each one a slug of lowercase words joined by hyphens.',
+        'A page has no usable address. Give each one a slug of lowercase words joined by hyphens.',
       paths: badSlugs,
     })
   }
@@ -3318,7 +3318,7 @@ export function detectMissingNavAndSeo(
       rule: 10,
       code: 'plan-slug-taken',
       message:
-        'A screen reuses an address the site or the plan already uses. Give each screen its own slug.',
+        'A page reuses an address the site or the plan already uses. Give each page its own slug.',
       paths: collisions,
     })
   }
@@ -3326,7 +3326,7 @@ export function detectMissingNavAndSeo(
     violations.push({
       rule: 10,
       code: 'plan-seo',
-      message: `A screen is missing its search title or description, or runs past ${AI_SEO_TITLE_MAX} and ${AI_SEO_DESCRIPTION_MAX} characters. Write both for every screen.`,
+      message: `A page is missing its search title or description, or runs past ${AI_SEO_TITLE_MAX} and ${AI_SEO_DESCRIPTION_MAX} characters. Write both for every page.`,
       paths: seo,
     })
   }
@@ -3369,7 +3369,7 @@ export function detectMissedDuplicate(
       violations.push({
         rule: 15,
         code: 'plan-missed-duplicate',
-        message: `The site already has "${nearest.name}". Start the new screen from a duplicate of it, which keeps its bindings and SEO, and edit that.`,
+        message: `The site already has "${nearest.name}". Start the new page from a duplicate of it, which keeps its bindings and SEO, and edit that.`,
         paths: [`screens[${index}].duplicateOf`],
       })
     }

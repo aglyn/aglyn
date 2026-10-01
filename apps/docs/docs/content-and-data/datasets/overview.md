@@ -7,7 +7,7 @@ description: Model structured content with typed fields and relations, then bind
 # Datasets & Dynamic Content
 
 **Datasets** are your structured content: a typed **model** plus the **records** that fill
-it. Screens read from datasets to render dynamic, repeatable content, and
+it. Pages read from datasets to render dynamic, repeatable content, and
 [forms](../forms/overview.md) write new records back in.
 
 Datasets belong to your **organization**, not to a single site — every site in the
@@ -118,7 +118,7 @@ model real structures (posts ↔ authors, products ↔ categories).
 
 ## Query layer
 
-A **dataset query layer** powers both the editor and screen bindings, so the same data is
+A **dataset query layer** powers both the editor and page bindings, so the same data is
 available to design-time previews and the live site.
 
 ## Repeatable components

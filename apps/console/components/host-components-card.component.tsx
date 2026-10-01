@@ -787,7 +787,7 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
           : {
               noRowsLabel: 'No reusable components yet',
               noRowsDescription:
-                'A reusable component is a block you build once and drop onto any screen — a hero, a pricing table, a footer. Create one, or save one from the besigner.',
+                'A reusable component is a block you build once and drop onto any page — a hero, a pricing table, a footer. Create one, or save one from the Besigner.',
               noRowsAction:
                 onCreate || onBrowseTemplates ? (
                   <Stack direction="row" spacing={1}>

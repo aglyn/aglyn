@@ -88,7 +88,7 @@ export function registerEmailConsole(): void {
       label: 'Who received a template’s emails',
       surface: 'console',
       description:
-        'On one template’s page, under its report. A widget here lists the recipients of every send built from that template; it is handed the site and the template’s screen id.',
+        'On one template’s page, under its report. A widget here lists the recipients of every send built from that template; it is handed the site and the template’s id.',
     },
     { pluginId: BUNDLE_ID },
   )

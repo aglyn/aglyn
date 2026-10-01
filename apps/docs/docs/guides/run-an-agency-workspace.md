@@ -13,7 +13,7 @@ setup, in the order you'd actually do it.
 
 It's written for someone who has built one Aglyn site already. If you haven't, do
 [Build your first site](/learn/build-your-first-site) first — this page assumes you
-know what a screen and the besigner are.
+know what a page and the besigner are.
 
 ## The mental model, first {#the-model}
 
@@ -22,7 +22,7 @@ Three words, and getting them straight up front saves a lot of confusion later:
 | Term | What it is | For an agency |
 | --- | --- | --- |
 | **Organization** | The billing and identity boundary. Owns the plan, the invoice, the members, the shared library. | **You.** One organization for your agency. |
-| **Site** (or *host*) | One published website with its own screens, domain, media and store. | **One per client project.** |
+| **Site** (or *host*) | One published website with its own pages, domain, media and store. | **One per client project.** |
 | **Workspace** | What the console calls your organization when you're working in it. | Same thing as organization — you'll see both words. |
 
 The consequence that matters: **your plan's limits are per organization, and your
@@ -78,7 +78,7 @@ The single biggest saving in agency work is not rebuilding the same footer.
 Two more things worth doing once:
 
 - **[Reusable components](/building-sites/besigner/reusable-components)** for the
-  pieces you'll place on many screens within a site. Edit the component, every
+  pieces you'll place on many pages within a site. Edit the component, every
   instance updates.
 - **The [organization media library](/content-and-data/media/overview)** for assets
   shared across clients — your own logo, stock photography you've licensed, icon sets.

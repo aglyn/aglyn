@@ -15,7 +15,7 @@ typed dataset you can filter, search, and export.
 
 ```mermaid
 flowchart LR
-  DS["Dataset<br/>(typed schema)"] --> Screen["Survey screen<br/>(Form + fields)"]
+  DS["Dataset<br/>(typed schema)"] --> Screen["Survey page<br/>(Form + fields)"]
   Screen --> Publish["Publish<br/>(slug /survey)"]
   Publish --> Visitor["Visitor submits"]
   Visitor --> Records[(Records on the<br/>Data page)]
@@ -66,16 +66,16 @@ disagree with its field's type. See the [datasets deep-dive](datasets-and-schema
 for the full type system.
 :::
 
-## 2. Add a screen for the survey
+## 2. Add a page for the survey {#2-add-a-screen-for-the-survey}
 
-1. Go to **Screens** and choose **New screen**.
+1. Go to **Pages** and choose **New page**.
 2. Title it `Survey` and give it the slug `survey` — that becomes its public
    URL path (`https://your-site/survey`).
 3. Open it in the **Besigner**.
 
 ## 3. Insert a Form from the element picker
 
-With the screen open, add the form:
+With the page open, add the form:
 
 1. In the Elements panel choose **Add Element** (or right-click a node and pick
    **Add element**). The **Choose element** picker opens, grouped by category.
@@ -116,7 +116,7 @@ For this survey:
    Visitors can tick several; the submission joins them with `, `.
 4. `comments` — Type **Multiline** for free-form feedback.
 
-![The survey screen in the Besigner with the Form selected and the properties panel showing Form name, Write to dataset, Submit label, and Success message](/img/guides/survey-besigner-form.png)
+![The survey page in the Besigner with the Form selected and the properties panel showing Form name, Write to dataset, Submit label, and Success message](/img/guides/survey-besigner-form.png)
 
 ## 5. Point the form at the dataset
 
@@ -145,7 +145,7 @@ above and clear it.
 ## 6. Publish
 
 Click **Publish** in the Besigner's top-right (it flips to **Unpublish** once
-live). If the screen has no URL path yet you're prompted to set one first. The
+live). If the page has no URL path yet you're prompted to set one first. The
 survey is now served at `/survey` on your site's domain.
 
 ![The published survey on the live site: star rating, radio choices, checkboxes, and a comments box above the submit button](/img/guides/survey-live-form.png)
@@ -172,7 +172,7 @@ Export everything with the **CSV** / **JSON** buttons.
 :::tip Chart it
 Bind a container's **Repeat over dataset** to `Survey responses` and reference
 `{{item.satisfaction}}` inside it to render responses back onto a
-(members-only?) results screen. The [deep-dive](datasets-and-schema.md#repeatables)
+(members-only?) results page. The [deep-dive](datasets-and-schema.md#repeatables)
 covers repeatables.
 :::
 
@@ -180,5 +180,5 @@ covers repeatables.
 
 - [Datasets & schema deep-dive](datasets-and-schema.md)
 - [Forms & lead capture](../content-and-data/forms/overview.md)
-- [Publish your first screen](../getting-started/publish-your-first-screen.md)
+- [Publish your first page](../getting-started/publish-your-first-screen.md)
 - [Workflows & actions](../marketing-and-automation/workflows-and-actions/overview.md)

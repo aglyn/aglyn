@@ -67,7 +67,7 @@ beforeEach(() => {
 it('opens with the default name and the copies sentence for the kind', () => {
   render(<Surface />)
   fireEvent.click(screen.getByRole('button', { name: 'Duplicate…' }))
-  expect(screen.getByRole('dialog', { name: 'Duplicate screen' })).toBeTruthy()
+  expect(screen.getByRole('dialog', { name: 'Duplicate page' })).toBeTruthy()
   expect((screen.getByLabelText('Name') as HTMLInputElement).value).toBe('Copy of Home')
   for (const line of DUPLICATE_COPIES.screen) {
     expect(screen.getByText(line)).toBeTruthy()
@@ -102,11 +102,11 @@ it('posts one duplicate with the typed name and an attempt key, then reports the
 })
 
 it('shows a refusal in place and keeps the dialog open; a new open mints a new key', async () => {
-  answer(403, { error: 'Your plan includes 5 screens — upgrade in Billing for more' })
+  answer(403, { error: 'Your plan includes 5 pages — upgrade in Billing for more' })
   render(<Surface />)
   fireEvent.click(screen.getByRole('button', { name: 'Duplicate…' }))
   fireEvent.click(screen.getByRole('button', { name: 'Duplicate' }))
-  await screen.findByText('Your plan includes 5 screens — upgrade in Billing for more')
+  await screen.findByText('Your plan includes 5 pages — upgrade in Billing for more')
   expect(screen.getByRole('dialog')).toBeTruthy()
   const firstKey = postedBody(0).attemptKey
 

@@ -21,8 +21,8 @@ your sites across the workspace:
 | Group | What a row is | Where clicking it goes |
 | --- | --- | --- |
 | Sites | A site you belong to in this workspace | The site dashboard |
-| Pages | A screen on the open site | The screen's version view |
-| Emails | An email screen on the open site | The email in the Besigner |
+| Pages | A page on the open site | The page's version view |
+| Emails | A designed email on the open site | The email in the Besigner |
 | Components | A reusable component | The component page |
 | Layouts | A shared layout | The layout page |
 | Templates | A site template | The template page |

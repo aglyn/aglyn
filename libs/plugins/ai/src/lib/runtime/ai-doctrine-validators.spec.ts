@@ -930,7 +930,7 @@ describe('rule 10 — a link goes to a screen that does what its words say, or i
         rule: 10,
         code: 'link-unrelated-screen',
         message:
-          '"Request a Consultation" links the home page, which does not do what its words say. Link the screen that does, or leave the link out when the site has none.',
+          '"Request a Consultation" links the home page, which does not do what its words say. Link the page that does, or leave the link out when the site has none.',
         nodeIds: ['n2'],
       },
     ])
@@ -964,13 +964,13 @@ describe('rule 10 — a link that goes nowhere (AGL-3072)', () => {
         rule: 10,
         code: 'link-without-destination',
         message:
-          '"Request a Consultation" goes nowhere. Give it the "screenId" of a screen the site has that does what its words say, or an "href" that is a path on this site or an https: address the brief gives. When the site has no page for it, take it out: a form on this page is sent by its own button, and no element can be reached by an anchor.',
+          '"Request a Consultation" goes nowhere. Give it the "screenId" of a page the site has that does what its words say, or an "href" that is a path on this site or an https: address the brief gives. When the site has no page for it, take it out: a form on this page is sent by its own button, and no element can be reached by an anchor.',
         nodeIds: ['n2'],
       },
     ])
     const unlabeled = { componentId: 'muiScreenLink', props: { renderAs: 'link' } }
     expect(detectLinksWithoutDestination(tree(page(section(unlabeled))), 'layout')).toMatchObject([
-      { code: 'link-without-destination', message: expect.stringMatching(/^A Screen Link goes nowhere\./), nodeIds: ['n2'] },
+      { code: 'link-without-destination', message: expect.stringMatching(/^A Page Link goes nowhere\./), nodeIds: ['n2'] },
     ])
   })
 
@@ -1012,7 +1012,7 @@ describe('rule 10 — a link that goes nowhere (AGL-3072)', () => {
       {
         code: 'link-fragment',
         message:
-          '"Request a Consultation" links "#consultation", an anchor, and no element on a page carries an id an anchor could name, so it goes nowhere. Give it the "screenId" of a screen the site has that does what its words say, or an "href" that is a path on this site or an https: address the brief gives, or take it out.',
+          '"Request a Consultation" links "#consultation", an anchor, and no element on a page carries an id an anchor could name, so it goes nowhere. Give it the "screenId" of a page the site has that does what its words say, or an "href" that is a path on this site or an https: address the brief gives, or take it out.',
         nodeIds: [Object.keys(report.tree?.sourceIds ?? {}).find((id) => report.tree?.sourceIds[id] === 'n3')],
       },
     ])
@@ -1051,7 +1051,7 @@ describe('rule 10 — a link to a section of its own page (AGL-3097)', () => {
     expect(found({ href: '#contact' })).toEqual([
       {
         code: 'link-fragment',
-        message: `"Request a Consultation" links "#contact", an anchor, and no element on a page carries an id an anchor could name, so it goes nowhere. To take a visitor to a section of this page, set "scrollTo" to that section's name in the plan: ${LISTED}. Otherwise give it the "screenId" of a screen the site has that does what its words say, or take it out.`,
+        message: `"Request a Consultation" links "#contact", an anchor, and no element on a page carries an id an anchor could name, so it goes nowhere. To take a visitor to a section of this page, set "scrollTo" to that section's name in the plan: ${LISTED}. Otherwise give it the "screenId" of a page the site has that does what its words say, or take it out.`,
       },
     ])
     // A scrollTo that names a section is read before an anchor that names none, and one that names none is the fault.
@@ -1062,7 +1062,7 @@ describe('rule 10 — a link to a section of its own page (AGL-3097)', () => {
     expect(found({})).toEqual([
       {
         code: 'link-without-destination',
-        message: `"Request a Consultation" goes nowhere. Give it the "screenId" of a screen the site has that does what its words say, or an "href" that is a path on this site or an https: address the brief gives. To take a visitor to a section of this page, set "scrollTo" to that section's name in the plan: ${LISTED}. When none of these fits, take it out.`,
+        message: `"Request a Consultation" goes nowhere. Give it the "screenId" of a page the site has that does what its words say, or an "href" that is a path on this site or an https: address the brief gives. To take a visitor to a section of this page, set "scrollTo" to that section's name in the plan: ${LISTED}. When none of these fits, take it out.`,
       },
     ])
     // With no plan to name sections, a scrollTo goes nowhere, and says nothing of sections.
@@ -1883,7 +1883,7 @@ describe('what a plan places, it reuses or creates (AGL-3040)', () => {
         rule: 2,
         code: 'plan-layout-in-section',
         message:
-          "A section places a layout. A layout frames a whole screen and is never placed inside one: name it as the screen's layout, and take it out of the section's uses.",
+          "A section places a layout. A layout frames a whole page and is never placed inside one: name it as the page's layout, and take it out of the section's uses.",
         paths: ['screens[0].sections[0].uses[0]', 'screens[0].sections[1].uses[1]'],
       },
     ])
@@ -1898,7 +1898,7 @@ describe('what a plan places, it reuses or creates (AGL-3040)', () => {
         rule: 2,
         code: 'plan-screen-without-layout',
         message:
-          'A screen names no layout the site has, and this job may not create one. Put every screen in a layout the site has.',
+          'A page names no layout the site has, and this job may not create one. Put every page in a layout the site has.',
         paths: ['screens[0].layout'],
       },
     ])
@@ -1914,7 +1914,7 @@ describe('what a plan places, it reuses or creates (AGL-3040)', () => {
         rule: 4,
         code: 'plan-template-in-section',
         message:
-          "A section places a template. A template is applied to a whole screen and is never placed inside one: take it out of the section's uses, and name it as the screen's template only when the whole screen is built from it.",
+          "A section places a template. A template is applied to a whole page and is never placed inside one: take it out of the section's uses, and name it as the page's template only when the whole page is built from it.",
         paths: ['screens[0].sections[0].uses[0]'],
       },
     ])
@@ -2017,12 +2017,12 @@ describe('what a plan places, it reuses or creates (AGL-3040)', () => {
         rule: 7,
         code: 'plan-creation-undeclared',
         message:
-          'The screen "Roof repair" applies a template named "Service page", but the plan never creates it, and a page job does not build one. Leave the screen\'s template empty, or apply a template the site already has.',
+          'The page "Roof repair" applies a template named "Service page", but the plan never creates it, and a page job does not build one. Leave the page\'s template empty, or apply a template the site already has.',
         paths: ['screens[0].template'],
       },
     ])
     expect(detectPlanUndeclaredCreations(plan, INVENTORY)[0].message).toBe(
-      'The screen "Roof repair" applies a template named "Service page", but the plan never creates it. Declare it in create as a template, with why nothing the site has will do, or leave the screen\'s template empty.',
+      'The page "Roof repair" applies a template named "Service page", but the plan never creates it. Declare it in create as a template, with why nothing the site has will do, or leave the page\'s template empty.',
     )
   })
 
@@ -2071,7 +2071,7 @@ describe('what a plan places, it reuses or creates (AGL-3040)', () => {
           rule: 2,
           code: 'plan-layout-in-section',
           message:
-            "A section places a layout. A layout frames a whole screen and is never placed inside one: name it as the screen's layout, and take it out of the section's uses.",
+            "A section places a layout. A layout frames a whole page and is never placed inside one: name it as the page's layout, and take it out of the section's uses.",
           paths: ['screens[0].sections[0].uses[0]'],
         },
         {

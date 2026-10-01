@@ -204,7 +204,7 @@ export function StaffUserDeviceSessionsCard({
       {lookupFailed ? (
         <Alert severity="warning">
           {
-            'The device registry could not be read. This is NOT the same as "no other devices" — do not tell anyone their account is clean from this screen until it loads.'
+            'The device registry could not be read. This is NOT the same as "no other devices" — do not tell anyone their account is clean from this page until it loads.'
           }
         </Alert>
       ) : rows.length === 0 ? (

@@ -308,7 +308,7 @@ function heldPagePayload(data: Record<string, unknown>) {
   const screenId = asString(held['screenId'])
   const versionId = asString(held['versionId'])
   return {
-    label: `screen ${screenId ?? 'unknown'}`,
+    label: `page ${screenId ?? 'unknown'}`,
     kind: null,
     route: null,
     url: asString(held['url']),

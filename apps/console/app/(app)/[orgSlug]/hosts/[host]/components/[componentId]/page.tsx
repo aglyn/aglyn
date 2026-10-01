@@ -383,7 +383,7 @@ const ComponentDetails: NextPageWithLayout<Record<string, never>> = () => {
           header={'Details'}
           help={docsHelp('components', {
             excerpt:
-              'A reusable component: build it once, drop it on any screen, ' +
+              'A reusable component: build it once, drop it on any page, ' +
               'and every instance updates when you publish a new version.',
           })}
           contentGutterX
@@ -413,7 +413,7 @@ const ComponentDetails: NextPageWithLayout<Record<string, never>> = () => {
               helperText="Marks every instance of this component in the besigner"
             />
             <Typography variant="caption" color="text.secondary">
-              {`ID ${componentId} — persisted in screen documents, so it never changes`}
+              {`ID ${componentId} — persisted in page documents, so it never changes`}
             </Typography>
             {/* Save stays with the fields it saves. Open-besigner moved to
                 the hero, and "Back to components" is dropped — the
@@ -441,7 +441,7 @@ const ComponentDetails: NextPageWithLayout<Record<string, never>> = () => {
           help={docsHelp('components', {
             anchor: '#save-then-publish',
             excerpt:
-              'Publishing a component version updates every screen using it. ' +
+              'Publishing a component version updates every page using it. ' +
               'Saving does not — a save is not a publish.',
           })} contentGutterX contentGutterY>
           {versions.length === 0 ? (

@@ -63,7 +63,7 @@ answer with a plain notice instead:
 
 Three things are true about that page and are worth knowing before you see it:
 
-- **Nothing is deleted.** Your screens, media, datasets and settings are untouched. The
+- **Nothing is deleted.** Your pages, media, datasets and settings are untouched. The
   console keeps working normally — only the *public* site is paused.
 - **It clears itself.** The pause is stamped with the month it belongs to. When the month
   turns over it stops applying, with no action from you and nothing to un-set.
@@ -161,7 +161,7 @@ stretch the allowance further, for the same reason: if you want more views, the 
 plan's band, not the page.
 
 Page views are read from the per-host `analytics/{YYYY-MM-DD}` documents that already
-exist for the Analytics screens — evaluating a cap adds no Firestore reads to the serving
+exist for the Analytics pages — evaluating a cap adds no Firestore reads to the serving
 path.
 
 ### The two mechanisms

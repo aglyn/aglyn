@@ -88,7 +88,7 @@ a **source site**, then what to publish:
   datasets. **Records are never published** — only the structure travels.
 - **An email template** — a transactional email you've designed for that site
   (only emails that already have a saved design are offered).
-- **This entire site** — its published screens and theme, as an installable
+- **This entire site** — its published pages and theme, as an installable
   template.
 
 Dataset schemas are the one exception to the source-site picker: datasets

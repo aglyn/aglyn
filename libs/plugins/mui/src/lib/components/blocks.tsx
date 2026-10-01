@@ -635,7 +635,7 @@ export const blockPresets: Aglyn.PresetSchema[] = [
     type: Aglyn.NodeType.PRESET,
     displayName: 'Nav Bar',
     pluginId: BUNDLE_ID,
-    description: 'Header bar with brand text and screen links',
+    description: 'Header bar with brand text and page links',
     category: Aglyn.ComponentCategory.BLOCKS,
     icon: { path: mdiPageLayoutHeader.path, sx: { color: '#1976d2' } },
     data: {

@@ -207,7 +207,7 @@ export const AI_DRAFT_BANDS: Readonly<Record<AiDraftKind, AiDraftBand>> = {
     entitlement: 'reusableComponents',
     label: 'reusable components',
   },
-  screen: { collection: 'screens', quotaKey: 'screensPerHost', label: 'screens' },
+  screen: { collection: 'screens', quotaKey: 'screensPerHost', label: 'pages' },
 }
 
 interface SiblingRow {

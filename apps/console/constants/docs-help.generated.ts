@@ -291,7 +291,7 @@ export const DOCS_HELP_TOPICS = {
   },
   errorScreens: {
     path: '/building-sites/site-protection/error-screens',
-    title: 'Design custom error screens',
+    title: 'Design custom error pages',
   },
   events: {
     path: '/content-and-data/events/overview',
@@ -483,7 +483,7 @@ export const DOCS_HELP_TOPICS = {
   },
   passwordAScreen: {
     path: '/building-sites/site-protection/password-a-screen',
-    title: 'Password-protect a screen',
+    title: 'Password-protect a page',
   },
   platformHealth: {
     path: '/staff-console/platform-health',
@@ -519,7 +519,7 @@ export const DOCS_HELP_TOPICS = {
   },
   publishYourFirstScreen: {
     path: '/getting-started/publish-your-first-screen',
-    title: 'Publish your first screen',
+    title: 'Publish your first page',
   },
   realmBundles: {
     path: '/developers/plugins/guides/realm-bundles',
@@ -575,11 +575,11 @@ export const DOCS_HELP_TOPICS = {
   },
   screens: {
     path: '/building-sites/screens-and-layouts/screens',
-    title: 'Screens',
+    title: 'Pages',
   },
   screensAndLayouts: {
     path: '/building-sites/screens-and-layouts/overview',
-    title: 'Screens & Layouts',
+    title: 'Pages & Layouts',
   },
   securityAndCompliance: {
     path: '/enterprise/security-and-compliance',
@@ -880,7 +880,7 @@ export const DOCS_HELP_ANCHORS = {
   tasks: ['#the-tasks-page', '#the-calendar-view', '#snoozing-a-task', '#selecting-exporting-and-acting-on-many', '#import-from-csv', '#creating-a-task', '#assigning-a-task-to-someone-else', '#completing-and-reopening', '#organization-tasks', '#tasks-on-a-contact-company-or-deal', '#reminders', '#turning-reminders-off', '#next-activity', '#the-daily-digest', '#turning-it-off', '#the-dashboard-card', '#who-can-do-what', '#related'],
   team: ['#team-roles', '#organizations', '#three-kinds-of-user', '#site-roles', '#site-collaborators', '#collaborator-ai-access', '#what-a-site-collaborator-sees', '#site-membership', '#visitor-record-ceiling', '#seats', '#related'],
   templatesLibrary: ['#the-three-kinds', '#installing-from-the-marketplace', '#saving-something-as-a-template', '#using-a-template', '#generate-a-page-template-with-aglyn-ai', '#where-a-template-came-from', '#first-party-starters', '#templates-are-per-site', '#duplicating', '#deleting', '#related'],
-  termReference: ['#platform--accounts', '#aglyn', '#aglyn-ai', '#aglyn-assist', '#organization-org', '#workspace', '#tenant', '#host', '#site', '#console', '#staff-console', '#member', '#custom-role', '#publisher', '#sites--content', '#screen', '#layout', '#slug', '#version', '#redirect', '#error-screens', '#maintenance-mode', '#locale', '#site-template', '#theme', '#custom-domain', '#subdomain', '#the-node-tree', '#node', '#tree', '#tree-root', '#trunk', '#stem', '#branch', '#leaf', '#component', '#component-bundle', '#preset', '#reusable-component', '#lineal-placement-rules', '#besigner-the-editor', '#besigner', '#canvas', '#hierarchy-panel', '#drawer', '#binding', '#plugins--marketplace', '#plugin', '#add-on', '#surface', '#console-extension', '#widget', '#injection-zone', '#plugin-manifest', '#enabled-plugins', '#feature-flag', '#release-flag', '#plugin-config', '#plugin-permission', '#plugin-job', '#listing', '#install', '#realm-bundle', '#sandbox', '#host-abi', '#review-queue', '#data--logic', '#dataset', '#record', '#field', '#relation', '#contact', '#segment', '#media-library', '#variable', '#function-fx', '#form', '#automation--marketing', '#event', '#workflow', '#action', '#automation', '#overlay', '#experiment', '#email-campaign', '#designed-email', '#merge-tag', '#commerce', '#product', '#order', '#pos', '#booking', '#billing--plans', '#plan', '#entitlement', '#quota', '#seat', '#metered-usage', '#credit-ai-credit', '#allotment'],
+  termReference: ['#platform--accounts', '#aglyn', '#aglyn-ai', '#aglyn-assist', '#organization-org', '#workspace', '#tenant', '#host', '#site', '#console', '#staff-console', '#member', '#custom-role', '#publisher', '#sites--content', '#page', '#screen', '#layout', '#slug', '#version', '#redirect', '#error-screens', '#maintenance-mode', '#locale', '#site-template', '#theme', '#custom-domain', '#subdomain', '#the-node-tree', '#node', '#tree', '#tree-root', '#trunk', '#stem', '#branch', '#leaf', '#component', '#component-bundle', '#preset', '#reusable-component', '#lineal-placement-rules', '#besigner-the-editor', '#besigner', '#canvas', '#hierarchy-panel', '#drawer', '#binding', '#plugins--marketplace', '#plugin', '#add-on', '#surface', '#console-extension', '#widget', '#injection-zone', '#plugin-manifest', '#enabled-plugins', '#feature-flag', '#release-flag', '#plugin-config', '#plugin-permission', '#plugin-job', '#listing', '#install', '#realm-bundle', '#sandbox', '#host-abi', '#review-queue', '#data--logic', '#dataset', '#record', '#field', '#relation', '#contact', '#segment', '#media-library', '#variable', '#function-fx', '#form', '#automation--marketing', '#event', '#workflow', '#action', '#automation', '#overlay', '#experiment', '#email-campaign', '#designed-email', '#merge-tag', '#commerce', '#product', '#order', '#pos', '#booking', '#billing--plans', '#plan', '#entitlement', '#quota', '#seat', '#metered-usage', '#credit-ai-credit', '#allotment'],
   textEditing: ['#edit-inline', '#committing', '#inline-toolbar', '#rich-text', '#the-text-attribute', '#text-field-read-only', '#remove-formatting', '#line-breaks', '#bindings-in-text', '#limits', '#wrapped-outlines', '#related'],
   themeAssist: ['#change-what-you-describe-or-design-a-new-theme', '#match-your-brand', '#review-the-proposal', '#save-it-or-dont', '#who-can-use-it', '#related'],
   themeBuilder: ['#edit-your-theme', '#related'],

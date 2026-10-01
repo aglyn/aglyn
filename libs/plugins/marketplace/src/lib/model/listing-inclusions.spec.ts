@@ -32,7 +32,7 @@ const labels = (listing: Parameters<typeof listingInclusions>[0], options = {}) 
 describe('listingInclusions', () => {
   it('leads with what the install actually produces', () => {
     expect(labels({ artifactType: 'template' })[0]).toBe(
-      'Editable screens you can rework in Besigner',
+      'Editable pages you can rework in Besigner',
     )
     expect(labels({ artifactType: 'datasetSchema' })[0]).toContain(
       'new empty dataset',

@@ -459,7 +459,7 @@ describe('the bound: four slots, four exemptions (AGL-2092)', () => {
     // its `kind: 'error'` (clearing is free, by design).
     const fifth = await assign('notFound', 's5')
     expect(fifth.status).toBe(403)
-    expect(fifth.body.error).toContain('already has 4 error screens')
+    expect(fifth.body.error).toContain('already has 4 error pages')
     expect(kindOf('s5')).toBe('page')
   })
 

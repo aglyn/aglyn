@@ -31,7 +31,7 @@ description: The plugin manifest schema, the marketplace listing/version documen
       "slots": ["hostActivity"],  // widget slots and panels it fills
       "routes": [],               // site-level console routes it serves
       "orgRoutes": [],            // organization-level routes
-      "shell": false              // a nav tab or provider on every screen
+      "shell": false              // a nav tab or provider on every page
     }
   },
   "restrictParent": [],       // besigner lineal rules
@@ -57,15 +57,15 @@ events.
 
 A plugin loads only where something uses it. Installing one loads nothing:
 the platform reads `contributes` to decide which published pages and which
-console screens fetch your bundle, and it never runs your code to find out.
+console pages fetch your bundle, and it never runs your code to find out.
 
 | Key | What it declares | Where the plugin then loads |
 | --- | --- | --- |
 | `site.components` | The canvas component ids `register()` registers | A published page whose node tree places one of them, and the Besigner for every site that runs the plugin |
 | `site.features` | The `runtimeId` of each site runtime it mounts | Every page of a site that has the plugin switched on, and the Besigner for that site |
-| `console.slots` | The widget slots it fills, including the panels the shell draws as slots (`consoleDock`, `besignerInspector`) | A console screen that renders one of those slots |
-| `console.routes` / `console.orgRoutes` | The console routes its pages serve (`/my-plugin`) | The screens under those routes |
-| `console.shell` | It adds a nav tab, a provider or a staff page, which the shell draws on every screen | Every screen of the workspace |
+| `console.slots` | The widget slots it fills, including the panels the shell draws as slots (`consoleDock`, `besignerInspector`) | A console page that renders one of those slots |
+| `console.routes` / `console.orgRoutes` | The console routes its pages serve (`/my-plugin`) | The pages under those routes |
+| `console.shell` | It adds a nav tab, a provider or a staff page, which the shell draws on every page | Every page of the workspace |
 
 The Besigner loads a plugin that declares either `site` key for every site
 that runs it, whether or not the page open places one of its elements. That
@@ -106,7 +106,7 @@ The declaration is the whole contract, so it has to be complete:
   and the publish API read what `register()` registers (a widget's `slot`, a
   nav item's `href`, a runtime's `runtimeId`, a component's `$id`) and refuse
   a registration the declaration omits: a slot you forget to declare is a
-  slot whose screens never load your plugin.
+  slot whose pages never load your plugin.
 - **A new version must declare.** A bundle whose `register()` registers
   anything and whose manifest has no `contributes` fails publishing, with the
   declaration the verifier read printed for you to paste. Write the values
@@ -127,7 +127,7 @@ renders your `render()` entry in an iframe wherever an author places it, and
 the frame fetches your bundle, never the page, so it needs no `contributes`
 entry.
 
-### `config` — settings without writing a settings screen
+### `config` — settings without writing a settings page {#config--settings-without-writing-a-settings-screen}
 
 A first-party plugin registers its settings schema by calling
 `registerPluginConfigSchema` at module scope. Your bundle cannot: it runs

@@ -182,7 +182,7 @@ describe('collectionTemplatePublishMessage (AGL-1269)', () => {
     expect(
       collectionTemplatePublishMessage(undefined, { isTemplateScreen: true }),
     ).toBe(
-      'Published — this screen is a collection template, so it is not ' +
+      'Published — this is a collection template, so it is not ' +
         'served at a path of its own',
     )
   })

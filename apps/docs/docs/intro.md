@@ -43,7 +43,7 @@ first syllable (IPA `/ˈæɡlɪn/`).
 <div className="home-grid">
   <a className="home-card" href="/building-sites">
     <div className="home-card__title">Building sites</div>
-    <p className="home-card__desc">The Besigner, screens and layouts, theming, bindings, SEO, protection, redirects, and domains.</p>
+    <p className="home-card__desc">The Besigner, pages and layouts, theming, bindings, SEO, protection, redirects, and domains.</p>
   </a>
   <a className="home-card" href="/content-and-data">
     <div className="home-card__title">Content &amp; data</div>
@@ -74,7 +74,7 @@ product clicks into place.
 
 ```mermaid
 flowchart TD
-  H[Site — your website] --> S[Screens]
+  H[Site — your website] --> S[Pages]
   H --> L[Layouts]
   H --> D[Data: datasets]
   H --> G[Logic: variables, functions]
@@ -88,13 +88,13 @@ flowchart TD
 
 | Concept | What it is |
 | --- | --- |
-| **Site** | Your website — its screens, theme, data, domain, and settings. You can own more than one. |
-| **Screen** | A page. Screens have a URL slug, live in a hierarchy, and are edited in the Besigner. |
-| **Layout** | A shared frame (header/footer/nav) that many screens render inside via a layout **slot**. |
+| **Site** | Your website — its pages, theme, data, domain, and settings. You can own more than one. |
+| **Page** | One page of your site. Pages have a URL slug, live in a hierarchy, and are edited in the Besigner. |
+| **Layout** | A shared frame (header/footer/nav) that many pages render inside via a layout **slot**. |
 | **Besigner** | The visual editor. Drag components onto a canvas, arrange a hierarchy, and edit text inline. |
 | **Component** | A building block on the canvas (Button, Image, Video, Form, and more). Can be made **reusable**. |
 | **Binding** | A live reference in a text prop — `{'{{variable}}'}`, `{'{{fn:name(args)}}'}`, or a dataset field — resolved at render time. |
-| **Dataset** | Structured content (a typed model with records) that screens read from and forms write to. |
+| **Dataset** | Structured content (a typed model with records) that pages read from and forms write to. |
 | **Plan & entitlements** | Your subscription tier gates features and quotas (Free, Pro, Business). |
 
 :::info Plan availability

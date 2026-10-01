@@ -39,7 +39,7 @@
       ],
       "items": [],
       "image": {
-        "describe": "AI jobs panel mockup, 920×580, floating card with the hero shadow. Header 'AI jobs' with a close glyph and a job chip 'Needs review'. The job at the top reads 'Describe a page' with the brief beneath it in quotes: 'A services page for a two-person landscaping company — what we do, before-and-after photos, and a quote request form.' Below it the PLAN, in three labeled groups. 'Reuse' lists three rows with a recycle glyph: Layout · Site header & footer; Component · Service card; Form · Quote request. 'Create' lists two rows with a plus glyph: Section · Before and after, because the site has no gallery component; Dataset · Services, proposed from the six services in the brief. 'Screens' lists one row: /services · Site header & footer · 'Landscaping services in Ashford'. Bottom bar: an estimate chip reading 'Estimated · 1,850 credits', a text button 'Cancel' and a primary button 'Confirm plan'. Right of the panel, a second, smaller card labeled 'Draft · not published' showing a page thumbnail with an 'Open draft' link and a small amber row reading '1 gap to fill: [phone number]'.",
+        "describe": "AI jobs panel mockup, 920×580, floating card with the hero shadow. Header 'AI jobs' with a close glyph and a job chip 'Needs review'. The job at the top reads 'Describe a page' with the brief beneath it in quotes: 'A services page for a two-person landscaping company — what we do, before-and-after photos, and a quote request form.' Below it the PLAN, in three labeled groups. 'Reuse' lists three rows with a recycle glyph: Layout · Site header & footer; Component · Service card; Form · Quote request. 'Create' lists two rows with a plus glyph: Section · Before and after, because the site has no gallery component; Dataset · Services, proposed from the six services in the brief. 'Pages' lists one row: /services · Site header & footer · 'Landscaping services in Ashford'. Bottom bar: an estimate chip reading 'Estimated · 1,850 credits', a text button 'Cancel' and a primary button 'Confirm plan'. Right of the panel, a second, smaller card labeled 'Draft · not published' showing a page thumbnail with an 'Open draft' link and a small amber row reading '1 gap to fill: [phone number]'.",
         "figmaNodeId": null
       },
       "notes": "Two columns: 600px text column left (80px left inset, no right padding), mockup right, bleeding off the right edge — the deliberate container-overflow exception the skeleton records. Eyebrow is the 28×2px magenta rule plus the uppercase tracked label. Heading is Display/XL 72px Black and fits three short sentences on two lines at that size. ⛔ The mockup is the page's one chance to show the draft-first rule without prose, so it must show a PLAN awaiting confirmation and a DRAFT that is not published — never a published page, never a live URL, never a Send button. The credits figure is illustrative and is flagged in `claimsToVerify`; it carries no dollar amount, and no plan tier or price may appear anywhere in this shot. The '1 gap to fill' row is building rule 14 (`apps/docs/docs/ai/how-aglyn-ai-builds.md`), which marks a missing fact in square brackets rather than inventing it."
@@ -67,7 +67,7 @@
       "items": [
         {
           "title": "Pages, and whole small sites",
-          "body": "Describe a page and it builds a screen in your layout. Describe a business and it plans a small site — the pages, their addresses, a shared layout and a contact form — before it builds anything.",
+          "body": "Describe a page and it builds one in your layout. Describe a business and it plans a small site — the pages, their addresses, a shared layout and a contact form — before it builds anything.",
           "meta": null
         },
         {
@@ -112,7 +112,7 @@
       "items": [
         {
           "title": "A plan before any work",
-          "body": "Each build job first proposes what it will reuse, what it will create and why, and what each screen will hold. Nothing is generated until you confirm it.",
+          "body": "Each build job first proposes what it will reuse, what it will create and why, and what each page will hold. Nothing is generated until you confirm it.",
           "meta": null
         },
         {
@@ -127,7 +127,7 @@
         }
       ],
       "image": {
-        "describe": "Besigner canvas mockup, 768×580, showing a generated page open as a draft. Top bar carries the screen name 'Services', a grey status pill reading 'Draft · never published', and a primary 'Publish' button that is the only way it goes live. Left rail shows the layer tree with a highlighted 'Service card' component instance repeated three times — one component, three instances, not three copies. Right rail shows the Attributes panel with theme tokens selected rather than hex values ('Primary', 'Spacing 4'). Across the canvas, a services section with three cards and a quote form block labeled 'Quote request · placed by reference'. Bottom-left, a small toast: 'Draft created. Nothing on your live site has changed.'",
+        "describe": "Besigner canvas mockup, 768×580, showing a generated page open as a draft. Top bar carries the page name 'Services', a grey status pill reading 'Draft · never published', and a primary 'Publish' button that is the only way it goes live. Left rail shows the layer tree with a highlighted 'Service card' component instance repeated three times — one component, three instances, not three copies. Right rail shows the Attributes panel with theme tokens selected rather than hex values ('Primary', 'Spacing 4'). Across the canvas, a services section with three cards and a quote form block labeled 'Quote request · placed by reference'. Bottom-left, a small toast: 'Draft created. Nothing on your live site has changed.'",
         "figmaNodeId": null
       },
       "notes": "Combined deep-dive + canvas/visual section — the page's one big visual moment. Two columns: 440px text column left, 768px mockup right, on the tinted band. The three items are checkmark-bulleted rows, not cards. This section carries the single most load-bearing true claim on the page, so its body is close to verbatim from `apps/docs/docs/ai/overview.md#drafts-only` and building rule 13 — the four nevers are the ones the product actually enforces, and no one of them may be softened or dropped for rhythm. Item three does three jobs. 'Costs the credits it spent and a draft you delete' is the abandon case. 'A proposal fills in the fields you would have typed — it never starts a test or moves a visitor' is the A/B door stated as its code states it: the variants widget writes into the experiment editor's own fields, unsaved, and the dialog's Save is the only write (`libs/plugins/marketing/src/lib/components/experiment-zones.tsx`). And 'simply read what you have' is exactly what Explain it and Why did this fail? do, neither of which drafts nor runs anything."
@@ -143,12 +143,12 @@
       "items": [
         {
           "title": "Describe it",
-          "body": "Open the page that lists what you want built — Screens, Layouts, Templates, Forms or Components — and choose Describe it beside its create button.",
+          "body": "Open the page that lists what you want built — Pages, Layouts, Templates, Forms or Components — and choose Describe it beside its create button.",
           "meta": "01"
         },
         {
           "title": "Read the plan",
-          "body": "The job answers with a plan: what it will reuse, what it will create and why, and the screens it will build. Confirm it to build, or cancel and pay nothing more.",
+          "body": "The job answers with a plan: what it will reuse, what it will create and why, and the pages it will build. Confirm it to build, or cancel and pay nothing more.",
           "meta": "02"
         },
         {
