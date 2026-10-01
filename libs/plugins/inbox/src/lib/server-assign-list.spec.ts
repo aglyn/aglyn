@@ -52,6 +52,7 @@ jest.mock('firebase-admin/firestore', () => ({
 
 jest.mock('@aglyn/shared-util-email', () => ({
   sendEmail: (...args: unknown[]) => sendEmail(...args),
+  messageFromName: jest.requireActual('@aglyn/shared-util-email').messageFromName,
 }))
 
 jest.mock('@aglyn/aglyn/server', () => ({
