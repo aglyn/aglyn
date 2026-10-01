@@ -15,14 +15,12 @@
  * limitations under the License.
  */
 
-import { DATASET_FIELD_TYPES } from '@aglyn/aglyn'
 import {
   MARKETPLACE_COMPONENT_ID_ALLOWLIST,
   VERIFICATION_BLOCK_MESSAGES,
   VERIFICATION_DECLINE_COOLDOWN_DAYS,
   verificationRequestBlock,
   type VerificationRequestBlock,
-  MARKETPLACE_DATASET_FIELD_TYPES,
   MARKETPLACE_EMAIL_COMPONENT_ID_ALLOWLIST,
   installsUnreviewedFallback,
   installTargetsFor,
@@ -31,10 +29,8 @@ import {
   isPrivateListing,
   resolveInstallPlan,
   resolveOrgInstallSummary,
-  resolveInstalledDatasetSchema,
   resolvePluginInstallState,
   sanitizeMarketplaceDefinition,
-  sanitizeDatasetSchema,
   resolveUninstallTargets,
 } from './marketplace'
 
@@ -921,121 +917,6 @@ describe('resolveInstallPlan (AGL-773)', () => {
       { scope: 'host', hostId: 'h2' },
       { scope: 'host', hostId: 'h3' },
     ])
-  })
-})
-
-describe('sanitizeDatasetSchema (AGL-657)', () => {
-  it('accepts exactly the field types core defines', () => {
-    // MARKETPLACE_DATASET_FIELD_TYPES is duplicated to keep the model module
-    // dependency-free; this is the guard that keeps the copy honest, so a new
-    // core field type can't become silently unpublishable.
-    expect([...MARKETPLACE_DATASET_FIELD_TYPES].sort()).toEqual(
-      [...DATASET_FIELD_TYPES].sort(),
-    )
-  })
-
-  const model = {
-    fields: {
-      title: { name: 'Title', type: 'text', required: true },
-      rating: {
-        name: 'Rating',
-        type: 'int32',
-        validation: { min: 1, max: 5, junk: 'dropped' },
-      },
-      owner: {
-        name: 'Owner',
-        type: 'reference',
-        reference: { datasetId: 'ds-people', displayFieldId: 'name' },
-      },
-    },
-    order: ['title', 'rating', 'owner'],
-  }
-
-  it('keeps the model and drops unknown validation keys', () => {
-    const result = sanitizeDatasetSchema(model)
-    if (result.ok === false) throw new Error(result.error)
-    expect(result.schema.order).toEqual(['title', 'rating', 'owner'])
-    expect(result.schema.fields['rating'].validation).toEqual({ min: 1, max: 5 })
-    expect(result.schema.fields['title'].required).toBe(true)
-  })
-
-  it('never carries records — only the field model is read', () => {
-    const result = sanitizeDatasetSchema({
-      ...model,
-      // A records key on the input must not survive into the schema.
-      records: [{ values: { title: 'secret customer row' } }],
-    } as any)
-    if (result.ok === false) throw new Error(result.error)
-    expect(JSON.stringify(result.schema)).not.toContain('secret customer row')
-    expect(Object.keys(result.schema)).toEqual(['fields', 'order'])
-  })
-
-  it('drops non-primitive defaults', () => {
-    const result = sanitizeDatasetSchema({
-      fields: {
-        a: { name: 'A', type: 'text', default: 'ok' },
-        b: { name: 'B', type: 'map', default: { nested: 'no' } },
-      },
-      order: ['a', 'b'],
-    })
-    if (result.ok === false) throw new Error(result.error)
-    expect(result.schema.fields['a'].default).toBe('ok')
-    expect(result.schema.fields['b'].default).toBeUndefined()
-  })
-
-  it('rejects unsupported field types and empty models', () => {
-    expect(
-      sanitizeDatasetSchema({
-        fields: { a: { name: 'A', type: 'sqlInjection' } },
-        order: ['a'],
-      }),
-    ).toEqual({ ok: false, error: 'Field "a" has an unsupported type' })
-    expect(sanitizeDatasetSchema({ fields: {}, order: [] })).toEqual({
-      ok: false,
-      error: 'Dataset has no fields to publish',
-    })
-  })
-
-  it('falls back to key order for models written before `order`', () => {
-    const result = sanitizeDatasetSchema({
-      fields: { a: { name: 'A', type: 'text' } },
-    })
-    if (result.ok === false) throw new Error(result.error)
-    expect(result.schema.order).toEqual(['a'])
-  })
-})
-
-describe('resolveInstalledDatasetSchema (AGL-657)', () => {
-  const schema = {
-    fields: {
-      title: { name: 'Title', type: 'text' },
-      owner: {
-        name: 'Owner',
-        type: 'reference',
-        reference: { datasetId: 'ds-people', datasetLabel: 'People' },
-      },
-    },
-    order: ['title', 'owner'],
-  }
-
-  it('relinks a reference onto the installing org’s dataset by label', () => {
-    const result = resolveInstalledDatasetSchema(schema, {
-      people: 'local-people-id',
-    })
-    expect(result.degradedFieldIds).toEqual([])
-    expect(result.schema.fields['owner'].reference?.datasetId).toBe(
-      'local-people-id',
-    )
-  })
-
-  it('degrades an unmatched reference to text and reports it', () => {
-    const result = resolveInstalledDatasetSchema(schema, {})
-    // A dead FK renders as a broken picker, so the field becomes plain text
-    // rather than installing something visibly broken.
-    expect(result.degradedFieldIds).toEqual(['owner'])
-    expect(result.schema.fields['owner'].type).toBe('text')
-    expect(result.schema.fields['owner'].reference).toBeUndefined()
-    expect(result.schema.fields['title']).toEqual({ name: 'Title', type: 'text' })
   })
 })
 

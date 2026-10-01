@@ -15,22 +15,11 @@
  * limitations under the License.
  */
 
-import {
-  checkDatasetQuota,
-  checkEntitlement,
-  createResourceUid,
-  defaultScopeForNewResource,
-  newResourceScopeFields,
-  scopeCovers,
-} from '@aglyn/aglyn/server'
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
-import {
-  isPrivateListing,
-  resolveInstalledDatasetSchema,
-listingArtifactType,
-} from '../model/marketplace'
+import { isPrivateListing, listingArtifactType } from '../model/marketplace'
+import { artifactTypeOwnerOrRefusal, marketplaceInstallStamp } from './artifact-owner'
 import { canActAsPublisher } from './publisher-profile'
 import { requirePurchase } from './purchase-entitlement'
 import { recordInstallProvenance } from './provenance'
@@ -40,15 +29,19 @@ import { isPublisherSecurityLocked } from './sale-risk'
 /**
  * Installs a marketplace dataset schema into an org (AGL-657).
  *
- * Creates a NEW, EMPTY dataset from the published model — installing never
- * merges into an existing dataset, because a schema change on a dataset that
- * already holds rows would silently reinterpret live data. Re-installing makes
- * another dataset rather than replacing one, for the same reason.
+ * The install makes a NEW, EMPTY dataset from the published model, and a
+ * dataset is the data plugin's (AGL-3080). So this door keeps what is the
+ * marketplace's (who may install, the listing and its gates, the purchase,
+ * the provenance stamp and the tally) and asks the plugin that keeps the
+ * `datasetSchema` type for the rest: whether the org's plan holds datasets,
+ * whether the version can land and within what quota, and the write itself
+ * (`plugin-manager/plugin-artifact-types`). It never reads the datasets
+ * collection.
  *
  * Accepts either `orgId` or a `hostId` to derive it, so the shared install
  * hook (which is host-oriented) works unchanged. The site is ONLY that: a way
- * to find the org. It is never the site the dataset is created in — see the
- * scope decision below.
+ * to find the org. It never reaches the owner, so it is never the site the
+ * dataset is shared with (AGL-2891).
  */
 export const installDatasetSchemaHandler: PluginApiHandler = async (
   req,
@@ -90,10 +83,14 @@ export const installDatasetSchemaHandler: PluginApiHandler = async (
       return res.status(404).json({ error: 'Unknown organization' })
     }
     const org = orgSnapshot.data() as any
-    if (!checkEntitlement(org, 'dataStore')) {
-      return res
-        .status(403)
-        .json({ error: 'Datasets require a Starter plan or higher' })
+    // The plugin that keeps the copies, asked before anything is read or
+    // written: with none, the install refuses whole.
+    const owned = await artifactTypeOwnerOrRefusal('datasetSchema')
+    if (owned.ok === false) return res.status(owned.status).json({ error: owned.error })
+    const { owner } = owned
+    const inadmissible = await owner.admits({ orgId, org })
+    if (inadmissible) {
+      return res.status(inadmissible.status).json({ error: inadmissible.error })
     }
 
     const listingRef = firestore.collection('marketplaceListings').doc(listingId)
@@ -160,104 +157,44 @@ export const installDatasetSchemaHandler: PluginApiHandler = async (
       .collection('versions')
       .doc(String(listing.latestVersion))
       .get()
-    const published = versionSnapshot.get('datasetSchema') as any
-    if (!published?.order?.length) {
-      return res.status(500).json({ error: 'Dataset schema version missing' })
-    }
-
-    // Creating a dataset consumes org quota exactly like the console's own
-    // create path (AGL-473) — installing must not be a way around it.
-    // Deliberately counts EVERY dataset the org owns, not the visible ones
-    // (AGL-1046). Scoping decides who can see a dataset, never who pays for
-    // it — the org owns all of them. Counting per scope would also make a
-    // collaborator's remaining quota disagree with the admin's.
-    const datasets = await orgRef.collection('datasets').get()
-    const quota = checkDatasetQuota(org, datasets.size)
-    if (!quota.allowed) {
-      return res.status(403).json({
-        error: `Dataset limit reached (${quota.limit}) — see Billing to upgrade.`,
-      })
-    }
-
-    /**
-     * Who the new dataset is shared with. Decided before relinking, because
-     * it also decides what a reference field may point at.
-     *
-     * A dataset schema installs at ORGANIZATION scope and nowhere else
-     * (`INSTALL_TARGETS.datasetSchema`), from the organization Marketplace —
-     * the one surface that installs anything. The `hostId` that surface sends
-     * is the site it acts THROUGH so the org can be resolved: the org's first
-     * site, not a site anyone is working in. So no site is in context, and the
-     * dataset starts where a create on an organization page starts: All
-     * sites, whatever the org's Default sharing says. Honoring the acting site
-     * instead would hide the dataset from every other site, under an install
-     * dialog that says it lands on "the whole organization — every site".
-     */
-    const visibleTo = defaultScopeForNewResource({
-      defaultResourceScope: org?.defaultResourceScope,
-      hostId: null,
+    // The owner checks the version can land here (its quota, its relinking)
+    // and writes nothing yet.
+    const prepared = await owner.prepare({
+      orgId,
+      org,
+      listing: {
+        listingId,
+        displayName: listing.displayName,
+        description: listing.description,
+        version: listing.latestVersion,
+      },
+      published: versionSnapshot.get('datasetSchema'),
     })
-
-    // Relink reference fields onto this org's datasets by display name; what
-    // can't be relinked degrades to text and is reported to the installer.
-    // A candidate has to be visible everywhere the new dataset is, which is
-    // the rule every reference answers to (`scopeCovers`, AGL-1044): one
-    // pointing at a dataset some of those sites cannot see resolves to nothing
-    // there, and nothing says why. That is also what keeps an install from
-    // binding its reference fields to an agency's internal dataset of the same
-    // name (AGL-1046) — the display-name collision AGL-1039 fixed on the
-    // render path, arriving here instead.
-    const byLabel: Record<string, string> = {}
-    for (const entry of datasets.docs) {
-      if (!scopeCovers(entry.get('visibleTo'), visibleTo)) continue
-      const label = String(entry.get('displayName') ?? '').toLowerCase()
-      if (label && !byLabel[label]) byLabel[label] = entry.id
+    if (prepared.ok === false) {
+      return res.status(prepared.status).json({ error: prepared.error })
     }
-    const { schema, degradedFieldIds } = resolveInstalledDatasetSchema(
-      published,
-      byLabel,
-    )
-
-    const datasetId = createResourceUid()
-    const now = firebaseAdmin.firestore.FieldValue.serverTimestamp()
-    // Provenance + base snapshot (AGL-1015). The RELINKED schema, not the
-    // published one: relinking rewrites reference fields onto this org's
-    // datasets, so a base holding the publisher's ids would report every
-    // relinked field as a user edit the moment anything is diffed.
+    // Provenance + base snapshot (AGL-1015), of the content AS PREPARED for
+    // this org rather than as published: a base holding the publisher's
+    // reference ids would report every relinked field as a user edit the
+    // moment anything is diffed.
     const provenance = await recordInstallProvenance({
       firestore,
       listingId,
       listing,
       version: listing.latestVersion,
       artifactType: 'datasetSchema',
-      content: schema,
+      content: prepared.content,
     })
-    await orgRef
-      .collection('datasets')
-      .doc(datasetId)
-      .create({
-        displayName: String(listing.displayName ?? 'Dataset').slice(0, 120),
-        ...(listing.description && { description: listing.description }),
-        // `fields` is the v1 flat list the older editor still reads; keep it in
-        // step with the model so both readers agree (AGL-102).
-        fields: schema.order,
-        model: schema,
-        source: {
-          type: 'marketplace' as const,
-          listingId,
-          version: listing.latestVersion ?? null,
-        },
+    const installed = await prepared.commit(
+      marketplaceInstallStamp({
         installedFrom: provenance.installedFrom,
-        // The scope decided above. Stamping it is not optional — a dataset
-        // with no `visibleTo` matches no scoped read and would render on no
-        // site at all.
-        //
-        // Through the AGL-1478 gate since AGL-1484, so "every other dataset
-        // creator" is a fact about the type rather than about four object
-        // literals that happen to agree today.
-        ...newResourceScopeFields(visibleTo),
-        createdAt: now,
-      })
+        listingId,
+        version: listing.latestVersion,
+      }),
+    )
+    if (installed.ok === false) {
+      return res.status(installed.status).json({ error: installed.error })
+    }
 
     // Per-version tally (AGL-1036). Installing a schema always CREATES a new
     // dataset rather than replacing one, so there is never a version to leave.
@@ -275,9 +212,9 @@ export const installDatasetSchemaHandler: PluginApiHandler = async (
 
     return res.status(200).json({
       installed: true,
-      datasetId,
-      fields: schema.order.length,
-      degradedFieldIds,
+      // What the owner landed: the new dataset's id, its field count, and the
+      // reference fields it could not relink.
+      ...installed.report,
       version: listing.latestVersion ?? null,
       baseStored: provenance.baseStored,
     })

@@ -441,27 +441,6 @@
       "lane": "coupling"
     },
     {
-      "path": "libs/plugins/marketplace/src/lib/server/install-dataset-schema.ts",
-      "rules": [
-        "plugin-collection:data"
-      ],
-      "lane": "coupling"
-    },
-    {
-      "path": "libs/plugins/marketplace/src/lib/server/publish-dataset-schema.ts",
-      "rules": [
-        "plugin-collection:data"
-      ],
-      "lane": "coupling"
-    },
-    {
-      "path": "libs/plugins/marketplace/src/lib/server/update-artifact.ts",
-      "rules": [
-        "plugin-collection:data"
-      ],
-      "lane": "coupling"
-    },
-    {
       "path": "libs/plugins/outreach/src/lib/components/use-outreach-crm.ts",
       "rules": [
         "plugin-collection:crm"

@@ -887,6 +887,12 @@
       "formRecordTarget": {
         "id": "dataset"
       },
+      "artifactTypes": [
+        {
+          "$comment": "A dataset's schema, published from a dataset and installed as a new, empty one; the installer asks this plugin to read, write and update the copy, and never reads the datasets collection itself.",
+          "type": "datasetSchema"
+        }
+      ],
       "catalog": {
         "order": 10,
         "label": "Data",

@@ -1106,7 +1106,9 @@ registerArtifactTypeOwner(
 Every answer comes before the installer writes anything, so an install whose
 owner is missing refuses whole: no copy, no provenance, no tally. One owner
 per type, a camelCase `type`, and a plugin with a declarations entry on the
-console's server; the generator refuses anything else.
+console's server; the generator refuses anything else. The data plugin's
+`datasetSchema` is the first: the marketplace sells a dataset's schema and
+never reads the datasets collection.
 
 ## Recurring charges — `plugin-recurring-charges` (`/server`)
 

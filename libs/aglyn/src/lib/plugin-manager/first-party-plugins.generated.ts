@@ -1206,7 +1206,7 @@ export const PLUGIN_FORM_RECORD_TARGET_DECLARED: FormRecordTargetDeclaration | n
  * then refuses every listing of a type nobody keeps.
  */
 export const PLUGIN_ARTIFACT_TYPES_DECLARED: readonly ArtifactTypeDeclaration[] = [
-
+  {"pluginId":"data","type":"datasetSchema"},
 ]
 
 /**

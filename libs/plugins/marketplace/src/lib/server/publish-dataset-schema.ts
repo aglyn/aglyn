@@ -20,7 +20,8 @@ import { checkEntitlement, createResourceUid } from '@aglyn/aglyn/server'
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
-import { marketplacePriceRefusal, sanitizeDatasetSchema } from '../model'
+import { marketplacePriceRefusal } from '../model'
+import { artifactTypeOwnerOrRefusal } from './artifact-owner'
 import { resolvePublisherProfile } from './publisher-profile'
 import { publishPreconditionRefusal } from './publish-preconditions'
 import { listingSubmissionRefusal } from './listing-screen'
@@ -34,9 +35,12 @@ import { refreshListingQueryFields } from './listing-query-fields'
  * (AGL-237), so there is no source site to derive the org from. The role gate
  * goes through `resolveOrgPermissions` directly for the same reason.
  *
- * Records NEVER travel — `sanitizeDatasetSchema` reads the model and this
- * handler never touches the `records` subcollection. A dataset's rows are the
- * org's customer data; only the shape is publishable.
+ * The schema itself is read by the plugin that keeps datasets (AGL-3080):
+ * this door asks the `datasetSchema` type's owner for the snapshot a version
+ * carries (`plugin-manager/plugin-artifact-types`) and never reads the
+ * datasets collection. Records never travel. The owner reads the model and
+ * nothing else, because a dataset's rows are the org's customer data and only
+ * the shape is publishable.
  */
 export const publishDatasetSchemaHandler: PluginApiHandler = async (
   req,
@@ -102,60 +106,13 @@ export const publishDatasetSchemaHandler: PluginApiHandler = async (
     })
     if (refusal) return res.status(refusal.status).json(refusal.body)
 
-    const datasetSnapshot = await orgRef
-      .collection('datasets')
-      .doc(datasetId)
-      .get()
-    const dataset = datasetSnapshot.data() as any
-    if (!datasetSnapshot.exists || dataset?.deletedAt) {
-      return res.status(404).json({ error: 'Unknown dataset' })
-    }
-    // v1 datasets carry a flat `fields: string[]` with no model; publish the
-    // derived shape so unmigrated datasets are publishable too (AGL-102 shim,
-    // inlined rather than importing core's deriveModelFromFields to keep the
-    // sanitizer's input one plain shape).
-    const model = dataset?.model?.fields
-      ? dataset.model
-      : {
-          fields: Object.fromEntries(
-            (Array.isArray(dataset?.fields) ? dataset.fields : []).map(
-              (name: unknown) => [String(name), { name: String(name), type: 'text' }],
-            ),
-          ),
-          order: (Array.isArray(dataset?.fields) ? dataset.fields : []).map(String),
-        }
-
-    const sanitized = sanitizeDatasetSchema(model)
-    if (sanitized.ok === false) {
-      return res.status(422).json({ error: sanitized.error })
-    }
-
-    // Reference fields name a dataset id that means nothing outside this org,
-    // so resolve each target's display name now — the installer relinks by
-    // that label (see resolveInstalledDatasetSchema).
-    const referenced = new Set(
-      Object.values(sanitized.schema.fields)
-        .map((field) => field.reference?.datasetId)
-        .filter((id): id is string => Boolean(id)),
-    )
-    if (referenced.size) {
-      const labels = new Map<string, string>()
-      await Promise.all(
-        [...referenced].map(async (id) => {
-          const snapshot = await orgRef.collection('datasets').doc(id).get()
-          const label = snapshot.get('displayName')
-          if (label) labels.set(id, String(label))
-        }),
-      )
-      for (const field of Object.values(sanitized.schema.fields)) {
-        const target = field.reference?.datasetId
-        if (target && labels.has(target)) {
-          field.reference = {
-            ...field.reference,
-            datasetLabel: labels.get(target),
-          }
-        }
-      }
+    // The plugin that keeps datasets reads the one named and reduces it to
+    // what travels; with no such plugin, nothing is listed.
+    const owned = await artifactTypeOwnerOrRefusal('datasetSchema')
+    if (owned.ok === false) return res.status(owned.status).json({ error: owned.error })
+    const snapshot = await owned.owner.snapshot({ orgId, sourceId: datasetId })
+    if (snapshot.ok === false) {
+      return res.status(snapshot.status).json({ error: snapshot.error })
     }
 
     // One listing per source dataset: re-publish bumps latestVersion.
@@ -187,6 +144,10 @@ export const publishDatasetSchemaHandler: PluginApiHandler = async (
 
     await listingRef.set(
       {
+        // What the owner says the listing carries about the schema (its
+        // field count), written first so no fact can stand in for one of the
+        // listing's own fields below.
+        ...snapshot.facts,
         profileId: publisher.orgId,
         artifactType: 'datasetSchema',
         sourceDatasetId: datasetId,
@@ -198,7 +159,6 @@ export const publishDatasetSchemaHandler: PluginApiHandler = async (
         ...(category.trim() && { category: category.trim() }),
         priceUsd,
         latestVersion: version,
-        fieldCount: sanitized.schema.order.length,
         deletedAt: null,
         ...(existing.empty && { createdAt: now }),
         updatedAt: now,
@@ -214,7 +174,7 @@ export const publishDatasetSchemaHandler: PluginApiHandler = async (
     await listingRef
       .collection('versions')
       .doc(String(version))
-      .set({ datasetSchema: sanitized.schema, publishedAt: now })
+      .set({ datasetSchema: snapshot.content, publishedAt: now })
 
     return res.status(200).json({ listingId: listingRef.id, version })
   } catch (error) {

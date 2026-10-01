@@ -28,6 +28,8 @@ The plugin is console-only and declares one registrar, `registerDataConsole` (th
 - The organization datasets card, `HostDatasetsCard`, as a widget in the `orgData` slot.
 - Datasets as a repeat source (`DATASET_REPEAT_SOURCE`), which is what offers "Repeat over dataset" on an element in Besigner and draws a repeat's copies from real rows on the canvas.
 
+It also keeps the `datasetSchema` installable artifact type (`artifactTypes` in `plugins.config.json`, registered from `registerDataConsoleServerDeclarations`): a dataset's schema published to a marketplace, installed as a new, empty dataset, and updated in place. The installer asks this plugin through `@aglyn/aglyn/plugin-manager/plugin-artifact-types` and never reads the datasets collection; the schema's model (`sanitizeDatasetSchema`, `resolveInstalledDatasetSchema`, `summarizeSchemaChange`) is `@aglyn/plugins-data/artifact/dataset-schema`.
+
 ### Entry points
 
 | import | contents |

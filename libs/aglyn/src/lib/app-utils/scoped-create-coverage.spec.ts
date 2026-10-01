@@ -78,7 +78,9 @@ describe('AGL-1478 · every creator of a scoped collection stamps the scope', ()
       why: 'org Data page → new dataset',
     },
     {
-      file: 'libs/plugins/marketplace/src/lib/server/install-dataset-schema.ts',
+      // The marketplace's install door asks the plugin that keeps datasets
+      // to write the new one (AGL-3080), so the scope is decided there.
+      file: 'libs/plugins/data/src/lib/artifact/dataset-schema-artifact.server.ts',
       mustContain: ['defaultScopeForNewResource', 'newResourceScopeFields'],
       why: 'installing a dataset schema from the marketplace',
     },
