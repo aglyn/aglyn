@@ -219,6 +219,11 @@ export interface RiskEventInput {
   /** Overrides the default dedupe key. */
   dedupeKey?: string | null
   /**
+   * A closing notice's opening kind. The closing goes to the people the
+   * opening went to: the site's managers too, when the opening told them.
+   */
+  openedAs?: RiskEventKind | null
+  /**
    * `false` to send no owner EMAIL for this event (a lock placed under a
    * legal hold). The in-app notice and the record are still written.
    */
@@ -669,7 +674,11 @@ async function ownerRecipients(
       if (owner.email) emails[owner.uid] = owner.email
     }
   }
-  if (definition.includeSiteManagers) for (const uid of siteManagerUids) uids.add(uid)
+  // A closing kind is shared by openings with different audiences, so it
+  // follows the one it closes: a site manager told a review opened is told
+  // it closed.
+  const audience = isRiskEventKind(input.openedAs) ? RISK_NOTICE_CATALOG[input.openedAs] : definition
+  if (audience.includeSiteManagers) for (const uid of siteManagerUids) uids.add(uid)
   return { uids: [...uids], emails }
 }
 
@@ -1214,6 +1223,7 @@ export async function closeRiskNotice(
         reference: (row.get('reference') as string | null) ?? null,
         item: stamp.itemLabel ? { label: stamp.itemLabel, path: stamp.itemPath ?? null } : null,
         dedupeKey: `${closing}:${input.reviewId}`,
+        openedAs: stamp.kind,
       },
       overrides,
     )

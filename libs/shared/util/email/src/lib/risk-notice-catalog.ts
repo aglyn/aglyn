@@ -330,7 +330,11 @@ export interface RiskNoticeDefinition {
   reviewable: boolean
   /** The kinds staff decisions on this kind's row close it with. */
   closesWith?: { released: RiskEventKind; rejected: RiskEventKind }
-  /** Also tell the managers of the site the event is on, not just the workspace's. */
+  /**
+   * Also tell the managers of the site the event is on, not just the
+   * workspace's. A closing notice sent for a decided row goes to whoever
+   * its opening went to, so for it the opening kind's answer is the one read.
+   */
   includeSiteManagers: boolean
   /** The help page section that explains it. */
   helpAnchor: string

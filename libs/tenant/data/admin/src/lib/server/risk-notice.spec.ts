@@ -504,6 +504,55 @@ describe('closeRiskNotice', () => {
     // Once per decision.
     expect((await closeRiskNotice({ reviewId: input.reviewId, decision: 'released' }, h.deps))?.duplicate).toBe(true)
   })
+
+  it('tells the people the opening told, the site’s managers included, that a review closed (AGL-3442)', async () => {
+    const h = harness({ owners: [{ uid: 'owner-1', email: 'avery@example.com' }] })
+    const reviewId = 'd'.repeat(40)
+    h.firestore.docs.set(`abuseReports/${reviewId}`, {
+      orgId: 'org-1',
+      hostId: 'host-1',
+      reference: 'PV-2',
+      status: 'dismissed',
+    })
+    await notifyRiskEvent(
+      {
+        kind: 'card-testing',
+        orgId: 'org-1',
+        hostId: 'host-1',
+        reviewId,
+        reference: 'PV-2',
+        item: { label: 'checkout on the site "harborview"', path: '/host-1/products/orders' },
+      },
+      h.deps,
+    )
+    const opened = h.sent.map((email) => email['to'])
+    expect(opened).toEqual(['avery@example.com', 'manager-1@example.com'])
+
+    const closed = await closeRiskNotice({ reviewId, decision: 'released' }, h.deps)
+    expect(closed?.owners).toMatchObject({ recipients: 2, emailed: 2 })
+    const closing = h.sent.slice(opened.length)
+    expect(closing.map((email) => email['to'])).toEqual(opened)
+    expect(String(closing[1]['subject'])).toBe('Our review is complete')
+    expect(h.inApp[h.inApp.length - 1].uids).toEqual(['owner-1', 'manager-1'])
+  })
+
+  it('keeps a review the site’s managers were never told about between the owners (AGL-3442)', async () => {
+    const h = harness({ owners: [{ uid: 'owner-1', email: 'avery@example.com' }] })
+    const reviewId = 'e'.repeat(40)
+    // A subscription payment's review, on a row that happens to name a site.
+    h.firestore.docs.set(`abuseReports/${reviewId}`, {
+      orgId: 'org-1',
+      hostId: 'host-1',
+      reference: 'SF-1',
+      status: 'dismissed',
+    })
+    await notifyRiskEvent(
+      { kind: 'billing-payment-flagged', orgId: 'org-1', hostId: 'host-1', reviewId, reference: 'SF-1' },
+      h.deps,
+    )
+    await closeRiskNotice({ reviewId, decision: 'released' }, h.deps)
+    expect(h.sent.map((email) => email['to'])).toEqual(['avery@example.com', 'avery@example.com'])
+  })
 })
 
 describe('requestRiskReview', () => {

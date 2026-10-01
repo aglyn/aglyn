@@ -409,8 +409,10 @@ same seam; see [Lockdown](./lockdown.md#owner-notices).
   with a link here. It never changes the row's status or its held send.
 - **Closing a row tells them how it ended.** Dismissed sends the "released"
   notice, Actioned sends "not approved"; a review with no held item sends
-  "complete, no action" or "found a problem". Put anything more you want them
-  to know in "What you did".
+  "complete, no action" or "found a problem". It goes to the people the opening
+  notice went to, so a site's managers told about card testing, a flagged page
+  or a blocked link are told it closed. Put anything more you want them to know
+  in "What you did".
 - **Bursts.** Past five notices in an hour for one workspace (ten staff alerts),
   the rest are folded into one summary sent when the hour closes, so a
   workspace under attack gets a digest, not five hundred emails. Locks, lifts,
