@@ -36,7 +36,7 @@ import {
   STALE_LEAD_WAIT_MINUTES,
   validateHostAction,
 } from './actions'
-import { HOST_EVENT_PAYLOAD_KEYS, HOST_EVENT_TYPES } from './workflows'
+import { HOST_EVENT_PAYLOAD_KEYS, HOST_EVENT_TYPES } from './host-events'
 
 const FORM = { id: 'form-contact', name: 'Contact us' }
 

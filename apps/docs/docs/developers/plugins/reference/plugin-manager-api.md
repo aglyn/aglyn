@@ -808,19 +808,23 @@ value without either plugin importing the other.
 ## The tenant's tax rule — `plugin-tax-profile` (`/server`)
 
 More than one plugin takes money, and a merchant has one tax profile. The
-plugin that keeps it answers what a flat rate adds to a charge and which regime
-a settled payment was taxed under; any other plugin that charges asks here
-instead of importing the owner's model.
+plugin that keeps it answers the merchant's rate for a kind of charge, what a
+flat rate adds to a charge and which regime a settled payment was taxed under;
+any other plugin that charges asks here instead of importing the owner's model
+or reading the owner's settings.
 
 ```ts
 // the owner, from each of its server registrars
 registerPluginTaxProfile({
+  flatRate: (hostId, charge) => readStoredRate(hostId, charge),
   flatTax: (rate, chargeCents, fallbackLabel) => resolveFlatTax(rate, chargeCents, fallbackLabel),
   taxModeOf: (settledPayment, manualTaxCents) => modeOf(settledPayment, manualTaxCents),
 })
 
 // a plugin that charges
-const tax = pluginTaxProfile().flatTax(settings.service, chargeCents, 'Service tax')
+const profile = pluginTaxProfile()
+const rate = await profile.flatRate(hostId, 'service')
+const tax = profile.flatTax(rate, chargeCents, 'Service tax')
 const total = chargeCents + tax.taxCents
 ```
 
@@ -828,6 +832,7 @@ const total = chargeCents + tax.taxCents
 | --- | --- |
 | `registerPluginTaxProfile(profile, { pluginId? })` | A slot: a workspace has one tax profile, so a second plugin's is refused and the incumbent keeps serving. |
 | `pluginTaxProfile()` | The rule — and it **throws** when no plugin registered one. |
+| `flatRate(hostId, charge)` | The merchant's flat rate for one kind of charge on a site (`service` for an appointment), read where the owner keeps it, to be handed to `flatTax`. `undefined` for a rate nobody set or a kind the owner keeps none for. The contract's one read; a caller never reads the owner's settings itself. |
 | `flatTax(rate, chargeCents, fallbackLabel)` | `{ taxCents, label, pct }`, exclusive and rounded to the cent. `rate` is the merchant's stored setting passed as read; an absent, zero, negative or out-of-range one answers all-zero and never throws. |
 | `taxModeOf(settledPayment, manualTaxCents?)` | The regime as the owner records it. `manualTaxCents` is tax the caller added as a line of its own, which the processor reports as none. |
 | `pluginTaxProfileOwner()` | The owner's plugin id, or `null` — for a caller that only wants to know who it is. |
@@ -1266,6 +1271,68 @@ in `plugins.config.json`, not from code:
 | `validateInteraction(interaction, { validateStep? })` | The name, the trigger and its conditions, the step count, each step's guard, the client steps and every declared pick. `validateStep` is the owner's check for its own step types. |
 | `isClientActionStep(step)` / `isClientStepEntitled(step, tiers)` | Whether the page runs a step, and whether the site's plan lets it. |
 | `SiteAlert` | What a `siteAlert` step, or a listener, hands back to the visitor's page. |
+
+## Host events — `host-events`
+
+A host event is what happened on a site that an automation can start on: a
+form submitted, a booking made, a contact moved stage. A server door raises one
+with `emitHostEvent(hostId, type, payload, { actor })` beside the write it
+performed; nothing watches the database. The platform raises `pageView` itself.
+A plugin whose doors raise others declares them in `plugins.config.json`, so
+the trigger pickers, the run history and every validator know them with no
+plugin loaded:
+
+```json
+"hostEvents": [
+  {
+    "type": "booking",
+    "order": 70,
+    "label": "New booking",
+    "payloadKeys": ["serviceName", "email", "startsAtMs"]
+  }
+]
+```
+
+- `type` is what a stored trigger names: never rename it. One plugin declares
+  each type, and none may take the platform's `pageView`.
+- `order` places it in every picker; `pageView` is 20.
+- `payloadKeys` (optional) lists what the event puts in scope for a filter or a
+  condition; leave it out when the door documents none.
+
+The declarations compile into `app-utils/plugin-host-events.generated.ts`.
+
+| API | Semantics |
+| --- | --- |
+| `HOST_EVENTS` / `HOST_EVENT_TYPES` | Every event, the platform's and the plugins', in `order`. `HostEventType` is their union. |
+| `hostEventLabel(type)` / `hostEventPayloadHint(type)` | The picker's words, falling back to the type itself for a custom event; the "In scope: …" line, or `null` where nothing is documented. |
+
+## Computed variables — `computed-variables` (`/server`)
+
+A site variable is bound into a page with `{{var:id}}` and resolved when the
+page is composed. A COMPUTED variable takes its value from a record a plugin
+keeps, with its stored value as the fallback. The plugin that computes it
+registers a variable computer, in two halves so its reads overlap the page's
+own:
+
+```ts
+// your plugin's serverDeclarations entry
+registerVariableComputer(
+  {
+    prepare: async (hostId) => (await import('./server/rates')).prepareRates(hostId),
+  },
+  { pluginId: 'cellar' },
+)
+
+// prepareRates reads what it needs for the site, then answers a computation:
+// ({ variables, functions }) => variables, with the computed ones' values filled in
+```
+
+| API | Semantics |
+| --- | --- |
+| `registerVariableComputer(computer, { pluginId? })` | Owner = the loader's marker, else `pluginId`; no owner throws. Registering again replaces the plugin's own. |
+| `prepareComputedVariables(hostId)` | What the compose pipeline calls beside its variable and function reads: every computer's `prepare`, resolved to their computations applied in registration order. A computer that fails, or none registered, leaves each variable its stored value; with none registered, the app's declarations step is run once more first. |
+
+Workflows registers one: a variable that names a workflow takes its result.
 
 ## Platform events — `plugin-events` (`/server`)
 

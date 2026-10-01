@@ -25,7 +25,7 @@
 // (AGL-2839). Every other CRM spec drives the primary e2e org, which is on
 // Business, so none of them can see any of it. This one signs in as the
 // non-staff owner of a workspace that is always on Free
-// (`tools/scripts/lib/crm-free-plan-fixtures.mjs`) and proves, in order:
+// (`libs/plugins/crm/scripts/fixtures/crm-free-plan-fixtures.mjs`) and proves, in order:
 //
 // 1. A bare `/crm` under a site stays where it is and draws the CRM notice
 //    beside a rail with every section locked, Leads included, and no person
@@ -60,7 +60,7 @@ import {
   FREE_PLAN_FIXTURE as FREE,
   leadIdFor,
   seedFreePlanWorkspace,
-} from '../scripts/lib/crm-free-plan-fixtures.mjs'
+} from '../../libs/plugins/crm/scripts/fixtures/crm-free-plan-fixtures.mjs'
 import {
   adminFirestore,
   BASE_URL,

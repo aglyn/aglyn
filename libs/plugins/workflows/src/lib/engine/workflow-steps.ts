@@ -26,7 +26,7 @@ import {
   type HostWorkflow,
   type HostWorkflowStep,
   WORKFLOW_MAX_STEPS,
-} from '@aglyn/aglyn/app-utils/workflows'
+} from '../model/workflows'
 
 /**
  * ONE STEP MODEL FOR BOTH ENGINES.

@@ -33,7 +33,7 @@ import {
   type PluginRecordRouteContext,
 } from '../plugin-manager/plugin-record-routes'
 import { PLATFORM_BRAND_NAME } from './platform-brand'
-import { hostEventLabel } from './workflows'
+import { hostEventLabel } from './host-events'
 import { duplicateActivityActionLabel } from './duplicate-resource'
 import {
   pluginActivityActionLabel,
@@ -410,9 +410,9 @@ export interface ActionRunEntryLike extends ActivityEntryLike {
  * `formSubmission` → `Form submitted`.
  *
  * The console rendered the raw camelCase identifier in the trigger select
- * and in every run row. The words are `HOST_EVENT_LABELS` in `workflows.ts`
- * — one map, so the picker an author chose from and the run row they read
- * afterwards cannot name the same event differently.
+ * and in every run row. The words are each event's declared label
+ * (`host-events.ts`) — one map, so the picker an author chose from and the
+ * run row they read afterwards cannot name the same event differently.
  */
 export function actionTriggerLabel(event: string | undefined): string {
   return hostEventLabel(event)

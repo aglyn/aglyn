@@ -32,7 +32,7 @@ import {
   type ScopeToken,
   visibleToHost,
 } from '@aglyn/aglyn/app-utils/scope-tokens'
-import type { HostEventType } from '@aglyn/aglyn/app-utils/workflows'
+import type { HostEventType } from '@aglyn/aglyn/app-utils/host-events'
 
 /**
  * ORG AUTOMATIONS (AGL-3302): one automation the organization writes once and

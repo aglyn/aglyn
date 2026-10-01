@@ -40,11 +40,11 @@ import { getApps, initializeApp } from 'firebase-admin/app'
 import { getAuth } from 'firebase-admin/auth'
 import { FieldValue, getFirestore, Timestamp } from 'firebase-admin/firestore'
 
-import { seedCrmFixtures } from './lib/crm-fixtures.mjs'
+import { seedCrmFixtures } from '../../libs/plugins/crm/scripts/fixtures/crm-fixtures.mjs'
 import {
   FREE_PLAN_FIXTURE,
   seedFreePlanWorkspace,
-} from './lib/crm-free-plan-fixtures.mjs'
+} from '../../libs/plugins/crm/scripts/fixtures/crm-free-plan-fixtures.mjs'
 import { E2E_ORG_RELEASE_FLAGS } from './lib/e2e-release-flags.mjs'
 import { datasetFilterFields, effectiveModel } from './lib/record-filter-keys.mjs'
 import { readLegalDocumentVersion } from './lib/legal-document-version.mjs'

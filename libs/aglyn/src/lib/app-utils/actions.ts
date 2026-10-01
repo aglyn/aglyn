@@ -35,7 +35,7 @@ import {
   type TriggerCombinator,
   validateInteraction,
 } from './site-interactions'
-import { HOST_EVENT_TYPES } from './workflows'
+import { HOST_EVENT_TYPES } from './host-events'
 
 /**
  * Actions builder (AGL-148): HubSpot-style event → action automation on

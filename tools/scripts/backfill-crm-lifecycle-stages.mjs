@@ -83,7 +83,7 @@ import {
   planLeadForHost,
   preconditionsForTree,
   tallyCompanyMirrors,
-} from './lib/crm-lifecycle-backfill.mjs'
+} from '../../libs/plugins/crm/scripts/crm-lifecycle-backfill.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = join(here, '..', '..')

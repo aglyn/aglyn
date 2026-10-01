@@ -29,11 +29,17 @@ import { registerPluginTaxProfile } from '@aglyn/aglyn/plugin-manager/plugin-tax
  * charges and records what it is told. That the REAL owner answers the same,
  * and is registered wherever a booking is priced or confirmed, is held where
  * both plugins can be reached: `tax-profile-is-registered.spec.ts` in each app.
+ *
+ * `flatRate` is the owner's read of the merchant's rate for a kind of charge;
+ * a spec hands the rates its merchant set, and with none every rate is unset.
  */
-export function standInTaxProfile(): void {
+export function standInTaxProfile(
+  options: { flatRate?: (hostId: string, charge: string) => unknown } = {},
+): void {
   resetPluginServicesForTests()
   registerPluginTaxProfile(
     {
+      flatRate: async (hostId, charge) => options.flatRate?.(hostId, charge),
       flatTax: (rate, chargeCents, fallbackLabel) => {
         const source = (rate ?? {}) as { pct?: unknown; label?: unknown }
         const pct = Number(source.pct)
