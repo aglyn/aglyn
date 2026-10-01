@@ -556,24 +556,9 @@
       "why": "The designer's generic form controls; nothing of the forms plugin's model."
     },
     {
-      "path": "libs/plugins/ai/src/lib/insights/ai-figure-readers.ts",
-      "rules": [
-        "plugin-collection:data"
-      ],
-      "lane": "coupling"
-    },
-    {
       "path": "libs/plugins/ai/src/lib/jobs/ai-workflow-records.ts",
       "rules": [
-        "plugin-collection:data",
         "plugin-collection:marketing"
-      ],
-      "lane": "coupling"
-    },
-    {
-      "path": "libs/plugins/ai/src/lib/runtime/site-inventory.ts",
-      "rules": [
-        "plugin-collection:data"
       ],
       "lane": "coupling"
     },

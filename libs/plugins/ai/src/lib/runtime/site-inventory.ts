@@ -16,8 +16,6 @@
  */
 
 import { hostCollectionKind } from '@aglyn/aglyn/app-utils/collection-kind'
-import { effectiveDatasetModel } from '@aglyn/aglyn/app-utils/dataset-models'
-import { datasetDisplayName } from '@aglyn/aglyn/app-utils/datasets'
 import { isFormArchived } from '@aglyn/aglyn/app-utils/forms'
 import {
   describeTheme,
@@ -29,11 +27,9 @@ import {
   reusableComponentKindOf,
 } from '@aglyn/aglyn/app-utils/reusable-component-kind'
 import { SCREEN_KIND_TEMPLATE } from '@aglyn/aglyn/app-utils/screen-route'
+import { pluginRecordIndex } from '@aglyn/aglyn/plugin-manager/plugin-record-index'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin/server/firebase-admin'
-import {
-  resolveOrgIdForHost,
-  scopedToHost,
-} from '@aglyn/tenant-data-admin/server/organizations'
+import { resolveOrgIdForHost } from '@aglyn/tenant-data-admin/server/organizations'
 import {
   AI_INVENTORY_KINDS,
   AI_SITE_INVENTORY_MAX_PER_KIND,
@@ -153,6 +149,32 @@ async function readWindow<T>(
 }
 
 /**
+ * The org's datasets shared with the site, through the `dataset` index the
+ * data plugin publishes (AGL-3080) rather than its collection: their names
+ * and their fields' names, in the dataset page's order. None where no plugin
+ * keeps datasets here.
+ */
+async function readIndexedDatasets(
+  orgId: string,
+  hostId: string,
+  cap: number,
+): Promise<Window<AiInventoryDataset>> {
+  const datasets = pluginRecordIndex('dataset')
+  if (!datasets) return { rows: [], truncated: false }
+  const { records, truncated } = await datasets.index.list({ orgId, hostId, limit: cap })
+  return {
+    rows: records.map((record) => ({
+      id: record.id,
+      name: record.name,
+      fields: (Array.isArray(record.facts['fields']) ? (record.facts['fields'] as Data[]) : [])
+        .map((field) => text(field?.['name']) || text(field?.['id']))
+        .filter(Boolean),
+    })),
+    truncated,
+  }
+}
+
+/**
  * Read one site's inventory for a generation.
  *
  * SCOPED before anything is read. The job names a site and an org, and
@@ -246,21 +268,7 @@ export async function readSiteInventory(
                   .filter(Boolean),
               },
       ),
-      readWindow<AiInventoryDataset>(
-        scopedToHost(firestore.collection('orgs').doc(orgId).collection('datasets'), hostId),
-        ['displayName', 'name', 'fields', 'model', 'deletedAt'],
-        cap,
-        (id, data) => {
-          if (data['deletedAt']) return null
-          const model = effectiveDatasetModel(
-            data as Parameters<typeof effectiveDatasetModel>[0],
-          )
-          const fields = model.order
-            .map((fieldId) => text(model.fields[fieldId]?.name) || fieldId)
-            .filter(Boolean)
-          return { id, name: datasetDisplayName(data) || id, fields }
-        },
-      ),
+      readIndexedDatasets(orgId, hostId, cap),
       readWindow<AiInventoryCollection>(
         host.collection('collections'),
         ['displayName', 'name', 'slug', 'kind'],

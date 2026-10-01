@@ -50,7 +50,7 @@ import {
   parseAiInsightReads,
   type AiInsightReadRequest,
 } from '../tools/ai-insight-tool'
-import { aiDatasetCatalog } from '../insights/ai-figure-readers'
+import { aiDatasetCatalog } from '../insights/ai-dataset-catalog'
 import {
   aiInsightDatasetCatalog,
   aiInsightReaderCatalog,

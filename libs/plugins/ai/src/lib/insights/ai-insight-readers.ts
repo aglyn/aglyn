@@ -33,7 +33,7 @@ import {
 } from '../model/ai-insight'
 import { filterEnabledPluginsByReleaseFlags } from '@aglyn/tenant-data-admin/server/release-flags'
 import type { AiInsightReadRequest } from '../tools/ai-insight-tool'
-import type { AiDatasetCatalogEntry } from './ai-figure-readers'
+import type { AiDatasetCatalogEntry } from './ai-dataset-catalog'
 
 /**
  * Which figure readers an insight job may read, and reading them (AGL-2915).

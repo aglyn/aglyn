@@ -773,7 +773,9 @@ const { records } = bottles ? await bottles.list({ hostId, limit: 20 }) : { reco
 Import it by its own subpath (`@aglyn/aglyn/plugin-manager/plugin-record-index`).
 Commerce publishes `product` and `productCategory`; Workflows publishes a site's
 `workflow`, `webhook` and `action` records (a webhook's facts never carry its URL
-or secret).
+or secret); Data publishes the workspace's `dataset` records, narrowed to a site
+to the ones shared with it, with their fields and scope tokens (never a record of
+one), from its console-only server declarations.
 
 ## What depends on a thing — `plugin-dependents` (`/server`)
 
