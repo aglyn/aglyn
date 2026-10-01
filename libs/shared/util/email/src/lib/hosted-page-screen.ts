@@ -78,6 +78,7 @@ import {
   DOCUMENT_SHARE_LURE_PATTERNS,
   isWorkspaceOwnBrand,
   linkHostsIn,
+  linkUrlsIn,
   isBrandsOwnDomain,
   lookalikeBrandForHost,
   PHISHING_LURE_PATTERNS,
@@ -112,6 +113,13 @@ export interface HostedPageScreenVerdict {
    * link reputation lookup reads (AGL-3451), so the page is walked once.
    */
   linkHosts: string[]
+  /**
+   * The same links whole, as written (`linkUrlsIn`), for the lookup's
+   * `'url'` mode (AGL-3459). Query strings are still on them:
+   * `foreignLinksForReputation` drops them before anything is looked up or
+   * stored.
+   */
+  linkUrls: string[]
 }
 
 /** A node as the walk finds it. */
@@ -430,7 +438,7 @@ export function screenHostedPage(input: HostedPageScreenInput): HostedPageScreen
     })
   }
 
-  return { signals, linkHosts }
+  return { signals, linkHosts, linkUrls: linkUrlsIn(pageText) }
 }
 
 /**
@@ -517,8 +525,10 @@ export interface SiteRedirectScreenInput {
 export function screenSiteRedirect(input: SiteRedirectScreenInput): HostedPageScreenVerdict {
   const signals: PhishingScreenSignal[] = []
   const destination = String(input.destination ?? '').trim()
-  const hosts = linkHostsIn(destination.startsWith('//') ? `https:${destination}` : destination)
-  if (!hosts.length) return { signals, linkHosts: hosts }
+  const absolute = destination.startsWith('//') ? `https:${destination}` : destination
+  const hosts = linkHostsIn(absolute)
+  const linkUrls = linkUrlsIn(absolute)
+  if (!hosts.length) return { signals, linkHosts: hosts, linkUrls }
   const ownNames = squashScreenText((input.ownNames ?? []).filter(Boolean).join(' '))
   const ownHosts = (input.ownDomains ?? [])
     .map((domain) => String(domain ?? '').trim().toLowerCase().replace(/\.+$/, ''))
@@ -539,7 +549,7 @@ export function screenSiteRedirect(input: SiteRedirectScreenInput): HostedPageSc
     !ownHosts.some((own) => host === own || host.endsWith(`.${own}`)) &&
     !isAnyOfficialBrandDomain(registrable) &&
     !isCommonLinkDomain(registrable)
-  if (!leaves) return { signals, linkHosts: hosts }
+  if (!leaves) return { signals, linkHosts: hosts, linkUrls }
 
   const source = String(input.source ?? '').trim()
   const words = pathWords(source)
@@ -557,7 +567,7 @@ export function screenSiteRedirect(input: SiteRedirectScreenInput): HostedPageSc
       signals.push({ code: 'brand-lure-link', brand: brand.id, lure: anyLure.slice(0, 120), host })
     }
   }
-  return { signals, linkHosts: hosts }
+  return { signals, linkHosts: hosts, linkUrls }
 }
 
 /** A path read as words: `/secure-document_access` → `secure document access`. */

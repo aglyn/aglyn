@@ -40,7 +40,7 @@
 
 import { linkReputationSignals } from './link-reputation'
 import {
-  linkHostsIn,
+  linkUrlsIn,
   type PhishingScreenSignal,
   screenOutboundEmail,
   signalsThatHold,
@@ -158,11 +158,12 @@ export async function screenTenantMessage(
     ownNames: workspace.ownNames,
     ownDomains: workspace.ownDomains,
   })
-  // Every foreign host the message links to, against the reputation list
-  // (AGL-3451). A listed host is a strong signal; a lookup that fails is
-  // none. Nothing installed looks nothing up.
+  // Every foreign link the message carries, against the reputation list
+  // (AGL-3451): its host, and in 'url' mode its address (AGL-3459). A
+  // listing is a strong signal; a lookup that fails is none. Nothing
+  // installed looks nothing up.
   const reputation = await linkReputationSignals(
-    linkHostsIn([input.subject, ...input.bodies].filter(Boolean).join('\n')),
+    linkUrlsIn([input.subject, ...input.bodies].filter(Boolean).join('\n')),
     { ownDomains: workspace.ownDomains },
   )
   const holding = signalsThatHold([...verdict.signals, ...reputation], {
