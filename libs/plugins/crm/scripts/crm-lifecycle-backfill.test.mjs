@@ -49,7 +49,7 @@ import {
 } from './crm-lifecycle-backfill.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
-const REPO_ROOT = join(here, '..', '..', '..')
+const REPO_ROOT = join(here, '..', '..', '..', '..')
 
 const HOST = 'demo'
 const FORM = 'form-wholesale'

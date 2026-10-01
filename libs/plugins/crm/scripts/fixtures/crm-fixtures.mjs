@@ -72,9 +72,9 @@
 //   is the seed invariant `docs/E2E_LOCAL.md` states.
 
 import { Timestamp } from 'firebase-admin/firestore'
-import { crmFieldListFields, withCrmListFields } from './org-record-list-fields.mjs'
-import { displayNameSearchFields } from './name-search-tokens.mjs'
-import { newFormListFields } from './site-form-list-fields.mjs'
+import { crmFieldListFields, withCrmListFields } from '../../../../../tools/scripts/lib/org-record-list-fields.mjs'
+import { displayNameSearchFields } from '../../../../../tools/scripts/lib/name-search-tokens.mjs'
+import { newFormListFields } from '../../../../../tools/scripts/lib/site-form-list-fields.mjs'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 const HOUR_MS = 60 * 60 * 1000

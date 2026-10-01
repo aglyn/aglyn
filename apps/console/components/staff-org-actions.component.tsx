@@ -39,6 +39,7 @@ import {
   type OrgPlan,
 } from '@aglyn/aglyn'
 import { withAdminAuditIndex } from '@aglyn/aglyn/app-utils/admin-audit-index'
+import { pluginPlanQuotas } from '@aglyn/aglyn/plugin-manager/plugin-plan-entitlements'
 import { useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
@@ -116,8 +117,8 @@ export const PLAN_OPTIONS: Array<{ value: string; label: string }> = [
  *
  * That is exactly the AGL-549 bug, which was fixed for the feature booleans
  * by deriving them and never fixed here. `QUOTA_FIELDS` is now derived too,
- * and anything absent from this map falls back to a humanised key rather
- * than dropping out.
+ * and anything absent from this map falls back to the label the owning
+ * plugin declares, then to a humanised key, rather than dropping out.
  */
 const QUOTA_LABELS: Readonly<Record<string, string>> = {
   hostLimit: 'Sites',
@@ -140,7 +141,6 @@ const QUOTA_LABELS: Readonly<Record<string, string>> = {
   redirectsPerHost: 'Redirects',
   // Contacts + companies + deals (AGL-2611); the key keeps its persisted name.
   contactsPerHost: 'CRM records',
-  crmEmailsPerDay: 'One-to-one emails / day',
   // Campaign sends only (AGL-1438); transactional mail is uncapped.
   emailSendsPerMonth: 'Campaign email sends / mo',
   actionRunsPerMonth: 'Action runs / mo',
@@ -157,6 +157,13 @@ const QUOTA_LABELS: Readonly<Record<string, string>> = {
   transactionFeeDigitalPct: 'Txn fee digital %',
   marketplaceFeePct: 'Marketplace fee %',
 }
+
+/**
+ * A key a plugin owns, in the plugin's own words: the label its plan
+ * declaration gives a staff page (AGL-3080).
+ */
+const pluginQuotaLabel = (key: string): string | undefined =>
+  pluginPlanQuotas().find((quota) => quota.key === key)?.label
 
 /** `maxDatasetsPerOrg` → `Max datasets per org`, for a key nobody labelled. */
 const humanizeKey = (key: string): string => {
@@ -175,7 +182,10 @@ const humanizeKey = (key: string): string => {
 export const QUOTA_FIELDS: Array<{ key: string; label: string }> =
   Object.entries(PLAN_ENTITLEMENTS.free)
     .filter(([, value]) => typeof value === 'number')
-    .map(([key]) => ({ key, label: QUOTA_LABELS[key] ?? humanizeKey(key) }))
+    .map(([key]) => ({
+      key,
+      label: QUOTA_LABELS[key] ?? pluginQuotaLabel(key) ?? humanizeKey(key),
+    }))
 
 /** Every boolean feature flag, overridable as inherit / on / off. */
 // Every feature key, derived from the plan model so new flags (the

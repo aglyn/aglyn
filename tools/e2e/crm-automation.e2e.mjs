@@ -35,7 +35,7 @@
 //
 //   node tools/e2e/crm-automation.e2e.mjs
 
-import { removeContactsAtAddress } from '../scripts/lib/crm-fixtures.mjs'
+import { removeContactsAtAddress } from '../../libs/plugins/crm/scripts/fixtures/crm-fixtures.mjs'
 import {
   adminFirestore,
   cardNamed,

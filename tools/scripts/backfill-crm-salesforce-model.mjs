@@ -65,7 +65,7 @@ import {
   planContact,
   preconditionsForTree,
 } from './lib/one-record-backfill.mjs'
-import { planCompanyCounts, tallyCompanyMirrors } from './lib/crm-lifecycle-backfill.mjs'
+import { planCompanyCounts, tallyCompanyMirrors } from '../../libs/plugins/crm/scripts/crm-lifecycle-backfill.mjs'
 import { parseDeployArgs } from './lib/deploy-args.mjs'
 import { collect, commitAll, connectFirestore } from './lib/firestore-backfill.mjs'
 

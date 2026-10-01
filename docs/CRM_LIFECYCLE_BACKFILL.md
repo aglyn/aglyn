@@ -11,8 +11,8 @@
 
 Three gaps the CRM v2 arc left in the data that was already there, closed by
 one script: `tools/scripts/backfill-crm-lifecycle-stages.mjs`. Its decisions
-live in `tools/scripts/lib/crm-lifecycle-backfill.mjs` and are pinned by
-`tools/scripts/lib/crm-lifecycle-backfill.test.mjs`
+live in `libs/plugins/crm/scripts/crm-lifecycle-backfill.mjs` and are pinned by
+`libs/plugins/crm/scripts/crm-lifecycle-backfill.test.mjs`
 (`npm run test:crm-lifecycle-backfill`).
 
 | Gap | Left by | Repaired by |

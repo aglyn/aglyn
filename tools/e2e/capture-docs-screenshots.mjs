@@ -1034,7 +1034,7 @@ const shots = [
   // captured, so they drifted from the hub the moment it moved on: the
   // contacts table grew the grid's own toolbar (AGL-3313) and the pipeline
   // stages were renamed. Captured from the seeded book in
-  // `tools/scripts/lib/crm-fixtures.mjs`, whose addresses the docs fixtures
+  // `libs/plugins/crm/scripts/fixtures/crm-fixtures.mjs`, whose addresses the docs fixtures
   // move onto the reserved `.example` TLD.
   //
   // Each frame is the hub's rail plus the section, not the page header

@@ -167,7 +167,7 @@ describe('AGL-3330 · every write to a form keeps the Forms list true', () => {
       'apps/console/app/api/hosts/resources/route.ts',
       'libs/tenant/data/admin/src/lib/server/duplicate-resource.ts',
       'libs/plugins/ai/src/lib/jobs/ai-job-drafts.ts',
-      'tools/scripts/lib/crm-fixtures.mjs',
+      'libs/plugins/crm/scripts/fixtures/crm-fixtures.mjs',
     ]) {
       expect([file, /\bnewFormListFields\(/.test(readCode(file))]).toEqual([file, true])
     }

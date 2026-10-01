@@ -145,7 +145,7 @@
     "test:test-wiring": "node --test tools/scripts/lib/test-wiring.test.mjs",
     "test:backfill-core": "node --test tools/scripts/backfills/lib/backfill-core.test.mjs",
     "test:resource-uid": "node --test tools/scripts/lib/resource-uid.test.mjs",
-    "test:crm-lifecycle-backfill": "node --test tools/scripts/lib/crm-lifecycle-backfill.test.mjs",
+    "test:crm-lifecycle-backfill": "node --test libs/plugins/crm/scripts/crm-lifecycle-backfill.test.mjs",
     "test:one-record-backfill": "node --test tools/scripts/lib/one-record-backfill.test.mjs",
     "test:org-lead-backfill": "node --test tools/scripts/lib/org-lead-backfill.test.mjs",
     "test:org-campaign-backfill": "node --test tools/scripts/lib/org-campaign-backfill.test.mjs",
