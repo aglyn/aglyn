@@ -341,7 +341,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       scheduledPublishing: false,
       // The two AI flags point opposite ways on Free, on purpose (AGL-2925).
       // `aiAssist` is the guided rung of the console assistant — page-aware
-      // level-2 answers and the copy assistant — and stays Pro and up; Free
+      // level-2 answers and the copy assistant — and starts at Starter; Free
       // keeps the docs-grounded level-1 chat it always had. `aiGenerative`
       // is the generative door the taste is FOR: a Free workspace may
       // generate against its 300-credit band, behind the wall and every

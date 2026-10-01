@@ -17,6 +17,7 @@
 
 import {
   isUncappedPlanComp,
+  planLabelGrantingFeature,
   resolveOrgEntitlements,
   resolvePlanPricing,
 } from '@aglyn/aglyn/app-utils/plan-entitlements'
@@ -531,6 +532,24 @@ export function assistFreeTasteRefusalText(
     default:
       return null
   }
+}
+
+/**
+ * The sentence a workspace whose plan does not carry `aiAssist` is told, at
+ * the route and at every console door that checks the flag first.
+ *
+ * The plan it names is read from the plan table rather than written here.
+ * Which tier first carries the flag is a pricing decision, and a name typed
+ * into the sentence keeps naming the old tier after the table moves — telling
+ * the reader to buy a plan above the one that would let them in. `undefined`
+ * from the lookup means no tier carries the flag on its base row, and the
+ * sentence then names no plan rather than a wrong one.
+ */
+export function assistNotOnPlanText(): string {
+  const plan = planLabelGrantingFeature('aiAssist')
+  return plan
+    ? `AI assist starts on the ${plan} plan — see Billing to upgrade`
+    : 'AI assist is not on this plan — see Billing to upgrade'
 }
 
 /**

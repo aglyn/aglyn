@@ -156,7 +156,7 @@ Either way the records are the same, and the site's setup page shows them. See
 
 ## Step 5 — Back up before you hand over {#step-5-backups}
 
-Every site exports a full backup from its own settings. Take one:
+On **Pro and above**, every site exports a full backup from its own settings. Take one:
 
 - **before any large redesign**, so "put it back how it was" is a real option;
 - **at handover**, and give the client a copy — it is theirs, and having it makes the
