@@ -324,13 +324,30 @@ describe('QuotaWarningsBanner actions for a scoped viewer (AGL-1072)', () => {
     expect(billingLinks()).toEqual([])
   })
 
-  it('keeps Fix payment for an org-wide viewer', async () => {
+  it('sends an org-wide viewer to the Update payment method button when payment is past due', async () => {
+    // The sentence asks for a new payment method, so the button is named for
+    // it and lands on the Billing button that does it (AGL-3442).
     scope.loaded = true
     scope.orgWide = true
     currentOrg.org = { plan: 'business', subscription: { status: 'past_due' } }
     render(<QuotaWarningsBanner />)
     await screen.findByText(/Update your payment method/)
-    expect(billingLinks()[0].textContent).toBe('Fix payment')
+    expect(billingLinks()).toHaveLength(1)
+    expect(billingLinks()[0].textContent).toBe('Update payment method')
+    expect(billingLinks()[0].getAttribute('href')).toBe(
+      '/acme/billing#update-payment-method',
+    )
+  })
+
+  it('keeps Fix billing, to Billing itself, once the plan has lapsed', async () => {
+    // Control for the case above: the anchor is the past-due answer only.
+    scope.loaded = true
+    scope.orgWide = true
+    currentOrg.org = { plan: 'business', subscription: { status: 'unpaid' } }
+    render(<QuotaWarningsBanner />)
+    await screen.findByText(/your plan has stopped/)
+    expect(billingLinks()[0].textContent).toBe('Fix billing')
+    expect(billingLinks()[0].getAttribute('href')).toBe('/acme/billing')
   })
 })
 

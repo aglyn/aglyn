@@ -64,6 +64,7 @@ import {
   billingNoticeWorkspace,
   dunningCancellationNotice,
   invoiceNotice,
+  invoiceNoticeLink,
 } from './customer-billing-notices'
 import { revalidateOrgHosts } from '../../../../utils/server/tenant-revalidate'
 import {
@@ -87,7 +88,11 @@ import {
   stripeCallWithKey,
 } from '../../../../utils/server/immediate-charge'
 import { platformInvoiceRevenue } from '../../../../utils/server/platform-revenue'
-import { describeStripePaymentMethod } from '../../_lib/stripe-payment-method'
+import {
+  defaultPaymentMethodChange,
+  describeStripePaymentMethod,
+  moveSubscriptionsOntoDefault,
+} from '../../_lib/stripe-payment-method'
 // The annual-mix metric's only input (AGL-1640) — three-state on purpose, and
 // specced per branch, because a wrong `billing_interval` is indistinguishable
 // from a right one in every report that reads it.
@@ -1614,9 +1619,9 @@ async function handler(request: Request): Promise<Response> {
                   : 'billing.invoice',
               ...notice,
               orgId,
-              link: orgSlug
-                ? buildRoute(Route.MANAGE_BILLING, { orgSlug })
-                : '/org/billing',
+              // A failed payment lands on the Update payment method button
+              // its body names (AGL-3442).
+              link: invoiceNoticeLink(type, orgSlug),
             }))
           }
           // THE PLUGIN'S OWN INVOICE, ANSWERED (AGL-3011).
@@ -1757,6 +1762,40 @@ async function handler(request: Request): Promise<Response> {
       if (customerId) {
         const orgId = await findOrgIdByStripeCustomer(customerId)
         if (!orgId) ledger.skip('payment-method-customer-is-not-a-workspace')
+        // A NEW DEFAULT REACHES THE SUBSCRIPTION (AGL-3442).
+        //
+        // Stripe's portal payment-method flow, which Billing's "Update
+        // payment method" button opens, sets only the CUSTOMER's default. The
+        // subscription carries its own, which wins, so without this the
+        // customer is told the payment method is updated while the next retry
+        // charges the card that failed. Done here because every route to a
+        // new default arrives here, and before the plugins are told what the
+        // default is. Idempotent, so a redelivery is harmless.
+        const newDefault =
+          orgId && type === 'customer.updated'
+            ? defaultPaymentMethodChange(
+                object,
+                event?.data?.previous_attributes,
+              )
+            : null
+        const stripeSecret = process.env.STRIPE_SECRET_KEY
+        if (newDefault && stripeSecret) {
+          const outcome = await moveSubscriptionsOntoDefault(
+            stripeSecret,
+            customerId,
+            newDefault,
+          )
+          if (!outcome || outcome.failed.length) {
+            // LOUD: the customer believes the new card is the one billed.
+            console.error(
+              '[billing/webhook] subscription not moved onto the new default payment method',
+              { orgId, failed: outcome?.failed ?? 'subscriptions unreadable' },
+            )
+          }
+          if (outcome?.moved.length) {
+            ledger.effect('subscriptions-moved-onto-the-new-default')
+          }
+        }
         if (orgId) {
           const defaultType = await readDefaultPaymentMethodType(customerId)
           if (defaultType === undefined) {

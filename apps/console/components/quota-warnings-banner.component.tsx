@@ -33,6 +33,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useFirestore, useScopeTokens, useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { buildRoute, Route } from '../constants/route-links'
+import { updatePaymentMethodHref } from '../utils/update-payment-method-link'
 import { useHostId } from '../components/host-id-provider'
 import { useOrgScope, useOrgSlug } from '../hooks/use-org-scope'
 import { useUrlNamesOrg } from '../hooks/use-secondary-nav'
@@ -518,13 +519,21 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
         sx={{ borderRadius: 0 }}
         action={
           orgWideViewer ? (
+            // Past due, the sentence asks for a new payment method, so the
+            // button is named for that and lands on the Billing button that
+            // does it (AGL-3442). Lapsed, the plan has already stopped, and
+            // Billing's Outstanding card is where the unpaid invoice is paid.
             <AppLink
               componentVariant="button"
               color="inherit"
               size="small"
-              href={buildRoute(Route.MANAGE_BILLING, { orgSlug })}
+              href={
+                lapsed
+                  ? buildRoute(Route.MANAGE_BILLING, { orgSlug })
+                  : updatePaymentMethodHref(orgSlug)
+              }
             >
-              {lapsed ? 'Fix billing' : 'Fix payment'}
+              {lapsed ? 'Fix billing' : 'Update payment method'}
             </AppLink>
           ) : undefined
         }
