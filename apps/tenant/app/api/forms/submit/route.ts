@@ -774,7 +774,9 @@ export async function POST(request: Request): Promise<Response> {
         // Filed under the form's campaigns, inside this site's own facet on a
         // row the whole org shares. Membership is not consent, and this passes
         // none: `marketingConsent` above is the only input that records one.
-        ...(formCampaignIds.length ? { campaignIds: formCampaignIds } : {}),
+        ...(formCampaignIds.length
+          ? { containers: { campaign: formCampaignIds } }
+          : {}),
         // The mapped custom field values. Absent when nothing mapped, so the
         // owner adds no `custom` key for nothing.
         ...(Object.keys(mappedContactCustom).length

@@ -512,7 +512,8 @@
       "rules": [
         "domain-declares:marketing"
       ],
-      "lane": "marketing"
+      "lane": "stays",
+      "why": "The person-capture contract every silo hands to the plugin that keeps people, not a Marketing feature. The one word it trips on is `marketingConsent`: the opt-in a capture surface carried, which is consent to the mail rail's MARKETING send purpose (the argued stay on marketing-consent.ts), asked by every marketing-purpose message whichever plugin sends it. What a capture surface is filed under is named by container kind (`containers`, plugin-containers.ts), never by campaign."
     },
     {
       "path": "libs/besigner/feature/designer/src/lib/form-fields/form-fields.tsx",

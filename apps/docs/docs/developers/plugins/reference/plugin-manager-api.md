@@ -1150,6 +1150,14 @@ and what a new person sets off. The silo reports what it saw. Like
 `plugin-record-timeline`, the registry authenticates nobody: the silo has
 already decided the capture is the workspace's to record.
 
+**`containers` is what the capture SURFACE is filed under, by container
+kind** (`plugin-containers`, above) — `{ campaign: ids }` for a form its
+merchant filed under campaigns. It is true of everybody who
+uses that surface, which is what makes it a different fact from where this
+visitor arrived from. The owner files the person under the kinds it keeps and
+ignores the rest. Filing is not consent: `marketingConsent` is the only input
+that records one.
+
 ## Record timeline — `plugin-record-timeline` (`/server`)
 
 A plugin that sends mail or books meetings files what happened on the
