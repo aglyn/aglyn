@@ -19,6 +19,7 @@
 import {
   NOTIFICATION_CATEGORY_DESCRIPTIONS,
   NOTIFICATION_SELF_SENT_EMAIL_TYPES,
+  selfSentEmailNote,
   NOTIFICATION_TYPE_LABELS,
   notificationTypesInCategory,
   type AglynNotificationType,
@@ -229,7 +230,7 @@ export function NotificationScopeTable(props: NotificationScopeTableProps) {
                         return (
                           <TableCell key={channel.key} align="center">
                             {disabled ? (
-                              <Tooltip title="This digest sends its own email, under its switch in Digests.">
+                              <Tooltip title={selfSentEmailNote(type)}>
                                 <span>{control}</span>
                               </Tooltip>
                             ) : (

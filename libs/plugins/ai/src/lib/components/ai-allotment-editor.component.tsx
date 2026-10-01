@@ -160,7 +160,7 @@ export function AiAllotmentEditor(props: AiAllotmentEditorProps) {
                   value="soft"
                   control={<Radio size="small" />}
                   disabled={busy}
-                  label="Keep going and alert at 80% and 100% (soft)"
+                  label="Keep going and alert at 75%, 80%, 90% and 100% (soft)"
                 />
               </RadioGroup>
             </div>

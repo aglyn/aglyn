@@ -302,7 +302,7 @@ export function BillingAiAllotments({ orgId }: { orgId?: string }) {
       <Typography variant="body2" color="text.secondary">
         {'Give a member or a whole site a share of the workspace’s AI credits each month. ' +
           'A hard allotment stops AI requests at the line; a soft one keeps going and alerts ' +
-          'you at 80% and 100%. The workspace’s own credits still stop first.'}
+          'you at 75%, 80%, 90% and 100%. The workspace’s own credits still stop first.'}
       </Typography>
 
       <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}>

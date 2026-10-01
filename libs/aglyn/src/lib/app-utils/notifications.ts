@@ -733,6 +733,22 @@ export const NOTIFICATION_SELF_SENT_EMAIL_TYPES: ReadonlySet<string> =
   ])
 
 /**
+ * The tooltip on a self-sent type's disabled email switch: it names what
+ * DOES govern that mail, which differs by type (AGL-3432). Calling a task
+ * reminder a digest sent people looking for a Digests switch that is not it.
+ */
+export function selfSentEmailNote(type: string): string {
+  switch (type) {
+    case 'content.taskReminder':
+      return 'Task reminders send their own email, one per run listing every task due. Mute this category to stop them.'
+    case 'system.riskNotice':
+      return 'Risk and account notices are always emailed, whatever this switch says.'
+    default:
+      return 'This digest sends its own email, under its switch in Digests.'
+  }
+}
+
+/**
  * Whether a channel is on for one notification, at its own scope.
  *
  * Resolution order, first answer wins: the notification's SITE, its
