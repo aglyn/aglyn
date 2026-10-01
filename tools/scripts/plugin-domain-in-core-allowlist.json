@@ -99,21 +99,6 @@
       "lane": "forms"
     },
     {
-      "path": "apps/console/app/api/hosts/export/route.ts",
-      "rules": [
-        "plugin-collection:data"
-      ],
-      "lane": "plugin-id"
-    },
-    {
-      "path": "apps/console/app/api/hosts/import/route.ts",
-      "rules": [
-        "plugin-collection:data",
-        "domain-declares:data"
-      ],
-      "lane": "plugin-id"
-    },
-    {
       "path": "apps/console/app/api/orgs/datasets/export/route.ts",
       "rules": [
         "domain-name",

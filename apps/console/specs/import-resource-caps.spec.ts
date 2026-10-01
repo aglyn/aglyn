@@ -230,6 +230,8 @@ jest.mock('@aglyn/aglyn/server', () => ({
 }))
 
 import { POST as IMPORT_POST } from '../app/api/hosts/import/route'
+import { registerPluginServerDeclarations } from '../constants/plugins.declarations.server.generated'
+import { listDeclaredSiteBundleSections } from '@aglyn/aglyn/plugin-manager/plugin-site-bundle'
 import {
   EXPORT_COLLECTION_LIMITS,
   SITE_EXPORT_FORMAT,
@@ -243,6 +245,19 @@ import {
 } from '@aglyn/aglyn/server'
 
 const PRO = PLAN_ENTITLEMENTS.pro
+
+/**
+ * A site's datasets are the data plugin's section of the bundle, restored
+ * through its answers — registered from its declarations, as the console's
+ * boot registers them — and capped at the limit it declares.
+ */
+const DATASETS_LIMIT = listDeclaredSiteBundleSections().find(
+  (section) => section.key === 'datasets',
+)?.limit as number
+
+beforeAll(async () => {
+  await registerPluginServerDeclarations()
+})
 
 const ids = (count: number, prefix: string) =>
   Array.from({ length: count }, (_unused, index) => `${prefix}-${index + 1}`)
@@ -340,7 +355,7 @@ describe('the premise: every bundle cap is at or over the Pro plan cap', () => {
     expect(EXPORT_COLLECTION_LIMITS.functions).toBe(100)
     expect(PRO.functionsPerHost).toBe(50)
 
-    expect(EXPORT_COLLECTION_LIMITS.datasets).toBe(50)
+    expect(DATASETS_LIMIT).toBe(50)
     expect(PRO.datasetsPerOrg).toBe(15)
     // Exactly the hard max: a full bundle takes the whole addon runway too.
     expect(PRO.maxDatasetsPerOrg).toBe(50)
@@ -354,7 +369,7 @@ describe('the premise: every bundle cap is at or over the Pro plan cap', () => {
 
 describe('datasets: the leg that leaks revenue, and the org-scoped one', () => {
   it('refuses a full bundle into a Pro workspace, and writes NOTHING', async () => {
-    const wanted = ids(EXPORT_COLLECTION_LIMITS.datasets, 'ds')
+    const wanted = ids(DATASETS_LIMIT, 'ds')
     const response = await runImport('host-1', bundleOf({
       datasets: wanted.map((id) => datasetItem(id)),
     }))
@@ -394,7 +409,7 @@ describe('datasets: the leg that leaks revenue, and the org-scoped one', () => {
     // reading the plan's included number would refuse a customer their own
     // backup after taking their money for the room to hold it.
     mockOrg = { plan: 'pro', seatAddons: { datasets: 35 } }
-    const wanted = ids(EXPORT_COLLECTION_LIMITS.datasets, 'ds')
+    const wanted = ids(DATASETS_LIMIT, 'ds')
     const response = await runImport('host-1', bundleOf({
       datasets: wanted.map((id) => datasetItem(id)),
     }))
@@ -447,7 +462,7 @@ describe('datasets: the leg that leaks revenue, and the org-scoped one', () => {
      * is one of the two things the feature is for.
      */
     seedHost('host-2')
-    const all = ids(EXPORT_COLLECTION_LIMITS.datasets, 'ds')
+    const all = ids(DATASETS_LIMIT, 'ds')
     seedWorkspaceDatasets('org-1', all)
 
     const response = await runImport('host-2', bundleOf({
@@ -463,7 +478,7 @@ describe('datasets: the leg that leaks revenue, and the org-scoped one', () => {
     // datasets are being provisioned into a workspace that holds none of them,
     // and the ids collide with nothing because dataset ids are org-scoped.
     seedHost('host-3')
-    const all = ids(EXPORT_COLLECTION_LIMITS.datasets, 'ds')
+    const all = ids(DATASETS_LIMIT, 'ds')
     seedWorkspaceDatasets('org-1', all)
 
     const response = await runImport('host-3', bundleOf({
@@ -482,7 +497,7 @@ describe('datasets: the leg that leaks revenue, and the org-scoped one', () => {
     // because the datasets are still 50 datasets the WORKSPACE does not have.
     const response = await runImport('host-1', {
       ...bundleOf({
-        datasets: ids(EXPORT_COLLECTION_LIMITS.datasets, 'ds').map((id) =>
+        datasets: ids(DATASETS_LIMIT, 'ds').map((id) =>
           datasetItem(id),
         ),
       }),
@@ -494,14 +509,15 @@ describe('datasets: the leg that leaks revenue, and the org-scoped one', () => {
   })
 
   it('judges the bundle by what will be written, not by what the file claims', async () => {
-    // The route truncates at `EXPORT_COLLECTION_LIMITS.datasets`, so a longer
-    // file stores 50 documents whatever it says. A check counting the raw array
+    // The route truncates at the section's declared limit, so a longer file
+    // stores 50 documents whatever it says. A check counting the raw array
     // would refuse an import that fits — the same drift the export/import media
     // limit had before AGL-1382 gave it one home, which is why the slice lives
-    // in `bundleItems` and both answers read it.
+    // in the route's `sectionItems` and the section's refusal and restore both
+    // read it.
     mockOrg = { plan: 'pro', seatAddons: { datasets: 35 } }
     const response = await runImport('host-1', bundleOf({
-      datasets: ids(EXPORT_COLLECTION_LIMITS.datasets + 10, 'ds').map((id) =>
+      datasets: ids(DATASETS_LIMIT + 10, 'ds').map((id) =>
         datasetItem(id),
       ),
     }))
@@ -512,7 +528,7 @@ describe('datasets: the leg that leaks revenue, and the org-scoped one', () => {
 
   it('lets an unlimited plan restore a full bundle', async () => {
     mockOrg = { plan: 'enterprise' }
-    const wanted = ids(EXPORT_COLLECTION_LIMITS.datasets, 'ds')
+    const wanted = ids(DATASETS_LIMIT, 'ds')
     const response = await runImport('host-1', bundleOf({
       datasets: wanted.map((id) => datasetItem(id)),
     }))
@@ -653,7 +669,7 @@ describe('the whole bundle or none of it, and one refusal', () => {
         screens: { 'page-1': '/page-1' },
       },
       screens: [{ $id: 'page-1', displayName: 'Page', slug: '/page-1' }],
-      datasets: ids(EXPORT_COLLECTION_LIMITS.datasets, 'ds').map((id) =>
+      datasets: ids(DATASETS_LIMIT, 'ds').map((id) =>
         datasetItem(id),
       ),
     }))
