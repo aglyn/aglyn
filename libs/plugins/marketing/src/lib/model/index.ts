@@ -22,6 +22,8 @@
  */
 export * from './campaign-kind'
 export * from './campaign-membership-figures'
+export * from './campaign-conversions'
+export * from './campaign-revenue'
 export * from './overlays'
 export * from './experiments'
 export * from './site-contract'

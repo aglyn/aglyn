@@ -394,13 +394,14 @@ A plugin can be used without the designer UI, which is what the map asks.
 
 **A plugin domain on the generic floor: `@aglyn/shared-ui-email-campaigns`** (a
 finding, not an allowlist row). `libs/shared/ui/email-campaigns` holds the
-campaign domain model — `model/campaign-container.ts`,
-`campaign-conversions.ts`, `campaign-report.ts`, `campaign-revenue.ts`,
+campaign domain model — `model/campaign-container.ts`, `campaign-report.ts`,
 `email-record.ts` — and `campaign-container.ts` opens by naming the Firestore
-path a send is stored at. Four plugins read it, and no app does. Two things
+path a send is stored at. Four plugins read it, and no app does. Three things
 have left it (AGL-3080). The send-time rule is the marketing plugin's, and the
 AI plugin asks for a list's send time through `plugin-record-facts`
-(`listSendTime`) instead of reading the sends. The campaign picker is gone:
+(`listSendTime`) instead of reading the sends. What a campaign caused and
+earned (`campaign-conversions.ts`, `campaign-revenue.ts`) is the marketing
+plugin's model too: no other plugin read either. The campaign picker is gone:
 a campaign is a container kind the marketing plugin declares
 (`plugins.config.json` → `containers`, compiled into core
 `plugin-manager/plugin-containers`), and every surface that files a record

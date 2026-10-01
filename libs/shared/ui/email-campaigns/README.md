@@ -53,15 +53,14 @@ handed the `campaign` kind the Marketing plugin declares.
 | --------------------------- | --------------------------------------------------------------------------------- |
 | `model/campaign-container`  | The campaign's window, its lists, its sends, and the rollup across them           |
 | `model/campaign-report`     | The rate math, the population each rate describes, and the link rollup            |
-| `model/campaign-revenue`    | What a campaign earned, per currency, gross and refunded                          |
-| `model/campaign-conversions`| What a campaign caused: the identify moments it is credited with                  |
 | `model/email-record`        | One message: its state, its audience, and when it went out                        |
 
-`model/campaign-revenue` re-exports the attribution window and model name from
-`@aglyn/shared-util-email`, which is where the writer in `tenant-data-admin`
-takes them from — one definition of the window on both sides of the join.
-
 ## What is not here
+
+What a campaign caused and earned — the conversions it is credited with and
+its revenue per currency. Only the Marketing plugin reads them, so they are
+its model (`libs/plugins/marketing/src/lib/model/`), not a shape two plugins
+share.
 
 Sending. The send loop, the composer, the topic subscriptions and the
 send-time API all stay in `@aglyn/plugins-email`: they are behavior that the

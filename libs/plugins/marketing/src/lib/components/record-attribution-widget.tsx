@@ -20,7 +20,7 @@
 import {
   CAMPAIGN_CONVERSION_KINDS,
   type CampaignConversionKind,
-} from '@aglyn/shared-ui-email-campaigns/model/campaign-conversions'
+} from '../model/campaign-conversions'
 import ConversionAttribution from './conversion-attribution.component'
 
 /**

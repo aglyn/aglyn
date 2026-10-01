@@ -726,25 +726,7 @@
       "lane": "marketing"
     },
     {
-      "path": "libs/shared/ui/email-campaigns/src/lib/model/campaign-conversions.ts",
-      "rules": [
-        "domain-name",
-        "domain-exports:marketing",
-        "domain-declares:marketing"
-      ],
-      "lane": "marketing"
-    },
-    {
       "path": "libs/shared/ui/email-campaigns/src/lib/model/campaign-report.ts",
-      "rules": [
-        "domain-name",
-        "domain-exports:marketing",
-        "domain-declares:marketing"
-      ],
-      "lane": "marketing"
-    },
-    {
-      "path": "libs/shared/ui/email-campaigns/src/lib/model/campaign-revenue.ts",
       "rules": [
         "domain-name",
         "domain-exports:marketing",

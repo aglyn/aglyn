@@ -25,7 +25,7 @@ import {
   EMAIL_ATTRIBUTION_MODEL,
   EMAIL_ATTRIBUTION_WINDOW_DAYS,
 } from '@aglyn/shared-util-email'
-import type { CampaignCaveat } from './campaign-report'
+import type { CampaignCaveat } from '@aglyn/shared-ui-email-campaigns/model/campaign-report'
 
 /**
  * WHAT A CAMPAIGN CAUSED — the read half of the identify-moment join.
