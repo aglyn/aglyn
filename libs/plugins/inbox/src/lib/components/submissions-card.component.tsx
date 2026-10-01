@@ -22,6 +22,8 @@ import {
   type ConsolePluginOrgMount,
 } from '@aglyn/aglyn'
 import { INBOX_SUBMISSION_PARAM } from '../model/inbox-record-routes'
+import { hostPublicOrigin } from '@aglyn/aglyn/app-utils/host-naming'
+import { submissionFiledUnder, submissionLinks } from '../model/submission-links'
 // A deep import, NOT the plugin barrel (AGL-1151): the barrel is the entry
 // point the tenant's loader dynamically imports to activate the marketing
 // plugin's SITE half, so a console card named there ships to every published
@@ -31,6 +33,7 @@ import { InboxRecordAttributionZone } from './inbox-attribution-zone'
 // is the plugin's site entry point.
 import {
   pluginRecordByEmailHref,
+  pluginRecordHref,
   pluginRecordListHref,
 } from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
 import {
@@ -39,7 +42,7 @@ import {
   mdiEmailOpenOutline,
   mdiEmailOutline,
 } from '@aglyn/shared-data-mdi'
-import { CardDisplay, MdiIcon, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import { AppLink, CardDisplay, MdiIcon, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import ListQueryNotices, {
@@ -788,17 +791,48 @@ export function SubmissionsCard({
               // The site it was sent to, where the list spans every site.
               (hostId == null && readerSite
                 ? ` · ${orgSiteName(orgMount, readerSite)}`
-                : '') +
-              (reader?.screenId ? ` · page ${reader.screenId}` : '')}
-            {/*
-              THE PAGE THE FORM WAS ON. Stored by the submit route since the
-              form existed and rendered by nothing, which is also the field
-              the marketing console's landing-page grouping joins on — a
-              reader who wants to check one row against that grouping has to
-              be able to see the row's own page.
-             */}
-            {reader?.path ? ` · ${String(reader.path)}` : ''}
+                : '')}
           </Typography>
+          {/*
+            WHERE IT CAME IN, AND WHAT IT MADE (AGL-3461) — the form, the page
+            it was on, and the lead or contact it filed, each a link to its
+            own page. The page is also the field the marketing console's
+            landing-page grouping joins on, so a reader can check one row
+            against that grouping. Each link is asked of the plugin that owns
+            the record, and is text where no plugin answers.
+           */}
+          {reader ? (
+            <Stack spacing={0.5} sx={{ mt: 1 }}>
+              {submissionLinks({
+                submission: reader,
+                hrefOf: (kind, id) =>
+                  routeContext ? pluginRecordHref(kind, routeContext, id) : null,
+                siteOrigin:
+                  hostPublicOrigin({
+                    subdomain:
+                      (hostId != null ? routeContext?.host : null) ??
+                      orgMount?.hosts.find((site) => site.id === readerSite)?.subdomain ??
+                      null,
+                  }) ?? null,
+              }).map((link) => (
+                <Stack key={link.key} direction="row" spacing={1} sx={{ alignItems: 'baseline' }}>
+                  <Typography variant="caption" color="text.secondary" sx={{ minWidth: 72 }}>
+                    {link.label}
+                  </Typography>
+                  {link.href ? (
+                    <AppLink
+                      href={link.href}
+                      {...(link.external ? { target: '_blank', rel: 'noopener' } : {})}
+                    >
+                      {link.text}
+                    </AppLink>
+                  ) : (
+                    <Typography variant="body2">{link.text}</Typography>
+                  )}
+                </Stack>
+              ))}
+            </Stack>
+          ) : null}
           <Divider sx={{ my: 1.5 }} />
           <Stack spacing={1.5}>
             {Object.entries(reader?.fields ?? {}).map(([key, value]) => (
@@ -855,6 +889,7 @@ export function SubmissionsCard({
                 hostId={readerSite}
                 recordKind="form"
                 recordId={String(reader.$id)}
+                filedUnder={submissionFiledUnder(reader)}
               />
             </Box>
           ) : null}

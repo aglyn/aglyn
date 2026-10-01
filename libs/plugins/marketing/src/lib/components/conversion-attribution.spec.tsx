@@ -46,6 +46,8 @@ jest.mock('firebase/firestore', () => ({
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   __esModule: true,
   useFirestore: () => ({ __firestore: true }),
+  // The org the campaign names are read from (AGL-3461).
+  useOrgDataScope: () => ({ orgId: 'org1', ready: true }),
   useFirestoreDoc: (build: () => { __path?: string } | null) => {
     const ref = build()
     if (ref?.__path) asked.push(ref.__path)
@@ -75,9 +77,12 @@ async function renderAttribution(options: {
   refId?: string
   record?: Record<string, unknown>
   quiet?: boolean
+  filedUnder?: string[]
+  docs?: Record<string, unknown>
 }): Promise<void> {
   mockDocs.clear()
   asked.length = 0
+  for (const [path, data] of Object.entries(options.docs ?? {})) mockDocs.set(path, data)
   const kind = options.kind ?? 'form'
   const refId = options.refId ?? 'sub_1'
   if (options.record) {
@@ -96,6 +101,7 @@ async function renderAttribution(options: {
         kind={kind}
         refId={refId}
         quiet={options.quiet}
+        filedUnder={options.filedUnder}
       />
     ) as ReactNode as never,
   )
@@ -250,5 +256,80 @@ describe('a web-channel attribution', () => {
     })
     expect(screen.getByText('google')).toBeTruthy()
     expect(screen.queryByText(/\(none\)/)).toBeNull()
+  })
+})
+
+/*==========================================
+ * A PAGE FILED UNDER A CAMPAIGN (AGL-3461), and the difference between what
+ * a record is filed under and what it is credited to.
+ *=========================================*/
+describe('a page-channel attribution', () => {
+  const RECORD = {
+    kind: 'form',
+    refId: 'sub_1',
+    channel: 'page',
+    campaignId: 'camp_ai',
+    screenId: 'scr_1',
+    path: '/ai-website-draft',
+    touchedAtMs: 1_700_000_000_000,
+    convertedAtMs: 1_700_000_060_000,
+    model: 'last-touch',
+    windowDays: 7,
+  }
+
+  it('links to the campaign by its name, and says the page was viewed', async () => {
+    await renderAttribution({
+      record: RECORD,
+      docs: { 'orgs/org1/emailCampaigns/camp_ai': { name: 'OneJob — AI' } },
+    })
+    expect(screen.getByText('OneJob — AI').closest('a')?.getAttribute('href')).toBe(
+      '/acme/hosts/site/marketing/campaigns/camp_ai',
+    )
+    expect(screen.getByText('Campaign page')).toBeTruthy()
+    expect(screen.getByText(/Viewed \/ai-website-draft on/)).toBeTruthy()
+    expect(screen.getByText(/a page filed under one/)).toBeTruthy()
+  })
+})
+
+describe('a web touch whose label a campaign declares', () => {
+  it('links to that campaign and keeps the label beside it', async () => {
+    await renderAttribution({
+      record: {
+        kind: 'form',
+        refId: 'sub_1',
+        channel: 'web',
+        campaignId: 'camp_ai',
+        source: 'google',
+        campaign: 'onejob-ai',
+        touchedAtMs: 1_700_000_000_000,
+        model: 'last-touch',
+        windowDays: 7,
+      },
+      docs: { 'orgs/org1/emailCampaigns/camp_ai': { name: 'OneJob — AI' } },
+    })
+    expect(screen.getByText('OneJob — AI').closest('a')).toBeTruthy()
+    expect(screen.getByText('Campaign link')).toBeTruthy()
+    expect(screen.getByText('google / onejob-ai')).toBeTruthy()
+  })
+})
+
+describe('filed under, and credited to', () => {
+  it('draws what the record is filed under apart from what it is credited to', async () => {
+    await renderAttribution({
+      filedUnder: ['camp_ai'],
+      docs: { 'orgs/org1/emailCampaigns/camp_ai': { name: 'OneJob — AI' } },
+    })
+    expect(screen.getByText('Filed under')).toBeTruthy()
+    expect(screen.getByText('OneJob — AI').closest('a')?.getAttribute('href')).toBe(
+      '/acme/hosts/site/marketing/campaigns/camp_ai',
+    )
+    // Filed under a campaign and credited to none are both true at once.
+    expect(screen.getByText('Credited to')).toBeTruthy()
+    expect(screen.getByText(/Not credited to a campaign/i)).toBeTruthy()
+  })
+
+  it('draws no Filed under heading when the host knows of none', async () => {
+    await renderAttribution({})
+    expect(screen.queryByText('Filed under')).toBeNull()
   })
 })

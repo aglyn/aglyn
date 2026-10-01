@@ -17,7 +17,9 @@
 
 import { FieldValue, type DocumentReference, type Firestore } from 'firebase-admin/firestore'
 import {
+  parsePageTouch,
   parseUtmTouch,
+  type PageTouch,
   type UtmTouch,
 } from '@aglyn/aglyn/app-utils/utm-touch'
 /*
@@ -30,10 +32,18 @@ import {
  * same rule rather than two that happen to agree.
  */
 import {
-  EMAIL_ATTRIBUTION_MODEL as ATTRIBUTION_MODEL,
   EMAIL_ATTRIBUTION_WINDOW_DAYS as ATTRIBUTION_WINDOW_DAYS,
   emailTouchIsInWindow,
 } from '@aglyn/shared-util-email/email-revenue-window'
+/*
+ * The identify moment's own rule (AGL-3461): a page filed under a campaign is
+ * a touch here, and it is not a click, so these records say `last-touch` where
+ * an order's say `last-click`. The window above is still the one both share.
+ */
+import {
+  CAMPAIGN_TOUCH_MODEL as ATTRIBUTION_MODEL,
+  CAMPAIGN_VISIT_MS,
+} from '../model/campaign-conversions'
 import { personKey } from '@aglyn/aglyn/app-utils/person-key'
 import {
   CAMPAIGN_ATTRIBUTIONS_COLLECTION,
@@ -43,6 +53,7 @@ import { isDocumentId } from '@aglyn/tenant-data-admin/server/document-id'
 import firebaseAdmin from '@aglyn/tenant-data-admin/server/firebase-admin'
 import { resolveOrgIdForHost } from '@aglyn/tenant-data-admin/server/organizations'
 import { readEmailCampaignTouch } from './email-campaign-touch'
+import { campaignForUtmLabel, filedCampaignForPage } from './campaign-touch-targets'
 
 const defaultFirestore = () => firebaseAdmin.app().firestore()
 
@@ -84,6 +95,17 @@ const defaultFirestore = () => firebaseAdmin.app().firestore()
  * reason that applies here unchanged: a rule the merchant did not choose
  * produces a figure nobody can check. One outcome, one campaign, and a rule
  * stated on the record.
+ *
+ * ## And a page filed under a campaign (AGL-3461)
+ *
+ * A third touch needs no label and no click: the visitor viewed a page the
+ * merchant filed under a campaign. The device carries it beside the labels
+ * (`utm-touch.ts`), the server credits it only while the campaign exists and
+ * the page is still filed under it (`campaign-touch-targets.ts`), and it
+ * competes with the winning click under {@link pickCampaignTouch}. A label a
+ * campaign declares as its own (`utmCampaigns` on the container) names that
+ * campaign the same way. Both are recorded with the CONTAINER's id as
+ * `campaignId`, under the `last-touch` model.
  *
  * ## No campaign touch means NO RECORD
  *
@@ -147,17 +169,22 @@ export type CampaignConversionKind = 'form' | 'lead' | 'contact' | 'booking'
  * every other booking, and nothing in this join has to know what a
  * sequence is.
  */
-export type CampaignTouchChannel = 'email' | 'web' | 'sequence'
+export type CampaignTouchChannel = 'email' | 'web' | 'sequence' | 'page'
 
-/** The touch a conversion is credited to, once both channels have been asked. */
+/** The touch a conversion is credited to, once every channel has been asked. */
 export interface ResolvedCampaignTouch {
   channel: CampaignTouchChannel
   /**
    * The campaign document, when the touch was a click on our own mail — or
    * the campaign CONTAINER (`emailCampaigns/{id}`) a sequence is in, for a
-   * sequence touch.
+   * sequence touch, the page was filed under, for a page touch, or that
+   * declares the label, for a web touch whose label one does (AGL-3461).
    */
   campaignId?: string
+  /** The screen the visitor viewed, for a `page` touch. */
+  screenId?: string
+  /** That page's path, for a `page` touch. */
+  path?: string
   /** The sequence the touch came through, for a `sequence` touch. */
   sequenceId?: string
   /** The enrollment the touch came through, for a `sequence` touch. */
@@ -238,12 +265,27 @@ export async function resolveCampaignTouch(
     if (!isDocumentId(hostId)) return null
     const convertedAtMs = Number(options.atMs ?? Date.now())
     if (!Number.isFinite(convertedAtMs) || convertedAtMs <= 0) return null
+    const db = firestore ?? defaultFirestore()
 
-    // The window is enforced inside the parser, so an expired or
-    // future-dated wire value answers null here exactly as it does in the
-    // browser that decided whether to send it.
-    const web: UtmTouch | null = parseUtmTouch(
-      options.wire,
+    /*
+     * The window is enforced inside the parsers, so an expired wire value
+     * answers null here exactly as it does in the browser that decided
+     * whether to send it.
+     *
+     * Both instants on the wire are the VISITOR'S clock, and a device running
+     * a few minutes fast would date the page it is reading after the
+     * conversion the server is recording — refused as "a touch after the
+     * conversion", which is the receipt rule, not a clock rule. So the parse
+     * allows {@link CLIENT_CLOCK_SKEW_MS} of future and clamps it to the
+     * conversion; the write re-checks the window against the server's own
+     * instant either way.
+     */
+    const web = clampToConversion(
+      parseUtmTouch(options.wire, convertedAtMs + CLIENT_CLOCK_SKEW_MS),
+      convertedAtMs,
+    )
+    const page = clampToConversion(
+      parsePageTouch(options.wire, convertedAtMs + CLIENT_CLOCK_SKEW_MS),
       convertedAtMs,
     )
 
@@ -255,11 +297,7 @@ export async function resolveCampaignTouch(
      * nothing here.
      */
     const emailTouch = key
-      ? await readEmailCampaignTouch(
-          String(options.email ?? ''),
-          hostId,
-          firestore ?? defaultFirestore(),
-        )
+      ? await readEmailCampaignTouch(String(options.email ?? ''), hostId, db)
       : null
     const emailInWindow =
       emailTouch &&
@@ -269,17 +307,28 @@ export async function resolveCampaignTouch(
         : null
 
     /*
-     * LAST TOUCH decides, and a tie goes to email. A tie is only reachable
-     * when the two instants are the same millisecond, and in that case the
-     * email touch is the better evidence: it was recorded by the provider's
-     * own click event on the server, while the web touch is a value the
-     * visitor's device supplied.
+     * The org owns the campaigns a page or a label can name. Asked only when
+     * the visitor carried one of those, so the ordinary conversion pays
+     * nothing for it — and the lookup is request-cached besides.
+     */
+    const orgId =
+      page || web?.campaign
+        ? await resolveOrgIdForHost(hostId).catch(() => null)
+        : null
+
+    /*
+     * A CLICK first — the later of the campaign email and the labeled link,
+     * and a tie goes to email. A tie is only reachable when the two instants
+     * are the same millisecond, and in that case the email touch is the better
+     * evidence: it was recorded by the provider's own click event on the
+     * server, while the web touch is a value the visitor's device supplied.
      */
     const emailWins =
       emailInWindow && (!web || emailInWindow.clickedAtMs >= web.atMs)
+    let click: ResolvedCampaignTouch | null = null
     if (emailWins) {
       const viaSequence = emailInWindow.sequenceId && emailInWindow.enrollmentId
-      return {
+      click = {
         channel: viaSequence ? 'sequence' : 'email',
         campaignId: emailInWindow.campaignId,
         ...(viaSequence
@@ -288,20 +337,106 @@ export async function resolveCampaignTouch(
         touchedAtMs: emailInWindow.clickedAtMs,
         ...(key ? { personKey: key } : {}),
       }
+    } else if (web) {
+      // A label a campaign declares names that campaign (AGL-3461); any other
+      // label stays the text it is.
+      const declared =
+        orgId && web.campaign
+          ? await campaignForUtmLabel({ orgId, hostId, label: web.campaign }, db)
+          : null
+      click = {
+        channel: 'web',
+        ...(declared ? { campaignId: declared.id } : {}),
+        ...(web.source ? { source: web.source } : {}),
+        ...(web.medium ? { medium: web.medium } : {}),
+        ...(web.campaign ? { campaign: web.campaign } : {}),
+        touchedAtMs: web.atMs,
+        ...(key ? { personKey: key } : {}),
+      }
     }
-    if (!web) return null
-    return {
-      channel: 'web',
-      ...(web.source ? { source: web.source } : {}),
-      ...(web.medium ? { medium: web.medium } : {}),
-      ...(web.campaign ? { campaign: web.campaign } : {}),
-      touchedAtMs: web.atMs,
-      ...(key ? { personKey: key } : {}),
-    }
+
+    /*
+     * THEN THE PAGE (AGL-3461), checked against what is stored: the campaign
+     * still exists and the page is still filed under it. Read only when there
+     * is one — and never when the click it would compete with is in the same
+     * visit and names a campaign, because that click wins without it.
+     */
+    const pageCouldWin =
+      page &&
+      orgId &&
+      !(
+        click?.campaignId &&
+        Math.abs(page.atMs - click.touchedAtMs) <= CAMPAIGN_VISIT_MS
+      )
+    const filed = pageCouldWin
+      ? await filedCampaignForPage(
+          {
+            orgId,
+            hostId,
+            screenId: page.screenId,
+            campaignIds: page.campaignIds,
+          },
+          db,
+        )
+      : null
+    const pageTouch: ResolvedCampaignTouch | null =
+      page && filed
+        ? {
+            channel: 'page',
+            campaignId: filed.id,
+            screenId: page.screenId,
+            ...(page.path ? { path: page.path } : {}),
+            touchedAtMs: page.atMs,
+            ...(key ? { personKey: key } : {}),
+          }
+        : null
+
+    return pickCampaignTouch(click, pageTouch)
   } catch (error) {
     console.error('resolveCampaignTouch failed', error)
     return null
   }
+}
+
+/**
+ * How far ahead of the server a visitor's clock may run before the touch it
+ * dates is refused as after the conversion.
+ */
+const CLIENT_CLOCK_SKEW_MS = 5 * 60 * 1000
+
+/** A parsed touch with an instant no later than the conversion. */
+function clampToConversion<T extends UtmTouch | PageTouch>(
+  touch: T | null,
+  convertedAtMs: number,
+): T | null {
+  if (!touch) return null
+  return touch.atMs > convertedAtMs ? { ...touch, atMs: convertedAtMs } : touch
+}
+
+/**
+ * THE RULE, between a click and a page (AGL-3461) — `CAMPAIGN_TOUCH_MODEL`
+ * says it in words.
+ *
+ * Within one visit a click that names a campaign keeps the credit for the
+ * page it landed on: the visitor clicked a campaign's mail or a link labeled
+ * for a campaign and READ the page because of it, and handing the credit to
+ * the page would take every landing page's conversions away from the email
+ * that sent the reader there. A bare label yields to the page, because the
+ * page names a campaign and the label names nothing anybody can open.
+ *
+ * Further apart, the later wins, which is the last-touch rule every other
+ * pair already follows.
+ */
+export function pickCampaignTouch(
+  click: ResolvedCampaignTouch | null,
+  page: ResolvedCampaignTouch | null,
+): ResolvedCampaignTouch | null {
+  if (!page) return click
+  if (!click) return page
+  if (Math.abs(page.touchedAtMs - click.touchedAtMs) <= CAMPAIGN_VISIT_MS) {
+    return click.campaignId ? click : page
+  }
+  return page.touchedAtMs > click.touchedAtMs ? page : click
 }
 
 /**
@@ -368,6 +503,8 @@ export async function attributeCampaignConversion(
       ...(touch.source ? { source: touch.source } : {}),
       ...(touch.medium ? { medium: touch.medium } : {}),
       ...(touch.campaign ? { campaign: touch.campaign } : {}),
+      ...(touch.screenId ? { screenId: touch.screenId } : {}),
+      ...(touch.path ? { path: touch.path } : {}),
       touchedAtMs: touch.touchedAtMs,
       convertedAtMs,
       model: ATTRIBUTION_MODEL,

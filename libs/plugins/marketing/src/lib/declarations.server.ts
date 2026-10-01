@@ -57,6 +57,18 @@ export function registerMarketingServerDeclarations(): void {
     },
     { pluginId: BUNDLE_ID },
   )
+  // A visitor reaching a campaign — a page filed under it, or a link carrying
+  // a label it declares — counted under the campaign (AGL-3461).
+  registerPluginSiteBeacon(
+    {
+      field: 'campaignVisit',
+      async count(request) {
+        const { countCampaignVisitBeacon } = await import('./server/campaign-visit-beacon')
+        await countCampaignVisitBeacon(request)
+      },
+    },
+    { pluginId: BUNDLE_ID },
+  )
   registerPluginConversionCreditor(lazyConversionCreditor(), { pluginId: BUNDLE_ID })
   registerPluginSendTally(
     {
@@ -84,5 +96,7 @@ function lazyConversionCreditor(): PluginConversionCreditor {
     recordClick: async (click) => (await load()).recordClick(click),
     creditOutcome: async (request) => (await load()).creditOutcome(request),
     erasePerson: async (key) => (await load()).erasePerson(key),
+    describeConversion: async (request) =>
+      (await load()).describeConversion?.(request) ?? null,
   }
 }

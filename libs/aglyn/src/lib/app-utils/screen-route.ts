@@ -399,6 +399,26 @@ export function screenRoutePathToUrl(path: string): string {
 }
 
 /**
+ * The routing-map path a page's URL path names — the inverse of
+ * {@link screenRoutePathToUrl}: `/about` → `about`, `/company/about/` →
+ * `company/about`, `/` and `''` → `/` (AGL-3461).
+ *
+ * For a door that knows the address a visitor was on and needs the screen
+ * that served it: the host's routing map answers with no read. A query string
+ * or a fragment is dropped; a value that is not a site-relative path answers
+ * `undefined` rather than a routing key nobody wrote.
+ */
+export function screenRoutePathFromUrl(
+  urlPath: string | null | undefined,
+): string | undefined {
+  const raw = String(urlPath ?? '').trim()
+  if (!raw) return SCREEN_ROOT_PATH
+  if (!raw.startsWith('/') || raw.startsWith('//')) return undefined
+  const bare = raw.split(/[?#]/)[0].replace(/^\/+|\/+$/g, '')
+  return bare ? bare : SCREEN_ROOT_PATH
+}
+
+/**
  * A screen's OWN slug segment, read back off its composed routing-map path
  * (`company/about` → `about`) — the inverse of the one step
  * {@link composeScreenRoutePath} adds for this screen (AGL-2572).

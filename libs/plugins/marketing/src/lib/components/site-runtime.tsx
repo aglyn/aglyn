@@ -22,7 +22,12 @@ import {
   trackAuthoredEvent,
   trackEvent,
 } from '@aglyn/aglyn/app-utils/analytics-events'
-import { utmTouchField } from '@aglyn/aglyn/app-utils/utm-touch'
+import {
+  claimCampaignFirstVisits,
+  notePageCampaigns,
+  utmTouchField,
+  whenUtmTouchConsentSettles,
+} from '@aglyn/aglyn/app-utils/utm-touch'
 import { type CSSProperties, useEffect, useRef, useState } from 'react'
 import type { SiteRuntimeProps } from '@aglyn/aglyn'
 import * as MarketingModel from '../model'
@@ -1131,6 +1136,108 @@ function PopupOverlay(props: {
 }
 
 
+/** The page-props slice the server enricher writes for a page filed under a campaign. */
+export interface CampaignPageData {
+  screenId: string
+  campaignIds: string[]
+}
+
+/**
+ * Pageviews already reported to their campaigns, keyed by host and address.
+ * Module scope for the reason the pageview beacon's guard is: a page remounts
+ * on its own, and a remount is not a second visit.
+ */
+const campaignVisitsReported = new Set<string>()
+
+/**
+ * How long the visit report waits for the visitor's storage consent to
+ * settle before it reports the view alone. Long enough for the region check
+ * a consent posture runs on load; short enough that a stalled one still
+ * counts the page view.
+ */
+const CAMPAIGN_VISIT_CONSENT_WAIT_MS = 10_000
+
+/**
+ * A PAGE FILED UNDER A CAMPAIGN IS A CAMPAIGN TOUCH (AGL-3461).
+ *
+ * On every pageview this tells the core which campaigns the page is filed
+ * under — the touch every conversion door on the page then reports, live and
+ * with nothing written, and the one the device remembers under the visitor's
+ * analytics grant (`utm-touch.ts`). A page filed under nothing clears the
+ * live touch and keeps the remembered one.
+ *
+ * And it reports the visit to each campaign through the site collector's
+ * `campaignVisit` beacon: a view of the campaign's page, and — when the
+ * device has not been counted for that campaign in the window — a first
+ * visit. A link carrying a `utm_campaign` label counts a first visit too,
+ * for the campaign that declares it; the server answers which one. The
+ * first-visit claim waits for consent to settle, because asked before it an
+ * unresolved state would read as "may not remember", and the view would be
+ * counted as nobody's first.
+ *
+ * Renders nothing.
+ */
+function CampaignPageTouch(props: {
+  hostId?: string
+  campaignPage: CampaignPageData | null
+}) {
+  const { hostId, campaignPage } = props
+  const screenId = campaignPage?.screenId ?? ''
+  const idsKey = (campaignPage?.campaignIds ?? []).join(',')
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined
+    const ids = idsKey ? idsKey.split(',') : []
+    notePageCampaigns(
+      ids.length ? { screenId, campaignIds: ids, path: window.location.pathname } : null,
+    )
+    if (!hostId) return undefined
+    const label = (new URLSearchParams(window.location.search).get('utm_campaign') ?? '')
+      .trim()
+      .toLowerCase()
+      .slice(0, 100)
+    if (!ids.length && !label) return undefined
+    const visitKey = `${hostId}\x00${window.location.pathname}${window.location.search}`
+    if (campaignVisitsReported.has(visitKey)) return undefined
+
+    let done = false
+    const report = (allowed: boolean) => {
+      if (done) return
+      done = true
+      campaignVisitsReported.add(visitKey)
+      const claimed = allowed
+        ? claimCampaignFirstVisits([
+            ...ids.map((id) => `c:${id}`),
+            ...(label ? [`u:${label}`] : []),
+          ])
+        : []
+      const first = claimed.filter((key) => key.startsWith('c:')).map((key) => key.slice(2))
+      const firstLabel = Boolean(label) && claimed.includes(`u:${label}`)
+      // A label arrival on a page filed under nothing is only a first visit;
+      // with nothing first about it there is nothing to count.
+      if (!ids.length && !firstLabel) return
+      sendAnalyticsBeacon({
+        hostId,
+        campaignVisit: '1',
+        ...(ids.length ? { screenId, campaignIds: ids } : {}),
+        ...(first.length ? { first } : {}),
+        ...(firstLabel ? { utmCampaign: label, firstLabel: true } : {}),
+      })
+    }
+    const withdraw = whenUtmTouchConsentSettles(report)
+    const timer = window.setTimeout(() => {
+      withdraw()
+      report(false)
+    }, CAMPAIGN_VISIT_CONSENT_WAIT_MS)
+    return () => {
+      withdraw()
+      window.clearTimeout(timer)
+    }
+  }, [hostId, screenId, idsKey])
+
+  return null
+}
+
 /**
  * The marketing plugin's site runtime (AGL-419), relocated verbatim from
  * the tenant catch-all: announcement bar + popup rendering (AGL-195/200),
@@ -1146,8 +1253,12 @@ export function MarketingSiteRuntime({ hostId, screens, page }: SiteRuntimeProps
   const clientAutomations = (page['clientAutomations'] ?? []) as ClientAutomation[]
   const automationOverlays = page['automationOverlays'] as Record<string, any> | null
 
+  const campaignPage = (page['campaignPage'] ?? null) as CampaignPageData | null
+
   return (
     <>
+      {/* A page filed under a campaign is a campaign touch (AGL-3461). */}
+      <CampaignPageTouch hostId={hostId} campaignPage={campaignPage} />
       {announcementBar ? (
         <AnnouncementBar bar={announcementBar} hostId={hostId} />
       ) : null}

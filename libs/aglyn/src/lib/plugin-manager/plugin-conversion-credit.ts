@@ -59,6 +59,9 @@ import { runPluginDeclarationsRepair } from './plugin-declarations-repair'
  *  - {@link eraseConversionCredits}: everything the creditor holds about a
  *    person, by the key every suppression list names them by, on every site.
  *    The platform's own address erasure calls it beside the delivery log.
+ *  - {@link describeConversion}: the touch a door resolved and the
+ *    containers its record is filed under, in words a person reads — what a
+ *    door's alert says about where an outcome came from (AGL-3461).
  *
  * ## No creditor is an answer
  *
@@ -198,6 +201,42 @@ export interface PluginConversionCreditor {
    * records went.
    */
   erasePerson(key: string): Promise<number>
+  /**
+   * Names a touch and a record's containers for a person to read. Optional:
+   * a creditor that does not answer leaves a door's alert saying what it
+   * knows itself.
+   */
+  describeConversion?(
+    request: PluginConversionDescribeRequest,
+  ): Promise<PluginConversionDescription | null>
+}
+
+/** What a door asks to have named (AGL-3461). */
+export interface PluginConversionDescribeRequest {
+  hostId: string
+  /** The touch {@link resolveConversionTouch} answered, handed back unread. */
+  touch?: PluginConversionTouch | null
+  /** The containers the door's record is filed under (`plugin-containers.ts`). */
+  containerIds?: readonly string[]
+}
+
+/** A touch and a record's containers, in a person's words. */
+export interface PluginConversionDescription {
+  /**
+   * What the outcome was credited to: a campaign's name, or the label a link
+   * carried when no campaign declares it. Absent when the touch credits
+   * nothing the creditor can name.
+   */
+  credited?: {
+    /** The campaign's name, or the link's labels joined. */
+    label: string
+    /** How the visitor was touched, in a phrase: `viewed a page filed under it`. */
+    how: string
+    /** The container credited, when the touch names one. */
+    containerId?: string
+  }
+  /** The containers named, in the order asked, each still standing. */
+  filedUnder: Array<{ id: string; label: string }>
 }
 
 export const PLUGIN_CONVERSION_CREDIT = definePluginServiceContract<PluginConversionCreditor>(
@@ -294,4 +333,16 @@ export function creditConversionOutcome(request: PluginConversionOutcomeRequest)
 export function eraseConversionCredits(key: string): Promise<number> {
   if (!key) return Promise.resolve(0)
   return ask('erasePerson', 0, (found) => found.erasePerson(key))
+}
+
+/**
+ * A touch and a record's containers, named — or `null` when nobody credits
+ * outcomes here or the creditor does not describe them.
+ */
+export function describeConversion(
+  request: PluginConversionDescribeRequest,
+): Promise<PluginConversionDescription | null> {
+  return ask('describeConversion', null, async (found) =>
+    found.describeConversion ? found.describeConversion(request) : null,
+  )
 }

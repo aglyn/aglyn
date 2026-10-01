@@ -54,12 +54,12 @@ import {
 } from './campaign-conversion-attribution'
 import {
   ATTRIBUTION_WINDOW_MS,
+  pageTouchWire,
   utmTouchWire,
 } from '@aglyn/aglyn/app-utils/utm-touch'
-import {
-  EMAIL_ATTRIBUTION_MODEL as ATTRIBUTION_MODEL,
-  EMAIL_ATTRIBUTION_WINDOW_DAYS as ATTRIBUTION_WINDOW_DAYS,
-} from '@aglyn/shared-util-email/email-revenue-window'
+import { EMAIL_ATTRIBUTION_WINDOW_DAYS as ATTRIBUTION_WINDOW_DAYS } from '@aglyn/shared-util-email/email-revenue-window'
+// The identify moment's own rule since AGL-3461; an order's is still `last-click`.
+import { CAMPAIGN_TOUCH_MODEL as ATTRIBUTION_MODEL } from '../model/campaign-conversions'
 import {
   EMAIL_TOUCH_FIELD,
   eraseEmailCampaignTouches,
@@ -163,7 +163,33 @@ function fakeFirestore() {
     collection: (name: string) => collectionRef(`${path}/${name}`),
   })
 
+  /** A collection's direct documents matching every clause, for a lookup. */
+  const collectionQuery = (
+    prefix: string,
+    clauses: Array<[string, string, unknown]> = [],
+    max = Infinity,
+  ): any => ({
+    where: (field: string, op: string, value: unknown) =>
+      collectionQuery(prefix, [...clauses, [field, op, value]], max),
+    limit: (n: number) => collectionQuery(prefix, clauses, n),
+    get: async () => {
+      const docs = [...store.entries()]
+        .filter(([path]) => path.startsWith(`${prefix}/`) && !path.slice(prefix.length + 1).includes('/'))
+        .filter(([, data]) =>
+          clauses.every(([field, op, value]) =>
+            op === 'array-contains'
+              ? Array.isArray(data[field]) && data[field].includes(value)
+              : data[field] === value,
+          ),
+        )
+        .slice(0, max)
+        .map(([path]) => snapshotOf(path))
+      return { empty: docs.length === 0, size: docs.length, docs }
+    },
+  })
+
   const collectionRef = (prefix: string): any => ({
+    ...collectionQuery(prefix),
     doc: (id: string) => docRef(`${prefix}/${id}`),
   })
 
@@ -434,8 +460,292 @@ describe('resolveCampaignTouch', () => {
 
     // The email channel is only askable of somebody who named an address, and
     // asking anyway would put a Firestore read on every anonymous form
-    // submission on the platform.
+    // submission on the platform. The one question a LABELED arrival does ask
+    // is whether a campaign declares its label (AGL-3461), of the org.
+    expect(reads.filter((name) => name !== 'orgs')).toEqual([])
+  })
+
+  it('an arrival from nowhere asks nothing at all', async () => {
+    const firestore = fakeFirestore()
+    const reads: string[] = []
+    const counted = {
+      ...firestore,
+      collection: (name: string) => {
+        reads.push(name)
+        return (firestore as any).collection(name)
+      },
+    }
+
+    expect(await resolveCampaignTouch({ hostId: HOST, atMs: LANDED_AT }, counted)).toBe(null)
     expect(reads).toEqual([])
+  })
+})
+
+/*==========================================
+ * CREDIT WITHOUT A LABEL (AGL-3461): a page filed under a campaign, and a
+ * label a campaign declares as its own.
+ *=========================================*/
+
+const SCREEN = 'scr_landing'
+const PAGE = '/ai-website-draft'
+
+/** The org's campaign `id`, placed on every site, declaring `labels`. */
+function seedCampaign(
+  firestore: ReturnType<typeof fakeFirestore>,
+  id: string,
+  extra: Record<string, unknown> = {},
+) {
+  firestore.seed(`orgs/${ORG}/emailCampaigns/${id}`, {
+    name: `Campaign ${id}`,
+    visibleTo: ['org'],
+    ...extra,
+  })
+}
+
+/** The landing page, filed under `campaignIds`. */
+function seedScreen(firestore: ReturnType<typeof fakeFirestore>, campaignIds: string[]) {
+  firestore.seed(`hosts/${HOST}/screens/${SCREEN}`, { campaignIds })
+}
+
+/** The wire a browser sends from a page filed under `campaignIds`, viewed at `atMs`. */
+function pageWire(campaignIds: string[], atMs: number): string {
+  return pageTouchWire({ campaignIds, screenId: SCREEN, path: PAGE, atMs })
+}
+
+describe('a page filed under a campaign is a campaign touch', () => {
+  it('credits the campaign with no label on the address at all', async () => {
+    const firestore = fakeFirestore()
+    seedCampaign(firestore, 'camp_ai')
+    seedScreen(firestore, ['camp_ai'])
+
+    const touch = await resolveCampaignTouch(
+      { hostId: HOST, wire: pageWire(['camp_ai'], LANDED_AT), atMs: LANDED_AT + 60_000 },
+      firestore,
+    )
+
+    expect(touch).toEqual({
+      channel: 'page',
+      campaignId: 'camp_ai',
+      screenId: SCREEN,
+      path: PAGE,
+      touchedAtMs: LANDED_AT,
+    })
+  })
+
+  it('is written to the record with the rule it was credited under', async () => {
+    const firestore = fakeFirestore()
+    seedCampaign(firestore, 'camp_ai')
+    seedScreen(firestore, ['camp_ai'])
+    const touch = await resolveCampaignTouch(
+      { hostId: HOST, wire: pageWire(['camp_ai'], LANDED_AT), atMs: LANDED_AT + 60_000 },
+      firestore,
+    )
+
+    await attributeCampaignConversion(
+      { hostId: HOST, kind: 'form', refId: 'sub1', touch, convertedAtMs: LANDED_AT + 60_000 },
+      firestore,
+    )
+
+    expect(firestore.attribution(HOST, 'form', 'sub1')).toMatchObject({
+      channel: 'page',
+      campaignId: 'camp_ai',
+      screenId: SCREEN,
+      path: PAGE,
+      model: 'last-touch',
+      windowDays: ATTRIBUTION_WINDOW_DAYS,
+    })
+    // No per-send rollup: the campaign's page counts its own id's records.
+    expect(firestore.paths().some((path) => path.includes('/reports/'))).toBe(false)
+  })
+
+  it('credits nothing once the page is no longer filed under the campaign', async () => {
+    const firestore = fakeFirestore()
+    seedCampaign(firestore, 'camp_ai')
+    seedScreen(firestore, [])
+
+    expect(
+      await resolveCampaignTouch(
+        { hostId: HOST, wire: pageWire(['camp_ai'], LANDED_AT), atMs: LANDED_AT + DAY },
+        firestore,
+      ),
+    ).toBe(null)
+  })
+
+  it('credits nothing for a campaign that was deleted', async () => {
+    const firestore = fakeFirestore()
+    seedCampaign(firestore, 'camp_ai', { deletedAt: 1 })
+    seedScreen(firestore, ['camp_ai'])
+
+    expect(
+      await resolveCampaignTouch(
+        { hostId: HOST, wire: pageWire(['camp_ai'], LANDED_AT), atMs: LANDED_AT + DAY },
+        firestore,
+      ),
+    ).toBe(null)
+  })
+
+  it('a page under two campaigns credits the first that still stands', async () => {
+    const firestore = fakeFirestore()
+    seedCampaign(firestore, 'camp_b')
+    seedScreen(firestore, ['camp_a', 'camp_b'])
+
+    const touch = await resolveCampaignTouch(
+      { hostId: HOST, wire: pageWire(['camp_a', 'camp_b'], LANDED_AT), atMs: LANDED_AT + DAY },
+      firestore,
+    )
+
+    expect(touch?.campaignId).toBe('camp_b')
+  })
+
+  it('a visitor whose clock runs a minute fast is still credited', async () => {
+    const firestore = fakeFirestore()
+    seedCampaign(firestore, 'camp_ai')
+    seedScreen(firestore, ['camp_ai'])
+
+    const touch = await resolveCampaignTouch(
+      { hostId: HOST, wire: pageWire(['camp_ai'], LANDED_AT + 60_000), atMs: LANDED_AT },
+      firestore,
+    )
+
+    expect(touch).toMatchObject({ channel: 'page', touchedAtMs: LANDED_AT })
+  })
+
+  it('THE SAME VISIT — the campaign email that sent the reader keeps the credit', async () => {
+    const firestore = fakeFirestore()
+    seedCampaign(firestore, 'camp_ai')
+    seedScreen(firestore, ['camp_ai'])
+    await clickedMail(firestore, 'send_1', LANDED_AT)
+
+    const touch = await resolveCampaignTouch(
+      {
+        hostId: HOST,
+        email: VISITOR,
+        wire: pageWire(['camp_ai'], LANDED_AT + 5_000),
+        atMs: LANDED_AT + 10 * 60_000,
+      },
+      firestore,
+    )
+
+    expect(touch).toMatchObject({ channel: 'email', campaignId: 'send_1' })
+  })
+
+  it('A LATER VISIT — the page beats a click from days before', async () => {
+    const firestore = fakeFirestore()
+    seedCampaign(firestore, 'camp_ai')
+    seedScreen(firestore, ['camp_ai'])
+    await clickedMail(firestore, 'send_1', LANDED_AT)
+
+    const touch = await resolveCampaignTouch(
+      {
+        hostId: HOST,
+        email: VISITOR,
+        wire: pageWire(['camp_ai'], LANDED_AT + 2 * DAY),
+        atMs: LANDED_AT + 2 * DAY + 60_000,
+      },
+      firestore,
+    )
+
+    expect(touch).toMatchObject({ channel: 'page', campaignId: 'camp_ai' })
+  })
+
+  it('a click days AFTER the page beats it', async () => {
+    const firestore = fakeFirestore()
+    seedCampaign(firestore, 'camp_ai')
+    seedScreen(firestore, ['camp_ai'])
+    await clickedMail(firestore, 'send_1', LANDED_AT + 2 * DAY)
+
+    const touch = await resolveCampaignTouch(
+      {
+        hostId: HOST,
+        email: VISITOR,
+        wire: pageWire(['camp_ai'], LANDED_AT),
+        atMs: LANDED_AT + 3 * DAY,
+      },
+      firestore,
+    )
+
+    expect(touch).toMatchObject({ channel: 'email', campaignId: 'send_1' })
+  })
+
+  it('THE SAME VISIT — a label no campaign declares yields to the page', async () => {
+    const firestore = fakeFirestore()
+    seedCampaign(firestore, 'camp_ai')
+    seedScreen(firestore, ['camp_ai'])
+
+    const touch = await resolveCampaignTouch(
+      {
+        hostId: HOST,
+        wire: `${webTouch('random-push', LANDED_AT + 60_000)}&${pageWire(['camp_ai'], LANDED_AT)}`,
+        atMs: LANDED_AT + 2 * 60_000,
+      },
+      firestore,
+    )
+
+    expect(touch).toMatchObject({ channel: 'page', campaignId: 'camp_ai' })
+  })
+})
+
+describe('a utm_campaign label a campaign declares names the campaign', () => {
+  it('credits the campaign document, keeping the labels on the record', async () => {
+    const firestore = fakeFirestore()
+    seedCampaign(firestore, 'camp_ai', { utmCampaigns: ['onejob-ai'] })
+
+    const touch = await resolveCampaignTouch(
+      { hostId: HOST, wire: webTouch('OneJob-AI', LANDED_AT), atMs: LANDED_AT + DAY },
+      firestore,
+    )
+
+    expect(touch).toEqual({
+      channel: 'web',
+      campaignId: 'camp_ai',
+      source: 'google',
+      campaign: 'OneJob-AI',
+      touchedAtMs: LANDED_AT,
+    })
+  })
+
+  it('a label two campaigns claim credits neither — the label stays text', async () => {
+    const firestore = fakeFirestore()
+    seedCampaign(firestore, 'camp_a', { utmCampaigns: ['spring'] })
+    seedCampaign(firestore, 'camp_b', { utmCampaigns: ['spring'] })
+
+    const touch = await resolveCampaignTouch(
+      { hostId: HOST, wire: webTouch('spring', LANDED_AT), atMs: LANDED_AT + DAY },
+      firestore,
+    )
+
+    expect(touch?.campaignId).toBeUndefined()
+    expect(touch?.campaign).toBe('spring')
+  })
+
+  it('a campaign placed only on another site does not claim this site’s label', async () => {
+    const firestore = fakeFirestore()
+    seedCampaign(firestore, 'camp_a', { utmCampaigns: ['spring'], visibleTo: ['host:other'] })
+
+    const touch = await resolveCampaignTouch(
+      { hostId: HOST, wire: webTouch('spring', LANDED_AT), atMs: LANDED_AT + DAY },
+      firestore,
+    )
+
+    expect(touch?.campaignId).toBeUndefined()
+  })
+
+  it('THE SAME VISIT — a declared label keeps the credit over the page it landed on', async () => {
+    const firestore = fakeFirestore()
+    seedCampaign(firestore, 'camp_ai', { utmCampaigns: ['onejob-ai'] })
+    seedCampaign(firestore, 'camp_other')
+    seedScreen(firestore, ['camp_other'])
+
+    const touch = await resolveCampaignTouch(
+      {
+        hostId: HOST,
+        wire: `${webTouch('onejob-ai', LANDED_AT)}&${pageWire(['camp_other'], LANDED_AT + 1_000)}`,
+        atMs: LANDED_AT + 60_000,
+      },
+      firestore,
+    )
+
+    expect(touch).toMatchObject({ channel: 'web', campaignId: 'camp_ai' })
   })
 })
 
