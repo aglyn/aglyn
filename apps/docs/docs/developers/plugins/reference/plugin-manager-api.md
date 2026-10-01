@@ -1067,6 +1067,47 @@ cannot be declared. A template whose stamp no plugin in the build declares —
 installed by a plugin since removed — still reads as **Installed**, never as
 something the site authored.
 
+## Installable artifact types — `plugin-artifact-types` (`/server`)
+
+A workspace can install some content rather than author it. When the copies of
+one artifact type live in your plugin's storage, your plugin keeps that type:
+the installer, which owns the listing, the purchase and the provenance stamp,
+asks you to read a published source, check an install and write it, and find
+and update an installed copy. It never reads your collections itself. Declare
+each type in `plugins.config.json` and register its owner from your
+`consoleServerDeclarations` entry, with the work behind `import()`:
+
+```json
+"artifactTypes": [{ "type": "cellarList" }]
+```
+
+```ts
+registerArtifactTypeOwner(
+  'cellarList',
+  {
+    snapshot: async (request) => (await import('./server/cellar-artifact')).snapshot(request),
+    admits: async (workspace) => (await import('./server/cellar-artifact')).admits(workspace),
+    prepare: async (request) => (await import('./server/cellar-artifact')).prepare(request),
+    locate: async (request) => (await import('./server/cellar-artifact')).locate(request),
+  },
+  { pluginId: 'acme-cellar' },
+)
+```
+
+| API | Semantics |
+| --- | --- |
+| `snapshot({ orgId, sourceId })` | Publishing. Read the source the publisher named in their own workspace and answer `{ ok: true, content, facts? }`: `content` is what every install of the version receives, and `facts` are plain values the listing carries beside it. Answer `{ ok: false, status, error }` to refuse. |
+| `admits({ orgId, org })` | Asked before the installer reads the listing: a refusal when this workspace's plan cannot hold one at all, else `null`. |
+| `prepare({ orgId, org, listing, published })` | Installing. Validate the published content, check what the workspace may hold, make the content this workspace's, and write nothing. Answer `{ ok: true, content, commit }`: `content` is exactly what the copy will hold, which the installer records as its base snapshot. `commit({ installedFrom, source })` then writes the copy with the installer's stamp and answers `{ ok: true, report }`, the fields the install reports, or a refusal that wrote nothing. |
+| `locate({ orgId, hostId, listingId, published })` | Updating. Find the copy the listing installed and answer its `current` content, the `incoming` version made this workspace's, its `installedVersion` and `baseSha`, an optional `impact` (`preview` fields shown on the update dialog, and `destructive` with the `refusal` an unconfirmed merge gets), and `apply({ content, stamp })`, the one write that takes the merged result. |
+| `resolveArtifactTypeOwner(type)` | What the installer asks: `null` when no plugin declares the type, the registered owner when one does. A declared owner that is not registered runs the app's declarations step once; still missing, it throws `ArtifactTypeOwnerUnavailableError`. |
+| `listDeclaredArtifactTypes()` / `declaredArtifactTypeOwner(type)` | The compiled declarations. |
+
+Every answer comes before the installer writes anything, so an install whose
+owner is missing refuses whole: no copy, no provenance, no tally. One owner
+per type, a camelCase `type`, and a plugin with a declarations entry on the
+console's server; the generator refuses anything else.
+
 ## Recurring charges — `plugin-recurring-charges` (`/server`)
 
 A security lockdown pauses the subscriptions a locked site sells to its own

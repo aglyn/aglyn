@@ -2274,6 +2274,51 @@ function formRecordTargetRow() {
 }
 
 /**
+ * The installable artifact types a plugin keeps the copies of (AGL-3080),
+ * through `plugin-manager/plugin-artifact-types.ts`: the installer asks the
+ * type's owner to publish, install and update a copy, and never reaches into
+ * the owner's storage. Declared as well as registered for the reason
+ * `repeatSourceRow` gives: a boot that did not register an owner must be
+ * refused, not read as "nobody keeps this type".
+ *
+ * Checked here: a plain camelCase `type` (it is stored on listings and
+ * provenance stamps), one owner per type, no other key, and a declarations
+ * entry on the console's server for the owner to register from.
+ */
+function artifactTypeRows() {
+  const rows = []
+  const owners = new Map()
+  for (const plugin of config.plugins) {
+    const declared = plugin.artifactTypes
+    if (declared === undefined) continue
+    const where = `plugins.config.json: "${plugin.id}" artifactTypes`
+    if (!Array.isArray(declared) || !declared.length) {
+      throw new Error(`${where} is present and declares nothing — drop it, or name the types this plugin keeps`)
+    }
+    if (!plugin.register?.consoleServerDeclarations && !plugin.register?.serverDeclarations) {
+      throw new Error(
+        `${where}: an owner is registered from a "consoleServerDeclarations" (or "serverDeclarations") entry, ` +
+          'and this plugin names neither — a declared type nothing registers refuses every install of it',
+      )
+    }
+    for (const [index, row] of declared.entries()) {
+      const at = `${where}[${index}]`
+      const { $comment: _comment, type, ...rest } = row ?? {}
+      if (Object.keys(rest).length) throw new Error(`${at}: unknown key(s) ${Object.keys(rest).join(', ')}`)
+      if (typeof type !== 'string' || !/^[a-z][A-Za-z0-9]*$/.test(type)) {
+        throw new Error(`${at}: "type" is the artifact type's plain camelCase id`)
+      }
+      if (owners.has(type)) {
+        throw new Error(`${at}: type "${type}" is already declared by "${owners.get(type)}"`)
+      }
+      owners.set(type, plugin.id)
+      rows.push({ pluginId: plugin.id, type })
+    }
+  }
+  return rows
+}
+
+/**
  * A plugin's top-level collections whose documents name an organization in a
  * field (AGL-3080), which a workspace erasure sweeps by that field in every
  * process. One owner per collection; plain names only.
@@ -2654,7 +2699,7 @@ function catalogContent(videoEmbedRows, planEntitlements, usageAxes) {
  * the types and the resolvers in \`enabled-plugins.ts\`; it holds no row.
  */
 
-import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'\nimport type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'\nimport type { ResolvedPluginSitemapSection } from './plugin-sitemap-sections'\nimport type { ResolvedPluginSiteBundleSectionDeclaration } from './plugin-site-bundle'\nimport type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'\nimport type { ResolvedPluginCostAxis, ResolvedPluginSpendLine, ResolvedPluginUsageBand, ResolvedPluginUsageMeter } from './plugin-usage-axes'\nimport type { ResolvedPluginPlanFeature, ResolvedPluginPlanQuota } from './plugin-plan-entitlements'\nimport type { FunctionBindings } from './plugin-contributions'\nimport type { PluginDistribution } from './plugin-distribution'\nimport type { RepeatSourceDeclaration } from './repeat-rows'\nimport type { PluginTemplateSource } from './plugin-template-sources'\nimport type { FormRecordTargetDeclaration } from './submission-record-target'\nimport type { ResolvedBesignerDocument } from './besigner-documents'\nimport type { PluginOrgKeyedCollection } from './plugin-org-erasure'\nimport type { ResolvedVideoEmbedProvider } from './video-embed-provider'\nimport type { AnalyticsProviderDeclaration } from '../app-utils/analytics-provider'\nimport type { InteractionStepDeclaration } from '../app-utils/site-interactions'\nimport type { ServerStepDeclaration } from './plugin-server-steps'\nimport type { NotificationCategoryDeclaration, NotificationDigestDeclaration } from '../app-utils/notifications'
+import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'\nimport type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'\nimport type { ResolvedPluginSitemapSection } from './plugin-sitemap-sections'\nimport type { ResolvedPluginSiteBundleSectionDeclaration } from './plugin-site-bundle'\nimport type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'\nimport type { ResolvedPluginCostAxis, ResolvedPluginSpendLine, ResolvedPluginUsageBand, ResolvedPluginUsageMeter } from './plugin-usage-axes'\nimport type { ResolvedPluginPlanFeature, ResolvedPluginPlanQuota } from './plugin-plan-entitlements'\nimport type { FunctionBindings } from './plugin-contributions'\nimport type { PluginDistribution } from './plugin-distribution'\nimport type { RepeatSourceDeclaration } from './repeat-rows'\nimport type { PluginTemplateSource } from './plugin-template-sources'\nimport type { FormRecordTargetDeclaration } from './submission-record-target'\nimport type { ArtifactTypeDeclaration } from './plugin-artifact-types'\nimport type { ResolvedBesignerDocument } from './besigner-documents'\nimport type { PluginOrgKeyedCollection } from './plugin-org-erasure'\nimport type { ResolvedVideoEmbedProvider } from './video-embed-provider'\nimport type { AnalyticsProviderDeclaration } from '../app-utils/analytics-provider'\nimport type { InteractionStepDeclaration } from '../app-utils/site-interactions'\nimport type { ServerStepDeclaration } from './plugin-server-steps'\nimport type { NotificationCategoryDeclaration, NotificationDigestDeclaration } from '../app-utils/notifications'
 
 export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
 ${rows.map((row) => `  ${indent(JSON.stringify(row.plugin, null, 2))},`).join('\n')}
@@ -2817,6 +2862,15 @@ ${besignerDocumentRows().map((row) => `  ${JSON.stringify(row, null, 2).split('\
  * by that plugin (AGL-3080). \`null\` when none does, and no form writes one.
  */
 export const PLUGIN_FORM_RECORD_TARGET_DECLARED: FormRecordTargetDeclaration | null = ${JSON.stringify(formRecordTargetRow(), null, 2)}
+
+/**
+ * The installable artifact types a first-party plugin keeps the copies of,
+ * declared by that plugin (AGL-3080). Empty when none does, and an installer
+ * then refuses every listing of a type nobody keeps.
+ */
+export const PLUGIN_ARTIFACT_TYPES_DECLARED: readonly ArtifactTypeDeclaration[] = [
+${artifactTypeRows().map((row) => `  ${JSON.stringify(row)},`).join('\n')}
+]
 
 /**
  * What a site's template library calls a template a plugin installed, by the
