@@ -987,17 +987,17 @@ export const formSchema: Aglyn.ComponentSchema<FormProps> = {
     {
       name: 'redirectScreenId',
       description:
-        'Screen the visitor lands on after submitting. The address is ' +
-        "resolved at render time, so renaming the screen's slug never " +
+        'Page the visitor lands on after submitting. The address is ' +
+        "resolved at render time, so renaming the page's slug never " +
         'breaks the redirect.',
       component: Aglyn.FieldComponentType.SCREEN_SELECT,
-      label: 'Redirect to screen',
+      label: 'Redirect to page',
       condition: { when: 'afterSubmit', is: 'redirect' },
     },
     {
       name: 'redirectUrl',
       description:
-        'Used only when no screen is selected above: a same-site path ' +
+        'Used only when no page is selected above: a same-site path ' +
         '(/thanks) or an https URL. Anything else is ignored.',
       component: Aglyn.FieldComponentType.TEXT_FIELD,
       label: 'Redirect URL',

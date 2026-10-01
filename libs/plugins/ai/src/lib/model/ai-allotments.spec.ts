@@ -121,9 +121,16 @@ describe('the line', () => {
     expect(aiAllotmentState(799, 1000)).toBe('ok')
     expect(aiAllotmentState(800, 1000)).toBe('warn')
     expect(aiAllotmentState(1000, 1000)).toBe('reached')
-    expect(aiAllotmentThreshold(799, 1000)).toBeNull()
+  })
+
+  it('alerts at the highest of 75, 80, 90 and 100% reached (AGL-3431)', () => {
+    expect(aiAllotmentThreshold(749, 1000)).toBeNull()
+    expect(aiAllotmentThreshold(750, 1000)).toBe(75)
     expect(aiAllotmentThreshold(850, 1000)).toBe(80)
+    expect(aiAllotmentThreshold(9, 10)).toBe(90)
+    expect(aiAllotmentThreshold(999, 1000)).toBe(90)
     expect(aiAllotmentThreshold(1200, 1000)).toBe(100)
+    expect(aiAllotmentThreshold(10, 0)).toBeNull()
   })
 })
 
@@ -187,5 +194,8 @@ describe('the words', () => {
     expect(`${reached.title} ${reached.body}`).not.toMatch(/\$/)
     const warned = aiAllotmentAlertCopy({ scope: 'member', threshold: 80, used: 820, credits: 1000, name: 'Sam' })
     expect(warned.title).toMatch(/Sam is past 80% of their AI allotment/)
+    // The step actually crossed, not a fixed 80.
+    const nearly = aiAllotmentAlertCopy({ scope: 'member', threshold: 90, used: 920, credits: 1000, name: 'Sam' })
+    expect(nearly.title).toMatch(/Sam is past 90% of their AI allotment/)
   })
 })

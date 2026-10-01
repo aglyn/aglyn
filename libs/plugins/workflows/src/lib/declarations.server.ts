@@ -21,6 +21,7 @@ import {
   type HostEventListener,
   registerHostEventListener,
 } from '@aglyn/tenant-runtime/host-event-listeners'
+import { registerPluginDependentsSource } from '@aglyn/aglyn/plugin-manager/plugin-dependents'
 import {
   registerPluginRecordIndex,
   type PluginRecordIndex,
@@ -69,8 +70,9 @@ export const workflowsHostEventListener: HostEventListener = {
  * `instrumentation.ts` gives.
  *
  * The indexes of the site's workflows, webhooks and actions, so another
- * surface — an AI job, the "Used by" scan — reads them without reaching for
- * this plugin's collections.
+ * surface — an AI job — reads them without reaching for this plugin's
+ * collections; and the workflows that call a function, which the "Used by"
+ * scan asks this plugin for.
  *
  * Also called from the plugin's own API register functions, so a process
  * whose boot did not run it still registers the listener the first time a
@@ -82,6 +84,14 @@ export function registerWorkflowsServerDeclarations(): void {
   registerPluginRecordIndex('workflow', lazyIndex('workflowRecordIndex'), { pluginId: BUNDLE_ID })
   registerPluginRecordIndex('webhook', lazyIndex('webhookRecordIndex'), { pluginId: BUNDLE_ID })
   registerPluginRecordIndex('action', lazyIndex('actionRecordIndex'), { pluginId: BUNDLE_ID })
+  registerPluginDependentsSource(
+    {
+      kinds: ['function'],
+      find: async (request) =>
+        (await import('./server/workflow-dependents')).findFunctionDependents(request),
+    },
+    { pluginId: BUNDLE_ID },
+  )
 }
 
 type IndexName = 'workflowRecordIndex' | 'webhookRecordIndex' | 'actionRecordIndex'

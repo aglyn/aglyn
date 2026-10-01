@@ -114,7 +114,7 @@ import AssistPanelComponent, {
 
 const PROPOSAL = {
   id: 'open.host.screens',
-  label: 'Open Screens',
+  label: 'Open Pages',
   outcome: 'the list of pages on this site',
   href: '/acme/hosts/host-1/screens',
   values: [{ name: 'source', value: '/old-page' }],
@@ -209,10 +209,10 @@ function dockProps() {
 
 describe('GUARD: no write happens without an explicit confirm', () => {
   it('shows the proposal as a card the user has to act on', async () => {
-    armChat('Open Screens and pick the page.', PROPOSAL)
+    armChat('Open Pages and pick the page.', PROPOSAL)
     render(<AssistPanelComponent {...dockProps()} />)
     await ask()
-    expect(await screen.findByText('Open Screens')).toBeTruthy()
+    expect(await screen.findByText('Open Pages')).toBeTruthy()
     // The card states the boundary in the user's own words, not only ours.
     expect(
       screen.getByText(/Nothing is saved until you fill the form in/),
@@ -224,7 +224,7 @@ describe('GUARD: no write happens without an explicit confirm', () => {
   })
 
   it('confirming NAVIGATES and sends nothing', async () => {
-    armChat('Open Screens and pick the page.', PROPOSAL)
+    armChat('Open Pages and pick the page.', PROPOSAL)
     render(<AssistPanelComponent {...dockProps()} />)
     await ask()
     const confirm = (await screen.findByText('Take me there')).closest('a')
@@ -245,7 +245,7 @@ describe('GUARD: no write happens without an explicit confirm', () => {
   })
 
   it('declining removes the card and sends nothing', async () => {
-    armChat('Open Screens and pick the page.', PROPOSAL)
+    armChat('Open Pages and pick the page.', PROPOSAL)
     render(<AssistPanelComponent {...dockProps()} />)
     await ask()
     // The question's own POST has to be on the record before the count is
@@ -310,9 +310,9 @@ describe('GUARD: no write happens without an explicit confirm', () => {
 describe('one answer, two depths', () => {
   it('splits the technical tail off the plain answer', () => {
     const { plain, technical } = splitAssistDisclosure(
-      'Open Screens, then press Publish.\n\nUnder the hood: the route is /[orgSlug]/hosts/[host]/screens.',
+      'Open Pages, then press Publish.\n\nUnder the hood: the route is /[orgSlug]/hosts/[host]/screens.',
     )
-    expect(plain).toBe('Open Screens, then press Publish.')
+    expect(plain).toBe('Open Pages, then press Publish.')
     expect(technical).toBe('the route is /[orgSlug]/hosts/[host]/screens.')
   })
 
@@ -334,12 +334,12 @@ describe('one answer, two depths', () => {
 
   it('hides the developer layer until it is asked for', async () => {
     armChat(
-      'Open Screens, then press Publish.\n\nUnder the hood: the route is /[orgSlug]/hosts/[host]/screens.',
+      'Open Pages, then press Publish.\n\nUnder the hood: the route is /[orgSlug]/hosts/[host]/screens.',
     )
     render(<AssistPanelComponent {...dockProps()} />)
     await ask()
     // The beginner sees the steps and a toggle; not the route.
-    await screen.findByText(/Open Screens, then press Publish/)
+    await screen.findByText(/Open Pages, then press Publish/)
     expect(screen.getByText('Under the hood')).toBeTruthy()
     expect(screen.queryByText(/the route is/)).toBeNull()
 

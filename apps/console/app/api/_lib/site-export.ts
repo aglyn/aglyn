@@ -20,7 +20,18 @@
  * import routes. Lives in `_lib` (an App Router private folder) because
  * `route.ts` files may only export route handlers — the Pages Router version
  * exported these from the export route itself.
+ *
+ * The tables below hold the platform's own documents. A plugin's collection
+ * is carried because the plugin declares it (`siteExport` beside the
+ * collection in `plugins.config.json`), and its cap and field list are folded
+ * in from that declaration, so a plugin's document model is never written
+ * here.
  */
+
+import {
+  listPluginSiteExportCollections,
+  type ResolvedPluginSiteExportCollection,
+} from '@aglyn/aglyn/plugin-manager/plugin-site-export'
 
 export const SITE_EXPORT_FORMAT = 'aglyn-site-export'
 export const SITE_EXPORT_VERSION = 1
@@ -37,21 +48,23 @@ export const EXPORTABLE_HOST_FIELDS = [
   'analytics',
 ] as const
 
+/**
+ * The host collections plugins declare for the bundle, in config order: each
+ * is exported under its own name and restored as a plain collection.
+ */
+export const PLUGIN_SITE_EXPORT_COLLECTIONS: readonly ResolvedPluginSiteExportCollection[] =
+  listPluginSiteExportCollections()
+
 /** Per-collection doc caps keep bundles bounded and import tractable. */
 export const EXPORT_COLLECTION_LIMITS: Record<string, number> = {
   screens: 200,
   layouts: 50,
   components: 100,
-  variables: 100,
-  functions: 100,
-  workflows: 100,
-  actions: 100,
   // Custom content authors (AGL-2486). Well under `AUTHORS_MAX_PER_HOST`
   // (200) on purpose: the cap bounds a site's masthead, this bounds a
   // BUNDLE, and a site that genuinely holds 200 bylines is not the site
   // anyone round-trips through a manifest.
   authors: 100,
-  services: 50,
   collections: 20,
   datasets: 50,
   // Read by BOTH directions, so it has to be declared rather than passed at
@@ -97,6 +110,9 @@ export const EXPORT_COLLECTION_LIMITS: Record<string, number> = {
    */
   hostMedia: 500,
   hostMediaFolders: 200,
+  ...Object.fromEntries(
+    PLUGIN_SITE_EXPORT_COLLECTIONS.map((declared) => [declared.collection, declared.limit]),
+  ),
 }
 
 /**
@@ -264,14 +280,6 @@ export const IMPORTABLE_FIELDS: Record<string, readonly string[]> = {
     'publishSchedule',
     'kind',
   ],
-  variables: ['name', 'type', 'value', 'workflowId', 'workflowName'],
-  functions: ['name', 'parameters', 'variables', 'operations', 'returnValue'],
-  // `trigger` is written as a literal `null` by the edit path, so absence and
-  // null are different states here — the filter must drop only `undefined`.
-  workflows: ['name', 'steps', 'returnValue', 'trigger'],
-  // Interactions have no `RESOURCES` entry at all: all three creators write
-  // the document client-direct, so this list comes from them, not from a route.
-  actions: ['name', 'trigger', 'steps', 'enabled'],
   // Custom content authors (AGL-2486). The list is the `author` RESOURCES
   // entry's `fields`, which is what the console can write; `$id` is
   // structural and re-keyed by the import, and it is what `entries.authorId`
@@ -301,14 +309,6 @@ export const IMPORTABLE_FIELDS: Record<string, readonly string[]> = {
     'seoDescription',
     'seoImage',
     'seoImageAlt',
-  ],
-  services: [
-    'name',
-    'description',
-    'durationMinutes',
-    'priceUsd',
-    'timezone',
-    'windows',
   ],
   /**
    * One collection holding two shapes, discriminated by `kind` (AGL-954), so
@@ -466,4 +466,7 @@ export const IMPORTABLE_FIELDS: Record<string, readonly string[]> = {
    *   The same "a key nobody can point at a document for" test AGL-1384 applies.
    */
   mediaFolders: ['name', 'parentId'],
+  ...Object.fromEntries(
+    PLUGIN_SITE_EXPORT_COLLECTIONS.map((declared) => [declared.collection, declared.fields]),
+  ),
 }

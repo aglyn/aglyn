@@ -120,11 +120,11 @@ export const AI_BRIEF_COPY: Readonly<Record<AiBriefKind, AiBriefCopy>> = {
       'our address and opening hours',
     next:
       'A plan comes first, and nothing is built until you confirm it. The layout links your ' +
-      'screens, and places your navigation or menu component when the site has one.',
+      'pages, and places your navigation or menu component when the site has one.',
     submit: 'Plan the layout',
     started:
       'The layout is being planned. Open AI jobs in the Assist panel to review the plan and ' +
-      'confirm it. The layout is built as a draft, and no screen uses it until you assign it.',
+      'confirm it. The layout is built as a draft, and no page uses it until you assign it.',
     failed: 'The layout could not be started. Try again.',
   },
   form: {
@@ -140,7 +140,7 @@ export const AI_BRIEF_COPY: Readonly<Record<AiBriefKind, AiBriefCopy>> = {
     started:
       'The form is being planned. Open AI jobs in the Assist panel to review the plan and ' +
       'confirm it. The form is built as a draft, and it collects nothing until you place it ' +
-      'on a screen.',
+      'on a page.',
     failed: 'The form could not be started. Try again.',
   },
   component: {

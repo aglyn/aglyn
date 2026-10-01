@@ -147,7 +147,7 @@ export const PERSONAL_DATA_SOURCES: readonly ExportSourceSpec[] = [
     keyedBy: 'field',
     subjects: ['org'],
     exported: true,
-    note: 'Each site tree the org owns — screens, layouts, orders, form submissions. Secrets within are redacted, not omitted, so the export still says a webhook exists.',
+    note: 'Each site tree the org owns — pages, layouts, orders, form submissions. Secrets within are redacted, not omitted, so the export still says a webhook exists.',
   },
   {
     collection: 'hostIndex',

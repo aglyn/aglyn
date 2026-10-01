@@ -133,16 +133,17 @@ export function aiJobOutputHref(output: AiJobOutput, orgSlug: string): string | 
   }
   if (output.resource === 'workflow') {
     // A drafted automation is an action (AGL-2919), listed switched off on
-    // the Automation page's Actions.
-    return `${buildRoute(Route.HOST_AUTOMATION, { orgSlug, host })}/actions`
+    // the workflows plugin's list of actions, or no link where it is not loaded.
+    return pluginRecordListHref('action', { orgSlug, host })
   }
   if (output.resource === 'theme') {
     return buildRoute(Route.HOST_SETUP_THEME, { orgSlug, host })
   }
   if (output.resource === 'form') {
-    // A new form has no version for the besigner to open: its own page mints
-    // the first one, and holds the routing and consent it declares.
-    return buildRoute(Route.FORM_DETAILS, { orgSlug, host, formId: output.id })
+    // A new form has no version for the besigner to open: its own page — the
+    // forms plugin's address for it — mints the first one, and holds the
+    // routing and consent it declares.
+    return pluginRecordHref('form', { orgSlug, host }, output.id)
   }
   if (output.resource === 'campaign') {
     // A campaign's page is the marketing plugin's, under the site: its

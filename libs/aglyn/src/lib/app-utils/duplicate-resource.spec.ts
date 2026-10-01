@@ -55,7 +55,7 @@ describe('the catalog', () => {
   })
 
   it('the feed translates the code once, and leaves prose alone', () => {
-    expect(activityActionLabel('screen.duplicated')).toBe('Duplicated a screen')
+    expect(activityActionLabel('screen.duplicated')).toBe('Duplicated a page')
     expect(activityActionLabel('emailDesign.duplicated')).toBe(
       'Duplicated an email design',
     )

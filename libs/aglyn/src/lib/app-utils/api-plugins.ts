@@ -171,6 +171,21 @@ export interface PluginApiRouteOptions {
    */
   machine?: boolean
   /**
+   * The route hands a workspace the records a plugin keeps for it — a
+   * data-portability export — which the workspace is owed whether or not the
+   * plugin is switched on or released for it now (AGL-3080).
+   *
+   * Exporting the people a workspace holds is an obligation, not a feature:
+   * a workspace that switched the plugin off, or a plugin paused by its
+   * kill switch, still has to be able to take its data away. So both
+   * dispatchers skip their per-site enablement and release gates for it —
+   * and nothing else: lockdown, the email-verification gate and the rate
+   * limit still apply. The flag grants nothing by itself: the route
+   * authenticates the member, and asks the plugin's release and plan itself
+   * of anything it serves beyond what the workspace is owed.
+   */
+  portability?: boolean
+  /**
    * The route OPENS A CARD PAYMENT for whoever calls it: a Checkout Session,
    * a PaymentIntent or a SetupIntent (AGL-3363).
    *
@@ -345,6 +360,16 @@ export function isPluginRecipientLinkRoute(path: string): boolean {
 export function isPluginMachineRoute(path: string): boolean {
   const matched = matchRegisteredApiKey(path)
   return matched ? apiRouteOptions.get(matched.key)?.machine === true : false
+}
+
+/**
+ * Whether a request path resolves to a route registered as a
+ * {@link PluginApiRouteOptions.portability} export — what both dispatchers
+ * ask before their enablement and release gates (AGL-3080).
+ */
+export function isPluginPortabilityRoute(path: string): boolean {
+  const matched = matchRegisteredApiKey(path)
+  return matched ? apiRouteOptions.get(matched.key)?.portability === true : false
 }
 
 /**

@@ -17,7 +17,7 @@
 'use client'
 
 import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
-import type { ConsoleProductsHubZoneProps } from '@aglyn/aglyn/plugin-manager/feature-plugins'
+import type { ConsoleProductsHubZoneProps } from './ai-product-zones'
 import { ListTable, type ListTableProps } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import {
   Alert,

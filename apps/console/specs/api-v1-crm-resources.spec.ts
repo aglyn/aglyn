@@ -62,7 +62,7 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     // The REAL customer floor a win applies to the deal's contact (AGL-2641),
     // over the same double, so the facet it writes is the one read back.
     ...jest.requireActual(
-      '../../../libs/tenant/data/admin/src/lib/server/contact-lifecycle-floor',
+      '../../../libs/plugins/crm/src/lib/server/contact-lifecycle-floor',
     ),
     // The REAL `nextTaskAtMs` writer (AGL-2661), over the same double, so the
     // figure a task write leaves on its contact is the one read back.

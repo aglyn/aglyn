@@ -220,7 +220,7 @@ describe('a per-site refusal is recorded on a contact and nowhere else', () => {
     'libs/tenant/data/admin/src/lib/server/host-visitor-records.ts',
     'libs/tenant/data/admin/src/lib/server/list-members.ts',
     'libs/plugins/commerce/src/lib/server/membership-register.ts',
-    'libs/tenant/runtime/src/lib/convert-host-lead.ts',
+    'libs/plugins/crm/src/lib/server/convert-host-lead.ts',
   ]
 
   it('only a contact writer records one', () => {

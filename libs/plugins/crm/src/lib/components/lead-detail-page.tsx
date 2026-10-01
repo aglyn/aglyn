@@ -19,7 +19,6 @@
 import {
   pluginDocsHelp,
   type CrmLeadFields,
-  leadPrimaryGroup,
   normalizeContactEmail,
   readErasureRequestedAtMs,
 } from '@aglyn/aglyn'
@@ -44,6 +43,7 @@ import { LeadUnqualifyDialog } from './lead-unqualify-dialog'
 import { RecordActivityCard } from './record-activity-card'
 import { CrmShareChipView, RecordSharingCard } from './record-sharing-card'
 import { crmShareChipFor } from '../model/crm-sharing'
+import { leadPrimaryGroup } from '../model/contact-holder'
 
 type LeadDocument = Record<string, unknown> & CrmLeadFields
 

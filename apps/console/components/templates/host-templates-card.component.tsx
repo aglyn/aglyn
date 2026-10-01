@@ -383,7 +383,7 @@ export function HostTemplatesCard({
           `Creates one page per template — ${pages
             .map((page: any) => page.displayName ?? page.$id)
             .join(', ')} — and publishes each at its own address. Existing ` +
-          'screens are never touched, and the templates stay in your library.',
+          'pages are never touched, and the templates stay in your library.',
         confirmationText: `Add ${pages.length} pages`,
       })
         .then(() => true)
@@ -424,7 +424,7 @@ export function HostTemplatesCard({
         )
         if (!quota.allowed) {
           return void enqueueSnackbar(
-            `This starter needs ${pages.length} screens and this site has ` +
+            `This starter needs ${pages.length} pages and this site has ` +
               `${screenCount} — your plan allows ${quota.limit}. See Billing ` +
               'to upgrade.',
             { variant: 'warning', persist: false },
@@ -477,11 +477,11 @@ export function HostTemplatesCard({
         }
         if (created) {
           enqueueSnackbar(
-            `Added ${created} screen${created === 1 ? '' : 's'} from "${
+            `Added ${created} page${created === 1 ? '' : 's'} from "${
               row.displayName
             }"` +
               (releasedRoot
-                ? '. The placeholder home page is kept in Screens as a draft.'
+                ? '. The placeholder home page is kept in Pages as a draft.'
                 : ''),
             { variant: 'success', persist: false },
           )
@@ -490,7 +490,7 @@ export function HostTemplatesCard({
           // Persistent: skipping is only honest if the person reads which
           // screens were left out and why.
           enqueueSnackbar(
-            `${skipped.length} screen${
+            `${skipped.length} page${
               skipped.length === 1 ? '' : 's'
             } could not be added: ${skipped.join('; ')}`,
             { variant: 'warning', persist: true },
@@ -817,7 +817,7 @@ export function HostTemplatesCard({
           : {
               noRowsLabel: 'No templates yet',
               noRowsDescription:
-                'A template is a saved starting point for a screen or layout. Create one, or save one from a screen you have already built.',
+                'A template is a saved starting point for a page or layout. Create one, or save one from a page you have already built.',
               noRowsAction: onCreate ? (
                 <Button variant="contained" onClick={onCreate}>
                   {'Create your first template'}

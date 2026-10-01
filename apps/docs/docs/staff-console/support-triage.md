@@ -10,7 +10,7 @@ description: How Aglyn staff triage an incoming support ticket — priority, the
 Requires a staff claim. `/admin/*` returns a **404** for everyone else.
 :::
 
-[Support queue](support-queue.md) documents the *screen*. This documents the
+[Support queue](support-queue.md) documents the *page*. This documents the
 *job*: what to do with a ticket once it is open, in what order, and — the part
 that was missing entirely until AGL-2141 — how to recognize the tickets that
 are not support tickets at all.
@@ -155,7 +155,7 @@ worse than one that admits the gap:
 
 ## Related
 
-- [Support queue](support-queue.md) — the screen
+- [Support queue](support-queue.md) — the page
 - [Support & community](../workspace-and-billing/support-and-community.md) —
   what the customer sees
 - [Support tiers](../enterprise/support-tiers.md) — the commercial commitment

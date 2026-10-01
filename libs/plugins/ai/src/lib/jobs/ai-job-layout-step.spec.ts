@@ -392,7 +392,7 @@ describe('the layout step', () => {
       '- Rule 5 (Colors, spacing and type come from the theme): A link or button on a primary.main band draws its words in the theme\'s primary color, the band\'s own, so they cannot be read. Give it "color": "inherit" under a band whose sx color is primary.contrastText, or set its own sx color to primary.contrastText. (nodes consult)',
     )
     expect(reask).toContain(
-      '- Rule 10 (Navigation and SEO travel with a page): "Request a Consultation" links the home page, which does not do what its words say. Link the screen that does, or leave the link out when the site has none. (nodes consult)',
+      '- Rule 10 (Navigation and SEO travel with a page): "Request a Consultation" links the home page, which does not do what its words say. Link the page that does, or leave the link out when the site has none. (nodes consult)',
     )
     expect(outcome.review).toBeUndefined()
     expect(outcome.outputs).toEqual([

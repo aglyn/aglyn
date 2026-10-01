@@ -33,7 +33,7 @@
       "heading": "See what’s working, site by site.",
       "subheading": null,
       "body": [
-        "Page views, top pages, referrers, and device split, per site — with per-screen trends and commerce revenue built in. Cookieless, no extra scripts."
+        "Page views, top pages, referrers, and device split, per site — with per-page trends and commerce revenue built in. Cookieless, no extra scripts."
       ],
       "actions": [
         { "label": "Start free", "variant": "contained" },
@@ -73,8 +73,8 @@
           "meta": null
         },
         {
-          "title": "Per-screen analytics",
-          "body": "Drill into any screen’s 14-day traffic, device split, and referrers (Pro & up).",
+          "title": "Per-page analytics",
+          "body": "Drill into any page’s 14-day traffic, device split, and referrers (Pro & up).",
           "meta": "plan gate: Pro & up"
         },
         {
@@ -103,32 +103,32 @@
     },
     {
       "kind": "deep-dive",
-      "eyebrow": "PER-SCREEN",
-      "heading": "Zoom into any screen.",
+      "eyebrow": "PER-PAGE",
+      "heading": "Zoom into any page.",
       "subheading": null,
       "body": [
-        "Open any screen to see its own 14-day traffic, device split, and top referrers — so you know exactly which pages are working."
+        "Open any page to see its own 14-day traffic, device split, and top referrers — so you know exactly which ones are working."
       ],
       "actions": [],
       "items": [
         {
           "title": "14-day trend",
-          "body": "Every screen keeps its own rolling 14-day view history.",
+          "body": "Every page keeps its own rolling 14-day view history.",
           "meta": null
         },
         {
           "title": "Device split",
-          "body": "See the mobile, desktop, and tablet mix for the screen.",
+          "body": "See the mobile, desktop, and tablet mix for the page.",
           "meta": null
         },
         {
           "title": "Top referrers",
-          "body": "Find where each screen’s traffic is coming from.",
+          "body": "Find where each page’s traffic is coming from.",
           "meta": null
         }
       ],
       "image": {
-        "describe": "Per-screen analytics mockup, 768×580. Breadcrumb 'Analytics / Home'; three stat tiles — 'Screen views 22,410 / +9% vs prior', 'Avg. time 2m 04s / on this screen', 'Mobile 58% / of views'; a chart 'Views · last 14 days'; a 'Device split' block (Mobile 58% · Desktop 36% · Tablet 6%); a 'Top referrers' list (google.com 4,210 · Direct 3,180 · /pricing 1,940 · x.com 860).",
+        "describe": "Per-page analytics mockup, 768×580. Breadcrumb 'Analytics / Home'; three stat tiles — 'Page views 22,410 / +9% vs prior', 'Avg. time 2m 04s / on this page', 'Mobile 58% / of views'; a chart 'Views · last 14 days'; a 'Device split' block (Mobile 58% · Desktop 36% · Tablet 6%); a 'Top referrers' list (google.com 4,210 · Direct 3,180 · /pricing 1,940 · x.com 860).",
         "figmaNodeId": "124:3166"
       },
       "notes": "Two-column: 440px copy column left with three icon+text bullets, 768px mockup right. Section background is grey (bg/default #f8f9fa). This is the 'Canvas/visual' beat of the skeleton — the Figma frame is named 'Deep-dive · canvas' and merges the two."
@@ -152,8 +152,8 @@
           "meta": "02"
         },
         {
-          "title": "Zoom into a screen",
-          "body": "Open any screen for its own 14-day trend, or watch revenue and orders from commerce.",
+          "title": "Zoom into a page",
+          "body": "Open any page for its own 14-day trend, or watch revenue and orders from commerce.",
           "meta": "03"
         }
       ],
@@ -246,7 +246,7 @@
       "why": "Uses a VISITORS metric. Aglyn measures page/screen views, not unique visitors. Banned-claim list: 'conversions/visitors metrics'."
     },
     {
-      "phrase": "Find where each screen’s visitors are coming from.",
+      "phrase": "Find where each page’s visitors are coming from.",
       "where": "Deep-dive → bullet 'Top referrers' (124:3165)",
       "why": "Second VISITORS reference. Same concern as above."
     },
@@ -256,7 +256,7 @@
       "why": "Reads as a cross-site analytics rollup, which Aglyn does not have. Needs rewording to per-site if the console has no aggregate view."
     },
     {
-      "phrase": "Page views, top pages, referrers, and device split for every site — with per-screen trends and commerce revenue built in.",
+      "phrase": "Page views, top pages, referrers, and device split for every site — with per-page trends and commerce revenue built in.",
       "where": "Hero body (124:3080)",
       "why": "'for every site' again implies a cross-site rollup."
     },
@@ -276,7 +276,7 @@
       "why": "Fifth 'every site' cross-site rollup implication, and it promises the metric on the free tier — but the Capabilities grid gates per-screen analytics at 'Pro & up'. Verify what Free actually gets."
     },
     {
-      "phrase": "Drill into any screen’s 14-day traffic, device split, and referrers (Pro & up).",
+      "phrase": "Drill into any page’s 14-day traffic, device split, and referrers (Pro & up).",
       "where": "Capabilities → card 'Per-screen analytics' (124:3315)",
       "why": "Plan gate 'Pro & up' — confirm per-screen analytics really starts at Pro and not Starter."
     },
@@ -291,7 +291,7 @@
       "why": "'top products' is the one item here not evidenced anywhere else in the design. Verify the metric exists."
     },
     {
-      "phrase": "Avg. time 2m 04s / on this screen",
+      "phrase": "Avg. time 2m 04s / on this page",
       "where": "Deep-dive mockup 'Mockup/Analytics Screen' (150:188–150:190)",
       "why": "An average-time-on-screen metric appears in the MOCKUP but in none of the copy. If Aglyn does not compute dwell time, the illustration is claiming a metric that doesn't exist."
     },

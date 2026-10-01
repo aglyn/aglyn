@@ -60,16 +60,17 @@ import {
   seoListingFieldTooLong,
   type SeoListingFieldKey,
 } from '@aglyn/aglyn/app-utils/seo-listing-fields'
-import type {
-  ConsoleProductCopyValues,
-  ConsoleProductEditorZoneProps,
-  ConsoleSeoFieldValues,
-} from '@aglyn/aglyn/plugin-manager/feature-plugins'
+import type { ConsoleSeoFieldValues } from '@aglyn/aglyn/plugin-manager/feature-plugins'
 import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import {
   EntitlementUpsell,
   useCommerceEntitlement,
 } from './entitlement-gate.component'
+import {
+  PRODUCT_EDITOR_ZONE,
+  type ConsoleProductCopyValues,
+  type ConsoleProductEditorZoneProps,
+} from './product-zones'
 import {
   MembersVideosField,
   PaidDownloadAddButton,
@@ -853,7 +854,7 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
         */}
         {WidgetSlot ? (
           <WidgetSlot
-            slot="productEditor"
+            slot={PRODUCT_EDITOR_ZONE.id}
             hostId={hostId}
             orgId={undefined}
             product={zoneProduct}

@@ -171,7 +171,7 @@
             }
           },
           {
-            "label": "Screen versioning",
+            "label": "Page versioning",
             "duplicateOf": null,
             "values": {
               "free": "—",
@@ -779,7 +779,7 @@
             }
           },
           {
-            "label": "Per-screen analytics",
+            "label": "Per-page analytics",
             "duplicateOf": null,
             "values": {
               "free": "—",

@@ -8,9 +8,9 @@ description: Fixes for common issues — publishing, domains, sign-in, and searc
 
 ## My changes aren't live
 
-Publishing a screen creates a version that goes live — edits in the Besigner
+Publishing a page creates a version that goes live — edits in the Besigner
 aren't public until you publish. See
-[Publish your first screen](/getting-started/publish-your-first-screen) and
+[Publish your first page](/getting-started/publish-your-first-screen) and
 [Versions & scheduled publishing](/building-sites/screens-and-layouts/versions-and-publishing).
 
 ## My custom domain won't verify
@@ -28,8 +28,8 @@ email isn't verified, some actions are blocked until you verify it.
 
 ## Search isn't finding a page
 
-Site search matches published content — screens, blog entries, and dataset
-records surfaced through a repeatable screen. Make sure the content is published
+Site search matches published content — pages, blog entries, and dataset
+records surfaced through a repeatable page. Make sure the content is published
 and see [Site search](/building-sites/site-search/overview).
 
 ## A form submission didn't arrive

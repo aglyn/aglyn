@@ -39,14 +39,22 @@ import { join } from 'node:path'
 const readRepo = (rel: string) => readFileSync(join(process.cwd(), rel), 'utf8')
 
 const FORM_BESIGNER =
-  'apps/console/app/(editor)/[orgSlug]/hosts/[host]/forms/[formId]/versions/[versionId]/besigner/page.tsx'
+  'apps/console/app/(editor)/[orgSlug]/hosts/[host]/[documentSegment]/[docId]/versions/[versionId]/besigner/page.tsx'
 const PROVIDER = 'apps/console/components/reusable-components-provider.component.tsx'
 const PREVIEW = 'apps/console/components/document-preview.component.tsx'
 
 describe("a form's own editor withholds itself from the graft", () => {
-  it('passes the edited form id to the provider that carries the designs', () => {
+  it('passes the edited document to the provider that carries the designs', () => {
     const source = readRepo(FORM_BESIGNER)
-    expect(source).toMatch(/editingFormId=\{formId as string\}/)
+    expect(source).toMatch(/editingDocument=\{\{ kind, id: docId \}\}/)
+  })
+
+  it('withholds by form id only when the edited document is a form', () => {
+    // The placed-form designs are keyed by form id, so another kind's id
+    // must never be read as one.
+    expect(readRepo(PROVIDER)).toMatch(
+      /editingDocument\?\.kind === 'form' \? editingDocument\.id : undefined/,
+    )
   })
 
   it('drops that id from the map the canvas resolves against', () => {

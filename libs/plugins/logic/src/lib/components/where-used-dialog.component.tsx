@@ -68,7 +68,7 @@ export function WhereUsedDialog(props: WhereUsedDialogProps) {
       <DialogContent>
         {usage?.result.total === 0 ? (
           <Typography variant="body2" color="text.secondary">
-            {'Not referenced by any published screen, layout, or workflow. ' +
+            {'Not referenced by any published page, layout, or workflow. ' +
               'Unpublished drafts are not scanned.'}
           </Typography>
         ) : (
@@ -99,7 +99,8 @@ export function WhereUsedDialog(props: WhereUsedDialogProps) {
                     </Typography>
                   )}
                   <Typography variant="caption" color="text.secondary">
-                    {dependent.type +
+                    {/* The stored type stays `screen`; a person reads "page". */}
+                    {(dependent.type === 'screen' ? 'page' : dependent.type) +
                       (dependent.via.includes('name') ? ' · legacy token' : '')}
                   </Typography>
                 </Stack>
@@ -108,7 +109,7 @@ export function WhereUsedDialog(props: WhereUsedDialogProps) {
             {usage?.result.legacyCount ? (
               <Typography variant="caption" color="warning.main">
                 {'Legacy tokens reference this by name and break if it is ' +
-                  'renamed — re-publish those screens to upgrade them.'}
+                  'renamed — re-publish those pages to upgrade them.'}
               </Typography>
             ) : null}
           </Stack>

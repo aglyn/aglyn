@@ -110,7 +110,7 @@ element, that's the whole setup — it finds it and lists its headings.
 
 | Attribute | What it does |
 | --- | --- |
-| **Markdown element** | Which document to read. Leave it empty unless the screen has more than one. |
+| **Markdown element** | Which document to read. Leave it empty unless the page has more than one. |
 | **Heading** | The label above the list. Defaults to *On this page*; clear it for no label. |
 | **Levels** | List `##` and `###` headings, or `##` only. |
 
@@ -120,10 +120,10 @@ matching heading.
 
 ### How it finds the markdown
 
-By walking the screen, in reading order — not by looking for anything in the page's HTML.
+By walking the page, in reading order — not by looking for anything in the page's HTML.
 That's what makes it work everywhere: on the canvas, in Preview and on the published site.
 
-- **Left empty**, it takes the **first** document on the screen.
+- **Left empty**, it takes the **first** document on the page.
 - **Set** to a specific element, it takes that one.
 - Set to an element that's **since been deleted**, it falls back to the first one. Deleting
   and re-adding a Markdown element is exactly what re-pasting a document looks like, and a
@@ -131,11 +131,11 @@ That's what makes it work everywhere: on the canvas, in Preview and on the publi
 
 Two elements count as a document: the **Markdown** element, and the **Collection entry body**
 on a blog article template. So an article template can carry an "On this page" aside beside
-the post, with no extra wiring — drop the Table of contents element on the screen and it
+the post, with no extra wiring — drop the Table of contents element on the page and it
 reads the entry body.
 
 While you're authoring, the entry body still shows its `{{entry.body}}` token rather than a
-real post, so the contents list skips it and reads the next document on the screen instead.
+real post, so the contents list skips it and reads the next document on the page instead.
 It fills in on Preview and on the published page, where the post is actually there.
 
 Put the contents list wherever you like — most often in an aside column beside the document,
@@ -163,9 +163,9 @@ document order — and the numbering skips anything already taken, so a document
 `## Notice` twice *and* `## Notice 2` still ends up with three distinct links.
 
 :::note
-Anchors come from the document's own words, so two documents on one screen with the same
+Anchors come from the document's own words, so two documents on one page with the same
 headings will produce the same ids twice. On a page like that, give the second document
-distinct headings — or split it onto its own screen, which is usually what it wanted anyway.
+distinct headings — or split it onto its own page, which is usually what it wanted anyway.
 :::
 
 ## Related
@@ -173,4 +173,4 @@ distinct headings — or split it onto its own screen, which is usually what it 
 - [Element catalog](element-catalog.md)
 - [Text editing](text-editing.md) — for headlines and short copy, where Typography is the
   right element
-- [Screens and layouts](../screens-and-layouts/overview.md)
+- [Pages and layouts](../screens-and-layouts/overview.md)

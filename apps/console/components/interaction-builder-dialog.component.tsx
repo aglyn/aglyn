@@ -692,7 +692,7 @@ export function InteractionBuilderDialog(props: InteractionBuilderDialogProps) {
       'Video element it should play.' +
       (videoTargetOptions.length
         ? ''
-        : ' There is no Video on this screen yet — add one from the Media group.')
+        : ' There is no Video on this page yet — add one from the Media group.')
     )
   }
 
@@ -1094,7 +1094,7 @@ export function InteractionBuilderDialog(props: InteractionBuilderDialogProps) {
                     helperText={
                       drawerTargetOptions.length
                         ? undefined
-                        : 'No drawer on this screen yet — add one from the ' +
+                        : 'No drawer on this page yet — add one from the ' +
                           'Navigation group'
                     }
                   >
@@ -1141,7 +1141,7 @@ export function InteractionBuilderDialog(props: InteractionBuilderDialogProps) {
                     helperText={
                       menuTargetOptions.length
                         ? undefined
-                        : 'No menu on this screen yet — add one from the ' +
+                        : 'No menu on this page yet — add one from the ' +
                           'Navigation group'
                     }
                   >
@@ -1254,7 +1254,7 @@ export function InteractionBuilderDialog(props: InteractionBuilderDialogProps) {
               {step.type === 'redirect' ? (
                 <>
                   <TextField
-                    label="Screen"
+                    label="Page"
                     value={step.screenId ?? ''}
                     onChange={(inputEvent) =>
                       updateStep(index, {

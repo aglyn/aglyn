@@ -52,7 +52,6 @@ import { collectionLivePageScope } from '@aglyn/tenant-data-admin/server/collect
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 import {
   screenIdsUsingComponentDeep,
-  screenIdsUsingFormDeep,
   screenIdsUsingLayoutDeep,
 } from '../../../../utils/server/scan-artifact-usage'
 import { readUsageCandidates } from '../../../../utils/server/read-usage-candidates'
@@ -269,9 +268,7 @@ async function screenIdsUsingComponent(
  * both tree-searching scans walk.
  *
  * Each collection ONCE, in memory: a query per level would multiply round
- * trips by the nesting depth of the graph. Shared by the component and form
- * scans so the two read the same corpus under the same bound, and a change to
- * one cannot quietly narrow the other.
+ * trips by the nesting depth of the graph.
  */
 async function readPlacementSources(
   firestore: FirebaseFirestore.Firestore,
@@ -293,27 +290,6 @@ async function readPlacementSources(
       components: components.candidates,
     },
     truncated: screens.truncated || layouts.truncated || components.truncated,
-  }
-}
-
-/**
- * Every live screen whose output places the form `formId`.
- *
- * The same read the component scan makes, because it answers the same shape of
- * question: a placement is found by searching node trees, so the published
- * body of every screen and layout has to be in hand. Sharing the read means a
- * form publish and a component publish cannot disagree about which pages
- * exist.
- */
-async function screenIdsUsingForm(
-  firestore: FirebaseFirestore.Firestore,
-  hostId: string,
-  formId: string,
-): Promise<{ screenIds: string[]; truncated: boolean }> {
-  const sources = await readPlacementSources(firestore, hostId)
-  return {
-    screenIds: screenIdsUsingFormDeep(formId, sources.candidates),
-    truncated: sources.truncated,
   }
 }
 
@@ -402,14 +378,6 @@ export async function POST(request: Request): Promise<Response> {
           // The tenant's own `MAX_PATHS`; more would be dropped there anyway.
           .slice(0, 250) as string[])
       : []
-    // Publishing a FORM changes every page that PLACES it, because a placed
-    // form renders the entity's published design rather than the fields the
-    // page holds. Before that graft existed a form publish changed nothing a
-    // visitor could see, so nothing announced it; now it changes the form on
-    // every page at once, and the only alternative to this is waiting out the
-    // hour-long `tenant-data:{hostId}` backstop while the besigner says the
-    // live sites already serve the new design.
-    const formId = String((payload as { formId?: unknown })?.formId ?? '')
     // A content ENTRY changed. Entries have no version pointer and no publish
     // step — saving one is a client Firestore write — and the pages that
     // render them are addressed by slug rather than served by a screen
@@ -441,7 +409,6 @@ export async function POST(request: Request): Promise<Response> {
         !screenId &&
         !layoutId &&
         !componentId &&
-        !formId &&
         !collectionId &&
         !redirectPath &&
         !namedPaths.length)
@@ -449,7 +416,7 @@ export async function POST(request: Request): Promise<Response> {
       return Response.json(
         {
           error:
-            'Missing hostId, and one of entireHost, screenId, layoutId, componentId, formId, collectionId, redirectPath or paths',
+            'Missing hostId, and one of entireHost, screenId, layoutId, componentId, collectionId, redirectPath or paths',
         },
         { status: 400 },
       )
@@ -568,10 +535,6 @@ export async function POST(request: Request): Promise<Response> {
       const scan = await screenIdsUsingComponent(firestore, hostId, componentId)
       affectedScreenIds = scan.screenIds
       scanTruncated = scan.truncated
-    } else if (formId) {
-      const scan = await screenIdsUsingForm(firestore, hostId, formId)
-      affectedScreenIds = scan.screenIds
-      scanTruncated = scan.truncated
     } else if (layoutId) {
       affectedScreenIds = await screenIdsUsingLayout(firestore, hostId, layoutId)
     } else {
@@ -605,7 +568,6 @@ export async function POST(request: Request): Promise<Response> {
           tag: 'AGL-1161:component-scan-truncated',
           hostId,
           ...(componentId ? { componentId } : {}),
-          ...(formId ? { formId } : {}),
           ...(collectionId ? { collectionId } : {}),
           limit: SCAN_LIMIT,
         }),

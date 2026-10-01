@@ -119,7 +119,7 @@ describe('Preview never renders a blank tab (AGL-1261)', () => {
     render(<DocumentPreview ids={IDS} />)
     // Pre-fix this was an empty document — `document.body.textContent` held
     // only the React comment markers.
-    expect(screen.getByText(/Preparing the screen preview/i)).toBeTruthy()
+    expect(screen.getByText(/Preparing the page preview/i)).toBeTruthy()
     expect(screen.queryByTestId('tree')).toBeNull()
   })
 

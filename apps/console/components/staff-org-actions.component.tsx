@@ -121,7 +121,7 @@ export const PLAN_OPTIONS: Array<{ value: string; label: string }> = [
  */
 const QUOTA_LABELS: Readonly<Record<string, string>> = {
   hostLimit: 'Sites',
-  screensPerHost: 'Screens / site',
+  screensPerHost: 'Pages / site',
   sharedLayoutsPerHost: 'Layouts / site',
   storagePerHostMb: 'Storage MB',
   membersPerHost: 'Members / site',

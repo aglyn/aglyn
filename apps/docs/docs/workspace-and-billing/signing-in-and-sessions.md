@@ -47,7 +47,7 @@ to methods linked before your organization enabled enforcement.
 ## Verifying your email
 
 A new email-and-password account is verified before it can open a workspace. Right after
-you sign up, the console emails you a link and waits on a **Verify your email** screen.
+you sign up, the console emails you a link and waits on a **Verify your email** page.
 
 - **Open the link from the email.** It opens a new tab (on a phone, often inside your mail
   app) that confirms **Email verified**. You can close that tab: the tab you signed up in
@@ -55,28 +55,28 @@ you sign up, the console emails you a link and waits on a **Verify your email** 
   tab, choose **Continue to Aglyn**, or **Sign in to continue** if that browser isn't
   signed in.
 - **Opened it twice?** A link works once. If the account signed in on that browser is
-  already verified, the screen says **You're already verified** and offers to continue, so
+  already verified, the page says **You're already verified** and offers to continue, so
   there is nothing to fix.
-- **No email?** Choose **Resend verification email** on the waiting screen. If a link has
+- **No email?** Choose **Resend verification email** on the waiting page. If a link has
   expired, the same button sends a fresh one.
 
 ## Resetting your password
 
-Forgot your password? From the sign-in screen, choose **Account recovery** and enter your
+Forgot your password? From the sign-in page, choose **Account recovery** and enter your
 email. We email you a secure reset link, then walk you through the rest:
 
-1. **Request** — enter your email on the account recovery screen and submit. We always show
+1. **Request** — enter your email on the account recovery page and submit. We always show
    the same "check your email" confirmation, whether or not an account exists for that
-   address (so the screen can't be used to probe who has an account).
+   address (so the page can't be used to probe who has an account).
 2. **Email** — open the message and follow the reset link. Links expire after a short
    while and can only be used once.
-3. **Choose a new password** — the link opens the reset screen, which confirms whose
+3. **Choose a new password** — the link opens the reset page, which confirms whose
    account it's for and asks for a new password (entered twice). Password rules match the
-   sign-up screen.
-4. **Done** — once saved, head back to the sign-in screen and sign in with your new
+   sign-up page.
+4. **Done** — once saved, head back to the sign-in page and sign in with your new
    password.
 
-If a link has expired or was already used, the reset screen offers to send a fresh one.
+If a link has expired or was already used, the reset page offers to send a fresh one.
 
 If you signed up with Google and have never set a password, there's nothing to reset —
 connect **Email & password** from [Manage Account](manage-account.md#sign-in-methods)
@@ -90,7 +90,7 @@ and the link's host are Aglyn's, and the link is built from your own console ori
 
 What you do still need: the console domain listed under **Authentication → Settings →
 Authorized domains**, and a working mail provider. If mail is unconfigured, account
-recovery still returns its usual "check your email" screen — deliberately, so the screen
+recovery still returns its usual "check your email" page — deliberately, so the page
 can't be used to probe who has an account — but no message goes out. Check your server
 logs for `[auth/send-password-reset] email is not configured`.
 :::
@@ -105,7 +105,7 @@ credentials. Signing out anywhere retires the shared session everywhere.
 
 For security, an idle console session expires after **1 hour of no activity** (in any open
 tab, on any of your workspace subdomains). When that happens you're returned to the
-sign-in screen, and the page you were on is preserved — after signing back in you resume
+sign-in page, and the page you were on is preserved — after signing back in you resume
 exactly where you left off.
 
 Activity means any interaction: pointer movement, typing, scrolling, or touching. Active

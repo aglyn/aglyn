@@ -79,7 +79,7 @@ as a record of what was asked and answered.
 
 ### What to include
 
-Support answers faster with the specifics: the site and screen involved, what you
+Support answers faster with the specifics: the site and page involved, what you
 expected versus what happened, and the exact error text if there is one. If it's about
 billing, say which plan and which invoice.
 

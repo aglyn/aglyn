@@ -225,7 +225,7 @@ const atMost = (limit: number = AI_BUILD_PLAN_LIMITS.text) => `at most ${limit} 
 export const AI_BUILD_PLAN_TOOL: AiTool = {
   name: 'submit_build_plan',
   description:
-    'Submit the build plan: what the site already has that this job reuses, what it creates and why, and the screens it builds from them.',
+    'Submit the build plan: what the site already has that this job reuses, what it creates and why, and the pages it builds from them.',
   strict: true,
   inputSchema: {
     type: 'object',
@@ -271,7 +271,7 @@ export const AI_BUILD_PLAN_TOOL: AiTool = {
       },
       screens: {
         type: 'array',
-        description: 'The screens the job builds, each a new draft.',
+        description: 'The pages the job builds, each a new draft.',
         items: {
           type: 'object',
           additionalProperties: false,
@@ -287,7 +287,7 @@ export const AI_BUILD_PLAN_TOOL: AiTool = {
             'sections',
           ],
           properties: {
-            title: string(`The screen name, ${atMost()}.`),
+            title: string(`The page name, ${atMost()}.`),
             slug: string(
               `The path, ${atMost()}: lowercase words joined by hyphens, e.g. /services/roof-repair.`,
             ),
@@ -298,7 +298,7 @@ export const AI_BUILD_PLAN_TOOL: AiTool = {
               'The template it applies (inventory id or new:<name>), or null for a one-off page.',
             ),
             duplicateOf: nullableString(
-              'The inventory screen it starts from as a duplicate, or null.',
+              'The inventory page it starts from as a duplicate, or null.',
             ),
             nav: {
               type: 'boolean',

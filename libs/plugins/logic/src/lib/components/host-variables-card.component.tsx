@@ -493,7 +493,7 @@ export function HostVariablesCard(props: HostVariablesCardProps) {
             'Those bindings will render as empty or literal tokens after ' +
             'the next publish.'
           : `"${variable.name}" is not referenced by any published ` +
-            'screen, layout, or workflow.',
+            'page, layout, or workflow.',
         confirmationText: 'Delete',
         confirmationButtonProps: { color: 'error' },
       })

@@ -72,14 +72,14 @@ never names anything in code; it's the word the UI uses for your org.
 
 The published-site **runtime**: the single deployment that takes any
 incoming domain, resolves it to one of your sites, and renders its published
-screens. "Tenant" always means this serving side of the platform — it is not
+pages. "Tenant" always means this serving side of the platform — it is not
 another word for organization. → [Glossary](glossary.md),
 [Architecture & multi-tenancy](../staff-console/architecture-multi-tenancy.md)
 
 ### Host
 
 One site, as the data model sees it: its subdomain or custom domain, its
-screens and layouts, its media, its member-role projection. An organization
+pages and layouts, its media, its member-role projection. An organization
 owns many hosts. In UI copy a host is called a **site**. → [Glossary](glossary.md)
 
 ### Site
@@ -91,7 +91,7 @@ The user-facing word for a host — what you create, design, and publish.
 ### Console
 
 The builder application where you sign in and do everything: manage your
-workspace, design screens in the Besigner, configure plugins, view billing.
+workspace, design pages in the Besigner, configure plugins, view billing.
 → [Console tour](../getting-started/console-tour.md)
 
 ### Staff console
@@ -122,42 +122,47 @@ has one public profile (handle, display name, listings).
 
 ## Sites & content
 
-### Screen
+### Page
 
 One page of a site: a slug, publish state, and a designed node tree.
-Screens can nest (parent/child slugs) and can bind to a shared layout.
-→ [Screens](../building-sites/screens-and-layouts/screens.md)
+Pages can nest (parent/child slugs) and can bind to a shared layout.
+→ [Pages](../building-sites/screens-and-layouts/screens.md)
+
+### Screen
+
+The former name for a [page](#page). Code, API paths and console URLs still
+say `screen`. → [Page](#page)
 
 ### Layout
 
 Shared site chrome — app bar, footer, navigation — designed once and
-rendered around every screen bound to it. → [Layouts](../building-sites/screens-and-layouts/layouts.md)
+rendered around every page bound to it. → [Layouts](../building-sites/screens-and-layouts/layouts.md)
 
 ### Slug
 
-A screen's URL segment. Nested screens compose their ancestors' slugs into
-the full path. → [Screens](../building-sites/screens-and-layouts/screens.md#screens--routing)
+A page's URL segment. Nested pages compose their ancestors' slugs into
+the full path. → [Pages](../building-sites/screens-and-layouts/screens.md#screens--routing)
 
 ### Version
 
-An immutable snapshot of a screen's (or layout's) node tree. You edit a
+An immutable snapshot of a page's (or layout's) node tree. You edit a
 draft version; publishing points the live site at a version. Scheduled
 publishing flips the pointer at a set time.
-→ [Publish your first screen](../getting-started/publish-your-first-screen.md)
+→ [Publish your first page](../getting-started/publish-your-first-screen.md)
 
 ### Redirect
 
 A rule that forwards one path to another on your published site — for
 migrations, renamed pages, or vanity URLs. → [Redirects](../building-sites/redirects/overview.md)
 
-### Error screens
+### Error pages {#error-screens}
 
-Designable screens served for 404/401/403/503 instead of a generic error
-page. → [Error screens](../building-sites/site-protection/error-screens.md)
+Designable pages served for 404/401/403/503 instead of a generic error
+page. → [Error pages](../building-sites/site-protection/error-screens.md)
 
 ### Maintenance mode
 
-A host-level switch that serves the designed 503 screen on every path while
+A host-level switch that serves the designed 503 page on every path while
 you work. → [Maintenance mode](../building-sites/site-protection/maintenance-mode.md)
 
 ### Locale
@@ -168,14 +173,14 @@ default locale and can render a language switcher.
 
 ### Site template
 
-A snapshot of screens, layouts, and content that can be applied to a new
+A snapshot of pages, layouts, and content that can be applied to a new
 site — yours to save and reuse, or installed from the marketplace.
 → [Site templates](../building-sites/site-templates/overview.md)
 
 ### Theme
 
 The site-wide design system — palette, typography, spacing, component
-styling — edited in the theme builder and applied to every screen.
+styling — edited in the theme builder and applied to every page.
 → [Theme builder](../building-sites/theme-builder/overview.md)
 
 ### Custom domain
@@ -193,19 +198,19 @@ The default address every site gets on the platform's serving domain, before
 ## The node tree
 
 The rendering model shared by the editor and the published site. Every
-designed screen is a **tree** of **nodes**; the renderer walks it with a
+designed page is a **tree** of **nodes**; the renderer walks it with a
 family of components named like the parts of a tree.
 
 ### Node
 
 The atom of a design: `{ $id, componentId, props, sx, nodes }`. Each node
 names the registered component that renders it, carries its props and
-styling, and lists its child node ids. A screen version stores its whole
+styling, and lists its child node ids. A page version stores its whole
 design as a map of nodes. → [Besigner overview](../building-sites/besigner/overview.md)
 
 ### Tree
 
-The node hierarchy of one screen or layout — what you see in the Besigner's
+The node hierarchy of one page or layout — what you see in the Besigner's
 hierarchy panel and what the renderer walks to produce the page.
 → [Drag-and-drop hierarchy](../building-sites/besigner/drag-drop-hierarchy.md)
 
@@ -240,7 +245,7 @@ the editor's selection and drag-and-drop hang on to.
 ### Component
 
 A registered, renderable building block (button, section, product card…) a
-node can reference by `componentId`. Component ids are persisted in screen
+node can reference by `componentId`. Component ids are persisted in page
 documents, so they are never renamed. → [Besigner overview](../building-sites/besigner/overview.md)
 
 ### Component bundle
@@ -273,19 +278,19 @@ When a drag is rejected, the Besigner names the lineal rule that blocked it.
 
 ### Besigner
 
-Aglyn's visual designer — the editor where you build screens, layouts, and
+Aglyn's visual designer — the editor where you build pages, layouts, and
 designed emails by composing the node tree on a live canvas.
 → [Besigner overview](../building-sites/besigner/overview.md)
 
 ### Canvas
 
-The live design surface inside the Besigner: your screen rendering for real,
+The live design surface inside the Besigner: your page rendering for real,
 with selection, drag-and-drop, and inline text editing layered on top.
 → [Besigner overview](../building-sites/besigner/overview.md)
 
 ### Hierarchy panel
 
-The tree view of the current screen's nodes — select, reorder, and reparent
+The tree view of the current page's nodes — select, reorder, and reparent
 from the structure instead of the canvas.
 → [Drag-and-drop hierarchy](../building-sites/besigner/drag-drop-hierarchy.md)
 
@@ -510,7 +515,7 @@ optional email capture). → [Marketing overlays](../marketing-and-automation/ma
 
 ### Experiment
 
-An A/B test on a screen: visitors are assigned variants and engagement is
+An A/B test on a page: visitors are assigned variants and engagement is
 tracked so a winner can be promoted.
 → [Marketing overlays](../marketing-and-automation/marketing-overlays/overview.md)
 

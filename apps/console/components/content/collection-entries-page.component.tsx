@@ -308,7 +308,7 @@ export function CollectionEntriesPage() {
         enqueueSnackbar(
           value
             ? `${kind === 'list' ? 'List' : 'Entry'} template assigned — ` +
-                'the page renders through that screen'
+                `${kind === 'list' ? 'the list' : 'each entry'} renders through that page`
             : `${kind === 'list' ? 'List' : 'Entry'} template cleared — ` +
                 'the built-in themed page renders instead',
           { variant: 'success', persist: false },
@@ -369,7 +369,7 @@ export function CollectionEntriesPage() {
       {
         component: 'select',
         name: 'listScreenId',
-        label: 'List screen',
+        label: 'List page',
         helperText: 'Lists every entry. Leave on the built-in themed list.',
         options: [
           { label: 'Built-in themed list', value: '' },
@@ -382,7 +382,7 @@ export function CollectionEntriesPage() {
       {
         component: 'select',
         name: 'entryScreenId',
-        label: 'Entry screen',
+        label: 'Entry page',
         helperText:
           'Renders one entry. Leave on the built-in themed article.',
         options: [
@@ -476,7 +476,7 @@ export function CollectionEntriesPage() {
         )
       } catch {
         enqueueSnackbar(
-          'Collection created, but its template screens were not saved — set them in Collection settings.',
+          'Collection created, but its template pages were not saved — set them in Collection settings.',
           { variant: 'warning' },
         )
       }
@@ -832,7 +832,7 @@ export function CollectionEntriesPage() {
       }
       enqueueSnackbar(
         value
-          ? 'Author pages render through that screen — it no longer serves ' +
+          ? 'Author pages render through the page you picked — it no longer serves ' +
               'at its own address'
           : 'Author pages render through the built-in themed page',
         { variant: 'success', persist: false },
@@ -1827,7 +1827,7 @@ export function CollectionEntriesPage() {
                                   sx={{ alignItems: 'center' }}
                                 >
                                   <Typography variant="subtitle2">
-                                    {'Template screens'}
+                                    {'Template pages'}
                                   </Typography>
                                   {/*
                                     The captions under these two selects used to
@@ -1840,14 +1840,14 @@ export function CollectionEntriesPage() {
                                     has, which is which URL the screen serves.
                                   */}
                                   <HelpTip
-                                    title="Template screens"
+                                    title="Template pages"
                                     href={docsHelp('buildABlog').href}
                                     excerpt={
                                       'Leave either on the built-in themed ' +
                                       `page and ${branding.productName} ` +
                                       'renders it for you. To design your own: ' +
-                                      'the list screen needs a Collection ' +
-                                      'Entries block, and the entry screen can ' +
+                                      'the list page needs a Collection ' +
+                                      'Entries block, and the entry page can ' +
                                       'use {{entry.title}}, Entry Body and the ' +
                                       'entry’s other fields.'
                                     }
@@ -1866,7 +1866,7 @@ export function CollectionEntriesPage() {
                                   <TextField
                                     select
                                     size="small"
-                                    label="List screen"
+                                    label="List page"
                                     value={selected?.listScreenId ?? ''}
                                     onChange={handleTemplateChange(
                                       selected?.$id ?? '',
@@ -1891,7 +1891,7 @@ export function CollectionEntriesPage() {
                                   <TextField
                                     select
                                     size="small"
-                                    label="Entry screen"
+                                    label="Entry page"
                                     value={
                                       selected?.entryScreenId ??
                                       selected?.templateScreenId ??
@@ -2298,7 +2298,7 @@ export function CollectionEntriesPage() {
                       <TextField
                         select
                         size="small"
-                        label="Author page screen"
+                        label="Author page template"
                         value={hostDoc?.authorScreenId ?? ''}
                         onChange={(event) =>
                           void handleAuthorScreenChange(event.target.value)
@@ -2308,7 +2308,7 @@ export function CollectionEntriesPage() {
                           'it with an Author Profile block and a Collection ' +
                           'Entries block; {{author.name}}, {{author.bio}} and ' +
                           '{{author.entryCountLabel}} resolve per author. The ' +
-                          'screen you pick stops serving at its own address.'
+                          'page you pick stops serving at its own address.'
                         }
                         sx={{ maxWidth: 420 }}
                       >

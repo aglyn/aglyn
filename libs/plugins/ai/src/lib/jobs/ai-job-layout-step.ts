@@ -118,7 +118,7 @@ export const AI_JOB_LAYOUT_INSTRUCTIONS: readonly AiSystemBlock[] = [
     text: [
       'You build one shared layout for a website: the frame every page of the site renders inside. Answer with submit_layout: the whole layout as one flat node map.',
       'A layout is a header, one Layout Slot and a footer, top to bottom. The header is an App Bar (muiAppBar) holding a Toolbar Content (muiToolbar) with the site’s name as text and its navigation. The footer is a Section (section) whose element is footer.',
-      'Navigation links the site’s own screens by id: a Screen Link (muiScreenLink) whose screenId is a screen id from the site inventory, in the order the brief and the confirmed plan give, seven at most in the header. Never invent a screen id, and never link a screen by its address.',
+      'Navigation links the site’s own pages by id: a Page Link (muiScreenLink) whose screenId is a page id from the site inventory, in the order the brief and the confirmed plan give, seven at most in the header. Never invent a page id, and never link a page by its address.',
       'When the site inventory lists a component whose name says it is navigation, a menu or a mega menu, place it in the header as an instance instead of building the navigation again. Place every component the confirmed plan reuses.',
       'The Layout Slot (layoutSlot) is where each page renders and is the page’s main landmark: leave its component unset or main, and put nothing inside it. A layout carries no h1, because every page brings its own.',
     ].join('\n'),

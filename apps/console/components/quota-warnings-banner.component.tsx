@@ -232,7 +232,7 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
             quota.label === 'team seats' || quota.key === 'assistCredits',
         ),
         {
-          label: 'screens',
+          label: 'pages',
           used: screens?.data().count ?? 0,
           limit: entitlements.screensPerHost,
         },

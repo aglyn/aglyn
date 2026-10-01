@@ -80,7 +80,7 @@ jest.mock('@aglyn/shared-ui-jsx/components/list-table.component', () => ({
   ),
 }))
 
-import type { ConsoleProductsHubZoneProps } from '@aglyn/aglyn/plugin-manager/feature-plugins'
+import type { ConsoleProductsHubZoneProps } from './ai-product-zones'
 import AiProductsHubCard from './ai-products-hub-card.component'
 
 const json = (body: unknown, status = 200) => ({ ok: status < 400, status, json: async () => body })

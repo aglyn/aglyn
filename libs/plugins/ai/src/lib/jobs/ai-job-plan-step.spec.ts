@@ -540,7 +540,7 @@ describe('the plan step — what the job may create (AGL-3030)', () => {
     mockRunAiRequest.mockResolvedValueOnce(planAnswer(INLINE_PLAN))
     const admissionRefusal = jest.fn(async () => ({
       status: 403 as const,
-      error: 'Your plan includes 5 screens — upgrade in Billing for more',
+      error: 'Your plan includes 5 pages — upgrade in Billing for more',
     }))
     const outcome = await planStep({ admissionRefusal, readCapabilities: async () => FREE })({
       job: job(),
@@ -559,7 +559,7 @@ describe('the plan step — what the job may create (AGL-3030)', () => {
       plan: expect.objectContaining({ status: 'proposed', screens: INLINE_PLAN.screens }),
       uid: 'uid-1',
     })
-    expect(outcome.failure).toBe('Your plan includes 5 screens — upgrade in Billing for more')
+    expect(outcome.failure).toBe('Your plan includes 5 pages — upgrade in Billing for more')
     expect(outcome.plan).toBeUndefined()
     expect(outcome.review).toBeUndefined()
     // What the plan spent is on the bill all the same.

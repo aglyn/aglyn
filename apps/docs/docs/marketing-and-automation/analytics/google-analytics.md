@@ -113,7 +113,7 @@ which is not a number that means anything.
 
 ## Your own events {#authored-events}
 
-Any element on a screen can send an event you name yourself, via the
+Any element on a page can send an event you name yourself, via the
 **Track an analytics event** interaction step. It lands in the same property as
 everything above. See
 [Interactions](../../building-sites/besigner/interactions-and-custom-html.md#analytics-event-step)
@@ -141,6 +141,6 @@ property:
 
 ## Related
 
-- [Analytics](./overview.md) — the built-in Traffic card and per-screen figures
+- [Analytics](./overview.md) — the built-in Traffic card and per-page figures
 - [Cookie consent](./cookie-consent.md) — what has to be true before any of this runs
 - [Interactions](../../building-sites/besigner/interactions-and-custom-html.md) — sending an event of your own

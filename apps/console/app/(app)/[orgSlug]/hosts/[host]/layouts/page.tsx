@@ -727,7 +727,7 @@ function Layouts(props) {
                 : {
                     noRowsLabel: 'No layouts yet',
                     noRowsDescription:
-                      'Layouts are the chrome your screens render inside — headers, footers, sidebars. Create one, or start from a template.',
+                      'Layouts are the chrome your pages render inside — headers, footers, sidebars. Create one, or start from a template.',
                     noRowsAction: (
                       <Stack direction="row" spacing={1}>
                         <Button variant="contained" onClick={handleFormOpen}>

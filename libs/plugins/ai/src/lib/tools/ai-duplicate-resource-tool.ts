@@ -58,7 +58,7 @@ export const AI_DUPLICATE_RESOURCE_TOOL_NAME = 'duplicate_resource'
 export const AI_DUPLICATE_RESOURCE_TOOL: AiTool = {
   name: AI_DUPLICATE_RESOURCE_TOOL_NAME,
   description:
-    'Copy a resource this site already has — a screen, an email design, a component, a layout, ' +
+    'Copy a resource this site already has — a page (kind "screen"), an email design, a component, a layout, ' +
     'a template, a form or a workflow — as a new draft to build from, instead of creating it again. ' +
     'The copy is unpublished: it has no address, runs nothing and is placed nowhere until a person does.',
   inputSchema: {

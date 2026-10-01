@@ -256,7 +256,7 @@ describe('Screen rename (AGL-1358)', () => {
     await waitFor(() => expect(mockEnqueueSnackbar).toHaveBeenCalled())
     expect(mockUpdateDoc).not.toHaveBeenCalled()
     const [message] = mockEnqueueSnackbar.mock.calls[0]
-    expect(message).toEqual(expect.stringContaining('screen details'))
+    expect(message).toEqual(expect.stringContaining('page details'))
     expect(message).toEqual(expect.stringMatching(/reload/i))
     // The dialog stays open with what was typed.
     expect(

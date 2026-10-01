@@ -129,7 +129,7 @@ export const consequenceNote = (
   }
   if (kind === 'layout') {
     return (
-      'Nothing goes down: those screens keep serving, rendering without the ' +
+      'Nothing goes down: those pages keep serving, rendering without the ' +
       'shared chrome until they are bound to another layout.'
     )
   }
@@ -166,7 +166,7 @@ function screenConsequenceNote(dependents: ArtifactDependent[]): string {
   /** True of every screen delete, whatever else is also true. */
   const SURVIVES =
     'Pages that link to it keep rendering — those links stop working until ' +
-    'you point them somewhere else — and any screen nested under it keeps ' +
+    'you point them somewhere else — and any page nested under it keeps ' +
     'its own published path.'
 
   if (!dependents.length) {
@@ -174,17 +174,17 @@ function screenConsequenceNote(dependents: ArtifactDependent[]): string {
     // nobody reads safety into a scan that did not run.
     return (
       'Links to it stop working, and any collection that renders its pages ' +
-      `through it loses them until another screen is picked. ${SURVIVES}`
+      `through it loses them until another page is picked. ${SURVIVES}`
     )
   }
   if (!templates.length) return `Nothing goes down: ${SURVIVES}`
 
   const names = templates.map((dependent) => dependent.name).join(', ')
-  const verb = templates.length === 1 ? 'renders' : 'render'
+  const verb = templates.length === 1 ? 'renders its' : 'render their'
   return (
-    `This one does break: ${names} ${verb} pages through this screen, so ` +
+    `This one does break: ${names} ${verb} pages through this one, so ` +
     `those pages stop resolving until you point the collection at another ` +
-    `screen. Otherwise: ${SURVIVES.charAt(0).toLowerCase()}${SURVIVES.slice(1)}`
+    `page. Otherwise: ${SURVIVES.charAt(0).toLowerCase()}${SURVIVES.slice(1)}`
   )
 }
 
@@ -200,7 +200,7 @@ export const deleteConfirmationLead = (
       ? 'It disappears from Layouts.'
       : kind === 'collection'
         ? 'It disappears from Content and its listing page stops resolving.'
-        : 'It disappears from Screens and its published path stops resolving.')
+        : 'It disappears from Pages and its published path stops resolving.')
 
 /** Shown while the scan is still running. Never a blank space. */
 export const SCAN_PENDING_NOTE = ' Checking where it is used…'

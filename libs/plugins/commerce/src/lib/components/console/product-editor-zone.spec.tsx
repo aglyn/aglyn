@@ -28,7 +28,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { setDoc } from 'firebase/firestore'
 import { ConsoleWidgetSlotContext } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
-import type { ConsoleProductEditorZoneProps } from '@aglyn/aglyn/plugin-manager/feature-plugins'
+import type { ConsoleProductEditorZoneProps } from './product-zones'
 
 // The card saves through `writeSiteWideChange` (AGL-3386); the double sends
 // each staged write to this spec's own `firebase/firestore` mock.

@@ -8,7 +8,7 @@ description: What organization, workspace, tenant, host, and site each mean — 
 
 Aglyn's vocabulary grew through a couple of migrations, so several words
 name the same thing at different layers. This page is the canonical map
-(codified in AGL-443). For definitions of every product term — screens,
+(codified in AGL-443). For definitions of every product term — pages,
 nodes, plugins, workflows, and the rest — see the
 [Term reference](term-reference.md); this page is specifically the ruling
 on the four contested words.
@@ -20,8 +20,8 @@ flowchart TD
   Org["Organization (org)<br/>orgs/{orgId} — billing, members, plugins"]
   Org --> H1["Host (site)<br/>hosts/{hostId}"]
   Org --> H2["Host (site)<br/>hosts/{hostId}"]
-  H1 --> S1["Screens, layouts, media, content"]
-  H2 --> S2["Screens, layouts, media, content"]
+  H1 --> S1["Pages, layouts, media, content"]
+  H2 --> S2["Pages, layouts, media, content"]
 ```
 
 ## Organization (org)
@@ -75,13 +75,13 @@ These are the two most-confused terms because both relate to published
 sites:
 
 - A **host** is *one site*: `hosts/{hostId}`, with its own domain or
-  subdomain, screens, media, and member-role projection. An organization
+  subdomain, pages, media, and member-role projection. An organization
   owns many hosts ("3 of 15 sites"). In UI copy a host is called a
   **site**.
 - The **tenant app** is the *runtime that serves every host*: one
   Next.js deployment that resolves the incoming hostname to a host doc
   (`hostIndex`), loads that host's org, and renders its published
-  screens.
+  pages.
 
 So: an org (workspace) owns hosts (sites); the tenant app serves them.
 A request to `bakery.example.com` is resolved to a **host**, whose
@@ -96,3 +96,4 @@ A request to `bakery.example.com` is resolved to a **host**, whose
 | Tenant (runtime) | Published-site side | `apps/tenant`, `@aglyn/tenant-*` | ✅ that side of the platform |
 | Tenant (billing alias) | Removed (AGL-444/445) | none — identifiers and persisted strings are both gone | ❌ don't reintroduce |
 | Host / site | One published site | `hosts/{hostId}`, `AglynHost` | ✅ `host` in code, "site" in copy |
+| Page (formerly "screen") | One page of a site | `screen`, `screenId`, the `screens` collection | ✅ `screen` in code, "page" in copy |

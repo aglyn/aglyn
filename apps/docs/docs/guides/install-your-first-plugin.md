@@ -87,7 +87,7 @@ On the detail page, read three things before anything else:
 1. **The What's included box.** Aglyn writes it from the listing itself, not the
    publisher, so it is the one description that cannot oversell. Its first row names
    what the install produces — a sandboxed *plugin*, an editable *component*,
-   *screens* you rework in Besigner, a *theme*, or **a new empty dataset with its
+   *pages* you rework in Besigner, a *theme*, or **a new empty dataset with its
    fields already defined** for a dataset schema, which is the reminder that **records
    never travel**: you get the shape, not somebody's data. The rows after it cover
    where it lands (step 4), review, license and updates. See
@@ -199,7 +199,7 @@ that, delete the data itself.
 
 Design copied onto a site behaves differently, and the difference matters: a component
 or template you installed and then **edited** is now *your* copy. Uninstalling the
-listing doesn't reach into your screens and remove it, and updating shows you field by
+listing doesn't reach into your pages and remove it, and updating shows you field by
 field what the publisher's new version would overwrite before it touches your edits.
 
 ## What to do next

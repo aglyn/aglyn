@@ -24,7 +24,7 @@ card closes that.
 Open **Staff → Organizations**, pick the organization, and scroll to
 **Refund a charge** — directly under **Billing history & payment method**. That
 placement is deliberate: the charge you are about to refund is almost always the one you
-were just reading about, so you never have to copy a charge id from one screen to
+were just reading about, so you never have to copy a charge id from one page to
 another, and you never have to paste one from Stripe.
 
 The card lists the organization's most recent charges with, for each one, what it

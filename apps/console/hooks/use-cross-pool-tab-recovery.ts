@@ -38,7 +38,9 @@ import {
  * The rejection is OBSERVED, never handled — `preventDefault` is deliberately
  * not called. The error beacon reports it either way, and a fault we recover
  * from is still a fault worth seeing in the log; silencing it would turn the
- * one signal that this is happening into the absence of one.
+ * one signal that this is happening into the absence of one. The beacon
+ * labels it `auth-desync`, so it is watched by rate rather than paged on
+ * every entry.
  *
  * A tab that is visible when the rejection lands keeps waiting: the desync is
  * real and does not expire, so it reloads the next time it is hidden rather

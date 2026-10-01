@@ -103,9 +103,9 @@ The first row is what the install physically produces, which depends on the type
 | Type | The row reads |
 | --- | --- |
 | Plugin | A plugin, sandboxed on its own origin with a per-plugin CSP |
-| Component | An editable component you can place on any screen |
-| Template | Editable screens you can rework in Besigner |
-| Layout | An editable layout you can apply to any screen |
+| Component | An editable component you can place on any page |
+| Template | Editable pages you can rework in Besigner |
+| Layout | An editable layout you can apply to any page |
 | Dataset schema | A new empty dataset with its fields already defined |
 | Email template | An editable email design you can send campaigns from |
 | Theme | A theme applied to the site you choose |
@@ -125,7 +125,7 @@ Then, in order, up to four more rows:
   way, updates are not a second charge — but they are still
   [deliberate](../../guides/install-your-first-plugin.md#step-7-off), not automatic.
 
-What the box will never tell you is how many screens or blocks a template contains.
+What the box will never tell you is how many pages or blocks a template contains.
 Aglyn collects no manifest of that, and counting it would mean inventing a number, so
 the box stays to facts the listing actually carries.
 
@@ -218,7 +218,7 @@ different decisions:
 | Serves routes (User Accounts, Redirects, Automation) | Published pages keep rendering, but the routes or rules it serves stop. |
 | Console-only (CRM, Data, Inbox, Logic, Marketplace) | It leaves navigation and the editor. Published pages are unaffected. |
 
-Counts come from scanning the **published** version of each screen, layout and component,
+Counts come from scanning the **published** version of each page, layout and component,
 and are capped — where the scan hits its cap the dialog says "at least". Drafts are not
 scanned.
 

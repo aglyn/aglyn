@@ -29,7 +29,7 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { host, screenId } = await params
   return {
-    title: entityPageTitle({ subject: screenId, noun: 'Screen besigner', scope: host }),
+    title: entityPageTitle({ subject: screenId, noun: 'Page besigner', scope: host }),
   }
 }
 

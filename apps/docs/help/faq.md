@@ -54,7 +54,7 @@ stuck, check [Troubleshoot verification](/building-sites/custom-domains/troubles
 
 ## Can visitors have accounts on my site?
 
-Yes — let visitors sign up, gate screens to members, and manage them from the
+Yes — let visitors sign up, gate pages to members, and manage them from the
 console. See [Member accounts](/guides/member-accounts).
 
 ## Can I access my data programmatically?

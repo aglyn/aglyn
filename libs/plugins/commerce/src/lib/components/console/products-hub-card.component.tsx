@@ -92,7 +92,10 @@ import { productCollectionFields, readSmartCollections } from './smart-collectio
 import ProductsHubZone from './products-hub-zone.component'
 import { pluginDocsHelp } from '@aglyn/aglyn'
 import { useConsoleWidgetSlot } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
-import type { ConsoleProductsHubZoneProps } from '@aglyn/aglyn/plugin-manager/feature-plugins'
+import {
+  PRODUCT_IMPORT_ZONE,
+  type ConsoleProductsHubZoneProps,
+} from './product-zones'
 
 /** Products read per request of the CSV export's walk. */
 const EXPORT_PAGE = 500
@@ -1050,7 +1053,7 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
             filtering
               ? undefined
               : 'Build your catalog: add a product, then drop commerce ' +
-                'blocks on any screen in Besigner.'
+                'blocks on any page in Besigner.'
           }
         />
         {products.length === 0 && page === 0 && productsStatus !== 'loading' ? null : (
@@ -1236,7 +1239,7 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
           ) : null}
           {WidgetSlot && importing?.parsed?.products.length ? (
             <WidgetSlot
-              slot="productImport"
+              slot={PRODUCT_IMPORT_ZONE.id}
               hostId={hostId}
               orgId={undefined}
               count={importing.parsed.products.length}

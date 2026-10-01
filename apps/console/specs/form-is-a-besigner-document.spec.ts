@@ -40,6 +40,7 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { buildRoute, Route } from '@aglyn/aglyn/server'
+import { besignerDocumentForSegment } from '@aglyn/aglyn/plugin-manager/besigner-documents'
 
 const readRepo = (rel: string) =>
   readFileSync(join(process.cwd(), rel), 'utf8')
@@ -59,18 +60,37 @@ describe('a form has the routes a designable document needs', () => {
     )
   })
 
+  /** The form as the console's plugin-document routes address it. */
+  const document = {
+    orgSlug: 'acme',
+    host: 'site-1',
+    documentSegment: 'forms',
+    docId: 'form-abc',
+  }
+
+  it('is a document its plugin declares, under the segment its URLs use', () => {
+    // The console serves the editor for any declared kind; this is the
+    // declaration that makes a form one, and the URLs below depend on it.
+    expect(besignerDocumentForSegment('forms')).toMatchObject({
+      pluginId: 'forms',
+      kind: 'form',
+      collection: 'forms',
+      noun: 'form',
+    })
+  })
+
   it('routes to a besigner keyed by form AND version', () => {
     // The versionId is what makes the editor a draft surface rather than a
     // direct edit of what the public is submitting to.
     expect(
-      buildRoute(Route.FORM_BESIGNER, { ...params, versionId: 'v1' }),
+      buildRoute(Route.PLUGIN_DOCUMENT_BESIGNER, { ...document, versionId: 'v1' }),
     ).toBe('/acme/hosts/site-1/forms/form-abc/versions/v1/besigner')
   })
 
   it('routes to a preview of the same version', () => {
-    expect(buildRoute(Route.FORM_PREVIEW, { ...params, versionId: 'v1' })).toBe(
-      '/acme/hosts/site-1/forms/form-abc/versions/v1/preview',
-    )
+    expect(
+      buildRoute(Route.PLUGIN_DOCUMENT_PREVIEW, { ...document, versionId: 'v1' }),
+    ).toBe('/acme/hosts/site-1/forms/form-abc/versions/v1/preview')
   })
 
   it('puts the list at the bare path, matching components and layouts', () => {
@@ -79,10 +99,14 @@ describe('a form has the routes a designable document needs', () => {
 
   it('nests the besigner under the detail path', () => {
     // A besigner URL that was not a child of the detail URL would make the
-    // breadcrumb a fiction and the back button a guess.
+    // breadcrumb a fiction and the back button a guess — and the editor's
+    // back link is the generic detail route, which must be the form's page.
     expect(
-      buildRoute(Route.FORM_BESIGNER, { ...params, versionId: 'v1' }),
+      buildRoute(Route.PLUGIN_DOCUMENT_BESIGNER, { ...document, versionId: 'v1' }),
     ).toContain(buildRoute(Route.FORM_DETAILS, params))
+    expect(buildRoute(Route.PLUGIN_DOCUMENT_DETAILS, document)).toBe(
+      buildRoute(Route.FORM_DETAILS, params),
+    )
   })
 })
 
@@ -146,65 +170,38 @@ describe('creating a form creates a design, not just a declaration', () => {
  * The check is only worth having if it stands BETWEEN the author and the
  * write.
  *
- * `form-contract.spec.ts` proves the rule is right. Nothing there proves it
- * runs, and a contract check that is called after the publish, or whose
- * result is computed and not acted on, is indistinguishable from no check at
- * all while looking exactly like one in review.
+ * `form-contract.spec.ts` proves the rule is right, and
+ * the forms plugin's `form-promotion.spec.ts` proves the promote route
+ * runs it before its write. What is left to hold here is that the besigner
+ * has no other way to publish: it asks the route the form's plugin declares,
+ * and never writes the published copy itself — a client write would be a
+ * second publish path the check never sees.
  */
-describe('the besigner publish path is gated on the contract', () => {
-  const FORM_BESIGNER_PAGE =
-    'app/(editor)/[orgSlug]/hosts/[host]/forms/[formId]/versions/[versionId]/besigner/page.tsx'
+describe('the besigner publishes a form only through the route that checks it', () => {
+  const source = () => readRepo('apps/console/app/(editor)/[orgSlug]/hosts/[host]/[documentSegment]/[docId]/versions/[versionId]/besigner/page.tsx')
 
-  const source = () => read(FORM_BESIGNER_PAGE)
-
-  it('runs the check before the write that publishes', () => {
-    const text = source()
-    const checkedAt = text.indexOf('checkFormContract')
-    const publishedAt = text.indexOf("updateDoc(doc(firestore, 'hosts', hostId, 'forms', formId)")
-    expect(checkedAt).toBeGreaterThan(-1)
-    expect(publishedAt).toBeGreaterThan(-1)
-    expect(checkedAt).toBeLessThan(publishedAt)
+  it('the form declares the promote route as its publish', () => {
+    expect(besignerDocumentForSegment('forms')?.publish).toEqual({
+      path: '/api/forms/promote',
+      idField: 'formId',
+    })
   })
 
-  it('returns on a violation rather than only reporting one', () => {
-    // A computed-and-ignored result is the shape this is guarding against.
-    // The early return has to sit between the two positions above.
+  it('posts the version to the declared route and writes no parent itself', () => {
     const text = source()
-    const refusedAt = text.search(
-      /if \(!(?:Aglyn\.)?formContractIsSatisfied\(violations\)\) \{/,
-    )
-    const publishedAt = text.indexOf("updateDoc(doc(firestore, 'hosts', hostId, 'forms', formId)")
-    expect(refusedAt).toBeGreaterThan(-1)
-    expect(refusedAt).toBeLessThan(publishedAt)
-    expect(text.slice(refusedAt, publishedAt)).toContain('return enqueueSnackbar')
+    expect(text).toContain('authorizedFetch(user, declared.publish.path')
+    expect(text).toContain('[declared.publish.idField]: docId')
+    expect(text).not.toContain('updateDoc(')
+    expect(text).not.toContain('setDoc(')
   })
 
-  it('makes the refusal persist, so it cannot be missed', () => {
+  it('makes a refusal persist, so it cannot be missed', () => {
     // An auto-dismissed warning is how somebody walks away believing the form
     // shipped.
     const text = source()
-    const refusedAt = text.search(
-      /if \(!(?:Aglyn\.)?formContractIsSatisfied\(violations\)\) \{/,
-    )
-    const publishedAt = text.indexOf("updateDoc(doc(firestore, 'hosts', hostId, 'forms', formId)")
-    expect(text.slice(refusedAt, publishedAt)).toContain('persist: true')
-  })
-
-  it('publishes the declaration derived from the same tree it checked', () => {
-    // `fields` is what the submit route reads and what the detail page's
-    // consent picker offers. Writing `nodes` without it is how the two drift
-    // straight back apart after the check passed.
-    const text = source()
-    const publishedAt = text.indexOf("updateDoc(doc(firestore, 'hosts', hostId, 'forms', formId)")
-    const write = text.slice(publishedAt, publishedAt + 600)
-    expect(text).toContain('formFieldDeclsFromNodes')
-    expect(write).toContain('fields,')
-    // The tree that was CHECKED is the tree that is written. Matched on the
-    // identifier rather than on a whole expression, because the storage form
-    // is a separate decision — it is msgpack now (AGL-1151) — and pinning the
-    // encoding here would make this spec fail for a change it is not about.
-    expect(write).toContain('publishedNodes')
-    expect(write).toMatch(/nodes:\s*Bytes\.fromUint8Array\(/)
+    const refusedAt = text.indexOf('besignerPublishRefusal(body, noun)')
+    expect(refusedAt).toBeGreaterThan(-1)
+    expect(text.slice(refusedAt, refusedAt + 300)).toContain('persist: true')
   })
 })
 

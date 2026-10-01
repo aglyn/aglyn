@@ -1,7 +1,7 @@
 ---
 sidebar_position: 11
 title: "A/B tests by AI: write variants, read the result"
-description: "Have Aglyn AI write two to four variants for a screen, section or email experiment, and put a finished test into plain language — with the verdict decided from the counts before the model is asked anything."
+description: "Have Aglyn AI write two to four variants for a page, section or email experiment, and put a finished test into plain language — with the verdict decided from the counts before the model is asked anything."
 ---
 
 # A/B tests by AI
@@ -40,7 +40,7 @@ The card sits in the experiment editor, beneath the list of variants it writes f
    and what that is testing.
 
 What a variant varies depends on what the test varies. An email variant varies its
-subject line, its preheader and its body; a screen or a section variant varies the copy
+subject line, its preheader and its body; a page or a section variant varies the copy
 on it. A variant that fills the other kind's fields has them dropped.
 
 ### Putting them in {#putting-them-in}
@@ -48,8 +48,8 @@ on it. A variant that fills the other kind's fields has them dropped.
 **Put into the variants** places the proposal in the editor's own fields, unsaved:
 
 - For an **email**, each variant takes its name, subject and body.
-- For a **screen or a section**, each variant takes its **name** only. The copy itself is
-  a screen version, so you make one per variant in the editor and pin it above — read the
+- For a **page or a section**, each variant takes its **name** only. The copy itself is
+  a page version, so you make one per variant in the editor and pin it above — read the
   proposed copy on the card and build from it.
 
 Then review them and **Save** the experiment, or **Cancel**.

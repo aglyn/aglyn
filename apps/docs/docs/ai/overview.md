@@ -36,8 +36,8 @@ Each capability has its own page, next to the thing it builds:
 
 | You want | Where you start | The page |
 | --- | --- | --- |
-| A page from a brief | **Screens → Describe it** | [Generate a page](../building-sites/screens-and-layouts/generate-a-page.md) |
-| A whole small site | **Screens**, or **Sites** for several at once | [Generate a site](generate-a-site.md) |
+| A page from a brief | **Pages → Describe it** | [Generate a page](../building-sites/screens-and-layouts/generate-a-page.md) |
+| A whole small site | **Pages**, or **Sites** for several at once | [Generate a site](generate-a-site.md) |
 | Many client sites, run as an agency | **Sites** | [An AI website builder for agencies](agency-sites.md) |
 | A layout — header, navigation, footer | **Layouts → Describe it** | [Generate a layout](../building-sites/screens-and-layouts/layouts.md#generate-a-layout-with-aglyn-ai) |
 | A page template | **Templates → Describe it** | [Generate a page template](../building-sites/site-templates/templates-library.md#generate-a-page-template-with-aglyn-ai) |
@@ -140,7 +140,7 @@ switching it off stops and what it leaves running.
 
 With AI off for a site:
 
-- the assistant, **Describe it** on the Screens, Templates, Layouts, Forms and
+- the assistant, **Describe it** on the Pages, Templates, Layouts, Forms and
   Components pages, the SEO and theme cards, the editor's **Rewrite with AI**,
   **Generate a section with AI** and **Make a reusable component with AI** controls, and
   the AI columns on the site's collaborators card are gone from that site;

@@ -79,7 +79,64 @@ export const WATCHED = Object.freeze([
     rateTables: Object.freeze(['METERED_UNIT_RATES_USD']),
     scalars: Object.freeze([]),
   }),
+  /*
+   * What each plan includes of a PLUGIN's own keys (AGL-3080): declared by the
+   * plugin, compiled here by the manifest generator, and composed into
+   * `PLAN_ENTITLEMENTS` as it loads. Read under the SAME keys the plan table
+   * gives them — `PLAN_ENTITLEMENTS.<plan>.<key>` — so a figure that moved
+   * from a core row into a plugin's declaration, unchanged, moves nothing
+   * here, and a figure that changed in either place is a change.
+   *
+   * Optional: a ref from before plugins declared plan figures carries none,
+   * and absent there is not unreadable.
+   */
+  Object.freeze({
+    path: 'libs/aglyn/src/lib/plugin-manager/first-party-plugins.generated.ts',
+    records: Object.freeze([]),
+    rateTables: Object.freeze([]),
+    scalars: Object.freeze([]),
+    pluginPlanFigures: Object.freeze([
+      'PLUGIN_PLAN_QUOTAS_DECLARED',
+      'PLUGIN_PLAN_FEATURES_DECLARED',
+    ]),
+    optional: true,
+  }),
 ])
+
+/**
+ * A compiled declaration list — `export const NAME: … = [ …JSON rows… ]` —
+ * as data, or `null` when the file does not declare it. The generator writes
+ * `Infinity` for `UNLIMITED`, the one value JSON cannot spell; it reads back
+ * as `UNLIMITED`, the way the plan table's own literal parses.
+ */
+export function parseDeclaredList(source, constName) {
+  const start = source.indexOf(`export const ${constName}`)
+  if (start === -1) return null
+  const open = source.indexOf('= [', start)
+  const close = source.indexOf('\n]\n', open)
+  if (open === -1 || close === -1) return null
+  const body = source
+    .slice(open + 3, close)
+    .trim()
+    .replace(/,$/, '')
+    .replace(/:\s*Infinity\b/g, ': "UNLIMITED"')
+  try {
+    return JSON.parse(`[${body}]`)
+  } catch {
+    return null
+  }
+}
+
+/**
+ * A plan-table value that is a bare constant name, resolved to the number the
+ * same file assigns it — `FREE_AI_TASTE_CREDITS_PER_MONTH` reads as `300`.
+ * The figure is what a customer is granted, whichever spelling carries it.
+ */
+function resolveConstant(src, value) {
+  if (typeof value !== 'string' || !/^[A-Z][A-Z0-9_]*$/.test(value)) return value
+  const m = src.match(new RegExp(`export const ${value}\\s*=\\s*(-?[\\d._]+)\\s*$`, 'm'))
+  return m ? Number(m[1].replace(/_/g, '')) : value
+}
 
 /** The fields every Decision Log entry must carry to count as a decision. */
 export const REQUIRED_FIELDS = Object.freeze(['Decided by', 'Scope', 'Evidence'])
@@ -99,8 +156,16 @@ export function priceSurface(sources) {
   for (const spec of WATCHED) {
     const src = sources?.[spec.path]
     if (typeof src !== 'string' || src.length === 0) {
+      if (spec.optional) continue
       unreadable.push({ key: spec.path, detail: 'not present or empty at this ref' })
       continue
+    }
+    for (const name of spec.pluginPlanFigures ?? []) {
+      for (const row of parseDeclaredList(src, name) ?? []) {
+        for (const [plan, value] of Object.entries(row.byPlan ?? {})) {
+          values[`PLAN_ENTITLEMENTS.${plan}.${row.key}`] = value
+        }
+      }
     }
     for (const name of spec.records) {
       const record = parsePlanRecord(src, name)
@@ -111,7 +176,7 @@ export function priceSurface(sources) {
       }
       for (const plan of plans) {
         for (const [field, value] of Object.entries(record[plan])) {
-          values[`${name}.${plan}.${field}`] = value
+          values[`${name}.${plan}.${field}`] = resolveConstant(src, value)
         }
       }
     }

@@ -260,7 +260,7 @@ export function ScreenLinkValuePicker(props: ScreenLinkValuePickerProps) {
             // validation error outranks it.
             (error ? helperText : bareFragmentLinkWarning(literal)) ??
             helperText ??
-            'Typed addresses do not follow a screen rename.'
+            'Typed addresses do not follow a page rename.'
           }
           onChange={(event) => onChange(event.target.value)}
           fullWidth

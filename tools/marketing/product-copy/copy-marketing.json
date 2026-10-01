@@ -89,7 +89,7 @@
         },
         {
           "title": "A/B testing",
-          "body": "Run experiments on screens and sections, and let the winning variant take over (Business and up).",
+          "body": "Run experiments on pages and sections, and let the winning variant take over (Business and up).",
           "meta": "plan gate: Business and up"
         },
         {
@@ -256,7 +256,7 @@
       "why": "Names a third-party sub-processor in public marketing copy. Confirm this is intended and consistent with the privacy/sub-processor page, and that it stays true if the provider changes."
     },
     {
-      "phrase": "Run experiments on screens and sections, and let the winning variant take over (Business and up).",
+      "phrase": "Run experiments on pages and sections, and let the winning variant take over (Business and up).",
       "where": "Capabilities → card 'A/B testing' (637:1274)",
       "why": "Automatic winner promotion ('let the winning variant take over') is a stronger claim than plain A/B testing. Confirm auto-promotion exists and that the gate is Business, not Pro."
     },

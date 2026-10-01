@@ -55,8 +55,6 @@ const mockStartBlank = jest.fn()
 /** The template gallery's doors (AGL-3080), passed through by identity. */
 const mockGalleryInstalled = jest.fn()
 const mockReportShelf = jest.fn()
-/** The commerce zones' doors (AGL-2916), passed through by identity. */
-const mockProductWrite = jest.fn()
 /** The CRM record zones' proposal doors (AGL-2917), passed through by identity. */
 const mockProposeTask = jest.fn()
 const mockProposeStage = jest.fn()
@@ -350,54 +348,7 @@ const MOUNTS: Record<
   },
 }
 
-/**
- * Zones a PLUGIN hosts (AGL-2916): the commerce product editor, products hub
- * and import dialog draw the shell's renderer through
- * `useConsoleWidgetSlot`, as the product editor draws `seoFields`, so their
- * mounts are in the plugin's files rather than a console page.
- */
 Object.assign(MOUNTS, {
-  productEditor: {
-    file: 'libs/plugins/commerce/src/lib/components/console/product-editor-dialog.component.tsx',
-    how: 'slot',
-    props: {
-      hostId: 'host-1',
-      orgId: undefined,
-      product: {
-        id: 'prod-1',
-        name: 'Desk lamp',
-        type: 'physical',
-        description: '',
-        tags: [],
-        categoryIds: [],
-        options: [],
-        mediaUrls: [],
-        seoTitle: '',
-        seoDescription: '',
-      },
-      categories: [],
-      proposeValues: mockProposeValues,
-    },
-  },
-  productsHub: {
-    file: 'libs/plugins/commerce/src/lib/components/console/products-hub-zone.component.tsx',
-    how: 'slot',
-    props: {
-      hostId: 'host-1',
-      orgId: undefined,
-      products: [],
-      lastImport: null,
-      applyProductCopy: mockProductWrite,
-      createProductDrafts: mockProductWrite,
-      createCategories: mockProductWrite,
-      createDiscountDrafts: mockProductWrite,
-    },
-  },
-  productImport: {
-    file: 'libs/plugins/commerce/src/lib/components/console/products-hub-card.component.tsx',
-    how: 'slot',
-    props: { hostId: 'host-1', orgId: undefined, count: 2, options: {}, setOption: mockProductWrite },
-  },
   // AGL-3080: the installed half of the workspace's plugin inventory, and an
   // installation's version line, drawn by the plugin that installed them.
   orgPluginInstalls: {

@@ -246,8 +246,8 @@ const BUTTON_STYLED = { when: 'renderAs', is: 'link', notMatch: true }
 export const schema: Aglyn.ComponentSchema<ScreenLinkProps> = {
   $id: ID,
   pluginId: BUNDLE_ID,
-  displayName: 'Screen Link',
-  description: 'Links to another screen by id, so it survives a slug change.',
+  displayName: 'Page Link',
+  description: 'Links to another page by id, so it survives a slug change.',
   category: Aglyn.ComponentCategory.NAVIGATION,
   icon: {
     path: mdiLinkVariant.path,
@@ -265,17 +265,17 @@ export const schema: Aglyn.ComponentSchema<ScreenLinkProps> = {
     {
       name: 'screenId',
       description:
-        'Screen this link navigates to. The address is generated from the ' +
+        'Page this link navigates to. The address is generated from the ' +
         'published path at render time, so it keeps working when the ' +
-        "screen's slug or parent changes.",
+        "page's slug or parent changes.",
       component: Aglyn.FieldComponentType.SCREEN_SELECT,
-      label: 'Screen',
+      label: 'Page',
     },
     {
       name: 'href',
       description:
         'Where this link goes when it points off this site. Ignored while ' +
-        'Screen names one — that field wins, so clear it to use a URL.',
+        'Page names one — that field wins, so clear it to use a URL.',
       component: Aglyn.FieldComponentType.TEXT_FIELD,
       label: 'External URL',
       // A bare `#fragment` saves and goes nowhere (AGL-2867).
@@ -342,7 +342,7 @@ export const presets: Aglyn.PresetSchema[] = [
   {
     $id: generatePresetId(ID),
     type: Aglyn.NodeType.PRESET,
-    displayName: 'Screen Link',
+    displayName: 'Page Link',
     icon: {
       path: mdiLinkVariant.path,
       sx: { color: '#2196f3' },
@@ -353,7 +353,7 @@ export const presets: Aglyn.PresetSchema[] = [
       componentId: ID,
       pluginId: BUNDLE_ID,
       props: {
-        children: 'Screen Link',
+        children: 'Page Link',
         // Same visible-on-any-surface defaults as the button preset; the
         // default text color disappears against a same-hue appbar.
         variant: 'outlined',

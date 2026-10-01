@@ -87,7 +87,7 @@ export const SEO_TITLE_VARIABLES: readonly SeoTitleVariableDefinition[] = [
   {
     name: 'page.name',
     label: 'Page name',
-    description: 'What this page is called — a screen’s display name.',
+    description: 'What this page is called — its display name.',
   },
   {
     name: 'site.separator',

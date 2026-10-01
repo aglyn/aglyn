@@ -48,7 +48,6 @@ import {
   type CrmLeadStatus,
   crmLeadStatus,
   isCrmLeadOpen,
-  leadPrimaryGroup,
   readCampaignIds,
 } from '@aglyn/aglyn'
 import CampaignPicker from '@aglyn/shared-ui-email-campaigns/components/campaign-picker.component'
@@ -81,6 +80,7 @@ import { CrmBulkShareButton } from './record-sharing-card'
 import { LeadOwnerSelect } from './lead-owner-select'
 import { UNQUALIFY_REASON_MAX } from './lead-unqualify-dialog'
 import { useCrmSharingFollowUp } from '../hooks/use-crm-sharing'
+import { leadPrimaryGroup } from '../model/contact-holder'
 
 /**
  * One row of the Leads list as the bar needs it: the document's fields,

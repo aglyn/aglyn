@@ -105,7 +105,7 @@ For stays (cabins, rooms, rentals):
 1. Add **resources** on the Products page — nightly rate, weekend
    multiplier, minimum nights, deposit percent, and free-cancellation
    window.
-2. Drop the **Reservation widget** on any screen in the besigner and point
+2. Drop the **Reservation widget** on any page in the besigner and point
    it at the resource id. Guests pick dates, see a live quote, and pay the
    deposit (or full amount) at checkout.
 3. Manage stays from the **Reservations** card: check in, check out

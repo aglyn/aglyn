@@ -146,9 +146,9 @@ gets saved is the `{{…}}` you wrote.
 ## Where you cannot edit in place {#limits}
 
 - **Elements that do not declare text.** In-place editing is offered by the
-  components built for it — Typography, inline text, buttons, screen links, accordion
+  components built for it — Typography, inline text, buttons, page links, accordion
   summaries and the email text blocks. Elsewhere, use the attribute panel.
-- **Locked elements**, such as the layout chrome shown around a screen. Double-click
+- **Locked elements**, such as the layout chrome shown around a page. Double-click
   does nothing; edit it in the layout itself.
 - **While the interaction builder is choosing a target** — there, two clicks are two
   choices, not an edit.

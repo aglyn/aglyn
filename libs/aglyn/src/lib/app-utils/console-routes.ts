@@ -477,7 +477,7 @@ export enum Route {
    * permanently, so a held bookmark still lands on the section (and keeps its
    * `?tab=`, which never changed).
    *
-   * Kept on the table rather than as a bare literal in `next.config.js`
+   * Kept on the table rather than as a bare literal in the redirect
    * because the redirect and the address it serves are one fact:
    * `automation-section.spec.ts` reads this entry and fails if the rule for
    * it goes missing.
@@ -511,7 +511,14 @@ export enum Route {
   HOST_USERS = '/[orgSlug]/hosts/[host]/users',
   HOST_ANALYTICS = '/[orgSlug]/hosts/[host]/analytics',
   COMPONENT_BESIGNER = '/[orgSlug]/hosts/[host]/components/[componentId]/versions/[versionId]/besigner',
-  FORM_BESIGNER = '/[orgSlug]/hosts/[host]/forms/[formId]/versions/[versionId]/besigner',
+  /*
+   * A document a plugin keeps under a site and authors in the besigner
+   * (`plugin-manager/besigner-documents.ts`): the segment is the kind the
+   * plugin declared, the details page is the plugin's own at
+   * `<segment>/<docId>`, and the editor and preview are the console's.
+   */
+  PLUGIN_DOCUMENT_DETAILS = '/[orgSlug]/hosts/[host]/[documentSegment]/[docId]',
+  PLUGIN_DOCUMENT_BESIGNER = '/[orgSlug]/hosts/[host]/[documentSegment]/[docId]/versions/[versionId]/besigner',
   TEMPLATE_BESIGNER = '/[orgSlug]/hosts/[host]/templates/[templateId]/besigner',
   LAYOUT_BESIGNER = '/[orgSlug]/hosts/[host]/layouts/[layoutId]/versions/[versionId]/besigner',
   // Draft preview for every besigner document kind (AGL-1203). Screens had
@@ -521,7 +528,7 @@ export enum Route {
   // deployment. TEMPLATE_PREVIEW carries no versionId, matching
   // TEMPLATE_BESIGNER.
   COMPONENT_PREVIEW = '/[orgSlug]/hosts/[host]/components/[componentId]/versions/[versionId]/preview',
-  FORM_PREVIEW = '/[orgSlug]/hosts/[host]/forms/[formId]/versions/[versionId]/preview',
+  PLUGIN_DOCUMENT_PREVIEW = '/[orgSlug]/hosts/[host]/[documentSegment]/[docId]/versions/[versionId]/preview',
   TEMPLATE_PREVIEW = '/[orgSlug]/hosts/[host]/templates/[templateId]/preview',
   LAYOUT_PREVIEW = '/[orgSlug]/hosts/[host]/layouts/[layoutId]/versions/[versionId]/preview',
   // The list sits at the bare path, like HOST_COMPONENTS. It used to be
@@ -731,10 +738,17 @@ export interface RoutePayload {
     componentId: string
     versionId: string
   }
-  [Route.FORM_BESIGNER]: {
+  [Route.PLUGIN_DOCUMENT_DETAILS]: {
     orgSlug: string
     host: string
-    formId: string
+    documentSegment: string
+    docId: string
+  }
+  [Route.PLUGIN_DOCUMENT_BESIGNER]: {
+    orgSlug: string
+    host: string
+    documentSegment: string
+    docId: string
     versionId: string
   }
   [Route.TEMPLATE_BESIGNER]: {
@@ -754,10 +768,11 @@ export interface RoutePayload {
     componentId: string
     versionId: string
   }
-  [Route.FORM_PREVIEW]: {
+  [Route.PLUGIN_DOCUMENT_PREVIEW]: {
     orgSlug: string
     host: string
-    formId: string
+    documentSegment: string
+    docId: string
     versionId: string
   }
   [Route.TEMPLATE_PREVIEW]: {

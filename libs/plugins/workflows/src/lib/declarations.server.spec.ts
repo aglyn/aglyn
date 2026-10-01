@@ -55,8 +55,12 @@ jest.mock('./engine/run-event-actions', () => ({
     (mockRunSingleAction as (...a: unknown[]) => unknown)(...args),
 }))
 
+import { PLUGIN_DEPENDENTS_SOURCES } from '@aglyn/aglyn/plugin-manager/plugin-dependents'
 import { pluginRecordIndex } from '@aglyn/aglyn/plugin-manager/plugin-record-index'
-import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
+import {
+  resetPluginServicesForTests,
+  resolvePluginServices,
+} from '@aglyn/aglyn/plugin-manager/plugin-services'
 import { emitHostEvent } from '@aglyn/tenant-runtime/emit-host-event'
 import {
   dispatchHostAutomation,
@@ -94,6 +98,15 @@ describe('the server declarations', () => {
     expect(pluginRecordIndex('action')?.pluginId).toBe(BUNDLE_ID)
     // Registering again — boot, then an API register function — refuses nothing.
     expect(() => registerWorkflowsServerDeclarations()).not.toThrow()
+  })
+
+  it('answer the "Used by" scan for a function, once however often they run (AGL-3080)', () => {
+    registerWorkflowsServerDeclarations()
+    registerWorkflowsServerDeclarations()
+    const sources = resolvePluginServices(PLUGIN_DEPENDENTS_SOURCES)
+    expect(sources.map(({ pluginId, impl }) => [pluginId, impl.kinds])).toEqual([
+      [BUNDLE_ID, ['function']],
+    ])
   })
 
   it('carry an event raised by the runtime to the engine, and its alerts back', async () => {
