@@ -35,7 +35,6 @@ import {
 } from '@aglyn/aglyn'
 import {
   ORG_CRM_PERMISSION,
-  orgCrmRefusalNotice,
   resolveOrgCrmAccess,
 } from './org-crm-access'
 
@@ -204,23 +203,5 @@ describe('resolveOrgCrmAccess — permission', () => {
         permissionsErrored: true,
       }),
     ).toBe('refused')
-  })
-})
-
-describe('the refusal copy', () => {
-  it('tells a collaborator where their own people are, not to ask for a role', () => {
-    const notice = orgCrmRefusalNotice('scoped')
-    expect(notice).toContain('sites you')
-    expect(notice).not.toContain('permission')
-  })
-
-  it('tells a member without the permission who can grant it', () => {
-    expect(orgCrmRefusalNotice('permission')).toContain('Team')
-  })
-
-  it('gives the two audiences different sentences', () => {
-    expect(orgCrmRefusalNotice('scoped')).not.toBe(
-      orgCrmRefusalNotice('permission'),
-    )
   })
 })

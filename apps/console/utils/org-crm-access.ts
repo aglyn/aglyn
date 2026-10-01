@@ -18,19 +18,21 @@
 import type { OrgPermission } from '@aglyn/aglyn'
 
 /**
- * WHO MAY OPEN THE ORGANIZATION-LEVEL CRM.
+ * WHO MAY READ THE ORGANIZATION'S CRM FIGURES: the verdict the org dashboard
+ * row (`org-dashboard-widgets.component.tsx`, AGL-2636) renders behind.
  *
- * The org CRM hub (`/[orgSlug]/crm`, AGL-2630) is the one surface in the
- * product that deliberately reads ACROSS the host boundary: every section
- * lists every site's records at once, and the contacts section answers which
- * of an organization's sites know a given person, which is a fact about every
- * site at once. Every other CRM surface is scoped by `visibleTo` and proves
- * itself per document. This one does not — its listeners carry no scope
- * clause — so this decision is the whole of what keeps it from becoming the
- * leak the per-host work closed. It was written for the read-only address
- * book that lived at `/[orgSlug]/contacts` and it is unchanged by the hub
- * that replaced it: the reasoning below is about REACH, and a hub that can
- * also write makes it more load-bearing, not less.
+ * The org CRM hub (`/[orgSlug]/crm`, AGL-2630) and the cards that total it
+ * on the sites page are the surfaces that deliberately read ACROSS the host
+ * boundary: every section lists every site's records at once, and the
+ * contacts section answers which of an organization's sites know a given
+ * person, which is a fact about every site at once. Every other CRM surface
+ * is scoped by `visibleTo` and proves itself per document. These are not —
+ * their listeners carry no scope clause — so reach is the whole of what keeps
+ * them from becoming the leak the per-host work closed. The hub itself is
+ * served by the shell's generic organization route, which asks the same two
+ * questions in the same order: `resolveOrgPluginReach`, then the
+ * `data.manage` the CRM's extension declares. The reasoning below is the
+ * hub's as much as the row's.
  *
  * ## A ROLE IS NOT A REACH, and that is the defect this exists to avoid
  *
@@ -150,24 +152,6 @@ export function resolveOrgCrmAccess(input: OrgCrmAccessInput): OrgCrmAccess {
   if (permissionsErrored) return 'unavailable'
   if (!permissionsLoaded) return 'pending'
   return can(ORG_CRM_PERMISSION) === true ? 'granted' : 'refused'
-}
-
-/**
- * What a refused reader is told.
- *
- * Two audiences reach this copy and they need different sentences, so the
- * reason is a parameter rather than one apologetic string. A collaborator is
- * not missing a permission — they are looking at a page about sites they do
- * not hold, and offering them "ask an admin for access" invites a request
- * that would have to be answered by widening their whole membership.
- */
-export function orgCrmRefusalNotice(reason: 'scoped' | 'permission'): string {
-  return reason === 'scoped'
-    ? 'This page covers every site in the organization. Your access is ' +
-        "limited to the sites you've been added to — open the CRM from " +
-        'one of those sites to see the people it holds.'
-    : "You don't have permission to see the organization's CRM. An " +
-        'organization owner or admin can grant it from Team.'
 }
 
 export default resolveOrgCrmAccess

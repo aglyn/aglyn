@@ -23,6 +23,7 @@ import {
   buildDocsUrl,
   DOCS_BASE_URL,
   DOCS_HELP_TOPICS,
+  resolveDocsHelpTarget,
 } from './docs-links'
 
 const REPO_ROOT = join(__dirname, '../../..')
@@ -149,6 +150,30 @@ describe('docs help registry', () => {
  *
  * Module scope, so each shape needs a fresh registry.
  */
+describe('a plugin surface\'s help, deep-linked (AGL-3080)', () => {
+  it('links the heading a topic\'s page carries', () => {
+    expect(
+      resolveDocsHelpTarget('crm', '#at-the-organization-level', 'plugins'),
+    ).toEqual({ topic: 'crm', anchor: '#at-the-organization-level' })
+  })
+
+  it('opens the top of the page for a heading the page does not carry', () => {
+    expect(resolveDocsHelpTarget('crm', '#no-such-heading', 'plugins')).toBe(
+      'crm',
+    )
+  })
+
+  it('drops the anchor with a topic that fell back', () => {
+    expect(
+      resolveDocsHelpTarget('not-a-topic', '#at-the-organization-level', 'plugins'),
+    ).toBe('plugins')
+  })
+
+  it('answers the bare topic when no anchor is named', () => {
+    expect(resolveDocsHelpTarget('crm', undefined, 'plugins')).toBe('crm')
+  })
+})
+
 describe('the docs origin is one value under one name (AGL-2186)', () => {
   const KEYS = ['NEXT_PUBLIC_DOCS_ORIGIN', 'NEXT_PUBLIC_AGLYN_DOCS_URL'] as const
   const ORIGINAL = Object.fromEntries(KEYS.map((key) => [key, process.env[key]]))

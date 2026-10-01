@@ -38,7 +38,7 @@ import { useEnabledPluginIds } from '../../../../components/console-plugins-gate
 import FeatureGate from '../../../../components/feature-gate.component'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import PluginHubRail from '../../../../components/plugin-hub-rail.component'
-import { resolveDocsHelpTopic } from '../../../../constants/docs-links'
+import { resolveDocsHelpTarget } from '../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 import { useConsoleRoutePlugins } from '../../../../hooks/use-console-plugins'
@@ -97,10 +97,11 @@ function wrapInGate(
  *
  * What it adds over the site route is REACH, checked before anything else:
  * a surface with no site has no scope to narrow a site collaborator to, so a
- * scoped member is refused before the plugin chunk downloads — the rule the
- * CRM's own org route (`/[orgSlug]/crm`, AGL-2630) states for itself. That
- * route stays a page of its own; this one is what every other organization
- * surface gets without one.
+ * scoped member is refused before the plugin chunk downloads, and before the
+ * permission the surface declares is consulted at all — no permission grants
+ * reach (`resolveOrgPluginReach`). The CRM's organization hub
+ * (`/[orgSlug]/crm`, AGL-2630) is served here like every other surface: reach
+ * first, then the `data.manage` its extension declares.
  *
  * An unresolved URL is refused by segment count, as on the site route: one
  * segment names a surface (a live bookmark into a plugin this workspace does
@@ -127,6 +128,7 @@ const OrgPluginPage: NextPageWithLayout<Record<string, never>> = () => {
     permissions,
     can: canOrgPermission,
     loaded: permissionsLoaded,
+    errored: permissionsErrored,
   } = useOrgPermissions()
 
   /*
@@ -347,6 +349,18 @@ const OrgPluginPage: NextPageWithLayout<Record<string, never>> = () => {
       {"This page isn't available. It may have moved or the feature that " +
         'provided it is not installed.'}
     </Alert>
+  ) : reach === 'refused' ? (
+    // Before the member read is consulted, or its failure reported: no
+    // permission grants reach, so the refusal cannot wait on one.
+    <Alert severity="info">{orgPluginScopedNotice(title)}</Alert>
+  ) : reach === 'granted' && permissionsErrored ? (
+    // A FAILED member read, told apart from a pending one, which would spin
+    // forever on an answer that is never coming, and from a refusal, which
+    // would tell a legitimate admin they have no access (AGL-2474).
+    <Alert severity="warning">
+      {"We couldn't confirm your access to this organization. Reload the " +
+        'page, and if it keeps happening sign out and back in.'}
+    </Alert>
   ) : reach === 'pending' ||
     !orgReady ||
     !permissionsLoaded ||
@@ -357,8 +371,6 @@ const OrgPluginPage: NextPageWithLayout<Record<string, never>> = () => {
     <Box sx={{ p: 2 }}>
       <CircularProgress size={24} />
     </Box>
-  ) : reach === 'refused' ? (
-    <Alert severity="info">{orgPluginScopedNotice(title)}</Alert>
   ) : surfacePermission === 'refused' ? (
     // Before the entitlement branch: a reader who may not open the surface
     // is not shown its upgrade path.
@@ -413,8 +425,8 @@ const OrgPluginPage: NextPageWithLayout<Record<string, never>> = () => {
     >
       {/*
         The organization's shared library, with no site's private one beside
-        it, as on the CRM's org route (AGL-2662): a surface about every site
-        offers the assets every site can already see.
+        it (AGL-2662): a surface about every site offers the assets every site
+        can already see and none that belong to one.
       */}
       <ConsoleMediaPickerProvider orgId={orgId}>
         <PluginComponent
@@ -452,7 +464,11 @@ const OrgPluginPage: NextPageWithLayout<Record<string, never>> = () => {
             ]
           : []),
       ]}
-      help={resolveDocsHelpTopic(header?.docsTopic, 'plugins')}
+      help={resolveDocsHelpTarget(
+        header?.docsTopic,
+        header?.docsAnchor,
+        'plugins',
+      )}
       header={{
         children: title,
         secondary: activeSection?.label,

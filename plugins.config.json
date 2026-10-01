@@ -778,6 +778,9 @@
           "routes": [
             "/crm"
           ],
+          "orgRoutes": [
+            "/crm"
+          ],
           "slots": [
             "consoleSearch",
             "formContactFields",

@@ -39,6 +39,12 @@ routes, such as `/team` or `/settings`, never renders), `dashboardCards?`,
 `settingsSections?`, `widgets?`, `providers?`, `staffPages?`, `themePresets?`,
 `searchSources?`.
 
+A nav item's `header?: { title, icon?, docsTopic?, docsAnchor? }` titles its
+page and names the docs topic its help button opens. `docsAnchor` deep-links
+one heading of that topic's page (`'#at-the-organization-level'`); an anchor
+the page does not carry is dropped and the help opens the top of the page,
+and so is any anchor when the topic itself is not one the console knows.
+
 `ConsoleExtension.themePresets?` adds built-in themes to every site's theme
 picker (**Setup → Theme**): each `{ id, name, description?, theme }` is a
 plain-JSON `HostTheme` — both schemes, fonts, typography, shape and component

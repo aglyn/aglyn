@@ -117,7 +117,8 @@ export enum Route {
    * does. What this route adds over the site hub is the cross-site fact the
    * old address book carried — which sites know a person — and what it takes
    * from it is the site every create must name, since a record is always
-   * captured BY a site.
+   * captured BY a site. Served by `ORG_PLUGIN` below, from the CRM's own
+   * `orgNavItems`; the constant is the address its links are built from.
    */
   ORG_CRM = '/[orgSlug]/crm',
   /*

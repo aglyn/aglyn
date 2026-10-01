@@ -581,8 +581,19 @@ export interface ConsoleNavItem {
    * Every surface mounted by the shell's generic plugin route shares one
    * `help=` prop, so a surface that omits this is not "help-less" — it
    * inherits Plugins & Marketplace, which reads as if it were its own.
+   *
+   * `docsAnchor` deep-links the help to one heading of that topic's page
+   * (`#at-the-organization-level`), for a surface whose page explains this
+   * mount under a heading of its own. It is validated the same way: an
+   * anchor the topic's page does not carry is dropped, and the help opens the
+   * top of the page.
    */
-  header?: { title: string; icon?: MdiIconProps; docsTopic?: string }
+  header?: {
+    title: string
+    icon?: MdiIconProps
+    docsTopic?: string
+    docsAnchor?: string
+  }
 }
 
 export interface ConsoleDashboardCard {

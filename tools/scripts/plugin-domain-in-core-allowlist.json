@@ -10,23 +10,6 @@
       "why": "Aglyn's own plan checkout, not a tenant feature: it carries the operator's measurement client id and own-traffic flag to the operator's server-side revenue event, and the comment names how that stamp reaches the operator's tag. A self-host's operator identity replaces both."
     },
     {
-      "path": "apps/console/app/(app)/[orgSlug]/crm/[[...crmSlug]]/layout.tsx",
-      "rules": [
-        "domain-name",
-        "plugin-id"
-      ],
-      "lane": "crm"
-    },
-    {
-      "path": "apps/console/app/(app)/[orgSlug]/crm/[[...crmSlug]]/page.tsx",
-      "rules": [
-        "domain-name",
-        "plugin-id",
-        "domain-declares:crm"
-      ],
-      "lane": "crm"
-    },
-    {
       "path": "apps/console/app/api/_lib/site-export.ts",
       "rules": [
         "plugin-id"
