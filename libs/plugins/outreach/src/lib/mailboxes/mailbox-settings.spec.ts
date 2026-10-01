@@ -51,15 +51,15 @@ const DAY = 24 * 60 * 60 * 1000
 const START = Date.UTC(2026, 8, 1, 12, 0, 0)
 
 describe('the daily cap and the warm-up ramp (AGL-2978)', () => {
-  it('starts at 20 and is never set above 50', () => {
+  it('starts at 20 and is never set above 100', () => {
     expect(OUTREACH_DEFAULT_DAILY_CAP).toBe(20)
-    expect(OUTREACH_MAX_DAILY_CAP).toBe(50)
-    expect(validateDailyCap(50)).toBe(50)
+    expect(OUTREACH_MAX_DAILY_CAP).toBe(100)
+    expect(validateDailyCap(100)).toBe(100)
     expect(validateDailyCap(1)).toBe(1)
-    for (const bad of [0, 51, 2.5, '20', null]) {
+    for (const bad of [0, 101, 2.5, '20', null]) {
       expect(typeof validateDailyCap(bad)).toBe('object')
     }
-    expect(clampDailyCap(500)).toBe(50)
+    expect(clampDailyCap(500)).toBe(100)
     expect(clampDailyCap(undefined)).toBe(20)
   })
 

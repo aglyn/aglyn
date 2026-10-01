@@ -109,7 +109,7 @@ The **display name** is the name recipients see beside the address.
 ### Daily cap, warm-up and sending window {#daily-cap}
 
 - **Daily cap** — the most the mailbox sends in one day. It starts at **20**
-  and can be set up to **50**.
+  and can be set up to **100**.
 - **Warm-up** — a newly connected mailbox ramps up: at most **10** a day in
   its first week, **20** in its second and **30** from its third. The daily
   cap still applies, so a mailbox capped at 20 never sends more than 20.

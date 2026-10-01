@@ -62,7 +62,7 @@ import { firstEmailStepIndex } from './sequence-validation'
 export const OUTREACH_RAMP_DAILY_CAPS: readonly number[] = [10, 20, 30]
 
 /** The most any mailbox sends in one day, whatever is configured. */
-export const OUTREACH_DAILY_CAP_MAX = 50
+export const OUTREACH_DAILY_CAP_MAX = 100
 
 /** How often the sending runtime runs, in minutes. */
 export const OUTREACH_TICK_MINUTES = 15
