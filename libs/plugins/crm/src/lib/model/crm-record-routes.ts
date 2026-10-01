@@ -87,4 +87,10 @@ export function registerCrmRecordRoutes(): void {
     list: (context) => hub(context).section('deals'),
     record: (context, id) => hub(context).deal(id),
   }, owner)
+  // A task has no page of its own: it is a row in the Tasks list, at both
+  // levels, so a task's record answers the list.
+  registerPluginRecordRoute('task', {
+    list: (context) => hub(context).section('tasks'),
+    record: (context) => hub(context).section('tasks'),
+  }, owner)
 }

@@ -358,13 +358,6 @@
       "lane": "workflows"
     },
     {
-      "path": "libs/aglyn/src/lib/app-utils/activity-presenter.ts",
-      "rules": [
-        "domain-declares:crm"
-      ],
-      "lane": "ai"
-    },
-    {
       "path": "libs/aglyn/src/lib/app-utils/advertising-tag-mounts.tsx",
       "rules": [
         "vendor:ga4",

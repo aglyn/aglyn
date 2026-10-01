@@ -634,10 +634,13 @@ plugin publishes the kind, or the owner has no address at that scope. Render
 text, which is what these surfaces already do while their route params settle.
 A link is not access: the page at the far end applies its own gates.
 
-The first-party kinds: `contact`, `lead`, `company` and `deal` (CRM),
-`product` (Commerce), `campaign` (Marketing), `emailMessage`, `emailTemplate`
-and `sendingIdentity` (Email), `form` (Forms), and `workflow`, `action` and
-`webhook` (Workflows). A plugin that links to another plugin's page asks for
+The first-party kinds: `contact`, `lead`, `company`, `deal` and `task` (CRM),
+`product` and `order` (Commerce), `booking` (Bookings), `formSubmission`
+(Inbox), `campaign` (Marketing), `emailMessage`, `emailTemplate` and
+`sendingIdentity` (Email), `form` (Forms), and `workflow`, `action` and
+`webhook` (Workflows). The console's activity feeds link any of them the same
+way: an entry whose target type is a published kind opens at its owner's
+address. A plugin that links to another plugin's page asks for
 one of these; `check:plugin-domain-in-core` refuses one that spells the other
 plugin's slug or core route itself.
 

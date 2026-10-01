@@ -23,7 +23,7 @@ import { escapeHtml } from '../../utils/escape-html'
 // import of the CRM from here would close a cycle between the three
 // plugins. The shared builder is pinned against the CRM's own routes by a
 // spec, so the address is the same one the hub resolves.
-import { crmContactByEmailHref } from '@aglyn/aglyn'
+import { pluginRecordByEmailHref } from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
 import { describePaymentRisk } from '@aglyn/aglyn/app-utils/payment-risk'
 import { AppLink, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -109,16 +109,18 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
    * address updated a person in the CRM — a customer, with this order on
    * their timeline — and the dialog links there by the address, because
    * the contact's id is minted at capture and nothing on the order holds
-   * it. The Contacts list is the lookup and opens the record on one match.
-   * A guest checkout with no address updated nobody, so there is no link.
-   * Built from the route params already in the URL — no document is read
-   * to draw a link — and absent until they settle, so the dialog never
-   * offers a link to a half-built address.
+   * it. The Contacts list is the lookup and opens the record on one match,
+   * at the address the plugin that keeps contacts publishes; where none
+   * does, there is no link. A guest checkout with no address updated
+   * nobody, so there is no link either. Built from the route params already
+   * in the URL — no document is read to draw a link — and absent until they
+   * settle, so the dialog never offers a link to a half-built address.
    */
   const params = useParams<{ orgSlug?: string; host?: string }>()
   const customerCrmHref =
     params?.orgSlug && params?.host && order?.customerEmail
-      ? crmContactByEmailHref(
+      ? pluginRecordByEmailHref(
+          'contact',
           { orgSlug: String(params.orgSlug), host: String(params.host) },
           String(order.customerEmail),
         )

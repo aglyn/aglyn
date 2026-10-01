@@ -18,10 +18,10 @@
 
 import {
   FORMS_MAX_PER_HOST,
-  INBOX_SUBMISSION_PARAM,
   pluginDocsHelp,
   type ConsolePluginOrgMount,
 } from '@aglyn/aglyn'
+import { INBOX_SUBMISSION_PARAM } from '../model/inbox-record-routes'
 // A deep import, NOT the plugin barrel (AGL-1151): the barrel is the entry
 // point the tenant's loader dynamically imports to activate the marketing
 // plugin's SITE half, so a console card named there ships to every published

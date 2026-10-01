@@ -42,6 +42,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { addDoc } from 'firebase/firestore'
 import type { ReactNode } from 'react'
 import { ContactTimelineCard } from './contact-timeline-card'
+import { standInSiteRecordRoutes } from '../testing/stand-in-site-record-routes'
 
 const activityRows = [
   {
@@ -224,6 +225,8 @@ jest.mock('next/navigation', () => ({
 }))
 
 beforeEach(() => {
+  // The submission, order and booking pages are other plugins' (AGL-3080).
+  standInSiteRecordRoutes()
   jest.clearAllMocks()
   campaignState = { status: 'success', lookupFailed: false }
   campaignHookCalls.length = 0
