@@ -312,7 +312,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   /*
    * The confirmation write is a double over the same store.
    *
-   * `email-topic-confirmation.spec.ts` certifies what it stores and what it
+   * `topic-subscriptions.spec.ts` certifies what it stores and what it
    * refuses, against the Admin SDK's transaction shape. What this file
    * certifies is the ROUTE: that the GET writes nothing, that the POST acts,
    * and that every outcome reaches a page saying what is true.
@@ -336,7 +336,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 }))
 
 import { resolvePluginApiRoute } from '@aglyn/aglyn/server'
-import { DEFAULT_EMAIL_TOPICS } from '@aglyn/aglyn'
+import { DECLARED_SUBSCRIPTION_TOPICS } from '@aglyn/aglyn'
 import { createHash, createHmac } from 'crypto'
 import { registerEmailApi, rejoinStreamForAccount } from './server'
 
@@ -481,7 +481,7 @@ describe('the preference page is SAFE on GET', () => {
   it('offers every built-in topic, ticked, for an address with no records', async () => {
     const reply = await call({ method: 'GET', query: topicQuery() })
     expect(checkedTopics(reply.body)).toEqual(
-      DEFAULT_EMAIL_TOPICS.map((topic) => topic.id),
+      DECLARED_SUBSCRIPTION_TOPICS.map((topic) => topic.id),
     )
   })
 
@@ -614,7 +614,7 @@ describe('a topic edited in the URL is refused', () => {
     // An email is not recallable. Every link already in an inbox has to work.
     const reply = await call({ method: 'GET', query: legacyQuery() })
     expect(reply.status).toBe(200)
-    expect(checkedTopics(reply.body).length).toBe(DEFAULT_EMAIL_TOPICS.length)
+    expect(checkedTopics(reply.body).length).toBe(DECLARED_SUBSCRIPTION_TOPICS.length)
   })
 })
 
@@ -732,7 +732,7 @@ describe('sender protection is not a recipient preference', () => {
         method: 'POST',
         query: topicQuery(),
         body: Object.fromEntries(
-          DEFAULT_EMAIL_TOPICS.map((topic) => [`topic:${topic.id}`, 'on']),
+          DECLARED_SUBSCRIPTION_TOPICS.map((topic) => [`topic:${topic.id}`, 'on']),
         ),
       })
       expect(reply.status).toBe(200)
@@ -769,7 +769,7 @@ describe('saving preferences', () => {
   /** Every topic ticked except the ones named. */
   const keepAllBut = (...dropped: string[]) =>
     Object.fromEntries(
-      DEFAULT_EMAIL_TOPICS.filter((topic) => !dropped.includes(topic.id)).map(
+      DECLARED_SUBSCRIPTION_TOPICS.filter((topic) => !dropped.includes(topic.id)).map(
         (topic) => [`topic:${topic.id}`, 'on'],
       ),
     )
@@ -815,7 +815,7 @@ describe('saving preferences', () => {
     expect(reply.status).toBe(200)
     const record = docs.get(OPT_OUT_PATH) as any
     expect(Object.keys(record.topics).sort()).toEqual(
-      DEFAULT_EMAIL_TOPICS.map((topic) => topic.id).sort(),
+      DECLARED_SUBSCRIPTION_TOPICS.map((topic) => topic.id).sort(),
     )
   })
 
@@ -979,7 +979,7 @@ describe('the topic catalog on the preference page', () => {
     // turns the one screen they came to in order to leave a stream into a
     // dead end.
     expect(checkedTopics(reply.body)).toEqual(
-      DEFAULT_EMAIL_TOPICS.map((topic) => topic.id),
+      DECLARED_SUBSCRIPTION_TOPICS.map((topic) => topic.id),
     )
   })
 })
@@ -1067,7 +1067,7 @@ describe('how often the recipient wants to hear', () => {
   const FREQUENCY_PATH = `hosts/${HOST}/emailFrequency/${KEY}`
   const keepAll = () =>
     Object.fromEntries(
-      DEFAULT_EMAIL_TOPICS.map((topic) => [`topic:${topic.id}`, 'on']),
+      DECLARED_SUBSCRIPTION_TOPICS.map((topic) => [`topic:${topic.id}`, 'on']),
     )
 
   it('offers the choice on the page', async () => {
@@ -1329,7 +1329,7 @@ describe('a topic waiting for confirmation', () => {
       method: 'POST',
       query: topicQuery(),
       body: Object.fromEntries(
-        DEFAULT_EMAIL_TOPICS.map((topic) => [`topic:${topic.id}`, 'on']),
+        DECLARED_SUBSCRIPTION_TOPICS.map((topic) => [`topic:${topic.id}`, 'on']),
       ),
     })
     const stored = (docs.get(OPT_OUT_PATH) as any).topics[TOPIC]
@@ -1351,7 +1351,7 @@ describe('a topic waiting for confirmation', () => {
       method: 'POST',
       query: topicQuery(),
       body: Object.fromEntries(
-        DEFAULT_EMAIL_TOPICS.filter((topic) => topic.id !== TOPIC).map(
+        DECLARED_SUBSCRIPTION_TOPICS.filter((topic) => topic.id !== TOPIC).map(
           (topic) => [`topic:${topic.id}`, 'on'],
         ),
       ),
@@ -1382,7 +1382,7 @@ describe('when Firestore is down', () => {
 describe('the account mirror is told what the person did', () => {
   const keepAllBut = (...dropped: string[]) =>
     Object.fromEntries(
-      DEFAULT_EMAIL_TOPICS.filter((topic) => !dropped.includes(topic.id)).map(
+      DECLARED_SUBSCRIPTION_TOPICS.filter((topic) => !dropped.includes(topic.id)).map(
         (topic) => [`topic:${topic.id}`, 'on'],
       ),
     )
@@ -1553,7 +1553,7 @@ describe('a declared consent group is one sender on every page', () => {
     }
   }
   const everyTopic = () =>
-    Object.fromEntries(DEFAULT_EMAIL_TOPICS.map((topic) => [`topic:${topic.id}`, 'on']))
+    Object.fromEntries(DECLARED_SUBSCRIPTION_TOPICS.map((topic) => [`topic:${topic.id}`, 'on']))
   const leftNewsletter = () => ({
     email: RECIPIENT,
     topics: { newsletter: { optedOutAt: 't0', resubscribedAt: null } },
@@ -1692,7 +1692,7 @@ describe('a declared consent group is one sender on every page', () => {
 
     const page = await call({ method: 'GET', query: topicQuery() })
     expect(page.body).not.toContain('currently unsubscribed')
-    expect(checkedTopics(page.body)).toEqual(DEFAULT_EMAIL_TOPICS.map((topic) => topic.id))
+    expect(checkedTopics(page.body)).toEqual(DECLARED_SUBSCRIPTION_TOPICS.map((topic) => topic.id))
     expect(page.body).not.toMatch(/sends from \d+ sites/)
 
     // A resubscribe here is about this site, and lifts nothing of the other.
@@ -1732,7 +1732,7 @@ describe('a sibling’s pending confirmation, under the org’s switch', () => {
     })
   }
   const everyTopic = () =>
-    Object.fromEntries(DEFAULT_EMAIL_TOPICS.map((topic) => [`topic:${topic.id}`, 'on']))
+    Object.fromEntries(DECLARED_SUBSCRIPTION_TOPICS.map((topic) => [`topic:${topic.id}`, 'on']))
 
   it('shows the topic as waiting, unticked, once the org turns it on', async () => {
     declare(true)

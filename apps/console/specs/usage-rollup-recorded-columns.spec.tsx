@@ -72,12 +72,13 @@ const FULL_ROW = {
   recorded: {
     emailSends: 4321,
     emailSendsOverage: 321,
-    workflowRuns: 87,
+    // The workflows plugin's runs, a band counted by its host counter.
+    counted: { workflowRuns: 87 },
     actionRuns: 219,
     billableCostUsd: 3.0625,
     apiOverageUsd: 6.5,
-    formSubmissionsBilled: false,
-    formSubmissionsOverageWithheldUsd: 4.25,
+    // The forms plugin's submissions, a metered band withheld this month.
+    meteredVerdicts: { formSubmissions: { billed: false, withheldUsd: 4.25 } },
     contactsOverageBilled: true,
     contactsOverageUsd: 7.75,
     contactsOverageWithheldUsd: 0,
@@ -116,7 +117,9 @@ describe('the recorded meters reach the staff table', () => {
 
     // The defect this pair exists to end: `$4.25` on its own is
     // indistinguishable from an in-band month that happened to cost $4.25.
-    expect(screen.getByText(/Form overage withheld \$4\.25/)).toBeTruthy()
+    expect(
+      screen.getByText(/Form submissions overage withheld \$4\.25/),
+    ).toBeTruthy()
     // And the opposite flag renders as billed, with the charged figure —
     // proving the render reads each row's own flag rather than one of them.
     expect(screen.getByText(/Contacts overage billed \$7\.75/)).toBeTruthy()
@@ -155,10 +158,14 @@ describe('the recorded meters reach the staff table', () => {
             costUsd: 0,
             recorded: {
               emailSends: null as unknown as undefined,
-              workflowRuns: null as unknown as undefined,
+              counted: {
+                workflowRuns: null as unknown as number,
+              },
               actionRuns: null as unknown as undefined,
               billableCostUsd: null as unknown as undefined,
-              formSubmissionsBilled: null,
+              meteredVerdicts: {
+                formSubmissions: { billed: null, withheldUsd: 0 },
+              },
               contactsOverageBilled: null,
               orgLibraryStorageGb: null,
               orgLibraryBilled: null,

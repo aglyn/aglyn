@@ -16,10 +16,10 @@
  */
 
 import {
-  CAMPAIGN_MEMBERSHIP_FIELD,
-  contactCampaignFieldPath,
-  normalizeCampaignIds,
-} from '@aglyn/aglyn/app-utils/campaign-membership'
+  containerMembershipField,
+  contactContainerFieldPath,
+  normalizeContainerIds,
+} from '@aglyn/aglyn/app-utils/container-membership'
 import { consentGroupForHost } from '@aglyn/aglyn/app-utils/consent-groups'
 import { scopeTokensForHost, seenOnlyThroughGrant } from '@aglyn/aglyn/app-utils/scope-tokens'
 import {
@@ -34,6 +34,7 @@ import type { PluginRecordTimelineWriter } from '@aglyn/aglyn/plugin-manager/plu
 import type { PluginTextGenerator } from '@aglyn/aglyn/plugin-manager/plugin-text-generation'
 import type { PluginWebApiHandler } from '@aglyn/aglyn/server'
 import { findContactByEmail } from '@aglyn/tenant-data-admin/server/contact-email-index'
+import { readOrgContainers } from '@aglyn/tenant-data-admin/server/org-containers'
 import { restampCrmListFieldsAt } from '@aglyn/tenant-data-admin/server/crm-records'
 import { FieldValue } from 'firebase-admin/firestore'
 import { outreachCuratedEntry, outreachEnrolledEntry } from '../engine/enrollment-activity'
@@ -383,7 +384,7 @@ export function createOutreachEnrollRoutes(deps: OutreachEnrollRouteDeps): Outre
     candidate: OutreachEnrollCandidate,
     nowMs: number,
   ): Promise<void> {
-    const campaignIds = normalizeCampaignIds(sequence.campaignIds)
+    const campaignIds = normalizeContainerIds(sequence.campaignIds)
     if (!campaignIds.length) return
     try {
       const ref =
@@ -394,7 +395,7 @@ export function createOutreachEnrollRoutes(deps: OutreachEnrollRouteDeps): Outre
             : null
       if (ref) {
         const field =
-          candidate.target === 'lead' ? CAMPAIGN_MEMBERSHIP_FIELD : contactCampaignFieldPath(contactGroupId)
+          candidate.target === 'lead' ? containerMembershipField('campaign') : contactContainerFieldPath(contactGroupId, 'campaign')
         await ref.update({ [field]: FieldValue.arrayUnion(...campaignIds), updatedAt: FieldValue.serverTimestamp() })
         // A lead's campaigns are what the Leads list's Campaign filter reads
         // under a site (AGL-3321): restamped from the lead as it now stands.
@@ -412,21 +413,20 @@ export function createOutreachEnrollRoutes(deps: OutreachEnrollRouteDeps): Outre
 
   /**
    * The names of the sequence's campaigns as they stand, for the entry the
-   * enroll files on the person's record (AGL-3274) — the org's containers,
-   * `orgs/{orgId}/emailCampaigns`. Read once per request, not per person; a
-   * container that is gone answers nothing and the entry names the rest.
+   * enroll files on the person's record (AGL-3274) — the org's containers of
+   * the `campaign` kind. Read once per request, not per person; a container
+   * that is gone answers nothing and the entry names the rest.
    */
   async function sequenceCampaignNames(
     firestore: Firestore,
     orgId: string,
     sequence: OutreachSequence,
   ): Promise<string[]> {
-    const campaignIds = normalizeCampaignIds(sequence.campaignIds)
+    const campaignIds = normalizeContainerIds(sequence.campaignIds)
     if (!campaignIds.length || !orgId) return []
     try {
-      const containers = firestore.collection('orgs').doc(orgId).collection('emailCampaigns')
-      const found = await firestore.getAll(...campaignIds.map((id) => containers.doc(id)))
-      return found.map((snapshot) => String(snapshot.get('name') ?? '').trim()).filter(Boolean)
+      const found = await readOrgContainers(firestore, 'campaign', orgId, campaignIds)
+      return found.map((container) => container.name).filter(Boolean)
     } catch (error) {
       console.error('[outreach] the sequence’s campaigns could not be named for the record', error)
       return []

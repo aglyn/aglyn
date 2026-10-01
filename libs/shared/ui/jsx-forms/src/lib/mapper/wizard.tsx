@@ -37,8 +37,10 @@ import { styled } from '@mui/material/styles'
 
 import clsx from 'clsx'
 
-import CommonWizard from '@data-driven-forms/common/wizard'
-import selectNext from '@data-driven-forms/common/wizard/select-next'
+// The folder entry is the ESM build; the deep `wizard/select-next` file is
+// CommonJS, and its default import is the whole `exports` object to a bundler
+// that reads this package's output under Node's rules (AGL-3201).
+import CommonWizard, { selectNext } from '@data-driven-forms/common/wizard'
 
 import {
   type FormOptions,

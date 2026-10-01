@@ -208,6 +208,35 @@ describe('sendEmail × the outbound phishing screen', () => {
     expect(requests).toHaveLength(0)
   })
 
+  /*
+   * The screen reads the name the message leaves under (AGL-3442). A site's
+   * mail goes out under the site's own name in place of the org default the
+   * sender passed, so that name is the `From:` line a recipient sees and the
+   * one a brand in it must be caught on.
+   */
+  it('screens the site’s name the message leaves under, not the org default the sender passed', async () => {
+    const clean = { subject: 'Thanks for signing up', text: 'Welcome aboard.' }
+    const named = (fromName: string) => ({
+      ...identity(3),
+      fromName,
+      brandFromName: 'Aglyn',
+    })
+
+    const held = await send(clean, 3, { fromName: 'Aglyn', sendingIdentity: named('PayPal Rewards') })
+    expect(sendFailureReason(held)).toBe('held-for-review')
+    expect(asked[0].fromName).toBe('PayPal Rewards')
+    expect(asked[0].signals).toEqual([
+      expect.objectContaining({ code: 'brand-sender', brand: 'paypal', fromName: 'PayPal Rewards' }),
+    ])
+
+    // CONTROL: the same mail under a name of the site's own goes.
+    asked = []
+    const sent = await send(clean, 3, { fromName: 'Aglyn', sendingIdentity: named('Acme Cabins') })
+    expect(sent.sent).toBe(true)
+    expect(asked).toHaveLength(0)
+    expect(requests[0]).toMatchObject({ from: '"Acme Cabins" <hello@acme.example.com>' })
+  })
+
   it('does not screen platform mail, or tenant mail no host identity was resolved for', async () => {
     const platform = await sendEmail({ to: 'a@example.com', ...LOOKALIKE })
     expect(platform.sent).toBe(true)

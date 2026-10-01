@@ -216,9 +216,10 @@ test('the rate matches the weight it CLAIMS to be priced for', () => {
 })
 
 test('the checked-in rate is priced in dollars, not in kilobytes', () => {
-  // Why the gate compares kilobytes and not dollars. The rate is pinned so the
-  // PUBLISHED figure is round — $0.21 per 1,000 views — which leaves the cost
-  // per view a long decimal that no rounding of a weight reproduces. It sits
+  // Why the gate compares kilobytes and not dollars. The rate is pinned so its
+  // marked-up figure is round — $0.21 per 1,000 views, before the CDN request
+  // term a billed view adds — which leaves the cost per view a long decimal
+  // that no rounding of a weight reproduces. It sits
   // within a grid step of the exact implication, and that is the whole of the
   // slack the comparison allows.
   const { meteredRate } = realRates()

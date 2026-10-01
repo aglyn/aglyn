@@ -379,7 +379,7 @@ export const emailListImportStartHandler: PluginApiHandler = async (
       screening: screeningReport(parsed),
       /*
        * WHO attested, stored beside WHETHER. A flag on its own is an
-       * unattributed claim, which is the one thing `list-assignment-policy`
+       * unattributed claim, which is the one thing `enrollment-basis`
        * refuses to let an attestation be — and every run reads the account
        * from here rather than from the session that triggered it.
        */

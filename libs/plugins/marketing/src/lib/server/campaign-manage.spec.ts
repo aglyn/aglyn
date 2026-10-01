@@ -760,7 +760,8 @@ describe('discarding a draft', () => {
 })
 
 /**
- * THE REST OF THE CAMPAIGN — the forms, screens and contacts assigned to it.
+ * THE REST OF THE CAMPAIGN — the forms and screens assigned to it, and every
+ * record another plugin keeps filed under it.
  *
  * A campaign is more than its mail, and every one of those members names the
  * campaign from its OWN document. That is what makes deleting the campaign a
@@ -788,21 +789,11 @@ describe('deleting a campaign takes it off everything assigned to it', () => {
     })
   }
 
-  /** A contact filed under the campaign, inside this site's own facet. */
-  function seedContact(id: string, campaigns: string[], group = HOST) {
-    store.set(`orgs/${ORG}/contacts/${id}`, {
-      email: `${id}@example.com`,
-      facets: { [group]: { tags: ['vip'], campaignIds: campaigns } },
-    })
-  }
-
   const hostMember = (collectionName: string, id: string) =>
     store.get(`hosts/${HOST}/${collectionName}/${id}`)
-  const contactRow = (id: string) => store.get(`orgs/${ORG}/contacts/${id}`)
 
   beforeEach(() => {
-    // The org link the contact pass resolves through. Without it a site holds
-    // no org-shared contacts at all, which is the skip asserted at the end.
+    // The org link the walk resolves the organization's sites through.
     store.set(`hostIndex/${HOST}`, { orgId: ORG })
     store.set(`orgs/${ORG}`, { name: 'Acme' })
   })
@@ -847,56 +838,13 @@ describe('deleting a campaign takes it off everything assigned to it', () => {
     expect(hostMember('forms', 'unrelated')?.['campaignIds']).toEqual([OTHER])
   })
 
-  it('clears it out of the contact facet the site actually holds', async () => {
-    seedContact('ada', [CAMPAIGN, OTHER])
-
-    const result = await post({
-      hostId: HOST,
-      action: 'deleteCampaign',
-      campaignId: CAMPAIGN,
-    })
-
-    expect(result.status).toBe(200)
-    // The person, their tags and their other campaign all survive.
-    expect(contactRow('ada')?.['email']).toBe('ada@example.com')
-    expect(contactRow('ada')?.['facets']?.[HOST]?.['tags']).toEqual(['vip'])
-    expect(contactRow('ada')?.['facets']?.[HOST]?.['campaignIds']).toEqual([
-      OTHER,
-    ])
-  })
-
-  it('leaves another holder’s filing of the same person alone', async () => {
-    /*
-     * One human touched by two sites is ONE row. The campaign belongs to this
-     * site, so the detach addresses this site's facet by path — a pass that
-     * walked the document instead would edit a business record it has no
-     * claim on, under a deletion nobody asked to be cross-site.
-     */
-    store.set(`orgs/${ORG}/contacts/shared`, {
-      email: 'shared@example.com',
-      facets: {
-        [HOST]: { campaignIds: [CAMPAIGN] },
-        'other-site': { campaignIds: [CAMPAIGN] },
-      },
-    })
-
-    await post({ hostId: HOST, action: 'deleteCampaign', campaignId: CAMPAIGN })
-
-    expect(contactRow('shared')?.['facets']?.[HOST]?.['campaignIds']).toEqual([])
-    expect(
-      contactRow('shared')?.['facets']?.['other-site']?.['campaignIds'],
-    ).toEqual([CAMPAIGN])
-  })
-
   it('removes the container only after the members are off it', async () => {
     seedHostMember('forms', 'signup', [CAMPAIGN])
-    seedContact('ada', [CAMPAIGN])
 
     await post({ hostId: HOST, action: 'deleteCampaign', campaignId: CAMPAIGN })
 
     expect(stored(`emailCampaigns/${CAMPAIGN}`)).toBeUndefined()
     expect(hostMember('forms', 'signup')?.['campaignIds']).toEqual([])
-    expect(contactRow('ada')?.['facets']?.[HOST]?.['campaignIds']).toEqual([])
   })
 
   it('refuses a site with no org behind it, which can hold no campaign', async () => {
@@ -939,7 +887,6 @@ describe('deleting a campaign takes it off everything assigned to it', () => {
     seedHostMember('forms', 'a', [CAMPAIGN])
     seedHostMember('forms', 'b', [CAMPAIGN])
     seedHostMember('screens', 'c', [CAMPAIGN])
-    seedContact('ada', [CAMPAIGN])
 
     const result = await post({
       hostId: HOST,
@@ -947,78 +894,42 @@ describe('deleting a campaign takes it off everything assigned to it', () => {
       campaignId: CAMPAIGN,
     })
 
-    expect(result.body.detachedMembers).toBe(4)
-  })
-
-  /*
-   * A lead joins a campaign at the top of its document like a form does
-   * (AGL-3254), and comes off it the same way.
-   */
-  it('clears the campaign off its leads, and leaves the lead standing', async () => {
-    // A lead is the org's row; one captured before leads moved there is still
-    // at the site, and both come off.
-    store.set(`orgs/${ORG}/leads/org-lead`, { name: 'Org lead', campaignIds: [CAMPAIGN, OTHER] })
-    seedHostMember('leads', 'lead-key', [CAMPAIGN, OTHER])
-    const result = await post({ hostId: HOST, action: 'deleteCampaign', campaignId: CAMPAIGN })
-    expect(result.status).toBe(200)
-    expect(store.get(`orgs/${ORG}/leads/org-lead`)).toMatchObject({ name: 'Org lead', campaignIds: [OTHER] })
-    // Restamped from the lead as it now stands (AGL-3321): the double carries
-    // the collection's name now, so the restamp this pass always made runs here.
-    expect(store.get(`orgs/${ORG}/leads/org-lead`)).toHaveProperty('scopedCampaignIds')
-    expect(hostMember('leads', 'lead-key')?.['campaignIds']).toEqual([OTHER])
-    expect(hostMember('leads', 'lead-key')?.['displayName']).toBe('leads lead-key')
+    expect(result.body.detachedMembers).toBe(3)
   })
 
   /*
    * THE CAMPAIGN IS THE ORGANIZATION'S, so its members may be on any of its
    * sites — including one it has since been taken off. The walk covers every
-   * site in the org, and each distinct consent group's facet once.
+   * site in the org, and asks the plugins that keep members once per site.
    */
   it('clears it off every site of the organization, whichever site asked', async () => {
     store.set(`hostIndex/${SIBLING}`, { orgId: ORG })
     store.set(`hostIndex/elsewhere`, { orgId: 'org-2' })
     store.set(`hosts/${SIBLING}/forms/their-form`, { campaignIds: [CAMPAIGN] })
     store.set(`hosts/elsewhere/forms/not-ours`, { campaignIds: [CAMPAIGN] })
-    store.set(`orgs/${ORG}/contacts/both`, {
-      email: 'both@example.com',
-      facets: {
-        [HOST]: { campaignIds: [CAMPAIGN] },
-        [SIBLING]: { campaignIds: [CAMPAIGN, OTHER] },
+    const asked: string[] = []
+    registerPluginMembershipDetacher(
+      async ({ hostId }) => {
+        asked.push(hostId)
+        return { detached: 0, remaining: false }
       },
-    })
+      { pluginId: 'crm' },
+    )
 
     const result = await post({ hostId: HOST, action: 'deleteCampaign', campaignId: CAMPAIGN })
 
     expect(result.status).toBe(200)
     expect(store.get(`hosts/${SIBLING}/forms/their-form`)?.['campaignIds']).toEqual([])
-    expect(contactRow('both')?.['facets']?.[HOST]?.['campaignIds']).toEqual([])
-    expect(contactRow('both')?.['facets']?.[SIBLING]?.['campaignIds']).toEqual([OTHER])
+    expect(asked.sort()).toEqual([HOST, SIBLING].sort())
     // Another organization's records are never reached.
     expect(store.get(`hosts/elsewhere/forms/not-ours`)?.['campaignIds']).toEqual([CAMPAIGN])
   })
 
-  it('walks a facet two sites share as one sender once', async () => {
-    store.set(`hostIndex/${SIBLING}`, { orgId: ORG })
-    store.set(`orgs/${ORG}`, {
-      name: 'Acme',
-      consentGroups: { brand: { name: 'Acme brands', hostIds: [HOST, SIBLING] } },
-    })
-    store.set(`orgs/${ORG}/contacts/grouped`, {
-      email: 'grouped@example.com',
-      facets: { brand: { campaignIds: [CAMPAIGN] } },
-    })
-
-    const result = await post({ hostId: HOST, action: 'deleteCampaign', campaignId: CAMPAIGN })
-
-    expect(result.status).toBe(200)
-    expect(contactRow('grouped')?.['facets']?.['brand']?.['campaignIds']).toEqual([])
-    expect(result.body.detachedMembers).toBe(1)
-  })
-
   /*
-   * A plugin's own members (AGL-3254) — a sequence, its enrollments — are
-   * reached through the core's seam, before the container goes, and a
-   * plugin that has more to clear, or that failed, holds the deletion.
+   * A plugin's own members (AGL-3254, AGL-3080) — a lead and a contact, a
+   * sequence and its enrollments — are reached through the core's seam,
+   * before the container goes, and a plugin that has more to clear, or that
+   * failed, holds the deletion.
    */
   it('asks every plugin to clear its own records, before the container goes', async () => {
     const asked: Array<{ hostId: string; orgId: string; field: string; id: string }> = []

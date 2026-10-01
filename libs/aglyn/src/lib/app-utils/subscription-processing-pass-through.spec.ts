@@ -17,12 +17,12 @@
 
 import type { AglynOrgBilling, OrgPlan } from '../foundation'
 import {
-  STOREFRONT_PROCESSING_FIXED_CENTS,
-  STOREFRONT_PROCESSING_PERCENT,
+  SALE_PROCESSING_FIXED_CENTS,
+  SALE_PROCESSING_PERCENT,
   resolveSubscriptionFeePercent,
   resolveTransactionFeePct,
-  storefrontProcessingCostCents,
-  storefrontProcessingPassThroughPercent,
+  saleProcessingCostCents,
+  saleProcessingPassThroughPercent,
 } from './plan-entitlements'
 
 /**
@@ -66,24 +66,24 @@ describe('subscription processing pass-through (AGL-2655)', () => {
    * of every recurring membership.
    */
   it('folds the fixed 30¢ into the rate for a $10, $25 and $100 price', () => {
-    expect(STOREFRONT_PROCESSING_PERCENT).toBe(6)
-    expect(STOREFRONT_PROCESSING_FIXED_CENTS).toBe(30)
-    expect(storefrontProcessingPassThroughPercent(1000)).toBe(9)
-    expect(storefrontProcessingPassThroughPercent(2500)).toBe(7.2)
-    expect(storefrontProcessingPassThroughPercent(10000)).toBe(6.3)
+    expect(SALE_PROCESSING_PERCENT).toBe(6)
+    expect(SALE_PROCESSING_FIXED_CENTS).toBe(30)
+    expect(saleProcessingPassThroughPercent(1000)).toBe(9)
+    expect(saleProcessingPassThroughPercent(2500)).toBe(7.2)
+    expect(saleProcessingPassThroughPercent(10000)).toBe(6.3)
   })
 
   it('rounds up to the next hundredth, never to nearest', () => {
     // $90: 6 + 0.30 ÷ 90 = 6.3333…, which nearest would make 6.33 and leave
     // the recovery a third of a cent short every cycle.
-    expect(storefrontProcessingPassThroughPercent(9000)).toBe(6.34)
+    expect(saleProcessingPassThroughPercent(9000)).toBe(6.34)
     // $70: 6 + 0.4285… = 6.4285…, up to 6.43.
-    expect(storefrontProcessingPassThroughPercent(7000)).toBe(6.43)
+    expect(saleProcessingPassThroughPercent(7000)).toBe(6.43)
   })
 
   it('never carries a third decimal, which Stripe rejects', () => {
     for (const amount of RECURRING_CENTS) {
-      const percent = storefrontProcessingPassThroughPercent(amount)
+      const percent = saleProcessingPassThroughPercent(amount)
       expect(String(percent)).toMatch(/^\d+(\.\d{1,2})?$/)
     }
   })
@@ -96,25 +96,25 @@ describe('subscription processing pass-through (AGL-2655)', () => {
    */
   it('recovers the card cost at every recurring size, and never much more', () => {
     for (const amount of RECURRING_CENTS) {
-      const percent = storefrontProcessingPassThroughPercent(amount)
+      const percent = saleProcessingPassThroughPercent(amount)
       const recovered = recoveredCents(amount, percent)
-      const cost = storefrontProcessingCostCents(amount)
+      const cost = saleProcessingCostCents(amount)
       expect(recovered).toBeGreaterThanOrEqual(cost - 1)
       expect(recovered - cost).toBeLessThanOrEqual(amount * 0.0001 + 1)
     }
   })
 
   it('answers zero for a charge that is not a charge', () => {
-    expect(storefrontProcessingPassThroughPercent(0)).toBe(0)
-    expect(storefrontProcessingPassThroughPercent(-500)).toBe(0)
-    expect(storefrontProcessingPassThroughPercent(Number.NaN)).toBe(0)
+    expect(saleProcessingPassThroughPercent(0)).toBe(0)
+    expect(saleProcessingPassThroughPercent(-500)).toBe(0)
+    expect(saleProcessingPassThroughPercent(Number.NaN)).toBe(0)
     expect(resolveSubscriptionFeePercent(org('business'), 'digital', 0)).toBe(0)
   })
 
   it('caps at 100, the ceiling Stripe puts on the parameter', () => {
     // A 1¢ recurring price would need 3,006%. Stripe would reject that; the
     // cap is the recurring twin of clamping a one-time fee to the charge.
-    expect(storefrontProcessingPassThroughPercent(1)).toBe(100)
+    expect(saleProcessingPassThroughPercent(1)).toBe(100)
     expect(resolveSubscriptionFeePercent(org('starter'), 'digital', 1)).toBe(100)
   })
 
@@ -129,7 +129,7 @@ describe('subscription processing pass-through (AGL-2655)', () => {
       expect(resolveTransactionFeePct(org(plan), 'digital')).toBe(0)
       for (const amount of [1000, 2500, 10000]) {
         expect(resolveSubscriptionFeePercent(org(plan), 'digital', amount)).toBe(
-          storefrontProcessingPassThroughPercent(amount),
+          saleProcessingPassThroughPercent(amount),
         )
       }
     }
@@ -147,7 +147,7 @@ describe('subscription processing pass-through (AGL-2655)', () => {
       for (const amount of RECURRING_CENTS) {
         const percent = resolveSubscriptionFeePercent(org(plan), 'digital', amount)
         expect(String(percent)).toMatch(/^\d+(\.\d{1,2})?$/)
-        const net = recoveredCents(amount, percent) - storefrontProcessingCostCents(amount)
+        const net = recoveredCents(amount, percent) - saleProcessingCostCents(amount)
         expect(net).toBeGreaterThanOrEqual(recoveredCents(amount, take) - 1)
       }
     }
@@ -162,7 +162,7 @@ describe('subscription processing pass-through (AGL-2655)', () => {
   it('the bare take would have been a loss on a 0% tier at every size', () => {
     for (const amount of RECURRING_CENTS) {
       const takeOnly = recoveredCents(amount, resolveTransactionFeePct(org('advanced'), 'digital'))
-      expect(takeOnly - storefrontProcessingCostCents(amount)).toBeLessThan(0)
+      expect(takeOnly - saleProcessingCostCents(amount)).toBeLessThan(0)
     }
   })
 })

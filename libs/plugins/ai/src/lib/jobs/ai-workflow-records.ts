@@ -22,7 +22,8 @@ import {
   pluginRecordIndex,
   type PluginIndexedRecord,
 } from '@aglyn/aglyn/plugin-manager/plugin-record-index'
-import { campaignPlacedOnHost } from '@aglyn/shared-ui-email-campaigns/model/campaign-container'
+import { visibleToHost } from '@aglyn/aglyn/app-utils/scope-tokens'
+import { listOrgContainers } from '@aglyn/tenant-data-admin/server/org-containers'
 import type {
   AiAutomationForm,
   AiAutomationNamedRecord,
@@ -77,6 +78,18 @@ async function named(
 }
 
 const live = (data: Data) => data['deletedAt'] == null
+
+/** The org's live campaigns placed on the site, named, in the editor's window. */
+async function placedCampaigns(
+  firestore: Firestore,
+  orgId: string,
+  hostId: string,
+): Promise<AiAutomationNamedRecord[]> {
+  const containers = await listOrgContainers(firestore, 'campaign', orgId, AI_WORKFLOW_RECORDS_WINDOW)
+  return containers
+    .filter((container) => container.live && container.name && visibleToHost(container.visibleTo, hostId))
+    .map((container) => ({ id: container.id, name: container.name }))
+}
 
 /**
  * The live records of a kind another plugin keeps, through its index, in the
@@ -134,17 +147,9 @@ export async function readAiAutomationRecords(
     !wanted('datasets') ? none : indexed('dataset', { orgId: input.orgId, hostId: input.hostId }),
     !wanted('lists') ? none : named(org.collection('lists'), ['name', 'deletedAt'], live, (data) => text(data['name'])),
     // The org's campaigns placed on this site: the set the automation's
-    // `assignCampaign` step accepts when it runs here.
-    !wanted('campaigns')
-      ? none
-      : named(
-          org.collection('emailCampaigns'),
-          ['name', 'deletedAt', 'visibleTo'],
-          (data) =>
-            live(data) &&
-            campaignPlacedOnHost({ visibleTo: data['visibleTo'] as string[] | undefined }, input.hostId),
-          (data) => text(data['name']),
-        ),
+    // `assignCampaign` step accepts when it runs here. Read as the `campaign`
+    // container kind, where its declaration says the containers are stored.
+    !wanted('campaigns') ? none : placedCampaigns(firestore, input.orgId, input.hostId),
     !wanted('workflows') ? none : indexed('workflow', { hostId: input.hostId }),
     // Only a webhook that posts OUT is a step's target; an inbound one is an
     // endpoint that runs a workflow.

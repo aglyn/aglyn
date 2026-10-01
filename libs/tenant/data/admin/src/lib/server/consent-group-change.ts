@@ -104,9 +104,9 @@ import {
 } from '@aglyn/aglyn/app-utils/consent-groups'
 import { createResourceUid } from '@aglyn/aglyn/app-utils/create-resource-uid'
 import {
-  DEFAULT_EMAIL_TOPICS,
+  DECLARED_SUBSCRIPTION_TOPICS,
   TOPIC_OPT_OUTS_SUBCOLLECTION,
-} from '@aglyn/aglyn/app-utils/email-topics'
+} from '@aglyn/aglyn/app-utils/subscription-topics'
 import {
   MARKETING_CONSENT_BY_HOST_FIELD,
   MARKETING_CONSENT_FIELD,
@@ -497,7 +497,7 @@ export async function previewConsentGroupChange(
       released.set(carry.toHostId, [...(released.get(carry.toHostId) ?? []), carry.fromHostId])
     }
     for (const [hostId, releasedHostIds] of [...released.entries()].sort()) {
-      for (const topic of DEFAULT_EMAIL_TOPICS) {
+      for (const topic of DECLARED_SUBSCRIPTION_TOPICS) {
         const count = await countOf(
           db
             .collection('hosts')

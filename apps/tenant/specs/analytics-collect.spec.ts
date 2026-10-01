@@ -45,6 +45,11 @@ import {
   checkBandwidthAbuseCeiling,
   pageViewsFromBandwidthGb,
 } from '@aglyn/aglyn/server'
+import {
+  registerPluginSiteBeacon,
+  type PluginSiteBeaconRequest,
+} from '@aglyn/aglyn/plugin-manager/plugin-site-beacons'
+import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
 
 const HOST_ID = 'host-1'
 const DAY = new Date().toISOString().slice(0, 10)
@@ -54,6 +59,15 @@ const mockIsIncrement = (value: unknown): value is Increment =>
   typeof value === 'object' && value !== null && '__increment' in (value as any)
 
 let mockStore: Record<string, Record<string, any>> = {}
+/**
+ * What a plugin that claims the `overlay` beacon field was handed. A stand-in
+ * owner: what the overlay counters write is the Marketing plugin's own spec
+ * (`overlay-beacon.spec.ts`); this file holds the collector's half — which
+ * beacons reach an owner, after which gates, with what.
+ */
+let pluginBeacons: PluginSiteBeaconRequest[] = []
+/** Makes the stand-in owner's counter throw. */
+let pluginBeaconThrows = false
 let mockEmitted: Array<{ hostId: string; event: string }> = []
 let mockHostReads = 0
 /** The owning org the ceiling resolves the plan from (AGL-2155). */
@@ -296,6 +310,19 @@ beforeEach(() => {
     // The host exists — the AGL-1844 spoof gate reads this.
     [`hosts/${HOST_ID}`]: { subdomain: 'site' },
   }
+  pluginBeacons = []
+  pluginBeaconThrows = false
+  resetPluginServicesForTests()
+  registerPluginSiteBeacon(
+    {
+      field: 'overlay',
+      async count(request) {
+        if (pluginBeaconThrows) throw new Error('the owner fell over')
+        pluginBeacons.push(request)
+      },
+    },
+    { pluginId: 'stand-in-overlays' },
+  )
   mockEmitted = []
   mockHostReads = 0
   mockOrgForHost = { $id: 'org-1', plan: 'free' }
@@ -434,13 +461,28 @@ describe('retention stamps (AGL-1844)', () => {
     }
   })
 
-  it('stamps a day doc created by overlay events alone', async () => {
+  it('hands a plugin beacon the day and its expiry, and counts no pageview', async () => {
     const route = loadRoute()
-    await route.POST(beacon({ hostId: HOST_ID, overlay: 'barImpression' }))
-    const dayData = dayDoc()
-    expect(dayData.overlays.barImpression).toBe(1)
-    expect(dayData.expiresAt).toBeInstanceOf(Date)
-    expect((dayData.expiresAt as Date).getTime()).toBe(expected)
+    const response = await route.POST(beacon({ hostId: HOST_ID, overlay: 'barImpression' }))
+    expect(response.status).toBe(204)
+    expect(pluginBeacons).toHaveLength(1)
+    const [handed] = pluginBeacons
+    expect(handed.hostId).toBe(HOST_ID)
+    expect(handed.day).toBe(DAY)
+    // The platform's retention, so a day document the owner creates alone is
+    // still swept.
+    expect(handed.dayExpiresAt).toBeInstanceOf(Date)
+    expect(handed.dayExpiresAt.getTime()).toBe(expected)
+    expect(handed.body).toMatchObject({ overlay: 'barImpression' })
+    expect(dayDoc()).toBeUndefined()
+  })
+
+  it('answers 204 when the owner’s counter fails', async () => {
+    pluginBeaconThrows = true
+    const route = loadRoute()
+    const response = await route.POST(beacon({ hostId: HOST_ID, overlay: 'barImpression' }))
+    expect(response.status).toBe(204)
+    expect(dayDoc()).toBeUndefined()
   })
 })
 
@@ -455,11 +497,12 @@ describe('spoofed-host gate (AGL-1844, AGL-510)', () => {
     expect(mockEmitted).toEqual([])
   })
 
-  it('drops overlay counters for a spoofed hostId too', async () => {
+  it('hands no plugin beacon on for a spoofed hostId either', async () => {
     const route = loadRoute()
     await route.POST(
       beacon({ hostId: 'no-such-host', overlay: 'popupImpression' }),
     )
+    expect(pluginBeacons).toEqual([])
     expect(mockStore[`hosts/no-such-host/analytics/${DAY}`]).toBeUndefined()
   })
 
@@ -598,8 +641,8 @@ describe('dwell time (AGL-2182)', () => {
  * the mechanism are proved separately, so neither can pass on the other's
  * behalf.
  *
- * ⚠️ Free's ceiling is the FLOOR (100,000), not 3× its 2 GB band (~10,486).
- * Starter's is 3× its 50 GB band (262,144). 150,000 views therefore sits
+ * ⚠️ Free's ceiling is the FLOOR (100,000), not 3× its 2 GB band (~6,212).
+ * Starter's is 3× its 35 GB band (108,709). 105,000 views therefore sits
  * between them, which is what makes the plan pair below a real forced branch
  * rather than two runs of the same arithmetic.
  */
@@ -647,14 +690,14 @@ describe('bandwidth abuse ceiling (AGL-2155)', () => {
   it('a FREE host past the ceiling is flagged, degraded and escalated', async () => {
     mockStore[`hosts/${HOST_ID}`] = { subdomain: 'site', displayName: 'Acme' }
     mockOrgForHost = { $id: 'org-1', plan: 'free', name: 'Acme Co' }
-    plantMonthViews(150_000)
+    plantMonthViews(105_000)
     await loadRoute().POST(beacon({ hostId: HOST_ID, path: '/' }))
     expect(flag()).toMatchObject({
       month: MONTH,
       ceiling: 100_000,
       degraded: true,
     })
-    expect(flag().used).toBeGreaterThanOrEqual(150_000)
+    expect(flag().used).toBeGreaterThanOrEqual(105_000)
     expect(flag().trippedAtMs).toBeGreaterThan(0)
     // Staff AND the site's managers — the incident and the customer.
     expect(mockStaffNotices).toHaveLength(1)
@@ -662,9 +705,9 @@ describe('bandwidth abuse ceiling (AGL-2155)', () => {
     // Staff read the site by name, not only by id (AGL-3432).
     expect(mockStaffNotices[0]['title']).toBe(`Bandwidth ceiling tripped — Acme (${HOST_ID})`)
     expect(mockStaffNotices[0]['body']).toMatch(
-      new RegExp(`^The site Acme \\(${HOST_ID}\\) on workspace Acme Co served 150,`),
+      new RegExp(`^The site Acme \\(${HOST_ID}\\) on workspace Acme Co served 105,`),
     )
-    // BOTH manager notices, because 150,000 views crosses both limits and the
+    // BOTH manager notices, because 105,000 views crosses both limits and the
     // two say different things: the cap explains a paused site and points at
     // Billing, the ceiling asks whether this is the customer's traffic at all.
     // The cap is first — the band is crossed first, and it is evaluated first.
@@ -696,10 +739,10 @@ describe('bandwidth abuse ceiling (AGL-2155)', () => {
 
   it('THE NEGATIVE CONTROL: a PAID host at the SAME count is not flagged at all', async () => {
     // Same traffic, same route, same month — only the plan differs. Starter's
-    // ceiling is 155,299 — 50 GB of views times three — so 150,000 is still
+    // ceiling is 108,709 — 35 GB of views times three — so 105,000 is still
     // ordinary growth and nothing happens.
     mockOrgForHost = { $id: 'org-1', plan: 'starter' }
-    plantMonthViews(150_000)
+    plantMonthViews(105_000)
     await loadRoute().POST(beacon({ hostId: HOST_ID, path: '/' }))
     expect(flag()).toBeUndefined()
     expect(mockStaffNotices).toHaveLength(0)
@@ -713,7 +756,7 @@ describe('bandwidth abuse ceiling (AGL-2155)', () => {
     mockOrgForHost = { $id: 'org-1', plan: 'starter' }
     plantMonthViews(1_000_000)
     await loadRoute().POST(beacon({ hostId: HOST_ID, path: '/' }))
-    expect(flag()).toMatchObject({ ceiling: 155_299, degraded: false })
+    expect(flag()).toMatchObject({ ceiling: 108_709, degraded: false })
     expect(mockStaffNotices).toHaveLength(1) // still an incident
     // The managers are told the site still serves and the overage bills
     // (AGL-3432), on the plan that meters it.
@@ -745,7 +788,7 @@ describe('bandwidth abuse ceiling (AGL-2155)', () => {
     // that must not fail open — an unindexed host serving a million views is
     // exactly the shape nobody is billing for.
     mockOrgForHost = undefined // getOrgForHost returns null
-    plantMonthViews(150_000)
+    plantMonthViews(105_000)
     await loadRoute().POST(beacon({ hostId: HOST_ID, path: '/' }))
     expect(flag()).toMatchObject({ ceiling: 100_000, degraded: true })
   })
@@ -771,7 +814,7 @@ describe('bandwidth abuse ceiling (AGL-2155)', () => {
     plantMonthViews(9_000)
     await route.POST(beacon({ hostId: HOST_ID, path: '/' }))
     expect(flag()).toBeUndefined()
-    plantMonthViews(150_000)
+    plantMonthViews(105_000)
     for (let i = 0; i < 50; i++) {
       await route.POST(beacon({ hostId: HOST_ID, path: '/' }, spread(i)))
     }
@@ -780,7 +823,7 @@ describe('bandwidth abuse ceiling (AGL-2155)', () => {
 
   it('an already-tripped host does not re-notify on every later sample', async () => {
     const route = loadRoute()
-    plantMonthViews(150_000)
+    plantMonthViews(105_000)
     await route.POST(beacon({ hostId: HOST_ID, path: '/' }))
     expect(mockStaffNotices).toHaveLength(1)
     for (let i = 0; i < 400; i++) {
@@ -1063,12 +1106,13 @@ describe('lockdown freezes the beacon (AGL-1627)', () => {
     expect(mockEmitted).toEqual([])
   })
 
-  it('a full lockdown freezes the OVERLAY branch too, not just pageviews', async () => {
+  it('a full lockdown freezes plugin beacons too, not just pageviews', async () => {
     mockLockdown = { scope: 'org', reason: 'security' }
     const route = loadRoute()
     await route.POST(
       beacon({ hostId: HOST_ID, path: '/', overlay: 'popupImpression' }),
     )
+    expect(pluginBeacons).toEqual([])
     expect(dayDoc()).toBeUndefined()
   })
 
@@ -1114,7 +1158,7 @@ describe('lockdown freezes the beacon (AGL-1627)', () => {
     expect(mockEmitted).toEqual([])
   })
 
-  it('a READ-ONLY lockdown still counts the OVERLAY branch', async () => {
+  it('a READ-ONLY lockdown still hands plugin beacons on', async () => {
     mockLockdown = { scope: 'host', mode: 'read-only', reason: 'billing' }
     const route = loadRoute()
     await route.POST(
@@ -1123,7 +1167,7 @@ describe('lockdown freezes the beacon (AGL-1627)', () => {
     // Same reasoning as the pageview counter, and worth its own assertion:
     // the freeze verdict is consulted once for the whole route, so a wrong
     // verdict would silence this branch too.
-    expect(dayDoc().overlays.popupImpression).toBe(1)
+    expect(pluginBeacons.map((handed) => handed.body['overlay'])).toEqual(['popupImpression'])
   })
 
   it('memoizes the verdict per host rather than reading it per beacon', async () => {

@@ -1,0 +1,66 @@
+:root {
+  color-scheme: light dark;
+  font-family: system-ui, sans-serif;
+}
+
+body {
+  margin: 0;
+}
+
+.editor {
+  display: grid;
+  grid-template-columns: minmax(200px, 280px) 1fr;
+  grid-template-rows: auto 1fr;
+  min-height: 100vh;
+}
+
+.toolbar {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+}
+
+.status {
+  margin-left: auto;
+  opacity: 0.7;
+}
+
+.outline {
+  padding: 12px 8px;
+  border-right: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+}
+
+.outline ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.outline button {
+  width: 100%;
+  padding: 4px 8px;
+  text-align: left;
+  background: none;
+  border: 0;
+  border-radius: 4px;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.outline button[aria-pressed='true'] {
+  background: color-mix(in srgb, Highlight 30%, transparent);
+}
+
+.preview {
+  padding: 24px;
+}
+
+.preview-node.selected {
+  outline: 2px solid Highlight;
+  outline-offset: 2px;
+}

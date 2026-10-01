@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { CAMPAIGN_MEMBERSHIP_FIELD } from '@aglyn/aglyn/app-utils/campaign-membership'
+import { containerMembershipField } from '@aglyn/aglyn/app-utils/container-membership'
 import type {
   PluginMembershipDetacher,
   PluginMembershipDetachReport,
@@ -43,6 +43,9 @@ import { outreachOrgCollection } from '../storage/outreach-records'
  * gone is in a report document nobody reads any more, which is the
  * conversions rollup's own fate.
  */
+
+/** The field a sequence or an enrollment holds its campaigns in. */
+const CAMPAIGN_MEMBERSHIP_FIELD = containerMembershipField('campaign')
 
 /** Members detached in one write, under the 500-operation batch limit. */
 const DETACH_BATCH = 400

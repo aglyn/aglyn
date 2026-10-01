@@ -25,7 +25,7 @@ import {
   assistFreeTasteRefusalText,
   assistHardCapRefusalText,
   assistRefusedByHardCap,
-} from '@aglyn/aglyn/app-utils/assist-credits'
+} from '../usage/assist-credits'
 import type { AglynOrganization } from '@aglyn/aglyn/foundation/definitions/organization.types'
 import type { OrgFeatureFlags } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
 import {

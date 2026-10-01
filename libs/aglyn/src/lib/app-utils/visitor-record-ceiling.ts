@@ -226,6 +226,60 @@ export function visitorRecordRefusedCounterId(kind: VisitorRecordKind): string {
   return kind === 'leads' ? 'leadsRefused' : 'siteMembersRefused'
 }
 
+/**
+ * The field on the refusal counter that says whether the site's managers have
+ * been told about the crossing the site is in: when the notice went out, or
+ * `null` once the site has been seen below the ceiling again (AGL-3442).
+ */
+export const VISITOR_RECORD_NOTICE_SENT_FIELD = 'noticeSentAtMs'
+
+/** A month key on the refusal counter — `submissionMonthKey`'s `YYYY-MM`. */
+const REFUSAL_MONTH_KEY = /^\d{4}-\d{2}$/
+
+/**
+ * Whether the managers have already been told this site is at the ceiling.
+ *
+ * The notice goes out once per CROSSING (AGL-3442): on the first refusal after
+ * the site reaches the ceiling, never again while it stays there, and again
+ * only after it has been seen below the ceiling and reached it once more. A
+ * site can sit at this ceiling for months, and a notice every month would be
+ * an alarm about a state nobody needs telling about twice.
+ *
+ * A counter written before {@link VISITOR_RECORD_NOTICE_SENT_FIELD} existed
+ * does not carry it. Its writer sent the notice on the first refusal of each
+ * month, so any month with a refusal is a month the notice went out, and such
+ * a counter reads as announced. Otherwise every site already at its ceiling
+ * would be notified again on its next refusal.
+ */
+export function visitorRecordCeilingAnnounced(
+  counter: Record<string, unknown> | null | undefined,
+): boolean {
+  if (!counter) return false
+  const sent = counter[VISITOR_RECORD_NOTICE_SENT_FIELD]
+  if (sent === null) return false
+  if (sent !== undefined) return true
+  return Object.entries(counter).some(
+    ([key, value]) => REFUSAL_MONTH_KEY.test(key) && Number(value) > 0,
+  )
+}
+
+/**
+ * Whether accepting one more record, with `used` already held, takes the
+ * site's last free slot under `ceiling`.
+ *
+ * Every new record is judged against the ceiling one at a time, so a site that
+ * dropped below the ceiling can only reach it again through this accept. That
+ * makes it the one accept where the notice is re-armed, and the only one that
+ * pays a read for it.
+ */
+export function visitorRecordAcceptFillsCeiling(
+  used: number,
+  ceiling: number,
+): boolean {
+  const resolvedUsed = Math.max(0, Math.floor(Number(used) || 0))
+  return checkVisitorRecordCeiling(resolvedUsed + 1, ceiling).exceeded
+}
+
 /** What the site's owner is shown. Shaped like `FormsPausedOwnerNotice`. */
 export interface VisitorRecordsPausedNotice {
   title: string

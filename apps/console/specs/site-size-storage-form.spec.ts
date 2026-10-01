@@ -167,7 +167,17 @@ const fakeFirestore = {
       }
       return api
     }
-    if (name === 'orgs') return { doc: (id: string) => fakeOrgRef(id) }
+    if (name === 'orgs') {
+      // The sweep lists its workspaces here, ids only (AGL-3445). This
+      // fixture's workspaces are the ones its sites name.
+      const ids = [...new Set(mockHosts.map((host) => host.orgId))]
+      return {
+        doc: (id: string) => fakeOrgRef(id),
+        select: () => ({
+          get: async () => ({ docs: ids.map((id) => ({ id })) }),
+        }),
+      }
+    }
     return emptyCollection()
   },
   getAll: async (...refs: Array<{ path: string }>) =>

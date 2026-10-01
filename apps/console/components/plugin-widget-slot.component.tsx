@@ -128,22 +128,17 @@ export const WIDGET_ZONE_LAYOUTS: Readonly<
   // Controls in the besigner's Attributes panel and its toolbar.
   besignerInspector: 'bare',
   besignerToolbar: 'bare',
+  // Nothing drawn: a widget reports to the Interactions section it sits in.
+  besignerInteractions: 'bare',
   // A panel among a search listing editor's own fields.
   seoFields: 'bare',
   hostSeo: 'stack',
   // A button in a site resource page's row of header actions: Screens,
-  // Templates, Layouts, Forms and Components.
+  // Templates, Layouts and Components.
   hostScreens: 'bare',
   hostTemplates: 'bare',
   hostLayouts: 'bare',
-  hostForms: 'bare',
   hostComponents: 'bare',
-  // Controls the workflows plugin places on its Automation page: a button
-  // beside Add action and Recipes, one in a saved automation's editor, and
-  // one on each failed run of its history.
-  hostAutomations: 'bare',
-  automationEditor: 'bare',
-  automationRun: 'bare',
   // A card among a CRM record page's own cards, which the CRM plugin hosts.
   recordInsights: 'stack',
   // Sections the CRM plugin places inside its own spaced layouts: under the

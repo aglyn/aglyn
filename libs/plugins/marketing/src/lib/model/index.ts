@@ -20,7 +20,10 @@
  * Context-free — importable by client components, /server handlers, and
  * other plugins/apps via `@aglyn/plugins-marketing/model`.
  */
+export * from './campaign-kind'
 export * from './campaign-membership-figures'
+export * from './campaign-conversions'
+export * from './campaign-revenue'
 export * from './overlays'
 export * from './experiments'
 export * from './site-contract'

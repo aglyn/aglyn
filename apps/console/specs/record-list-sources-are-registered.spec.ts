@@ -23,10 +23,10 @@ import { CONSOLE_PLUGIN_MANIFEST } from '../constants/plugins.client.generated'
  * THE RECORDS ONE PLUGIN'S PICKER LISTS FROM ANOTHER HAVE A SOURCE IN THIS
  * CONSOLE (AGL-3080).
  *
- * An automation step's dataset select, a computed variable's workflow select,
- * a deal's catalog search and the marketplace's install state list another
- * plugin's records through the list source that plugin publishes
- * (`plugin-record-lists`). Not registered is an answer there — no plugin
+ * An automation step's dataset and overlay selects, a computed variable's
+ * workflow select, a deal's catalog search and the marketplace's install
+ * state list another plugin's records through the list source that plugin
+ * publishes (`plugin-record-lists`). Not registered is an answer there — no plugin
  * keeps the kind here — so a registrar that stopped publishing its source
  * would empty every one of those selects without an error, exactly like a
  * workspace with nothing in it. Each owner's spec holds what its source
@@ -43,6 +43,7 @@ const LISTED: Record<string, string> = {
   webhook: 'workflows',
   action: 'workflows',
   product: 'commerce',
+  overlay: 'marketing',
 }
 
 let ownersBeforeBoot: Array<string | null>

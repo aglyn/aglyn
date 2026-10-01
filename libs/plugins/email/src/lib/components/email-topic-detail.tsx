@@ -19,8 +19,8 @@
 import {
   PageHeaderRecord,
   pluginDocsHelp,
-  resolveCampaignTopic,
-  DEFAULT_EMAIL_TOPICS,
+  resolveSubscriptionTopic,
+  DECLARED_SUBSCRIPTION_TOPICS,
 } from '@aglyn/aglyn'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -58,7 +58,7 @@ export interface EmailTopicDetailProps {
  * The four built-ins have no stored document until somebody changes one, so
  * this page's save is the same `setDoc` for a built-in and a custom topic:
  * the write CREATES the override document at the built-in's id. That is the
- * whole overlay design — see `email-topics.ts`.
+ * whole overlay design — see `subscription-topics.ts`.
  *
  * ## Retire, not delete
  *
@@ -82,11 +82,11 @@ export function EmailTopicDetail(props: EmailTopicDetailProps) {
   })
 
   /*
-   * `resolveCampaignTopic` rather than a bare `find`, so an id that no longer
+   * `resolveSubscriptionTopic` rather than a bare `find`, so an id that no longer
    * names anything lands on a real topic instead of an empty form. A stale
    * bookmark is the common way to arrive here with one.
    */
-  const topic = resolveCampaignTopic(topicId, topics)
+  const topic = resolveSubscriptionTopic(topicId, topics)
   const known = topics.some((it) => it.id === topicId)
 
   const [name, setName] = useState('')
@@ -221,7 +221,7 @@ export function EmailTopicDetail(props: EmailTopicDetailProps) {
               label="Retired"
             />
           ) : null}
-          {DEFAULT_EMAIL_TOPICS.some((it) => it.id === topic.id) ? (
+          {DECLARED_SUBSCRIPTION_TOPICS.some((it) => it.id === topic.id) ? (
             <Typography variant="overline" color="text.secondary">
               {'Built in'}
             </Typography>

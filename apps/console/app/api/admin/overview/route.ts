@@ -17,9 +17,14 @@
 
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
+  meteredBandField,
+  meteredPluginBands,
+} from '@aglyn/aglyn/plugin-manager/plugin-usage-axes'
+import {
   ORG_BILLING_SUBCOLLECTION,
   isBillingSubscription,
   isEnterpriseOrg,
+  orgCogsInputFrom,
   orgMonthlyCogsUsd,
   orgMonthlyRevenueUsd,
   resolveEffectivePlan,
@@ -217,24 +222,16 @@ async function handler(request: Request): Promise<Response> {
         // Priced through the shared cost model (AGL-1134) rather than the
         // rollup's own `costUsd`, so this detector and the discount guardrail
         // cannot disagree about what an org costs. It also widens what counts
-        // as a spike: `costUsd` prices storage, page views and form
-        // submissions only, so a runaway in dataset storage, API requests or
-        // contacts — all recorded on the same document — was invisible here.
+        // as a spike: `costUsd` prices the infrastructure meters only, so a
+        // runaway in dataset storage, API requests, email or any plugin's
+        // meter — all recorded on the same document — was invisible here. The
+        // fields are read through `orgCogsInputFrom`, the guardrail's own
+        // projection, so a meter a plugin adds is in the detector too.
         //
         // Both sides of the ratio use the same function, so the 10x
         // comparison is unaffected by the change in absolute scale.
         const measured = (snap: typeof current) =>
-          orgMonthlyCogsUsd(
-            {
-              storageGb: snap.get('storageGb'),
-              pageViews: snap.get('pageViews'),
-              formSubmissions: snap.get('formSubmissions'),
-              dataStorageMb: snap.get('dataStorageMb'),
-              apiRequests: snap.get('apiRequests'),
-              contactsCount: snap.get('contactsCount'),
-            },
-            0,
-          ).measuredUsd
+          orgMonthlyCogsUsd(orgCogsInputFrom(snap.data()), 0).measuredUsd
         const pageViews = Number(current.get('pageViews') ?? 0)
         const costUsd = measured(current)
         const priorPageViews = Number(prior.get('pageViews') ?? 0)
@@ -263,7 +260,11 @@ async function handler(request: Request): Promise<Response> {
         month: current.get('month'),
         storageGb: Number(current.get('storageGb') ?? 0),
         pageViews: Number(current.get('pageViews') ?? 0),
-        formSubmissions: Number(current.get('formSubmissions') ?? 0),
+        // Each metered band, in running prose: "12 form submissions".
+        meters: meteredPluginBands().map((band) => ({
+          noun: band.metered.noun,
+          count: Number(current.get(meteredBandField(band)) ?? 0),
+        })),
         costUsd: Number(current.get('costUsd') ?? 0),
       }))
       .sort((a, b) => b.costUsd - a.costUsd)

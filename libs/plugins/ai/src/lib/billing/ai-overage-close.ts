@@ -22,9 +22,10 @@
  * that never reached the threshold before the month ended. This settles it,
  * and does the two other things a month's end is the right moment for.
  *
- * Run from the platform's closed-month usage sweep through the metered-line
- * seam — the one job that already knows every workspace, its month and its
- * Stripe customer — rather than from a cron of its own. A second schedule
+ * Run from the platform's closed-month usage sweep through this plugin's
+ * usage meter (`ai-month-meter.ts`) — the one job that already knows every
+ * workspace, its month and its Stripe customer — rather than from a cron of
+ * its own. A second schedule
  * for the same fact is a second schedule to keep in step, and the sweep that
  * closes the month is by definition on time for this.
  *
@@ -47,7 +48,6 @@
  * ladder only while it is on it.
  */
 
-import type { PluginMeteredLineMonthContext } from '@aglyn/aglyn/plugin-manager/plugin-metered-lines'
 import {
   closeOutAiOverage,
   reconcileAiOverageCharge,
@@ -58,6 +58,17 @@ import {
 } from './ai-overage-ledger'
 import { dropAiOverageQualifyingMonth } from './ai-overage-standing-writes'
 import { aiOverageFirestore } from './ai-overage-trigger'
+
+/** One workspace's closed month, as the usage sweep's meter hands it over. */
+export interface AiOverageMonthContext {
+  orgId: string
+  /** `YYYY-MM`, the month that closed. */
+  month: string
+  /** The workspace's own document, as the sweep already read it. */
+  org: Readonly<Record<string, unknown>>
+  /** Its Stripe customer, or `null` when it has none. */
+  stripeCustomerId: string | null
+}
 
 /** How many of a month's charge rows the close-out will look at. */
 const CHARGE_SCAN = 100
@@ -77,7 +88,7 @@ export interface AiOverageCloseResult {
  * does not cost it the ladder correction it also needed.
  */
 export async function closeAiOverageMonth(
-  context: PluginMeteredLineMonthContext,
+  context: AiOverageMonthContext,
   now = new Date(),
 ): Promise<AiOverageCloseResult> {
   const firestore = aiOverageFirestore()

@@ -140,7 +140,7 @@ import { expandAiRepeatedItems } from './ai-repeated-items'
  * A document of a kind a site renders is also held to **responsive** (AGL-3020):
  * rendered at every device of the besigner's switcher, nothing runs past the
  * screen and no band keeps its desktop columns on a phone. It is measured in a
- * browser by `tools/scripts/record-ai-page-axe.mts` and read back from that
+ * browser by `libs/plugins/ai/scripts/record-ai-page-axe.mts` and read back from that
  * recording, so it gates a pass without moving a score: a page that only works
  * on desktop does not pass, whatever its checks and grade average to.
  *

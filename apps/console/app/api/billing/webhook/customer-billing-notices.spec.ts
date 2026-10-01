@@ -19,6 +19,7 @@ import {
   billingNoticeWorkspace,
   dunningCancellationNotice,
   invoiceNotice,
+  invoiceNoticeLink,
 } from './customer-billing-notices'
 
 const snapshot = (data: Record<string, unknown>) => ({
@@ -157,5 +158,24 @@ describe('the invoice notices (AGL-3432)', () => {
       'Stripe could not charge $9.00 for Northwind and will try again automatically. ' +
         'Update the payment method or pay the invoice in Billing.',
     )
+  })
+})
+
+describe('where an invoice notice links (AGL-3442)', () => {
+  it('a failed payment lands on the Update payment method button its body names', () => {
+    expect(invoiceNoticeLink('invoice.payment_failed', 'northwind')).toBe(
+      '/northwind/billing#update-payment-method',
+    )
+    // Without a slug, the stored form the console and the email rewrite onto
+    // the reader's workspace, hash intact.
+    expect(invoiceNoticeLink('invoice.payment_failed', undefined)).toBe(
+      '/org/billing#update-payment-method',
+    )
+  })
+
+  it('an issued or paid invoice has nothing to change, so it opens Billing itself', () => {
+    expect(invoiceNoticeLink('invoice.finalized', 'northwind')).toBe('/northwind/billing')
+    expect(invoiceNoticeLink('invoice.paid', 'northwind')).toBe('/northwind/billing')
+    expect(invoiceNoticeLink('invoice.paid', null)).toBe('/org/billing')
   })
 })

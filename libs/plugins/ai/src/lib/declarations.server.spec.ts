@@ -90,6 +90,11 @@ describe('the AI plugin declares its keys through the generic seams', () => {
       'ai-assist',
       'ai-generate',
     ])
+    // What a paused workspace's owners read each lever as (AGL-3442).
+    expect(AI_PLUGIN_ENTITLEMENTS.lockdownFeatures?.map((lever) => lever.customerName)).toEqual([
+      'AI assist',
+      'AI generation',
+    ])
     expect(listPluginLockdownFeatures()).toEqual([])
   })
 })

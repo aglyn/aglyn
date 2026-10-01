@@ -17,11 +17,11 @@
 'use client'
 
 import {
-  EMAIL_TOPICS_COLLECTION,
-  mergeEmailTopics,
-  normalizeEmailTopic,
-  type EmailTopic,
+  mergeSubscriptionTopics,
+  normalizeSubscriptionTopic,
+  type SubscriptionTopic,
 } from '@aglyn/aglyn'
+import { EMAIL_TOPICS_COLLECTION } from '../model/email-topic-catalog'
 import type { Firestore } from 'firebase/firestore'
 import {
   collection,
@@ -57,7 +57,7 @@ import {
  *
  * ## Why a built-in saves the same way
  *
- * `DEFAULT_EMAIL_TOPICS` is the FLOOR of the catalog, not its initial
+ * `DECLARED_SUBSCRIPTION_TOPICS` is the FLOOR of the catalog, not its initial
  * contents: the four built-ins have no stored document until somebody changes
  * one. `setDoc` at the built-in's own id is what creates the override, so the
  * same call serves a custom topic and a built-in being retired for the first
@@ -123,7 +123,7 @@ const TOPIC_READ_CEILING = 200
  * different merge rules is how the composer comes to send a campaign under a
  * topic nobody can unsubscribe from.
  *
- * ORG-scoped, following `lists` (AGL-254) — see `email-topics.ts` for why the
+ * ORG-scoped, following `lists` (AGL-254) — see `subscription-topics.ts` for why the
  * definitions are org-shared while the recipient's opt-outs are per site.
  *
  * Ordered by the server rather than capped and re-sorted here (AGL-2501,
@@ -154,7 +154,7 @@ export function useOrgEmailTopics(
     orgId?: string | null
   },
 ): {
-  topics: EmailTopic[]
+  topics: SubscriptionTopic[]
   /** `['orgs', orgId]`, or null until the org lookup settles. */
   scope: readonly [string, string] | null
 } {
@@ -180,10 +180,10 @@ export function useOrgEmailTopics(
   )
   const topics = useMemo(
     () =>
-      mergeEmailTopics(
+      mergeSubscriptionTopics(
         (stored ?? [])
-          .map((doc) => normalizeEmailTopic(String(doc['$id'] ?? ''), doc))
-          .filter((topic): topic is EmailTopic => !!topic),
+          .map((doc) => normalizeSubscriptionTopic(String(doc['$id'] ?? ''), doc))
+          .filter((topic): topic is SubscriptionTopic => !!topic),
       ),
     [stored],
   )

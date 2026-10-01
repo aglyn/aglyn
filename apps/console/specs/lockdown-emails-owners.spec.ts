@@ -248,14 +248,92 @@ describe('a lock emails the people it locked', () => {
       expect.objectContaining({
         kind: 'feature-locked',
         orgId: 'org-fraud',
-        item: expect.objectContaining({ label: 'Checkout (new subscriptions)' }),
+        // The customer's name for the lever, never the checklist label
+        // "Checkout (new subscriptions)" (AGL-3442).
+        item: expect.objectContaining({ label: 'new purchases' }),
         lock: expect.objectContaining({
           message: 'Checkout is temporarily unavailable.',
-          affected: 'It stays off until our team turns it back on.',
+          affected: 'The pause holds until our team lifts it.',
         }),
       }),
     ])
     expect(mockNotices[0]['lock']['message']).not.toMatch(/try again/i)
+  })
+
+  /*
+   * The staff org page's AI pause is two levers and one staff action, so it
+   * is one request and one email (AGL-3442): each lever is still written
+   * and audited on its own.
+   */
+  it('sends ONE notice for a pause of several levers, naming each by its customer name', async () => {
+    const { status, body } = await post({
+      action: 'lock',
+      scope: 'feature',
+      targetIds: ['ai-assist', 'ai-generate'],
+      orgId: 'org-fraud',
+      reason: 'billing',
+    })
+    expect(status).toBe(200)
+    expect(Object.keys(mockStore).filter((path) => path.startsWith('lockdowns/')).sort()).toEqual([
+      'lockdowns/feature--ai-assist--org--org-fraud',
+      'lockdowns/feature--ai-generate--org--org-fraud',
+    ])
+    expect(body).toMatchObject({ confirmed: true, features: ['ai-assist', 'ai-generate'] })
+    expect(body.verifiedTargets.map((state: any) => [state.targetId, state.locked])).toEqual([
+      ['ai-assist', true],
+      ['ai-generate', true],
+    ])
+    expect(mockNotices).toEqual([
+      expect.objectContaining({
+        kind: 'feature-locked',
+        orgId: 'org-fraud',
+        item: expect.objectContaining({ label: 'AI assist and AI generation' }),
+        lock: expect.objectContaining({
+          message: 'AI assist is temporarily unavailable. AI generation is temporarily unavailable.',
+          affected: 'The pause holds until our team lifts it.',
+        }),
+      }),
+    ])
+    expect(body.ownerNotice).toMatchObject({ kind: 'feature-locked', confirmed: true })
+
+    // The lift is one request and one "back on" email too.
+    mockNotices.length = 0
+    const lifted = await post({
+      action: 'unlock',
+      scope: 'feature',
+      targetIds: ['ai-assist', 'ai-generate'],
+      orgId: 'org-fraud',
+    })
+    expect(lifted.body.confirmed).toBe(true)
+    expect(Object.keys(mockStore).filter((path) => path.startsWith('lockdowns/'))).toEqual([])
+    expect(mockNotices).toEqual([
+      expect.objectContaining({
+        kind: 'feature-unlocked',
+        item: expect.objectContaining({ label: 'AI assist and AI generation' }),
+        lock: expect.objectContaining({ affected: 'Everything the pause stopped works again.' }),
+      }),
+    ])
+  })
+
+  it('says a feature pause with an end ends on its own, rather than that it holds until lifted', async () => {
+    const untilMs = Date.now() + 3_600_000
+    await post({ action: 'lock', scope: 'feature', targetId: 'uploads', orgId: 'org-fraud', reason: 'manual', untilMs })
+    expect(mockNotices[0]['lock']['affected']).toBe(
+      `The pause ends on its own at ${new Date(untilMs).toUTCString()}, or sooner if our team lifts it.`,
+    )
+  })
+
+  it('refuses a pause naming any lever nothing declared, and writes none of them', async () => {
+    const { status } = await post({
+      action: 'lock',
+      scope: 'feature',
+      targetIds: ['ai-assist', 'everything'],
+      orgId: 'org-fraud',
+      reason: 'billing',
+    })
+    expect(status).toBe(400)
+    expect(Object.keys(mockStore).filter((path) => path.startsWith('lockdowns/'))).toEqual([])
+    expect(mockNotices).toEqual([])
   })
 
   it('keeps a feature pause’s own message when staff wrote one', async () => {

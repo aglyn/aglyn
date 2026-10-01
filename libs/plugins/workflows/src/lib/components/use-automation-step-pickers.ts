@@ -27,6 +27,7 @@
  */
 
 import { scopeTokensForHost } from '@aglyn/aglyn'
+import { pluginContainerKind } from '@aglyn/aglyn/plugin-manager/plugin-containers'
 import {
   useFirestore,
   useFirestoreCollection,
@@ -137,18 +138,20 @@ export function useAutomationStepPickers(
   )
   const { rows: datasetRows, truncated: datasetsTruncated } =
     ceilingedWindow<any>(datasetRead, EDITOR_OPTION_CEILING)
+  // The site's overlays are the marketing plugin's, listed through the
+  // source it publishes (AGL-3080); none where no plugin keeps them here.
   const { data: overlayRead } = useFirestoreCollection<any>(
     () =>
       editorOpened
-        ? collectionCeiling(
-            collection(firestore, 'hosts', hostId, 'overlays'),
-            EDITOR_OPTION_CEILING,
-          )
+        ? pluginRecordListQuery('overlay', firestore, {
+            hostId,
+            limit: EDITOR_OPTION_CEILING + 1,
+          })
         : null,
     [firestore, hostId, editorOpened],
     { idField: '$id' },
   )
-  const { rows: overlayDocs, truncated: overlaysTruncated } =
+  const { rows: overlayRows, truncated: overlaysTruncated } =
     ceilingedWindow<any>(overlayRead, EDITOR_OPTION_CEILING)
   // Lists live on the org (AGL-254), and so do campaigns.
   const { data: listRead } = useFirestoreCollection<any>(
@@ -167,29 +170,31 @@ export function useAutomationStepPickers(
     EDITOR_OPTION_CEILING,
   )
   /*
-   * The campaign CONTAINERS, `emailCampaigns`: the collection the executor
-   * resolves an "Assign to a campaign" step's `campaignId` against when it
-   * runs (AGL-3052). `campaigns` beside it holds the individual email sends,
-   * and a send's id names no container, so a step pointed at one fails every
-   * run with "unknown campaign".
+   * The campaign CONTAINERS — the `campaign` container kind, read where its
+   * declaration says they are stored — which the executor resolves an
+   * "Assign to a campaign" step's `campaignId` against when it runs
+   * (AGL-3052). A send's id names no container, so a step pointed at one
+   * fails every run with "unknown campaign". Nothing is read where no plugin
+   * keeps the kind.
    *
    * The org's, narrowed to the ones placed on THIS site by the same host
    * tokens the datasets use — an automation runs on this site, so it may
    * only file under a campaign the site offers, and the clause is what
    * makes the list provable for a collaborator scoped to the site.
    */
+  const campaignCollection = pluginContainerKind('campaign')?.orgCollection
   const { data: campaignRead } = useFirestoreCollection<any>(
     () =>
-      editorOpened && dataScope
+      editorOpened && dataScope && campaignCollection
         ? collectionCeiling(
             query(
-              collection(firestore, dataScope[0], dataScope[1], 'emailCampaigns'),
+              collection(firestore, dataScope[0], dataScope[1], campaignCollection),
               where('visibleTo', 'array-contains-any', scopeTokens),
             ),
             EDITOR_OPTION_CEILING,
           )
         : null,
-    [firestore, dataScope, scopeTokens, editorOpened],
+    [firestore, dataScope, scopeTokens, editorOpened, campaignCollection],
     { idField: '$id' },
   )
   const { rows: campaignDocs, truncated: campaignsTruncated } =
@@ -235,15 +240,9 @@ export function useAutomationStepPickers(
   const datasetOptions = pluginRecordsFromRows('dataset', datasetRows)
     .map((dataset) => ({ id: dataset.id, name: dataset.name }))
     .sort((a, b) => a.name.localeCompare(b.name))
-  const overlayOptions = (overlayDocs ?? [])
-    .filter((overlay: any) => !overlay.deletedAt)
-    .map((overlay: any) => ({
-      id: overlay.$id as string,
-      name: (overlay.name ||
-        overlay.bar?.text ||
-        overlay.popup?.headline ||
-        overlay.$id) as string,
-    }))
+  // Named as the Marketing page names them, by their owner.
+  const overlayOptions = pluginRecordsFromRows('overlay', overlayRows)
+    .map((overlay) => ({ id: overlay.id, name: overlay.name }))
     .sort((a, b) => a.name.localeCompare(b.name))
   const listOptions = (listDocs ?? [])
     .filter((list: any) => !list.deletedAt && list.name)

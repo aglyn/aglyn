@@ -113,6 +113,11 @@ export interface SendEmailOptions {
    * itself is never taken from the caller, so this cannot forge a different
    * sender. Callers pass `resolveBrandingProfile(org).fromName` here so an
    * agency's mail reads as their brand instead of "Aglyn".
+   *
+   * A SITE's mail leaves under the site's own name instead (AGL-3442): an
+   * identity from `hostSendingIdentity` carries it, and it takes the place of
+   * the org's branding default. A name of the caller's own, such as the
+   * person writing a CRM email, still wins. See {@link messageFromName}.
    */
   fromName?: string
   /**
@@ -508,6 +513,34 @@ async function askDeliverabilityPreflight(
 }
 
 /**
+ * The display name a message leaves under (AGL-3442).
+ *
+ * A site's mail goes out under the site's own name — the business name its
+ * emails render as `{{host.businessName}}`, else its display name, else the
+ * org's branding default — which `hostSendingIdentity` resolves with the
+ * address from the host and org documents it already reads. That is decided
+ * here rather than at each sender because every site sender passes the org's
+ * branding default as `fromName`, and to a visitor that is the platform's or
+ * the agency's name rather than the business they dealt with. So the default
+ * is replaced, and only the default: a name of the caller's own, such as the
+ * person writing a CRM email, is still the name the message leaves under.
+ *
+ * Mail on any other identity — the platform's own, or a campaign's, which
+ * resolves its identity without a host stamp and records the name its
+ * composer chose — keeps the caller's `fromName` unchanged.
+ */
+export function messageFromName(
+  options: Pick<SendEmailOptions, 'fromName' | 'sendingIdentity'>,
+): string | undefined {
+  const given = String(options.fromName ?? '').trim()
+  const identity = options.sendingIdentity
+  const siteName = String(identity?.fromName ?? '').trim()
+  if (!siteName) return given || undefined
+  const brandDefault = String(identity?.brandFromName ?? '').trim()
+  return given && given !== brandDefault ? given : siteName
+}
+
+/**
  * The send seam's half of the outbound phishing screen (AGL-3356): every
  * message a SITE sends whose identity carries the workspace
  * `hostSendingIdentity` stamped, through {@link screenTenantMessage} — the
@@ -524,7 +557,9 @@ export async function askOutboundScreen(
     {
       workspace,
       subject: options.subject,
-      fromName: options.fromName ?? null,
+      // The name the message actually leaves under, so a site named after
+      // somebody else's brand is screened on the `From:` line it would send.
+      fromName: messageFromName(options) ?? null,
       // The resolved address, never anything the caller passed: the only
       // `From:` this message can leave on (AGL-3362).
       fromAddress: options.sendingIdentity?.from ?? null,
@@ -695,7 +730,7 @@ export async function sendEmail(
 
   const from = applyFromName(
     resolvedFrom ?? configuredFrom,
-    options.fromName,
+    messageFromName(options),
   )
 
   const missing = [

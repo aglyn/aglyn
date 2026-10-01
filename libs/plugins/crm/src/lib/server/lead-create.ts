@@ -73,7 +73,8 @@ import {
   scopedToHost,
 } from '@aglyn/tenant-data-admin'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
-import { normalizeCampaignIds, readCampaignIds } from '@aglyn/aglyn/app-utils/campaign-membership'
+import { normalizeContainerIds, readContainerIds } from '@aglyn/aglyn/app-utils/container-membership'
+import { readOrgContainers } from '@aglyn/tenant-data-admin/server/org-containers'
 import { FieldValue } from 'firebase-admin/firestore'
 import type { CampaignFilingRef } from '../model/campaign-filing-activity'
 import { fileCampaignFilingActivities } from './campaign-filing-activity'
@@ -121,7 +122,7 @@ export const LEAD_CAMPAIGN_REFUSAL =
 
 /**
  * The campaigns a request may file a lead under: the organization's own
- * live containers (`orgs/{orgId}/emailCampaigns`), and nothing else. A
+ * live containers of the `campaign` kind, and nothing else. A
  * request can claim any id, and a lead filed under another org's campaign
  * — or one the console soft-deleted — would sit on a page nobody in this
  * org can open. A lead is an org record, so any live campaign of the org
@@ -135,14 +136,12 @@ export async function orgCampaigns(
   orgId: string,
   raw: unknown,
 ): Promise<CampaignFilingRef[] | null> {
-  const ids = normalizeCampaignIds(raw)
+  const ids = normalizeContainerIds(raw)
   if (!ids.length) return []
   if (!orgId || ids.some((id) => id.includes('/'))) return null
-  const containers = firestore.collection('orgs').doc(orgId).collection('emailCampaigns')
-  const found = await firestore.getAll(...ids.map((id) => containers.doc(id)))
-  const live = found.every((snapshot) => snapshot.exists && !snapshot.get('deletedAt'))
-  return live
-    ? ids.map((id, index) => ({ id, name: String(found[index]?.get('name') ?? '').trim() || id }))
+  const found = await readOrgContainers(firestore, 'campaign', orgId, ids)
+  return found.every((container) => container.live)
+    ? found.map((container) => ({ id: container.id, name: container.name || container.id }))
     : null
 }
 
@@ -381,7 +380,7 @@ export const leadCreateHandler: PluginApiHandler = async (req, res) => {
      * After the write and never before, and never failing it — the
      * membership is on the document; the entry records the act.
      */
-    const already = readCampaignIds(before ? (before.data() as Record<string, unknown>) : null)
+    const already = readContainerIds(before ? (before.data() as Record<string, unknown>) : null, 'campaign')
     await fileCampaignFilingActivities(firestore, {
       orgId: resolved.orgId,
       org: resolved.org as Record<string, unknown>,

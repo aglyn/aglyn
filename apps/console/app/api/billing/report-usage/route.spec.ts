@@ -242,7 +242,7 @@ jest.mock('../../../../utils/org-counter-totals', () => ({
   __esModule: true,
   orgCounterTotals: async () => ({
     emailSends: 0,
-    workflowRuns: 0,
+    counters: {},
     actionRuns: 0,
     orgLibraryBytes: 0,
   }),
@@ -1242,5 +1242,57 @@ describe('assist credits past the band bill the month at the plan rate (AGL-2653
     const selling = await sweepClosed()
     expect(stopped['assistOverageUsd']).toBe(7.5)
     expect(stopped['billedCents']).toBe(selling['billedCents'])
+  })
+})
+
+/*==========================================
+ * A WORKSPACE WITH NO SITES IS STILL A BILLING SUBJECT (AGL-3445).
+ *
+ * The sweep used to find its workspaces by reading the sites, so one with no
+ * site was never visited. Everything metered at the org level accrues without
+ * a site — here, the CRM records band — and none of it was measured, written
+ * down or reported.
+ *=========================================*/
+describe('a workspace with no sites is swept and billed (AGL-3445)', () => {
+  /** Beside `org-1`, a Starter workspace with no site and 6,000 contacts. */
+  function seedSitelessOrg() {
+    seedOrg()
+    mockDocs.set('orgs/org-2', {
+      plan: 'starter',
+      subscription: { status: 'active' },
+    })
+    for (let index = 0; index < 6_000; index += 1) {
+      mockDocs.set(`orgs/org-2/contacts/contact-${index}`, { email: 'a@b.c' })
+    }
+  }
+
+  it('writes its closed-month rollup and reports its overage to the meter', async () => {
+    // FORCED RED by seeding the sweep from the sites alone, as it was: no
+    // `usage/{CLOSED}` for org-2, and no meter event under its identifier.
+    seedSitelessOrg()
+    const response = await runSweep(loadRoute())
+    expect(response.status).toBe(200)
+
+    const rollup = mockDocs.get(`orgs/org-2/usage/${CLOSED}`)
+    expect(rollup).toBeDefined()
+    expect(rollup!['hostCount']).toBe(0)
+    // 5,000 contacts over Starter's 1,000 at $1/1k, and nothing else billable.
+    expect(rollup!['contactsOverageUsd']).toBe(5)
+    expect(rollup!['billedCents']).toBe(500)
+
+    const event = meterEvents.find(
+      (params) => params.get('identifier') === `org-2-${CLOSED}`,
+    )
+    expect(event?.get('payload[value]')).toBe('500')
+    expect(rollup!['reportedAt']).toBe('<server-timestamp>')
+  })
+
+  it('writes the in-progress figure a budget reads, and reports nothing', async () => {
+    // FORCED RED the same way: `usage/{OPEN}` for org-2 was never written.
+    seedSitelessOrg()
+    const response = await runSweep(loadRoute(), { query: '?month=current' })
+    expect(response.status).toBe(200)
+    expect(mockDocs.get(`orgs/org-2/usage/${OPEN}`)).toBeDefined()
+    expect(meterEvents).toHaveLength(0)
   })
 })

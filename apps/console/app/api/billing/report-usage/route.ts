@@ -17,21 +17,21 @@
 
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
-  ASSIST_PROVIDER_COST_FIELD,
-  assistMonthOverage,
-  assistProviderCostUsd,
-} from '@aglyn/aglyn/app-utils/assist-credits'
+  listPluginUsageMeters,
+  unregisteredPluginUsageMeters,
+  type PluginUsageMeterContext,
+} from '@aglyn/aglyn/plugin-manager/plugin-usage-meters'
 import {
-  pluginBillsMeteredLine,
-  runPluginMeteredLineClose,
-} from '@aglyn/aglyn/plugin-manager/plugin-metered-lines'
+  countedPluginBands,
+  meteredBandField,
+  meteredBandVerdictFields,
+  type ResolvedPluginMeteredBand,
+} from '@aglyn/aglyn/plugin-manager/plugin-usage-axes'
 import { registerPluginServerDeclarations } from '../../../../constants/plugins.declarations.server.generated'
 import { isCronAuthorized } from '../../../../utils/cron-auth'
 import { recordCronBeat } from '../../../../utils/cron-beat'
 import {
   checkApiRequestQuota,
-  checkCrmRecordsQuota,
-  checkDataStorageQuota,
   decodeStoredNodes,
   isReleaseFlagOnForOrg,
   nodeMapBytes,
@@ -45,7 +45,9 @@ import {
   billsEmailSendOverage,
   billsOrgLibraryStorage,
   estimateMonthlyUsageCost,
+  hostMeterReadings,
   type HostUsageSnapshot,
+  meteredBands,
 } from '../../../../utils/usage-metering'
 import { measureScreenCaps } from '../../../../utils/screen-cap-reconciliation'
 import type { BillableScreenSource } from '../../hosts/resources/count-billable-screens'
@@ -76,41 +78,6 @@ import {
 // private copies across this route, `billing/usage-email` and `admin/overview`,
 // and `monthIsClosed` is a rule about which months may be invoiced — neither
 // belongs inline in the route that sends the meter event.
-
-/**
- * Approximate aggregate dataset bytes for an org (AGL-240): per dataset,
- * an aggregate record count × the average serialized size of a small
- * sample — O(datasets) reads instead of O(records), good enough for
- * metering (the billing export replaces this when it lands).
- */
-async function orgDatasetBytes(
-  orgRef: FirebaseFirestore.DocumentReference,
-): Promise<number> {
-  const datasets = await orgRef.collection('datasets').get()
-  // Datasets in parallel (AGL-1141). Each is two independent reads and the
-  // results are summed, so walking them in sequence cost the sum of the
-  // latencies for no ordering benefit — an org with 20 datasets paid 20
-  // round trips end to end.
-  const perDataset = await Promise.all(
-    datasets.docs.map(async (dataset) => {
-      const records = dataset.ref.collection('records')
-      const [countSnapshot, sample] = await Promise.all([
-        records.count().get(),
-        records.limit(50).get(),
-      ])
-      const count = Number(countSnapshot.data().count ?? 0)
-      const sampleBytes = sample.docs.reduce(
-        (sum, record) => sum + JSON.stringify(record.data() ?? {}).length,
-        0,
-      )
-      const average = sample.size > 0 ? sampleBytes / sample.size : 0
-      return (
-        JSON.stringify(dataset.data() ?? {}).length + Math.round(average * count)
-      )
-    }),
-  )
-  return perDataset.reduce((sum, bytes) => sum + bytes, 0)
-}
 
 /**
  * Size of one version doc's node payload, in **msgpack bytes of the DECODED
@@ -464,13 +431,20 @@ async function meterReportBlockedReason(
   }
 }
 
+/** A meter's dollars as a finite, positive figure — anything else bills nothing. */
+function finiteUsd(value: unknown): number {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
+}
+
 async function hostUsage(
   hostRef: FirebaseFirestore.DocumentReference,
   month: string,
 ): Promise<HostUsageSnapshot> {
-  const [media, forms, analytics] = await Promise.all([
+  // Each metered band's per-site counter, beside the platform's two.
+  const counterNames = meteredBands().map((band) => band.hostCounter)
+  const [media, analytics, ...counters] = await Promise.all([
     hostRef.collection('counters').doc('media').get(),
-    hostRef.collection('counters').doc('formSubmissions').get(),
     hostRef
       .collection('analytics')
       .where(
@@ -484,10 +458,13 @@ async function hostUsage(
         `${month}-31`,
       )
       .get(),
+    ...counterNames.map((name) => hostRef.collection('counters').doc(name).get()),
   ])
   return {
     storageBytes: Number(media.get('bytes') ?? 0),
-    formSubmissions: Number(forms.get(month) ?? 0),
+    meters: hostMeterReadings((name) =>
+      counters[counterNames.indexOf(name)]?.get(month),
+    ),
     pageViews: analytics.docs.reduce(
       (sum, day) => sum + Number(day.get('total') ?? 0),
       0,
@@ -509,14 +486,6 @@ async function hostUsage(
  * already-reported org-months. Validate rates against a real invoice
  * month before enabling live billing.
  */
-/**
- * The name this sweep knows the AI overage line by, and the name a plugin
- * claims it under. One string, stated here because this is the file that
- * computes the line — a plugin's internal name for it would be the plugin's
- * to change.
- */
-const ASSIST_OVERAGE_METER_LINE_ID = 'assist-overage'
-
 async function handler(request: Request): Promise<Response> {
   const {
     method,
@@ -592,46 +561,65 @@ async function handler(request: Request): Promise<Response> {
   // the next, which would report half the platform and freeze the other half.
   const closed = monthIsClosed(month)
   /*==========================================
-   * A METER LINE A PLUGIN BILLS FOR ITSELF (AGL-3011).
+   * THE PLUGINS' METERS (AGL-3080).
    *
-   * One line of the figure below — AI credits past a plan's included band —
-   * can be billed by the AI plugin as it accrues, on its own one-off
-   * invoices, from a month the plugin names. From that month the line must
-   * be LEFT OUT of what this sweep meters, or the customer pays for it
-   * twice.
+   * A plugin's usage — its storage, its band, its price past the band — is
+   * measured by the plugin's own meter (`plugin-usage-meters.ts`), which this
+   * sweep asks once per workspace for the fields it writes onto the rollup
+   * and the dollars it adds to the billed figure. The plugins' declarations
+   * are loaded first because this is a core cron that never touches a
+   * plugin's own doors.
    *
-   * Only the BILLING moves. The line is still measured and still written to
-   * the month's audit fields below, so a month's usage history reads the
-   * same either way and the handover is visible in it.
-   *
-   * Resolved ONCE for the sweep, like `closed` above and for the same
-   * reason: a run straddling midnight on the 1st must not bill one org
-   * through the meter and the next by invoice for the same month. The
-   * plugins' declarations are loaded first because this is a core cron that
-   * never touches a plugin's own doors — and a failure to load them leaves
-   * the line billed through the meter, which is the channel that already
-   * works.
+   * Listed ONCE for the sweep, like `closed` above and for the same reason:
+   * every workspace in one run is measured by the same meters. A meter a
+   * plugin DECLARED and did not register refuses every workspace below —
+   * each fails loudly for this pass and is swept again tomorrow, where a
+   * month billed without the meter would be short and final.
    *=========================================*/
   try {
     await registerPluginServerDeclarations()
   } catch (error) {
     console.error('[report-usage] plugin declarations failed', error)
   }
-  const assistOverageBilledByPlugin = pluginBillsMeteredLine(
-    ASSIST_OVERAGE_METER_LINE_ID,
-    month,
-  )
+  const usageMeters = listPluginUsageMeters()
+  const missingUsageMeters = unregisteredPluginUsageMeters()
+  // Each plugin usage band measured by a per-site counter and not metered:
+  // the sweep sums it with the platform's own counters and records it on the
+  // rollup. A metered band's counter is read with each host's usage instead.
+  const counterBands = countedPluginBands()
   const stripeKey = process.env.STRIPE_SECRET_KEY
   const meterEventName =
     process.env.STRIPE_METER_EVENT_NAME ?? 'aglyn_metered_usage'
 
   try {
     const firestore = firebaseAdmin.app().firestore()
-    const hosts = await firestore.collection('hosts').limit(1000).get()
+    /*==========================================
+     * EVERY WORKSPACE, NOT EVERY WORKSPACE WITH A SITE (AGL-3445).
+     *
+     * The subjects of this sweep used to be read off the sites alone, so a
+     * workspace with none was never visited: no rollup, no meter event, and
+     * no document for the budget card, the alerts cron or the monthly email
+     * to read. Everything a workspace is metered for at the org level —
+     * API requests, CRM records, the org library, plugin bands, org mail —
+     * accrues with or without a site, and went unmeasured.
+     *
+     * So the org ids seed the list and the sites are grouped under them. A
+     * site naming an org with no document is still swept, as before. Ids
+     * only (`select()`), because the loop below reads each org itself.
+     *
+     * Neither read is capped. The sites read was `.limit(1000)`, which past
+     * 1,000 sites would have dropped whole workspaces from billing with
+     * nothing to say so — the AGL-1371 truncation one level up.
+     *=========================================*/
+    const [orgs, hosts] = await Promise.all([
+      firestore.collection('orgs').select().get(),
+      firestore.collection('hosts').get(),
+    ])
 
     // Group hosts by org — the sole billing subject (AGL-238; the legacy
     // per-tenant rollups retired with the tenants collection).
     const byOrg: Record<string, FirebaseFirestore.DocumentReference[]> = {}
+    for (const org of orgs.docs) byOrg[org.id] = []
     // The `screens` routing map per host, kept from this sweep so the AGL-1390
     // screen-cap reconciliation below re-reads nothing: the documents are
     // already in hand here, and the map is what decides which screens count.
@@ -690,31 +678,23 @@ async function handler(request: Request): Promise<Response> {
       const hostRefs = byOrg[orgId] ?? []
       try {
       const orgRef = firestore.collection('orgs').doc(orgId)
-      // Seven INDEPENDENT round trips, previously awaited one after another
+      // INDEPENDENT round trips, previously awaited one after another
       // (AGL-1141). None consumes another's result — the quota checks below
-      // combine them, but only once all seven are in hand — so the sequencing
-      // was incidental, and it made an org cost the SUM of its reads rather
-      // than the slowest of them. That is most of why four orgs took ~10s.
+      // combine them, but only once all are in hand — so the sequencing was
+      // incidental, and it made an org cost the SUM of its reads rather than
+      // the slowest of them. That is most of why four orgs took ~10s.
       const usageRef = orgRef.collection('usage').doc(month)
       const [
         usage,
         orgSnapshot,
-        datasetBytes,
         siteSize,
         apiUsageSnap,
-        contactsSnap,
-        companiesSnap,
-        dealsSnap,
         counterTotals,
-        assistUsageSnap,
         offlineFeesSnap,
         existing,
       ] = await Promise.all([
         Promise.all(hostRefs.map(usageFor)),
         orgRef.get(),
-        // Dataset storage overage (AGL-240): plan-priced (not cost-plus),
-        // metered on top of the infra estimate.
-        orgDatasetBytes(orgRef),
         // Published-site size (AGL-1107): stored on the rollup so the daily
         // usage-alerts cron — and, since AGL-1371, the console meter — can
         // read the `totalSiteSizeMb` figure cheaply, without re-reading every
@@ -724,38 +704,31 @@ async function handler(request: Request): Promise<Response> {
         // requests over the included quota. The durable counter is written
         // per-request by the API auth chokepoint.
         orgRef.collection('apiUsage').doc(month).get(),
-        // The CRM records band (AGL-890, widened in AGL-2611): three
-        // aggregate counts per org, one per collection the band counts —
-        // `CRM_RECORD_COLLECTIONS` in the shared model — because contacts,
-        // companies and deals are all org-scoped (AGL-237) and the band is
-        // their SUM. Tasks and activities are not counted, deliberately.
-        orgRef.collection('contacts').count().get(),
-        orgRef.collection('companies').count().get(),
-        orgRef.collection('deals').count().get(),
-        // Email sends and workflow/action runs (AGL-1134) — counted per host
-        // all along, enforced per org by `usage-alerts`, and never once
-        // written down. RECORDED, NOT PRICED: see the rollup write below.
+        // Email sends, action runs and every host counter a plugin's usage
+        // band is measured by (AGL-1134) — counted per host all along,
+        // enforced per org by `usage-alerts`, and never once written down.
+        // RECORDED, NOT PRICED: see the rollup write below.
         //
         // `orgRef` since AGL-1438: invites, member-added mail, the welcome
         // email and these very usage summaries belong to the org and to no
         // site, so they are counted at `orgs/{id}/counters` and were invisible
         // to a sum taken over hosts alone. Since AGL-1473 it also carries the
         // org LIBRARY's stored bytes, which had the identical defect.
-        orgCounterTotals(firestore, hostRefs, month, orgRef),
-        // Aglyn Assist provider spend for the month (AGL-2280). `estCostUsd`
-        // was written by the assist route from day one, expressly so the paid
-        // constraint — and it lived in a collection the rollup never touched,
-        // so the one cost line big enough to matter was absent from the
-        // document every cost reader on the platform reads.
-        orgRef.collection('assistUsage').doc(month).get(),
+        orgCounterTotals(
+          firestore,
+          hostRefs,
+          month,
+          orgRef,
+          counterBands.map((band) => band.hostCounter),
+        ),
         // Platform fee on POS sales that never touched Stripe (AGL-2111).
         // Cash and folio tenders have no charge to net an
         // `application_fee_amount` out of, so `pos-order.ts` accrues the fee
         // here — in the same transaction as the order — and this is the only
-        // place it can reach an invoice. PRICED, unlike `assistUsage` beside
-        // it: this is not a cost we absorb, it is the platform fee the
-        // merchant's own plan already charges, collected on the one channel
-        // where Stripe cannot collect it for us.
+        // place it can reach an invoice. PRICED: this is not a cost we
+        // absorb, it is the platform fee the merchant's own plan already
+        // charges, collected on the one channel where Stripe cannot collect it
+        // for us.
         orgRef.collection('offlineFees').doc(month).get(),
         // THE ROLLUP DOCUMENT ITSELF (AGL-2399), moved into this batch from a
         // sequential read further down.
@@ -781,6 +754,33 @@ async function handler(request: Request): Promise<Response> {
       // came back empty. An unknown tier must refuse; a KNOWN `'free'` must
       // match. Those are different facts, so they are spelled differently.
       const releaseFlagPlan = orgData ? resolveEffectivePlan(orgData) : null
+      // THE PLUGINS' METERS, one pass per workspace after the batch above,
+      // because each measures against the workspace document it read. A
+      // missing declared meter or a meter that throws fails this workspace
+      // for the pass — see where they are listed.
+      if (missingUsageMeters.length) {
+        throw new Error(
+          `usage meters declared and not registered: ${missingUsageMeters.join(', ')}`,
+        )
+      }
+      const meterContext: PluginUsageMeterContext = {
+        orgId,
+        org: (orgData ?? {}) as Record<string, unknown>,
+        month,
+        closed,
+        previous: (existing.data() ?? {}) as Record<string, unknown>,
+        releaseFlagOn: (key) =>
+          isReleaseFlagOnForOrg(
+            key,
+            releaseFlagValues[key],
+            orgId,
+            parseOrgReleaseFlagOverrides(orgData?.['releaseFlags']),
+            releaseFlagPlan,
+          ),
+      }
+      const meterReadings = await Promise.all(
+        usageMeters.map((meter) => meter.measure(meterContext)),
+      )
       // The ORG LIBRARY as one more storage snapshot (AGL-1473).
       //
       // `resolveMediaScope` sends an org DAM upload to
@@ -792,13 +792,13 @@ async function handler(request: Request): Promise<Response> {
       // It is a SNAPSHOT rather than an addition to some host's, because the
       // org library belongs to no site — the same reason `orgCounterTotals`
       // reads one ref for the whole org rather than one per host. Page views
-      // and form submissions are zero: a library serves no pages.
+      // and every metered band are zero: a library serves no pages and
+      // receives nothing.
       const orgLibrary: HostUsageSnapshot = {
         storageBytes: counterTotals.orgLibraryBytes,
         pageViews: 0,
-        formSubmissions: 0,
       }
-      // Only usage BEYOND the plan's included storage/bandwidth/form bands
+      // Only usage BEYOND the plan's included storage/bandwidth/metered bands
       // is billed (AGL-1280) — `billedCents` is the excess; `costUsd` stays
       // the gross figure the COGS model and staff views read.
       //
@@ -822,266 +822,119 @@ async function handler(request: Request): Promise<Response> {
         month,
         process.env.BILL_ORG_LIBRARY_STORAGE_FROM,
       )
-      // Form-submission overage is WITHHELD while `release_inbox` is off
-      // (AGL-1688). The same split AGL-1604 found on Contacts, on the flag
-      // next door: the flag gates the console Inbox page and its nav tab,
-      // while `/api/forms/submit` keeps writing `hosts/{id}/formSubmissions`
-      // and `GET /v1/sites/{id}/form-submissions` keeps serving them. So
-      // submissions accrue past the plan's band and bill at cost x 1.3, for a
-      // lead list the customer has no console way to read, mark read, or
-      // export. Nobody may be charged for what they cannot reach.
+      // A metered band's overage is WITHHELD while the release flag its
+      // declaration names is off for the workspace (`metered.withheldUntil`).
+      // The forms plugin's submissions wait behind `release_inbox` (AGL-1688):
+      // the flag gates the console Inbox page and its nav tab, while
+      // `/api/forms/submit` keeps counting submissions and
+      // `GET /v1/sites/{id}/form-submissions` keeps serving them. So they
+      // accrue past the plan's band and would bill at cost x 1.3, for a lead
+      // list the customer has no console way to read, mark read, or export.
+      // Nobody may be charged for what they cannot reach.
       //
-      // AGL-1688 recorded "no billing path" for Inbox, which is why it is
-      // stated here: `hostUsage` reads `counters/formSubmissions` into
-      // `HostUsageSnapshot.formSubmissions`, and `estimateMonthlyUsageCost`
-      // prices the excess over `hostLimit x formSubmissionsPerMonth` at
-      // `METERED_UNIT_RATES_USD.perFormSubmission`. It bills. That is what
-      // makes the Contacts remedy the analogous one rather than a stretch.
-      //
-      // Same construction as `contactsOverageBilled` below and for the same
-      // reasons: bucketed by `orgId` so an org inside a partial rollout CAN
-      // reach the page and so is billed; per-org overrides read off `orgData`,
-      // already in hand, so a staff grant reaches the invoice too (AGL-1635)
-      // at no extra read; and conditional on the flag rather than zeroed, so
-      // the day Inbox ships the same expression bills again on its own.
-      const formSubmissionsBilled = isReleaseFlagOnForOrg(
-        'release_inbox',
-        releaseFlagValues['release_inbox'],
-        orgId,
-        parseOrgReleaseFlagOverrides(orgData?.['releaseFlags']),
-        releaseFlagPlan,
+      // Same construction as `contactsOverageBilled` and for the same
+      // reasons (`meterContext.releaseFlagOn`): bucketed by `orgId` so an org
+      // inside a partial rollout CAN reach the page and so is billed; per-org
+      // overrides read off `orgData`, already in hand, so a staff grant
+      // reaches the invoice too (AGL-1635) at no extra read; and conditional
+      // on the flag rather than zeroed, so the day the page ships the same
+      // expression bills again on its own.
+      const withheldBands = meteredBands().filter(
+        (band) =>
+          band.metered.withheldUntil &&
+          !meterContext.releaseFlagOn(band.metered.withheldUntil),
       )
       // WHAT REACHES THE INVOICE, not what is counted. The snapshots feeding
-      // `estimate` are untouched, so `costUsd`, the recorded `formSubmissions`
-      // total and every COGS reader stay truthful — under-reporting our own
-      // cost is the direction that silently loosens the discount guardrail.
-      const billedHosts = formSubmissionsBilled
-        ? usage
-        : usage.map((host) => ({ ...host, formSubmissions: 0 }))
-      const billedEstimateBeforeInbox = orgLibraryBilled
+      // `estimate` are untouched, so `costUsd`, each recorded band count and
+      // every COGS reader stay truthful — under-reporting our own cost is the
+      // direction that silently loosens the discount guardrail.
+      const billedEstimateBeforeWithholding = orgLibraryBilled
         ? estimate
         : estimateMonthlyUsageCost(usage, orgData)
-      const billedEstimate = formSubmissionsBilled
-        ? billedEstimateBeforeInbox
-        : estimateMonthlyUsageCost(
-            orgLibraryBilled ? [...billedHosts, orgLibrary] : billedHosts,
-            orgData,
-          )
-      // What was forgone, so a withheld month is distinguishable from a month
-      // with no form overage at all — the first question anyone re-reading a
-      // beta invoice will ask. Pre-markup, matching `billableCostUsd` beside
-      // which it is recorded.
-      const formSubmissionsWithheldUsd = formSubmissionsBilled
-        ? 0
-        : billedEstimateBeforeInbox.billableCostUsd -
-          billedEstimate.billableCostUsd
-      /*==========================================
-       * THE TWO STOCK METERS ARE READ AT THE END OF THE MONTH THEY BILL
-       * (AGL-2399).
-       *
-       * ## The distinction the four meters divide on
-       *
-       * API requests and form submissions are FLOWS: `apiUsage/{month}.count`
-       * and `counters/formSubmissions.{month}` accumulate inside the period
-       * and nothing done afterwards can move them. Contacts and dataset bytes
-       * are STOCKS — a level, not a total — and the two measurements below
-       * (`contacts.count()`, `orgDatasetBytes`) read that level AS IT STANDS
-       * NOW. The closed-month sweep runs at 02:00 UTC on the 1st, so "now" was
-       * a moment strictly OUTSIDE the month being invoiced.
-       *
-       * That charged August for September's behaviour, in both directions: a
-       * bulk-delete on the 1st erased an overage already incurred, and an
-       * import on the 1st landed on the previous month's invoice. The daily
-       * re-sweep of an unreported org-month measured a third value again, so
-       * the amount was not stable across runs of the same month either — only
-       * `reportedAt` froze it, and only for whichever run reported first.
-       *
-       * ## The convention: the last reading taken INSIDE the period
-       *
-       * A stock has no single honest monthly figure. Period-end, peak and
-       * time-weighted mean are all defensible and each charges a DIFFERENT
-       * amount for identical behaviour, which is why AGL-2399 was raised as a
-       * decision rather than fixed in the pass that found it.
-       *
-       * This takes period-end, and takes it as the narrowest of the three on
-       * purpose, because pricing is locked for Sept 1:
-       *
-       *   1. The STATISTIC does not change — it is still a point-in-time
-       *      level. Only the instant moves, from just after the period to the
-       *      last moment inside it. Peak and mean are different statistics and
-       *      would move every bill; this moves only the bills that were
-       *      measuring the wrong month.
-       *   2. It is the number the customer was already shown. The console
-       *      meter and the budget card read `contactsCount`/`dataStorageMb`
-       *      off this document, written daily by the `?month=current` sweep,
-       *      so the invoice now equals the last figure the console displayed
-       *      instead of one that appeared on no surface anywhere.
-       *   3. It is computable for every month. A time-weighted mean needs a
-       *      complete daily series and months predating the in-progress sweep
-       *      have none — a basis that cannot be applied to the months already
-       *      on the books is not a basis, it is a cutover.
-       *   4. The platform's other level meters — host media bytes, org-library
-       *      bytes — are already billed as point-in-time levels. Period-end
-       *      keeps the four meters mutually consistent.
-       *
-       * PEAK is the only candidate that fully closes deleting on the 30th to
-       * duck the band, and it is left open deliberately: it would RAISE bills,
-       * which the locked-pricing rule reserves for an explicit decision. The
-       * daily series this reads from is the same series a peak would need, so
-       * that decision costs a predicate here and no new writer.
-       *
-       * ## No new document, no new writer, no index
-       *
-       * The in-progress sweep is already the only writer of this document and
-       * already runs daily over every org. It now stamps its reading under a
-       * name that says WHEN it was taken, and a closed sweep reads it back.
-       * That is one field pair on a document already being read and written —
-       * no query, so no composite index, and nothing to go FAILED_PRECONDITION
-       * in production.
-       *=========================================*/
-      const dataStorageMbAtSweep =
-        Math.round((datasetBytes / (1024 * 1024)) * 10) / 10
-      const contactsCountAtSweep = Number(contactsSnap.data().count ?? 0)
-      const companiesCountAtSweep = Number(companiesSnap.data().count ?? 0)
-      const dealsCountAtSweep = Number(dealsSnap.data().count ?? 0)
-      // The records band's own figure (AGL-2611): the three summed, measured
-      // at the same instant, so the total and its parts describe one moment.
-      const crmRecordsCountAtSweep =
-        contactsCountAtSweep + companiesCountAtSweep + dealsCountAtSweep
-      /**
-       * A stock reading recorded by an earlier sweep, or `null` when there is
-       * none to trust.
-       *
-       * Defensive because the value is read back off a document written by a
-       * previous deployment: a missing field, a `null`, a NaN or a stringly
-       * typed number must fall back to measuring, never bill as zero. Billing
-       * zero on a malformed field would forfeit the overage silently and look
-       * exactly like a customer who stayed inside the band.
-       */
-      const storedStock = (field: string): number | null => {
-        const value = Number(existing.get(field))
-        return Number.isFinite(value) && value >= 0 ? value : null
+      const estimateWithholding = (
+        bands: readonly ResolvedPluginMeteredBand[],
+      ) => {
+        const billedHosts = usage.map((host) => ({
+          ...host,
+          meters: Object.fromEntries(
+            Object.entries(host.meters ?? {}).map(([id, count]) => [
+              id,
+              bands.some((band) => band.id === id) ? 0 : count,
+            ]),
+          ),
+        }))
+        return estimateMonthlyUsageCost(
+          orgLibraryBilled ? [...billedHosts, orgLibrary] : billedHosts,
+          orgData,
+        )
       }
-      const contactsAtPeriodEnd = storedStock('contactsCountAtPeriodEnd')
-      const dataStorageMbAtPeriodEnd = storedStock('dataStorageMbAtPeriodEnd')
-      // The records band's period-end reading and its two non-contact
-      // parts, stamped together by the same in-progress sweep (AGL-2611).
-      const crmRecordsAtPeriodEnd = storedStock('crmRecordsCountAtPeriodEnd')
-      const companiesAtPeriodEnd = storedStock('companiesCountAtPeriodEnd')
-      const dealsAtPeriodEnd = storedStock('dealsCountAtPeriodEnd')
-      /**
-       * Which instant the billed stock figures describe.
+      const billedEstimate = withheldBands.length
+        ? estimateWithholding(withheldBands)
+        : billedEstimateBeforeWithholding
+      // Each withheld band's verdict, and what was forgone, so a withheld
+      // month is distinguishable from a month with no overage on that band at
+      // all — the first question anyone re-reading a beta invoice will ask.
+      // Pre-markup, matching `billableCostUsd` beside which it is recorded.
+      const meteredVerdicts = Object.fromEntries(
+        meteredBands()
+          .filter((band) => band.metered.withheldUntil)
+          .flatMap((band) => {
+            const fields = meteredBandVerdictFields(band)
+            const withheld = withheldBands.includes(band)
+            return [
+              [fields.billed, !withheld],
+              [
+                fields.withheldUsd,
+                withheld
+                  ? billedEstimateBeforeWithholding.billableCostUsd -
+                    estimateWithholding([band]).billableCostUsd
+                  : 0,
+              ],
+            ]
+          }),
+      )
+      /*==========================================
+       * STOCK METERS ARE READ AT THE END OF THE MONTH THEY BILL (AGL-2399).
        *
-       * `in-progress` — an OPEN month, measured now, which is inside it by
-       *   definition. This sweep's reading is also what a later closed sweep
-       *   will bill, so it is the value stamped as the period-end one.
-       * `period-end` — a CLOSED month billing the last reading taken inside
-       *   it. The normal case, and the one that makes a re-sweep idempotent:
-       *   the closed sweep never writes the period-end fields, so every re-run
-       *   reads the same frozen input and arrives at the same `billedCents`.
-       * `sweep-time` — a CLOSED month with no in-period reading, measured now
-       *   and therefore after the fact. Months that ended before the
-       *   in-progress sweep existed, and orgs created after the month's last
-       *   07:00 run. Named rather than silent, so which months are comparable
-       *   is answerable from the audit rows instead of from a deploy date.
-       */
+       * API requests and form submissions are FLOWS: they accumulate inside
+       * the period and nothing done afterwards can move them. A plugin's
+       * records or a workspace's dataset bytes are STOCKS — a level, not a
+       * total — and the closed-month sweep runs after the month is over, so a
+       * level read "now" would charge August for September's behaviour.
+       *
+       * The convention, decided as the narrowest of the candidates because
+       * pricing is locked: a stock bills the LAST READING TAKEN INSIDE the
+       * month. Every in-progress sweep stamps its reading as the period-end
+       * one, a closed sweep bills that stamp and never writes it, so every
+       * re-run of a closed month reads the same input and bills the same
+       * amount — and the invoice equals the last figure the console showed.
+       * Peak would close deleting on the 30th to duck the band and is left
+       * open deliberately: it would RAISE bills, which needs a decision. The
+       * daily series this reads is the one a peak would need.
+       *
+       * Each stock meter applies the convention to its own reading — the
+       * stamp rides `periodEndFields`, written below only while the month is
+       * open — and says when it billed a stamp. `stockBasis` names which
+       * instant this month's stocks describe:
+       *
+       * `in-progress` — an OPEN month, measured now, which is inside it.
+       * `period-end` — a CLOSED month billing the last reading inside it.
+       * `sweep-time` — a CLOSED month with no in-period reading, measured
+       *   after the fact: months before the in-progress sweep existed, and
+       *   orgs created after the month's last run. Named rather than silent,
+       *   so which months are comparable is answerable from the audit rows.
+       *=========================================*/
       const stockBasis: 'in-progress' | 'period-end' | 'sweep-time' = !closed
         ? 'in-progress'
-        : contactsAtPeriodEnd !== null ||
-            crmRecordsAtPeriodEnd !== null ||
-            dataStorageMbAtPeriodEnd !== null
+        : meterReadings.some((reading) => reading.periodEndBasis)
           ? 'period-end'
           : 'sweep-time'
-      // The two are resolved INDEPENDENTLY, so one missing field never drags
-      // the other back onto the post-period reading — an org with contacts and
-      // no datasets has no `dataStorageMbAtPeriodEnd` worth trusting either
-      // way, and must not lose its contacts basis over it.
-      const dataStorageMb =
-        closed && dataStorageMbAtPeriodEnd !== null
-          ? dataStorageMbAtPeriodEnd
-          : dataStorageMbAtSweep
-      const contactsCount =
-        closed && contactsAtPeriodEnd !== null
-          ? contactsAtPeriodEnd
-          : contactsCountAtSweep
-      /*
-       * The records band, on the same basis rule as the contacts figure
-       * inside it (AGL-2611), resolved as a TRIO so the parts always sum to
-       * the total on the audit row — `contactsCount + companiesCount +
-       * dealsCount === crmRecordsCount` on every basis, which is what makes
-       * the billed number legible rather than opaque.
-       *
-       * A closed month with a contacts reading but no records reading is a
-       * month whose in-progress sweeps ran before the band was widened. It
-       * was measured on contacts alone, and the two collections nobody read
-       * inside the period bill as NOTHING for that month rather than at a
-       * figure taken after it — the permissive direction, and the only one
-       * the period-end convention above permits. `companiesCount: 0` on that
-       * row means "billed as zero", exactly as `contactsCount` means "the
-       * billed basis", not "there were none".
-       */
-      const [crmRecordsCount, companiesCount, dealsCount] =
-        closed && crmRecordsAtPeriodEnd !== null
-          ? [
-              crmRecordsAtPeriodEnd,
-              companiesAtPeriodEnd ?? 0,
-              dealsAtPeriodEnd ?? 0,
-            ]
-          : closed && contactsAtPeriodEnd !== null
-            ? [contactsAtPeriodEnd, 0, 0]
-            : [crmRecordsCountAtSweep, companiesCountAtSweep, dealsCountAtSweep]
       // Msgpack bytes of the decoded node maps — see `nodesBytes`. One unit
       // for all three storage forms, so this figure is comparable BETWEEN
       // sites rather than only with itself.
       const siteSizeMb = Math.round((siteSize.bytes / (1024 * 1024)) * 10) / 10
-      const dataQuota = checkDataStorageQuota(orgData, dataStorageMb)
       const apiRequests = Number(apiUsageSnap.get('count') ?? 0)
       const apiQuota = checkApiRequestQuota(orgData, apiRequests)
-      // The band's verdict on the SUM (AGL-2611) — the persisted field names
-      // below still say "contacts" because they are the vocabulary every
-      // reader of this document keys on; the quantity behind them widened.
-      const contactQuota = checkCrmRecordsQuota(orgData, crmRecordsCount)
-      // Records-band overage is WITHHELD while `release_crm` is off
-      // (AGL-1604). The flag gates one surface — the console CRM and its nav
-      // tab — while ingestion and `GET /v1/contacts` keep running. So
-      // records accrue, the band is crossed, and the org has no console way to
-      // see, tag or export the very records it is being invoiced for. Nobody
-      // may be charged for what they cannot reach.
-      //
-      // WHEN the quota is applied, not HOW it is counted. `checkCrmRecordsQuota`
-      // also feeds entitlement resolution, and a defaulted or reshaped count
-      // there renders a paying org as Free; the count and the quota call
-      // are therefore byte-for-byte what they were, and only the figure that
-      // reaches `billedCents` moves.
-      //
-      // Conditional on the flag, never a hardcoded zero: the day Contacts
-      // ships, the same expression starts billing again on its own. A removal
-      // here would under-bill silently and forever.
-      //
-      // Bucketed by `orgId`, matching every other release-flag verdict — an org
-      // inside a partial rollout CAN reach the page, so it is billed.
-      //
-      // Per-org overrides included (AGL-1635). An org that staff granted
-      // Contacts early has the page, so it must have the invoice too; a gate
-      // that read only the Remote Config value would ignore the grant and
-      // under-bill exactly the customers who CAN reach the feature. Resolved
-      // off `orgData` — the org doc is already in hand from the batch above, so
-      // this costs no extra read, unlike `isServerReleaseFlagOnForOrg`, which
-      // would re-fetch the same document once per org.
-      const contactsOverageBilled = isReleaseFlagOnForOrg(
-        'release_crm',
-        releaseFlagValues['release_crm'],
-        orgId,
-        parseOrgReleaseFlagOverrides(orgData?.['releaseFlags']),
-        // Tier targeting included (AGL-2486), from the same `orgData` as the
-        // overrides. Omitting it made every `plans`-declaring flag read OFF —
-        // and this line is where that stops being a gating curiosity and
-        // becomes an invoice that is quietly short.
-        releaseFlagPlan,
-      )
-      const contactsOverageUsd = contactsOverageBilled
-        ? contactQuota.overageMonthlyUsd
-        : 0
       // Screen-cap reconciliation (AGL-1390). Not priced and not enforced —
       // recorded, so that a site past the plan's screen allowance leaves a
       // dated trace somebody can find. `screensPerHost` is otherwise only ever
@@ -1140,65 +993,6 @@ async function handler(request: Request): Promise<Response> {
         ? emailOveragePrice.overageMonthlyUsd
         : 0
       /*==========================================
-       * AGLYN ASSIST PROVIDER SPEND, RECORDED AND PRICED (AGL-2280).
-       *
-       * The SPEND is deliberately absent from `billedCents` below — Assist is
-       * entitled by plan up to its band, and putting our provider bill on the
-       * invoice would charge for what the subscription already bought. It IS
-       * priced by `orgMonthlyCogsUsd`, because it is a real dollar cost we
-       * pay a provider, and the discount guardrail's entire job is to compare
-       * revenue against what an org costs us.
-       *
-       * Already dollars, and the PROVIDER figure of the two the rollup keeps
-       * (AGL-3015): `estCostUsd` beside it is the same tokens at the billed
-       * rates a customer's credits come out of, and a cost of goods carrying
-       * our own markup would understate the margin the guardrail defends.
-       * Re-deriving either from tokens here would be a second cost model to
-       * drift from the first.
-       *=========================================*/
-      const assistCostUsd = assistProviderCostUsd(
-        assistUsageSnap.get('estCostUsd'),
-        assistUsageSnap.get(ASSIST_PROVIDER_COST_FIELD),
-      )
-      /*==========================================
-       * AGLYN ASSIST OVERAGE, PRICED ONTO THE INVOICE (AGL-2653).
-       *
-       * The credits PAST the plan's band are a different thing from the spend
-       * above: they were sold, at `extraAssistCreditsUsdPer1k`, and they enter
-       * `billedCents` beside contacts, API requests and dataset storage with
-       * the same cent rounding. One derivation — `assistMonthOverage` turns
-       * the measured spend into credits, subtracts the band the org resolves
-       * to, and prices the rest — so the console meter and this line cannot
-       * disagree about what was over.
-       *
-       * Off the BILLED figure, not the provider one above it (AGL-3015). A
-       * credit is a fixed quantity of billed spend, so this is the only
-       * reading under which the credits invoiced here are the credits the
-       * customer's own meter counted down.
-       *
-       * The org's hard-cap switch is NOT read here, on purpose. The switch
-       * lives at the gate: on, `reserveAssistMessage` refuses at the band and
-       * at most the one exchange that crossed the line can land past it; off,
-       * the org bought the excess. Either way what landed is what bills,
-       * exactly as storage bills stored bytes whatever `storageOverage.capUsd`
-       * says — reading the switch at sweep time would let a flip on the 1st
-       * erase a month's overage, which is AGL-2399 on a different meter. A
-       * plan with no band or no rate prices zero structurally.
-       *=========================================*/
-      const assistBilledRaw = Number(assistUsageSnap.get('estCostUsd') ?? 0)
-      const assistOverage = assistMonthOverage(
-        orgData,
-        Number.isFinite(assistBilledRaw) && assistBilledRaw > 0 ? assistBilledRaw : 0,
-      )
-      // WITHHELD from the meter figure once a plugin bills the line itself
-      // (AGL-3011) — the same shape as `emailOverageUsd` above, and for the
-      // same reason: one month's usage must reach exactly one invoice. The
-      // priced figure is kept and still written to the audit fields below,
-      // so the month still records what the overage WAS.
-      const assistOverageBilledUsd = assistOverageBilledByPlugin
-        ? 0
-        : assistOverage.overageMonthlyUsd
-      /*==========================================
        * THE POS FEE THAT STRIPE CANNOT COLLECT (AGL-2111).
        *
        * Already cents, already the plan's own rate, already floored — the
@@ -1221,35 +1015,43 @@ async function handler(request: Request): Promise<Response> {
       const offlinePosFeeOrders = Number(offlineFeesSnap.get('orders') ?? 0)
       const billedCents =
         billedEstimate.billedCents +
-        Math.round(dataQuota.overageMonthlyUsd * 100) +
         Math.round(apiQuota.overageMonthlyUsd * 100) +
-        Math.round(contactsOverageUsd * 100) +
         Math.round(emailOverageUsd * 100) +
-        Math.round(assistOverageBilledUsd * 100) +
+        // Each plugin meter's line, rounded to cents on its own like every
+        // plan-priced line above.
+        meterReadings.reduce(
+          (sum, reading) => sum + Math.round(finiteUsd(reading.billedUsd) * 100),
+          0,
+        ) +
         offlinePosFeeCents
       // `usageRef` / `existing` come from the batch above (AGL-2399) — the
       // stock basis needs the same document this guard does, and reading it
       // twice per org bought nothing.
-      // THE PLUGIN'S CLOSE-OUT (AGL-3011), before the already-reported skip
-      // below: the remainder of a line a plugin bills itself is owed whether
-      // or not the meter reported for this workspace, and a month that has
-      // reported is exactly the month whose remainder is due. Awaited, and
-      // isolated by the registry — a plugin's Stripe call failing must not
-      // cost the platform's own metering.
+      // THE PLUGINS' CLOSE-OUTS, before the already-reported skip below: what
+      // a plugin bills on its own is settled whether or not the meter reported
+      // for this workspace, and a month that has reported is exactly the month
+      // whose remainder is due. Awaited and isolated — a plugin's Stripe call
+      // failing must not cost the platform's own metering.
       //
-      // No cost at all before a plugin claims the line and names a month:
-      // `runPluginMeteredLineClose` answers `false` without calling anything.
-      //
-      // The billing read is made only when a plugin actually claims the line
-      // for this month, so a deployment with no claim adds no read per org.
-      if (closed && assistOverageBilledByPlugin) {
-        const closeCustomerId = (await readOrgBilling(orgId)).stripeCustomerId
-        await runPluginMeteredLineClose(ASSIST_OVERAGE_METER_LINE_ID, {
-          orgId,
-          month,
-          org: orgData as Record<string, unknown>,
-          stripeCustomerId: closeCustomerId ? String(closeCustomerId) : null,
-        })
+      // The billing document is read only when a close-out asks for it, so a
+      // month with nothing of a plugin's to settle adds no read per org.
+      if (closed) {
+        let customerId: Promise<string | null> | undefined
+        const stripeCustomerId = () =>
+          (customerId ??= readOrgBilling(orgId).then((billing) =>
+            billing.stripeCustomerId ? String(billing.stripeCustomerId) : null,
+          ))
+        for (const meter of usageMeters) {
+          if (!meter.closeMonth) continue
+          try {
+            await meter.closeMonth({ ...meterContext, stripeCustomerId })
+          } catch (error) {
+            console.error(
+              `[report-usage] ${meter.pluginId}:${meter.id} failed to close ${month} for ${orgId}`,
+              error,
+            )
+          }
+        }
       }
       if (existing.get('reportedAt')) {
         orgResults[orgId] = { billedCents, skipped: true }
@@ -1345,22 +1147,38 @@ async function handler(request: Request): Promise<Response> {
 
       await usageRef.set(
         {
+          // Each plugin meter's fields FIRST, so a field the platform writes
+          // below can never be overwritten by one; its period-end stamp only
+          // while the month is open, for the reason the platform's own stock
+          // readings below are.
+          ...Object.assign(
+            {},
+            ...meterReadings.map((reading) => ({
+              ...reading.fields,
+              ...(closed ? {} : (reading.periodEndFields ?? {})),
+            })),
+          ),
           month,
           hostCount: hostRefs.length,
           storageGb: estimate.storageGb,
           pageViews: estimate.pageViews,
-          // COUNTED ALWAYS (AGL-1688), like `contactsCount` below: the
-          // submissions are real, the count is what the abuse ceiling and the
-          // plan quota are evaluated against, and it stays truthful whatever
-          // the flag says. Only the figure that reaches `billedCents` moves.
-          formSubmissions: estimate.formSubmissions,
-          // Whether THIS month charged for form-submission overage, and what
-          // was forgone if it did not. Same pair, same reason, as
+          // Each metered band's count, under the band's field. COUNTED ALWAYS
+          // (AGL-1688), like `contactsCount` below: the units are real, the
+          // count is what the abuse ceiling and the plan quota are evaluated
+          // against, and it stays truthful whatever a flag says. Only the
+          // figure that reaches `billedCents` moves.
+          ...Object.fromEntries(
+            meteredBands().map((band) => [
+              meteredBandField(band),
+              estimate.meters[band.id] ?? 0,
+            ]),
+          ),
+          // Whether THIS month charged for each withheld band's overage, and
+          // what was forgone if it did not. Same pair, same reason, as
           // `contactsOverageBilled` / `contactsOverageWithheldUsd`: without
           // the second field a withheld month is indistinguishable from a
           // month that simply stayed inside the band.
-          formSubmissionsBilled,
-          formSubmissionsOverageWithheldUsd: formSubmissionsWithheldUsd,
+          ...meteredVerdicts,
           costUsd: estimate.costUsd,
           // The excess only, at cost (AGL-1280) — `billedCents` is this
           // number marked up, plus the five plan-priced overages. Read off
@@ -1408,127 +1226,59 @@ async function handler(request: Request): Promise<Response> {
           // ever does must refuse to bill from a truncated figure, and this
           // is how it can tell.
           siteSizeTruncated: siteSize.truncated,
-          // THE BILLED FIGURE, on the basis named by `stockBasis` (AGL-2399)
-          // — for a closed month, the last reading taken inside it. Written
-          // under the name every existing reader already uses, on purpose:
-          // the console meter, the budget card and `orgMonthlySpend` read
-          // these two fields, and they must show what the invoice charged. A
-          // meter that still explains the old basis is its own bug.
-          dataStorageMb,
-          dataOverageUsd: dataQuota.overageMonthlyUsd,
           apiRequests,
           apiOverageUsd: apiQuota.overageMonthlyUsd,
-          // COUNTED ALWAYS (AGL-1604) — the records are real and the count is
-          // an entitlement input, so it stays truthful whatever the flag says.
-          contactsCount,
-          // The records band's billed figure and its other two parts
-          // (AGL-2611), on the basis `stockBasis` names. `orgMonthlyCogsUsd`
-          // prices `crmRecordsCount` and falls back to `contactsCount` only
-          // on a row written before this field existed; the console meter
-          // shows the three parts under the total so the sum is legible.
-          crmRecordsCount,
-          companiesCount,
-          dealsCount,
           /*==========================================
            * THE STOCK BASIS, WRITTEN DOWN (AGL-2399).
            *
-           * `stockBasis` names WHICH INSTANT `contactsCount` and
-           * `dataStorageMb` above describe, and the `AtSweep` pair records
-           * what this run actually measured. Three fields, and each earns its
-           * place on a billing audit row:
+           * `stockBasis` names WHICH INSTANT the stock meters' billed figures
+           * describe — see where it is computed. Without it, a month billed on
+           * the last in-period reading and a month that fell back to a
+           * post-period one are indistinguishable, and "is this month
+           * comparable to that one" becomes a question about deploy dates.
+           * Each stock meter records what this run measured beside what it
+           * billed, so the size of the correction stays recoverable.
            *
-           *  - without `stockBasis`, a month billed on the last in-period
-           *    reading and a month that fell back to a post-period one are
-           *    indistinguishable, and "is this month comparable to that one"
-           *    becomes a question about deploy dates.
-           *  - without the `AtSweep` pair, the size of the correction is
-           *    unrecoverable — the difference between them IS how much a
-           *    month moved by being measured honestly, which is the first
-           *    thing anyone auditing this change will ask for.
-           *
-           * The `AtPeriodEnd` pair is written ONLY while the month is open,
-           * and that conditional is the whole idempotency guarantee. A closed
-           * sweep that re-runs must read the same input it read yesterday; if
-           * it stamped its own post-period measurement here, the second
-           * re-sweep would bill from the first re-sweep's reading and the
-           * figure would walk forward a day at a time — the original defect
-           * wearing a new field name.
+           * The period-end stamps — each meter's `periodEndFields`, spread at
+           * the top of this write — and `stockMeasuredAt` are written ONLY
+           * while the month is open, and that conditional is the whole
+           * idempotency guarantee. A closed sweep that re-runs must read the
+           * same input it read yesterday; if it stamped its own post-period
+           * measurement, the second re-sweep would bill from the first
+           * re-sweep's reading and the figure would walk forward a day at a
+           * time.
            *=========================================*/
           stockBasis,
-          contactsCountAtSweep,
-          crmRecordsCountAtSweep,
-          dataStorageMbAtSweep,
           ...(closed
             ? {}
             : {
-                contactsCountAtPeriodEnd: contactsCountAtSweep,
-                // The records trio, stamped together (AGL-2611): a closed
-                // sweep reads the total and the two parts back as one unit,
-                // so a row can never carry a period-end total whose parts
-                // were measured on a different day.
-                crmRecordsCountAtPeriodEnd: crmRecordsCountAtSweep,
-                companiesCountAtPeriodEnd: companiesCountAtSweep,
-                dealsCountAtPeriodEnd: dealsCountAtSweep,
-                dataStorageMbAtPeriodEnd: dataStorageMbAtSweep,
                 stockMeasuredAt:
                   firebaseAdmin.firestore.FieldValue.serverTimestamp(),
               }),
-          // What actually entered `billedCents`: zero while the console page
-          // is dark.
-          contactsOverageUsd,
-          // Whether THIS month charged for the audience band, and what was
-          // forgone if it did not — without the second field a withheld month
-          // is indistinguishable from a month with no overage, which is the
-          // question anyone re-reading a beta invoice will ask first. Same
-          // shape as `orgLibraryBilled` above, and for the same reason.
-          contactsOverageBilled,
-          contactsOverageWithheldUsd: contactsOverageBilled
-            ? 0
-            : contactQuota.overageMonthlyUsd,
-          // AGL-2280 — see where it is computed. Priced into COGS, never into
-          // `billedCents`: the subscription bought the band.
-          assistCostUsd,
-          // The credit view of the same month (AGL-2653): what was drawn, the
-          // band it was drawn against, and the part past it that DID enter
-          // `billedCents`, with the rate it was priced at. Recorded always,
-          // zeros included, so a month inside its band is legible as one and
-          // the count sits beside the amount on the row a customer asks
-          // about. `assistCreditsBand` is `null` where the plan sells none.
-          assistCredits: assistOverage.usedCredits,
-          assistCreditsBand: assistOverage.bandCredits,
-          assistCreditsOverage: assistOverage.overageCredits,
-          assistOverageUsd: assistOverage.overageMonthlyUsd,
-          assistOverageRateUsd: assistOverage.overageRateUsd,
-          // Whether the meter billed it, or a plugin did (AGL-3011). Same
-          // pair, same reason, as `emailSendsOverageBilled` below: a month
-          // billed through the other channel must not read as a month that
-          // stayed inside its band, and the handover must be countable from
-          // the rows rather than inferred from a deployment variable.
-          assistOverageMeteredUsd: assistOverageBilledUsd,
-          assistOverageBilledByPlugin,
           // The cash/folio POS platform fee this month (AGL-2111), and the
           // number of sales it came from. Recorded ALWAYS, including at zero,
           // so "this store took no cash" is legible as a fact rather than as
           // a missing field — and so a merchant querying why their invoice
-          // moved has the count beside the amount. Unlike `assistCostUsd`
-          // above, this IS inside `billedCents`.
+          // moved has the count beside the amount. It IS inside
+          // `billedCents`.
           offlinePosFeeCents,
           offlinePosFeeOrders:
             Number.isFinite(offlinePosFeeOrders) && offlinePosFeeOrders > 0
               ? Math.round(offlinePosFeeOrders)
               : 0,
-          // Email sends and workflow/action runs (AGL-1134), summed across
-          // the org's hosts. COUNTS for this month — see `orgCounterTotals`
-          // for the unit and the double-count argument.
+          // Email sends, action runs and each plugin band's host counter
+          // (AGL-1134), summed across the org's hosts. COUNTS for this month
+          // — see `orgCounterTotals` for the unit and the double-count
+          // argument.
           //
           // `emailSends` is PRICED INTO COGS, at
           // `ORG_COGS_UNIT_RATES_USD.perEmailSend` — every message the
           // provider charged for, campaigns and transactional alike — and its
           // OVERAGE is priced onto the invoice at the plan's retail
-          // per-1,000 rate. `workflowRuns` and `actionRuns` are PRICED INTO
-          // COGS at `ORG_COGS_UNIT_RATES_USD.perRun` (2026-09-07) and never
-          // reach the invoice: no plan sells runs past its band, so there is
-          // no overage line for them to become.
+          // per-1,000 rate. Runs are PRICED INTO COGS at
+          // `ORG_COGS_UNIT_RATES_USD.perRun` (2026-09-07) and never reach the
+          // invoice: no plan sells runs past its band, so there is no overage
+          // line for them to become.
           emailSends: counterTotals.emailSends,
           // Volume above the plan's included band, in emails (AGL-1438).
           // Mostly transactional, because that is the mail no cap may refuse
@@ -1537,16 +1287,22 @@ async function handler(request: Request): Promise<Response> {
           // What actually entered `billedCents`: zero until
           // `BILL_EMAIL_SEND_OVERAGE_FROM` names this month or an earlier one.
           emailSendsOverageUsd: emailOverageUsd,
-          // Whether THIS month charged for it, and what was forgone if not.
-          // Same pair, same reason, as `contactsOverageBilled` /
-          // `contactsOverageWithheldUsd`: a withheld month must not read as a
-          // month that stayed inside its band.
+          // Whether THIS month charged for it, and what was forgone if not:
+          // a withheld month must not read as a month that stayed inside its
+          // band.
           emailSendsOverageBilled: emailOverageBilled,
           emailSendsOverageWithheldUsd: emailOverageBilled
             ? 0
             : emailOveragePrice.overageMonthlyUsd,
-          workflowRuns: counterTotals.workflowRuns,
           actionRuns: counterTotals.actionRuns,
+          // Each plugin band measured by a host counter, recorded under the
+          // band's own field so its cost axis and utilization read it.
+          ...Object.fromEntries(
+            counterBands.map((band) => [
+              band.fields[0]!,
+              counterTotals.counters[band.hostCounter] ?? 0,
+            ]),
+          ),
           // AGL-1390: the org's worst host, and every host past its cap. An
           // empty array is the answer we expect every month; a non-empty one
           // means a screen was created through something the create-time gate

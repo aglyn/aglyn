@@ -263,7 +263,7 @@ export const PLUGIN_TENANT_EMAILS: readonly TenantEmailEntry[] = [
       },
       {
         "name": "reservation.paid",
-        "description": "Amount paid today",
+        "description": "What the guest was charged today, lodging tax included; a charge that carried lodging tax names it, as in “$254.40, including $14.40 lodging tax”",
         "sample": "$240.00"
       },
       {

@@ -23,12 +23,16 @@
  *
  * WHAT THE DOUBLES MODEL, stated so a false green is visible:
  *
- *  1. `topicRequiresDoubleOptIn`, `mergeEmailTopics` and `normalizeEmailTopic`
- *     are the REAL pure functions. Whether a topic's own setting overrules the
- *     site's IS the rule under test, and doubling it would assert the double.
+ *  1. `topicRequiresDoubleOptIn`, `mergeSubscriptionTopics` and
+ *     `normalizeSubscriptionTopic` are the REAL pure functions. Whether a
+ *     topic's own setting overrules the site's IS the rule under test, and
+ *     doubling it would assert the double. The org's stored catalog is
+ *     answered by a stand-in `subscriptionTopic` record index — the seam the
+ *     signup reads it through — merging `storedTopics` over the built-ins as
+ *     the Email plugin's index does.
  *  2. `recordPendingTopicConfirmation` and `siteRequiresDoubleOptIn` are
  *     doubles. What they store and what they refuse is
- *     `email-topic-confirmation.spec.ts`'s question; what this file certifies
+ *     `topic-subscriptions.spec.ts`'s question; what this file certifies
  *     is that the SIGNUP asks them, and in which order.
  *  3. `sendEmail` is a spy. The property that matters is what it is handed:
  *     no marketing context (this is transactional), and a link the recipient
@@ -160,6 +164,13 @@ jest.mock('@aglyn/tenant-data-admin/server/email-unsubscribe-link', () => ({
 }))
 
 import type { PluginContactCaptureRequest } from '@aglyn/aglyn/plugin-manager/plugin-contact-capture'
+import { registerPluginRecordIndex } from '@aglyn/aglyn/plugin-manager/plugin-record-index'
+import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
+import {
+  mergeSubscriptionTopics,
+  normalizeSubscriptionTopic,
+  type SubscriptionTopic,
+} from '@aglyn/aglyn/app-utils/subscription-topics'
 import { standInRecordSystem } from '../testing/stand-in-record-system'
 import { newsletterHandler } from './newsletter'
 
@@ -208,6 +219,30 @@ beforeEach(() => {
   sent.length = 0
   metered.length = 0
   captured = standInRecordSystem()
+  // The org's topic catalog, as its keeper answers it: the built-ins with
+  // whatever this test stored laid over them.
+  const catalog = () =>
+    mergeSubscriptionTopics(
+      Object.entries(storedTopics)
+        .map(([id, data]) => normalizeSubscriptionTopic(id, data))
+        .filter((topic): topic is SubscriptionTopic => !!topic),
+    ).map((topic) => ({
+      id: topic.id,
+      name: topic.name,
+      facts: {
+        description: topic.description,
+        archived: topic.archived === true,
+        ...(typeof topic.doubleOptIn === 'boolean' ? { doubleOptIn: topic.doubleOptIn } : {}),
+      },
+    }))
+  registerPluginRecordIndex(
+    'subscriptionTopic',
+    {
+      list: async ({ limit }) => ({ records: catalog().slice(0, limit), truncated: false }),
+      get: async ({ id }) => catalog().find((record) => record.id === id) ?? null,
+    },
+    { pluginId: 'stand-in-topic-catalog' },
+  )
   enrolled.length = 0
   pendingCalls = []
   pendingResult = 'pending'
@@ -332,5 +367,13 @@ describe('the topic overrules the site, in both directions', () => {
     siteDefault = true
     storedTopics = { newsletter: { name: 'Newsletter' } }
     expect((await signUp()).body.confirmationRequired).toBe(true)
+  })
+
+  it('asks the catalog’s keeper, never its collection: with no keeper, the site’s answer stands', async () => {
+    resetPluginServicesForTests()
+    standInRecordSystem()
+    siteDefault = false
+    storedTopics = { newsletter: { name: 'Newsletter', doubleOptIn: true } }
+    expect((await signUp()).body.confirmationRequired).toBe(false)
   })
 })

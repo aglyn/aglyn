@@ -537,6 +537,9 @@ describe('the invoice notices say which event happened, to which workspace (AGL-
     expect(told.title).toBe('Payment failed: $25.00 for Acme Ltd')
     expect(told.body).toContain('Update the payment method or pay the invoice in Billing')
     expect(told.body).toContain('Acme Ltd moves to the Free plan')
+    // And its link lands on the button that does what the body asks
+    // (AGL-3442); the paid notice above still opens Billing itself.
+    expect(told.link).toBe('/acme/billing#update-payment-method')
   })
 })
 

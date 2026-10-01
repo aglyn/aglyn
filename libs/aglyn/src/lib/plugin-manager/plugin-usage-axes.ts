@@ -36,12 +36,23 @@
  *    own axes, and `orgCogsInputFrom` forwards its fields.
  *  - a BAND names the rollup fields that measure it and the entitlement that
  *    says what the plan includes. The utilization table reads it beside
- *    core's own bands.
+ *    core's own bands. A METERED band is also billed past what the plan
+ *    includes, at cost × `METERED_MARKUP`, beside storage and bandwidth: the
+ *    invoice sweep, the Billing card's estimate, the monthly summary and the
+ *    staff usage rows read it from here.
+ *  - a SPEND LINE names the month document holding what the plugin's usage
+ *    came to at the rates it bills, the deployment variable naming the month
+ *    it is first charged for, and the unit a customer sees it in. The usage
+ *    budget shows it beside the metered figure and counts it once charged.
+ *  - a METER names what the plugin measures in the monthly usage sweep
+ *    (`plugin-usage-meters.ts`), so the sweep can refuse to bill a month the
+ *    registered meter is missing from.
  *
  * ## What core keeps
  *
  * The MONEY. Every unit rate stays in `ORG_COGS_UNIT_RATES_USD`, beside the
- * billed table it is reconciled against, and every included figure stays in
+ * billed table it is reconciled against (`METERED_UNIT_RATES_USD`, which a
+ * metered band names its rate in), and every included figure stays in
  * `PLAN_ENTITLEMENTS`. A declaration names fields and keys; it carries no
  * price. The one number a declaration may carry is a band's unit cost, where
  * the band is sold in a unit OF cost (a credit is a fixed quantity of
@@ -58,9 +69,11 @@
  * error rather than a zero.
  */
 
+import type { ReleaseFlagKey } from '../app-utils/release-flags'
 import {
-  PLUGIN_USAGE_BANDS_DECLARED,
   PLUGIN_COST_AXES_DECLARED,
+  PLUGIN_SPEND_LINES_DECLARED,
+  PLUGIN_USAGE_BANDS_DECLARED,
 } from './first-party-plugins.generated'
 
 /** A meter a plugin contributes to the platform's cost model. */
@@ -81,6 +94,12 @@ export interface PluginCostAxisDeclaration {
    * by `orgCogsInputFrom` and never priced.
    */
   recordedFields?: readonly string[]
+  /**
+   * Rollup fields the plugin's usage sweep writes beside the meter for its
+   * staff surfaces to read — served on the staff usage rows, `null` where a
+   * rollup never wrote one, and never forwarded to the cost model.
+   */
+  staffFields?: readonly string[]
   /**
    * The `ORG_COGS_UNIT_RATES_USD` key pricing one unit. Absent when the
    * fields are already dollars, which then enter the model at ×1.
@@ -114,15 +133,111 @@ export interface PluginUsageBandDeclaration {
    * made never reads as less of the band.
    */
   unitCostUsd?: number
+  /**
+   * The per-site monthly counter the band is measured by:
+   * `hosts/{hostId}/counters/{hostCounter}`, field `{month}`, summed over the
+   * workspace's sites.
+   */
+  hostCounter?: string
+  /**
+   * The workspace is WARNED as it approaches and reaches this band, by the
+   * usage-alerts sweep, from its `hostCounter` against what the plan includes
+   * of `entitlement`, once per threshold per month. `label` names the band in
+   * the title ("monthly workflow runs") and `noun` in the opening sentence
+   * ("workflow runs"); `outcome` is what happens at the band — `stops`,
+   * `bills` or `continues` — and `reached` and `approach` are the sentences
+   * that say so, at the band and approaching it.
+   */
+  alert?: {
+    label: string
+    noun: string
+    outcome: 'stops' | 'bills' | 'continues'
+    reached: string
+    approach: string
+  }
+  /**
+   * The band is one of the INFRASTRUCTURE meters (AGL-1280): what the
+   * workspace uses past it is billed at our cost × `METERED_MARKUP`, beside
+   * storage and bandwidth, on the same invoice line and the same estimate.
+   * A metered band names one rollup field and the `hostCounter` it is
+   * measured by.
+   */
+  metered?: PluginMeteredBand
+}
+
+/** How a metered band is priced, quoted and withheld. */
+export interface PluginMeteredBand {
+  /**
+   * The `METERED_UNIT_RATES_USD` key holding our cost per unit — never a
+   * number: the rate table is the platform's, beside the markup it is
+   * published with.
+   */
+  rate: string
+  /** The count a published price is quoted per: `1000` reads "per 1,000". */
+  quotedPer: number
+  /** The band in running prose, plural and lowercase: "form submissions". */
+  noun: string
+  /**
+   * A release flag the overage waits behind: while it is off for the
+   * workspace, the units are counted and the charge is recorded as withheld
+   * rather than billed — nobody is charged for what they cannot reach
+   * (AGL-1604). The rollup records the verdict as `{field}Billed` and what
+   * was forgone, at cost, as `{field}OverageWithheldUsd`.
+   */
+  withheldUntil?: ReleaseFlagKey
+}
+
+/**
+ * A line of a workspace's monthly SPEND a plugin contributes to its usage
+ * budget (`usage-budget.ts`): what the plugin's usage came to this month, in
+ * the dollars it is billed at, shown on the customer's budget card and
+ * counted toward the budget from the month the plugin starts charging for it.
+ */
+export interface PluginSpendLineDeclaration {
+  /** The line's key. */
+  id: string
+  /** What the budget card and the budget alert call it. */
+  label: string
+  /**
+   * Where the month's figure is read: `orgs/{orgId}/{collection}/{month}`,
+   * field `field`, in dollars.
+   */
+  live: { collection: string; field: string }
+  /**
+   * The deployment variable naming the first month (`YYYY-MM`) the line is
+   * charged for. Until it names this month or an earlier one — and on any
+   * value that is not a month — the line is shown and never counted.
+   */
+  billedFromEnv: string
+  /**
+   * The unit the customer is shown the line in, when the stored dollars are
+   * not theirs to see: `ceil(dollars / costUsd)` of `label`, and the dollar
+   * figure never crosses to the browser.
+   */
+  unit?: { costUsd: number; label: string }
+}
+
+/**
+ * A meter the plugin measures in the platform's monthly usage sweep and
+ * registers at runtime (`plugin-usage-meters.ts`). Declared as well as
+ * registered so the sweep can refuse to bill a workspace's month without it.
+ */
+export interface PluginUsageMeterDeclaration {
+  /** As `registerPluginUsageMeter` names it. */
+  id: string
 }
 
 export type ResolvedPluginCostAxis = PluginCostAxisDeclaration & { pluginId: string }
 export type ResolvedPluginUsageBand = PluginUsageBandDeclaration & { pluginId: string }
+export type ResolvedPluginSpendLine = PluginSpendLineDeclaration & { pluginId: string }
+export type ResolvedPluginUsageMeter = PluginUsageMeterDeclaration & { pluginId: string }
 
 /** What a plugin's `usageAxes` function answers. */
 export interface PluginUsageAxesDeclaration {
   costAxes?: readonly PluginCostAxisDeclaration[]
   bands?: readonly PluginUsageBandDeclaration[]
+  spendLines?: readonly PluginSpendLineDeclaration[]
+  meters?: readonly PluginUsageMeterDeclaration[]
 }
 
 export function pluginCostAxes(): readonly ResolvedPluginCostAxis[] {
@@ -131,6 +246,64 @@ export function pluginCostAxes(): readonly ResolvedPluginCostAxis[] {
 
 export function pluginUsageBands(): readonly ResolvedPluginUsageBand[] {
   return PLUGIN_USAGE_BANDS_DECLARED
+}
+
+/** A declared band that is metered, with its one field and its counter. */
+export type ResolvedPluginMeteredBand = ResolvedPluginUsageBand & {
+  metered: PluginMeteredBand
+  hostCounter: string
+}
+
+/**
+ * Every band billed at cost past what the plan includes, in band order — the
+ * infrastructure meters a plugin adds beside storage and bandwidth.
+ */
+export function meteredPluginBands(): readonly ResolvedPluginMeteredBand[] {
+  return PLUGIN_USAGE_BANDS_DECLARED.filter(
+    (band): band is ResolvedPluginMeteredBand =>
+      Boolean(band.metered && band.hostCounter),
+  )
+}
+
+/** A declared band measured by a per-site counter and never billed past it. */
+export type ResolvedPluginCountedBand = ResolvedPluginUsageBand & {
+  hostCounter: string
+}
+
+/**
+ * Every band measured by a per-site counter and not metered, in band order:
+ * the usage sweep sums each across the workspace's sites and records it under
+ * the band's first field, and the staff usage rows show the count. A metered
+ * band's counter is read with the infrastructure meters instead.
+ */
+export function countedPluginBands(): readonly ResolvedPluginCountedBand[] {
+  return PLUGIN_USAGE_BANDS_DECLARED.filter(
+    (band): band is ResolvedPluginCountedBand =>
+      Boolean(band.hostCounter && !band.metered),
+  )
+}
+
+/** The rollup field a metered band records its count under. */
+export function meteredBandField(band: ResolvedPluginMeteredBand): string {
+  return band.fields[0]!
+}
+
+/**
+ * Where the rollup records a withheld band's verdict (`metered.withheldUntil`):
+ * whether the month billed the band's overage, and what was forgone, at cost,
+ * when it did not. Without the second a withheld month reads as a month that
+ * stayed inside the band.
+ */
+export function meteredBandVerdictFields(band: ResolvedPluginMeteredBand): {
+  billed: string
+  withheldUsd: string
+} {
+  const field = meteredBandField(band)
+  return { billed: `${field}Billed`, withheldUsd: `${field}OverageWithheldUsd` }
+}
+
+export function pluginSpendLines(): readonly ResolvedPluginSpendLine[] {
+  return PLUGIN_SPEND_LINES_DECLARED
 }
 
 /** A positive finite number, or 0 — the reading every meter is priced from. */
@@ -191,4 +364,43 @@ export function pluginCostAxisFields(): string[] {
     }
   }
   return fields
+}
+
+/**
+ * A month's rollup as a staff reader is served it, one entry per field the
+ * declared cost axes read, record or serve to staff (`get` reads one rollup
+ * field).
+ *
+ * A field an axis prices reads zero where the rollup lacks it, as the cost
+ * model reads it — except where the axis falls back to an older basis when
+ * the rollup carries none of its fields: there absence is the answer that
+ * selects the fallback, so it is served as `null`, and a reader pricing the
+ * served row reads the month the way the sweep did. A field an axis only
+ * records or serves reads `null` when the rollup never wrote it: "not
+ * recorded" and "recorded zero" are different answers, and a projection
+ * that collapses them invents history (AGL-2321).
+ */
+export function pluginCostAxisProjection(
+  get: (field: string) => unknown,
+): Record<string, number | null> {
+  const out: Record<string, number | null> = {}
+  for (const axis of PLUGIN_COST_AXES_DECLARED) {
+    const absentIsNull = [
+      ...(axis.fallbackFields?.length ? axis.fields : []),
+      ...(axis.recordedFields ?? []),
+      ...(axis.staffFields ?? []),
+    ]
+    for (const field of [
+      ...axis.fields,
+      ...(axis.fallbackFields ?? []),
+      ...(axis.recordedFields ?? []),
+      ...(axis.staffFields ?? []),
+    ]) {
+      if (field in out) continue
+      const value = get(field)
+      out[field] =
+        value != null ? Number(value) : absentIsNull.includes(field) ? null : 0
+    }
+  }
+  return out
 }

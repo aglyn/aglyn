@@ -25,7 +25,9 @@ import {
   isLockdownFeatureKey,
   listLockdownFeatureKeys,
   listLockdownFeatures,
+  lockdownFeatureCustomerName,
   lockdownFeatureLabel,
+  lockdownFeaturesCustomerText,
   lockdownFeatureStaffBypass,
   LOCKDOWN_ENFORCEMENTS,
   LOCKDOWN_MESSAGE_MAX,
@@ -73,6 +75,7 @@ const AI_LEVERS = {
     {
       key: 'ai-assist',
       label: 'AI assist',
+      customerName: 'AI assist',
       staffBypass: true,
       notice: {
         title: 'AI assist is temporarily unavailable',
@@ -83,6 +86,7 @@ const AI_LEVERS = {
     {
       key: 'ai-generate',
       label: 'AI generation',
+      customerName: 'AI generation',
       staffBypass: true,
       notice: {
         title: 'AI generation is temporarily unavailable',
@@ -359,6 +363,31 @@ describe('FEATURE scope (AGL-1510) — the pure half', () => {
     expect(lockdownFeatureLabel('everything')).toBe('everything')
   })
 
+  it('names every lever to a customer in its own words, never the staff label (AGL-3442)', () => {
+    expect(
+      Object.fromEntries(listLockdownFeatureKeys().map((key) => [key, lockdownFeatureCustomerName(key)])),
+    ).toEqual({
+      signups: 'new signups',
+      uploads: 'media uploads',
+      checkout: 'new purchases',
+      'marketplace-installs': 'marketplace installs',
+      'ai-assist': 'AI assist',
+      'ai-generate': 'AI generation',
+    })
+    // A staff label's aside ("Checkout (new subscriptions)") never reaches a customer.
+    for (const key of listLockdownFeatureKeys()) {
+      expect(lockdownFeatureCustomerName(key)).not.toMatch(/[()]/)
+    }
+    // Several levers paused by one staff action are named together, once.
+    expect(lockdownFeaturesCustomerText(['ai-assist', 'ai-generate'])).toBe('AI assist and AI generation')
+    expect(lockdownFeaturesCustomerText(['uploads'])).toBe('media uploads')
+    expect(lockdownFeaturesCustomerText(['signups', 'uploads', 'checkout'])).toBe(
+      'new signups, media uploads, and new purchases',
+    )
+    // A key nothing declares names neither its key nor a label.
+    expect(lockdownFeatureCustomerName('everything')).toBe('a feature')
+  })
+
   it('a second, unrelated plugin adds a lever with its own label, bypass, notice and paths (AGL-2940)', () => {
     registerPluginEntitlements({
       pluginId: 'zeta-backups',
@@ -366,6 +395,7 @@ describe('FEATURE scope (AGL-1510) — the pure half', () => {
         {
           key: 'backups',
           label: 'Backups',
+          customerName: 'backups',
           staffBypass: false,
           notice: { title: 'Backups are paused', body: 'Restores still work.' },
           apiPaths: { exact: ['backups/snapshot'], prefixes: ['backups/export'] },

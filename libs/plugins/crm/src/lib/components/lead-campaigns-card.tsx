@@ -17,14 +17,14 @@
 'use client'
 
 import {
-  campaignMembershipUnchanged,
-  campaignMembershipValue,
+  containerMembershipUnchanged,
+  containerMembershipValue,
   pluginDocsHelp,
-  readCampaignIds,
+  readContainerIds,
 } from '@aglyn/aglyn'
-import CampaignPicker, {
-  type CampaignPickerOption,
-} from '@aglyn/shared-ui-email-campaigns/components/campaign-picker.component'
+import ContainerPicker, {
+  type ContainerPickerOption,
+} from '@aglyn/tenant-feature-instance/components/container-picker'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -57,10 +57,10 @@ export const LEAD_CAMPAIGNS_HELPER_TEXT =
  */
 export function leadCampaignNames(
   lead: Record<string, unknown> | null | undefined,
-  options: readonly CampaignPickerOption[],
+  options: readonly ContainerPickerOption[],
 ): string[] {
   const labels = new Map(options.map((option) => [option.value, option.label]))
-  return readCampaignIds(lead)
+  return readContainerIds(lead, 'campaign')
     .map((id) => labels.get(id))
     .filter((name): name is string => Boolean(name))
 }
@@ -79,7 +79,7 @@ export interface LeadCampaignsCardProps {
   /** The listener has not confirmed this document with the server yet. */
   fromCache: boolean
   /** The site's campaigns, read once by the page for this card and the header. */
-  options: readonly CampaignPickerOption[]
+  options: readonly ContainerPickerOption[]
   /** The campaign read has answered — false while it settles. */
   optionsReady: boolean
   /**
@@ -102,7 +102,7 @@ export interface LeadCampaignsCardProps {
  * is the lead's own client door — a one-field `update` on
  * `hosts/{hostId}/leads`, as the properties card writes status and notes —
  * guarded by the seed like every draft edited over a cached read, and
- * `campaignMembershipUnchanged` keeps Save quiet while the picker only
+ * `containerMembershipUnchanged` keeps Save quiet while the picker only
  * reorders what is stored. **Save filing** sits in the card header.
  *
  * It is FILING, not audience: the helper says so, in the sentence the
@@ -117,7 +117,7 @@ export function LeadCampaignsCard(props: LeadCampaignsCardProps) {
   const followUpSharing = useCrmSharingFollowUp(hostId, orgId)
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
-  const stored = readCampaignIds(lead)
+  const stored = readContainerIds(lead, 'campaign')
   const [selected, setSelected] = useState<string[]>(stored)
   const [dirty, setDirty] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -130,7 +130,7 @@ export function LeadCampaignsCard(props: LeadCampaignsCardProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [storedKey, dirty])
 
-  const unchanged = campaignMembershipUnchanged(stored, selected)
+  const unchanged = containerMembershipUnchanged(stored, selected)
   const empty = optionsReady && !options.length
 
   const save = async () => {
@@ -143,7 +143,7 @@ export function LeadCampaignsCard(props: LeadCampaignsCardProps) {
       return
     }
     setSaving(true)
-    const next = campaignMembershipValue(selected)
+    const next = containerMembershipValue(selected)
     const verdict = await writeGuardedBySeed(
       { subject: 'lead', fromCache, unreadable: leadStatus === 'error' },
       async () => {
@@ -198,7 +198,8 @@ export function LeadCampaignsCard(props: LeadCampaignsCardProps) {
       }}
     >
       <Stack spacing={2}>
-        <CampaignPicker
+        <ContainerPicker
+          kind="campaign"
           options={options}
           value={selected}
           onChange={(next) => {

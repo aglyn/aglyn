@@ -35,7 +35,7 @@
  * sequence is the way to change them.
  *==========================================*/
 
-import { normalizeCampaignIds } from '@aglyn/aglyn/app-utils/campaign-membership'
+import { normalizeContainerIds } from '@aglyn/aglyn/app-utils/container-membership'
 import {
   readOutreachSequenceSettings,
   type OutreachValidationIssue,
@@ -64,7 +64,7 @@ export interface OutreachSequenceDraft {
   /**
    * The site's campaigns the sequence is in (AGL-3254), as the picker holds
    * them: clean ids, `[]` for none — stored as `[]` too, for the reason
-   * `campaignMembershipValue` gives.
+   * `containerMembershipValue` gives.
    */
   campaignIds: string[]
 }
@@ -146,7 +146,7 @@ export function readOutreachSequenceDraft(input: unknown): OutreachSequenceDraft
       ...settings,
       window: readWindow((raw['settings'] as Record<string, unknown> | undefined)?.['window']),
     },
-    campaignIds: normalizeCampaignIds(raw['campaignIds']),
+    campaignIds: normalizeContainerIds(raw['campaignIds']),
   }
 }
 

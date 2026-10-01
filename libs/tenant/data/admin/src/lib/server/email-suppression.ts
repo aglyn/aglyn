@@ -100,7 +100,7 @@ import {
 import {
   readTopicSubscriptionState,
   TOPIC_OPT_OUTS_SUBCOLLECTION,
-} from '@aglyn/aglyn/app-utils/email-topics'
+} from '@aglyn/aglyn/app-utils/subscription-topics'
 import { emailSearchTokens } from '@aglyn/aglyn/app-utils/email-search'
 import { personKey } from '@aglyn/aglyn/app-utils/person-key'
 import { stampRecordEmailState } from '@aglyn/aglyn/plugin-manager/plugin-record-email-state'

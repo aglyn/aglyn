@@ -31,7 +31,7 @@ Firestore counter, so the cap is global.
 | `POST /api/orgs/create` | 3 / hour per uid AND 10 / hour per IP | Scripted org minting (AGL-1534). The AGL-1523 signup grace admits a brand-new unverified account, so each fresh account can create one org; the uid key catches a stuck or scripted client, the IP key catches a farm rotating accounts. A real person creates at most 2–3 workspaces in a burst, so 3/h/uid clears every human while an office NAT signing up a team still fits under 10/h/IP. |
 | `/api/v1/*` (customer REST API) | 120 / min per API key | The limit is **published** (AGL-1679). Not a secret to protect — a number customers plan against. See below. |
 | `/api/*` plugin dispatcher, **writes** | 120 / min per (site, IP) | Unbounded document creation in the *merchant's* Firestore (AGL-1770). See below. |
-| `GET /api/media/cdn/*`, **deliveries** | 600 / min per IP for images, 180 / min per IP for everything else | Egress on anonymous public delivery, which the firewall deliberately does not challenge (AGL-2812). See below. |
+| `GET /api/media/cdn/*`, **deliveries** | 600 / min per IP for images, 180 / min per IP for everything else; at the edge, 1,500 requests / min per IP | Egress on anonymous public delivery, which the firewall deliberately does not challenge (AGL-2812). See below. |
 
 Keys are compound on purpose. Unlock is keyed per *(screen, IP)* so a shared
 office NAT can't be locked out of a whole site by one person, while one IP
@@ -44,6 +44,13 @@ the firewall bypasses it on purpose: link-preview crawlers and Gmail's image
 proxy cannot solve a challenge. Both middlewares exclude `/api/*`, so the limit
 lives inside `serveMediaCdn`, in `lib/server/media-cdn-rate-limit.ts`.
 
+- **The edge counts first.** A Vercel firewall rate limit, `Media CDN per-IP
+  rate limit`, counts every request on the path at 1,500 a minute per address
+  on both projects, before any function runs, edge hits included. It sits
+  ahead of the bypass, because a matched bypass skips every later rule, and it
+  went in on 2026-10-01 in **log** mode. The measurements behind the number,
+  the verification and the switch to enforce are in the firewall-posture
+  runbook (`apps/docs/docs/operations/firewall-posture.md`).
 - **What is counted:** a GET that gets past every access gate and the 304
   exit, which is where the Storage reads begin. The gates' refusals, 304s and
   HEADs send no file and are not counted. The count starts beside the metadata

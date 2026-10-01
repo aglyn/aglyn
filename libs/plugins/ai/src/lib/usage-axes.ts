@@ -16,10 +16,11 @@
  */
 
 import type { PluginUsageAxesDeclaration } from '@aglyn/aglyn/plugin-manager/plugin-usage-axes'
+import { AI_USAGE_METER_ID } from './constants'
 import {
   ASSIST_CREDIT_COST_USD,
   ASSIST_PROVIDER_COST_FIELD,
-} from '@aglyn/aglyn/app-utils/assist-credits'
+} from './usage/assist-credits'
 
 /**
  * THE AI PLUGIN'S METER (AGL-3080): provider spend, in the platform's cost
@@ -41,7 +42,18 @@ import {
  * The band is sold in credits, and a credit is `ASSIST_CREDIT_COST_USD` of
  * spend, so what was used is the dollars over that — rounded up, the one
  * conversion the customer's own meter uses.
+ *
+ * On the usage BUDGET the month's spend is the billed figure (`estCostUsd`),
+ * shown to the customer in credits and never in dollars: the dollars are our
+ * cost, and publishing them would put our model choice and our margin on a
+ * billing page. It counts toward the budget only from the month
+ * `BILL_ASSIST_TOKENS_FROM` names, because assist is a plan entitlement with
+ * no per-token price until then, and a budget that added it would be a
+ * surprise bill invented by a notification.
  */
+/** The AI plugin's line of a workspace's monthly spend, by the id it declares. */
+export const AI_ASSIST_SPEND_LINE_ID = 'assist'
+
 export function aiUsageAxes(): PluginUsageAxesDeclaration {
   return {
     costAxes: [
@@ -49,6 +61,11 @@ export function aiUsageAxes(): PluginUsageAxesDeclaration {
         id: 'assist',
         order: 80,
         fields: ['assistCostUsd'],
+        // The month's credit draw and the overage that entered `billedCents`
+        // (AGL-2930), which the usage sweep writes beside the spend: the
+        // staff usage table's AI columns, `null` on a rollup written before
+        // the sweep recorded credits, and never a cost.
+        staffFields: ['assistCredits', 'assistOverageUsd'],
         live: {
           collection: 'assistUsage',
           fields: [ASSIST_PROVIDER_COST_FIELD, 'estCostUsd'],
@@ -63,6 +80,16 @@ export function aiUsageAxes(): PluginUsageAxesDeclaration {
         fields: ['assistCostUsd'],
         entitlement: 'assistCreditsPerMonth',
         unitCostUsd: ASSIST_CREDIT_COST_USD,
+      },
+    ],
+    meters: [{ id: AI_USAGE_METER_ID }],
+    spendLines: [
+      {
+        id: AI_ASSIST_SPEND_LINE_ID,
+        label: 'Assist',
+        live: { collection: 'assistUsage', field: 'estCostUsd' },
+        billedFromEnv: 'BILL_ASSIST_TOKENS_FROM',
+        unit: { costUsd: ASSIST_CREDIT_COST_USD, label: 'Assist credits' },
       },
     ],
   }

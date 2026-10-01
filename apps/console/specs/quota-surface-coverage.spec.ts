@@ -137,10 +137,18 @@ const SURFACES = [
  * customer actually reads.
  */
 const INDIRECT_SURFACES: Record<string, { via: string; renderedIn: string; label: string }> = {
+  /*
+   * Metered on the Billing card's estimate. BOTH ENDS MOVED WITH AGL-3080 and
+   * both are still pinned: submissions are the forms plugin's metered band,
+   * so the file that names the entitlement is the compiled declaration, and
+   * the card draws each metered band under the label it declares rather than
+   * a literal it spelled itself. The words the customer reads are asserted in
+   * `billing-metered-estimate.spec.tsx`, on the rendered row.
+   */
   formSubmissionsPerMonth: {
-    via: 'apps/console/utils/usage-metering.ts',
+    via: 'libs/aglyn/src/lib/plugin-manager/first-party-plugins.generated.ts',
     renderedIn: 'apps/console/components/billing/billing-metered-estimate.component.tsx',
-    label: "'Form submissions'",
+    label: 'metered.label',
   },
   /*
    * Metered twice over — the "Team seats" meter on the billing page and

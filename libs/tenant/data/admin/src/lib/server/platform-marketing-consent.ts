@@ -70,7 +70,7 @@ import {
   TOPIC_OPT_OUTS_SUBCOLLECTION,
   type TopicSubscriptionEntry,
   type TopicSubscriptionState,
-} from '@aglyn/aglyn/app-utils/email-topics'
+} from '@aglyn/aglyn/app-utils/subscription-topics'
 import {
   isPlatformMarketingConsentDecision,
   isPlatformMarketingConsoleSourceKind,

@@ -58,8 +58,8 @@
  * short "more are arriving" note in-app; when the hour closes,
  * {@link flushRiskNoticeDigests} (hourly cron, and the next notice after the
  * window) sends ONE summary. A workspace under attack gets a digest, not
- * five hundred emails. Locks, lifts and cancellations (`neverDigest`) always
- * go out on their own.
+ * five hundred emails. Locks, lifts, cancellations, disputes and card-testing
+ * warnings (`neverDigest`) always go out on their own.
  *
  * ## Never throws
  *
@@ -84,11 +84,14 @@ import {
   RISK_NOTICE_HELP_PATH,
   RISK_NOTICE_WORKSPACE_BRANDED,
   riskNoticeEmailKey,
+  riskPayoutDelayText,
   type ResolvedRiskAction,
   type RiskActionParams,
   type RiskEventKind,
+  type RiskNoticeSeverity,
   type RiskNoticeValues,
 } from '@aglyn/shared-util-email/risk-notice-catalog'
+import type { NotificationLevel } from '@aglyn/aglyn/server'
 import {
   sendEmail as sendEmailImpl,
   type SendEmailOptions,
@@ -135,6 +138,16 @@ export const RISK_NOTICE_LEDGER_COLLECTION = 'riskNoticeLedger'
 
 /** The in-app notification type every owner notice is written as. */
 export const RISK_NOTICE_NOTIFICATION_TYPE = 'system.riskNotice' as const
+
+/**
+ * The level an owner notice is drawn at (AGL-3437), from its kind's
+ * severity: a release or a lift is `info`, not the red of the hold it ends.
+ */
+export const RISK_NOTICE_LEVELS: Record<RiskNoticeSeverity, NotificationLevel> = {
+  urgent: 'critical',
+  warning: 'warning',
+  info: 'info',
+}
 
 /**
  * The burst allowance: how many notices one workspace's owners, and staff
@@ -186,6 +199,11 @@ export interface RiskEventInput {
    */
   paymentEvent?: string | null
   evidenceDueByMs?: number | null
+  /**
+   * A new publisher's payout schedule: how many days each payout waits, and
+   * the workspace age it waits until.
+   */
+  payout?: { delayDays: number; untilWorkspaceAgeDays: number } | null
   /** Staff only: the Stripe Dashboard page for the charge, review or dispute. */
   stripeUrl?: string | null
   lock?: {
@@ -206,6 +224,11 @@ export interface RiskEventInput {
   staffEvidence?: string | null
   /** Overrides the default dedupe key. */
   dedupeKey?: string | null
+  /**
+   * A closing notice's opening kind. The closing goes to the people the
+   * opening went to: the site's managers too, when the opening told them.
+   */
+  openedAs?: RiskEventKind | null
   /**
    * `false` to send no owner EMAIL for this event (a lock placed under a
    * legal hold). The in-app notice and the record are still written.
@@ -657,7 +680,11 @@ async function ownerRecipients(
       if (owner.email) emails[owner.uid] = owner.email
     }
   }
-  if (definition.includeSiteManagers) for (const uid of siteManagerUids) uids.add(uid)
+  // A closing kind is shared by openings with different audiences, so it
+  // follows the one it closes: a site manager told a review opened is told
+  // it closed.
+  const audience = isRiskEventKind(input.openedAs) ? RISK_NOTICE_CATALOG[input.openedAs] : definition
+  if (audience.includeSiteManagers) for (const uid of siteManagerUids) uids.add(uid)
   return { uids: [...uids], emails }
 }
 
@@ -718,6 +745,7 @@ export async function notifyRiskEvent(
       amount: input.amount ?? null,
       'payment.event': input.paymentEvent ?? null,
       'evidence.dueBy': input.evidenceDueByMs ? formatRiskNoticeTime(input.evidenceDueByMs) : null,
+      'payout.delay': input.payout ? riskPayoutDelayText(input.payout) : null,
       'page.visitors': input.page ? heldPageVisitorSentence(input.page) : null,
       'brand.productName': riskNoticeProductName(brand) || null,
     }
@@ -818,6 +846,7 @@ export async function notifyRiskEvent(
             type: RISK_NOTICE_NOTIFICATION_TYPE,
             title: owner.title,
             body: `${owner.summary} ${owner.meaning}`.slice(0, 1000),
+            level: RISK_NOTICE_LEVELS[definition.severity],
             link: primary?.href ?? riskHoldsPath(noticeId),
             ...(orgId ? { orgId } : {}),
             ...(input.hostId ? { hostId: input.hostId } : {}),
@@ -863,6 +892,7 @@ export async function notifyRiskEvent(
           {
             type: RISK_NOTICE_NOTIFICATION_TYPE,
             title: 'More account notices are arriving',
+            level: 'warning',
             body:
               'Several items on your workspace were held or flagged in the last hour. ' +
               'We will send one summary instead of a message for each. Every item is listed on Holds & reviews.',
@@ -1086,6 +1116,7 @@ async function flushLedger(deps: RiskNoticeDeps, ledgerId: string): Promise<bool
           type: RISK_NOTICE_NOTIFICATION_TYPE,
           title,
           body: summary.slice(0, 1000),
+          level: 'warning',
           link: riskHoldsPath(),
           ...(orgId ? { orgId } : {}),
         },
@@ -1199,6 +1230,7 @@ export async function closeRiskNotice(
         reference: (row.get('reference') as string | null) ?? null,
         item: stamp.itemLabel ? { label: stamp.itemLabel, path: stamp.itemPath ?? null } : null,
         dedupeKey: `${closing}:${input.reviewId}`,
+        openedAs: stamp.kind,
       },
       overrides,
     )

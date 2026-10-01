@@ -82,6 +82,7 @@ let mockNotifications: Array<{
   orgId: string
   title: string
   body: string
+  level?: string
   options?: { skipEmail?: boolean }
 }>
 let mockEmails: Array<{ orgId: string; subject: string; text: string }>
@@ -261,13 +262,14 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   },
   notifyOrgAdmins: async (
     orgId: string,
-    payload: { title: string; body: string },
+    payload: { title: string; body: string; level?: string },
     options?: { skipEmail?: boolean },
   ) => {
     mockNotifications.push({
       orgId,
       title: payload.title,
       body: payload.body,
+      level: payload.level,
       options,
     })
   },
@@ -596,11 +598,14 @@ describe('the four steps — 75, 80, 90, 100 — each once (AGL-3431)', () => {
     await run(DAY_TWO)
     expect(pageNotices()).toHaveLength(1)
     expect(pageNotices()[0].title).toContain('above 80%')
+    // A step on the way is informational; the limit itself is amber (AGL-3437).
+    expect(pageNotices()[0].level).toBe('info')
 
     atPages(6)
     await run(DAY_THREE)
     expect(pageNotices()).toHaveLength(2)
     expect(pageNotices()[1].title).toContain('reached')
+    expect(pageNotices()[1].level).toBe('warning')
   })
 
   it('dropping from 90 to 85% lowers the guard to 80, and 90 is announced again', async () => {

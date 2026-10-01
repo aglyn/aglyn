@@ -308,9 +308,9 @@ export function PaymentsSettingsCard(props: PaymentsSettingsCardProps) {
                 never cost more to process than it collects. */}
             <Typography variant="body2" color="text.secondary">
               {'Card processing is passed through at cost on top of that: ' +
-                `${Aglyn.MARKETPLACE_PROCESSING_PERCENT_CARD}–` +
-                `${Aglyn.MARKETPLACE_PROCESSING_PERCENT_BNPL}% + ` +
-                `${Aglyn.MARKETPLACE_PROCESSING_FIXED_CENTS}¢ per online ` +
+                `${Aglyn.CARD_PROCESSING_PERCENT}–` +
+                `${Aglyn.BNPL_PROCESSING_PERCENT}% + ` +
+                `${Aglyn.PROCESSING_FIXED_CENTS}¢ per online ` +
                 'sale, what Stripe charges to take the payment. It is not a ' +
                 `${Aglyn.PLATFORM_BRAND_LEGAL_NAME} margin.`}
             </Typography>

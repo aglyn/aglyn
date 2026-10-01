@@ -12,7 +12,7 @@ import type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from '
 import type { ResolvedPluginSitemapSection } from './plugin-sitemap-sections'
 import type { ResolvedPluginSiteBundleSectionDeclaration } from './plugin-site-bundle'
 import type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'
-import type { ResolvedPluginCostAxis, ResolvedPluginUsageBand } from './plugin-usage-axes'
+import type { ResolvedPluginCostAxis, ResolvedPluginSpendLine, ResolvedPluginUsageBand, ResolvedPluginUsageMeter } from './plugin-usage-axes'
 import type { ResolvedPluginPlanFeature, ResolvedPluginPlanQuota } from './plugin-plan-entitlements'
 import type { FunctionBindings } from './plugin-contributions'
 import type { PluginDistribution } from './plugin-distribution'
@@ -978,6 +978,10 @@ export const PLUGIN_COST_AXES_DECLARED: readonly ResolvedPluginCostAxis[] = [
     "fields": [
       "assistCostUsd"
     ],
+    "staffFields": [
+      "assistCredits",
+      "assistOverageUsd"
+    ],
     "live": {
       "collection": "assistUsage",
       "fields": [
@@ -1012,7 +1016,14 @@ export const PLUGIN_USAGE_BANDS_DECLARED: readonly ResolvedPluginUsageBand[] = [
       "formSubmissions"
     ],
     "entitlement": "formSubmissionsPerMonth",
-    "perHost": true
+    "perHost": true,
+    "hostCounter": "formSubmissions",
+    "metered": {
+      "rate": "perFormSubmission",
+      "quotedPer": 1000,
+      "noun": "form submissions",
+      "withheldUntil": "release_inbox"
+    }
   },
   {
     "pluginId": "crm",
@@ -1046,7 +1057,15 @@ export const PLUGIN_USAGE_BANDS_DECLARED: readonly ResolvedPluginUsageBand[] = [
     "fields": [
       "workflowRuns"
     ],
-    "entitlement": "workflowRunsPerMonth"
+    "entitlement": "workflowRunsPerMonth",
+    "hostCounter": "workflowRuns",
+    "alert": {
+      "label": "monthly workflow runs",
+      "noun": "workflow runs",
+      "outcome": "stops",
+      "reached": "Workflows pause until next month and nothing is charged — upgrade in Billing to keep them running.",
+      "approach": "Nothing changes and nothing is charged — at the included amount, workflows pause until next month unless you upgrade in Billing."
+    }
   },
   {
     "pluginId": "workflows",
@@ -1058,6 +1077,38 @@ export const PLUGIN_USAGE_BANDS_DECLARED: readonly ResolvedPluginUsageBand[] = [
     ],
     "entitlement": "actionRunsPerMonth"
   },
+]
+
+/**
+ * Every line of a workspace's monthly spend a first-party plugin contributes
+ * to its usage budget, in catalog order, declared by that plugin (AGL-3080).
+ */
+export const PLUGIN_SPEND_LINES_DECLARED: readonly ResolvedPluginSpendLine[] = [
+  {
+    "pluginId": "ai",
+    "id": "assist",
+    "label": "Assist",
+    "live": {
+      "collection": "assistUsage",
+      "field": "estCostUsd"
+    },
+    "billedFromEnv": "BILL_ASSIST_TOKENS_FROM",
+    "unit": {
+      "costUsd": 0.001,
+      "label": "Assist credits"
+    }
+  },
+]
+
+/**
+ * Every meter a first-party plugin measures in the monthly usage sweep, in
+ * catalog order, declared by that plugin (AGL-3080). The sweep refuses to bill
+ * a month while one of these is unregistered.
+ */
+export const PLUGIN_USAGE_METERS_DECLARED: readonly ResolvedPluginUsageMeter[] = [
+  {"pluginId":"crm","id":"records"},
+  {"pluginId":"data","id":"dataset-storage"},
+  {"pluginId":"ai","id":"assist"},
 ]
 
 /**

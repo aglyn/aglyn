@@ -63,6 +63,14 @@ Until you change them, the coded defaults apply:
 A row you set back to its default is removed from the stored settings, so the page
 only ever holds the answers staff actually gave.
 
+**In the bell, the tier sets the color.** A must-know alert is red, a should-know
+alert amber, and a routine one blue (see [how urgent each notification
+is](../getting-started/console-tour.md#notification-levels)). A few alerts name
+their own color because their tone and importance differ. A degraded health check
+is a must-know, but it is amber because degraded is not down. A recovery is green.
+Support tickets are blue. The color changes nothing about delivery: the switches
+above decide that.
+
 **Repeats are told once.** Each alert names what makes two raises the same event (a
 dispute, a workspace and month, a sending domain), and a repeat inside the alert's
 window is counted rather than sent again. The next alert that does go out says how

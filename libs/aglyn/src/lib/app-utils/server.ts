@@ -135,7 +135,7 @@ export * from './retained-refusals'
 // mail somebody, and this decides what basis putting them on a list may
 // record. Two enrollment surfaces import it — the Inbox assignment route and
 // the Emails console's audience card — and neither could import the other.
-export * from './list-assignment-policy'
+export * from './enrollment-basis'
 // Reading the FILE a merchant arrives with (`docs/specs/email-competitive-gaps.md`
 // G5/P4), directly after the policy it hands its addresses to: parsing and
 // mechanical screening only, so that an import asks the enrollment question
@@ -149,7 +149,7 @@ export * from './dynamic-list-rule'
 // sides of the feature: the composer picks one, the send path signs it into
 // the unsubscribe link, and the unauthenticated preference page renders the
 // catalog. No Node builtin, so it stays out of the `/server`-only group.
-export * from './email-topics'
+export * from './subscription-topics'
 export * from './compose-layout-nodes'
 // Layout properties applied through the chain (AGL-2893).
 export * from './compose-layout-props'
@@ -183,11 +183,12 @@ export * from './onboarding-deep-link'
 // they are the same hop — the marketing CTA's query string — and both are
 // remembered on `users/{uid}` across the verification wall.
 export * from './utm-attribution'
-// The edge between a campaign and the forms, screens and contacts a push is
-// coordinated across. Beside the attribution above because the two answer
-// opposite questions about the same word: attribution records where somebody
-// CAME from, this records what a merchant DECLARED belongs together.
-export * from './campaign-membership'
+// What a record is filed under: the edge between a container a plugin keeps
+// (a campaign) and the forms, screens and contacts it gathers. Beside the
+// attribution above because the two answer opposite questions: attribution
+// records where somebody CAME from, this records what a merchant DECLARED
+// belongs together.
+export * from './container-membership'
 export * from './deployment-shape'
 // Which browser origins may complete a signed direct-to-GCS upload (AGL-1452).
 // GCS matches the origin list EXACTLY, so every serving console name needs its

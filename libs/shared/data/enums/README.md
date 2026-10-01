@@ -8,7 +8,7 @@ Constants, enums and small pure helpers shared across the Aglyn packages: HTTP c
 
     npm install @aglyn/shared-data-enums@beta
 
-Peer dependency: `firebase`. The `firebase-auth` module imports error codes and types from `firebase/auth`, and the root entry re-exports that module.
+Optional peer dependency: `firebase`. The `firebase-auth` module imports error codes and types from `firebase/auth`, and the root entry re-exports that module, so install `firebase` if you import either of them. Every other module is importable by its subpath without it, which is how `@aglyn/aglyn` uses this package: the core installs and runs with no Firebase SDK.
 
 ## What's in it
 

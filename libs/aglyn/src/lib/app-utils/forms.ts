@@ -33,7 +33,7 @@
 
 import type { AglynNodeSchema, NodeId } from '../foundation/definitions/components.types'
 import { FORMS_PLUGIN_ID } from '../plugin-manager/enabled-plugins'
-import { campaignMembershipValue } from './campaign-membership'
+import { containerMembershipValue } from './container-membership'
 import type { PlacementKind } from './compose-reusable-components'
 import { submissionMonthKey } from './form-abuse-ceiling'
 import { displayNameSearchFields, nameSearchTokens } from './name-search'
@@ -350,7 +350,7 @@ export function formCampaignFields(selected: unknown): {
   campaignIds: string[]
   inCampaign: boolean
 } {
-  const campaignIds = campaignMembershipValue(Array.isArray(selected) ? selected : [])
+  const campaignIds = containerMembershipValue(Array.isArray(selected) ? selected : [])
   return { campaignIds, inCampaign: campaignIds.length > 0 }
 }
 

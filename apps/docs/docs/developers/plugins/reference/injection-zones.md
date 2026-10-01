@@ -44,14 +44,11 @@ The guaranteed zones are the exported `CONSOLE_WIDGET_SLOTS` catalog —
 | `consoleDock` | The console dock: a floating panel above every route boundary in both the app and editor shells (it was `assistPanel` until AGL-3080) | `orgId`, `org`, `orgReady`, `scopedOrgId` (the org a widget may act and be metered for, `undefined` where the page names none), `orgSlug`, `hostId`, `productName`, `releaseVerdict(key)` (`{ visible, staffPreview }` for any release flag, staff bypass applied), `isStaff`, `permissionsOnHost` |
 | `besignerInspector` | A section at the bottom of the besigner's Attributes panel, under the selected element's fields, on every editor the designer opens | `hostId` (`null` on an editor that names no site), `node` (the selected element) |
 | `besignerToolbar` | The besigner's secondary toolbar, after undo and redo, on every editor the designer opens | `hostId` (`null` on an editor that names no site) |
+| `besignerInteractions` | The besigner's Interactions section, on every editor that offers one. Your widget draws nothing: it reads the section experiments your plugin runs on the site and calls `reportSectionExperiments` from an effect, and the section badges an element that has one and offers to start one from your `create`. Report `null` to withdraw | `hostId`, `screenId` (`null` on a layout or a component, which is no page to run one on: report no `create` there), `reportSectionExperiments(reporterId, { experiments, create? } \| null)` |
 | `hostScreens` | A site's **Pages** list, beside Templates and Create New Page: another way to start a page | `hostId`, `orgId` (`undefined` while the page resolves it) |
 | `hostTemplates` | A site's Templates page, beside Create Template: another way to start a template | `hostId`, `orgId` |
 | `hostLayouts` | A site's Layouts page, beside Templates and Create New Layout: another way to start a layout | `hostId`, `orgId` |
-| `hostForms` | A site's Forms page, beside Create Form: another way to start a form. The Forms page is the forms plugin's, which hosts the zone — see [Zones a plugin hosts](#zones-a-plugin-hosts) | `hostId`, `orgId` |
 | `hostComponents` | A site's Components page, beside Templates and Create Component: another way to start a reusable component | `hostId`, `orgId` |
-| `hostAutomations` | The Automation page's Actions, beside **Add action** and **Recipes**: another way to start an automation. Hosted by the workflows plugin (see [Zones a plugin hosts](#zones-a-plugin-hosts)) | `hostId`, `orgId`, `openAction(actionId)` — opens a listed action in the Actions editor, and answers `false` for one the list has not read yet |
-| `automationEditor` | Inside the editor of one saved automation, an action or a workflow, on the Automation page. Hosted by the workflows plugin | `hostId`, `orgId`, `target` (`{ type: 'action' \| 'workflow', id, name }`, the automation as it is stored) |
-| `automationRun` | On each failed run in an automation's run history. Hosted by the workflows plugin | `hostId`, `orgId`, `target` (as above), `runId` (the run's entry in the site's activity log) |
 | `recordInsights` | A CRM contact's, company's, deal's or lead's page, under its header. Hosted by the CRM plugin (see [Zones a plugin hosts](#zones-a-plugin-hosts)) | `hostId` (`null` at the organization level), `orgId`, `record` (`{ kind, id, name }`), `proposeTask(task, key)` (opens the CRM's task form filled in; absent on a lead), and on a deal `stages`, `stageId` and `proposeStage(stageId, key)` (asks, then moves the deal through its stage route) |
 | `recordEmail` | Inside the CRM's one-to-one composer, under the message. Hosted by the CRM plugin (see [Zones a plugin hosts](#zones-a-plugin-hosts)) | `hostId`, `orgId`, `record`, `subject`, `body`, `proposeDraft({ subject, body }, key)` (fills the composer, asking before it replaces a written message; Send is the member's) |
 | `importMapping` | Inside a CRM contacts, companies, deals or leads import, under its column matching. Hosted by the CRM plugin (see [Zones a plugin hosts](#zones-a-plugin-hosts)) | `hostId`, `orgId`, `collection`, `columns` (each `{ header, shape }`, where `shape` is `email`, `phone`, `number`, `date`, `yes-no`, `url`, `text` or `empty`; never a cell), `mapping`, `proposeMapping(mapping, key)` (replaces the drawer's matching; Import is the write) |
@@ -74,7 +71,7 @@ so the shell hands its renderer down: read it with `useConsoleWidgetSlot()` from
 
 ```tsx
 const Slot = useConsoleWidgetSlot()
-return Slot ? <Slot slot="hostForms" hostId={hostId} orgId={orgId} /> : null
+return Slot ? <Slot slot={HOST_FORMS_ZONE.id} hostId={hostId} orgId={orgId} /> : null
 ```
 
 The renderer is the same gated slot a console page mounts, so a widget there passes the
@@ -84,12 +81,16 @@ and the zone draws nothing.
 A plugin that hosts a zone also declares it, with `registerPluginZone` and a token that
 carries the props it hands each widget (see
 [Zones a plugin hosts](./plugin-manager-api.md#zones-a-plugin-hosts--plugin-zones) in the
-plugin-manager reference). The commerce plugin declares these three on its product
-surfaces; a widget from another plugin restates the props it reads rather than importing
-the commerce package:
+plugin-manager reference). The forms, workflows and commerce plugins declare these on
+their own surfaces; a widget from another plugin restates the props it reads rather than
+importing the host's package:
 
 | Zone | Where it renders | Props your widget receives |
 | --- | --- | --- |
+| `hostForms` | A site's Forms page, the forms plugin's, beside Create Form: another way to start a form | `hostId`, `orgId` |
+| `hostAutomations` | The workflows plugin's Automation page, its Actions, beside **Add action** and **Recipes**: another way to start an automation | `hostId`, `orgId`, `openAction(actionId)` — opens a listed action in the Actions editor, and answers `false` for one the list has not read yet |
+| `automationEditor` | Inside the editor of one saved automation, an action or a workflow, on the Automation page | `hostId`, `orgId`, `target` (`{ type: 'action' \| 'workflow', id, name }`, the automation as it is stored) |
+| `automationRun` | On each failed run in an automation's run history | `hostId`, `orgId`, `target` (as above), `runId` (the run's entry in the site's activity log) |
 | `productEditor` | The commerce product editor, under a product's description, tags and categories: copy proposed for the fields, which Save product writes | `hostId`, `orgId`, `product` (as the editor holds it), `categories`, `proposeValues(values, key)` — stages copy in the editor as unsaved edits |
 | `productsHub` | The commerce products page, above its catalog table: proposals the hub writes when a member applies them | `hostId`, `orgId`, `products` (the catalog rows the hub holds), `lastImport` (the products the latest import created, with its options, or `null`), and the hub's writes a widget asks for: `applyProductCopy`, `createProductDrafts`, `createCategories`, `createDiscountDrafts` |
 | `productImport` | Inside the commerce CSV import dialog: options for what happens to the imported products once they land | `hostId`, `orgId`, `count` (products the import creates), `options`, `setOption(key, on)` |
@@ -122,6 +123,8 @@ page spaces it there:
 - `besignerFunctions`, `orgData`, `orgMarketplace`, `orgAddons` and
   `marketplaceListing`: the body of a dialog or a page.
 - `consoleDock`: a floating dock.
+- `besignerInteractions`: nothing; a widget there reports to the section and
+  renders `null`.
 - `orgMembersListColumn`, `staffOrgsListColumn` and `staffOrgUsageColumn`: a
   column of a table, or, on `staffOrgUsageColumn`, a line above it.
 

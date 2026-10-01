@@ -153,6 +153,45 @@ test('a comment-only change moves nothing and needs no entry', () => {
   assert.equal(overallExitCode(verdicts), 0)
 })
 
+test('an OPTIONAL scalar a ref does not declare is absent, not unreadable', () => {
+  const { values, unreadable } = priceSurface(sources())
+  assert.deepEqual(unreadable, [])
+  assert.equal('PAGE_VIEW_CDN_REQUEST_COST_USD' in values, false)
+})
+
+test('RED: an optional scalar ARRIVING is a move the log must record', () => {
+  const head = sources()
+  head[ENTITLEMENTS_PATH] += '\nexport const PAGE_VIEW_CDN_REQUEST_COST_USD = 0.00011538462\n'
+  const verdicts = changeControlVerdicts({
+    baseRef: 'origin/production',
+    baseSources: sources(),
+    headSources: head,
+    baseLog: GOOD_LOG,
+    headLog: GOOD_LOG,
+  })
+  const v = verdictFor(verdicts, 'change-control')
+  assert.equal(v.status, 'differs')
+  assert.match(v.detail, /PAGE_VIEW_CDN_REQUEST_COST_USD undefined → 0\.00011538462/)
+  assert.equal(overallExitCode(verdicts), 1)
+})
+
+test('RED: an optional scalar that MOVES is a move, and one that will not parse is unreadable', () => {
+  const at = (value) => {
+    const src = sources()
+    src[ENTITLEMENTS_PATH] += `\nexport const PAGE_VIEW_CDN_REQUEST_COST_USD = ${value}\n`
+    return src
+  }
+  const moved = changeControlVerdicts({
+    baseRef: 'origin/production',
+    baseSources: at('0.00011538462'),
+    headSources: at('0.0002'),
+    baseLog: GOOD_LOG,
+    headLog: GOOD_LOG,
+  })
+  assert.match(verdictFor(moved, 'change-control').detail, /0\.00011538462 → 0\.0002/)
+  assert.equal(priceSurface(at('perView * 57')).unreadable[0].key, 'PAGE_VIEW_CDN_REQUEST_COST_USD')
+})
+
 test('RED: a moved PRICE with an unchanged Decision Log', () => {
   const verdicts = changeControlVerdicts({
     baseRef: 'origin/production',

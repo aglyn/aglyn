@@ -16,8 +16,11 @@
  */
 
 import {
+  defaultPaymentMethodChange,
   describeStripePaymentMethod,
+  moveSubscriptionsOntoDefault,
   selectSubscriptionPaymentMethod,
+  subscriptionsToMoveOntoDefault,
 } from './stripe-payment-method'
 
 const cardMethod = {
@@ -110,5 +113,148 @@ describe('selectSubscriptionPaymentMethod (AGL-940)', () => {
     expect(
       selectSubscriptionPaymentMethod([subscription('active', null)]),
     ).toBeNull()
+  })
+})
+
+/**
+ * A NEW CUSTOMER DEFAULT MUST REACH THE SUBSCRIPTION (AGL-3442).
+ *
+ * The Billing Portal's payment-method flow sets only
+ * `customer.invoice_settings.default_payment_method`, and every subscription
+ * the console creates carries its own `default_payment_method`, which wins.
+ * Left there, the customer is told the payment method is updated while the
+ * next retry charges the card that failed.
+ */
+describe('defaultPaymentMethodChange (AGL-3442)', () => {
+  const customer = (pm: unknown) => ({ invoice_settings: { default_payment_method: pm } })
+
+  it('reads a change from one default to another', () => {
+    expect(
+      defaultPaymentMethodChange(customer('pm_new'), {
+        invoice_settings: { default_payment_method: 'pm_old' },
+      }),
+    ).toEqual({ from: 'pm_old', to: 'pm_new' })
+  })
+
+  it('reads a first default as a change from none', () => {
+    expect(
+      defaultPaymentMethodChange(customer({ id: 'pm_new' }), {
+        invoice_settings: { default_payment_method: null },
+      }),
+    ).toEqual({ from: null, to: 'pm_new' })
+  })
+
+  it('is no change when the update was about something else', () => {
+    // An address edit names `address` in previous_attributes, not the default,
+    // however the default is set.
+    expect(
+      defaultPaymentMethodChange(customer('pm_new'), { address: { city: 'Austin' } }),
+    ).toBeNull()
+    expect(defaultPaymentMethodChange(customer('pm_new'), undefined)).toBeNull()
+    expect(
+      defaultPaymentMethodChange(customer('pm_new'), {
+        invoice_settings: { custom_fields: null },
+      }),
+    ).toBeNull()
+  })
+
+  it('is no change when the default was cleared', () => {
+    expect(
+      defaultPaymentMethodChange(customer(null), {
+        invoice_settings: { default_payment_method: 'pm_old' },
+      }),
+    ).toBeNull()
+  })
+})
+
+describe('subscriptionsToMoveOntoDefault (AGL-3442)', () => {
+  const sub = (id: string, status: string, pm: unknown) => ({
+    id,
+    status,
+    default_payment_method: pm,
+  })
+
+  it('moves a live subscription still billing the previous default', () => {
+    expect(
+      subscriptionsToMoveOntoDefault(
+        [sub('sub_live', 'past_due', 'pm_old'), sub('sub_paid', 'active', { id: 'pm_old' })],
+        { from: 'pm_old', to: 'pm_new' },
+      ),
+    ).toEqual(['sub_live', 'sub_paid'])
+  })
+
+  it('leaves a subscription pinned to some other method, one with no override, one already on the new default, and a dead one', () => {
+    expect(
+      subscriptionsToMoveOntoDefault(
+        [
+          sub('sub_other', 'active', 'pm_elsewhere'),
+          sub('sub_follows', 'active', null),
+          sub('sub_done', 'active', 'pm_new'),
+          sub('sub_dead', 'canceled', 'pm_old'),
+        ],
+        { from: 'pm_old', to: 'pm_new' },
+      ),
+    ).toEqual([])
+  })
+
+  it('moves every live override when the customer had no default before', () => {
+    expect(
+      subscriptionsToMoveOntoDefault(
+        [sub('sub_legacy', 'unpaid', 'pm_checkout'), sub('sub_follows', 'active', null)],
+        { from: null, to: 'pm_new' },
+      ),
+    ).toEqual(['sub_legacy'])
+  })
+
+  it('reads nothing into a non-list', () => {
+    expect(subscriptionsToMoveOntoDefault({ error: 'nope' }, { from: null, to: 'pm_new' })).toEqual([])
+  })
+})
+
+describe('moveSubscriptionsOntoDefault (AGL-3442)', () => {
+  const originalFetch = global.fetch
+  afterEach(() => {
+    global.fetch = originalFetch
+  })
+
+  it('posts the new default onto each subscription that must follow it, and only those', async () => {
+    const posts: Array<{ url: string; body: string }> = []
+    global.fetch = jest.fn(async (url: string, init?: RequestInit) => {
+      if (init?.method === 'POST') {
+        posts.push({ url, body: String(init.body) })
+        return { ok: !url.endsWith('sub_refused'), json: async () => ({}) }
+      }
+      return {
+        ok: true,
+        json: async () => ({
+          data: [
+            { id: 'sub_live', status: 'past_due', default_payment_method: 'pm_old' },
+            { id: 'sub_refused', status: 'active', default_payment_method: 'pm_old' },
+            { id: 'sub_other', status: 'active', default_payment_method: 'pm_elsewhere' },
+          ],
+        }),
+      }
+    }) as never
+
+    const outcome = await moveSubscriptionsOntoDefault('sk_test_fake', 'cus_1', {
+      from: 'pm_old',
+      to: 'pm_new',
+    })
+
+    expect(outcome).toEqual({ moved: ['sub_live'], failed: ['sub_refused'] })
+    expect(posts.map((post) => post.url)).toEqual([
+      'https://api.stripe.com/v1/subscriptions/sub_live',
+      'https://api.stripe.com/v1/subscriptions/sub_refused',
+    ])
+    expect(posts[0].body).toBe('default_payment_method=pm_new')
+  })
+
+  it('answers undefined, and never throws, when the subscriptions cannot be read', async () => {
+    global.fetch = jest.fn(async () => {
+      throw new Error('network down')
+    }) as never
+    await expect(
+      moveSubscriptionsOntoDefault('sk_test_fake', 'cus_1', { from: 'pm_old', to: 'pm_new' }),
+    ).resolves.toBeUndefined()
   })
 })

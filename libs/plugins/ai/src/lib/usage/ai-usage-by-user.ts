@@ -32,7 +32,7 @@ import {
 } from '../model/ai-usage-by-user'
 import { AI_USAGE_TOKENS_FIELD } from '../model/ai-tokens'
 import type { AiUsage } from '../providers/contract'
-import { assistCreditsFromUsd } from '@aglyn/aglyn/app-utils/assist-credits'
+import { assistCreditsFromUsd } from './assist-credits'
 
 /**
  * PER-USER AI USAGE (AGL-2928): the writer and the readers.

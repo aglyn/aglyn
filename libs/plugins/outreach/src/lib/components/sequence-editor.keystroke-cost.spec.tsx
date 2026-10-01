@@ -71,7 +71,7 @@ jest.mock('./use-outreach-crm', () => ({
 }))
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useUser: () => ({ data: { uid: 'uid-rep', email: 'avery@example.com' } }),
-  useOrgCampaigns: () => ({ options: mockCampaigns, truncated: false, ready: true }),
+  useOrgContainerOptions: () => ({ options: mockCampaigns, truncated: false, ready: true }),
 }))
 jest.mock('@aglyn/shared-ui-snackstack', () => ({
   useSnackbar: () => ({ enqueueSnackbar: jest.fn() }),

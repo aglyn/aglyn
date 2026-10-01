@@ -35,7 +35,7 @@ import {
   resolveAssistOverageCapUsd,
   resolveAssistOverageRateUsdPer1k,
   type PublicAssistCredits,
-} from '@aglyn/aglyn/app-utils/assist-credits'
+} from './assist-credits'
 import {
   aiOverageRefusal,
   type AiOverageCapReason,

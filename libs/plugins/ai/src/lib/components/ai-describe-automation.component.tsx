@@ -18,7 +18,7 @@
  */
 
 import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
-import type { ConsoleHostAutomationsZoneProps } from '@aglyn/aglyn/plugin-manager/feature-plugins'
+import type { ConsoleHostAutomationsZoneProps } from './ai-automation-zones'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import {
   Alert,

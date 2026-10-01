@@ -70,11 +70,12 @@ const USAGE_METERING_TS = 'apps/console/utils/usage-metering.ts'
  *
  * Agency moved once since the lock — 799 → 1299 monthly, 649 → 1049 annual,
  * recorded in "2026-08-31 — Agency is $1,299/mo and $1,049 annual". The page
- * view rate moved once too — $0.13 → $0.21 per 1,000, recorded in
- * "2026-09-09 — The page-view rate is re-pegged to a 1012.8 KB page". Both are
- * pinned here because the decision is written down, not because the check was
- * red: a pin moved to silence a failure records nothing and can catch nothing
- * afterwards. Every other column is where Sept 1 put it.
+ * view rate moved twice — $0.13 → $0.21 per 1,000, recorded in
+ * "2026-09-09 — The page-view rate is re-pegged to a 1012.8 KB page", then
+ * $0.21 → $0.36, recorded in "2026-10-01 — Page-view overage $0.21 → $0.36
+ * per 1k". Each is pinned here because the decision is written down, not
+ * because the check was red: a pin moved to silence a failure records nothing
+ * and can catch nothing afterwards. Every other column is where Sept 1 put it.
  */
 const LOCKED = {
   monthly: { free: 0, starter: 25, pro: 56, business: 139, scale: 249, advanced: 399, agency: 1299 },
@@ -91,7 +92,7 @@ const LOCKED = {
   // What `/pricing` publishes: unit cost × 1.30, in the units the page quotes.
   publishedMetered: {
     storagePerGbMonth: 0.0338,
-    perThousandPageViews: 0.21,
+    perThousandPageViews: 0.36,
     perThousandFormSubmissions: 0.065,
   },
 }
@@ -264,14 +265,25 @@ verdicts.push(...compareUnitRateTables(metered, cogs))
 
 // ---- 4. published metered rates = unit cost × markup ---------------------
 const markupMatch = entitlementsSrc.match(/export const METERED_MARKUP\s*=\s*([\d.]+)/)
-if (metered && markupMatch) {
-  const published = publishedMeteredRates(metered, Number(markupMatch[1]))
+const cdnMatch = entitlementsSrc.match(
+  /export const PAGE_VIEW_CDN_REQUEST_COST_USD\s*=\s*([\d.]+)/,
+)
+if (metered && markupMatch && cdnMatch) {
+  const published = publishedMeteredRates(
+    metered,
+    Number(markupMatch[1]),
+    Number(cdnMatch[1]),
+  )
   for (const [key, want] of Object.entries(LOCKED.publishedMetered)) {
     if (published[key] === want) note('in-sync', `published:${key}`, `$${want}`)
     else note('differs', `published:${key}`, `derived $${published[key]} vs published $${want}`)
   }
 } else {
-  note('unreadable', 'published:metered', 'METERED_MARKUP or the unit rates could not be parsed')
+  note(
+    'unreadable',
+    'published:metered',
+    'METERED_MARKUP, PAGE_VIEW_CDN_REQUEST_COST_USD or the unit rates could not be parsed',
+  )
 }
 
 // ---- 5. code ↔ Stripe live ----------------------------------------------

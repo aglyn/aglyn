@@ -17,9 +17,9 @@
 
 import type { PluginApiRequest, PluginApiResponse } from '@aglyn/aglyn/server'
 import {
-  MARKETPLACE_PROCESSING_FIXED_CENTS,
-  MARKETPLACE_PROCESSING_PERCENT_BNPL,
-  MARKETPLACE_PROCESSING_PERCENT_CARD,
+  PROCESSING_FIXED_CENTS,
+  BNPL_PROCESSING_PERCENT,
+  CARD_PROCESSING_PERCENT,
 } from '@aglyn/aglyn/server'
 import { checkoutHandler } from './checkout'
 
@@ -345,7 +345,7 @@ async function runCheckout(scenario: Scenario = {}) {
 /** What Stripe debits from the PLATFORM for a charge of `chargeCents`. */
 function stripeCostCents(chargeCents: number, percent: number): number {
   return (
-    Math.round((chargeCents * percent) / 100) + MARKETPLACE_PROCESSING_FIXED_CENTS
+    Math.round((chargeCents * percent) / 100) + PROCESSING_FIXED_CENTS
   )
 }
 
@@ -403,7 +403,7 @@ describe('a storefront sale is never a loss to the platform (AGL-2152)', () => {
     expect(body?.get('line_items[0][price_data][unit_amount]')).toBe('3000')
     expect(body?.has('line_items[1][price_data][unit_amount]')).toBe(false)
     expect(fee).toBeGreaterThan(0)
-    expect(fee - stripeCostCents(3000, MARKETPLACE_PROCESSING_PERCENT_BNPL)).toBeGreaterThanOrEqual(0)
+    expect(fee - stripeCostCents(3000, BNPL_PROCESSING_PERCENT)).toBeGreaterThanOrEqual(0)
   })
 
   /**
@@ -421,7 +421,7 @@ describe('a storefront sale is never a loss to the platform (AGL-2152)', () => {
     })
     expect(result.status).toBe(200)
     const fee = feeCents(body)
-    const net = fee - stripeCostCents(500, MARKETPLACE_PROCESSING_PERCENT_BNPL)
+    const net = fee - stripeCostCents(500, BNPL_PROCESSING_PERCENT)
     expect(net).toBeGreaterThanOrEqual(0)
     // And the advertised 2% is still really collected on top of the cost —
     // the take did not quietly become the cost recovery.
@@ -458,7 +458,7 @@ describe('a storefront sale is never a loss to the platform (AGL-2152)', () => {
     const worstChargeCents = 3000 + taxCents + dearestShippingCents
     expect(
       feeCents(body) -
-        stripeCostCents(worstChargeCents, MARKETPLACE_PROCESSING_PERCENT_BNPL),
+        stripeCostCents(worstChargeCents, BNPL_PROCESSING_PERCENT),
     ).toBeGreaterThanOrEqual(0)
   })
 
@@ -480,7 +480,7 @@ describe('a storefront sale is never a loss to the platform (AGL-2152)', () => {
       // reading of Stripe's cost.
       expect(
         takeOnlyFee -
-          stripeCostCents(goodsCents, MARKETPLACE_PROCESSING_PERCENT_CARD),
+          stripeCostCents(goodsCents, CARD_PROCESSING_PERCENT),
       ).toBeLessThan(0)
     }
   })

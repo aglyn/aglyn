@@ -595,7 +595,7 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
         flex: 1,
         minWidth: 150,
         valueGetter: (_value: unknown, row: LeadRow) =>
-          Aglyn.readCampaignIds(row).map(campaignName).join(', '),
+          Aglyn.readContainerIds(row, 'campaign').map(campaignName).join(', '),
       } satisfies GridColDef,
       {
         field: 'lastSeenAtMs',

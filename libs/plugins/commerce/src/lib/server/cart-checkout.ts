@@ -841,7 +841,7 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
         shippingCeilingCents
       feeCents = Math.min(
         chargeCents,
-        feeCents + Aglyn.storefrontProcessingCostCents(chargeCents),
+        feeCents + Aglyn.saleProcessingCostCents(chargeCents),
       )
     }
     // THE CONNECT SPLIT IS EMITTED BELOW, NOT HERE (AGL-1956). It used to be

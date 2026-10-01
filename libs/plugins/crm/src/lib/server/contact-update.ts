@@ -78,8 +78,8 @@ import {
   type ContactCompanyLinkPlan,
   type ContactCustomValue,
   type ContactFieldDefinition,
-  campaignMembershipValue,
-  contactCampaignFieldPath,
+  containerMembershipValue,
+  contactContainerFieldPath,
   contactFacetPath,
   CRM_COLLECTIONS,
   CRM_LEAD_SOURCE_PICKLIST,
@@ -215,7 +215,7 @@ export function readContactUpdateFields(
   if ('campaignIds' in raw) {
     const ids = raw['campaignIds']
     if (!Array.isArray(ids)) return { ok: false, error: 'Campaigns must be a list.' }
-    fields.campaignIds = campaignMembershipValue(ids.map((id) => String(id ?? '')))
+    fields.campaignIds = containerMembershipValue(ids.map((id) => String(id ?? '')))
   }
   if ('ownerUid' in raw) fields.ownerUid = typed(raw['ownerUid'], 128)
   if ('companyId' in raw) {
@@ -328,7 +328,7 @@ function contactPatch(
     update[path('tags')] = FieldValue.arrayRemove(fields.removeTag)
   }
   if (fields.campaignIds !== undefined) {
-    update[contactCampaignFieldPath(groupId)] = fields.campaignIds
+    update[contactContainerFieldPath(groupId, 'campaign')] = fields.campaignIds
   }
   if (fields.ownerUid !== undefined) update[path('ownerUid')] = text(fields.ownerUid)
 

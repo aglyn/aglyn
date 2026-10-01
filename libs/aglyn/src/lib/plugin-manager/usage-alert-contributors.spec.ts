@@ -47,9 +47,8 @@ const CONTEXT: UsageAlertContext = {
   month: '2026-09',
   spend: {
     meteredUsd: 0,
-    assistUsd: 0,
+    lines: [],
     totalUsd: 0,
-    assistBilled: false,
     meteredFresh: false,
   },
   guards: {},
@@ -111,7 +110,7 @@ describe('usage alert contributors', () => {
     expect(names()).toEqual(['ai:monthly-spend', 'deliverability:monthly-spend'])
   })
 
-  it('refuses a contributor with no plugin, no id or no evaluate', () => {
+  it('refuses a contributor with no plugin, no id, or nothing to run', () => {
     expect(() =>
       registerUsageAlertContributor(contributor('  ', 'bounce-rate')),
     ).toThrow('needs a pluginId and an id')
@@ -123,8 +122,39 @@ describe('usage alert contributors', () => {
         pluginId: DELIVERABILITY,
         id: 'bounce-rate',
       } as unknown as UsageAlertContributor),
-    ).toThrow('"deliverability:bounce-rate" has no evaluate function')
+    ).toThrow(
+      '"deliverability:bounce-rate" has neither an evaluate nor a quotaChecks function',
+    )
     expect(names()).toEqual([])
+  })
+
+  it('takes a contributor that only answers quota checks', async () => {
+    const check = {
+      key: 'bounces',
+      label: 'monthly bounces',
+      noun: 'bounced emails',
+      used: 9,
+      limit: 10,
+      cadence: 'monthly' as const,
+      outcome: 'continues' as const,
+      reached: 'Nothing stops and nothing is charged.',
+      approach: 'Nothing changes and nothing is charged.',
+    }
+    registerUsageAlertContributor({
+      pluginId: DELIVERABILITY,
+      id: 'bounce-band',
+      quotaChecks: async () => [check],
+    })
+    const [registered] = listUsageAlertContributors()
+    expect(registered?.evaluate).toBeUndefined()
+    await expect(
+      registered?.quotaChecks?.({
+        orgId: 'org-1',
+        org: {},
+        month: '2026-09',
+        spend: { meteredUsd: 0, lines: [], totalUsd: 0, meteredFresh: false },
+      }),
+    ).resolves.toEqual([check])
   })
 
   it('answers copies, so a reader cannot rename a registered contributor', () => {

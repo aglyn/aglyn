@@ -43,7 +43,7 @@ storefront orders, paid memberships and paid bookings alike — separate from
 Stripe's payment-processing fees. Upgrading is the way to reduce them.
 
 Every plan also includes an amount of monthly **traffic** — 2 GB on Free, rising to
-3,080 GB on Enterprise by default (an agreement can set more). Passing it is metered and
+1,580 GB on Enterprise by default (an agreement can set more). Passing it is metered and
 billed on a paid plan, and pauses the site until the start of next month on Free. See [Bandwidth](bandwidth.md) for the table and
 for what a paused site shows a visitor.
 
@@ -641,8 +641,12 @@ monthly invoice as a usage line. See
   The address and tax ID appear on the invoice, which is what makes it usable for
   reclaiming tax or filing it with an accountant. Previously an address was collected
   only when the card happened to require one, and the phone and tax ID never were.
-- **Manage payment methods** opens the Stripe **Billing Portal** — update cards, view
-  receipts, and set tax details there. It works even after a subscription lapses.
+- **Update payment method**, at the top of the **Current plan** card, opens Stripe's own
+  add-a-payment-method step and brings you back to Billing when it is saved. The new
+  method becomes the one your subscription is charged to, including the retries of a
+  payment that failed. It works even after a subscription lapses.
+- **Manage payment methods** goes to [Payment methods](#payment-methods) under
+  **Billing → Settings**, where you add and remove cards and choose the default.
 - If a payment fails, the console shows a **past-due banner** while Stripe retries;
   access continues while you fix the card, and entitlements only downgrade if the
   subscription dies.
@@ -653,8 +657,9 @@ monthly invoice as a usage line. See
   workspace moves to **Free**; the console notifies the workspace's owners and admins
   when that happens. **Paying the outstanding invoice at any point beforehand
   restores the plan with no further action**, and you can update your card at any
-  time from **Manage payment methods**, which keeps working even after a
-  subscription lapses.
+  time with **Update payment method** on the Billing page, which keeps working even
+  after a subscription lapses. The failed-payment email and the past-due banner both
+  link straight to it.
 - **A shortcut straight to billing: `app.aglyn.com/billing`.** It doesn't name a
   workspace, so it's safe to bookmark or to follow from an email. Sign in and it
   takes you to your workspace's Billing page; if you manage several, it asks which

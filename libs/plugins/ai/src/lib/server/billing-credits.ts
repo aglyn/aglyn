@@ -18,8 +18,9 @@
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   publicAssistCredits,
+  assistBandRefuses,
   resolveAssistBudgetUsd,
-} from '@aglyn/aglyn/app-utils/assist-credits'
+} from '../usage/assist-credits'
 import { isUncappedPlanComp } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import {
   emailUnverifiedResponse,
@@ -69,6 +70,11 @@ import { invalidIdTokenResponse } from '@aglyn/tenant-data-admin/server/id-token
  * which absence it is, so a reader that turns `null` into a number cannot
  * mistake an unlimited workspace for one with a band of zero.
  *
+ * `stopsAtBand` says what happens at the band — the reservation's own
+ * verdict (`assistBandRefuses`): `true` where it refuses, `false` where it
+ * sells past at the plan's rate — so a surface that warns about the band
+ * says the same thing the gate does without resolving the plan itself.
+ *
  * Membership alone, not `billing.manage`: this is a capacity readout of the
  * kind every other meter on the page shows to anyone who can see the page, and
  * it carries no money. The spend view that DOES carry money is
@@ -117,6 +123,7 @@ async function handler(request: Request): Promise<Response> {
         Number.isFinite(costUsd) && costUsd > 0 ? costUsd : 0,
         budgetUsd,
       ),
+      stopsAtBand: assistBandRefuses(org),
       ...(unlimited ? { unlimited: true } : {}),
     })
   } catch (error) {

@@ -32,5 +32,10 @@
   "peerDependencies": {
     "firebase": "^12.18.0"
   },
+  "peerDependenciesMeta": {
+    "firebase": {
+      "optional": true
+    }
+  },
   "sideEffects": false
 }

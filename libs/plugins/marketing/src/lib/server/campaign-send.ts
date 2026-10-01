@@ -18,8 +18,8 @@
 import {
   checkQuota,
   contactMatchesSegment,
-  isEmailTopicId,
-  DEFAULT_CAMPAIGN_TOPIC_ID,
+  isSubscriptionTopicId,
+  DEFAULT_SUBSCRIPTION_TOPIC_ID,
   readMarketingBasis,
   resolveMarketingConsentPolicy,
   splitByMarketingConsent,
@@ -393,7 +393,7 @@ export interface CampaignSendOptions {
   /**
    * The stream this campaign belongs to, chosen in the composer.
    *
-   * Resolved to {@link DEFAULT_CAMPAIGN_TOPIC_ID} when absent, so every send
+   * Resolved to {@link DEFAULT_SUBSCRIPTION_TOPIC_ID} when absent, so every send
    * belongs to some topic: a campaign with none would mint an unsubscribe link
    * the preference page can render but not place, offering the recipient a
    * catalog without saying which entry the message in front of them was.
@@ -959,10 +959,10 @@ export async function performCampaignSend(
    * `unsubscribe-link.ts`. Refused at the point the topic ENTERS the send, so
    * the link that leaves it is unambiguous by construction.
    */
-  if (options.topicId && !isEmailTopicId(options.topicId)) {
+  if (options.topicId && !isSubscriptionTopicId(options.topicId)) {
     throw new CampaignSendError('Invalid topicId', 400)
   }
-  const topicId = options.topicId || DEFAULT_CAMPAIGN_TOPIC_ID
+  const topicId = options.topicId || DEFAULT_SUBSCRIPTION_TOPIC_ID
   /**
    * Whether this send ADDS to an email that already exists, rather than
    * starting one.
@@ -3934,7 +3934,7 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
    * `performCampaignSend` resolves to the default topic.
    */
   const topicId = String(req.body?.topicId ?? '')
-  if (topicId && !isEmailTopicId(topicId)) {
+  if (topicId && !isSubscriptionTopicId(topicId)) {
     return res.status(400).json({ error: 'Unknown topic' })
   }
 

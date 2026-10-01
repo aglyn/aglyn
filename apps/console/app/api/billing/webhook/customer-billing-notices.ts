@@ -17,6 +17,8 @@
 
 import type { AglynOrgBilling } from '@aglyn/aglyn/server'
 import { PLAN_LABELS, readOrgPlanComp } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { buildRoute, Route } from '../../../../constants/route-links'
+import { updatePaymentMethodHref } from '../../../../utils/update-payment-method-link'
 
 /**
  * WHAT THE BILLING WEBHOOK TELLS A WORKSPACE'S ADMINS (AGL-3432).
@@ -178,4 +180,21 @@ export function invoiceNotice(input: {
       'invoice automatically. It is still open in Billing, where you can ' +
       'update the payment method and pay it.'
   return { title: `Payment failed: ${due} for ${workspace}`, body }
+}
+
+/**
+ * Where an invoice notice's link goes (AGL-3442).
+ *
+ * A failed payment's body tells the reader to update the payment method, so
+ * its link lands on Billing with the Update payment method button in view.
+ * The other two have nothing to change and open Billing itself. Without a
+ * slug the link is the `/org/billing` form, which the console and the
+ * notification email rewrite onto the reader's workspace.
+ */
+export function invoiceNoticeLink(
+  type: CustomerInvoiceEvent,
+  orgSlug: string | null | undefined,
+): string {
+  if (type === 'invoice.payment_failed') return updatePaymentMethodHref(orgSlug)
+  return orgSlug ? buildRoute(Route.MANAGE_BILLING, { orgSlug }) : '/org/billing'
 }

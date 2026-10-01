@@ -62,7 +62,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => {
     useFirestore: () => ({}),
     useUser: () => ({ data: mockUser }),
     useAuthPersistence: () => authPersistence,
-    useHostCampaigns: () => ({ options: [], truncated: false, ready: true }),
+    useSiteContainerOptions: () => ({ options: [], truncated: false, ready: true }),
     // The REAL guard, so the refusal case refuses for real.
     writeGuardedBySeed: jest.requireActual('@aglyn/tenant-feature-instance')
       .writeGuardedBySeed,

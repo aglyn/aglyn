@@ -48,13 +48,13 @@ let lastWidgetProps: Record<string, unknown> | undefined
 /** The SEO zones' proposal doors (AGL-2910), passed through by identity. */
 const mockProposeValues = jest.fn()
 const mockProposeDraft = jest.fn()
-/** The Actions editor's door (AGL-2919), passed through by identity. */
-const mockOpenAction = jest.fn()
 /** The first-run zone's way back to the blank path (AGL-2918), by identity. */
 const mockStartBlank = jest.fn()
 /** The template gallery's doors (AGL-3080), passed through by identity. */
 const mockGalleryInstalled = jest.fn()
 const mockReportShelf = jest.fn()
+/** The Interactions section's report door (AGL-3080), passed through by identity. */
+const mockReportSectionExperiments = jest.fn()
 /** The CRM record zones' proposal doors (AGL-2917), passed through by identity. */
 const mockProposeTask = jest.fn()
 const mockProposeStage = jest.fn()
@@ -265,43 +265,11 @@ const MOUNTS: Record<
     how: 'slot',
     props: { hostId: 'host-1', orgId: 'org-1' },
   },
-  hostForms: {
-    file: 'libs/plugins/forms/src/lib/components/host-forms-card.component.tsx',
-    how: 'hosted',
-    props: { hostId: 'host-1', orgId: 'org-1' },
-  },
   // AGL-3051: beside Templates and Create Component on a site's Components page.
   hostComponents: {
     file: 'apps/console/app/(app)/[orgSlug]/hosts/[host]/components/page.tsx',
     how: 'slot',
     props: { hostId: 'host-1', orgId: 'org-1' },
-  },
-  // AGL-2919: the Automation page, which is the workflows plugin's own
-  // surface — beside Add action and Recipes, in the editor of a saved
-  // automation, and on a failed run in its history.
-  hostAutomations: {
-    file: 'libs/plugins/workflows/src/lib/components/host-actions-card.component.tsx',
-    how: 'hosted',
-    props: { hostId: 'host-1', orgId: 'org-1', openAction: mockOpenAction },
-  },
-  automationEditor: {
-    file: 'libs/plugins/workflows/src/lib/components/host-actions-card.component.tsx',
-    how: 'hosted',
-    props: {
-      hostId: 'host-1',
-      orgId: 'org-1',
-      target: { type: 'action', id: 'act-1', name: 'Welcome new leads' },
-    },
-  },
-  automationRun: {
-    file: 'libs/plugins/workflows/src/lib/components/host-run-history-card.component.tsx',
-    how: 'hosted',
-    props: {
-      hostId: 'host-1',
-      orgId: 'org-1',
-      target: { type: 'action', id: 'act-1', name: 'Welcome new leads' },
-      runId: 'run-1',
-    },
   },
   // AGL-2917: the CRM's record pages, its one-to-one composer and its import
   // drawers, which are the CRM plugin's own surfaces.
@@ -385,6 +353,17 @@ Object.assign(MOUNTS, {
     file: 'apps/console/components/templates/host-templates-card.component.tsx',
     how: 'slot',
     props: { hostId: 'host-1', template: { $id: 'tpl-1', source: { type: 'installer' } } },
+  },
+  // AGL-3080: the section experiments a plugin runs, reported to the
+  // besigner's Interactions section rather than drawn.
+  besignerInteractions: {
+    file: 'apps/console/components/interactions-provider.component.tsx',
+    how: 'slot',
+    props: {
+      hostId: 'host-1',
+      screenId: 'screen-1',
+      reportSectionExperiments: mockReportSectionExperiments,
+    },
   },
   // AGL-3080: what a plugin holds across every workspace, on the staff
   // overview. No props — the overview is about the platform, not one org.

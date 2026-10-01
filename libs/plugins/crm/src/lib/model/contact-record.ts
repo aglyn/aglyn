@@ -155,7 +155,7 @@ export function contactRecordFromDoc(
     interactions: Aglyn.interactionsForGroup(facet.interactions, group.hostIds),
     tags: facet.tags ?? [],
     notes: facet.notes ?? '',
-    campaignIds: Aglyn.readContactCampaignIds(row, group.groupId),
+    campaignIds: Aglyn.readContactContainerIds(row, group.groupId, 'campaign'),
     ltvCents: facet.ltvCents ?? 0,
     ordersCount: facet.ordersCount ?? 0,
     phone: facet.phone ?? '',

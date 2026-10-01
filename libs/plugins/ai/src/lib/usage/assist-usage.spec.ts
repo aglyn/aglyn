@@ -34,7 +34,7 @@ import {
   assistRefusedByHardCap,
   assistRefusedByOverageCap,
   assistUsdFromCredits,
-} from '@aglyn/aglyn/app-utils/assist-credits'
+} from './assist-credits'
 import {
   AI_ADDON_CREDITS_PER_MONTH,
   PLAN_ENTITLEMENTS,
@@ -43,12 +43,12 @@ import { FREE_AI_TASTE_CREDITS_PER_MONTH } from '../plan-entitlements'
 import {
   ASSIST_ORG_MONTHLY_COGS_LIMIT_DEFAULT_USD,
   assistOrgMonthlyCostLimitUsd,
-} from '@aglyn/aglyn/app-utils/usage-budget'
+} from './assist-spend-guards'
 import {
   aiBilledRatesForModel,
   aiProviderRatesForModel,
 } from '../providers/catalog'
-import type { AssistRefusedBy } from '@aglyn/aglyn/app-utils/assist-credits'
+import type { AssistRefusedBy } from './assist-credits'
 import type { AiRefusedBy } from '../model/ai-allotments'
 
 /**

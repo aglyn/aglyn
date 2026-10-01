@@ -61,7 +61,7 @@ jest.mock('@aglyn/aglyn/server', () => ({
   __esModule: true,
   registerPluginApiRoute: jest.fn(),
   ...jest.requireActual('@aglyn/aglyn/app-utils/marketing-consent'),
-  ...jest.requireActual('@aglyn/aglyn/app-utils/list-assignment-policy'),
+  ...jest.requireActual('@aglyn/aglyn/app-utils/enrollment-basis'),
   ...jest.requireActual('@aglyn/aglyn/app-utils/csv-upload'),
   ...jest.requireActual('@aglyn/aglyn/app-utils/organizations'),
   ...jest.requireActual('@aglyn/aglyn/app-utils/contacts'),
