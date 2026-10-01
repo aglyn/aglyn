@@ -33,6 +33,7 @@ import {
   type HostActionAlert,
   type HostActionStep,
   type HostActionStepType,
+  type HostEventType,
   type HostFunction,
   type HostVariable,
   datasetDisplayName,
@@ -139,6 +140,8 @@ import {
   workflowStepTypeLabel,
 } from './workflow-steps'
 import { runTriggeredByFields } from './run-trigger-actor'
+// By path, not the barrel: only a server run asks.
+import { pluginServerStepExecutor } from '@aglyn/aglyn/plugin-manager/plugin-server-steps'
 
 /** Bounded fan-out per event, mirroring the workflow runner. */
 const MAX_TRIGGERED_ACTIONS = 10
@@ -492,6 +495,28 @@ function tallyStep(
       tally.ending = 'deferred'
       return true
   }
+}
+
+/**
+ * Raises an event a step's write earned — a stage an automation set IS a
+ * stage change, and whatever listens for one must hear it.
+ *
+ * Fanned out here, one level deeper under the same depth guard a
+ * `customEvent` chain runs under, rather than through `emitHostEvent`, which
+ * starts every chain at depth zero and would let an automation that causes
+ * the event it listens for run forever. Workflows take the guard too.
+ */
+async function raiseEarnedEvent(
+  env: ActionRunEnv,
+  emit: { event: string; payload: Record<string, unknown> },
+): Promise<void> {
+  const payload = emit.payload as HostEventPayload
+  const [fromWorkflows, fromActions] = await Promise.all([
+    // A step names any event a listener may hear: a declared one or a custom one.
+    runEventWorkflows(env.hostId, emit.event as HostEventType, payload, env.depth + 1),
+    runEventActions(env.hostId, emit.event, payload, env.depth + 1),
+  ])
+  env.alerts.push(...fromActions, ...fromWorkflows)
 }
 
 /**
@@ -1249,30 +1274,31 @@ async function runServerStep(
       )
       if (outcome.error) return failed(outcome.error)
       detail = outcome.detail
+      // A stage set by an automation IS a stage change; see `raiseEarnedEvent`.
+      if (outcome.emit) await raiseEarnedEvent(env, outcome.emit)
+    } else {
       /*
-       * A stage set by an automation IS a stage change, and whatever
-       * listens for one must hear it — fanned out here, under the same
-       * depth guard a `customEvent` chain runs under, rather than through
-       * `emitHostEvent`, which starts every chain at depth zero and would
-       * let an automation that sets the stage it listens for run forever.
-       * Workflows take the guard too, now that a workflow can set a stage.
+       * A STEP ANOTHER PLUGIN RUNS: one that writes that plugin's records,
+       * handed to the executor it registered (`plugin-server-steps`). The
+       * guard, the order, the history and the nesting cap stay here; the
+       * write is the owner's. A declared step whose executor is missing
+       * throws, and is this step's failure. A type nobody runs answers
+       * `null` and reads as done, as an unknown type always has.
        */
-      if (outcome.emit) {
-        const [fromWorkflows, fromActions] = await Promise.all([
-          runEventWorkflows(
-            hostId,
-            outcome.emit.event,
-            outcome.emit.payload,
-            depth + 1,
-          ),
-          runEventActions(
-            hostId,
-            outcome.emit.event,
-            outcome.emit.payload,
-            depth + 1,
-          ),
-        ])
-        alerts.push(...fromActions, ...fromWorkflows)
+      const executor = await pluginServerStepExecutor(step.type)
+      if (executor) {
+        const answer = await executor.run({
+          hostId,
+          org: env.org,
+          orgId: env.orgId,
+          run: { kind: run.kind, id: run.id, name: run.name },
+          event,
+          payload: payload as Record<string, unknown>,
+          step: step as { type: string; [field: string]: unknown },
+        })
+        if (answer.error) return failed(answer.error)
+        detail = answer.detail
+        if (answer.emit) await raiseEarnedEvent(env, answer.emit)
       }
     }
   } catch (error) {
