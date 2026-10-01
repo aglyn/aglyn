@@ -130,7 +130,7 @@
  * other.
  */
 
-import type { TopicSubscriptionState } from './email-topics'
+import type { TopicSubscriptionState } from './subscription-topics'
 import { hostScopeToken, MAX_SCOPE_HOSTS, type ScopeToken } from './scope-tokens'
 
 /**

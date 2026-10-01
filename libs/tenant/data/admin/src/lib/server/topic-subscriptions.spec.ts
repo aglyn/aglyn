@@ -32,14 +32,14 @@
 import {
   readTopicSubscriptionState,
   DOUBLE_OPT_IN_EXPIRY_MS,
-} from '@aglyn/aglyn/app-utils/email-topics'
+} from '@aglyn/aglyn/app-utils/subscription-topics'
 import { emailSuppressionKey } from './email-suppression'
 import {
   confirmTopicSubscription,
   recordPendingTopicConfirmation,
   recordTopicOptOut,
   siteRequiresDoubleOptIn,
-} from './email-topic-confirmation'
+} from './topic-subscriptions'
 import { fakeFirestore } from './test-firestore'
 
 const HOST = 'host-1'

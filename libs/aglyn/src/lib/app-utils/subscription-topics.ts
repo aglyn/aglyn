@@ -15,13 +15,24 @@
  * limitations under the License.
  */
 
+import { PLUGIN_SUBSCRIPTION_TOPICS_DECLARED } from '../plugin-manager/plugin-subscription-topics.generated'
+
 /**
- * EMAIL TOPICS — the streams a recipient can leave one at a time.
+ * SUBSCRIPTION TOPICS — the streams a recipient can leave one at a time.
+ *
+ * The mail rail's per-stream consent: every marketing-purpose message names
+ * the stream it belongs to, its unsubscribe link carries that stream, and the
+ * send path refuses a recipient who left it. That obligation is owed on every
+ * such message whichever plugin sends it — a campaign, a newsletter, a
+ * restock alert, an automation, the operator's own product updates — so the
+ * state and the policy are the platform's. What a plugin brings is the
+ * STREAMS it sends under, which it declares (`plugins.config.json` →
+ * `subscriptionTopics`, compiled into {@link DECLARED_SUBSCRIPTION_TOPICS}).
  *
  * ## The gap this closes
  *
  * `docs/specs/email-competitive-gaps.md` §1f records the only row in that
- * table where every competitor has something and we have nothing: "Preference
+ * table where every competitor has something and we had nothing: "Preference
  * center / subscription topics — unsubscribe is all-or-nothing per site".
  * A recipient who wanted the newsletter but not the sales mail had exactly one
  * lever, and pulling it took the newsletter too. The lever people reach for
@@ -30,12 +41,11 @@
  *
  * ## Scope: definitions are ORG-shared, opt-outs are PER-SITE
  *
- * The topic CATALOG lives at `orgs/{orgId}/emailTopics`, which is where
- * `lists` live (AGL-254) and for the same reason: a topic is authored
- * editorial content — a name and a sentence of description — that an agency
- * writes once and points several sites at. Following `lists` also means the
- * console surface that manages topics inherits a scoping question that has
- * already been answered, rather than inventing a second answer.
+ * The topic CATALOG an org authors — renaming, re-describing, archiving a
+ * built-in stream, adding its own — is stored by the plugin that manages it,
+ * under the organization, where lists live and for the same reason: a topic is
+ * authored editorial content that an agency writes once and points several
+ * sites at.
  *
  * A recipient's OPT-OUT is per site, at `hosts/{hostId}/topicOptOuts`. It sits
  * beside `hosts/{hostId}/suppressions`, which is per site, and it answers the
@@ -46,20 +56,19 @@
  * the unauthenticated preference page honest — the signed link names a host
  * and nothing else, so a per-site read is exactly what the link authorizes.
  *
- * ## Why the defaults are code and not seeded documents
+ * ## Why the built-ins are declared and not seeded documents
  *
- * Every tenant that exists today has an empty `emailTopics` collection. A
- * seeding migration would have to run against every org, would leave any org
+ * A seeding migration would have to run against every org, would leave any org
  * created while it was mid-flight with none, and — like every backfill — is a
- * thing that gets written and then not run. So {@link DEFAULT_EMAIL_TOPICS} is
- * the floor of the catalog rather than its initial contents: it is present for
- * every org from the moment this ships, with no write anywhere, and a stored
- * document at the same id renames, re-describes or archives one. The catalog a
- * reader sees is {@link mergeEmailTopics} of the two.
+ * thing that gets written and then not run. So the declared streams are the
+ * floor of the catalog rather than its initial contents: present for every
+ * org from the moment a plugin declares one, with no write anywhere, and a
+ * stored document at the same id renames, re-describes or archives one. The
+ * catalog a reader sees is {@link mergeSubscriptionTopics} of the two.
  */
 
 /** One subscribable stream. */
-export interface EmailTopic {
+export interface SubscriptionTopic {
   /**
    * The stored id. Rides in the unsubscribe link's `tid` and is covered by
    * its signature, so it is treated as persisted — rename the {@link name},
@@ -163,7 +172,7 @@ export const DOUBLE_OPT_IN_EXPIRY_MS = 72 * 60 * 60 * 1000
  * merchant confirm everything except their order-related stream.
  */
 export function topicRequiresDoubleOptIn(
-  topic: Pick<EmailTopic, 'doubleOptIn'> | null | undefined,
+  topic: Pick<SubscriptionTopic, 'doubleOptIn'> | null | undefined,
   siteDefault: boolean = DEFAULT_SITE_DOUBLE_OPT_IN,
 ): boolean {
   return typeof topic?.doubleOptIn === 'boolean'
@@ -241,76 +250,55 @@ export function doubleOptInExpired(
   return nowMs - at > DOUBLE_OPT_IN_EXPIRY_MS
 }
 
-/** `orgs/{orgId}/emailTopics` — the catalog, org-shared like `lists`. */
-export const EMAIL_TOPICS_COLLECTION = 'emailTopics'
-
 /** `hosts/{hostId}/topicOptOuts/{emailKey}` — one document per recipient. */
 export const TOPIC_OPT_OUTS_SUBCOLLECTION = 'topicOptOuts'
 
-/*==========================================
- * THE BUILT-IN STREAM IDS.
- *
- * Named rather than written as literals wherever a send declares which stream
- * it belongs to, because a mistyped id does not fail loudly. It names a
- * stream nobody has opted out of, so `filterTopicSendable` finds no opt-out
- * and the send goes to everybody — the control silently doing nothing, which
- * is the failure mode a topic filter is least able to reveal.
- *
- * The value is also a Firestore path component and a colon-joined component
- * of the unsubscribe link's signed subject, so it is a wire format: changing
- * one of these strings orphans every opt-out already recorded against it.
- *=========================================*/
-
-/** Sales, discounts, seasonal campaigns — and the cart a shopper left. */
-export const EMAIL_TOPIC_MARKETING = 'marketing'
-/** Regular news and stories, including a site's posts to its members. */
-export const EMAIL_TOPIC_NEWSLETTER = 'newsletter'
-/** New products, restocks, and changes to what a site offers. */
-export const EMAIL_TOPIC_PRODUCT_UPDATES = 'product-updates'
-/** One person here writing to another about working together. */
-export const EMAIL_TOPIC_SALES = 'sales'
+/** One stream a plugin declares, as compiled from `plugins.config.json`. */
+export interface DeclaredSubscriptionTopic {
+  /** The plugin that sends under it. */
+  pluginId: string
+  /**
+   * A wire value: a Firestore path component and a colon-joined component of
+   * the unsubscribe link's signed subject. Changing one orphans every opt-out
+   * already recorded against it.
+   */
+  id: string
+  name: string
+  description: string
+  /** Its place on the preference page. */
+  order: number
+  /** The stream a message belongs to when it names none. */
+  default?: true
+}
 
 /**
- * The catalog every org has before anyone opens the console.
+ * The catalog every org has before anyone opens the console: the streams the
+ * plugins declare, in preference-page order.
  *
- * Four, not twelve. A preference page whose value is "leave one stream without
- * leaving all of them" stops working the moment the list is long enough that
- * reading it is a chore, and a merchant who needs a fifth can add one. The ids
- * are the generic names an unsubscribing recipient can recognize without
- * knowing anything about the sender's internal vocabulary.
+ * A handful, not a dozen. A preference page whose value is "leave one stream
+ * without leaving all of them" stops working the moment the list is long
+ * enough that reading it is a chore, and a merchant who needs another can add
+ * one. The ids are the generic names an unsubscribing recipient can recognize
+ * without knowing anything about the sender's internal vocabulary.
  */
-export const DEFAULT_EMAIL_TOPICS: readonly EmailTopic[] = [
-  {
-    id: EMAIL_TOPIC_MARKETING,
-    name: 'Promotions and offers',
-    description: 'Sales, discounts and seasonal campaigns.',
-  },
-  {
-    id: EMAIL_TOPIC_NEWSLETTER,
-    name: 'Newsletter',
-    description: 'Regular news and stories from us.',
-  },
-  {
-    id: EMAIL_TOPIC_PRODUCT_UPDATES,
-    name: 'Product updates',
-    description: 'New products, restocks and changes to what we offer.',
-  },
-  {
-    id: EMAIL_TOPIC_SALES,
-    name: 'Sales outreach',
-    description: 'Messages from a person here about working together.',
-  },
-]
+export const DECLARED_SUBSCRIPTION_TOPICS: readonly SubscriptionTopic[] =
+  PLUGIN_SUBSCRIPTION_TOPICS_DECLARED.map(({ id, name, description }) => ({
+    id,
+    name,
+    description,
+  }))
 
 /**
- * The topic a campaign carries when its author picked none.
+ * The stream a message belongs to when its author picked none: the one a
+ * plugin declares `default`, or `''` when none does.
  *
- * Every campaign resolves to SOME topic, because a campaign with no topic
- * would mint an unsubscribe link the preference page cannot place — it could
- * offer the catalog but not say which entry this message was, which is the one
- * thing the recipient came to the page knowing.
+ * Every campaign resolves to SOME topic while one is declared, because a
+ * campaign with no topic would mint an unsubscribe link the preference page
+ * cannot place — it could offer the catalog but not say which entry this
+ * message was, which is the one thing the recipient came to the page knowing.
  */
-export const DEFAULT_CAMPAIGN_TOPIC_ID = EMAIL_TOPIC_MARKETING
+export const DEFAULT_SUBSCRIPTION_TOPIC_ID: string =
+  PLUGIN_SUBSCRIPTION_TOPICS_DECLARED.find((topic) => topic.default)?.id ?? ''
 
 /**
  * WHICH STREAM AN AUTOMATED EMAIL BELONGS TO — the one answer, named once.
@@ -330,12 +318,12 @@ export const DEFAULT_CAMPAIGN_TOPIC_ID = EMAIL_TOPIC_MARKETING
  *          which is not "the default topic", and must not be signed into a
  *          link as one.
  */
-export function flowEmailTopicId(
+export function flowSubscriptionTopicId(
   topicId: string | null | undefined,
   scope?: 'scheduled' | 'immediate',
 ): string {
   const named = String(topicId ?? '').trim()
-  return scope === 'immediate' ? named : named || DEFAULT_CAMPAIGN_TOPIC_ID
+  return scope === 'immediate' ? named : named || DEFAULT_SUBSCRIPTION_TOPIC_ID
 }
 
 /**
@@ -348,7 +336,7 @@ export function flowEmailTopicId(
  * parameter tuples. See `signatureMatches` in the email plugin's
  * `unsubscribe-link.ts` for what that ambiguity would buy.
  */
-export function isEmailTopicId(value: unknown): value is string {
+export function isSubscriptionTopicId(value: unknown): value is string {
   return (
     typeof value === 'string' &&
     value.length > 0 &&
@@ -362,11 +350,11 @@ export function isEmailTopicId(value: unknown): value is string {
 }
 
 /** Coerces one stored document into a topic, or `null` if it is not one. */
-export function normalizeEmailTopic(
+export function normalizeSubscriptionTopic(
   id: unknown,
   data: Record<string, unknown> | null | undefined,
-): EmailTopic | null {
-  if (!isEmailTopicId(id)) return null
+): SubscriptionTopic | null {
+  if (!isSubscriptionTopicId(id)) return null
   const name = String(data?.['name'] ?? '').trim()
   return {
     id,
@@ -404,18 +392,18 @@ export function normalizeEmailTopic(
  * alphabetically after, so the preference page's checkbox order is stable
  * across renders and across sites.
  */
-export function mergeEmailTopics(
-  stored: readonly EmailTopic[] | null | undefined,
-): EmailTopic[] {
-  const overrides = new Map<string, EmailTopic>()
+export function mergeSubscriptionTopics(
+  stored: readonly SubscriptionTopic[] | null | undefined,
+): SubscriptionTopic[] {
+  const overrides = new Map<string, SubscriptionTopic>()
   for (const topic of stored ?? []) {
-    if (isEmailTopicId(topic?.id)) overrides.set(topic.id, topic)
+    if (isSubscriptionTopicId(topic?.id)) overrides.set(topic.id, topic)
   }
-  const builtIn = DEFAULT_EMAIL_TOPICS.map(
+  const builtIn = DECLARED_SUBSCRIPTION_TOPICS.map(
     (topic) => overrides.get(topic.id) ?? topic,
   )
   const custom = [...overrides.values()]
-    .filter((topic) => !DEFAULT_EMAIL_TOPICS.some((it) => it.id === topic.id))
+    .filter((topic) => !DECLARED_SUBSCRIPTION_TOPICS.some((it) => it.id === topic.id))
     .sort((a, b) => a.name.localeCompare(b.name))
   return [...builtIn, ...custom]
 }
@@ -429,9 +417,9 @@ export function mergeEmailTopics(
  * belongs to that topic, and re-pointing it at something else would attribute
  * the unsubscribes to the wrong stream.
  */
-export function activeEmailTopics(
-  topics: readonly EmailTopic[],
-): EmailTopic[] {
+export function activeSubscriptionTopics(
+  topics: readonly SubscriptionTopic[],
+): SubscriptionTopic[] {
   return topics.filter((topic) => !topic.archived)
 }
 
@@ -445,18 +433,18 @@ export function activeEmailTopics(
  * page that names A topic, not on one that says the message came from
  * nowhere.
  */
-export function resolveCampaignTopic(
+export function resolveSubscriptionTopic(
   topicId: string | null | undefined,
-  topics: readonly EmailTopic[],
-): EmailTopic {
+  topics: readonly SubscriptionTopic[],
+): SubscriptionTopic {
   const found = topicId
     ? topics.find((topic) => topic.id === topicId)
     : undefined
   if (found) return found
   return (
-    topics.find((topic) => topic.id === DEFAULT_CAMPAIGN_TOPIC_ID) ??
+    topics.find((topic) => topic.id === DEFAULT_SUBSCRIPTION_TOPIC_ID) ??
     topics[0] ?? {
-      id: DEFAULT_CAMPAIGN_TOPIC_ID,
+      id: DEFAULT_SUBSCRIPTION_TOPIC_ID,
       name: 'Email',
       description: '',
     }

@@ -149,7 +149,7 @@ export * from './dynamic-list-rule'
 // sides of the feature: the composer picks one, the send path signs it into
 // the unsubscribe link, and the unauthenticated preference page renders the
 // catalog. No Node builtin, so it stays out of the `/server`-only group.
-export * from './email-topics'
+export * from './subscription-topics'
 export * from './compose-layout-nodes'
 // Layout properties applied through the chain (AGL-2893).
 export * from './compose-layout-props'

@@ -43,11 +43,11 @@
 import { consentGroupTopicState } from '@aglyn/aglyn/app-utils/consent-groups'
 import { CRM_COLLECTIONS } from '@aglyn/aglyn/app-utils/crm'
 import {
-  EMAIL_TOPIC_SALES,
   readTopicSubscriptionState,
   TOPIC_OPT_OUTS_SUBCOLLECTION,
   type TopicSubscriptionState,
-} from '@aglyn/aglyn/app-utils/email-topics'
+} from '@aglyn/aglyn/app-utils/subscription-topics'
+import { SALES_TOPIC_ID } from '../model/sales-topic'
 import type { MemberAddresses } from '@aglyn/aglyn/app-utils/member-email-aliases'
 import { personKey } from '@aglyn/aglyn/app-utils/person-key'
 import { loadMemberAddressRoster } from '@aglyn/tenant-data-admin/server/member-email-aliases'
@@ -229,7 +229,7 @@ export async function readOutreachGateLookups(
       (host, key) => host.collection(TOPIC_OPT_OUTS_SUBCOLLECTION).doc(key),
       (snapshot) =>
         readTopicSubscriptionState(
-          ((snapshot.exists ? snapshot.get('topics') : null) ?? {})[EMAIL_TOPIC_SALES],
+          ((snapshot.exists ? snapshot.get('topics') : null) ?? {})[SALES_TOPIC_ID],
         ),
       // The group's standing, the way the topic filter folds it: leaving the
       // sales stream anywhere in the group is leaving the sender, and a

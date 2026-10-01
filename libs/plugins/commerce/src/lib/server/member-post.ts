@@ -29,7 +29,6 @@ import * as CommerceModel from '../model'
 import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
 import {
   consentGroupForHost,
-  EMAIL_TOPIC_NEWSLETTER,
   hostPublicOrigin,
   type PluginApiHandler,
   resolveBrandingProfile,
@@ -194,7 +193,7 @@ export const memberPostHandler: PluginApiHandler = async (req, res) => {
           marketing: {
             hostId,
             siteBase,
-            topicId: EMAIL_TOPIC_NEWSLETTER,
+            topicId: CommerceModel.NEWSLETTER_TOPIC_ID,
             consentHostIds: consentGroup.hostIds,
             consentAwaitsConfirmation: consentGroup.awaitsConfirmation,
           },

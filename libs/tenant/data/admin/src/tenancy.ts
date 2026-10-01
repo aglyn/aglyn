@@ -64,7 +64,7 @@ export * from './lib/server/email-suppression'
 // The double opt-in quarantine, after the module whose keying it shares and
 // whose `filterTopicSendable` is the reader that makes it a quarantine rather
 // than a stored fact.
-export * from './lib/server/email-topic-confirmation'
+export * from './lib/server/topic-subscriptions'
 export * from './lib/server/email-unsubscribe-link'
 export * from './lib/server/email-flow-gate'
 // Side-effecting on purpose, for the reason `email-send-rate` below is:

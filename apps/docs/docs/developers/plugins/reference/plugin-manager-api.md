@@ -1606,6 +1606,43 @@ writes nothing. Register from the server declarations, not the API register
 function, so the participant is in place in every process that works a
 change — the scheduled job that finishes an abandoned one included.
 
+## Subscription topics — `subscriptionTopics`, `app-utils/subscription-topics`
+
+Every marketing-purpose message names the stream it is sent under, its
+unsubscribe link carries that stream, and the send path refuses a recipient
+who left it. The state and the policy are the mail rail's; a plugin brings the
+streams its mail is sent under, declared in the `subscriptionTopics` block of
+`plugins.config.json` and compiled, because the unsubscribe and preference
+pages name a stream whether or not the sending plugin has loaded:
+
+```json
+"subscriptionTopics": [
+  {
+    "id": "tastings",
+    "name": "Tasting invitations",
+    "description": "Invitations to our tastings and cellar events.",
+    "order": 50
+  }
+]
+```
+
+`id` is a wire value — a Firestore path component and a component of the
+unsubscribe link's signed subject — so it is never renamed, and it may carry
+no `/` or `:`. `order` is the stream's place on the preference page. One
+plugin marks its stream `default`: the stream a campaign or a scheduled
+automated email belongs to when it names none.
+
+| API | Semantics |
+| --- | --- |
+| `DECLARED_SUBSCRIPTION_TOPICS` / `DEFAULT_SUBSCRIPTION_TOPIC_ID` | The declared streams in preference-page order — the floor of every org's catalog, present with no write anywhere — and the default stream's id (`''` when none is declared). |
+| `mergeSubscriptionTopics(stored)` / `activeSubscriptionTopics(topics)` / `resolveSubscriptionTopic(id, topics)` | The catalog a reader sees (the floor, overlaid by what the org stored, plus its own topics), the same without retired ones, and the stream a message belongs to — an unknown or missing id resolves to the default. |
+| `readTopicSubscriptionState(entry)` / `topicRequiresDoubleOptIn(topic, siteDefault)` / `TOPIC_OPT_OUTS_SUBCOLLECTION` | One recipient's standing on one stream (`subscribed`, `pending`, `opted-out`) from `hosts/{hostId}/topicOptOuts`, and whether joining needs a confirmation click. Written through `@aglyn/tenant-data-admin/server/topic-subscriptions`. |
+
+The catalog an org authors is kept by the Email plugin, which publishes it as
+the `subscriptionTopic` record index (facts `{ description, archived,
+doubleOptIn? }`). A plugin that has to ask what the org made of a stream reads
+that index, never the collection.
+
 ## Email streams — `plugin-email-streams` (`/server`)
 
 A slot one plugin holds (`core.email-streams`, built on the service contracts

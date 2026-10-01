@@ -397,15 +397,6 @@
       "lane": "marketing"
     },
     {
-      "path": "libs/aglyn/src/lib/app-utils/email-topics.ts",
-      "rules": [
-        "domain-name",
-        "plugin-id",
-        "domain-declares:email"
-      ],
-      "lane": "marketing"
-    },
-    {
       "path": "libs/aglyn/src/lib/app-utils/form-abuse-ceiling.ts",
       "rules": [
         "domain-name",
@@ -896,13 +887,6 @@
       "path": "libs/tenant/data/admin/src/lib/server/email-revenue-attribution.ts",
       "rules": [
         "domain-declares:marketing"
-      ],
-      "lane": "marketing"
-    },
-    {
-      "path": "libs/tenant/data/admin/src/lib/server/email-topic-confirmation.ts",
-      "rules": [
-        "domain-name"
       ],
       "lane": "marketing"
     },

@@ -234,7 +234,7 @@ export async function scanAbandonedCheckouts(
       marketing: {
         hostId,
         siteBase: siteBaseByHost.get(hostId) ?? '',
-        topicId: Aglyn.EMAIL_TOPIC_MARKETING,
+        topicId: Aglyn.DEFAULT_SUBSCRIPTION_TOPIC_ID,
         consentHostIds: consentGroup.hostIds,
         consentAwaitsConfirmation: consentGroup.awaitsConfirmation,
       },

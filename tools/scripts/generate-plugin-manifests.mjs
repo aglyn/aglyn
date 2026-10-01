@@ -1402,6 +1402,92 @@ function containersContent(rows) {
 }
 
 /**
+ * The subscription topics each plugin declares (AGL-3080): the streams its
+ * mail is sent under, which a recipient can leave one at a time.
+ *
+ * The rows are the built-in floor of every org's topic catalog — present for
+ * every org with no write anywhere, and overlaid by whatever the org stores —
+ * so they are compiled like the catalog: the readers include the unsubscribe
+ * and preference pages, which must name a stream whether or not the plugin
+ * that sends under it has loaded. Checked here:
+ *
+ *  - ONE OWNER per id, and an id the unsubscribe link can carry: it becomes a
+ *    Firestore path component and a colon-joined component of the link's
+ *    signed subject, so no `/`, no `:`, and never `.`, `..` or `__x__`.
+ *  - A name and a sentence of description, which the preference page shows.
+ *  - A distinct `order`, which is the preference page's checkbox order.
+ *  - At most one `default`: the stream a campaign or a scheduled automated
+ *    email belongs to when it names none. Two would make that stream a
+ *    question of config order.
+ */
+const SUBSCRIPTION_TOPICS_FILE = 'libs/aglyn/src/lib/plugin-manager/plugin-subscription-topics.generated.ts'
+const SUBSCRIPTION_TOPIC_FIELDS = ['id', 'name', 'description', 'order', 'default']
+
+function subscriptionTopicRows() {
+  const rows = []
+  const owners = new Map()
+  for (const plugin of config.plugins) {
+    const declared = plugin.subscriptionTopics
+    if (!declared) continue
+    const where = `plugins.config.json: "${plugin.id}" subscriptionTopics`
+    if (!Array.isArray(declared) || !declared.length) {
+      throw new Error(`${where} is present and declares nothing — drop it, or name the stream the plugin sends under`)
+    }
+    for (const declaration of declared) {
+      const { id, name, description, order } = declaration
+      const what = `${where} "${id ?? ''}"`
+      const unknown = Object.keys(declaration).filter((key) => !SUBSCRIPTION_TOPIC_FIELDS.includes(key))
+      if (unknown.length) throw new Error(`${what}: unknown field(s) ${unknown.join(', ')}`)
+      if (
+        typeof id !== 'string' ||
+        !id ||
+        id.length > 120 ||
+        id.includes('/') ||
+        id.includes(':') ||
+        id === '.' ||
+        id === '..' ||
+        /^__.*__$/.test(id)
+      ) {
+        throw new Error(`${what}: "id" rides in a signed unsubscribe link and is a Firestore path component — no "/", no ":", at most 120 characters`)
+      }
+      const held = owners.get(id)
+      if (held) throw new Error(`${what} is already declared by "${held}" — one stream has one owner`)
+      owners.set(id, plugin.id)
+      if (typeof name !== 'string' || !name.trim()) throw new Error(`${what}: "name" is what the preference page calls the stream`)
+      if (typeof description !== 'string' || !description.trim()) {
+        throw new Error(`${what}: "description" is the sentence the preference page shows under the name`)
+      }
+      if (!Number.isInteger(order)) throw new Error(`${what}: "order" is the stream's place on the preference page`)
+      if (declaration.default !== undefined && declaration.default !== true) {
+        throw new Error(`${what}: "default" is true or left out`)
+      }
+      rows.push({ pluginId: plugin.id, id, name, description, order, ...(declaration.default ? { default: true } : {}) })
+    }
+  }
+  rows.sort((a, b) => a.order - b.order)
+  const orders = rows.map((row) => row.order)
+  if (new Set(orders).size !== orders.length) throw new Error('plugins.config.json: two subscription topics share an "order"')
+  if (rows.filter((row) => row.default).length > 1) {
+    throw new Error('plugins.config.json: more than one subscription topic is the "default"')
+  }
+  return rows
+}
+
+function subscriptionTopicsContent(rows) {
+  return (
+    `/**\n * GENERATED FILE — do not edit. Regenerate with:\n` +
+    ` *   node tools/scripts/generate-plugin-manifests.mjs\n *\n` +
+    ` * The subscription topics plugins declare (AGL-3080): each plugin's\n` +
+    ` * \`subscriptionTopics\` block in plugins.config.json, in preference-page\n` +
+    ` * order. Core's \`app-utils/subscription-topics.ts\` reads them as the\n` +
+    ` * built-in floor of every org's topic catalog; core names no stream.\n */\n\n` +
+    `import type { DeclaredSubscriptionTopic } from '../app-utils/subscription-topics'\n\n` +
+    `export const PLUGIN_SUBSCRIPTION_TOPICS_DECLARED: readonly DeclaredSubscriptionTopic[] = ` +
+    `${JSON.stringify(rows, null, 2)}\n`
+  )
+}
+
+/**
  * The host subcollections each plugin declares it owns (AGL-3080).
  *
  * DATA rather than a runtime registration, for the reason every other row in
@@ -2739,6 +2825,7 @@ const ALL = [
   },
   { file: CONTAINERS_FILE, content: containersContent(containerKindRows()) },
   ...ANALYTICS_MANIFESTS.map((file) => ({ file, content: analyticsManifestContent() })),
+  { file: SUBSCRIPTION_TOPICS_FILE, content: subscriptionTopicsContent(subscriptionTopicRows()) },
   { file: TITLES_MANIFEST, content: titlesContent(await pluginSurfaceTitles()) },
   {
     file: SUBPROCESSORS_MANIFEST,

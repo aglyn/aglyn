@@ -16,11 +16,16 @@
  */
 
 /**
- * DOUBLE OPT-IN — the durable half.
+ * A RECIPIENT'S STREAMS, WRITTEN — the durable half of the mail rail's
+ * per-stream consent: an opt-out, and the double opt-in's pending and
+ * confirmed marks.
  *
- * `email-topics.ts` in the framework states the policy and owns the three
- * states an entry can be in; this writes them, because writing them needs
- * Firestore.
+ * `subscription-topics.ts` in the framework states the policy and owns the
+ * three states an entry can be in; this writes them, because writing them
+ * needs Firestore. Every sender's stream is written the same way — a
+ * newsletter signup asking for a confirmation, a sequence recipient asking to
+ * hear no more sales mail — which is why it sits beside the suppression list
+ * rather than in any one plugin.
  *
  * ## The record it writes is the one the send path already reads
  *
@@ -45,11 +50,11 @@
 import { FieldValue } from 'firebase-admin/firestore'
 import {
   doubleOptInExpired,
+  isSubscriptionTopicId,
   readTopicSubscriptionState,
   TOPIC_OPT_OUTS_SUBCOLLECTION,
   type TopicSubscriptionEntry,
-} from '@aglyn/aglyn/app-utils/email-topics'
-import { isEmailTopicId } from '@aglyn/aglyn/app-utils/email-topics'
+} from '@aglyn/aglyn/app-utils/subscription-topics'
 import firebaseAdmin from './firebase-admin'
 import {
   emailSuppressionKey,
@@ -110,7 +115,7 @@ export async function recordPendingTopicConfirmation(
   options?: { nowMs?: number; firestore?: any },
 ): Promise<{ result: PendingConfirmationResult; pendingAtMs: number | null }> {
   const key = emailSuppressionKey(email)
-  if (!key || !hostId || !isEmailTopicId(topicId)) {
+  if (!key || !hostId || !isSubscriptionTopicId(topicId)) {
     return { result: 'unusable', pendingAtMs: null }
   }
   const nowMs = options?.nowMs ?? Date.now()
@@ -228,7 +233,7 @@ export async function confirmTopicSubscription(
   options?: { nowMs?: number; firestore?: any },
 ): Promise<ConfirmTopicResult> {
   const key = emailSuppressionKey(email)
-  if (!key || !hostId || !isEmailTopicId(topicId)) return 'unusable'
+  if (!key || !hostId || !isSubscriptionTopicId(topicId)) return 'unusable'
   const nowMs = options?.nowMs ?? Date.now()
   const ref = optOutDoc(hostId, key, options?.firestore)
   /*
@@ -303,7 +308,7 @@ export async function siteRequiresDoubleOptIn(
       .get()
     return snapshot.exists && snapshot.get('emailDoubleOptIn') === true
   } catch (error) {
-    console.error('[email-topics] double opt-in setting read failed', error)
+    console.error('[topic-subscriptions] double opt-in setting read failed', error)
     return false
   }
 }
@@ -343,7 +348,7 @@ export async function recordTopicOptOut(
   options?: { firestore?: any },
 ): Promise<TopicOptOutResult> {
   const key = emailSuppressionKey(email)
-  if (!key || !hostId || !isEmailTopicId(topicId)) return 'unusable'
+  if (!key || !hostId || !isSubscriptionTopicId(topicId)) return 'unusable'
   const db = options?.firestore ?? defaultFirestore()
   const ref = optOutDoc(hostId, key, db)
   return db.runTransaction(async (transaction: any): Promise<TopicOptOutResult> => {

@@ -18,60 +18,80 @@
 /**
  * The topic catalog's merge rules, which three surfaces depend on agreeing:
  * the console card, the composer's picker and the unauthenticated preference
- * page. All three read `mergeEmailTopics`, so a defect here is the same defect
- * three times.
+ * page. All three read `mergeSubscriptionTopics`, so a defect here is the
+ * same defect three times.
  */
 
 import {
-  activeEmailTopics,
+  activeSubscriptionTopics,
   doubleOptInExpired,
-  isEmailTopicId,
-  mergeEmailTopics,
-  normalizeEmailTopic,
+  isSubscriptionTopicId,
+  mergeSubscriptionTopics,
+  normalizeSubscriptionTopic,
   readTopicSubscriptionState,
-  resolveCampaignTopic,
+  resolveSubscriptionTopic,
   topicRequiresDoubleOptIn,
-  DEFAULT_CAMPAIGN_TOPIC_ID,
-  DEFAULT_EMAIL_TOPICS,
+  DEFAULT_SUBSCRIPTION_TOPIC_ID,
+  DECLARED_SUBSCRIPTION_TOPICS,
   DEFAULT_SITE_DOUBLE_OPT_IN,
   DOUBLE_OPT_IN_EXPIRY_MS,
-} from './email-topics'
+} from './subscription-topics'
 
-describe('isEmailTopicId', () => {
+describe('isSubscriptionTopicId', () => {
   it('accepts an id `createResourceUid` can mint', () => {
     // nanoid's alphabet. If this ever fails, the topics card mints ids the
     // send path refuses and no campaign can be sent under a custom topic.
-    expect(isEmailTopicId('V1StGXR8_Z')).toBe(true)
+    expect(isSubscriptionTopicId('V1StGXR8_Z')).toBe(true)
   })
 
   it('refuses a COLON, which is what keeps the signed subject unambiguous', () => {
     // `host:email:cid:tid` is byte-identical to a three-part subject whose
     // campaign id is `cid:tid`. A colon here would make one signature verify
     // two different parameter tuples.
-    expect(isEmailTopicId('news:letter')).toBe(false)
+    expect(isSubscriptionTopicId('news:letter')).toBe(false)
   })
 
   it('refuses a path separator, reserved form, traversal and emptiness', () => {
-    expect(isEmailTopicId('a/b')).toBe(false)
-    expect(isEmailTopicId('__proto__')).toBe(false)
-    expect(isEmailTopicId('.')).toBe(false)
-    expect(isEmailTopicId('..')).toBe(false)
-    expect(isEmailTopicId('')).toBe(false)
-    expect(isEmailTopicId(undefined)).toBe(false)
+    expect(isSubscriptionTopicId('a/b')).toBe(false)
+    expect(isSubscriptionTopicId('__proto__')).toBe(false)
+    expect(isSubscriptionTopicId('.')).toBe(false)
+    expect(isSubscriptionTopicId('..')).toBe(false)
+    expect(isSubscriptionTopicId('')).toBe(false)
+    expect(isSubscriptionTopicId(undefined)).toBe(false)
   })
 })
 
-describe('mergeEmailTopics', () => {
+describe('the declared streams', () => {
+  it('are each an id an unsubscribe link can carry', () => {
+    expect(DECLARED_SUBSCRIPTION_TOPICS.length).toBeGreaterThan(0)
+    for (const topic of DECLARED_SUBSCRIPTION_TOPICS) {
+      expect(isSubscriptionTopicId(topic.id)).toBe(true)
+      expect(topic.name.trim()).not.toBe('')
+      expect(topic.description.trim()).not.toBe('')
+    }
+  })
+
+  it('name a default that is one of them', () => {
+    // A campaign or a scheduled automated email that names no stream belongs
+    // to this one; a default outside the catalog would sign a link the
+    // preference page cannot place.
+    expect(DECLARED_SUBSCRIPTION_TOPICS.map((topic) => topic.id)).toContain(
+      DEFAULT_SUBSCRIPTION_TOPIC_ID,
+    )
+  })
+})
+
+describe('mergeSubscriptionTopics', () => {
   it('gives an org with no stored topics the built-in floor', () => {
     // The reason there is no seeding migration: every tenant that exists today
     // has an empty collection, and this is what they see anyway.
-    expect(mergeEmailTopics(null).map((topic) => topic.id)).toEqual(
-      DEFAULT_EMAIL_TOPICS.map((topic) => topic.id),
+    expect(mergeSubscriptionTopics(null).map((topic) => topic.id)).toEqual(
+      DECLARED_SUBSCRIPTION_TOPICS.map((topic) => topic.id),
     )
   })
 
   it('lets a stored document rename a built-in without removing it', () => {
-    const merged = mergeEmailTopics([
+    const merged = mergeSubscriptionTopics([
       { id: 'newsletter', name: 'The Dispatch', description: 'Monthly.' },
     ])
     const found = merged.find((topic) => topic.id === 'newsletter')
@@ -82,27 +102,27 @@ describe('mergeEmailTopics', () => {
     })
     // Still four: an override REPLACES a built-in in place rather than being
     // appended beside it, or the catalog would show the topic twice.
-    expect(merged).toHaveLength(DEFAULT_EMAIL_TOPICS.length)
+    expect(merged).toHaveLength(DECLARED_SUBSCRIPTION_TOPICS.length)
   })
 
   it('keeps the built-ins when the org adds one of its own', () => {
     // The whole point of overlaying rather than replacing: adding a topic must
     // not silently delete the four every recipient has been unsubscribing
     // against.
-    const merged = mergeEmailTopics([
+    const merged = mergeSubscriptionTopics([
       { id: 'zzz', name: 'Events', description: '' },
     ])
-    expect(merged).toHaveLength(DEFAULT_EMAIL_TOPICS.length + 1)
+    expect(merged).toHaveLength(DECLARED_SUBSCRIPTION_TOPICS.length + 1)
     expect(merged[merged.length - 1].id).toBe('zzz')
   })
 
   it('puts the built-ins first in declared order and custom topics after', () => {
-    const merged = mergeEmailTopics([
+    const merged = mergeSubscriptionTopics([
       { id: 'zeta', name: 'Zeta', description: '' },
       { id: 'alpha', name: 'Alpha', description: '' },
     ])
     expect(merged.map((topic) => topic.id)).toEqual([
-      ...DEFAULT_EMAIL_TOPICS.map((topic) => topic.id),
+      ...DECLARED_SUBSCRIPTION_TOPICS.map((topic) => topic.id),
       'alpha',
       'zeta',
     ])
@@ -110,14 +130,14 @@ describe('mergeEmailTopics', () => {
 
   it('ignores a stored document whose id could not be signed', () => {
     expect(
-      mergeEmailTopics([{ id: 'a:b', name: 'Bad', description: '' }]),
-    ).toHaveLength(DEFAULT_EMAIL_TOPICS.length)
+      mergeSubscriptionTopics([{ id: 'a:b', name: 'Bad', description: '' }]),
+    ).toHaveLength(DECLARED_SUBSCRIPTION_TOPICS.length)
   })
 })
 
-describe('activeEmailTopics', () => {
+describe('activeSubscriptionTopics', () => {
   it('hides an archived topic from the composer and the preference page', () => {
-    const merged = mergeEmailTopics([
+    const merged = mergeSubscriptionTopics([
       {
         id: 'sales',
         name: 'Sales outreach',
@@ -127,15 +147,15 @@ describe('activeEmailTopics', () => {
     ])
     // Still in the CATALOG — links already sent under it must go on resolving.
     expect(merged.some((topic) => topic.id === 'sales')).toBe(true)
-    expect(activeEmailTopics(merged).some((topic) => topic.id === 'sales')).toBe(
+    expect(activeSubscriptionTopics(merged).some((topic) => topic.id === 'sales')).toBe(
       false,
     )
   })
 })
 
-describe('normalizeEmailTopic', () => {
+describe('normalizeSubscriptionTopic', () => {
   it('falls back to the id rather than rendering a blank checkbox', () => {
-    expect(normalizeEmailTopic('offers', { description: 'x' })).toEqual({
+    expect(normalizeSubscriptionTopic('offers', { description: 'x' })).toEqual({
       id: 'offers',
       name: 'offers',
       description: 'x',
@@ -144,34 +164,34 @@ describe('normalizeEmailTopic', () => {
 
   it('marks archived only on an explicit true', () => {
     expect(
-      normalizeEmailTopic('offers', { name: 'Offers', archived: 'yes' }),
+      normalizeSubscriptionTopic('offers', { name: 'Offers', archived: 'yes' }),
     ).toEqual({ id: 'offers', name: 'Offers', description: '' })
   })
 
   it('refuses a document whose id is not a topic id', () => {
-    expect(normalizeEmailTopic('a/b', { name: 'Offers' })).toBeNull()
+    expect(normalizeSubscriptionTopic('a/b', { name: 'Offers' })).toBeNull()
   })
 })
 
-describe('resolveCampaignTopic', () => {
-  const catalog = mergeEmailTopics(null)
+describe('resolveSubscriptionTopic', () => {
+  const catalog = mergeSubscriptionTopics(null)
 
   it('finds the campaign’s own topic', () => {
-    expect(resolveCampaignTopic('newsletter', catalog).id).toBe('newsletter')
+    expect(resolveSubscriptionTopic('newsletter', catalog).id).toBe('newsletter')
   })
 
   it('resolves a campaign sent before topics existed to the default', () => {
     // Those links are in inboxes right now. The preference page has to name A
     // topic for them, not report that the message came from nowhere.
-    expect(resolveCampaignTopic('', catalog).id).toBe(DEFAULT_CAMPAIGN_TOPIC_ID)
-    expect(resolveCampaignTopic(null, catalog).id).toBe(
-      DEFAULT_CAMPAIGN_TOPIC_ID,
+    expect(resolveSubscriptionTopic('', catalog).id).toBe(DEFAULT_SUBSCRIPTION_TOPIC_ID)
+    expect(resolveSubscriptionTopic(null, catalog).id).toBe(
+      DEFAULT_SUBSCRIPTION_TOPIC_ID,
     )
   })
 
   it('resolves a topic that has since been removed from the catalog', () => {
-    expect(resolveCampaignTopic('deleted-topic', catalog).id).toBe(
-      DEFAULT_CAMPAIGN_TOPIC_ID,
+    expect(resolveSubscriptionTopic('deleted-topic', catalog).id).toBe(
+      DEFAULT_SUBSCRIPTION_TOPIC_ID,
     )
   })
 
@@ -181,16 +201,16 @@ describe('resolveCampaignTopic', () => {
     // catalog that tells them apart.
     const reordered = [
       { id: 'events', name: 'Events', description: '' },
-      { id: DEFAULT_CAMPAIGN_TOPIC_ID, name: 'Promotions', description: '' },
+      { id: DEFAULT_SUBSCRIPTION_TOPIC_ID, name: 'Promotions', description: '' },
     ]
-    expect(resolveCampaignTopic('nope', reordered).id).toBe(
-      DEFAULT_CAMPAIGN_TOPIC_ID,
+    expect(resolveSubscriptionTopic('nope', reordered).id).toBe(
+      DEFAULT_SUBSCRIPTION_TOPIC_ID,
     )
   })
 
   it('falls back to the first topic when even the default is gone', () => {
     const trimmed = [{ id: 'only', name: 'Only', description: '' }]
-    expect(resolveCampaignTopic('nope', trimmed).id).toBe('only')
+    expect(resolveSubscriptionTopic('nope', trimmed).id).toBe('only')
   })
 })
 
@@ -225,12 +245,12 @@ describe('topicRequiresDoubleOptIn', () => {
   })
 })
 
-describe('normalizeEmailTopic and the confirmation setting', () => {
+describe('normalizeSubscriptionTopic and the confirmation setting', () => {
   it('carries a stored boolean through, either way', () => {
-    expect(normalizeEmailTopic('t', { doubleOptIn: true })?.doubleOptIn).toBe(
+    expect(normalizeSubscriptionTopic('t', { doubleOptIn: true })?.doubleOptIn).toBe(
       true,
     )
-    expect(normalizeEmailTopic('t', { doubleOptIn: false })?.doubleOptIn).toBe(
+    expect(normalizeSubscriptionTopic('t', { doubleOptIn: false })?.doubleOptIn).toBe(
       false,
     )
   })
@@ -238,8 +258,8 @@ describe('normalizeEmailTopic and the confirmation setting', () => {
   it('leaves the field ABSENT when the document has no boolean', () => {
     // Absent is the third state — "ask the site" — so coercing with `=== true`
     // the way `archived` does would erase it.
-    expect(normalizeEmailTopic('t', {})).not.toHaveProperty('doubleOptIn')
-    expect(normalizeEmailTopic('t', { doubleOptIn: 'yes' })).not.toHaveProperty(
+    expect(normalizeSubscriptionTopic('t', {})).not.toHaveProperty('doubleOptIn')
+    expect(normalizeSubscriptionTopic('t', { doubleOptIn: 'yes' })).not.toHaveProperty(
       'doubleOptIn',
     )
   })

@@ -94,7 +94,9 @@ import {
 import {
   collectDynamicListCandidates,
   enrollListMember,
+  firebaseAdmin,
 } from '@aglyn/tenant-data-admin'
+import { registerSubscriptionTopicIndex } from './server-topic-index'
 
 /** `source` stamped on every membership these routes write. */
 export const CONSOLE_ADD_SOURCE = 'console:list-add'
@@ -452,6 +454,9 @@ export function registerEmailConsoleApi(): void {
   // write through it run only on the console, inline and on the beat
   // (AGL-3026).
   registerEmailDesignDraftWriter()
+  // The org's topic catalog, as the tenant surface publishes it: the console
+  // runs sends under a stream too.
+  registerSubscriptionTopicIndex(() => firebaseAdmin.app().firestore())
   registerPluginApiRoute('email/list-rule-preview', emailListRulePreviewHandler)
   registerPluginApiRoute(
     'email/list-members-preview',

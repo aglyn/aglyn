@@ -25,7 +25,7 @@ import {
   evaluateStepGuard,
   evaluateTriggerConditions,
   FLOW_TIMED_OUT_FIELD,
-  flowEmailTopicId,
+  flowSubscriptionTopicId,
   hostPublicOrigin,
   isClientActionStep,
   isFlowSuspendingStep,
@@ -930,7 +930,7 @@ async function runServerStep(
        * preference page opens on a list of every stream the site has, and
        * the recipient has to find the one they were trying to leave.
        */
-      const topicId = flowEmailTopicId(step.topicId, scope)
+      const topicId = flowSubscriptionTopicId(step.topicId, scope)
       const gate = await flowEmailRefusal({
         hostId,
         email: to,
@@ -1043,7 +1043,7 @@ async function runServerStep(
          */
         ...(enrollmentRef ? { priority: 'bulk' as const } : {}),
         // `topicId` is `''` for a step that belongs to no stream, which
-        // every reader of it treats as absent — see `flowEmailTopicId`.
+        // every reader of it treats as absent — see `flowSubscriptionTopicId`.
         // The consent group comes off the org the run already holds, so the
         // gate honors an unsubscribe from any site of a declared group —
         // the sender this site mails as — and the org's confirmation switch,
