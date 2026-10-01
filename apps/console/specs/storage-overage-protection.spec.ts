@@ -50,9 +50,8 @@ import {
   storageOveragePricePerGbUsd,
   storageOverageUsd,
   STORAGE_CAP_FALLBACK_USD,
-  usageAlertApproachPct,
   usageAlertThreshold,
-  USAGE_ALERT_APPROACH_PCT_DEFAULT,
+  USAGE_ALERT_BANDS,
 } from '../utils/storage-overage'
 import { estimateMonthlyUsageCost } from '../utils/usage-metering'
 import { PLAN_ENTITLEMENTS, planMetersInfraOverage } from '@aglyn/aglyn/server'
@@ -505,21 +504,40 @@ describe('THE ALERT is the protection now, so it has to be able to fire', () => 
   })
 
   it('warns on APPROACH, before any money — again on a plan where it can', () => {
-    // 80% of the library's own 10240 MB is 8192 MB. That is a warning with
+    // 75% of the library's own 10240 MB is 7680 MB — the first step, with
     // days of headroom, not an announcement.
+    expect(usageAlertThreshold(7680, PRO_SCOPE_MB)).toBe(75)
+    expect(usageAlertThreshold(7679, PRO_SCOPE_MB)).toBe(0)
     expect(usageAlertThreshold(8192, PRO_SCOPE_MB)).toBe(80)
-    expect(usageAlertThreshold(8191, PRO_SCOPE_MB)).toBe(0)
     // And the same reading is silent org-wide: 8192/30720 = 26.7%.
     expect(usageAlertThreshold(8192, ORG_WIDE_MB)).toBe(0)
   })
 
-  it('warns at 80 and again at the band', () => {
-    expect(USAGE_ALERT_APPROACH_PCT_DEFAULT).toBe(80)
-    expect(usageAlertThreshold(79, 100)).toBe(0)
+  it('steps through 75, 80, 90 and the band, answering the HIGHEST reached (AGL-3431)', () => {
+    // Literal, never the constant: a ladder edited to three steps must fail
+    // here rather than quietly agree with itself.
+    expect(USAGE_ALERT_BANDS).toEqual([75, 80, 90, 100])
+    expect(usageAlertThreshold(74.9, 100)).toBe(0)
+    expect(usageAlertThreshold(75, 100)).toBe(75)
+    expect(usageAlertThreshold(79.9, 100)).toBe(75)
     expect(usageAlertThreshold(80, 100)).toBe(80)
-    expect(usageAlertThreshold(99.9, 100)).toBe(80)
+    expect(usageAlertThreshold(89.9, 100)).toBe(80)
+    expect(usageAlertThreshold(90, 100)).toBe(90)
+    expect(usageAlertThreshold(99.9, 100)).toBe(90)
     expect(usageAlertThreshold(100, 100)).toBe(100)
     expect(usageAlertThreshold(400, 100)).toBe(100)
+    // A jump straight past several steps answers only the highest.
+    expect(usageAlertThreshold(95, 100)).toBe(90)
+  })
+
+  it('is exact on whole numbers — 9 of 10 is 90%, never 89.999…%', () => {
+    expect(usageAlertThreshold(9, 10)).toBe(90)
+    expect(usageAlertThreshold(3, 4)).toBe(75)
+    expect(usageAlertThreshold(4, 5)).toBe(80)
+    // A small limit: 5 of 6 pages is 83%, the 80 step; 6 of 6 is the band.
+    expect(usageAlertThreshold(4, 6)).toBe(0)
+    expect(usageAlertThreshold(5, 6)).toBe(80)
+    expect(usageAlertThreshold(6, 6)).toBe(100)
   })
 
   it('never alerts on a limit that is zero, negative or not a number', () => {
@@ -533,19 +551,4 @@ describe('THE ALERT is the protection now, so it has to be able to fire', () => 
     expect(usageAlertThreshold(-5, 100)).toBe(0)
   })
 
-  it('takes a configured percentage', () => {
-    expect(usageAlertApproachPct('70')).toBe(70)
-    expect(usageAlertApproachPct('90')).toBe(90)
-    expect(usageAlertThreshold(75, 100, usageAlertApproachPct('70'))).toBe(70)
-  })
-
-  it('FAILS TO 80 on anything malformed, rather than going silent', () => {
-    // Now that overage BILLS, an alert that cannot fire is the surprise bill.
-    // Forced red by returning `parsed` unguarded: `''` → 0 (alert always),
-    // `'yes'` → NaN (alert never), `'100'` → the approach warning disappears
-    // into the cap notice. Literal 80, never the constant.
-    for (const bad of ['', ' ', 'yes', '0', '-10', '100', '250', undefined, null]) {
-      expect(usageAlertApproachPct(bad as never)).toBe(80)
-    }
-  })
 })

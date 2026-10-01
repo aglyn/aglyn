@@ -105,7 +105,7 @@ deliberate in each case rather than an oversight:
   endpoint, not ahead of it — a scope you can grant that grants nothing is a broken
   permission.
 - **Renaming and deleting a site.** `sites:write` creates; it deliberately stops
-  there. A delete would erase a whole site — screens, versions, products, uploaded
+  there. A delete would erase a whole site — pages, versions, products, uploaded
   files — immediately, from one field in a request body, with no hold and no undo.
 
 ```json

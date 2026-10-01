@@ -29,7 +29,7 @@ a `product` in many `categories`, each `category` holding many `products`.
 ## Using relations
 
 The [dataset query layer](overview.md#query-layer) resolves related records for both the
-editor and screen bindings, so you can render a record together with the things it links to.
+editor and page bindings, so you can render a record together with the things it links to.
 
 ## Tips
 

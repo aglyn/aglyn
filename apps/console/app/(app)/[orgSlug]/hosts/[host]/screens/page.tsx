@@ -339,7 +339,7 @@ function Screens(props) {
           // `formatQuotaLimit`, not the raw number: `UNLIMITED` is
           // `Number.POSITIVE_INFINITY`, so an uncapped plan that ever reached
           // this branch would read "Screen limit reached (Infinity)".
-          `Screen limit reached (${formatQuotaLimit(quota.limit)}) — see ` +
+          `Page limit reached (${formatQuotaLimit(quota.limit)}) — see ` +
             'Billing to upgrade',
           { variant: 'warning', persist: false },
         )
@@ -393,7 +393,7 @@ function Screens(props) {
         if (owner) {
           dequeueLoading()
           return enqueueSnackbar(
-            `Another screen is already published at ${screenRoutePathToUrl(path)}`,
+            `Another page is already published at ${screenRoutePathToUrl(path)}`,
             { variant: 'warning', persist: false },
           )
         }
@@ -435,7 +435,7 @@ function Screens(props) {
           // and a state change nobody is told about is one they will assume
           // the old answer to. Mirrors the duplicate path's sentence.
           enqueueSnackbar(
-            `Created “${values?.displayName ?? 'screen'}” — a draft until ` +
+            `Created “${values?.displayName ?? 'page'}” — a draft until ` +
               'you publish it',
             { variant: 'success', persist: false },
           ),
@@ -489,7 +489,7 @@ function Screens(props) {
           user,
         }))()
       await confirm({
-        title: 'Delete this screen?',
+        title: 'Delete this page?',
         description: (
           <ArtifactDeleteConfirmDescription
             kind="screen"
@@ -547,12 +547,12 @@ function Screens(props) {
   const handleUnpublishScreen = useCallback(
     (id: string, name: string, path: string | undefined) => async () => {
       const confirmed = await confirm({
-        title: 'Unpublish this screen?',
+        title: 'Unpublish this page?',
         description: path
           ? `${screenRoutePathToUrl(path)} will stop resolving on the live ` +
-            'site. The screen, its content and its address are kept — ' +
+            'site. The page, its content and its address are kept — ' +
             'publishing again puts it back.'
-          : 'This screen will stop resolving on the live site. Its content ' +
+          : 'This page will stop resolving on the live site. Its content ' +
             'and address are kept — publishing again puts it back.',
         confirmationText: 'Unpublish',
       })
@@ -562,7 +562,7 @@ function Screens(props) {
       const dequeueLoading = queueLoading()
       try {
         await unpublishScreenRoute(firestore, { hostId, screenId: id, user })
-        enqueueSnackbar('Screen unpublished', {
+        enqueueSnackbar('Page unpublished', {
           variant: 'success',
           persist: false,
         })
@@ -594,7 +594,7 @@ function Screens(props) {
       if (loading) return
       if (wouldCreateScreenCycle(screenId, nextParentId, screensById)) {
         enqueueSnackbar(
-          "A screen can't be nested inside itself or its own children",
+          "A page can't be nested inside itself or its own children",
           { variant: 'warning', persist: false },
         )
         return
@@ -613,7 +613,7 @@ function Screens(props) {
         : undefined
       if (owner && owner !== screenId) {
         enqueueSnackbar(
-          `Another screen is already published at ${screenRoutePathToUrl(nextSelfPath as string)}`,
+          `Another page is already published at ${screenRoutePathToUrl(nextSelfPath as string)}`,
           { variant: 'warning', persist: false },
         )
         return
@@ -716,8 +716,8 @@ function Screens(props) {
           // an unpublished screen is moved, not routed, and saying otherwise
           // is the same false report the toolbar was making.
           parentChanged && nextSelfPath && routingMap?.[screenId] !== undefined
-            ? `Screen moved — now served at ${screenRoutePathToUrl(nextSelfPath)}`
-            : 'Screen moved',
+            ? `Page moved — now served at ${screenRoutePathToUrl(nextSelfPath)}`
+            : 'Page moved',
           { variant: 'success', persist: false },
         )
       } catch (error) {
@@ -923,7 +923,7 @@ function Screens(props) {
       */
       const noVersionReason = versionId
         ? undefined
-        : 'This screen has no saved version yet.'
+        : 'This page has no saved version yet.'
       return (
         <ListRowActions
           label={label}
@@ -948,9 +948,9 @@ function Screens(props) {
                   unavailableReason:
                     unavailableReason ??
                     (routingMap?.[row.$id] == null
-                      ? 'Not published yet — publish this screen to give it ' +
+                      ? 'Not published yet — publish this page to give it ' +
                         'an address on the live site.'
-                      : 'No single live page for this screen.'),
+                      : 'This page has no single live address.'),
                 }),
           }}
           items={[
@@ -1082,13 +1082,13 @@ function Screens(props) {
             href: buildRoute(Route.HOST_DASHBOARD, { orgSlug,  host }),
           },
           {
-            children: 'Screens',
+            children: 'Pages',
             href: buildRoute(Route.HOST_SCREENS, { orgSlug,  host }),
           },
         ]}
         help="screens"
         header={{
-          children: 'Screens',
+          children: 'Pages',
           icon: { path: ICON_VARIANT_PAGES.path },
         }}
         headerRight={
@@ -1108,7 +1108,7 @@ function Screens(props) {
               ready={orgReady}
               used={billableScreenCount}
               limit={screenQuota.limit}
-              noun="screen"
+              noun="page"
             />
             <Stack direction="row" spacing={1}>
               {/* Other ways to start a screen, from plugins (AGL-2907). */}
@@ -1125,7 +1125,7 @@ function Screens(props) {
                 {'Templates'}
               </Button>
               <Button size="small" variant="contained" onClick={handleFormOpen}>
-                {'Create New Screen'}
+                {'Create New Page'}
               </Button>
             </Stack>
           </Stack>
@@ -1149,7 +1149,7 @@ function Screens(props) {
                   <SrOnly>close drawer</SrOnly>
                 </IconButton>
                 <Typography variant="h6" component="div">
-                  {'Create new screen'}
+                  {'Create new page'}
                 </Typography>
               </>
             }
@@ -1191,9 +1191,9 @@ function Screens(props) {
           */}
           {truncated ? (
             <Alert severity="warning" sx={{ mb: 2 }}>
-              {`This site holds more than ${SCREEN_WINDOW} screens. The tree ` +
+              {`This site holds more than ${SCREEN_WINDOW} pages. The tree ` +
                 `below shows the first ${SCREEN_WINDOW} in document order, and ` +
-                'the screen count beside Create is counted from those.'}
+                'the page count beside Create is counted from those.'}
             </Alert>
           ) : null}
           <CardDisplay>
@@ -1223,7 +1223,7 @@ function Screens(props) {
                     color="primary"
                     onClick={handleFormOpen}
                   >
-                    {'Create your first screen'}
+                    {'Create your first page'}
                   </Button>
                   <Button
                     size="small"
@@ -1257,13 +1257,13 @@ function Screens(props) {
         maxWidth="xs"
         fullWidth
       >
-        <DialogTitle>{'Screen translations'}</DialogTitle>
+        <DialogTitle>{'Page translations'}</DialogTitle>
         <DialogContent
           sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}
         >
           <TextField
             select
-            label="This screen's language"
+            label="This page's language"
             value={translationsFor?.locale ?? ''}
             onChange={(event) =>
               setTranslationsFor((prev) =>
@@ -1371,10 +1371,10 @@ const formSchema = {
         anchor: '#screens--routing',
         excerpt:
           'Publishing registers the slug in the routing map — nested ' +
-          'screens compose their path from their parents.',
+          'pages compose their path from their parents.',
       }),
       helperText:
-        'Path the screen is served at on your site ("/" for the home page). Leave empty to keep it unpublished.',
+        'Path the page is served at on your site ("/" for the home page). Leave empty to keep it unpublished.',
       validate: [
         {
           type: 'max-length',

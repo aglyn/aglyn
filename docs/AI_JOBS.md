@@ -2093,14 +2093,18 @@ needs, and the machine does not start it with less.
   request's line is the same length either way, so no figure the Free page's
   arithmetic quotes moves.
 - **The ceiling does not move to make a section fit.** The balanced tier's
-  1,050 fits the Free page's wall with little to spare: past 1,053 tokens the
+  1,050 fits the Free page's wall with little to spare: past 1,060 tokens the
   first section pass costs 45 credits, and the Free page that builds its layout
   first leaves 45 of the 300 — no more than that pass, which is the room the
   arithmetic keeps for a re-asked section. That margin was 1,060 until the
   palette learned the layout elements' Color scheme (AGL-3284): 20 estimated
-  tokens on every document door's cached prefix, the page's now 4,618. Three
-  tokens now separate the ceiling from the wall, so the next palette line a
-  section pass carries has to pay for itself. A two-person introduction drawn
+  tokens on every document door's cached prefix, the page's then 4,618. Three
+  tokens then separated the ceiling from the wall, so the next palette line a
+  section pass carries has to pay for itself — and the Video element's did
+  (AGL-3433): the catalog stopped printing a name that only spells its id
+  again (`image (Image)`, `searchBox (Search Box)`), which, with the copy that
+  calls a screen a page (AGL-3430), brought the page's prefix to 4,601 and left
+  ten. A two-person introduction drawn
   roomier, in the 20 elements an estimate-counted budget allowed, needs 1,114
   real tokens, so no ceiling the wall holds fits it; drawn in 15, it needs 834.
   A plan rule that splits a section cannot see how long its items' copy runs,

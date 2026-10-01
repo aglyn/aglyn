@@ -772,7 +772,7 @@ const TAB_LINK_FIELDS: Aglyn.AglynAttributeSchema[] = Array.from(
       name: tabLinkProp(position),
       label: `Tab ${position} link`,
       description:
-        `Screen the ${ordinal(position)} tab navigates to. A tab with a ` +
+        `Page the ${ordinal(position)} tab navigates to. A tab with a ` +
         'link is a real link — it can be opened in a new tab and search ' +
         'engines follow it — and it no longer switches panels. Leave it ' +
         'unset for a tab that just reveals its own panel, including the ' +
@@ -901,7 +901,7 @@ export const tabsSchema: Aglyn.ComponentSchema<TabsElementProps> = {
       label: 'Accessible label',
       description:
         'Names the row for screen readers. Default "Tabs". Give a row ' +
-        'whose tabs link to other screens its own name — it becomes a ' +
+        'whose tabs link to other pages its own name — it becomes a ' +
         'navigation landmark, and two landmarks called the same thing are ' +
         'no help to anyone.',
       component: Aglyn.FieldComponentType.TEXT_FIELD,

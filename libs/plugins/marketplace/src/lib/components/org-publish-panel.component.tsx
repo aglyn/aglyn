@@ -442,7 +442,7 @@ export function OrgPublishPanel({
           </Typography>
         ) : kind === 'site' ? (
           <Typography variant="body2" color="text.secondary">
-            {'Publishes this site’s current published screens and theme as an ' +
+            {'Publishes this site’s current published pages and theme as an ' +
               'installable starting point.'}
           </Typography>
         ) : kind === 'theme' ? (

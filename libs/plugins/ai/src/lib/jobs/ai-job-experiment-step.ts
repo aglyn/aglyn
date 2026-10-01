@@ -104,7 +104,7 @@ export const AI_EXPERIMENT_READ_DAYS = 0
 export const AI_EXPERIMENT_NO_TASK_COPY =
   'Start this from the A/B testing card, which says whether you want variants or an explanation.'
 export const AI_EXPERIMENT_NO_TARGET_COPY =
-  'Say whether the test varies a screen, a section or an email.'
+  'Say whether the test varies a page, a section or an email.'
 export const AI_EXPERIMENT_NO_SITE_COPY = 'Open the site whose test this is.'
 export const AI_EXPERIMENT_NO_READER_COPY =
   'A/B testing is not available on this workspace, so there is no test to work on.'

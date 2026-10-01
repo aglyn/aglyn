@@ -17,7 +17,6 @@
 
 import type { HostAction } from '@aglyn/aglyn'
 import type { HostVariable } from '@aglyn/aglyn'
-import type { HostWorkflow } from '@aglyn/aglyn'
 
 /**
  * Reference-integrity audit (wave v7): id references (AGL-261) are
@@ -46,9 +45,19 @@ export interface ScreenAuditEntry {
   nodes: Record<string, { props?: Record<string, unknown> } | undefined>
 }
 
+/**
+ * A stored workflow, as far as the audit reads one: its name and the function
+ * each step calls, by id and by the name it had when the step was written.
+ */
+export interface AuditedWorkflow {
+  $id: string
+  name?: string
+  steps?: Array<{ functionId?: string; functionName?: string }>
+}
+
 export interface ReferenceAuditInput {
   actions?: Array<HostAction & { $id: string }>
-  workflows?: Array<HostWorkflow & { $id: string }>
+  workflows?: AuditedWorkflow[]
   variables?: Array<HostVariable & { $id: string }>
   /** Screen node maps to scan for entity/screen-link references. */
   screens?: ScreenAuditEntry[]

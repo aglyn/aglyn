@@ -42,6 +42,7 @@ import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.
 import { Button, Chip, Stack, Tooltip, Typography } from '@mui/material'
 import { useParams } from 'next/navigation'
 import { useCallback, useMemo, useState } from 'react'
+import { contactInteractionHref, INTERACTION_LINK_LABELS } from '../model/contact-interaction-links'
 import { contactPrimaryGroup } from '../model/contact-record'
 import { ActivityRow } from './activity-list'
 import {
@@ -132,7 +133,7 @@ function CapturedRow(props: {
           {href ? (
             <Typography variant="caption">
               <AppLink href={href}>
-                {Aglyn.INTERACTION_LINK_LABELS[source] ?? 'Open'}
+                {INTERACTION_LINK_LABELS[source] ?? 'Open'}
               </AppLink>
             </Typography>
           ) : null}
@@ -311,7 +312,7 @@ export function ContactTimelineCard(props: ContactTimelineCardProps) {
   const interactionHref = useCallback(
     (interaction: ContactInteraction): string | null =>
       siteContext && interaction.hostId === hostId
-        ? Aglyn.contactInteractionHref(interaction, siteContext)
+        ? contactInteractionHref(interaction, siteContext)
         : null,
     [siteContext, hostId],
   )

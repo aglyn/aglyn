@@ -199,7 +199,7 @@ export function aiComponentTool(): AiTool {
               defaultValue: {
                 type: 'string',
                 description:
-                  'What the component shows until a page sets it: copy for text and richText, a screen id from the site inventory or "" for href, "" for image and icon, a number for number, "true" or "false" for boolean, one answer’s value for choice.',
+                  'What the component shows until a page sets it: copy for text and richText, a page id from the site inventory or "" for href, "" for image and icon, a number for number, "true" or "false" for boolean, one answer’s value for choice.',
               },
               options: {
                 type: 'array',
@@ -288,7 +288,7 @@ function readDefault(
       return scope.screenIds.has(value) || isRootRelativePath(value) || isHttpsUrl(value)
         ? { value }
         : {
-            error: 'is neither a screen id from the site inventory, a path on this site nor an https: address',
+            error: 'is neither a page id from the site inventory, a path on this site nor an https: address',
             rule: 1,
           }
     case 'number': {

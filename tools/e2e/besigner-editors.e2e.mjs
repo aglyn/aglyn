@@ -242,7 +242,7 @@ try {
   })
 
   const warned = await page
-    .getByText('Someone else saved this screen', { exact: false })
+    .getByText('Someone else saved this page', { exact: false })
     .waitFor({ state: 'visible', timeout: 20_000 })
     .then(() => true)
     .catch(() => false)

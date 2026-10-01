@@ -789,7 +789,7 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
       name: 'Confirm email',
       description:
         'Address verification link, sent after sign-up and whenever someone ' +
-        'asks for another from the verify screen.',
+        'asks for another from the verify page.',
       deliveredBy: 'resend',
       defaultSubject: 'Confirm your email address',
       mergeTokens: [

@@ -37,7 +37,7 @@ import {
   type OutreachStoredOpen,
 } from '../runtime/click-link'
 import { readStoredOutreachMailbox } from '../storage/outreach-records'
-import { GmailTransportError } from '../transport/gmail-errors'
+import { GmailTransportError, googleFailureAnswer } from '../transport/gmail-errors'
 import { Rfc5322MessageError } from '../transport/rfc5322'
 import { sendComposedOutreachEmail } from '../transport/send-message'
 import { readOutreachStepRender } from './preview-routes'
@@ -284,12 +284,8 @@ export function createOutreachStepTestRoute(
       if (error instanceof Rfc5322MessageError) {
         return outreachRefusal(400, 'invalid-request', `The test could not be written: ${error.message}`)
       }
-      if (!(error instanceof GmailTransportError)) throw error
-      return outreachRefusal(
-        502,
-        'google-unavailable',
-        error.retryable ? 'Google did not answer. Try again in a moment.' : `Google refused the request: ${error.message}`,
-      )
+      const answer = googleFailureAnswer(error, 'step test send')
+      return outreachRefusal(answer.status, answer.reason, answer.error)
     }
 
     const testsToday = await countTest(firestore, caller.orgId, mailbox, nowMs)

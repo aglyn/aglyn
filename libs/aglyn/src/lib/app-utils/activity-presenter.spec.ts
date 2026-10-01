@@ -27,6 +27,8 @@ import {
 } from './activity-presenter'
 import { PLATFORM_BRAND_NAME } from './platform-brand'
 import { registerPluginActivityActions } from '../plugin-manager/plugin-activity-actions'
+import { registerPluginRecordRoute } from '../plugin-manager/plugin-record-routes'
+import { unregisterPluginServices } from '../plugin-manager/plugin-services'
 
 // The AI codes the feed shows, as the AI plugin declares them (AGL-2940):
 // the presenter reads the registry, and this is the registration.
@@ -45,7 +47,7 @@ registerPluginActivityActions({
 
 describe('activityTypeLabel', () => {
   it('maps known types to human nouns', () => {
-    expect(activityTypeLabel('screen')).toBe('Screen')
+    expect(activityTypeLabel('screen')).toBe('Page')
     expect(activityTypeLabel('org')).toBe('Organization')
     expect(activityTypeLabel('invite')).toBe('Invitation')
   })
@@ -76,7 +78,7 @@ describe('activityTargetLabel', () => {
 
   it('degrades to the type label, NEVER the raw id', () => {
     const label = activityTargetLabel({ type: 'screen', id: 'x7Il1O0abc' })
-    expect(label).toBe('Screen')
+    expect(label).toBe('Page')
     expect(label).not.toContain('x7Il1O0abc')
   })
 })
@@ -305,26 +307,6 @@ describe('activityHref', () => {
     ).toBe('/acme/team')
   })
 
-  it('routes org-level CRM entries into the org hub (AGL-2634)', () => {
-    expect(
-      activityHref({ target: { type: 'deal', id: 'd1' } }, { orgSlug }),
-    ).toBe('/acme/crm/deals/d1')
-    expect(
-      activityHref({ target: { type: 'contact', id: 'c 1' } }, { orgSlug }),
-    ).toBe('/acme/crm/contacts/c%201')
-    // A bulk line names a kind and no record; a lead's org address needs
-    // its site; a task has no page: each lands on the section.
-    expect(activityHref({ target: { type: 'company' } }, { orgSlug })).toBe(
-      '/acme/crm/companies',
-    )
-    expect(
-      activityHref({ target: { type: 'lead', id: 'k1' } }, { orgSlug }),
-    ).toBe('/acme/crm/leads')
-    expect(
-      activityHref({ target: { type: 'task', id: 't1' } }, { orgSlug }),
-    ).toBe('/acme/crm/tasks')
-  })
-
   it('tolerates legacy top-level type/targetId fields', () => {
     expect(
       activityHref({ type: 'org', targetId: 'o1' }, { orgSlug }),
@@ -338,22 +320,42 @@ describe('activityHref', () => {
   })
 
   /**
-   * CRM work in Setup → Activity opens the record it names (AGL-2622), and
-   * a deleted record's entry still lands on its list rather than on a 404.
+   * A plugin's record (AGL-2622, AGL-2634) — a contact, a deal, an order —
+   * links at the address the plugin that owns the kind publishes on the
+   * record-route seam (AGL-3080): its own page, or its list when the entry
+   * named no record, at the site or at the organization. This stands in a
+   * plugin keeping `bottle` records; a kind nobody publishes links nowhere.
    */
-  it('links CRM entries into the hub, by record or by section', () => {
+  it('links a plugin’s record at the address its owner publishes', () => {
+    registerPluginRecordRoute(
+      'bottle',
+      {
+        list: ({ orgSlug: org, host: site }) =>
+          site ? `/${org}/hosts/${site}/cellar/bottles` : `/${org}/cellar/bottles`,
+        record: ({ orgSlug: org, host: site }, id) =>
+          `${site ? `/${org}/hosts/${site}` : `/${org}`}/cellar/bottles/${encodeURIComponent(id)}`,
+      },
+      { pluginId: 'cellar' },
+    )
+    try {
+      expect(
+        activityHref({ target: { type: 'bottle', id: 'b 1' } }, { orgSlug, host }),
+      ).toBe('/acme/hosts/shop/cellar/bottles/b%201')
+      expect(activityHref({ target: { type: 'bottle' } }, { orgSlug, host })).toBe(
+        '/acme/hosts/shop/cellar/bottles',
+      )
+      expect(activityHref({ target: { type: 'bottle', id: 'b1' } }, { orgSlug })).toBe(
+        '/acme/cellar/bottles/b1',
+      )
+      expect(activityHref({ target: { type: 'bottle' } }, { orgSlug })).toBe(
+        '/acme/cellar/bottles',
+      )
+    } finally {
+      unregisterPluginServices('cellar')
+    }
     expect(
-      activityHref({ target: { type: 'contact', id: 'c1' } }, { orgSlug, host }),
-    ).toBe('/acme/hosts/shop/crm/contacts/c1')
-    expect(
-      activityHref({ target: { type: 'lead', id: 'l1' } }, { orgSlug, host }),
-    ).toBe('/acme/hosts/shop/crm/leads/l1')
-    expect(
-      activityHref({ target: { type: 'company', id: 'co1' } }, { orgSlug, host }),
-    ).toBe('/acme/hosts/shop/crm/companies/co1')
-    expect(
-      activityHref({ target: { type: 'deal' } }, { orgSlug, host }),
-    ).toBe('/acme/hosts/shop/crm/deals')
+      activityHref({ target: { type: 'bottle', id: 'b1' } }, { orgSlug, host }),
+    ).toBeUndefined()
     expect(activityTypeLabel('deal')).toBe('Deal')
     expect(activityTypeLabel('lead')).toBe('Lead')
   })

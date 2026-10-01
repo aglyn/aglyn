@@ -26,7 +26,6 @@ import {
 } from '@aglyn/aglyn/app-utils/actions'
 import { automationPlaceholderIn } from '@aglyn/aglyn/app-utils/automation-placeholders'
 import { CONTACT_LIFECYCLE_STAGE_LABELS, type ContactLifecycleStage } from '@aglyn/aglyn/app-utils/crm'
-import type { HostWorkflow } from '@aglyn/aglyn/app-utils/workflows'
 import { aiAutomationTriggerLabel } from './ai-workflow-job'
 import type { AiAutomationNamedRecord, AiAutomationRecords } from './ai-automation-draft'
 import type { AiWorkflowExplanation } from '../tools/ai-workflow-tool'
@@ -216,9 +215,27 @@ export function aiActionOutline(
   return lines.join('\n')
 }
 
+/**
+ * A saved workflow as the workflows plugin's `workflow` record index shares
+ * it: its name, and the facts that index documents — the stored step list
+ * (each a function call by `functionId`, `functionName`, `args` and
+ * `resultName`), the scope name it returns, and its trigger.
+ */
+export interface AiIndexedWorkflow {
+  name: string
+  steps?: Array<{
+    functionId?: string
+    functionName?: string
+    args?: string[]
+    resultName?: string
+  }>
+  returnValue?: string | null
+  trigger?: { event?: string; filter?: string } | null
+}
+
 /** A saved workflow — a pipeline of function calls — as an outline. */
 export function aiWorkflowOutline(
-  workflow: HostWorkflow,
+  workflow: AiIndexedWorkflow,
   functions: readonly AiAutomationNamedRecord[] | null,
 ): string {
   const lines = [`Workflow: ${quoted(workflow.name)} — a workflow, a list of function calls.`]

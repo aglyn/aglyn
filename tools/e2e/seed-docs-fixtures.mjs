@@ -663,7 +663,7 @@ await put(firestore.collection('users').doc('e2e-owner'), {
 })
 
 // ── Addresses a reader sees (AGL-3319) ────────────────────────────────────
-// The CRM book (`tools/scripts/lib/crm-fixtures.mjs`) names invented people
+// The CRM book (`libs/plugins/crm/scripts/fixtures/crm-fixtures.mjs`) names invented people
 // at invented businesses, but on `.com` domains somebody may really own, and
 // one address is a Gmail inbox. A published image must not print an address
 // a real person reads, so the docs frame moves every one of them onto the

@@ -247,7 +247,9 @@ needs it starts.
 1. **`plugins-bookings` → `plugins-commerce`.** Gone (AGL-3080). Two plugins
    that take money need one tax rule. Commerce registers it through
    `registerPluginTaxProfile` from both of its server registrars, and a booking
-   is priced and confirmed by asking `pluginTaxProfile()`. That contract throws
+   is priced and confirmed by asking `pluginTaxProfile()` — for the site's
+   service rate too (`flatRate`), so bookings no longer reads the store
+   settings document commerce keeps its rates in. That contract throws
    rather than answer zero when no plugin owns the rule, and
    `tax-profile-is-registered.spec.ts` in each app runs the real registrars
    through the manifest to prove the owner is there. The number stays.

@@ -56,7 +56,7 @@ export function SiteTemplateCard(props: { hostId: string }) {
     >
       <Stack spacing={1.5}>
         <Typography variant="body2" color="text.secondary">
-          {'Publish this site — every published screen plus the theme — ' +
+          {'Publish this site — every published page plus the theme — ' +
             'as a template others can start from. Re-publishing bumps the ' +
             'version.'}
         </Typography>

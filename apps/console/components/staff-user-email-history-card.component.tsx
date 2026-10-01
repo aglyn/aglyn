@@ -434,7 +434,7 @@ export function StaffUserEmailHistoryCard({
         <Alert severity="warning">
           {'The delivery log could not be read. This is NOT the same as "we ' +
             'never emailed them" — do not tell anyone their mail was or was ' +
-            'not sent from this screen until it loads.'}
+            'not sent from this page until it loads.'}
         </Alert>
       ) : gridRows.length === 0 && !history.filtering && !history.loading ? (
         <Stack spacing={1}>

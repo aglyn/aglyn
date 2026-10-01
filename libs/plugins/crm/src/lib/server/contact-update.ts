@@ -81,7 +81,6 @@ import {
   campaignMembershipValue,
   contactCampaignFieldPath,
   contactFacetPath,
-  contactPrimaryGroup,
   CRM_COLLECTIONS,
   CRM_LEAD_SOURCE_PICKLIST,
   CRM_MEDIA_IDS_FIELD,
@@ -126,6 +125,7 @@ import {
 import { readCrmRouteScope } from './org-caller'
 import { crmSuiteRefusal } from './suite-gate'
 import { authorizeCrmWriter, canReach, type Writer } from './task-routes'
+import { contactPrimaryGroup } from '../model/contact-holder'
 
 /** What the suite gate names for each field a request can carry. */
 const SUITE_ACTS: Record<keyof ContactUpdateFields, string> = {

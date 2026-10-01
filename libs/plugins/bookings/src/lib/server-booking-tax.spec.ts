@@ -134,12 +134,11 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     bookings,
     ownerProfile,
     /**
-     * The COMMERCE plugin's `hosts/{hostId}/settings/store` document, which
-     * is where the merchant's service tax rate lives (AGL-2028). Modelled
-     * because the double must model real semantics: the handler reads a
-     * `settings` collection by name, and a fake that answered the service
-     * document for every collection would let a test "configure a rate" that
-     * the handler could never actually have read.
+     * The merchant's store settings, where the plugin that owns the tax rule
+     * keeps the service rate (AGL-2028). The handler never reads them: it
+     * asks that owner (`flatRate`), and the stand-in owner below answers from
+     * here, so a test that "configures a rate" configures the one the handler
+     * is handed.
      */
     store: {} as Record<string, unknown>,
     /** The org doc `getOrgForHost` answers with — the fee's own input. */
@@ -406,7 +405,12 @@ afterAll(() => {
 })
 
 beforeEach(() => {
-  standInTaxProfile()
+  // The owner of the tax rule reads the merchant's rates where it keeps them,
+  // which in this double is the store document below.
+  standInTaxProfile({
+    flatRate: (_hostId, charge) =>
+      (mockAdmin.__state.store['tax'] as Record<string, unknown> | undefined)?.[charge],
+  })
   stripePosts.length = 0
   // Per test. A merchant's tax settings leaking from one test into the next
   // is exactly how a "charges no tax by default" assertion goes green for the
@@ -593,6 +597,21 @@ describe('a merchant-set service rate is charged and recorded (AGL-2028)', () =>
       cookies: {},
     } as any
   }
+
+  it('asks the owner of the tax rule for this site’s service rate', async () => {
+    const asked: Array<[string, string]> = []
+    standInTaxProfile({
+      flatRate: (hostId, charge) => {
+        asked.push([hostId, charge])
+        return { pct: 6 }
+      },
+    })
+    const res = makeRes()
+    await bookHandler(taxReq(), res)
+    expect(res.statusCode).toBe(200)
+    expect(asked).toEqual([['host-1', 'service']])
+    expect(stripePosts[0].params.get('line_items[1][price_data][unit_amount]')).toBe('450')
+  })
 
   it('adds the merchant’s rate as its own line on the session', async () => {
     withService({ pct: 6, label: 'State service tax' })

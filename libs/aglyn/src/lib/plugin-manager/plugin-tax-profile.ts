@@ -31,11 +31,18 @@ import {
  * Importing the owner's model instead is how two money paths end up with two
  * rounding rules, and the second is found by an accountant.
  *
- * ## Pure, synchronous, and unauthenticated
+ * ## Where the rate is kept, and the arithmetic over it
  *
- * Both questions are arithmetic over values the caller already holds: a rate
- * off the settings it read, a charge in cents, a settled payment object.
- * Nothing is read and nobody is asked who they are.
+ * The merchant's rates are the owner's settings, stored where the owner keeps
+ * them, so a caller asks for one — {@link PluginTaxProfile.flatRate}, the
+ * contract's one read, by site and by the kind of charge — and never reads
+ * the owner's documents itself. A plugin that knew where another plugin kept
+ * a merchant's tax settings would charge untaxed, and record it as untaxed,
+ * the day those settings moved.
+ *
+ * The other two questions are pure and synchronous arithmetic over values the
+ * caller already holds: the rate it was handed, a charge in cents, a settled
+ * payment object. Nobody is asked who they are.
  *
  * ## No profile is a refusal, never a zero
  *
@@ -68,6 +75,15 @@ export interface PluginResolvedFlatTax {
 }
 
 export interface PluginTaxProfile {
+  /**
+   * The merchant's flat rate for one kind of charge on a site, as the owner
+   * stores it — to be handed to {@link PluginTaxProfile.flatTax} as read. `charge` names what
+   * is being sold in the owner's words for its rates (`service` for an
+   * appointment). A site that set none, or a kind the owner keeps no rate
+   * for, answers `undefined`, which `flatTax` prices at zero. Server-side:
+   * the owner reads its own settings document.
+   */
+  flatRate(hostId: string, charge: string): Promise<unknown>
   /**
    * Tax, EXCLUSIVE, for a flat merchant rate on one charged amount. `rate` is
    * the merchant's stored setting, passed as read: the owner decides what a

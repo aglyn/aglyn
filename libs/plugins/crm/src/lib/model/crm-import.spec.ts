@@ -72,6 +72,7 @@ describe('the mapping menu', () => {
       'duplicate',
       'erased',
       'invalid-email',
+      'not-reached',
       'write-failed',
     ])
   })

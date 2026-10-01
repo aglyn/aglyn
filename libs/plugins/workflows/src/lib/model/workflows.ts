@@ -1,0 +1,249 @@
+/**
+ * @license
+ * Copyright 2026 Aglyn LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import {
+  evaluateExpression,
+  evaluateHostFunction,
+  type HostFunction,
+} from '@aglyn/aglyn/app-utils/functions'
+import type { HostEventType } from '@aglyn/aglyn/app-utils/host-events'
+import type { HostVariable } from '@aglyn/aglyn/app-utils/variables'
+
+/**
+ * Workflows (Workflow Builder, AGL-101): named pipelines of host-function
+ * calls. Each step evaluates its argument expressions over host variables
+ * and previous step results, runs the function through the safe evaluator,
+ * and stores the result under its name for later steps. Pure and bounded —
+ * no I/O, no loops. Site-event triggers arrive in v2.
+ */
+
+export interface HostWorkflowTrigger {
+  event: HostEventType
+  /**
+   * Optional expression over the event payload (plus variables); the
+   * workflow only runs when it evaluates truthy (e.g. `path == "/pricing"`).
+   */
+  filter?: string
+}
+
+export interface HostWorkflowStep {
+  /**
+   * Host function to run — by doc id (AGL-261), rename-safe. Steps saved
+   * before AGL-261 carry only `functionName`; executors resolve id first.
+   */
+  functionId?: string
+  /** Legacy name reference, kept as the display hint; `functionId` wins. */
+  functionName: string
+  /**
+   * One expression per function parameter, evaluated over variables and
+   * previous step results (e.g. `price * qty`, `step1 + 10`).
+   */
+  args: string[]
+  /** Scope name the step's result binds to; defaults to `step<N>`. */
+  resultName?: string
+}
+
+/** `hosts/{hostId}/workflows/{id}` doc. */
+export interface HostWorkflow {
+  name: string
+  steps: HostWorkflowStep[]
+  /** Scope name whose final value the workflow returns. */
+  returnValue?: string
+  /** Event trigger (AGL-128); absent means manual/embedded use only. */
+  trigger?: HostWorkflowTrigger | null
+}
+
+export const WORKFLOW_MAX_STEPS = 25
+/** Max nesting across workflow→function→workflow cross-calls (AGL-129). */
+export const CROSS_MAX_DEPTH = 3
+
+export type WorkflowRunResult =
+  | {
+      ok: true
+      value: number | string | boolean
+      results: Record<string, number | string | boolean>
+    }
+  | { ok: false; error: string; step?: number }
+
+/** Variable values as a typed expression scope (mirrors resolveBindings). */
+function variableScope(
+  variables: Record<string, HostVariable>,
+): Record<string, number | string | boolean> {
+  const scope: Record<string, number | string | boolean> = {}
+  for (const [key, variable] of Object.entries(variables)) {
+    const value =
+      variable.type === 'number'
+        ? Number(variable.value ?? 0)
+        : variable.type === 'boolean'
+          ? variable.value === 'true'
+          : (variable.value ?? '')
+    scope[key] = value
+    // Under its NAME as well (AGL-3202). Callers key this map by name, by
+    // id, or by both; an expression only ever says the name, so a map keyed
+    // by id alone used to give it nothing to find.
+    if (
+      variable.name &&
+      !Object.prototype.hasOwnProperty.call(scope, variable.name)
+    ) {
+      scope[variable.name] = value
+    }
+  }
+  return scope
+}
+
+export interface WorkflowRunContext {
+  /** All host workflows by name, enabling function→workflow calls. */
+  workflows?: Record<string, HostWorkflow>
+  /** Cross-call nesting depth; internal — callers omit it. */
+  depth?: number
+}
+
+export function runWorkflow(
+  workflow: HostWorkflow,
+  functions: Record<string, HostFunction>,
+  variables: Record<string, HostVariable> = {},
+  /**
+   * Extra scope entries seeded ahead of the steps — event payloads (path,
+   * formName, field values) land here (AGL-128). Wins over variables.
+   */
+  extraScope: Record<string, number | string | boolean> = {},
+  context: WorkflowRunContext = {},
+): WorkflowRunResult {
+  const steps = workflow.steps ?? []
+  if (steps.length > WORKFLOW_MAX_STEPS) {
+    return { ok: false, error: `Workflows are capped at ${WORKFLOW_MAX_STEPS} steps` }
+  }
+  const depth = context.depth ?? 0
+  if (depth > CROSS_MAX_DEPTH) {
+    return { ok: false, error: 'Workflow nesting is too deep' }
+  }
+  // Function steps may call other workflows (AGL-129); every hop shares
+  // this depth guard so mutual recursion terminates.
+  const invokeWorkflow = (
+    name: string,
+    callScope: Record<string, number | string | boolean>,
+  ): number | string | boolean => {
+    const nested = context.workflows?.[name?.trim()]
+    if (!nested) throw new Error(`Unknown workflow "${name}"`)
+    const run = runWorkflow(nested, functions, variables, callScope, {
+      ...context,
+      depth: depth + 1,
+    })
+    if (run.ok === false) throw new Error(run.error)
+    return run.value
+  }
+  // The site's variables, apart from the step results layered over them:
+  // they are what a function may read by name (AGL-3202), wherever it runs.
+  const siteVariables = variableScope(variables)
+  const scope = { ...siteVariables, ...extraScope }
+  const results: Record<string, number | string | boolean> = {}
+
+  for (const [index, step] of steps.entries()) {
+    // Id-first resolution (AGL-261): maps are double-keyed by id and name.
+    const definition =
+      functions[step.functionId?.trim() ?? ''] ??
+      functions[step.functionName?.trim() ?? '']
+    if (!definition) {
+      return {
+        ok: false,
+        error: `Unknown function "${step.functionName || step.functionId}"`,
+        step: index + 1,
+      }
+    }
+    const args: Record<string, unknown> = {}
+    try {
+      definition.parameters?.forEach((parameter, parameterIndex) => {
+        const expression = step.args?.[parameterIndex]
+        if (expression != null && String(expression).trim() !== '') {
+          args[parameter.name] = evaluateExpression(String(expression), scope)
+        }
+      })
+    } catch (error) {
+      return {
+        ok: false,
+        error: `Step ${index + 1}: ${(error as Error).message}`,
+        step: index + 1,
+      }
+    }
+    const run = evaluateHostFunction(definition, args, {
+      ...(context.workflows ? { invokeWorkflow } : {}),
+      // A function that prices from `extra_site_price` on a page must not
+      // fail with "Unknown name" the day a workflow calls it.
+      globals: siteVariables,
+    })
+    // `=== false` (not `!run.ok`): the union fails to narrow under the
+    // stricter lib build tsconfig otherwise (same quirk as publish.ts).
+    if (run.ok === false) {
+      return {
+        ok: false,
+        error: `Step ${index + 1} (${definition.name}): ${run.error}`,
+        step: index + 1,
+      }
+    }
+    const resultName = step.resultName?.trim() || `step${index + 1}`
+    scope[resultName] = run.value
+    results[resultName] = run.value
+  }
+
+  const returnName = workflow.returnValue?.trim()
+  const value =
+    returnName && returnName in scope
+      ? scope[returnName]
+      : (Object.values(results).at(-1) ?? '')
+  return { ok: true, value, results }
+}
+
+/**
+ * Computed variables (AGL-129): a variable with `workflowName` takes the
+ * named workflow's result as its value at compose time; failures keep the
+ * stored fallback value. Each computed variable evaluates once, bounded
+ * by the shared depth guard.
+ */
+export function resolveComputedVariables(
+  variables: Record<string, HostVariable>,
+  functions: Record<string, HostFunction>,
+  workflows: Record<string, HostWorkflow>,
+): Record<string, HostVariable> {
+  const resolved: Record<string, HostVariable> = {}
+  // Lookup maps are double-keyed by id and name (AGL-185), so the same doc
+  // can appear under two keys — evaluate each workflow once per doc.
+  const memo = new Map<HostVariable, HostVariable>()
+  for (const [name, variable] of Object.entries(variables)) {
+    const workflowId = (variable as any).workflowId?.trim?.() ?? ''
+    const workflowName = variable.workflowName?.trim()
+    const workflow =
+      (workflowId ? workflows[workflowId] : undefined) ??
+      (workflowName ? workflows[workflowName] : undefined)
+    if (!workflow) {
+      resolved[name] = variable
+      continue
+    }
+    const cached = memo.get(variable)
+    if (cached) {
+      resolved[name] = cached
+      continue
+    }
+    const run = runWorkflow(workflow, functions, variables, {}, { workflows })
+    const next =
+      run.ok === false
+        ? variable
+        : { ...variable, value: String(run.value) }
+    memo.set(variable, next)
+    resolved[name] = next
+  }
+  return resolved
+}

@@ -254,7 +254,7 @@ jest.mock('@aglyn/shared-util-email', () => ({
 
 import { validateHostAction, type HostAction } from '@aglyn/aglyn/app-utils/actions'
 import { contactFacetPath } from '@aglyn/aglyn/app-utils/contacts'
-import { runWorkflow, type HostWorkflow } from '@aglyn/aglyn/app-utils/workflows'
+import { runWorkflow, type HostWorkflow } from '../model/workflows'
 import { runEventActions, runSingleAction } from './run-event-actions'
 import { runEventWorkflows } from './run-event-workflows'
 import {

@@ -182,7 +182,7 @@ const clickCases = [
   { name: 'layout', query: 'layout', expect: /\/layouts\/seed-main-layout$/ },
   { name: 'component', query: 'hero', expect: /\/components\/seed-hero$/ },
   { name: 'template', query: 'landing', expect: /\/templates\/seed-tpl$/ },
-  { name: 'workflow', query: 'confirmation', expect: /\/workflows$/ },
+  { name: 'workflow', query: 'confirmation', expect: /\/automation$/ },
   { name: 'product', query: 'sourdough', expect: /\/products$/ },
   { name: 'author', query: 'lovelace', expect: /\/content$/ },
   { name: 'site', query: 'bakery', expect: /\/hosts\/demo$/ },

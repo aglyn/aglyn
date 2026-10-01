@@ -18,6 +18,7 @@
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
 import type { ReusableComponentProp } from '@aglyn/aglyn/foundation/definitions/platform.types'
 import { duplicateResource } from '@aglyn/tenant-data-admin/server/duplicate-resource'
+import { aiPlanEmbedsFor } from '../model/ai-build-plan'
 import type { AiJob, AiJobOutput, AiJobPlan, AiJobReview } from '../model/ai-jobs.types'
 import { AI_STEP_TIERS } from '../providers/catalog'
 import { AI_ROUTING_TABLE, aiModelForStep } from '../providers/routing'
@@ -119,7 +120,7 @@ export const AI_JOB_COMPONENT_INSTRUCTIONS: readonly AiSystemBlock[] = [
       '- boolean: a switch setting such as a Button’s fullWidth, or hideIf on the part it hides, as the whole value.',
       '- choice: a setting with fixed options such as a Button’s variant, as the whole value, with every answer’s value one that setting lists.',
       'An optional part, such as a photo, a badge or a second button, gets a boolean property labeled "Hide <the part>" whose default is "false", and the part’s own element carries "hideIf": "{{prop.<name>}}". Never hide the whole component.',
-      'A default is what the component shows until a page sets it: copy in the site’s voice from the brief, with a fact the brief does not give in square brackets; for href a screen id from the site inventory, or ""; for image "", for an upload; for icon "", for the site owner to pick; for choice one of its answers’ values.',
+      'A default is what the component shows until a page sets it: copy in the site’s voice from the brief, with a fact the brief does not give in square brackets; for href a page id from the site inventory, or ""; for image "", for an upload; for icon "", for the site owner to pick; for choice one of its answers’ values.',
     ].join('\n'),
   },
 ]
@@ -299,7 +300,11 @@ export function createAiJobComponentStep(deps: AiJobComponentStepDeps = {}): AiJ
       ...(AI_ROUTING_TABLE['job.component'].effort
         ? { effort: AI_ROUTING_TABLE['job.component'].effort }
         : {}),
-      context: { definesComponent: true },
+      // A third-party player the confirmed plan lists for this component is the only one it may embed (AGL-3433).
+      context: {
+        definesComponent: true,
+        ...(creation ? { plannedEmbeds: aiPlanEmbedsFor(plan, { create: creation.name }) } : {}),
+      },
       extend: aiComponentCheck({
         inventory,
         plan,

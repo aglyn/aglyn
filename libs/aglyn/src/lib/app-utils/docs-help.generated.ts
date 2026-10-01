@@ -60,7 +60,7 @@ export const PLUGIN_DOCS = {
   aiExperiments: {
     path: '/ai/ab-tests-with-ai',
     title: 'A/B tests by AI: write variants, read the result',
-    excerpt: 'Have Aglyn AI write two to four variants for a screen, section or email experiment, and put a finished test into plain language — with the verdict decided from the counts before the model is asked anything.',
+    excerpt: 'Have Aglyn AI write two to four variants for a page, section or email experiment, and put a finished test into plain language — with the verdict decided from the counts before the model is asked anything.',
   },
   aiMonitoring: {
     path: '/staff-console/ai-monitoring',
@@ -210,7 +210,7 @@ export const PLUGIN_DOCS = {
   events: {
     path: '/content-and-data/events/overview',
     title: 'Events Calendar',
-    excerpt: 'Keep a schedule of events in the console and publish the ones you choose to any screen, with search-engine event markup.',
+    excerpt: 'Keep a schedule of events in the console and publish the ones you choose to any page, with search-engine event markup.',
   },
   forms: {
     path: '/content-and-data/forms/overview',
@@ -240,7 +240,7 @@ export const PLUGIN_DOCS = {
   membersOnly: {
     path: '/workspace-and-billing/teams-and-roles/members-only',
     title: 'Members-only areas',
-    excerpt: 'Let visitors sign up as members and gate screens so only members can view them.',
+    excerpt: 'Let visitors sign up as members and gate pages so only members can view them.',
   },
   orgAutomations: {
     path: '/marketing-and-automation/workflows-and-actions/org-automations',

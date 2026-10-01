@@ -63,7 +63,6 @@
 
 import {
   consentGroupForHost,
-  contactPrimaryGroup,
   crmReadTokens,
   heldScopeTokens,
   isOrgWideMember,
@@ -87,6 +86,7 @@ import { typed } from './contact-profile'
 import { readCrmRouteScope } from './org-caller'
 import { crmSuiteRefusal } from './suite-gate'
 import { authorizeCrmWriter, canReach, type Writer } from './task-routes'
+import { contactPrimaryGroup } from '../model/contact-holder'
 
 /** What the suite gate names for a detach on a plan without the CRM. */
 export const CONTACT_DETACH_SUITE_ACT = 'Removing a contact from one site'

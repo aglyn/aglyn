@@ -21,7 +21,7 @@
  * `renderInput` params instead of `inputProps`).
  */
 
-import { useMemo } from 'react'
+import { memo, useMemo, useRef } from 'react'
 
 import {
   Autocomplete,
@@ -156,7 +156,7 @@ interface InternalSelectProps<T = OptionValue> {
   [key: string]: any
 }
 
-function InternalSelect<T = OptionValue>({
+function InternalSelectView<T = OptionValue>({
   value,
   options,
   label,
@@ -170,7 +170,7 @@ function InternalSelect<T = OptionValue>({
   onInputChange,
   onSearchInput,
   isFetching,
-  noOptionsMessage,
+  noOptionsText,
   hideSelectedOptions,
   closeMenuOnSelect: _closeMenuOnSelect,
   required,
@@ -265,7 +265,7 @@ function InternalSelect<T = OptionValue>({
             }}
           />
         )}
-        noOptionsText={noOptionsMessage && noOptionsMessage()}
+        noOptionsText={noOptionsText}
         /*
          * The REASON travels with the text.
          *
@@ -292,6 +292,91 @@ function InternalSelect<T = OptionValue>({
         loading={isFetching}
       />
     </FormFieldGrid>
+  )
+}
+
+/**
+ * Whether the Autocomplete would draw the same thing: every prop the same,
+ * except `meta`, which final-form hands over as a new object on every render
+ * and which is compared by what it holds.
+ */
+function drawsTheSame(
+  previous: Record<string, unknown>,
+  next: Record<string, unknown>,
+): boolean {
+  const keys = new Set([...Object.keys(previous), ...Object.keys(next)])
+  for (const key of keys) {
+    const before = previous[key]
+    const after = next[key]
+    if (Object.is(before, after)) continue
+    if (key === 'meta' && shallowEqual(before, after)) continue
+    return false
+  }
+  return true
+}
+
+function shallowEqual(a: unknown, b: unknown): boolean {
+  if (!a || !b || typeof a !== 'object' || typeof b !== 'object') return false
+  const left = a as Record<string, unknown>
+  const right = b as Record<string, unknown>
+  const keys = Object.keys(left)
+  if (keys.length !== Object.keys(right).length) return false
+  return keys.every((key) => Object.is(left[key], right[key]))
+}
+
+const MemoizedSelectView = memo(
+  InternalSelectView,
+  drawsTheSame,
+) as typeof InternalSelectView
+
+/**
+ * The select, drawn only when something it draws has changed (AGL-3423).
+ *
+ * A multiple select is a multiple Autocomplete, which hands its input a new
+ * chip array as `startAdornment` on every render; MUI's `InputBase` copies
+ * that into its `FormControl` from a passive effect, a state update left
+ * pending after every commit the field takes part in. React 19 counts each
+ * such commit as a nested update, and keystrokes delivered back to back
+ * commit one after another with nothing to clear the count, so the
+ * fifty-first throws "Maximum update depth exceeded" (#185). A form that
+ * re-renders its fields on every change (a `values` subscription, an owner
+ * that keeps the values in state) re-rendered every multi-select with each
+ * keystroke in ANY field.
+ *
+ * So the drawing is memoized, and what defeated a plain `memo` is taken out
+ * of the comparison: the handlers, which final-form and the common select
+ * rebuild on every render, are called through the latest props instead of
+ * compared, and the no-options text is resolved here, where the common
+ * select's per-render function for it is called.
+ */
+function InternalSelect<T = OptionValue>(props: InternalSelectProps<T>) {
+  const latest = useRef(props)
+  latest.current = props
+  const handlers = useMemo(
+    () => ({
+      onChange: (value: unknown) => latest.current.onChange(value),
+      onFocus: (...args: unknown[]) =>
+        (latest.current.onFocus as ((...args: unknown[]) => void) | undefined)?.(
+          ...args,
+        ),
+      onBlur: (...args: unknown[]) =>
+        (latest.current.onBlur as ((...args: unknown[]) => void) | undefined)?.(
+          ...args,
+        ),
+      onInputChange: (value: string, reason?: string) =>
+        latest.current.onInputChange?.(value, reason),
+      onSearchInput: (value: string, reason?: string) =>
+        latest.current.onSearchInput?.(value, reason),
+    }),
+    [],
+  )
+  const { noOptionsMessage, ...drawn } = props
+  return (
+    <MemoizedSelectView<T>
+      {...drawn}
+      {...handlers}
+      noOptionsText={noOptionsMessage && noOptionsMessage()}
+    />
   )
 }
 

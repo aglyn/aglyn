@@ -21,7 +21,7 @@ import {
   HOST_EVENT_LABELS,
   HOST_EVENT_TYPES,
   type HostEventType,
-} from '@aglyn/aglyn/app-utils/workflows'
+} from '@aglyn/aglyn/app-utils/host-events'
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
 
 /**

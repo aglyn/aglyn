@@ -127,9 +127,15 @@ const EXPERIMENT_FILTER_HEADERS: Readonly<Record<string, string>> = {
   target: 'Tests',
   status: 'Status',
 }
+/** What each stored `target` reads as; the stored value stays `screen`. */
+const EXPERIMENT_TARGET_NOUNS: Readonly<Record<string, string>> = {
+  screen: 'page',
+  section: 'section',
+  email: 'email',
+}
 const EXPERIMENT_FILTER_OPTIONS = {
   target: [
-    { value: 'screen', label: 'Screen' },
+    { value: 'screen', label: 'Page' },
     { value: 'section', label: 'Section' },
     { value: 'email', label: 'Email' },
   ],
@@ -450,7 +456,7 @@ export function HostExperimentsCard(props: HostExperimentsCardProps) {
         .find((candidate) => candidate.$id !== experiment.$id)
       if (clash) {
         return void enqueueSnackbar(
-          `"${clash.name}" is already running on that screen — pause or ` +
+          `"${clash.name}" is already running on that page — pause or ` +
             'finish it first',
           { variant: 'warning', persist: false },
         )
@@ -568,7 +574,7 @@ export function HostExperimentsCard(props: HostExperimentsCardProps) {
       flex: 1,
       minWidth: 200,
       valueGetter: (_value, experiment) =>
-        `${experiment.target} · ${(experiment.variants ?? []).length} variants`,
+        `${EXPERIMENT_TARGET_NOUNS[experiment.target] ?? experiment.target} · ${(experiment.variants ?? []).length} variants`,
     },
     {
       field: 'status',
@@ -613,7 +619,7 @@ export function HostExperimentsCard(props: HostExperimentsCardProps) {
       ) : (
         <Stack spacing={1.5}>
           <Typography variant="body2" color="text.secondary">
-            {'Split traffic between variants of a screen, a section, or a ' +
+            {'Split traffic between variants of a page, a section, or a ' +
               'campaign email, and measure which one converts. Visitors ' +
               'are assigned deterministically, so everyone keeps seeing ' +
               'the same variant.'}
@@ -703,7 +709,7 @@ export function HostExperimentsCard(props: HostExperimentsCardProps) {
               }
               sx={{ minWidth: 140 }}
             >
-              <MenuItem value="screen">{'A screen'}</MenuItem>
+              <MenuItem value="screen">{'A page'}</MenuItem>
               <MenuItem value="section">{'A section'}</MenuItem>
               <MenuItem value="email">{'An email'}</MenuItem>
             </TextField>
@@ -711,7 +717,7 @@ export function HostExperimentsCard(props: HostExperimentsCardProps) {
               <TextField
                 select
                 size="small"
-                label="Screen"
+                label="Page"
                 value={editor?.screenId ?? ''}
                 onChange={(event) => patch({ screenId: event.target.value })}
                 sx={{ flex: 1 }}

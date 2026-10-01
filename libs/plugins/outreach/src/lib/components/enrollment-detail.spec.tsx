@@ -31,6 +31,7 @@ import {
 } from './enrollment-detail'
 import type { OutreachLoad } from './use-outreach-data'
 import type { OutreachMailboxesResult } from './use-outreach-mailboxes'
+import { standInCrmRecordRoutes } from '../testing/stand-in-crm-record-routes'
 
 /**
  * ONE PERSON'S PAGE (AGL-3332): the header a seller reads first — who, which
@@ -182,6 +183,8 @@ const renderDetail = (orgMount = { orgId: 'org-1', orgSlug: 'acme', hosts: [{ id
 const activity = () => within(screen.getByRole('list', { name: 'Activity' }))
 
 beforeEach(() => {
+  // A lead's and a contact's pages are the CRM's (AGL-3080).
+  standInCrmRecordRoutes()
   jest.clearAllMocks()
   // An hour before T, so every next send in the fixtures is still ahead.
   jest.spyOn(Date, 'now').mockReturnValue(T - 60 * MIN)

@@ -1,16 +1,16 @@
 ---
 sidebar_position: 1
 title: Analytics
-description: Built-in pageview analytics, the Traffic card and its growth figure, per-screen metrics, and average time on a screen.
+description: Built-in pageview analytics, the Traffic card and its growth figure, per-page metrics, and average time on a page.
 ---
 
 # Analytics
 
 Aglyn tracks how your site is doing out of the box — pageviews, referrers, devices, and
-per-screen traffic — so you don't need a third-party tool to see the basics.
+per-page traffic — so you don't need a third-party tool to see the basics.
 
 :::info Plan availability
-**Free** dashboard traffic panel. **Per-screen traffic** and the `screenAnalytics`
+**Free** dashboard traffic panel. **Per-page traffic** and the `screenAnalytics`
 entitlement are **Pro+**.
 :::
 
@@ -57,7 +57,7 @@ It is green above zero, red below, and neutral at exactly zero.
 **A first window shows no growth figure at all.** When there is no prior period to compare
 against — a site published last week, asked for 30 days — Aglyn renders nothing rather than
 `+100%` or `+0%`, both of which would be claims it cannot support. The same rule applies to
-every delta in the product, including the ones on the Orders screen.
+every delta in the product, including the ones on the Orders page.
 
 Percentages in the device split are each rounded on their own, so they need not add to
 exactly 100. A device with no views is left out rather than shown as `0%`.
@@ -74,20 +74,20 @@ the analytics page, so you can see which newsletters, ads, or campaigns actually
 visitors. Tag your links as you would for any analytics tool; Aglyn records the labels
 from the URL — nothing about the visitor.
 
-## Per-screen traffic
+## Per-page traffic {#per-screen-traffic}
 
-**Pro+** sites get a **per-screen traffic panel** on each screen's view page, with
-pageviews attributed to the screen and broken down by **referrer** and **device** — and a
-**Screens table** on the site's analytics page comparing pageview share across all your
-screens over a selectable window. Plan cards surface analytics as an upsell for lower
+**Pro+** sites get a **per-page traffic panel** in each page's detail view, with
+pageviews attributed to the page and broken down by **referrer** and **device** — and a
+**Pages table** on the site's analytics page comparing pageview share across all your
+pages over a selectable window. Plan cards surface analytics as an upsell for lower
 tiers.
 
-To find it: open a site, go to **Screens**, open a screen, open the version you want, and
-look for the **Screen traffic (14 days)** card.
+To find it: open a site, go to **Pages**, open a page, open the version you want, and
+look for the **Page traffic (14 days)** card.
 
-### Average time on a screen {#dwell-time}
+### Average time on a page {#dwell-time}
 
-Beside **Screen views**, that card shows **Avg. time on this screen** — how long a visitor
+Beside **Page views**, that card shows **Avg. time on this page** — how long a visitor
 stayed before leaving it. It reads as `45s`, `2m 04s` or `1h 05m`.
 
 Things worth knowing before you draw a conclusion from it:
@@ -99,12 +99,12 @@ Things worth knowing before you draw a conclusion from it:
   rather than as an afternoon, so one abandoned tab cannot dominate the average.
 - **Visits under a second are ignored.** A bounce through a redirect is not time on the
   page.
-- **It appears only once there is something to average.** A screen with no measured visits
+- **It appears only once there is something to average.** A page with no measured visits
   shows no figure at all — not a zero, not a dash.
 - **Time is collected on every plan**, including Free. Only *reading* it is Pro+, so the
   history is already waiting the moment an organization upgrades.
 
-Aglyn stores a running total and a count of measurements per screen per day. It never keeps
+Aglyn stores a running total and a count of measurements per page per day. It never keeps
 an individual visit's duration — that would be a behavioral record of a person, and the
 average is the whole of what the feature needs.
 

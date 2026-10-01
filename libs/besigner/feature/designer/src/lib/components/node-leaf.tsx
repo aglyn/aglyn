@@ -169,7 +169,7 @@ const SlotMarker = ({ caption }: { caption?: string }) => (
     <Box component="span" sx={{ color: SLOT_ACCENT, fontWeight: 700 }}>
       {'◇ layout-slot'}
     </Box>
-    <Box component="span">{caption || 'Screen content renders here'}</Box>
+    <Box component="span">{caption || 'Page content renders here'}</Box>
   </Box>
 )
 

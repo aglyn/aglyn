@@ -120,7 +120,7 @@ export const schema: Aglyn.ComponentSchema<DocumentRootProps> = {
       name: 'component',
       label: 'Component',
       description:
-        'The DOM element the page renders as. On a screen framed by a ' +
+        'The DOM element the page renders as. On a page framed by a ' +
         'shared layout the layout’s slot carries "main" instead, so this ' +
         'stays a plain container unless you say otherwise. Choosing a ' +
         'landmark other than "main" leaves the page without one.',

@@ -441,7 +441,7 @@ const AdminHostDetail: NextPageWithLayout<Record<string, never>> = () => {
                     help={docsHelp('billing', {
                       anchor: '#usage-meters',
                       excerpt:
-                        "Live counts for this site — pages, screens, media, members, and storage — the figures metered against the org's entitlements.",
+                        "Live counts for this site — published and total pages, media, members, and storage — the figures metered against the org's entitlements.",
                     })}
                     contentGutterX
                     contentGutterY
@@ -452,7 +452,7 @@ const AdminHostDetail: NextPageWithLayout<Record<string, never>> = () => {
                       sx={{ flexWrap: 'wrap', gap: 2 }}
                     >
                       {stat('Published pages', publishedPages)}
-                      {stat('Screens', counts.screens)}
+                      {stat('All pages', counts.screens)}
                       {stat('Media files (organization)', counts.media)}
                       {stat('Site members', counts.members)}
                       {stat('Storage (MB)', storageMb)}
@@ -499,7 +499,7 @@ const AdminHostDetail: NextPageWithLayout<Record<string, never>> = () => {
                     help={docsHelp('staffConsole', {
                       anchor: '#whats-there',
                       excerpt:
-                        "A read-only snapshot of the site's locales, analytics id, password protection, and store template screens.",
+                        "A read-only snapshot of the site's locales, analytics id, password protection, and store template pages.",
                     })}
                     contentGutterX
                     contentGutterY

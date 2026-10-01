@@ -62,14 +62,14 @@ it. This is how you build structure — a Stack of buttons, a Section full of bl
 
 **Leaf elements** have no slot for child elements. There are three kinds:
 
-- **Text elements** render their content as inline text — a **Screen Link**, a **Button**, or a
+- **Text elements** render their content as inline text — a **Page Link**, a **Button**, or a
   **Text** element. Their words *are* their content; there's nowhere to nest a child.
 - **Self-closing elements** draw themselves and take no children at all — an **Image**, an
   **Icon**, or a **Video**.
 - **Elements whose content is an attribute** look like containers but draw only what their
   attributes say — a **Markdown** block (its document is the **Content** attribute), a **List Item
   Text** row (its words are **Primary**/**Secondary**), a **Reusable Component** instance (its
-  content lives in the definition), and a **Layout Slot** (filled by the screen bound to the
+  content lives in the definition), and a **Layout Slot** (filled by the page bound to the
   layout). Anything nested inside one of these has nowhere to appear on the published page.
 
 Dropping onto a leaf places your element **as a sibling right after it**, inside the leaf's
@@ -78,7 +78,7 @@ placement marker, never an "inside" one, so the marker always matches where the 
 lands.
 
 :::info Why this matters
-Aiming at the middle of a small element like a Screen Link used to tuck the new element *inside* it,
+Aiming at the middle of a small element like a Page Link used to tuck the new element *inside* it,
 where it wouldn't render as expected. Now a leaf's center reads as "place next to me," which is
 almost always what you want — and you don't have to aim precisely at its edges.
 
@@ -95,7 +95,7 @@ current selection, following the same container-vs-leaf logic as a drop:
 
 - Select a **container** — a stack, section, or the document itself — and the new element is added
   **inside** it.
-- Select a **leaf** — anything without a child slot, such as a screen link, button, or icon — and
+- Select a **leaf** — anything without a child slot, such as a page link, button, or icon — and
   the new element lands as its **next sibling** in the same container, rather than nested inside it.
 - With nothing selected, the element is added at the end of the document.
 
@@ -115,7 +115,7 @@ Not every element can go everywhere. Two kinds of guardrails apply:
 - **You can't move an element inside itself** (or into one of its own descendants). That move is
   blocked with a clear message.
 
-Layout-only components are additionally gated by the **view type** you're editing (a screen vs. a
+Layout-only components are additionally gated by the **view type** you're editing (a page vs. a
 shared layout).
 
 ## Moving an element without dragging
@@ -162,4 +162,4 @@ placement rules — anything that can't legally move is skipped rather than bloc
 - [Multi-select & multi-drag](multi-select.md)
 - [The Besigner overview](overview.md)
 - [Inline & rich text editing](text-editing.md)
-- [Screens & layouts](../screens-and-layouts/overview.md)
+- [Pages & layouts](../screens-and-layouts/overview.md)

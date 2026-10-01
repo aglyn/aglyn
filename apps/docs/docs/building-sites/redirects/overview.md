@@ -7,7 +7,7 @@ description: Manage URL redirects with validation, loop detection, and hit metri
 # Redirects
 
 The **redirect manager** sends old or alternate URLs to the right place — essential when you
-rename screens or migrate a site.
+rename pages or migrate a site.
 
 ![The Redirects page in the Aglyn console, with an "Add redirect" action for exact-path rules](/img/redirects/redirects-page.png)
 
@@ -18,8 +18,8 @@ rename screens or migrate a site.
 ## Manage redirects
 
 - Create, edit, and delete redirect rules from the **redirect manager** page.
-- Rules are **validated** on save, with **chain-loop** and **screen-collision** checks so a
-  redirect can't send visitors in circles or shadow a real screen.
+- Rules are **validated** on save, with **chain-loop** and **page-collision** checks so a
+  redirect can't send visitors in circles or shadow a real page.
 - The published site enforces redirect rules during route resolution.
 
 :::info Who can manage redirects
@@ -70,5 +70,5 @@ matcher the live site uses.
 
 ## Related
 
-- [Screens & layouts](../screens-and-layouts/overview.md)
+- [Pages & layouts](../screens-and-layouts/overview.md)
 - [Site protection & error pages](../site-protection/overview.md)

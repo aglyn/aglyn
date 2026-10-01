@@ -17,6 +17,7 @@
 
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { PLAN_ENTITLEMENTS, RELEASE_FLAGS } from '@aglyn/aglyn'
+import { pluginPlanQuotas } from '@aglyn/aglyn/plugin-manager/plugin-plan-entitlements'
 
 /**
  * Coverage of the staff override surface (AGL-1635).
@@ -175,6 +176,14 @@ describe('staff org override surface coverage (AGL-1635)', () => {
       for (const field of QUOTA_FIELDS) {
         expect(field.label.length).toBeGreaterThan(0)
         expect(field.label).not.toBe(field.key)
+      }
+    })
+
+    it('labels a key a plugin owns in the words its plan declaration gives (AGL-3080)', () => {
+      const declared = pluginPlanQuotas()
+      expect(declared.length).toBeGreaterThan(0)
+      for (const quota of declared) {
+        expect(QUOTA_FIELDS.find((field) => field.key === quota.key)?.label).toBe(quota.label)
       }
     })
 

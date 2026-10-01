@@ -38,10 +38,10 @@ describe('entityPageTitle', () => {
     // before anything distinguishing. Order is the fix, not just content.
     const title = entityPageTitle({
       subject: 'Home',
-      noun: 'Screen besigner',
+      noun: 'Page besigner',
       scope: 'demo.aglyn.app',
     })
-    expect(title).toBe('Home · Screen besigner · demo.aglyn.app')
+    expect(title).toBe('Home · Page besigner · demo.aglyn.app')
     expect(title.startsWith('Home')).toBe(true)
   })
 
@@ -49,7 +49,7 @@ describe('entityPageTitle', () => {
     // THE regression. Four tabs on four screens of one host read identically;
     // everything else in this file is detail beside it.
     const of = (subject: string) =>
-      entityPageTitle({ subject, noun: 'Screen besigner', scope: 'demo' })
+      entityPageTitle({ subject, noun: 'Page besigner', scope: 'demo' })
     expect(of('4L_o499p_p')).not.toBe(of('9Xk_22bTq'))
     expect(new Set(['Home', 'Checkout', 'About'].map(of)).size).toBe(3)
   })
@@ -58,12 +58,12 @@ describe('entityPageTitle', () => {
     // `strictNullChecks` is off repo-wide, so an absent subject arrives at
     // runtime rather than at compile time. It must read as the OLD title, not
     // as " · Screen besigner · demo".
-    expect(entityPageTitle({ noun: 'Screen besigner', scope: 'demo' })).toBe(
-      'Screen besigner · demo',
+    expect(entityPageTitle({ noun: 'Page besigner', scope: 'demo' })).toBe(
+      'Page besigner · demo',
     )
     expect(
-      entityPageTitle({ subject: '   ', noun: 'Screen', scope: 'demo' }),
-    ).toBe('Screen · demo')
+      entityPageTitle({ subject: '   ', noun: 'Page', scope: 'demo' }),
+    ).toBe('Page · demo')
     expect(entityPageTitle({ subject: 'abc', noun: 'Staff user' })).toBe(
       'abc · Staff user',
     )
@@ -71,11 +71,11 @@ describe('entityPageTitle', () => {
 })
 
 describe('renameTitleSubject', () => {
-  const SERVED = '4L_o499p_p · Screen besigner · demo.aglyn.app'
+  const SERVED = '4L_o499p_p · Page besigner · demo.aglyn.app'
 
   it('swaps the id the server rendered for the loaded name', () => {
     expect(renameTitleSubject(SERVED, '4L_o499p_p', 'Home')).toBe(
-      'Home · Screen besigner · demo.aglyn.app',
+      'Home · Page besigner · demo.aglyn.app',
     )
   })
 
@@ -90,7 +90,7 @@ describe('renameTitleSubject', () => {
   it('only rewrites at the START, never inside the title', () => {
     // A screen genuinely named after an id, or a host whose name contains
     // one, must not be rewritten mid-string.
-    const title = 'Home · Screen besigner · 4L_o499p_p.example.com'
+    const title = 'Home · Page besigner · 4L_o499p_p.example.com'
     expect(renameTitleSubject(title, '4L_o499p_p', 'Renamed')).toBe(title)
   })
 
@@ -101,8 +101,8 @@ describe('renameTitleSubject', () => {
       'Billing · Aglyn',
     )
     // A prefix that is not a whole segment must not match either.
-    expect(renameTitleSubject('4L_o499p_pXY · Screen', '4L_o499p_p', 'Home')).toBe(
-      '4L_o499p_pXY · Screen',
+    expect(renameTitleSubject('4L_o499p_pXY · Page', '4L_o499p_p', 'Home')).toBe(
+      '4L_o499p_pXY · Page',
     )
   })
 

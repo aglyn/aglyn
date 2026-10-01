@@ -113,6 +113,11 @@ const BUNDLE_FILES: ReadonlyArray<[pluginId: string, file: string]> = [
  * a model composing the tenant's OWN page may also reach the layout and
  * surface primitives, the media lists and the collection blocks, which are
  * bound to this site's data and so stay out of a listing.
+ *
+ * `video` plays a library film or a declared host's link behind a poster,
+ * which is the player a featured video binds to (AGL-3433). `videoEmbed`
+ * frames a third-party player that loads its own code on every visit; rule 16
+ * admits it only where a confirmed plan lists it.
  */
 const PAGE_EXTRA_IDS = [
   'muiContainer',
@@ -123,6 +128,7 @@ const PAGE_EXTRA_IDS = [
   'muiCardContent',
   'muiCardActions',
   'image',
+  'video',
   'muiImageList',
   'muiImageListItem',
   'muiAccordion',
@@ -415,9 +421,23 @@ function holdsLine(entry: Dict): string {
   return 'holds any'
 }
 
-function catalogProps(entry: Dict, max = 5): string {
+/**
+ * The props a catalog line names for an element whose other settings a model
+ * should leave at their defaults. A Video plays its film behind its poster;
+ * how it loads and plays is rule 16's to hold, and a line naming `preload`
+ * among five props invites the one value the rule refuses (AGL-3433). The
+ * props schema still takes every setting: the line is what a model reads
+ * first, on every request that shows the surface.
+ */
+const CATALOG_PROPS: Readonly<Record<string, readonly string[]>> = {
+  video: ['src', 'poster'],
+  videoEmbed: ['url'],
+}
+
+function catalogProps(id: string, entry: Dict, max = 5): string {
   const properties = entry.propsSchema.properties as Record<string, Dict>
-  const names = Object.keys(properties)
+  const only = CATALOG_PROPS[id]
+  const names = Object.keys(properties).filter((name) => !only || only.includes(name))
   const rank = (name: string): number => {
     const schema = properties[name]
     if (entry.propsSchema.required.includes(name)) return 0
@@ -526,8 +546,15 @@ function buildCatalog(
   lines.push('Elements (id (name): purpose — children — props; * = required):')
   for (const id of definition.allow) {
     const entry = palette[id]
+    // A name that only spells its id again — `image (Image)`, `searchBox
+    // (Search Box)` — teaches the model nothing, and every request that shows
+    // the surface pays for it (AGL-3433).
+    const name =
+      String(entry.displayName).replace(/\s+/g, '').toLowerCase() === id.toLowerCase()
+        ? ''
+        : ` (${entry.displayName})`
     lines.push(
-      `- ${id} (${entry.displayName}): ${entry.summary || entry.category} — ${holdsLine(entry)} — ${catalogProps(entry) || 'no props'}`,
+      `- ${id}${name}: ${entry.summary || entry.category} — ${holdsLine(entry)} — ${catalogProps(id, entry) || 'no props'}`,
     )
   }
   const allowed = new Set(definition.allow)

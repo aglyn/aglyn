@@ -357,7 +357,7 @@ interface MediaUsageRef {
 
 /** How each reference kind is labelled in the "Used on" list. */
 const REF_KIND_LABEL: Record<MediaUsageRef['kind'], string> = {
-  screen: 'Screen',
+  screen: 'Page',
   layout: 'Layout',
   entry: 'Content',
   component: 'Component',
@@ -5127,7 +5127,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
               </Button>
             ) : refsAudit.status === 'loading' ? (
               <Typography variant="body2" color="text.secondary">
-                {'Scanning screens, layouts, and content…'}
+                {'Scanning pages, layouts, and content…'}
               </Typography>
             ) : refsAudit.status === 'error' ? (
               <Stack spacing={1} sx={{ alignItems: 'flex-start' }}>

@@ -246,7 +246,12 @@ function evalPlanStep(evalCase: AiEvalCase) {
 /** A plan outcome's plan, as a candidate records it. */
 function planOf(outcome: AiJobStepOutcome): AiEvalRecordedAnswer['plan'] {
   return outcome.plan
-    ? { reuse: outcome.plan.reuse, create: outcome.plan.create, screens: outcome.plan.screens }
+    ? {
+        reuse: outcome.plan.reuse,
+        create: outcome.plan.create,
+        screens: outcome.plan.screens,
+        ...(outcome.plan.embeds?.length ? { embeds: outcome.plan.embeds } : {}),
+      }
     : null
 }
 
@@ -855,16 +860,16 @@ export const AI_EVAL_GRADER_INSTRUCTIONS: readonly AiSystemBlock[] = [
  */
 export const AI_EVAL_PLAN_GRADER_NOTE =
   'A build plan is not the finished output: it is the proposal a member confirms before anything is generated. ' +
-  'It holds only what it reuses by inventory id, what it creates and why, and its screens — each with a title, ' +
+  'It holds only what it reuses by inventory id, what it creates and why, and its pages (the screens list) — each with a title, ' +
   'slug, layout, template, nav flag, search title and description, and sections named with what they place and ' +
-  'how many items they hold. Only a page or site job plans screens: the plan of a component, layout, template, ' +
+  'how many items they hold. Only a page or site job plans pages: the plan of a component, layout, template, ' +
   'form or email job has an empty screens list by design, and is never marked down for it. ' +
   'A plan has no node tree, no heading order, no landmarks, no theme tokens, no field ' +
   'labels or validation, and no body copy; all of those belong to the generation step that runs once the plan is ' +
-  'confirmed. Grade structure on whether the plan proposes the right screens, sections, fields and creations for ' +
+  'confirmed. Grade structure on whether the plan proposes the right pages, sections, fields and creations for ' +
   'the brief. A search box is a Search Box element, or a Collection Search element over a collection\'s entries, ' +
   'and never a new form, because a form collects submissions: a plan that creates a form to search with has ' +
-  'proposed the wrong creation. Grade copy on the only words a plan writes: screen titles, search titles and ' +
+  'proposed the wrong creation. Grade copy on the only words a plan writes: page titles, search titles and ' +
   'descriptions, and the names and rationales of what it creates. Do not mark a plan down for anything a plan ' +
   'cannot hold.'
 
@@ -934,10 +939,10 @@ export function aiEvalGraderCapabilities(evalCase: AiEvalCase): string | null {
  * page down for a layout, a landmark and a listing the page has.
  */
 export const AI_EVAL_PAGE_GRADER_NOTE =
-  'A page is built inside its layout and published as a screen, so its tree holds only what the page adds: ' +
+  'A page is built inside its layout and published as its own record, so its tree holds only what the page adds: ' +
   "the site's header, navigation and footer are the layout's; the page's one main landmark is placed when it is " +
   "published, on the layout's slot where the page renders, or on the page's root when it has no layout; and its " +
-  'address, search title and description are fields of its screen. Grade the page as built with all of them, as ' +
+  'address, search title and description are fields of that record. Grade the page as built with all of them, as ' +
   'listed above, and never mark it down for a layout, a landmark, an address or a listing its tree does not repeat.'
 
 /** The most elements a layout's outline lists; the rest are counted. */
@@ -1012,7 +1017,7 @@ export function aiEvalPlanOutline(plan: unknown): string | null {
     )
   }
   for (const screen of looseList(plan['screens'])) {
-    lines.push(`- the screen "${looseText(screen['title'])}", its sections in order:`)
+    lines.push(`- the page "${looseText(screen['title'])}", its sections in order:`)
     looseList(screen['sections']).forEach((section, index) => {
       const uses = Array.isArray(section['uses']) ? section['uses'].map(looseText).filter(Boolean) : []
       const items = Number(section['items'])
@@ -1082,7 +1087,7 @@ export function aiEvalBuiltPage(answer: AiEvalRecordedAnswer): string | null {
         }. A layout this job builds holds one Layout Slot, where the page renders, and the slot is the page's main landmark; the recording kept no tree of it`
       : `- layout: ${reference}, which the site already has; the page renders in its slot`
   return [
-    "The page as its plan built it (the recording kept no record of the draft's screen):",
+    "The page as its plan built it (the recording kept no record of the draft page itself):",
     `- address: ${addressOf(looseText(planned['slug']))}`,
     `- search title, as planned: ${listingValue(looseText(planned['seoTitle']))}`,
     `- search description, as planned: ${listingValue(looseText(planned['seoDescription']))}`,

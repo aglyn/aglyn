@@ -1,7 +1,7 @@
 ---
 sidebar_position: 2
 title: Add a locale
-description: Create a language variant of your site and translate its screens.
+description: Create a language variant of your site and translate its pages.
 ---
 
 # Add a locale
@@ -20,7 +20,7 @@ Publish your site in another language by adding a **locale variant**.
    **Setup → Basic details**.
 2. Aglyn creates **locale variants** of your content, sharing the same structure as your
    default language.
-3. Translate the screens' text for that locale.
+3. Translate the pages' text for that locale.
 4. Publish. Aglyn emits **hreflang** tags so search engines serve the right language to each
    visitor.
 

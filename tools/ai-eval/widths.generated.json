@@ -1504,6 +1504,138 @@
       "rows": []
     },
     {
+      "caseId": "template-insights-article",
+      "of": "candidate 0",
+      "answer": "b2c6bd8dd8ef07e3",
+      "devices": [
+        {
+          "device": "XS",
+          "width": 390,
+          "overflow": []
+        },
+        {
+          "device": "SM",
+          "width": 600,
+          "overflow": []
+        },
+        {
+          "device": "MD",
+          "width": 900,
+          "overflow": []
+        },
+        {
+          "device": "LG",
+          "width": 1200,
+          "overflow": []
+        },
+        {
+          "device": "XL",
+          "width": 1536,
+          "overflow": []
+        }
+      ],
+      "rows": []
+    },
+    {
+      "caseId": "template-insights-article",
+      "of": "control 0",
+      "answer": "0086a4d9670801b0",
+      "devices": [
+        {
+          "device": "XS",
+          "width": 390,
+          "overflow": []
+        },
+        {
+          "device": "SM",
+          "width": 600,
+          "overflow": []
+        },
+        {
+          "device": "MD",
+          "width": 900,
+          "overflow": []
+        },
+        {
+          "device": "LG",
+          "width": 1200,
+          "overflow": []
+        },
+        {
+          "device": "XL",
+          "width": 1536,
+          "overflow": []
+        }
+      ],
+      "rows": []
+    },
+    {
+      "caseId": "template-insights-article",
+      "of": "control 1",
+      "answer": "ca0cd3e87f52dbfc",
+      "devices": [
+        {
+          "device": "XS",
+          "width": 390,
+          "overflow": []
+        },
+        {
+          "device": "SM",
+          "width": 600,
+          "overflow": []
+        },
+        {
+          "device": "MD",
+          "width": 900,
+          "overflow": []
+        },
+        {
+          "device": "LG",
+          "width": 1200,
+          "overflow": []
+        },
+        {
+          "device": "XL",
+          "width": 1536,
+          "overflow": []
+        }
+      ],
+      "rows": []
+    },
+    {
+      "caseId": "template-insights-article",
+      "of": "control 2",
+      "answer": "d1b5c9a427ef653f",
+      "devices": [
+        {
+          "device": "XS",
+          "width": 390,
+          "overflow": []
+        },
+        {
+          "device": "SM",
+          "width": 600,
+          "overflow": []
+        },
+        {
+          "device": "MD",
+          "width": 900,
+          "overflow": []
+        },
+        {
+          "device": "LG",
+          "width": 1200,
+          "overflow": []
+        },
+        {
+          "device": "XL",
+          "width": 1536,
+          "overflow": []
+        }
+      ],
+      "rows": []
+    },
+    {
       "caseId": "template-service-area",
       "of": "candidate 0",
       "answer": "d266682fdcb01233",

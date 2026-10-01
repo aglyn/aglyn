@@ -50,6 +50,9 @@ function hub(context: PluginRecordRouteContext): CrmRoutes {
   )
 }
 
+/** The hub's routes at the scope the context names — the site's, or the org's. */
+export { hub as crmHubRoutes }
+
 /** The one narrowing the contacts list publishes: the form that captured them. */
 export const CRM_CONTACT_FILTER_FORM = 'form'
 
@@ -83,5 +86,11 @@ export function registerCrmRecordRoutes(): void {
   registerPluginRecordRoute('deal', {
     list: (context) => hub(context).section('deals'),
     record: (context, id) => hub(context).deal(id),
+  }, owner)
+  // A task has no page of its own: it is a row in the Tasks list, at both
+  // levels, so a task's record answers the list.
+  registerPluginRecordRoute('task', {
+    list: (context) => hub(context).section('tasks'),
+    record: (context) => hub(context).section('tasks'),
   }, owner)
 }

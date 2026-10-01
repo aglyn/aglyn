@@ -508,7 +508,7 @@ function sanitizeString(
     case 'screen': {
       if (screenIds ? !screenIds.has(value) : !SCREEN_ID.test(value)) {
         repairs.push(
-          `${nodeId}.${name} names a screen this site does not have; dropped`,
+          `${nodeId}.${name} names a page this site does not have; dropped`,
         )
         return undefined
       }

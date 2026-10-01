@@ -33,7 +33,6 @@ const mockGetComponents = jest.fn()
 const mockGetVariables = jest.fn()
 const mockGetFunctions = jest.fn()
 const mockReadRepeatRows = jest.fn()
-const mockGetWorkflows = jest.fn()
 const mockGetPluginInstalls = jest.fn()
 const mockGetForms = jest.fn()
 const mockGetRealmPluginInstalls = jest.fn()
@@ -62,7 +61,6 @@ jest.mock('./get-variables', () => ({
   __esModule: true,
   default: (...a: unknown[]) => mockGetVariables(...a),
   getFunctions: (...a: unknown[]) => mockGetFunctions(...a),
-  getWorkflows: (...a: unknown[]) => mockGetWorkflows(...a),
 }))
 jest.mock('./get-collection-content', () => ({
   __esModule: true,
@@ -144,7 +142,6 @@ describe('function bindings are declared, not named by core (AGL-3393)', () => {
     mockGetVariables.mockResolvedValue({})
     mockGetFunctions.mockResolvedValue({ quote: QUOTE })
     mockReadRepeatRows.mockResolvedValue([])
-    mockGetWorkflows.mockResolvedValue([])
     mockGetPluginInstalls.mockResolvedValue({})
     mockGetForms.mockResolvedValue({ forms: {} })
     mockGetRealmPluginInstalls.mockResolvedValue([CALCULATOR_INSTALL])
@@ -312,7 +309,6 @@ describe("the dev loop's plugins bind through their manifests on disk (AGL-3394)
     mockGetVariables.mockResolvedValue({})
     mockGetFunctions.mockResolvedValue({ quote: QUOTE })
     mockReadRepeatRows.mockResolvedValue([])
-    mockGetWorkflows.mockResolvedValue([])
     mockGetPluginInstalls.mockResolvedValue({})
     mockGetForms.mockResolvedValue({ forms: {} })
     // A dev bundle has no install.

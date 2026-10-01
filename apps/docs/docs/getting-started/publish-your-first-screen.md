@@ -1,39 +1,39 @@
 ---
 sidebar_position: 3
-title: Publish your first screen
-description: Create a screen, design it in the Besigner, and publish it live.
+title: Publish your first page
+description: Create a page, design it in the Besigner, and publish it live.
 ---
 
-# Publish your first screen
+# Publish your first page
 
 This walks through the core loop: **create → design → publish**.
 
-![The screens list with each screen's publish state](/img/getting-started/screens-list.png)
+![The pages list with each page's publish state](/img/getting-started/screens-list.png)
 
 :::tip Publish from the editor
 You don't have to leave the Besigner to go live: the **Publish** button in
 the top-right of the editor publishes the version you're editing (and
-flips to **Unpublish** once the screen is live). Screens without a URL
+flips to **Unpublish** once the page is live). Pages without a URL
 path yet are prompted to set one in Properties first.
 :::
 
-## 1. Create a screen
+## 1. Create a page {#1-create-a-screen}
 
-1. Go to **Screens** and choose **New screen**.
+1. Go to **Pages** and choose **New page**.
 2. Set a **title** and a URL **slug** (e.g. `about`). Aglyn normalizes the slug and
-   stores it on the screen, ready for when you publish.
-3. Optionally pick a **parent** screen — children inherit a nested URL path
+   stores it on the page, ready for when you publish.
+3. Optionally pick a **parent** page — children inherit a nested URL path
    (`/services/pricing`).
 
-:::info A new screen is a draft
-Creating a screen doesn't put anything on your live site — its **Date published**
+:::info A new page is a draft
+Creating a page doesn't put anything on your live site — its **Date published**
 stays empty and nothing resolves at its address until you publish it in step 3.
 Design it first, publish when it's ready.
 :::
 
 ## 2. Design it in the Besigner
 
-1. Open the screen to launch the **[Besigner](../building-sites/besigner/overview.md)**.
+1. Open the page to launch the **[Besigner](../building-sites/besigner/overview.md)**.
 2. Drag components from the drawer onto the canvas. Rearrange them in the **hierarchy**
    panel or directly on the canvas.
 3. Double-click text to edit it inline. Set component attributes in the inspector.
@@ -44,11 +44,11 @@ Design it first, publish when it's ready.
 
 1. Use the artboard **light/dark toggle** to check both color schemes.
 2. **Save** the canvas. Saving writes your working version — it isn't publishing.
-3. **Publish**. The screen's slug is registered in the routing map and the page goes live
+3. **Publish**. The page's slug is registered in the routing map and the page goes live
    on your site's domain.
 
 :::info Keeping more than one version is a Pro feature
-Every screen is created with one working version, and **Save** updates that version on
+Every page is created with one working version, and **Save** updates that version on
 every plan — the core loop above needs nothing extra. Keeping *more* than one — named
 snapshots you can reopen, publish to roll back to, or schedule — requires **Pro or
 above**, and scheduling a version requires **Business or above**. On Free and Starter the
@@ -64,7 +64,7 @@ saves so you can jump straight to the real page.
 
 ## How fast changes go live
 
-- **Publishing a screen** refreshes its live page immediately — the very next visitor
+- **Publishing a page** refreshes it on the live site immediately — the very next visitor
   gets the new version, usually within seconds.
 - **Publishing a layout or a reusable component** refreshes every page that uses it
   the same way. When that fan-out is very large, the publish confirms that the
@@ -77,7 +77,7 @@ saves so you can jump straight to the real page.
   product, a review's moderation, a site variable or function, an overlay or an A/B
   test. If you close the tab straight after saving, the refresh still happens within
   a few minutes.
-- **Collections refresh their own pages.** Changing a collection's template screens,
+- **Collections refresh their own pages.** Changing a collection's template pages,
   its address or its categories refreshes its listing and every published entry page
   — including the old addresses after a rename.
 - **A deleted site stops serving at once.** Its cached pages are dropped when you

@@ -39,16 +39,16 @@
  * "Do not import" on the way back.
  */
 
-/* The writer moved to `@aglyn/aglyn` under AGL-2662 — see `deals-csv.ts`. */
+/* The writer is `crm-csv.ts`, shared with the server's export — see `deals-csv.ts`. */
 export {
   CONTACT_CSV_COLUMNS,
   contactCsvHeader,
   contactsCsv,
   type ContactCsvOptions,
   type ContactCsvRow,
-} from '@aglyn/aglyn'
+} from './crm-csv'
 
-import { contactsCsv, type ContactCsvOptions } from '@aglyn/aglyn'
+import { contactsCsv, type ContactCsvOptions } from './crm-csv'
 
 /**
  * The file the Import drawer hands out to start from: the export's header

@@ -1,35 +1,35 @@
 ---
 sidebar_position: 2
-title: Password-protect a screen
-description: Require a password to view a specific screen.
+title: Password-protect a page
+description: Require a password to view a specific page.
 ---
 
-# Password-protect a screen
+# Password-protect a page
 
-Lock a single screen behind a **password** — useful for drafts, client previews, or gated
+Lock a single page behind a **password** — useful for drafts, client previews, or gated
 content, without setting up full membership.
 
-![The Page Access card on a screen's own page: the Visibility menu open on Public, Unlisted, Password protected and Members only — the Page password field appears once Password protected is chosen](/img/seo/page-access-visibility.png)
+![The Page Access card on a page's detail view: the Visibility menu open on Public, Unlisted, Password protected and Members only — the Page password field appears once Password protected is chosen](/img/seo/page-access-visibility.png)
 
 ## Steps
 
-1. Open **Screens** and click the screen you want to protect. The screens list has no
-   visibility column — the control is on the screen's own page.
+1. Open **Pages** and click the page you want to protect. The pages list has no
+   visibility column — the control is on the page's detail view.
 2. Find the **Page Access** card and set **Visibility** to **Password protected**.
 3. A **Page password** field appears. Type the password and click **Save**. Once one is
    set, the field reads *"A password is set — save a new one to change it."*
-4. Publish. Visitors are prompted for the password before they can view the screen.
+4. Publish. Visitors are prompted for the password before they can view the page.
 
 The other visibility options on the same card are **Public** (anyone with the link, listed
 in navigation and offered to search engines), **Unlisted** (reachable by URL only, kept out
 of search results and the sitemap), and **Members only**. Password-protected and unlisted
-screens are both kept out of search results.
+pages are both kept out of search results.
 
-Password attempts are limited to **10 per minute per screen, per visitor address**, so
+Password attempts are limited to **10 per minute per page, per visitor address**, so
 the password can't be guessed by brute force. Someone who trips it is asked to wait a
 moment and try again. The limit counts per address, so a shared office connection
 tripping it won't lock out anyone else — but if a whole team is unlocking the same
-screen at once, expect the occasional retry prompt.
+page at once, expect the occasional retry prompt.
 
 ## Password vs. members-only
 
@@ -44,5 +44,5 @@ instead.
 
 ## Related
 
-- [Custom error screens](error-screens.md)
+- [Custom error pages](error-screens.md)
 - [Members-only areas](../../workspace-and-billing/teams-and-roles/members-only.md)

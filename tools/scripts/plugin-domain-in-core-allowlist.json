@@ -99,38 +99,6 @@
       "lane": "forms"
     },
     {
-      "path": "apps/console/app/api/crm/export/route.ts",
-      "rules": [
-        "domain-name",
-        "plugin-id",
-        "plugin-collection:crm",
-        "domain-declares:crm"
-      ],
-      "lane": "crm"
-    },
-    {
-      "path": "apps/console/app/api/hosts/export/route.ts",
-      "rules": [
-        "plugin-collection:data"
-      ],
-      "lane": "plugin-id"
-    },
-    {
-      "path": "apps/console/app/api/hosts/forms/promote/route.ts",
-      "rules": [
-        "domain-name"
-      ],
-      "lane": "forms"
-    },
-    {
-      "path": "apps/console/app/api/hosts/import/route.ts",
-      "rules": [
-        "plugin-collection:data",
-        "domain-declares:data"
-      ],
-      "lane": "plugin-id"
-    },
-    {
       "path": "apps/console/app/api/orgs/datasets/export/route.ts",
       "rules": [
         "domain-name",
@@ -188,28 +156,6 @@
       "lane": "data"
     },
     {
-      "path": "apps/console/components/global-search/global-search-dialog.component.tsx",
-      "rules": [
-        "domain-declares:crm"
-      ],
-      "lane": "crm"
-    },
-    {
-      "path": "apps/console/components/global-search/global-search-scope.ts",
-      "rules": [
-        "plugin-id",
-        "domain-declares:crm"
-      ],
-      "lane": "plugin-id"
-    },
-    {
-      "path": "apps/console/components/global-search/use-global-search.ts",
-      "rules": [
-        "domain-declares:crm"
-      ],
-      "lane": "crm"
-    },
-    {
       "path": "apps/console/components/interactions-provider.component.tsx",
       "rules": [
         "plugin-collection:marketing"
@@ -258,7 +204,6 @@
     {
       "path": "apps/console/components/staff-org-actions.component.tsx",
       "rules": [
-        "domain-declares:crm",
         "domain-declares:forms",
         "domain-declares:marketplace",
         "domain-declares:workflows"
@@ -325,13 +270,6 @@
         "domain-declares:workflows"
       ],
       "lane": "workflows"
-    },
-    {
-      "path": "apps/console/utils/promote-form-version.ts",
-      "rules": [
-        "domain-declares:forms"
-      ],
-      "lane": "forms"
     },
     {
       "path": "apps/console/utils/server/announce-dataset-change.ts",
@@ -402,13 +340,6 @@
         "domain-declares:workflows"
       ],
       "lane": "workflows"
-    },
-    {
-      "path": "libs/aglyn/src/lib/app-utils/activity-presenter.ts",
-      "rules": [
-        "domain-declares:crm"
-      ],
-      "lane": "ai"
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/advertising-tag-mounts.tsx",
@@ -499,13 +430,6 @@
       "lane": "crm"
     },
     {
-      "path": "libs/aglyn/src/lib/app-utils/contact-holder.ts",
-      "rules": [
-        "domain-name"
-      ],
-      "lane": "crm"
-    },
-    {
       "path": "libs/aglyn/src/lib/app-utils/contacts.ts",
       "rules": [
         "domain-name",
@@ -521,14 +445,6 @@
         "plugin-id",
         "domain-exports:crm",
         "domain-declares:bookings",
-        "domain-declares:crm"
-      ],
-      "lane": "crm"
-    },
-    {
-      "path": "libs/aglyn/src/lib/app-utils/crm-csv.ts",
-      "rules": [
-        "domain-name",
         "domain-declares:crm"
       ],
       "lane": "crm"
@@ -757,16 +673,6 @@
     {
       "path": "libs/aglyn/src/lib/app-utils/variables.ts",
       "rules": [
-        "domain-declares:workflows"
-      ],
-      "lane": "workflows"
-    },
-    {
-      "path": "libs/aglyn/src/lib/app-utils/workflows.ts",
-      "rules": [
-        "domain-name",
-        "domain-declares:crm",
-        "domain-declares:forms",
         "domain-declares:workflows"
       ],
       "lane": "workflows"
@@ -1176,7 +1082,8 @@
       "rules": [
         "domain-name"
       ],
-      "lane": "crm"
+      "lane": "stays",
+      "why": "`contact` here is the VERB, not the CRM's record: the operator's own do-not-contact list for the calls and texts it makes to its account holders (`contactSuppressions/{nationalKey}`, AGL-1592), the retained record Privacy Policy §11, the TSR and CCPA §1798.105(d) require to honor an opt-out. It is keyed by phone number across accounts and read by the SMS keyword handler, the user-profile erasure and the staff console; it reads and writes no CRM contact, and a self-host without the CRM still owes it."
     },
     {
       "path": "libs/tenant/data/admin/src/lib/server/crm-booking-activity.ts",
@@ -1357,40 +1264,11 @@
       "lane": "crm"
     },
     {
-      "path": "libs/tenant/runtime/src/lib/get-variables.ts",
-      "rules": [
-        "plugin-id",
-        "plugin-collection:workflows"
-      ],
-      "lane": "plugin-id"
-    },
-    {
       "path": "libs/tenant/runtime/src/lib/resolve-dataset.ts",
       "rules": [
         "domain-declares:data"
       ],
       "lane": "data"
-    },
-    {
-      "path": "tools/scripts/lib/crm-fixtures.mjs",
-      "rules": [
-        "domain-name"
-      ],
-      "lane": "crm"
-    },
-    {
-      "path": "tools/scripts/lib/crm-free-plan-fixtures.mjs",
-      "rules": [
-        "domain-name"
-      ],
-      "lane": "crm"
-    },
-    {
-      "path": "tools/scripts/lib/crm-lifecycle-backfill.mjs",
-      "rules": [
-        "domain-name"
-      ],
-      "lane": "crm"
     }
   ]
 }

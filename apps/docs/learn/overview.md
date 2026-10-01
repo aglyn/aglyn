@@ -14,7 +14,7 @@ reference as you go.
 <div className="home-grid">
   <a className="home-card" href="/learn/build-your-first-site">
     <div className="home-card__title">Build your first site</div>
-    <p className="home-card__desc">Create a site, design a screen in the Besigner, connect a domain, and publish.</p>
+    <p className="home-card__desc">Create a site, design a page in the Besigner, connect a domain, and publish.</p>
   </a>
   <a className="home-card" href="/learn/launch-a-store">
     <div className="home-card__title">Launch a store</div>

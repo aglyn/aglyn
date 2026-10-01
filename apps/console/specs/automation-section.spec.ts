@@ -141,7 +141,7 @@ describe('the automation section', () => {
     // The redirect is for links already out in the world. Anything the
     // console emits today should arrive without a bounce.
     const emitters = [
-      'apps/console/components/global-search/global-search-scope.ts',
+      'libs/plugins/workflows/src/lib/model/workflows-search-sources.ts',
       'libs/aglyn/src/lib/app-utils/activity-presenter.ts',
     ]
     for (const path of emitters) {

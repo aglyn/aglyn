@@ -125,7 +125,7 @@ describe('the marketplace shelf of the template gallery', () => {
     )
     expect(screen.getByText('Florist site')).toBeTruthy()
     expect(screen.queryByText('Bakery site')).toBeNull()
-    expect(screen.getByText('? screens · v1 · $12')).toBeTruthy()
+    expect(screen.getByText('? pages · v1 · $12')).toBeTruthy()
     expect(reportShelf).toHaveBeenLastCalledWith('marketplace-site-templates', 'shown')
   })
 

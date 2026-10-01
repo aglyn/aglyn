@@ -58,7 +58,7 @@ export type PromoteForm = (options: {
  * Makes one version of a form the version the site serves.
  *
  * Server-side, and never a client `updateDoc`, because promotion is where the
- * form's contract is enforced: `/api/hosts/forms/promote` re-reads the stored
+ * form's contract is enforced: `/api/forms/promote` re-reads the stored
  * version, runs `checkFormContract` on the tree it is about to write, and
  * refuses with a 422 rather than publishing a design whose submissions would
  * silently stop arriving. A console-side check is advice; that route is the
@@ -72,7 +72,7 @@ export function useFormPromoteApi(): PromoteForm {
   const { data: user } = useUser()
   return useCallback<PromoteForm>(
     async ({ hostId, formId, versionId }) => {
-      const response = await authorizedFetch(user, '/api/hosts/forms/promote', {
+      const response = await authorizedFetch(user, '/api/forms/promote', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ hostId, formId, versionId }),

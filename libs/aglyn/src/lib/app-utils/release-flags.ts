@@ -113,7 +113,7 @@ const PLATFORM_RELEASE_FLAGS: readonly ReleaseFlagDefinition[] = [
     label: 'Site admin bar',
     description:
       'Admin bar on published sites: a signed-in editor jumps from a live ' +
-      'page into the besigner for the screen serving it. Released ' +
+      'page straight into the Besigner to edit it. Released ' +
       '2026-09-16 (AGL-3041) for every site; turning it off hides the bar ' +
       'and revokes every outstanding edit token at the verify site.',
     defaultEnabled: true,

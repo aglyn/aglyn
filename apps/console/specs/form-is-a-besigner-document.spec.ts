@@ -171,7 +171,7 @@ describe('creating a form creates a design, not just a declaration', () => {
  * write.
  *
  * `form-contract.spec.ts` proves the rule is right, and
- * `forms-promotion-runs-the-contract-check.spec.ts` proves the promote route
+ * the forms plugin's `form-promotion.spec.ts` proves the promote route
  * runs it before its write. What is left to hold here is that the besigner
  * has no other way to publish: it asks the route the form's plugin declares,
  * and never writes the published copy itself — a client write would be a
@@ -182,7 +182,7 @@ describe('the besigner publishes a form only through the route that checks it', 
 
   it('the form declares the promote route as its publish', () => {
     expect(besignerDocumentForSegment('forms')?.publish).toEqual({
-      path: '/api/hosts/forms/promote',
+      path: '/api/forms/promote',
       idField: 'formId',
     })
   })

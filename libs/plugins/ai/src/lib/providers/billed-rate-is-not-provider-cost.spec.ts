@@ -243,16 +243,13 @@ describe('every reader takes the figure it means', () => {
       why: 'Every dollar mined for the Assist signals page is our bill.',
     },
     {
-      path: 'apps/console/app/api/_lib/org-cogs.ts',
+      // The discount guardrail's cost of goods and the fleet margin page read
+      // the AI meter through the plugin's declaration since AGL-3080, which
+      // names the live month's fields in the order they are taken.
+      path: 'libs/plugins/ai/src/lib/usage-axes.ts',
       means: 'what we pay',
-      fragment: 'assistProviderCostUsd(',
-      why: "The discount guardrail's cost of goods.",
-    },
-    {
-      path: 'apps/console/app/api/admin/margin-utilization/route.ts',
-      means: 'what we pay',
-      fragment: 'assistProviderCostUsd(',
-      why: 'The fleet margin page rates organizations on what they cost.',
+      fragment: "fields: [ASSIST_PROVIDER_COST_FIELD, 'estCostUsd']",
+      why: "The discount guardrail's cost of goods and the fleet margin page: the provider figure, the billed one only on a month closed before the split.",
     },
     {
       path: 'apps/console/app/api/billing/report-usage/route.ts',

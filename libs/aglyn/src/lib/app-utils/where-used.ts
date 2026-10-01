@@ -51,11 +51,12 @@ export interface WhereUsedResult {
   legacyCount: number
 }
 
-/** One-line summary for confirm dialogs: `2 screens, 1 workflow`. */
+/** One-line summary for confirm dialogs: `2 pages, 1 workflow`. */
 export function summarizeDependents(result: WhereUsedResult): string {
   const counts = new Map<string, number>()
   for (const dependent of result.dependents) {
-    const label = dependent.type
+    // A `screen` is called a page wherever a person reads it.
+    const label = dependent.type === 'screen' ? 'page' : dependent.type
     counts.set(label, (counts.get(label) ?? 0) + 1)
   }
   return [...counts.entries()]

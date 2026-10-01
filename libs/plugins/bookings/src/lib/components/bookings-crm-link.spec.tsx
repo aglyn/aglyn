@@ -27,6 +27,7 @@
 import { render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import BookingsConsolePage from './bookings-console-page'
+import { standInCrmRecordRoutes } from '../testing/stand-in-crm-record-routes'
 
 const collections: Record<string, Array<Record<string, unknown>>> = {
   services: [],
@@ -102,6 +103,8 @@ const show = () =>
   )
 
 beforeEach(() => {
+  // The Contacts list is the CRM's (AGL-3080).
+  standInCrmRecordRoutes()
   params = { orgSlug: 'acme', host: 'shop' }
   collections.bookings = []
 })

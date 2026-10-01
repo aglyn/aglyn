@@ -226,7 +226,7 @@ function HostUsageMeters(props: {
         </Typography>
       ) : null}
       <UsageMeter
-        label="Screens"
+        label="Pages"
         used={counts.screens}
         limit={entitlements.screensPerHost}
       />

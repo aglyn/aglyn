@@ -32,6 +32,7 @@ import type { HostedPagePart } from '@aglyn/tenant-data-admin/server/held-page-s
 // asked through, both server-only.
 import { stampFormRecordTargets } from '@aglyn/aglyn/plugin-manager/submission-record-target'
 import { readRepeatRows } from '@aglyn/aglyn/plugin-manager/repeat-rows'
+import { prepareComputedVariables } from '@aglyn/aglyn/plugin-manager/computed-variables'
 import applyDuePublishSchedule from './apply-publish-schedule'
 import getComponents from './get-components'
 import getForms from './get-forms'
@@ -41,7 +42,7 @@ import {
   type PublishedCollectionSource,
 } from './get-collection-content'
 import getPluginInstalls from './get-plugin-installs'
-import getVariables, { getFunctions, getWorkflows } from './get-variables'
+import getVariables, { getFunctions } from './get-variables'
 import getPublishedLayoutVersion from './get-layout-version'
 import getScreenVersion from './get-screen-version'
 import {
@@ -565,11 +566,12 @@ export async function composeNodesWithChrome(options: {
     getComponents({ hostId }),
     // Host variable + function bindings (AGL-91/93): {{name}} and
     // {{fn:name(args)}} in string props resolve to values; unknown tokens
-    // and failed runs stay literal.
+    // and failed runs stay literal. Whatever computes a variable's value
+    // starts its reads here too.
     Promise.all([
       getVariables({ hostId }),
       getFunctions({ hostId }),
-      getWorkflows({ hostId }),
+      prepareComputedVariables(hostId),
       getPluginInstalls({ hostId }),
     ]),
   ])
@@ -595,7 +597,7 @@ export async function composeNodesWithChrome(options: {
     options.collection,
   )
   const [layoutChain, componentsRes, bulk] = await chromeBundle
-  const [rawVariables, functions, workflows, pluginInstalls] = bulk
+  const [rawVariables, functions, computeVariables, pluginInstalls] = bulk
   const screenRepeatRows = await screenRepeatRowsPromise
   // Settled by now: it is read off the same version document the layout
   // binding the walk above waited on came from.
@@ -644,13 +646,9 @@ export async function composeNodesWithChrome(options: {
         [Aglyn.placedFormPlacement(forms as any)],
       )
     : graftedComponents
-  // Computed variables (AGL-129): workflow-backed values resolve once per
-  // compose; failures keep each variable's stored fallback.
-  const variables = Aglyn.resolveComputedVariables(
-    rawVariables,
-    functions,
-    workflows,
-  )
+  // Computed variables (AGL-129): the plugin that computes a variable's
+  // value fills it in once per compose; a failure keeps its stored fallback.
+  const variables = computeVariables({ variables: rawVariables, functions })
   // Repeatables (AGL-103) expand after grafting (so they work inside
   // reusable components) and before bindings (so {{name}} tokens inside
   // cloned items still resolve).

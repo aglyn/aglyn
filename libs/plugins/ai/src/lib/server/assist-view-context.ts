@@ -214,7 +214,7 @@ export const ASSIST_VIEWS: readonly AssistView[] = [
   {
     key: 'besigner',
     match: /^\/[^/]+\/hosts\/[^/]+\/(screens|components|templates|layouts|emails)\/.*\/besigner$/,
-    screen: 'The Besigner — the visual editor for a screen, component, template, layout or email.',
+    screen: 'The Besigner — the visual editor for a page, component, template, layout or email.',
     plain: [
       'Edit the page visually: pick an element on the canvas and change its text, styling and layout.',
       'Work is saved to a draft version; publishing is a separate, deliberate step.',
@@ -238,11 +238,11 @@ export const ASSIST_VIEWS: readonly AssistView[] = [
   {
     key: 'host-screens',
     match: /^\/[^/]+\/hosts\/[^/]+\/screens(\/|$)/,
-    screen: 'Screens — the list of pages on this site.',
+    screen: 'Pages — the list of pages on this site.',
     plain: [
-      'Every page a visitor can reach is a screen listed here.',
-      'Open a screen to see its versions, then open the Besigner to edit it.',
-      'Publishing a screen version is what puts a change on the live site.',
+      'Every page a visitor can reach is listed here.',
+      'Open a page to see its versions, then open the Besigner to edit it.',
+      'Publishing a page version is what puts a change on the live site.',
     ],
     technical: [
       'Route: /[orgSlug]/hosts/[host]/screens; detail is .../screens/[screenId]/versions/[versionId]/view.',
@@ -251,7 +251,7 @@ export const ASSIST_VIEWS: readonly AssistView[] = [
     actions: [
       orgAction(
         'open.host.screens',
-        'Open Screens',
+        'Open Pages',
         'the list of pages on this site',
         '/[orgSlug]/hosts/[host]/screens',
       ),
@@ -260,14 +260,14 @@ export const ASSIST_VIEWS: readonly AssistView[] = [
   {
     key: 'host-theme',
     match: /^\/[^/]+\/hosts\/[^/]+\/theme(\/|$)/,
-    screen: 'Theme — the site-wide colors, type and spacing every screen inherits.',
+    screen: 'Theme — the site-wide colors, type and spacing every page inherits.',
     plain: [
       'Change something here and it changes everywhere on the site at once.',
       'This is the place to fix a color or a font you keep re-setting on individual elements.',
     ],
     technical: [
       'Route: /[orgSlug]/hosts/[host]/theme.',
-      'Theme values resolve at render time, so screens pick them up without being republished individually.',
+      'Theme values resolve at render time, so pages pick them up without being republished individually.',
     ],
     actions: [],
   },
@@ -296,7 +296,7 @@ export const ASSIST_VIEWS: readonly AssistView[] = [
     screen: 'Products — the commerce catalog for this site.',
     plain: [
       'Add and edit the things this site sells, including price and availability.',
-      'A product has to exist here before a screen can put it in front of a buyer.',
+      'A product has to exist here before a page can put it in front of a buyer.',
     ],
     technical: [
       'Route: /[orgSlug]/hosts/[host]/products.',
@@ -314,7 +314,7 @@ export const ASSIST_VIEWS: readonly AssistView[] = [
     ],
     technical: [
       'Route: /[orgSlug]/hosts/[host]/redirects.',
-      'Rules are evaluated by the tenant runtime on the request path, before the screen is resolved.',
+      'Rules are evaluated by the tenant runtime on the request path, before the page is resolved.',
     ],
     actions: [
       orgAction(
@@ -331,7 +331,7 @@ export const ASSIST_VIEWS: readonly AssistView[] = [
     match: /^\/[^/]+\/hosts\/[^/]+\/analytics(\/|$)/,
     screen: 'Analytics — traffic and visitor figures for this site.',
     plain: [
-      'See how many people visited, and which screens they landed on.',
+      'See how many people visited, and which pages they landed on.',
       'Figures cover the live site only — drafts and previews are not counted.',
     ],
     technical: ['Route: /[orgSlug]/hosts/[host]/analytics.'],
@@ -364,8 +364,8 @@ export const ASSIST_VIEWS: readonly AssistView[] = [
     match: /^\/[^/]+\/hosts\/[^/]+\/data(\/|$)/,
     screen: 'Site data — the datasets this site reads and writes.',
     plain: [
-      'A dataset is a structured list — products, posts, submissions — that screens can display.',
-      'Define the fields first; screens bind to them afterwards.',
+      'A dataset is a structured list — products, posts, submissions — that pages can display.',
+      'Define the fields first; pages bind to them afterwards.',
     ],
     technical: [
       'Route: /[orgSlug]/hosts/[host]/data. The workspace-wide view is /[orgSlug]/data.',
@@ -377,7 +377,7 @@ export const ASSIST_VIEWS: readonly AssistView[] = [
     match: /^\/[^/]+\/hosts\/[^/]+(\/|$)/,
     screen: 'Site dashboard — the home page for one site in this workspace.',
     plain: [
-      'Everything about one site hangs off this page: its screens, theme, data, commerce and settings.',
+      'Everything about one site hangs off this dashboard: its pages, theme, data, commerce and settings.',
       'A workspace can hold several sites; this is one of them.',
     ],
     technical: [
@@ -390,7 +390,7 @@ export const ASSIST_VIEWS: readonly AssistView[] = [
     match: /^\/[^/]+\/hosts(\/|$)/,
     screen: 'Sites — every site in this workspace.',
     plain: [
-      'Each row is a site with its own screens, theme and domain.',
+      'Each row is a site with its own pages, theme and domain.',
       'Agencies typically run one site per client from here.',
     ],
     technical: ['Route: /[orgSlug]/hosts.'],
@@ -453,7 +453,7 @@ export const ASSIST_VIEWS: readonly AssistView[] = [
     plain: [
       'Structured lists defined once here can be used by any site in the workspace.',
       'If a list only belongs to one site, define it on that site’s own Data page instead.',
-      'Define the fields before building the screen that displays them — screens bind to fields that already exist.',
+      'Define the fields before building the page that displays them — pages bind to fields that already exist.',
     ],
     technical: [
       'Route: /[orgSlug]/data. The per-site view is /[orgSlug]/hosts/[host]/data.',
@@ -475,7 +475,7 @@ export const ASSIST_VIEWS: readonly AssistView[] = [
     plain: [
       'Upload once here and use the file on any site in the workspace.',
       'If the file belongs to one site only, upload it on that site’s own Media page instead.',
-      'Files are referenced by the screens that use them, so replacing a file changes it everywhere it appears.',
+      'Files are referenced by the pages that use them, so replacing a file changes it everywhere it appears.',
     ],
     technical: [
       'Route: /[orgSlug]/media. The per-site library is /[orgSlug]/hosts/[host]/media.',
@@ -658,7 +658,7 @@ export function viewScreenBlock(
 ): string {
   const lines: string[] = []
   if (view) {
-    lines.push(`This screen: ${view.screen}`)
+    lines.push(`This console page: ${view.screen}`)
     if (view.plain.length) {
       lines.push('What the user can do here:')
       for (const line of view.plain) lines.push(`- ${line}`)
@@ -671,7 +671,7 @@ export function viewScreenBlock(
     const navigations = offered.filter(isNavigateAction)
     if (navigations.length) {
       lines.push(
-        'Actions you may PROPOSE from this screen (ids are exact; propose at most one, and only when the user asked to get something done):',
+        'Actions you may PROPOSE from this console page (ids are exact; propose at most one, and only when the user asked to get something done):',
       )
       for (const action of navigations) {
         const params = action.params.length
@@ -680,21 +680,21 @@ export function viewScreenBlock(
         lines.push(`- id "${action.id}" — ${action.label}: opens ${action.outcome}.${params}`)
       }
     } else if (offered.length) {
-      lines.push('This screen offers no page to open. Do not emit an action block here.')
+      lines.push('This console page offers nothing to open. Do not emit an action block here.')
     } else {
       lines.push(
-        'This screen offers no proposable actions. Do not emit an action block here.',
+        'This console page offers no proposable actions. Do not emit an action block here.',
       )
     }
     for (const action of offered) {
       if (action.kind !== 'edit') continue
       lines.push(
-        `Edits you may PROPOSE on this screen (id "${action.id}"): through the ${ASSIST_EDIT_TOOL_NAME} tool described below, never an action block.`,
+        `Edits you may PROPOSE on this console page (id "${action.id}"): through the ${ASSIST_EDIT_TOOL_NAME} tool described below, never an action block.`,
       )
     }
   } else {
     lines.push(
-      'This exact screen is not in the assistant’s screen index. Answer from the documentation and describe navigation in words rather than asserting what this page contains.',
+      'This exact console page is not in the assistant’s index of console pages. Answer from the documentation and describe navigation in words rather than asserting what this page contains.',
       'Do not emit an action block.',
     )
   }
