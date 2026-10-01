@@ -255,7 +255,9 @@ export * from './repeat-infringer'
 export * from './org-override-reason'
 export * from './host-tokens'
 export * from './variables'
-export * from './workflows'
+// What happened on a site that an automation can start on: the platform's
+// own event and the ones plugins declare (AGL-3080).
+export * from './host-events'
 export * from './datasets'
 export * from './expand-repeatables'
 export * from './org-roles'

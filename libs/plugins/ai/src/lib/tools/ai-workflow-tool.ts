@@ -42,7 +42,7 @@ import {
   HOST_EVENT_PAYLOAD_KEYS,
   HOST_EVENT_TYPES,
   type HostEventType,
-} from '@aglyn/aglyn/app-utils/workflows'
+} from '@aglyn/aglyn/app-utils/host-events'
 import {
   AI_AUTOMATION_NEED_LABELS,
   AI_AUTOMATION_STEP_NEEDS,

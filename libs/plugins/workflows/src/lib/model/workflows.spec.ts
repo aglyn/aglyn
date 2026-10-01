@@ -15,16 +15,8 @@
  * limitations under the License.
  */
 
-import type { HostFunction } from './functions'
-import {
-  HOST_EVENT_LABELS,
-  HOST_EVENT_PAYLOAD_KEYS,
-  HOST_EVENT_TYPES,
-  hostEventLabel,
-  hostEventPayloadHint,
-  resolveComputedVariables,
-  runWorkflow,
-} from './workflows'
+import type { HostFunction } from '@aglyn/aglyn/app-utils/functions'
+import { resolveComputedVariables, runWorkflow } from './workflows'
 
 const sum: HostFunction = {
   name: 'Sum',
@@ -243,60 +235,5 @@ describe('runWorkflow', () => {
     })
     expect(resolved['answer'].value).toBe('42')
     expect(resolved['missing'].value).toBe('7')
-  })
-})
-
-/**
- * The CRM events (AGL-2605) exist, read as words in a picker, and tell an
- * author what a filter over them can name.
- */
-describe('CRM host events', () => {
-  it('are in the event list', () => {
-    expect(HOST_EVENT_TYPES).toContain('contactCreated')
-    expect(HOST_EVENT_TYPES).toContain('contactStageChanged')
-  })
-
-  it('read as words, and an unlabeled or custom event keeps its name', () => {
-    expect(hostEventLabel('contactCreated')).toBe('Contact created')
-    expect(hostEventLabel('contactStageChanged')).toBe('Contact changed stage')
-    expect(hostEventLabel('formSubmission')).toBe('Form submitted')
-    // The fallback is the identifier: a custom event is the author's own
-    // word, and a built-in event added without a label is not hidden.
-    expect(hostEventLabel('cartAbandoned')).toBe('cartAbandoned')
-    expect(hostEventLabel('')).toBe('Event')
-    expect(hostEventLabel(undefined)).toBe('Event')
-  })
-
-  it('labels every event this change added', () => {
-    for (const event of ['contactCreated', 'contactStageChanged'] as const) {
-      expect(HOST_EVENT_LABELS[event]).toBeTruthy()
-      expect(HOST_EVENT_PAYLOAD_KEYS[event]?.length).toBeGreaterThan(0)
-    }
-  })
-
-  it('names the payload keys a filter can read', () => {
-    expect(HOST_EVENT_PAYLOAD_KEYS.contactCreated).toEqual([
-      'contactId',
-      'email',
-      'name',
-      'source',
-      'hostId',
-      'lifecycleStage',
-      'campaignIds',
-      'formId',
-    ])
-    expect(HOST_EVENT_PAYLOAD_KEYS.contactStageChanged).toEqual([
-      'contactId',
-      'email',
-      'lifecycleStage',
-      'previousStage',
-    ])
-    expect(hostEventPayloadHint('contactStageChanged')).toBe(
-      'In scope: contactId, email, lifecycleStage, previousStage.',
-    )
-    // A custom event has no documented payload — the hint says nothing
-    // rather than inventing one.
-    expect(hostEventPayloadHint('cartAbandoned')).toBeNull()
-    expect(hostEventPayloadHint('')).toBeNull()
   })
 })

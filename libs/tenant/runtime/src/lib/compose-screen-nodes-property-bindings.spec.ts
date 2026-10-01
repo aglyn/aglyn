@@ -36,7 +36,6 @@ const mockGetComponents = jest.fn()
 const mockGetVariables = jest.fn()
 const mockGetFunctions = jest.fn()
 const mockReadRepeatRows = jest.fn()
-const mockGetWorkflows = jest.fn()
 const mockGetPluginInstalls = jest.fn()
 const mockGetForms = jest.fn()
 
@@ -64,7 +63,6 @@ jest.mock('./get-variables', () => ({
   __esModule: true,
   default: (...a: unknown[]) => mockGetVariables(...a),
   getFunctions: (...a: unknown[]) => mockGetFunctions(...a),
-  getWorkflows: (...a: unknown[]) => mockGetWorkflows(...a),
 }))
 jest.mock('./get-collection-content', () => ({
   __esModule: true,
@@ -140,7 +138,6 @@ describe('component properties driving non-text fields on the published page', (
     mockGetVariables.mockResolvedValue([])
     mockGetFunctions.mockResolvedValue([])
     mockReadRepeatRows.mockResolvedValue([])
-    mockGetWorkflows.mockResolvedValue([])
     mockGetPluginInstalls.mockResolvedValue([])
     mockGetForms.mockResolvedValue({ forms: {} })
   })
@@ -559,7 +556,6 @@ describe("a layout's properties on the published page (AGL-2893)", () => {
     mockGetVariables.mockResolvedValue([])
     mockGetFunctions.mockResolvedValue([])
     mockReadRepeatRows.mockResolvedValue([])
-    mockGetWorkflows.mockResolvedValue([])
     mockGetPluginInstalls.mockResolvedValue([])
     mockGetForms.mockResolvedValue({ forms: {} })
     mockApplySchedule.mockResolvedValue(null)

@@ -39,8 +39,6 @@ import {
   type HostActionStepType,
   type HostFunction,
   type HostVariable,
-  type HostWorkflow,
-  type HostWorkflowStep,
   datasetDisplayName,
   describeDatasetRecordErrors,
   contactCampaignFieldPath,
@@ -53,8 +51,6 @@ import {
   prepareDatasetRecordWrite,
   type PluginJobHostGate,
   resolveOrgEntitlements,
-  runWorkflow,
-  WORKFLOW_MAX_STEPS,
 } from '@aglyn/aglyn/server'
 import {
   isDeferrableSendResult,
@@ -89,6 +85,12 @@ import { renderSiteTextEmail } from '@aglyn/tenant-data-admin/server/host-email-
 import { createHmac } from 'crypto'
 import { FieldValue } from 'firebase-admin/firestore'
 import { runSummaryFields } from '../model/run-history'
+import {
+  type HostWorkflow,
+  type HostWorkflowStep,
+  runWorkflow,
+  WORKFLOW_MAX_STEPS,
+} from '../model/workflows'
 import { eventRunSuspension } from './site-suspension'
 import {
   advanceFlowEnrollment,

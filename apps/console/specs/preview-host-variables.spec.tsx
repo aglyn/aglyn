@@ -140,7 +140,6 @@ jest.mock('@aglyn/tenant-runtime/get-variables', () => ({
   __esModule: true,
   default: jest.fn(async () => ({})),
   getFunctions: jest.fn(async () => ({})),
-  getWorkflows: jest.fn(async () => ({})),
 }))
 jest.mock('@aglyn/aglyn/plugin-manager/repeat-rows', () => ({
   __esModule: true,

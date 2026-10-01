@@ -25,10 +25,9 @@ import {
 
 /**
  * Part of the per-host compose bundle every page render pays (AGL-1302):
- * variables, functions and workflows were three ~100-doc queries per
- * render. All three fail open, so a cache-layer failure degrades to the
- * uncached read rather than an empty map. 60s matches the page's own ISR
- * window; the publish path busts `tenant-data:{hostId}` on top.
+ * variables and functions are two ~100-doc queries per render. Both fail
+ * open, so a cache-layer failure degrades to the uncached read rather than
+ * an empty map. The publish path busts `tenant-data:{hostId}` on top.
  */
 const HOST_BINDINGS_TTL_SECONDS = PUBLISHED_SITE_DATA_TTL_SECONDS
 
@@ -140,42 +139,3 @@ async function readFunctions(options: {
 }
 
 export default getVariables
-
-/**
- * Fetches the host's workflows keyed by name for computed variables and
- * function→workflow calls (AGL-129). Fail-open like variables.
- */
-export async function getWorkflows(options: {
-  hostId: string
-}): Promise<Record<string, Aglyn.HostWorkflow>> {
-  return cachedBindingsRead('tenant-workflows', options.hostId, () =>
-    readWorkflows(options),
-  )
-}
-
-async function readWorkflows(options: {
-  hostId: string
-}): Promise<Record<string, Aglyn.HostWorkflow>> {
-  const workflows: Record<string, Aglyn.HostWorkflow> = {}
-  try {
-    const snapshot = await firebaseAdmin
-      .app()
-      .firestore()
-      .collection('hosts')
-      .doc(options.hostId)
-      .collection('workflows')
-      .limit(100)
-      .get()
-    for (const docSnapshot of snapshot.docs) {
-      const data = docSnapshot.data() as Aglyn.HostWorkflow
-      if ((data as any).deletedAt) continue
-      // Double-keyed by doc id AND name (AGL-261): id references are
-      // rename-safe; legacy name references keep resolving.
-      workflows[docSnapshot.id] = data
-      if (data?.name) workflows[data.name] = data
-    }
-  } catch (error) {
-    console.error(error)
-  }
-  return workflows
-}

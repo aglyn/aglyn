@@ -678,16 +678,6 @@
       "lane": "workflows"
     },
     {
-      "path": "libs/aglyn/src/lib/app-utils/workflows.ts",
-      "rules": [
-        "domain-name",
-        "domain-declares:crm",
-        "domain-declares:forms",
-        "domain-declares:workflows"
-      ],
-      "lane": "workflows"
-    },
-    {
       "path": "libs/aglyn/src/lib/foundation/definitions/contact.types.ts",
       "rules": [
         "domain-name"
@@ -1272,14 +1262,6 @@
         "plugin-collection:crm"
       ],
       "lane": "crm"
-    },
-    {
-      "path": "libs/tenant/runtime/src/lib/get-variables.ts",
-      "rules": [
-        "plugin-id",
-        "plugin-collection:workflows"
-      ],
-      "lane": "plugin-id"
     },
     {
       "path": "libs/tenant/runtime/src/lib/resolve-dataset.ts",

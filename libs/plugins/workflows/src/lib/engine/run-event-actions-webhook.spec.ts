@@ -153,7 +153,7 @@ jest.mock('@aglyn/shared-util-email', () => ({
   sendFailureReason: () => null,
 }))
 
-import type { HostEventType } from '@aglyn/aglyn/app-utils/workflows'
+import type { HostEventType } from '@aglyn/aglyn/app-utils/host-events'
 import { emitHostEvent } from '@aglyn/tenant-runtime/emit-host-event'
 import type { HostEventPayload } from '@aglyn/tenant-runtime/host-event-listeners'
 import { registerWorkflowsServerDeclarations } from '../declarations.server'

@@ -106,7 +106,6 @@ jest.mock('@aglyn/tenant-runtime/get-variables', () => ({
   __esModule: true,
   default: async () => [],
   getFunctions: async () => [],
-  getWorkflows: async () => [],
 }))
 jest.mock('@aglyn/tenant-runtime/get-plugin-installs', () => ({
   __esModule: true,

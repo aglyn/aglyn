@@ -55,6 +55,7 @@ jest.mock('./engine/run-event-actions', () => ({
     (mockRunSingleAction as (...a: unknown[]) => unknown)(...args),
 }))
 
+import { VARIABLE_COMPUTERS } from '@aglyn/aglyn/plugin-manager/computed-variables'
 import { PLUGIN_DEPENDENTS_SOURCES } from '@aglyn/aglyn/plugin-manager/plugin-dependents'
 import { pluginRecordIndex } from '@aglyn/aglyn/plugin-manager/plugin-record-index'
 import {
@@ -106,6 +107,14 @@ describe('the server declarations', () => {
     const sources = resolvePluginServices(PLUGIN_DEPENDENTS_SOURCES)
     expect(sources.map(({ pluginId, impl }) => [pluginId, impl.kinds])).toEqual([
       [BUNDLE_ID, ['function']],
+    ])
+  })
+
+  it('compute the site variables a workflow backs, once however often they run (AGL-3080)', () => {
+    registerWorkflowsServerDeclarations()
+    registerWorkflowsServerDeclarations()
+    expect(resolvePluginServices(VARIABLE_COMPUTERS).map(({ pluginId }) => pluginId)).toEqual([
+      BUNDLE_ID,
     ])
   })
 

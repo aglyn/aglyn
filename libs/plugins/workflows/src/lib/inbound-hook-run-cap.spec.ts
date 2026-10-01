@@ -150,13 +150,13 @@ const mockRegistered: Array<(req: any, res: any) => unknown> = []
 
 jest.mock('@aglyn/aglyn/server', () => ({
   __esModule: true,
-  // The REAL plan table, the REAL entitlement check and the REAL workflow
-  // engine. Stubbing `resolveOrgEntitlements` would let this suite pass
-  // against a handler that read nothing, which IS the defect under repair.
+  // The REAL plan table and the REAL entitlement check (the workflow engine
+  // is this plugin's own module, never mocked here). Stubbing
+  // `resolveOrgEntitlements` would let this suite pass against a handler
+  // that read nothing, which IS the defect under repair.
   ...jest.requireActual(
     '../../../../aglyn/src/lib/app-utils/plan-entitlements',
   ),
-  ...jest.requireActual('../../../../aglyn/src/lib/app-utils/workflows'),
   // The REAL lockdown carriers, so the suspension gate (AGL-3356) is the
   // product's own decision under this harness too.
   ...jest.requireActual('../../../../aglyn/src/lib/app-utils/lockdown'),

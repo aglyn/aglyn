@@ -19,7 +19,6 @@ import type { HostAction } from '@aglyn/aglyn/app-utils/actions'
 import { actionRunResult } from '@aglyn/aglyn/app-utils/activity-presenter'
 import { datasetDisplayName } from '@aglyn/aglyn/app-utils/datasets'
 import { isFormArchived } from '@aglyn/aglyn/app-utils/forms'
-import type { HostWorkflow } from '@aglyn/aglyn/app-utils/workflows'
 import {
   pluginRecordIndex,
   type PluginIndexedRecord,
@@ -31,7 +30,7 @@ import type {
   AiAutomationNamedRecord,
   AiAutomationRecords,
 } from '../model/ai-automation-draft'
-import type { AiRunRecord } from '../model/ai-automation-outline'
+import type { AiIndexedWorkflow, AiRunRecord } from '../model/ai-automation-outline'
 import type { AiWorkflowTargetType } from '../model/ai-workflow-job'
 
 /**
@@ -194,7 +193,7 @@ export async function readAiWorkflowFunctions(
 
 export type AiWorkflowTarget =
   | { type: 'action'; id: string; name: string; action: HostAction }
-  | { type: 'workflow'; id: string; name: string; workflow: HostWorkflow }
+  | { type: 'workflow'; id: string; name: string; workflow: AiIndexedWorkflow }
 
 /**
  * A saved automation of the site, read through the index of the plugin that
@@ -210,7 +209,7 @@ export async function readAiWorkflowTarget(
   const stored = { name: record.name, ...record.facts }
   return input.type === 'action'
     ? { type: 'action', id: record.id, name: record.name, action: stored as unknown as HostAction }
-    : { type: 'workflow', id: record.id, name: record.name, workflow: stored as unknown as HostWorkflow }
+    : { type: 'workflow', id: record.id, name: record.name, workflow: stored as unknown as AiIndexedWorkflow }
 }
 
 export type AiWorkflowRunRead =

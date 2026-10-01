@@ -26,7 +26,7 @@ Variables and functions resolve when a page renders, through the tenant runtime'
 
 - `registerLogicConsole` and `BUNDLE_ID` (`'logic'`).
 - `HostVariablesCard`, `HostFunctionsCard` and their props types, for an app that opens the cards itself.
-- `auditHostReferences` with `ReferenceIssue`, `ReferenceAuditInput` and `ScreenAuditEntry`: a pure check of every reference an action, workflow, computed variable or screen holds against the ids and names that still exist.
+- `auditHostReferences` with `ReferenceIssue`, `ReferenceAuditInput`, `AuditedWorkflow` and `ScreenAuditEntry`: a pure check of every reference an action, workflow, computed variable or screen holds against the ids and names that still exist.
 - `parseParameterOptions` and `formatParameterOptions`: a function parameter's choice list as one line of text. The grammar itself lives in `@aglyn/aglyn`; these are the function builder's names for it.
 
 ## Usage

@@ -85,7 +85,7 @@ const mockGetComponents = jest.fn()
 const mockGetVariables = jest.fn()
 const mockGetFunctions = jest.fn()
 const mockReadRepeatRows = jest.fn()
-const mockGetWorkflows = jest.fn()
+const mockPrepareComputedVariables = jest.fn()
 const mockGetPluginInstalls = jest.fn()
 const mockGetScreenVersion = jest.fn()
 const mockApplyDuePublishSchedule = jest.fn()
@@ -102,6 +102,10 @@ jest.mock('@aglyn/aglyn/plugin-manager/repeat-rows', () => ({
   __esModule: true,
   readRepeatRows: (...a: unknown[]) => mockReadRepeatRows(...a),
 }))
+jest.mock('@aglyn/aglyn/plugin-manager/computed-variables', () => ({
+  __esModule: true,
+  prepareComputedVariables: (...a: unknown[]) => mockPrepareComputedVariables(...a),
+}))
 jest.mock('./get-plugin-installs', () => ({
   __esModule: true,
   default: (...a: unknown[]) => mockGetPluginInstalls(...a),
@@ -110,7 +114,6 @@ jest.mock('./get-variables', () => ({
   __esModule: true,
   default: (...a: unknown[]) => mockGetVariables(...a),
   getFunctions: (...a: unknown[]) => mockGetFunctions(...a),
-  getWorkflows: (...a: unknown[]) => mockGetWorkflows(...a),
 }))
 jest.mock('./get-collection-content', () => ({
   __esModule: true,
@@ -151,7 +154,7 @@ const HOST_SCOPED = [
   'components',
   'variables',
   'functions',
-  'workflows',
+  'computed',
   'installs',
 ] as const
 
@@ -173,7 +176,9 @@ const setup = (
   mockGetVariables.mockImplementation(tracked('variables', []))
   mockGetFunctions.mockImplementation(tracked('functions', []))
   mockReadRepeatRows.mockImplementation(tracked('datasets', []))
-  mockGetWorkflows.mockImplementation(tracked('workflows', []))
+  mockPrepareComputedVariables.mockImplementation(
+    tracked('computed', ({ variables }: { variables: unknown }) => variables),
+  )
   mockGetPluginInstalls.mockImplementation(tracked('installs', []))
   // The version read is the one this change exists to hide. The default is
   // deliberately LONGER than the whole chrome bundle (the layout walk is two

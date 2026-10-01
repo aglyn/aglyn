@@ -1272,6 +1272,68 @@ in `plugins.config.json`, not from code:
 | `isClientActionStep(step)` / `isClientStepEntitled(step, tiers)` | Whether the page runs a step, and whether the site's plan lets it. |
 | `SiteAlert` | What a `siteAlert` step, or a listener, hands back to the visitor's page. |
 
+## Host events — `host-events`
+
+A host event is what happened on a site that an automation can start on: a
+form submitted, a booking made, a contact moved stage. A server door raises one
+with `emitHostEvent(hostId, type, payload, { actor })` beside the write it
+performed; nothing watches the database. The platform raises `pageView` itself.
+A plugin whose doors raise others declares them in `plugins.config.json`, so
+the trigger pickers, the run history and every validator know them with no
+plugin loaded:
+
+```json
+"hostEvents": [
+  {
+    "type": "booking",
+    "order": 70,
+    "label": "New booking",
+    "payloadKeys": ["serviceName", "email", "startsAtMs"]
+  }
+]
+```
+
+- `type` is what a stored trigger names: never rename it. One plugin declares
+  each type, and none may take the platform's `pageView`.
+- `order` places it in every picker; `pageView` is 20.
+- `payloadKeys` (optional) lists what the event puts in scope for a filter or a
+  condition; leave it out when the door documents none.
+
+The declarations compile into `app-utils/plugin-host-events.generated.ts`.
+
+| API | Semantics |
+| --- | --- |
+| `HOST_EVENTS` / `HOST_EVENT_TYPES` | Every event, the platform's and the plugins', in `order`. `HostEventType` is their union. |
+| `hostEventLabel(type)` / `hostEventPayloadHint(type)` | The picker's words, falling back to the type itself for a custom event; the "In scope: …" line, or `null` where nothing is documented. |
+
+## Computed variables — `computed-variables` (`/server`)
+
+A site variable is bound into a page with `{{var:id}}` and resolved when the
+page is composed. A COMPUTED variable takes its value from a record a plugin
+keeps, with its stored value as the fallback. The plugin that computes it
+registers a variable computer, in two halves so its reads overlap the page's
+own:
+
+```ts
+// your plugin's serverDeclarations entry
+registerVariableComputer(
+  {
+    prepare: async (hostId) => (await import('./server/rates')).prepareRates(hostId),
+  },
+  { pluginId: 'cellar' },
+)
+
+// prepareRates reads what it needs for the site, then answers a computation:
+// ({ variables, functions }) => variables, with the computed ones' values filled in
+```
+
+| API | Semantics |
+| --- | --- |
+| `registerVariableComputer(computer, { pluginId? })` | Owner = the loader's marker, else `pluginId`; no owner throws. Registering again replaces the plugin's own. |
+| `prepareComputedVariables(hostId)` | What the compose pipeline calls beside its variable and function reads: every computer's `prepare`, resolved to their computations applied in registration order. A computer that fails, or none registered, leaves each variable its stored value; with none registered, the app's declarations step is run once more first. |
+
+Workflows registers one: a variable that names a workflow takes its result.
+
 ## Platform events — `plugin-events` (`/server`)
 
 Core raises the events; a plugin that must react to what a core route did

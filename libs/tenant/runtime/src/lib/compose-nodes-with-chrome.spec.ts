@@ -49,7 +49,7 @@ const mockGetComponents = jest.fn()
 const mockGetVariables = jest.fn()
 const mockGetFunctions = jest.fn()
 const mockReadRepeatRows = jest.fn()
-const mockGetWorkflows = jest.fn()
+const mockPrepareComputedVariables = jest.fn()
 const mockGetPluginInstalls = jest.fn()
 
 jest.mock('./get-layout-version', () => ({
@@ -64,6 +64,10 @@ jest.mock('@aglyn/aglyn/plugin-manager/repeat-rows', () => ({
   __esModule: true,
   readRepeatRows: (...a: unknown[]) => mockReadRepeatRows(...a),
 }))
+jest.mock('@aglyn/aglyn/plugin-manager/computed-variables', () => ({
+  __esModule: true,
+  prepareComputedVariables: (...a: unknown[]) => mockPrepareComputedVariables(...a),
+}))
 jest.mock('./get-plugin-installs', () => ({
   __esModule: true,
   default: (...a: unknown[]) => mockGetPluginInstalls(...a),
@@ -72,7 +76,6 @@ jest.mock('./get-variables', () => ({
   __esModule: true,
   default: (...a: unknown[]) => mockGetVariables(...a),
   getFunctions: (...a: unknown[]) => mockGetFunctions(...a),
-  getWorkflows: (...a: unknown[]) => mockGetWorkflows(...a),
 }))
 jest.mock('./get-collection-content', () => ({
   __esModule: true,
@@ -158,7 +161,9 @@ const setup = () => {
   mockGetVariables.mockImplementation(tracked('variables', []))
   mockGetFunctions.mockImplementation(tracked('functions', []))
   mockReadRepeatRows.mockImplementation(tracked('datasets', []))
-  mockGetWorkflows.mockImplementation(tracked('workflows', []))
+  mockPrepareComputedVariables.mockImplementation(
+    tracked('computed', ({ variables }: { variables: unknown }) => variables),
+  )
   mockGetPluginInstalls.mockImplementation(tracked('installs', []))
 }
 
@@ -187,7 +192,7 @@ describe('composeNodesWithChrome read fan-out (AGL-1225)', () => {
       'variables',
       'functions',
       'datasets',
-      'workflows',
+      'computed',
       'installs',
     ]) {
       const start = order.indexOf(`${label}:start`)
@@ -235,7 +240,7 @@ describe('composeNodesWithChrome read fan-out (AGL-1225)', () => {
     expect(mockGetVariables).toHaveBeenCalledTimes(1)
     expect(mockGetFunctions).toHaveBeenCalledTimes(1)
     expect(mockReadRepeatRows).toHaveBeenCalledTimes(1)
-    expect(mockGetWorkflows).toHaveBeenCalledTimes(1)
+    expect(mockPrepareComputedVariables).toHaveBeenCalledTimes(1)
     expect(mockGetPluginInstalls).toHaveBeenCalledTimes(1)
     // One read per layout in the chain, and no more.
     expect(mockGetPublishedLayoutVersion).toHaveBeenCalledTimes(2)
