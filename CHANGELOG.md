@@ -15,12 +15,15 @@ content on the marketing site and is written separately.
 
 ### Added
 
+- **notifications:** every notification carries an alert level, and the bell and the notifications page color rows by it ([AGL-3437](https://linear.app/aglyn/issue/AGL-3437))
 - **notifications:** a site manager's notice can name its site with {site} ([AGL-3432](https://linear.app/aglyn/issue/AGL-3432))
 - **commerce:** a site user's purchases are drawn by commerce in the drawer's siteMember zone ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
 - **ui:** a spec can count what one keystroke re-rendered ([AGL-3423](https://linear.app/aglyn/issue/AGL-3423))
 
 ### Fixed
 
+- **ai:** the subprocessor list says a generation job sends the site's pages, not its screens ([AGL-3442](https://linear.app/aglyn/issue/AGL-3442))
+- **crm:** a site's leads by first sighting have their index, both directions ([AGL-3443](https://linear.app/aglyn/issue/AGL-3443), [AGL-3275](https://linear.app/aglyn/issue/AGL-3275))
 - **billing:** the monthly usage summary waits for the closed-month sweep ([AGL-3442](https://linear.app/aglyn/issue/AGL-3442), [AGL-3439](https://linear.app/aglyn/issue/AGL-3439))
 - **branding:** an entitled org that has set no brand mails in the platform's ([AGL-3440](https://linear.app/aglyn/issue/AGL-3440), [AGL-2428](https://linear.app/aglyn/issue/AGL-2428))
 - **crons:** the monthly usage summaries run on Cloud Scheduler, not GitHub Actions ([AGL-3439](https://linear.app/aglyn/issue/AGL-3439), [AGL-3351](https://linear.app/aglyn/issue/AGL-3351))
@@ -74,10 +77,14 @@ content on the marketing site and is written separately.
 - **ai:** the dataset figure readers are named as the data plugin's ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
 
 <details>
-<summary>Also in this release: 3 test</summary>
+<summary>Also in this release: 3 test, 4 chore</summary>
 
+- **tools:** raise the Linear id ceiling to AGL-3443, read from the workspace ([AGL-3443](https://linear.app/aglyn/issue/AGL-3443), [AGL-3442](https://linear.app/aglyn/issue/AGL-3442), [AGL-3437](https://linear.app/aglyn/issue/AGL-3437))
+- **tools:** raise the Linear id ceiling to AGL-3437, read from the workspace ([AGL-3437](https://linear.app/aglyn/issue/AGL-3437))
+- **release:** v1.0.0-beta.220 carries main through be7137dea ([AGL-2089](https://linear.app/aglyn/issue/AGL-2089))
 - **aglyn:** the spread-question fixture of the docs gate names no plugin seam ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
 - **console:** the record kinds one plugin's picker lists from another have a source once the console boots ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **release:** v1.0.0-beta.220 ([AGL-2089](https://linear.app/aglyn/issue/AGL-2089))
 - **jsx:** a keystroke-cost spec sets its fresh-registry timeout file-wide ([AGL-3423](https://linear.app/aglyn/issue/AGL-3423))
 
 </details>
