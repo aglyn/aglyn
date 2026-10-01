@@ -138,6 +138,17 @@ export interface MuiComponentSource {
   schema: string
   /** The export carrying its presets, for the element that ships them. */
   presets?: string
+  /**
+   * An export that loads what SOME instances of the element render, before
+   * any of them does (AGL-3438) — `(everything: boolean) => Promise | void`.
+   *
+   * For a module the element fetches only when an instance's props ask for
+   * it, the way Collection Entries fetches its search box. The element alone
+   * knows when a render must not wait for that fetch; `everything` tells it
+   * the whole library is loading, which is what the console and the besigner
+   * ask for. The bundle is handed over once the load it returns has settled.
+   */
+  prepare?: string
 }
 
 /**
@@ -246,6 +257,7 @@ export const MUI_COMPONENT_SOURCES: Readonly<
     component: 'CollectionEntries',
     schema: 'collectionEntriesSchema',
     presets: 'collectionPresets',
+    prepare: 'prepareEntriesSearch',
   },
   collectionEntryBody: {
     module: collectionEntryBody,
@@ -551,6 +563,24 @@ export async function loadMuiBundle(
         pending.set(source.module, load)
       }
       return load
+    }),
+  )
+  // Each module's on-demand parts, once per module, before anything renders.
+  const everything = componentIds === undefined
+  const prepared = new Set<unknown>()
+  await Promise.all(
+    ids.map((id, index) => {
+      const source = MUI_COMPONENT_SOURCES[id] as MuiComponentSource
+      const mod = modules[index] as Record<string, unknown>
+      if (!source.prepare || prepared.has(mod)) return undefined
+      prepared.add(mod)
+      const prepare = mod[source.prepare] as
+        | ((everything: boolean) => Promise<unknown> | void)
+        | undefined
+      // A failed fetch is the render's to report, not the registration's:
+      // the element asks again when it renders, and a block that still
+      // cannot have it fails alone instead of taking the page with it.
+      return Promise.resolve(prepare?.(everything)).catch(() => undefined)
     }),
   )
   return ids.map((id, index) => {

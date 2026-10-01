@@ -40,13 +40,15 @@ import {
   collectionSearchSchema,
   collectionShareSchema,
   loadCollectionFuse,
+  loadEntriesSearch,
 } from './collection'
 
-// The matcher loads on a reader's first keystroke (AGL-3401). Loaded once up
-// front here, so every search assertion below reads the answer the keystroke
-// produces rather than the fetch in front of it; the fetch itself is
+// The matcher loads on a reader's first keystroke (AGL-3401), and an entries
+// block's search box with the first block that turns it on (AGL-3438). Both
+// are loaded once up front here, so every search assertion below reads the
+// answer rather than the fetch in front of it; the fetches themselves are
 // `collection-search-on-demand.spec.tsx`'s subject.
-beforeAll(() => loadCollectionFuse())
+beforeAll(() => Promise.all([loadCollectionFuse(), loadEntriesSearch()]))
 
 describe('Collection entries block (AGL-551)', () => {
   it('registers under the persisted compose-time component ids', () => {
