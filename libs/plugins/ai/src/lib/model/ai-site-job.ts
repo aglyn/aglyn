@@ -21,6 +21,7 @@ import {
   type AiBuildPlan,
   type AiBuildPlanCreateKind,
 } from './ai-build-plan'
+import { AI_JOB_CREATE_KINDS } from './ai-job-creations'
 import { AI_PAGE_CREATE_KINDS } from './ai-page-job'
 
 /**
@@ -430,11 +431,15 @@ export function aiPlanCreditEstimate(plan: AiBuildPlan, options: AiPlanPassOptio
 /**
  * About what a job of this kind costs to build from its plan (AGL-3031): a
  * page job counts the layout, forms and components it builds before its
- * page, and every other kind counts what a scaffold would. The figure the
- * proposal shows beside Confirm, and the hold a confirmation takes.
+ * page; a template, layout, component, form or email job counts its own
+ * record and every creation it builds before it (AGL-3143 §15); and a
+ * scaffold counts what it builds. The figure the proposal shows beside
+ * Confirm, and the hold a confirmation takes.
  */
 export function aiJobPlanCreditEstimate(kind: string, plan: AiBuildPlan): number {
-  return aiPlanCreditEstimate(plan, kind === 'page' ? { creates: AI_PAGE_CREATE_KINDS } : {})
+  const creates =
+    kind === 'page' ? AI_PAGE_CREATE_KINDS : AI_JOB_CREATE_KINDS[kind as keyof typeof AI_JOB_CREATE_KINDS]
+  return aiPlanCreditEstimate(plan, creates ? { creates } : {})
 }
 
 /**

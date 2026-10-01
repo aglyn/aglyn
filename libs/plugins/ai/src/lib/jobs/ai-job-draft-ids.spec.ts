@@ -144,8 +144,18 @@ describe('the ids a plan names its drafts by (AGL-3079)', () => {
   })
 
   it('keeps any other kind’s plan as it is: its own draft is named on its step', () => {
-    for (const kind of ['layout', 'template', 'form', 'component', 'email'] as const) {
+    for (const kind of ['form', 'email'] as const) {
       expect(aiPlanWithDraftIds(kind, PLAN)).toBe(PLAN)
+    }
+  })
+
+  it('names what a template, layout or component job builds before its own record, and no screen (AGL-3143 §15)', () => {
+    for (const kind of ['template', 'layout', 'component'] as const) {
+      const kept = aiPlanWithDraftIds(kind, PLAN)
+      // A palette change is a proposal, never a document, so it is named by nothing.
+      const documents = kept.create.filter((entry) => entry.kind !== 'theme-change')
+      expect(documents.every((entry) => typeof entry.id === 'string' && entry.id.length > 0)).toBe(true)
+      expect(kept.screens).toBe(PLAN.screens)
     }
   })
 })

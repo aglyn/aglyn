@@ -341,7 +341,7 @@ export function aiSiteBuiltRefs(
 type BuiltRefs = ReturnType<typeof aiSiteBuiltRefs>
 
 /** A plan reference as the unit's own job reads it: an id the site now has, or nothing. */
-function resolved(ref: string | null, built: BuiltRefs): string | null {
+export function aiSiteResolvedRef(ref: string | null, built: BuiltRefs): string | null {
   if (!ref) return null
   if (!isAiPlanNewRef(ref)) return ref
   return (
@@ -466,7 +466,7 @@ export function aiSiteUnitJob(
     unitPlan.create = [
       {
         ...unit.creation,
-        duplicateOf: resolved(unit.creation.duplicateOf, built),
+        duplicateOf: aiSiteResolvedRef(unit.creation.duplicateOf, built),
       },
     ]
     brief.push(
@@ -488,13 +488,13 @@ export function aiSiteUnitJob(
     unitPlan.screens = [
       {
         ...screen,
-        layout: resolved(screen.layout, built),
-        template: resolved(screen.template, built),
-        duplicateOf: resolved(screen.duplicateOf, built),
+        layout: aiSiteResolvedRef(screen.layout, built),
+        template: aiSiteResolvedRef(screen.template, built),
+        duplicateOf: aiSiteResolvedRef(screen.duplicateOf, built),
         sections: screen.sections.map((section) => ({
           ...section,
           uses: section.uses
-            .map((ref) => resolved(ref, built))
+            .map((ref) => aiSiteResolvedRef(ref, built))
             .filter((ref): ref is string => !!ref),
         })),
       },

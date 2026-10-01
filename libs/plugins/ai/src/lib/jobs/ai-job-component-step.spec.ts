@@ -305,6 +305,8 @@ describe('the component step', () => {
     registerAiComponentJob()
     expect(registerAiJobStep).toHaveBeenCalledWith('component', runAiJobComponentStep, {
       minimumMs: AI_JOB_COMPONENT_STEP_MINIMUM_MS,
+      // A pass that builds a creation of its plan first needs that step's time (AGL-3143 §15).
+      minimumMsFor: expect.any(Function),
     })
     const ask = (hostId: string | null, org: object) =>
       aiJobAdmissionRefusal('component', { firestore, orgId: 'org-1', hostId, inputs: {}, org })

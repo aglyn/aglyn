@@ -320,6 +320,8 @@ describe('the template step', () => {
     registerAiTemplateJob()
     expect(registerAiJobStep).toHaveBeenCalledWith('template', runAiJobTemplateStep, {
       minimumMs: AI_JOB_TEMPLATE_STEP_MINIMUM_MS,
+      // A pass that builds a creation of its plan first needs that step's time (AGL-3143 §15).
+      minimumMsFor: expect.any(Function),
     })
     const ask = (inputs: Record<string, unknown>, org: object = STARTER_ORG, hostId: string | null = 'host-1') =>
       aiJobAdmissionRefusal('template', { firestore, orgId: 'org-1', hostId, inputs, org })

@@ -37,6 +37,11 @@ import type { AiLoadEstimate } from '../runtime/ai-palette'
 import type { AiSystemBlock } from '../runtime/ai-runtime'
 import { readSiteInventory } from '../runtime/site-inventory'
 import { registerAiJobAdmission, type AiJobAdmission } from './ai-job-admission'
+import {
+  aiBuildingPlanCreations,
+  aiJobPlanCreationsRefusal,
+  aiPlanCreationsRunMinimumMs,
+} from './ai-job-plan-creations'
 import { aiJobDraftId } from './ai-job-draft-ids'
 import {
   aiDraftAdmissionRefusal,
@@ -229,13 +234,18 @@ export async function aiCopiedLayoutReview(
   })
 }
 
-/** A layout job is admitted for a site of the job's own org with a shared layout to spare. */
+/**
+ * A layout job is admitted for a site of the job's own org with a shared
+ * layout to spare, and confirmed only for a plan whose other creations it
+ * builds (AGL-3143 §15).
+ */
 export const aiLayoutJobAdmission: AiJobAdmission = (context) =>
   aiDraftAdmissionRefusal(context.firestore, {
     orgId: context.orgId,
     hostId: context.hostId,
     kind: 'layout',
     org: context.org,
+    ownCheck: (hostId) => aiJobPlanCreationsRefusal('layout', context, hostId),
   })
 
 export interface AiJobLayoutStepDeps {
@@ -358,10 +368,14 @@ export function createAiJobLayoutStep(deps: AiJobLayoutStepDeps = {}): AiJobStep
   }
 }
 
-export const runAiJobLayoutStep = createAiJobLayoutStep()
+/** The layout step, building the components and forms its plan creates before the layout (AGL-3143 §15). */
+export const runAiJobLayoutStep = aiBuildingPlanCreations('layout', 'job.layout', createAiJobLayoutStep())
 
 /** Registers the layout step and the check a layout job passes before it is created or resumed. */
 export function registerAiLayoutJob(): void {
-  registerAiJobStep('layout', runAiJobLayoutStep, { minimumMs: AI_JOB_LAYOUT_STEP_MINIMUM_MS })
+  registerAiJobStep('layout', runAiJobLayoutStep, {
+    minimumMs: AI_JOB_LAYOUT_STEP_MINIMUM_MS,
+    minimumMsFor: aiPlanCreationsRunMinimumMs('layout'),
+  })
   registerAiJobAdmission('layout', aiLayoutJobAdmission)
 }

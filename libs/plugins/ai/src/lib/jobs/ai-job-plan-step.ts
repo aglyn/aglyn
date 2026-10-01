@@ -29,6 +29,7 @@ import {
   aiTemplateShownTokens,
   type AiTemplateSubject,
 } from '../model/ai-template-subjects'
+import { AI_JOB_CREATE_KINDS, AI_JOB_CREATE_NOUNS } from '../model/ai-job-creations'
 import { AI_PAGE_CREATE_KINDS, aiPagePlanShapeRefusal } from '../model/ai-page-job'
 import {
   aiPlanCapabilitiesForJob,
@@ -196,12 +197,19 @@ export interface AiJobPlanScope extends AiPlanJobScope {
 /**
  * The kinds whose confirm door builds only some plans (AGL-3030). A page job
  * builds one screen and a scaffold four to eight; each builds only the
- * creations its list names. Every other planned kind builds its own one
- * output, and its plan is held to the workspace alone.
+ * creations its list names. A template, layout, component, form or email job
+ * builds its own record and what that record places (AGL-3143 §15,
+ * `AI_JOB_CREATE_KINDS`), and holds no plan to a shape.
  */
 export const AI_JOB_PLAN_SCOPES: Readonly<Partial<Record<AiJobKind, AiJobPlanScope>>> = {
   page: { noun: 'a page job', creates: AI_PAGE_CREATE_KINDS, shapeRefusal: aiPagePlanShapeRefusal },
   site: { noun: 'a site scaffold', creates: AI_SITE_CREATE_KINDS, shapeRefusal: aiSitePlanShapeRefusal },
+  ...Object.fromEntries(
+    Object.entries(AI_JOB_CREATE_KINDS).map(([kind, creates]) => [
+      kind,
+      { noun: AI_JOB_CREATE_NOUNS[kind as AiJobKind] as string, creates, shapeRefusal: () => null },
+    ]),
+  ),
 }
 
 /**
