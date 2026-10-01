@@ -243,6 +243,7 @@ import {
 import { crmScopeTokens, DEFAULT_DEAL_STAGES } from '@aglyn/aglyn/app-utils/crm'
 import { marketingConsentFieldsForGroup } from '@aglyn/aglyn/app-utils/marketing-consent'
 import { DELETE, GET, PATCH, POST } from '../app/api/v1/[[...route]]/route'
+import { registerPluginServerDeclarations } from '../constants/plugins.declarations.server.generated'
 import {
   childPaths,
   lastFilters,
@@ -319,6 +320,9 @@ const all = (collectionPath: string): Array<Record<string, any>> =>
     ...mockDocs.get(path),
   }))
 
+// The console's boot, which registers the CRM's `/v1` resources (AGL-3080).
+beforeAll(() => registerPluginServerDeclarations())
+
 beforeEach(() => {
   resetMockFirestore()
   mockUidSeq = 0
@@ -368,7 +372,7 @@ beforeEach(() => {
 
 describe('the premise', () => {
   it('enforces the CRM scopes and advertises the resource at the root', async () => {
-    const source = readSource('apps/console/utils/api-v1/crm-leads.ts')
+    const source = readSource('libs/plugins/crm/src/lib/server/api-v1/crm-leads.ts')
     expect(source).toContain("requireScope(ctx, 'crm:read')")
     expect(source).toContain("requireScope(ctx, 'crm:write')")
     const root = await json(await call('GET', ''))

@@ -572,7 +572,7 @@ describe('a stored value is resolved by a keyed read', () => {
       latest().resolve?.('datasets', 'd-far')
     })
     await waitFor(() =>
-      expect(latest().datasetFields?.['d-far']).toEqual([
+      expect(latest().entityFields?.datasets?.['d-far']).toEqual([
         { id: 'email', label: 'Email address' },
       ]),
     )

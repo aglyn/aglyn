@@ -65,8 +65,12 @@ import {
   parseLimit,
 } from '@aglyn/tenant-data-admin'
 import { FieldPath, FieldValue, Timestamp } from 'firebase-admin/firestore'
-import type { ApiV1Context } from '../api-v1'
-import { orgOwnsHost, paginate, serialize } from './shared'
+import {
+  type ApiV1Context,
+  orgOwnsHost,
+  paginate,
+  serialize,
+} from '@aglyn/tenant-data-admin/server/api-v1-kit'
 
 // ── Bounds ──────────────────────────────────────────────────────────────────
 

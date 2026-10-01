@@ -28,6 +28,8 @@ import PluginSiteSetPanel from './components/plugin-site-set-panel.component'
 import OrgPluginInstallsCard from './components/org-plugin-installs-card.component'
 import PluginInstallStatus from './components/plugin-install-status.component'
 import StaffMarketplaceOverview from './components/staff-marketplace-overview.component'
+import TemplateGalleryShelf from './components/template-gallery-shelf.component'
+import TemplateInstallStatus from './components/template-install-status.component'
 import PublishArtifactDialog from './components/publish-artifact-dialog.component'
 import { MarketplaceListingContent } from './components/listing-content.component'
 import { BUNDLE_ID } from './constants/bundle-common'
@@ -99,6 +101,21 @@ export function registerMarketplaceConsole(): void {
         slot: 'staffOverview',
         widgetId: 'marketplace-staff-overview',
         Component: StaffMarketplaceOverview,
+      },
+      // A site's templates (AGL-3080). The gallery and the library are the
+      // shell's; the site templates this plugin lists, the route that
+      // installs one, and whether a template it installed has a newer
+      // version are read from this plugin's listings, so this plugin draws
+      // them: a shelf of the gallery, and a chip on the library's row.
+      {
+        slot: 'templateGallery',
+        widgetId: 'marketplace-template-gallery',
+        Component: TemplateGalleryShelf,
+      },
+      {
+        slot: 'templateInstallStatus',
+        widgetId: 'marketplace-template-install-status',
+        Component: TemplateInstallStatus,
       },
     ],
     /**

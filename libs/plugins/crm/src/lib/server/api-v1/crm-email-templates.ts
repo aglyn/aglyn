@@ -51,7 +51,12 @@ import {
 } from '@aglyn/aglyn/server'
 import { apiJson, ApiErrors } from '@aglyn/tenant-data-admin'
 import { Timestamp } from 'firebase-admin/firestore'
-import { type ApiV1Context, requireScope } from '../api-v1'
+import {
+  type ApiV1Context,
+  claimWrite,
+  readJsonBody,
+  requireScope,
+} from '@aglyn/tenant-data-admin/server/api-v1-kit'
 import {
   type Clearable,
   CRM_TITLE_MAX,
@@ -69,7 +74,6 @@ import {
   refuseUnknownKeys,
   updatePayload,
 } from './crm-shared'
-import { claimWrite, readJsonBody } from './shared'
 
 /*
  * Spelled here rather than imported: the `/v1` suites mock the model as a

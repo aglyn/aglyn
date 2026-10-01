@@ -249,6 +249,7 @@ jest.mock('firebase-admin/firestore', () => {
 })
 
 import { GET } from '../app/api/v1/[[...route]]/route'
+import { registerPluginServerDeclarations } from '../constants/plugins.declarations.server.generated'
 
 const CONTACTS = 'orgs/org-1/contacts'
 const SUBMISSIONS = 'hosts/host-1/formSubmissions'
@@ -278,6 +279,9 @@ const listOrders = (query = '') =>
 
 /** The filters the LAST issued query carried. */
 const lastFilters = (): IssuedFilter[] => issued[issued.length - 1] ?? []
+
+// The console's boot, which registers the CRM's `/v1` resources (AGL-3080).
+beforeAll(() => registerPluginServerDeclarations())
 
 beforeEach(() => {
   mockDocs.clear()

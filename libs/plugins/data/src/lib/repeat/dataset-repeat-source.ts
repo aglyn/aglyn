@@ -82,6 +82,7 @@ export const DATASET_REPEAT_SOURCE: RepeatSource = {
   id: DATASET_REPEAT_SOURCE_ID,
   label: 'Dataset',
   keyProp: DATASET_REPEAT_KEY_PROP,
+  entityKind: 'datasets',
   keyAttribute: {
     component: FieldComponentType.DATASET_SELECT,
     label: 'Repeat over dataset',

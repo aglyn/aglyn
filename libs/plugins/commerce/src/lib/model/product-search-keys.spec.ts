@@ -103,6 +103,7 @@ describe('every product write path carries them', () => {
   const HUB =
     'libs/plugins/commerce/src/lib/components/console/products-hub-card.component.tsx'
   const ROUTE = 'apps/console/app/api/hosts/resources/route.ts'
+  const CONFIG = 'plugins.config.json'
 
   it('the editor dialog derives the name rather than assigning it', () => {
     const source = read(DIALOG)
@@ -132,11 +133,22 @@ describe('every product write path carries them', () => {
 
   it('the resources route stores all four', () => {
     // An allow-list, so a key nobody named is silently dropped — a create
-    // would succeed and the product would simply never be findable.
-    const fields = read(ROUTE).slice(
-      read(ROUTE).indexOf('  product: {'),
-      read(ROUTE).indexOf('  product: {') + 2500,
-    )
+    // would succeed and the product would simply never be findable. The
+    // route's list for a product is the kind this plugin declares beside its
+    // collection (AGL-3080), so that declaration is what is read.
+    const config = JSON.parse(read(CONFIG)) as {
+      plugins: Array<{
+        id: string
+        hostCollections?: Array<{ name: string; resource?: { kind: string; fields: string[] } }>
+      }>
+    }
+    const product = config.plugins
+      .find((plugin) => plugin.id === 'commerce')
+      ?.hostCollections?.find((collection) => collection.resource?.kind === 'product')
+    expect(product?.name).toBe('products')
+    // The route resolves undeclared kinds to a refusal, never to a list, so
+    // the route has to be the one reading the declaration for this to hold.
+    expect(read(ROUTE)).toContain('pluginHostResource(key)')
     for (const key of [
       'nameLower',
       'nameTokens',
@@ -146,7 +158,7 @@ describe('every product write path carries them', () => {
       'priceFromCents',
       'soldOut',
     ]) {
-      expect(fields).toContain(`'${key}'`)
+      expect([key, product?.resource?.fields.includes(key)]).toEqual([key, true])
     }
   })
 
@@ -169,7 +181,7 @@ describe('every product write path carries them', () => {
     for (const path of [DIALOG, HUB, ROUTE]) {
       expect(read(path).length).toBeGreaterThan(1000)
     }
-    expect(read(ROUTE)).toContain("collection: 'products'")
+    expect(read(CONFIG)).toContain('"name": "products"')
   })
 })
 

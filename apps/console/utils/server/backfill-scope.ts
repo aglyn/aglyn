@@ -133,14 +133,6 @@ export interface ScopeBackfillTotals {
   mediaFolders: { written: number; skipped: number }
   contacts: { written: number; skipped: number }
   contactSegments: { written: number; skipped: number }
-  /**
-   * Legacy `hosts/{hostId}/datasets` docs seen (AGL-237's pre-migration
-   * fallback). Counted, never touched: those are already site-private by
-   * construction, and whether to migrate them into `orgs/{orgId}/datasets`
-   * with `visibleTo: ['host:{hostId}']` or leave them is a decision that
-   * wants this number in front of it first.
-   */
-  legacyHostDatasets: number
 }
 
 export function emptyTotals(): ScopeBackfillTotals {
@@ -152,7 +144,6 @@ export function emptyTotals(): ScopeBackfillTotals {
     mediaFolders: { written: 0, skipped: 0 },
     contacts: { written: 0, skipped: 0 },
     contactSegments: { written: 0, skipped: 0 },
-    legacyHostDatasets: 0,
   }
 }
 

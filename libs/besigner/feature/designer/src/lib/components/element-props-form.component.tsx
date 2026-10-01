@@ -1091,15 +1091,15 @@ export function resolveAttributeField<T extends Record<string, any>>(
     }
   }
   if (field.component === FieldComponentType.DATASET_FIELD_SELECT) {
-    // Model order, never alphabetized — it mirrors the schema dialog. A
+    // Declared order, never alphabetized — it mirrors the schema dialog. A
     // field naming its own dataset (a Dataset field property) reads that
     // one; every other reads the nearest ancestor's.
-    const datasetId =
+    const boundId =
       typeof field['datasetId'] === 'string' && field['datasetId']
         ? field['datasetId']
         : ancestorDatasetId
-    const modelFields = datasetId
-      ? entityOptions.datasetFields?.[datasetId] ?? []
+    const modelFields = boundId
+      ? entityOptions.entityFields?.datasets?.[boundId] ?? []
       : []
     return {
       ...field,
