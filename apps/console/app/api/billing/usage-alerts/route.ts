@@ -38,10 +38,7 @@ import {
   billsEmailSendOverage,
   pageViewsFromBandwidthGb,
 } from '../../../../utils/usage-metering'
-import {
-  usageAlertApproachPct,
-  usageAlertThreshold,
-} from '../../../../utils/storage-overage'
+import { usageAlertThreshold } from '../../../../utils/storage-overage'
 import {
   formatBandwidthGb,
   formatCount,
@@ -220,10 +217,10 @@ export async function hostsForOrg(
 /**
  * Usage-threshold notifications (AGL-276, wave v5): the in-console
  * quota banner only helps people who are looking — this cron pushes a
- * `billing.usage` notification to org admins when a quota crosses the
- * approach threshold (80% by default, `USAGE_ALERT_APPROACH_PCT`) or 100%
- * — see `utils/storage-overage.ts` for why those two numbers and not
- * others. Each threshold is announced ONCE PER CROSSING, guarded by
+ * `billing.usage` notification to org admins when a quota crosses 75%,
+ * 80%, 90% or 100% of its allowance, sending only the highest step reached —
+ * see `USAGE_ALERT_BANDS` in `utils/storage-overage.ts` for why those four
+ * (AGL-3431). Each threshold is announced ONCE PER CROSSING, guarded by
  * `orgs/{orgId}.usageAlerts` (AGL-3431): a quota the workspace HAS — sites,
  * pages on a site, datasets, stored bytes — is announced when it is reached
  * and not again while it stays there, and re-arms when usage falls back
@@ -279,8 +276,7 @@ async function handler(request: Request): Promise<Response> {
     // bandwidth cap is stamped and read with (AGL-2155). Frozen here rather
     // than recomputed per org so a run straddling midnight UTC on the 1st
     // cannot engage a cap for one month while deduping its alert guards
-    // against another — the same discipline `approachPct` below is read once
-    // for.
+    // against another.
     const month = bandwidthCapMonthKey()
 
     /*==========================================
@@ -759,13 +755,6 @@ async function handler(request: Request): Promise<Response> {
       // `guards` and `guardUpdates` are declared at the TOP of this loop body
       // (AGL-2420) — the seed decision needs the guard map before any check
       // runs, and two declarations of the same map would be two answers.
-      //
-      // Config-driven since AGL-1886, and shared with the specs that pin the
-      // percentages. Read once per org rather than once per check so a single
-      // sweep cannot use two different approach thresholds.
-      const approachPct = usageAlertApproachPct(
-        process.env.USAGE_ALERT_APPROACH_PCT,
-      )
 
       /**
        * The workspace, by name, for the first sentence of every notice
@@ -965,7 +954,7 @@ async function handler(request: Request): Promise<Response> {
           // summed total against `hostLimit × storagePerHostMb`. On a Pro org
           // — three sites, 10 GB each — an org library sitting at its full
           // 10 GB is AT the cap that refuses the next upload and reads as 33%
-          // of the org-wide band. It can never reach 80%, so the alert cannot
+          // of the org-wide band. It can never reach 75%, so the alert cannot
           // fire, on the one surface whose whole job is telling somebody
           // before a limit bites. An alert that cannot fire reads as coverage.
           //
@@ -1283,14 +1272,14 @@ async function handler(request: Request): Promise<Response> {
         // never fire: `measure-node-map.ts` refuses any node map over 900 KB
         // (AGL-678) and the rollup sweep is bounded per host, so the measured
         // total tops out at 2.3–20.9% of `totalSiteSizeMb` depending on plan —
-        // never the 80% this loop alerts at. The measurement itself stays on
+        // never the 75% this loop first alerts at. The measurement stays on
         // the rollup as an internal signal; the dead alert does not.
       ]
 
       for (const check of checks) {
         const limited = check.limit !== UNLIMITED && check.limit > 0
         const threshold = limited
-          ? usageAlertThreshold(check.used, check.limit, approachPct)
+          ? usageAlertThreshold(check.used, check.limit)
           : 0
         // ONCE PER CROSSING (AGL-3431). A quota the workspace HAS is not
         // announced again while it stays at a threshold — a month guard
@@ -1337,7 +1326,7 @@ async function handler(request: Request): Promise<Response> {
                 : check.outcome === 'continues'
                   ? `You've used your included ${check.label}`
                   : `You've reached your ${check.label} limit`))
-            : `You're above ${approachPct}% of your ${check.label} quota`
+            : `You're above ${threshold}% of your ${check.label} quota`
         const alertBody =
           `${await check.lead()} ` +
           (threshold >= 100 ? check.reached : check.approach)

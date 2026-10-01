@@ -21,7 +21,7 @@ import { seoListingFieldCount, seoListingFieldTooLong } from '@aglyn/aglyn/app-u
 import type {
   ConsoleProductCopyValues,
   ConsoleProductEditorZoneProps,
-} from '@aglyn/aglyn/plugin-manager/feature-plugins'
+} from './ai-product-zones'
 import { Alert, Box, Button, Chip, CircularProgress, Link, Stack, Typography } from '@mui/material'
 import { useCallback, useState, type ReactNode } from 'react'
 import {

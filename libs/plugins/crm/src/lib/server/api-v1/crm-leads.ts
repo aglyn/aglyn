@@ -104,7 +104,7 @@ import {
   type ConvertHostLeadInput,
   type ConvertHostLeadRefusal,
   convertHostLead,
-} from '@aglyn/tenant-runtime/convert-host-lead'
+} from '../convert-host-lead'
 import { FieldPath, FieldValue, Timestamp } from 'firebase-admin/firestore'
 import {
   type ApiV1Context,

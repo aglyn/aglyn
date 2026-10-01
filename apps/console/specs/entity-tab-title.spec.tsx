@@ -83,7 +83,7 @@ function setTitle(value: string) {
 
 /** The title the SERVER renders for a screen besigner route. */
 const served = (id = SCREEN_ID) =>
-  `${id} · Screen besigner · demo.aglyn.app · ${PLATFORM_BRAND_NAME}`
+  `${id} · Page besigner · demo.aglyn.app · ${PLATFORM_BRAND_NAME}`
 
 function asWhiteLabel(productName = WHITE_LABEL_NAME) {
   mockBrandingState = {
@@ -123,7 +123,7 @@ describe('the console tab names the open document', () => {
     setDocumentSubject({ id: SCREEN_ID, name: 'Home' })
     await settle()
     expect(document.title).toBe(
-      `Home · Screen besigner · demo.aglyn.app · ${PLATFORM_BRAND_NAME}`,
+      `Home · Page besigner · demo.aglyn.app · ${PLATFORM_BRAND_NAME}`,
     )
     expect(document.title).not.toContain(SCREEN_ID)
   })
@@ -159,7 +159,7 @@ describe('the console tab names the open document', () => {
     setTitle(served())
     await settle()
     expect(document.title).toBe(
-      `Home · Screen besigner · demo.aglyn.app · ${PLATFORM_BRAND_NAME}`,
+      `Home · Page besigner · demo.aglyn.app · ${PLATFORM_BRAND_NAME}`,
     )
   })
 
@@ -199,7 +199,7 @@ describe('the console tab names the open document', () => {
       setDocumentSubject({ id: SCREEN_ID, name: 'Home' })
       await settle()
       expect(document.title).toBe(
-        `(3) Home · Screen besigner · demo.aglyn.app · ${PLATFORM_BRAND_NAME}`,
+        `(3) Home · Page besigner · demo.aglyn.app · ${PLATFORM_BRAND_NAME}`,
       )
     })
 
@@ -221,7 +221,7 @@ describe('the console tab names the open document', () => {
       setDocumentSubject({ id: SCREEN_ID, name: 'Home' })
       await settle()
       expect(document.title).toBe(
-        `(9+) Home · Screen besigner · demo.aglyn.app · ${PLATFORM_BRAND_NAME}`,
+        `(9+) Home · Page besigner · demo.aglyn.app · ${PLATFORM_BRAND_NAME}`,
       )
     })
 
@@ -235,7 +235,7 @@ describe('the console tab names the open document', () => {
       await settle()
       await settle()
       expect(document.title).toBe(
-        `(3) Home · Screen besigner · demo.aglyn.app · ${PLATFORM_BRAND_NAME}`,
+        `(3) Home · Page besigner · demo.aglyn.app · ${PLATFORM_BRAND_NAME}`,
       )
     })
   })
@@ -250,7 +250,7 @@ describe('the console tab names the open document', () => {
       setDocumentSubject({ id: SCREEN_ID, name: 'Home' })
       await settle()
       expect(document.title).toBe(
-        `Home · Screen besigner · demo.aglyn.app · ${WHITE_LABEL_NAME}`,
+        `Home · Page besigner · demo.aglyn.app · ${WHITE_LABEL_NAME}`,
       )
       expect(document.title).not.toContain(PLATFORM_BRAND_NAME)
       expect(document.title).not.toContain(SCREEN_ID)
@@ -261,7 +261,7 @@ describe('the console tab names the open document', () => {
       render(<ConsoleBrandingEffects />)
       await settle()
       expect(document.title).toBe(
-        `${SCREEN_ID} · Screen besigner · demo.aglyn.app · ${WHITE_LABEL_NAME}`,
+        `${SCREEN_ID} · Page besigner · demo.aglyn.app · ${WHITE_LABEL_NAME}`,
       )
     })
 
@@ -275,7 +275,7 @@ describe('the console tab names the open document', () => {
       await settle()
       await settle()
       expect(document.title).toBe(
-        `Home · Screen besigner · demo.aglyn.app · ${PLATFORM_BRAND_NAME} Partners`,
+        `Home · Page besigner · demo.aglyn.app · ${PLATFORM_BRAND_NAME} Partners`,
       )
     })
 

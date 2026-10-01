@@ -45,7 +45,7 @@ registerPluginActivityActions({
 
 describe('activityTypeLabel', () => {
   it('maps known types to human nouns', () => {
-    expect(activityTypeLabel('screen')).toBe('Screen')
+    expect(activityTypeLabel('screen')).toBe('Page')
     expect(activityTypeLabel('org')).toBe('Organization')
     expect(activityTypeLabel('invite')).toBe('Invitation')
   })
@@ -76,7 +76,7 @@ describe('activityTargetLabel', () => {
 
   it('degrades to the type label, NEVER the raw id', () => {
     const label = activityTargetLabel({ type: 'screen', id: 'x7Il1O0abc' })
-    expect(label).toBe('Screen')
+    expect(label).toBe('Page')
     expect(label).not.toContain('x7Il1O0abc')
   })
 })

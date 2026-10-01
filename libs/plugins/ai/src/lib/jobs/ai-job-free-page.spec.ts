@@ -97,7 +97,7 @@ jest.mock('./ai-jobs', () => ({
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { assistCreditsFromUsd } from '@aglyn/aglyn/app-utils/assist-credits'
-import { FREE_AI_TASTE_CREDITS_PER_MONTH } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { FREE_AI_TASTE_CREDITS_PER_MONTH } from '../plan-entitlements'
 import { decodeStoredNodes } from '@aglyn/aglyn/app-utils/stored-nodes'
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
@@ -626,7 +626,7 @@ describe('one Free page fits the Free taste, end to end', () => {
     const reasks = passRequests.filter((request) => request.messages.length > 1)
     expect(reasks).toHaveLength(1)
     expect(String(reasks[0].messages.at(-1)?.content)).toContain(
-      '"Request a Consultation" goes nowhere. Give it the "screenId" of a screen the site has that does what its words say, or an "href" that is a path on this site or an https: address the brief gives. To take a visitor to a section of this page, set "scrollTo" to that section\'s name in the plan: "hero", "practice areas", "how we work" or "consultation request form". When none of these fits, take it out. (nodes ctaButton)',
+      '"Request a Consultation" goes nowhere. Give it the "screenId" of a page the site has that does what its words say, or an "href" that is a path on this site or an https: address the brief gives. To take a visitor to a section of this page, set "scrollTo" to that section\'s name in the plan: "hero", "practice areas", "how we work" or "consultation request form". When none of these fits, take it out. (nodes ctaButton)',
     )
     // Every pass runs, and the last reports the draft.
     expect(outcomes.slice(0, -1).map((outcome) => [outcome.continue, outcome.review])).toEqual(FIXTURE.answers.map(() => [true, undefined]))

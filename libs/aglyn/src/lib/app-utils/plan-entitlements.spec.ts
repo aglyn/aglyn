@@ -40,7 +40,6 @@ import {
   FORM_ABUSE_CEILING_UNLIMITED,
   FORMS_PER_HOST_CEILING,
   ENTERPRISE_EMAIL_SENDS_PER_MONTH,
-  ENTERPRISE_ASSIST_CREDITS_PER_MONTH,
   planMetersInfraOverage,
   isBillingSubscription,
   isCustomPricedPlan,
@@ -103,6 +102,25 @@ registerPluginEntitlements({
   ],
 })
 import type { OrgPlan } from '../foundation'
+
+/*
+ * The plugins' keys this suite reads, as their own `plan-entitlements`
+ * modules declare them (AGL-3080). `PLAN_ENTITLEMENTS` carries them at
+ * runtime — the manifest generator compiles each plugin's figures into it —
+ * but their types live in the plugins, which this library compiles without.
+ */
+declare module '../plugin-manager/plugin-entitlement-keys' {
+  interface PluginEntitlementQuotas {
+    assistCreditsPerMonth?: number
+    crmEmailsPerDay?: number
+    formSubmissionsPerMonth?: number
+    marketplaceFeePct?: number
+    workflowRunsPerMonth?: number
+  }
+  interface PluginEntitlementFeatures {
+    marketplaceSelling?: boolean
+  }
+}
 
 describe('plan entitlements', () => {
   it('resolves missing/unknown plans as free', () => {
@@ -476,13 +494,13 @@ describe('plan entitlements', () => {
         'dataStorageMbPerOrg',
       ]),
     )
-    // The two named constants ARE the doubled figures, finite, and survive
-    // the wire — `JSON.stringify(Infinity)` is `null`, which reads back as a
-    // cap of zero on the most expensive plan on the price list.
-    expect(resolved.assistCreditsPerMonth).toBe(ENTERPRISE_ASSIST_CREDITS_PER_MONTH)
+    // The named constant IS the doubled figure, finite, and survives the
+    // wire — `JSON.stringify(Infinity)` is `null`, which reads back as a cap
+    // of zero on the most expensive plan on the price list. The AI plugin's
+    // suite holds its own named band, `ENTERPRISE_ASSIST_CREDITS_PER_MONTH`,
+    // the same way.
     expect(resolved.emailSendsPerMonth).toBe(ENTERPRISE_EMAIL_SENDS_PER_MONTH)
     expect(ENTERPRISE_EMAIL_SENDS_PER_MONTH).toBe(agency.emailSendsPerMonth * 2)
-    expect(ENTERPRISE_ASSIST_CREDITS_PER_MONTH).toBe(agency.assistCreditsPerMonth * 2)
     expect(resolved.formsPerHost).toBe(FORMS_PER_HOST_CEILING)
     expect(resolved.transactionFeePhysicalPct).toBe(0)
     expect(resolved.transactionFeeDigitalPct).toBe(0)

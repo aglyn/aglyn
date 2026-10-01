@@ -73,7 +73,7 @@ Set the product's Status to **Active** — drafts are invisible to visitors.
 
 ## 3. Design the storefront
 
-Open a screen in the Besigner and add blocks from the **Commerce** group of
+Open a page in the Besigner and add blocks from the **Commerce** group of
 the element picker:
 
 ![The Choose element picker open on the Commerce group with Product grid, Product detail, Cart, and Customer account blocks](/img/guides/commerce-element-picker.png)
@@ -85,7 +85,7 @@ the element picker:
 - **Product detail** — gallery, variant picker, price (with sale badge, trial
   caption, and `/mo`·`/yr` when subscribing), **Add to cart**, and the buy
   button (**Buy now** / **Subscribe**, or the one-time-vs-subscribe toggle for
-  "Both" products). Leave its **Product slug** blank on a template screen so
+  "Both" products). Leave its **Product slug** blank on a template page so
   it follows the URL. The **Product page** preset drops the whole
   commerce-standard page in one go: a `Shop / {{product.name}}` breadcrumb,
   the detail block, a *You may also like* strip, and product reviews.
@@ -133,28 +133,28 @@ categories, sort, and paging already on.
 Two ways to give every category a browsable page:
 
 - **Pinned grid** — set a grid's **Show** to *A category* and pick the
-  category, then place it on its own screen (say `/apparel`). The category is
+  category, then place it on its own page (say `/apparel`). The category is
   stored by id, so renaming it later never breaks the page. With **Category
   chips** on, the pinned category is the initial filter and visitors can
   still hop to a sibling category or back to **All** from the same grid.
-- **Collection template** — design one screen with a Product grid whose
+- **Collection template** — design one page with a Product grid whose
   collection is left blank and set it as the **Collection page template**
-  (store settings): every `/collections/{slug}` URL renders that screen
+  (store settings): every `/collections/{slug}` URL renders that page
   scoped to its collection.
 
-![A storefront screen on the live site showing the product grid with prices and a sale badge](/img/guides/commerce-storefront-grid.png)
+![A storefront page on the live site showing the product grid with prices and a sale badge](/img/guides/commerce-storefront-grid.png)
 
 ### The product page template
 
 Individual product URLs (`/products/{slug}`) render through a **template
-screen**: design a screen containing a **Product detail** block, then set it
+page**: design a page containing a **Product detail** block, then set it
 as the **Product page template** in the Products hub's **Settings** tab (store
-settings). The server composes that screen per product — `{{product.name}}`,
+settings). The server composes that page per product — `{{product.name}}`,
 `{{product.price}}`, and friends resolve, and product SEO/structured data is
 injected. Without a template, product URLs 404. A sibling **Collection page
 template** does the same for `/collections/{slug}`.
 
-![A live product page rendered through the template screen: gallery, variant picker, one-time vs subscribe toggle, and Add to cart](/img/guides/commerce-product-detail.png)
+![A live product page rendered through the template page: gallery, variant picker, one-time vs subscribe toggle, and Add to cart](/img/guides/commerce-product-detail.png)
 
 ## 4. What checkout does
 
@@ -211,7 +211,7 @@ The **Products** hub's **Orders** tab lists every sale, newest first. Its
 **Search** finds an order by the start of a word in its number, the buyer's
 email or an item's name, and **Filters** narrows it by order number, product,
 date, status, channel, customer and dispute — across every order in the store,
-not only the page on screen (see [The Orders screen](../commerce-and-bookings/commerce/overview.md#orders-screen)
+not only the page on screen (see [The Orders page](../commerce-and-bookings/commerce/overview.md#orders-screen)
 for what combines). Beside it sit **Export CSV** and **Draft order** (build an
 order by hand and send a payment link).
 

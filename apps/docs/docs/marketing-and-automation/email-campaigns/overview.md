@@ -57,7 +57,7 @@ campaign can coordinate a push across every site you run, the sequences your rep
 and the leads they produce.
 
 - **Which sites it runs on.** A campaign is placed on **every site** or on the sites you
-  choose. It is offered in a site's pickers — on its forms, screens and automations —
+  choose. It is offered in a site's pickers — on its forms, pages and automations —
   only where it is placed, and a collaborator invited to one site sees only the campaigns
   placed there. A campaign created from a site's own **Marketing** page starts on that
   site; one created from the organization's starts on every site, and you can change
@@ -174,7 +174,7 @@ coordinated push rather than a folder of emails.
 
 You set it from the record itself, never from the campaign:
 
-- **A screen** — open it from Screens and pick its campaigns on the **Campaigns** card.
+- **A page** — open it from Pages and pick its campaigns on the **Campaigns** card.
 - **A form** — open it from Forms and pick its campaigns under **Details**.
 - **A contact** — open the contact under **CRM → Contacts** and pick its campaigns on
   the **Relationship** card of [their page](../../content-and-data/crm/contact-record.md#the-record-page).
@@ -190,10 +190,10 @@ Each of them can be in **more than one campaign**, because the same landing page
 same signup form are usually re-run for the next push. Clearing every campaign takes the
 record out of all of them; nothing else about it changes.
 
-The campaign's own page then lists the screens and forms assigned to it, so you can see
+The campaign's own page then lists the pages and forms assigned to it, so you can see
 the association from either end. Each is its own table, a page at a time, and a deleted
-screen is never one of its rows. **Search** above each table matches the start of a
-screen's or form's name (`spr` finds *Spring landing page*), and while it applies the table
+page is never one of its rows. **Search** above each table matches the start of a
+page's or form's name (`spr` finds *Spring landing page*), and while it applies the table
 is in name order; the tables have no **Filters** panel. The search is answered by the
 table's query, so a match on a later page is found. **What these forms hold** adds up the
 counters of up to 25 of the campaign's forms and says so when it holds more; the table
@@ -216,7 +216,7 @@ they never add anybody to a send. A sequence's are the exception in one directio
 what the sequence produces is counted on the campaign, because the sequence's emails
 are the campaign's outreach.
 
-**Deleting a campaign** clears it off everything assigned to it. The screens, forms,
+**Deleting a campaign** clears it off everything assigned to it. The pages, forms,
 contacts, leads, sequences and their enrollments stay exactly where they are, minus that
 one campaign; nothing is deleted with the campaign except the campaign.
 
@@ -812,7 +812,7 @@ Four things worth knowing:
 
 ## Experiments
 
-Business plans can A/B test screens, sections, and emails from the **Experiments** card
+Business plans can A/B test pages, sections, and emails from the **Experiments** card
 on the Marketing page: weighted variants, deterministic visitor assignment, a conversion
 goal, and per-variant exposure/conversion rates with a pick-the-winner flow.
 
@@ -825,7 +825,7 @@ Two ways to finish a test without watching it:
   confidently loses to the control), the experiment completes itself and serves the
   winner. Auto-completed tests carry a chip in the results dialog.
 
-- **Screens & sections** — variants pin a screen *version*; visitors are split
+- **Pages & sections** — variants pin a page *version*; visitors are split
   deterministically and the winning version serves to everyone once you pick it.
   Start a section test straight from the Besigner's Interactions panel.
 - **Emails** — variants override the campaign's subject and/or body. Attach a running
@@ -834,7 +834,7 @@ Two ways to finish a test without watching it:
   winner is picked every later send uses the winning copy.
 
 The Experiments table filters through its toolbar by **Experiment** (a name
-that contains a word, or is exactly a name in either case), **Tests** (screen, section or
+that contains a word, or is exactly a name in either case), **Tests** (page, section or
 email) and **Status** (draft, running, paused or done; one or several of
 each). **Search** finds an experiment by the start of any word in its name:
 `cop` finds *Hero copy*. Every filter and the search are answered by the
@@ -845,7 +845,7 @@ a notice above the table says which was set aside.
 See [Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
 
 **Start** checks every experiment on the site, not only the page on screen,
-and refuses a second test running on the same screen: the page runner serves
+and refuses a second test running on the same page: the page runner serves
 only the first.
 
 ### Across your organization's sites {#experiments-across-sites}

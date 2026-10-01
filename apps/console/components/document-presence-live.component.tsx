@@ -67,7 +67,8 @@ export function DocumentPresenceLive({
   size = 24,
 }: {
   hostId: string | undefined
-  docType: 'screen' | 'layout' | 'component' | 'template' | 'email' | 'form'
+  /** A platform document kind, or a plugin document's declared `kind`. */
+  docType: string
   docId: string | undefined
   /**
    * The version this page is ABOUT — the one its open action would take you

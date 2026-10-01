@@ -71,18 +71,17 @@ const TEXT_SHAPED_TYPES: ReadonlySet<string> = new Set([
 
 /**
  * What one placement of the properties' owner is called in copy: a page for a
- * component, a screen for a layout, an email for an email block (AGL-3287).
+ * component or a layout, an email for an email block (AGL-3287).
  */
-type PlacementNoun = 'page' | 'screen' | 'email'
+type PlacementNoun = 'page' | 'email'
 
 /** The plural, sentence-initial form of each placement. */
 const PLACES: Record<PlacementNoun, string> = {
   page: 'Pages',
-  screen: 'Screens',
   email: 'Emails',
 }
 
-/** "a page", "a screen", "an email". */
+/** "a page", "an email". */
 const withArticle = (place: PlacementNoun): string =>
   `${place === 'email' ? 'an' : 'a'} ${place}`
 
@@ -1195,7 +1194,7 @@ const PropertyRow = memo(function PropertyRow(props: PropertyRowProps) {
           size="small"
           value={prop.label ?? ''}
           helperText={
-            noun === 'layout' ? 'Shown in Screen Properties' : 'Shown in Attributes'
+            noun === 'layout' ? 'Shown in Page Properties' : 'Shown in Attributes'
           }
           onChange={setLabel}
           sx={FILL}
@@ -1291,8 +1290,7 @@ export interface ComponentPropsDialogProps {
  */
 export function ComponentPropsDialog(props: ComponentPropsDialogProps) {
   const { open, value, onClose, onSave, noun = 'component', emailBlock } = props
-  const place: PlacementNoun =
-    noun === 'layout' ? 'screen' : emailBlock ? 'email' : 'page'
+  const place: PlacementNoun = emailBlock ? 'email' : 'page'
   const [draft, setDraft] = useState<Aglyn.ReusableComponentProp[]>([])
   const [saving, setSaving] = useState(false)
   // A key per row that survives renames and reordering, so each row's own
@@ -1375,7 +1373,7 @@ export function ComponentPropsDialog(props: ComponentPropsDialogProps) {
   }
 
   const owner = noun === 'layout' ? 'layout' : 'component'
-  const placement = noun === 'layout' ? 'screen that uses it' : 'place you use it'
+  const placement = noun === 'layout' ? 'page that uses it' : 'place you use it'
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
@@ -1389,7 +1387,7 @@ export function ComponentPropsDialog(props: ComponentPropsDialogProps) {
           <code>{'{{prop.headline}}'}</code>
           {` — anywhere inside this ${owner}, or bind a field to it with its {} button. `}
           {noun === 'layout'
-            ? `Each ${placement} sets its own values under Screen Properties.`
+            ? `Each ${placement} sets its own values under Page Properties.`
             : `Each ${placement} gets its own fields in the Attributes panel.`}
         </Typography>
 

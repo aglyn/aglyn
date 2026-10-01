@@ -411,7 +411,7 @@ import { PLAN_ENTITLEMENTS } from '@aglyn/aglyn/server'
 const FREE_BAND_VIEWS = Math.round(
   pageViewsFromBandwidthGb(PLAN_ENTITLEMENTS.free.bandwidthGb),
 )
-/** Comfortably past 80% of the band and comfortably under 100%. */
+/** 90% of the band: the 90 step, comfortably under 100%. */
 const APPROACHING = Math.round(FREE_BAND_VIEWS * 0.9)
 /** Past the band. */
 const OVER = Math.round(FREE_BAND_VIEWS * 1.2)
@@ -459,7 +459,6 @@ const guardsOf = (orgId: string) =>
 
 beforeEach(() => {
   process.env.CRON_SECRET = CRON_SECRET
-  delete process.env.USAGE_ALERT_APPROACH_PCT
   delete process.env.AUTO_LOCK_BILLING_FROM
   jest.clearAllMocks()
   orgStore = {}
@@ -483,11 +482,11 @@ describe('the sweep REACHES a never-subscribed org at all (AGL-2420)', () => {
     const response = await run()
 
     // One site against `hostLimit: 1` is 100% of the band; 90% of the
-    // bandwidth band is the approach threshold. Both are real states this
+    // bandwidth band is the 90 step (AGL-3431). Both are real states this
     // customer is in, and before the fix nothing here had ever looked.
     expect(guardsOf('org-organic')).toEqual({
       hosts: { month: MONTH, threshold: 100 },
-      bandwidth: { month: MONTH, threshold: 80 },
+      bandwidth: { month: MONTH, threshold: 90 },
     })
     await expect(response.json()).resolves.toMatchObject({ seeded: 2 })
   })
@@ -519,7 +518,7 @@ describe('the first pass BACKFILLS instead of firing (AGL-2420)', () => {
 
   it('MAILS on the NEXT threshold the org actually crosses', async () => {
     // The other half, and the reason this is a backfill and not a mute. The
-    // guard seeded above says "80% already announced"; crossing 100% is new
+    // guard seeded above says "90% already announced"; crossing 100% is new
     // information and must arrive.
     orgStore = neverSubscribedOrg()
     mockHosts = [

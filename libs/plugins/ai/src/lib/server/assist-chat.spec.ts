@@ -877,7 +877,7 @@ describe('the gate ladder — every guard forced red once', () => {
  */
 describe('a docs-answerable question costs nothing', () => {
   /** In the docs index, and measured as deflected — see the deflection spec. */
-  const DOCS_QUESTION = 'How do I publish my first screen?'
+  const DOCS_QUESTION = 'How do I publish my first page?'
 
   const docsBody = (orgId: string) => ({
     ...QUESTION_BODY(orgId),
@@ -1106,7 +1106,7 @@ describe('with no key at all, a question still gets the closest pages', () => {
     const first = await POST(
       post({
         ...QUESTION_BODY(FREE_ORG),
-        question: 'How do I publish my first screen?',
+        question: 'How do I publish my first page?',
       }),
     )
     expect(first.status).toBe(200)
@@ -1117,7 +1117,7 @@ describe('with no key at all, a question still gets the closest pages', () => {
         ...QUESTION_BODY(FREE_ORG),
         question: 'how do I add an element to my page',
         history: [
-          { role: 'user', text: 'how do I publish my first screen' },
+          { role: 'user', text: 'how do I publish my first page' },
           { role: 'assistant', text: 'open the screen and press Publish' },
         ],
       }),
@@ -1483,7 +1483,7 @@ describe('the green path', () => {
     expect(system).toContain('/acme/hosts/host-1/screens')
     // Not merely "here is a path" — the registry resolved it to a screen,
     // with both disclosure layers and the closed action set.
-    expect(system).toContain('This screen: Screens')
+    expect(system).toContain('This console page: Pages')
     expect(system).toContain('What the user can do here:')
     expect(system).toContain('Under the hood')
     expect(system).toContain('id "open.host.screens"')
@@ -1558,7 +1558,7 @@ describe('the green path', () => {
     expect(system).toHaveLength(5)
     expect(system[0].cache_control).toEqual({ type: 'ephemeral' })
     expect(system[1].cache_control).toEqual({ type: 'ephemeral' })
-    expect(system[1].text).toContain('This screen: Screens')
+    expect(system[1].text).toContain('This console page: Pages')
     // GUARD: the cached prefix names no workspace. Fold the org in here and
     // the entry stops being shareable — the symptom is a cache that mostly
     // writes, which costs more than not caching at all.
@@ -1706,7 +1706,7 @@ describe('the green path', () => {
     // carrying anything that could act on its own.
     seedOrgs()
     armUpstreamText([
-      'Open Screens and pick the page you want.',
+      'Open Pages and pick the page you want.',
       '\n\n```aglyn:action\n{"id":"open.host',
       '.screens"}\n```',
     ])
@@ -1716,7 +1716,7 @@ describe('the green path', () => {
       .filter((event) => event.type === 'delta')
       .map((event) => String(event.text))
       .join('')
-    expect(text).toBe('Open Screens and pick the page you want.\n\n')
+    expect(text).toBe('Open Pages and pick the page you want.\n\n')
     expect(text).not.toContain('aglyn:action')
     expect(text).not.toContain('open.host.screens')
 
@@ -1774,7 +1774,7 @@ describe('the green path', () => {
   it('GUARD: a free workspace gets no proposal even if the model emits one', async () => {
     seedOrgs()
     armUpstreamText([
-      'Open Screens.',
+      'Open Pages.',
       '\n```aglyn:action\n{"id":"open.host.screens"}\n```',
     ])
     const response = await POST(post(QUESTION_BODY(FREE_ORG)))

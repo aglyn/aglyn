@@ -274,6 +274,10 @@ jest.mock('./campaign-reach-sections', () => ({
 
 import CampaignDetailCard from './campaign-detail-card'
 import { MarketingOrgMountProvider } from './marketing-org-mount'
+import { standInEmailsPageRoutes } from '../testing/stand-in-emails-page-routes'
+
+// The Emails page this campaign links into is the email plugin's (AGL-3080).
+standInEmailsPageRoutes()
 
 beforeEach(() => {
   containers = {

@@ -66,19 +66,21 @@ import { useHostSubdomain } from './host-id-provider'
 export interface ReusableComponentsProviderProps {
   hostId: string
   /**
-   * The form this canvas IS, when it is a form's own besigner.
+   * The plugin document this canvas IS, when it is that document's own
+   * besigner: its declared `kind` and its id.
    *
-   * Its published design is withheld from the graft below, and the reason is
-   * structural rather than a preference: `checkFormContract` requires a form
-   * design's `form` node to name the form it is the design of, so the document
-   * open in a form editor always places itself. Grafting there would paint the
-   * last PUBLISHED version over the draft being edited — the author's unsaved
-   * fields would vanish behind the copy they are trying to replace.
+   * A placed form's published design is withheld from the graft below when
+   * the canvas is that form, and the reason is structural rather than a
+   * preference: `checkFormContract` requires a form design's `form` node to
+   * name the form it is the design of, so the document open in a form editor
+   * always places itself. Grafting there would paint the last PUBLISHED
+   * version over the draft being edited — the author's unsaved fields would
+   * vanish behind the copy they are trying to replace.
    *
-   * Only forms need this. A component definition cannot instance itself; the
-   * editor refuses the reference and the graft bounds it anyway.
+   * Only placed forms need this. A component definition cannot instance
+   * itself; the editor refuses the reference and the graft bounds it anyway.
    */
-  editingFormId?: string
+  editingDocument?: { kind: string; id: string }
   /**
    * Whether this canvas offers Save as reusable component. On by default.
    *
@@ -104,7 +106,11 @@ export interface ReusableComponentsProviderProps {
 export function ReusableComponentsProvider(
   props: ReusableComponentsProviderProps,
 ) {
-  const { hostId, editingFormId, allowPromote = true, children } = props
+  const { hostId, editingDocument, allowPromote = true, children } = props
+  // The placed-form designs are keyed by form id, so only a form's own
+  // editor has an id to withhold from them.
+  const editingFormId =
+    editingDocument?.kind === 'form' ? editingDocument.id : undefined
   const firestore = useFirestore()
   const createHostResource = useHostResourceApi()
   const { enqueueSnackbar } = useSnackbar()

@@ -276,7 +276,7 @@ describe('QuotaWarningsBanner datasets row (AGL-2773)', () => {
     // a rendered banner proves the datasets row was measured, not skipped.
     mockCountFor['hosts/host-1/screens'] = 3
     render(<QuotaWarningsBanner />)
-    const banner = await screen.findByText(/screens/)
+    const banner = await screen.findByText(/pages limit/)
     expect(banner.textContent).not.toMatch(/datasets/)
   })
 
@@ -293,7 +293,7 @@ describe('QuotaWarningsBanner actions for a scoped viewer (AGL-1072)', () => {
     scope.loaded = true
     scope.orgWide = true
     render(<QuotaWarningsBanner />)
-    await screen.findByText(/reached your screens limit/)
+    await screen.findByText(/reached your pages limit/)
     expect(billingLinks()).toHaveLength(1)
     expect(billingLinks()[0].textContent).toBe('Upgrade')
   })
@@ -311,7 +311,7 @@ describe('QuotaWarningsBanner actions for a scoped viewer (AGL-1072)', () => {
     // whereas the collaborator wording would spend that render telling the
     // owner to go ask an admin — themselves.
     render(<QuotaWarningsBanner />)
-    await screen.findByText(/reached your screens limit/)
+    await screen.findByText(/reached your pages limit/)
     expect(billingLinks()).toEqual([])
   })
 
@@ -427,7 +427,7 @@ describe('QuotaWarningsBanner off an org-scoped route (AGL-1916)', () => {
     scope.loaded = true
     scope.orgWide = true
     render(<QuotaWarningsBanner />)
-    await screen.findByText(/reached your screens limit/)
+    await screen.findByText(/reached your pages limit/)
   })
 
   it('renders on an org route with a breached quota (the paired positive)', async () => {
@@ -436,7 +436,7 @@ describe('QuotaWarningsBanner off an org-scoped route (AGL-1916)', () => {
     scope.loaded = true
     scope.orgWide = true
     render(<QuotaWarningsBanner />)
-    await screen.findByText(/reached your screens limit/)
+    await screen.findByText(/reached your pages limit/)
     expect(countedPaths).toContain('hosts/host-1/screens')
     await waitFor(() =>
       expect(seatFetches.join('\n')).toContain('/api/orgs/members?orgId=org-1'),
@@ -666,7 +666,7 @@ describe('QuotaWarningsBanner AI credits row (AGL-2898)', () => {
     mockCountFor['hosts/host-1/screens'] = 3
     answerCredits({ used: 2_800, limit: 2_750 })
     render(<QuotaWarningsBanner />)
-    await screen.findByText(/reached your screens limit/)
+    await screen.findByText(/reached your pages limit/)
     await screen.findByText(/used your included AI assist credits/)
   })
 

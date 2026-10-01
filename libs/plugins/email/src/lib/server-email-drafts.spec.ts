@@ -272,7 +272,7 @@ describe('the email design writer', () => {
     expect(await writer.write(request({ id: 'page-1' }))).toEqual({
       ok: false,
       status: 409,
-      error: 'That id already names a screen that is not an email design',
+      error: 'That id is already used by something other than an email design',
     })
     expect(await writer.read({ hostId: 'host-1', id: 'page-1' })).toBeNull()
   })
@@ -299,11 +299,11 @@ describe('the email design writer', () => {
     })
     expect(await writer.write(request())).toEqual({ ok: false, status: 403, error: EMAIL_DESIGN_LIMIT_REFUSAL })
     expect(EMAIL_DESIGN_LIMIT_REFUSAL).toBe(
-      'This site is at its limit of 3 email and template screens — delete some to make room',
+      'This site is at its limit of 3 email designs and template pages — delete some to make room',
     )
     const route = readFileSync(join(REPO_ROOT, 'apps/console/app/api/hosts/resources/route.ts'), 'utf8')
     expect(route).toContain("'Editing requires the editor role'")
-    expect(route).toContain('email and template screens — ')
+    expect(route).toContain('email designs and template pages — ')
     expect(route).toContain("'delete some to make room'")
   })
 

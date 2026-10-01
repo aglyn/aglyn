@@ -390,3 +390,7 @@ export { mintDownloadToken } from './server/download'
 // Site-member session primitives, shared with the (still app-side)
 // membership/* routes until those migrate too (AGL-396).
 export * from './server/membership'
+
+// Type-only (AGL-3080): the plugin's entitlement keys, declared by module
+// augmentation, for every program that loads this entry point.
+export type { commercePlanEntitlements } from './plan-entitlements'

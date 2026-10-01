@@ -17,6 +17,7 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import { pluginRecordRoute } from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
+import { pluginZone } from '@aglyn/aglyn/plugin-manager/plugin-zones'
 import { BUNDLE_ID } from './constants/bundle-common'
 import {
   COMMERCE_BUNDLE,
@@ -149,5 +150,22 @@ describe('where a product is read (AGL-3080)', () => {
     )
     expect(route?.list({ orgSlug: 'acme', host: null })).toBeNull()
     expect(route?.record({ orgSlug: 'acme', host: null }, 'prod-1')).toBeNull()
+  })
+})
+
+describe('the zones its product surfaces host (AGL-2916, AGL-3080)', () => {
+  it('declares each under the id widgets register for, owned here and laid out bare', () => {
+    registerCommerceConsole()
+    for (const id of ['productEditor', 'productsHub', 'productImport']) {
+      const zone = pluginZone(id)
+      // A section among fields, above a table, inside a dialog: the page
+      // spaces it, so a wrapper would add a gap it already has.
+      expect(`${id}: ${zone?.pluginId} ${zone?.layout} ${zone?.surface}`).toBe(
+        `${id}: ${BUNDLE_ID} bare console`,
+      )
+    }
+    // The shell's catalog no longer names them: the plugin that draws them
+    // says what they are.
+    expect(Object.values(Aglyn.CONSOLE_WIDGET_SLOTS)).not.toContain('productEditor')
   })
 })

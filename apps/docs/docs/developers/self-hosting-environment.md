@@ -226,7 +226,7 @@ What this protects:
   password-reset mailbombing, identifier resolution, storefront member login and
   member recovery.
 - **Provisioning throttles** — organization creation (the bot-farm control), site
-  creation, screen-password unlock, form submission, newsletter signup, booking
+  creation, page-password unlock, form submission, newsletter signup, booking
   creation, visitor plugin writes, the pre-auth REST budget.
 - **Unauthenticated beacons** — the console and tenant error collectors, CSP
   reports, attribution, analytics collection.
@@ -589,7 +589,7 @@ configured), `webhook` when only `AGLYN_MAIL_WEBHOOK_URL` is, and otherwise
 `resend`, unconfigured, so every send is skipped with a log line naming
 `RESEND_API_KEY`. A value that names no built-in and no registered provider is
 **refused, not replaced**: every send is skipped with an error naming the
-value, and the staff email-health screen shows it as a blocker. Falling back to
+value, and the staff email-health page shows it as a blocker. Falling back to
 another provider would hand your recipients and message bodies to a vendor you
 did not choose because a name was misspelled.
 
@@ -665,7 +665,6 @@ forced-failure lever for proving the alert path works.
 | `APP_CHECK_ATTESTATION_ENABLED` | unset | Set to exactly `1` to have `/api/health/journeys` report `appCheckAttestation` — the share of App Check verifications that were ALLOWED for **real visitors**, sampled hourly from Cloud Monitoring by `tools/e2e/appcheck-attestation.mjs`. Reds when attestation collapses, which is the `recaptcha-allowlist` failure where an origin that is attached and routed but not allowlisted renders a console nobody can sign in to. Left unset the check is absent from the body rather than green, because green would claim a measurement nobody took. Deliberately independent of `SIGNUP_CANARY_ENABLED`: this is what covers the canary's debug-token blindness, so it must not go dark with it. |
 | `EDGE_ADMISSION_ENABLED` | unset | Set to exactly `1` to have `/api/health/journeys` report `edgeAdmission` — how long since the metered page-view total last GREW, sampled by `tools/e2e/edge-admission.mjs`. This is the only check that can see the edge refusing real visitors: every other one carries the `x-aglyn-probe` bypass and would ride past a firewall that had started challenging everybody. It grades an OUTCOME rather than a probe, because a probe cannot answer the question — a non-JS client is challenged from a home connection too, and that is the healthy state. Left unset the check is absent from the body rather than green. |
 | `VERIFICATION_DELIVERY_MIN_ACCOUNTS` | `3` | Accounts created in the trailing day — password signups only, ignoring the last 15 minutes so the delivery feed has time — below which a missing verification delivery event is treated as too little data rather than an outage. Its forced-failure lever is `0`, like the drought check's: at zero any window is graded, so a quiet one reports red. The arm is skipped entirely when `RESEND_WEBHOOK_SECRET` is unset, because nothing records deliveries then. |
-| `USAGE_ALERT_APPROACH_PCT` | `80` | How close to a plan quota a workspace gets before it is warned. Strictly between 0 and 100; you cannot disable the warning with it. The at-cap alert is fixed at 100. |
 
 ### Sequences: a rep's own Google mailbox {#sequences}
 
@@ -779,7 +778,7 @@ your own.
 | Variable | Need | When | Value |
 | --- | --- | --- | --- |
 | `NEXT_PUBLIC_ADS_CONVERSION_ID` | Aglyn-only / your own | Build | Google Ads conversion id, `AW-` plus digits. Google Ads → **Goals** → *Conversions* → the tag's id. |
-| `NEXT_PUBLIC_ADS_SIGNUP_LABEL` | Aglyn-only / your own | Build | The opaque conversion **label** for the signup action, from the same screen. Fires only when the id is also set. |
+| `NEXT_PUBLIC_ADS_SIGNUP_LABEL` | Aglyn-only / your own | Build | The opaque conversion **label** for the signup action, from the same page. Fires only when the id is also set. |
 | `NEXT_PUBLIC_ADS_SUBSCRIBE_LABEL` | Aglyn-only / your own | Build | The conversion label for the subscribe action. |
 | `NEXT_PUBLIC_META_PIXEL_ID` | Aglyn-only / your own | Build | Meta (Facebook/Instagram) Pixel id — digits only. Loads the pixel **in the console**, and only for a visitor whose recorded consent grants the advertising category. Blank loads nothing. |
 | `NEXT_PUBLIC_LINKEDIN_PARTNER_ID` | Aglyn-only / your own | Build | LinkedIn Insight Tag partner id — digits only, from LinkedIn Campaign Manager → **Analytics** → *Insight Tag*. Same consent gate as the pixel above. Blank loads nothing. |
@@ -1225,7 +1224,7 @@ which is what makes it worth knowing.
 
 Several endpoints send `s-maxage` with little or no browser `max-age`, on the
 assumption that a shared cache honors it — the per-host manifest and `robots.txt`
-at 5 minutes to an hour, sitemaps and feeds at 5 minutes, screen-node and
+at 5 minutes to an hour, sitemaps and feeds at 5 minutes, page-node and
 commerce endpoints at 60–300 seconds. Behind a proxy that caches nothing they are
 simply recomputed per request: correct, slower, and several of them hit Firestore
 each time.

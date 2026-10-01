@@ -79,7 +79,8 @@ export function registerEventsCalendarPlugin(): void {
 ```
 
 :::warning Component and bundle ids are persisted
-`componentId` and `pluginId` are stored in screen documents. Never rename
+`componentId` and `pluginId` are stored in page documents (the `screens`
+collection). Never rename
 them — when a component moves between bundles, keep the old ids resolving
 (the mui plugin's legacy-id aliases are the precedent).
 :::
@@ -447,7 +448,7 @@ inside functions, never at module scope.
 Some handlers need tenant runtime that no single plugin owns — the host-event
 fan-out (`emitHostEvent`, `dispatchHostAutomation`, and the listener registry
 `registerHostEventListener` that a plugin joins from its `serverDeclarations`
-entry) and the server-side screen-composition read-path (`getScreen`,
+entry) and the server-side page-composition read-path (`getScreen`,
 `composeScreenNodes`, and the `get-*` loaders behind it). The runtime raises
 events and runs none of what they trigger: the automation engine is the
 Workflows plugin's listener. An event can carry who caused it beside its
@@ -546,11 +547,12 @@ Conventions the scaffold already applies:
   pages), so the app media dialog never leaves the console app.
 - **Automation** (`libs/plugins/workflows`) — console-only (AGL-395): the
   workflow builder, actions builder, and webhooks tabs, plus the shared
-  `HostActivityCard` (exported for the app dashboard + screen-view). Each tab
+  `HostActivityCard` (exported for the app dashboard and a page's detail view). Each tab
   gates on its own plan flag (workflows / actions / webhooks), so all three
-  read the passed `org` rather than a single `entitled`. Depends on
-  `@aglyn/plugins-logic` for the where-used tooling — the first plugin→plugin
-  dependency.
+  read the passed `org` rather than a single `entitled`. Asks the
+  platform's where-used scan what a workflow computes; the logic plugin
+  answers it through its dependents source and draws the dialog in the
+  `workflowUsage` zone, so neither plugin imports the other.
 - **Data** (`libs/plugins/data`) — console-only, and dual-surfaced (AGL-395):
   the datasets editor is served both as the host `/data` plugin page and,
   because datasets are org-scoped, imported directly by the org `/org/data`
@@ -558,7 +560,7 @@ Conventions the scaffold already applies:
   its entitlement/quota checks. `useHostActivityLogger` was promoted to
   `@aglyn/tenant-feature-instance` for the move.
 - **Email** (`libs/plugins/email`) — full console relocation (AGL-395): the
-  campaigns composer, audience lists, and a dedicated email-screens list moved
+  campaigns composer, audience lists, and a dedicated list of designed emails moved
   into the plugin and surface as the **Emails** page; the Besigner offers only
   email-safe blocks when editing an email document.
 - **Commerce** (`libs/plugins/commerce`) — full console relocation (AGL-395):

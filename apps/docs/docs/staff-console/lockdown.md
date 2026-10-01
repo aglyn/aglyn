@@ -991,15 +991,15 @@ A new route fails that spec by existing until someone decides which it is:
 
 **What a full lock stops on the tenant API, that it did not before:**
 
-- `POST /api/protection/unlock` — a password-protected screen's node tree. It
+- `POST /api/protection/unlock` — a password-protected page's node tree. It
   verified the password and returned the composed page while the site around it
   was 503ing. It now answers the same 423 a paused write gets, after the
-  brute-force counter and before the screen read. Read-only locks are
+  brute-force counter and before the page read. Read-only locks are
   unaffected: a site that is still serving still unlocks.
 - `GET /api/screen/not-found` — the host's *designed* 404 body. The loader
   behind it was a second entry point that never resolved a verdict, so a locked
   site kept handing out its own header, footer and nav to anyone hitting a
-  missing URL. It now falls back to the platform status screen.
+  missing URL. It now falls back to the platform status page.
 
 **What a full lock still does NOT stop, and it is deliberate that you can read
 the list rather than discover it:** `collections-rss`, `sitemap`, `robots`,
@@ -1825,7 +1825,7 @@ The set, as it stands:
    cookie.
 2. **The console shell renders.** `PlatformLockdownGate` is platform-scope only
    (`/api/lockdown-status` reports nothing about an org), so an org lock does not
-   replace the app with the notice screen.
+   replace the app with the notice page.
 3. **The reads succeed.** `orgNotSuspended()` in the Firestore rules gates
    **writes**. The org doc is `isOrgMember()`-readable and `billing/stripe` is
    `canManageOrg()`-readable, neither conditioned on suspension.

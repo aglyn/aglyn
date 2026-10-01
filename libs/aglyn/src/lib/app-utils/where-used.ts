@@ -21,17 +21,22 @@ import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
  * The client of the console's where-used scan (`/api/hosts/where-used`).
  *
  * The scan is the platform's: one route answers what references a variable, a
- * function or a workflow across a site's published screens, layouts, workflows
- * and variables. Its client sat in the logic plugin, so the workflows plugin
- * imported logic to ask about a workflow. It is here beside the route it
- * calls, and both ask the platform.
+ * function or a workflow across a site's published screens and layouts, and
+ * asks the plugins whose records refer to it (`plugin-dependents`) for the
+ * rest. Its client sat in the logic plugin, so the workflows plugin imported
+ * logic to ask about a workflow. It is here beside the route it calls, and
+ * both ask the platform.
  *
  * Imported by its own subpath; it is not in the barrel, so a page that never
  * asks does not carry it.
  */
 
 export interface WhereUsedDependent {
-  type: 'screen' | 'layout' | 'workflow' | 'variable'
+  /**
+   * `screen` or `layout` for a published page; otherwise the kind of record
+   * the plugin that answered names (`variable`, `workflow`).
+   */
+  type: string
   id: string
   name: string
   via: Array<'id' | 'name'>
@@ -46,18 +51,12 @@ export interface WhereUsedResult {
   legacyCount: number
 }
 
-const DEPENDENT_TYPE_LABELS: Record<WhereUsedDependent['type'], string> = {
-  screen: 'screen',
-  layout: 'layout',
-  workflow: 'workflow',
-  variable: 'variable',
-}
-
-/** One-line summary for confirm dialogs: `2 screens, 1 workflow`. */
+/** One-line summary for confirm dialogs: `2 pages, 1 workflow`. */
 export function summarizeDependents(result: WhereUsedResult): string {
   const counts = new Map<string, number>()
   for (const dependent of result.dependents) {
-    const label = DEPENDENT_TYPE_LABELS[dependent.type]
+    // A `screen` is called a page wherever a person reads it.
+    const label = dependent.type === 'screen' ? 'page' : dependent.type
     counts.set(label, (counts.get(label) ?? 0) + 1)
   }
   return [...counts.entries()]

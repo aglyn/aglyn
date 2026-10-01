@@ -302,7 +302,7 @@ describe('a screen', () => {
     expect(result).toEqual({
       ok: false,
       status: 403,
-      error: 'Your plan includes 1 screens — upgrade in Billing for more',
+      error: 'Your plan includes 1 page — upgrade in Billing for more',
     })
     expect(rowsIn(`hosts/${HOST}/screens`)).toHaveLength(1)
     expect(hostRows()).toHaveLength(0)
@@ -315,7 +315,7 @@ describe('a screen', () => {
       expect(await run('screen', { sourceId })).toEqual({
         ok: false,
         status: 400,
-        error: 'Only a page or a collection entry template can be duplicated as a screen',
+        error: 'Only a page or a collection entry template can be duplicated as a page',
       })
     }
     expect(rowsIn(`hosts/${HOST}/screens`)).toHaveLength(3)
@@ -372,8 +372,8 @@ const NON_PAGE_CEILING_REFUSAL = {
   ok: false,
   status: 403,
   error:
-    `This site is at its limit of ${NON_PAGE_SCREEN_MAX_PER_HOST} email and ` +
-    'template screens — delete some to make room',
+    `This site is at its limit of ${NON_PAGE_SCREEN_MAX_PER_HOST} email designs and ` +
+    'template pages — delete some to make room',
 }
 
 /** `count` live email designs, the commonest non-page screen. */

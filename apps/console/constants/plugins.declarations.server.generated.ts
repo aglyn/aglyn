@@ -23,6 +23,7 @@ export function registerPluginServerDeclarations(): Promise<void> {
     ;(await import('@aglyn/plugins-outreach/declarations.console-server')).registerOutreachConsoleServerDeclarations()
     ;(await import('@aglyn/plugins-data/declarations.server')).registerDataServerDeclarations()
     ;(await import('@aglyn/plugins-email/declarations.console-server')).registerEmailConsoleServerDeclarations()
+    ;(await import('@aglyn/plugins-logic/declarations.server')).registerLogicServerDeclarations()
     ;(await import('@aglyn/plugins-marketing/declarations.server')).registerMarketingServerDeclarations()
     ;(await import('@aglyn/plugins-workflows/declarations.server')).registerWorkflowsServerDeclarations()
     ;(await import('@aglyn/plugins-ai/declarations')).registerAiDeclarations()

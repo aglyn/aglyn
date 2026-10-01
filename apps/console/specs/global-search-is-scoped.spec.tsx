@@ -63,6 +63,15 @@ jest.mock('../components/global-search/use-global-search', () => ({
   }),
 }))
 
+// The plugins' groups arrive through their declarations (AGL-3080); this file
+// is about rendering what the hook found, so the gate that admits them is
+// answered here and exercised in `global-search-scope.spec.ts`.
+jest.mock('../components/global-search/use-global-search-sources', () => ({
+  __esModule: true,
+  default: () => [],
+  useGlobalSearchSources: () => [],
+}))
+
 jest.mock('../components/host-id-provider', () => ({
   useHostId: () => 'host-1',
   useHostReady: () => true,
@@ -98,10 +107,28 @@ jest.mock('../hooks/use-current-org', () => ({
 
 import { render, screen } from '@testing-library/react'
 import GlobalSearchDialogComponent from '../components/global-search/global-search-dialog.component'
-import { GLOBAL_SEARCH_ENTITIES } from '../components/global-search/global-search-scope'
+import {
+  GLOBAL_SEARCH_ENTITIES,
+  type GlobalSearchEntityDef,
+} from '../components/global-search/global-search-scope'
+
+/**
+ * A group as a plugin contributes it: the dialog names no plugin, and links
+ * the row wherever the plugin's own `href` says.
+ */
+const BOTTLES: GlobalSearchEntityDef = {
+  id: 'bottles',
+  group: 'Bottles',
+  noun: 'bottles',
+  scopeKind: 'host',
+  collection: 'bottles',
+  nameField: 'name',
+  order: 150,
+  href: (_row, { orgSlug, host }) => (host ? `/${orgSlug}/hosts/${host}/cellar` : null),
+}
 
 const definitionOf = (id: string) =>
-  GLOBAL_SEARCH_ENTITIES.find((entity) => entity.id === id)
+  [...GLOBAL_SEARCH_ENTITIES, BOTTLES].find((entity) => entity.id === id)
 
 const group = (id: string, rows: any[], extra: Record<string, any> = {}) => ({
   definition: definitionOf(id),
@@ -180,12 +207,13 @@ describe('a result row', () => {
   it('links each kind of row at its own route', () => {
     mockGroups.push(
       group('layouts', [{ $id: 'l1', $label: 'Main Layout', $score: 600 }]),
-      group('workflows', [{ $id: 'w1', $label: 'Quote', $score: 600 }]),
+      group('bottles', [{ $id: 'b1', $label: 'Vintage port', $score: 600 }]),
     )
     open()
     const hrefs = resultAnchors().map((a) => a.getAttribute('href'))
     expect(hrefs).toContain('/acme/hosts/demo/layouts/l1')
-    expect(hrefs).toContain('/acme/hosts/demo/automation')
+    // A plugin's row, linked where the plugin says.
+    expect(hrefs).toContain('/acme/hosts/demo/cellar')
   })
 })
 

@@ -180,10 +180,10 @@ missing page cites nothing. A gap in the documentation is therefore invisible to
 path-keyed ranking, no matter how the sort is written. It has to be counted on a
 different key or it is not counted at all.
 
-So ungrounded turns are counted by **route** — the console screen the person was
+So ungrounded turns are counted by **route** — the console page the person was
 looking at when they hit the gap. That is deliberately the most useful key available:
-there is no page to name, but there is a screen, and "eleven people asked something
-ungroundable from the bookings settings screen" is a docs assignment.
+there is no docs page to name, but there is a console page, and "eleven people asked something
+ungroundable from the bookings settings page" is a docs assignment.
 
 This is the sharper of the two gap signals. A thumbs-down means an answer was
 unsatisfying; an ungrounded question means the documentation had nothing to say.

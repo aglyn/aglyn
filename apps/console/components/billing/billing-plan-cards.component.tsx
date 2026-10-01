@@ -144,7 +144,7 @@ export const ENTERPRISE_HIGHLIGHTS: Array<{
     // Enterprise org holds it from the plan alone, a comped marker on a
     // lower base plan does not, and an agreement written BELOW the default
     // reads as one that does not enable everything Enterprise can.
-    label: 'Twice Agency’s sites, seats and storage, unlimited screens, and more by agreement',
+    label: 'Twice Agency’s sites, seats and storage, unlimited pages, and more by agreement',
     holds: (org) => {
       const entitlements = resolveOrgEntitlements(org)
       const agency = PLAN_ENTITLEMENTS.agency
@@ -350,7 +350,7 @@ const featureGroups = (
     title: 'Build & publish',
     rows: [
       { key: 'reusableComponents', label: 'Reusable components' },
-      { key: 'versioning', label: 'Screen versioning' },
+      { key: 'versioning', label: 'Page versioning' },
       { key: 'scheduledPublishing', label: 'Scheduled publishing' },
       { key: 'customDomain', label: 'Custom domain' },
       { key: 'removeBranding', label: `Remove ${brand} branding` },
@@ -387,7 +387,7 @@ const featureGroups = (
       { key: 'crm', label: 'CRM: contacts, leads, companies, deals & tasks' },
       { key: 'marketingOverlays', label: 'Announcement bar & popups' },
       { key: 'customSendingDomain', label: 'Send email from your own domain' },
-      { key: 'screenAnalytics', label: 'Per-screen traffic analytics' },
+      { key: 'screenAnalytics', label: 'Per-page traffic analytics' },
       { key: 'abTesting', label: 'A/B testing' },
       { key: 'marketplaceSelling', label: 'Sell on the marketplace' },
     ],
@@ -625,7 +625,7 @@ function headlineLimits(
     `${quotaLabel(entitlements.hostLimit)} host${
       entitlements.hostLimit === 1 ? '' : 's'
     }${per(pricing.extraHostMonthlyUsd, '/extra')}`,
-    `${quotaLabel(entitlements.screensPerHost)} screens per host`,
+    `${quotaLabel(entitlements.screensPerHost)} pages per host`,
     `${quotaLabel(entitlements.sharedLayoutsPerHost)} shared layouts`,
     `${mbLabel(entitlements.storagePerHostMb)} storage`,
     `${
@@ -1451,7 +1451,7 @@ function PlanCardBody({
           : ''}
       </Typography>
       <Typography variant="body2">
-        {`${quotaLabel(entitlements.screensPerHost)} screens per host`}
+        {`${quotaLabel(entitlements.screensPerHost)} pages per host`}
       </Typography>
       <Typography variant="body2">
         {`${quotaLabel(entitlements.sharedLayoutsPerHost)} shared layouts`}

@@ -66,7 +66,7 @@ registerPluginJob({
   // The beat is the real resolution — the runner treats a job as due when
   // `now - lastRun >= intervalMinutes`, so 1 means "every beat".
   intervalMinutes: 1,
-  description: 'Publish screens whose scheduled time has passed, and drop their cached pages.',
+  description: 'Publish pages whose scheduled time has passed, and drop their cached copies.',
   // AGL-2495. This beat predates the injected gate and keeps calling
   // `getSiteLockdown` directly, which it may: it lives in `apps/tenant`, so
   // the admin lib is an ordinary static import rather than something reached

@@ -51,7 +51,7 @@ export const membershipContentHandler: PluginApiHandler = async (req, res) => {
     }
     const screenRes = await getScreen({ hostId, screenId })
     if (!screenRes.screen) {
-      return res.status(404).json({ error: 'Unknown screen' })
+      return res.status(404).json({ error: 'Unknown page' })
     }
     // The site document (AGL-2883): the tree's host variables fill in from
     // it, and the enricher slice below reads the same copy. A failed read

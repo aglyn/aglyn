@@ -443,9 +443,8 @@ export function HostAnalyticsCard(props: {
           </Box>
           {/* Per-screen teaser (AGL-153, table AGL-1844). */}
           <Typography variant="caption" color="text.secondary">
-            {'Per-screen breakdowns live in the Screens table on the ' +
-              'analytics page and on each screen\u2019s view page (Pro ' +
-              'plans).'}
+            {'Per-page breakdowns live in the Pages table in Analytics ' +
+              'and in each page\u2019s detail view (Pro plans).'}
           </Typography>
         </Stack>
       )}

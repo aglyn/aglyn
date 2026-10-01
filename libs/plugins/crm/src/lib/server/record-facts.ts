@@ -23,7 +23,6 @@ import {
 } from '@aglyn/aglyn/plugin-manager/plugin-record-facts'
 import {
   CRM_COLLECTIONS,
-  contactPrimaryGroup,
   crmReadTokens,
   isOrgWideMember,
   type ConsentGroup,
@@ -56,6 +55,7 @@ import {
   type CrmRecordFactsKind,
 } from '../model/record-facts'
 import { crmSuiteRefusal } from './suite-gate'
+import { contactPrimaryGroup } from '../model/contact-holder'
 
 /**
  * THE CRM'S READERS ON THE CORE'S RECORD-FACTS SEAM (AGL-2917).

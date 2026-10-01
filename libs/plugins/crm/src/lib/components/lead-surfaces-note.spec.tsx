@@ -25,6 +25,7 @@
  * because under a site there is only one.
  */
 
+import { registerPluginRecordRoute } from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { LEAD_ROUTING_NEEDS_CONSENT_FIELD } from '../model/lead-surfaces'
 import LeadSurfacesNote from './lead-surfaces-note'
@@ -85,7 +86,25 @@ jest.mock('@aglyn/shared-ui-snackstack', () => ({
   useSnackbar: () => ({ enqueueSnackbar }),
 }))
 
+
+/**
+ * A form's page is the forms plugin's (AGL-3080): the note asks the
+ * record-route registry, so this stands in the address that plugin publishes.
+ * What it publishes is held in its own spec.
+ */
+function standInFormRoute() {
+  registerPluginRecordRoute(
+    'form',
+    {
+      list: () => null,
+      record: ({ orgSlug, host }, id) => `/${orgSlug}/hosts/${host}/forms/${id}`,
+    },
+    { pluginId: 'forms' },
+  )
+}
+
 beforeEach(() => {
+  standInFormRoute()
   updateDoc.mockClear()
   enqueueSnackbar.mockClear()
 })

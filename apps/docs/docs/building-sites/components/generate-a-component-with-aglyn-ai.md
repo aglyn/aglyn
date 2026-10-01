@@ -37,7 +37,7 @@ Each property is one of the kinds the **File ▸ Properties…** dialog offers:
 | -- | -- |
 | Text, Long text | Copy: a heading, a paragraph, a button's label, an image's alt text. Copy can mix a property with words, such as `Portrait of {{prop.name}}`. |
 | Image | A picture's source. |
-| Link | A screen picker, or an address. |
+| Link | A page picker, or an address. |
 | Icon | An **Icon** element, or a button's icon. |
 | Number | A number setting, or copy. |
 | Yes / no | A switch, such as a button's **Full width**, or whether an optional part shows. |
@@ -64,7 +64,7 @@ Each property's default is what the component shows until a page sets its own va
 written in your site's voice from the brief. Where the brief leaves out a fact, such as a
 customer's name, the default marks the gap in square brackets, such as **[Customer name]**,
 instead of inventing one, and **AI jobs** lists those gaps beside the draft. An Image starts empty for you to upload, and a Link names one of your
-screens. An Icon starts empty too: you pick each icon from the library, on the component or on each
+pages. An Icon starts empty too: you pick each icon from the library, on the component or on each
 page that places it, because the AI never picks an icon for you.
 
 ### Where it lands

@@ -6,7 +6,7 @@ description: Sign in, create your first site, and understand what a site contain
 
 # Create a site
 
-A **site** is one website you own in Aglyn — its screens, theme, data, domain, and
+A **site** is one website you own in Aglyn — its pages, theme, data, domain, and
 settings. Everything you build lives under a site, and you can own several.
 
 ![The All Sites page: the site allowance beside Create site, the Tasks due and CRM at a glance cards, and the search box and Filters button above the site cards, each with its status pill, Aglyn domain, custom domain, and Visit and Manage actions](/img/getting-started/sites-page.png)
@@ -18,17 +18,17 @@ settings. Everything you build lives under a site, and you can own several.
 3. Give it a name. Aglyn generates a working subdomain immediately, so the site has a
    real address from the first moment — you can attach a
    [custom domain](../building-sites/custom-domains/overview.md) later. Every new site
-   starts with a published **Home** screen at the site root — your site's name over a
+   starts with a published **Home** page at the site root — your site's name over a
    short welcome line — so the address shows a real page from the first visit. Open
-   it from **Screens** to make it your own. Or replace it: the first page you publish
+   it from **Pages** to make it your own. Or replace it: the first page you publish
    at the site root — one you build, one the AI drafts for you, or a
    [starter template](../building-sites/site-templates/overview.md)'s home page —
-   takes over `/`, and the placeholder Home screen is kept as an unpublished draft.
+   takes over `/`, and the placeholder Home page is kept as an unpublished draft.
 4. You land on the new site's **Setup** page (titled *Host Setup*), with tabs for
    Basic details, SEO, Tracking, Theme, and Emails; the custom domain and the
    activity log are under **Admin**. To start building
-   rather than configuring, use the **Screens** tab in the site navigation — see
-   [Publish your first screen](publish-your-first-screen.md).
+   rather than configuring, use the **Pages** tab in the site navigation — see
+   [Publish your first page](publish-your-first-screen.md).
 
 :::tip Name collisions
 Site names must be unique enough to generate a valid subdomain. If a name is taken,
@@ -37,7 +37,7 @@ the console suggests an available variation.
 
 ## What a site contains
 
-- **Screens & layouts** — the pages and the shared frames they render in.
+- **Pages & layouts** — the pages and the shared frames they render in.
 - **Data** — the datasets this site can see. Variables and functions are under
   **Logic**, and workflows and actions under **Automation**.
 - **Media** — images, video, and files, organized in folders.
@@ -60,4 +60,4 @@ in the breadcrumbs so you always know which site you're editing.
 ## Next
 
 - [Take the console tour](console-tour.md)
-- [Publish your first screen](publish-your-first-screen.md)
+- [Publish your first page](publish-your-first-screen.md)

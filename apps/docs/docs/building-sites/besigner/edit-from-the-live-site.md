@@ -7,12 +7,12 @@ description: The admin bar on your published site — who sees it, how it appear
 # Edit from the live site
 
 Browsing your published site and spot something to fix? If you can edit the site, the
-**admin bar** runs across the top of the live page. It names the screen serving that
-page and opens it in the besigner in one click.
+**admin bar** runs across the top of the live page. It names the page you're on and
+opens it in the Besigner in one click.
 
 :::info Plan availability
 **Every plan**, Free included. The count of today's views of the page you're on is
-**Pro+**, like [per-screen traffic](../../marketing-and-automation/analytics/overview.md#per-screen-traffic).
+**Pro+**, like [per-page traffic](../../marketing-and-automation/analytics/overview.md#per-screen-traffic).
 :::
 
 ## Who sees it
@@ -71,25 +71,25 @@ From left to right:
 
 - the site's **name**, beside the Aglyn mark and the site's favicon, if it has one. It
   opens the site's dashboard in the console.
-- the **screen** serving the page. A blog post or another collection page shows the
-  collection and the template screen that renders it, such as *Blog entry · Post*. A page
-  no screen serves shows *Unrouted page*.
-- **Draft changes**, when the screen has a version newer than the one that's live.
-- **Edit this page**, which opens the besigner on that screen, at the version the page is
+- the **page** you're on. A blog post or another collection page shows the collection
+  and the template page that renders it, such as *Blog entry · Post*. An address no page
+  serves shows *Unrouted page*.
+- **Draft changes**, when the page has a version newer than the one that's live.
+- **Edit this page**, which opens the Besigner on that page, at the version the site is
   serving. On a blog post or another collection entry it reads **Edit template**, because
-  that screen is the design every entry shares, and **Edit this entry** beside it opens
+  that template is the design every entry shares, and **Edit this entry** beside it opens
   the entry itself — its text, cover and author — in the console's content editor.
 - today's page views across the site, and on **Pro+** how many of them were of this page,
   as in *120 views today · 18 on this page*. Days are counted in UTC. It opens the site's
   analytics.
-- **Screens**, plus **Inbox** and **Orders** where the inbox and commerce plugins are
+- **Pages**, plus **Inbox** and **Orders** where the inbox and commerce plugins are
   enabled on the site.
 - your email, which opens a menu with **Account settings**, **Site dashboard** and
   **Disconnect**.
 - **×**.
 
 Every link opens the console in a new tab, where your usual permissions apply. As you
-browse, the bar follows: go to another page and it names that page's screen.
+browse, the bar follows: go to another page and it names that one.
 
 The bar sits above the page rather than over it. The page moves down by the bar's height,
 and so does a site header pinned to the top of the window. On a phone, the bar keeps the
@@ -108,7 +108,7 @@ site name, the edit links and **×**, and a **⋯** menu holds the links, your e
   `?aglyn-edit` or press the shortcut themselves. Even then, all they get is the **Edit
   this site** button, and the console window answers it with *Sign in first* or *No edit
   access*.
-- **Change your site.** The bar reads which screen serves the page and today's counts,
+- **Change your site.** The bar reads which page you're on and today's counts,
   and links to the console. Every edit still happens in the console, with your normal
   permissions, and what visitors see is untouched.
 - **Give the site your console sign-in.** The site gets a pass that works only on that
@@ -130,5 +130,5 @@ site name, the edit links and **×**, and a **⋯** menu holds the links, your e
 
 - [The Besigner](overview.md)
 - [Versions & scheduled publishing](../screens-and-layouts/versions-and-publishing.md)
-- [Publish your first screen](../../getting-started/publish-your-first-screen.md)
+- [Publish your first page](../../getting-started/publish-your-first-screen.md)
 - [Teams, roles & membership](../../workspace-and-billing/teams-and-roles/overview.md)

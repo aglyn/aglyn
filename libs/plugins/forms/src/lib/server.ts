@@ -19,6 +19,7 @@ import { registerPluginApiRoute, type PluginApiHandler } from '@aglyn/aglyn/serv
 import { firebaseAdmin, isImpersonationSession } from '@aglyn/tenant-data-admin'
 import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 import { FORM_STATS_RECOUNT_MAX, recountFormStats } from './server/form-stats'
+import { formPromoteHandler } from './server/form-promote-route'
 
 /**
  * `POST /api/forms/stats` — recount the named forms' counters from their
@@ -103,4 +104,11 @@ export const formStatsHandler: PluginApiHandler = async (req, res) => {
 /** Console API registration. */
 export function registerFormsConsoleApi(): void {
   registerPluginApiRoute('forms/stats', formStatsHandler)
+  // A form's publish — the `besignerDocuments` publish route
+  // `plugins.config.json` declares for it.
+  registerPluginApiRoute('forms/promote', { web: formPromoteHandler })
 }
+
+// Type-only (AGL-3080): the plugin's entitlement keys, declared by module
+// augmentation, for every program that loads this entry point.
+export type { formsPlanEntitlements } from './plan-entitlements'

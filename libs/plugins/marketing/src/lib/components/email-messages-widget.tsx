@@ -25,7 +25,7 @@ import {
   MarketingOrgMountProvider,
   type MarketingOrgMount,
 } from './marketing-org-mount'
-import { orgMarketingHubPath } from './use-emails-hub-path'
+import { orgMarketingHubPath } from './use-marketing-hub-path'
 
 /** What the Emails page's Messages zone hands a widget. */
 export interface EmailMessagesWidgetProps {

@@ -106,7 +106,7 @@ embeds it — e.g. `getting-started/console-chrome-annotated.png`,
 syntax and **always add alt text**:
 
 ```md
-![The Besigner editing a screen, with its five areas numbered](/img/besigner/besigner-annotated.png)
+![The Besigner editing a page, with its five areas numbered](/img/besigner/besigner-annotated.png)
 ```
 
 ### 3. Real screenshots

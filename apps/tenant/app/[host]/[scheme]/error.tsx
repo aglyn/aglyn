@@ -17,7 +17,10 @@
 'use client'
 
 import dynamic from 'next/dynamic'
-import { redispatchCaughtError } from '@aglyn/aglyn/app-utils/redispatch-caught-error'
+import {
+  isStaleBuildError,
+  recoverStaleBuildOrReport,
+} from '@aglyn/aglyn/app-utils/stale-build-error'
 import { useEffect } from 'react'
 
 /**
@@ -57,6 +60,14 @@ const SiteErrorScreen = dynamic(
  *    file structurally cannot: an error boundary never catches an error from
  *    the layout of its own segment.
  *
+ * ## A tab open across a deploy (AGL-3279)
+ *
+ * A published page loads its site plugins' chunks from the page, so a tab
+ * holding the previous deploy's HTML fails HERE (or in `PageBodyBoundary`),
+ * not in `app/error.tsx`. So the same one-reload-per-half-hour recovery the
+ * root boundaries run applies here; without it the visitor would sit on a
+ * crash page whose **Try again** re-requests the same missing chunk.
+ *
  * ## Reporting
  *
  * React 19 routes CAUGHT errors to `console.error` and only uncaught ones to
@@ -73,7 +84,17 @@ export default function HostError({
   error: Error & { digest?: string }
   reset: () => void
 }) {
-  useEffect(() => redispatchCaughtError(error), [error])
+  useEffect(() => {
+    recoverStaleBuildOrReport(error)
+  }, [error])
 
-  return <SiteErrorScreen onReset={() => reset()} />
+  return (
+    <SiteErrorScreen
+      // `reset()` re-renders the same tree, which asks for the same missing
+      // chunk, so a stale build's button reloads instead.
+      onReset={() =>
+        isStaleBuildError(error) ? window.location.reload() : reset()
+      }
+    />
+  )
 }

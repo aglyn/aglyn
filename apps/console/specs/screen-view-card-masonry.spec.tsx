@@ -74,7 +74,7 @@ const assignment = (text: string): Array<[string, string]> => {
     // so they are matched by COMPONENT and named here (AGL-703).
     const named = found
       ? (found[1] ??
-        (found[2] ? 'Screen traffic' : undefined) ??
+        (found[2] ? 'Page traffic' : undefined) ??
         (found[3] ? 'Used by' : undefined))
       : undefined
     return [named ?? '?', mark[1]]
@@ -107,7 +107,7 @@ const EXPECTED: Array<[string, string]> = [
   // Traffic sits ABOVE Page Activity: what the page is doing outranks who
   // touched it, and the activity feed is long enough to push the chart off
   // the screen entirely.
-  ['Screen traffic', '{ xs: 12 }'],
+  ['Page traffic', '{ xs: 12 }'],
   ['Page Activity', '{ xs: 12 }'],
   ['Raw JSON', '{ xs: 12 }'],
 ]

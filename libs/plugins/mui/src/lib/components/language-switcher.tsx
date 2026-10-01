@@ -78,7 +78,7 @@ const LanguageSwitcher = forwardRef<HTMLElement, LanguageSwitcherProps>(
             ...nodeSx,
           ]}
         >
-          {'Language switcher — set screen translations'}
+          {'Language switcher — set page translations'}
         </Stack>
       )
     }
@@ -130,7 +130,7 @@ export const schema: Aglyn.ComponentSchema<LanguageSwitcherProps> = {
   pluginId: BUNDLE_ID,
   displayName: 'Language Switcher',
   description:
-    "Links between this screen's translations. It hides itself when there are none.",
+    "Links between this page's translations. It hides itself when there are none.",
   category: Aglyn.ComponentCategory.NAVIGATION,
   icon: {
     path: mdiTranslate.path,
@@ -168,7 +168,7 @@ export const presets: Aglyn.PresetSchema[] = [
     type: Aglyn.NodeType.PRESET,
     displayName: 'Language Switcher',
     pluginId: BUNDLE_ID,
-    description: 'Links between this screen’s translations',
+    description: 'Links between this page’s translations',
     category: Aglyn.ComponentCategory.NAVIGATION,
     icon: {
       path: mdiTranslate.path,

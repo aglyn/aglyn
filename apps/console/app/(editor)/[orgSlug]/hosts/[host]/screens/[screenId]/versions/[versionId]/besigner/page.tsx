@@ -577,7 +577,7 @@ function BesignerPage(props) {
     status,
     error,
     save: saveScreenVersion,
-    noun: 'screen',
+    noun: 'page',
     // Email documents (kind 'email', AGL-395) restrict the component drawer
     // to the email plugin's email-safe blocks.
     viewType:
@@ -621,7 +621,7 @@ function BesignerPage(props) {
             // email screen; "your live page" would name a page that does
             // not exist.
             undefined
-          : 'Screen saved — your live page is refreshing now'
+          : 'Page saved — your live page is refreshing now'
         : undefined,
     queueLoading,
     // The refusal half of `onSaved` — the two together are what let
@@ -891,7 +891,7 @@ function BesignerPage(props) {
         .then(() => {
           enqueueSnackbar(
             value === '__inherit__'
-              ? 'Layout inherited from screen'
+              ? 'Layout inherited from page'
               : value === '__none__'
                 ? 'Layout removed for this version'
                 : 'Layout assigned to this version',
@@ -1400,7 +1400,7 @@ function BesignerPage(props) {
             )
             .then(() => {
               setSlugInput(null)
-              enqueueSnackbar('Screen unpublished', {
+              enqueueSnackbar('Page unpublished', {
                 variant: 'success',
                 persist: false,
               })
@@ -1458,7 +1458,7 @@ function BesignerPage(props) {
         // does not, or an unpublished screen reads as live everywhere the
         // console shows that date (AGL-2571).
         await updateScreenDoc({ publishedAt: deleteField() } as any)
-        enqueueSnackbar('Screen unpublished', {
+        enqueueSnackbar('Page unpublished', {
           variant: 'success',
           persist: false,
         })
@@ -1466,7 +1466,7 @@ function BesignerPage(props) {
       }
       if (!normalizedSlug) {
         setScreenDialog(true)
-        enqueueSnackbar('Set the screen path to publish it', {
+        enqueueSnackbar('Set the page path to publish it', {
           variant: 'info',
           persist: false,
         })
@@ -1480,12 +1480,12 @@ function BesignerPage(props) {
       ) {
         enqueueSnackbar(
           slugConflict
-            ? 'Another screen is already published at this path'
+            ? 'Another page is already published at this path'
             : reservedSegment
               ? reservedScreenRouteMessage(reservedSegment)
               : slugPathSeparator
                 ? SCREEN_SLUG_PATH_SEPARATOR_MESSAGE
-                : 'Publish the parent screen first',
+                : 'Publish the parent page first',
           { variant: 'warning', persist: false },
         )
         return
@@ -1597,19 +1597,19 @@ function BesignerPage(props) {
     ) {
       enqueueSnackbar(
         slugConflict
-          ? 'Another screen is already published at this path'
+          ? 'Another page is already published at this path'
           : reservedSegment
             ? reservedScreenRouteMessage(reservedSegment)
             : slugPathSeparator
               ? SCREEN_SLUG_PATH_SEPARATOR_MESSAGE
-              : 'Publish the parent screen first',
+              : 'Publish the parent page first',
         { variant: 'warning', persist: false },
       )
       return false
     }
     if (!normalizedSlug) {
       enqueueSnackbar(
-        'Clearing the slug takes the screen off your site — press Unpublish ' +
+        'Clearing the slug takes the page off your site — press Unpublish ' +
           'to do that',
         { variant: 'warning', persist: false },
       )
@@ -1632,7 +1632,7 @@ function BesignerPage(props) {
       enqueueSnackbar(
         publishedPath && composedPath
           ? `Now served at ${screenRoutePathToUrl(composedPath)}`
-          : 'Slug saved — press Publish to put this screen on your site',
+          : 'Slug saved — press Publish to put this page on your site',
         { variant: 'success', persist: false },
       )
       return true
@@ -1667,7 +1667,7 @@ function BesignerPage(props) {
       const nextParentId = value === '__none__' ? undefined : value
       if (wouldCreateScreenCycle(screenId, nextParentId, screensById)) {
         return enqueueSnackbar(
-          "A screen can't be nested inside itself or its own children",
+          "A page can't be nested inside itself or its own children",
           { variant: 'warning', persist: false },
         )
       }
@@ -1681,7 +1681,7 @@ function BesignerPage(props) {
         : undefined
       if (owner && owner !== screenId) {
         return enqueueSnackbar(
-          `Another screen is already published at ${screenRoutePathToUrl(nextSelfPath as string)}`,
+          `Another page is already published at ${screenRoutePathToUrl(nextSelfPath as string)}`,
           { variant: 'warning', persist: false },
         )
       }
@@ -1704,7 +1704,7 @@ function BesignerPage(props) {
         )
         .then(() => {
           enqueueSnackbar(
-            nextParentId ? 'Parent screen assigned' : 'Parent screen removed',
+            nextParentId ? 'Parent page assigned' : 'Parent page removed',
             { variant: 'success', persist: false },
           )
         })
@@ -1865,7 +1865,7 @@ function BesignerPage(props) {
         allowDuplicate: true,
       })
     } else if (notFound) {
-      enqueueSnackbar('404: Screen not found', {
+      enqueueSnackbar('404: Page not found', {
         variant: 'error',
         allowDuplicate: true,
       })
@@ -1887,7 +1887,7 @@ function BesignerPage(props) {
             <BindingPickerProvider hostId={hostId}>
               <BesignerDraftAlertComponent
                 draft={draft}
-                noun="screen"
+                noun="page"
                 remoteChanged={remoteChanged}
               />
               {/* Email documents run no client JS (AGL-587): disable interaction
@@ -2032,7 +2032,7 @@ function BesignerPage(props) {
                             icon: {
                               path: ICON_VARIANT_APP_SETTINGS.path,
                             },
-                            children: 'Screen Properties',
+                            children: 'Page Properties',
                             onClick: () => setScreenDialog(true),
                           },
                         ],
@@ -2160,7 +2160,7 @@ function BesignerPage(props) {
                 out after twenty more minutes of editing is the bad
                 version of this (AGL-674). */}
                         {remoteChanged && !draft.available ? (
-                          <BesignerConflictAlertComponent noun="screen" />
+                          <BesignerConflictAlertComponent noun="page" />
                         ) : null}
                         {/* Held or flagged by the page review (AGL-3374):
                             what visitors see, and what the owner can do. */}
@@ -2212,7 +2212,7 @@ function BesignerPage(props) {
                           >
                             {`Shared layout "${
                               layoutResult?.data?.displayName ?? layoutId
-                            }" frames this screen — its content is locked here, but you can restyle its elements for this page.`}
+                            }" frames this page — its content is locked here, but you can restyle its elements for this page.`}
                           </Alert>
                         ) : null}
                         <LayoutChromeContext.Provider
@@ -2253,13 +2253,13 @@ function BesignerPage(props) {
                       </Typography>
                       <Typography variant="caption" color="text.secondary">
                         {
-                          'The slug is this screen\'s own path segment; nesting under a parent screen composes the full path (parent "company" + slug "about" → /company/about). Use "/" for the home page. Clearing the slug and pressing Unpublish removes the screen (and unroutes its children) from the site.'
+                          'The slug is this page\'s own path segment; nesting under a parent page composes the full path (parent "company" + slug "about" → /company/about). Use "/" for the home page. Clearing the slug and pressing Unpublish removes the page (and unroutes its children) from the site.'
                         }
                       </Typography>
                       <TextField
                         select
                         size="small"
-                        label="Parent screen"
+                        label="Parent page"
                         value={parentId ?? '__none__'}
                         onChange={handleParentChange}
                       >
@@ -2303,13 +2303,13 @@ function BesignerPage(props) {
                             slugPathSeparator
                               ? SCREEN_SLUG_PATH_SEPARATOR_MESSAGE
                               : slugConflict
-                              ? 'Another screen already uses this path'
+                              ? 'Another page already uses this path'
                               : reservedSegment
                                 ? reservedScreenRouteMessage(
                                     reservedSegment,
                                   )
                                 : unpublishedAncestor
-                                  ? 'A parent screen has no slug yet — publish the parent first'
+                                  ? 'A parent page has no slug yet — publish the parent first'
                                   : isCollectionTemplate
                                     ? templateRoutes
                                       ? `A collection template — renders ${templateRoutes}, not this path`
@@ -2328,7 +2328,7 @@ function BesignerPage(props) {
                                       : composedPath && publishedPath
                                         ? `Served at ${screenRoutePathToUrl(publishedPath)} — Done moves it to ${screenRoutePathToUrl(composedPath)}`
                                         : composedPath
-                                          ? `Not published — Publish puts this screen at ${screenRoutePathToUrl(composedPath)}`
+                                          ? `Not published — Publish puts this page at ${screenRoutePathToUrl(composedPath)}`
                                           : publishedPath
                                             ? `Currently published at ${screenRoutePathToUrl(publishedPath)}`
                                             : 'Not published'
@@ -2356,15 +2356,15 @@ function BesignerPage(props) {
                 effect is invisible on this screen's own canvas until it is
                 set, and nesting rules are not guessable from a picker. */}
                         <HelpTip
-                          title="Screens & layouts"
-                          excerpt="A layout wraps this screen in shared chrome — appbar, footer — maintained once. Layouts can nest; the screen renders in the innermost slot."
+                          title="Pages & layouts"
+                          excerpt="A layout wraps this page in shared chrome — appbar, footer — maintained once. Layouts can nest; the page renders in the innermost slot."
                           href={besignerDocsUrl('layouts', '#what-a-layout-is')}
                           sx={{ ml: 0.25, fontSize: '0.9em' }}
                         />
                       </Typography>
                       <Typography variant="caption" color="text.secondary">
                         {
-                          'Wraps this VERSION in chrome (appbar, footer, …) maintained once for every bound screen. Applies per version — publishing this version brings its layout with it. Saved immediately.'
+                          'Wraps this VERSION in chrome (appbar, footer, …) maintained once for every bound page. Applies per version — publishing this version brings its layout with it. Saved immediately.'
                         }
                       </Typography>
                       <TextField
@@ -2380,13 +2380,13 @@ function BesignerPage(props) {
                       >
                         <MenuItem value="__inherit__">
                           {screenResult?.data?.layoutId
-                            ? `Inherit from screen (${
+                            ? `Inherit from page (${
                                 (layoutOptions ?? []).find(
                                   (layout) =>
                                     layout.$id === screenResult.data?.layoutId,
                                 )?.displayName ?? screenResult.data.layoutId
                               })`
-                            : 'Inherit from screen (none)'}
+                            : 'Inherit from page (none)'}
                         </MenuItem>
                         <MenuItem value="__none__">{'None'}</MenuItem>
                         {(layoutOptions ?? []).map((layout) => (
@@ -2415,13 +2415,13 @@ function BesignerPage(props) {
                 says where the defaults live. */}
                         <HelpTip
                           title="SEO"
-                          excerpt="Per-screen overrides of the site's SEO defaults. Left empty, a screen falls back to the site-wide title pattern and social card."
+                          excerpt="Per-page overrides of the site's SEO defaults. Left empty, a page falls back to the site-wide title pattern and social card."
                           href={besignerDocsUrl('seo', '#per-screen-seo')}
                           sx={{ ml: 0.25, fontSize: '0.9em' }}
                         />
                       </Typography>
                       <Typography variant="caption" color="text.secondary">
-                        {'Search and social metadata for this screen. Saved separately ' +
+                        {'Search and social metadata for this page. Saved separately ' +
                           'from the canvas.'}
                       </Typography>
                       <TextField
@@ -2478,10 +2478,10 @@ function BesignerPage(props) {
                       </Typography>
                       <Typography variant="caption" color="text.secondary">
                         {(screenResult?.data as any)?.protection?.passwordHash
-                          ? 'This screen is password-protected. Enter a new password to ' +
+                          ? 'This page is password-protected. Enter a new password to ' +
                             'change it, or save empty to remove protection.'
                           : 'Visitors must enter this password to view the published ' +
-                            'screen. Leave empty for public.'}
+                            'page. Leave empty for public.'}
                       </Typography>
                       <Stack
                         direction="row"

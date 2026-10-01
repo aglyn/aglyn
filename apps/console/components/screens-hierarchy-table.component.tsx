@@ -765,7 +765,7 @@ export function ScreensHierarchyTableComponent(
                     nested
                     size="small"
                     sx={tableSx}
-                    aria-label={`Screens nested under ${
+                    aria-label={`Pages nested under ${
                       row.displayName || row.$id
                     }`}
                   >
@@ -790,7 +790,7 @@ export function ScreensHierarchyTableComponent(
       onDragCancel={() => setActiveId(undefined)}
     >
       {loading && <LinearProgress color="primary" />}
-      <ScrollTable size="small" aria-label="Screens hierarchy" sx={tableSx}>
+      <ScrollTable size="small" aria-label="Pages hierarchy" sx={tableSx}>
         <ScreenColumnWidths controlsWidth={controlsWidth} />
         {/* Header height matches the DataTable used by layouts, components
             and templates (AGL-693/694/695) — a size="small" TableHead is
@@ -859,7 +859,7 @@ export function ScreensHierarchyTableComponent(
                   matching the other three lists is the entire point.
                 */}
                 <EmptyStateComponent
-                  label={'No screens yet — this site is a blank canvas.'}
+                  label={'No pages yet — this site is a blank canvas.'}
                   description={
                     // WHAT A SCREEN IS, then what to do — the shape the
                     // other three lists use ("Layouts are the chrome your
@@ -868,8 +868,8 @@ export function ScreensHierarchyTableComponent(
                     // the reader looking at an empty list. Framed the same
                     // way the page's own help tip frames it: pages, their
                     // addresses, and the hierarchy that builds the URLs.
-                    'Screens are your pages — each one gets its own address, ' +
-                    'and nesting them builds your URL structure. Create one, ' +
+                    'Each page gets its own address, and nesting pages ' +
+                    'builds your URL structure. Create one, ' +
                     'or start from a template.'
                   }
                   action={emptyAction ?? null}

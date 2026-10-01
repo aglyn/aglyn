@@ -1324,9 +1324,9 @@ export interface ListingInclusion {
 /** What each artifact type drops into the org when it installs. */
 const ARTIFACT_INSTALL_RESULT: Record<MarketplaceArtifactType, string> = {
   plugin: 'A plugin, sandboxed on its own origin with a per-plugin CSP',
-  component: 'An editable component you can place on any screen',
-  template: 'Editable screens you can rework in Besigner',
-  layout: 'An editable layout you can apply to any screen',
+  component: 'An editable component you can place on any page',
+  template: 'Editable pages you can rework in Besigner',
+  layout: 'An editable layout you can apply to any page',
   datasetSchema: 'A new empty dataset with its fields already defined',
   emailTemplate: 'An editable email design you can send campaigns from',
   emailStarter:

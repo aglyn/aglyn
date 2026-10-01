@@ -18,13 +18,14 @@
 
 import { createResourceUid } from '@aglyn/aglyn/app-utils/create-resource-uid'
 import { useConsoleWidgetSlot } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
-import type {
-  ConsoleProductCopyValues,
-  ConsoleProductSummary,
-  ConsoleProductsHubZoneProps,
-  ConsoleProposedDiscount,
-  ConsoleProposedProduct,
-} from '@aglyn/aglyn/plugin-manager/feature-plugins'
+import {
+  PRODUCTS_HUB_ZONE,
+  type ConsoleProductCopyValues,
+  type ConsoleProductSummary,
+  type ConsoleProductsHubZoneProps,
+  type ConsoleProposedDiscount,
+  type ConsoleProposedProduct,
+} from './product-zones'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import {
   useFirestore,
@@ -288,7 +289,7 @@ export function ProductsHubZone(props: ProductsHubZoneProps) {
   if (!Slot) return null
   return (
     <Slot
-      slot="productsHub"
+      slot={PRODUCTS_HUB_ZONE.id}
       hostId={hostId}
       orgId={undefined}
       products={summaries}

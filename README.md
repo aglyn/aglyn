@@ -116,7 +116,7 @@ aglyn/
 │
 ├─ libs/
 │  ├─ aglyn                 → core platform library
-│  ├─ aglyn-node-renderer   → server-side screen renderer
+│  ├─ aglyn-node-renderer   → server-side page renderer
 │  ├─ besigner/             → the clickable visual editor (core + designer)
 │  ├─ tenant/runtime        → shared tenant runtime (host events + composition)
 │  ├─ plugins/              → bookings · commerce · contacts · data · email

@@ -66,9 +66,15 @@ export type UsageAlertGuardDecision =
  * Whether a quota's notice is due, and what its guard becomes.
  *
  * `threshold` is what `usageAlertThreshold` answered for today's reading: the
- * approach percentage, 100, or 0 for below every band. A quota whose limit is
- * unlimited or absent passes 0, which re-arms a `crossing` guard — the band it
- * announced no longer exists.
+ * highest band reached (75, 80, 90 or 100), or 0 for below every band. The
+ * stored guard is the highest band announced, so a step is sent only when it
+ * is above that, and a reading that falls to a LOWER band lowers the guard to
+ * it — 90 announced, 85% today, guard 80 — so climbing back announces 90
+ * again. A quota whose limit is unlimited or absent passes 0, which re-arms a
+ * `crossing` guard — the band it announced no longer exists.
+ *
+ * A guard written under the old two-step ladder (80 or 100) reads the same
+ * way: 80 held with usage at 83% sends nothing, and usage at 92% sends 90.
  *
  * A LEGACY GUARD COUNTS. Before AGL-3431 every guard was month-scoped, so a
  * workspace sitting at its site limit since July holds a September guard at

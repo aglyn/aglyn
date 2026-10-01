@@ -163,7 +163,7 @@ describe('ScreenLinkValuePicker (AGL-1335)', () => {
     fireEvent.change(box, { target: { value: '/pricing#faq' } })
     expect(screen.queryByText(/goes nowhere/)).toBeNull()
     expect(
-      screen.getByText('Typed addresses do not follow a screen rename.'),
+      screen.getByText('Typed addresses do not follow a page rename.'),
     ).toBeTruthy()
   })
 
@@ -190,7 +190,7 @@ describe('ScreenLinkValuePicker (AGL-1335)', () => {
     // And it says which of the two it is (AGL-1893): "unknown" read as "we
     // could not look it up", so the author had no reason to act. This is
     // the same wording the plain Screen picker uses for the same condition.
-    expect(shown()).toMatch(/Unavailable screen \(gone\)/)
+    expect(shown()).toMatch(/Unavailable page \(gone\)/)
     expect(shown()).toMatch(/unpublished or deleted/)
     expect(stored()).toBe('screen:gone')
   })

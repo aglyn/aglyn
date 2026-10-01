@@ -58,7 +58,7 @@ export function DeleteSiteCard(props: { hostId: string }) {
     const accepted = await confirm({
       title: 'Delete this site?',
       description:
-        `"${siteName}" and all of its screens, media, and settings are ` +
+        `"${siteName}" and all of its pages, media, and settings are ` +
         "permanently deleted. This can't be undone.",
       confirmationText: 'Delete site',
       confirmationButtonProps: { color: 'error' },
@@ -104,7 +104,7 @@ export function DeleteSiteCard(props: { hostId: string }) {
     >
       <Stack spacing={2} sx={{ maxWidth: 480 }}>
         <Typography variant="body2" color="text.secondary">
-          {'Permanently delete this site — its screens, media, and settings. ' +
+          {'Permanently delete this site — its pages, media, and settings. ' +
             'This is immediate and cannot be undone. Export a backup first if ' +
             'you might want it back.'}
         </Typography>

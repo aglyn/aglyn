@@ -71,12 +71,7 @@ import {
   normalizeCrmMediaIds,
   readDealLineItems,
 } from '@aglyn/aglyn/server'
-import {
-  apiJson,
-  ApiErrors,
-  floorContactLifecycleStage,
-  restampCrmListFieldsAt,
-} from '@aglyn/tenant-data-admin'
+import { apiJson, ApiErrors, restampCrmListFieldsAt } from '@aglyn/tenant-data-admin'
 import { Timestamp } from 'firebase-admin/firestore'
 import {
   type ApiV1Context,
@@ -84,6 +79,7 @@ import {
   readJsonBody,
   requireScope,
 } from '@aglyn/tenant-data-admin/server/api-v1-kit'
+import { floorContactLifecycleStage } from '../contact-lifecycle-floor'
 import { orderedStages, type ResolvedPipeline, resolvePipeline } from './crm-pipelines'
 import {
   type Clearable,

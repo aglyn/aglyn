@@ -134,10 +134,10 @@ interface ScreenFacts extends ScreenPageClaim {
  */
 function nonPageScreenReason(screen: ScreenFacts): string | null {
   if (screenClaimsToBeAPage(screen)) return null
-  if (screen.deletedAt != null) return 'a deleted screen'
+  if (screen.deletedAt != null) return 'a deleted page'
   if (screen.kind === SCREEN_KIND_EMAIL) return 'an email design'
   if (screen.kind === SCREEN_KIND_TEMPLATE) return 'a collection entry template'
-  if (screen.kind === SCREEN_KIND_ERROR) return 'an error screen'
+  if (screen.kind === SCREEN_KIND_ERROR) return 'an error page'
   return 'not a page of this site'
 }
 
@@ -212,7 +212,7 @@ async function writeTemplatePointers(options: {
     // Rejected rather than stored.
     if (!screen) {
       return Response.json({
-        error: `No screen ${value} on this site (${field})`,
+        error: `No page ${value} on this site (${field})`,
       }, { status: 400 })
     }
     /*==========================================
@@ -253,9 +253,9 @@ async function writeTemplatePointers(options: {
           : value
       return Response.json({
         error:
-          `${name} is ${reason}, so it cannot be a list screen — it would ` +
+          `${name} is ${reason}, so it cannot be a list page — it would ` +
           'serve this collection a page the site does not pay for. Pick a ' +
-          'page, or convert this screen back to one first.',
+          'regular page, or convert this one back to a regular page first.',
       }, { status: 400 })
     }
   }

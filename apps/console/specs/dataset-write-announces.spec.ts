@@ -22,7 +22,7 @@
  * lives in. What is left is the failure that renders perfectly: a write path
  * that stores the row and tells nobody. There is no output to assert on — the
  * page is simply stale for an hour — so it is asserted against the SOURCE, the
- * shape `form-publish-revalidates.spec.ts` uses next door.
+ * shape the forms plugin's `form-publish-announce.spec.ts` uses.
  *
  * The list is closed on purpose. `dataset-referenced-ids.spec.ts` sweeps the
  * tree for a seventh record writer, so a path added later is caught there and

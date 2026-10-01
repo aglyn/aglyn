@@ -451,8 +451,8 @@ subscription product, Stripe records them and charges no one.
      `storagePerHostMb`, the check compared a summed total to
      `hostLimit × storagePerHostMb`, and on Pro a *full* library reads as 33%
      of the band. An alert that cannot fire reads as coverage.
-   - Thresholds are config (`USAGE_ALERT_APPROACH_PCT`, default 80; cap at
-     100) and fail TO the default on anything malformed.
+   - Thresholds are a fixed ladder — 75, 80, 90 and 100% (AGL-3431), the
+     highest step reached sent once; `USAGE_ALERT_APPROACH_PCT` is gone.
    - **Overage protection is ALERTS plus an OPTIONAL customer cap** — see the
      correction below. Past the included allowance a metered org's upload is
      **accepted and billed**; the alerts above are what prevent the surprise.

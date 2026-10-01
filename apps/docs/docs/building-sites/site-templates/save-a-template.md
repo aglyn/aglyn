@@ -13,7 +13,7 @@ from the marketplace gallery.
 **Free** to use the starter gallery; sharing scales with your tier.
 :::
 
-![The screens list, with the Templates button that opens the "Start from a template" picker next to Create New Screen](/img/getting-started/screens-list.png)
+![The pages list, with the Templates button that opens the "Start from a template" picker next to Create New Page](/img/getting-started/screens-list.png)
 
 ## Start from a template
 
@@ -30,12 +30,12 @@ templates of its own kind:
 
 | List | What the picker offers |
 | --- | --- |
-| **Screens** | Page templates, plus Aglyn's starter sites and marketplace templates |
+| **Pages** | Page templates, plus Aglyn's starter sites and marketplace templates |
 | **Layouts** | Layout templates |
 | **Components** | Component templates |
 
 Starter sites and marketplace templates are whole-site page bundles, so they appear
-only on **Screens** — a layout or component picker would have nothing to do with
+only on **Pages** — a layout or component picker would have nothing to do with
 them.
 
 The filter icon in the dialog's header opens the picker's search box, which finds a
@@ -47,20 +47,20 @@ marketplace templates page through what matched.
 
 ## Save your site as a template
 
-Saving a *whole site* is not done from the screens list — it lives in **Setup**.
+Saving a *whole site* is not done from the pages list — it lives in **Setup**.
 
 1. Open **Setup** for the site and find the **Site template** card, under the basic details.
 2. Click **Publish as template**.
 3. Fill in **Template name**, **Description**, **Category** (e.g. Portfolio, Restaurant) and
    **Price (USD, 0 = free)**, then publish.
 
-This captures **every published screen plus the theme**, and publishes it to the
+This captures **every published page plus the theme**, and publishes it to the
 **marketplace** — so it is a share, not a private snapshot. Re-publishing bumps the
 version. Add a preview image afterwards from **Manage → Marketplace**.
 
 ### Saving a single page instead
 
-To reuse one page rather than a whole site, use the **⋮** row menu on the **Screens** list
+To reuse one page rather than a whole site, use the **⋮** row menu on the **Pages** list
 and choose **Save as template**. **Layouts** and **Components** have the same row action.
 These save into [your own templates library](./templates-library.md) and are **not**
 published anywhere until you publish them separately.

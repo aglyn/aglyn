@@ -34,58 +34,12 @@
       "lane": "crm"
     },
     {
-      "path": "apps/console/app/(editor)/[orgSlug]/hosts/[host]/forms/[formId]/versions/[versionId]/besigner/layout.tsx",
-      "rules": [
-        "domain-name"
-      ],
-      "lane": "plugin-id"
-    },
-    {
-      "path": "apps/console/app/(editor)/[orgSlug]/hosts/[host]/forms/[formId]/versions/[versionId]/besigner/page.tsx",
-      "rules": [
-        "domain-name",
-        "domain-declares:forms"
-      ],
-      "lane": "plugin-id"
-    },
-    {
-      "path": "apps/console/app/(editor)/[orgSlug]/hosts/[host]/forms/[formId]/versions/[versionId]/preview/layout.tsx",
-      "rules": [
-        "domain-name"
-      ],
-      "lane": "plugin-id"
-    },
-    {
-      "path": "apps/console/app/(editor)/[orgSlug]/hosts/[host]/forms/[formId]/versions/[versionId]/preview/page.tsx",
-      "rules": [
-        "domain-name"
-      ],
-      "lane": "plugin-id"
-    },
-    {
-      "path": "apps/console/app/api/_lib/org-cogs.ts",
-      "rules": [
-        "plugin-collection:ai",
-        "domain-declares:ai"
-      ],
-      "lane": "ai"
-    },
-    {
       "path": "apps/console/app/api/_lib/site-export.ts",
       "rules": [
         "plugin-id"
       ],
       "lane": "stays",
       "why": "`'marketplace'` here is a FIELD NAME, not a plugin id: the component document's install stamp from before AGL-1015 (`{ listingId, profileId, version }`), which core's own provenance reader (`app-utils/artifact-provenance.ts`, `resolveProvenance`, argued stays) still reads as the listing an installed component came from, and which the component install still writes beside `installedFrom`. This list is the round trip of a live component document, so leaving the key out would restore every legacy installed component with its origin stripped; renaming it is a data migration of every installed component on every site."
-    },
-    {
-      "path": "apps/console/app/api/admin/margin-utilization/route.ts",
-      "rules": [
-        "plugin-collection:ai",
-        "domain-declares:ai",
-        "domain-declares:workflows"
-      ],
-      "lane": "ai"
     },
     {
       "path": "apps/console/app/api/admin/org-usage/route.ts",
@@ -145,34 +99,15 @@
       "lane": "forms"
     },
     {
-      "path": "apps/console/app/api/crm/export/route.ts",
-      "rules": [
-        "domain-name",
-        "plugin-id",
-        "plugin-collection:crm",
-        "domain-declares:crm"
-      ],
-      "lane": "crm"
-    },
-    {
       "path": "apps/console/app/api/hosts/export/route.ts",
       "rules": [
-        "plugin-id",
         "plugin-collection:data"
       ],
       "lane": "plugin-id"
     },
     {
-      "path": "apps/console/app/api/hosts/forms/promote/route.ts",
-      "rules": [
-        "domain-name"
-      ],
-      "lane": "forms"
-    },
-    {
       "path": "apps/console/app/api/hosts/import/route.ts",
       "rules": [
-        "plugin-id",
         "plugin-collection:data",
         "domain-declares:data"
       ],
@@ -234,28 +169,6 @@
         "domain-declares:data"
       ],
       "lane": "data"
-    },
-    {
-      "path": "apps/console/components/global-search/global-search-dialog.component.tsx",
-      "rules": [
-        "domain-declares:crm"
-      ],
-      "lane": "crm"
-    },
-    {
-      "path": "apps/console/components/global-search/global-search-scope.ts",
-      "rules": [
-        "plugin-id",
-        "domain-declares:crm"
-      ],
-      "lane": "plugin-id"
-    },
-    {
-      "path": "apps/console/components/global-search/use-global-search.ts",
-      "rules": [
-        "domain-declares:crm"
-      ],
-      "lane": "crm"
     },
     {
       "path": "apps/console/components/interactions-provider.component.tsx",
@@ -348,14 +261,6 @@
       "why": "The subprocessor inventory discloses every vendor by name; naming them is its whole job, and a plugin-declared row still folds in through the subprocessor seam."
     },
     {
-      "path": "apps/console/next.config.js",
-      "rules": [
-        "plugin-id",
-        "plugin-collection:workflows"
-      ],
-      "lane": "plugin-id"
-    },
-    {
       "path": "apps/console/utils/api-v1-openapi.ts",
       "rules": [
         "domain-declares:data"
@@ -381,13 +286,6 @@
         "domain-declares:workflows"
       ],
       "lane": "workflows"
-    },
-    {
-      "path": "apps/console/utils/promote-form-version.ts",
-      "rules": [
-        "domain-declares:forms"
-      ],
-      "lane": "forms"
     },
     {
       "path": "apps/console/utils/server/announce-dataset-change.ts",
@@ -555,21 +453,6 @@
       "lane": "crm"
     },
     {
-      "path": "libs/aglyn/src/lib/app-utils/contact-holder.ts",
-      "rules": [
-        "domain-name"
-      ],
-      "lane": "crm"
-    },
-    {
-      "path": "libs/aglyn/src/lib/app-utils/contact-merge.ts",
-      "rules": [
-        "domain-name",
-        "domain-declares:marketing"
-      ],
-      "lane": "crm"
-    },
-    {
       "path": "libs/aglyn/src/lib/app-utils/contacts.ts",
       "rules": [
         "domain-name",
@@ -585,14 +468,6 @@
         "plugin-id",
         "domain-exports:crm",
         "domain-declares:bookings",
-        "domain-declares:crm"
-      ],
-      "lane": "crm"
-    },
-    {
-      "path": "libs/aglyn/src/lib/app-utils/crm-csv.ts",
-      "rules": [
-        "domain-name",
         "domain-declares:crm"
       ],
       "lane": "crm"
@@ -760,15 +635,6 @@
       "lane": "marketing"
     },
     {
-      "path": "libs/aglyn/src/lib/app-utils/margin-utilization.ts",
-      "rules": [
-        "domain-declares:ai",
-        "domain-declares:forms",
-        "domain-declares:workflows"
-      ],
-      "lane": "ai"
-    },
-    {
       "path": "libs/aglyn/src/lib/app-utils/marketing-consent.ts",
       "rules": [
         "domain-exports:marketing",
@@ -780,13 +646,11 @@
     {
       "path": "libs/aglyn/src/lib/app-utils/plan-entitlements.ts",
       "rules": [
-        "domain-declares:ai",
         "domain-declares:commerce",
         "domain-declares:crm",
         "domain-declares:data",
         "domain-declares:forms",
-        "domain-declares:marketplace",
-        "domain-declares:workflows"
+        "domain-declares:marketplace"
       ],
       "lane": "ai"
     },
@@ -857,21 +721,9 @@
     {
       "path": "libs/aglyn/src/lib/foundation/definitions/org-billing.types.ts",
       "rules": [
-        "domain-declares:ai",
-        "domain-declares:commerce",
-        "domain-declares:crm",
-        "domain-declares:forms",
-        "domain-declares:marketplace",
-        "domain-declares:workflows"
+        "domain-declares:ai"
       ],
       "lane": "ai"
-    },
-    {
-      "path": "libs/aglyn/src/lib/plugin-manager/commerce-zone-props.ts",
-      "rules": [
-        "domain-name"
-      ],
-      "lane": "commerce"
     },
     {
       "path": "libs/aglyn/src/lib/plugin-manager/feature-plugins.ts",
@@ -897,27 +749,12 @@
       "lane": "crm"
     },
     {
-      "path": "libs/besigner/feature/designer/src/lib/components/element-detail.component.tsx",
-      "rules": [
-        "domain-declares:commerce"
-      ],
-      "lane": "commerce"
-    },
-    {
       "path": "libs/besigner/feature/designer/src/lib/form-fields/form-fields.tsx",
       "rules": [
         "domain-name"
       ],
       "lane": "stays",
       "why": "The designer's generic form controls; nothing of the forms plugin's model."
-    },
-    {
-      "path": "libs/plugins/ai/src/lib/components/assist-jobs-drawer.component.tsx",
-      "rules": [
-        "console-path:forms",
-        "console-path:workflows"
-      ],
-      "lane": "coupling"
     },
     {
       "path": "libs/plugins/ai/src/lib/insights/ai-figure-readers.ts",
@@ -945,27 +782,6 @@
       "path": "libs/plugins/crm/src/lib/components/deal-products-card.tsx",
       "rules": [
         "plugin-collection:commerce"
-      ],
-      "lane": "coupling"
-    },
-    {
-      "path": "libs/plugins/crm/src/lib/components/lead-surfaces-note.tsx",
-      "rules": [
-        "console-path:forms"
-      ],
-      "lane": "coupling"
-    },
-    {
-      "path": "libs/plugins/crm/src/lib/components/org-lead-surfaces-note.tsx",
-      "rules": [
-        "console-path:forms"
-      ],
-      "lane": "coupling"
-    },
-    {
-      "path": "libs/plugins/crm/src/lib/components/recipes-card.tsx",
-      "rules": [
-        "console-path:workflows"
       ],
       "lane": "coupling"
     },
@@ -1047,21 +863,6 @@
         "plugin-collection:bookings",
         "plugin-collection:forms",
         "console-path:crm"
-      ],
-      "lane": "coupling"
-    },
-    {
-      "path": "libs/plugins/marketing/src/lib/components/campaign-members-section.tsx",
-      "rules": [
-        "console-path:crm",
-        "console-path:forms"
-      ],
-      "lane": "coupling"
-    },
-    {
-      "path": "libs/plugins/marketing/src/lib/components/use-emails-hub-path.ts",
-      "rules": [
-        "console-path:email"
       ],
       "lane": "coupling"
     },
@@ -1310,21 +1111,6 @@
       "lane": "crm"
     },
     {
-      "path": "libs/tenant/data/admin/src/lib/server/contact-lifecycle-floor.ts",
-      "rules": [
-        "domain-name"
-      ],
-      "lane": "crm"
-    },
-    {
-      "path": "libs/tenant/data/admin/src/lib/server/contact-merge.ts",
-      "rules": [
-        "domain-name",
-        "plugin-collection:crm"
-      ],
-      "lane": "crm"
-    },
-    {
       "path": "libs/tenant/data/admin/src/lib/server/contact-suppression.ts",
       "rules": [
         "domain-name"
@@ -1506,14 +1292,6 @@
       "path": "libs/tenant/runtime/src/lib/associate-company-by-domain.ts",
       "rules": [
         "plugin-collection:crm"
-      ],
-      "lane": "crm"
-    },
-    {
-      "path": "libs/tenant/runtime/src/lib/convert-host-lead.ts",
-      "rules": [
-        "plugin-collection:crm",
-        "domain-declares:crm"
       ],
       "lane": "crm"
     },

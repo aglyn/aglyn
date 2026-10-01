@@ -89,7 +89,7 @@ export function describeHostStatus(host: {
     return {
       label: 'Maintenance',
       color: 'warning',
-      detail: 'Every path serves the maintenance screen.',
+      detail: 'Every path serves the maintenance page.',
     }
   }
   const published = publishedScreenCount(host)

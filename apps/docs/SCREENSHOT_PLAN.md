@@ -66,12 +66,12 @@ route that can still leak one (AGL-1600).
 ### 4. `static/img/seo/screen-seo-card.png`
 
 - **Docs page:** `building-sites/seo/overview.md` → `#per-screen-seo`
-- **Capture:** console → any screen's detail page → the **SEO** card, with Title and
+- **Capture:** console → any page's detail view → the **SEO** card, with Title and
   Description filled so the character counters (`…/60`, `…/155`) show non-zero
   numbers, a social image picked so its preview shows, and the **Save SEO**
   button visible.
 - **Frame:** the SEO card only.
-- **Alt text:** A screen's SEO card with Title and Description fields, a Social
+- **Alt text:** A page's SEO card with Title and Description fields, a Social
   image preview with Replace and Clear buttons, and the Save SEO button.
 
 ### 5. `static/img/seo/search-engines-card-on.png`
@@ -88,11 +88,11 @@ route that can still leak one (AGL-1600).
 
 Shot spec lives in `capture-docs-screenshots.mjs`; embedded in
 `building-sites/seo/overview.md`, and in `site-protection/overview.md` and
-`site-protection/password-a-screen.md`, which were borrowing a screens-list shot
+`site-protection/password-a-screen.md`, which were borrowing a pages-list shot
 for want of this one (AGL-1599).
 
 - **Docs page:** `building-sites/seo/overview.md` → `#a-single-page`
-- **Capture:** a screen's detail page → **Page Access** card, with the **Visibility**
+- **Capture:** a page's detail view → **Page Access** card, with the **Visibility**
   select **open** so all four options (Public, Unlisted, Password protected, Members
   only) and their hint lines are visible.
 - **Frame:** the Page Access card with the open dropdown.
@@ -124,13 +124,13 @@ for want of this one (AGL-1599).
 
 ## Besigner — live co-editing & drafts
 
-These four need **two signed-in sessions** on the same screen (two browsers on the
+These four need **two signed-in sessions** on the same page (two browsers on the
 seeded emulator stack). Use two accounts with distinct names/photos.
 
 ### 9. `static/img/besigner/presence-avatar-stack.png`
 
 - **Docs page:** `building-sites/besigner/live-co-editing.md` → `#whos-here`
-- **Capture:** besigner with a second account editing the same screen. Hover the
+- **Capture:** besigner with a second account editing the same page. Hover the
   collaborator's avatar so the tooltip "«Name» has this open too. Edits merge live,
   element by element, and either of you can save at any time…" is visible.
 - **Frame:** the toolbar's right half — avatar stack + tooltip + the Live/Preview/
@@ -154,7 +154,7 @@ seeded emulator stack). Use two accounts with distinct names/photos.
 
 - **Docs page:** `building-sites/besigner/live-co-editing.md` → `#when-a-save-is-refused`
 - **Capture:** both sessions edit; session B saves. Session A immediately shows the
-  warning banner under the toolbar: "Someone else saved this screen while you were
+  warning banner under the toolbar: "Someone else saved this page while you were
   editing. Saving is paused so their work is not overwritten — reload to pick up
   their changes. Nothing you have done here is lost until you do." with its
   **Reload** button.
@@ -166,13 +166,13 @@ seeded emulator stack). Use two accounts with distinct names/photos.
 ### 12. `static/img/besigner/draft-recovery-alert.png`
 
 - **Docs page:** `building-sites/besigner/live-co-editing.md` → `#local-draft-recovery`
-- **Capture:** edit a screen, wait ~2s (draft write), close the tab **without
-  saving**, reopen the same screen. The info alert "Unsaved changes to this screen
+- **Capture:** edit a page, wait ~2s (draft write), close the tab **without
+  saving**, reopen the same page. The info alert "Unsaved changes to this page
   from a moment ago were recovered from this browser. Restoring puts them back on
   the canvas without saving; you can undo it." with **Restore** and **Discard**.
 - **Frame:** the alert only, full width.
 - **Alt text:** The draft-recovery offer with Restore and Discard buttons after
-  reopening a screen that closed with unsaved changes.
+  reopening a page that closed with unsaved changes.
 
 ### 13. `static/img/besigner/versions-dialog.png`
 
@@ -204,11 +204,11 @@ so there is no flag to switch on first.
 
 - **Docs page:** `building-sites/besigner/edit-from-the-live-site.md` → `#the-bar`
 - **Capture:** at desktop width, once the bar is up: the dark bar across the top of the
-  page showing the site name, the current screen's name, **Edit this page**, today's
-  views, **Screens**, the account menu and the × button.
+  page showing the site name, the current page's name, **Edit this page**, today's
+  views, **Pages**, the account menu and the × button.
 - **Frame:** the full-width bar plus a strip of the page below it.
-- **Alt text:** The admin bar across the top of a published page, naming the screen
-  beside Edit this page, today's views and the Screens link.
+- **Alt text:** The admin bar across the top of a published page, naming the page
+  beside Edit this page, today's views and the Pages link.
 
 ## Media
 

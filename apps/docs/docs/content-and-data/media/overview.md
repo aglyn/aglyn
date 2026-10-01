@@ -401,7 +401,7 @@ and cache well.
 A media URL is keyed to the **asset**, not to its bytes or its location. That means the
 link you copied stays correct when you:
 
-- **Replace the file** — every screen, layout, and content entry that embeds it serves
+- **Replace the file** — every page, layout, and content entry that embeds it serves
   the new file immediately, with no re-linking. A replaced video also drops the poster
   frame and any encoded versions of the old footage, so nothing left over is served
   under the new file's link. The file's [details](#file-info) are read from the new
@@ -637,7 +637,7 @@ console will name the host it refused.
 
 ## Reference {#reference}
 
-The details behind the screens above, for anyone wiring media into their own code.
+The details behind the sections above, for anyone wiring media into their own code.
 
 ### Variant widths {#variant-widths}
 

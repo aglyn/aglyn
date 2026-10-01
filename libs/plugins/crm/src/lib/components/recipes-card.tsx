@@ -25,6 +25,7 @@ import {
   planLabelGrantingFeature,
   pluginDocsHelp,
 } from '@aglyn/aglyn'
+import { pluginRecordListHref } from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
 import { AppLink, CardDisplay, SrOnly } from '@aglyn/shared-ui-jsx'
 import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -60,14 +61,15 @@ import { useCrmApi } from './use-crm-api'
 const FORM_OPTION_CEILING = 100
 
 /**
- * The site's Automation → Actions page — where an installed action lives
- * and is edited — or `null` for a site whose subdomain the mount could not
- * answer, which is named and not linked.
+ * The site's list of actions — where an installed action lives and is
+ * edited — at the address the plugin that keeps actions publishes, or `null`
+ * for a site whose subdomain the mount could not answer or a workspace where
+ * no plugin keeps actions, which is named and not linked.
  */
 function siteActionsHref(mount: CrmOrgMount, hostId: string): string | null {
   const subdomain = mount.siteSubdomain(hostId)
   return subdomain
-    ? `${mount.hostsPath}/${encodeURIComponent(subdomain)}/automation/actions`
+    ? pluginRecordListHref('action', { orgSlug: mount.orgSlug, host: subdomain })
     : null
 }
 

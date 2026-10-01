@@ -68,6 +68,7 @@ import { collection, doc, limit, query, updateDoc } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
 import { useCallback, useMemo, useState } from 'react'
 import { FORM_CONTACT_FIELDS_ZONE } from './form-zones'
+import { FORMS_DOCUMENT_SEGMENT } from '../constants/bundle-common'
 import FormDesignPreview from './form-design-preview.component'
 import FormMetricsCard from './form-metrics-card.component'
 import FormSubmissionsCard from './form-submissions-card.component'
@@ -116,7 +117,7 @@ export interface FormDetailCardProps {
  * how you go back, not only how you go forward, and an author restoring last
  * week's design should not have to open a canvas to do it.
  *
- * It rides `/api/hosts/forms/promote` rather than an `updateDoc` here, because
+ * It rides `/api/forms/promote` rather than an `updateDoc` here, because
  * a form's promotion has to run `checkFormContract` on the tree it is about to
  * write and REFUSE. A check in this component would be advice a determined
  * client could skip; the route reads the stored version itself, so nothing
@@ -460,7 +461,13 @@ export function FormDetailCard(props: FormDetailCardProps) {
         // disabled, so this branch cannot be reached without them.
         if (orgSlug && host) {
           router.push(
-            buildRoute(Route.FORM_BESIGNER, { orgSlug, host, formId, versionId }),
+            buildRoute(Route.PLUGIN_DOCUMENT_BESIGNER, {
+              orgSlug,
+              host,
+              documentSegment: FORMS_DOCUMENT_SEGMENT,
+              docId: formId,
+              versionId,
+            }),
           )
         }
       } catch (error) {

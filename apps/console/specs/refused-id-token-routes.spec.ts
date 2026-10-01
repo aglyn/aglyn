@@ -110,13 +110,12 @@ jest.mock('@aglyn/tenant-data-admin', () => {
 // The REAL library: routes and their helpers read its constants at module
 // scope (`SELF_SERVE_PLANS.filter` in billing-addons), and the request adapter
 // has to parse the body a route validates before it verifies the way
-// production parses it. Only the two validators that gate verification on
-// input this suite does not care about are pinned open.
+// production parses it. Only the validator that gates verification on
+// input this suite does not care about is pinned open.
 jest.mock('@aglyn/aglyn/server', () => ({
   ...(jest.requireActual('@aglyn/aglyn/server') as Record<string, unknown>),
   __esModule: true,
   isValidOrgSlug: () => true,
-  isCrmExportResource: () => true,
 }))
 
 jest.mock('@aglyn/shared-util-email', () =>
@@ -145,7 +144,6 @@ import * as passkeyRemove from '../app/api/auth/passkeys/remove/route'
 import * as sendVerification from '../app/api/auth/send-verification/route'
 import * as billingSubscription from '../app/api/billing/subscription/route'
 import * as usageConfig from '../app/api/billing/usage-config/route'
-import * as crmExport from '../app/api/crm/export/route'
 import * as domainsStatus from '../app/api/domains/status/route'
 import * as editAccessToken from '../app/api/edit-access/token/route'
 import * as hostsDelete from '../app/api/hosts/delete/route'
@@ -261,11 +259,6 @@ const ROUTES: RouteCase[] = [
   {
     label: 'support/tickets',
     send: () => supportTickets.GET(request('GET', '/api/support/tickets')),
-    broken: 500,
-  },
-  {
-    label: 'crm/export, a catch with no binding',
-    send: () => crmExport.GET(request('GET', '/api/crm/export?orgId=org-1&resource=contacts')),
     broken: 500,
   },
   {

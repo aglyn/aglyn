@@ -142,12 +142,6 @@ export const WIDGET_ZONE_LAYOUTS: Readonly<
   hostAutomations: 'bare',
   automationEditor: 'bare',
   automationRun: 'bare',
-  // Sections the commerce plugin places inside its own spaced layouts: the
-  // product editor's fields, above the products hub's catalog table, and the
-  // CSV import dialog's options.
-  productEditor: 'bare',
-  productsHub: 'bare',
-  productImport: 'bare',
   // A card among a CRM record page's own cards, which the CRM plugin hosts.
   recordInsights: 'stack',
   // Sections the CRM plugin places inside its own spaced layouts: under the

@@ -45,14 +45,37 @@
  * returns as a verdict. Both changes are the door's, so the v1 API and the
  * manual add can reach them next.
  *
- * ## Two lookups paid once per request, not once per row
+ * ## Every lookup paid once per request, not once per row (AGL-3423)
  *
- * An owner is named by email in the file and stored by uid on the record,
- * so the org's roster is read once and every row resolves against it. A
- * company is named by name and stored by id, so each distinct name is
- * looked up once, created once when missing, and remembered for the rest
- * of the request — two hundred rows at one company is one read and at most
- * one write, not two hundred of each.
+ * A request has sixty seconds, and a row that reads for itself spends them
+ * a round trip at a time: the door alone was a dozen serial reads and three
+ * aggregate counts per new person, and a two-hundred-row chunk of an
+ * Apollo export ran out of time before it answered. So nothing here is
+ * read per row:
+ *
+ * - The door's own lookups — the site, the consent group, who each address
+ *   already is, who the site erased, the room in the records band — come
+ *   from one `prepareContactCaptureBatch` for the whole chunk, which every
+ *   row's capture is handed. The door still makes every decision.
+ * - An owner is named by email and stored by uid, so the org's roster is
+ *   read once and every row resolves against it.
+ * - A company is named by name and stored by id, so the distinct names are
+ *   looked up together, thirty to an `in` query, and the missing ones are
+ *   created in one batched write — an Apollo file names a different company
+ *   on nearly every row, and that was a read, a count and a write each.
+ *
+ * What is left per row is the row's own writes and what a new person sets
+ * off, and those run {@link CONTACT_IMPORT_CONCURRENCY} at a time. A row is
+ * started only inside {@link CONTACT_IMPORT_TIME_BUDGET_MS}; the rest are
+ * reported `not-reached`, so a slow chunk answers with what it did instead
+ * of being cut off at the limit with no answer at all.
+ *
+ * ## A retry is a merge, never a second person
+ *
+ * The door dedupes on the address, through the index and then the `email`
+ * query, so a row that landed before a request was cut off is found by the
+ * next attempt and merged into — the one-person-one-record rule a second
+ * form submission meets. A company is found by its `nameLower` the same way.
  *
  * ## Who may call it
  *
@@ -78,7 +101,11 @@ import {
   type ContactImportSkippedRow,
   normalizeContactImportRow,
 } from '../model/crm-import'
-import { crmRecordsQuotaForOrg, firebaseAdmin } from '@aglyn/tenant-data-admin'
+import {
+  type ContactCaptureBatch,
+  firebaseAdmin,
+  prepareContactCaptureBatch,
+} from '@aglyn/tenant-data-admin'
 import { captureHostContact } from '@aglyn/tenant-runtime'
 // The leaf, so a spec that stands a partial barrel in still reaches it.
 import {
@@ -97,6 +124,26 @@ import {
 
 /** The one sentence every imported contact's timeline opens with. */
 export const CONTACT_IMPORT_INTERACTION_SUMMARY = 'Imported from CSV'
+
+/**
+ * How many rows are written at once. Enough to overlap the round trips a
+ * row still pays; few enough that a chunk never has more writes in flight
+ * than one client connection handles comfortably.
+ */
+export const CONTACT_IMPORT_CONCURRENCY = 8
+
+/**
+ * How long after the request arrived a row may still be STARTED. The
+ * function is stopped at sixty seconds; this leaves the rows already in
+ * flight, and the mail-server check's grace, room to finish before then.
+ */
+export const CONTACT_IMPORT_TIME_BUDGET_MS = 40_000
+
+/** The most values one Firestore `in` filter may carry. */
+const IN_FILTER_LIMIT = 30
+
+/** The most writes one batch may carry. */
+const BATCH_WRITE_LIMIT = 500
 
 /**
  * The holder's live custom-field definitions.
@@ -136,81 +183,118 @@ interface ImportCompany {
   name: string
 }
 
+function pagesOf<T>(items: readonly T[], size: number): T[][] {
+  const out: T[][] = []
+  for (let at = 0; at < items.length; at += size) out.push(items.slice(at, at + size))
+  return out
+}
+
 /**
- * The company a name refers to in this scope, created when there is none.
+ * The company each row names, in this scope, with the missing ones created.
  *
  * Looked up by `nameLower`, the search twin `nameSearchFields` writes on
- * every company, and narrowed in memory to the ones the caller's scope can
- * see — two clients of one agency may each have an "Acme" and must each get
- * their own. Created with the same scope stamp every CRM creator uses, so
- * the company lands exactly where a contact captured on this site would.
+ * every company, thirty names to an `in` query and every page at once, and
+ * narrowed in memory to the ones the caller's scope can see — two clients
+ * of one agency may each have an "Acme" and must each get their own. A
+ * name nobody in scope holds is created once for the request, with the
+ * same scope stamp every CRM creator uses, so the company lands exactly
+ * where a contact captured on this site would; the creates go out in one
+ * batched write.
+ *
+ * THE RECORDS BAND (AGL-2611). A company is a record of the same band the
+ * contact behind its row will meet at the door, so the band is walked in
+ * file order — the row's company, then the row's contact when the address
+ * is new — from the capture batch's one tally. On an org at a full hard
+ * band the row gets no company rather than a company it was not allowed to
+ * hold, and a later row's company never takes the room an earlier row's
+ * contact needed. Nothing is reported here: the contact is refused
+ * `audience-band` at its door and the row is listed skipped, which is the
+ * one message the operator needs. A plan with an overage rate always
+ * admits — a rate is what makes the band meter instead of refuse.
+ *
+ * Keyed by `nameLower`; a name absent from the map gets no company.
  */
-async function resolveCompany(
+async function resolveCompanies(
   context: Extract<ImportContext, { ok: true }>,
-  name: string,
-  cache: Map<string, ImportCompany>,
-  tally: { created: number },
-): Promise<ImportCompany | null> {
-  const fields = nameSearchFields(name)
-  const cached = cache.get(fields.nameLower)
-  if (cached) return cached
-  const orgRef = firebaseAdmin
-    .app()
-    .firestore()
+  capture: ContactCaptureBatch,
+  rows: readonly { row: ContactImportRow }[],
+): Promise<{ companies: Map<string, ImportCompany>; created: number }> {
+  const firestore = firebaseAdmin.app().firestore()
+  const collection = firestore
     .collection('orgs')
     .doc(context.orgId)
-  const companies = orgRef.collection(CRM_COLLECTIONS.companies)
-  const matches = await companies
-    .where('nameLower', '==', fields.nameLower)
-    .limit(10)
-    .get()
-  const seen = matches.docs.find((doc) =>
-    visibleToTokens(doc.get('visibleTo'), context.readTokens),
-  )
-  if (seen) {
-    // The name as the record spells it, not as this row typed it, so the
-    // contact's facet reads the same as the company page.
-    const found = { id: seen.id, name: String(seen.get('name') ?? name) }
-    cache.set(fields.nameLower, found)
-    return found
+    .collection(CRM_COLLECTIONS.companies)
+  const named = new Map<string, ReturnType<typeof nameSearchFields>>()
+  for (const { row } of rows) {
+    if (!row.companyName) continue
+    const fields = nameSearchFields(row.companyName)
+    if (!named.has(fields.nameLower)) named.set(fields.nameLower, fields)
   }
-  /*
-   * THE RECORDS BAND (AGL-2611). A company is a record of the same band
-   * the contact behind this row will meet at its own door, so on an org
-   * at a full hard band the row gets no company rather than a company it
-   * was not allowed to hold. Nothing is reported here: the contact is
-   * refused `audience-band` a few lines on and the row is listed skipped,
-   * which is the one message the operator needs. A plan with an overage
-   * rate never reaches this branch — a rate is what makes the band meter
-   * instead of refuse.
-   */
-  const room = await crmRecordsQuotaForOrg(context.org as never, orgRef)
-  if (!room.allowed) return null
-  const created = await companies.add({
-    ...fields,
-    hostId: context.hostId,
-    visibleTo: context.scopeTokens,
-    createdByUid: context.uid,
-    createdAt: FieldValue.serverTimestamp(),
-    updatedAt: FieldValue.serverTimestamp(),
-    // What the Companies list searches and filters by (AGL-3321).
-    ...crmNewRecordListFields('companies', { ...fields, visibleTo: context.scopeTokens }),
-  })
-  tally.created += 1
-  const made = { id: created.id, name }
-  cache.set(fields.nameLower, made)
-  return made
+
+  const companies = new Map<string, ImportCompany>()
+  await Promise.all(
+    pagesOf([...named.keys()], IN_FILTER_LIMIT).map(async (page) => {
+      const matches = await collection.where('nameLower', 'in', page).get()
+      for (const doc of matches.docs) {
+        const nameLower = String(doc.get('nameLower') ?? '')
+        if (!named.has(nameLower) || companies.has(nameLower)) continue
+        if (!visibleToTokens(doc.get('visibleTo'), context.readTokens)) continue
+        // The name as the record spells it, not as this row typed it, so the
+        // contact's facet reads the same as the company page.
+        companies.set(nameLower, {
+          id: doc.id,
+          name: String(doc.get('name') ?? named.get(nameLower)?.name ?? ''),
+        })
+      }
+    }),
+  )
+
+  const creates: { ref: FirebaseFirestore.DocumentReference; record: Record<string, unknown> }[] = []
+  for (const { row } of rows) {
+    if (row.companyName) {
+      const nameLower = nameSearchFields(row.companyName).nameLower
+      if (!companies.has(nameLower) && capture.admit()) {
+        const fields = named.get(nameLower) as ReturnType<typeof nameSearchFields>
+        const ref = collection.doc()
+        creates.push({
+          ref,
+          record: {
+            ...fields,
+            hostId: context.hostId,
+            visibleTo: context.scopeTokens,
+            createdByUid: context.uid,
+            createdAt: FieldValue.serverTimestamp(),
+            updatedAt: FieldValue.serverTimestamp(),
+            // What the Companies list searches and filters by (AGL-3321).
+            ...crmNewRecordListFields('companies', { ...fields, visibleTo: context.scopeTokens }),
+          },
+        })
+        companies.set(nameLower, { id: ref.id, name: row.companyName })
+      }
+    }
+    if (capture.peek(row.email) === null && capture.erased(row.email) !== true) {
+      capture.reserve(row.email)
+    }
+  }
+  for (const page of pagesOf(creates, BATCH_WRITE_LIMIT)) {
+    const batch = firestore.batch()
+    for (const { ref, record } of page) batch.set(ref, record)
+    await batch.commit()
+  }
+  return { companies, created: creates.length }
 }
 
 /**
  * `POST crm/contacts-import` — `{ hostId, rows }` → a {@link ContactImportChunkResult}.
  *
- * Rows are written one after another rather than in parallel, because the
- * door's create path counts the collection before it adds: two hundred
- * creates racing one another would each count the same audience and each
- * pass a band the last of them should have hit.
+ * Rows are written {@link CONTACT_IMPORT_CONCURRENCY} at a time, which the
+ * band allows because it is no longer counted per row: the capture batch
+ * counted once, and every create is admitted from its tally — reserved in
+ * file order before any row is written, so which rows the band keeps does
+ * not depend on which write happened to finish first.
  */
 export const crmContactsImportHandler: PluginApiHandler = async (req, res) => {
+  const startedAt = Date.now()
   if (req.method !== 'POST') {
     res.setHeader('Allow', 'POST')
     return res.status(405).json({ error: 'Method not allowed' })
@@ -258,25 +342,34 @@ export const crmContactsImportHandler: PluginApiHandler = async (req, res) => {
     // stamps the records; this is the count the result states.
     const mailServers = findUndeliverableEmails(normalized.map((entry) => entry.row.email))
     const imported: string[] = []
-    const owners = await ownerDirectory(
-      context.orgId,
-      normalized.map((entry) => entry.row),
+    const [owners, capture] = await Promise.all([
+      ownerDirectory(
+        context.orgId,
+        normalized.map((entry) => entry.row),
+      ),
+      prepareContactCaptureBatch(
+        context.hostId,
+        normalized.map((entry) => entry.row.email),
+      ),
+    ])
+    const { companies, created: companiesCreated } = await resolveCompanies(
+      context,
+      capture,
+      normalized,
     )
     const ownersUnresolved = new Set<string>()
-    const companies = new Map<string, ImportCompany>()
-    const companyTally = { created: 0 }
     let created = 0
     let merged = 0
 
-    for (const { index, row } of normalized) {
+    const writeRow = async ({ index, row }: { index: number; row: ContactImportRow }) => {
       let ownerUid: string | undefined
       if (row.ownerEmail) {
         ownerUid = owners.get(row.ownerEmail)
         if (!ownerUid) ownersUnresolved.add(row.ownerEmail)
       }
       const company = row.companyName
-        ? await resolveCompany(context, row.companyName, companies, companyTally)
-        : null
+        ? companies.get(nameSearchFields(row.companyName).nameLower)
+        : undefined
       const verdict = await captureHostContact({
         hostId: context.hostId,
         email: row.email,
@@ -300,6 +393,7 @@ export const crmContactsImportHandler: PluginApiHandler = async (req, res) => {
         // An import is the merchant's own act and files nobody under a
         // campaign; the picker on the profile is where that happens.
         campaignIds: [],
+        batch: capture,
       })
       if ('refused' in verdict) {
         skipped.push({
@@ -314,12 +408,34 @@ export const crmContactsImportHandler: PluginApiHandler = async (req, res) => {
                   ? 'erased'
                   : 'write-failed',
         })
-        continue
+        return
       }
       imported.push(row.email)
       if (verdict.created) created += 1
       else merged += 1
     }
+
+    // A fixed pool drawing from one queue in file order; a row is started
+    // only inside the budget, and whatever is left is reported, not dropped.
+    let next = 0
+    const worker = async () => {
+      while (next < normalized.length) {
+        if (Date.now() - startedAt >= CONTACT_IMPORT_TIME_BUDGET_MS) return
+        const entry = normalized[next]
+        next += 1
+        await writeRow(entry)
+      }
+    }
+    await Promise.all(
+      Array.from(
+        { length: Math.min(CONTACT_IMPORT_CONCURRENCY, normalized.length) },
+        worker,
+      ),
+    )
+    for (const { index, row } of normalized.slice(next)) {
+      skipped.push({ index, email: row.email, reason: 'not-reached' })
+    }
+
     const noMailServer = countUndeliverableEmails(
       imported,
       await settleWithin(mailServers, IMPORT_MAIL_CHECK_GRACE_MS),
@@ -331,7 +447,7 @@ export const crmContactsImportHandler: PluginApiHandler = async (req, res) => {
       merged,
       skipped: skipped.sort((a, b) => a.index - b.index),
       dropped,
-      companiesCreated: companyTally.created,
+      companiesCreated,
       ownersUnresolved: [...ownersUnresolved],
       ...(noMailServer !== undefined ? { noMailServer } : {}),
     }

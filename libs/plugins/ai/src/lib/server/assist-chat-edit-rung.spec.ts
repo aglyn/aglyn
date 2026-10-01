@@ -366,7 +366,7 @@ describe('on the edit rung', () => {
     armStream([OPENING, text('Darkening the hero.'), ...closing()])
     await (await POST(post(editBody(ADDON_ORG)))).text()
     const system = providerRequest().system as SystemBlock[]
-    expect(system[1].text).toContain('This screen: The Besigner')
+    expect(system[1].text).toContain('This console page: The Besigner')
     expect(system[1].text).toContain('propose_canvas_edit')
     expect(system[1].cache_control).toEqual({ type: 'ephemeral' })
     expect(system[2].text.startsWith('Editing this canvas:')).toBe(true)
@@ -429,14 +429,14 @@ describe('on the edit rung', () => {
   })
 
   it('a question that stands on its own is still answered from the docs', async () => {
-    const response = await POST(post(editBody(FREE_ORG, { question: 'How do I publish my first screen?' })))
+    const response = await POST(post(editBody(FREE_ORG, { question: 'How do I publish my first page?' })))
     expect(response.status).toBe(200)
     expect(response.headers.get('X-Assist-Served-By')).toBe('docs')
     expect(mockFetch).not.toHaveBeenCalled()
   })
 
   it('GUARD: a question about "this" element is not answered with a docs quote on the rung', async () => {
-    const question = 'How do I publish this screen?'
+    const question = 'How do I publish this page?'
     // The control: below the rung, the same question is a docs answer.
     const below = await POST(post(editBody(PRO_ORG, { question })))
     expect(below.headers.get('X-Assist-Served-By')).toBe('docs')

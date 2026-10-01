@@ -1,7 +1,7 @@
 ---
 sidebar_position: 2
 title: Add search to your site
-description: Drop the Search Box element onto a screen and publish — the built-in search page does the rest.
+description: Drop the Search Box element onto a page and publish — the built-in search page does the rest.
 ---
 
 # Add search to your site
@@ -18,7 +18,7 @@ Included on **every plan**.
 ## Steps
 
 1. In the [Besigner](../besigner/overview.md), open the elements drawer and add
-   the **Search Box** (under **Forms**) to a screen — or to your shared
+   the **Search Box** (under **Forms**) to a page — or to your shared
    [layout](../screens-and-layouts/layouts.md) so it appears site-wide.
 2. Optionally set the box's **Placeholder** text in the Attributes panel.
 3. **Publish.** Submitting the box sends visitors to your site's `/search`
@@ -34,8 +34,8 @@ build.
 - Search covers [dataset](../../content-and-data/datasets/overview.md) records
   and [blog entries](../site-templates/build-a-blog.md), so well-structured
   content and clear titles make results more useful.
-- Dataset records only surface when a published screen repeats over that
-  dataset — build a listing screen for anything you want to be findable.
+- Dataset records only surface when a published page repeats over that
+  dataset — build a listing page for anything you want to be findable.
 
 ## Related
 

@@ -112,13 +112,13 @@ const openSwitcher = async () => {
     { timeout: TIMEOUT_MS },
   )
   await trigger.click()
-  await page.waitForSelector('input[placeholder="Find screen or layout…"]', {
+  await page.waitForSelector('input[placeholder="Find page or layout…"]', {
     timeout: TIMEOUT_MS,
   })
 }
 
 const rowsFor = async (text) => {
-  await page.fill('input[placeholder="Find screen or layout…"]', text)
+  await page.fill('input[placeholder="Find page or layout…"]', text)
   await page.waitForTimeout(2500)
   return page.$$eval('[role="menu"] [role="menuitem"], [role="menu"] li', (nodes) =>
     nodes.map((node) => (node.textContent ?? '').trim()).filter(Boolean),

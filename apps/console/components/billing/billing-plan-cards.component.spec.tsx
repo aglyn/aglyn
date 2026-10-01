@@ -226,7 +226,7 @@ describe('the page opens on the decision, not the catalogue', () => {
     // Screen versioning is off on Free and on from Pro up, so the Pro card
     // earns it. Starter does not have it, so Starter must not claim it.
     expect(screen.getByText('Everything in Free, plus')).toBeTruthy()
-    expect(screen.queryAllByText('Screen versioning').length).toBeGreaterThan(0)
+    expect(screen.queryAllByText('Page versioning').length).toBeGreaterThan(0)
   })
 
   /**
@@ -239,7 +239,7 @@ describe('the page opens on the decision, not the catalogue', () => {
     // One occurrence per card that lists it as a limit — never a second copy
     // inside that card's own gains list.
     expect(screen.queryAllByText(/up from/)).toHaveLength(0)
-    expect(screen.queryAllByText('25 screens per host')).toHaveLength(1)
+    expect(screen.queryAllByText('25 pages per host')).toHaveLength(1)
   })
 
   /**
@@ -531,7 +531,7 @@ describe('the Enterprise card in the comparison grid', () => {
     // by LABEL rather than by value, because the values differ by design and
     // the shared structure is the property.
     expect(enterprise.getAllByText(/hosts?$/).length).toBeGreaterThan(0)
-    expect(enterprise.getByText(/screens per host/)).toBeTruthy()
+    expect(enterprise.getByText(/pages per host/)).toBeTruthy()
     expect(enterprise.getByText(/shared layouts/)).toBeTruthy()
     expect(enterprise.getByText(/saved templates per host/)).toBeTruthy()
     expect(enterprise.getAllByText(/ storage$/).length).toBeGreaterThan(0)
@@ -665,7 +665,7 @@ describe('the Enterprise card in the comparison grid', () => {
     expect(enterprise.queryByText('WHAT AN AGREEMENT INCLUDES')).toBeNull()
     expect(enterprise.queryByText('YOUR AGREEMENT')).toBeNull()
     for (const restated of [
-      'Twice Agency’s sites, seats and storage, unlimited screens, and more by agreement',
+      'Twice Agency’s sites, seats and storage, unlimited pages, and more by agreement',
       'SAML / OIDC single sign-on for your whole team',
       'Full white-label — your brand, not ours',
     ]) {

@@ -102,7 +102,7 @@ export const AI_TEMPLATE_SUBJECT_DEFINITIONS: Readonly<
     tokens: [...ENTRY_TOKEN_CATALOG, ...COLLECTION_TOKEN_CATALOG],
     blocks: ['collectionEntryMeta', 'collectionEntryBody', 'collectionEntryAuthor', 'collectionRelated'],
     defaultName: 'Entry page template',
-    appliedIn: 'the collection’s entry template screen, under Template screens in Content',
+    appliedIn: 'the collection’s entry template page, under Template pages in Content',
   },
   product: {
     subject: 'product',
@@ -120,7 +120,7 @@ export const AI_TEMPLATE_SUBJECT_DEFINITIONS: Readonly<
     tokens: [...AUTHOR_TOKEN_CATALOG, ...PAGINATION_TOKENS],
     blocks: ['contentAuthorProfile'],
     defaultName: 'Author page template',
-    appliedIn: 'the author page screen on the Authors tab',
+    appliedIn: 'the author page on the Authors tab',
   },
 }
 

@@ -144,7 +144,7 @@ Pages are screened when they are served rather than when Publish is clicked.
 Publishing is a pointer move made from the browser in several places, and an
 author can edit a live version in place. Every one of those paths reaches a
 visitor through the same composition step, and that is where the screen reads
-the page: the screen, its layout, the components placed on it and its forms.
+the page: the page itself, its layout, the components placed on it and its forms.
 
 ### What holds, in two tiers {#tiers}
 

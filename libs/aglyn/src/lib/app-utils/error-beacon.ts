@@ -45,10 +45,17 @@
  * module graph (AGL-52); every importer is already a client module.
  */
 
+import { isCrossPoolDesync } from './cross-pool-desync'
 import { isForeignScriptUrl, stackFrameUrls } from './foreign-script'
+import { isStaleBuildError, recoverStaleBuildRejection } from './stale-build-error'
 
 export interface ErrorBeaconEvent {
-  /** 'error' | 'unhandledrejection' — which handler caught it. */
+  /**
+   * Which handler caught it — 'error' | 'unhandledrejection' — or the
+   * family it was labeled with: 'hydration', {@link AUTH_DESYNC_KIND},
+   * {@link CHUNK_LOAD_KIND}, or a caller's own kind for a handled error.
+   * Lands at `jsonPayload.kind`, where the alert policies filter on it.
+   */
   kind: string
   /** Error message, clamped. */
   message: string
@@ -93,8 +100,8 @@ function clamp(value: unknown, max: number): string {
 /**
  * Was this thrown by a script somebody ELSE evaluated into our page?
  *
- * Two tells, both read off the frames' URLs and neither off a function name —
- * a name would be a denylist needing a new entry per vendor.
+ * Three tells, all read off the frames' positions and none off a function
+ * name — a name would be a denylist needing a new entry per vendor.
  *
  * **Every frame is the DOCUMENT.** Measured 2026-09-02 (AGL-2523) on
  * aglyn.com/pricing, reported as an error of ours:
@@ -113,9 +120,22 @@ function clamp(value: unknown, max: number): string {
  *     at sendDataToNative (iabjs://navigation_performance_logger_android:1:10632)
  *
  * That webview names its scripts under its own `iabjs://` scheme, and
- * extensions do the same under theirs — see `FOREIGN_SCRIPT_SCHEMES`. A frame
- * may carry either tell. Nothing we ship can be fixed in response to any of
- * them, which is the same test the opaque `Script error.` cut already applies.
+ * extensions do the same under theirs — see `FOREIGN_SCRIPT_SCHEMES`.
+ *
+ * **Every frame is a script with NO URL** (AGL-3423). Measured on the
+ * sign-up page and on aglyn.com/solutions/agencies:
+ *
+ *     at eval (<anonymous>)
+ *     at predicate (eval at evaluate (:234:30), <anonymous>:11:37)
+ *
+ *     at <anonymous>:1:54
+ *     at <anonymous>:1:64
+ *
+ * An automation driver's `evaluate` and a snippet pasted into devtools. Every
+ * script we serve has a URL — a chunk, a CDN asset, or the document for an
+ * inline one — so a frame whose position is `<anonymous>:line:col`, or code
+ * `eval`'d by such a frame, was not served by us. See
+ * {@link anonymousScriptFrameCount} for exactly which frames count.
  *
  * ⚑ Deliberately `every`, and deliberately compared against the document
  * rather than against our asset path. A rule like "no frame under
@@ -123,6 +143,10 @@ function clamp(value: unknown, max: number): string {
  * that serves its assets from a CDN, because none of its frames would match.
  * Comparing to the document cannot fail that way: a CDN frame is not the
  * document either, so it keeps the report.
+ *
+ * A stack may mix the tells frame by frame. Nothing we ship can be fixed in
+ * response to any of them, which is the same test the opaque `Script error.`
+ * cut already applies.
  *
  * The cost is honest and small: a throw from one of our own inline
  * bootstrap scripts looks the same and is dropped with it. That trade buys a
@@ -133,11 +157,101 @@ export function isInjectedThirdPartyFrame(
   documentUrl: string,
 ): boolean {
   const urls = stackFrameUrls(stack)
-  // No frames parsed is not evidence of anything — keep the report.
-  if (!urls.length) return false
+  // No frames parsed is not evidence of anything — keep the report. A stack
+  // with neither a URL nor an anonymous-script frame is exactly that: an
+  // empty frame list must never read as "every frame is injected".
+  if (!urls.length && !anonymousScriptFrameCount(stack)) return false
+  // Anonymous frames need no test of their own — they are injected by
+  // definition — so `every` over the URLs is `every` over the whole stack.
+  // One URL of ours, even as the origin of an `eval`, keeps the report.
   return urls.every(
     (url) => isForeignScriptUrl(url) || scrubUrl(url) === documentUrl,
   )
+}
+
+/** A frame line, in V8's `at …` format or WebKit/Firefox's `fn@location`. */
+const STACK_FRAME_LINE = /^\s*at\s|@/
+
+/**
+ * A position in a script that has no URL.
+ *
+ * - `<anonymous>:line:col` — V8's name for such a script, both for a top-level
+ *   snippet and as the position of code run through `eval`/`new Function`.
+ * - `eval at …` — V8's origin of `eval`'d code. When OUR script ran the eval
+ *   its URL is inside this origin, `stackFrameUrls` reads it, and the report
+ *   is kept; that is how the marketing plugin's `runJs` step stays reported.
+ * - `debugger eval code:line:col` — Firefox's devtools console, in the
+ *   `fn@location` format WebKit also uses.
+ *
+ * ⚑ A BARE `(<anonymous>)` with no line and column is NOT one of these. It is
+ * how V8 prints a builtin — `at Array.forEach (<anonymous>)`,
+ * `at JSON.parse (<anonymous>)` — and a builtin is called by whoever called
+ * it, including us.
+ */
+const ANONYMOUS_SCRIPT_POSITION =
+  /<anonymous>:\d+:\d+|\beval at\s|\bdebugger eval code:\d+:\d+/
+
+/** How many frames of this stack are in a script with no URL at all. */
+export function anonymousScriptFrameCount(stack: string): number {
+  let count = 0
+  for (const line of stack.split('\n')) {
+    if (STACK_FRAME_LINE.test(line) && ANONYMOUS_SCRIPT_POSITION.test(line)) {
+      count += 1
+    }
+  }
+  return count
+}
+
+/**
+ * Browser notices that are not failures, and that no fix of ours could act on.
+ *
+ * `ResizeObserver loop completed with undelivered notifications` (and its older
+ * wording, `ResizeObserver loop limit exceeded`) is the browser saying it
+ * deferred some resize callbacks to the next frame. Nothing threw: the event
+ * carries no error object and no stack, and every observer is still
+ * delivered. It arrived from the Besigner on 2026-09-26 and paged. Dropped, on
+ * the browser's exact wording.
+ */
+const BENIGN_BROWSER_NOTICE =
+  /^(?:Uncaught )?(?:Error: )?ResizeObserver loop (?:completed with undelivered notifications|limit exceeded)/
+
+export function isBenignBrowserNotice(message: string): boolean {
+  return BENIGN_BROWSER_NOTICE.test(message)
+}
+
+/**
+ * `kind` for Firebase's `auth/tenant-id-mismatch` — a sibling tab signed in to
+ * another account pool (AGL-3280). The console recovers the tab by reloading
+ * it once it is hidden and deliberately leaves the rejection unhandled so it
+ * is still seen; this label is what lets it be seen by RATE instead of paging
+ * on each of the several rejections one storage event raises.
+ */
+export const AUTH_DESYNC_KIND = 'auth-desync'
+
+/**
+ * `kind` for a chunk the document names and the origin no longer serves
+ * (AGL-3279). Every boundary reloads once for it; what still arrives is the
+ * failure the reload did not cure. One of those is a visitor on a bad
+ * connection; a burst of them is a broken deploy, which only a rate can tell.
+ */
+export const CHUNK_LOAD_KIND = 'chunk-load'
+
+/**
+ * The label for a fault we RECOVER from and still want to see, or undefined.
+ *
+ * These could be ours, so unlike an injected stack they are never dropped:
+ * they are written at full severity under their own `kind`, the per-entry
+ * policy excludes that kind, and a rate policy watches it — the same split
+ * `hydration` already has.
+ */
+export function recoveredErrorKind(error: unknown): string | undefined {
+  try {
+    if (isCrossPoolDesync(error)) return AUTH_DESYNC_KIND
+    if (isStaleBuildError(error)) return CHUNK_LOAD_KIND
+  } catch {
+    // A getter that throws leaves the event unlabeled, never unreported.
+  }
+  return undefined
 }
 
 /**
@@ -233,6 +347,37 @@ export function describeRejectionReason(reason: unknown): string {
   }
 }
 
+/**
+ * How many frames a thrown error keeps, on a pageview that reports (AGL-3423).
+ *
+ * V8 keeps ten by default, and ten is not enough to find where a render loop
+ * STARTED. The Besigner's one React #185 report (2026-09-24) was a
+ * react-final-form field's `setState` inside final-form's `notify` loop, and
+ * every one of its ten frames was inside those two libraries: the component
+ * whose update fed the loop was cut off below them. Fifty reaches past a
+ * form library's own frames to ours, and still fits the {@link MAX_STACK}
+ * clamp at the length a minified frame line has.
+ */
+export const BEACON_STACK_TRACE_LIMIT = 50
+
+/**
+ * Raises the engine's frame limit to `limit`, never lowers it. V8 and
+ * JavaScriptCore read `Error.stackTraceLimit`; an engine that does not has no
+ * such number, and is left without one rather than handed a property it
+ * ignores. It applies to errors created after the call, which is why the
+ * beacon sets it at install, at module scope of the app's first client chunk.
+ */
+export function raiseStackTraceLimit(limit: number): void {
+  try {
+    const engine = Error as ErrorConstructor & { stackTraceLimit?: number }
+    const current = engine.stackTraceLimit
+    if (typeof current !== 'number' || current >= limit) return
+    engine.stackTraceLimit = limit
+  } catch {
+    // A frozen or exotic `Error` keeps its own limit.
+  }
+}
+
 let installed = false
 
 /**
@@ -300,7 +445,11 @@ export function installErrorBeacon(options?: ErrorBeaconOptions): void {
   const endpoint = options?.endpoint ?? '/api/errors'
   const sampleRate = options?.sampleRate ?? 1
   const maxPerPage = options?.maxPerPage ?? 10
-  if (Math.random() >= sampleRate) return
+  // Only a sampled pageview REPORTS. Every pageview recovers a stale build
+  // (the rejection handler below), because a tab left on a dead deploy is a
+  // visitor's problem whether or not its errors are counted.
+  const sampled = Math.random() < sampleRate
+  if (sampled) raiseStackTraceLimit(BEACON_STACK_TRACE_LIMIT)
 
   const seen = new Set<string>()
   let queued: ErrorBeaconEvent[] = []
@@ -330,7 +479,7 @@ export function installErrorBeacon(options?: ErrorBeaconOptions): void {
   }
 
   const enqueue = (event: ErrorBeaconEvent) => {
-    if (sent >= maxPerPage) return
+    if (!sampled || sent >= maxPerPage) return
     // Message + first stack line: enough identity to collapse a render loop
     // without collapsing distinct errors that share a message.
     const key = `${event.message}\x00${(event.stack ?? '').split('\n', 2).join('\n')}`
@@ -340,10 +489,9 @@ export function installErrorBeacon(options?: ErrorBeaconOptions): void {
     queued.push(event)
     if (!timer) timer = setTimeout(flush, FLUSH_DELAY_MS)
   }
-  // Published AFTER the sample-rate return above, so an unsampled pageview
-  // reports nothing by either door rather than one by one and none by the
-  // other.
-  publishEvent = enqueue
+  // Null on an unsampled pageview, so it reports nothing by either door
+  // rather than one by one and none by the other.
+  publishEvent = sampled ? enqueue : null
 
   window.addEventListener('error', (event) => {
     try {
@@ -352,6 +500,7 @@ export function installErrorBeacon(options?: ErrorBeaconOptions): void {
       // Cross-origin scripts yield an opaque "Script error." with nothing
       // actionable attached; reporting it would only create a noisy group.
       if (!message || message === 'Script error.') return
+      if (isBenignBrowserNotice(message)) return
       const pageUrl = scrubUrl(window.location.href)
       const fullStack = error?.stack ? String(error.stack) : undefined
       // A webview or extension that evaluated its own code into our page —
@@ -362,9 +511,12 @@ export function installErrorBeacon(options?: ErrorBeaconOptions): void {
       if (fullStack && isInjectedThirdPartyFrame(fullStack, pageUrl)) return
       const stack = fullStack ? clamp(fullStack, MAX_STACK) : undefined
       enqueue({
-        // MARKED, not dropped: a translator causes these and so does a real
-        // render divergence, and only a rate tells them apart.
-        kind: isHydrationMismatch(message) ? 'hydration' : 'error',
+        // MARKED, not dropped: a translator causes a hydration mismatch and
+        // so does a real render divergence, and a recovered fault is still a
+        // fault. Only a rate tells either apart from noise.
+        kind:
+          recoveredErrorKind(error ?? { message }) ??
+          (isHydrationMismatch(message) ? 'hydration' : 'error'),
         message,
         stack,
         source: scrubUrl(event.filename) || undefined,
@@ -379,14 +531,26 @@ export function installErrorBeacon(options?: ErrorBeaconOptions): void {
 
   window.addEventListener('unhandledrejection', (event) => {
     try {
+      // An `import()` of a chunk this document names and the origin dropped,
+      // which no boundary saw. Recovered by a reload once the tab is hidden,
+      // and, like a boundary's reload, not reported: see
+      // `recoverStaleBuildRejection`. A tab whose recovery is spent still
+      // reports it, as `chunk-load`.
+      if (recoverStaleBuildRejection(event.reason)) return
       const reason = event.reason as Error | undefined
       const message = clamp(describeRejectionReason(event.reason), MAX_MESSAGE)
       if (!message) return
+      const pageUrl = scrubUrl(window.location.href)
+      const fullStack = reason?.stack ? String(reason.stack) : undefined
+      // The same injected-code drop as an uncaught error: a rejection raised
+      // by a devtools snippet or an automation driver's `evaluate` is no more
+      // ours for having been a promise.
+      if (fullStack && isInjectedThirdPartyFrame(fullStack, pageUrl)) return
       enqueue({
-        kind: 'unhandledrejection',
+        kind: recoveredErrorKind(event.reason) ?? 'unhandledrejection',
         message,
-        stack: reason?.stack ? clamp(reason.stack, MAX_STACK) : undefined,
-        url: scrubUrl(window.location.href),
+        stack: fullStack ? clamp(fullStack, MAX_STACK) : undefined,
+        url: pageUrl,
       })
     } catch {
       // Never rethrow from an error handler.

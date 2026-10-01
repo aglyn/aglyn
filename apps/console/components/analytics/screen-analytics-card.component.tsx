@@ -149,7 +149,7 @@ export function ScreenAnalyticsCard(props: {
     // fetch on a guessed "no" meant the pending window suppressed the load.
     return (
       <CardDisplay
-        header={'Screen traffic'}
+        header={'Page traffic'}
         help={docsHelp('analytics', { anchor: '#per-screen-traffic' })}
         contentGutterX
         contentGutterY
@@ -164,7 +164,7 @@ export function ScreenAnalyticsCard(props: {
   if (!entitled) {
     return (
       <CardDisplay
-        header={'Screen traffic'}
+        header={'Page traffic'}
         help={docsHelp('analytics', { anchor: '#per-screen-traffic' })}
         contentGutterX
         contentGutterY
@@ -182,7 +182,7 @@ export function ScreenAnalyticsCard(props: {
             </AppLink>
           }
         >
-          {'Per-screen traffic — views, devices, referrers per page — is a ' +
+          {'Per-page traffic — the views, devices and referrers of each page — is a ' +
             'Pro feature. Data is already being collected, so history is ' +
             'waiting the moment you upgrade.'}
         </Alert>
@@ -227,11 +227,11 @@ export function ScreenAnalyticsCard(props: {
 
   return (
     <CardDisplay
-      header={'Screen traffic (14 days)'}
+      header={'Page traffic (14 days)'}
       help={docsHelp('analytics', {
         anchor: '#dwell-time',
         excerpt:
-          "This screen's views over the last 14 days, its device split and " +
+          "This page's views over the last 14 days, its device split and " +
           'top referrers, and the average time a visitor stayed — measured ' +
           'over the visits that reported one, capped at 30 minutes.',
       })}
@@ -242,7 +242,7 @@ export function ScreenAnalyticsCard(props: {
         <LinearProgress />
       ) : total === 0 ? (
         <Typography variant="body2" color="text.secondary">
-          {'No pageviews recorded for this screen yet.'}
+          {'No pageviews recorded for this page yet.'}
         </Typography>
       ) : (
         <Stack spacing={2}>
@@ -250,7 +250,7 @@ export function ScreenAnalyticsCard(props: {
             <Stack>
               <Typography variant="h4">{total.toLocaleString()}</Typography>
               <Typography variant="caption" color="text.secondary">
-                {'Screen views'}
+                {'Page views'}
               </Typography>
             </Stack>
             {/*
@@ -265,7 +265,7 @@ export function ScreenAnalyticsCard(props: {
                   {formatDwell(avgDwell)}
                 </Typography>
                 <Typography variant="caption" color="text.secondary">
-                  {'Avg. time on this screen'}
+                  {'Avg. time on this page'}
                 </Typography>
               </Stack>
             )}

@@ -132,7 +132,7 @@ export const publishEmailStarterHandler: PluginApiHandler = async (req, res) => 
     if (screen['kind'] !== 'email') {
       return res
         .status(422)
-        .json({ error: 'That screen is a page, not an email' })
+        .json({ error: 'That design is not an email' })
     }
     const activeVersionId = screen['versionId']
     if (!activeVersionId) {

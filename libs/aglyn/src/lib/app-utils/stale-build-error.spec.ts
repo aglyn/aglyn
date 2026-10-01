@@ -28,6 +28,7 @@
 
 import {
   isStaleBuildError,
+  recoverStaleBuildOrReport,
   RECOVERY_INTERVAL_MS,
   shouldReloadForStaleBuild,
 } from './stale-build-error'
@@ -112,5 +113,203 @@ describe('shouldReloadForStaleBuild', () => {
     window.sessionStorage.setItem('aglyn.staleBuildReloaded', 'not a number')
 
     expect(shouldReloadForStaleBuild(stale())).toBe(true)
+  })
+})
+
+/**
+ * The one recovery every boundary runs (AGL-3423). Before it, the two
+ * boundaries a published page's body actually reaches only re-dispatched, so a
+ * stale tab kept an empty body and the beacon reported a `ChunkLoadError`.
+ */
+describe('recoverStaleBuildOrReport', () => {
+  const stale = () =>
+    Object.assign(new Error('Failed to load chunk /_next/x.js'), {
+      name: 'ChunkLoadError',
+    })
+
+  function withReportError(): jest.Mock {
+    const reportError = jest.fn()
+    Object.defineProperty(window, 'reportError', {
+      value: reportError,
+      configurable: true,
+      writable: true,
+    })
+    return reportError
+  }
+
+  it('reloads a stale build and does NOT report it', () => {
+    const reportError = withReportError()
+    const reload = jest.fn()
+
+    expect(recoverStaleBuildOrReport(stale(), reload)).toBe(true)
+    expect(reload).toHaveBeenCalledTimes(1)
+    expect(reportError).not.toHaveBeenCalled()
+  })
+
+  it('reports the failure a reload already failed to cure, and reloads no more', () => {
+    const reportError = withReportError()
+    const reload = jest.fn()
+    recoverStaleBuildOrReport(stale(), reload)
+    reload.mockClear()
+
+    const again = stale()
+    expect(recoverStaleBuildOrReport(again, reload)).toBe(false)
+    expect(reload).not.toHaveBeenCalled()
+    expect(reportError).toHaveBeenCalledWith(again)
+  })
+
+  it('reports every other error without reloading', () => {
+    const reportError = withReportError()
+    const reload = jest.fn()
+    const boom = new TypeError("Cannot read properties of null (reading 'indexOf')")
+
+    expect(recoverStaleBuildOrReport(boom, reload)).toBe(false)
+    expect(reload).not.toHaveBeenCalled()
+    expect(reportError).toHaveBeenCalledWith(boom)
+  })
+})
+
+/**
+ * The same stale tab when no boundary saw it: an `import()` nobody awaited
+ * inside a render rejects to `window` (AGL-3423). The page is still up and may
+ * hold unsaved work, so the reload waits for the tab to be hidden.
+ *
+ * The module holds the pending reload, so each case loads a fresh copy; the
+ * `afterEach` hides the tab once so no case leaves a listener armed for the
+ * next.
+ */
+describe('recoverStaleBuildRejection', () => {
+  type Module = typeof import('./stale-build-error')
+
+  const stale = () =>
+    Object.assign(new Error('Failed to load chunk /_next/static/chunks/x.js'), {
+      name: 'ChunkLoadError',
+    })
+
+  function fresh(): Module {
+    let loaded: Module | undefined
+    jest.isolateModules(() => {
+      loaded = jest.requireActual<Module>('./stale-build-error')
+    })
+    return loaded as Module
+  }
+
+  function setVisibility(state: DocumentVisibilityState): void {
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => state,
+    })
+  }
+
+  function hideTab(): void {
+    setVisibility('hidden')
+    document.dispatchEvent(new Event('visibilitychange'))
+  }
+
+  beforeEach(() => {
+    setVisibility('visible')
+  })
+
+  afterEach(() => {
+    hideTab()
+    delete (document as { visibilityState?: unknown }).visibilityState
+  })
+
+  it('waits for the tab to be hidden, then reloads once', () => {
+    const { recoverStaleBuildRejection } = fresh()
+    const reload = jest.fn()
+
+    expect(recoverStaleBuildRejection(stale(), reload)).toBe(true)
+    expect(reload).not.toHaveBeenCalled()
+    expect(window.sessionStorage.getItem('aglyn.staleBuildReloaded')).toBeTruthy()
+
+    hideTab()
+    expect(reload).toHaveBeenCalledTimes(1)
+    hideTab()
+    expect(reload).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not reload for a tab that is merely shown again', () => {
+    const { recoverStaleBuildRejection } = fresh()
+    const reload = jest.fn()
+    recoverStaleBuildRejection(stale(), reload)
+
+    document.dispatchEvent(new Event('visibilitychange'))
+
+    expect(reload).not.toHaveBeenCalled()
+  })
+
+  it('reloads at once when the tab is already hidden', () => {
+    const { recoverStaleBuildRejection } = fresh()
+    const reload = jest.fn()
+    setVisibility('hidden')
+
+    expect(recoverStaleBuildRejection(stale(), reload)).toBe(true)
+    expect(reload).toHaveBeenCalledTimes(1)
+  })
+
+  it('absorbs every later stale rejection while the reload is pending', () => {
+    const { recoverStaleBuildRejection } = fresh()
+    const reload = jest.fn()
+    recoverStaleBuildRejection(stale(), reload)
+
+    // The recovery mark is spent, so without the pending reload these would
+    // read as a reload that failed to cure the tab, and be reported.
+    expect(recoverStaleBuildRejection(stale(), reload)).toBe(true)
+    expect(recoverStaleBuildRejection(stale(), reload)).toBe(true)
+    hideTab()
+    expect(reload).toHaveBeenCalledTimes(1)
+  })
+
+  it('declines a stale build whose recovery is spent, so the beacon reports it', () => {
+    const { recoverStaleBuildRejection } = fresh()
+    window.sessionStorage.setItem('aglyn.staleBuildReloaded', String(Date.now()))
+
+    expect(recoverStaleBuildRejection(stale(), jest.fn())).toBe(false)
+  })
+
+  it('declines every other rejection, without spending the recovery', () => {
+    const { recoverStaleBuildRejection } = fresh()
+    const reload = jest.fn()
+
+    expect(recoverStaleBuildRejection(new Error('a save was refused'), reload)).toBe(false)
+    expect(recoverStaleBuildRejection('aborted', reload)).toBe(false)
+    expect(window.sessionStorage.getItem('aglyn.staleBuildReloaded')).toBeNull()
+    hideTab()
+    expect(reload).not.toHaveBeenCalled()
+  })
+
+  it('lets a boundary that crashes meanwhile take the pending reload at once', () => {
+    const { recoverStaleBuildOrReport, recoverStaleBuildRejection } = fresh()
+    const reportError = jest.fn()
+    Object.defineProperty(window, 'reportError', {
+      value: reportError,
+      configurable: true,
+      writable: true,
+    })
+    const pending = jest.fn()
+    const now = jest.fn()
+    recoverStaleBuildRejection(stale(), pending)
+
+    expect(recoverStaleBuildOrReport(stale(), now)).toBe(true)
+    expect(now).toHaveBeenCalledTimes(1)
+    expect(reportError).not.toHaveBeenCalled()
+    hideTab()
+    expect(pending).not.toHaveBeenCalled()
+  })
+
+  it('keeps the pending reload when a boundary catches an unrelated error', () => {
+    const { recoverStaleBuildOrReport, recoverStaleBuildRejection } = fresh()
+    Object.defineProperty(window, 'reportError', {
+      value: jest.fn(),
+      configurable: true,
+      writable: true,
+    })
+    const pending = jest.fn()
+    recoverStaleBuildRejection(stale(), pending)
+
+    expect(recoverStaleBuildOrReport(new TypeError('boom'), jest.fn())).toBe(false)
+    hideTab()
+    expect(pending).toHaveBeenCalledTimes(1)
   })
 })

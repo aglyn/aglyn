@@ -507,3 +507,90 @@ describe('the sequence editor: a stored sequence (AGL-2980)', () => {
     expect(mockApi.sendStepTest).not.toHaveBeenCalled()
   })
 })
+
+/**
+ * "Maximum update depth exceeded" while typing a step's body (AGL-3423).
+ *
+ * The console reported minified React error #185 thrown from the body
+ * field's own `onChange`. React 19 counts every commit that leaves a
+ * default-priority update pending as a nested one, and keystrokes the
+ * browser delivers back to back commit one after another with nothing in
+ * between to clear that count. The editor held such an update pending after
+ * every commit: the countries Autocomplete re-rendered with each keystroke,
+ * handed its input a new chip array, and MUI's `InputBase` copied it into
+ * its `FormControl` from a passive effect.
+ *
+ * Run against the PRODUCTION builds of React and MUI, in a module registry
+ * of their own: in development MUI's `FormControl` hands its inputs a new
+ * context on every render, which reruns that effect for every field on the
+ * page and would measure the development build rather than what ships. The
+ * keystrokes are dispatched in one task and outside `act`, which is how a
+ * browser delivers queued input, and which `act` would batch into a single
+ * commit.
+ */
+describe('the sequence editor: typing (AGL-3423)', () => {
+  it('takes a burst of keystrokes in a step’s body without exceeding React’s update depth', async () => {
+    const scope = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+    // Widened: the Next typings declare `NODE_ENV` read-only.
+    const env = process.env as Record<string, string | undefined>
+    const environment = env['NODE_ENV']
+    const actEnvironment = scope.IS_REACT_ACT_ENVIRONMENT
+    const errors: string[] = []
+    const onError = (event: ErrorEvent) => {
+      errors.push(String(event.error?.message ?? event.message))
+      event.preventDefault()
+    }
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    env['NODE_ENV'] = 'production'
+    scope.IS_REACT_ACT_ENVIRONMENT = false
+    window.addEventListener('error', onError)
+    let unmount: () => void = () => undefined
+    try {
+      let react!: typeof import('react')
+      let client!: typeof import('react-dom/client')
+      let Editor!: typeof OutreachSequenceEditor
+      jest.isolateModules(() => {
+        react = jest.requireActual('react')
+        client = jest.requireActual('react-dom/client')
+        Editor = (
+          jest.requireActual('./sequence-editor') as typeof import('./sequence-editor')
+        ).OutreachSequenceEditor
+      })
+      const root = client.createRoot(host)
+      unmount = () => root.unmount()
+      root.render(
+        react.createElement(Editor, {
+          orgId: 'org-1',
+          orgMount,
+          sequence: null,
+          settings,
+          mailboxes,
+          mailboxesPath: '/acme/outreach/mailboxes',
+          onSaved: () => undefined,
+        }),
+      )
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      // A new sequence's countries are chips: the field that held the update.
+      expect(within(host).getByText('United States')).toBeTruthy()
+      const body = within(host).getByLabelText('Body') as HTMLTextAreaElement
+      const setValue = Object.getOwnPropertyDescriptor(
+        HTMLTextAreaElement.prototype,
+        'value',
+      )?.set
+      for (let typed = 1; typed <= 80; typed += 1) {
+        setValue?.call(body, 'x'.repeat(typed))
+        body.dispatchEvent(new Event('input', { bubbles: true }))
+      }
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      expect(errors).toEqual([])
+      expect(body.value).toHaveLength(80)
+    } finally {
+      unmount()
+      window.removeEventListener('error', onError)
+      host.remove()
+      env['NODE_ENV'] = environment
+      scope.IS_REACT_ACT_ENVIRONMENT = actEnvironment
+    }
+  })
+})

@@ -117,6 +117,7 @@ jest.mock('@aglyn/tenant-feature-instance/hooks/use-list-query', () => ({
   },
 }))
 
+import { registerPluginRecordRoute } from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
 import CampaignMembersSection from './campaign-members-section'
 
 const HOST = 'host-1'
@@ -153,7 +154,32 @@ const formDoc = (id: string, name: string, extra: Record<string, unknown> = {}) 
   ...extra,
 })
 
+/**
+ * A form's page and the Contacts list are other plugins' (AGL-3080): the
+ * section asks the record-route registry, so this stands in the addresses the
+ * forms and CRM plugins publish. What each publishes is held in its own spec.
+ */
+function standInMemberRoutes() {
+  registerPluginRecordRoute(
+    'form',
+    {
+      list: () => null,
+      record: ({ orgSlug, host }, id) => `/${orgSlug}/hosts/${host}/forms/${id}`,
+    },
+    { pluginId: 'forms' },
+  )
+  registerPluginRecordRoute(
+    'contact',
+    {
+      list: ({ orgSlug, host }) => `/${orgSlug}/hosts/${host}/crm/contacts`,
+      record: () => null,
+    },
+    { pluginId: 'crm' },
+  )
+}
+
 beforeEach(() => {
+  standInMemberRoutes()
   queries.length = 0
   rows.clear()
   stored.clear()
@@ -250,7 +276,7 @@ describe('finding the records that name this campaign', () => {
     expect(screen.getByText('Unsaved landing page')).toBeTruthy()
     expect(screen.getByText('Unsaved landing page').closest('a')).toBeNull()
     expect(
-      screen.getByText('This screen has no saved version yet'),
+      screen.getByText('This page has no saved version yet'),
     ).toBeTruthy()
   })
 
@@ -338,7 +364,7 @@ describe('finding the records that name this campaign', () => {
 
   it('says a campaign holds nothing rather than drawing an empty table', () => {
     draw()
-    expect(screen.getByText(/No screen is in this campaign/)).toBeTruthy()
+    expect(screen.getByText(/No page is in this campaign/)).toBeTruthy()
     expect(screen.getByText(/No form is in this campaign/)).toBeTruthy()
   })
 })
@@ -367,7 +393,7 @@ describe('what the section refuses to claim', () => {
     // rule above makes impossible to build.
     draw()
     const link = screen.getByText('Open Contacts').closest('a')
-    expect(link?.getAttribute('href')).toBe('/acme/hosts/shop/contacts')
+    expect(link?.getAttribute('href')).toBe('/acme/hosts/shop/crm/contacts')
     expect(screen.getByText(/opens unfiltered/)).toBeTruthy()
   })
 
@@ -383,7 +409,7 @@ describe('what the section refuses to claim', () => {
 
     expect(screen.getByText(/Page views are not shown here/)).toBeTruthy()
     const link = screen
-      .getByText('The site’s analytics measures it by screen.')
+      .getByText('The site’s analytics measures it by page.')
       .closest('a')
     expect(link?.getAttribute('href')).toBe('/acme/hosts/shop/analytics')
   })

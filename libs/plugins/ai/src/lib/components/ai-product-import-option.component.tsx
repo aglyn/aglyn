@@ -16,7 +16,7 @@
  */
 'use client'
 
-import type { ConsoleProductImportZoneProps } from '@aglyn/aglyn/plugin-manager/feature-plugins'
+import type { ConsoleProductImportZoneProps } from './ai-product-zones'
 import { Checkbox, FormControlLabel, Stack, Typography } from '@mui/material'
 import { AI_PRODUCTS_BULK_MAX, AI_PRODUCTS_IMPORT_WRITE_COPY } from '../model/ai-products'
 import { useAiProductsJobs } from './use-ai-products-jobs'

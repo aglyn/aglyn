@@ -158,10 +158,7 @@ export * from './lib/server/sso-provisioning'
 export * from './lib/server/update-existing'
 export * from './lib/server/contact-company-link'
 export * from './lib/server/contact-email-index'
-export * from './lib/server/contact-merge'
 export * from './lib/server/upsert-contact'
-// The stage floor a won deal applies to its contact (AGL-2641).
-export * from './lib/server/contact-lifecycle-floor'
 export * from './lib/server/crm-records'
 // The `nextTaskAtMs` a contact, a company and a deal carry, recomputed from
 // their open tasks by every server-side task writer (AGL-2661).

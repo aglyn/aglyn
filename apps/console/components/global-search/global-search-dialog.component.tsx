@@ -38,9 +38,7 @@ import { useHostId, useHostReady, useHostSubdomain } from '../host-id-provider'
 import { useOrgSlug } from '../../hooks/use-org-scope'
 import { useUrlNamedOrg } from '../../hooks/use-url-names-org'
 import useCurrentOrg from '../../hooks/use-current-org'
-import { useOrgPermissions } from '../../hooks/use-org-permissions'
 import { useOrgReach } from '../../hooks/use-org-reach'
-import { useReleaseFlag } from '../../hooks/use-release-flags'
 import DocsHelpTip from '../docs-help-tip.component'
 import {
   buildResultHref,
@@ -48,6 +46,7 @@ import {
   resolveGlobalSearchScope,
 } from './global-search-scope'
 import useGlobalSearch, { SEARCH_MAX_ITEMS } from './use-global-search'
+import useGlobalSearchSources from './use-global-search-sources'
 import {
   consentGroupForHost,
   hostScopeToken,
@@ -124,58 +123,40 @@ export function GlobalSearchDialogComponent(props: GlobalSearchDialogProps) {
   }, [org, orgReady])
 
   /*
-   * The viewer's scope tokens for the org-shared CRM records (AGL-2596;
-   * companies, deals and the site's leads joined under AGL-2622), or null
-   * when none of them must be offered.
+   * The viewer's scope tokens for the org-shared data root under the open
+   * site (AGL-2596): the site's consent group — the same set every list of
+   * org-shared records filters by — resolved from the org document, so this
+   * costs no read and cannot disagree with those lists about who a record is
+   * visible to. Off a site there is no group to resolve, so no tokens.
    *
-   * Three gates, all read from what the console already holds. The CRM
-   * surface is release-flagged, so its rows are offered only where its nav
-   * tab would be — searching a surface the reader cannot open is a link to a
-   * 404. The rules read contacts for `data.manage` holders only, so a viewer
-   * without it is withheld the groups rather than shown "could not be read".
-   * And the tokens themselves are the site's consent group — the same set
-   * the contacts list filters by — resolved from the org document, so this
-   * costs no read and cannot disagree with the list about who a person is
-   * visible to. Off a site there is no group to resolve, so no CRM groups —
-   * the leads read is host data, but it follows this same gate because the
-   * hub is where a lead opens.
+   * Who may read a group at all is not decided here: a plugin's group
+   * arrives only where its gates pass (`useGlobalSearchSources`), and the
+   * tokens are what makes the read the rules admit.
    */
-  const contactsFlag = useReleaseFlag('release_crm')
-  const permissions = useOrgPermissions()
-  // Primitives, so the memo below — and the query effect that depends on
-  // its result — settle once rather than once per render of the provider.
-  const contactsVisible = contactsFlag.ready && contactsFlag.visible
-  const canManageData = permissions.loaded && permissions.can('data.manage')
   const orgDataTokens = useMemo(() => {
     if (!orgReady || !org || !hostId || !hostReady) return null
-    if (!contactsVisible || !canManageData) return null
     const group = consentGroupForHost(org as Record<string, unknown>, hostId)
     return [ORG_SCOPE_TOKEN, ...group.hostIds.map(hostScopeToken)].slice(
       0,
       MAX_SCOPE_HOSTS,
     )
-  }, [org, orgReady, hostId, hostReady, contactsVisible, canManageData])
+  }, [org, orgReady, hostId, hostReady])
 
   /*
-   * The org-level half of the same gate (AGL-2662). Off a site there is no
-   * consent group to resolve tokens from, and the CRM's org hub is offered
-   * to an ORG-WIDE member only — the reach requirement `resolveOrgCrmAccess`
-   * puts in front of that hub, for the same reason: a scoped collaborator's
-   * unfiltered reads are refused by the rules, and a group that renders as
-   * "could not be searched" is worse than one that is not offered.
+   * The organization-level half (AGL-2662). Off a site there is no consent
+   * group to resolve tokens from, and the rules admit an unfiltered read of
+   * the org-shared data only to an ORG-WIDE member: a scoped collaborator's
+   * unfiltered reads are refused, and a group that renders as "could not be
+   * searched" is worse than one that is not offered.
    *
-   * The two gates are exclusive by construction: `hostId` decides which,
+   * The two halves are exclusive by construction: `hostId` decides which,
    * so a site's viewer is never admitted org-wide and vice versa.
    */
-  const { orgWide, ready: reachReady } = useOrgReach()
-  const crmOrgWide =
-    !hostId &&
-    hostReady &&
-    orgReady &&
-    reachReady &&
-    orgWide &&
-    contactsVisible &&
-    canManageData
+  const reach = useOrgReach()
+  const orgWide =
+    !hostId && hostReady && orgReady && reach.ready && reach.orgWide
+
+  const sources = useGlobalSearchSources(org, orgReady)
 
   const scope = useMemo(
     () =>
@@ -186,9 +167,19 @@ export function GlobalSearchDialogComponent(props: GlobalSearchDialogProps) {
         entitlements,
         entitlementsReady: orgReady,
         orgDataTokens,
-        crmOrgWide,
+        orgWide,
+        sources,
       }),
-    [orgId, hostId, hostReady, entitlements, orgReady, orgDataTokens, crmOrgWide],
+    [
+      orgId,
+      hostId,
+      hostReady,
+      entitlements,
+      orgReady,
+      orgDataTokens,
+      orgWide,
+      sources,
+    ],
   )
 
   // Reset between openings so a stale query never renders against a scope it
@@ -204,7 +195,7 @@ export function GlobalSearchDialogComponent(props: GlobalSearchDialogProps) {
     orgId,
     hostId,
     orgDataTokens,
-    crmOrgWide,
+    orgWide,
     text,
   })
 
@@ -217,7 +208,7 @@ export function GlobalSearchDialogComponent(props: GlobalSearchDialogProps) {
             key: `${group.definition.id}:${row.$id}`,
             label: row.$label || String(row.$id),
             href: buildResultHref(
-              group.definition.id,
+              group.definition,
               row,
               { orgSlug, hostSubdomain },
               buildRoute as any,

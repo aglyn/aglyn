@@ -76,6 +76,18 @@ export interface PluginSiteCacheRequest {
    * `'marketplace listing revoked'`, not `'revoke'`.
    */
   reason: string
+  /**
+   * Narrows a site's drop to the pages that changed: its site-absolute
+   * addresses (`/`, `/contact`), keyed by site id. A site named here loses
+   * only those pages, and one named with an empty list loses none; a site
+   * not named here loses every page it serves.
+   *
+   * For a change the plugin can place exactly — a document it publishes that
+   * renders on the pages that place it — rather than one that reaches every
+   * page, like a revoked bundle. The plugin knows which pages; the app knows
+   * how to drop one, on every address the site answers at.
+   */
+  paths?: Readonly<Record<string, readonly string[]>>
 }
 
 export interface PluginSiteCacheResult {
