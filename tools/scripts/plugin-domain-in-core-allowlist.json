@@ -93,13 +93,10 @@
     {
       "path": "apps/console/utils/api-v1-resources.ts",
       "rules": [
-        "plugin-id",
-        "plugin-collection:commerce",
-        "plugin-collection:forms",
-        "domain-declares:forms",
         "domain-declares:marketing"
       ],
-      "lane": "plugin-id"
+      "lane": "stays",
+      "why": "The `campaignEmails` band of `GET /v1/usage` is the platform's own meter, not the Marketing plugin's: it reads the organization's `campaignEmailSends` counter that the mail rail's refusable `campaign` send class increments whoever sends (the argued stay on `email-metering.ts`), limited by the platform plan table's `emailSendsPerMonth`. The words it trips on are that band's published member name and the two locals that compute it; renaming the member would break every integration that reads it."
     },
     {
       "path": "apps/tenant/app/[host]/[scheme]/[[...slug]]/advertising-tags.tsx",

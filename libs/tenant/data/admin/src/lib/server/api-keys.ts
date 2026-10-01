@@ -122,9 +122,9 @@ export const API_SCOPES = [
   // Fulfilment ONLY. `cancelled` and `refunded` are refused by name with a
   // 400: those move stock and money through their own transactions, and this
   // scope must never become the door around them. The transition rule itself
-  // is not re-implemented here at all — the write goes through the commerce
-  // plugin's own transaction via the order-fulfilment capability registry,
-  // so the API can never write a status the console forbids.
+  // is not re-implemented here at all — the commerce plugin serves the
+  // resource and writes through the same transaction its console route
+  // takes, so the API can never write a status the console forbids.
   'orders:write',
   'products:read',
   'media:read',

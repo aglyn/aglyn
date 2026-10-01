@@ -230,6 +230,11 @@ import {
   resetPluginEventHandlersForTests,
 } from '@aglyn/aglyn/plugin-manager/plugin-events'
 import { DELETE, GET, PATCH, POST } from '../app/api/v1/[[...route]]/route'
+import { registerPluginServerDeclarations } from '../constants/plugins.declarations.server.generated'
+// The console's boot, which registers the plugins' resources under a site —
+// the forms plugin's submissions, the commerce plugin's orders and products
+// (AGL-3080).
+beforeAll(() => registerPluginServerDeclarations())
 
 const SUBMISSIONS = 'hosts/host-1/formSubmissions'
 const BASE = 'https://app.aglyn.com/api/v1/sites/host-1/form-submissions'

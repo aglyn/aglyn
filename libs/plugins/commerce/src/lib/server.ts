@@ -27,7 +27,6 @@
 
 import {
   registerBillingWebhookHandler,
-  registerOrderFulfilmentService,
   registerPluginApiRoute,
   registerPluginJob,
   registerSitePageEnricher,
@@ -84,10 +83,7 @@ import { connectHandler } from './server/connect'
 import { cancelOrderHandler } from './server/cancel-order'
 import { collectionMembershipHandler } from './server/collection-membership'
 import { draftOrderHandler } from './server/draft-order'
-import {
-  fulfillOrderHandler,
-  recordOrderShipment,
-} from './server/fulfill-order'
+import { fulfillOrderHandler } from './server/fulfill-order'
 import { giftCardsHandler } from './server/gift-cards'
 import { memberPostHandler } from './server/member-post'
 import { orderAnalyticsHandler } from './server/order-analytics'
@@ -333,26 +329,10 @@ export function registerCommerceConsoleApi(): void {
   registerPluginApiRoute('commerce/draft-order', draftOrderHandler)
   // Fulfil + mark-delivered with the transition re-asked under the write
   // (AGL-1819) — the same stale-dialog hole cancel-order closes, minus the
-  // stock release those two transitions never had.
+  // stock release those two transitions never had. The customer REST API's
+  // `PATCH /v1/sites/{id}/orders/{id}` records a shipment through the same
+  // transaction (`server/api-v1/orders-and-products.ts`).
   registerPluginApiRoute('commerce/fulfill-order', fulfillOrderHandler)
-  // The same transaction, offered to the HOST APP as a capability (AGL-2461)
-  // so `/v1` can record a shipment without importing this library — which
-  // `eslint.config.mjs`'s `scope:app` boundary forbids, and which is why the
-  // public REST API could take an order and never ship it.
-  //
-  // Registered HERE, in the consoleApi surface, beside the route it shares an
-  // implementation with: `/v1` reaches it through the console's server plugin
-  // loader, the same `ensureAll(['consoleApi'])` batch the plugin API
-  // dispatcher runs. A registration at module scope would instead depend on
-  // which entry point a process happened to import.
-  //
-  // NOTHING ABOUT AUTHORIZATION CROSSES THIS LINE. The capability is a
-  // pre-authorized domain operation and `/v1` does its own gating (key scope,
-  // plan entitlement, org-owns-host, plugin-enabled-for-site) before it calls.
-  registerOrderFulfilmentService({
-    pluginId: BUNDLE_ID,
-    recordShipment: recordOrderShipment,
-  })
   // Issue / void store credit (AGL-2226). Server-side because the host
   // catch-all in the Firestore rules would otherwise let a client write
   // its own `balanceCents`, which checkout applies as amount-off.
