@@ -1138,6 +1138,9 @@ function hostCollectionRows() {
       if (declaration.resource !== undefined) {
         row.resource = hostResourceRow(declaration.resource, `${what} resource`, resourceKinds, plugin.id)
       }
+      if (declaration.siteExport !== undefined) {
+        row.siteExport = siteExportRow(declaration.siteExport, `${what} siteExport`, name, row.resource)
+      }
       rows.push(row)
     }
   }
@@ -1257,6 +1260,65 @@ function stampRecord(stamps, what, writable) {
     }
   }
   return stamps
+}
+
+/**
+ * The keys the whole-site export already writes: the bundle's envelope and the
+ * platform's own documents. A plugin collection carried under one of these
+ * names would overwrite it on the way out and be restored through the wrong
+ * allow-list on the way in.
+ */
+const CORE_SITE_EXPORT_KEYS = [
+  'format', 'version', 'exportedAt', 'sourceHostId', 'host',
+  'screens', 'layouts', 'versions', 'components', 'authors', 'collections', 'entries',
+  'datasets', 'records', 'media', 'mediaFolders', 'hostMedia', 'hostMediaFolders',
+]
+
+/** The most documents one bundle may carry of one collection. */
+const SITE_EXPORT_MAX_LIMIT = 1000
+
+/**
+ * A plugin's host collection in the whole-site export (AGL-3080): the export
+ * reads up to `limit` of its live documents into the bundle under the
+ * collection's own name, and a restore writes each one back through `fields`
+ * with `merge: false` — so the list is every key a live document carries, not
+ * what a create sends, and a key left off is ERASED from every restored
+ * document.
+ *
+ *  - A COUNT. A restore creates documents with the Admin SDK, past the rules,
+ *    so the collection must have a `resource` whose plan `quotaKey` or
+ *    `platformCap` the restore is met against (AGL-1403, AGL-2266).
+ *  - NOTHING THE RESTORE STAMPS OR SCOPES. `createdAt`, `updatedAt`,
+ *    `createdBy` and `deletedAt` are stamped (a bundle carrying a tombstone
+ *    would restore a document invisible), `visibleTo` is assigned fresh, and
+ *    an external destination's approver is provenance a file cannot supply.
+ *  - NO KEY THE PLATFORM'S OWN BUNDLE USES.
+ */
+function siteExportRow(siteExport, what, collection, resource) {
+  if (!siteExport || typeof siteExport !== 'object' || Array.isArray(siteExport)) throw new Error(`${what} is an object`)
+  const { $comment: _note, ...fields } = siteExport
+  const unknown = Object.keys(fields).filter((key) => !['limit', 'fields'].includes(key))
+  if (unknown.length) throw new Error(`${what}: ${unknown.join(', ')} is not a site export field`)
+  if (CORE_SITE_EXPORT_KEYS.includes(collection)) {
+    throw new Error(`${what}: "${collection}" is a key the platform's own bundle writes`)
+  }
+  if (!resource) {
+    throw new Error(`${what} needs the collection's "resource": a restore creates documents here, and the resource names the count they are met against`)
+  }
+  const { limit } = fields
+  if (!Number.isInteger(limit) || limit < 1 || limit > SITE_EXPORT_MAX_LIMIT) {
+    throw new Error(`${what}: "limit" is a whole number from 1 to ${SITE_EXPORT_MAX_LIMIT}`)
+  }
+  const restored = plainFieldList(fields.fields, `${what} fields`)
+  const never = [
+    ...SERVER_STAMPED_FIELDS,
+    'visibleTo',
+    ...(resource.externalDestination ? [resource.externalDestination.approvedByField] : []),
+  ]
+  for (const field of restored) {
+    if (never.includes(field)) throw new Error(`${what}: "${field}" is stamped or scoped by the restore, never read from a bundle`)
+  }
+  return { limit, fields: restored }
 }
 
 /**

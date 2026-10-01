@@ -611,6 +611,9 @@ const SEEDS: Array<{
       },
       steps: [{ type: 'openDialog', dialogId: 'signup' }],
       enabled: true,
+      // The recipe the action began as (AGL-2639). A restore that dropped
+      // it would read back as an action from before the stamp existed.
+      recipe: 'welcomeNewLead',
     },
   },
   {
@@ -667,6 +670,12 @@ const SEEDS: Array<{
       priceUsd: 0,
       timezone: 'America/Chicago',
       windows: { 1: [{ start: 540, end: 1020 }] },
+      // The service's two CRM switches (AGL-2660), each seeded AWAY from what
+      // its absence means: a missing `crmMeetingActivity` files meetings and
+      // a missing `crmFollowUpTask` owes no task, so a restore that dropped
+      // them would flip both.
+      crmFollowUpTask: true,
+      crmMeetingActivity: false,
     },
   },
   {

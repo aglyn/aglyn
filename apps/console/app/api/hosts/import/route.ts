@@ -21,7 +21,6 @@
 import { artifactCreateListKeys } from '@aglyn/aglyn/app-utils/artifact-list-keys'
 import { PLATFORM_BRAND_NAME, pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
-  ACTIONS_MAX_PER_HOST,
   AUTHORS_MAX_PER_HOST,
   checkDatasetQuota,
   checkEntitlement,
@@ -51,6 +50,7 @@ import {
   EXPORT_COLLECTION_LIMITS,
   EXPORTABLE_HOST_FIELDS,
   IMPORTABLE_FIELDS,
+  PLUGIN_SITE_EXPORT_COLLECTIONS,
   SITE_EXPORT_FORMAT,
   SITE_EXPORT_VERSION,
 } from '../../_lib/site-export'
@@ -403,7 +403,7 @@ async function screenCapRefusal(options: {
  * paired with the quota key `/api/hosts/resources` already enforces them on
  * (AGL-1403).
  *
- * A table rather than five checks because the arithmetic really is the same
+ * A table rather than a check per collection because the arithmetic really is the same
  * for all of them: unlike screens these have no exclusion rule, so the state an
  * import would leave is just `|existing ids ∪ bundle ids|`. The mapping is the
  * only thing worth writing down, and writing it down is what makes the gap
@@ -412,6 +412,12 @@ async function screenCapRefusal(options: {
  * `checkQuota` arrives here for the first time with this table. A cap nothing
  * in the file mentions is a cap nobody reviewing the file can notice is
  * missing.
+ *
+ * The platform's own row is `layouts`. The rest are the collections plugins
+ * declare for the bundle whose `resource` names a plan counter — a site's
+ * workflows, functions, variables and services — read from the declaration
+ * rather than written here, so the counter a restore is met against is the
+ * one the create route meets the same kind against, by construction.
  *
  * `layouts` and `services` are UNLIMITED on every plan that can reach this
  * route, so today they refuse nothing and cost no read. They are in the table
@@ -423,25 +429,35 @@ async function screenCapRefusal(options: {
  *
  * * `screens` — a different rule (`billableScreenIds`, with three exclusions)
  *   and its own check above (AGL-1398).
- * * `actions` — no `RESOURCES` entry and no quota key anywhere; all three
- *   creators write the document client-direct.
+ * * a declared collection counted by a FLAT cap — the table below.
  * * `collections`/`entries` — uncapped by design; AGL-1387 declined
  *   `collectionsPerHost` and this is not the issue that re-opens it.
  * * `components` — `reusableComponents` is a BOOLEAN entitlement, true on
  *   every plan that can reach here. There is no number to compare against.
  * * `media` — the meter is bytes at upload, and an import copies no bytes.
  */
-const CAPPED_HOST_COLLECTIONS = [
-  { collection: 'workflows', quotaKey: 'workflowsPerHost', label: 'workflows' },
-  { collection: 'functions', quotaKey: 'functionsPerHost', label: 'functions' },
-  { collection: 'variables', quotaKey: 'variablesPerHost', label: 'variables' },
+const CAPPED_HOST_COLLECTIONS: ReadonlyArray<{
+  collection: string
+  quotaKey: string
+  label: string
+}> = [
   {
     collection: 'layouts',
     quotaKey: 'sharedLayoutsPerHost',
     label: 'shared layouts',
   },
-  { collection: 'services', quotaKey: 'servicesPerHost', label: 'services' },
-] as const
+  ...PLUGIN_SITE_EXPORT_COLLECTIONS.flatMap((declared) =>
+    'quotaKey' in declared.count
+      ? [
+          {
+            collection: declared.collection,
+            quotaKey: declared.count.quotaKey,
+            label: declared.label,
+          },
+        ]
+      : [],
+  ),
+]
 
 /**
  * The bundle collections bounded by a FLAT PLATFORM cap rather than a plan
@@ -453,6 +469,12 @@ const CAPPED_HOST_COLLECTIONS = [
  * arithmetic is otherwise identical, so the loop below is shared.
  *
  * ## Why this route needs them at all
+ *
+ * The declared collections counted by a flat cap — a site's interactions and
+ * actions, by `ACTIONS_MAX_PER_HOST` — come from their `resource`, resolved by
+ * name the way the create route resolves it; a name core does not hold is
+ * `null`, and a bundle carrying that collection is refused rather than
+ * restored uncapped.
  *
  * AGL-2266 moved `actions` and `entries` creation server-side and gave
  * `collections` a ceiling, which closes the CLIENT door. This route is the
@@ -467,8 +489,22 @@ const CAPPED_HOST_COLLECTIONS = [
  * `entries` is deliberately NOT here, and the reason is a read bill rather
  * than a judgement — see the note at the end of this table's use below.
  */
-const FLAT_CAPPED_HOST_COLLECTIONS = [
-  { collection: 'actions', max: ACTIONS_MAX_PER_HOST, label: 'interactions' },
+const FLAT_CAPPED_HOST_COLLECTIONS: ReadonlyArray<{
+  collection: string
+  max: number | null
+  label: string
+}> = [
+  ...PLUGIN_SITE_EXPORT_COLLECTIONS.flatMap((declared) =>
+    'max' in declared.count
+      ? [
+          {
+            collection: declared.collection,
+            max: declared.count.max,
+            label: declared.label,
+          },
+        ]
+      : [],
+  ),
   // Custom content authors (AGL-2486). Same arithmetic and the same reason:
   // `AUTHORS_MAX_PER_HOST` is enforced on /api/hosts/resources, which closes
   // the CLIENT door, and this route writes with the Admin SDK. A bundle can
@@ -479,7 +515,7 @@ const FLAT_CAPPED_HOST_COLLECTIONS = [
     max: COLLECTIONS_MAX_PER_HOST,
     label: 'collections',
   },
-] as const
+]
 
 /** The ids a collection already holds. A field mask with no fields projects to
  * the document id alone, so this is the cheapest form of the read. */
@@ -677,19 +713,25 @@ async function hostCapRefusal(options: {
   for (const capped of FLAT_CAPPED_HOST_COLLECTIONS) {
     const bundleIds = bundleDocIds(bundleItems(capped.collection))
     if (!bundleIds.size) continue
+    const max = capped.max
+    if (max == null) {
+      throw new Error(
+        `hosts/import: "${capped.collection}" names a platform cap core does not hold`,
+      )
+    }
     const ref = hostRef.collection(capped.collection)
     const held = (await ref.count().get()).data().count
-    if (held + bundleIds.size <= capped.max) continue
+    if (held + bundleIds.size <= max) continue
 
     const existing = await existingDocIds(ref)
     const next = new Set([...existing, ...bundleIds]).size
-    if (next <= existing.size || next <= capped.max) continue
+    if (next <= existing.size || next <= max) continue
 
     return Response.json({
       error:
         `This backup holds ${bundleIds.size} ${capped.label} and this site ` +
         `has ${existing.size}, which would put it at ${next} of ` +
-        `${capped.max}. Nothing was imported — delete some, or restore into ` +
+        `${max}. Nothing was imported — delete some, or restore into ` +
         'a site with room.',
     }, { status: 403 })
   }
@@ -1354,12 +1396,12 @@ async function handler(request: Request): Promise<Response> {
 
     await importVersioned('layouts')
     await importPlain('components')
-    await importPlain('variables')
-    await importPlain('functions')
-    await importPlain('workflows')
-    await importPlain('actions')
+    // The collections plugins declare for the bundle, each through the
+    // field list its declaration names (folded into `IMPORTABLE_FIELDS`).
+    for (const declared of PLUGIN_SITE_EXPORT_COLLECTIONS) {
+      await importPlain(declared.collection)
+    }
     await importAuthors()
-    await importPlain('services')
     // Folders before assets: the tree has to exist before anything points into
     // it, and both reads resolve against the same id set (AGL-1392).
     await importMediaFolders()

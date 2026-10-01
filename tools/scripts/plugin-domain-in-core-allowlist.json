@@ -128,7 +128,6 @@
     {
       "path": "apps/console/app/api/hosts/export/route.ts",
       "rules": [
-        "plugin-id",
         "plugin-collection:data"
       ],
       "lane": "plugin-id"
@@ -143,7 +142,6 @@
     {
       "path": "apps/console/app/api/hosts/import/route.ts",
       "rules": [
-        "plugin-id",
         "plugin-collection:data",
         "domain-declares:data"
       ],

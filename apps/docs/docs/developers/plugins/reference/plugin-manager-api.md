@@ -420,6 +420,38 @@ every rule above; `registerPluginHostCollections` refuses a declaration that
 carries a `resource`. `listPluginHostResources()` / `pluginHostResource(kind)`
 (`@aglyn/aglyn/plugin-manager/plugin-host-resources`) read them.
 
+### In the site backup — `siteExport`, and `plugin-site-export`
+
+A site admin on a plan with site export downloads one JSON bundle of the
+site and restores it later, into the same site or another. The platform's own
+documents are always in it. A plugin collection is in it only when the
+collection says so, beside its `resource`:
+
+```json
+{
+  "name": "bottles",
+  "resource": { "kind": "bottle", "quotaKey": "bottlesPerHost", "…": "…" },
+  "siteExport": {
+    "limit": 100,
+    "fields": ["name", "vintage", "notes", "cellarId"]
+  }
+}
+```
+
+| Field | Semantics |
+| --- | --- |
+| `limit` | The most live documents one bundle carries (1–1000). The export reads no more, and a restore writes no more. |
+| `fields` | The keys a restore writes back, with `merge: false` — so it is every key a LIVE document carries, not what a create sends, and a key left off is erased from every restored document. `createdAt`, `updatedAt`, `createdBy`, `deletedAt`, `visibleTo` and an external destination's approver field are refused: a restore stamps or scopes them itself. |
+
+The export writes the collection's live documents under the collection's name,
+and a restore writes them back by id and counts the result against the
+`resource` — its `quotaKey`, or its `platformCap` — before the first write,
+so a `siteExport` on a collection with no `resource` is refused. A collection
+may not take a key the platform's bundle already uses (`screens`, `media`,
+`datasets`, …). Compiled like `resource`, and refused at runtime:
+`listPluginSiteExportCollections()`
+(`@aglyn/aglyn/plugin-manager/plugin-site-export`) reads them.
+
 ## Sitemap sections — `plugin-sitemap-sections`
 
 A site's `/sitemap.xml` is an index over one child per section. The pages,

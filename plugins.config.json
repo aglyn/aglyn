@@ -201,6 +201,19 @@
               "crmFollowUpTask",
               "crmMeetingActivity"
             ]
+          },
+          "siteExport": {
+            "limit": 50,
+            "fields": [
+              "name",
+              "description",
+              "durationMinutes",
+              "priceUsd",
+              "timezone",
+              "windows",
+              "crmFollowUpTask",
+              "crmMeetingActivity"
+            ]
           }
         },
         {
@@ -971,6 +984,10 @@
             "activityType": "function",
             "quotaKey": "functionsPerHost",
             "fields": ["name", "parameters", "variables", "operations", "returnValue"]
+          },
+          "siteExport": {
+            "limit": 100,
+            "fields": ["name", "parameters", "variables", "operations", "returnValue"]
           }
         },
         {
@@ -982,6 +999,10 @@
             "activityNoun": "variable",
             "activityType": "variable",
             "quotaKey": "variablesPerHost",
+            "fields": ["name", "type", "value", "workflowId", "workflowName"]
+          },
+          "siteExport": {
+            "limit": 100,
             "fields": ["name", "type", "value", "workflowId", "workflowName"]
           }
         }
@@ -1209,6 +1230,11 @@
                 "trigger": null
               }
             }
+          },
+          "siteExport": {
+            "$comment": "`trigger` is written as a literal null by the edit path, so absence and null are different states and a restore keeps the null.",
+            "limit": 100,
+            "fields": ["name", "steps", "returnValue", "trigger"]
           }
         },
         {
@@ -1247,6 +1273,11 @@
               "nodeId",
               "screenId"
             ]
+          },
+          "siteExport": {
+            "$comment": "The stored shape `hostActionDocument` writes, which is narrower than the create's list: every creator now creates a shell and merge-sets the rest. `recipe` is the stamp of the recipe an action began as (AGL-2639).",
+            "limit": 100,
+            "fields": ["name", "trigger", "steps", "enabled", "recipe"]
           }
         }
       ],

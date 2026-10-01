@@ -226,6 +226,19 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
         "crmFollowUpTask",
         "crmMeetingActivity"
       ]
+    },
+    "siteExport": {
+      "limit": 50,
+      "fields": [
+        "name",
+        "description",
+        "durationMinutes",
+        "priceUsd",
+        "timezone",
+        "windows",
+        "crmFollowUpTask",
+        "crmMeetingActivity"
+      ]
     }
   },
   {
@@ -487,6 +500,16 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
         "operations",
         "returnValue"
       ]
+    },
+    "siteExport": {
+      "limit": 100,
+      "fields": [
+        "name",
+        "parameters",
+        "variables",
+        "operations",
+        "returnValue"
+      ]
     }
   },
   {
@@ -499,6 +522,16 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
       "activityNoun": "variable",
       "activityType": "variable",
       "quotaKey": "variablesPerHost",
+      "fields": [
+        "name",
+        "type",
+        "value",
+        "workflowId",
+        "workflowName"
+      ]
+    },
+    "siteExport": {
+      "limit": 100,
       "fields": [
         "name",
         "type",
@@ -577,6 +610,15 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
           "trigger": null
         }
       }
+    },
+    "siteExport": {
+      "limit": 100,
+      "fields": [
+        "name",
+        "steps",
+        "returnValue",
+        "trigger"
+      ]
     }
   },
   {
@@ -621,6 +663,16 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
         "audience",
         "nodeId",
         "screenId"
+      ]
+    },
+    "siteExport": {
+      "limit": 100,
+      "fields": [
+        "name",
+        "trigger",
+        "steps",
+        "enabled",
+        "recipe"
       ]
     }
   },
