@@ -16,16 +16,14 @@
  */
 
 /**
- * AGL-1810: the site-member drawer stops calling a chargeback a refund.
+ * A site user's purchases, in the `siteMember` zone of their drawer
+ * (AGL-546, AGL-3080).
  *
- * `refundedCents` carries a lost chargeback as well as a refund (AGL-1787
- * puts both there deliberately), and the drawer rendered the whole figure as
- * "refunded" — the one word that says the merchant chose it — on the third
- * surface AGL-1796 did not name. The split is the local
- * `splitReversalCents`, a deliberate duplicate of the commerce model's
- * `splitOrderReversal` because `scope:app` must not import `aglyn:addons`
- * (the nx edge AGL-417/419 forbids); its own spec pins the shared clamp
- * semantics.
+ * AGL-1810: a chargeback is not called a refund. `refundedCents` carries a
+ * lost chargeback as well as a refund (AGL-1787 puts both there
+ * deliberately), and the drawer rendered the whole figure as "refunded" —
+ * the one word that says the merchant chose it. The split is the order
+ * model's own `splitOrderReversal`.
  *
  * The LIFETIME TOTAL is pinned unchanged: money reversed is money reversed
  * whichever door it left by, so the netting keeps reading the whole
@@ -33,93 +31,49 @@
  */
 
 import { render, screen } from '@testing-library/react'
-import SiteMemberDrawer from './site-member-drawer.component'
 
 /** Orders the mocked collection hook serves for the member's email. */
 let mockOrders: Array<Record<string, unknown>> = []
+/** Every collection path the section asked for. */
+const mockAsked: string[] = []
 
 /*
- * The double has to answer every constraint the drawer builds, not the ones
- * it built when this was written. A missing export here is not a soft
- * failure: the factory replaces the whole module, so `documentId` came back
- * `undefined` and the component threw on render — a mock that goes stale
- * fails the surface it was meant to be testing, in a message about the
- * fixture rather than about the code.
+ * The double has to answer every constraint the section builds. The factory
+ * replaces the whole module, so a missing export is not a soft failure: it
+ * comes back `undefined` and the component throws on render.
  */
 jest.mock('firebase/firestore', () => ({
   collection: (_db: unknown, ...segments: string[]) => segments.join('/'),
-  doc: (_db: unknown, ...segments: string[]) => segments.join('/'),
   query: (path: string) => ({ path }),
   where: () => undefined,
   orderBy: () => undefined,
   documentId: () => '__name__',
   limit: () => undefined,
-  updateDoc: jest.fn(async () => undefined),
 }))
 
 /**
- * Stable identities, deliberately (AGL-2374).
- *
- * The real `useFirestore`/`useUser` return the same instance on every call.
- * A mock returning a fresh literal per call does not, and `useConfirmedDoc`
- * lists `firestore` in an effect whose first statement is a `setState` — so
- * render → effect → setState → render → NEW `{}` → effect → … forever. That
- * loop is pure microtasks, which starves jest's real-timer `testTimeout`, so
- * the suite cannot fail: it just never returns, and `console:test` produces
- * no verdict at all. Hoisting the returns is what keeps it terminating.
- * (`mock`-prefixed names are the only out-of-scope refs jest lets a module
- * factory close over.)
+ * Stable identities, deliberately (AGL-2374): a mock returning a fresh
+ * literal per call loops an effect that lists it forever. `ceilingedWindow`
+ * is a pure function and is the real one — a hand-written stand-in would be
+ * free to slice differently from the thing that ships.
  */
 const mockFirestore = {}
-const mockUser = {
-  data: { uid: 'uid-admin', getIdToken: async () => 'tok' },
-}
-
-/*
- * The barrel is mocked for its HOOKS; `ceilingedWindow` is a pure function
- * and is taken from the real module rather than stubbed. A hand-written
- * stand-in would be free to slice differently from the thing that ships, and
- * the rows these tests assert on are exactly what it returns — a double that
- * disagrees with the implementation tests the double.
- */
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => mockFirestore,
-  useUser: () => mockUser,
   ceilingedWindow: jest.requireActual(
     '@aglyn/tenant-feature-instance/hooks/host-collection-queries',
   ).ceilingedWindow,
-}))
-
-jest.mock('@aglyn/shared-ui-snackstack', () => ({
-  useSnackbar: () => ({ enqueueSnackbar: jest.fn() }),
-}))
-
-jest.mock('@aglyn/shared-ui-jsx', () => ({
-  useConfirmationContext: () => ({ confirm: jest.fn(async () => undefined) }),
-}))
-
-jest.mock('../hooks/use-host-activity-logger', () => ({
-  __esModule: true,
-  default: () => jest.fn(),
-}))
-
-jest.mock('./password-admin-controls.component', () => ({
-  __esModule: true,
-  default: () => null,
-}))
-
-// Routed by the queried collection's path: the drawer asks for orders,
-// subscriptions and (only when subscriptions exist) products.
-jest.mock('../hooks/use-firestore-collection', () => ({
-  __esModule: true,
-  default: (factory: () => { path?: string } | null) => {
+  // Routed by the queried collection's path: orders, subscriptions and
+  // (only when subscriptions exist) products.
+  useFirestoreCollection: (factory: () => { path?: string } | null) => {
     const path = factory?.()?.path ?? ''
-    if (path.endsWith('/orders')) {
-      return { data: mockOrders, status: 'success' }
-    }
+    if (path) mockAsked.push(path)
+    if (path.endsWith('/orders')) return { data: mockOrders, status: 'success' }
     return { data: [], status: 'success' }
   },
 }))
+
+import { SiteMemberPurchases } from './site-member-purchases.component'
 
 const member = {
   $id: 'member-1',
@@ -127,10 +81,7 @@ const member = {
   displayName: 'Buyer',
 }
 
-const show = () =>
-  render(
-    <SiteMemberDrawer hostId="host-1" member={member} onClose={jest.fn()} />,
-  )
+const show = () => render(<SiteMemberPurchases hostId="host-1" member={member} />)
 
 /** A $62.00 order, the figure the AGL-1796 fixtures use. */
 const baseOrder = {
@@ -154,7 +105,30 @@ const lostDispute = {
   reversedCents: 6200,
 }
 
-describe('the member drawer splits a reversal by its door (AGL-1810)', () => {
+beforeEach(() => {
+  mockOrders = []
+  mockAsked.length = 0
+})
+
+describe('a site user’s purchases', () => {
+  it('reads the site’s orders by the account’s address, and its subscriptions', () => {
+    mockOrders = [baseOrder]
+    show()
+    expect(mockAsked).toEqual(
+      expect.arrayContaining(['hosts/host-1/orders', 'hosts/host-1/subscriptions']),
+    )
+    expect(screen.getByText('Lifetime purchases')).toBeTruthy()
+    expect(screen.getByText(/#1042 · \$62\.00/)).toBeTruthy()
+  })
+
+  it('says there are none, and asks for no product names without subscriptions', () => {
+    show()
+    expect(screen.getByText('No orders yet.')).toBeTruthy()
+    expect(mockAsked).not.toContain('hosts/host-1/products')
+  })
+})
+
+describe('the purchases split a reversal by its door (AGL-1810)', () => {
   it('still says "refunded" for a refund the merchant chose', () => {
     // The control: without a dispute the wording must not move.
     mockOrders = [baseOrder]
@@ -168,9 +142,8 @@ describe('the member drawer splits a reversal by its door (AGL-1810)', () => {
     show()
     expect(screen.getByText(/· charged back \$62\.00/)).toBeTruthy()
     expect(screen.queryByText(/refunded \$/)).toBeNull()
-    // The lifetime netting is CORRECT as it stands (money reversed is money
-    // reversed) and must keep reading the whole figure: $62.00 charged minus
-    // $62.00 reversed.
+    // The lifetime netting keeps reading the whole figure: $62.00 charged
+    // minus $62.00 reversed.
     expect(screen.getByText('$0.00')).toBeTruthy()
   })
 
@@ -187,9 +160,7 @@ describe('the member drawer splits a reversal by its door (AGL-1810)', () => {
   })
 
   it('renders no reversal suffix at all on an untouched order', () => {
-    mockOrders = [
-      { ...baseOrder, status: 'paid', refundedCents: undefined },
-    ]
+    mockOrders = [{ ...baseOrder, status: 'paid', refundedCents: undefined }]
     show()
     expect(screen.queryByText(/refunded \$/)).toBeNull()
     expect(screen.queryByText(/charged back/)).toBeNull()

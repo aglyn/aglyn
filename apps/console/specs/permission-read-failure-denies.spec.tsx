@@ -98,8 +98,8 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
  * effect deps; a factory returning a fresh `{}` per call re-runs the effect
  * forever — render → effect → setState → new `{}` → render. That is an
  * infinite MICROTASK loop, so jest's real-timer `testTimeout` never fires and
- * the suite hangs rather than failing (AGL-2105, and again in
- * `site-member-reversal-label.spec.tsx`).
+ * the suite hangs rather than failing (AGL-2105, and again in the commerce
+ * plugin's `site-member-purchases.spec.tsx`).
  */
 const FIRESTORE = {}
 

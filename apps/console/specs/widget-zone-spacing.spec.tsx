@@ -352,6 +352,7 @@ describe('every zone says how it places its widgets', () => {
       'hostAutomations',
       'automationEditor',
       'automationRun',
+      'siteMember',
       'recordEmail',
       'importMapping',
       'besignerToolbar',

@@ -890,6 +890,15 @@ export const CONSOLE_WIDGET_SLOTS = {
    */
   hostMembers: 'hostMembers',
   /**
+   * One visitor account's drawer on a site's Users page (AGL-546), under the
+   * account's password controls and above its saved addresses: what a plugin
+   * holds about the person behind the account — what they bought, what they
+   * subscribe to. Props: {@link ConsoleSiteMemberZoneProps}. Each widget is
+   * one section of the drawer's own column, which spaces it; the drawer
+   * draws the account itself, its suspension and its password help.
+   */
+  siteMember: 'siteMember',
+  /**
    * The console dock (AGL-2940): the one position above every route boundary
    * in both the `(app)` and `(editor)` shells, where a floating panel — an
    * assistant, a helper — survives a navigation. Props:
@@ -1243,6 +1252,18 @@ export interface ConsoleTemplateGalleryZoneProps {
    * than nothing once a read answers with nothing.
    */
   reportShelf: (shelfId: string, state: ConsoleTemplateGalleryShelfState) => void
+}
+
+/** What the `siteMember` zone hands each widget (AGL-3080). */
+export interface ConsoleSiteMemberZoneProps {
+  /** The site whose visitor account it is. */
+  hostId: string
+  /**
+   * The account's `siteMembers` document as the drawer holds it, `$id`
+   * included. Its `email` is how a plugin finds what the person did on the
+   * site.
+   */
+  member: Readonly<Record<string, unknown>> & { $id: string }
 }
 
 /** What the `templateInstallStatus` zone hands each widget (AGL-3080). */

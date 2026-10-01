@@ -1894,7 +1894,8 @@ async function handler(request: Request): Promise<Response> {
     // through to the plugins exactly as before.
     //
     // WHY `refundedCents` AND `chargedBackCents` BOTH. This mirrors the order
-    // model AGL-1787 already established (`utils/site-member-purchases.ts`):
+    // model AGL-1787 already established (the commerce plugin's
+    // `model/site-member-purchases.ts`):
     // the reversal lands in `refundedCents` because that is the field the
     // return reads and a lost dispute reverses money precisely as a refund
     // does, and `chargedBackCents` records how much of it the BANK took

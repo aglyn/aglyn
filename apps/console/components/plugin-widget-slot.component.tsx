@@ -121,6 +121,8 @@ export const WIDGET_ZONE_LAYOUTS: Readonly<
   orgMember: 'stack',
   // The card beneath the collaborators table; its columns never render here.
   hostMembers: 'stack',
+  // Sections of a site user's drawer, spaced by the drawer's own column.
+  siteMember: 'bare',
   // A floating dock, positioned by the widget itself.
   consoleDock: 'bare',
   // Controls in the besigner's Attributes panel and its toolbar.

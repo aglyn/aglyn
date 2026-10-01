@@ -579,7 +579,8 @@
           "slots": [
             "commerceGlance",
             "consoleSearch",
-            "hostDashboard"
+            "hostDashboard",
+            "siteMember"
           ]
         }
       }

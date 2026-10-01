@@ -170,6 +170,13 @@ const MOUNTS: Record<
     how: 'both',
     props: { hostId: 'host-1', canManage: true },
   },
+  // AGL-3080: what a plugin holds about the person behind a visitor account,
+  // in that account's drawer on the site's Users page.
+  siteMember: {
+    file: 'apps/console/components/site-member-drawer.component.tsx',
+    how: 'slot',
+    props: { hostId: 'host-1', member: { $id: 'member-1', email: 'buyer@example.com' } },
+  },
   consoleDock: {
     file: 'apps/console/components/console-dock-slot.component.tsx',
     how: 'slot',

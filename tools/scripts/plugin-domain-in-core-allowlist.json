@@ -177,13 +177,6 @@
       "lane": "plugin-id"
     },
     {
-      "path": "apps/console/components/site-member-drawer.component.tsx",
-      "rules": [
-        "plugin-collection:commerce"
-      ],
-      "lane": "commerce"
-    },
-    {
       "path": "apps/console/components/staff-org-actions.component.tsx",
       "rules": [
         "domain-declares:forms",
