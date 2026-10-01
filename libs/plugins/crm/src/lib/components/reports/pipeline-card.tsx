@@ -53,6 +53,7 @@ import {
 } from './report-scope'
 import { ReportStatTile } from './report-stat-tile'
 import { useAggregateRead, useWindowRead } from './use-aggregate-read'
+import { currencyOfDeals, pipelineTotals } from '../../model/crm-reports'
 
 /**
  * How many open deals the by-stage chart, the forecast and the top-deals
@@ -158,7 +159,7 @@ export function PipelineCard(props: PipelineCardProps) {
       .filter((pipeline) => !Aglyn.isPipelineArchived(pipeline) || byPipeline.has(pipeline.$id))
       .map((pipeline) => ({
         pipeline,
-        totals: Aglyn.pipelineTotals(byPipeline.get(pipeline.$id) ?? [], pipeline),
+        totals: pipelineTotals(byPipeline.get(pipeline.$id) ?? [], pipeline),
       }))
     const known = new Set(pipelineWindow.rows.map((pipeline) => pipeline.$id))
     const orphans = dealWindow.rows.filter(
@@ -176,14 +177,14 @@ export function PipelineCard(props: PipelineCardProps) {
       .slice(0, TOP_DEALS)
     return {
       pipelines,
-      orphanTotals: Aglyn.pipelineTotals(orphans, null),
+      orphanTotals: pipelineTotals(orphans, null),
       weightedCents: pipelines.reduce(
         (total, entry) => total + entry.totals.weightedCents,
         0,
       ),
       top,
       stageName,
-      currency: Aglyn.currencyOfDeals(dealWindow.rows),
+      currency: currencyOfDeals(dealWindow.rows),
     }
   }, [dealWindow, pipelineWindow])
   // Open deals with nothing scheduled (AGL-2661), off the same window.

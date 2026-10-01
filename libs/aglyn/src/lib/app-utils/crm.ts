@@ -2383,6 +2383,21 @@ export const CRM_LEAD_OPEN_STATUSES: readonly CrmLeadStatus[] = ['new', 'working
 export const CRM_LEAD_CLOSED_STATUSES: readonly CrmLeadStatus[] =
   CRM_LEAD_STATUSES.filter((status) => !CRM_LEAD_OPEN_STATUSES.includes(status))
 
+/**
+ * The leads still needing somebody, from two server counts: every lead,
+ * less the ones closed one way or the other.
+ *
+ * Subtraction rather than a count of the open statuses because a lead
+ * nobody has touched carries NO status field — see `crmLeadStatus` — and
+ * Firestore cannot select a document by a field's absence. The closed
+ * statuses are always written, so they can be counted; what remains is
+ * open. Clamped at zero for the moment between the two counts in which a
+ * lead was closed.
+ */
+export function openLeadsFromCounts(total: number, closed: number): number {
+  return Math.max(0, Math.round(Number(total) || 0) - Math.round(Number(closed) || 0))
+}
+
 export function isCrmLeadStatus(value: unknown): value is CrmLeadStatus {
   return (
     typeof value === 'string' &&

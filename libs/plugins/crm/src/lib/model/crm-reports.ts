@@ -31,7 +31,7 @@
  * needs "now" is handed it.
  */
 
-import type { ContactFacet, ContactSource } from './contacts'
+import type { ContactFacet, ContactSource } from '@aglyn/aglyn/app-utils/contacts'
 import {
   CONTACT_LIFECYCLE_STAGES,
   CONTACT_LIFECYCLE_STAGE_LABELS,
@@ -51,7 +51,7 @@ import {
   isCrmActivityKind,
   isPipelineArchived,
   weightedDealAmountCents,
-} from './crm'
+} from '@aglyn/aglyn/app-utils/crm'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 const WEEK_MS = 7 * DAY_MS
@@ -760,21 +760,6 @@ export function leadFunnel(
       (a, b) => b.count - a.count || a.label.localeCompare(b.label),
     ),
   }
-}
-
-/**
- * The leads still needing somebody, from two server counts: every lead,
- * less the ones closed one way or the other.
- *
- * Subtraction rather than a count of the open statuses because a lead
- * nobody has touched carries NO status field — see `crmLeadStatus` — and
- * Firestore cannot select a document by a field's absence. The closed
- * statuses are always written, so they can be counted; what remains is
- * open. Clamped at zero for the moment between the two counts in which a
- * lead was closed.
- */
-export function openLeadsFromCounts(total: number, closed: number): number {
-  return Math.max(0, Math.round(Number(total) || 0) - Math.round(Number(closed) || 0))
 }
 
 /*==========================================

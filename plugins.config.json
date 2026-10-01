@@ -683,6 +683,14 @@
       "apiPrefixes": [
         "crm"
       ],
+      "consoleRedirects": [
+        {
+          "$comment": "The organization's address book, before it became the contacts section of the organization-level CRM (AGL-2630). Permanent, so a link kept from before — a bookmark, a docs page, an email — is corrected by the browser rather than followed twice; a reader the hub refuses is refused there, with the reason.",
+          "source": "/:orgSlug/contacts",
+          "destination": "/:orgSlug/crm/contacts",
+          "permanent": true
+        }
+      ],
       "activityMutationPaths": [
         "libs/plugins/crm/src/lib/server.ts",
         "libs/plugins/crm/src/lib/server/convert-host-lead.ts",

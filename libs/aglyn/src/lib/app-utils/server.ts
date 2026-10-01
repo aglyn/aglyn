@@ -87,19 +87,14 @@ export * from './crm-booking'
 // shape and id, the marker a record carries while it waits, and the lists
 // the dialog and the docs share. Pure like `crm`; the sweep is server-side.
 export * from './person-erasure'
-// What the CRM's reports compute from what they read — periods, weekly
-// buckets, the lifecycle funnel, pipeline totals (AGL-2604). Pure like `crm`,
-// and beside it because it reads the stage list and the deal weighting from
-// there rather than restating either.
-export * from './crm-reports'
 // A task's reminder at its own time (AGL-2659): which reminder a save
 // leaves, whether one is owed, and the words the notification and the mail
-// say. Pure like `crm-reports`, read by the hourly route and by every
-// writer of the field.
+// say. Pure like `crm`, read by the hourly route and by every writer of the
+// field.
 export * from './crm-task-reminders'
 // Email capture (AGL-2657): the address's shape and token, which of a
 // message's addresses is the correspondent, the excerpt, and the row a
-// captured message becomes. Pure like `crm-reports`; the webhook route and
+// captured message becomes. Pure like `crm`; the webhook route and
 // the address route are the readers with Firestore.
 export * from './crm-inbound'
 // A member's own addresses in a workspace (AGL-2975): the ones they have

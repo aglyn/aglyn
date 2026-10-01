@@ -110,28 +110,6 @@ export enum Route {
   ORG_MEDIA = '/[orgSlug]/media',
   ORG_DATA = '/[orgSlug]/data',
   /*
-   * The organization's address book.
-   *
-   * Org-scoped rather than a section of a site, because it answers the one
-   * question a site page cannot: which of the organization's sites know a
-   * given person. A contact document is shared by every site in the org — one
-   * human who touched two of them is one row — and until this route there was
-   * no surface anywhere that showed the deduped person, so the dedupe the
-   * shared address book exists for was invisible and the billing unit
-   * (unique people per org) had nothing standing behind it.
-   *
-   * It shows identity, which sites hold the person, and consent per site. The
-   * per-site CRM — notes, tags, timeline, order history — stays on the site's
-   * own Contacts surface, because those are the holder's business records and
-   * this is the one route designed to cross between holders.
-   *
-   * A LEGACY ADDRESS since AGL-2630: the page behind it redirects, permanently,
-   * to the org-level CRM hub's contacts section. It stays declared so a link
-   * kept from before — a bookmark, a docs page, an email — still resolves,
-   * and so the redirect has a constant to be built from rather than a string.
-   */
-  ORG_CONTACTS = '/[orgSlug]/contacts',
-  /*
    * The organization-level CRM hub (AGL-2630): the same sections the site hub
    * has — `/[orgSlug]/crm/<section>[/<recordId>]` — mounted with an ORG scope,
    * for an org-wide member who works every site's people at once. A bare
@@ -599,7 +577,6 @@ export interface RoutePayload {
   }
   [Route.ORG_MEDIA]: { orgSlug: string }
   [Route.ORG_DATA]: { orgSlug: string }
-  [Route.ORG_CONTACTS]: { orgSlug: string }
   [Route.ORG_CRM]: { orgSlug: string }
   [Route.ORG_PLUGIN]: { orgSlug: string; pluginSlug: string }
   [Route.ORG_PLUGINS]: { orgSlug: string }

@@ -49,6 +49,11 @@ import {
 } from './report-scope'
 import { ReportStatTile } from './report-stat-tile'
 import { useAggregateRead, useWindowRead } from './use-aggregate-read'
+import {
+  activityLeaderboard,
+  type ActivityLeaderboardRow,
+  deltaPercent,
+} from '../../model/crm-reports'
 
 /**
  * How many activities and how many completed tasks the leaderboard is
@@ -192,10 +197,10 @@ export function ActivityCard(props: ActivityCardProps) {
   )
 
   const rows = useMemo(
-    () => Aglyn.activityLeaderboard(activityWindow.rows, taskWindow.rows),
+    () => activityLeaderboard(activityWindow.rows, taskWindow.rows),
     [activityWindow, taskWindow],
   )
-  const nameOf = (row: Aglyn.ActivityLeaderboardRow): string => {
+  const nameOf = (row: ActivityLeaderboardRow): string => {
     if (!row.uid) return 'No teammate'
     return Aglyn.findOrgMember(roster.options, row.uid)?.label ?? row.name ?? row.uid
   }
@@ -254,7 +259,7 @@ export function ActivityCard(props: ActivityCardProps) {
             value={activityFigures ? activityFigures.current.toLocaleString() : null}
             deltaPct={
               activityFigures
-                ? Aglyn.deltaPercent(activityFigures.current, activityFigures.previous)
+                ? deltaPercent(activityFigures.current, activityFigures.previous)
                 : null
             }
             note={'counted on the server'}
@@ -265,7 +270,7 @@ export function ActivityCard(props: ActivityCardProps) {
             value={taskFigures ? taskFigures.current.toLocaleString() : null}
             deltaPct={
               taskFigures
-                ? Aglyn.deltaPercent(taskFigures.current, taskFigures.previous)
+                ? deltaPercent(taskFigures.current, taskFigures.previous)
                 : null
             }
             note={'ticked off in the period'}

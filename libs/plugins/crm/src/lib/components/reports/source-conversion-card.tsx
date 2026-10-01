@@ -53,6 +53,7 @@ import {
 } from './report-scope'
 import { ReportStatTile } from './report-stat-tile'
 import { useAggregateRead, useWindowRead } from './use-aggregate-read'
+import { conversionBySource } from '../../model/crm-reports'
 
 /**
  * How many of the period's contacts the by-source table is read from.
@@ -124,7 +125,7 @@ export function SourceConversionCard(props: SourceConversionCardProps) {
 
   const conversion = useMemo(
     () =>
-      Aglyn.conversionBySource(
+      conversionBySource(
         window.rows.map((row) => Aglyn.readContactFacet(row, groupId)),
       ),
     [window, groupId],

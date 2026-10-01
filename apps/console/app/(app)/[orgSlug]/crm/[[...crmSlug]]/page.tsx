@@ -116,10 +116,11 @@ const CRM_HREF = '/crm'
  *
  * ## The old address
  *
- * `/[orgSlug]/contacts` was a read-only, cross-site address book. It now
- * redirects here, and what it showed — which sites know a person, and their
- * consent per site — is the contacts section's "Known by" column and the
- * record's card at this mount.
+ * `/[orgSlug]/contacts` was a read-only, cross-site address book. The CRM's
+ * console redirect (`consoleRedirects` in plugins.config.json) sends it here,
+ * and what it showed — which sites know a person, and their consent per site
+ * — is the contacts section's "Known by" column and the record's card at
+ * this mount.
  */
 const OrgCrmPage: NextPageWithLayout<Record<string, never>> = () => {
   const params = useParams<{ crmSlug?: string | string[] }>()

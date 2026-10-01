@@ -33,6 +33,7 @@ import {
   visibleToClause,
 } from './report-scope'
 import { useWindowRead } from './use-aggregate-read'
+import { currencyOfDeals, wonLostByOwner } from '../../model/crm-reports'
 
 /**
  * The same ceiling the Won and lost card reads its chart under, spelled
@@ -105,11 +106,11 @@ export function WonLostByOwnerCard(props: WonLostByOwnerCardProps) {
   )
 
   const owners = useMemo(
-    () => Aglyn.wonLostByOwner(wonWindow.rows, lostWindow.rows),
+    () => wonLostByOwner(wonWindow.rows, lostWindow.rows),
     [wonWindow.rows, lostWindow.rows],
   )
   const currency = useMemo(
-    () => Aglyn.currencyOfDeals(wonWindow.rows).currency,
+    () => currencyOfDeals(wonWindow.rows).currency,
     [wonWindow.rows],
   )
 

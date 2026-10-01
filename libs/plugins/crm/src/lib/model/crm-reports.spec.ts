@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { DEFAULT_DEAL_STAGES } from './crm'
+import { DEFAULT_DEAL_STAGES } from '@aglyn/aglyn/app-utils/crm'
 import {
   activityLeaderboard,
   bucketByWeek,
@@ -31,7 +31,6 @@ import {
   LEAD_NO_REASON_LABEL,
   leadFunnel,
   localDayBounds,
-  openLeadsFromCounts,
   pipelineTotals,
   OWNER_UNASSIGNED_KEY,
   tally,
@@ -493,14 +492,6 @@ describe('leadFunnel', () => {
       { key: LEAD_NO_REASON_KEY, label: LEAD_NO_REASON_LABEL, count: 1 },
       { key: 'wrong region', label: 'Wrong region', count: 1 },
     ])
-  })
-})
-
-describe('openLeadsFromCounts', () => {
-  it('is the total less the closed, never below zero', () => {
-    expect(openLeadsFromCounts(12, 5)).toBe(7)
-    expect(openLeadsFromCounts(3, 5)).toBe(0)
-    expect(openLeadsFromCounts(Number.NaN, 2)).toBe(0)
   })
 })
 
