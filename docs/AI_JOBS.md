@@ -2585,16 +2585,16 @@ sees a record, and every insight a person reads is traced to the numbers it cite
   `libs/aglyn/src/lib/plugin-manager/plugin-figures.ts` by the plugin that owns its records: the
   commerce plugin's `commerce.sales` and `commerce.products` (`server/order-figures.ts`, on the
   Analytics tab card's own arithmetic in `model/order-figures.ts`), the bookings plugin's
-  `bookings.services`, the marketing plugin's `marketing.campaigns` and `marketing.experiments`.
-  This plugin registers the readers for records the platform keeps
-  (`src/lib/insights/ai-figure-readers.ts`): `traffic.summary`, `traffic.pages`,
-  `traffic.sources`, `traffic.daily`, `forms.performance`, `datasets.summary` and
-  `datasets.breakdown`. A reader answers one compact table — counts, sums and rates with a
-  `source` label and the console page they come from — held to the contract by
-  `normalizePluginFigureTable`: at most 25 rows and 8 typed columns, every text cell stripped of
-  email addresses and phone numbers. A dataset breakdown reads at most 2,000 records, refuses a
-  field with more than 60 different values, and folds every group of fewer than three records
-  into one row.
+  `bookings.services`, the marketing plugin's `marketing.campaigns` and `marketing.experiments`,
+  and the data plugin's `datasets.summary` and `datasets.breakdown` (`server/dataset-figures.ts`,
+  from its console-only server declarations). This plugin registers the readers for records the
+  platform keeps (`src/lib/insights/ai-figure-readers.ts`): `traffic.summary`, `traffic.pages`,
+  `traffic.sources`, `traffic.daily` and `forms.performance`. A reader answers one compact
+  table — counts, sums and rates with a `source` label and the console page they come from —
+  held to the contract by `normalizePluginFigureTable`: at most 25 rows and 8 typed columns, every
+  text cell stripped of email addresses and phone numbers. A dataset breakdown reads at most 2,000
+  records, refuses a field with more than 60 different values, and folds every group of fewer
+  than three records into one row.
 - **Who may read what.** `aiInsightReaders` (`src/lib/insights/ai-insight-readers.ts`) offers a
   reader only when the surface asks about its kind of figures, the plan includes the feature it is
   sold under (`commerceAnalytics`, `bookings`, `abTesting`, `dataStore`), and its plugin is past
