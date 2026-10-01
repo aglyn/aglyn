@@ -52,6 +52,7 @@ import { AI_PALETTE } from '../runtime/ai-palette.generated'
 import type { AiSystemBlock, AiTool } from '../runtime/ai-runtime'
 import { readSiteInventory } from '../runtime/site-inventory'
 import { registerAiJobAdmission, type AiJobAdmission } from './ai-job-admission'
+import { aiJobPlanCreationsRefusal } from './ai-job-plan-creations'
 import { aiJobDraftId } from './ai-job-draft-ids'
 import {
   aiDraftAdmissionRefusal,
@@ -628,13 +629,19 @@ const SUBMISSION_WORDS: Record<AiSiteSubmissions, string> = {
   lead: 'the Inbox, and each one with an email address is a sales lead — routing.kind is lead',
 }
 
-/** A form job is admitted for a site of the job's own org whose plan has forms, with a form to spare. */
+/**
+ * A form job is admitted for a site of the job's own org whose plan has
+ * forms, with a form to spare, and confirmed only for a plan that creates
+ * nothing but the form: a form places nothing another job builds
+ * (AGL-3143 §15).
+ */
 export const aiFormJobAdmission: AiJobAdmission = (context) =>
   aiDraftAdmissionRefusal(context.firestore, {
     orgId: context.orgId,
     hostId: context.hostId,
     kind: 'form',
     org: context.org,
+    ownCheck: (hostId) => aiJobPlanCreationsRefusal('form', context, hostId),
   })
 
 export interface AiJobFormStepDeps {

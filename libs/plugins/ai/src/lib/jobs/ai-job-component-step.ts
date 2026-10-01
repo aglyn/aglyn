@@ -33,6 +33,11 @@ import {
   aiComponentTool,
 } from '../tools/ai-component-tool'
 import { registerAiJobAdmission, type AiJobAdmission } from './ai-job-admission'
+import {
+  aiBuildingPlanCreations,
+  aiJobPlanCreationsRefusal,
+  aiPlanCreationsRunMinimumMs,
+} from './ai-job-plan-creations'
 import { aiJobStepBudget } from './ai-job-budget'
 import { aiComponentCheck, aiPlannedComponentProps } from './ai-job-component-checks'
 import { aiJobDraftId } from './ai-job-draft-ids'
@@ -189,13 +194,18 @@ export async function aiCopiedComponentReview(
   })
 }
 
-/** A component job is admitted for a site of the job's own org whose plan includes reusable components. */
+/**
+ * A component job is admitted for a site of the job's own org whose plan
+ * includes reusable components, and confirmed only for a plan whose other
+ * creations it builds (AGL-3143 §15).
+ */
 export const aiComponentJobAdmission: AiJobAdmission = (context) =>
   aiDraftAdmissionRefusal(context.firestore, {
     orgId: context.orgId,
     hostId: context.hostId,
     kind: 'component',
     org: context.org,
+    ownCheck: (hostId) => aiJobPlanCreationsRefusal('component', context, hostId),
   })
 
 export interface AiJobComponentStepDeps {
@@ -344,10 +354,18 @@ export function createAiJobComponentStep(deps: AiJobComponentStepDeps = {}): AiJ
   }
 }
 
-export const runAiJobComponentStep = createAiJobComponentStep()
+/** The component step, building the forms and other components its plan creates first (AGL-3143 §15). */
+export const runAiJobComponentStep = aiBuildingPlanCreations(
+  'component',
+  'job.component',
+  createAiJobComponentStep(),
+)
 
 /** Registers the component step and the check a component job passes before it is created or resumed. */
 export function registerAiComponentJob(): void {
-  registerAiJobStep('component', runAiJobComponentStep, { minimumMs: AI_JOB_COMPONENT_STEP_MINIMUM_MS })
+  registerAiJobStep('component', runAiJobComponentStep, {
+    minimumMs: AI_JOB_COMPONENT_STEP_MINIMUM_MS,
+    minimumMsFor: aiPlanCreationsRunMinimumMs('component'),
+  })
   registerAiJobAdmission('component', aiComponentJobAdmission)
 }

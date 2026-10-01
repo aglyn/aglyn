@@ -520,7 +520,11 @@ create on its site (`src/lib/model/ai-plan-capabilities.ts`):
 - **The job.** A kind that builds only some plans narrows that
   (`AI_JOB_PLAN_SCOPES` in the plan step): a page job builds the layout, forms and
   components its plan creates (`AI_PAGE_CREATE_KINDS`, AGL-3031) and a site scaffold
-  its layout, form and palette change, and each refuses a plan of the wrong shape.
+  its layout, form and palette change, and each refuses a plan of the wrong shape. A
+  template, layout, component, form or email job builds its own record and what that
+  record can place (`AI_JOB_CREATE_KINDS`, AGL-3143 §15): a template, a layout and a
+  component build the forms and components their plan creates, and a form or an email
+  design, which place neither, build nothing else.
 - **The request.** The lines ride the plan's USER turn (`aiJobPlanPrompt`), never a
   system block: they are per workspace and per site, and the doctrine's cached prefix
   stays one entry for the platform. The doctrine states the rule once — rule 7,
@@ -1242,6 +1246,20 @@ nothing itself.
   `aiSiteBuiltRefs` with `aiSiteUnitJob` resolve `new:<name>` to what was built. A
   creation unit is told the plan's reuse less what the plan's screens place
   themselves, so a layout is never refused for leaving out a card a page places.
+- **And with a template, layout or component job (AGL-3143 §15).** Each of those
+  steps built only the first creation of its own kind, so a plan that also created a
+  card left it unbuilt and still reported `Done` — measured live on 2026-10-01, job
+  `2xD9Y7NayF`, whose confirmed plan read "Creates the component
+  related-article-card" and made none. The registered runner is now the kind's step
+  wrapped by `aiBuildingPlanCreations` (`jobs/ai-job-plan-creations.ts`): the plan's
+  other creations are built first, a form before a component, one a pass, through
+  these same pieces; then the kind's own step runs on the plan with the built records
+  added to its reuse (`aiJobWithBuiltCreations`), so the template's and the layout's
+  reuse check (rule 7) holds the record to placing the card its plan created. A unit
+  is told none of the components the plan reuses: those are the job's own record's to
+  place. The confirm door refuses a creation the kind does not build, one no step here
+  builds, and one the workspace may no longer make (`aiJobPlanCreationsRefusal`), and
+  the estimate counts the job's own record and each creation it builds.
 - **The estimate is the guard rail.** `aiPlanCreditEstimate` counts the plan's
   passes — one a section, one more a page, one a creation — at the machine's
   nominal credits per step, and the plan proposal shows it beside the button

@@ -296,6 +296,8 @@ describe('the layout step', () => {
     registerAiLayoutJob()
     expect(registerAiJobStep).toHaveBeenCalledWith('layout', runAiJobLayoutStep, {
       minimumMs: AI_JOB_LAYOUT_STEP_MINIMUM_MS,
+      // A pass that builds a creation of its plan first needs that step's time (AGL-3143 §15).
+      minimumMsFor: expect.any(Function),
     })
     const ask = (hostId: string | null, org: object) =>
       aiJobAdmissionRefusal('layout', { firestore, orgId: 'org-1', hostId, inputs: {}, org })

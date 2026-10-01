@@ -73,6 +73,11 @@ import {
   aiUnspentOutcome,
 } from './ai-job-generation'
 import { aiPlannedTemplateTokens, aiPlanTemplateTokenViolations } from './ai-job-plan-conformance'
+import {
+  aiBuildingPlanCreations,
+  aiJobPlanCreationsRefusal,
+  aiPlanCreationsRunMinimumMs,
+} from './ai-job-plan-creations'
 import type { AiJobStepRunner } from './ai-job-text-step'
 import { aiJobStepBudget } from './ai-job-budget'
 import { registerAiJobStep } from './ai-jobs'
@@ -365,7 +370,7 @@ export function createAiTemplateJobAdmission(deps: AiTemplateJobAdmissionDeps = 
       ownCheck: async (hostId) =>
         inputs.collectionId && !(await readCollection(context.firestore, hostId, inputs.collectionId))
           ? { status: 404, error: 'That content collection is not on this site' }
-          : null,
+          : aiJobPlanCreationsRefusal('template', context, hostId),
     })
   }
 }
@@ -573,10 +578,14 @@ export function createAiJobTemplateStep(deps: AiJobTemplateStepDeps = {}): AiJob
   }
 }
 
-export const runAiJobTemplateStep = createAiJobTemplateStep()
+/** The template step, building the components and forms its plan creates before the template (AGL-3143 §15). */
+export const runAiJobTemplateStep = aiBuildingPlanCreations('template', 'job.template', createAiJobTemplateStep())
 
 /** Registers the template step and the check a template job passes before it is created or resumed. */
 export function registerAiTemplateJob(): void {
-  registerAiJobStep('template', runAiJobTemplateStep, { minimumMs: AI_JOB_TEMPLATE_STEP_MINIMUM_MS })
+  registerAiJobStep('template', runAiJobTemplateStep, {
+    minimumMs: AI_JOB_TEMPLATE_STEP_MINIMUM_MS,
+    minimumMsFor: aiPlanCreationsRunMinimumMs('template'),
+  })
   registerAiJobAdmission('template', createAiTemplateJobAdmission())
 }
