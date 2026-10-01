@@ -60,6 +60,11 @@ import { runPluginEventHandlers } from '@aglyn/aglyn/server'
 // a signed payload, an idempotency claim and a Firestore double standing
 // between a test and the question it is asking (AGL-118).
 import { subscriptionActivityEntry } from './subscription-activity'
+import {
+  billingNoticeWorkspace,
+  dunningCancellationNotice,
+  invoiceNotice,
+} from './customer-billing-notices'
 import { revalidateOrgHosts } from '../../../../utils/server/tenant-revalidate'
 import {
   INTERNAL_TRAFFIC_PARAM,
@@ -1167,11 +1172,20 @@ async function handler(request: Request): Promise<Response> {
           // Fire-and-forget through `after()`, like every other notification
           // on this route: a notification failure must never 500 the webhook
           // into redelivering the mirrors above.
+          //
+          // The notice names the workspace and says what the cancellation
+          // means: which plan it is on now, that nothing was deleted, and that
+          // the last invoice is still owed (AGL-3432).
           if (object?.cancellation_details?.reason === 'payment_failed') {
             const canceledSlug = orgSnapshot.get('slug') as string | undefined
+            const notice = dunningCancellationNotice({
+              workspace: billingNoticeWorkspace(orgSnapshot),
+              previousPlan,
+              org: orgSnapshot.data(),
+            })
             after(() => notifyOrgAdmins(String(orgId), {
               type: 'billing.subscriptionCanceled',
-              title: 'Your subscription was canceled — payment kept failing',
+              ...notice,
               orgId: String(orgId),
               link: canceledSlug
                 ? buildRoute(Route.MANAGE_BILLING, { orgSlug: canceledSlug })
@@ -1529,9 +1543,8 @@ async function handler(request: Request): Promise<Response> {
           // Billing is org-scoped now (AGL-621/644). Links are frozen at write
           // time, so emit the canonical path; the reader normalizes anything
           // legacy that predates this.
-          const orgSlug = (
-            await observed().collection('orgs').doc(orgId).get()
-          ).get('slug') as string | undefined
+          const invoiceOrg = await observed().collection('orgs').doc(orgId).get()
+          const orgSlug = invoiceOrg.get('slug') as string | undefined
           // Tag the INVOICE itself with the workspace (AGL-941).
           //
           // Checkout cannot do this: `subscription_data[metadata]` reaches
@@ -1586,15 +1599,20 @@ async function handler(request: Request): Promise<Response> {
             type === 'invoice.payment_failed'
           ) {
             ledger.effect('org-admins-notified')
+            // Each event its own copy, naming the workspace (AGL-3432): a paid
+            // invoice announced as "available" read as money still owed.
+            const notice = invoiceNotice({
+              type,
+              workspace: billingNoticeWorkspace(invoiceOrg),
+              invoice: object,
+              org: invoiceOrg.data(),
+            })
             after(() => notifyOrgAdmins(orgId, {
               type:
                 type === 'invoice.payment_failed'
                   ? 'billing.paymentFailed'
                   : 'billing.invoice',
-              title:
-                type === 'invoice.payment_failed'
-                  ? `Payment failed for your $${dollars} invoice`
-                  : `Your $${dollars} invoice is available`,
+              ...notice,
               orgId,
               link: orgSlug
                 ? buildRoute(Route.MANAGE_BILLING, { orgSlug })

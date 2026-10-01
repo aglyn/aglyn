@@ -143,6 +143,8 @@ function mockFirestore(): any {
 import {
   POST as usageEmailCron,
   USAGE_EMAIL_CHUNK_SIZE,
+  meteredUsageLine,
+  usageMonthLabel,
 } from '../app/api/billing/usage-email/route'
 
 const originalFetch = global.fetch
@@ -286,5 +288,41 @@ describe('a governor refusal', () => {
     expect(mockSent).toHaveLength(3)
     expect(body.deferred).toBeUndefined()
     expect(body.done).toBe(true)
+  })
+})
+
+describe('the summary says whose usage it is, and whether any of it is billed (AGL-3432)', () => {
+  it('names the month as a reader writes it', () => {
+    expect(usageMonthLabel('2026-08')).toBe('August 2026')
+    expect(usageMonthLabel('2027-01')).toBe('January 2027')
+  })
+
+  it('says a reported figure is on the next invoice, and promises nothing for one not yet reported', () => {
+    expect(meteredUsageLine(0, false)).toBe(
+      'Metered usage beyond your plan: none, so nothing extra is billed for it.',
+    )
+    expect(meteredUsageLine(4.2, true)).toBe(
+      'Metered usage beyond your plan: $4.20, added to your next invoice.',
+    )
+    expect(meteredUsageLine(4.2, false)).toBe(
+      'Metered usage beyond your plan: about $4.20. ' +
+        'Whatever is billed for it appears on your next invoice.',
+    )
+  })
+
+  it('opens with the workspace and the month, and its money line says what is billed', async () => {
+    mockOrgCount = 1
+    await post()
+    const text = String(mockSent[0]?.['text'])
+    // `post()` sends no month, so the route summarizes the previous one.
+    const now = new Date()
+    const month = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1))
+      .toISOString()
+      .slice(0, 7)
+    expect(text.startsWith(`Here is how org-000 used Aglyn in ${usageMonthLabel(month)}.`)).toBe(true)
+    expect(mockSent[0]?.['subject']).toBe(`Your Aglyn usage summary for ${usageMonthLabel(month)}`)
+    expect(text).toContain('Plan: Starter')
+    expect(text).toContain('Metered usage beyond your plan: none, so nothing extra is billed for it.')
+    expect(text).not.toContain('Metered usage estimate')
   })
 })

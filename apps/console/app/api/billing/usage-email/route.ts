@@ -24,6 +24,7 @@ import {
   resolveBrandingProfile,
 } from '@aglyn/aglyn/server'
 import {
+  PLAN_LABELS,
   readOrgPlanComp,
   resolveEffectivePlan,
 } from '@aglyn/aglyn/app-utils/plan-entitlements'
@@ -61,6 +62,33 @@ import { isAccountMailWithheld } from '@aglyn/tenant-data-admin/server/account-m
 
 function formatUsd(costUsd: number) {
   return `$${costUsd.toFixed(2)}`
+}
+
+/** `2026-08` as `August 2026`, the month a reader recognizes. */
+export function usageMonthLabel(month: string): string {
+  const [year, monthNumber] = month.split('-').map(Number)
+  return new Date(Date.UTC(year, monthNumber - 1, 1)).toLocaleString('en-US', {
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'UTC',
+  })
+}
+
+/**
+ * The summary's money line: what the metered figure is, and whether it is
+ * billed. `reported` is the rollup's `reportedAt` — the month's figure went to
+ * Stripe's meter, which puts it on the next invoice. A figure not yet reported
+ * is promised nothing, because the meter may still refuse it (no customer, no
+ * metered item) or the closing sweep may still move it.
+ */
+export function meteredUsageLine(billedUsd: number, reported: boolean): string {
+  if (!(billedUsd > 0)) {
+    return 'Metered usage beyond your plan: none, so nothing extra is billed for it.'
+  }
+  return reported
+    ? `Metered usage beyond your plan: ${formatUsd(billedUsd)}, added to your next invoice.`
+    : `Metered usage beyond your plan: about ${formatUsd(billedUsd)}. ` +
+        'Whatever is billed for it appears on your next invoice.'
 }
 
 /**
@@ -242,18 +270,19 @@ async function handler(request: Request): Promise<Response> {
       // our raw cost with no markup and, until now, no included band
       // subtracted, so this line quoted a number matching nothing.
       const billedUsd = Number(rollup.get('billedCents') ?? 0) / 100
+      const monthLabel = usageMonthLabel(month)
       // The metric block, reused as the built-in body and as the
       // {{usage.summary}} token a staff-designed template drops in.
       const usageSummary = [
-        `Plan: ${plan}`,
+        `Plan: ${PLAN_LABELS[plan] ?? plan}`,
         `Storage: ${storageGb.toFixed(2)} GB`,
-        `Page views: ${pageViews}`,
-        `Form submissions: ${formSubmissions}`,
+        `Page views: ${pageViews.toLocaleString('en-US')}`,
+        `Form submissions: ${formSubmissions.toLocaleString('en-US')}`,
         `Dataset storage: ${(dataStorageMb / 1024).toFixed(2)} GB` +
           (dataOverageUsd > 0
             ? ` (overage ${formatUsd(dataOverageUsd)})`
             : ''),
-        `Metered usage estimate: ${formatUsd(billedUsd)}`,
+        meteredUsageLine(billedUsd, Boolean(rollup.get('reportedAt'))),
         '',
         'Full meters and plan limits: your console → Manage → Billing.',
       ].join('\n')
@@ -269,10 +298,10 @@ async function handler(request: Request): Promise<Response> {
       // reads as that org throughout; a "Need help?" pointing at Aglyn sends
       // them to a desk that cannot help them and names a vendor they were
       // never told about. No line at all reads as plain, which is correct.
-      const fallbackText =
-        `Here is your ${branding.productName} usage summary for ${month}.\n\n` +
-        `${usageSummary}${brandSupportLine(branding)}`
       const orgName = orgDoc.get('name') ?? 'your organization'
+      const fallbackText =
+        `Here is how ${orgName} used ${branding.productName} in ${monthLabel}.\n\n` +
+        `${usageSummary}${brandSupportLine(branding)}`
       // Render the batch-resolved template for this org's values and in its
       // header and footer (AGL-768, AGL-3322); the copy above is the last
       // resort behind it.
@@ -286,6 +315,7 @@ async function handler(request: Request): Promise<Response> {
               // first one's.
               ...brandMergeTokens(branding),
               month,
+              'month.label': monthLabel,
               'org.name': String(orgName),
               'usage.summary': usageSummary,
             },
@@ -300,7 +330,7 @@ async function handler(request: Request): Promise<Response> {
         to: email,
         subject:
           designed?.subject ??
-          `Your ${branding.productName} usage summary for ${month}`,
+          `Your ${branding.productName} usage summary for ${monthLabel}`,
         text: designed?.text || fallbackText,
         ...(designed?.html ? { html: designed.html } : {}),
         // White-label the sender display name off the org's brand profile

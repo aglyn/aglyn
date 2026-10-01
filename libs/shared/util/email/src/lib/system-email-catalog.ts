@@ -266,12 +266,17 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         'Monthly per-organization usage and metered-cost summary, sent by ' +
         'the scheduled job.',
       deliveredBy: 'resend',
-      defaultSubject: 'Your {{brand.productName}} usage summary for {{month}}',
+      defaultSubject: 'Your {{brand.productName}} usage summary for {{month.label}}',
       mergeTokens: [
         {
           name: 'month',
           description: 'Billing month as YYYY-MM',
           sample: '2026-06',
+        },
+        {
+          name: 'month.label',
+          description: 'Billing month as a reader writes it',
+          sample: 'June 2026',
         },
         {
           name: 'org.name',
@@ -281,7 +286,9 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         {
           name: 'usage.summary',
           description: 'Pre-formatted usage lines',
-          sample: 'Page views: 12,400',
+          sample:
+            'Plan: Starter\nPage views: 12,400\n' +
+            'Metered usage beyond your plan: none, so nothing extra is billed for it.',
         },
       ],
       // Mirrors the summary lines assembled in usage-email/route.ts.
@@ -289,7 +296,7 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         { block: 'text', text: 'Usage summary for {{org.name}}', variant: 'heading' },
         {
           block: 'text',
-          text: 'Here is your {{brand.productName}} usage summary for {{month}}.',
+          text: 'Here is how {{org.name}} used {{brand.productName}} in {{month.label}}.',
           variant: 'body',
         },
         { block: 'text', text: '{{usage.summary}}', variant: 'body' },
@@ -579,7 +586,8 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         {
           block: 'text',
           text:
-            '{{actor.name}} set a new password on your account. You have ' +
+            '{{actor.name}} set a new password on your {{brand.productName}} ' +
+            'account. You have ' +
             'been signed out everywhere and will need the new password to ' +
             'sign back in.',
           variant: 'body',

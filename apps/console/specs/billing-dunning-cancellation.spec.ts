@@ -98,9 +98,11 @@ const BASE_ENV = {
   STRIPE_PRICE_STARTER: 'price_starter_monthly',
 }
 
-type NotifyInput = { type: string; title: string; orgId: string; link: string }
+type NotifyInput = { type: string; title: string; body?: string; orgId: string; link: string }
 
 const mockNotifications: NotifyInput[] = []
+/** The workspace an invoice's customer resolves to; none unless a test says. */
+let mockInvoiceOrgId: string | null = null
 const mockBillingWrites: Array<{ orgId: string; patch: any }> = []
 
 let docs = new Map<string, Record<string, unknown>>()
@@ -216,7 +218,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
       },
     },
   },
-  findOrgIdByStripeCustomer: async () => null,
+  findOrgIdByStripeCustomer: async () => mockInvoiceOrgId,
   // Captured, not stubbed — HALF the subject of this file.
   notifyOrgAdmins: async (orgId: string, input: Omit<NotifyInput, 'orgId'>) => {
     mockNotifications.push({ ...input, orgId })
@@ -428,6 +430,27 @@ describe('the webhook records WHY a subscription ended (AGL-1877)', () => {
     expect(mockAfterScheduled.length).toBeGreaterThan(0)
   })
 
+  it('names the workspace and says what the cancellation means (AGL-3432)', async () => {
+    const post = loadWebhook()
+    await post(
+      signed(
+        event(
+          deletedSubscription({ reason: 'payment_failed' }),
+          'customer.subscription.deleted',
+        ),
+      ),
+    )
+    const [told] = mockNotifications.filter(
+      (notification) => notification.type === 'billing.subscriptionCanceled',
+    )
+    expect(told.title).toBe('Subscription for Acme Ltd canceled after failed payments')
+    // The plan read before the mirror, by its pricing-page name.
+    expect(told.body).toMatch(/^Stripe could not collect payment for Acme Ltd/)
+    expect(told.body).toContain('its Starter subscription was canceled')
+    expect(told.body).toContain('now on the Free plan')
+    expect(told.body).toContain('Nothing was deleted')
+  })
+
   it('does NOT tell a workspace that cancelled on purpose — the control', async () => {
     const post = loadWebhook()
     await post(
@@ -455,6 +478,65 @@ describe('the webhook records WHY a subscription ended (AGL-1877)', () => {
         (notification) => notification.type === 'billing.subscriptionCanceled',
       ),
     ).toHaveLength(0)
+  })
+})
+
+describe('the invoice notices say which event happened, to which workspace (AGL-3432)', () => {
+  beforeEach(() => {
+    docs = new Map()
+    docs.set('orgs/org-real', { name: 'Acme Ltd', slug: 'acme', plan: 'starter' })
+    mockNotifications.length = 0
+    mockInvoiceOrgId = 'org-real'
+    global.fetch = jest.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({}),
+      text: async () => '',
+    })) as never
+  })
+
+  afterEach(() => {
+    mockInvoiceOrgId = null
+  })
+
+  afterAll(() => {
+    process.env = ORIGINAL_ENV
+  })
+
+  const invoice = (overrides: Record<string, unknown> = {}) => ({
+    id: 'in_renewal',
+    object: 'invoice',
+    customer: 'cus_drill',
+    subscription: 'sub_drill',
+    collection_method: 'charge_automatically',
+    amount_due: 2500,
+    amount_paid: 0,
+    ...overrides,
+  })
+
+  it('a paid invoice is announced as paid, not as an invoice "available" (RB20)', async () => {
+    const post = loadWebhook()
+    await post(signed(event(invoice(), 'invoice.finalized')))
+    await post(signed(event(invoice({ amount_paid: 2500, status: 'paid' }), 'invoice.paid')))
+    const told = mockNotifications.filter((notification) => notification.type === 'billing.invoice')
+    expect(told.map((notification) => notification.title)).toEqual([
+      'New $25.00 invoice for Acme Ltd',
+      'Invoice paid: $25.00 for Acme Ltd',
+    ])
+    expect(told[1].body).toBe('The $25.00 invoice for Acme Ltd was paid. Nothing more is due on it.')
+  })
+
+  it('a failed charge names the workspace and what to do', async () => {
+    const post = loadWebhook()
+    await post(
+      signed(event(invoice({ next_payment_attempt: 1_794_300_000 }), 'invoice.payment_failed')),
+    )
+    const [told] = mockNotifications.filter(
+      (notification) => notification.type === 'billing.paymentFailed',
+    )
+    expect(told.title).toBe('Payment failed: $25.00 for Acme Ltd')
+    expect(told.body).toContain('Update the payment method or pay the invoice in Billing')
+    expect(told.body).toContain('Acme Ltd moves to the Free plan')
   })
 })
 
