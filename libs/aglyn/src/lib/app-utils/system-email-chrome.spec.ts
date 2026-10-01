@@ -194,6 +194,29 @@ describe('the platform brand, Aglyn-operated', () => {
     expect(built.header?.logoUrl).toBe(AGLYN_WORDMARK)
     expect(built.footer?.legal).toContain(AGLYN_ADDRESS)
   })
+
+  it('treats an entitled org that has set no brand as the platform (AGL-3440)', () => {
+    // Aglyn LLC's own September usage summary: Enterprise carries white-label,
+    // the org never opened Branding, and the mail went out with its name in
+    // bold where the wordmark belongs and no legal line under it.
+    const { chrome, entitlements } = loadWith({})
+    const branding = entitlements.resolveBrandingProfile({
+      plan: 'enterprise',
+    } as never)
+    const built = chrome.buildSystemEmailChrome({
+      definition: getSystemEmailTemplate('usage-summary')!,
+      merged: {
+        ...chrome.PLATFORM_BRAND_MERGE_TOKENS,
+        ...entitlements.brandMergeTokens(branding),
+      },
+      brandLogoUrl: branding.emailLogoUrl,
+      brandHomeUrl: branding.homeUrl,
+      now: IN_2031,
+    })
+    expect(built.header?.logoUrl).toBe(AGLYN_WORDMARK)
+    expect(built.footer?.support).toBeDefined()
+    expect(built.footer?.legal).toContain(AGLYN_ADDRESS)
+  })
 })
 
 describe('the platform brand, renamed or self-hosted', () => {

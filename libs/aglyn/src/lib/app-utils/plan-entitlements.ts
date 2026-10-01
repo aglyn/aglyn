@@ -4219,12 +4219,28 @@ function cleanBrandString(value: string | undefined): string | undefined {
  * entitlement the stored profile is ignored entirely and the full Aglyn
  * brand is returned — so an org that white-labeled and then downgraded
  * reverts cleanly.
+ *
+ * An org WITH the entitlement that has stored no brand value at all gets the
+ * full Aglyn brand too (AGL-3440). The entitlement is the right to a brand,
+ * not a brand: until the org sets one, every name it shows is the platform's
+ * anyway, so the white-label profile's blanks — no logo, no support link, no
+ * home — conceal nothing and only strip the platform's own header and footer
+ * from mail whose every line already names the platform. Every Enterprise
+ * org carries the entitlement, Aglyn's own included. One field set, and the
+ * rules below apply.
  */
 export function resolveBrandingProfile(
   org: Partial<AglynOrgBilling> | null | undefined,
 ): ResolvedBrandingProfile {
   if (!checkEntitlement(org, 'whiteLabel')) return PLATFORM_BRANDING_PROFILE
   const profile = (org?.brandingProfile ?? {}) as OrgBrandingProfile
+  if (
+    !Object.values(profile).some(
+      (value) => cleanBrandString(value as string | undefined) !== undefined,
+    )
+  ) {
+    return PLATFORM_BRANDING_PROFILE
+  }
   return {
     productName:
       cleanBrandString(profile.productName) ??

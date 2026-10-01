@@ -2297,6 +2297,41 @@ describe('plan entitlements', () => {
       expect(brand.productName).toBe('Studio One')
     })
 
+    /**
+     * The entitlement is the right to a brand, not a brand (AGL-3440).
+     *
+     * Every Enterprise org carries `whiteLabel`, Aglyn's own included, and
+     * one that never opened Branding was resolved as a white-label org with
+     * nothing set: the platform's name everywhere, and none of its logo,
+     * support link or home. Its usage summary went out with "Aglyn" in bold
+     * where the wordmark belongs and no footer under it.
+     */
+    describe('an entitled org that has set no brand is the platform', () => {
+      it('resolves to the platform profile whole', () => {
+        for (const org of [
+          { plan: 'enterprise' },
+          { plan: 'agency' },
+          { plan: 'agency', brandingProfile: {} },
+          { plan: 'agency', brandingProfile: { productName: ' ', supportUrl: '' } },
+        ]) {
+          expect(resolveBrandingProfile(org as any)).toBe(PLATFORM_BRANDING_PROFILE)
+        }
+      })
+
+      it('THE CONTROL: one field set, and the white-label rules apply', () => {
+        // Without this the case above is satisfied by a build that never
+        // white-labels anybody.
+        const brand = resolveBrandingProfile({
+          plan: 'agency',
+          brandingProfile: { primaryColor: '#ff5a00' },
+        } as any)
+        expect(brand).not.toBe(PLATFORM_BRANDING_PROFILE)
+        expect(brand.primaryColor).toBe('#ff5a00')
+        expect(brand.supportUrl).toBeNull()
+        expect(brand.logoUrl).toBeNull()
+      })
+    })
+
     it('treats blank/whitespace profile fields as unset (Aglyn default wins)', () => {
       const org = {
         plan: 'agency',
