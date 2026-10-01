@@ -89,6 +89,7 @@ import { AI_JOB_ZERO_USAGE } from './ai-job-generation'
 import {
   AI_JOB_TEMPLATE_INSTRUCTIONS,
   aiJobTemplatePrompt,
+  aiTemplateBindingCheck,
   aiTemplateDraftName,
   aiTemplateDraftSlug,
   createAiJobTemplateStep,
@@ -706,5 +707,59 @@ describe('the template’s name and address', () => {
     expect(aiTemplateDraftSlug(entry, blog)).toBe('blog-entry-template')
     expect(aiTemplateDraftSlug(entry, { ...blog, slug: '' })).toBe('col-blog-entry-template')
     expect(aiTemplateDraftSlug(AI_TEMPLATE_SUBJECT_DEFINITIONS.product, null)).toBe('product-page-template')
+  })
+})
+
+describe('copy that prints a token no reader reads (AGL-3143 §16)', () => {
+  const check = aiTemplateBindingCheck(AI_TEMPLATE_SUBJECT_DEFINITIONS.entry)
+  const tree = (nodes: Record<string, unknown>) =>
+    ({
+      rootId: 'r',
+      nodes: {
+        r: { componentId: 'div', nodes: ['h', ...Object.keys(nodes)] },
+        h: { componentId: 'muiTypography', props: { variant: 'h1', component: 'h1', children: '{{entry.title}}' } },
+        ...nodes,
+      },
+      sourceIds: {},
+    }) as unknown as Parameters<ReturnType<typeof aiTemplateBindingCheck>>[0]
+
+  it('refuses the line the 2026-10-01 live build printed on every article', () => {
+    // Stored tree hosts/demo-legal/templates/AYjsowFqBG, node JQlMlKs21t.
+    const found = check(
+      tree({
+        line: {
+          componentId: 'muiTypography',
+          props: {
+            variant: 'body2',
+            component: 'p',
+            children:
+              'From {{collection.name}} ({{collection.slug}}) — entry slug: {{entry.slug}} — published {{entry.publishedAt}} — permalink {{entry.url}}',
+          },
+        },
+      }),
+    )
+    expect(found.map((violation) => [violation.rule, violation.code])).toEqual([[8, 'printed-token']])
+    expect(found[0].message).toContain('{{collection.slug}}')
+    // The collection's name is copy a reader reads, so it is not named.
+    expect(found[0].message).not.toContain('{{collection.name}}')
+  })
+
+  it('refuses an address shown as an element’s whole text', () => {
+    const found = check(tree({ link: { componentId: 'muiTypography', props: { children: '{{entry.url}}' } } }))
+    expect(found.map((violation) => violation.code)).toEqual(['printed-token'])
+  })
+
+  it('lets a link or picture hold its token, a block take one whole, and a markdown link follow one', () => {
+    expect(
+      check(
+        tree({
+          cover: { componentId: 'image', props: { src: '{{entry.coverImage}}', href: '{{entry.url}}', alt: 'Cover for {{entry.title}}' } },
+          meta: { componentId: 'collectionEntryMeta', props: { author: '{{entry.author}}', avatarImage: '{{entry.authorImage}}' } },
+          film: { componentId: 'video', props: { src: '{{entry.coverVideo}}', uploadDate: '{{entry.publishedAt}}' } },
+          more: { componentId: 'collectionEntryBody', props: { markdown: 'Read [the whole story]({{entry.url}}).' } },
+          back: { componentId: 'muiButton', props: { children: 'Back to {{collection.name}}', href: '{{entry.collectionUrl}}' } },
+        }),
+      ),
+    ).toEqual([])
   })
 })

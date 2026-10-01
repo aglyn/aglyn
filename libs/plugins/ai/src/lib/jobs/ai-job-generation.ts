@@ -34,6 +34,7 @@ import type {
   AiJobReviewOutlineNode,
 } from '../model/ai-jobs.types'
 import type { AiSiteInventory } from '../model/ai-site-inventory'
+import { isAiUnreadToken } from '../model/ai-template-subjects'
 import { aiAnswerTree, type AiGenerationSpend, type AiValidatedTree } from '../runtime/ai-doctrine'
 import {
   aiBracketedFacts,
@@ -98,7 +99,10 @@ export function aiPlanReferenceLines(plan: AiJobPlan | null): string[] {
   }
   for (const entry of plan.create) {
     const from = entry.duplicateOf ? `, from a copy of ${referenceOf(plan, entry.duplicateOf)}` : ''
-    const fields = entry.fields.length ? ` Fields: ${entry.fields.join(', ')}.` : ''
+    // A template's slug or timestamp is filled, never shown, so a build told
+    // it is a field prints it (AGL-3143 §16).
+    const shown = entry.kind === 'template' ? entry.fields.filter((field) => !isAiUnreadToken(field)) : entry.fields
+    const fields = shown.length ? ` Fields: ${shown.join(', ')}.` : ''
     lines.push(`- create the ${entry.kind} "${entry.name}"${from}: ${entry.why}${fields}`)
   }
   for (const screen of plan.screens) {

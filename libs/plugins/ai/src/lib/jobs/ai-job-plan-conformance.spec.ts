@@ -335,6 +335,50 @@ describe('a token the plan promised for a template (AGL-3143 §11)', () => {
     expect(aiPlannedTemplateTokens(null, AUTHOR)).toEqual({ tokens: [], unreadable: [] })
     expect(aiPlanTemplateTokenViolations(null, AUTHOR, NAME_AND_TITLE)).toEqual([])
   })
+
+  it('holds a build to no slug and no timestamp, so it is never pushed to print one (AGL-3143 §16)', () => {
+    // The fields of the 2026-10-01 live plan (job 2xD9Y7NayF). Held to all
+    // nine, its build printed "From {{collection.name}} ({{collection.slug}})
+    // — entry slug: {{entry.slug}} — published {{entry.publishedAt}} —
+    // permalink {{entry.url}}" on every article.
+    const ENTRY = AI_TEMPLATE_SUBJECT_DEFINITIONS.entry
+    const plan = planWithTemplateFields([
+      '{{entry.title}}',
+      '{{entry.author}}',
+      '{{entry.publishedAt}}',
+      '{{entry.body}}',
+      '{{entry.coverImage}}',
+      '{{entry.url}}',
+      '{{entry.slug}}',
+      '{{collection.name}}',
+      '{{collection.slug}}',
+    ])
+    expect(aiPlannedTemplateTokens(plan, ENTRY)).toEqual({
+      tokens: [
+        '{{entry.title}}',
+        '{{entry.author}}',
+        '{{entry.body}}',
+        '{{entry.coverImage}}',
+        '{{entry.url}}',
+        '{{collection.name}}',
+      ],
+      unreadable: [],
+    })
+    // The same article without the printed line: every token a reader sees
+    // is shown, the address by the picture that links to it.
+    const article = {
+      rootId: 'r',
+      nodes: {
+        r: { componentId: 'div', nodes: ['h', 'm', 'i', 'b', 'k'] },
+        h: { componentId: 'muiTypography', props: { children: '{{entry.title}}', variant: 'h1' } },
+        m: { componentId: 'collectionEntryMeta', props: { date: '{{entry.date}}', author: '{{entry.author}}' } },
+        i: { componentId: 'image', props: { src: '{{entry.coverImage}}', href: '{{entry.url}}', alt: '' } },
+        b: { componentId: 'collectionEntryBody', props: { markdown: '{{entry.body}}' } },
+        k: { componentId: 'muiButton', props: { children: 'Back to {{collection.name}}', href: '{{entry.collectionUrl}}' } },
+      },
+    } as unknown as Parameters<typeof aiPlanTemplateTokenViolations>[2]
+    expect(aiPlanTemplateTokenViolations(plan, ENTRY, article)).toEqual([])
+  })
 })
 
 describe('a count the plan promised, against a page a copy produced (AGL-3024)', () => {

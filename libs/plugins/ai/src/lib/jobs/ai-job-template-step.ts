@@ -26,6 +26,8 @@ import {
   AI_TEMPLATE_SUBJECTS,
   aiBindingTokensIn,
   aiTemplateAddressTokens,
+  isAiAddressToken,
+  isAiUnreadToken,
   parseAiTemplateJobInputs,
   type AiTemplateSubjectDefinition,
 } from '../model/ai-template-subjects'
@@ -87,8 +89,9 @@ import { registerAiJobStep } from './ai-jobs'
  * picker offers for that page; a link or media prop may hold one of those
  * tokens whole, which the palette validator admits only because this door
  * names them. The door adds one check of its own through `extend` (rule 8):
- * no token the page does not fill, an h1 bound to the subject's title, and no
- * block that fills itself only on another subject's page.
+ * no token the page does not fill, an h1 bound to the subject's title, no
+ * block that fills itself only on another subject's page, and no address,
+ * slug or timestamp printed in its copy.
  *
  * The model is shown the platform's starter pages as examples, in a cached
  * block (`runtime/ai-template-examples.ts`), and writes against them.
@@ -124,7 +127,7 @@ export const AI_JOB_TEMPLATE_INSTRUCTIONS: readonly AiSystemBlock[] = [
       'You build one page template: the page a website renders once for each record it keeps, such as each entry of a content collection, each product or each author. Answer with submit_template: the whole page as one flat node map.',
       'Everything that differs from one record to the next is a binding token, never typed copy. The request names what the page is for, the tokens that page fills and the blocks that fill themselves there; bind only those tokens.',
       'The page’s one h1 holds the title token the request names. Copy that reads the same on every record, such as a section heading, is written in the site’s voice.',
-      'A link or media prop holds exactly one token from the request’s link and media tokens, such as an Image whose src is {{entry.coverImage}}; its alt text may combine words and tokens.',
+      'A link or media prop holds exactly one token from the request’s link and media tokens, such as an Image whose src is {{entry.coverImage}}; its alt text may combine words and tokens. Copy never prints a link or media token, a slug or a timestamp.',
       'A template carries no third-party player. It plays a video token only when the confirmed plan lists it, in a Video (video) whose src is that token and whose poster is the cover image token.',
       'The page renders inside the site’s layout, so it carries no header, navigation or footer of its own.',
     ].join('\n'),
@@ -237,10 +240,31 @@ function isPageTitle(node: AiDoctrineNode): boolean {
 }
 
 /**
+ * The tokens a prop prints for a reader that no reader reads: a link or
+ * picture token, a slug or a timestamp, in copy (AGL-3143 §16). Copy is a
+ * prop the palette gives the text role, read as words where it holds more
+ * than one token or is the element's children. A block handed one token
+ * whole reads it as a value, as Entry Meta's avatar takes the author's
+ * portrait and a Video's publication date takes the timestamp, and a
+ * markdown link's target is followed, not read.
+ */
+function printedTokens(node: AiDoctrineNode): string[] {
+  const roles = AI_PALETTE[node.componentId]?.propRoles ?? {}
+  return Object.entries(node.props ?? {}).flatMap(([key, value]) => {
+    if (typeof value !== 'string' || roles[key] !== 'text') return []
+    const tokens = aiBindingTokensIn(value.replace(/\]\([^)]*\)/g, ']'))
+    const unread = tokens.filter((token) => isAiAddressToken(token) || isAiUnreadToken(token))
+    const whole = tokens.length === 1 && value.trim() === tokens[0]
+    return unread.length && (key === 'children' || !whole) ? unread : []
+  })
+}
+
+/**
  * The template door's check on a tree the doctrine admitted (rule 8): every
- * token is one the page fills, the h1 binds the subject's title, and no block
+ * token is one the page fills, the h1 binds the subject's title, no block
  * that fills itself on another subject's page is placed — except inside a
- * Collection Entries card, where each fills from the card's own entry.
+ * Collection Entries card, where each fills from the card's own entry — and
+ * no copy prints an address, a slug or a timestamp.
  */
 export function aiTemplateBindingCheck(
   definition: AiTemplateSubjectDefinition,
@@ -252,6 +276,8 @@ export function aiTemplateBindingCheck(
     const unknownAt: string[] = []
     const foreign: Array<{ id: string; componentId: string; owner: AiTemplateSubjectDefinition }> = []
     const titles: string[] = []
+    const printed = new Set<string>()
+    const printedAt: string[] = []
     let titleBound = false
     for (const { id, node, ancestors } of walkTree({ rootId: tree.rootId, nodes })) {
       const tokens = stringsIn(node.props).flatMap(aiBindingTokensIn)
@@ -259,6 +285,11 @@ export function aiTemplateBindingCheck(
       if (strays.length) {
         for (const token of strays) unknown.add(token)
         unknownAt.push(id)
+      }
+      const shown = printedTokens(node).filter((token) => allowed.has(token))
+      if (shown.length) {
+        for (const token of shown) printed.add(token)
+        printedAt.push(id)
       }
       const owner = BLOCK_SUBJECTS.get(node.componentId)
       const inCard = ancestors.some((ancestor) => nodes[ancestor]?.componentId === 'collectionEntries')
@@ -277,6 +308,14 @@ export function aiTemplateBindingCheck(
         code: 'unknown-binding',
         message: `This binds ${[...unknown].slice(0, 3).join(', ')}, which ${definition.noun}’s page does not fill. Bind only the tokens listed for this page.`,
         nodeIds: aiModelNodeIds(unknownAt, tree.sourceIds),
+      })
+    }
+    if (printed.size) {
+      violations.push({
+        rule: 8,
+        code: 'printed-token',
+        message: `This prints ${[...printed].slice(0, 3).join(', ')} in the page's copy, where a reader sees an address, a slug or a timestamp. A link or picture token goes whole in a link or media prop, and a slug or a timestamp stays off the page.`,
+        nodeIds: aiModelNodeIds(printedAt, tree.sourceIds),
       })
     }
     // The doctrine already refuses a page with no h1 or with several.

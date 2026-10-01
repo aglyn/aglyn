@@ -1636,6 +1636,39 @@
       "rows": []
     },
     {
+      "caseId": "template-insights-article",
+      "of": "control 4",
+      "answer": "ee81874608c382bc",
+      "devices": [
+        {
+          "device": "XS",
+          "width": 390,
+          "overflow": []
+        },
+        {
+          "device": "SM",
+          "width": 600,
+          "overflow": []
+        },
+        {
+          "device": "MD",
+          "width": 900,
+          "overflow": []
+        },
+        {
+          "device": "LG",
+          "width": 1200,
+          "overflow": []
+        },
+        {
+          "device": "XL",
+          "width": 1536,
+          "overflow": []
+        }
+      ],
+      "rows": []
+    },
+    {
       "caseId": "template-service-area",
       "of": "candidate 0",
       "answer": "d266682fdcb01233",
