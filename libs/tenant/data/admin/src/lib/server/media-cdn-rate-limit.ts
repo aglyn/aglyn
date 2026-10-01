@@ -28,9 +28,12 @@ import { consumeRateLimit } from './rate-limit-store'
  * much of it one caller could take. The firewall bypasses the route on
  * purpose, because link-preview crawlers and Gmail's image proxy cannot solve
  * a challenge ("Public asset delivery bypass" in
- * `tools/scripts/lib/firewall-posture.mjs`). Both middlewares exclude `/api/*`,
- * and no WAF rule covers the path. `serveMediaCdn` is the one piece of code
- * every request passes through, so the limit lives there.
+ * `tools/scripts/lib/firewall-posture.mjs`). Both middlewares exclude `/api/*`.
+ * The edge counts the path too, ahead of that bypass ("Media CDN per-IP rate
+ * limit", 1,500 requests a minute per address), but it sees one stream of
+ * requests per address: only `serveMediaCdn` can tell an image from a film,
+ * skip a 304, and fold an IPv6 address to its /64, so the ceilings on what one
+ * caller is served live here.
  *
  * ## What is counted
  *

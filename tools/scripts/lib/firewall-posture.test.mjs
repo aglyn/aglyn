@@ -79,6 +79,33 @@ const AI_AGENT_UA_PATTERN = EXPECTED_POSTURE.find(
   (e) => e.project === 'aglyn-tenant',
 ).bypassRules.find((r) => r.name === 'AI agent bypass').conditions[0].value
 
+/**
+ * The media CDN's edge rate limit as the API returns it (AGL-2812), built off
+ * the declaration so the window, limit and key are never transcribed. Both
+ * mounts carry it, and in both it sits DIRECTLY AHEAD of the asset bypass —
+ * behind it, it would count nothing.
+ */
+const MEDIA_RATE_LIMIT = tenantExpected.rateLimitRules[0]
+const mediaRateLimitRule = (id) => ({
+  name: MEDIA_RATE_LIMIT.name,
+  id,
+  active: true,
+  valid: true,
+  action: {
+    mitigate: {
+      redirect: null,
+      action: 'rate_limit',
+      rateLimit: {
+        ...MEDIA_RATE_LIMIT.rateLimit,
+        keys: [...MEDIA_RATE_LIMIT.rateLimit.keys],
+        action: MEDIA_RATE_LIMIT.exceeded,
+      },
+      actionDuration: null,
+    },
+  },
+  conditionGroup: [{ conditions: [{ type: 'path', op: 'pre', value: '/api/media/cdn' }] }],
+})
+
 /** The live-good aglyn-tenant config, with the probe secret stubbed. */
 function healthyTenantConfig() {
   return {
@@ -148,6 +175,7 @@ function healthyTenantConfig() {
           },
         ],
       },
+      mediaRateLimitRule('rule_media_cdn_per_ip_rate_limit_T4n8Qx'),
       {
         name: 'Public asset delivery bypass',
         id: 'rule_public_asset_delivery_bypass_Zb9Hm6',
@@ -344,6 +372,7 @@ function healthyConsoleConfig() {
           { conditions: [{ op: 'pre', type: 'path', value: '/api/plugin-host-origins' }] },
         ],
       },
+      mediaRateLimitRule('rule_media_cdn_rate_limit_console'),
       {
         name: 'Public asset delivery bypass',
         id: 'rule_public_asset_console',
@@ -652,7 +681,7 @@ test('a config with no rules at all fails for every declared rule', () => {
   const config = healthyTenantConfig()
   config.rules = []
   const findings = evalTenant(config).findings
-  assert.equal(findings.length, tenantExpected.bypassRules.length)
+  assert.equal(findings.length, tenantExpected.bypassRules.length + tenantExpected.rateLimitRules.length)
   assert.ok(findings.every((f) => /is MISSING/.test(f)))
 })
 
@@ -1095,4 +1124,185 @@ test('losing the click-tracking bypass fails — a mail scanner would get a chal
   const { ok, findings } = evalConsole(config)
   assert.equal(ok, false)
   assert.match(findings.join('\n'), /Click-tracking link bypass.*MISSING/)
+})
+
+// ── The media CDN's edge rate limit (AGL-2812) ─────────────────────────────
+// Every case damages one thing in a known-good config and asserts the finding
+// that names it. The order case is the one that matters most: a rate-limit
+// rule behind the bypass it shares a path with reads back present, active and
+// valid, and counts nothing.
+
+const MEDIA_LIMIT_NAME = MEDIA_RATE_LIMIT.name
+const tenantFindings = (config) => evalTenant(config).findings.join('\n')
+
+test('the media rate limit is declared on both mounts, ahead of the asset bypass, never challenging', () => {
+  for (const expected of [tenantExpected, consoleExpected]) {
+    const rule = (expected.rateLimitRules ?? []).find((r) => r.name === MEDIA_LIMIT_NAME)
+    assert.ok(rule, `${expected.project} declares the media rate limit`)
+    assert.equal(rule.precedes, 'Public asset delivery bypass')
+    assert.ok(expected.bypassRules.some((r) => r.name === rule.precedes), 'and keeps the bypass it precedes')
+    assert.deepEqual(rule.conditions, [{ type: 'path', op: 'pre', value: '/api/media/cdn' }])
+    assert.deepEqual([...rule.rateLimit.keys], ['ip'])
+    // Log or a 429, and nothing else: the crawlers and mail image proxies this
+    // path serves can answer neither a challenge nor a 403. Going from one to
+    // the other changes this field and the live rule together.
+    assert.ok(['log', 'rate_limit'].includes(rule.exceeded), `${expected.project}: ${rule.exceeded}`)
+  }
+})
+
+test('the media rate limit sits far above every legitimate burst measured for it', () => {
+  // Measured 2026-10-01 (see the declaration): the heaviest public page
+  // scrolled end to end, the same page with every srcset width fetched, and
+  // the function's own per-address ceilings, 600 images + 180 other files.
+  const HEAVY_PAGE = 58
+  const EVERY_WIDTH_OF_EVERY_IMAGE = 244
+  const FUNCTION_SERVES_ONE_ADDRESS = 600 + 180
+  const { limit, window } = MEDIA_RATE_LIMIT.rateLimit
+  assert.equal(window, 60)
+  assert.ok(limit >= 20 * HEAVY_PAGE)
+  assert.ok(limit >= 5 * EVERY_WIDTH_OF_EVERY_IMAGE)
+  assert.ok(limit > FUNCTION_SERVES_ONE_ADDRESS, 'the edge never refuses what the function would still serve')
+})
+
+test('a missing media rate limit fails on either mount', () => {
+  const tenant = healthyTenantConfig()
+  tenant.rules = tenant.rules.filter((r) => r.name !== MEDIA_LIMIT_NAME)
+  assert.match(tenantFindings(tenant), /rate-limit rule "Media CDN per-IP rate limit" is MISSING/)
+  const console_ = healthyConsoleConfig()
+  console_.rules = console_.rules.filter((r) => r.name !== MEDIA_LIMIT_NAME)
+  assert.match(evalConsole(console_).findings.join('\n'), /rate-limit rule "Media CDN per-IP rate limit" is MISSING/)
+})
+
+test('a media rate limit BEHIND the asset bypass fails — it would count nothing', () => {
+  // Where `rules.insert` leaves a new rule: at the end.
+  const config = healthyTenantConfig()
+  const rule = ruleNamed(config, MEDIA_LIMIT_NAME)
+  config.rules = [...config.rules.filter((r) => r !== rule), rule]
+  const findings = tenantFindings(config)
+  assert.match(findings, /is evaluated AFTER "Public asset delivery bypass"/)
+  assert.match(findings, /PATCH rules\.priority, value \d+/)
+  assert.equal(evalTenant(config).ok, false)
+})
+
+test('the PATCH rules.priority index the finding names puts the rule directly ahead of the bypass', () => {
+  const config = healthyConsoleConfig()
+  const rule = ruleNamed(config, MEDIA_LIMIT_NAME)
+  const rest = config.rules.filter((r) => r !== rule)
+  config.rules = [...rest, rule]
+  const index = Number(/value (\d+)/.exec(evalConsole(config).findings.join('\n'))[1])
+  // What rules.priority does with that index: take the rule out, put it back
+  // at the index. The result must pass.
+  config.rules = [...rest.slice(0, index), rule, ...rest.slice(index)]
+  assert.deepEqual(evalConsole(config).findings, [])
+})
+
+test('a media rate limit with no bypass to precede raises no order finding of its own', () => {
+  const config = healthyTenantConfig()
+  config.rules = config.rules.filter((r) => r.name !== 'Public asset delivery bypass')
+  const findings = tenantFindings(config)
+  assert.match(findings, /bypass rule "Public asset delivery bypass" is MISSING/)
+  assert.doesNotMatch(findings, /evaluated AFTER/)
+})
+
+test('a raised limit, a changed window or a different key each fail by name', () => {
+  for (const [field, value, pattern] of [
+    ['limit', MEDIA_RATE_LIMIT.rateLimit.limit * 10, /has limit \d+, declared \d+/],
+    ['window', 600, /has window 600, declared 60/],
+    ['algo', 'token_bucket', /has algo "token_bucket", declared "fixed_window"/],
+    ['keys', ['ja4'], /counts by \["ja4"\], declared \["ip"\]/],
+  ]) {
+    const config = healthyTenantConfig()
+    ruleNamed(config, MEDIA_LIMIT_NAME).action.mitigate.rateLimit[field] = value
+    assert.match(tenantFindings(config), pattern, field)
+  }
+})
+
+test('a media rate limit switched to CHALLENGE past the limit fails, naming who cannot answer it', () => {
+  const config = healthyTenantConfig()
+  ruleNamed(config, MEDIA_LIMIT_NAME).action.mitigate.rateLimit.action = 'challenge'
+  const findings = tenantFindings(config)
+  assert.match(findings, /answers "challenge" past the limit, declared "log"/)
+  assert.match(findings, /unanswerable for the crawlers and mail image proxies/)
+})
+
+test('enforcing live while the table still says log fails, so the two change together', () => {
+  const config = healthyTenantConfig()
+  ruleNamed(config, MEDIA_LIMIT_NAME).action.mitigate.rateLimit.action = 'rate_limit'
+  const findings = tenantFindings(config)
+  assert.match(findings, /answers "rate_limit" past the limit, declared "log"/)
+  assert.doesNotMatch(findings, /unanswerable/)
+})
+
+test('a media rate limit that is no longer a rate limit fails', () => {
+  const config = healthyTenantConfig()
+  const rule = ruleNamed(config, MEDIA_LIMIT_NAME)
+  rule.action = bypass('log')
+  const findings = tenantFindings(config)
+  assert.match(findings, /no longer mitigates with "rate_limit" \(found "log"\)/)
+  assert.match(findings, /carries no rateLimit settings/)
+})
+
+test('an inactive or invalid media rate limit fails', () => {
+  const config = healthyConsoleConfig()
+  const rule = ruleNamed(config, MEDIA_LIMIT_NAME)
+  rule.active = false
+  rule.valid = false
+  const findings = evalConsole(config).findings.join('\n')
+  assert.match(findings, /rate-limit rule "Media CDN per-IP rate limit" is present but INACTIVE/)
+  assert.match(findings, /rate-limit rule "Media CDN per-IP rate limit" is marked invalid/)
+})
+
+test('a media rate limit WIDENED by an appended group fails, naming what the group counts', () => {
+  const config = healthyTenantConfig()
+  ruleNamed(config, MEDIA_LIMIT_NAME).conditionGroup.push({
+    conditions: [{ type: 'path', op: 'pre', value: '/' }],
+  })
+  const findings = tenantFindings(config)
+  assert.match(findings, /condition group 2 of 2\) NO LONGER REQUIRES path pre "\/api\/media\/cdn"/)
+  assert.match(findings, /That group counts: path pre "\/"/)
+})
+
+test('a media rate limit with no condition groups fails — it would count the whole project', () => {
+  const config = healthyTenantConfig()
+  ruleNamed(config, MEDIA_LIMIT_NAME).conditionGroup = []
+  assert.match(tenantFindings(config), /has NO condition groups — it would count every request on the project/)
+})
+
+test('an undeclared persistent action on the media rate limit fails — it blocks the address everywhere', () => {
+  const config = healthyTenantConfig()
+  ruleNamed(config, MEDIA_LIMIT_NAME).action.mitigate.actionDuration = '1h'
+  assert.match(tenantFindings(config), /persistent action of "1h", declared null: an address past the limit is then blocked on every path/)
+})
+
+test('the rate limit is not mistaken for an undeclared bypass, and does not hide one', () => {
+  const config = healthyTenantConfig()
+  assert.doesNotMatch(tenantFindings(config), /UNDECLARED/)
+  config.rules.push({
+    name: 'Sneaky media hole',
+    id: 'rule_sneaky',
+    active: true,
+    valid: true,
+    action: bypass(),
+    conditionGroup: [{ conditions: [{ type: 'path', op: 'pre', value: '/api/media' }] }],
+  })
+  assert.match(tenantFindings(config), /UNDECLARED active bypass rule "Sneaky media hole"/)
+})
+
+test('a rate-limit declaration that asserts less than it appears to is refused at startup', () => {
+  const base = tenantExpected.rateLimitRules[0]
+  const withLimit = (patch) => [
+    { ...tenantExpected, rateLimitRules: [{ ...base, ...patch, rateLimit: { ...base.rateLimit, ...(patch.rateLimit ?? {}) } }] },
+  ]
+  assert.match(
+    validatePostureTable(withLimit({ precedes: 'No such bypass' })).join('\n'),
+    /`precedes` "No such bypass", which is not a declared bypass rule/,
+  )
+  assert.match(validatePostureTable(withLimit({ conditions: [] })).join('\n'), /declares no conditions/)
+  assert.match(validatePostureTable(withLimit({ rateLimit: { window: 3600 } })).join('\n'), /window` from 10 to 600/)
+  assert.match(validatePostureTable(withLimit({ rateLimit: { limit: 0 } })).join('\n'), /positive whole `rateLimit\.limit`/)
+  assert.match(validatePostureTable(withLimit({ exceeded: 'block' })).join('\n'), /needs `exceeded` set to one of/)
+  assert.match(
+    validatePostureTable([{ ...pluginsExpected, rateLimitRules: [base] }]).join('\n'),
+    /an 'unprotected' entry cannot declare `rateLimitRules`/,
+  )
 })
