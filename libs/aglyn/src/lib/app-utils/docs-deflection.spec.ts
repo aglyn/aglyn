@@ -569,7 +569,10 @@ describe('the gates, each forced on its own', () => {
   })
 
   it('a question spread across unrelated pages is ambiguous, not answered', () => {
-    const verdict = verdictFor('plugin dataset booking locale invoice theme')
+    // No `plugin` among the words: the plugin-manager reference names a plugin
+    // seam in every heading and documents the `dataset` record kind, so those
+    // two together are one page's subject rather than a spread.
+    const verdict = verdictFor('dataset booking locale invoice theme')
     expect(verdict.answered).toBe(false)
     expect(['ambiguous', 'low-coverage', 'low-score']).toContain(verdict.refusal)
   })
