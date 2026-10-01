@@ -40,6 +40,7 @@ import {
   RISK_STAFF_ACTIONS,
   riskKindForAbuseRow,
   riskNoticeEmailKey,
+  riskPayoutDelayText,
 } from './risk-notice-catalog'
 import { RISK_NOTICE_SYSTEM_EMAIL_TEMPLATES, RISK_REVIEW_REQUESTED_EMAIL_KEY } from './risk-notice-emails'
 import { getSystemEmailTemplate } from './system-email-catalog'
@@ -321,6 +322,21 @@ describe('what a notice claims is what happens', () => {
 
   it('keeps a dispute out of the burst digest, which would drop its deadline', () => {
     expect(RISK_NOTICE_CATALOG['sale-dispute'].neverDigest).toBe(true)
+  })
+
+  it('states a new publisher’s payout schedule, and that nothing is withheld or charged (AGL-3442)', () => {
+    const told = renderOwnerRiskNotice('publisher-payouts-held', {
+      'payout.delay': riskPayoutDelayText({ delayDays: 14, untilWorkspaceAgeDays: 30 }),
+    })
+    expect(told.summary).toMatch(
+      /moved to an extended schedule: each payout reaches your bank 14 days after the sale, until your workspace is 30 days old\.$/,
+    )
+    expect(told.meaning).toMatch(/^Nothing is withheld or charged\./)
+    expect(riskPayoutDelayText({ delayDays: 1, untilWorkspaceAgeDays: 30 })).toMatch(/^each payout reaches your bank 1 day after/)
+    // A notice sent without the schedule still reads as a whole sentence.
+    expect(renderOwnerRiskNotice('publisher-payouts-held', {}).summary).toMatch(
+      /extended schedule: each payout waits a set number of days after the sale before it reaches your bank\.$/,
+    )
   })
 
   it('keeps a card-testing warning out of the burst digest, which would drop its site (AGL-3442)', () => {

@@ -468,6 +468,24 @@ describe('notifyRiskEvent', () => {
     )
   })
 
+  it('fills a new publisher’s payout schedule into the notice it is sent (AGL-3442)', async () => {
+    const h = harness({ owners: [{ uid: 'owner-1', email: 'avery@example.com' }] })
+    await notifyRiskEvent(
+      {
+        kind: 'publisher-payouts-held',
+        orgId: 'org-1',
+        item: { label: 'your marketplace payouts', path: '/org/marketplace/payouts' },
+        payout: { delayDays: 14, untilWorkspaceAgeDays: 30 },
+      },
+      h.deps,
+    )
+    expect(String(h.sent[0]['text'])).toContain(
+      'payouts for Harbor View\'s marketplace sales moved to an extended schedule: each payout reaches your bank ' +
+        '14 days after the sale, until your workspace is 30 days old.',
+    )
+    expect(String(h.inApp[0].payload['body'])).toContain('Nothing is withheld or charged.')
+  })
+
   it('reports an unticked "Email the owners" as a skip, and still writes the in-app notice', async () => {
     const h = harness()
     const result = await notifyRiskEvent(

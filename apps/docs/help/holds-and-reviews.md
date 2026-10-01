@@ -219,9 +219,10 @@ reversed.
 
 ## Marketplace payout schedule {#marketplace-payouts}
 
-Payouts to new publishers wait for a period before they reach your bank. Your sales are
-recorded as usual and pay out automatically when the period ends, and you get a notice
-when payouts return to the standard schedule.
+Payouts to new publishers wait for a set number of days before they reach your bank, while
+the workspace is new. The notice says how many days each payout waits and until when.
+Nothing is withheld or charged: your sales are recorded as usual and pay out automatically
+when their wait ends, and you get a notice when payouts return to the standard schedule.
 
 ## Your workspace, a site, a domain or your account is locked {#locked}
 

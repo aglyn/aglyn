@@ -372,6 +372,8 @@ export const RISK_NOTICE_TOKENS = {
     'What happened to a payment, finishing "the payment was …": flagged for a fraud check, disputed by the cardholder with their bank.',
   'page.visitors': 'What visitors see while a held page waits, as one sentence.',
   'evidence.dueBy': 'The date dispute evidence is due, when Stripe gave one.',
+  'payout.delay':
+    'A new publisher\'s payout schedule, finishing "moved to an extended schedule:": each payout reaches your bank 14 days after the sale, until your workspace is 30 days old.',
   'staff.evidence': 'Staff only: what the screen or Stripe reported.',
 } as const
 
@@ -387,6 +389,24 @@ export const RISK_PAYMENT_EVENTS = {
   'radar-review': 'held for a fraud review',
   dispute: 'disputed by the cardholder with their bank',
 } as const satisfies Record<string, string>
+
+/** `14 days`, `1 day`. */
+function dayCount(days: number): string {
+  return `${days} ${days === 1 ? 'day' : 'days'}`
+}
+
+/**
+ * `{{payout.delay}}`: how long a new publisher's payouts wait, and until
+ * when. The numbers are the marketplace's own payout terms, passed in by the
+ * caller, and the notice states them: the schedule is money the publisher is
+ * owed and when it lands, not how anything was detected.
+ */
+export function riskPayoutDelayText(payout: { delayDays: number; untilWorkspaceAgeDays: number }): string {
+  return (
+    `each payout reaches your bank ${dayCount(payout.delayDays)} after the sale, ` +
+    `until your workspace is ${dayCount(payout.untilWorkspaceAgeDays)} old`
+  )
+}
 
 const ASK_FOR_REVIEW =
   'If you think this is a mistake, choose Request a review and tell us about it. A person reads every request.'
@@ -1127,9 +1147,10 @@ export const RISK_NOTICE_CATALOG: Readonly<Record<RiskEventKind, RiskNoticeDefin
     helpAnchor: 'marketplace-payouts',
     owner: {
       title: 'Your marketplace payouts are on an extended schedule',
-      summary: 'On {{occurredAt}}, payouts for {{workspace.name}}\'s marketplace sales moved to an extended schedule.',
+      summary:
+        'On {{occurredAt}}, payouts for {{workspace.name}}\'s marketplace sales moved to an extended schedule: {{payout.delay}}.',
       meaning:
-        'Payouts to new publishers wait for a period before they reach your bank. Your sales are recorded as usual and pay out automatically when the period ends.',
+        'Nothing is withheld or charged. Your sales are recorded as usual, and each one pays out automatically when its wait ends.',
       steps: ['Nothing to do. You will get a notice when payouts return to the standard schedule.'],
       actions: ['view-marketplace-sales', 'contact-support'],
     },
@@ -1534,6 +1555,7 @@ const TOKEN_FALLBACKS: Partial<Record<RiskNoticeToken | 'brand.productName', str
   'page.visitors':
     'Visitors see the previous version of this page, or a not-found page if it was never published, until the review is done.',
   'evidence.dueBy': 'the date shown on the order',
+  'payout.delay': 'each payout waits a set number of days after the sale before it reaches your bank',
   'staff.evidence': '',
   'brand.productName': 'the platform',
 }

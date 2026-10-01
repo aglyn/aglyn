@@ -84,6 +84,7 @@ import {
   RISK_NOTICE_HELP_PATH,
   RISK_NOTICE_WORKSPACE_BRANDED,
   riskNoticeEmailKey,
+  riskPayoutDelayText,
   type ResolvedRiskAction,
   type RiskActionParams,
   type RiskEventKind,
@@ -198,6 +199,11 @@ export interface RiskEventInput {
    */
   paymentEvent?: string | null
   evidenceDueByMs?: number | null
+  /**
+   * A new publisher's payout schedule: how many days each payout waits, and
+   * the workspace age it waits until.
+   */
+  payout?: { delayDays: number; untilWorkspaceAgeDays: number } | null
   /** Staff only: the Stripe Dashboard page for the charge, review or dispute. */
   stripeUrl?: string | null
   lock?: {
@@ -739,6 +745,7 @@ export async function notifyRiskEvent(
       amount: input.amount ?? null,
       'payment.event': input.paymentEvent ?? null,
       'evidence.dueBy': input.evidenceDueByMs ? formatRiskNoticeTime(input.evidenceDueByMs) : null,
+      'payout.delay': input.payout ? riskPayoutDelayText(input.payout) : null,
       'page.visitors': input.page ? heldPageVisitorSentence(input.page) : null,
       'brand.productName': riskNoticeProductName(brand) || null,
     }
