@@ -938,7 +938,12 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
           sample: 'Free-tier AI spend for 2026-09-28 (UTC) is at $40.00 of the $50.00 ceiling.',
         },
       ],
-      defaultBody: [{ block: 'text', text: '{{alert.body}}', variant: 'body' }],
+      // The subject heads the body (AGL-3432): a reader who skips the
+      // subject line still sees what the alert is about.
+      defaultBody: [
+        { block: 'text', text: '{{alert.subject}}', variant: 'heading' },
+        { block: 'text', text: '{{alert.body}}', variant: 'body' },
+      ],
       footerReason:
         'You’re receiving this because this address gets ' +
         '{{brand.productName}}’s staff alerts.',
@@ -993,8 +998,13 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         'for review, and any type staff moved there — in one email. Goes to ' +
         'the same inbox as the operator alert.',
       deliveredBy: 'resend',
-      defaultSubject: '{{digest.count}} operator alerts on {{digest.date}}',
+      defaultSubject: '{{digest.title}}',
       mergeTokens: [
+        {
+          name: 'digest.title',
+          description: 'The count and the day, in one line, “alert” or “alerts” as the count needs',
+          sample: '3 operator alerts on 2026-09-28',
+        },
         {
           name: 'digest.date',
           description: 'The day the digest covers, UTC',
@@ -1021,11 +1031,7 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         },
       ],
       defaultBody: [
-        {
-          block: 'text',
-          text: '{{digest.count}} operator alerts on {{digest.date}}',
-          variant: 'heading',
-        },
+        { block: 'text', text: '{{digest.title}}', variant: 'heading' },
         { block: 'text', text: '{{digest.body}}', variant: 'body' },
         { block: 'button', label: 'Open the staff console', href: '{{digest.url}}' },
       ],
@@ -1110,7 +1116,12 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
           sample: 'Test Org',
         },
       ],
-      defaultBody: [{ block: 'text', text: '{{notice.body}}', variant: 'body' }],
+      // The subject heads the body (AGL-3432): a reader who skips the
+      // subject line still sees what the notice is about.
+      defaultBody: [
+        { block: 'text', text: '{{notice.subject}}', variant: 'heading' },
+        { block: 'text', text: '{{notice.body}}', variant: 'body' },
+      ],
       footerReason:
         'You’re receiving this because you’re a member of {{org.name}} on ' +
         '{{brand.productName}}.',

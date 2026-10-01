@@ -43,7 +43,9 @@ jest.mock('./email-metering', () => ({ meterPlatformEmail: async () => undefined
 
 import {
   resolveStaffAlertRecipients,
+  sendOperatorAlertDigestEmail,
   sendOperatorAlertEmail,
+  sendStaffAlertEmail,
 } from './staff-alert-email'
 
 const ENV_KEYS = ['STAFF_ALERT_EMAIL', 'NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL', 'VERCEL_ENV'] as const
@@ -123,6 +125,38 @@ describe('who hears a staff alarm (AGL-3375)', () => {
     expect(html).toContain('A dispute was opened on invoice in_123.')
     expect(html).toContain('href="https://app.example.com/admin/abuse-reports/r1"')
     expect(html).toContain('operator alerts')
+  })
+
+  it('heads a staff alert with its subject, so the body never leans on the subject line (AGL-3432)', async () => {
+    process.env.STAFF_ALERT_EMAIL = 'alerts@example.com'
+    await sendStaffAlertEmail({
+      subject: 'Free AI spend at 80% of today’s ceiling',
+      text: 'Free-tier AI spend for 2026-09-28 (UTC) is at $40.00 of the $50.00 ceiling.',
+      context: 'staff-alert test',
+    })
+    expect(sends[0]['subject']).toBe('Free AI spend at 80% of today’s ceiling')
+    for (const part of [String(sends[0]['html']), String(sends[0]['text'])]) {
+      const heading = part.indexOf('Free AI spend at 80% of today’s ceiling')
+      const body = part.indexOf('Free-tier AI spend for 2026-09-28')
+      expect(heading).toBeGreaterThanOrEqual(0)
+      expect(body).toBeGreaterThan(heading)
+    }
+  })
+
+  it('counts a one-alert digest as one alert, in the subject and the heading (AGL-3432)', async () => {
+    process.env.STAFF_ALERT_EMAIL = 'alerts@example.com'
+    await sendOperatorAlertDigestEmail({
+      date: '2026-09-28',
+      count: 1,
+      body: '• New support ticket: Checkout button missing',
+      url: 'https://app.example.com/admin/operator-alerts',
+    })
+    expect(sends[0]['subject']).toBe('1 operator alert on 2026-09-28')
+    expect(String(sends[0]['html'])).toContain('1 operator alert on 2026-09-28')
+    expect(String(sends[0]['html'])).not.toContain('1 operator alerts')
+    sends.length = 0
+    await sendOperatorAlertDigestEmail({ date: '2026-09-28', count: 3, body: '• a\n\n• b\n\n• c' })
+    expect(sends[0]['subject']).toBe('3 operator alerts on 2026-09-28')
   })
 
   it('reports unconfigured, and sends nothing, when there is no one to tell', async () => {

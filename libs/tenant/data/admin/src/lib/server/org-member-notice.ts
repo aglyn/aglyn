@@ -108,7 +108,8 @@ export async function sendOrgMemberNotice(input: OrgMemberNoticeInput): Promise<
         'org.name': brand.orgName ?? '',
       },
       brand,
-      { subject: input.subject, text: input.text },
+      // The last resort reads as the built-in copy does: subject, then body.
+      { subject: input.subject, text: `${input.subject}\n\n${input.text}` },
     )
     let sent = 0
     for (const to of recipients.slice(0, MAX_SENDS)) {

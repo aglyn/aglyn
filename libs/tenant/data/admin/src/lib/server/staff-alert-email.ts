@@ -133,7 +133,8 @@ export async function sendStaffAlertEmail(input: {
       'staff-alert',
       { 'alert.subject': input.subject, 'alert.body': input.text },
       systemEmailBrand(null),
-      { subject: input.subject, text: input.text },
+      // The last resort reads as the built-in copy does: subject, then body.
+      { subject: input.subject, text: `${input.subject}\n\n${input.text}` },
     )
     return await sendToOperators(content, input.context)
   } catch (error) {
@@ -197,6 +198,7 @@ export async function sendOperatorAlertDigestEmail(input: {
     const content = await renderSystemEmailContent(
       'operator-alert-digest',
       {
+        'digest.title': subject,
         'digest.date': input.date,
         'digest.count': String(input.count),
         'digest.body': input.body,
