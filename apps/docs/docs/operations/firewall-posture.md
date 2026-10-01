@@ -177,9 +177,9 @@ Measured 2026-10-01.
 
 | Project | Serves | Posture |
 | --- | --- | --- |
-| `aglyn-tenant` | every customer site on `*.aglyn.app` + custom domains | ✅ protected — challenge, 10 scoped bypass rules, 1 rate limit (log mode) |
+| `aglyn-tenant` | every customer site on `*.aglyn.app` + custom domains | ✅ protected — challenge, 10 scoped bypass rules, 1 rate limit (enforcing) |
 | `aglyn-docs` | `docs.aglyn.com` | ✅ protected — challenge, 4 scoped bypass rules |
-| `aglyn-console` | `app.aglyn.com` — sign-in, billing, staff surfaces, and every Sequences link domain | ✅ protected — challenge, 8 scoped bypass rules, 1 rate limit (log mode) |
+| `aglyn-console` | `app.aglyn.com` — sign-in, billing, staff surfaces, and every Sequences link domain | ✅ protected — challenge, 8 scoped bypass rules, 1 rate limit (enforcing) |
 | `aglyn-plugins` | `plugins.aglyn.com` — plugin loader origin | ⚠️ **no WAF config** — reviewed, deliberate |
 
 ### How the console was closed, and why the order mattered
@@ -575,7 +575,7 @@ function runs. It went in on 2026-10-01 on `aglyn-tenant` and `aglyn-console`:
 | --- | --- |
 | scope | `path pre /api/media/cdn`, the bypass's own scope |
 | count | fixed window, **1,500 requests per 60 s per IP** |
-| past the limit | **`log`**: recorded, nobody refused |
+| past the limit | **`rate_limit`**: a 429 the caller can back off from (enforcing since 2026-10-01; `log` before that) |
 | position | directly **ahead of** `Public asset delivery bypass` |
 
 **Position is the whole rule.** A request matching a custom bypass "is allowed
@@ -642,6 +642,14 @@ changes only `rateLimit.action` from `log` to `rate_limit` (a 429), plus
 move together, `check:firewall-posture` reports the difference. Never
 `challenge` or `deny` past this limit: the callers this path serves without a
 browser can answer neither.
+
+**Enforcing since 2026-10-01** (tenant firewall config v32, console v23). The
+window it was judged on: Firewall → Traffic over the past day showed no address
+but the burst test's (`74.244.49.138`, the two bursts above) at 1,500 requests
+or more in the WHOLE day on either project, across every path, so none can have
+crossed 1,500 in a minute on this one. Read back after the change: only this
+rule's `rateLimit.action` differed; every other rule, the managed rulesets and
+the IP rules were identical, and an anonymous media URL still answered 200.
 
 What it does not bound: the bytes in one request, a caller spread across many
 addresses, and an org's total delivery. The function folds an IPv6 address to

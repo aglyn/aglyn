@@ -48,7 +48,8 @@ lives inside `serveMediaCdn`, in `lib/server/media-cdn-rate-limit.ts`.
   rate limit`, counts every request on the path at 1,500 a minute per address
   on both projects, before any function runs, edge hits included. It sits
   ahead of the bypass, because a matched bypass skips every later rule, and it
-  went in on 2026-10-01 in **log** mode. The measurements behind the number,
+  went in on 2026-10-01 in **log** mode and has enforced (a 429 past the limit)
+  since later that day. The measurements behind the number,
   the verification and the switch to enforce are in the firewall-posture
   runbook (`apps/docs/docs/operations/firewall-posture.md`).
 - **What is counted:** a GET that gets past every access gate and the 304
