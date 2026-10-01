@@ -26,6 +26,7 @@ import {
   linkableScreenRoutes,
   normalizeScreenSlug,
   ownScreenSlugFromRoutePath,
+  SCREEN_KIND_GROUP,
   SCREEN_ROOT_PATH,
   SCREEN_SLUG_PATH_SEPARATOR_MESSAGE,
   screenClaimsToBeAPage,
@@ -380,6 +381,8 @@ describe('screenClaimsToBeAPage', () => {
     // address of its own. It is the third exclusion, and the first one that is
     // a fact about the screen rather than about some other document.
     expect(screenClaimsToBeAPage({ kind: 'template' })).toBe(false)
+    // AGL-3463: a page group is a folder, not a page.
+    expect(screenClaimsToBeAPage({ kind: SCREEN_KIND_GROUP })).toBe(false)
     expect(screenClaimsToBeAPage({ deletedAt: { seconds: 1 } })).toBe(false)
     // A Firestore Timestamp is an object; so is the `_seconds` shape a JSON
     // round trip leaves. Any non-null value means deleted.

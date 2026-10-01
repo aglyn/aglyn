@@ -22,6 +22,7 @@ import {
   pluginRequestFromWeb,
   SCREEN_KIND_EMAIL,
   SCREEN_KIND_ERROR,
+  SCREEN_KIND_GROUP,
   SCREEN_KIND_TEMPLATE,
   screenClaimsToBeAPage,
   type ScreenPageClaim,
@@ -138,6 +139,7 @@ function nonPageScreenReason(screen: ScreenFacts): string | null {
   if (screen.kind === SCREEN_KIND_EMAIL) return 'an email design'
   if (screen.kind === SCREEN_KIND_TEMPLATE) return 'a collection entry template'
   if (screen.kind === SCREEN_KIND_ERROR) return 'an error page'
+  if (screen.kind === SCREEN_KIND_GROUP) return 'a page group'
   return 'not a page of this site'
 }
 
@@ -213,6 +215,20 @@ async function writeTemplatePointers(options: {
     if (!screen) {
       return Response.json({
         error: `No page ${value} on this site (${field})`,
+      }, { status: 400 })
+    }
+    // A page GROUP (AGL-3463) is a folder in the Pages list with no design of
+    // its own, so no pointer may name one — entry or list. An entry template
+    // that is a group renders every entry from a version that does not exist.
+    if (screen.kind === SCREEN_KIND_GROUP) {
+      const name =
+        typeof screen.displayName === 'string' && screen.displayName
+          ? screen.displayName
+          : value
+      return Response.json({
+        error:
+          `${name} is a page group, which has no design of its own to ` +
+          'render this collection with. Pick a page instead.',
       }, { status: 400 })
     }
     /*==========================================

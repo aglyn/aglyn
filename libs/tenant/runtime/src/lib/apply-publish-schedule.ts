@@ -21,7 +21,9 @@ import {
   checkEntitlement,
   composeScreenRoutePath,
   SCREEN_KIND_EMAIL,
+  SCREEN_KIND_GROUP,
   SCREEN_ROOT_PATH,
+  toScreenRouteNode,
 } from '@aglyn/aglyn/server'
 // Deep import, like the Measurement Protocol sender's: `analytics-events.ts`
 // is deliberately DOM-free so both sides of the publish path can share the
@@ -56,11 +58,12 @@ type RouteRefusal = 'not-a-page' | 'no-path' | 'path-taken'
  * The three refusals are all "this cannot become an address", and all three
  * are silent no-ops if left unrecorded, which is the bug this issue is about:
  *
- * - `not-a-page` — an email document (AGL-1383). It has no URL, the serve
- *   path refuses to render it, and a routing entry would make it BILLABLE
- *   against `screensPerHost` without making it reachable. `kind: 'template'`
- *   is deliberately NOT refused: a collection entry template is routed on
- *   purpose, which is how the compose pipeline picks it up (AGL-1400).
+ * - `not-a-page` — an email document (AGL-1383) or a page group (AGL-3463).
+ *   Neither has a URL, the serve path refuses to render either, and a routing
+ *   entry would make it BILLABLE against `screensPerHost` without making it
+ *   reachable. `kind: 'template'` is deliberately NOT refused: a collection
+ *   entry template is routed on purpose, which is how the compose pipeline
+ *   picks it up (AGL-1400).
  * - `no-path` — the screen or an ancestor has no slug, so there is no address
  *   to publish at.
  * - `path-taken` — another screen already holds the address. The interactive
@@ -88,15 +91,19 @@ async function resolveScheduledRoutePath(options: {
     if (currentId === screenId) {
       if (
         snapshot.get('deletedAt') != null ||
-        snapshot.get('kind') === SCREEN_KIND_EMAIL
+        snapshot.get('kind') === SCREEN_KIND_EMAIL ||
+        snapshot.get('kind') === SCREEN_KIND_GROUP
       ) {
         return { refused: 'not-a-page' }
       }
     }
-    screensById[currentId] = {
+    // The kind rides along so a GROUP ancestor composes as nothing rather
+    // than as a slugless page that refuses the path (AGL-3463).
+    screensById[currentId] = toScreenRouteNode({
       slug: snapshot.get('slug'),
       parentId: snapshot.get('parentId'),
-    }
+      kind: snapshot.get('kind'),
+    })
     currentId = snapshot.get('parentId')
   }
 

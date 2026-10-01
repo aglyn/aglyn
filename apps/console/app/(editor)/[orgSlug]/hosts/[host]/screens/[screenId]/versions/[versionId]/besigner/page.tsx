@@ -991,9 +991,11 @@ function BesignerPage(props) {
       Aglyn.ScreenRouteNode & { displayName?: string }
     > = {}
     for (const screen of screenDocs ?? []) {
+      // `toScreenRouteNode` carries the kind, so a page GROUP above this
+      // screen composes as nothing rather than as an unpublished page that
+      // refuses the path (AGL-3463).
       map[screen.$id] = {
-        slug: screen.slug,
-        parentId: screen.parentId,
+        ...Aglyn.toScreenRouteNode(screen),
         displayName: screen.displayName,
       }
     }

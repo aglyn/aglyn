@@ -205,10 +205,71 @@ export const SCREEN_SLUG_PATH_SEPARATOR_MESSAGE =
   'A slug is one path segment — remove the "/" and nest the page under a ' +
   'parent page instead'
 
+/**
+ * `kind` of a page GROUP (AGL-3463): a folder in the Pages list that holds
+ * pages and is not one.
+ *
+ * A group has no slug, no versions and no address. It is never routed, never
+ * published or scheduled, and it contributes NOTHING to its descendants'
+ * paths — a page inside a group composes exactly as if it sat at the group's
+ * own level, so moving a page into or out of a group at that level leaves its
+ * URL untouched. A group nested in a group behaves the same way.
+ *
+ * It has to be a declared kind rather than "a parent with no slug", because a
+ * slugless parent already means something: an unpublished page, and
+ * {@link composeScreenRoutePath} refuses every path beneath one. An
+ * unpublished, address-less parent built from data alone would therefore
+ * unroute its children the next time any of them was moved or published.
+ *
+ * A group is not a page, so it is in {@link screenClaimsToBeAPage}'s list and
+ * spends none of the plan's page allowance. That is safe for the reasons the
+ * other non-page kinds are: `kind` is stamped at create by
+ * /api/hosts/resources and frozen against the client by the rules, no route
+ * converts a group into anything else, and the serve path refuses a non-page
+ * claim — so a group can never be laundered into a page it did not pay for,
+ * and the flat {@link NON_PAGE_SCREEN_MAX_PER_HOST} bounds how many exist.
+ */
+export const SCREEN_KIND_GROUP = 'group'
+
 /** Minimal screen shape the hierarchy helpers need. */
 export interface ScreenRouteNode {
   slug?: string
   parentId?: ScreenUid
+  /**
+   * The screen's `kind`. Read here for ONE value, {@link SCREEN_KIND_GROUP}:
+   * a group contributes nothing to a path, where a slugless page breaks it.
+   * A caller that leaves this out makes every group look like an unpublished
+   * page — build nodes with {@link toScreenRouteNode} so it cannot.
+   */
+  kind?: string
+}
+
+/**
+ * The {@link ScreenRouteNode} of a screen document: the three fields path
+ * composition reads, and nothing else. Every surface that composes paths
+ * builds its map through this, because a map built from `{ slug, parentId }`
+ * alone silently reads a group as an unpublished page and unroutes every page
+ * inside it (AGL-3463).
+ */
+export function toScreenRouteNode(screen: {
+  slug?: unknown
+  parentId?: unknown
+  kind?: unknown
+}): ScreenRouteNode {
+  const node: ScreenRouteNode = {}
+  if (typeof screen.slug === 'string') node.slug = screen.slug
+  if (typeof screen.parentId === 'string' && screen.parentId) {
+    node.parentId = screen.parentId
+  }
+  if (typeof screen.kind === 'string') node.kind = screen.kind
+  return node
+}
+
+/** Is this screen a page group ({@link SCREEN_KIND_GROUP})? */
+export function isScreenGroup(
+  screen: { kind?: unknown } | null | undefined,
+): boolean {
+  return screen?.kind === SCREEN_KIND_GROUP
 }
 
 /** Defensive cap: parent chains deeper than this are treated as invalid. */
@@ -218,17 +279,24 @@ const MAX_SCREEN_DEPTH = 32
  * Composes a screen's routing-map path from its own slug plus its ancestor
  * chain: parent `company` + own `about` → `company/about`. Root (`'/'`)
  * segments contribute nothing, so children of the home screen sit at the
- * top level. Returns `undefined` when the screen (or any ancestor) has no
- * slug, when the screen's own slug is `'/'` while it has a parent, or when
- * the chain has a cycle / exceeds {@link MAX_SCREEN_DEPTH}.
+ * top level, and GROUP ancestors contribute nothing either (AGL-3463) — they
+ * are passed through as if the screen sat at the group's own level.
+ *
+ * Returns `undefined` when the screen is itself a group, when it (or any
+ * non-group ancestor) has no slug, when its own slug is `'/'` while it has a
+ * non-group ancestor, or when the chain has a cycle / exceeds
+ * {@link MAX_SCREEN_DEPTH}.
  */
 export function composeScreenRoutePath(
   screenId: ScreenUid,
   screensById: Record<ScreenUid, ScreenRouteNode | undefined>,
 ): string | undefined {
+  // A group is never an address, whatever else its document says.
+  if (isScreenGroup(screensById[screenId])) return undefined
   const segments: string[] = []
   const visited = new Set<ScreenUid>()
   let currentId: ScreenUid | undefined = screenId
+  let isHomePage = false
 
   while (currentId) {
     if (visited.has(currentId) || visited.size >= MAX_SCREEN_DEPTH) {
@@ -236,23 +304,76 @@ export function composeScreenRoutePath(
     }
     visited.add(currentId)
     const screen = screensById[currentId]
+    if (isScreenGroup(screen)) {
+      // No segment, and no slug required: a group does not gate the pages
+      // inside it. Its own slug, if a stray one exists, is ignored.
+      currentId = screen?.parentId
+      continue
+    }
     if (!screen?.slug) return undefined
+    // The home screen's segment is empty (children of home sit at the top
+    // level), but a screen can't itself be the home page AND sit under
+    // another page. Groups above it are fine — they are not levels.
+    if (isHomePage) return undefined
     if (screen.slug === SCREEN_ROOT_PATH) {
-      // The home screen's segment is empty (children of home sit at the top
-      // level), but a screen can't itself be the home page AND have a parent.
-      if (currentId === screenId && screen.parentId) return undefined
+      if (currentId === screenId) isHomePage = true
     } else {
       segments.unshift(screen.slug)
     }
     currentId = screen.parentId
   }
 
-  if (!segments.length) {
-    return screensById[screenId]?.slug === SCREEN_ROOT_PATH
-      ? SCREEN_ROOT_PATH
-      : undefined
-  }
+  if (!segments.length) return isHomePage ? SCREEN_ROOT_PATH : undefined
   return segments.join('/')
+}
+
+/**
+ * The nearest ancestor that is NOT a group — the screen whose level a page
+ * actually composes its path at — or `undefined` for the top level
+ * (AGL-3463). Two placements with the same answer compose the same path,
+ * which is what makes moving a page into or out of a group at that level a
+ * move that cannot change its URL.
+ */
+export function screenRouteParentId(
+  screenId: ScreenUid,
+  screensById: Record<ScreenUid, ScreenRouteNode | undefined>,
+): ScreenUid | undefined {
+  const visited = new Set<ScreenUid>([screenId])
+  let currentId = screensById[screenId]?.parentId
+  while (currentId && !visited.has(currentId)) {
+    visited.add(currentId)
+    const screen = screensById[currentId]
+    if (!isScreenGroup(screen)) return currentId
+    currentId = screen?.parentId
+  }
+  return undefined
+}
+
+/**
+ * Where each child of a group goes when the group is deleted: one level up,
+ * under the group's own parent (AGL-3463). A child id → its next `parentId`
+ * (`undefined` for the top level).
+ *
+ * Only DIRECT children move; grandchildren ride along under them. Because a
+ * group contributes nothing to a path, the children's composed paths are the
+ * same before and after, so deleting a group never touches the routing map.
+ * Answers `{}` for a screen that is not a group — deleting a page is a
+ * different act with a different consequence for what sits under it.
+ */
+export function screenGroupDissolveMoves(
+  groupId: ScreenUid,
+  screensById: Record<ScreenUid, ScreenRouteNode | undefined>,
+): Record<ScreenUid, ScreenUid | undefined> {
+  const group = screensById[groupId]
+  if (!isScreenGroup(group)) return {}
+  const nextParentId = group?.parentId
+  const moves: Record<ScreenUid, ScreenUid | undefined> = {}
+  for (const [id, screen] of Object.entries(screensById)) {
+    if (id !== groupId && screen?.parentId === groupId) {
+      moves[id] = nextParentId
+    }
+  }
+  return moves
 }
 
 /**
@@ -330,6 +451,11 @@ export interface BuildScreenRouteEntriesOptions {
  * candidate screens map: a composed path sets the entry, `null` marks an
  * existing entry whose chain no longer resolves for removal. Callers apply
  * the result in one write so slug/parent changes cascade atomically.
+ *
+ * A group never gets an entry (AGL-3463): it composes no path, so it is never
+ * written, and a stray entry one somehow holds is marked for removal. Its
+ * descendants are still walked — they compose through it as if it were not
+ * there.
  *
  * See {@link BuildScreenRouteEntriesOptions.publish} for the difference
  * between publishing a screen and merely moving one.
@@ -668,13 +794,14 @@ export interface ScreenPageClaim {
  * document, which has no URL and is rendered only by the campaign sender,
  * straight off the doc), `kind: 'template'` (a collection entry template,
  * which composes `/{collection}/{entry}` and has no address of its own —
- * AGL-1400) and `kind: 'error'` (a screen assigned to one of the host's four
- * error slots, rendered on paths that matched nothing — AGL-2092). All four
- * are also the exclusions `countBillableScreens` subtracts before enforcing
- * `screensPerHost`, and since AGL-1400 they are the WHOLE of that subtraction:
- * the count reads no other collection.
+ * AGL-1400), `kind: 'error'` (a screen assigned to one of the host's four
+ * error slots, rendered on paths that matched nothing — AGL-2092) and
+ * `kind: 'group'` (a folder of pages with no address, slug or content of its
+ * own — AGL-3463). All five are also the exclusions `countBillableScreens`
+ * subtracts before enforcing `screensPerHost`, and since AGL-1400 they are the
+ * WHOLE of that subtraction: the count reads no other collection.
  *
- * Adding the fourth needed no edit to `billableScreenIds` and no edit to
+ * Adding the fourth and fifth needed no edit to `billableScreenIds` and no edit to
  * `nonPageScreenIds`, which is the property AGL-1439 wrote them for: the
  * routing-map override applies to a new non-page `kind` by default, and the
  * flat infrastructure cap is the complement, so there is no second list to
@@ -716,7 +843,8 @@ export function screenClaimsToBeAPage(
     screen.deletedAt == null &&
     screen.kind !== SCREEN_KIND_EMAIL &&
     screen.kind !== SCREEN_KIND_TEMPLATE &&
-    screen.kind !== SCREEN_KIND_ERROR
+    screen.kind !== SCREEN_KIND_ERROR &&
+    screen.kind !== SCREEN_KIND_GROUP
   )
 }
 

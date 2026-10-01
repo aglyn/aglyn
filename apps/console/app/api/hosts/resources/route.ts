@@ -33,6 +33,7 @@ import {
   type OrgEntitlements,
   type OrgFeatureFlags,
   SCREEN_KIND_EMAIL,
+  SCREEN_KIND_GROUP,
   screenClaimsToBeAPage,
 } from '@aglyn/aglyn/server'
 import {
@@ -197,8 +198,9 @@ interface HostResource {
  * could create any number of them.
  */
 const RESOURCES: Record<string, HostResource> = {
-  // Sent by the screens page (displayName/description/slug), the template
-  // installers (adds `seo`) and the email composer (`kind: 'email'`).
+  // Sent by the screens page (displayName/description/slug, or a page group's
+  // `kind: 'group'`), the template installers (adds `seo`) and the email
+  // composer (`kind: 'email'`).
   // `versionId` points at the first version the caller is about to mint.
   screen: {
     collection: 'screens',
@@ -610,11 +612,19 @@ async function handler(request: Request): Promise<Response> {
     // owns the stamp. Written as "not a page, and not the one exception", a
     // future non-page kind is refused by default — which is the same shape the
     // flat cap thirty lines below already uses, and for the same stated reason.
+    //
+    // A page GROUP (AGL-3463) is the second value born rather than converted
+    // to. It has no promotion to gate: no route converts a group into
+    // anything, the rules freeze `kind`, and the serve path refuses it, so a
+    // group can never become the page a create here would have charged for.
     const requestedKind = (data as Record<string, unknown>)['kind']
+    const createsGroup =
+      resourceKey === 'screen' && requestedKind === SCREEN_KIND_GROUP
     if (
       resourceKey === 'screen' &&
       typeof requestedKind === 'string' &&
       requestedKind !== SCREEN_KIND_EMAIL &&
+      !createsGroup &&
       !screenClaimsToBeAPage({ kind: requestedKind })
     ) {
       return Response.json({
@@ -717,6 +727,14 @@ async function handler(request: Request): Promise<Response> {
     if (resourceKey === 'template' && doc['kind'] !== 'component') {
       delete doc['componentKind']
     }
+    // A group is a name and nothing else (AGL-3463): no address, no first
+    // version, no search snippet. Dropped like any field the kind cannot use,
+    // so a group can never be stored carrying an address it will not serve.
+    if (createsGroup) {
+      delete doc['slug']
+      delete doc['versionId']
+      delete doc['seo']
+    }
     /*
      * COMPRESSED AT REST (AGL-1151).
      *
@@ -790,7 +808,10 @@ async function handler(request: Request): Promise<Response> {
         resourceKey === 'screen'
           ? await readScreenSources(hostRef, (query) => tx.get(query as any))
           : []
-      if (resource.quotaKey) {
+      // A group spends none of the plan's page allowance, so a site at its
+      // page limit can still make one (AGL-3463). The flat non-page cap below
+      // is what bounds how many exist.
+      if (resource.quotaKey && !createsGroup) {
         // Platform-seeded starters (AGL-687) are excluded from the template
         // count: they are content WE put in the library, and charging a free
         // plan's ten-template allowance for them would leave no room for the
@@ -870,7 +891,8 @@ async function handler(request: Request): Promise<Response> {
           return {
             error:
               'This site is at its limit of ' +
-              `${NON_PAGE_SCREEN_MAX_PER_HOST} email designs and template pages — ` +
+              `${NON_PAGE_SCREEN_MAX_PER_HOST} email designs, template pages ` +
+              'and page groups — ' +
               'delete some to make room',
           }
         }

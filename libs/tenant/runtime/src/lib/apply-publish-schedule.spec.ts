@@ -413,6 +413,52 @@ describe('a scheduled first publish registers the route (AGL-1589)', () => {
     expect(commitMock).not.toHaveBeenCalled()
   })
 
+  /*
+   * PAGE GROUPS (AGL-3463). A group is a folder in the Pages list: it has no
+   * address of its own and contributes nothing to the paths of the pages in
+   * it. Publishing one is refused; publishing a page inside one is not.
+   */
+  it('never routes a page group, even one carrying a stray slug', async () => {
+    screenDocs = { 'screen-1': { slug: 'campaigns', kind: 'group' } }
+
+    const result = await run({ versionId: 'v-live', publishSchedule: schedule() })
+
+    expect(updateMock).toHaveBeenCalledWith({
+      'publishSchedule.status': 'skipped-unroutable',
+    })
+    expect(result).toBe('v-live')
+    expect(commitMock).not.toHaveBeenCalled()
+  })
+
+  it('publishes a page inside a group at the group’s level', async () => {
+    screenDocs = {
+      'screen-1': { slug: 'launch-waitlist', parentId: 'group-1' },
+      'group-1': { kind: 'group' },
+    }
+
+    await run({ versionId: 'v-live', publishSchedule: schedule() })
+
+    expect(batchUpdateMock.mock.calls[0][1]).toEqual({
+      'screens.screen-1': 'launch-waitlist',
+    })
+    expect(commitMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('composes through nested groups under a page', async () => {
+    screenDocs = {
+      'screen-1': { slug: 'about', parentId: 'group-2' },
+      'group-2': { kind: 'group', parentId: 'group-1' },
+      'group-1': { kind: 'group', parentId: 'parent-1' },
+      'parent-1': { slug: 'company' },
+    }
+
+    await run({ versionId: 'v-live', publishSchedule: schedule() })
+
+    expect(batchUpdateMock.mock.calls[0][1]).toEqual({
+      'screens.screen-1': 'company/about',
+    })
+  })
+
   it('leaves the schedule PENDING when the routing read fails', async () => {
     // Fail-open: an unanswerable routing question must not become an
     // `applied` status, because `applied` never retries. The next beat does.
