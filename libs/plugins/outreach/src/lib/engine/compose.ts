@@ -67,7 +67,7 @@ import {
   type CrmMergeContext,
   resolveCrmMergeFields,
 } from '@aglyn/aglyn/app-utils/crm-email-templates'
-import { crmThreadSubject } from '@aglyn/aglyn/app-utils/crm-inbound'
+import { threadSubject as threadSubjectOf } from '@aglyn/aglyn/app-utils/email-text'
 import type {
   OutreachEnrollment,
   OutreachOrgSettings,
@@ -348,7 +348,7 @@ export function composeOutreachEmail(input: ComposeOutreachEmailInput): Outreach
     ? Math.max(0, Number(input.enrollment.startStepIndex))
     : 0
   if (isInThreadEmailStep(steps, stepIndex, startStepIndex)) {
-    const threadSubject = crmThreadSubject(input.enrollment.threadSubject)
+    const threadSubject = threadSubjectOf(input.enrollment.threadSubject)
     const messageIds = (input.enrollment.messageIds ?? [])
       .map(outreachMessageIdHeader)
       .filter((id): id is string => id !== null)

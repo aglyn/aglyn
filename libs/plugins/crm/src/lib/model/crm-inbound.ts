@@ -15,19 +15,18 @@
  * limitations under the License.
  */
 
-import { normalizeContactEmail } from './contacts'
 import {
   CRM_EMAIL_BODY_MAX,
   CRM_EMAIL_SUBJECT_MAX,
   type CrmActivity,
   type CrmActivityLink,
   type CrmEmailDirection,
-} from './crm'
+} from '@aglyn/aglyn/app-utils/crm'
+import { emailAddressOf, threadSubject } from '@aglyn/aglyn/app-utils/email-text'
 import {
   type MemberAddresses,
   memberEmailAddresses,
-  verifiedMemberEmailAliases,
-} from './member-email-aliases'
+} from '@aglyn/aglyn/app-utils/member-email-aliases'
 
 /**
  * EMAIL CAPTURE (AGL-2657): the pure half.
@@ -37,10 +36,11 @@ import {
  * own mailbox, is filed on the record of whoever the message was with.
  * This module is everything about that which needs no Firestore and no
  * provider: the shape of the address, the token in it, which of a
- * message's addresses is the correspondent, what of the body is worth
- * keeping, and the activity row the whole thing becomes. The webhook route
- * and the address route read it; the dialog and the settings card read the
- * address helpers; the specs read all of it.
+ * message's addresses is the correspondent, and the activity row the whole
+ * thing becomes. How a message is read — the address in a header, the
+ * reply above the quoted history — is the platform's (`email-text.ts`), and
+ * so is the domain mail arrives on (`inbound-mail-domain.ts`). The webhook
+ * route and the address route read it; the specs read all of it.
  *
  * ## The token is the whole secret
  *
@@ -69,17 +69,11 @@ import {
  * `outbound`.
  */
 
-/** Where captured mail arrives when the deployment names no domain. */
-export const CRM_INBOUND_DEFAULT_DOMAIN = 'in.aglyn.com'
-
 /** The local part every capture address begins with: `crm+<token>@…`. */
 export const CRM_INBOUND_LOCAL_PART = 'crm'
 
 /** How many characters a minted token has. */
 export const CRM_INBOUND_TOKEN_LENGTH = 32
-
-/** The most a captured message's excerpt keeps: a letter, not a thread. */
-export const CRM_INBOUND_EXCERPT_MAX = 4_000
 
 /** What the org's feed says about a message that matched no record. */
 export const CRM_INBOUND_UNMATCHED_ACTION = 'Inbound email matched no record'
@@ -89,21 +83,6 @@ export const CRM_INBOUND_CEILING_ACTION = 'Inbound email not filed: activity log
 
 const TOKEN_ALPHABET = 'abcdefghijklmnopqrstuvwxyz0123456789'
 const TOKEN_PATTERN = /^[a-z0-9]{24,64}$/
-const DOMAIN_PATTERN = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/
-
-/**
- * The domain captured mail is addressed at: `CRM_INBOUND_DOMAIN`, or the
- * platform's default when the deployment names none or names something
- * that is not a hostname. Lowercased, because a domain is.
- */
-export function crmInboundDomain(
-  env: Record<string, string | undefined> = process.env,
-): string {
-  const configured = String(env['CRM_INBOUND_DOMAIN'] ?? '')
-    .trim()
-    .toLowerCase()
-  return DOMAIN_PATTERN.test(configured) ? configured : CRM_INBOUND_DEFAULT_DOMAIN
-}
 
 /**
  * A fresh token from the platform's random source. One byte per character
@@ -126,25 +105,6 @@ export function isCrmInboundToken(value: unknown): value is string {
 /** `crm+<token>@<domain>` — the address a member pastes into a mailbox. */
 export function crmInboundAddress(token: string, domain: string): string {
   return `${CRM_INBOUND_LOCAL_PART}+${token}@${domain}`
-}
-
-/**
- * The bare address in a header value — `Ada <ada@example.com>` and
- * `ada@example.com` both answer `ada@example.com` — normalized as every
- * contact address is, or `null` for anything that is not one.
- */
-export function emailAddressOf(value: unknown): string | null {
-  const raw = String(value ?? '').trim()
-  const angled = /<([^<>]+)>\s*$/.exec(raw)
-  return normalizeContactEmail(angled ? angled[1] : raw)
-}
-
-/** The part after the `@`, or `null` — what an unmatched message is logged by. */
-export function emailDomainOf(value: unknown): string | null {
-  const address = emailAddressOf(value)
-  if (!address) return null
-  const at = address.lastIndexOf('@')
-  return at > 0 ? address.slice(at + 1) : null
 }
 
 /**
@@ -182,180 +142,6 @@ export function isCrmInboundAddress(address: unknown, domain: string): boolean {
   return crmInboundTokenOf(address, domain) !== null
 }
 
-/**
- * The subject with its reply and forward prefixes removed, however many
- * were stacked — `Re: Fwd: RE: Renewal` is the `Renewal` thread — and
- * whitespace collapsed, so two rows of one conversation carry one value.
- */
-export function crmThreadSubject(subject: unknown): string {
-  let value = String(subject ?? '')
-    .replace(/\s+/g, ' ')
-    .trim()
-  const prefix = /^(re|fwd?|aw|wg|tr|sv|vs)\s*(\[\d+\])?\s*:\s*/i
-  while (prefix.test(value)) value = value.replace(prefix, '')
-  return value.slice(0, CRM_EMAIL_SUBJECT_MAX)
-}
-
-const ENTITIES: Record<string, string> = {
-  amp: '&',
-  lt: '<',
-  gt: '>',
-  quot: '"',
-  apos: "'",
-  nbsp: ' ',
-}
-
-/**
- * The words in an HTML part, for a message that carried no text part.
- * Block boundaries become line breaks, tags go, the common entities are
- * read back — a best effort over a bounded slice, never a renderer.
- */
-export function htmlToPlainText(html: unknown): string {
-  return String(html ?? '')
-    .slice(0, 200_000)
-    .replace(/<(script|style)[\s\S]*?<\/\1>/gi, '')
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<\/(p|div|li|tr|h[1-6]|blockquote|pre)>/gi, '\n')
-    .replace(/<[^>]+>/g, '')
-    .replace(/&(#\d+|#x[0-9a-f]+|[a-z]+);/gi, (whole, code: string) => {
-      if (code.startsWith('#x') || code.startsWith('#X')) {
-        return String.fromCodePoint(parseInt(code.slice(2), 16))
-      }
-      if (code.startsWith('#')) return String.fromCodePoint(parseInt(code.slice(1), 10))
-      return ENTITIES[code.toLowerCase()] ?? whole
-    })
-}
-
-/** What a forwarded message's header block says, and the words after it. */
-export interface ForwardedSection {
-  /** The address on the block's `From:` line, or `null` when it carried none. */
-  from: string | null
-  /** The forwarded message's own text, header block removed. */
-  body: string
-}
-
-const FORWARD_MARKER = /^\s*(-{2,}\s*Forwarded message\s*-{2,}|Begin forwarded message:)\s*$/i
-const HEADER_LINE = /^\s*\*?(From|Sent|Date|To|Cc|Subject|Reply-To)\s*:\*?\s*(.*)$/i
-
-/**
- * The forwarded message inside a forward — the block a mail client puts
- * under "Forwarded message" or, with no marker, a run of `From:` … `Subject:`
- * header lines — or `null` when the text carries none. The `From:` line is
- * where the correspondent of a forwarded reply is named, since the forward's
- * own headers name only the teammate who forwarded it.
- */
-export function forwardedSection(text: string): ForwardedSection | null {
-  const lines = text.split('\n')
-  let start = -1
-  for (let index = 0; index < lines.length; index += 1) {
-    if (FORWARD_MARKER.test(lines[index])) {
-      start = index + 1
-      break
-    }
-    if (/^\s*\*?From\s*:/i.test(lines[index]) && !lines[index].trimStart().startsWith('>')) {
-      const window = lines.slice(index, index + 8)
-      if (window.some((line) => /^\s*\*?Subject\s*:/i.test(line))) {
-        start = index
-        break
-      }
-    }
-  }
-  if (start < 0) return null
-  let from: string | null = null
-  let cursor = start
-  // The header block: header lines, blank lines between them allowed, up to
-  // the first line that is neither.
-  let sawHeader = false
-  while (cursor < lines.length) {
-    const line = lines[cursor]
-    const header = HEADER_LINE.exec(line)
-    if (header) {
-      sawHeader = true
-      if (header[1].toLowerCase() === 'from') from = from ?? emailAddressOf(header[2])
-      cursor += 1
-      continue
-    }
-    if (!line.trim() && !sawHeader) {
-      cursor += 1
-      continue
-    }
-    if (!line.trim() && sawHeader) {
-      // A blank line after a header run may precede more headers (Apple
-      // Mail) or the body; look past it.
-      const next = lines[cursor + 1] ?? ''
-      if (HEADER_LINE.test(next)) {
-        cursor += 1
-        continue
-      }
-      cursor += 1
-      break
-    }
-    break
-  }
-  return { from, body: lines.slice(cursor).join('\n') }
-}
-
-const QUOTE_INTRO = /^\s*On\b.{0,300}$/
-const QUOTE_END = /wrote:\s*$/i
-const HISTORY_MARKERS = [
-  /^\s*>/,
-  /^\s*-{2,}\s*Original Message\s*-{2,}\s*$/i,
-  /^\s*_{5,}\s*$/,
-  /^\s*From:\s.+$/,
-  /^\s*Sent from my\b/i,
-  /^\s*Le .{0,200} a écrit\s*:\s*$/i,
-  /^\s*Am .{0,200} schrieb .{0,100}:\s*$/i,
-]
-
-/**
- * The words above the quoted history: everything before the first `On …
- * wrote:` line, quote mark, "Original Message" rule or reply header block.
- * The intro may wrap onto a second line, so a line that begins `On` is
- * read together with the one after it.
- */
-export function stripQuotedHistory(text: string): string {
-  const lines = text.split('\n')
-  let end = lines.length
-  for (let index = 0; index < lines.length; index += 1) {
-    const line = lines[index]
-    if (HISTORY_MARKERS.some((marker) => marker.test(line))) {
-      end = index
-      break
-    }
-    if (QUOTE_INTRO.test(line)) {
-      const joined = `${line} ${lines[index + 1] ?? ''}`
-      if (QUOTE_END.test(line) || QUOTE_END.test(joined)) {
-        end = index
-        break
-      }
-    }
-  }
-  return lines.slice(0, end).join('\n')
-}
-
-/**
- * What the timeline keeps of a captured message: the text part — or the
- * words of the HTML part when there is none — with a forward's header
- * block and the quoted history below the reply removed, whitespace
- * settled, bounded. Never the whole thread: the thread is in the mailbox,
- * and the row is a note that this exchange happened.
- */
-export function crmInboundExcerpt(text: unknown, html?: unknown): string {
-  let body = String(text ?? '')
-  if (!body.trim() && html) body = htmlToPlainText(html)
-  body = body.replace(/\r\n?/g, '\n').replace(/\u00a0/g, ' ')
-  const forwarded = forwardedSection(body)
-  if (forwarded) body = forwarded.body
-  body = stripQuotedHistory(body)
-  return body
-    .split('\n')
-    .map((line) => line.replace(/[ \t]+$/g, ''))
-    .join('\n')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim()
-    .slice(0, CRM_INBOUND_EXCERPT_MAX)
-}
-
 /** One address the message might be with, in the order the rule tries them. */
 export interface CrmInboundCandidate {
   email: string
@@ -363,53 +149,6 @@ export interface CrmInboundCandidate {
   direction: CrmEmailDirection
   /** Which header the address came from, for the spec and the log. */
   via: 'from' | 'to' | 'cc' | 'forwarded'
-}
-
-/** One member of the workspace, as the capture filer reads them. */
-export interface CrmInboundMember extends MemberAddresses {
-  uid: string
-  /** The address they sign in with; `''` for a roster row that carries none. */
-  email: string
-  name?: string | null
-}
-
-/** A roster row as {@link crmInboundRoster} reads it — `AglynOrgMember`'s fields. */
-export interface CrmInboundRosterRow {
-  $id: string
-  email?: string | null
-  displayName?: string | null
-  orgSuspended?: boolean
-}
-
-/**
- * The roster a captured message is matched against: every roster row that
- * does not carry the org's suspension flag, each with the address the
- * member signs in with and the aliases they have CONFIRMED, read off their
- * stored alias document by uid. The confirmed filter is applied here, from
- * the stored documents, so no caller can hand the rule an address a member
- * only typed. An alias document with no roster row beside it belongs to
- * somebody who is no longer a member, and is never read.
- */
-export function crmInboundRoster(
-  rows: readonly CrmInboundRosterRow[],
-  aliasDocuments: ReadonlyMap<string, unknown>,
-): CrmInboundMember[] {
-  const roster: CrmInboundMember[] = []
-  for (const row of rows) {
-    if (row.orgSuspended === true) continue
-    const uid = String(row.$id ?? '')
-    if (!uid) continue
-    const email = normalizeContactEmail(row.email) ?? ''
-    const verifiedAliases = verifiedMemberEmailAliases(aliasDocuments.get(uid))
-    if (!email && !verifiedAliases.length) continue
-    roster.push({
-      uid,
-      email,
-      name: row.displayName ?? null,
-      ...(verifiedAliases.length ? { verifiedAliases } : {}),
-    })
-  }
-  return roster
 }
 
 export interface CrmInboundCandidatesInput {
@@ -488,7 +227,7 @@ export function crmCapturedEmailKey(messageId: unknown, providerId: unknown): st
 export interface CrmCapturedEmailInput {
   direction: CrmEmailDirection
   subject: string
-  /** The excerpt, already reduced by {@link crmInboundExcerpt}. */
+  /** The excerpt, already reduced by `emailExcerpt`. */
   excerpt: string
   /** The address on the message's From. */
   from: string
@@ -533,7 +272,7 @@ export function buildCrmCapturedEmailActivity(input: CrmCapturedEmailInput): Crm
     ...(to ? { to } : {}),
     messageId: String(input.messageId ?? '').trim(),
     ...(inReplyTo ? { inReplyTo } : {}),
-    threadSubject: crmThreadSubject(subject),
+    threadSubject: threadSubject(subject),
     atMs: input.atMs,
     byUid: input.byUid,
     ...(byName ? { byName } : {}),

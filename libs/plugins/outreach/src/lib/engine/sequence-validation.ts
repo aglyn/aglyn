@@ -39,7 +39,7 @@ import {
   type CrmMergeFieldGroup,
   crmMergeFieldsIn,
 } from '@aglyn/aglyn/app-utils/crm-email-templates'
-import { crmThreadSubject } from '@aglyn/aglyn/app-utils/crm-inbound'
+import { threadSubject } from '@aglyn/aglyn/app-utils/email-text'
 import {
   OUTREACH_DEFAULT_ALLOWED_COUNTRIES,
   OUTREACH_MAX_EMAIL_STEPS,
@@ -210,7 +210,7 @@ export function outreachThreadStartSubject(
  */
 export function outreachSubjectHasReplyPrefix(subject: unknown): boolean {
   const collapsed = asText(subject).replace(/\s+/g, ' ').trim()
-  return collapsed !== '' && crmThreadSubject(collapsed) !== collapsed.slice(0, CRM_EMAIL_SUBJECT_MAX)
+  return collapsed !== '' && threadSubject(collapsed) !== collapsed.slice(0, CRM_EMAIL_SUBJECT_MAX)
 }
 
 const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']

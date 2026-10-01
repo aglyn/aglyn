@@ -17,7 +17,7 @@
 
 import { normalizeContactEmail } from '@aglyn/aglyn/app-utils/contacts'
 import { isPublicMailboxDomain } from '@aglyn/aglyn/app-utils/crm'
-import { crmInboundExcerpt, emailAddressOf } from '@aglyn/aglyn/app-utils/crm-inbound'
+import { emailAddressOf, emailExcerpt } from '@aglyn/aglyn/app-utils/email-text'
 import { outreachMessageIdHeader } from '../engine/compose'
 import { readOutreachDeliveryReport } from '../engine/delivery-status'
 import { outreachEmailDomain } from '../engine/do-not-contact-domain'
@@ -416,7 +416,7 @@ async function fileInbound(context: SyncContext, enrollment: OutreachEnrollment,
     to: context.mailbox.sendAs || context.mailbox.email,
     messageId,
     inReplyTo: outreachMessageIdHeader(outreachHeader(message, 'In-Reply-To')),
-    body: crmInboundExcerpt(message.textBody ?? message.snippet ?? '', message.htmlBody ?? ''),
+    body: emailExcerpt(message.textBody ?? message.snippet ?? '', message.htmlBody ?? ''),
     atMs: message.internalDateMs,
     byUid: '',
   })
@@ -497,7 +497,7 @@ async function applyMessages(
             link: outreachEnrollmentLink(enrollment),
             dedupeKey: `reply:${messageIdOf(decidingMessage) ?? decidingMessage.id}`,
             title: `Reply from ${enrollment.contactName || enrollment.email}`,
-            notes: crmInboundExcerpt(decidingMessage.textBody ?? decidingMessage.snippet ?? '', decidingMessage.htmlBody ?? '').slice(0, 500),
+            notes: emailExcerpt(decidingMessage.textBody ?? decidingMessage.snippet ?? '', decidingMessage.htmlBody ?? '').slice(0, 500),
             kind: 'email',
             dueAtMs: nowMs,
             assigneeUid: context.mailbox.connectedByUid,

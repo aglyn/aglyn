@@ -15,28 +15,18 @@
  * limitations under the License.
  */
 
+import { memberAddressRoster } from '@aglyn/aglyn/app-utils/member-email-aliases'
 import {
   buildCrmCapturedEmailActivity,
-  CRM_INBOUND_DEFAULT_DOMAIN,
-  CRM_INBOUND_EXCERPT_MAX,
   CRM_INBOUND_TOKEN_LENGTH,
   crmCapturedEmailKey,
   crmInboundAddress,
   crmInboundCandidates,
-  crmInboundDomain,
-  crmInboundExcerpt,
-  crmInboundRoster,
   crmInboundTokenOf,
   crmInboundTokensIn,
-  crmThreadSubject,
-  emailAddressOf,
-  emailDomainOf,
-  forwardedSection,
-  htmlToPlainText,
   isCrmInboundAddress,
   isCrmInboundToken,
   mintCrmInboundToken,
-  stripQuotedHistory,
 } from './crm-inbound'
 
 const DOMAIN = 'in.aglyn.com'
@@ -57,15 +47,6 @@ describe('the capture address (AGL-2657)', () => {
     expect(isCrmInboundToken(TOKEN.toUpperCase())).toBe(false)
     expect(isCrmInboundToken(42)).toBe(false)
     expect(isCrmInboundToken(TOKEN)).toBe(true)
-  })
-
-  it('reads the domain off the environment and falls back to the platform default', () => {
-    expect(crmInboundDomain({})).toBe(CRM_INBOUND_DEFAULT_DOMAIN)
-    expect(crmInboundDomain({ CRM_INBOUND_DOMAIN: ' In.Example.COM ' })).toBe('in.example.com')
-    // Not a hostname: the default, not a broken address.
-    expect(crmInboundDomain({ CRM_INBOUND_DOMAIN: 'not a domain' })).toBe(
-      CRM_INBOUND_DEFAULT_DOMAIN,
-    )
   })
 
   it('spells the address as crm+<token>@<domain>', () => {
@@ -99,101 +80,6 @@ describe('the capture address (AGL-2657)', () => {
         DOMAIN,
       ),
     ).toEqual([TOKEN, other])
-  })
-})
-
-describe('addresses and subjects', () => {
-  it('reads the bare, normalized address out of a header value', () => {
-    expect(emailAddressOf('Ada Lovelace <Ada@Example.com>')).toBe('ada@example.com')
-    expect(emailAddressOf('  ada@example.com ')).toBe('ada@example.com')
-    expect(emailAddressOf('not an address')).toBeNull()
-    expect(emailAddressOf(null)).toBeNull()
-    expect(emailDomainOf('Ada <ada@Example.com>')).toBe('example.com')
-    expect(emailDomainOf('nope')).toBeNull()
-  })
-
-  it('strips stacked reply and forward prefixes down to the thread subject', () => {
-    expect(crmThreadSubject('Re: Fwd: RE: Renewal  quote')).toBe('Renewal quote')
-    expect(crmThreadSubject('FW: AW [2]: Hello')).toBe('Hello')
-    expect(crmThreadSubject('Renewal')).toBe('Renewal')
-    expect(crmThreadSubject(undefined)).toBe('')
-  })
-})
-
-describe('the excerpt', () => {
-  it('keeps the reply and drops the quoted history under "On … wrote:"', () => {
-    const text = [
-      'Thanks — Tuesday works.',
-      '',
-      'Ada',
-      '',
-      'On Mon, Sep 7, 2026 at 3:12 PM Sam Rep <sam@acme.com> wrote:',
-      '> Would Tuesday suit?',
-      '> Sam',
-    ].join('\n')
-    expect(crmInboundExcerpt(text)).toBe('Thanks — Tuesday works.\n\nAda')
-  })
-
-  it('reads a wrapped "On … wrote:" intro across two lines', () => {
-    const text = 'Yes please.\n\nOn Mon, Sep 7, 2026 at 3:12 PM Sam Rep\n<sam@acme.com> wrote:\n> Shall I?'
-    expect(crmInboundExcerpt(text)).toBe('Yes please.')
-  })
-
-  it('cuts at a quote mark, an Outlook rule and a reply header block', () => {
-    expect(stripQuotedHistory('Hi\n> earlier')).toBe('Hi')
-    expect(stripQuotedHistory('Hi\n-----Original Message-----\nFrom: x')).toBe('Hi')
-    expect(stripQuotedHistory('Hi\n________________\nFrom: x')).toBe('Hi')
-    expect(stripQuotedHistory('Hi\nFrom: Sam <sam@acme.com>\nSent: Monday')).toBe('Hi')
-    expect(stripQuotedHistory('Hi\nSent from my iPhone')).toBe('Hi')
-  })
-
-  it("takes a forward's inner message and names the correspondent off its From line", () => {
-    const text = [
-      'FYI',
-      '',
-      '---------- Forwarded message ---------',
-      'From: Ada Lovelace <ada@example.com>',
-      'Date: Mon, Sep 7, 2026 at 2:00 PM',
-      'Subject: Re: Renewal',
-      'To: Sam Rep <sam@acme.com>',
-      '',
-      'Could we push the renewal to October?',
-      '',
-      'On Fri, Sep 4, 2026 Sam Rep <sam@acme.com> wrote:',
-      '> Renewal is due in September.',
-    ].join('\n')
-    expect(forwardedSection(text)).toEqual({
-      from: 'ada@example.com',
-      body: 'Could we push the renewal to October?\n\nOn Fri, Sep 4, 2026 Sam Rep <sam@acme.com> wrote:\n> Renewal is due in September.',
-    })
-    expect(crmInboundExcerpt(text)).toBe('Could we push the renewal to October?')
-  })
-
-  it('recognizes an Outlook forward with no marker, by its header run', () => {
-    const text = [
-      '',
-      'From: Ada Lovelace <ada@example.com>',
-      'Sent: Monday, September 7, 2026 2:00 PM',
-      'To: Sam Rep <sam@acme.com>',
-      'Subject: Renewal',
-      '',
-      'October, please.',
-    ].join('\n')
-    expect(forwardedSection(text)?.from).toBe('ada@example.com')
-    expect(crmInboundExcerpt(text)).toBe('October, please.')
-  })
-
-  it('falls back to the words of the HTML part when there is no text part', () => {
-    const html =
-      '<html><style>p{color:red}</style><body><p>Hello &amp; welcome</p><div>Line two<br>Line three</div></body></html>'
-    expect(htmlToPlainText(html)).toBe('Hello & welcome\nLine two\nLine three\n')
-    expect(crmInboundExcerpt('', html)).toBe('Hello & welcome\nLine two\nLine three')
-  })
-
-  it('is bounded and settles whitespace', () => {
-    const long = 'a'.repeat(CRM_INBOUND_EXCERPT_MAX + 50)
-    expect(crmInboundExcerpt(long)).toHaveLength(CRM_INBOUND_EXCERPT_MAX)
-    expect(crmInboundExcerpt('one  \r\n\r\n\r\n\r\ntwo   ')).toBe('one\n\ntwo')
   })
 })
 
@@ -283,8 +169,8 @@ describe("a member's confirmed alias is the member (AGL-2975)", () => {
       new Map<string, unknown>([
         ['u-avery', { aliases: [{ address: 'avery@example.org', addedAtMs: 1, ...(verifiedAtMs ? { verifiedAtMs } : {}) }] }],
       ])
-    const unconfirmed = crmInboundCandidates({ ...outreach, members: crmInboundRoster([row], stored()) })
-    const noAlias = crmInboundCandidates({ ...outreach, members: crmInboundRoster([row], new Map()) })
+    const unconfirmed = crmInboundCandidates({ ...outreach, members: memberAddressRoster([row], stored()) })
+    const noAlias = crmInboundCandidates({ ...outreach, members: memberAddressRoster([row], new Map()) })
     expect(unconfirmed).toEqual(noAlias)
     expect(unconfirmed.senderIsMember).toBe(false)
     expect(unconfirmed.candidates).toEqual([
@@ -292,7 +178,7 @@ describe("a member's confirmed alias is the member (AGL-2975)", () => {
       { email: 'pat@prospect.example', direction: 'inbound', via: 'to' },
     ])
     // The same document, confirmed, and the alias is the member's.
-    const confirmed = crmInboundCandidates({ ...outreach, members: crmInboundRoster([row], stored(2)) })
+    const confirmed = crmInboundCandidates({ ...outreach, members: memberAddressRoster([row], stored(2)) })
     expect(confirmed.senderIsMember).toBe(true)
   })
 
@@ -320,40 +206,6 @@ describe("a member's confirmed alias is the member (AGL-2975)", () => {
     const plusSignIn = crmInboundCandidates({ ...outreach, from: 'avery+news@example.com', members: [avery] })
     expect(plusAlias.senderIsMember).toBe(false)
     expect(plusSignIn.senderIsMember).toBe(false)
-  })
-})
-
-describe('the roster the filer matches against (AGL-2975)', () => {
-  const rows = [
-    { $id: 'u-avery', email: 'Avery@Example.com', displayName: 'Avery Quinn' },
-    { $id: 'u-kim', email: 'kim@aglyn.com', displayName: 'Kim' },
-    { $id: 'u-gone', email: 'gone@aglyn.com', orgSuspended: true },
-    { $id: 'u-alias-only', email: null },
-    { $id: 'u-nobody', email: '' },
-  ]
-
-  it('carries each member’s CONFIRMED aliases and none they only typed', () => {
-    const roster = crmInboundRoster(
-      rows,
-      new Map<string, unknown>([
-        [
-          'u-avery',
-          {
-            aliases: [
-              { address: 'avery@example.org', addedAtMs: 1, verifiedAtMs: 2 },
-              { address: 'typo@aglyn.io', addedAtMs: 3 },
-            ],
-          },
-        ],
-        ['u-alias-only', { aliases: [{ address: 'ops@aglyn.io', addedAtMs: 1, verifiedAtMs: 2 }] }],
-        ['u-stranger', { aliases: [{ address: 'left@aglyn.io', addedAtMs: 1, verifiedAtMs: 2 }] }],
-      ]),
-    )
-    expect(roster).toEqual([
-      { uid: 'u-avery', email: 'avery@example.com', name: 'Avery Quinn', verifiedAliases: ['avery@example.org'] },
-      { uid: 'u-kim', email: 'kim@aglyn.com', name: 'Kim' },
-      { uid: 'u-alias-only', email: '', name: null, verifiedAliases: ['ops@aglyn.io'] },
-    ])
   })
 })
 

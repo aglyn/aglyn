@@ -20,6 +20,7 @@ import {
   findMemberByEmailAddress,
   isVerifiedMemberEmailAlias,
   MEMBER_EMAIL_ALIASES_MAX,
+  memberAddressRoster,
   type MemberEmailAlias,
   memberEmailAddresses,
   memberEmailAliasRows,
@@ -176,6 +177,40 @@ describe('the rows the management route answers', () => {
     expect(memberEmailAliasRows([pending('b@aglyn.io', 20), confirmed('a@aglyn.io', 10)])).toEqual([
       { address: 'a@aglyn.io', addedAtMs: 10, verified: true, verifiedAtMs: 11 },
       { address: 'b@aglyn.io', addedAtMs: 20, verified: false, verifiedAtMs: null },
+    ])
+  })
+})
+
+describe('the roster a received message is matched against (AGL-2975)', () => {
+  const rows = [
+    { $id: 'u-avery', email: 'Avery@Example.com', displayName: 'Avery Quinn' },
+    { $id: 'u-kim', email: 'kim@aglyn.com', displayName: 'Kim' },
+    { $id: 'u-gone', email: 'gone@aglyn.com', orgSuspended: true },
+    { $id: 'u-alias-only', email: null },
+    { $id: 'u-nobody', email: '' },
+  ]
+
+  it('carries each member’s CONFIRMED aliases and none they only typed', () => {
+    const roster = memberAddressRoster(
+      rows,
+      new Map<string, unknown>([
+        [
+          'u-avery',
+          {
+            aliases: [
+              { address: 'avery@example.org', addedAtMs: 1, verifiedAtMs: 2 },
+              { address: 'typo@aglyn.io', addedAtMs: 3 },
+            ],
+          },
+        ],
+        ['u-alias-only', { aliases: [{ address: 'ops@aglyn.io', addedAtMs: 1, verifiedAtMs: 2 }] }],
+        ['u-stranger', { aliases: [{ address: 'left@aglyn.io', addedAtMs: 1, verifiedAtMs: 2 }] }],
+      ]),
+    )
+    expect(roster).toEqual([
+      { uid: 'u-avery', email: 'avery@example.com', name: 'Avery Quinn', verifiedAliases: ['avery@example.org'] },
+      { uid: 'u-kim', email: 'kim@aglyn.com', name: 'Kim' },
+      { uid: 'u-alias-only', email: '', name: null, verifiedAliases: ['ops@aglyn.io'] },
     ])
   })
 })

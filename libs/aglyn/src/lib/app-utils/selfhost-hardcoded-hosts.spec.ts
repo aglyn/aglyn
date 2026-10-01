@@ -113,10 +113,10 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
       "AGL-2703. Which hosts wear the OPERATOR's own brand rather than the neutral tenant palette. The two literals are the `??` default of `NEXT_PUBLIC_PLATFORM_BRAND_HOSTS` and nothing else reads them: a self-host operator points that variable at their own marketing domain, and their customers keep resolving the tenant default either way. Left as the default so the platform's own deployment needs no variable to keep its brand. On a self-hosted instance the literals are inert — no host there ever equals them, so every site correctly gets the tenant palette.",
   },
   {
-    file: 'libs/aglyn/src/lib/app-utils/crm-inbound.ts',
+    file: 'libs/aglyn/src/lib/app-utils/inbound-mail-domain.ts',
     count: 1,
     reason:
-      "AGL-2657. The CRM's email capture. The literal is the `??` default of `CRM_INBOUND_DOMAIN` and nothing else reads it: a self-host operator points that variable at the receiving domain their own mail provider verified, and every capture address is built from what the variable answers. Left as the default so the platform's own deployment needs no variable to work.",
+      "AGL-2657. The domain the platform receives mail on — the CRM's capture addresses, and the domain no member alias may claim. The literal is the default of `CRM_INBOUND_DOMAIN` and nothing else reads it: a self-host operator points that variable at the receiving domain their own mail provider verified, and every reader takes what the variable answers. Left as the default so the platform's own deployment needs no variable to work.",
   },
   {
     file: 'libs/tenant/data/admin/src/lib/server/upload-cors-reconcile.ts',

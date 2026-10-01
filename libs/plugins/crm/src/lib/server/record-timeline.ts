@@ -25,13 +25,11 @@ import {
   type PluginRecordWrite,
 } from '@aglyn/aglyn/plugin-manager/plugin-record-timeline'
 import {
-  buildCrmCapturedEmailActivity,
   checkEntitlement,
   consentGroupForHost,
   CRM_ACTIVITY_LOG_FULL_MESSAGE,
   CRM_COLLECTIONS,
   crmActivityLogHasRoom,
-  crmCapturedEmailKey,
   crmScopeTokens,
   crmTaskListFields,
   crmTaskReminderAfterEdit,
@@ -53,6 +51,7 @@ import {
 import { createHash } from 'crypto'
 import { FieldValue } from 'firebase-admin/firestore'
 import { BUNDLE_ID } from '../constants/bundle-common'
+import { buildCrmCapturedEmailActivity, crmCapturedEmailKey } from '../model/crm-inbound'
 import { CRM_SUITE_FEATURE } from './suite-gate'
 
 /**

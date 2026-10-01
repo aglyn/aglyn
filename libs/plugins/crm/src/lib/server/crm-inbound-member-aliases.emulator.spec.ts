@@ -36,7 +36,7 @@
  * The whole path the webhook takes after it has the message: the alias is
  * added through `addMemberEmailAlias`, its link minted and confirmed through
  * `confirmMemberEmailAlias` in the member's name, the roster read by
- * `loadCrmInboundRoster`, and the message filed by `fileCrmInboundEmail` —
+ * `loadMemberAddressRoster`, and the message filed by `fileCrmInboundEmail` —
  * every read and write against the emulator. Then the other half of the
  * feature's promise: the addresses leave with the membership, and with the
  * person when they are erased.
@@ -58,7 +58,7 @@
  * (`npm run firebase:emulate`), then:
  *
  *   FIRESTORE_EMULATOR_HOST=localhost:8082 \
- *     npx jest -c libs/tenant/data/admin/jest.config.ts \
+ *     npx jest -c libs/plugins/crm/jest.config.ts \
  *       --testPathPatterns crm-inbound-member-aliases.emulator
  */
 
@@ -104,7 +104,7 @@ jest.mock('firebase-admin/storage', () => ({
 }))
 
 /** No Auth emulator here; an unstubbed lookup reaches real identity pools. */
-jest.mock('./auth-pools', () => ({
+jest.mock('@aglyn/tenant-data-admin/server/auth-pools', () => ({
   findUserByUidAcrossPools: async () => null,
   findUserByEmailAcrossPools: async () => null,
   authForPool: () => ({ deleteUser: async () => undefined }),
@@ -112,9 +112,17 @@ jest.mock('./auth-pools', () => ({
 
 const describeEmulated = EMULATED ? describe : describe.skip
 
+/**
+ * A data-layer leaf, loaded after the environment above is set. Through a
+ * specifier the project graph does not read: a literal deferred import of
+ * a library from a spec registers a lazy edge on the whole project, and a
+ * spec is not a code-split boundary.
+ */
+const dataLeaf = (name: string): Promise<unknown> => import(`@aglyn/tenant-data-admin/server/${name}`)
+
 describeEmulated('a BCC from a member’s send-as alias (AGL-2975)', () => {
   let db: Firestore
-  let aliases: typeof import('./member-email-aliases')
+  let aliases: typeof import('@aglyn/tenant-data-admin/server/member-email-aliases')
   let inbound: typeof import('./crm-inbound-email')
 
   const outreach = (from: string, id: string): ReceivedEmail => ({
@@ -139,7 +147,7 @@ describeEmulated('a BCC from a member’s send-as alias (AGL-2975)', () => {
       org,
       message,
       domain: DOMAIN,
-      members: await inbound.loadCrmInboundRoster(db as unknown as FirebaseFirestore.Firestore, ORG),
+      members: await aliases.loadMemberAddressRoster(db as unknown as FirebaseFirestore.Firestore, ORG),
       hostIds: [HOST],
     })
   }
@@ -177,7 +185,7 @@ describeEmulated('a BCC from a member’s send-as alias (AGL-2975)', () => {
 
   beforeAll(async () => {
     db = getFirestore()
-    aliases = await import('./member-email-aliases')
+    aliases = (await dataLeaf('member-email-aliases')) as typeof aliases
     inbound = await import('./crm-inbound-email')
     await purge()
 
@@ -274,7 +282,7 @@ describeEmulated('a BCC from a member’s send-as alias (AGL-2975)', () => {
     })
     expect(added).toMatchObject({ ok: true, created: true })
 
-    const roster = await inbound.loadCrmInboundRoster(db as unknown as FirebaseFirestore.Firestore, ORG)
+    const roster = await aliases.loadMemberAddressRoster(db as unknown as FirebaseFirestore.Firestore, ORG)
     expect(roster.find((member) => member.uid === TEAMMATE)).toEqual({
       uid: TEAMMATE,
       email: 'teammate@workspace.example',
@@ -301,7 +309,7 @@ describeEmulated('a BCC from a member’s send-as alias (AGL-2975)', () => {
       signInEmail: 'rep@workspace.example',
     })
     expect((await aliasDoc(OTHER_ORG, REP).get()).exists).toBe(true)
-    const organizations = await import('./organizations')
+    const organizations = (await dataLeaf('organizations')) as typeof import('@aglyn/tenant-data-admin/server/organizations')
     await organizations.removeOrgMember(OTHER_ORG, REP)
     expect((await aliasDoc(OTHER_ORG, REP).get()).exists).toBe(false)
     expect((await aliasDoc(ORG, TEAMMATE).get()).exists).toBe(true)
@@ -319,7 +327,7 @@ describeEmulated('a BCC from a member’s send-as alias (AGL-2975)', () => {
     expect((await aliasDoc(ORG, REP).get()).exists).toBe(true)
     expect((await aliasDoc(OTHER_ORG, REP).get()).exists).toBe(true)
 
-    const erase = await import('./erase')
+    const erase = (await dataLeaf('erase')) as typeof import('@aglyn/tenant-data-admin/server/erase')
     expect(await erase.eraseUser(REP)).toMatchObject({ ok: true })
     expect((await aliasDoc(ORG, REP).get()).exists).toBe(false)
     expect((await aliasDoc(OTHER_ORG, REP).get()).exists).toBe(false)

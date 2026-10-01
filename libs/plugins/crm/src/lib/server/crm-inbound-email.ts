@@ -16,41 +16,40 @@
  */
 
 import {
-  buildCrmCapturedEmailActivity,
   consentGroupForHost,
   contactCaptureHostIds,
   crmActivityLogHasRoom,
-  crmCapturedEmailKey,
-  crmInboundCandidates,
-  crmInboundExcerpt,
-  crmInboundRoster,
   type CrmActivityLink,
   type CrmEmailDirection,
-  type CrmInboundCandidate,
-  type CrmInboundMember,
-  type CrmInboundRosterRow,
   crmScopeTokens,
   emailAddressOf,
   emailDomainOf,
+  emailExcerpt,
   findMemberByEmailAddress,
   forwardedSection,
   htmlToPlainText,
-  isCrmInboundAddress,
-  isCrmInboundToken,
-  mintCrmInboundToken,
   personKey,
   readContactFacet,
+  type RosterMember,
 } from '@aglyn/aglyn/server'
-import { MEMBER_EMAIL_ALIASES_COLLECTION } from '@aglyn/aglyn/app-utils/member-email-aliases'
 import type { ReceivedEmail } from '@aglyn/shared-util-email'
 import { visibleToHost } from '@aglyn/aglyn/app-utils/scope-tokens'
-import { findContactByEmail } from './contact-email-index'
+import { findContactByEmail } from '@aglyn/tenant-data-admin/server/contact-email-index'
 import {
   createCrmEmailActivity,
   crmCapturedEmailActivityRef,
   newCrmActivityRef,
-} from './crm-email-activity'
-import { countCrmActivitiesForRecord } from './crm-records'
+} from '@aglyn/tenant-data-admin/server/crm-email-activity'
+import { countCrmActivitiesForRecord } from '@aglyn/tenant-data-admin/server/crm-records'
+import {
+  buildCrmCapturedEmailActivity,
+  crmCapturedEmailKey,
+  type CrmInboundCandidate,
+  crmInboundCandidates,
+  isCrmInboundAddress,
+  isCrmInboundToken,
+  mintCrmInboundToken,
+} from '../model/crm-inbound'
 
 /**
  * EMAIL CAPTURE (AGL-2657): the half with Firestore.
@@ -65,7 +64,7 @@ import { countCrmActivitiesForRecord } from './crm-records'
  * `crm-email-activity.ts`: the routes hold one, and a module that reached
  * for the Admin app itself would drag it into every spec that only wants
  * the matching. The roster is read through that same store by
- * `loadCrmInboundRoster`, and the caller writes the org's feed line, so a
+ * `loadMemberAddressRoster`, and the caller writes the org's feed line, so a
  * spec of this module needs a store and nothing else.
  */
 
@@ -279,31 +278,6 @@ export async function matchCrmInboundCorrespondent(
   return null
 }
 
-/**
- * The workspace's roster as the filer matches against it: the member
- * documents and every member's stored alias document, two reads under the
- * org, reduced by `crmInboundRoster` to each member's sign-in address and
- * the aliases they have confirmed (AGL-2975).
- */
-export async function loadCrmInboundRoster(
-  firestore: FirebaseFirestore.Firestore,
-  orgId: string,
-): Promise<CrmInboundMember[]> {
-  const orgRef = firestore.collection('orgs').doc(orgId)
-  const [members, aliases] = await Promise.all([
-    orgRef.collection('members').get(),
-    orgRef.collection(MEMBER_EMAIL_ALIASES_COLLECTION).get(),
-  ])
-  const rows: CrmInboundRosterRow[] = members.docs.map((doc) => ({
-    ...((doc.data() ?? {}) as Omit<CrmInboundRosterRow, '$id'>),
-    $id: doc.id,
-  }))
-  const aliasDocuments = new Map<string, unknown>(
-    aliases.docs.map((doc) => [String(doc.id), doc.data()]),
-  )
-  return crmInboundRoster(rows, aliasDocuments)
-}
-
 export type CrmInboundFileOutcome =
   /** A row was written. */
   | { outcome: 'filed'; activityId: string; match: CrmInboundMatch }
@@ -333,8 +307,8 @@ export async function fileCrmInboundEmail(
     message: ReceivedEmail
     /** The capture domain, so the capture address is never the correspondent. */
     domain: string
-    /** The roster, from `loadCrmInboundRoster`: sign-in addresses and confirmed aliases. */
-    members: readonly CrmInboundMember[]
+    /** The roster, from `loadMemberAddressRoster`: sign-in addresses and confirmed aliases. */
+    members: readonly RosterMember[]
     hostIds: readonly string[]
   },
 ): Promise<CrmInboundFileOutcome> {
@@ -392,7 +366,7 @@ export async function fileCrmInboundEmail(
   const activity = buildCrmCapturedEmailActivity({
     direction: match.direction,
     subject: message.subject,
-    excerpt: crmInboundExcerpt(message.text, message.html),
+    excerpt: emailExcerpt(message.text, message.html),
     from: sender ?? message.from,
     to,
     messageId: message.messageId || message.id,

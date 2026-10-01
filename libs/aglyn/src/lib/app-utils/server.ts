@@ -92,11 +92,12 @@ export * from './person-erasure'
 // say. Pure like `crm`, read by the hourly route and by every writer of the
 // field.
 export * from './crm-task-reminders'
-// Email capture (AGL-2657): the address's shape and token, which of a
-// message's addresses is the correspondent, the excerpt, and the row a
-// captured message becomes. Pure like `crm`; the webhook route and
-// the address route are the readers with Firestore.
-export * from './crm-inbound'
+// Reading a received email (AGL-2657): the address in a header, the thread
+// a subject belongs to, the reply above the quoted history — and the domain
+// the platform receives mail on. Pure; every surface that reads mail it was
+// sent reads it this way.
+export * from './email-text'
+export * from './inbound-mail-domain'
 // A member's own addresses in a workspace (AGL-2975): the ones they have
 // confirmed count as theirs wherever the roster is asked who wrote a
 // message. Pure; the store and the confirmation link are server-side.

@@ -386,16 +386,6 @@
       "lane": "crm"
     },
     {
-      "path": "libs/aglyn/src/lib/app-utils/crm-inbound.ts",
-      "rules": [
-        "domain-name",
-        "plugin-id",
-        "domain-exports:crm",
-        "domain-declares:crm"
-      ],
-      "lane": "crm"
-    },
-    {
       "path": "libs/aglyn/src/lib/app-utils/crm-kinds.ts",
       "rules": [
         "domain-name",
@@ -979,16 +969,6 @@
       "path": "libs/tenant/data/admin/src/lib/server/crm-email-activity.ts",
       "rules": [
         "domain-name",
-        "domain-exports:crm",
-        "domain-declares:crm"
-      ],
-      "lane": "crm"
-    },
-    {
-      "path": "libs/tenant/data/admin/src/lib/server/crm-inbound-email.ts",
-      "rules": [
-        "domain-name",
-        "plugin-collection:crm",
         "domain-exports:crm",
         "domain-declares:crm"
       ],

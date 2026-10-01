@@ -31,11 +31,11 @@ jest.mock('firebase-admin/firestore', () => ({
 
 import { CRM_ACTIVITIES_PER_RECORD_CEILING, personKey } from '@aglyn/aglyn/server'
 import type { ReceivedEmail } from '@aglyn/shared-util-email'
+import { loadMemberAddressRoster } from '@aglyn/tenant-data-admin/server/member-email-aliases'
 import {
   ensureCrmInboundToken,
   fileCrmInboundEmail,
   findOrgByCrmInboundToken,
-  loadCrmInboundRoster,
 } from './crm-inbound-email'
 
 // ---------------------------------------------------------------------------
@@ -415,7 +415,7 @@ describe("a send from a member's alias (AGL-2975)", () => {
       org: store.get(`orgs/${ORG}`) as Record<string, unknown>,
       message: msg,
       domain: DOMAIN,
-      members: await loadCrmInboundRoster(firestore, ORG),
+      members: await loadMemberAddressRoster(firestore, ORG),
       hostIds: ['site-1', 'site-2'],
     })
 
@@ -487,7 +487,7 @@ describe("a send from a member's alias (AGL-2975)", () => {
     store.set(`orgs/${ORG}/memberEmailAliases/u-left`, {
       aliases: [{ address: 'left@aglyn.io', addedAtMs: 1, verifiedAtMs: 2 }],
     })
-    expect(await loadCrmInboundRoster(firestore, ORG)).toEqual([
+    expect(await loadMemberAddressRoster(firestore, ORG)).toEqual([
       { uid: 'u-avery', email: 'avery@example.com', name: 'Avery Quinn', verifiedAliases: ['avery@example.org'] },
     ])
   })

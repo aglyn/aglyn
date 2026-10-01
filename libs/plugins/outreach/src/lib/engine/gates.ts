@@ -143,7 +143,7 @@ export interface OutreachGateLookups {
   doNotContactDomain: boolean | null
   /**
    * The organization's roster: each member's sign-in address and confirmed
-   * aliases, as `crmInboundRoster` builds it.
+   * aliases, as `memberAddressRoster` builds it.
    */
   workspaceMembers: readonly MemberAddresses[] | null
   /**

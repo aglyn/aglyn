@@ -82,7 +82,8 @@ import {
   type PluginRecordTaskRequest,
 } from '@aglyn/aglyn/plugin-manager/plugin-record-timeline'
 import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
-import { CRM_ACTIVITY_LOG_FULL_MESSAGE, crmCapturedEmailKey } from '@aglyn/aglyn/server'
+import { CRM_ACTIVITY_LOG_FULL_MESSAGE } from '@aglyn/aglyn/server'
+import { crmCapturedEmailKey } from '../model/crm-inbound'
 import { crmCapturedEmailActivityRef } from '@aglyn/tenant-data-admin/server/crm-email-activity'
 import { createCrmRecordTimelineWriter, registerCrmRecordTimelineWriter } from './record-timeline'
 

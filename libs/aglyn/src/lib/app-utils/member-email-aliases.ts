@@ -208,6 +208,54 @@ export function findMemberByEmailAddress<T extends MemberAddresses>(
   return holders.length === 1 ? holders[0] : null
 }
 
+/** One member of the workspace, with every address that is theirs. */
+export interface RosterMember extends MemberAddresses {
+  uid: string
+  /** The address they sign in with; `''` for a roster row that carries none. */
+  email: string
+  name?: string | null
+}
+
+/** A roster row as {@link memberAddressRoster} reads it — `AglynOrgMember`'s fields. */
+export interface RosterRow {
+  $id: string
+  email?: string | null
+  displayName?: string | null
+  orgSuspended?: boolean
+}
+
+/**
+ * The workspace's people as a received message is matched against them:
+ * every roster row that does not carry the org's suspension flag, each with
+ * the address the member signs in with and the aliases they have CONFIRMED,
+ * read off their stored alias document by uid. The confirmed filter is
+ * applied here, from the stored documents, so no caller can hand a matcher
+ * an address a member only typed. An alias document with no roster row
+ * beside it belongs to somebody who is no longer a member, and is never
+ * read.
+ */
+export function memberAddressRoster(
+  rows: readonly RosterRow[],
+  aliasDocuments: ReadonlyMap<string, unknown>,
+): RosterMember[] {
+  const roster: RosterMember[] = []
+  for (const row of rows) {
+    if (row.orgSuspended === true) continue
+    const uid = String(row.$id ?? '')
+    if (!uid) continue
+    const email = normalizeContactEmail(row.email) ?? ''
+    const verifiedAliases = verifiedMemberEmailAliases(aliasDocuments.get(uid))
+    if (!email && !verifiedAliases.length) continue
+    roster.push({
+      uid,
+      email,
+      name: row.displayName ?? null,
+      ...(verifiedAliases.length ? { verifiedAliases } : {}),
+    })
+  }
+  return roster
+}
+
 /** Why an address could not be added. */
 export type MemberEmailAliasAddRefusal =
   | 'invalid-address'

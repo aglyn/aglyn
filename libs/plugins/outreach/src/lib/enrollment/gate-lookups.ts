@@ -50,7 +50,7 @@ import {
 } from '@aglyn/aglyn/app-utils/email-topics'
 import type { MemberAddresses } from '@aglyn/aglyn/app-utils/member-email-aliases'
 import { personKey } from '@aglyn/aglyn/app-utils/person-key'
-import { loadCrmInboundRoster } from '@aglyn/tenant-data-admin/server/crm-inbound-email'
+import { loadMemberAddressRoster } from '@aglyn/tenant-data-admin/server/member-email-aliases'
 import {
   EMAIL_SUPPRESSIONS_COLLECTION,
   HOST_SUPPRESSIONS_SUBCOLLECTION,
@@ -267,7 +267,7 @@ export async function readOutreachGateLookups(
       console.error('[outreach] mail gateway lookup failed; reading as unchecked', error)
       return new Map<string, null>()
     }),
-    loadCrmInboundRoster(firestore, orgId).catch((error: unknown): MemberAddresses[] | null => {
+    loadMemberAddressRoster(firestore, orgId).catch((error: unknown): MemberAddresses[] | null => {
       console.error('[outreach] roster lookup failed; reading as unchecked', error)
       return null
     }),

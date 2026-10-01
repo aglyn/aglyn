@@ -26,8 +26,8 @@
  * exactly its own.
  */
 
-jest.mock('@aglyn/tenant-data-admin/server/crm-inbound-email', () => ({
-  loadCrmInboundRoster: async () => [],
+jest.mock('@aglyn/tenant-data-admin/server/member-email-aliases', () => ({
+  loadMemberAddressRoster: async () => [],
 }))
 
 import { personKey } from '@aglyn/aglyn/app-utils/person-key'

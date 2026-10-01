@@ -21,10 +21,13 @@ import {
   MEMBER_EMAIL_ALIAS_CONFIRM_PARAM,
   MEMBER_EMAIL_ALIAS_CONFIRM_TTL_MS,
   MEMBER_EMAIL_ALIASES_COLLECTION,
+  memberAddressRoster,
   type MemberEmailAlias,
   type MemberEmailAliasAddRefusal,
   normalizeMemberEmailAlias,
   readMemberEmailAliases,
+  type RosterMember,
+  type RosterRow,
 } from '@aglyn/aglyn/app-utils/member-email-aliases'
 import { resolveBrandingProfile } from '@aglyn/aglyn/server'
 import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
@@ -140,6 +143,32 @@ export async function loadMemberEmailAliases(
 ): Promise<MemberEmailAlias[]> {
   const snapshot = await aliasesRef(firestore, orgId, uid).get()
   return readMemberEmailAliases(snapshot.exists ? snapshot.data() : null)
+}
+
+/**
+ * The workspace's people and every address that is theirs — the member
+ * documents and every member's stored alias document, two reads under the
+ * org, reduced by `memberAddressRoster` to each member's sign-in address and
+ * the aliases they have confirmed (AGL-2975). What a received message is
+ * matched against to tell the team's own mail from a correspondent's.
+ */
+export async function loadMemberAddressRoster(
+  firestore: FirebaseFirestore.Firestore,
+  orgId: string,
+): Promise<RosterMember[]> {
+  const orgRef = firestore.collection('orgs').doc(orgId)
+  const [members, aliases] = await Promise.all([
+    orgRef.collection('members').get(),
+    orgRef.collection(MEMBER_EMAIL_ALIASES_COLLECTION).get(),
+  ])
+  const rows: RosterRow[] = members.docs.map((doc) => ({
+    ...((doc.data() ?? {}) as Omit<RosterRow, '$id'>),
+    $id: doc.id,
+  }))
+  const aliasDocuments = new Map<string, unknown>(
+    aliases.docs.map((doc) => [String(doc.id), doc.data()]),
+  )
+  return memberAddressRoster(rows, aliasDocuments)
 }
 
 export type MemberEmailAliasAdded =

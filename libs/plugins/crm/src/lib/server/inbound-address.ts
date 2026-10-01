@@ -18,14 +18,12 @@
 import {
   type AglynOrgMember,
   canManageOrg,
-  crmInboundAddress,
-  crmInboundDomain,
+  inboundMailDomain,
   isOrgWideMember,
   type PluginApiHandler,
   type PluginApiRequest,
 } from '@aglyn/aglyn/server'
 import {
-  ensureCrmInboundToken,
   firebaseAdmin,
   getOrgForHost,
   logOrgActivity,
@@ -34,6 +32,8 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 import { CRM_API_ROUTES } from '../constants/api-routes'
+import { crmInboundAddress } from '../model/crm-inbound'
+import { ensureCrmInboundToken } from './crm-inbound-email'
 import { authorizeOrgCaller, readCrmRouteScope } from './org-caller'
 import { crmSuiteRefusal } from './suite-gate'
 
@@ -224,7 +224,7 @@ export const crmInboundAddressHandler: PluginApiHandler = async (req, res) => {
     }
     const answer: CrmInboundAddressResponse = {
       ok: true,
-      address: crmInboundAddress(result.token, crmInboundDomain()),
+      address: crmInboundAddress(result.token, inboundMailDomain()),
       createdAtMs: result.createdAtMs,
       ...(typeof result.rotatedAtMs === 'number' ? { rotatedAtMs: result.rotatedAtMs } : {}),
       rotated: result.rotated,
