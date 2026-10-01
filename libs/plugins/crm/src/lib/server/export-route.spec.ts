@@ -40,6 +40,8 @@ const mockLeads = new Map<string, Map<string, Record<string, unknown>>>()
 let mockOrg: Record<string, unknown> | null = null
 let mockMember: Record<string, unknown> | null = null
 let mockDecoded: Record<string, unknown> = { uid: 'user-1', email_verified: true }
+/** What `verifyIdToken` throws instead of answering, when set. */
+let mockVerifyError: Error | null = null
 let mockReleaseFlag = true
 let mockPermission = true
 let mockLocked: Response | null = null
@@ -120,7 +122,12 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
   firebaseAdmin: {
     app: () => ({
-      auth: () => ({ verifyIdToken: async () => mockDecoded }),
+      auth: () => ({
+        verifyIdToken: async () => {
+          if (mockVerifyError) throw mockVerifyError
+          return mockDecoded
+        },
+      }),
       firestore: () => ({
         collection: (name: string) => {
           if (name === 'orgs') return { doc: () => mockOrgRef() }
@@ -181,10 +188,8 @@ jest.mock('@aglyn/aglyn/server', () => ({
   ...jest.requireActual('@aglyn/aglyn/app-utils/organizations'),
   ...jest.requireActual('@aglyn/aglyn/app-utils/scope-tokens'),
   ...jest.requireActual('@aglyn/aglyn/app-utils/consent-groups'),
-  ...jest.requireActual('@aglyn/aglyn/app-utils/contact-holder'),
   ...jest.requireActual('@aglyn/aglyn/app-utils/csv-import'),
   ...jest.requireActual('@aglyn/aglyn/app-utils/crm'),
-  ...jest.requireActual('@aglyn/aglyn/app-utils/crm-csv'),
   // The REAL plan tables, so the CRM's plan gate answers as it does live.
   ...jest.requireActual('@aglyn/aglyn/app-utils/plan-entitlements'),
   pluginRequestFromWeb: async (request: Request) => {
@@ -203,10 +208,8 @@ jest.mock('@aglyn/aglyn/server', () => ({
   },
 }))
 
-const route = require('../app/api/crm/export/route')
-const { COMPANY_CSV_COLUMNS, LEAD_CSV_COLUMNS } = jest.requireActual(
-  '@aglyn/aglyn/app-utils/crm-csv',
-)
+const { crmExportRoute } = require('./export-route')
+const { COMPANY_CSV_COLUMNS, LEAD_CSV_COLUMNS } = jest.requireActual('../model/crm-csv')
 
 /** `count` companies with deliberately non-sequential ids, as auto-ids are. */
 const seedCompanies = (count: number, visibleTo: string[] = ['org']) => {
@@ -229,7 +232,7 @@ const callExport = (
   headers: Record<string, string> = { Authorization: 'Bearer tok' },
 ) => {
   const search = new URLSearchParams({ orgId: 'org-1', ...params })
-  return route.GET(
+  return crmExportRoute(
     new Request(`https://console.aglyn.com/api/crm/export?${search}`, { headers }),
   )
 }
@@ -244,6 +247,7 @@ beforeEach(() => {
   mockOrg = { plan: 'agency' }
   mockMember = { $id: 'user-1', role: 'admin' }
   mockDecoded = { uid: 'user-1', email_verified: true }
+  mockVerifyError = null
   mockReleaseFlag = true
   mockPermission = true
   mockLocked = null
@@ -544,5 +548,22 @@ describe('contacts, which are read through one holder’s facet', () => {
       scopeTokens: ['host:host-1'],
     }
     expect((await callExport({ resource: 'contacts' })).status).toBe(400)
+  })
+})
+
+describe('a refused credential is a 401, a broken check a 500 (AGL-1993)', () => {
+  it('answers a revoked token with 401, not a fault of ours', async () => {
+    const { IdTokenRevokedError } = jest.requireActual(
+      '@aglyn/tenant-data-admin/server/token-revocation',
+    )
+    mockVerifyError = new IdTokenRevokedError()
+    const response = await callExport({ resource: 'contacts' })
+    expect(response.status).toBe(401)
+  })
+
+  it('keeps a failure of ours a 500', async () => {
+    mockVerifyError = new Error('certificate endpoint unreachable')
+    const response = await callExport({ resource: 'contacts' })
+    expect(response.status).toBe(500)
   })
 })

@@ -29,15 +29,15 @@
  * feature plugin (AGL-2662).
  */
 
-import { CONTACT_FACETS_FIELD } from './contacts'
-import { CAPTURED_BY_HOST_FIELD } from './marketing-consent'
+import { CONTACT_FACETS_FIELD } from '@aglyn/aglyn/app-utils/contacts'
+import { CAPTURED_BY_HOST_FIELD } from '@aglyn/aglyn/app-utils/marketing-consent'
 import {
   type ConsentGroup,
   consentGroupForHost,
   consentGroupsAwaitConfirmation,
   readConsentGroups,
   soloConsentGroup,
-} from './consent-groups'
+} from '@aglyn/aglyn/app-utils/consent-groups'
 
 /**
  * The holder of nothing: the group a contact is flattened through when no

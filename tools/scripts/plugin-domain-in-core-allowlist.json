@@ -99,16 +99,6 @@
       "lane": "forms"
     },
     {
-      "path": "apps/console/app/api/crm/export/route.ts",
-      "rules": [
-        "domain-name",
-        "plugin-id",
-        "plugin-collection:crm",
-        "domain-declares:crm"
-      ],
-      "lane": "crm"
-    },
-    {
       "path": "apps/console/app/api/hosts/export/route.ts",
       "rules": [
         "plugin-collection:data"
@@ -499,13 +489,6 @@
       "lane": "crm"
     },
     {
-      "path": "libs/aglyn/src/lib/app-utils/contact-holder.ts",
-      "rules": [
-        "domain-name"
-      ],
-      "lane": "crm"
-    },
-    {
       "path": "libs/aglyn/src/lib/app-utils/contacts.ts",
       "rules": [
         "domain-name",
@@ -521,14 +504,6 @@
         "plugin-id",
         "domain-exports:crm",
         "domain-declares:bookings",
-        "domain-declares:crm"
-      ],
-      "lane": "crm"
-    },
-    {
-      "path": "libs/aglyn/src/lib/app-utils/crm-csv.ts",
-      "rules": [
-        "domain-name",
         "domain-declares:crm"
       ],
       "lane": "crm"

@@ -49,13 +49,13 @@
  * file re-imports without a hand mapping.
  */
 
-import type { AglynPostalAddress } from '../foundation'
+import type { AglynPostalAddress } from '@aglyn/aglyn'
 import {
   CONTACT_SOURCE_LABELS,
   contactDisplayName,
   interactionsForGroup,
   readContactFacet,
-} from './contacts'
+} from '@aglyn/aglyn/app-utils/contacts'
 import {
   CONTACT_LIFECYCLE_STAGE_LABELS,
   CRM_LEAD_STATUS_LABELS,
@@ -68,8 +68,8 @@ import {
   type CrmTask,
   crmLeadStatus,
   isContactLifecycleStage,
-} from './crm'
-import { csvDocument } from './csv-import'
+} from '@aglyn/aglyn/app-utils/crm'
+import { csvDocument } from '@aglyn/aglyn/app-utils/csv-import'
 
 /*==========================================
  * CELLS EVERY FILE SHARES

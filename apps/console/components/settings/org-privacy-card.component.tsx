@@ -19,7 +19,6 @@
 
 import {
   countCsvDataRows,
-  type CrmExportResource,
   PERSON_ERASURE_NOT_REACHED,
   PERSON_ERASURE_REMOVES,
   PERSON_ERASURE_RETAINS,
@@ -36,8 +35,14 @@ import { useOrgScope } from '../../hooks/use-org-scope'
 /** The header the export route promises its row count in. */
 const EXPORT_ROWS_HEADER = 'X-Aglyn-Export-Rows'
 
-/** The two files of the people a workspace holds, in the order they are offered. */
-const PEOPLE_FILES: ReadonlyArray<{ resource: CrmExportResource; label: string }> = [
+/**
+ * The two files of the people a workspace holds — what the record system's
+ * export route owes every workspace, on every plan — in the order they are
+ * offered.
+ */
+type PeopleFile = 'contacts' | 'leads'
+
+const PEOPLE_FILES: ReadonlyArray<{ resource: PeopleFile; label: string }> = [
   { resource: 'contacts', label: 'Export contacts' },
   { resource: 'leads', label: 'Export leads' },
 ]
@@ -82,13 +87,13 @@ export function OrgPrivacyCard() {
   const orgId = currentOrg?.$id ?? null
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
-  const [exporting, setExporting] = useState<CrmExportResource | null>(null)
+  const [exporting, setExporting] = useState<PeopleFile | null>(null)
   const [email, setEmail] = useState('')
   const [confirmEmail, setConfirmEmail] = useState('')
   const [filing, setFiling] = useState(false)
 
   const exportFile = useCallback(
-    async (resource: CrmExportResource) => {
+    async (resource: PeopleFile) => {
       if (!orgId || !user || exporting) return
       setExporting(resource)
       try {

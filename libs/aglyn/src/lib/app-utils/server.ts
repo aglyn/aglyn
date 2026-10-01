@@ -92,15 +92,6 @@ export * from './person-erasure'
 // and beside it because it reads the stage list and the deal weighting from
 // there rather than restating either.
 export * from './crm-reports'
-// Every CRM CSV, written once (AGL-2662): the column lists and the cells
-// each section's Export button writes, and the server's whole-collection
-// export streams — one implementation, because the console app may not
-// import the plugin whose sections used to hold it.
-export * from './crm-csv'
-// Which holder a cross-site reader sees one contact through (AGL-2630),
-// beside the files that write it: the org-level list and the server's
-// export both flatten a contact this way.
-export * from './contact-holder'
 // A task's reminder at its own time (AGL-2659): which reminder a save
 // leaves, whether one is owed, and the words the notification and the mail
 // say. Pure like `crm-reports`, read by the hourly route and by every
