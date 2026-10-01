@@ -733,6 +733,16 @@ and re-reads rather than moving on, and fails loudly if the version never
 appears. Reading the two as one is how the first run of this left `latest`
 behind on two packages and reported success.
 
+How long it waits is the run's budget, not each package's. The biggest
+packages reach the package document six minutes or more after their publish,
+and the CDN keeps that document for five minutes on top. A 75-second wait per
+package left `beta` behind on two or three packages in each of beta.217,
+beta.218 and beta.219, and each run still read green because the step is
+`continue-on-error`. So it moves everything visible on the first pass, looks
+again every 30 seconds at what is still missing, for up to 15 minutes, and
+asks whether a version exists from that version's own document, which the CDN
+does not cache.
+
 ⛔ **This is the one thing `NPM_TOKEN` still does.** An OIDC identity may not
 set a dist-tag, so the publish step runs tokenless and this one carries the
 secret. In `publish-packages.yml` it is `continue-on-error`: the default
