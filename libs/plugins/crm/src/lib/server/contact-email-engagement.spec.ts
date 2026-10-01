@@ -23,13 +23,13 @@
  */
 
 import { personKey } from '@aglyn/aglyn/app-utils/person-key'
-import type { EmailDeliveryEventOutcome } from './email-delivery-log'
+import type { EmailDeliveryEventOutcome } from '@aglyn/tenant-data-admin/server/email-delivery-log'
 
-jest.mock('./firebase-admin', () => ({ firebaseAdmin: {} }))
+jest.mock('@aglyn/tenant-data-admin/server/firebase-admin', () => ({ firebaseAdmin: {} }))
 
 let groupId = 'host-1'
 let resolveFailure: Error | null = null
-jest.mock('./organizations', () => ({
+jest.mock('@aglyn/tenant-data-admin/server/organizations', () => ({
   orgDataCollectionForHost: async (hostId: string, name: string) => {
     if (resolveFailure) throw resolveFailure
     return fake.collection(`orgs/org-1/${name}`)
@@ -147,7 +147,7 @@ const outcome = (
 })
 
 const stamp = (outcomes: EmailDeliveryEventOutcome[], hostId = HOST) =>
-  recordContactEmailEngagement({ hostId, outcomes, firestore: fake })
+  recordContactEmailEngagement({ hostId, events: outcomes, firestore: fake })
 
 const facet = () => store.get(CONTACT)?.facets?.[groupId]
 
@@ -316,7 +316,7 @@ describe('never throws', () => {
     })
     const written = await recordContactEmailEngagement({
       hostId: HOST,
-      outcomes: [outcome(), outcome({ to: 'second@example.com', providerMessageId: 'm2' })],
+      events: [outcome(), outcome({ to: 'second@example.com', providerMessageId: 'm2' })],
       firestore: failing,
     })
     expect(written).toBe(1)

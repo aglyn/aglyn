@@ -136,6 +136,13 @@ export function registerCrmServerDeclarations(): void {
           await import('./server/record-email-state')
         return createCrmRecordEmailStateWriter(defaultCrmRecordEmailStateDeps()).stamp(request)
       },
+      // A send's first opens and clicks, stamped on the contacts they name
+      // (AGL-2616) — the campaign webhook's courtesy, deferred like the rest.
+      async engaged(request) {
+        const { createCrmRecordEmailStateWriter, defaultCrmRecordEmailStateDeps } =
+          await import('./server/record-email-state')
+        return createCrmRecordEmailStateWriter(defaultCrmRecordEmailStateDeps()).engaged!(request)
+      },
     },
     { pluginId: BUNDLE_ID },
   )

@@ -73,23 +73,27 @@ import {
   readContactFacet,
   visibleToHost,
 } from '@aglyn/aglyn/server'
-import { findContactByEmail } from './contact-email-index'
-import type { EmailDeliveryEventOutcome } from './email-delivery-log'
-import { firebaseAdmin } from './firebase-admin'
-import { consentGroupForSite, orgDataCollectionForHost } from './organizations'
+import type { PluginRecordEmailEvent } from '@aglyn/aglyn/plugin-manager/plugin-record-email-state'
+import { findContactByEmail } from '@aglyn/tenant-data-admin/server/contact-email-index'
+import { firebaseAdmin } from '@aglyn/tenant-data-admin/server/firebase-admin'
+import {
+  consentGroupForSite,
+  orgDataCollectionForHost,
+} from '@aglyn/tenant-data-admin/server/organizations'
 
 /** The facet field the stamp lives under. */
 export const CONTACT_EMAIL_ENGAGEMENT_FIELD = 'lastEmailEngagementAtMs'
 
 /** The event types that count as a person engaging with a campaign. */
-const ENGAGEMENT_TYPES: ReadonlySet<EmailDeliveryEventOutcome['type']> = new Set([
+const ENGAGEMENT_TYPES: ReadonlySet<string> = new Set([
   'opened',
   'clicked',
 ])
 
 /**
- * Stamps the sending site's contact facet for every person these outcomes
- * say engaged for the first time with a message.
+ * Stamps the sending site's contact facet for every person these events
+ * say engaged for the first time with a message — the CRM's answer on the
+ * core's record email-state seam (`stampRecordEmailEngagement`).
  *
  * @param hostId the site the campaign went out from — the `hostId` tag the
  *   send stamped, which is the only tenant identity a delivery event carries.
@@ -97,7 +101,7 @@ const ENGAGEMENT_TYPES: ReadonlySet<EmailDeliveryEventOutcome['type']> = new Set
  */
 export async function recordContactEmailEngagement(args: {
   hostId: string
-  outcomes: readonly EmailDeliveryEventOutcome[]
+  events: readonly PluginRecordEmailEvent[]
   firestore?: any
 }): Promise<number> {
   const hostId = String(args.hostId ?? '')
@@ -105,7 +109,7 @@ export async function recordContactEmailEngagement(args: {
 
   /** Address → the newest engagement instant in this batch. */
   const byEmail = new Map<string, number>()
-  for (const outcome of args.outcomes) {
+  for (const outcome of args.events) {
     if (!outcome.firstOfType) continue
     if (!ENGAGEMENT_TYPES.has(outcome.type)) continue
     const email = normalizeContactEmail(outcome.to)

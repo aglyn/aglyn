@@ -950,13 +950,6 @@
       "lane": "crm"
     },
     {
-      "path": "libs/tenant/data/admin/src/lib/server/contact-email-engagement.ts",
-      "rules": [
-        "domain-name"
-      ],
-      "lane": "crm"
-    },
-    {
       "path": "libs/tenant/data/admin/src/lib/server/contact-email-index.ts",
       "rules": [
         "domain-name"

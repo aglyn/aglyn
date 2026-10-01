@@ -56,10 +56,9 @@ import {
   recordEmailDeliveryEvents,
   recordPersonEngagement,
 } from '@aglyn/tenant-data-admin/server/email-delivery-log'
-// The leaf again: the contact's own stamp is what the record page, the list
-// and the re-engagement audience read, and a wholesale mock would green a
-// webhook that stamped nobody.
-import { recordContactEmailEngagement } from '@aglyn/tenant-data-admin/server/contact-email-engagement'
+// The contact's own stamp is the record system's, asked through the core's
+// seam: what the record page, the list and the re-engagement audience read.
+import { stampRecordEmailEngagement } from '@aglyn/aglyn/plugin-manager/plugin-record-email-state'
 import { isDocumentId } from '@aglyn/tenant-data-admin/server/document-id'
 import {
   crmEmailDeliveryStateForEvent,
@@ -522,13 +521,13 @@ export const emailEventsHandler: PluginApiHandler = async (req, res) => {
      * mail; this one is about THIS SITE's relationship with the person and
      * moves only on its own campaigns — which is why it sits below the
      * `hostId` gate the rollup deliberately sits above. Same `firstOfType`
-     * outcomes, so a replay contributes nothing here either, and the leaf
-     * decides which types count. Best-effort: a stamp is worth less than
-     * the campaign counters below it.
+     * outcomes, so a replay contributes nothing here either, and the record
+     * system decides which types count. Best-effort: a stamp is worth less
+     * than the campaign counters below it.
      *=========================================*/
     if (hostRef && (type === 'email.opened' || type === 'email.clicked')) {
-      await recordContactEmailEngagement({ hostId: hostRef.id, outcomes }).catch(
-        () => 0,
+      await stampRecordEmailEngagement({ hostId: hostRef.id, events: outcomes }).catch(
+        () => null,
       )
     }
 
