@@ -32,7 +32,7 @@
 
 import {
   ATTRIBUTION_WINDOW_MS,
-  CAMPAIGN_VISITS_STORAGE_KEY,
+  FIRST_VISITS_STORAGE_KEY,
   PAGE_TOUCH_STORAGE_KEY,
   UTM_TOUCH_STORAGE_KEY,
   claimCampaignFirstVisits,
@@ -341,7 +341,7 @@ describe('a store that is writable by anything on the page', () => {
  * no label on the address at all.
  *=========================================*/
 
-const LANDING = { screenId: 'scr_landing', campaignIds: ['camp_ai'], path: '/ai-website-draft' }
+const LANDING = { screenId: 'scr_landing', containerIds: ['camp_ai'], path: '/ai-website-draft' }
 
 describe('the page touch', () => {
   it('round-trips the campaigns, the screen, the path and the instant', () => {
@@ -355,7 +355,7 @@ describe('the page touch', () => {
 
     expect(parsePageTouch(wire, LANDED_AT + ATTRIBUTION_WINDOW_MS + 1)).toBe(null)
     expect(parsePageTouch(wire, LANDED_AT - 1)).toBe(null)
-    expect(pageTouchWire({ ...LANDING, campaignIds: [], atMs: LANDED_AT })).toBe('')
+    expect(pageTouchWire({ ...LANDING, containerIds: [], atMs: LANDED_AT })).toBe('')
     expect(parsePageTouch(`ps=scr_landing&pt=${LANDED_AT}`, LANDED_AT)).toBe(null)
   })
 
@@ -365,7 +365,7 @@ describe('the page touch', () => {
       LANDED_AT,
     )
 
-    expect(touch).toEqual({ campaignIds: ['camp_ai'], screenId: 'scr_landing', path: '', atMs: LANDED_AT })
+    expect(touch).toEqual({ containerIds: ['camp_ai'], screenId: 'scr_landing', path: '', atMs: LANDED_AT })
   })
 
   it('THE PAGE THE VISITOR IS ON is reported with no grant and nothing written', () => {
@@ -421,7 +421,7 @@ describe('the page touch', () => {
     setUtmTouchConsent(false)
 
     expect(window.localStorage.getItem(PAGE_TOUCH_STORAGE_KEY)).toBe(null)
-    expect(window.localStorage.getItem(CAMPAIGN_VISITS_STORAGE_KEY)).toBe(null)
+    expect(window.localStorage.getItem(FIRST_VISITS_STORAGE_KEY)).toBe(null)
   })
 
   it('rides the same wire field as the labels, each half parsed by its own reader', () => {
@@ -456,6 +456,6 @@ describe('the first-visit claim', () => {
 
   it('claims nothing without the grant — a visit it cannot tell from the next is not a first', () => {
     expect(claimCampaignFirstVisits(['c:camp_ai'], LANDED_AT)).toEqual([])
-    expect(window.localStorage.getItem(CAMPAIGN_VISITS_STORAGE_KEY)).toBe(null)
+    expect(window.localStorage.getItem(FIRST_VISITS_STORAGE_KEY)).toBe(null)
   })
 })

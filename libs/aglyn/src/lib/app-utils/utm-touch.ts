@@ -316,7 +316,7 @@ export function setUtmTouchConsent(allowed: boolean | null): void {
     for (const key of [
       UTM_TOUCH_STORAGE_KEY,
       PAGE_TOUCH_STORAGE_KEY,
-      CAMPAIGN_VISITS_STORAGE_KEY,
+      FIRST_VISITS_STORAGE_KEY,
     ]) {
       try {
         store.removeItem(key)
@@ -444,7 +444,7 @@ export function utmTouchField(
 /*==========================================
  * THE PAGE TOUCH (AGL-3461) — a page filed under a campaign, viewed.
  *
- * A merchant files a landing page under a campaign (`campaignIds` on the
+ * A merchant files a landing page under a campaign (`containerIds` on the
  * screen, `container-membership.ts`) so the campaign can say what its pages
  * did. A visitor who reaches that page by typing its address, from a search
  * result or from a link carrying no labels has still been touched by the
@@ -477,7 +477,7 @@ export function utmTouchField(
  * A campaign's page counts the visitors it reached for the first time in a
  * window (`claimCampaignFirstVisits`). The device remembers which campaigns
  * it has already been counted for, and for how long, under
- * {@link CAMPAIGN_VISITS_STORAGE_KEY} — ids and labels with an instant each,
+ * {@link FIRST_VISITS_STORAGE_KEY} — ids and labels with an instant each,
  * nothing that names the visitor. Without the grant nothing is remembered and
  * nothing is claimed: a visit that cannot be told from the last one is not
  * counted as a first.
@@ -487,7 +487,7 @@ export function utmTouchField(
 export const PAGE_TOUCH_STORAGE_KEY = 'aglyn:page-touch'
 
 /** Where the campaigns already counted as a first visit are held. */
-export const CAMPAIGN_VISITS_STORAGE_KEY = 'aglyn:campaign-visits'
+export const FIRST_VISITS_STORAGE_KEY = 'aglyn:campaign-visits'
 
 /**
  * How many of a page's campaigns a touch carries. A page is rarely filed
@@ -496,7 +496,7 @@ export const CAMPAIGN_VISITS_STORAGE_KEY = 'aglyn:campaign-visits'
 export const PAGE_TOUCH_MAX_CAMPAIGNS = 5
 
 /** How many campaigns and labels the first-visit record remembers at once. */
-const CAMPAIGN_VISITS_MAX = 50
+const FIRST_VISITS_MAX = 50
 
 /** The page touch's keys inside the wire form, outside the `utm_` allowlist. */
 const PAGE_TOUCH_KEYS = {
@@ -515,7 +515,7 @@ const MAX_PATH = 200
 /** A page filed under one or more campaigns, and when it was viewed. */
 export interface PageTouch {
   /** The campaign ids the page was filed under, in the screen's order. */
-  campaignIds: string[]
+  containerIds: string[]
   /** The screen the page renders. */
   screenId: string
   /** The page's path, `/`-led. */
@@ -527,7 +527,7 @@ export interface PageTouch {
 /** The page this pageview is on, when it is filed under a campaign. */
 let currentPage: PageTouch | null = null
 
-function cleanCampaignIds(raw: unknown): string[] {
+function cleanContainerIds(raw: unknown): string[] {
   if (!Array.isArray(raw)) return []
   const ids: string[] = []
   for (const entry of raw) {
@@ -551,13 +551,13 @@ function cleanPath(raw: unknown): string {
  */
 export function pageTouchWire(touch: PageTouch | null | undefined): string {
   if (!touch) return ''
-  const campaignIds = cleanCampaignIds(touch.campaignIds)
+  const containerIds = cleanContainerIds(touch.containerIds)
   const screenId = String(touch.screenId ?? '').trim()
   const atMs = Math.round(Number(touch.atMs))
-  if (!campaignIds.length || !DOCUMENT_ID.test(screenId)) return ''
+  if (!containerIds.length || !DOCUMENT_ID.test(screenId)) return ''
   if (!Number.isFinite(atMs) || atMs <= 0) return ''
   const params = new URLSearchParams()
-  params.set(PAGE_TOUCH_KEYS.campaigns, campaignIds.join(','))
+  params.set(PAGE_TOUCH_KEYS.campaigns, containerIds.join(','))
   params.set(PAGE_TOUCH_KEYS.screen, screenId)
   const path = cleanPath(touch.path)
   if (path) params.set(PAGE_TOUCH_KEYS.path, path)
@@ -584,15 +584,15 @@ export function parsePageTouch(
   } catch {
     return null
   }
-  const campaignIds = cleanCampaignIds(
+  const containerIds = cleanContainerIds(
     String(params.get(PAGE_TOUCH_KEYS.campaigns) ?? '').split(','),
   )
   const screenId = String(params.get(PAGE_TOUCH_KEYS.screen) ?? '').trim()
-  if (!campaignIds.length || !DOCUMENT_ID.test(screenId)) return null
+  if (!containerIds.length || !DOCUMENT_ID.test(screenId)) return null
   const atMs = Number(params.get(PAGE_TOUCH_KEYS.time))
   if (!touchIsInWindow(atMs, nowMs)) return null
   return {
-    campaignIds,
+    containerIds,
     screenId,
     path: cleanPath(params.get(PAGE_TOUCH_KEYS.path)),
     atMs,
@@ -630,14 +630,14 @@ function rememberPageTouch(): void {
 export function notePageCampaigns(
   page: {
     screenId?: string | null
-    campaignIds?: readonly string[] | null
+    containerIds?: readonly string[] | null
     path?: string | null
   } | null,
   nowMs: number = Date.now(),
 ): PageTouch | null {
-  const campaignIds = cleanCampaignIds(page?.campaignIds ?? [])
+  const containerIds = cleanContainerIds(page?.containerIds ?? [])
   const screenId = String(page?.screenId ?? '').trim()
-  if (!page || !campaignIds.length || !DOCUMENT_ID.test(screenId)) {
+  if (!page || !containerIds.length || !DOCUMENT_ID.test(screenId)) {
     currentPage = null
     return null
   }
@@ -651,11 +651,11 @@ export function notePageCampaigns(
     currentPage &&
     currentPage.screenId === screenId &&
     currentPage.path === path &&
-    currentPage.campaignIds.join(',') === campaignIds.join(',')
+    currentPage.containerIds.join(',') === containerIds.join(',')
   ) {
     return currentPage
   }
-  currentPage = { campaignIds, screenId, path, atMs: nowMs }
+  currentPage = { containerIds, screenId, path, atMs: nowMs }
   rememberPageTouch()
   return currentPage
 }
@@ -716,7 +716,7 @@ export function claimCampaignFirstVisits(
   if (!store) return []
   let seen: Record<string, number> = {}
   try {
-    const raw = store.getItem(CAMPAIGN_VISITS_STORAGE_KEY)
+    const raw = store.getItem(FIRST_VISITS_STORAGE_KEY)
     const parsed = raw ? (JSON.parse(raw) as unknown) : null
     if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
       seen = parsed as Record<string, number>
@@ -741,9 +741,9 @@ export function claimCampaignFirstVisits(
   // worst counted again, never lost from a campaign that was counted.
   const kept = Object.entries(live)
     .sort((a, b) => b[1] - a[1])
-    .slice(0, CAMPAIGN_VISITS_MAX)
+    .slice(0, FIRST_VISITS_MAX)
   try {
-    store.setItem(CAMPAIGN_VISITS_STORAGE_KEY, JSON.stringify(Object.fromEntries(kept)))
+    store.setItem(FIRST_VISITS_STORAGE_KEY, JSON.stringify(Object.fromEntries(kept)))
   } catch {
     // A device that refuses the write cannot remember the claim, so it
     // claims nothing: a visit it cannot tell from the next is not a first.

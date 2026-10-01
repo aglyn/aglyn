@@ -374,7 +374,7 @@ export async function resolveCampaignTouch(
             orgId,
             hostId,
             screenId: page.screenId,
-            campaignIds: page.campaignIds,
+            campaignIds: page.containerIds,
           },
           db,
         )

@@ -1189,7 +1189,7 @@ function CampaignPageTouch(props: {
     if (typeof window === 'undefined') return undefined
     const ids = idsKey ? idsKey.split(',') : []
     notePageCampaigns(
-      ids.length ? { screenId, campaignIds: ids, path: window.location.pathname } : null,
+      ids.length ? { screenId, containerIds: ids, path: window.location.pathname } : null,
     )
     if (!hostId) return undefined
     const label = (new URLSearchParams(window.location.search).get('utm_campaign') ?? '')

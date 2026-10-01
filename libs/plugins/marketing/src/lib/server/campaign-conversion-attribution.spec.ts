@@ -509,7 +509,7 @@ function seedScreen(firestore: ReturnType<typeof fakeFirestore>, campaignIds: st
 
 /** The wire a browser sends from a page filed under `campaignIds`, viewed at `atMs`. */
 function pageWire(campaignIds: string[], atMs: number): string {
-  return pageTouchWire({ campaignIds, screenId: SCREEN, path: PAGE, atMs })
+  return pageTouchWire({ containerIds: campaignIds, screenId: SCREEN, path: PAGE, atMs })
 }
 
 describe('a page filed under a campaign is a campaign touch', () => {
