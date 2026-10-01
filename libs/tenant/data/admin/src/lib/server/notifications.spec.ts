@@ -253,6 +253,59 @@ describe('notifyHostManagers org stamping (AGL-1773)', () => {
   })
 })
 
+describe('notifyHostManagers names the site (AGL-3432)', () => {
+  beforeEach(() => {
+    written.length = 0
+    hostDocs.clear()
+    userDocs.clear()
+    sends.length = 0
+    metered.length = 0
+    suppressed.clear()
+    directory.clear()
+    emailConfigured = true
+  })
+
+  it('fills {site} in the title and body with the site name', async () => {
+    hostDocs.set('hosts/host-1', {
+      orgId: 'org-1',
+      displayName: 'Ready To Roll',
+      subdomain: 'ready-to-roll',
+      memberRoles: { 'uid-a': 'admin' },
+    })
+    await notifyHostManagers('host-1', {
+      type: 'content.order',
+      title: 'New order on {site}',
+      body: 'A $42.00 order came in on {site}.',
+    })
+    expect(written[0].data['title']).toBe('New order on Ready To Roll')
+    expect(written[0].data['body']).toBe('A $42.00 order came in on Ready To Roll.')
+  })
+
+  it('falls back to the address, then the id, when the site has no name', async () => {
+    hostDocs.set('hosts/host-2', {
+      subdomain: 'acme',
+      memberRoles: { 'uid-a': 'admin' },
+    })
+    hostDocs.set('hosts/host-3', { memberRoles: { 'uid-b': 'admin' } })
+    await notifyHostManagers('host-2', { type: 'content.order', title: 'On {site}' })
+    await notifyHostManagers('host-3', { type: 'content.order', title: 'On {site}' })
+    expect(written.map((entry) => entry.data['title'])).toEqual([
+      'On acme',
+      'On host-3',
+    ])
+  })
+
+  it('leaves a payload with no placeholder exactly as written', async () => {
+    hostDocs.set('hosts/host-1', {
+      displayName: 'Ready To Roll',
+      memberRoles: { 'uid-a': 'admin' },
+    })
+    await notifyHostManagers('host-1', { type: 'content.booking', title: 'New booking' })
+    expect(written[0].data['title']).toBe('New booking')
+    expect('body' in written[0].data).toBe(false)
+  })
+})
+
 /**
  * The email beside the console notification (AGL-3224).
  *
