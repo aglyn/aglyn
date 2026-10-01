@@ -323,7 +323,7 @@
         "domain-declares:data",
         "domain-declares:forms"
       ],
-      "lane": "ai"
+      "lane": "crm"
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/platform-ad-conversions.ts",
@@ -362,7 +362,8 @@
       "rules": [
         "domain-declares:ai"
       ],
-      "lane": "ai"
+      "lane": "stays",
+      "why": "The member it trips on is `assistOverage`, a STORED field of `orgs/{orgId}`: the AI hard-cap switch and monthly ceiling, written only by the AI plugin's Admin-SDK route and denied to every client branch in `cloud/firebase-firestore.rules`. `org-write-deny-coverage.spec.ts` derives the org document's field set by reading this interface's source and fails on any declared field the rules do not deny; that is why the interface is not composed from plugin augmentations (AGL-3124, stated on `AglynOrgBilling`). Dropping the field from here would take it out of that sweep, so the rules could stop denying it with nothing red, and renaming it is a data migration of every org that set a cap. Its shape (`OrgAssistOverage`) names no plugin word and stays beside it."
     },
     {
       "path": "libs/aglyn/src/lib/plugin-manager/feature-plugins.ts",
