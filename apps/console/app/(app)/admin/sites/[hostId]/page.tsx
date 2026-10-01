@@ -60,6 +60,7 @@ import {
   staffSiteLiveUrl,
 } from '../../../../../components/staff-site-row-actions.component'
 import { homeScreenId, staffSitePreviewHref } from '../../../../../utils/staff-site-links'
+import { staffLeavingNoticeLabel } from '../../../../../utils/staff-leaving-notice'
 
 /**
  * The published-site apex, from the ONE shared source (AGL-2195).
@@ -116,6 +117,8 @@ const AdminHostDetail: NextPageWithLayout<Record<string, never>> = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hostId, (user as { uid?: string } | null)?.uid, siteNonce])
   const homeId = useMemo(() => homeScreenId(host?.screens), [host?.screens])
+  // The workspace's leaving-notice window, as the server read it (AGL-3452).
+  const leavingNoticeUntil = site?.org?.leavingNoticeUntil ?? null
   const { widgets: staffSiteWidgets } = useSlotWidgets(['staffSite'])
 
   // Usage counts (AGL-392): screens = pages, media file count, members.
@@ -325,7 +328,27 @@ const AdminHostDetail: NextPageWithLayout<Record<string, never>> = () => {
                         {host?.maintenance ? (
                           <Chip size="small" color="warning" label="maintenance" />
                         ) : null}
+                        {leavingNoticeUntil ? (
+                          <Chip
+                            size="small"
+                            color="info"
+                            variant="outlined"
+                            label="leaving notice"
+                          />
+                        ) : null}
                       </Stack>
+                      {/*
+                        The leaving notice (AGL-3452): a new free workspace's
+                        sites send links to other domains through a "You're
+                        leaving" page for their first two weeks. Stated either
+                        way once the row has loaded, so "off" is an answer
+                        rather than a missing line.
+                      */}
+                      {site ? (
+                        <Typography variant="caption" color="text.secondary">
+                          {staffLeavingNoticeLabel(leavingNoticeUntil)}
+                        </Typography>
+                      ) : null}
                       {/* Subdomain edit (AGL-390). */}
                       <Stack
                         direction="row"

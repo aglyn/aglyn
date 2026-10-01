@@ -22,6 +22,7 @@ import {
   isImpersonationSession,
   resolveUidsToPeople,
 } from '@aglyn/tenant-data-admin'
+import { leavingNoticeEndsAt } from '@aglyn/tenant-data-admin/server/leaving-notice'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 import {
   readStaffListQuery,
@@ -110,6 +111,7 @@ async function handler(request: Request): Promise<Response> {
           .filter((orgId): orgId is string => typeof orgId === 'string' && !!orgId),
       ),
     ]
+    const nowMs = Date.now()
     const orgSnaps = orgIds.length
       ? await db.getAll(...orgIds.map((orgId) => db.collection('orgs').doc(orgId)))
       : []
@@ -125,6 +127,10 @@ async function handler(request: Request): Promise<Response> {
             plan: snap.get('plan') ?? null,
             ownerUid: snap.get('ownerUid') ?? null,
             suspendedAt: ts(snap.get('suspendedAt')),
+            // When this workspace's sites stop routing outside links through
+            // the leaving notice (AGL-3452), or null when they never do —
+            // from the same rule the published site applies.
+            leavingNoticeUntil: leavingNoticeEndsAt(snap.data(), nowMs),
           },
         ]),
     )

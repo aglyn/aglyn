@@ -20,6 +20,7 @@ import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import { filterEnabledPluginsByReleaseFlags } from '@aglyn/tenant-data-admin'
 import { composeSearchPage } from '@aglyn/tenant-runtime/compose-search-page'
+import { leavingNoticeConfig } from '@aglyn/tenant-data-admin/server/leaving-notice'
 import { placedComponentIds } from '@aglyn/tenant-runtime/required-site-plugins'
 import searchContent, {
   filterSearchResults,
@@ -165,10 +166,19 @@ export default async function SearchPage({
     ),
     { orgId: (orgRes.org as { $id?: string })?.$id ?? null },
   )
+  // The site's chrome is around the results here too, and its links go
+  // through the leaving notice like every other page's (AGL-3452).
+  const leavingNotice = leavingNoticeConfig({
+    hostId,
+    site: hostRes.host,
+    org: orgRes.org,
+    content: composed.nodes,
+  })
   return (
     <PageBodyBoundary>
       <CatchAllClient
         data={{ host: hostRes.host as never }}
+        leavingNotice={leavingNotice ?? undefined}
         nodes={composed.nodes as never}
         // The elements this page places, so the site plugins register those
         // and fetch nothing for the rest (AGL-3141). Nothing prunes this

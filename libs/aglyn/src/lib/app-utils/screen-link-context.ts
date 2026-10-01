@@ -20,6 +20,7 @@
 // barrel from the tenant page) makes the bundler duplicate parts of the
 // module graph — a second canvas/emitter instance renders the site blank.
 import { useContext, useMemo } from 'react'
+import { routeThroughLeavingNotice } from './leaving-notice'
 import {
   ScreenLinkContext,
   type ScreenRouteMap,
@@ -369,15 +370,33 @@ export function useLinkTarget(
 ): ResolvedLinkTarget {
   const target = splitLinkValue(screenId, href)
   const resolved = useScreenLink(target.screenId)
+  const { leavingNotice } = useContext(ScreenLinkContext)
   const externalHref =
     target.href && SAFE_HREF_PATTERN.test(target.href) ? target.href : undefined
   const finalHref = target.screenId ? resolved.href : externalHref
+  /*
+   * A new free site's links to other domains go through the leaving notice on
+   * its own host (AGL-3452). Here rather than in each element so the served
+   * HTML already carries the notice's address: it holds without JavaScript,
+   * and it is what a hover, a copied link and "Open in new tab" all see.
+   *
+   * The notice is on the site, so the rewritten link no longer leaves it —
+   * and keeping the referrer is what lets the notice's Go back return to the
+   * page the visitor came from.
+   */
+  const noticeHref =
+    !target.screenId && !resolved.suppressNavigation
+      ? routeThroughLeavingNotice(externalHref, leavingNotice)
+      : undefined
   return {
     ...resolved,
-    href: finalHref,
+    href: noticeHref ?? finalHref,
     externalHref,
     leavesSite: Boolean(
-      !target.screenId && externalHref && EXTERNAL_HREF_PATTERN.test(externalHref),
+      !noticeHref &&
+        !target.screenId &&
+        externalHref &&
+        EXTERNAL_HREF_PATTERN.test(externalHref),
     ),
   }
 }

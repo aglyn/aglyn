@@ -38,6 +38,9 @@ import {
   ENTRY_PREVIEW_PARAM,
   ENTRY_PREVIEW_ROUTE_SEGMENT,
 } from '@aglyn/aglyn/app-utils/entry-preview-link'
+// Deep import for the same reason: the leaving notice's path, from a leaf
+// with no imports of its own (AGL-3452).
+import { LEAVING_NOTICE_PATH } from '@aglyn/aglyn/app-utils/leaving-notice'
 import { resolveSchemeRouteSegment } from '@aglyn/shared-ui-theme/util/scheme-route-segment'
 // Deep import for the same reason: the declared video hosts' player origins,
 // compiled data with no plugin behind it, which `frame-src` must admit.
@@ -759,6 +762,24 @@ export const middleware: NextMiddleware = async (req, event) => {
     lockedHeaders.set('x-aglyn-tenant-host', tenantHost)
     return NextResponse.rewrite(lockedUrl, {
       request: { headers: lockedHeaders },
+    })
+  }
+
+  // The leaving notice (AGL-3452): a new free site's links to other domains
+  // come to `/_aglyn/leaving` on the site's own host. Served by an api route
+  // for the reasons `/api/locked` is — status codes and no page chrome — and
+  // reached through this rewrite so it is only ever answered for the site the
+  // request's own host resolved to. Below the lockdown branch, so a locked
+  // site's notice is the lockdown notice.
+  if (req.nextUrl.pathname === LEAVING_NOTICE_PATH) {
+    const leavingUrl = req.nextUrl.clone()
+    leavingUrl.pathname = '/api/leaving'
+    // The header, not a query: a rewrite target's query does not reach the
+    // handler (AGL-1501), and the visitor's own query is the notice's input.
+    const leavingHeaders = new Headers(req.headers)
+    leavingHeaders.set('x-aglyn-tenant-host', tenantHost)
+    return NextResponse.rewrite(leavingUrl, {
+      request: { headers: leavingHeaders },
     })
   }
 

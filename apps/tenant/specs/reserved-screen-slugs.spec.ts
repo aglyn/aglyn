@@ -169,6 +169,8 @@ describe('reservedScreenRouteSegment', () => {
    * Named individually rather than looped over an exported list: a list
    * compared against itself passes whatever is in it, and the point of these
    * six is that each was MEASURED against production, not reasoned about.
+   * `_aglyn` is the one that was not: it is claimed by this app's own
+   * middleware rewrite, which the leaving-notice suite drives.
    */
   it.each([
     ['404', 'Vercel serves its own static 404.html at this path'],
@@ -177,6 +179,7 @@ describe('reservedScreenRouteSegment', () => {
     ['api', 'excluded from the middleware matcher — API routes live there'],
     ['_next', "excluded from the middleware matcher — Next's internals"],
     ['_static', 'excluded from the middleware matcher — the public directory'],
+    ['_aglyn', 'the platform’s own pages on every site — the leaving notice (AGL-3452)'],
   ])('refuses %s (%s)', (path) => {
     expect(reservedScreenRouteSegment(path)).toBe(path)
   })

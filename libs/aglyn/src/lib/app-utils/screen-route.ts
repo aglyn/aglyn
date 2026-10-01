@@ -18,6 +18,7 @@
 import { HOST_ERROR_SCREEN_SLOTS, type ScreenUid } from '../foundation'
 import { collectionListUrl } from './collection-entries'
 import { ENTRY_PREVIEW_ROUTE_SEGMENT } from './entry-preview-link'
+import { LEAVING_NOTICE_ROUTE_SEGMENT } from './leaving-notice'
 import { PLATFORM_BRAND_NAME } from './platform-brand'
 import {
   formatCollectionLinkValue,
@@ -100,6 +101,9 @@ export function normalizeScreenSlug(
  *    catch-all is required, not optional — and it is reserved anyway for the
  *    reason given below about child paths: a child only exists when its
  *    parent is published, and this rule refuses the parent.
+ *  - `_aglyn` — the platform's own pages on every site, the leaving notice
+ *    at `/_aglyn/leaving` first (AGL-3452). The middleware rewrites that path
+ *    to an api route before the catch-all could see it.
  *
  * NOT reserved, and deliberately so, because measuring found them fine:
  * `401`, `403`, `503` (`/401` returns 200 through the catch-all — two of the
@@ -119,6 +123,7 @@ export const RESERVED_SCREEN_ROUTE_SEGMENTS: readonly string[] = [
   'api',
   '_next',
   '_static',
+  LEAVING_NOTICE_ROUTE_SEGMENT,
 ]
 
 /**

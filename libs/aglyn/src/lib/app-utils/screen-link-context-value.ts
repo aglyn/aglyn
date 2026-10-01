@@ -34,6 +34,7 @@
  */
 
 import { createContext } from 'react'
+import type { LeavingNoticeConfig } from './leaving-notice'
 
 /**
  * Host routing map: screen id → routed path in the tenant matcher format
@@ -67,6 +68,12 @@ export interface ScreenLinkContextValue {
   localeVariants?: Record<string, string>
   /** Locale of the screen being rendered (AGL-164). */
   currentLocale?: string
+  /**
+   * Present only on a published page of a site in its leaving-notice window
+   * (AGL-3452): links to other domains resolve to the notice on the site's
+   * own host instead. See `leaving-notice.ts`.
+   */
+  leavingNotice?: LeavingNoticeConfig
 }
 
 /**
