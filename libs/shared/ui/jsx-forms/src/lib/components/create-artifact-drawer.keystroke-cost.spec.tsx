@@ -18,8 +18,11 @@
 import { within } from '@testing-library/dom'
 import {
   type FiberRenderCounter,
+  FRESH_REGISTRY_TIMEOUT_MS,
   installFiberRenderCounter,
 } from '@aglyn/shared-ui-jsx/testing/fiber-render-counter'
+
+jest.setTimeout(FRESH_REGISTRY_TIMEOUT_MS)
 
 // The drawer's mapper loads its fields through next/dynamic, which renders
 // nothing under jest; these are the components it loads.
@@ -130,7 +133,7 @@ describe('one keystroke in the create drawer (AGL-3423)', () => {
       await react.act(async () => root.unmount())
       host.remove()
     }
-  }, 60000)
+  })
 
   afterEach(async () => {
     await unmount()
@@ -163,7 +166,7 @@ describe('one keystroke in the create drawer (AGL-3423)', () => {
     expect(counter.rendered('InternalSelect')).toBe(0)
     // The name, drawn again as MUI marks it filled.
     expect(counter.rendered('InputBase')).toBeLessThanOrEqual(2)
-  }, 60000)
+  })
 
   it('draws only the name for each letter after it', async () => {
     await type('Display name', 'S')
@@ -171,13 +174,13 @@ describe('one keystroke in the create drawer (AGL-3423)', () => {
     expect(counter.rendered('Autocomplete')).toBe(0)
     expect(counter.rendered('InternalSelect')).toBe(0)
     expect(counter.rendered('InputBase')).toBeLessThanOrEqual(1)
-  }, 60000)
+  })
 
   it('still shows a field whose condition names the field typed in', async () => {
     expect(drawer().queryByRole('textbox', { name: 'Spring code' })).toBeNull()
     await type('Display name', 'Spring')
     expect(drawer().getByRole('textbox', { name: 'Spring code' })).toBeTruthy()
-  }, 60000)
+  })
 
   it('still refuses an empty name, and submits what was typed and picked', async () => {
     const submit = drawer().getByRole('button', { name: 'Create campaign' })
@@ -192,5 +195,5 @@ describe('one keystroke in the create drawer (AGL-3423)', () => {
       siteIds: ['main'],
       listIds: ['customers'],
     })
-  }, 60000)
+  })
 })

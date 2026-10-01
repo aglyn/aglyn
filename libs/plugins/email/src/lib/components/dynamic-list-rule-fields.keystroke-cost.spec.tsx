@@ -18,8 +18,11 @@
 import { within } from '@testing-library/dom'
 import {
   type FiberRenderCounter,
+  FRESH_REGISTRY_TIMEOUT_MS,
   installFiberRenderCounter,
 } from '@aglyn/shared-ui-jsx/testing/fiber-render-counter'
+
+jest.setTimeout(FRESH_REGISTRY_TIMEOUT_MS)
 
 /*
  * The reads, answered with values that keep their identity from render to
@@ -121,7 +124,7 @@ describe('one keystroke on the audience rule form (AGL-3423)', () => {
       await react.act(async () => root.unmount())
       host.remove()
     }
-  }, 60000)
+  })
 
   afterEach(async () => {
     await unmount()
@@ -159,19 +162,19 @@ describe('one keystroke on the audience rule form (AGL-3423)', () => {
     expect(counter.rendered('InputBase')).toBeLessThanOrEqual(2)
     await type('Tagged', 'vi')
     expect(counter.rendered('InputBase')).toBeLessThanOrEqual(1)
-  }, 60000)
+  })
 
   it('draws only the number typed into', async () => {
     await type('Orders at least', '3')
     expectOnlyTheFieldTypedIn()
     expect(counter.rendered('CustomClauseRow')).toBe(0)
     expect(counter.rendered('InputBase')).toBeLessThanOrEqual(2)
-  }, 60000)
+  })
 
   it('draws only the condition value typed into, not its field or operator', async () => {
     await type('Value', 'prox')
     expectOnlyTheFieldTypedIn()
     expect(counter.rendered('CustomClauseRow')).toBe(1)
     expect(counter.rendered('InputBase')).toBeLessThanOrEqual(1)
-  }, 60000)
+  })
 })

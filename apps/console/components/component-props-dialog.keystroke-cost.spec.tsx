@@ -18,8 +18,11 @@
 import { within } from '@testing-library/dom'
 import {
   type FiberRenderCounter,
+  FRESH_REGISTRY_TIMEOUT_MS,
   installFiberRenderCounter,
 } from '@aglyn/shared-ui-jsx/testing/fiber-render-counter'
+
+jest.setTimeout(FRESH_REGISTRY_TIMEOUT_MS)
 
 /**
  * What one keystroke costs in the Properties dialog (AGL-3423).

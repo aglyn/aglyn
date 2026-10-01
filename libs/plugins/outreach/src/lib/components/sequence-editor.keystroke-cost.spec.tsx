@@ -19,10 +19,13 @@ import { within } from '@testing-library/dom'
 import type { ReactNode } from 'react'
 import {
   type FiberRenderCounter,
+  FRESH_REGISTRY_TIMEOUT_MS,
   installFiberRenderCounter,
 } from '@aglyn/shared-ui-jsx/testing/fiber-render-counter'
 import type { OutreachSequence } from '../model/outreach.types'
 import type { OutreachSequenceEditorProps } from './sequence-editor'
+
+jest.setTimeout(FRESH_REGISTRY_TIMEOUT_MS)
 
 /**
  * What one keystroke costs in the sequence editor (AGL-3423).
@@ -44,9 +47,6 @@ import type { OutreachSequenceEditorProps } from './sequence-editor'
  * and once more when the letter is its first, because MUI keeps "filled" in
  * the field's `FormControl` and the change redraws the input under it.
  */
-
-// A fresh module registry per test loads React and MUI anew.
-jest.setTimeout(60_000)
 
 const mockApi = { saveSequence: jest.fn(), sendStepTest: jest.fn() }
 const mockMailboxApi = {

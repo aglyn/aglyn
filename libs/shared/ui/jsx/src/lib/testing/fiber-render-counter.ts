@@ -34,6 +34,14 @@
  * component under test from the fresh registry.
  */
 
+/**
+ * The time a spec built on this needs, per test and per setup hook: each
+ * loads React, MUI and the component under test into a fresh registry, which
+ * on a loaded two-worker CI shard ran past jest's 30 s default (2026-09-30).
+ * Set it file-wide with `jest.setTimeout`.
+ */
+export const FRESH_REGISTRY_TIMEOUT_MS = 120_000
+
 interface Fiber {
   type: unknown
   flags: number
