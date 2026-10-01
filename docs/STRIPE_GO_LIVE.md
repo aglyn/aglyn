@@ -319,9 +319,11 @@ subscription product, Stripe records them and charges no one.
    ($0.00011538462, 57.7 requests at $2.00/M) is added to `perPageView` for
    views billed past a band (`METERED_OVERAGE_COST_USD`), and the sum is
    marked up 1.3. Neither rate table carries it: the weight term stays
-   identical in both, and the COGS model still sizes the bands on weight. No
-   Stripe object changes — the meter value is cents and both metered prices
-   are $0.01/unit.
+   identical in both. The included bands are sized with it counted, at the
+   dearest region's $3.20 per million (AGL-3444, `tier-margin-floor.spec.ts`),
+   while the platform COGS model (`orgMonthlyCogsUsd`) still prices views on
+   weight alone. No Stripe object changes — the meter value is cents and both
+   metered prices are $0.01/unit, and no Stripe object carries a band.
 
    **Re-validate this table once a real paid month exists**, i.e. once the
    Vercel team is off Hobby and GCP usage clears the free tier. Until then

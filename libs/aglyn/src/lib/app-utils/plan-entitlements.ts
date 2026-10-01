@@ -413,7 +413,8 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     managersPerOrg: 2,
     maxManagersPerOrg: 5,
     maxMembersPerHost: 10,
-    bandwidthGb: 50,
+    // Sized by the same annual-price invariant as Pro's — see that band.
+    bandwidthGb: 35,
     formsPerHost: FORMS_PER_HOST_CEILING,
     variablesPerHost: 25,
     functionsPerHost: 10,
@@ -517,20 +518,25 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     managersPerOrg: 5,
     maxManagersPerOrg: 20,
     maxMembersPerHost: 25,
-    // Page views are the largest term of this tier's modeled COGS — one GB
-    // is 1,035 views at `ESTIMATED_PAGE_TRANSFER_BYTES`, or $0.167 of
-    // measured cost — so the bandwidth band is what decides whether the tier
-    // survives a customer spending the whole allowance it was sold.
+    // Page views are the largest term of this tier's modeled COGS. One GB is
+    // 1,035 views at `ESTIMATED_PAGE_TRANSFER_BYTES`: $0.167 of weight, and
+    // $0.191 of CDN requests once the hosting plan's monthly request
+    // allowance is spent, priced at the dearest region's $3.20 per million
+    // (`PAGE_VIEW_CDN_REQUEST_COST_USD` is the $2.00 figure). So a GB of
+    // included bandwidth costs $0.358, and the bandwidth band is what
+    // decides whether the tier survives a customer spending the whole
+    // allowance it was sold.
     //
     // The invariant the band is sized against is the ANNUAL price ($39 a
     // month) net of Stripe's fee, with every band at 100% and the CRM seat
-    // and one-to-one email terms counted — the 2026-09-07 pricing decision.
-    // At 225 GB that price was 44% under water; 125 GB is what it carries.
+    // and one-to-one email terms counted — the 2026-09-07 pricing decision —
+    // at that all-in gigabyte (AGL-3444). 60 GB is what it carries; every
+    // paid band on the ladder is sized the same way.
     // `tier-margin-floor.spec.ts` holds the model and pins the figure.
     //
     // `meteredInfraPassThrough` is true here, so traffic past the band BILLS
     // at the page-view pass-through rather than being refused or absorbed.
-    bandwidthGb: 125,
+    bandwidthGb: 60,
     formsPerHost: FORMS_PER_HOST_CEILING,
     variablesPerHost: 100,
     functionsPerHost: 50,
@@ -622,7 +628,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     maxManagersPerOrg: 100,
     maxMembersPerHost: 100,
     // Sized by the same annual-price invariant as Pro's — see that band.
-    bandwidthGb: 185,
+    bandwidthGb: 90,
     formsPerHost: FORMS_PER_HOST_CEILING,
     variablesPerHost: 1000,
     functionsPerHost: 250,
@@ -693,7 +699,8 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     managersPerOrg: 25,
     maxManagersPerOrg: 150,
     maxMembersPerHost: 150,
-    bandwidthGb: 290,
+    // Sized by the same annual-price invariant as Pro's — see that band.
+    bandwidthGb: 145,
     formsPerHost: FORMS_PER_HOST_CEILING,
     variablesPerHost: 5000,
     functionsPerHost: 500,
@@ -761,7 +768,8 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     managersPerOrg: 50,
     maxManagersPerOrg: 250,
     maxMembersPerHost: 250,
-    bandwidthGb: 345,
+    // Sized by the same annual-price invariant as Pro's — see that band.
+    bandwidthGb: 175,
     formsPerHost: FORMS_PER_HOST_CEILING,
     variablesPerHost: UNLIMITED,
     functionsPerHost: 1000,
@@ -833,7 +841,8 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     managersPerOrg: 100,
     maxManagersPerOrg: 500,
     maxMembersPerHost: 1000,
-    bandwidthGb: 1540,
+    // Sized by the same annual-price invariant as Pro's — see that band.
+    bandwidthGb: 790,
     formsPerHost: FORMS_PER_HOST_CEILING,
     variablesPerHost: UNLIMITED,
     functionsPerHost: UNLIMITED,
@@ -942,7 +951,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     managersPerOrg: 200,
     maxManagersPerOrg: 1_000,
     maxMembersPerHost: 2_000,
-    bandwidthGb: 3_080,
+    bandwidthGb: 1_580,
     formsPerHost: FORMS_PER_HOST_CEILING,
     variablesPerHost: UNLIMITED,
     functionsPerHost: UNLIMITED,
@@ -2399,7 +2408,7 @@ export const METERED_MARKUP = 1.3
  * region and up to $3.20 elsewhere. A cold load of `aglyn.com/` makes 57
  * first-party requests to settle (`tools/tenant-page-budget.json`,
  * `wireCalibration.measuredAgainst`), so the allowance is about 175,000 views
- * of that page a month, platform-wide — less than one Pro plan's 125 GB band
+ * of that page a month, platform-wide — about 169 GB of included bandwidth
  * — where the 1 TB transfer allowance lasts about 1.4 million. The request
  * allowance runs out first, and past it a view costs:
  *
@@ -2425,11 +2434,19 @@ export const METERED_MARKUP = 1.3
  * page weight in dollars and in bytes — and `npm run check:page-view-rate`
  * recovers that weight from the rate. A per-request charge is not
  * proportional to weight, so folding it into `perPageView` would make the
- * gate read a 1,736 KB page nobody serves, and would re-price every
- * `bandwidthGb` band through the cost of a gigabyte. Whether the INCLUDED
- * bands should carry the request charge is a band-sizing question with its
- * own owner; `tier-margin-floor.spec.ts` pins what the ladder reads if they
- * do. This term prices only the views a customer is billed for.
+ * gate read a 1,736 KB page nobody serves. This term prices the views a
+ * customer is billed for, at the cheapest region's $2.00 per million.
+ *
+ * ## The INCLUDED bands carry it too, at the dearest region
+ *
+ * A view inside a plan's band makes the same requests as one past it, and
+ * once the platform is past the allowance the CDN bills them either way. The
+ * `bandwidthGb` bands are therefore sized with this term counted at the
+ * dearest region's $3.20 per million — 1.6× this figure, $0.191 per included
+ * GB on top of the $0.167 of weight — because the margin rule they hold is
+ * stated at any utilization, and a band cannot choose where its visitors
+ * are (AGL-3444). `tier-margin-floor.spec.ts` multiplies it in and pins every
+ * tier at 100% of every band.
  *
  * Lives HERE, beside the markup, for the reason the markup does: the
  * `/pricing` generator publishes the cost column from it and cannot import
@@ -2463,8 +2480,8 @@ export const PAGE_VIEW_CDN_REQUEST_COST_USD = 0.00011538462
  * A page view billed past its band also carries
  * {@link PAGE_VIEW_CDN_REQUEST_COST_USD}, which neither table holds: it is
  * the per-request CDN charge past the hosting plan's allowance, and this
- * table's `perPageView` is the weight-proportional cost the bands are sized
- * against.
+ * table's `perPageView` is the weight-proportional half of what a band is
+ * sized against — the request term, at the dearest region, is the other.
  *
  * Everything else here is a cost-model input ONLY. `dataStoragePerGbMonth`,
  * `perApiRequest`, `perContactMonth` and `perEmailSend` price what an org
@@ -4993,7 +5010,9 @@ export function checkFormSubmissionAbuseCeiling(
  * view costs. They are one physical measurement written in two units, and
  * what every `bandwidthGb` band is actually sized against is neither of them
  * alone but their quotient — `(1 GB ÷ this) × perPageView`, the cost of a
- * gigabyte. That quotient is stable even while the page's weight is not,
+ * gigabyte's WEIGHT, to which the band sizing adds the CDN requests the same
+ * views make ({@link PAGE_VIEW_CDN_REQUEST_COST_USD}). That quotient is
+ * stable even while the page's weight is not,
  * which is precisely why moving one half re-prices every band on the ladder
  * without touching a band: a heavier page costs more per view and buys fewer
  * views per gigabyte, and the two cancel.
@@ -5051,8 +5070,8 @@ export function bandwidthGbFromPageViews(pageViews: number): number {
  * It is a CAP, not a price, and it is lower than {@link
  * FORM_ABUSE_CEILING_MULTIPLE} because bandwidth is the largest cost line the
  * platform carries and the one a stranger can spend on the customer's behalf.
- * Past the band every 1,000 views bills $0.36 against about $0.28 of real
- * cost once the CDN's request allowance is spent
+ * Past the band every 1,000 views bills $0.36 against $0.28 to $0.35 of
+ * real cost, by region, once the CDN's request allowance is spent
  * ({@link PAGE_VIEW_CDN_REQUEST_COST_USD}), so the tail is not a loss — but a
  * scraper, a hotlinked asset or a botnet still bills the account holder for
  * traffic they did not ask for, and the ceiling is what bounds that before

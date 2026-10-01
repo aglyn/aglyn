@@ -21,16 +21,16 @@ until the start of the next month.
 | Plan | Included bandwidth per month | Past the allowance |
 |---|---|---|
 | Free | 2 GB | Sites are **paused** until the start of next month |
-| Starter | 50 GB | Keeps serving; the extra is billed |
-| Pro | 125 GB | Keeps serving; the extra is billed |
-| Business | 185 GB | Keeps serving; the extra is billed |
-| Scale | 290 GB | Keeps serving; the extra is billed |
-| Advanced | 345 GB | Keeps serving; the extra is billed |
-| Agency | 1,540 GB | Keeps serving; the extra is billed |
-| Enterprise | 3,080 GB by default; more by agreement | Keeps serving; not billed — your agreement sets the terms |
+| Starter | 35 GB | Keeps serving; the extra is billed |
+| Pro | 60 GB | Keeps serving; the extra is billed |
+| Business | 90 GB | Keeps serving; the extra is billed |
+| Scale | 145 GB | Keeps serving; the extra is billed |
+| Advanced | 175 GB | Keeps serving; the extra is billed |
+| Agency | 790 GB | Keeps serving; the extra is billed |
+| Enterprise | 1,580 GB by default; more by agreement | Keeps serving; not billed — your agreement sets the terms |
 
 The allowance is per **organization**, across every site in it — not per site. If you run
-four sites on one Business plan, they share the 185 GB.
+four sites on one Business plan, they share the 90 GB.
 
 ## Where to see your usage {#where-to-see-it}
 
@@ -124,7 +124,7 @@ Bandwidth is derived from page views rather than measured byte-for-byte at the e
 platform uses a fixed accounting figure of **1,012.8 KB per page view** and converts in both
 directions, so the meter you read in GB and the counters the analytics pipeline writes are
 the same number expressed differently. On Free, 2 GB works out to roughly **2,070 page
-views** a month; on Starter, 50 GB is roughly **51,800**, and the same division gives every
+views** a month; on Starter, 35 GB is roughly **36,200**, and the same division gives every
 other band.
 
 ### Which views are counted
@@ -154,8 +154,8 @@ is charged at, so erring high means the next correction can only be downward.
 The figure was 600 KB until September 2026, when it was brought into line with the page the
 platform actually serves. If you are comparing an older invoice or an older reading of the
 meter, the same traffic now converts to more gigabytes — the traffic did not change, the
-accounting figure did, and it is the **gigabyte bands that are the promise**. Your plan's
-band has not moved.
+accounting figure did, and it is the **gigabyte bands that are the promise**. That change
+moved no plan's band.
 
 Two things follow. Pages heavier than 1,012.8 KB do **not** consume your allowance faster —
 the counter moves per view, whatever the page weighs. And a page you make lighter does not

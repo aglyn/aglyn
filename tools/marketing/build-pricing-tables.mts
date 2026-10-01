@@ -109,14 +109,16 @@ const mb = (v: number): string => {
 /**
  * Bandwidth in gigabytes. DECIMAL promotion (1 TB = 1000 GB) — note this
  * differs from `mb` above, and the difference is real, not an oversight. The
- * code's bandwidth values are chosen in decimal — 1,540 GB is "1.54 TB" —
- * and dividing by 1024 would render them as "1.5 TB" of a different size.
- * The reconciliation against the frame is what first caught this: every
- * terabyte row disagreed, and the frame was right.
+ * code's bandwidth values are chosen in decimal — a 1,540 GB band reads
+ * "1.54 TB" — and dividing by 1024 would render them as "1.5 TB" of a
+ * different size. The reconciliation against the frame is what first caught
+ * this: every terabyte row disagreed, and the frame was right.
  *
  * Two decimals, trailing zeros dropped: the page shows the band to the
  * gigabyte where the number has one, so 1,540 GB reads "1.54 TB" and 2,500
- * GB reads "2.5 TB", never "1.5 TB" for a band that is not 1,500 GB.
+ * GB reads "2.5 TB", never "1.5 TB" for a band that is not 1,500 GB. Every
+ * self-serve band is under 1,000 GB today, so the TB branch is the one a
+ * band that grows past it would take.
  */
 const gb = (v: number): string => {
   if (v === UNLIMITED) return 'Unlimited'
@@ -1203,6 +1205,30 @@ for (const [label, [why]] of injected('--declare-extra-row', 2)) {
  */
 const FRAME_STALE_CELLS: Record<string, { frame: string; why: string }> = {}
 
+/**
+ * The bandwidth bands re-sized past the CDN's request allowance (AGL-3444):
+ * every paid band is cut to what the annual price carries once an included
+ * gigabyte bears its CDN requests at the dearest region. The four Figma
+ * frames and the live `/pricing` still carry the bands sold until
+ * 2026-10-01; they are redrawn and republished with the promotion that ships
+ * these bands, and then these entries come out.
+ */
+const BANDWIDTH_RESIZE_WHY =
+  'the paid bandwidth bands were re-sized so every tier holds the margin ' +
+  'rule once an included gigabyte carries its CDN requests at the dearest ' +
+  'region (AGL-3444). Redraw the four frames, re-extract, and this entry ' +
+  'comes out.'
+for (const [plan, frame] of [
+  ['Starter', '50 GB'],
+  ['Pro', '125 GB'],
+  ['Business', '185 GB'],
+  ['Scale', '290 GB'],
+  ['Advanced', '345 GB'],
+  ['Agency', '1.54 TB'],
+] as const) {
+  FRAME_STALE_CELLS[`Bandwidth / mo · ${plan}`] = { frame, why: BANDWIDTH_RESIZE_WHY }
+}
+
 /*
  * `--declare-stale-cell='<row> · <plan>|<frame value>'`, repeatable.
  *
@@ -1662,7 +1688,9 @@ columns.finish()
  * writes them as a single ` · `-joined string, which is why the count can
  * disagree as well as the contents.
  *=========================================*/
-const TIERS_STALE: Record<string, Divergence> = {}
+const TIERS_STALE: Record<string, Divergence> = {
+  'Scale · spec 6': { frame: '290 GB bandwidth', why: BANDWIDTH_RESIZE_WHY },
+}
 
 const tierStrip = reconciler('scale strip', TIERS_STALE)
 const TIER_CARDS = [...tiers.rows, tiers.enterprise]
@@ -2222,6 +2250,14 @@ for (const [label, d] of Object.entries(FRAME_STALE_METERED)) {
   console.log(
     `  pass-through exempt: ${label} — frame draws ${d.ourCost} / ${d.youPay}`,
   )
+}
+// …and the stale compare and scale-strip cells, for the same reason: a cell
+// the code has moved past is a published figure the page still carries.
+for (const [key, d] of [
+  ...Object.entries(FRAME_STALE_CELLS),
+  ...Object.entries(TIERS_STALE).map(([k, v]) => [`scale strip · ${k}`, v] as const),
+]) {
+  console.log(`  stale cell: ${key} — frame draws ${d.frame}`)
 }
 // Printed because a reconciler that silently matched NOTHING would report
 // exactly as clean as one that matched everything. A zero here is a failure
