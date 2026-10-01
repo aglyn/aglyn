@@ -1331,6 +1331,9 @@ async function handler(request: Request): Promise<Response> {
             dedupeKey: `${orgId}:${month}`,
             context: {
               orgId,
+              // Off the org document this loop already holds (AGL-3432);
+              // blank when it has no name, and the template keeps the id.
+              orgName: String(orgData?.name ?? '').trim(),
               month,
               amount: formatOperatorAlertAmount(billedCents),
               reason: meterReportBlocked,

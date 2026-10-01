@@ -84,7 +84,11 @@ export const MARKETING_REPUTATION_BREAKER: OperatorAlertDefinition = {
   tier: 'should',
   category: 'deliverability',
   title: 'Campaigns blocked on workspace {{orgId}}',
-  body: 'Workspace {{orgId}}’s campaigns are blocked by the reputation breaker: {{reason}}',
+  // Staff's copy, in numbers (AGL-3432). The merchant's refusal is written
+  // to "you" and lists what the merchant must do; staff's own step is to
+  // check the list before reinstating.
+  body:
+    'Campaign sending is blocked on workspace {{orgName}} ({{orgId}}) by the reputation breaker. Its campaign mail over the last {{windowDays}} days: {{detail}} Nothing was removed from its lists, and its transactional mail still sends. Check its list before you reinstate it.',
   link: '/admin/orgs/{{orgId}}',
   delivery: 'immediate',
   dedupeWindowMinutes: DAY,

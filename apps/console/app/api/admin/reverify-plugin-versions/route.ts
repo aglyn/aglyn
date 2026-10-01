@@ -285,11 +285,16 @@ async function handler(request: Request): Promise<Response> {
       await notifyStaff({
         type: 'system.pluginVerifierRegression',
         title: `${summary.needsStaff.length} live plugin version(s) now fail the verifier`,
+        // The body says what happened without its title (AGL-3432): which
+        // live version, that it now fails the verifier, and why.
         body:
-          `${first.listingName} v${first.version} — ${first.problems[0] ?? 'see the review page'}` +
-          (summary.needsStaff.length > 1
-            ? ` (and ${summary.needsStaff.length - 1} more)`
-            : ''),
+          `${first.listingName} v${first.version} is live and now fails the plugin verifier: ` +
+          `${(first.problems[0] ?? 'see the review page').replace(/\.$/, '')}.` +
+          (summary.needsStaff.length === 2
+            ? ' 1 more live version fails it too.'
+            : summary.needsStaff.length > 2
+              ? ` ${summary.needsStaff.length - 1} more live versions fail it too.`
+              : ''),
         // The owning plugin's own link, not one composed here — see
         // `ReverifyEntry.reviewLink`.
         link: first.reviewLink,

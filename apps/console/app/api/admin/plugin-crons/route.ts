@@ -119,7 +119,8 @@ async function handler(request: Request): Promise<Response> {
   for (const jobId of failed) {
     await raiseConsoleOperatorAlert('ops.pluginJobFailed', {
       dedupeKey: `plugin-crons:${jobId}`,
-      context: { job: jobId, error: 'it threw; the console log has the error' },
+      // A noun phrase, so "{{job}} failed" reads as a sentence (AGL-3432).
+      context: { job: `The scheduled job ${jobId}`, error: 'it threw; the console log has the error' },
     })
   }
   return Response.json(

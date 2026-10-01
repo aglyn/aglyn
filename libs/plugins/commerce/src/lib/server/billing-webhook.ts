@@ -435,6 +435,28 @@ async function reportUnresolvedDispute(
 }
 
 /**
+ * A site as an operator alert names it: its name and id, else the id alone
+ * (AGL-3432) — staff see faults from every org, and a bare host id has to be
+ * looked up before anyone can act. One host read, taken only when a money
+ * fault is being reported; a read that fails answers the id.
+ */
+async function operatorSiteLabel(hostId: string): Promise<string> {
+  if (!hostId) return 'unknown'
+  try {
+    const host =
+      (
+        await firebaseAdmin.app().firestore().collection('hosts').doc(hostId).get()
+      ).data() ?? {}
+    const name = [host['displayName'], host['subdomain']].find(
+      (value): value is string => typeof value === 'string' && value.trim() !== '',
+    )
+    return name ? `${name.trim()} (${hostId})` : hostId
+  } catch {
+    return hostId
+  }
+}
+
+/**
  * Tells the operator that a subscription cycle's sales tax stayed with the
  * merchant (AGL-3377): the platform files and remits it, so every one of
  * these is tax it may owe and does not hold. Once per invoice and outcome, so
@@ -453,6 +475,7 @@ async function reportTaxNotReversed(input: {
     context: {
       invoiceId: input.invoiceId,
       hostId: input.hostId,
+      site: await operatorSiteLabel(input.hostId),
       amount:
         input.taxCents === undefined
           ? 'An unknown amount'
@@ -1006,11 +1029,13 @@ async function repriceStorefrontSubscriptionFee(
       error?: { message?: string }
     } | null
     console.error(`Stripe refused the fee re-price for ${subscriptionId} (AGL-2289)`, refusal)
+    const repriceHostId = subscriptionRef.parent.parent?.id ?? ''
     await raiseOperatorAlert(COMMERCE_FEE_REPRICE_REFUSED, {
       dedupeKey: `${subscriptionId}:${desiredFeePct}`,
       context: {
         subject: `subscription ${subscriptionId}`,
-        hostId: subscriptionRef.parent.parent?.id ?? '',
+        hostId: repriceHostId,
+        site: await operatorSiteLabel(repriceHostId),
         reason: `Stripe refused to set the fee to ${desiredFeePct}% (${
           refusal?.error?.message ?? `HTTP ${response.status}`
         })`,
@@ -1035,7 +1060,12 @@ async function reportFeeNotCorrected(
 ): Promise<void> {
   await raiseOperatorAlert(COMMERCE_FEE_REPRICE_REFUSED, {
     dedupeKey: invoiceId,
-    context: { subject: `invoice ${invoiceId}`, hostId, reason },
+    context: {
+      subject: `invoice ${invoiceId}`,
+      hostId,
+      site: await operatorSiteLabel(hostId),
+      reason,
+    },
   })
 }
 
@@ -1974,6 +2004,7 @@ async function reportSellerShareNotReversed(
       disputeId,
       orderId: orderRef.id,
       hostId: orderRef.parent.parent?.id ?? '',
+      site: await operatorSiteLabel(orderRef.parent.parent?.id ?? ''),
       amount: formatOperatorAlertAmount(principalCents),
       reason,
     },

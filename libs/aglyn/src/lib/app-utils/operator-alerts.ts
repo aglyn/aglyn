@@ -215,7 +215,7 @@ export const CORE_OPERATOR_ALERTS: readonly OperatorAlertDefinition[] = [
     category: 'billing',
     title: 'Subscription dispute lost on workspace {{orgId}}',
     body:
-      'The card dispute {{disputeId}} on invoice {{invoiceId}} closed as lost ({{reason}}), and {{amount}} was taken back. The workspace keeps its plan until somebody decides otherwise.',
+      'The card dispute {{disputeId}} on invoice {{invoiceId}} for workspace {{orgName}} ({{orgId}}) closed as lost ({{reason}}), and {{amount}} was taken back. The workspace keeps its plan until somebody decides otherwise.',
     link: '/admin/orgs/{{orgId}}',
     delivery: 'immediate',
     dedupeWindowMinutes: 30 * DAY,
@@ -244,7 +244,7 @@ export const CORE_OPERATOR_ALERTS: readonly OperatorAlertDefinition[] = [
     category: 'billing',
     title: 'Usage for {{month}} not billed on {{orgId}}',
     body:
-      'The closed month {{month}} measured {{amount}} of billable usage on workspace {{orgId}}, and it was not reported to Stripe ({{reason}}). Nothing will invoice it until somebody does.',
+      'The closed month {{month}} measured {{amount}} of billable usage on workspace {{orgName}} ({{orgId}}), and it was not reported to Stripe ({{reason}}). Nothing will invoice it until somebody does.',
     link: '/admin/orgs/{{orgId}}',
     delivery: 'immediate',
     dedupeWindowMinutes: 7 * DAY,
@@ -292,7 +292,7 @@ export const CORE_OPERATOR_ALERTS: readonly OperatorAlertDefinition[] = [
     category: 'data',
     title: 'Erasure request {{requestId}} failed',
     body:
-      'The erasure request {{requestId}} on workspace {{orgId}} failed (attempt {{attempt}}): {{error}}. The statutory deadline keeps running while it retries.',
+      'The erasure request {{requestId}} on workspace {{orgName}} ({{orgId}}) failed (attempt {{attempt}}): {{error}}. The statutory deadline keeps running while it retries.',
     delivery: 'immediate',
     dedupeWindowMinutes: DAY,
     defaultEnabled: true,
@@ -403,7 +403,7 @@ export const CORE_OPERATOR_ALERTS: readonly OperatorAlertDefinition[] = [
     category: 'billing',
     title: 'Invoice {{status}} on {{orgId}}',
     body:
-      'Invoice {{invoiceId}} for {{amount}} on workspace {{orgId}} was marked {{status}}.',
+      'Invoice {{invoiceId}} for {{amount}} on workspace {{orgName}} ({{orgId}}) was marked {{status}}, so Stripe has stopped collecting it.',
     link: '/admin/orgs/{{orgId}}',
     delivery: 'immediate',
     dedupeWindowMinutes: 30 * DAY,
@@ -418,7 +418,7 @@ export const CORE_OPERATOR_ALERTS: readonly OperatorAlertDefinition[] = [
     category: 'billing',
     title: 'A {{kind}} to {{account}} failed',
     body:
-      'Stripe {{kind}} {{stripeId}} to connected account {{account}} failed ({{reason}}). The merchant’s funds are not where the ledger says.',
+      'A {{amount}} Stripe {{kind}} ({{stripeId}}) to connected account {{account}} ({{merchant}}) failed: {{reason}}. The merchant’s funds are not where the ledger says.',
     delivery: 'immediate',
     dedupeWindowMinutes: 30 * DAY,
     defaultEnabled: true,
@@ -464,8 +464,9 @@ export const CORE_OPERATOR_ALERTS: readonly OperatorAlertDefinition[] = [
     category: 'support',
     title: 'Ticket past its response time: {{subject}}',
     body:
-      'The {{tier}} ticket “{{subject}}” on workspace {{orgId}} was due a first response {{overdue}} ago and has none.',
-    link: '/admin/support',
+      'The {{tier}} ticket “{{subject}}” from workspace {{orgName}} ({{orgId}}) was due a first response {{overdue}} ago and has none.',
+    // The ticket itself: the support page opens `?ticketId=` on load.
+    link: '/admin/support?ticketId={{ticketId}}',
     delivery: 'immediate',
     dedupeWindowMinutes: DAY,
     defaultEnabled: true,
@@ -557,6 +558,23 @@ export const CORE_OPERATOR_ALERTS: readonly OperatorAlertDefinition[] = [
     dedupeWindowMinutes: 6 * 60,
     defaultEnabled: true,
   },
+  {
+    // A purchasing ceiling, not a job failure: the provisioning sweep ran
+    // and every site keeps sending, so the copy must not read as an outage.
+    type: 'deliverability.sendingDomainCapacityFull',
+    label: 'Sending-domain allowance full',
+    description:
+      'Every dedicated sending domain the provider allowance covers is in use, so new sites that ask for one stay on the shared pool. No mail is lost; raise the allowance or move merchants onto domains they own.',
+    tier: 'should',
+    category: 'deliverability',
+    title: 'Sending-domain allowance full ({{held}}/{{capacity}})',
+    body:
+      'The sending-domain allowance is full ({{held}} of {{capacity}} in use), so sites that asked for a dedicated domain keep sending on the shared pool. No mail is lost: what they go without is the isolation a domain of their own buys, and their campaigns are held to the pool’s stricter reputation limits. Raise AGLYN_SENDING_DOMAIN_CAPACITY once the provider allowance covers it, or move merchants onto domains they own.',
+    link: '/admin/emails',
+    delivery: 'immediate',
+    dedupeWindowMinutes: DAY,
+    defaultEnabled: true,
+  },
 
   // ── SHOULD: operations ──────────────────────────────────────────────────
   {
@@ -579,8 +597,11 @@ export const CORE_OPERATOR_ALERTS: readonly OperatorAlertDefinition[] = [
       'A plugin’s scheduled job threw: consent-group changes, the publish outbox, sending-domain provisioning, a plugin cron.',
     tier: 'should',
     category: 'ops',
+    // `job` is a noun phrase that reads as a subject on its own ("The
+    // publish outbox drain", "The scheduled job acme-mail-send"), so the
+    // title and the body open with the same words.
     title: '{{job}} failed',
-    body: 'The scheduled job {{job}} failed: {{error}}',
+    body: '{{job}} failed: {{error}}',
     delivery: 'immediate',
     dedupeWindowMinutes: 6 * 60,
     defaultEnabled: true,

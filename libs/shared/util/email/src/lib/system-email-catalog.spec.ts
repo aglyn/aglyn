@@ -204,6 +204,15 @@ describe('SYSTEM_EMAIL_TEMPLATES', () => {
       }
     })
 
+    it('the erasure-hold alert reports the scheduled erasure and orders no manual delete (AGL-3432)', () => {
+      // The built-in copy is what staff receive whenever no design is
+      // published. `run-erasures` erases the same workspaces an hour later,
+      // so it must not order the erase script by hand.
+      const text = JSON.stringify(getSystemEmailTemplate('erasure-hold-alert')?.defaultBody)
+      expect(text).toContain('The nightly erasure job erases them at 04:00 UTC')
+      expect(text).not.toContain('erase-tenant.mjs')
+    })
+
     it('marks the billing emails as Stripe-delivered and non-editable', () => {
       // Listed for visibility only (AGL-767); Stripe owns the copy, so an
       // editor here would silently do nothing — same guard as the auth rows.

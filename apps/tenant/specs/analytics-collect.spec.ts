@@ -645,6 +645,8 @@ describe('bandwidth abuse ceiling (AGL-2155)', () => {
   })
 
   it('a FREE host past the ceiling is flagged, degraded and escalated', async () => {
+    mockStore[`hosts/${HOST_ID}`] = { subdomain: 'site', displayName: 'Acme' }
+    mockOrgForHost = { $id: 'org-1', plan: 'free', name: 'Acme Co' }
     plantMonthViews(150_000)
     await loadRoute().POST(beacon({ hostId: HOST_ID, path: '/' }))
     expect(flag()).toMatchObject({
@@ -657,6 +659,11 @@ describe('bandwidth abuse ceiling (AGL-2155)', () => {
     // Staff AND the site's managers — the incident and the customer.
     expect(mockStaffNotices).toHaveLength(1)
     expect(mockStaffNotices[0]['type']).toBe('system.bandwidthCeilingTripped')
+    // Staff read the site by name, not only by id (AGL-3432).
+    expect(mockStaffNotices[0]['title']).toBe(`Bandwidth ceiling tripped — Acme (${HOST_ID})`)
+    expect(mockStaffNotices[0]['body']).toMatch(
+      new RegExp(`^The site Acme \\(${HOST_ID}\\) on workspace Acme Co served 150,`),
+    )
     // BOTH manager notices, because 150,000 views crosses both limits and the
     // two say different things: the cap explains a paused site and points at
     // Billing, the ceiling asks whether this is the customer's traffic at all.
@@ -728,6 +735,9 @@ describe('bandwidth abuse ceiling (AGL-2155)', () => {
     const notice = mockManagerNotices.find((n) => n['type'] === 'system.bandwidthCeilingTripped')
     expect(notice?.['body']).toContain('It is still serving normally.')
     expect(notice?.['body']).not.toContain('overage')
+    // Nor are staff told the traffic bills.
+    expect(mockStaffNotices[0]['body']).toContain('nothing meters this traffic')
+    expect(mockStaffNotices[0]['body']).not.toContain('traffic bills')
   })
 
   it('an org with NO plan resolves as free and is contained', async () => {

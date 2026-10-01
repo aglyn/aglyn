@@ -84,12 +84,14 @@ export async function evaluateEmailHealth(options: { probe: boolean }) {
         `sending domain is ${EXPECTED_FROM_DOMAIN}.`,
     )
   }
-  if (credentials?.status === 'invalid-key') {
-    blockers.push(
-      `The "${config.provider}" mail provider rejected its credential — ` +
-        'rotate or re-scope it.',
-    )
-  }
+  // Kept by reference so the alert below can open with it.
+  const rejectedKey =
+    credentials?.status === 'invalid-key'
+      ? `The "${config.provider}" mail provider rejected its credential, so ` +
+        'mail sent through it — invites, password resets, receipts — is not ' +
+        'leaving. Rotate or re-scope it.'
+      : null
+  if (rejectedKey) blockers.push(rejectedKey)
 
   /*
    * The shared pool, which this check could not see until now.
@@ -134,14 +136,14 @@ export async function evaluateEmailHealth(options: { probe: boolean }) {
     )
   }
 
-  if (pool?.status === 'degraded') {
-    blockers.push(
-      `The shared sending pool cannot carry mail on ${pool.unusable.join(', ')}. ` +
+  const degradedPool =
+    pool?.status === 'degraded'
+      ? `The shared sending pool cannot carry mail on ${pool.unusable.join(', ')}. ` +
         'Every site without a sending domain of its own sends its receipts ' +
         'and password resets from a pool member, so this is those sites ' +
-        'already failing rather than a warning about later.',
-    )
-  }
+        'already failing rather than a warning about later.'
+      : null
+  if (degradedPool) blockers.push(degradedPool)
 
   const report = {
     ...config,
@@ -161,13 +163,17 @@ export async function evaluateEmailHealth(options: { probe: boolean }) {
      */
     healthy: config.configured && !blockers.length,
   }
-  const rejected = credentials?.status === 'invalid-key'
-  if (options.probe && (rejected || pool?.status === 'degraded')) {
+  const rejected = rejectedKey !== null
+  if (options.probe && (rejected || degradedPool)) {
+    // The detail OPENS with the failure that raised the alert and what it
+    // stops (AGL-3432), so an unrelated blocker such as a missing sender
+    // address cannot lead. The rest follow in their usual order.
+    const lead = (rejectedKey ?? degradedPool) as string
     await raiseOperatorAlert('deliverability.providerCredentialsRejected', {
       dedupeKey: rejected ? 'credentials' : `pool:${pool?.unusable.join(',') ?? ''}`,
       context: {
         problem: rejected ? 'the API key was rejected' : 'the shared sending pool is degraded',
-        detail: blockers.join(' '),
+        detail: [lead, ...blockers.filter((blocker) => blocker !== lead)].join(' '),
       },
     })
   }

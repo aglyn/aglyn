@@ -1176,13 +1176,16 @@ describe('when the reversal cannot be made (AGL-1956)', () => {
       reversedCents: 0,
       owedCents: TAX_CENTS,
     })
-    // Said to the operator, who files the return (AGL-3377).
+    // Said to the operator, who files the return (AGL-3377), with the site
+    // by name and the consequence in the body (AGL-3432).
     expect(staffNotifications).toEqual([
       expect.objectContaining({
         type: 'commerce.taxNotReversed',
         title: expect.stringContaining('Sales tax not reversed on invoice'),
+        body: expect.stringContaining('for site Acme Boxes (host-1) was not pulled back'),
       }),
     ])
+    expect(staffNotifications[0].body).toContain('so it may owe tax it does not hold')
   })
 
   /** A partial reversal reverses what it can and records the remainder. */

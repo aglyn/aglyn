@@ -158,12 +158,11 @@ async function handler(request: Request): Promise<Response> {
           'it, or move merchants onto domains they own — see the per-domain ' +
           'line for which lever pulls on what.',
       )
-      await raiseConsoleOperatorAlert('ops.pluginJobFailed', {
+      // Its own alert type, not a job failure (AGL-3432): the sweep ran, and
+      // the alert must not read as the outage this comment rules out.
+      await raiseConsoleOperatorAlert('deliverability.sendingDomainCapacityFull', {
         dedupeKey: 'provision-sending-domains:capacity',
-        context: {
-          job: 'Sending-domain provisioning',
-          error: `the provider allowance is full (${ceiling.held}/${ceiling.capacity}), so sites that asked for a dedicated domain stay on the shared pool. Raise AGLYN_SENDING_DOMAIN_CAPACITY once the provider allowance covers it`,
-        },
+        context: { held: ceiling.held, capacity: ceiling.capacity },
       })
     } else if (ceiling.low) {
       /*
@@ -201,8 +200,8 @@ async function handler(request: Request): Promise<Response> {
     await raiseConsoleOperatorAlert('ops.pluginJobFailed', {
       dedupeKey: 'provision-sending-domains:sweep',
       context: {
-        job: 'Sending-domain provisioning',
-        error: `the sweep failed (${(error as { name?: string })?.name ?? 'unknown'})`,
+        job: 'The sending-domain provisioning sweep',
+        error: `it threw (${(error as { name?: string })?.name ?? 'unknown'})`,
       },
     })
     return Response.json({ error: 'Provisioning sweep failed' }, { status: 500 })

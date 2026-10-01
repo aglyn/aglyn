@@ -53,8 +53,10 @@ export const COMMERCE_TAX_NOT_REVERSED: OperatorAlertDefinition = {
   tier: 'must',
   category: 'payments',
   title: 'Sales tax not reversed on invoice {{invoiceId}}',
+  // `{{site}}` is the site's name and id (AGL-3432), so staff need not look
+  // it up; the last sentence is the consequence the description states.
   body:
-    '{{amount}} of sales tax on invoice {{invoiceId}} (site {{hostId}}) was not pulled back from the merchant: {{reason}}.',
+    '{{amount}} of sales tax on invoice {{invoiceId}} for site {{site}} was not pulled back from the merchant: {{reason}}. The platform files and remits that tax, so it may owe tax it does not hold.',
   delivery: 'immediate',
   dedupeWindowMinutes: 7 * DAY,
   defaultEnabled: true,
@@ -70,7 +72,7 @@ export const COMMERCE_SELLER_SHARE_NOT_REVERSED: OperatorAlertDefinition = {
   category: 'payments',
   title: 'Seller share not reversed on dispute {{disputeId}}',
   body:
-    'The lost dispute {{disputeId}} on order {{orderId}} (site {{hostId}}) cost {{amount}}, and the merchant’s share was not reversed: {{reason}}.',
+    'The lost dispute {{disputeId}} on order {{orderId}} from site {{site}} cost {{amount}}, and the merchant’s share was not reversed: {{reason}}. The platform is out that share until it is recovered by hand in Stripe.',
   delivery: 'immediate',
   dedupeWindowMinutes: 30 * DAY,
   defaultEnabled: true,
@@ -85,7 +87,8 @@ export const COMMERCE_FEE_REPRICE_REFUSED: OperatorAlertDefinition = {
   tier: 'must',
   category: 'payments',
   title: 'Platform fee not corrected on {{subject}}',
-  body: 'The platform fee on {{subject}} (site {{hostId}}) could not be corrected: {{reason}}.',
+  body:
+    'The platform fee on {{subject}} for site {{site}} could not be corrected: {{reason}}. Until it is, the merchant is charged a fee its plan does not set.',
   delivery: 'immediate',
   dedupeWindowMinutes: 7 * DAY,
   defaultEnabled: true,

@@ -230,9 +230,13 @@ async function handler(request: Request): Promise<Response> {
       await notifyStaff({
         type: 'system.scopeDrift',
         title: `${drift?.total} document(s) are missing their sharing scope`,
+        // Opens with what is wrong, so the body reads without its title
+        // (AGL-3432); `said` is only the counts.
         body:
-          `${said}. They are invisible to every site-scoped read until ` +
-          'stamped — this is a report, nothing has been changed.',
+          `These documents are missing their sharing scope: ${said}. No ` +
+          'site-scoped read can see them until they are stamped from the ' +
+          'Sharing-scope drift card on Staff → Health. This is a report; ' +
+          'nothing has been changed.',
         // The staff health page, because that is where the Sharing-scope
         // drift card scans and stamps (AGL-2062). The repair being a human
         // act is the design; an alert that opens a page with no way to

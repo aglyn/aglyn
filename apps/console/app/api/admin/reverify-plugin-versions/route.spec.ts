@@ -242,6 +242,9 @@ describe('the plugin-verdict sweep (AGL-1086)', () => {
     const notification = mockNotifyStaff.mock.calls[0][0] as Record<string, string>
     expect(notification.type).toBe('system.pluginVerifierRegression')
     expect(notification.title).toContain('fail the verifier')
+    // The body says what happened without the title (AGL-3432).
+    expect(notification.body).toMatch(/ v1\.0\.0 is live and now fails the plugin verifier: .+\.$/)
+    expect(notification.body).not.toMatch(/\.\.$/)
     expect(notification.link).toContain('/admin/plugin-reviews/listing-1')
     expect(notification.link).toContain('version=1.0.0')
     expect(mockAuditAdd).toHaveBeenCalledTimes(1)

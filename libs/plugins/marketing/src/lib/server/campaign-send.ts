@@ -1803,7 +1803,20 @@ export async function performCampaignSend(
       // before it is reinstated (AGL-3377).
       await raiseOperatorAlert(MARKETING_REPUTATION_BREAKER, {
         dedupeKey: orgId,
-        context: { orgId, reason: reputation.reason },
+        // The findings in numbers, and the workspace by name off the org doc
+        // this send already holds. `reputation.reason` is the merchant's
+        // refusal, written to them, so it is not staff's copy.
+        context: {
+          orgId,
+          orgName: String(
+            (orgForHost?.org as Record<string, unknown> | undefined)?.['name'] ?? '',
+          ).trim(),
+          windowDays: reputation.windowDays,
+          detail: reputation.findings
+            .filter((finding) => finding.actionable)
+            .map((finding) => finding.detail)
+            .join(' '),
+        },
         orgId,
       })
       throw new CampaignSendError(reputation.reason, 409)

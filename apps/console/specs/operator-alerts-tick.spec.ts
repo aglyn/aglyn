@@ -46,7 +46,17 @@ jest.mock('@aglyn/tenant-data-admin', () => {
       firestore: { Timestamp: { fromMillis: ts } },
       app: () => ({
         firestore: () => ({
-          collection: () => {
+          collection: (name: string) => {
+            // The workspace the SLA alert names (AGL-3432).
+            if (name === 'orgs') {
+              return {
+                doc: (id: string) => ({
+                  get: async () => ({
+                    get: (field: string) => (id === 'o1' && field === 'name' ? 'Harbor View' : undefined),
+                  }),
+                }),
+              }
+            }
             const filters: Array<[string, string, { ms: number }]> = []
             const query: any = {
               where: (field: string, op: string, value: { ms: number }) => {
@@ -194,7 +204,16 @@ describe('the operator alerts tick (AGL-3377)', () => {
         type: 'support.slaBreached',
         options: {
           dedupeKey: 't1',
-          context: { ticketId: 't1', subject: 'Checkout broken', tier: 'priority', orgId: 'o1', overdue: '3 h' },
+          context: {
+            ticketId: 't1',
+            subject: 'Checkout broken',
+            tier: 'priority',
+            orgId: 'o1',
+            orgName: 'Harbor View',
+            overdue: '3 h',
+          },
+          // The ticket's workspace travels with the console notification.
+          orgId: 'o1',
         },
       },
     ])

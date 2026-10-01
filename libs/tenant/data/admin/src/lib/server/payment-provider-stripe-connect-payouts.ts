@@ -112,6 +112,45 @@ export function payoutFailureReason(object: unknown): string {
 }
 
 /**
+ * The workspaces behind the profiles that bind a connected account, by name,
+ * so the operator alert says whose money it was and not only `acct_…`
+ * (AGL-3432).
+ *
+ * A profile is keyed by the workspace it belongs to, or by the person who
+ * owns the workspaces it sells for; this tries the first and falls back to
+ * the second, so it needs to know no plugin's collection. Taken only on a
+ * failure, at most three profiles and three workspaces each, and best-effort:
+ * a read that fails names nobody rather than holding the alert.
+ */
+async function boundWorkspaceNames(
+  firestore: FirebaseFirestore.Firestore,
+  profileIds: readonly string[],
+): Promise<string> {
+  const names = new Set<string>()
+  const keep = (name: unknown) => {
+    if (typeof name === 'string' && name.trim()) names.add(name.trim())
+  }
+  try {
+    for (const id of profileIds.slice(0, 3)) {
+      const org = await firestore.collection('orgs').doc(id).get()
+      if (org.exists) {
+        keep(org.get('name'))
+        continue
+      }
+      const owned = await firestore
+        .collection('orgs')
+        .where('ownerUid', '==', id)
+        .limit(3)
+        .get()
+      for (const owner of owned.docs) keep(owner.get('name'))
+    }
+  } catch {
+    // The alert names the account id alone.
+  }
+  return [...names].join(', ')
+}
+
+/**
  * Records one failed payout or transfer, and mirrors it onto the profiles in
  * `collection` that bind the account.
  *
@@ -181,7 +220,12 @@ export async function recordConnectPayoutFailure(
       kind: input.kind,
       stripeId,
       account: accountId,
-      reason,
+      merchant: await boundWorkspaceNames(
+        firestore,
+        matches.docs.map((doc) => doc.id),
+      ),
+      // The template ends the sentence; Stripe's message usually already does.
+      reason: reason.replace(/[.\s]+$/, ''),
       amount: formatOperatorAlertAmount(amountCents, text(input.object?.currency) ?? 'usd'),
     },
   })

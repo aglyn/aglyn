@@ -670,13 +670,31 @@ async function evaluateBandwidthLimits(hostId: string): Promise<void> {
     // month-over-month spike flag on /api/admin/overview — has a month of
     // latency and no action attached; this is the same signal at beacon
     // latency with containment already applied.
+    //
+    // Named, not only numbered (AGL-3432): staff see trips from every org,
+    // and a bare host id has to be looked up before anyone can act. One host
+    // read, on the beacon that trips the ceiling only — once per host per
+    // month per instance — and a failed read falls back to the id.
+    const hostDoc = await hostRef
+      .get()
+      .then((snapshot) => snapshot.data() ?? {})
+      .catch(() => ({}) as Record<string, unknown>)
+    const siteName = [hostDoc['displayName'], hostDoc['subdomain']].find(
+      (value): value is string => typeof value === 'string' && value.trim() !== '',
+    )
+    const site = siteName ? `${siteName.trim()} (${hostId})` : hostId
+    const orgName = typeof org?.['name'] === 'string' ? String(org['name']).trim() : ''
     await notifyStaff({
       type: 'system.bandwidthCeilingTripped',
-      title: `Bandwidth ceiling tripped — ${hostId}`,
-      body: `${hostId} served ${ceiling.used.toLocaleString()} page views in ${month}, past its ${ceiling.ceiling.toLocaleString()} ceiling. ${
+      title: `Bandwidth ceiling tripped — ${site}`,
+      body: `The site ${site}${
+        orgName ? ` on workspace ${orgName}` : ''
+      } served ${ceiling.used.toLocaleString()} page views in ${month}, past its ${ceiling.ceiling.toLocaleString()} ceiling. ${
         degraded
           ? 'The site is now serving the capped notice.'
-          : 'The plan meters the overage, so the site keeps serving and the traffic bills.'
+          : Aglyn.planMetersInfraOverage(org as never)
+            ? 'The plan meters the overage, so the site keeps serving and the traffic bills.'
+            : 'The site keeps serving: its price is contracted, so nothing meters this traffic.'
       }`,
       link: `/admin/hosts`,
     })

@@ -20,7 +20,7 @@
 // each workspace, and for the member who started its change, before it acts.
 
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
-import { advanceDueConsentGroupChanges } from '@aglyn/tenant-data-admin'
+import { advanceDueConsentGroupChanges, getOrgDoc } from '@aglyn/tenant-data-admin'
 import { registerPluginServerDeclarations } from '../../../../constants/plugins.declarations.server.generated'
 import { isCronAuthorized, isCronDryRun } from '../../../../utils/cron-auth'
 import { recordCronBeat } from '../../../../utils/cron-beat'
@@ -49,6 +49,16 @@ import { raiseConsoleOperatorAlert } from '../../../../utils/server/raise-operat
  * wait, so a unit started at the budget's edge still answers before it.
  */
 const CONSENT_GROUP_CHANGES_BUDGET_MS = 200_000
+
+/** A workspace's name, blank when it has none or the read fails. */
+async function workspaceName(orgId: string): Promise<string> {
+  try {
+    const org = await getOrgDoc(orgId)
+    return typeof org?.name === 'string' ? org.name.trim() : ''
+  } catch {
+    return ''
+  }
+}
 
 async function handler(request: Request): Promise<Response> {
   const { method, headers, query, body } = await pluginRequestFromWeb(request)
@@ -82,13 +92,23 @@ async function handler(request: Request): Promise<Response> {
     })
     const failed = changes.filter((change) => change.error || change.status?.progress.stalled)
     // A change that failed or stalled holds every later change off its
-    // workspace (AGL-3377). Once per change per window.
+    // workspace (AGL-3377): `start` refuses while one is in flight. Once per
+    // change per window. The alert names the workspace and says that
+    // consequence (AGL-3432); the name is one read, only for a change that
+    // failed, and a read that fails leaves the id alone.
     for (const change of failed) {
+      const orgName = await workspaceName(change.orgId)
+      const workspace = orgName ? `${orgName} (${change.orgId})` : change.orgId
+      const held =
+        'every later consent group change on that workspace is refused, and ' +
+        'the runner retries this one every fifteen minutes'
       await raiseConsoleOperatorAlert('ops.pluginJobFailed', {
         dedupeKey: `consent-group-change:${change.orgId}:${change.changeId}`,
         context: {
-          job: `Consent group change ${change.changeId} on workspace ${change.orgId}`,
-          error: change.error ? String(change.error).slice(0, 200) : 'it has stalled',
+          job: `Consent group change ${change.changeId} on workspace ${workspace}`,
+          error: change.error
+            ? `${String(change.error).slice(0, 200).replace(/[.\s]+$/, '')}. Until it succeeds, ${held}`
+            : `it has stalled after repeated errors. Until it finishes, ${held}`,
         },
         orgId: change.orgId,
       })

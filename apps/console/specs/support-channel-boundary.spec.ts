@@ -289,6 +289,16 @@ describe('tickets are gated on the ladder, not on "paid" (AGL-1103/AGL-1158)', (
     expect(created.supportTier).toBe('standard')
     expect(created.responseDueAt).not.toBeNull()
     expect(created.orgId).toBe('org-pro')
+    // Staff are told who opened it, for which workspace and what reply is
+    // owed — in the digest the body sits under a one-line title (AGL-3432).
+    expect(mockNotifyStaff).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'support.ticketOpened',
+        body:
+          'user-pro@example.com opened a Standard support ticket for workspace org-pro. ' +
+          'A first response is owed within 7–14 business days.',
+      }),
+    )
   })
 })
 

@@ -1698,6 +1698,9 @@ async function handler(request: Request): Promise<Response> {
               context: {
                 invoiceId: String(object?.id ?? ''),
                 orgId,
+                // Off the org document already read for the slug above
+                // (AGL-3432); blank when it has no name.
+                orgName: String(invoiceOrg.get('name') ?? '').trim(),
                 status: type === 'invoice.voided' ? 'voided' : 'uncollectible',
                 amount: formatOperatorAlertAmount(
                   Number(object?.amount_due ?? 0),
@@ -2039,12 +2042,27 @@ async function handler(request: Request): Promise<Response> {
           }
           // Money taken back from a paying workspace, which keeps its plan
           // until a person decides otherwise (AGL-3377). Once per dispute.
+          // The workspace is named as well as numbered (AGL-3432): one read,
+          // on a lost dispute only. A failed read leaves the id alone, and a
+          // row attributed to no workspace says so.
+          const orgName = orgId
+            ? String(
+                (
+                  await observed()
+                    .collection('orgs')
+                    .doc(orgId)
+                    .get()
+                    .catch(() => null)
+                )?.get('name') ?? '',
+              ).trim()
+            : 'unknown'
           await raiseOperatorAlert('billing.platformDisputeLost', {
             dedupeKey: disputeId || chargeId || revenueDoc.id,
             context: {
               disputeId,
               invoiceId: revenueDoc.id,
               orgId,
+              orgName,
               reason: String(object?.reason ?? '') || 'no reason given',
               amount: formatOperatorAlertAmount(
                 disputedCents,

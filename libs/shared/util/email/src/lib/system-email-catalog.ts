@@ -326,13 +326,20 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
           sample: '- Test Org (org_123), requested 2026-07-01',
         },
       ],
-      // Mirrors the staff-alert text in audit-archive/route.ts.
+      // Mirrors the staff-alert text in audit-archive/route.ts. It reports
+      // and asks for nothing: `run-erasures` erases these orgs at 04:00 UTC,
+      // an hour after this sends, and a failure raises its own alert.
       defaultBody: [
         {
           block: 'text',
           text:
-            'These organizations are past their GDPR erasure hold. Run ' +
-            'tools/scripts/erase-tenant.mjs to hard-delete. No copy is kept:',
+            'These workspaces are past their 7-day erasure hold. The nightly ' +
+            'erasure job erases them at 04:00 UTC, five a run and oldest ' +
+            'first, and keeps no copy, so nothing is needed from you. A ' +
+            'workspace still listed here tomorrow either failed to erase, ' +
+            'which raises its own "could not be erased" alert, or is waiting ' +
+            'behind a longer queue. Pending erasures on Staff → Health can ' +
+            'run the due ones sooner.',
           variant: 'body',
         },
         { block: 'text', text: '{{orgs.list}}', variant: 'body' },

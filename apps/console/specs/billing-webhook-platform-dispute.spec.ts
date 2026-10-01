@@ -485,6 +485,8 @@ describe('a platform subscription chargeback is handled (AGL-2120)', () => {
         disputeId: 'dp_own_1',
         invoiceId: 'in_disputed',
         orgId: 'org-real',
+        // By name as well as id, off the org document (AGL-3432).
+        orgName: 'Acme Ltd',
         reason: 'fraudulent',
         amount: '$289.00',
       },
