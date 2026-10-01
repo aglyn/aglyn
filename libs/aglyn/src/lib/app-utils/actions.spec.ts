@@ -24,10 +24,7 @@ import {
   type HostAction,
   type HostActionStep,
   CONTACT_TAG_MAX_LENGTH,
-  CRM_ACTION_STEP_TYPES,
   HOST_ACTION_STEP_LABELS,
-  HOST_ACTION_STEP_OUTCOMES,
-  isCrmActionStep,
   isBasicClientActionStep,
   isClientStepEntitled,
   isCustomEventName,
@@ -36,7 +33,6 @@ import {
   normalizeTriggerConditions,
   SCROLL_TO_MAX_OFFSET_PX,
   validateHostAction,
-  WEBHOOK_URL_PATTERN,
 } from './actions'
 import { CRM_TASK_MAX_DUE_DAYS } from './crm'
 
@@ -653,15 +649,7 @@ describe('isCustomEventName', () => {
   })
 })
 
-describe('WEBHOOK_URL_PATTERN', () => {
-  it('allows public https and blocks local/private targets (AGL-149)', () => {
-    expect(WEBHOOK_URL_PATTERN.test('https://hooks.example.com/x')).toBe(true)
-    expect(WEBHOOK_URL_PATTERN.test('http://example.com')).toBe(false)
-    expect(WEBHOOK_URL_PATTERN.test('https://localhost/x')).toBe(false)
-    expect(WEBHOOK_URL_PATTERN.test('https://192.168.1.5/x')).toBe(false)
-    expect(WEBHOOK_URL_PATTERN.test('https://10.0.0.1/x')).toBe(false)
-  })
-
+describe('webhookPost steps', () => {
   it('validates webhookPost steps', () => {
     expect(
       validateHostAction({
@@ -840,7 +828,7 @@ describe('CRM steps', () => {
     steps: [crmStep as unknown as HostActionStep],
   })
 
-  it('are server steps with labels and outcomes, and are classified as CRM', () => {
+  it('are server steps with labels', () => {
     for (const type of [
       'setContactStage',
       'addContactTag',
@@ -848,14 +836,10 @@ describe('CRM steps', () => {
       'createCrmTask',
       'logCrmActivity',
     ] as const) {
-      expect(CRM_ACTION_STEP_TYPES.has(type)).toBe(true)
-      expect(isCrmActionStep(step(type))).toBe(true)
       expect(CLIENT_ACTION_STEP_TYPES.has(type)).toBe(false)
       expect(isClientStepEntitled(step(type), BUSINESS)).toBe(false)
       expect(HOST_ACTION_STEP_LABELS[type]).toBeTruthy()
-      expect(HOST_ACTION_STEP_OUTCOMES[type]).toBeTruthy()
     }
-    expect(isCrmActionStep(step('sendEmail'))).toBe(false)
   })
 
   it('accepts a well-formed step of each kind', () => {

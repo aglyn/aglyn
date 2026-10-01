@@ -71,6 +71,9 @@ export const WORKFLOW_MAX_STEPS = 25
 /** Max nesting across workflow→function→workflow cross-calls (AGL-129). */
 export const CROSS_MAX_DEPTH = 3
 
+/** How deep one custom event may chain into another automation's run. */
+export const ACTION_MAX_EVENT_DEPTH = 3
+
 export type WorkflowRunResult =
   | {
       ok: true

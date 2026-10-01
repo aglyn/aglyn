@@ -16,7 +16,6 @@
  */
 
 import {
-  ACTION_MAX_EVENT_DEPTH,
   checkEntitlement,
   evaluateExpression,
   FLOW_TIMED_OUT_FIELD,
@@ -31,7 +30,7 @@ import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import type { HostEventPayload } from '@aglyn/tenant-runtime/host-event-listeners'
 import { FieldValue } from 'firebase-admin/firestore'
 import { runSummaryFields } from '../model/run-history'
-import { type HostWorkflow, runWorkflow } from '../model/workflows'
+import { ACTION_MAX_EVENT_DEPTH, type HostWorkflow, runWorkflow } from '../model/workflows'
 import { eventRunSuspension } from './site-suspension'
 import {
   deferFlowEnrollment,

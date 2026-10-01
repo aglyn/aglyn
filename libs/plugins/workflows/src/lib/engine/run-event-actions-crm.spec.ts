@@ -307,6 +307,9 @@ import {
   CRM_ACTIVITY_LOG_FULL_MESSAGE,
 } from '@aglyn/aglyn/app-utils/crm'
 import { personKey } from '@aglyn/aglyn/app-utils/person-key'
+import type { HostActionStep } from '@aglyn/aglyn/app-utils/actions'
+import { CRM_ACTION_STEP_TYPES, isCrmActionStep } from './crm-action-steps'
+import { HOST_ACTION_STEP_OUTCOMES } from '../model/step-outcomes'
 import { runEventActions } from './run-event-actions'
 
 /** An action on `formSubmission` carrying one CRM step. */
@@ -904,5 +907,28 @@ describe('a sendEmail step addressed to the contact', () => {
     await run({ contactId: 'contact-1', email: 'ada@example.com' })
     expect(sentMessages).toHaveLength(1)
     expect(added['crmActivities']).toBeUndefined()
+  })
+})
+
+/**
+ * The five CRM steps are one group the executor hands to one module: a step
+ * added to the vocabulary but not to the group would be a server step the
+ * executor silently skipped, and one with no outcome would print a bare enum
+ * in the run history.
+ */
+describe('the CRM steps, as the executor groups them', () => {
+  it('are each in the group, with an outcome, and nothing else is', () => {
+    for (const type of [
+      'setContactStage',
+      'addContactTag',
+      'assignContactOwner',
+      'createCrmTask',
+      'logCrmActivity',
+    ] as const) {
+      expect(CRM_ACTION_STEP_TYPES.has(type)).toBe(true)
+      expect(isCrmActionStep({ type } as HostActionStep)).toBe(true)
+      expect(HOST_ACTION_STEP_OUTCOMES[type]).toBeTruthy()
+    }
+    expect(isCrmActionStep({ type: 'sendEmail' } as HostActionStep)).toBe(false)
   })
 })

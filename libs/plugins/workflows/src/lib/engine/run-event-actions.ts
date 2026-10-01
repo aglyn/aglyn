@@ -16,14 +16,11 @@
  */
 
 import {
-  ACTION_MAX_EVENT_DEPTH,
   ACTION_MAX_STEPS,
   checkEntitlement,
   consentGroupForHost,
   planLabelGrantingFeature,
   checkQuota,
-  type HostWebhook,
-  WEBHOOK_URL_PATTERN,
   evaluateExpression,
   evaluateStepGuard,
   evaluateTriggerConditions,
@@ -31,7 +28,6 @@ import {
   flowEmailTopicId,
   hostPublicOrigin,
   isClientActionStep,
-  isCrmActionStep,
   isFlowSuspendingStep,
   type HostAction,
   type HostActionAlert,
@@ -44,7 +40,6 @@ import {
   contactCampaignFieldPath,
   datasetIntegrityFields,
   datasetIntegrityUpdate,
-  describeStepOutcome,
   effectiveDatasetModel,
   ensureDeclaredCustomFieldTypes,
   normalizeTriggerConditions,
@@ -86,11 +81,14 @@ import { createHmac } from 'crypto'
 import { FieldValue } from 'firebase-admin/firestore'
 import { runSummaryFields } from '../model/run-history'
 import {
+  ACTION_MAX_EVENT_DEPTH,
   type HostWorkflow,
   type HostWorkflowStep,
   runWorkflow,
   WORKFLOW_MAX_STEPS,
 } from '../model/workflows'
+import { describeStepOutcome } from '../model/step-outcomes'
+import { type HostWebhook, WEBHOOK_URL_PATTERN } from '../model/webhooks'
 import { eventRunSuspension } from './site-suspension'
 import {
   advanceFlowEnrollment,
@@ -105,6 +103,7 @@ import {
   sweepDueFlowEnrollments,
 } from './flow-enrollments'
 import {
+  isCrmActionStep,
   logCrmEmailActivity,
   prepareCrmEmailActivity,
   runCrmActionStep,

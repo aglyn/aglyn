@@ -201,37 +201,6 @@ export function isFlowSuspendingStep(step: HostActionStep): boolean {
   return FLOW_SUSPENDING_STEP_TYPES.has(step.type)
 }
 
-/**
- * The steps that act on the CRM (AGL-2605) — named as a set because the
- * executor dispatches all five to one module and the docs list them as one
- * group, and a step added to the union but not here would be a server step
- * the executor silently skipped.
- */
-export const CRM_ACTION_STEP_TYPES: ReadonlySet<HostActionStepType> = new Set([
-  'setContactStage',
-  'addContactTag',
-  'assignContactOwner',
-  'createCrmTask',
-  'logCrmActivity',
-] as const)
-
-/** The CRM steps, as the type the executor narrows to. */
-export type CrmActionStep = Extract<
-  HostActionStep,
-  {
-    type:
-      | 'setContactStage'
-      | 'addContactTag'
-      | 'assignContactOwner'
-      | 'createCrmTask'
-      | 'logCrmActivity'
-  }
->
-
-export function isCrmActionStep(step: HostActionStep): step is CrmActionStep {
-  return CRM_ACTION_STEP_TYPES.has(step.type)
-}
-
 /** Longest tag an automation may write — the console's own tag field cap. */
 export const CONTACT_TAG_MAX_LENGTH = 60
 
@@ -564,9 +533,6 @@ export interface HostAction extends SiteInteraction<HostActionStep> {
   recipe?: CrmActionRecipeId | null
 }
 
-/** Custom-event chaining depth cap (mirrors CROSS_MAX_DEPTH). */
-export const ACTION_MAX_EVENT_DEPTH = 3
-
 /**
  * The shortest and longest a flow may wait.
  *
@@ -622,67 +588,6 @@ export const HOST_ACTION_STEP_LABELS: Record<HostActionStepType, string> = {
   assignContactOwner: 'Assign the contact an owner',
   createCrmTask: 'Create a CRM task',
   logCrmActivity: 'Log a CRM activity',
-}
-
-/**
- * Past-tense phrases for a run summary (AGL-2171).
- *
- * `HOST_ACTION_STEP_LABELS` above names what a step WILL do, in the
- * imperative, for a `Do` select — "Send an email". A run history is the
- * opposite tense and a different audience: it says what already happened,
- * on one line, several steps at a time. `/product/workflows` advertises
- * exactly that shape — `Sent email · saved to Leads · webhook 200`.
- *
- * Two maps rather than one derived from the other, because "Send a webhook
- * (Business)" cannot be mechanically turned into "webhook" — the plan
- * suffix is part of the picker's label and has no business in a log line.
- * Only the steps a SERVER run can perform appear here; the client-side
- * steps run in the visitor's browser and never reach the activity write.
- */
-export const HOST_ACTION_STEP_OUTCOMES: Partial<
-  Record<HostActionStepType, string>
-> = {
-  runWorkflow: 'ran workflow',
-  siteAlert: 'showed an alert',
-  customEvent: 'fired an event',
-  datasetAppend: 'saved to dataset',
-  updateDataset: 'updated dataset',
-  webhookPost: 'webhook',
-  sendEmail: 'sent email',
-  notifyAdmins: 'notified admins',
-  enrollList: 'enrolled in list',
-  assignCampaign: 'assigned to campaign',
-  wait: 'waiting',
-  waitForEvent: 'waiting for',
-  exitFlow: 'ended the flow',
-  setContactStage: 'set stage',
-  addContactTag: 'tagged',
-  assignContactOwner: 'assigned owner',
-  createCrmTask: 'created task',
-  logCrmActivity: 'logged activity',
-}
-
-/**
- * One step's line in a run summary, with the detail that makes it useful.
- *
- * `saved to Leads` beats `saved to dataset`, and `webhook 200` beats
- * `webhook` — the status code is the entire reason anyone opens a run
- * history after a webhook, and it was being discarded on the line it
- * arrived.
- */
-export function describeStepOutcome(
-  type: HostActionStepType,
-  detail?: string,
-): string {
-  const base = HOST_ACTION_STEP_OUTCOMES[type] ?? String(type)
-  const trimmed = detail?.trim()
-  if (!trimmed) return base
-  if (type === 'datasetAppend' || type === 'updateDataset') {
-    // `saved to dataset` + `Leads` reads as `saved to Leads`, not
-    // `saved to dataset Leads`.
-    return `${base.replace(/ dataset$/, '')} ${trimmed}`
-  }
-  return `${base} ${trimmed}`
 }
 
 /** A whole number of minutes inside the wait band. */
@@ -843,28 +748,5 @@ function serverStepProblem(step: HostActionStep, label: string): string | null {
   return null
 }
 
-/**
- * Webhooks (AGL-149) at `hosts/{hostId}/webhooks/{id}`. Outbound entries
- * are targets a `webhookPost` action step delivers to (HMAC-signed);
- * inbound entries mint `/api/hooks/{hostId}/{hookId}` endpoints that run
- * a workflow with the posted JSON in scope. Business tier (`webhooks`
- * flag); Pro can be enabled per-tenant via entitlement overrides.
- */
-export interface HostWebhook {
-  name: string
-  direction: 'outbound' | 'inbound'
-  /** Outbound delivery URL (https only; checked again at send time). */
-  url?: string
-  /** Shared secret: signs outbound bodies, verifies inbound callers. */
-  secret?: string
-  /** Inbound: workflow (by name) enrolled with the payload in scope. */
-  workflowName?: string
-  enabled?: boolean
-}
-
+/** The most webhooks one site keeps; the site create route enforces it. */
 export const WEBHOOK_MAX_PER_HOST = 5
-
-/** Outbound URLs must be public https — first-line SSRF guard. */
-export const WEBHOOK_URL_PATTERN =
-  /^https:\/\/(?!localhost)(?!127\.)(?!0\.)(?!10\.)(?!172\.(1[6-9]|2\d|3[01])\.)(?!192\.168\.)(?!169\.254\.)[^\s]+$/i
-

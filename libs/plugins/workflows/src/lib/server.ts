@@ -19,7 +19,6 @@ import {
   checkEntitlement,
   type HostFunction,
   type HostVariable,
-  type HostWebhook,
   resolveOrgEntitlements,
 } from '@aglyn/aglyn/server'
 import {
@@ -33,6 +32,7 @@ import { timingSafeEqual } from 'crypto'
 import { FieldValue } from 'firebase-admin/firestore'
 import { runSummaryFields } from './model/run-history'
 import { type HostWorkflow, runWorkflow } from './model/workflows'
+import type { HostWebhook } from './model/webhooks'
 import { eventRunSuspension } from './engine/site-suspension'
 import { BUNDLE_ID as WORKFLOWS_BUNDLE_ID } from './constants/bundle-common'
 import { registerWorkflowsServerDeclarations } from './declarations.server'
