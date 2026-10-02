@@ -125,9 +125,9 @@ export interface BesignerDocumentSource<TData = unknown> {
 export interface UseBesignerDocumentOptions<TData = unknown>
   extends BesignerDocumentSource<TData> {
   /**
-   * The word used in user-facing copy — 'screen', 'layout', 'component',
+   * The word used in user-facing copy — 'page', 'layout', 'component',
    * 'template', 'email'. Keeps each editor's messages accurate without
-   * forking the logic.
+   * forking the logic, and is published to the canvas as `documentNoun`.
    */
   noun: string
   /** Canvas view type; reset to SCREEN on unmount. */
@@ -435,6 +435,21 @@ export function useBesignerDocument<TData = unknown>(
       })
     }
   }, [viewType])
+
+  // The noun reaches the canvas too, so its own copy (the empty-document
+  // slot) names the document being edited rather than calling everything a
+  // page. Cleared on leave for the same reason the view type is reset.
+  useEffect(() => {
+    if (!Besigner.doesBesignerAppExist()) return undefined
+    const app = Besigner.getBesignerApp()
+    Besigner.setBesignerFlag(app, { flag: 'documentNoun', value: () => noun })
+    return () => {
+      Besigner.setBesignerFlag(app, {
+        flag: 'documentNoun',
+        value: () => undefined,
+      })
+    }
+  }, [noun])
 
   useEffect(() => {
     if (status === 'loading') return queueLoading()
