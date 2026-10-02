@@ -421,6 +421,12 @@ Two things you may see:
 Every plan serves media via a **CDN** with automatic **WebP variants**, so images load fast
 and cache well.
 
+Video, audio and documents are sent fresh on every request, so they count toward your
+organization's [bandwidth allowance](../../workspace-and-billing/billing-and-plans/bandwidth.md#how-usage-is-counted)
+by the bytes they send — a play, a seek or a download, from your site or from anywhere
+else the link is used. Images do not count separately: they are part of what a page
+weighs, which the allowance already counts.
+
 ### URLs are stable
 
 A media URL is keyed to the **asset**, not to its bytes or its location. That means the

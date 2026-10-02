@@ -687,6 +687,11 @@ export function BillingUsageComponent(props: BillingUsageProps) {
   // used to render one site's reading against it, understating by up to
   // `hostLimit`×. `host-usage` stays per-site (its authorization is per-site
   // membership); the summing moved here, where the denominator lives.
+  //
+  // Plus the ORG LIBRARY's video and file delivery (AGL-3474), which the media
+  // CDN counts on the org's own day documents and no site's reading includes:
+  // one more reading from the same route, asked once for the org rather than
+  // once per site.
   const hostKey = hosts.map((host) => host?.$id).filter(Boolean).join(',')
   useEffect(() => {
     const hostIds = hostKey ? hostKey.split(',') : []
@@ -694,12 +699,16 @@ export function BillingUsageComponent(props: BillingUsageProps) {
     let active = true
     void (async () => {
       try {
+        const scopes = [
+          ...hostIds.map((hostId) => `hostId=${encodeURIComponent(hostId)}`),
+          ...(orgId ? [`orgId=${encodeURIComponent(orgId)}`] : []),
+        ]
         const readings = await Promise.all(
-          hostIds.map(async (hostId) => {
+          scopes.map(async (scope) => {
             try {
               const response = await authorizedFetch(
                 user,
-                `/api/billing/host-usage?hostId=${encodeURIComponent(hostId)}`,
+                `/api/billing/host-usage?${scope}`,
               )
               if (!response.ok) return null
               const payload = await response.json()
@@ -723,7 +732,7 @@ export function BillingUsageComponent(props: BillingUsageProps) {
     return () => {
       active = false
     }
-  }, [hostKey, user])
+  }, [hostKey, orgId, user])
   const teamSeatLimit = checkSeatQuota(org, 'managers', 0).limit
   /*
    * The records band's live figure: `null` until every part has answered —

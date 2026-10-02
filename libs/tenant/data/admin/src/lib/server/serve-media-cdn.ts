@@ -17,8 +17,15 @@
 
 import { pipeline } from 'node:stream/promises'
 import {
+  type AglynOrgBilling,
+  BANDWIDTH_CAP_RETRY_AFTER_SECONDS,
+  bandwidthCapApplies,
+  bandwidthCapEngaged,
+  bandwidthCeilingDegradesHost,
+  bandwidthCeilingMonthKey,
   isLockdownActive,
   type LockdownState,
+  MEDIA_BANDWIDTH_DAY_FIELD,
   MEDIA_CDN_POSTER_PARAM,
   MEDIA_CDN_RENDITION_AUTO,
   MEDIA_CDN_RENDITION_PARAM,
@@ -44,6 +51,10 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import { analyticsDayExpiresAt } from './analytics-retention'
 import { firebaseAdmin } from './firebase-admin'
 import { getPlatformLockdown } from './lockdown'
+import {
+  engageMediaBandwidthCap,
+  mediaBandwidthEvaluationDue,
+} from './media-bandwidth-cap'
 import { mediaCdnRateLimitRefusal } from './media-cdn-rate-limit'
 import { mediaDeliveryOrgIdFor, mediaDeliveryRedirect } from './media-delivery'
 import { getMediaQuarantine } from './media-quarantine'
@@ -387,11 +398,16 @@ export function lockdownStopsMediaDelivery(
  *
  * That lookup is one BatchGetDocuments at org scope, and two at host scope
  * — `hosts` and `hostIndex` batched together, then the owning org, whose id
- * is what `hostIndex` returns and so cannot join the batch. Every one of
- * them is projected to {@link SUSPENSION_FIELDS}: the verdict needs three
- * fields, and the host document is the largest in the product. Measured
- * against production, projecting the three reads and batching two of them
- * took the host branch from 3 round trips and 2,964 B to 2 and 34 B.
+ * is what `hostIndex` returns and so cannot join the batch. The host and
+ * index reads are projected to {@link SUSPENSION_FIELDS} plus the two fields
+ * the bandwidth verdict needs off them: the host document is the largest in
+ * the product. Measured against production, projecting the three reads and
+ * batching two of them took the host branch from 3 round trips and 2,964 B to
+ * 2 and 34 B. The ORG read is whole since AGL-3474, because the bandwidth
+ * verdict asks the org's plan, and the plan is resolved from more fields than
+ * a projection could promise to keep in step with — a mask missing one would
+ * read a paying org as Free and pause its video. Still one read per scope
+ * per TTL.
  *
  * **Staleness bound, stated rather than hidden:** a warm origin refuses
  * within ≤15s of the org-doc write (the platform panic number). What the
@@ -419,8 +435,39 @@ export function lockdownStopsMediaDelivery(
  */
 const MEDIA_CDN_LOCK_TTL_MS = 15_000
 
-const lockCache = new Map<string, { at: number; blocked: boolean }>()
-const lockPending = new Map<string, Promise<boolean>>()
+/**
+ * Everything the scope documents say about serving, read once per scope per
+ * {@link MEDIA_CDN_LOCK_TTL_MS}: the lockdown verdict and, off the same
+ * documents, the bandwidth one (AGL-3474).
+ */
+interface MediaCdnScopeVerdict {
+  /** A lockdown stops every byte (AGL-1520). */
+  locked: boolean
+  /**
+   * The bandwidth band stops video and files: the owning org's Free cap is
+   * engaged this month, or the site's abuse ceiling degrades it. The same two
+   * predicates the site's own pages are paused by, so a paused site's media
+   * stops with it — and only its counted media: images are inside the page
+   * weight the band already measures, and a paused site serves no page that
+   * could ask for one.
+   */
+  bandwidthPaused: boolean
+  /** The owning org is on a plan the cap stops rather than bills. */
+  capApplies: boolean
+  /** The org that owns the scope, when it is known. */
+  orgId: string | null
+}
+
+/** The verdict when nothing could be read: serve, the lockdown core's posture. */
+const OPEN_SCOPE_VERDICT: MediaCdnScopeVerdict = {
+  locked: false,
+  bandwidthPaused: false,
+  capApplies: false,
+  orgId: null,
+}
+
+const lockCache = new Map<string, { at: number; verdict: MediaCdnScopeVerdict }>()
+const lockPending = new Map<string, Promise<MediaCdnScopeVerdict>>()
 
 /**
  * Drop the per-scope lock cache. Tests need it between cases; production
@@ -457,6 +504,9 @@ const SUSPENSION_FIELDS = [
 /** Which host owns the asset's scope — the only field read off `hostIndex`. */
 const HOST_INDEX_ORG_FIELD = 'orgId'
 
+/** The site's abuse-ceiling stamp (AGL-2155), read beside its lockdown. */
+const HOST_BANDWIDTH_CEILING_FIELD = 'bandwidthCeiling'
+
 /** The `suspended*` field family off a snapshot, for the normalizers. */
 const suspensionCarrier = (snapshot: {
   get: (field: string) => unknown
@@ -469,37 +519,71 @@ const suspensionCarrier = (snapshot: {
     SUSPENSION_FIELDS.map((field) => [field, snapshot.get(field)]),
   )
 
-/** TTL-cached: does any lockdown covering `scope` stop delivery? */
-async function mediaCdnScopeLocked(scope: MediaCdnScope): Promise<boolean> {
+/**
+ * The verdict an org document gives: its lockdown and, when it is not locked,
+ * whether its bandwidth stops video and files. `host` is the site's projected
+ * document for a host-library scope, whose abuse ceiling (AGL-2155) pauses the
+ * site's own media as it pauses the site's pages; an org library belongs to
+ * no site, so only the org-wide cap reaches it.
+ */
+function orgScopeVerdict(
+  org: { get: (field: string) => unknown; data: () => unknown },
+  orgId: string,
+  host: { get: (field: string) => unknown } | null,
+  nowMs: number,
+): MediaCdnScopeVerdict {
+  if (lockdownStopsMediaDelivery(normalizeOrgLockdown(suspensionCarrier(org)), nowMs)) {
+    return { ...OPEN_SCOPE_VERDICT, locked: true, orgId }
+  }
+  const billing = (org.data() ?? null) as Partial<AglynOrgBilling> | null
+  const now = new Date(nowMs)
+  return {
+    locked: false,
+    bandwidthPaused:
+      bandwidthCapEngaged(billing, now) ||
+      (host !== null &&
+        bandwidthCeilingDegradesHost(
+          { [HOST_BANDWIDTH_CEILING_FIELD]: host.get(HOST_BANDWIDTH_CEILING_FIELD) },
+          bandwidthCeilingMonthKey(now),
+          billing,
+        )),
+    // A missing org document resolves as Free, but there is no org to total
+    // or to stamp, so nothing is evaluated for it.
+    capApplies: billing !== null && bandwidthCapApplies(billing),
+    orgId,
+  }
+}
+
+/** TTL-cached: what the documents covering `scope` say about serving it. */
+async function mediaCdnScopeVerdict(
+  scope: MediaCdnScope,
+): Promise<MediaCdnScopeVerdict> {
   const key = `${scope.isOrg ? 'org' : 'host'}:${scope.scopeId}`
   const cached = lockCache.get(key)
   if (cached && Date.now() - cached.at < MEDIA_CDN_LOCK_TTL_MS) {
-    return cached.blocked
+    return cached.verdict
   }
   let pending = lockPending.get(key)
   if (!pending) {
     pending = (async () => {
-      let blocked: boolean
+      let verdict: MediaCdnScopeVerdict = OPEN_SCOPE_VERDICT
       try {
         const nowMs = Date.now()
         // Platform first: cached, and a platform security lock is the panic
         // button — asset delivery is part of what it stops.
-        blocked = lockdownStopsMediaDelivery(await getPlatformLockdown(), nowMs)
-        const firestore = firebaseAdmin.app().firestore()
-        if (!blocked && scope.isOrg) {
+        if (lockdownStopsMediaDelivery(await getPlatformLockdown(), nowMs)) {
+          verdict = { ...OPEN_SCOPE_VERDICT, locked: true }
+        } else if (scope.isOrg) {
+          const firestore = firebaseAdmin.app().firestore()
           // Org forms (`org:{orgId}` and `org:{orgId}:{hostId}`): the org
           // doc governs. The context host's own lock is not consulted — a
           // suspended HOST's pages 503 already, and which sites may USE an
           // org asset is `visibleTo`'s question, not the lock's.
           const [org] = await firestore.getAll(
             firestore.collection('orgs').doc(scope.scopeId),
-            { fieldMask: [...SUSPENSION_FIELDS] },
           )
-          blocked = lockdownStopsMediaDelivery(
-            normalizeOrgLockdown(suspensionCarrier(org)),
-            nowMs,
-          )
-        } else if (!blocked) {
+          verdict = orgScopeVerdict(org, scope.scopeId, null, nowMs)
+        } else {
           // Host-library form: the host's own lock, and the OWNING org's —
           // an org lock never stamps host docs (AGL-1506), so a host-only
           // read would silently miss the very lock this issue is about.
@@ -509,40 +593,52 @@ async function mediaCdnScopeLocked(scope: MediaCdnScope): Promise<boolean> {
           // BatchGetDocuments round trips where the batch is one. The org
           // read below cannot join them — its id is what `hostIndex`
           // returns — so two is the floor for this branch, not three.
+          const firestore = firebaseAdmin.app().firestore()
           const [host, hostIndex] = await firestore.getAll(
             firestore.collection('hosts').doc(scope.scopeId),
             firestore.collection('hostIndex').doc(scope.scopeId),
-            { fieldMask: [...SUSPENSION_FIELDS, HOST_INDEX_ORG_FIELD] },
-          )
-          blocked = lockdownStopsMediaDelivery(
-            normalizeHostLockdown(suspensionCarrier(host)),
-            nowMs,
+            {
+              fieldMask: [
+                ...SUSPENSION_FIELDS,
+                HOST_INDEX_ORG_FIELD,
+                HOST_BANDWIDTH_CEILING_FIELD,
+              ],
+            },
           )
           const orgId = hostIndex.get(HOST_INDEX_ORG_FIELD)
-          if (!blocked && typeof orgId === 'string' && orgId) {
-            const [org] = await firestore.getAll(
-              firestore.collection('orgs').doc(orgId),
-              { fieldMask: [...SUSPENSION_FIELDS] },
-            )
-            blocked = lockdownStopsMediaDelivery(
-              normalizeOrgLockdown(suspensionCarrier(org)),
+          if (
+            lockdownStopsMediaDelivery(
+              normalizeHostLockdown(suspensionCarrier(host)),
               nowMs,
             )
+          ) {
+            verdict = { ...OPEN_SCOPE_VERDICT, locked: true }
+          } else if (typeof orgId === 'string' && orgId) {
+            const [org] = await firestore.getAll(
+              firestore.collection('orgs').doc(orgId),
+            )
+            verdict = orgScopeVerdict(org, orgId, host, nowMs)
           }
         }
       } catch {
         // Fail open — the lockdown core's posture (see lockdown.ts): an
-        // unreachable Firestore is an outage, not a lockdown.
-        blocked = false
+        // unreachable Firestore is an outage, not a lockdown, and it is not a
+        // spent band either.
+        verdict = OPEN_SCOPE_VERDICT
       }
-      lockCache.set(key, { at: Date.now(), blocked })
-      return blocked
+      lockCache.set(key, { at: Date.now(), verdict })
+      return verdict
     })().finally(() => {
       lockPending.delete(key)
     })
     lockPending.set(key, pending)
   }
   return pending
+}
+
+/** TTL-cached: does any lockdown covering `scope` stop delivery? */
+async function mediaCdnScopeLocked(scope: MediaCdnScope): Promise<boolean> {
+  return (await mediaCdnScopeVerdict(scope)).locked
 }
 
 /**
@@ -890,6 +986,25 @@ function clearMediaCdnRepresentation(res: NextApiResponse): void {
     res.removeHeader(header)
   }
   res.setHeader('Cache-Control', 'no-store')
+}
+
+/**
+ * Note `bytes` of counted media against the scope's org on this instance, and
+ * when that makes it due, total the org's month and engage the Free cap
+ * (AGL-3474; see `media-bandwidth-cap.ts`).
+ *
+ * Only for an org whose plan the cap stops and that is not already paused,
+ * both read off the cached scope verdict, so a paying org's delivery reads
+ * nothing for it. Never rejects.
+ */
+async function mediaCdnBandwidthEvaluation(
+  scope: MediaCdnScope,
+  bytes: number,
+): Promise<void> {
+  const verdict = await mediaCdnScopeVerdict(scope)
+  if (!verdict.capApplies || verdict.bandwidthPaused || !verdict.orgId) return
+  if (!mediaBandwidthEvaluationDue(verdict.orgId, bytes)) return
+  await engageMediaBandwidthCap(verdict.orgId)
 }
 
 /**
@@ -1299,6 +1414,36 @@ export async function serveMediaCdn(
           ? rendition.contentType
           : snapshot.get('contentType')
     /*
+     * THE BANDWIDTH BAND (AGL-3474).
+     *
+     * Video and files count against the org's bandwidth allowance (see
+     * `media-bandwidth.ts`), so they stop where the band stops: when the Free
+     * cap is engaged for the owning org, or the site's abuse ceiling degrades
+     * it — the same two predicates that pause the site's pages, read off the
+     * scope documents the lockdown verdict above already holds. No read is
+     * added.
+     *
+     * Images keep serving. They are not counted here, a paused site serves
+     * no page that asks for one, and the ones the edge holds would keep
+     * serving from it whatever this said.
+     *
+     * Before the provider redirect, which would otherwise hand a paused org's
+     * film to the provider, and before the 304, which would renew a browser's
+     * copy for another minute. `503` with `Retry-After` and `no-store`, the
+     * shape the paused site's pages answer with: the pause lifts on an
+     * upgrade or at the month's end, and nothing may keep the refusal past
+     * either.
+     */
+    if (
+      !mediaCdnEdgeCacheable(docServedType) &&
+      (await mediaCdnScopeVerdict(scope)).bandwidthPaused
+    ) {
+      res.setHeader('Cache-Control', 'no-store')
+      res.setHeader('Retry-After', String(BANDWIDTH_CAP_RETRY_AFTER_SECONDS))
+      res.status(503).json({ error: 'Over the monthly traffic limit' })
+      return
+    }
+    /*
      * VIDEO FROM THE DELIVERY PROVIDER (AGL-2824).
      *
      * Every gate above has run: the scope, lockdown and quarantine, the
@@ -1346,10 +1491,19 @@ export async function serveMediaCdn(
         res.setHeader('Cache-Control', 'private, no-store')
         res.setHeader('Location', delivery.location)
         // A play starts here, so it is counted here. `redirects` says how many
-        // of the serves left through the provider; the bytes are the
-        // provider's to measure, because none leave from this route.
+        // of the serves left through the provider; the per-asset `bytes` stay
+        // the provider's to measure, because none leave from this route.
+        //
+        // The bandwidth band is not the provider's (AGL-3474): moving a film
+        // off origin must not move it off the meter. A player sends every
+        // range of a sitting to the URL it was redirected to, so this request
+        // is the only one of the sitting that reaches us, and it is counted
+        // at the copy's full size — the most one sitting sends, whatever range
+        // a player opens with.
+        let evaluation: Promise<void> | null = null
         if (req.method === 'GET') {
           const day = new Date().toISOString().slice(0, 10)
+          const bandwidthBytes = delivery.sizeBytes
           void firestore
             .collection(isOrg ? 'orgs' : 'hosts')
             .doc(scopeId)
@@ -1358,6 +1512,12 @@ export async function serveMediaCdn(
             .set(
               {
                 expiresAt: analyticsDayExpiresAt(day),
+                ...(bandwidthBytes > 0
+                  ? {
+                      [MEDIA_BANDWIDTH_DAY_FIELD]:
+                        firebaseAdmin.firestore.FieldValue.increment(bandwidthBytes),
+                    }
+                  : {}),
                 media: {
                   [mediaId]: {
                     serves: firebaseAdmin.firestore.FieldValue.increment(1),
@@ -1368,8 +1528,10 @@ export async function serveMediaCdn(
               { merge: true },
             )
             .catch(() => undefined)
+          evaluation = mediaCdnBandwidthEvaluation(scope, bandwidthBytes)
         }
         res.status(302).end()
+        await evaluation
         return
       }
     }
@@ -1578,13 +1740,19 @@ export async function serveMediaCdn(
     // Delivery volume (AGL-176): per-asset serves/bytes on the AGL-82
     // analytics day-doc, fire-and-forget. Only cache MISSES reach this
     // code — edge-cached responses aren't counted, so these are origin
-    // serves, not user-facing totals (billing accuracy is AGL-41's job).
+    // serves, not user-facing totals.
     // Hot-doc note: a single day-doc caps at ~1 write/sec sustained;
     // acceptable at current traffic, shard or sample if an asset gets hot.
     //
     // Written before the first byte, so `bytes` is what this request asked
     // the origin to send. A client that abandons the stream receives less;
     // the figure is the ceiling on what left, not a count of what arrived.
+    //
+    // The same bytes count against the org's bandwidth band when the type is
+    // one the edge never holds (AGL-3474): every such response is served from
+    // origin. In this write, so counting costs no write of its own. Images are
+    // left out — they are inside the page weight the band already measures.
+    const countedBytes = mediaCdnEdgeCacheable(servedType) ? 0 : servedBytes
     const day = new Date().toISOString().slice(0, 10)
     void firestore
       .collection(isOrg ? 'orgs' : 'hosts')
@@ -1596,6 +1764,12 @@ export async function serveMediaCdn(
           // Retention (AGL-1844): every writer of a day doc stamps the
           // day-anchored expiry the TTL policy sweeps on.
           expiresAt: analyticsDayExpiresAt(day),
+          ...(countedBytes > 0
+            ? {
+                [MEDIA_BANDWIDTH_DAY_FIELD]:
+                  firebaseAdmin.firestore.FieldValue.increment(countedBytes),
+              }
+            : {}),
           media: {
             [mediaId]: {
               serves: firebaseAdmin.firestore.FieldValue.increment(1),
@@ -1610,6 +1784,10 @@ export async function serveMediaCdn(
         { merge: true },
       )
       .catch(() => undefined)
+    // Totalled beside the stream rather than ahead of it, and awaited once
+    // the stream ends so the function lives until it is done.
+    const evaluation =
+      countedBytes > 0 ? mediaCdnBandwidthEvaluation(scope, countedBytes) : null
     if (partial) res.status(206)
     // `start`/`end` are inclusive in `createReadStream`, matching the parsed
     // range — GCS is asked for exactly the requested bytes and nothing is
@@ -1621,10 +1799,14 @@ export async function serveMediaCdn(
     // rather than `pipe` because streaming needs teardown in both directions,
     // which `pipe` does not give — a failed Storage read must fail the
     // response, and a client that stops reading must stop the Storage read.
-    await pipeline(
-      file.createReadStream(partial ? { start: range.start, end: range.end } : {}),
-      res,
-    )
+    try {
+      await pipeline(
+        file.createReadStream(partial ? { start: range.start, end: range.end } : {}),
+        res,
+      )
+    } finally {
+      await evaluation
+    }
   } catch (error) {
     if (mediaCdnClientWentAway(error, res)) return
     console.error('serveMediaCdn failed', scopeSegment, mediaId, error)

@@ -376,7 +376,14 @@ export function hostMeterReadings(
 /** One month of usage for a single host (from the per-host counters). */
 export interface HostUsageSnapshot {
   storageBytes: number
+  /**
+   * The bandwidth meter's reading, in page views: the views the beacon
+   * counted plus the video and file bytes the media CDN counted, converted at
+   * the page weight (`analyticsBandwidthReading`, AGL-3474).
+   */
   pageViews: number
+  /** The video and file bytes inside `pageViews`, kept to say how much. */
+  mediaBandwidthBytes?: number
   /**
    * Each metered band's month on this host, by band id (`hostMeterReadings`).
    * A band left out reads as zero — the org library, which serves no pages
@@ -439,7 +446,10 @@ export function meteredIncludedAllowance(
 
 export interface UsageCostEstimate {
   storageGb: number
+  /** Page views, video and file delivery included — see `HostUsageSnapshot`. */
   pageViews: number
+  /** The video and file bytes counted inside `pageViews`. */
+  mediaBandwidthBytes: number
   /** Each metered band's month, by band id, summed over the snapshots. */
   meters: Record<string, number>
   /** The bands subtracted before anything is priced. */
@@ -515,6 +525,10 @@ export function estimateMonthlyUsageCost(
     (sum, host) => sum + Math.max(0, host.pageViews || 0),
     0,
   )
+  const mediaBandwidthBytes = hosts.reduce(
+    (sum, host) => sum + Math.max(0, host.mediaBandwidthBytes || 0),
+    0,
+  )
   const meters: Record<string, number> = Object.fromEntries(
     bands.map((band) => [
       band.id,
@@ -574,6 +588,7 @@ export function estimateMonthlyUsageCost(
   return {
     storageGb,
     pageViews,
+    mediaBandwidthBytes,
     meters,
     included,
     billableStorageGb,

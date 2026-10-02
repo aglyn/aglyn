@@ -184,6 +184,26 @@ export function bandwidthCapShouldEngage(options: {
   return usedBandwidthGb > includedBandwidthGb
 }
 
+/**
+ * Could this org's traffic EVER engage the cap — is it on a plan that stops
+ * at its band rather than billing past it (AGL-3474)?
+ *
+ * {@link bandwidthCapShouldEngage} with the usage left out, for a writer that
+ * has to decide whether measuring is worth its reads at all: the media CDN
+ * totals an org's month only when this is true, so a paying org's video costs
+ * no read to meter. Answered by the same predicate rather than restated, so
+ * the two cannot disagree about which plans the cap is for.
+ */
+export function bandwidthCapApplies(
+  org: Partial<AglynOrgBilling> | null | undefined,
+): boolean {
+  return bandwidthCapShouldEngage({
+    org,
+    usedBandwidthGb: Number.POSITIVE_INFINITY,
+    includedBandwidthGb: resolveOrgEntitlements(org).bandwidthGb,
+  })
+}
+
 /** What a visitor sees on a capped site. */
 export interface BandwidthCapNotice {
   title: string

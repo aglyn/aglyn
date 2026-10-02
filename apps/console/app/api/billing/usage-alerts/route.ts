@@ -22,6 +22,8 @@ import {
 } from '@aglyn/aglyn/server'
 import { isCronAuthorized } from '../../../../utils/cron-auth'
 import { recordCronBeat } from '../../../../utils/cron-beat'
+// By path: the route's specs replace the `/server` barrel wholesale.
+import { analyticsBandwidthReading } from '@aglyn/aglyn/app-utils/media-bandwidth'
 import {
   bandwidthCapMonthKey,
   bandwidthCapShouldEngage,
@@ -561,7 +563,9 @@ async function handler(request: Request): Promise<Response> {
       // Bandwidth (AGL-1106): this month's page views × the average page
       // transfer — same estimate the billing meter uses; it was displayed
       // but never alerted. Computed fresh (bandwidth accrues within the
-      // month, so last month's rollup would be stale).
+      // month, so last month's rollup would be stale). Video and file
+      // delivery is in it, in page views, since AGL-3474 — the figure the
+      // invoice prices.
       let pageViews = 0
       for (const host of hosts.docs) {
         const [
@@ -602,10 +606,7 @@ async function handler(request: Request): Promise<Response> {
           bandUsed[band.id]! += Number(bandCounters[index]?.get(month) ?? 0)
         })
         mediaBytes += Number(mediaCounter.get('bytes') ?? 0)
-        pageViews += analytics.docs.reduce(
-          (sum, day) => sum + Number(day.get('total') ?? 0),
-          0,
-        )
+        pageViews += analyticsBandwidthReading(analytics.docs).meteredPageViews
       }
       // The org library's own counter (AGL-1473). ONE read for the whole org,
       // not one per host — it belongs to no site, so it cannot fan out.
@@ -615,15 +616,32 @@ async function handler(request: Request): Promise<Response> {
       // against `storagePerHostMb` at upload, and an alert that stays silent
       // about storage the platform will refuse the next upload for is the
       // defect, not the caution.
-      const orgMediaCounter = await org.ref
-        .collection('counters')
-        .doc('media')
-        .get()
+      //
+      // Beside it, the org library's DELIVERY (AGL-3474): the media CDN
+      // counts an org-library asset's video and file bytes on the org's own
+      // day documents, which the per-site sum above never reaches.
+      const [orgMediaCounter, orgLibraryDays] = await Promise.all([
+        org.ref.collection('counters').doc('media').get(),
+        org.ref
+          .collection('analytics')
+          .where(
+            firebaseAdmin.firestore.FieldPath.documentId(),
+            '>=',
+            `${month}-01`,
+          )
+          .where(
+            firebaseAdmin.firestore.FieldPath.documentId(),
+            '<=',
+            `${month}-31`,
+          )
+          .get(),
+      ])
       const orgLibraryBytes = Math.max(
         0,
         Number(orgMediaCounter.get('bytes') ?? 0) || 0,
       )
       mediaBytes += orgLibraryBytes
+      pageViews += analyticsBandwidthReading(orgLibraryDays.docs).meteredPageViews
 
       const hostCount = hosts.docs.length
       const mediaMb = mediaBytes / (1024 * 1024)

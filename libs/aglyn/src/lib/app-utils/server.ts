@@ -206,6 +206,8 @@ export * from './plan-entitlements'
 // The free plan's bandwidth hard cap (AGL-1967/2070/2155). After
 // `plan-entitlements`, which owns the predicate it keys off.
 export * from './bandwidth-cap'
+// Video and file delivery as bandwidth (AGL-3474), in the band's own units.
+export * from './media-bandwidth'
 // The month every monthly counter is keyed by, and the boundary it lifts on.
 export * from './utc-month'
 export * from './forms'
