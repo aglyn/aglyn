@@ -43,6 +43,11 @@ import {
 } from '@aglyn/aglyn'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+import {
+  ENTITY_PICKERS_LOAD_POINT,
+  pluginEntityPickers,
+} from '@aglyn/aglyn/plugin-manager/plugin-entity-pickers'
+import { pluginRecordListSource } from '@aglyn/aglyn/plugin-manager/plugin-record-lists'
 import { CONSOLE_PLUGIN_MANIFEST } from '../constants/plugins.client.generated'
 
 const REPO_ROOT = resolve(__dirname, '../../..')
@@ -147,6 +152,16 @@ describe('first-party plugins declare what they register (AGL-3116)', () => {
     const drawsAFieldType = listCustomFieldTypes().some(
       (fieldType) => fieldType.pluginId === id,
     )
+    // A registrar whose record list source shares an entity picker kind's
+    // fields loads where the picker provider does (AGL-3080): the kind is
+    // compiled, its fields are read through that source at run time.
+    const sharesPickerFields = pluginEntityPickers().some(
+      (picker) =>
+        picker.fieldsFrom && pluginRecordListSource(picker.fieldsFrom)?.pluginId === id,
+    )
+    if (sharesPickerFields) {
+      found.slots = [...new Set([...found.slots, ENTITY_PICKERS_LOAD_POINT])].sort()
+    }
     const own = declared.get(id)?.console ?? {}
     expect({ id, ...found, shell: found.shell || drawsAFieldType }).toEqual({
       id,

@@ -32,10 +32,12 @@
  * split one submission list into two.
  */
 import * as Aglyn from '@aglyn/aglyn'
+import { pluginEntityPickers } from '@aglyn/aglyn/plugin-manager/plugin-entity-pickers'
 import {
   buildEntityPickerField,
   elementPropsComponentMapper,
-  ENTITY_PICKER_KINDS,
+  entityKindsForAttributes,
+  entityPickerKindOf,
   entityPickerBrowseNotice,
   entityPickerNoMatchText,
   entityPickerPlaceholder,
@@ -65,10 +67,12 @@ const labelsOf = (field: { options?: Array<{ label: string }> }) =>
 
 describe('a form is placed by id, not by the caption an author typed', () => {
   const context = contextWith({
-    forms: [
-      { id: 'form-2', label: 'Contact us' },
-      { id: 'form-1', label: 'Apply now' },
-    ],
+    options: {
+      forms: [
+        { id: 'form-2', label: 'Contact us' },
+        { id: 'form-1', label: 'Apply now' },
+      ],
+    },
     status: { forms: 'ready' },
   })
 
@@ -83,7 +87,7 @@ describe('a form is placed by id, not by the caption an author typed', () => {
     // The defect this replaced: `?form=Contact` filtered on a caption, so
     // renaming the form split its submission history in two.
     const field = buildEntityPickerField(formIdField, 'forms', context)
-    const captions = (context.forms ?? []).map((form) => form.label)
+    const captions = (context.options?.forms ?? []).map((form) => form.label)
     for (const value of optionsOf(field)) {
       expect(captions).not.toContain(value)
     }
@@ -111,7 +115,7 @@ describe('a form is placed by id, not by the caption an author typed', () => {
     expect(field.component).not.toBe(Aglyn.FieldComponentType.SCREEN_SELECT)
     // And a screen picker is not an entity list, in the other direction.
     expect(
-      ENTITY_PICKER_KINDS[Aglyn.FieldComponentType.SCREEN_SELECT],
+      entityPickerKindOf(Aglyn.FieldComponentType.SCREEN_SELECT),
     ).toBeUndefined()
   })
 })
@@ -199,15 +203,28 @@ describe('a picker with nothing to offer is still a picker', () => {
     const field = buildEntityPickerField(
       formIdField,
       'forms',
-      contextWith({ forms: [], status: { forms: 'ready' } }),
+      contextWith({ options: { forms: [] }, status: { forms: 'ready' } }),
     )
     expect(labelsOf(field)[0]).toMatch(/no forms/i)
   })
 })
 
 describe('every entity picker resolves its options from one table', () => {
-  it('maps each attribute type to the list it displays', () => {
-    expect(ENTITY_PICKER_KINDS).toMatchObject({
+  it('maps each attribute type to the list its plugin declares it displays', () => {
+    // The kinds are the plugins' (AGL-3080): commerce's three, the forms
+    // plugin's forms and the data plugin's datasets, read from the compiled
+    // declarations the console's provider reads too.
+    expect(
+      Object.fromEntries(
+        [
+          Aglyn.FieldComponentType.PRODUCT_SELECT,
+          Aglyn.FieldComponentType.COLLECTION_SELECT,
+          Aglyn.FieldComponentType.CATEGORY_SELECT,
+          Aglyn.FieldComponentType.DATASET_SELECT,
+          Aglyn.FieldComponentType.FORM_SELECT,
+        ].map((type) => [type, entityPickerKindOf(type)]),
+      ),
+    ).toEqual({
       [Aglyn.FieldComponentType.PRODUCT_SELECT]: 'products',
       [Aglyn.FieldComponentType.COLLECTION_SELECT]: 'collections',
       [Aglyn.FieldComponentType.CATEGORY_SELECT]: 'categories',
@@ -216,32 +233,35 @@ describe('every entity picker resolves its options from one table', () => {
     })
   })
 
-  it('covers every list the picker context can hand out', () => {
-    // Derived, not hand-listed: a list the context offers with no attribute
-    // type pointing at it is a picker nobody can place.
-    const kinds: Aglyn.EntityPickerKind[] = [
-      'products',
-      'collections',
-      'categories',
-      'datasets',
-      'forms',
-    ]
-    expect(Object.values(ENTITY_PICKER_KINDS).sort()).toEqual([...kinds].sort())
+  it('covers every kind a plugin declares', () => {
+    // Derived, not hand-listed: a declared kind with no attribute type
+    // pointing at it is a picker nobody can place.
+    for (const picker of pluginEntityPickers()) {
+      expect(entityPickerKindOf(picker.attribute)).toBe(picker.kind)
+    }
   })
 
   it('leaves DATASET_FIELD_SELECT out — it lists fields, not datasets', () => {
     expect(
-      ENTITY_PICKER_KINDS[Aglyn.FieldComponentType.DATASET_FIELD_SELECT],
+      entityPickerKindOf(Aglyn.FieldComponentType.DATASET_FIELD_SELECT),
     ).toBeUndefined()
+    // …but it still asks for the list its fields are read from.
+    expect(
+      entityKindsForAttributes([
+        {
+          name: 'datasetField',
+          component: Aglyn.FieldComponentType.DATASET_FIELD_SELECT,
+        } as Aglyn.AglynAttributeSchema,
+      ]),
+    ).toEqual(['datasets'])
   })
 
   it('negative control: an ordinary text attribute is not a picker', () => {
     expect(
-      ENTITY_PICKER_KINDS[Aglyn.FieldComponentType.TEXT_FIELD],
+      entityPickerKindOf(Aglyn.FieldComponentType.TEXT_FIELD),
     ).toBeUndefined()
   })
 })
-
 
 /**
  * A stored value is not an option in a list — it is a fact about the node,
@@ -255,7 +275,7 @@ describe('every entity picker resolves its options from one table', () => {
  */
 describe('a stored value renders its label, in or out of the window', () => {
   const listed = contextWith({
-    forms: [{ id: 'form-1', label: 'Apply now' }],
+    options: { forms: [{ id: 'form-1', label: 'Apply now' }] },
     status: { forms: 'ready' },
   })
 
@@ -268,7 +288,7 @@ describe('a stored value renders its label, in or out of the window', () => {
 
   it('offers a resolved value the window does NOT hold', () => {
     const context = contextWith({
-      forms: [{ id: 'form-1', label: 'Apply now' }],
+      options: { forms: [{ id: 'form-1', label: 'Apply now' }] },
       status: { forms: 'ready' },
       resolved: { forms: { 'form-900': { id: 'form-900', label: 'Careers' } } },
     })
@@ -349,7 +369,7 @@ describe('a keyed read is asked for only when nothing else can answer', () => {
   it('asks for an id the settled window does not hold', () => {
     expect(
       Aglyn.entityValueNeedsResolution(
-        { ...base, forms: [], status: { forms: 'ready' } },
+        { ...base, options: { forms: [] }, status: { forms: 'ready' } },
         'forms',
         'form-900',
       ),
@@ -361,7 +381,7 @@ describe('a keyed read is asked for only when nothing else can answer', () => {
       Aglyn.entityValueNeedsResolution(
         {
           ...base,
-          forms: [{ id: 'form-1', label: 'Apply now' }],
+          options: { forms: [{ id: 'form-1', label: 'Apply now' }] },
           status: { forms: 'ready' },
         },
         'forms',
@@ -376,7 +396,7 @@ describe('a keyed read is asked for only when nothing else can answer', () => {
     // removing it.
     expect(
       Aglyn.entityValueNeedsResolution(
-        { ...base, forms: [], status: { forms: 'loading' } },
+        { ...base, options: { forms: [] }, status: { forms: 'loading' } },
         'forms',
         'form-900',
       ),
@@ -388,7 +408,7 @@ describe('a keyed read is asked for only when nothing else can answer', () => {
       Aglyn.entityValueNeedsResolution(
         {
           ...base,
-          forms: [],
+          options: { forms: [] },
           status: { forms: 'ready' },
           resolved: { forms: { 'form-900': null } },
         },
@@ -401,7 +421,7 @@ describe('a keyed read is asked for only when nothing else can answer', () => {
   it('asks for nothing on a surface that cannot resolve at all', () => {
     expect(
       Aglyn.entityValueNeedsResolution(
-        { request: () => undefined, forms: [], status: { forms: 'ready' } },
+        { request: () => undefined, options: { forms: [] }, status: { forms: 'ready' } },
         'forms',
         'form-900',
       ),
@@ -418,7 +438,7 @@ describe('a keyed read is asked for only when nothing else can answer', () => {
     // the contract the surface actually receives.
     const context: Aglyn.EntityPickerContextValue = {
       ...base,
-      forms: [],
+      options: { forms: [] },
       status: { forms: 'ready' },
     }
     expect(Aglyn.entityValueNeedsResolution(context, 'forms', '')).toBeUndefined()

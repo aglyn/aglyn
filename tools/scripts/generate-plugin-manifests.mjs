@@ -876,7 +876,7 @@ async function pluginUsageAxes() {
       costAxes.push({ pluginId: plugin.id, ...axis })
     }
     for (const band of declaredBands) {
-      const { id, label, order, fields, fallbackFields, entitlement, perHost, unitCostUsd, hostCounter, alert, metered } = band ?? {}
+      const { id, label, order, fields, fallbackFields, entitlement, perHost, unitCostUsd, hostCounter, alert, metered, consoleWarning } = band ?? {}
       const what = `${where} band "${id ?? ''}"`
       if (typeof id !== 'string' || !PLAIN_NAME.test(id)) throw new Error(`${where}: a band needs a plain "id"`)
       if (bandOwners.has(id)) throw new Error(`${what} is already measured by ${bandOwners.get(id)}`)
@@ -906,6 +906,21 @@ async function pluginUsageAxes() {
       }
       if (alert !== undefined && hostCounter === undefined) {
         throw new Error(`${what}: "alert" needs the "hostCounter" the band is measured by`)
+      }
+      if (consoleWarning !== undefined) {
+        const { standing, member, approach, reached, linksUsage } = consoleWarning ?? {}
+        if (typeof standing !== 'string' || !/^\/api\/[a-z0-9/-]+$/.test(standing)) {
+          throw new Error(`${what}: "consoleWarning.standing" is the console API path the band's standing is read from`)
+        }
+        if (typeof member !== 'string' || !PLAIN_NAME.test(member)) {
+          throw new Error(`${what}: "consoleWarning.member" is the plain name the route answers the standing under`)
+        }
+        if ([approach, reached?.stops, reached?.bills].some((sentence) => typeof sentence !== 'string' || !sentence.trim())) {
+          throw new Error(`${what}: "consoleWarning" needs its "approach" sentence and the two at the band, "reached.stops" and "reached.bills"`)
+        }
+        if (linksUsage !== undefined && typeof linksUsage !== 'boolean') {
+          throw new Error(`${what}: "consoleWarning.linksUsage" is a boolean`)
+        }
       }
       if (metered !== undefined) {
         const { rate, quotedPer, noun, withheldUntil } = metered ?? {}
@@ -2072,6 +2087,83 @@ function orgCapacityRows() {
 }
 
 /**
+ * The kinds of entity a besigner picker lists, each declared by the plugin
+ * that keeps it (AGL-3080).
+ *
+ * Compiled because the besigner decides whether an attribute IS a picker from
+ * these on the panel's first render, and a kind that had not registered yet
+ * would draw a bound element as an unbound field. Checked here: one owner per
+ * kind and per attribute type, a scope core knows how to read, the words a
+ * picker says, and a field-attribute only with the record kind its fields come
+ * from.
+ */
+const ENTITY_PICKER_KEYS = new Set([
+  'kind', 'attribute', 'scope', 'collection', 'nameField', 'where', 'searchable',
+  'fieldsAttribute', 'fieldsFrom', 'singular', 'plural', 'page',
+])
+
+function entityPickerRows() {
+  const rows = []
+  const kinds = new Map()
+  const attributes = new Map()
+  for (const plugin of config.plugins) {
+    const declared = plugin.entityPickers
+    if (declared === undefined) continue
+    const where = `plugins.config.json: "${plugin.id}" entityPickers`
+    if (!Array.isArray(declared) || !declared.length) {
+      throw new Error(`${where} is present and declares nothing — drop it, or name the kinds the plugin supplies`)
+    }
+    for (const declaration of declared) {
+      const what = `${where} "${declaration?.kind ?? ''}"`
+      const unknown = Object.keys(declaration ?? {}).filter((key) => !ENTITY_PICKER_KEYS.has(key))
+      if (unknown.length) throw new Error(`${what}: unknown key(s) ${unknown.join(', ')}`)
+      const { kind, attribute, scope, collection, nameField, where: clauses, searchable, fieldsAttribute, fieldsFrom } = declaration
+      for (const [field, value] of [
+        ['kind', kind],
+        ['attribute', attribute],
+        ['collection', collection],
+        ['nameField', nameField],
+        ['singular', declaration.singular],
+        ['plural', declaration.plural],
+        ['page', declaration.page],
+      ]) {
+        if (typeof value !== 'string' || !value.trim()) throw new Error(`${what} needs a "${field}"`)
+      }
+      if (scope !== 'host' && scope !== 'orgData') {
+        throw new Error(`${what}: "scope" is "host" (the site's own) or "orgData" (the organization's data, shared per site)`)
+      }
+      if (searchable !== undefined && typeof searchable !== 'boolean') throw new Error(`${what}: "searchable" is a boolean`)
+      if (
+        clauses !== undefined &&
+        (!Array.isArray(clauses) ||
+          clauses.some(
+            (clause) =>
+              typeof clause?.field !== 'string' ||
+              !clause.field.trim() ||
+              !['string', 'number', 'boolean'].includes(typeof clause.equals) ||
+              Object.keys(clause).length !== 2,
+          ))
+      ) {
+        throw new Error(`${what}: "where" is a list of { field, equals } equality clauses`)
+      }
+      if ((fieldsAttribute === undefined) !== (fieldsFrom === undefined)) {
+        throw new Error(`${what}: "fieldsAttribute" and "fieldsFrom" come together — the attribute that offers an entity's fields, and the record kind they are read from`)
+      }
+      const heldKind = kinds.get(kind)
+      if (heldKind) throw new Error(`${what} is already declared by "${heldKind}" — one kind has one owner`)
+      kinds.set(kind, plugin.id)
+      for (const type of [attribute, fieldsAttribute].filter(Boolean)) {
+        const held = attributes.get(type)
+        if (held) throw new Error(`${what}: attribute type "${type}" already lists "${held}"`)
+        attributes.set(type, kind)
+      }
+      rows.push({ pluginId: plugin.id, ...declaration })
+    }
+  }
+  return rows
+}
+
+/**
  * What a site's template library calls a template a plugin INSTALLED
  * (AGL-3080): the `source.type` the plugin's install route stamps, and the
  * badge and sentence the library shows for it. `authored` and `starter` are
@@ -2699,7 +2791,7 @@ function catalogContent(videoEmbedRows, planEntitlements, usageAxes) {
  * the types and the resolvers in \`enabled-plugins.ts\`; it holds no row.
  */
 
-import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'\nimport type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'\nimport type { ResolvedPluginSitemapSection } from './plugin-sitemap-sections'\nimport type { ResolvedPluginSiteBundleSectionDeclaration } from './plugin-site-bundle'\nimport type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'\nimport type { ResolvedPluginCostAxis, ResolvedPluginSpendLine, ResolvedPluginUsageBand, ResolvedPluginUsageMeter } from './plugin-usage-axes'\nimport type { ResolvedPluginPlanFeature, ResolvedPluginPlanQuota } from './plugin-plan-entitlements'\nimport type { FunctionBindings } from './plugin-contributions'\nimport type { PluginDistribution } from './plugin-distribution'\nimport type { RepeatSourceDeclaration } from './repeat-rows'\nimport type { PluginTemplateSource } from './plugin-template-sources'\nimport type { FormRecordTargetDeclaration } from './submission-record-target'\nimport type { ArtifactTypeDeclaration } from './plugin-artifact-types'\nimport type { ResolvedBesignerDocument } from './besigner-documents'\nimport type { PluginOrgKeyedCollection } from './plugin-org-erasure'\nimport type { ResolvedVideoEmbedProvider } from './video-embed-provider'\nimport type { AnalyticsProviderDeclaration } from '../app-utils/analytics-provider'\nimport type { InteractionStepDeclaration } from '../app-utils/site-interactions'\nimport type { ServerStepDeclaration } from './plugin-server-steps'\nimport type { NotificationCategoryDeclaration, NotificationDigestDeclaration } from '../app-utils/notifications'
+import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'\nimport type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'\nimport type { ResolvedPluginSitemapSection } from './plugin-sitemap-sections'\nimport type { ResolvedPluginSiteBundleSectionDeclaration } from './plugin-site-bundle'\nimport type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'\nimport type { ResolvedPluginEntityPicker } from './plugin-entity-pickers'\nimport type { ResolvedPluginCostAxis, ResolvedPluginSpendLine, ResolvedPluginUsageBand, ResolvedPluginUsageMeter } from './plugin-usage-axes'\nimport type { ResolvedPluginPlanFeature, ResolvedPluginPlanQuota } from './plugin-plan-entitlements'\nimport type { FunctionBindings } from './plugin-contributions'\nimport type { PluginDistribution } from './plugin-distribution'\nimport type { RepeatSourceDeclaration } from './repeat-rows'\nimport type { PluginTemplateSource } from './plugin-template-sources'\nimport type { FormRecordTargetDeclaration } from './submission-record-target'\nimport type { ArtifactTypeDeclaration } from './plugin-artifact-types'\nimport type { ResolvedBesignerDocument } from './besigner-documents'\nimport type { PluginOrgKeyedCollection } from './plugin-org-erasure'\nimport type { ResolvedVideoEmbedProvider } from './video-embed-provider'\nimport type { AnalyticsProviderDeclaration } from '../app-utils/analytics-provider'\nimport type { InteractionStepDeclaration } from '../app-utils/site-interactions'\nimport type { ServerStepDeclaration } from './plugin-server-steps'\nimport type { NotificationCategoryDeclaration, NotificationDigestDeclaration } from '../app-utils/notifications'
 
 export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
 ${rows.map((row) => `  ${indent(JSON.stringify(row.plugin, null, 2))},`).join('\n')}
@@ -2754,6 +2846,15 @@ ${orgCollectionRows().map((row) => `  ${indent(JSON.stringify(row, null, 2))},`)
  */
 export const PLUGIN_ORG_CAPACITIES_DECLARED: readonly ResolvedPluginOrgCapacity[] = [
 ${orgCapacityRows().map((row) => `  ${indent(JSON.stringify(row, null, 2))},`).join('\n')}
+]
+
+/**
+ * Every kind of entity a besigner picker lists, declared by the plugin that
+ * keeps it (AGL-3080). Core reads, browses and resolves; this says where and
+ * in what words.
+ */
+export const PLUGIN_ENTITY_PICKERS_DECLARED: readonly ResolvedPluginEntityPicker[] = [
+${entityPickerRows().map((row) => `  ${indent(JSON.stringify(row, null, 2))},`).join('\n')}
 ]
 
 /**

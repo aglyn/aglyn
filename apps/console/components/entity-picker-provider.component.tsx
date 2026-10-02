@@ -24,11 +24,19 @@ import {
   nameSearchToken,
   type EntityListState,
   type EntityOption,
+  type EntityPickerContextValue,
   type EntityPickerKind,
-  effectiveDatasetModel,
   scopeTokensForHost,
   visibleToHost,
 } from '@aglyn/aglyn'
+import {
+  ENTITY_PICKERS_LOAD_POINT,
+  pluginEntityPicker,
+  pluginEntityPickers,
+  type ResolvedPluginEntityPicker,
+} from '@aglyn/aglyn/plugin-manager/plugin-entity-pickers'
+import type { PluginIndexedRecord } from '@aglyn/aglyn/plugin-manager/plugin-record-index'
+import { pluginRecordListSource } from '@aglyn/aglyn/plugin-manager/plugin-record-lists'
 import {
   collection,
   doc,
@@ -55,6 +63,7 @@ import {
   type FirestoreCollectionStatus,
 } from '@aglyn/tenant-feature-instance'
 import useFirestoreCollection from '../hooks/use-firestore-collection'
+import { useConsoleSlotPlugins } from '../hooks/use-console-plugins'
 
 export interface EntityPickerProviderProps {
   hostId: string
@@ -114,8 +123,9 @@ export interface UseEntityPickerListOptions {
    * Collection path segments, or null to read NOTHING.
    *
    * Null is the demand gate and the unresolved-scope hold in one: a kind no
-   * picker has asked for and a dataset list whose org has not resolved both
-   * pass null, and `useFirestoreCollection` opens no listener for either.
+   * picker has asked for and an organization's list whose org has not
+   * resolved both pass null, and `useFirestoreCollection` opens no listener
+   * for either.
    */
   path: readonly string[] | null
   labelField?: string
@@ -144,9 +154,8 @@ export interface UseEntityPickerListResult {
   /**
    * The raw documents behind {@link options}.
    *
-   * Only the dataset list needs them — a dataset's model fields are read off
-   * the document, not off its name — and it is the one caller that takes
-   * them.
+   * Only a kind whose entities carry fields needs them — the fields are read
+   * off the document, not off its name.
    */
   rows: any[]
   state: EntityListState
@@ -286,28 +295,127 @@ export function useEntityPickerList(
 }
 
 /**
- * Feeds the attributes panel's id-based entity pickers (AGL-343/344):
- * products, collections, categories, datasets and forms listed by current
- * name, persisted by id — the same rename-safe contract as screen links
- * and variable bindings.
+ * The server-side narrowing a kind's browse and search both carry.
+ *
+ * The declaration's own equality clauses — commerce's product-grid picker
+ * lists catalog collections only, and content collections share the path
+ * (AGL-954) — applied on the server, not after the read: a client-side filter
+ * over a 25-document window offers however many happen to fall inside it.
+ *
+ * And for the organization's data, only what THIS site may use (AGL-1044):
+ * an `orgData` kind is owned by the org and shared per site, and a page bound
+ * to one its site cannot see renders nothing there. The site's tokens are a
+ * subset of those of any viewer who can open the site, so the query also
+ * satisfies the AGL-1041 rules for a scoped collaborator, and
+ * `array-contains-any` with `orderBy(__name__)` is served by the automatic
+ * single-field index. A declaration cannot widen this.
+ */
+function pickerScope(
+  picker: ResolvedPluginEntityPicker,
+  hostId: string,
+): QueryConstraint[] {
+  return [
+    ...(picker.where ?? []).map((clause) => where(clause.field, '==', clause.equals)),
+    ...(picker.scope === 'orgData'
+      ? [where('visibleTo', 'array-contains-any', scopeTokensForHost(hostId))]
+      : []),
+  ]
+}
+
+/** One kind's list, as the provider holds it. */
+type EntityKindList = Pick<UseEntityPickerListResult, 'options' | 'rows' | 'state' | 'truncated'>
+
+interface EntityPickerKindListProps {
+  picker: ResolvedPluginEntityPicker
+  /** Where the kind lives here, or null while nothing may read it. */
+  path: readonly string[] | null
+  hostId: string
+  text: string
+  onList: (kind: EntityPickerKind, list: EntityKindList) => void
+}
+
+/**
+ * One declared kind's list, mounted by the provider for every kind there is.
+ *
+ * A component rather than a hook call in the provider's own loop, so each
+ * kind's listener keeps the hook order React requires whatever the
+ * declarations hold. It renders nothing and reports its list up.
+ */
+function EntityPickerKindList(props: EntityPickerKindListProps) {
+  const { picker, path, hostId, text, onList } = props
+  const firestore = useFirestore()
+  const scope = useMemo(() => pickerScope(picker, hostId), [picker, hostId])
+  const { options, rows, state, truncated } = useEntityPickerList({
+    path,
+    labelField: picker.nameField,
+    scope,
+    serverSearchable: picker.searchable === true,
+    text,
+    deps: [firestore, path?.join('/') ?? '', hostId],
+  })
+  useEffect(() => {
+    onList(picker.kind, { options, rows, state, truncated })
+  }, [picker.kind, options, rows, state, truncated, onList])
+  return null
+}
+
+/**
+ * Whether a reader's report says nothing new. Identity, except that two empty
+ * lists are the same answer: a reader that has nothing re-reports an empty
+ * list on every render, and taking each as news would render forever.
+ */
+function sameList(previous: EntityKindList | undefined, next: EntityKindList): boolean {
+  if (!previous) return false
+  return (
+    previous.state === next.state &&
+    previous.truncated === next.truncated &&
+    (previous.rows === next.rows || (previous.rows.length === 0 && next.rows.length === 0)) &&
+    (previous.options === next.options ||
+      (previous.options.length === 0 && next.options.length === 0))
+  )
+}
+
+/** Nothing yet: the shape a kind's list has before its reader reports. */
+const NO_LIST: EntityKindList = { options: [], rows: [], state: 'loading', truncated: false }
+
+/** A record's `fields` fact, as a field picker's options. */
+function entityFieldOptions(record: PluginIndexedRecord | null | undefined): EntityOption[] {
+  const fields = record?.facts['fields']
+  if (!Array.isArray(fields)) return []
+  return fields
+    .filter((field): field is { id: unknown; name?: unknown } => Boolean(field) && typeof field === 'object')
+    .map((field) => {
+      const id = String(field.id ?? '')
+      return { id, label: String(field.name || id) }
+    })
+    .filter((field) => field.id)
+}
+
+/**
+ * Feeds the attributes panel's id-based entity pickers (AGL-343/344): every
+ * kind a plugin declares (`plugin-entity-pickers`) — a site's products, its
+ * forms, the organization's datasets — listed by current name, persisted by
+ * id: the same rename-safe contract as screen links and variable bindings.
  *
  * Mounted on every besigner surface, and cheap enough to be: no list is read
  * until a selected node's schema declares the picker that would show it, the
- * org lookup datasets need waits on the same signal, and what a list costs
- * when it IS read is a page of the size the console's own tables use.
+ * org lookup the organization's data needs waits on the same signal, and what
+ * a list costs when it IS read is a page of the size the console's own tables
+ * use.
  */
 export function EntityPickerProvider(props: EntityPickerProviderProps) {
   const { hostId, children } = props
   const firestore = useFirestore()
+  const pickers = pluginEntityPickers()
   /**
    * WHICH lists something on screen has actually asked for (AGL-703).
    *
-   * All four listeners used to open the moment the besigner mounted — up to
-   * 300 products, 200 catalog collections, 200 categories and 200 datasets,
+   * Every listener used to open the moment the besigner mounted — up to 300
+   * products, 200 catalog collections, 200 categories and 200 datasets,
    * every time, on a site with a real catalog. The attributes panel reads
    * them, and only for a node whose schema declares that kind of picker, so
-   * the overwhelming majority of editing sessions paid for four collections
-   * they never looked at and held four listeners open on them.
+   * the overwhelming majority of editing sessions paid for collections they
+   * never looked at and held listeners open on them.
    *
    * Same shape as the "Used by" scan (AGL-703): the surface that would show
    * the answer is the ask. A picker appearing IS a user action — it takes
@@ -345,21 +453,27 @@ export function EntityPickerProvider(props: EntityPickerProviderProps) {
     })
   }, [])
 
-  // Datasets are org-scoped (AGL-240). `dataScope` is null until the org
-  // lookup settles (AGL-1061) and for any host without one, so the picker
-  // shows an empty dataset list for a beat rather than listing a host path
-  // that no longer exists (AGL-1050). Read-only, so that flash is the
+  // The organization's data is org-scoped (AGL-240). `dataScope` is null
+  // until the org lookup settles (AGL-1061) and for any host without one, so
+  // such a picker shows an empty list for a beat rather than listing a host
+  // path that no longer exists (AGL-1050). Read-only, so that flash is the
   // entire cost.
   //
-  // The host is withheld until a dataset picker asks, which is what keeps
-  // MOUNTING this provider free: with no host to resolve the lookup settles
-  // without a read (AGL-1061), so a besigner surface that never opens a
-  // dataset picker makes no `hostIndex` call either. Same demand rule as the
-  // five lists below, applied to their one prerequisite.
-  const wantsDatasets = requested.has('datasets')
+  // The host is withheld until a picker of such a kind asks, which is what
+  // keeps MOUNTING this provider free: with no host to resolve the lookup
+  // settles without a read (AGL-1061), so a besigner surface that never opens
+  // one makes no `hostIndex` call either. Same demand rule as the lists
+  // themselves, applied to their one prerequisite.
+  const wantsOrgData = pickers.some(
+    (picker) => picker.scope === 'orgData' && requested.has(picker.kind),
+  )
   const { scope: dataScope } = useOrgDataScope({
-    hostId: wantsDatasets ? hostId : undefined,
+    hostId: wantsOrgData ? hostId : undefined,
   })
+  // The plugins whose list sources share an entity's fields. Read so the
+  // fields are taken again once they have registered: the registry is a
+  // module global React cannot see change.
+  const sourcesLoaded = useConsoleSlotPlugins([ENTITY_PICKERS_LOAD_POINT])
 
   /**
    * Where each kind lives, or null when nothing may read it yet.
@@ -372,109 +486,42 @@ export function EntityPickerProvider(props: EntityPickerProviderProps) {
    * fine.
    */
   const paths = useMemo(
-    (): Readonly<Record<EntityPickerKind, readonly string[] | null>> => ({
-      products: requested.has('products')
-        ? ['hosts', hostId, 'products']
-        : null,
-      collections: requested.has('collections')
-        ? ['hosts', hostId, 'collections']
-        : null,
-      categories: requested.has('categories')
-        ? ['hosts', hostId, 'productCategories']
-        : null,
-      // Host-scoped, unlike datasets: a form renders on one site's pages and
-      // its submissions already live under that host.
-      forms: requested.has('forms') ? ['hosts', hostId, 'forms'] : null,
-      datasets:
-        dataScope && requested.has('datasets')
-          ? [dataScope[0], dataScope[1], 'datasets']
-          : null,
-    }),
-    [hostId, dataScope, requested],
+    (): Readonly<Record<EntityPickerKind, readonly string[] | null>> =>
+      Object.fromEntries(
+        pickers.map((picker) => [
+          picker.kind,
+          !requested.has(picker.kind)
+            ? null
+            : picker.scope === 'host'
+              ? ['hosts', hostId, picker.collection]
+              : dataScope
+                ? [dataScope[0], dataScope[1], picker.collection]
+                : null,
+        ]),
+      ),
+    [pickers, hostId, dataScope, requested],
   )
 
-  /**
-   * COLLECTION_SELECT is the commerce product-grid picker, and content
-   * collections share the same Firestore path (AGL-954) — offering them here
-   * would bind a product grid to a blog.
-   *
-   * On the server, and not after the read. A client-side kind filter over a
-   * 25-document window offers however many catalog collections happen to fall
-   * inside it, so a site with thirty content collections and two catalog ones
-   * would show an empty product-grid picker while both of its collections
-   * exist.
-   *
-   * Exactly as strict as `isHostCollectionKind`, not more: a document that
-   * does not say what it is counts as content, and `where` drops precisely
-   * those.
-   */
-  const catalogOnly = useMemo(() => [where('kind', '==', 'catalog')], [])
-
-  const products = useEntityPickerList({
-    path: paths.products,
-    text: queries.products ?? '',
-    // The one kind whose documents carry `nameTokens`/`nameLower`: the
-    // catalog's own write path stamps them, and the shared resource route
-    // deliberately does not stamp them on the other four.
-    serverSearchable: true,
-    deps: [firestore, paths.products?.join('/') ?? ''],
-  })
-  const collections = useEntityPickerList({
-    path: paths.collections,
-    scope: catalogOnly,
-    text: queries.collections ?? '',
-    deps: [firestore, paths.collections?.join('/') ?? ''],
-  })
-  const categories = useEntityPickerList({
-    path: paths.categories,
-    text: queries.categories ?? '',
-    deps: [firestore, paths.categories?.join('/') ?? ''],
-  })
-  // Console-created forms store the human name as `displayName`.
-  const forms = useEntityPickerList({
-    path: paths.forms,
-    labelField: 'displayName',
-    text: queries.forms ?? '',
-    deps: [firestore, paths.forms?.join('/') ?? ''],
-  })
-  /**
-   * Only the datasets THIS site may use (AGL-1044).
-   *
-   * Datasets are owned by the org and shared per site, and a page bound to a
-   * dataset its site cannot see renders nothing there. The site's tokens are a
-   * subset of those of any viewer who can open the site, so the query also
-   * satisfies the AGL-1041 rules for a scoped collaborator, and
-   * `array-contains-any` with `orderBy(__name__)` is served by the automatic
-   * single-field index.
-   */
-  const datasetScope = useMemo(
-    () => [
-      where('visibleTo', 'array-contains-any', scopeTokensForHost(hostId)),
-    ],
-    [hostId],
-  )
-  // Console-created datasets store the human name as `displayName`
-  // (AGL-536); `name` covers pre-migration docs, via the label fallback.
-  const datasets = useEntityPickerList({
-    path: paths.datasets,
-    labelField: 'displayName',
-    scope: datasetScope,
-    text: queries.datasets ?? '',
-    deps: [firestore, paths.datasets?.join('/') ?? '', hostId],
-  })
+  /** Each kind's list, as its reader last reported it. */
+  const [lists, setLists] = useState<Readonly<Record<EntityPickerKind, EntityKindList>>>({})
+  const reportList = useCallback((kind: EntityPickerKind, list: EntityKindList) => {
+    setLists((previous) =>
+      sameList(previous[kind], list) ? previous : { ...previous, [kind]: list },
+    )
+  }, [])
 
   /**
-   * Dataset documents fetched by {@link resolve}, kept whole.
+   * Documents fetched by {@link resolve} for a kind whose entities carry
+   * fields, kept whole.
    *
-   * A dataset is the one kind whose picker is not the end of the story: a
-   * form bound to it then offers ITS model fields (AGL-556), and those are
-   * read off the document. Keeping only the resolved NAME would leave a form
-   * bound to a dataset outside the browse window with an empty "Maps to
-   * schema field" picker — the same defect as an unresolved selection, one
-   * level down.
+   * Such a kind's picker is not the end of the story: a form bound to a
+   * dataset then offers ITS fields (AGL-556), and those are read off the
+   * document. Keeping only the resolved NAME would leave a form bound to an
+   * entity outside the browse window with an empty field picker — the same
+   * defect as an unresolved selection, one level down.
    */
-  const [resolvedDatasetDocs, setResolvedDatasetDocs] = useState<
-    Readonly<Record<string, any>>
+  const [resolvedDocs, setResolvedDocs] = useState<
+    Readonly<Record<EntityPickerKind, Readonly<Record<string, any>>>>
   >({})
 
   /**
@@ -496,57 +543,47 @@ export function EntityPickerProvider(props: EntityPickerProviderProps) {
    * let the same id go out several times before the first answer landed.
    */
   const resolvingRef = useRef<Set<string>>(new Set())
-  const labelFields: Readonly<Record<EntityPickerKind, string>> = useMemo(
-    () => ({
-      products: 'name',
-      collections: 'name',
-      categories: 'name',
-      forms: 'displayName',
-      datasets: 'displayName',
-    }),
-    [],
-  )
   // The paths a resolution needs, read at CALL time rather than captured:
   // `resolve` is handed to consumers through the context and must stay
   // identity-stable, or the effect that calls it re-runs on every render.
   const pathsRef = useRef(paths)
   pathsRef.current = paths
-  const labelFieldsRef = useRef(labelFields)
-  labelFieldsRef.current = labelFields
   const hostIdRef = useRef(hostId)
   hostIdRef.current = hostId
 
   const resolve = useCallback((kind: EntityPickerKind, id: string) => {
+    const picker = pluginEntityPicker(kind)
     const path = pathsRef.current[kind]
-    // No path yet — the org lookup a dataset needs has not settled. Left
-    // unmarked deliberately, so the next call after it does resolves rather
-    // than being swallowed by a guard that thinks this id was handled.
-    if (!path || !id) return
+    // No path yet — the org lookup the organization's data needs has not
+    // settled. Left unmarked deliberately, so the next call after it does
+    // resolves rather than being swallowed by a guard that thinks this id
+    // was handled.
+    if (!picker || !path || !id) return
     const key = `${path.join('/')}/${id}`
     if (resolvingRef.current.has(key)) return
     resolvingRef.current.add(key)
-    const labelField = labelFieldsRef.current[kind]
     getDoc(doc(firestore, path[0], ...path.slice(1), id))
       .then((snapshot) => {
         const data = snapshot.exists() ? (snapshot.data() as any) : null
-        // A dataset this site cannot see resolves as unavailable: the page
-        // renders nothing from it, and the picker has to say so.
+        // An entity of the organization's data this site cannot see resolves
+        // as unavailable: the page renders nothing from it, and the picker
+        // has to say so.
         const usable =
           data &&
           !data.deletedAt &&
-          (kind !== 'datasets' ||
+          (picker.scope !== 'orgData' ||
             visibleToHost(data.visibleTo, hostIdRef.current))
         const option: EntityOption | null = usable
-          ? { id, label: String(data[labelField] ?? data.name ?? id) }
+          ? { id, label: String(data[picker.nameField] ?? data.name ?? id) }
           : null
         setResolved((previous) => ({
           ...previous,
           [kind]: { ...(previous[kind] ?? {}), [id]: option },
         }))
-        if (kind === 'datasets' && option) {
-          setResolvedDatasetDocs((previous) => ({
+        if (picker.fieldsFrom && option) {
+          setResolvedDocs((previous) => ({
             ...previous,
-            [id]: { ...data, $id: id },
+            [kind]: { ...(previous[kind] ?? {}), [id]: { ...data, $id: id } },
           }))
         }
       })
@@ -558,82 +595,66 @@ export function EntityPickerProvider(props: EntityPickerProviderProps) {
       })
   }, [firestore])
 
-  const value = useMemo(() => {
+  const value = useMemo((): EntityPickerContextValue => {
+    void sourcesLoaded
+    const listOf = (kind: EntityPickerKind) => lists[kind] ?? NO_LIST
+    const byKind = <V,>(read: (picker: ResolvedPluginEntityPicker) => V) =>
+      Object.fromEntries(pickers.map((picker) => [picker.kind, read(picker)]))
     /**
-     * The chosen dataset's model, wherever the document came from.
+     * The fields of each entity of a kind that has them, wherever the
+     * document came from, as the owner's list source shares them.
      *
      * A resolution counts here exactly as a browsed document does, which is
-     * what keeps a form bound to a dataset outside the window able to map its
+     * what keeps a form bound to an entity outside the window able to map its
      * fields. Browsed rows win on a collision — they are live, and the
      * resolution was taken once.
      */
-    const datasetModels = Object.fromEntries(
-      [...Object.values(resolvedDatasetDocs), ...datasets.rows]
-        .filter((dataset) => !dataset.deletedAt)
-        .map((dataset) => {
-          const model = effectiveDatasetModel(dataset)
+    const entityFields = Object.fromEntries(
+      pickers
+        .filter((picker) => picker.fieldsFrom)
+        .map((picker) => {
+          const source = pluginRecordListSource(String(picker.fieldsFrom))?.source
+          const docs = [
+            ...Object.values(resolvedDocs[picker.kind] ?? {}),
+            ...listOf(picker.kind).rows,
+          ].filter((entity) => !entity.deletedAt)
           return [
-            dataset.$id,
-            model.order
-              .filter((fieldId) => model.fields[fieldId])
-              .map((fieldId) => ({
-                id: fieldId,
-                label: model.fields[fieldId].name || fieldId,
-              })),
+            picker.kind,
+            Object.fromEntries(
+              docs.map((entity) => [
+                entity.$id,
+                entityFieldOptions(source?.record(String(entity.$id), entity)),
+              ]),
+            ),
           ]
         }),
     )
     return {
-      products: products.options,
-      collections: collections.options,
-      categories: categories.options,
-      forms: forms.options,
-      datasets: datasets.options,
-      // The one kind whose documents carry a field model.
-      entityFields: { datasets: datasetModels },
+      options: byKind((picker) => listOf(picker.kind).options),
+      entityFields,
       // Why each list is the length it is, so a picker showing nothing can
       // say which kind of nothing it is.
       //
-      // `datasets` reports its listener's state and not the org lookup's:
-      // a host with no owning org leaves `dataScope` null forever, the query
-      // is never built, and the hook sits on `loading` — which is the honest
-      // answer, since no dataset list is coming.
-      status: {
-        products: products.state,
-        collections: collections.state,
-        categories: categories.state,
-        datasets: datasets.state,
-        forms: forms.state,
-      },
-      truncated: {
-        products: products.truncated,
-        collections: collections.truncated,
-        categories: categories.truncated,
-        datasets: datasets.truncated,
-        forms: forms.truncated,
-      },
-      // Only the catalog carries the name-search keys, so only the catalog's
-      // picker may claim its search reaches the whole collection.
-      searchable: {
-        products: true,
-        collections: false,
-        categories: false,
-        datasets: false,
-        forms: false,
-      },
+      // An `orgData` kind reports its listener's state and not the org
+      // lookup's: a host with no owning org leaves `dataScope` null forever,
+      // the query is never built, and the hook sits on `loading` — which is
+      // the honest answer, since no list is coming.
+      status: byKind((picker) => listOf(picker.kind).state),
+      truncated: byKind((picker) => listOf(picker.kind).truncated),
+      // Only a kind whose documents carry the name-search keys may claim its
+      // search reaches the whole collection.
+      searchable: byKind((picker) => picker.searchable === true),
       resolved,
       request,
       search,
       resolve,
     }
   }, [
-    products,
-    collections,
-    categories,
-    datasets,
-    forms,
+    pickers,
+    lists,
     resolved,
-    resolvedDatasetDocs,
+    resolvedDocs,
+    sourcesLoaded,
     request,
     search,
     resolve,
@@ -641,6 +662,16 @@ export function EntityPickerProvider(props: EntityPickerProviderProps) {
 
   return (
     <EntityPickerContext.Provider value={value}>
+      {pickers.map((picker) => (
+        <EntityPickerKindList
+          key={picker.kind}
+          picker={picker}
+          path={paths[picker.kind] ?? null}
+          hostId={hostId}
+          text={queries[picker.kind] ?? ''}
+          onList={reportList}
+        />
+      ))}
       {children}
     </EntityPickerContext.Provider>
   )

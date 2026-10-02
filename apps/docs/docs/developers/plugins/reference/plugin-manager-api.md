@@ -639,6 +639,53 @@ server layout that loads no plugin code, and a segment nobody declared is a
 (`@aglyn/aglyn/plugin-manager/besigner-documents`) read them, and
 `useHostDocumentVersion` (`@aglyn/tenant-feature-instance`) reads a version.
 
+## Entity pickers — `plugin-entity-pickers`
+
+An element's attribute can name another record by id — the product a product
+grid shows, the form a Form element files into, the dataset a repeat walks —
+and the Besigner offers it as a picker of the site's records of that kind,
+listed by current name and stored by id. A plugin that keeps records an
+element can name declares each kind in an `entityPickers` block of
+`plugins.config.json`:
+
+```json
+"entityPickers": [
+  {
+    "kind": "bottles",
+    "attribute": "bottle-select",
+    "scope": "host",
+    "collection": "bottles",
+    "nameField": "label",
+    "where": [{ "field": "status", "equals": "listed" }],
+    "singular": "bottle",
+    "plural": "bottles",
+    "page": "the Cellar page"
+  }
+]
+```
+
+| Field | Semantics |
+| --- | --- |
+| `kind` | The key the picker context holds the kind under (`options[kind]`, `status[kind]`, `resolved[kind]`) and a repeat source names as its `entityKind`. One owner per kind. |
+| `attribute` | The attribute type (`FieldComponentType`) whose picker lists the kind. One kind per attribute type. |
+| `scope` | `host` — the site's own `hosts/{hostId}/{collection}`; `orgData` — the organization's data, read where the site's data scope resolves and narrowed to what the site may use (`visibleTo` against the site's scope tokens), with anything else resolved as unavailable. |
+| `collection`, `nameField` | Where the documents are and the field a document is named by; `name`, then the id, when it is empty. |
+| `where` | Equality clauses applied on the server to the browse and the search alike. |
+| `searchable` | The documents carry `nameTokens`/`nameLower`, so a typed query reaches past the browse window. |
+| `fieldsAttribute`, `fieldsFrom` | Together: an attribute type whose options are the FIELDS of an entity of this kind an ancestor chose, and the record kind whose console list source ([Record lists](#record-lists--plugin-record-lists-console)) shares each entity's `fields` as `{ id, name }`. The plugin declares the `entityPickers` load point among its `console.slots`, so the picker provider loads its source. |
+| `singular`, `plural`, `page` | The words a picker says: "No bottles yet — add one on the Cellar page". |
+
+Core keeps the machinery every kind shares: the browse window and its probe,
+the search past it, the keyed read that names a stored value outside the
+window, and the demand gate that reads nothing until a picker asks. The kinds
+are COMPILED, not registered: the Besigner decides whether an attribute IS a
+picker from them on the panel's first render. `pluginEntityPickers()`,
+`entityPickerForAttribute(type)` and `entityFieldsPickerForAttribute(type)`
+(`@aglyn/aglyn/plugin-manager/plugin-entity-pickers`) read them. Commerce
+declares `products`, `collections` (catalog collections only) and
+`categories`, Forms declares `forms`, and Data declares `datasets` with
+their fields.
+
 ## Container kinds — `plugin-containers`
 
 A container is a document other records are FILED UNDER: a form, a screen, a
@@ -2176,7 +2223,7 @@ export function cellarUsageAxes(): PluginUsageAxesDeclaration {
 | --- | --- |
 | `register.usageAxes` | The function's name. Called by the generator, never at runtime — the guardrail and the staff page price a rollup without loading a plugin, and a meter a registry had not filled would price at nothing, which approves a discount. |
 | `costAxes[]` | `{ id, order, fields, fallbackFields?, recordedFields?, staffFields?, rate?, live? }`. `fields` are summed from the month's usage rollup; `fallbackFields` are read only when a rollup carries none of `fields` (an older, narrower basis — a measured zero never falls back); `recordedFields` ride along so the sum stays legible and are never priced; `staffFields` are what the plugin's usage sweep writes beside the meter for its own staff columns to read — served on the staff usage rows (`null` where a rollup never wrote one) and never handed to the cost model. `rate` names a key of `ORG_COGS_UNIT_RATES_USD` — never a number: the money stays core's, beside the billed table it reconciles against — or is left out when the fields are already dollars. `live: { collection, fields }` names `orgs/{orgId}/{collection}/{month}`, whose first positive field replaces the rollup's snapshot wherever a reader fetches it. |
-| `bands[]` | `{ id, label, order, fields, fallbackFields?, entitlement, perHost?, unitCostUsd?, hostCounter?, alert?, metered? }`. `entitlement` is the resolved key holding what the plan includes (read with `planQuotaOf`, so an undeclared key is nothing included); `perHost` expands it by the host limit; `unitCostUsd` is set when the band is sold in a unit OF cost and the rollup records dollars, and usage is then the dollars over it, rounded up. `hostCounter` names the per-site monthly counter the band is measured by (`hosts/{hostId}/counters/{hostCounter}`, field `{month}`). `alert: { label, noun, outcome, reached, approach }` warns the workspace as it approaches and reaches the band, from that counter, once per threshold per month: `label` names the band in the title, `noun` in the opening sentence, and `outcome`, `reached` and `approach` say what happens at it. `metered: { rate, quotedPer, noun, withheldUntil? }` makes the band an infrastructure meter, billed past what the plan includes at our cost × `METERED_MARKUP` beside storage and bandwidth — on the invoice sweep, the Billing card's estimate, the monthly usage summary and the staff usage rows. It needs one field and its `hostCounter`: `rate` names a key of the console's `METERED_UNIT_RATES_USD` (never a number), `quotedPer` is the count a published price is quoted per (`1000` reads "per 1,000"), `noun` is the band in running prose, and `withheldUntil` names a release flag the overage waits behind — while it is off for a workspace the units are counted and the charge is recorded as withheld (`{field}Billed`, `{field}OverageWithheldUsd`) rather than billed. A band with a `hostCounter` and no `metered` is counted: summed by the usage sweep, recorded under its first field and shown on the staff usage rows. |
+| `bands[]` | `{ id, label, order, fields, fallbackFields?, entitlement, perHost?, unitCostUsd?, hostCounter?, alert?, metered?, consoleWarning? }`. `entitlement` is the resolved key holding what the plan includes (read with `planQuotaOf`, so an undeclared key is nothing included); `perHost` expands it by the host limit; `unitCostUsd` is set when the band is sold in a unit OF cost and the rollup records dollars, and usage is then the dollars over it, rounded up. `hostCounter` names the per-site monthly counter the band is measured by (`hosts/{hostId}/counters/{hostCounter}`, field `{month}`). `alert: { label, noun, outcome, reached, approach }` warns the workspace as it approaches and reaches the band, from that counter, once per threshold per month: `label` names the band in the title, `noun` in the opening sentence, and `outcome`, `reached` and `approach` say what happens at it. `metered: { rate, quotedPer, noun, withheldUntil? }` makes the band an infrastructure meter, billed past what the plan includes at our cost × `METERED_MARKUP` beside storage and bandwidth — on the invoice sweep, the Billing card's estimate, the monthly usage summary and the staff usage rows. It needs one field and its `hostCounter`: `rate` names a key of the console's `METERED_UNIT_RATES_USD` (never a number), `quotedPer` is the count a published price is quoted per (`1000` reads "per 1,000"), `noun` is the band in running prose, and `withheldUntil` names a release flag the overage waits behind — while it is off for a workspace the units are counted and the charge is recorded as withheld (`{field}Billed`, `{field}OverageWithheldUsd`) rather than billed. A band with a `hostCounter` and no `metered` is counted: summed by the usage sweep, recorded under its first field and shown on the staff usage rows. `consoleWarning: { standing, member, approach, reached: { stops, bills }, linksUsage? }` puts the band on the console's quota banner for an organization-wide reader: `standing` is a console API path the plugin serves, asked `?orgId=`, answering `{ used, limit }` in the band's own unit under `member` (`limit: null` is no band, and no row) and `stopsAtBand`; the banner says `approach` above 80% and `reached.stops` or `reached.bills` at the band — the wall when the route does not say — and links Billing → Usage when `linksUsage`. |
 | `spendLines[]` | `{ id, label, live: { collection, field }, billedFromEnv, unit? }`. A line of the workspace's monthly spend on its usage budget: `orgs/{orgId}/{collection}/{month}`'s `field`, in the dollars it is billed at. It is always shown and counts toward the budget only from the month the deployment variable `billedFromEnv` names (anything that is not a `YYYY-MM` bills nothing). `unit: { costUsd, label }` is set when the stored dollars are the platform's cost: the customer's browser then receives `ceil(dollars / costUsd)` of the unit and never the dollars. |
 | `meters[]` | `{ id }` of each meter the plugin registers with the monthly usage sweep ([Usage meters](#usage-meters--plugin-usage-meters-server)). The code is registered at runtime; the declaration is what lets the sweep refuse to bill a month the registration is missing from. |
 | `pluginCostAxes()` / `pluginUsageBands()` / `pluginSpendLines()` / `pluginCostAxisFields()` | Every compiled declaration, and every rollup field the cost axes read or record (`orgCogsInputFrom` forwards them). |

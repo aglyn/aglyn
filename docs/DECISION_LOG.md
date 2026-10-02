@@ -167,9 +167,16 @@ CPU, for the beacon and the API as well; nothing measures either.
 **Existing subscribers.** As recorded in the entry below: no outside
 organization holds a paid plan, so nothing is carried to a renewal.
 
-**Published surfaces.** `/pricing`, `/alternatives/webflow` and the
-calculator's variables carry the previous figures (`4goVJMQCh9`); they are
-republished with these BEFORE the promotion that bills them.
+**Published surfaces.** Republished on 2026-10-02, BEFORE any promotion
+billed these figures: `/pricing` `4goVJMQCh9` → `-jejSg7GLa`,
+`/alternatives/webflow` → `MmyN28bYIs`, `/use-cases/saas-websites` →
+`x5iCQ0J0dn` (its API card no longer quotes a band), and the calculator's
+variables. The parity spec's gaps were folded the same day.
+
+**Confirmed 2026-10-02.** Asked directly, leading with the ~60× cut to
+included API requests, whether every figure ships as committed in
+`3bd7db0531` or the API part is kept or reverted, the account owner confirmed
+all of it.
 
 ## 2026-10-01 — Every price and band holds its margin in Vercel's dearest region: page views $0.70 and form submissions $0.07 per 1k, bands re-sized again (AGL-3444, AGL-1879)
 

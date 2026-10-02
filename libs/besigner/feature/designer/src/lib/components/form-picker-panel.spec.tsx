@@ -80,10 +80,12 @@ const mount = (
 const SITE_FORMS: Aglyn.EntityPickerContextValue = {
   request: () => undefined,
   status: { forms: 'ready' },
-  forms: [
-    { id: 'form-2', label: 'Contact us' },
-    { id: 'form-1', label: 'Apply now' },
-  ],
+  options: {
+    forms: [
+      { id: 'form-2', label: 'Contact us' },
+      { id: 'form-1', label: 'Apply now' },
+    ],
+  },
 }
 
 /** The Form picker's own text box, once the panel has rendered its fields. */
@@ -199,7 +201,7 @@ describe('the attributes panel draws the Form picker', () => {
   })
 
   it('still draws the control when the site has no forms yet', async () => {
-    mount({ request: () => undefined, status: { forms: 'ready' }, forms: [] })
+    mount({ request: () => undefined, status: { forms: 'ready' }, options: { forms: [] } })
     const options = await offered()
     expect(options).toHaveLength(1)
     expect(options[0]).toMatch(/no forms yet/i)
