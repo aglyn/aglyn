@@ -44,7 +44,6 @@ jest.mock('@aglyn/tenant-data-admin/server/organizations', () => ({
 
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { crmActionRecipe } from '@aglyn/aglyn/app-utils/actions'
 import { assistCreditsFromUsd } from '../usage/assist-credits'
 import type { PluginResourceDraftWriter } from '@aglyn/aglyn/plugin-manager/plugin-resource-drafts'
 import { AI_PAGE_SECTION_INLINE_LINE, AI_PAGE_SECTION_TOOL } from '../jobs/ai-job-page-sections'
@@ -486,9 +485,8 @@ describe('the automation and products recorders (AGL-3074)', () => {
   })
 
   it('records an explanation of a saved automation from its outline, as the step’s runner explains the same action', async () => {
-    // The case explains the recipe as the platform builds it.
-    expect(explain.automation?.action).toEqual(crmActionRecipe('welcomeNewLead')?.build())
-
+    // The case is the CRM's welcome recipe as that plugin builds it, which the
+    // CRM's own recipe spec holds (`crm-recipes.spec.ts`).
     armReferenceAnswers()
     const [{ candidate }] = (await recordAiEvalLive([explain], LIVE)).recorded
     const [recorded] = requestsFor(AI_WORKFLOW_EXPLANATION_TOOL_NAME)

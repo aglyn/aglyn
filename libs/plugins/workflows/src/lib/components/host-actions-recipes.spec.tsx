@@ -25,10 +25,10 @@
  * this suite asserts stay silent.
  */
 
-import { CRM_ACTION_RECIPES } from '@aglyn/aglyn'
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { setDoc } from 'firebase/firestore'
 import type { ReactNode } from 'react'
+import { STAND_IN_RECIPES, standInFormList, standInRecipes } from '../testing/stand-in-recipes'
 import HostActionsCard from './host-actions-card.component'
 
 const collections: Record<string, Array<Record<string, unknown>>> = {
@@ -99,6 +99,13 @@ jest.mock('./host-activity-card.component', () => ({
 const PRO = { plan: 'business' } as never
 const FREE = { plan: 'free' } as never
 
+// The recipes are the CRM's, and the forms the Forms plugin's, both reached
+// through the platform's seams (AGL-3080); this plugin's specs stand them in.
+beforeAll(() => {
+  standInRecipes()
+  standInFormList()
+})
+
 beforeEach(() => {
   jest.clearAllMocks()
 })
@@ -124,8 +131,8 @@ describe('the Recipes menu (AGL-2626)', () => {
     expect(screen.getByRole('button', { name: 'Add action' })).toBeTruthy()
     const menu = openRecipes()
     const items = within(menu).getAllByRole('menuitem')
-    expect(items).toHaveLength(CRM_ACTION_RECIPES.length)
-    for (const recipe of CRM_ACTION_RECIPES) {
+    expect(items).toHaveLength(STAND_IN_RECIPES.length)
+    for (const recipe of STAND_IN_RECIPES) {
       expect(within(menu).getByText(recipe.title)).toBeTruthy()
       expect(within(menu).getByText(recipe.description)).toBeTruthy()
     }

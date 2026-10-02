@@ -1554,6 +1554,58 @@ the registration is refused rather than read as a step that ran:
 | `pluginServerStepExecutor(type)` | What the engine asks: the registered executor; for a declared step with none, the app's declarations step once more and then a `ServerStepUnavailableError` (the step's failure); `null` for a type nobody declares or runs. A type the engine runs itself never reaches it. |
 | `declaredServerSteps()` / `declaredServerStep(type)` | The compiled `serverSteps` rows. |
 
+## Interaction recipes — `interaction-recipes`
+
+A recipe is a ready-to-edit interaction: a trigger, its conditions and an
+ordered step list, handed to an editor as a draft that nothing writes until a
+person saves. The plugin that knows what a recipe is FOR writes it, and the
+plugin that edits and stores interactions offers it in its Recipes menu; neither
+imports the other. A recipe builds its interaction in code, so it is registered
+from the plugin's `declarations` entry, which both apps and the console's loader
+run at boot:
+
+```ts
+// your plugin's declarations entry
+registerInteractionRecipes(
+  [
+    {
+      id: 'thankRegular',
+      title: 'Thank a regular',
+      description: 'When a returning customer orders, thank them by email.',
+      build: () => ({
+        recipe: 'thankRegular',
+        name: 'Thank a regular',
+        trigger: { event: 'order' },
+        steps: [{ type: 'sendEmail', subject: 'Thank you', body: 'Good to see you again.' }],
+        enabled: true,
+      }),
+    },
+  ],
+  { pluginId: 'bakery' },
+)
+```
+
+A stored interaction remembers the recipe it began as by the recipe's id, its
+`recipe` stamp, so an id never changes once it has shipped. A first-party plugin
+also declares its ids, so a validator knows a stamp in a process where the
+plugin's declarations never ran:
+
+```json
+"interactionRecipes": [{ "id": "thankRegular" }]
+```
+
+A recipe that needs a record picked first — "Tag by form" needs the form —
+names it in `picks`: the record `kind`, listed through the kind's
+`plugin-record-lists` source, and the words the picker asks in (`label`,
+`plural`, `prompt`, `none`). It receives the pick as `build({ picked: { id, name } })`.
+
+| API | Semantics |
+| --- | --- |
+| `registerInteractionRecipes(recipes, { pluginId? })` | Owner = the loader's marker, else `pluginId`; no owner throws. An id another plugin declares or registered throws, and nothing is registered unless every recipe is accepted. Registering again replaces the plugin's own. |
+| `interactionRecipes()` / `interactionRecipe(id)` | Every registered recipe, each plugin's in its own order — what a Recipes menu lists — and one by id, or `null`. |
+| `isKnownInteractionRecipe(id)` | Whether a stamp names a recipe a plugin declares or registered. A validator refuses any other stamp; `null` and absent pass. |
+| `declaredInteractionRecipes()` | The compiled `interactionRecipes` rows. |
+
 ## Host events — `host-events`
 
 A host event is what happened on a site that an automation can start on: a

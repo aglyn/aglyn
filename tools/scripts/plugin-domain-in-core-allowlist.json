@@ -120,7 +120,7 @@
       "path": "libs/aglyn/src/lib/app-utils/actions.ts",
       "rules": [
         "domain-name",
-        "domain-declares:crm",
+        "domain-exports:workflows",
         "domain-declares:data",
         "domain-declares:workflows"
       ],
@@ -191,7 +191,6 @@
       "path": "libs/aglyn/src/lib/app-utils/crm-kinds.ts",
       "rules": [
         "domain-name",
-        "domain-exports:crm",
         "domain-declares:crm"
       ],
       "lane": "crm"

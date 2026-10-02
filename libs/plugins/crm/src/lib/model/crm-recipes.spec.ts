@@ -16,42 +16,40 @@
  */
 
 /**
- * The CRM recipes (AGL-2626): every one builds an action the validator
- * accepts and the editor can open, from the vocabulary the catalog holds.
+ * The CRM's recipes (AGL-2626): what each one builds, as the CRM decided it.
+ *
+ * That every recipe is an automation the automation editor accepts — its
+ * validator, its step labels, the copy a visitor's page receives — is held
+ * where both plugins run, in `apps/console/specs/interaction-recipes.spec.ts`;
+ * this plugin may not load the plugin that judges automations.
  */
 
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { CONTACT_TAG_MAX_LENGTH } from '@aglyn/aglyn/app-utils/crm-kinds'
+import { HOST_EVENT_PAYLOAD_KEYS, HOST_EVENT_TYPES } from '@aglyn/aglyn/app-utils/host-events'
+import { declaredInteractionRecipes } from '@aglyn/aglyn/plugin-manager/interaction-recipes'
+import { BUNDLE_ID } from '../constants/bundle-common'
 import {
-  ACTION_MAX_STEPS,
-  CONTACT_TAG_MAX_LENGTH,
   CRM_ACTION_RECIPE_IDS,
   CRM_ACTION_RECIPES,
   crmActionRecipe,
   crmRecipeTagForForm,
-  FLOW_TIMED_OUT_FIELD,
-  HOST_ACTION_STEP_LABELS,
-  type HostAction,
-  hostActionDocument,
-  hostActionRecipeId,
-  hostActionStepsForClient,
   STALE_LEAD_WAIT_MINUTES,
-  validateHostAction,
-} from './actions'
-import { HOST_EVENT_PAYLOAD_KEYS, HOST_EVENT_TYPES } from './host-events'
+} from './crm-recipes'
 
 const FORM = { id: 'form-contact', name: 'Contact us' }
 
-/** Every recipe, built with what it needs. */
+/** Every recipe, built with what it picks. */
 const built = () =>
   CRM_ACTION_RECIPES.map((recipe) => ({
     recipe,
-    action: recipe.build(recipe.needs === 'form' ? { form: FORM } : undefined),
+    action: recipe.build(recipe.picks ? { picked: FORM } : undefined),
   }))
 
 describe('CRM_ACTION_RECIPES', () => {
   it('offers the four recipes, in the order the menu lists them, each with a one-sentence description', () => {
-    expect(CRM_ACTION_RECIPES.map((recipe) => recipe.id)).toEqual([
-      ...CRM_ACTION_RECIPE_IDS,
-    ])
+    expect(CRM_ACTION_RECIPES.map((recipe) => recipe.id)).toEqual([...CRM_ACTION_RECIPE_IDS])
     for (const recipe of CRM_ACTION_RECIPES) {
       expect(recipe.title.trim()).not.toBe('')
       expect(recipe.description.trim()).not.toBe('')
@@ -59,25 +57,19 @@ describe('CRM_ACTION_RECIPES', () => {
     }
   })
 
-  it('builds an action the validator accepts, from steps the catalog labels and events the picker offers', () => {
-    for (const { recipe, action } of built()) {
-      expect({ id: recipe.id, problem: validateHostAction(action) }).toEqual({
-        id: recipe.id,
-        problem: null,
-      })
-      expect(HOST_EVENT_TYPES).toContain(action.trigger.event)
-      expect(action.steps.length).toBeGreaterThan(0)
-      expect(action.steps.length).toBeLessThanOrEqual(ACTION_MAX_STEPS)
-      for (const step of action.steps) {
-        expect(HOST_ACTION_STEP_LABELS[step.type]).toBeTruthy()
-      }
-      expect(action.enabled).toBe(true)
-      expect(action.name).toBe(recipe.title === 'Tag by form' ? action.name : recipe.title)
-    }
+  it('declares every id it ships, and no other, so a stored stamp is known without this plugin loaded', () => {
+    expect(
+      declaredInteractionRecipes()
+        .filter((row) => row.pluginId === BUNDLE_ID)
+        .map((row) => row.id),
+    ).toEqual([...CRM_ACTION_RECIPE_IDS])
   })
 
-  it('names only payload keys the trigger event puts in scope', () => {
+  it('starts each one on an event the picker offers, and names only the keys that event carries', () => {
     for (const { action } of built()) {
+      expect(HOST_EVENT_TYPES).toContain(action.trigger.event)
+      expect(action.steps.length).toBeGreaterThan(0)
+      expect(action.enabled).toBe(true)
       const keys = HOST_EVENT_PAYLOAD_KEYS[action.trigger.event as never] ?? []
       for (const condition of action.trigger.conditions ?? []) {
         expect(keys).toContain(condition.field)
@@ -87,7 +79,7 @@ describe('CRM_ACTION_RECIPES', () => {
 
   it('builds a fresh action on every call, so an edited draft never bleeds into the next', () => {
     for (const recipe of CRM_ACTION_RECIPES) {
-      const input = recipe.needs === 'form' ? { form: FORM } : undefined
+      const input = recipe.picks ? { picked: FORM } : undefined
       const first = recipe.build(input)
       const second = recipe.build(input)
       expect(first).toEqual(second)
@@ -106,96 +98,7 @@ describe('CRM_ACTION_RECIPES', () => {
   it('stamps every action it builds with its own id, so a writer saving what it was handed keeps the provenance (AGL-2639)', () => {
     for (const { recipe, action } of built()) {
       expect(action.recipe).toBe(recipe.id)
-      expect(hostActionRecipeId(action)).toBe(recipe.id)
-    }
-  })
-})
-
-describe('the stored recipe stamp (AGL-2639)', () => {
-  it('reads a known id, null for "no recipe", and UNKNOWN for a document from before the stamp', () => {
-    expect(hostActionRecipeId({ recipe: 'followUpWonDeal' })).toBe('followUpWonDeal')
-    expect(hostActionRecipeId({ recipe: null })).toBeNull()
-    // A retired or mistyped id says nothing usable; it reads as no recipe.
-    expect(hostActionRecipeId({ recipe: 'retiredRecipe' })).toBeNull()
-    // No field at all is the older document: unknown, not absent.
-    expect(hostActionRecipeId({})).toBeUndefined()
-    expect(hostActionRecipeId(undefined)).toBeUndefined()
-  })
-
-  it('refuses a stamp that names no recipe, and passes null and absent alike', () => {
-    const action = crmActionRecipe('followUpWonDeal')!.build()
-    expect(validateHostAction({ ...action, recipe: 'retiredRecipe' as never })).toBe(
-      'Unknown recipe',
-    )
-    expect(validateHostAction({ ...action, recipe: null })).toBeNull()
-    const { recipe: _stamp, ...unstamped } = action
-    expect(validateHostAction(unstamped)).toBeNull()
-  })
-})
-
-describe('hostActionDocument (AGL-2639)', () => {
-  const action: HostAction = {
-    name: 'Nudge',
-    trigger: {
-      event: 'scrollDepth',
-      threshold: 50,
-      oncePerVisitor: true,
-      cooldownMinutes: 30,
-      condition: { field: 'x', op: 'notEmpty' },
-      conditions: [{ field: 'path', op: 'contains', value: '/pricing' }],
-      combinator: 'or',
-    },
-    steps: [{ type: 'siteAlert', message: 'Hi', severity: 'info' }],
-  }
-
-  it('writes every cap and list out, so a merge-set clears what the editor switched off', () => {
-    const stored = hostActionDocument(action)
-    expect(stored.trigger).toEqual({
-      event: 'scrollDepth',
-      threshold: 50,
-      oncePerVisitor: true,
-      oncePerSession: false,
-      cooldownMinutes: 30,
-      everyTime: false,
-      // The legacy single condition is always nulled; the list is canonical.
-      condition: null,
-      conditions: [{ field: 'path', op: 'contains', value: '/pricing' }],
-      combinator: 'or',
-    })
-    expect(stored.enabled).toBe(true)
-    expect(stored.steps).toEqual(action.steps)
-    expect(stored.name).toBe('Nudge')
-    const bare = hostActionDocument({
-      name: 'Bare',
-      trigger: { event: 'formSubmission' },
-      steps: [],
-      enabled: false,
-    })
-    expect(bare.trigger).toEqual({
-      event: 'formSubmission',
-      oncePerVisitor: false,
-      oncePerSession: false,
-      cooldownMinutes: null,
-      everyTime: false,
-      condition: null,
-      conditions: null,
-      combinator: null,
-    })
-    expect(bare.enabled).toBe(false)
-  })
-
-  it('carries the recipe stamp only when the action says something about it', () => {
-    expect('recipe' in hostActionDocument(action)).toBe(false)
-    expect(hostActionDocument({ ...action, recipe: null }).recipe).toBeNull()
-    expect(hostActionDocument(crmActionRecipe('welcomeNewLead')!.build()).recipe).toBe(
-      'welcomeNewLead',
-    )
-  })
-
-  it('is the shape a recipe install writes: the validator accepts it as it accepts the action', () => {
-    for (const recipe of CRM_ACTION_RECIPES) {
-      const built = recipe.build(recipe.needs === 'form' ? { form: FORM } : undefined)
-      expect(validateHostAction(hostActionDocument(built))).toBeNull()
+      expect(action.name).toBe(recipe.picks ? action.name : recipe.title)
     }
   })
 })
@@ -226,12 +129,24 @@ describe('Welcome a new lead', () => {
     expect(action.steps[3]).toEqual({ type: 'addContactTag', tag: 'website' })
   })
 
-  it('sends the acknowledgement before any wait, so it is an immediate reply rather than marketing', () => {
-    expect(hostActionStepsForClient(action.steps)).toHaveLength(action.steps.length)
-    const email = action.steps[2] as { type: 'sendEmail'; subject: string; body: string }
+  it('thanks them in words that promise nothing, to the address the event carries', () => {
+    const email = action.steps[2] as { type: string; subject: string; body: string }
+    expect(email.type).toBe('sendEmail')
     expect(email.subject.trim()).not.toBe('')
     expect(email.body.trim()).not.toBe('')
     expect('toField' in email).toBe(false)
+  })
+
+  it('is the automation the AI evaluation explains, as this plugin builds it', () => {
+    // The explain case is drawn from this recipe; a recipe edited without it
+    // would grade the explanation of an automation nobody ships.
+    const evalCase = JSON.parse(
+      readFileSync(
+        join(__dirname, '../../../../../../tools/ai-eval/cases/workflow/explain-welcome-new-lead.json'),
+        'utf8',
+      ),
+    )
+    expect(evalCase.automation.action).toEqual(action)
   })
 })
 
@@ -275,26 +190,24 @@ describe('Re-engage a stale lead', () => {
   it('books the call only on the timeout branch — a stage that moved on skips it', () => {
     const task = action.steps[1]
     expect(task.type).toBe('createCrmTask')
+    // The field a resumed wait carries when the clock, not the event, ended it.
     expect(task.when).toEqual({
-      conditions: [{ field: FLOW_TIMED_OUT_FIELD, op: 'notEmpty' }],
+      conditions: [{ field: '_waitTimedOut', op: 'notEmpty' }],
     })
-  })
-
-  it('ships nothing past the wait to the visitor’s browser', () => {
-    expect(hostActionStepsForClient(action.steps)).toEqual([])
   })
 })
 
 describe('Tag by form', () => {
   const recipe = crmActionRecipe('tagByForm')!
 
-  it('needs a form, and built without one is an action the validator refuses', () => {
-    expect(recipe.needs).toBe('form')
-    expect(validateHostAction(recipe.build())).toMatch(/value/i)
+  it('asks for a form to be picked, and built without one names no form', () => {
+    expect(recipe.picks?.kind).toBe('form')
+    const unpicked = recipe.build()
+    expect(unpicked.trigger.conditions).toEqual([{ field: 'formId', op: 'equals', value: '' }])
   })
 
   it('keys the trigger on the picked form’s id and tags with the form’s name', () => {
-    const action = recipe.build({ form: FORM })
+    const action = recipe.build({ picked: FORM })
     expect(action.name).toBe('Tag Contact us submissions')
     expect(action.trigger).toEqual({
       event: 'contactCreated',
@@ -307,7 +220,7 @@ describe('Tag by form', () => {
   it('cuts a long form name to the tag cap', () => {
     const long = 'x'.repeat(CONTACT_TAG_MAX_LENGTH + 20)
     expect(crmRecipeTagForForm(`  ${long}  `)).toHaveLength(CONTACT_TAG_MAX_LENGTH)
-    const action = recipe.build({ form: { id: 'f', name: long } })
-    expect(validateHostAction(action)).toBeNull()
+    const action = recipe.build({ picked: { id: 'f', name: long } })
+    expect(action.steps).toEqual([{ type: 'addContactTag', tag: 'x'.repeat(CONTACT_TAG_MAX_LENGTH) }])
   })
 })

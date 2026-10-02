@@ -32,6 +32,7 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { setDoc } from 'firebase/firestore'
 import type { ReactNode } from 'react'
+import { standInRecipes } from '../testing/stand-in-recipes'
 import HostActionsCard from './host-actions-card.component'
 
 const collections: Record<string, Array<Record<string, unknown>>> = {
@@ -105,6 +106,10 @@ const stored = (extra: Record<string, unknown>) => ({
   steps: [{ type: 'addContactTag', tag: 'old' }],
   ...extra,
 })
+
+// The recipes are the CRM's, reached through the platform's recipe seam
+// (AGL-3080); this plugin's specs stand them in.
+beforeAll(() => standInRecipes())
 
 beforeEach(() => {
   jest.clearAllMocks()
