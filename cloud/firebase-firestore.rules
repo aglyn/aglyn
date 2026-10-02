@@ -1838,6 +1838,20 @@ service cloud.firestore {
              .data.get('visibleTo', []).hasAny(orgMember().get('scopeTokens', ['org'])));
         allow write: if false;
       }
+      // Who a campaign reached on the site (AGL-3461) — first visits and views
+      // of the pages filed under it, one document per campaign, written only
+      // by the site collector's `campaignVisit` beacon on the Admin SDK. Read
+      // through the campaign's own scope for the sequence rollup's reason:
+      // counts, never a visitor, on the page of a campaign the reader may
+      // open. A client that could write one would author the reach a
+      // campaign is judged by.
+      match /campaignVisitReports/{campaignId} {
+        allow read: if isStaff() || isOrgWideMember() ||
+          (isOrgMember() &&
+           get(/databases/$(database)/documents/orgs/$(orgId)/emailCampaigns/$(campaignId))
+             .data.get('visibleTo', []).hasAny(orgMember().get('scopeTokens', ['org'])));
+        allow write: if false;
+      }
 
       /**
        * Org automations (AGL-3302): one automation the organization places on

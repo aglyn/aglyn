@@ -22,6 +22,7 @@ import type {
   PluginConversionTouch,
 } from '@aglyn/aglyn/plugin-manager/plugin-conversion-credit'
 import { resolveOrgIdForHost } from '@aglyn/tenant-data-admin/server/organizations'
+import type { Firestore } from 'firebase-admin/firestore'
 import firebaseAdmin from '@aglyn/tenant-data-admin/server/firebase-admin'
 import { CAMPAIGN_SEND_CONTAINER_FIELD } from '@aglyn/shared-ui-email-campaigns/model/campaign-container'
 import { CAMPAIGN_CONVERSION_KINDS, type CampaignConversionKind } from '../model/campaign-conversions'
@@ -117,22 +118,20 @@ async function creditedCampaignName(
   hostId: string,
   orgId: string | null,
   touch: ResolvedCampaignTouch,
+  db: Firestore,
 ): Promise<{ label: string; containerId?: string } | null> {
   const campaignId = String(touch.campaignId ?? '')
   if (!campaignId) return null
   if (touch.channel !== 'email') {
     if (!orgId) return null
-    const campaign = await readLiveCampaign({ orgId, campaignId }, firebaseAdmin.app().firestore())
+    const campaign = await readLiveCampaign({ orgId, campaignId }, db)
     return campaign ? { label: campaign.name, containerId: campaign.id } : null
   }
-  const sendRef = await resolveCampaignSendRef({ hostId, sendId: campaignId, orgId })
+  const sendRef = await resolveCampaignSendRef({ hostId, sendId: campaignId, orgId, firestore: db })
   const send = sendRef ? ((await sendRef.get()).data() ?? {}) : {}
   const containerId = String(send[CAMPAIGN_SEND_CONTAINER_FIELD] ?? '')
   if (containerId && orgId) {
-    const campaign = await readLiveCampaign(
-      { orgId, campaignId: containerId },
-      firebaseAdmin.app().firestore(),
-    )
+    const campaign = await readLiveCampaign({ orgId, campaignId: containerId }, db)
     if (campaign) return { label: campaign.name, containerId: campaign.id }
   }
   const subject = String(send['subject'] ?? '').trim()
@@ -204,16 +203,20 @@ export const marketingConversionCreditor: PluginConversionCreditor = {
       if (!touch && !ids.length) return null
       const orgId = await resolveOrgIdForHost(request.hostId).catch(() => null)
       const db = firebaseAdmin.app().firestore()
-      const filedUnder: PluginConversionDescription['filedUnder'] = []
-      if (orgId) {
-        for (const campaignId of ids) {
-          const campaign = await readLiveCampaign({ orgId, campaignId }, db)
-          if (campaign) filedUnder.push({ id: campaign.id, label: campaign.name })
-        }
-      }
+      // Read side by side, kept in the order asked; a campaign since deleted
+      // is left out rather than named by its id.
+      const filedUnder: PluginConversionDescription['filedUnder'] = orgId
+        ? (
+            await Promise.all(
+              ids.map((campaignId) => readLiveCampaign({ orgId, campaignId }, db)),
+            )
+          )
+            .filter((campaign): campaign is NonNullable<typeof campaign> => Boolean(campaign))
+            .map((campaign) => ({ id: campaign.id, label: campaign.name }))
+        : []
       let credited: PluginConversionDescription['credited']
       if (touch) {
-        const named = await creditedCampaignName(request.hostId, orgId, touch)
+        const named = await creditedCampaignName(request.hostId, orgId, touch, db)
         const label =
           named?.label ??
           (touch.channel === 'web'
