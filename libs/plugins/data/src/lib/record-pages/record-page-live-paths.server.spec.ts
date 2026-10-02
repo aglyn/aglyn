@@ -1,4 +1,10 @@
 /**
+ * @jest-environment node
+ *
+ * The pragma stays in the FIRST block comment: behind the license header it
+ * is silently ignored.
+ */
+/**
  * @license
  * Copyright 2026 Aglyn LLC
  *
@@ -13,10 +19,6 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- */
-
-/**
- * @jest-environment node
  */
 
 /**

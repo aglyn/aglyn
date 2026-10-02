@@ -302,7 +302,11 @@ export function isRecordAddressField(
 
 /** The model's page-address fields, in display order. */
 export function recordAddressFieldIds(model: DatasetModel): string[] {
-  return model.order.filter((fieldId) => isRecordAddressField(model.fields[fieldId]))
+  // Tolerant of a partial model, as the filter fields' readers are: a write
+  // path must not fail over a model stored without its `order`.
+  return (model.order ?? []).filter((fieldId) =>
+    isRecordAddressField(model.fields?.[fieldId]),
+  )
 }
 
 /**
@@ -321,7 +325,7 @@ export function fillRecordAddresses<V extends Record<string, unknown>>(
 ): V {
   let next: V | null = null
   for (const fieldId of recordAddressFieldIds(model)) {
-    const field = model.fields[fieldId]
+    const field = model.fields?.[fieldId]
     const held = values[fieldId]
     const normalized =
       held == null || held === ''
@@ -498,7 +502,7 @@ export function withRecordPageUrls<R extends Record<string, unknown>>(
   binding: Pick<DatasetRecordPageBinding, 'base' | 'slugField'> | null | undefined,
   model: DatasetModel,
 ): R[] {
-  if (!binding || model.fields[RECORD_PAGE_URL_KEY]) return rows
+  if (!binding || model.fields?.[RECORD_PAGE_URL_KEY]) return rows
   return rows.map((row) => {
     const address = recordAddressOf(row, binding.slugField)
     return address

@@ -41,10 +41,18 @@ import {
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
 import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
-import { Timestamp } from 'firebase-admin/firestore'
+import { FieldPath, FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { announceDatasetRecords as announceDatasetChange } from './announce-dataset-records'
-import { coerceDocumentValues, datasetIntegrityFields, effectiveDatasetModel, validateDocument } from '../model/dataset-models'
-import { fillRecordAddresses } from '../record-pages/record-pages'
+import { coerceDocumentValues, datasetIntegrityFields, datasetIntegrityUpdate, effectiveDatasetModel, validateDocument } from '../model/dataset-models'
+import { defaultDatasetFieldId } from '../model/datasets'
+import {
+  RECORD_PAGE_ADDRESS_FIELD_TYPE,
+  fillRecordAddresses,
+  isRecordAddressField,
+  recordAddressFieldIds,
+  recordAddressOf,
+  uniqueRecordAddresses,
+} from '../record-pages/record-pages'
 
 /**
  * `dataStorageMbPerOrg` for this route, rendered as the console's 403.
@@ -85,6 +93,13 @@ const WRITER_ROLES = new Set(['owner', 'admin', 'editor'])
 const IMPORT_CHUNK = 400
 
 /**
+ * How many records one "give it page addresses" call fills (AGL-3475). Far
+ * past a services or locations dataset; a larger one reports `truncated`, and
+ * the next call fills the next records, since a filled record is skipped.
+ */
+const ADDRESS_FILL_MAX = 5000
+
+/**
  * Dataset/record creation API (AGL-473): creates moved out of the client
  * SDK so quotas and entitlements are enforced server-side — Firestore
  * rules deny client-side `create` on `orgs/{orgId}/datasets/**` (updates
@@ -97,6 +112,8 @@ const IMPORT_CHUNK = 400
  * - `create-record`:  `recordsPerDataset` quota; values are re-coerced
  *   and re-validated against the dataset's model server-side.
  * - `import-records`: batch create with the whole batch fitting the cap.
+ * - `add-address-field`: a "Page address" field that fills in from a text
+ *   field, and a unique address on every record that has none (AGL-3475).
  *
  * Since AGL-2163 both record actions ALSO enforce `checkDataStorageQuota`.
  * See {@link refuseIfDataStorageBlocked}: that check's `allowed` field had no
@@ -332,7 +349,8 @@ export const datasetsHandler: PluginWebApiHandler = async (request) => {
     if (
       action === 'create-record' ||
       action === 'import-records' ||
-      action === 'announce-records'
+      action === 'announce-records' ||
+      action === 'add-address-field'
     ) {
       const datasetId = String(body?.datasetId ?? '')
       if (!datasetId) {
@@ -392,6 +410,89 @@ export const datasetsHandler: PluginWebApiHandler = async (request) => {
         return Response.json({ ok: true, announced }, { status: 200 })
       }
       const model = effectiveDatasetModel(datasetSnapshot.data() as any)
+      /**
+       * Gives the dataset a page address (AGL-3475): a "Page address" field
+       * that fills in from `sourceField`, and an address on every record that
+       * has none yet, unique within the dataset (`roofing`, `roofing-2`).
+       *
+       * Server-side because it writes every record, and each write has to
+       * carry the filter fields the record template's lookup reads — the
+       * address is found through `filterValues`, so a record written without
+       * them would have a page nobody can reach. A dataset that already has
+       * an address field keeps it: the call fills that field's empty
+       * addresses instead of adding a second one.
+       */
+      if (action === 'add-address-field') {
+        const sourceField = String(body?.sourceField ?? '').trim()
+        const source = model.fields[sourceField]
+        if (!source || source.type !== 'text' || isRecordAddressField(source)) {
+          return Response.json(
+            { error: 'Pick a text field to fill page addresses from' },
+            { status: 400 },
+          )
+        }
+        const held = recordAddressFieldIds(model)[0]
+        const fieldId = held ?? defaultDatasetFieldId('slug', new Set(model.order))
+        const nextModel = held
+          ? model
+          : {
+              fields: {
+                ...model.fields,
+                [fieldId]: {
+                  name: 'Page address',
+                  type: 'text' as const,
+                  customType: RECORD_PAGE_ADDRESS_FIELD_TYPE,
+                  slugFrom: sourceField,
+                },
+              },
+              order: [...model.order, fieldId],
+            }
+        if (!held) {
+          await datasetRef.update({ model: nextModel, updatedAt: Timestamp.now() })
+        }
+        const snapshot = await datasetRef
+          .collection('records')
+          .orderBy(FieldPath.documentId())
+          .limit(ADDRESS_FILL_MAX + 1)
+          .get()
+        const docs = snapshot.docs.slice(0, ADDRESS_FILL_MAX)
+        const valuesOf = (doc: FirebaseFirestore.QueryDocumentSnapshot) =>
+          (doc.get('values') ?? {}) as Record<string, unknown>
+        const taken = docs
+          .map((doc) => recordAddressOf(valuesOf(doc), fieldId))
+          .filter(Boolean)
+        const assigned = uniqueRecordAddresses(
+          docs
+            .filter((doc) => !recordAddressOf(valuesOf(doc), fieldId))
+            .map((doc) => ({ id: doc.id, source: valuesOf(doc)[sourceField] })),
+          taken,
+        )
+        const writes = docs.filter((doc) => assigned.has(doc.id))
+        for (let start = 0; start < writes.length; start += IMPORT_CHUNK) {
+          const batch = firestore.batch()
+          for (const doc of writes.slice(start, start + IMPORT_CHUNK)) {
+            const values = { ...valuesOf(doc), [fieldId]: assigned.get(doc.id) }
+            batch.update(doc.ref, {
+              values,
+              ...datasetIntegrityUpdate(nextModel, values, FieldValue.delete()),
+              updatedAt: Timestamp.now(),
+            })
+          }
+          await batch.commit()
+        }
+        if (writes.length || !held) {
+          await announceDatasetChange({ firestore, orgId, datasetId })
+        }
+        return Response.json(
+          {
+            ok: true,
+            fieldId,
+            filled: writes.length,
+            truncated: snapshot.docs.length > ADDRESS_FILL_MAX,
+          },
+          { status: 200 },
+        )
+      }
       // Before either validation below: a plugin's field validator only runs
       // once its plugin's server entry has registered it.
       await ensureDeclaredCustomFieldTypes(model)

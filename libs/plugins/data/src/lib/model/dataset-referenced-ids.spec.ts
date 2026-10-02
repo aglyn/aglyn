@@ -155,8 +155,9 @@ describe('the field is OMITTED when a record references nothing', () => {
  * Static checks, because there is no runtime one. Records are written from six
  * places that share no function: the console card (editor save, CSV upsert,
  * and the FKey strip the delete check itself performs), the quota-enforcing
- * console route, the `/v1` REST API, the tenant form-submission leg, the event
- * actions runner, and the site-import restore.
+ * console route (creates, imports, and the page-address fill), the `/v1` REST
+ * API, the tenant form-submission leg, the event actions runner, and the
+ * site-import restore.
  */
 describe('every record write path carries the index', () => {
   const CARD =
@@ -180,8 +181,9 @@ describe('every record write path carries the index', () => {
   it.each([
     // The editor save, the importer's upsert branch, and the FKey strip.
     [CARD, 3],
-    // create-record and one chunk of import-records.
-    [CONSOLE_ROUTE, 2],
+    // create-record, one chunk of import-records, and add-address-field's
+    // fill of every record's page address (AGL-3475).
+    [CONSOLE_ROUTE, 3],
     // POST and PATCH on /v1/datasets/{id}/records.
     [REST_API, 2],
     // A bound form appends a record.
