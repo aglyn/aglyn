@@ -42,9 +42,11 @@ placed component or form, which show the same values the published page shows. T
 
 Bindings reference variables and functions **by id**, not by name. That means renaming a
 variable doesn't break anything that uses it. A typed `{{name}}` is converted to its id
-form when you save or publish, and imports are converted automatically. A published page
-resolves only the id form, so a name token that was never converted — because no variable
-had that name — shows exactly as typed.
+form when you save or publish, wherever you typed it: an attribute field, the canvas, **Raw
+JSON**, or an element's **Edit JSON**. Imports are converted automatically. The conversion
+happens on the canvas too, as one step that **Undo** takes back. A published page resolves
+only the id form, so a name token that was never converted — because no variable had that
+name — shows exactly as typed.
 
 ## Insert a variable
 

@@ -41,9 +41,15 @@ import {
   writeServerDraft,
 } from '../drafts/besigner-server-draft'
 import {
+  type CanvasBindingLookups,
+  normalizeCanvasBindingTokens,
+} from '../utils/normalize-canvas-binding-tokens'
+import {
   type BesignerDraftState,
   useBesignerDraft,
 } from './use-besigner-draft'
+
+export type { CanvasBindingLookups } from '../utils/normalize-canvas-binding-tokens'
 
 /**
  * How the host application surfaces a message. Deliberately a plain
@@ -215,6 +221,19 @@ export interface UseBesignerDocumentOptions<TData = unknown>
   fromCanvasNodes?: (
     canvasNodes: Record<string, unknown>,
   ) => { nodes: Record<string, unknown> } | { error: string }
+  /**
+   * The site's variables and functions, which every save converts a typed
+   * `{{name}}` against to its rename-safe id form (AGL-3481) — see
+   * `normalizeCanvasBindingTokens`. A published page resolves only the id
+   * form, so this is what makes a token written through Raw JSON, Edit JSON
+   * or the canvas itself render on the live page.
+   *
+   * Required, so an editor cannot be added that skips it by omission: `null`
+   * says the document has no site whose variables it could name (a platform
+   * email), and a site whose lookups are still loading passes `null` too —
+   * that save keeps the tokens as typed, and the next one converts them.
+   */
+  bindingLookups: CanvasBindingLookups | null
 }
 
 /** Who a shared working draft records as its last writer. */
@@ -391,6 +410,7 @@ export function useBesignerDocument<TData = unknown>(
     savedMessage,
     toCanvasNodes,
     fromCanvasNodes,
+    bindingLookups,
   } = options
 
   const saveAvailable = !canvas.isInitialSame
@@ -664,6 +684,11 @@ export function useBesignerDocument<TData = unknown>(
       onSaveRefused?.()
       return undefined
     }
+    // Typed names become id tokens ON THE CANVAS before anything reads it
+    // (AGL-3481), so the tree written is the tree on screen and the editor
+    // reads clean afterwards. Before "Already saved", too: a document stored
+    // with a name token is clean on load, and this click is what converts it.
+    normalizeCanvasBindingTokens(canvas, bindingLookups)
     const canvasNodes = canvas.toJSON().nodes as Record<string, unknown>
     const prepared = fromCanvasNodes
       ? fromCanvasNodes(canvasNodes)
@@ -808,6 +833,7 @@ export function useBesignerDocument<TData = unknown>(
     refuseOverUnopenedDraft,
     options.firestore,
     draft.sharedDraftUnopened,
+    bindingLookups,
   ])
 
   // See `UseBesignerDocumentResult.saveWorkingDraft` for why the stamp is

@@ -81,6 +81,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { withSitePlugins } from '../../../../../../../../../../components/console-plugins-gate.component'
 import BesignerFunctionsButton from '../../../../../../../../../../components/besigner-functions-button.component'
 import BindingPickerProvider from '../../../../../../../../../../components/binding-picker-provider.component'
+import { useBindingTokenLookups } from '../../../../../../../../../../hooks/use-host-binding-docs'
 import InteractionsProvider from '../../../../../../../../../../components/interactions-provider.component'
 import BesignerMediaPickerProvider from '../../../../../../../../../../components/besigner-media-picker-provider.component'
 import BesignerAppBarComponent from '../../../../../../../../../../components/besigner-app-bar.component'
@@ -349,6 +350,8 @@ function PluginDocumentBesignerPage() {
     notFound,
   } = useBesignerDocument({
     nodes,
+    // Every save converts a typed `{{name}}` to its id token (AGL-3481).
+    bindingLookups: useBindingTokenLookups(hostId),
     updatedAt: (data as { updatedAt?: unknown } | undefined)?.updatedAt,
     pendingWrites: hasPendingWrites,
     status,
