@@ -173,9 +173,10 @@ function declaredBandUnitCostUsd(band: ResolvedPluginUsageBand): number {
  * The platform's own bands, each at the rate `orgMonthlyCogsUsd` prices its
  * meter on: media storage per site (× `hostLimit`), bandwidth at its weight
  * (`perPageView`) and at its CDN requests (`PAGE_VIEW_CDN_REQUEST_COST_USD`),
- * dataset storage, API requests and every email the campaign band sends.
- * Then every band a plugin declares (`plugin-usage-axes.ts`), a per-site one
- * expanded by `hostLimit`. Then the two costs no meter records:
+ * stored data (`dataStorageMbPerOrg`), API requests and every email the
+ * campaign band sends. Then every band a plugin declares
+ * (`plugin-usage-axes.ts`), a per-site one expanded by `hostLimit`. Then the
+ * two costs no meter records:
  *
  *  - SEATS — every collaborator each site admits on every site
  *    (`membersPerHost × hostLimit`), the org's managers (`managersPerOrg`)
@@ -202,7 +203,7 @@ export function fullUseCogs(
     cdnRequests: termUsd(
       entitlements.bandwidthGb * VIEWS_PER_GB * PAGE_VIEW_CDN_REQUEST_COST_USD,
     ),
-    datasetStorage: termUsd(
+    dataStorage: termUsd(
       (entitlements.dataStorageMbPerOrg / 1024) * rates.dataStoragePerGbMonth,
     ),
     apiRequests: termUsd(entitlements.apiRequestsPerMonth * rates.perApiRequest),
