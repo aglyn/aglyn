@@ -128,6 +128,10 @@ export const WIDGET_ZONE_LAYOUTS: Readonly<
   // Controls in the besigner's Attributes panel and its toolbar.
   besignerInspector: 'bare',
   besignerToolbar: 'bare',
+  // A section of the Page Properties drawer, spaced by the drawer's column.
+  besignerPageProperties: 'bare',
+  // A chip inside a Pages list row, beside the page's own presence chips.
+  hostScreenRow: 'bare',
   // Nothing drawn: a widget reports to the Interactions section it sits in.
   besignerInteractions: 'bare',
   // A panel among a search listing editor's own fields.

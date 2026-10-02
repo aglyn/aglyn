@@ -190,6 +190,20 @@ const MOUNTS: Record<
     // whether this editor may change the element in place.
     props: { hostId: 'host-1', node: { $id: 'node-1' }, editable: true },
   },
+  // AGL-3475: what a plugin makes of the page in the editor, at the foot of
+  // Page Properties — a record template's settings.
+  besignerPageProperties: {
+    file:
+      'apps/console/app/(editor)/[orgSlug]/hosts/[host]/screens/[screenId]/versions/[versionId]/besigner/page.tsx',
+    how: 'slot',
+    props: { hostId: 'host-1', orgId: 'org-1', screenId: 'screen-1', screenKind: 'template' },
+  },
+  // AGL-3475: a chip in one row of the Pages list.
+  hostScreenRow: {
+    file: 'apps/console/app/(app)/[orgSlug]/hosts/[host]/screens/page.tsx',
+    how: 'slot',
+    props: { hostId: 'host-1', orgId: 'org-1', screenId: 'screen-1' },
+  },
   // AGL-2910: the screen detail page's SEO card, and the site SEO section.
   seoFields: {
     file:

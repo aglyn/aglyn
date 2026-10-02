@@ -975,6 +975,23 @@ export const CONSOLE_WIDGET_SLOTS = {
    */
   besignerToolbar: 'besignerToolbar',
   /**
+   * A section at the foot of the besigner's Page Properties drawer
+   * (AGL-3475), under the page's publishing, layout, SEO and password
+   * sections: what a plugin makes of the PAGE itself, such as serving it once
+   * per record. Props: {@link ConsoleBesignerPagePropertiesZoneProps}. The
+   * drawer's column spaces each widget as one of its sections; a widget saves
+   * through its own routes, never through the drawer's buttons.
+   */
+  besignerPageProperties: 'besignerPageProperties',
+  /**
+   * Inside one row of a site's Pages list (AGL-3475), beside the page's name:
+   * a chip a plugin draws about that page — that it is a record template,
+   * and how many pages it serves. Props:
+   * {@link ConsoleHostScreenRowZoneProps}. Drawn once per row, so a widget
+   * reads what it needs once for the site and answers each row from that.
+   */
+  hostScreenRow: 'hostScreenRow',
+  /**
    * A site's Screens page, beside its Templates and Create New Screen actions
    * (AGL-2907): another way to start a screen. Props:
    * {@link ConsoleHostScreensZoneProps}. A widget here runs its own flow and
@@ -1020,6 +1037,28 @@ export const CONSOLE_WIDGET_SLOTS = {
 
 export type ConsoleWidgetSlot =
   (typeof CONSOLE_WIDGET_SLOTS)[keyof typeof CONSOLE_WIDGET_SLOTS]
+
+/** What the `besignerPageProperties` zone hands each widget (AGL-3475). */
+export interface ConsoleBesignerPagePropertiesZoneProps {
+  hostId: string
+  /** The org the page names; `undefined` while it resolves. */
+  orgId: string | undefined
+  /** The page in the editor. */
+  screenId: string
+  /** The page's `kind` as stored: `'template'` for a template, absent for a page. */
+  screenKind?: string
+}
+
+/** What the `hostScreenRow` zone hands each widget (AGL-3475). */
+export interface ConsoleHostScreenRowZoneProps {
+  hostId: string
+  /** The org the page names; `undefined` while it resolves. */
+  orgId: string | undefined
+  /** The row's page. */
+  screenId: string
+  /** The page's `kind` as stored. */
+  screenKind?: string
+}
 
 /** What the `hostScreens` zone hands each widget (AGL-2907). */
 export interface ConsoleHostScreensZoneProps {

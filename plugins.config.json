@@ -1124,7 +1124,9 @@
             "/data"
           ],
           "slots": [
+            "besignerPageProperties",
             "entityPickers",
+            "hostScreenRow",
             "orgData"
           ]
         }
