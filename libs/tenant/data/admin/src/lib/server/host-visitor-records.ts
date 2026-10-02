@@ -387,9 +387,6 @@ export interface HostLeadInput {
   campaignIds?: readonly string[]
 }
 
-/** The field a lead holds its campaigns in, at the top of its document. */
-const LEAD_CAMPAIGNS_FIELD = containerMembershipField('campaign')
-
 /**
  * Record one lead at `hosts/{hostId}/leads/{personKey}`, bounded by
  * `LEADS_MAX_PER_HOST` (AGL-1529).
@@ -631,15 +628,20 @@ export async function addHostLeadOutcome(options: {
        * Written only when the capture names one, so a door with no campaign
        * never rewrites the field a person or a sequence filled.
        */
-      const campaigns = lead.campaignIds?.length
-        ? normalizeContainerIds([...normalizeContainerIds(stored[LEAD_CAMPAIGNS_FIELD]), ...lead.campaignIds])
+      // The field a lead holds its campaigns in, at the top of its document.
+      const campaignsField = lead.campaignIds?.length ? containerMembershipField('campaign') : null
+      const campaigns = campaignsField
+        ? normalizeContainerIds([
+            ...normalizeContainerIds(stored[campaignsField]),
+            ...(lead.campaignIds ?? []),
+          ])
         : null
       const listFields = crmLeadListFields({
         ...stored,
         email: lead.email,
         ...(lead.name ? { name: lead.name } : {}),
         visibleTo: [...new Set([...storedScope, ...scope])],
-        ...(campaigns ? { [LEAD_CAMPAIGNS_FIELD]: campaigns } : {}),
+        ...(campaignsField && campaigns ? { [campaignsField]: campaigns } : {}),
       })
       tx.set(
         leadRef,
@@ -647,7 +649,7 @@ export async function addHostLeadOutcome(options: {
           email: lead.email,
           ...seen,
           ...listFields,
-          ...(campaigns ? { [LEAD_CAMPAIGNS_FIELD]: campaigns } : {}),
+          ...(campaignsField && campaigns ? { [campaignsField]: campaigns } : {}),
           /*
            * WIDENED BY THE CAPTURE, NEVER BY THE LOOKUP (AGL-3275).
            *

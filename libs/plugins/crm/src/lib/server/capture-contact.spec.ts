@@ -310,8 +310,9 @@ describe('a lead surface', () => {
   })
 
   /*
-   * AGL-3458. A lead-routed form filed under a campaign made a lead filed
-   * under nothing: `containers` reached the contact door and never the lead.
+   * AGL-3458. A lead-routed form filed under a campaign files its lead under
+   * that campaign: `containers` reaches the lead door as it reaches the
+   * contact door.
    */
   it('files the lead under the form’s campaigns, and the Campaign filter finds it', async () => {
     await captureContactForCrm(
