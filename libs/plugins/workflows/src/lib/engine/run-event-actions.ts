@@ -82,6 +82,12 @@ import { describeStepOutcome } from '../model/step-outcomes'
 import { type HostWebhook, WEBHOOK_URL_PATTERN } from '../model/webhooks'
 import { eventRunSuspension } from './site-suspension'
 import {
+  recordRuns,
+  type RunMeterScope,
+  runMonthKey,
+  runsUsedThisMonth,
+} from './run-meter'
+import {
   advanceFlowEnrollment,
   claimFlowEnrollment,
   deferFlowEnrollment,
@@ -1473,8 +1479,6 @@ export async function runEventActions(
     const placed = await findOrgAutomationsForEvent(hostId, event)
     if (!actions.length && !placed) return alerts
 
-    const monthKey = new Date().toISOString().slice(0, 7)
-    const runCounterRef = hostRef.collection('counters').doc('actionRuns')
     // Webhook steps take the higher `webhooks` gate (AGL-149); plan gates
     // ride the owning org's doc (AGL-238).
     let webhooksAllowed = true
@@ -1486,7 +1490,7 @@ export async function runEventActions(
      * were always asked, so an organization placing automations on a site can
      * never be what stops that site's own actions running. The org half is
      * asked second, against what is left after the site's half, and both
-     * count on this site's one meter: an org automation's run is this site's
+     * count on this site's meter: an org automation's run is this site's
      * run, and the usage card, the usage alerts and the COGS rollup read it
      * there.
      */
@@ -1495,6 +1499,15 @@ export async function runEventActions(
     // Plan-less orgs resolve as free (AGL-247) — gates always run. Held for
     // the rest of the run so a step's own plan check costs no second read.
     const owner = await getOrgForHost(hostId)
+    // The band is the WORKSPACE's (AGL-3472): every site's runs count
+    // against it, read off the org's counter — see `run-meter.ts`.
+    const meter: RunMeterScope = {
+      firestore,
+      hostRef,
+      orgId: owner?.orgId,
+      counter: 'actionRuns',
+      month: runMonthKey(),
+    }
     // A suspended site runs nothing (AGL-3356): see `eventRunSuspension`.
     if (await eventRunSuspension(hostRef, owner?.org)) return alerts
     {
@@ -1504,8 +1517,7 @@ export async function runEventActions(
       const limit = resolveOrgEntitlements(
         org as any,
       ).actionRunsPerMonth
-      const counterSnapshot = await runCounterRef.get()
-      const used = Number(counterSnapshot.get(monthKey) ?? 0)
+      const used = await runsUsedThisMonth(meter)
       // Asked as "would it go over", the question this gate has always
       // asked — so a counter that reads as no number refuses nothing, as
       // before, rather than refusing everything.
@@ -1589,11 +1601,7 @@ export async function runEventActions(
         orgAutomation: { orgId: placed?.orgId ?? '' },
       })
     }
-    if (executed > 0) {
-      await runCounterRef
-        .set({ [monthKey]: FieldValue.increment(executed) }, { merge: true })
-        .catch(() => undefined)
-    }
+    await recordRuns({ ...meter, count: executed })
   } catch (error) {
     console.error('runEventActions failed', hostId, event, error)
   }
@@ -1627,7 +1635,7 @@ export type SingleActionSkip =
 
 /** What one dispatched action did, for a caller that has to say so. */
 export interface SingleActionOutcome {
-  /** Its steps ran, and the run counted on the site's meter. */
+  /** Its steps ran, and the run counted on the site's and workspace's meters. */
   ran: boolean
   /** Why nothing ran; `null` when it ran. */
   skipped: SingleActionSkip | null
@@ -1696,11 +1704,17 @@ export async function runSingleActionOutcome(
       return skipped('conditions')
     }
 
-    const monthKey = new Date().toISOString().slice(0, 7)
-    const runCounterRef = hostRef.collection('counters').doc('actionRuns')
     let webhooksAllowed = true
     // Held for the rest of the run, as in `runEventActions` above.
     const owner = await getOrgForHost(hostId)
+    // The workspace's band, as in `runEventActions` above (AGL-3472).
+    const meter: RunMeterScope = {
+      firestore,
+      hostRef,
+      orgId: owner?.orgId,
+      counter: 'actionRuns',
+      month: runMonthKey(),
+    }
     {
       const org = owner?.org
       if (!checkEntitlement(org as any, 'actions')) return skipped('plan')
@@ -1708,8 +1722,7 @@ export async function runSingleActionOutcome(
       const limit = resolveOrgEntitlements(
         org as any,
       ).actionRunsPerMonth
-      const counterSnapshot = await runCounterRef.get()
-      const used = Number(counterSnapshot.get(monthKey) ?? 0)
+      const used = await runsUsedThisMonth(meter)
       if (used + 1 > limit) return skipped('allowance', limit)
     }
 
@@ -1726,9 +1739,7 @@ export async function runSingleActionOutcome(
       loadWorkflowContext: makeWorkflowContextLoader(hostRef),
     }
     await executeAction(env, doc.id, action, event, payload)
-    await runCounterRef
-      .set({ [monthKey]: FieldValue.increment(1) }, { merge: true })
-      .catch(() => undefined)
+    await recordRuns({ ...meter, count: 1 })
     return { ran: true, skipped: null, alerts }
   } catch (error) {
     console.error('runSingleAction failed', hostId, actionId, error)
@@ -1901,12 +1912,14 @@ export async function resumeFlowEnrollment(
    * limit enforced against a person rather than against the decision that
    * added them. The gate belongs at enrollment, and that is where it is.
    */
-  const monthKey = new Date(nowMs).toISOString().slice(0, 7)
-  await hostRef
-    .collection('counters')
-    .doc('actionRuns')
-    .set({ [monthKey]: FieldValue.increment(1) }, { merge: true })
-    .catch(() => undefined)
+  await recordRuns({
+    firestore,
+    hostRef,
+    orgId: owner?.orgId,
+    counter: 'actionRuns',
+    month: runMonthKey(nowMs),
+    count: 1,
+  })
   return ending
 }
 

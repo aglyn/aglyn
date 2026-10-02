@@ -28,14 +28,14 @@ your Shop site, the org automation runs **as Shop**:
 - its emails go from Shop's sending identity, respect Shop's unsubscribes and
   suppressions, and are logged on the contact's timeline for Shop;
 - its CRM steps write into Shop's part of the contact, the way Shop's own actions do;
-- it counts on **Shop's action runs** — the same meter as Shop's own actions, shown
-  on Shop's **Automation → Actions** — and a site that has used its month's runs runs
-  no more of either;
+- it counts as one of **Shop's action runs**, beside Shop's own actions, and spends the
+  workspace's monthly action runs, which every site shares — once the workspace has used
+  its month's runs, no site runs more of either;
 - its run history is on **Shop's** Actions section, under **Org automations on this
   site → Runs**.
 
-Nothing about one site's run touches another site. Placing an automation on five sites
-is five sites each running it for themselves.
+Apart from that shared allowance, nothing about one site's run touches another site.
+Placing an automation on five sites is five sites each running it for themselves.
 
 A site's own actions always come first: an org automation never stops one of the site's
 actions from running, even when the month's runs are nearly used up.

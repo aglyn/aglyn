@@ -876,7 +876,7 @@ async function pluginUsageAxes() {
       costAxes.push({ pluginId: plugin.id, ...axis })
     }
     for (const band of declaredBands) {
-      const { id, label, order, fields, fallbackFields, entitlement, perHost, unitCostUsd, hostCounter, alert, metered, consoleWarning } = band ?? {}
+      const { id, label, order, fields, fallbackFields, entitlement, perHost, unitCostUsd, hostCounter, orgCounter, alert, metered, consoleWarning } = band ?? {}
       const what = `${where} band "${id ?? ''}"`
       if (typeof id !== 'string' || !PLAIN_NAME.test(id)) throw new Error(`${where}: a band needs a plain "id"`)
       if (bandOwners.has(id)) throw new Error(`${what} is already measured by ${bandOwners.get(id)}`)
@@ -896,6 +896,9 @@ async function pluginUsageAxes() {
       }
       if (hostCounter !== undefined && (typeof hostCounter !== 'string' || !PLAIN_NAME.test(hostCounter))) {
         throw new Error(`${what}: "hostCounter" is the plain name of the per-site counter holding the month's figure`)
+      }
+      if (orgCounter !== undefined && (typeof orgCounter !== 'string' || !PLAIN_NAME.test(orgCounter))) {
+        throw new Error(`${what}: "orgCounter" is the plain name of the workspace-wide counter the band is enforced against`)
       }
       if (
         alert !== undefined &&

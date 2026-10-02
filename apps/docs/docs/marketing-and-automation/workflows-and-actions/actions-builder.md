@@ -280,14 +280,16 @@ log you have to go and find.
 
 At the top of the **Actions** tab — and again on the **Workflows** tab, counting workflow
 runs — a line reads `1,284 action runs this month · 50,000 included`: how many metered
-runs this site has used this calendar month, against the number your plan includes. This
-line is the only place action runs are counted for you — the
+runs your workspace has used this calendar month, against the number your plan includes.
+The allowance belongs to the whole workspace, not to each site: every site's runs count
+against it, so the figure is the same on every site, and the organization's
+**Automation** page shows it too. The
 [billing usage meters](../../workspace-and-billing/billing-and-plans/overview.md#usage-meters)
-meter *workflow* runs, not action runs. Watch it: once the month's runs reach the limit,
-triggered automations stop running rather than queueing or billing on. The line renders
-nothing at all while the counter or the plan is still loading —
-`0 runs this month` on a site that has run thousands is the one reading that would make
-you stop debugging.
+show the same two figures. Watch it: once the workspace's runs reach the month's limit,
+triggered automations stop running on every site rather than queueing or billing on. The
+line renders nothing at all while the counter or the plan is still loading —
+`0 runs this month` on a workspace that has run thousands is the one reading that would
+make you stop debugging.
 
 ### What is and isn't recorded {#what-is-and-isnt-recorded}
 

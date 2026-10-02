@@ -140,6 +140,17 @@ export interface PluginUsageBandDeclaration {
    */
   hostCounter?: string
   /**
+   * The WORKSPACE-wide monthly counter the band is enforced against:
+   * `orgs/{orgId}/counters/{orgCounter}`, field `{month}` (AGL-3472). Declared
+   * by a band whose runtime counts every unit on the org's counter as well as
+   * on the site's, in one write, so a workspace-wide band is held to every
+   * site's use rather than handed to each site whole. The Billing card meters
+   * the band once for the organization from it, where a band without one is
+   * metered per site. The usage sweep and alerts still sum `hostCounter`,
+   * which the same write moves.
+   */
+  orgCounter?: string
+  /**
    * The workspace is WARNED as it approaches and reaches this band, by the
    * usage-alerts sweep, from its `hostCounter` against what the plan includes
    * of `entitlement`, once per threshold per month. `label` names the band in
@@ -303,6 +314,22 @@ export function countedPluginBands(): readonly ResolvedPluginCountedBand[] {
   return PLUGIN_USAGE_BANDS_DECLARED.filter(
     (band): band is ResolvedPluginCountedBand =>
       Boolean(band.hostCounter && !band.metered),
+  )
+}
+
+/** A declared band kept on a workspace-wide counter. */
+export type ResolvedPluginOrgCountedBand = ResolvedPluginUsageBand & {
+  orgCounter: string
+}
+
+/**
+ * Every band with a workspace-wide counter (`orgCounter`), in band order: the
+ * bands the Billing card meters once for the organization, from the counter
+ * the band is enforced against.
+ */
+export function orgCountedPluginBands(): readonly ResolvedPluginOrgCountedBand[] {
+  return PLUGIN_USAGE_BANDS_DECLARED.filter(
+    (band): band is ResolvedPluginOrgCountedBand => Boolean(band.orgCounter),
   )
 }
 

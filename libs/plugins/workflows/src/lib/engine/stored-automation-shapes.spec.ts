@@ -164,10 +164,24 @@ const collectionRef = (
 
 const firestoreHandle: any = {
   collection: (name: string) => collectionRef(name),
+  // The run meter's one write: the site's counter and the workspace's.
+  batch: () => {
+    const writes: Array<() => Promise<void>> = []
+    return {
+      set: (ref: any, data: any, options?: { merge?: boolean }) => {
+        writes.push(() => ref.set(data, options))
+      },
+      commit: async () => {
+        for (const write of writes) await write()
+      },
+    }
+  },
   runTransaction: async (work: (transaction: any) => Promise<unknown>) =>
     work({
       get: (ref: any) => ref.get(),
-      set: (ref: any, data: Record<string, any>) => ref.set(data),
+      getAll: (...refs: any[]) => Promise.all(refs.map((ref) => ref.get())),
+      set: (ref: any, data: Record<string, any>, options?: { merge?: boolean }) =>
+        ref.set(data, options),
       update: (ref: any, data: Record<string, any>) => ref.update(data),
     }),
 }
@@ -492,6 +506,7 @@ describe('the stored workflows', () => {
       )
     }
     expect(store[`${hostPath}/counters/workflowRuns`]).toBeDefined()
+    expect(store[`orgs/${ORG_ID}/counters/workflowRuns`]).toBeDefined()
   })
 
   it('run, untriggered, as the step of an action that names one', async () => {

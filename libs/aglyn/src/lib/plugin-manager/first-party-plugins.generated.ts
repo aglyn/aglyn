@@ -1194,6 +1194,7 @@ export const PLUGIN_USAGE_BANDS_DECLARED: readonly ResolvedPluginUsageBand[] = [
     ],
     "entitlement": "workflowRunsPerMonth",
     "hostCounter": "workflowRuns",
+    "orgCounter": "workflowRuns",
     "alert": {
       "label": "monthly workflow runs",
       "noun": "workflow runs",
@@ -1210,7 +1211,8 @@ export const PLUGIN_USAGE_BANDS_DECLARED: readonly ResolvedPluginUsageBand[] = [
     "fields": [
       "actionRuns"
     ],
-    "entitlement": "actionRunsPerMonth"
+    "entitlement": "actionRunsPerMonth",
+    "orgCounter": "actionRuns"
   },
 ]
 

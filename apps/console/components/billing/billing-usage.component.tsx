@@ -35,7 +35,10 @@ import {
 } from '@aglyn/aglyn'
 import { pluginOrgCapacities } from '@aglyn/aglyn/plugin-manager/plugin-org-capacity'
 import { planQuotaOf } from '@aglyn/aglyn/plugin-manager/plugin-plan-entitlements'
-import { countedPluginBands } from '@aglyn/aglyn/plugin-manager/plugin-usage-axes'
+import {
+  countedPluginBands,
+  orgCountedPluginBands,
+} from '@aglyn/aglyn/plugin-manager/plugin-usage-axes'
 import { type HelpTipContent } from '@aglyn/shared-ui-jsx'
 import { UsageMeter as SharedUsageMeter } from '@aglyn/shared-ui-jsx/components/usage-meter.component'
 import { Link, LinearProgress, Stack, Typography } from '@mui/material'
@@ -123,11 +126,22 @@ function capacityMeterLabel(many: string): string {
 }
 
 /**
- * The plugin bands counted per site each month (`countedPluginBands`) — the
- * workflows plugin's runs today — each metered per site from its host
- * counter, under the label its declaration gives.
+ * The plugin bands counted per site each month (`countedPluginBands`), each
+ * metered per site from its host counter, under the label its declaration
+ * gives — except a band kept on a workspace-wide counter, which is metered
+ * once for the organization below.
  */
-const COUNTED_BANDS = countedPluginBands()
+const COUNTED_BANDS = countedPluginBands().filter((band) => !band.orgCounter)
+
+/**
+ * The plugin bands enforced against a workspace-wide counter
+ * (`orgCountedPluginBands`) — the workflows plugin's workflow and action runs
+ * (AGL-3472). One meter each for the organization, read from the counter the
+ * run gates are held to: a per-site meter would show each site its own slice
+ * against the whole workspace's band, which is headroom the gate has already
+ * spent on the other sites.
+ */
+const ORG_COUNTED_BANDS = orgCountedPluginBands()
 
 function HostUsageMeters(props: {
   host: any
@@ -194,8 +208,8 @@ function HostUsageMeters(props: {
       getDoc(doc(firestore, 'hosts', host.$id, 'counters', 'media')).catch(
         () => null,
       ),
-      // Each counted band's month — the workflows plugin's event-triggered
-      // runs (AGL-165) — off the per-site counter it declares.
+      // Each per-site counted band's month, off the per-site counter it
+      // declares.
       Promise.all(
         COUNTED_BANDS.map((band) =>
           getDoc(
@@ -421,6 +435,14 @@ export function BillingUsageComponent(props: BillingUsageProps) {
    */
   const [totalEmails, setTotalEmails] = useState<number | null>(null)
   /*
+   * Each workspace-counted band's month (AGL-3472), by band id, off
+   * `orgs/{orgId}/counters/{orgCounter}`. A band stays absent until its read
+   * answers, and its meter shows "not yet metered" rather than 0.
+   */
+  const [orgCounted, setOrgCounted] = useState<
+    Readonly<Record<string, number>>
+  >({})
+  /*
    * The HOURLY campaign ceiling, and how much of this hour is already spent.
    *
    * A second, independent limit on the same unit. `claimOrgEmailSendBudget`
@@ -557,6 +579,23 @@ export function BillingUsageComponent(props: BillingUsageProps) {
       .catch(() => {
         // Meter keeps its "not yet metered" state on failure.
       })
+    // The workspace's run counters, in the same subcollection: one
+    // single-document read per band, whatever the site count.
+    for (const band of ORG_COUNTED_BANDS) {
+      void getDoc(doc(firestore, 'orgs', orgId, 'counters', band.orgCounter))
+        .then((snapshot) => {
+          if (!active) return
+          // No document is a workspace that has not run one: a settled zero.
+          const monthKey = new Date().toISOString().slice(0, 7)
+          const used = snapshot.exists()
+            ? Number(snapshot.data()?.[monthKey] ?? 0)
+            : 0
+          setOrgCounted((previous) => ({ ...previous, [band.id]: used }))
+        })
+        .catch(() => {
+          // Meter keeps its "not yet metered" state on failure.
+        })
+    }
     // The sibling counter in the same subcollection: one more single-document
     // read, on a path this component already reads.
     void getDoc(doc(firestore, 'orgs', orgId, 'counters', 'emailSends'))
@@ -925,6 +964,20 @@ export function BillingUsageComponent(props: BillingUsageProps) {
             "month's invoice."}
         </Typography>
       ) : null}
+      {/* Workflow and action runs, once for the organization (AGL-3472):
+          the bands are the workspace's and the run gates are held to the
+          workspace's count. Rendered only where a band is sold — Free
+          includes no runs, and "0 / 0" is not a readout of anything. */}
+      {ORG_COUNTED_BANDS.map((band) =>
+        planQuotaOf(entitlements, band.entitlement) > 0 ? (
+          <UsageMeter
+            key={band.id}
+            label={`${band.label} (this month, organization)`}
+            used={orgCounted[band.id] ?? null}
+            limit={planQuotaOf(entitlements, band.entitlement)}
+          />
+        ) : null,
+      )}
       {/* Org-wide by definition (AGL-1371): `bandwidthGb` is an org limit, not
           a per-site one, and the invoice and the usage-alerts cron both
           measure the org-wide total against it. Rendered here, once, rather

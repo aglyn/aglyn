@@ -51,8 +51,15 @@ const mockGetOrgForHost = jest.fn()
 interface MockStoreShape {
   hook: Record<string, unknown> | undefined
   workflows: Array<Record<string, unknown>>
-  /** `counters/workflowRuns` — month key → count. */
-  runCounter: Record<string, number>
+  /** The hook's site's `counters/workflowRuns` — month key → count. */
+  runCounter: Record<string, unknown>
+  /**
+   * Every other counter document, by path: a sibling site's, and the
+   * workspace's `orgs/{orgId}/counters/workflowRuns` (AGL-3472).
+   */
+  counters: Record<string, Record<string, unknown>>
+  /** The sites `hosts where orgId ==` answers, by id → owning org. */
+  sites: Record<string, string>
   /** Activity rows the handler wrote. */
   activity: Array<Record<string, unknown>>
 }
@@ -61,8 +68,13 @@ const mockStore: MockStoreShape = {
   hook: undefined,
   workflows: [],
   runCounter: {},
+  counters: {},
+  sites: {},
   activity: [],
 }
+
+/** The hook's site, whose counter is `mockStore.runCounter`. */
+const MOCK_HOST_RUNS = 'hosts/host-1/counters/workflowRuns'
 
 /** `FieldValue.increment(n)` as a resolvable sentinel, like the server's. */
 interface MockIncrement {
@@ -79,7 +91,92 @@ const mockDocsOf = (rows: Array<Record<string, unknown>>) => ({
   })),
 })
 
-const mockHostRef = {
+/** A counter document by path, merged the way `set(…, { merge: true })` is. */
+const mockCounterRef = (path: string) => {
+  const held = () =>
+    path === MOCK_HOST_RUNS ? mockStore.runCounter : mockStore.counters[path]
+  return {
+    path,
+    get: async () => ({
+      exists: held() !== undefined,
+      get: (field: string) => held()?.[field],
+    }),
+    // `set(..., { merge: true })` conjures the document when absent and
+    // merges when present — modelled exactly, because `update()` would
+    // throw NOT_FOUND on an org's first run and a double that used it
+    // would turn a real bug into a passing test.
+    set: async (payload: Record<string, unknown>) => {
+      const next = { ...(held() ?? {}) }
+      for (const [key, value] of Object.entries(payload)) {
+        next[key] = mockIsIncrement(value)
+          ? Number(next[key] ?? 0) + value.__increment
+          : value
+      }
+      if (path === MOCK_HOST_RUNS) mockStore.runCounter = next
+      else mockStore.counters[path] = next
+    },
+  }
+}
+
+/** A site other than the hook's: its counters, and nothing else. */
+const mockSiteRef = (hostId: string) => ({
+  collection: () => ({
+    doc: (counter: string) =>
+      mockCounterRef(`hosts/${hostId}/counters/${counter}`),
+  }),
+})
+
+const mockFirestore = {
+  collection: (name: string) => {
+    if (name === 'orgs') {
+      return {
+        doc: (orgId: string) => ({
+          collection: () => ({
+            doc: (counter: string) =>
+              mockCounterRef(`orgs/${orgId}/counters/${counter}`),
+          }),
+        }),
+      }
+    }
+    return {
+      doc: (hostId: string) =>
+        hostId === 'host-1' ? mockHostRef : mockSiteRef(hostId),
+      // The run meter's seed: the workspace's sites.
+      where: (_field: string, _op: '==', orgId: string) => ({
+        get: async () => ({
+          docs: Object.entries(mockStore.sites)
+            .filter(([, owner]) => owner === orgId)
+            .map(([hostId]) => ({
+              id: hostId,
+              ref: hostId === 'host-1' ? mockHostRef : mockSiteRef(hostId),
+            })),
+        }),
+      }),
+    }
+  },
+  batch: () => {
+    const writes: Array<() => Promise<void>> = []
+    return {
+      set: (ref: any, data: Record<string, unknown>) => {
+        writes.push(() => ref.set(data))
+      },
+      commit: async () => {
+        for (const write of writes) await write()
+      },
+    }
+  },
+  runTransaction: async (body: (transaction: any) => Promise<unknown>) =>
+    await body({
+      get: async (ref: any) => await ref.get(),
+      getAll: async (...refs: any[]) =>
+        await Promise.all(refs.map((ref) => ref.get())),
+      set: (ref: any, data: Record<string, unknown>) => {
+        void ref.set(data)
+      },
+    }),
+}
+
+const mockHostRef: any = {
   collection: (name: string) => {
     if (name === 'webhooks') {
       return {
@@ -93,22 +190,8 @@ const mockHostRef = {
     }
     if (name === 'counters') {
       return {
-        doc: () => ({
-          get: async () => ({
-            get: (field: string) => mockStore.runCounter[field],
-          }),
-          // `set(..., { merge: true })` conjures the document when absent and
-          // merges when present — modelled exactly, because `update()` would
-          // throw NOT_FOUND on an org's first run and a double that used it
-          // would turn a real bug into a passing test.
-          set: async (payload: Record<string, unknown>) => {
-            for (const [key, value] of Object.entries(payload)) {
-              mockStore.runCounter[key] = mockIsIncrement(value)
-                ? (mockStore.runCounter[key] ?? 0) + value.__increment
-                : (value as number)
-            }
-          },
-        }),
+        doc: (counter: string) =>
+          mockCounterRef(`hosts/host-1/counters/${counter}`),
       }
     }
     if (name === 'activity') {
@@ -139,9 +222,7 @@ jest.mock('firebase-admin/firestore', () => ({
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
   firebaseAdmin: {
-    app: () => ({
-      firestore: () => ({ collection: () => ({ doc: () => mockHostRef }) }),
-    }),
+    app: () => ({ firestore: () => mockFirestore }),
   },
   getOrgForHost: (...args: unknown[]) => mockGetOrgForHost(...args),
 }))
@@ -256,7 +337,12 @@ beforeEach(() => {
   }
   mockStore.workflows = [{ name: 'ingest', steps: [] }]
   mockStore.runCounter = {}
+  mockStore.counters = {}
+  mockStore.sites = {}
   mockStore.activity = []
+  // A site the org index does not name: no workspace to share a band with,
+  // so the site's own counter is the figure (see the AGL-3472 block below
+  // for a site that has one).
   mockGetOrgForHost.mockResolvedValue({
     org: { plan: 'business', subscription: { status: 'active' } },
   })
@@ -354,6 +440,80 @@ describe('POSITIVE CONTROL: the cap is the only thing refusing', () => {
     }
     expect(mockStore.runCounter[MONTH]).toBe(3)
     expect(mockStore.activity).toHaveLength(3)
+  })
+})
+
+/*
+ * AGL-3472 — the band is the WORKSPACE's. `workflowRunsPerMonth` is sold to
+ * the organization, so a hook on one site is held to every site's runs, read
+ * off `orgs/{orgId}/counters/workflowRuns` — seeded from the sites' counters
+ * the first time it is asked, so a workspace mid-month does not start over.
+ */
+describe('one band for the workspace’s sites (AGL-3472)', () => {
+  const ORG_RUNS = 'orgs/org-1/counters/workflowRuns'
+  const SIBLING_RUNS = 'hosts/host-2/counters/workflowRuns'
+
+  beforeEach(() => {
+    mockGetOrgForHost.mockResolvedValue({
+      orgId: 'org-1',
+      org: { plan: 'business', subscription: { status: 'active' } },
+    })
+    mockStore.sites = { 'host-1': 'org-1', 'host-2': 'org-1', 'host-9': 'org-9' }
+  })
+
+  it('refuses a site that has run nothing when its sibling spent the band', async () => {
+    mockStore.counters[SIBLING_RUNS] = { [MONTH]: BUSINESS_RUNS }
+    // Another workspace's site is not this workspace's spend.
+    mockStore.counters['hosts/host-9/counters/workflowRuns'] = { [MONTH]: 5 }
+    const response = await callHook(nextHookId())
+    expect(response.status).toBe(402)
+    expect(String((response.body as any).error)).toBe(
+      `This workspace has used its ${BUSINESS_RUNS} workflow runs for the month`,
+    )
+    expect(mockStore.runCounter[MONTH]).toBeUndefined()
+    expect(mockStore.activity).toHaveLength(0)
+    // Seeded from the workspace's two sites, once, and marked so.
+    expect(mockStore.counters[ORG_RUNS]).toEqual({
+      [MONTH]: BUSINESS_RUNS,
+      seededFrom: MONTH,
+    })
+  })
+
+  it('runs the last run the workspace has left, on both counters, then refuses', async () => {
+    mockStore.counters[SIBLING_RUNS] = { [MONTH]: BUSINESS_RUNS - 3 }
+    mockStore.runCounter = { [MONTH]: 2 }
+    expect((await callHook(nextHookId())).status).toBe(200)
+    expect(mockStore.runCounter[MONTH]).toBe(3)
+    expect(mockStore.counters[ORG_RUNS]?.[MONTH]).toBe(BUSINESS_RUNS)
+    // The site's own counter (3) is far inside the band; the workspace's is not.
+    expect((await callHook(nextHookId())).status).toBe(402)
+    expect(mockStore.runCounter[MONTH]).toBe(3)
+    expect(mockStore.counters[ORG_RUNS]?.[MONTH]).toBe(BUSINESS_RUNS)
+  })
+
+  it('keeps the two in step: the workspace figure is the sum of its sites', async () => {
+    mockStore.counters[SIBLING_RUNS] = { [MONTH]: 40 }
+    mockStore.runCounter = { [MONTH]: 2 }
+    for (let index = 0; index < 3; index += 1) {
+      expect((await callHook(nextHookId())).status).toBe(200)
+    }
+    // What the usage sweep, the alerts and the cost rollup sum across the
+    // sites is the number the gate was held to.
+    expect(mockStore.counters[ORG_RUNS]?.[MONTH]).toBe(
+      Number(mockStore.runCounter[MONTH]) +
+        Number(mockStore.counters[SIBLING_RUNS]?.[MONTH]),
+    )
+    expect(mockStore.counters[ORG_RUNS]?.[MONTH]).toBe(45)
+  })
+
+  it('seeds once: a seeded counter is the figure, whatever the sites say', async () => {
+    mockStore.counters[ORG_RUNS] = { [MONTH]: BUSINESS_RUNS, seededFrom: '2020-01' }
+    mockStore.counters[SIBLING_RUNS] = { [MONTH]: 0 }
+    expect((await callHook(nextHookId())).status).toBe(402)
+    expect(mockStore.counters[ORG_RUNS]).toEqual({
+      [MONTH]: BUSINESS_RUNS,
+      seededFrom: '2020-01',
+    })
   })
 })
 

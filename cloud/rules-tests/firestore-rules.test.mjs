@@ -660,6 +660,13 @@ beforeEach(async () => {
     await setDoc(doc(db, 'hosts', HOST, 'counters', 'emailSends'), { '2026-08': 500 })
     await setDoc(doc(db, 'hosts', HOST, 'counters', 'workflowRuns'), { '2026-08': 1000 })
     await setDoc(doc(db, 'hosts', HOST, 'counters', 'actionRuns'), { '2026-08': 1000 })
+    // The workspace's run counters (AGL-3472): the figure both run bands are
+    // enforced against, as the run meter's seed leaves them.
+    for (const counter of ['workflowRuns', 'actionRuns']) {
+      await setDoc(doc(db, 'orgs', ORG, 'counters', counter), {
+        '2026-08': 1000, seededFrom: '2026-08',
+      })
+    }
     await setDoc(doc(db, 'hosts', HOST, 'analytics', '2026-08-01'), { total: 900_000 })
     await setDoc(doc(db, 'hosts', HOST, 'members', 'm-collab'), {
       email: 'collab@acme.test', role: 'editor', status: 'active',
@@ -1647,6 +1654,37 @@ describe('hosts', () => {
       'deleting an analytics day',
       deleteDoc(doc(authed(EDITOR), 'hosts', HOST, 'analytics', '2026-08-01')),
     )
+  })
+
+  /**
+   * AGL-3472. The run bands are the WORKSPACE's, enforced against
+   * `orgs/{orgId}/counters/{workflowRuns|actionRuns}`, so that document is
+   * the wall the host counters above used to be: an owner who could lower it
+   * would lift the band for every site at once. The Automation page's run
+   * line reads it on every site, so a site collaborator — a member of the
+   * org — reads it too.
+   */
+  it('the workspace run counters are member-readable and server-written (AGL-3472)', async () => {
+    for (const counter of ['workflowRuns', 'actionRuns']) {
+      await assertSucceeds(getDoc(doc(authed(EDITOR), 'orgs', ORG, 'counters', counter)))
+      await assertFails(getDoc(doc(authed(OUTSIDER), 'orgs', ORG, 'counters', counter)))
+      await mustDeny(
+        `zeroing orgs/{orgId}/counters/${counter}[month]`,
+        updateDoc(doc(authed(OWNER), 'orgs', ORG, 'counters', counter), {
+          '2026-08': 0,
+        }),
+      )
+      await mustDeny(
+        `unseeding orgs/{orgId}/counters/${counter}`,
+        updateDoc(doc(authed(OWNER), 'orgs', ORG, 'counters', counter), {
+          seededFrom: '2099-01',
+        }),
+      )
+      await mustDeny(
+        `deleting orgs/{orgId}/counters/${counter}`,
+        deleteDoc(doc(authed(OWNER), 'orgs', ORG, 'counters', counter)),
+      )
+    }
   })
 
   /**

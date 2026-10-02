@@ -81,6 +81,15 @@ const ROLLUP_DATA_STORAGE_MB = 12.5
 const EXPECTED_ORG_GB = '55.63'
 const LARGEST_HOST_GB = '23.18'
 
+const MOCK_MONTH = new Date().toISOString().slice(0, 7)
+/**
+ * Workflow runs this month (AGL-3472): each site's own counter, and the
+ * workspace's — the sum, which is what the run gates are held to. Pro
+ * includes 5,000: the workspace is at 84%, no single site past 30%.
+ */
+const MOCK_SITE_WORKFLOW_RUNS = 1_400
+const MOCK_ORG_WORKFLOW_RUNS = 4_200
+
 const mockFetchSeatCounts = jest.fn(async () => ({
   managerSeats: 2,
   collaboratorSeats: 0,
@@ -109,6 +118,15 @@ jest.mock('firebase/firestore', () => ({
     // The monthly rollup. `siteSizeMb` is still written by report-usage as an
     // internal signal, and is deliberately still served here so the "no site
     // size row" assertion below cannot pass for want of data.
+    if (ref.path === 'orgs/org-1/counters/workflowRuns') {
+      return {
+        exists: () => true,
+        data: () => ({ [MOCK_MONTH]: MOCK_ORG_WORKFLOW_RUNS, seededFrom: MOCK_MONTH }),
+      }
+    }
+    if (/^hosts\/[^/]+\/counters\/workflowRuns$/.test(ref.path)) {
+      return { exists: () => true, data: () => ({ [MOCK_MONTH]: MOCK_SITE_WORKFLOW_RUNS }) }
+    }
     if (/^orgs\/org-1\/usage\//.test(ref.path)) {
       return {
         exists: () => true,
@@ -197,6 +215,35 @@ describe('the console meter measures the org, like the invoice does', () => {
     expect(
       screen.queryAllByText(String(ROLLUP_SITE_SIZE_MB), { exact: false }),
     ).toHaveLength(0)
+  })
+})
+
+describe('the run bands are metered for the workspace (AGL-3472)', () => {
+  it('renders ONE workflow runs row, from the counter the run gates are held to', async () => {
+    render(<BillingUsageComponent org={ORG} hosts={HOSTS} />)
+
+    const label = 'Workflow runs (this month, organization)'
+    await waitFor(() => {
+      expect(meterRow(label).textContent).toContain(`${MOCK_ORG_WORKFLOW_RUNS} / `)
+    })
+    expect(screen.getAllByText(label)).toHaveLength(1)
+    // No per-site runs row beside it: each site's own 1,400 against the
+    // whole band reads 28% while the workspace stands at 84%.
+    expect(screen.queryAllByText(/^Workflow runs/)).toHaveLength(1)
+    expect(meterRow(label).textContent).not.toContain(`${MOCK_SITE_WORKFLOW_RUNS} / `)
+    expect(meterRow(label).textContent).toContain('Upgrade')
+    // The action runs band, which no Billing meter showed before, beside it.
+    expect(
+      screen.getAllByText('Action runs (this month, organization)'),
+    ).toHaveLength(1)
+  })
+
+  it('shows no run row on a plan that includes no runs', async () => {
+    render(<BillingUsageComponent org={{ $id: 'org-1', plan: 'free' } as any} hosts={HOSTS} />)
+    await waitFor(() => {
+      expect(meterRow('Bandwidth (this month, organization)')).toBeTruthy()
+    })
+    expect(screen.queryAllByText(/runs \(this month/)).toHaveLength(0)
   })
 })
 

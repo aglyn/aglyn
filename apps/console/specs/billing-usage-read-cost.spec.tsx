@@ -205,6 +205,11 @@ describe('the meter reads counters, never collections', () => {
     expect(byId).toContain(
       `orgs/org-1/crmEmailUsage/${new Date().toISOString().slice(0, 10)}`,
     )
+    // The workspace's run counters (AGL-3472) — the figures the run gates are
+    // held to — and never a site's slice of either band.
+    expect(byId).toContain('orgs/org-1/counters/workflowRuns')
+    expect(byId).toContain('orgs/org-1/counters/actionRuns')
+    expect(byId.filter((path) => /^hosts\/[^/]+\/counters\/(workflow|action)Runs$/.test(path))).toEqual([])
   })
 })
 

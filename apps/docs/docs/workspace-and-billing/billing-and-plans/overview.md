@@ -130,8 +130,9 @@ Nothing here guarantees that a price or feature set will remain the same.
 
 - The **billing page** shows meters for every quota — storage, bandwidth, datasets, seats,
   sends, CRM records (with the contacts, companies and deals beneath the total),
-  one-to-one emails sent today, [AI assist credits](#assist-overage), and more — with
-  redesigned plan cards.
+  one-to-one emails sent today, [AI assist credits](#assist-overage), workflow and action
+  runs, and more — with redesigned plan cards. Workflow and action runs are one monthly
+  allowance for the whole workspace, so every site's runs count against them.
 - A **usage-cap banner** appears site-wide at 80% and 100% of a quota, with an upgrade link.
 - Org admins also get an in-app **notification** and an email when sites, pages on a site,
   storage, datasets, email sends, or [bandwidth](bandwidth.md) crosses 75%, 80%, 90% or 100%,
