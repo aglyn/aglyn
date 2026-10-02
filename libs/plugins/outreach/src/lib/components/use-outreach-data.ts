@@ -16,7 +16,7 @@
  */
 'use client'
 
-import type { CampaignLinkRollup } from '@aglyn/shared-ui-email-campaigns/model'
+import type { SendLinkRollup } from '@aglyn/shared-ui-email-campaigns/model/send-report'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import type {
   ListQueryDeclaration,
@@ -218,7 +218,7 @@ export function useOutreachSequence(
  * table is not a read of every enrollment. A sequence that tracks nothing
  * never has one, and an absent document is not an error.
  */
-export type OutreachSequenceLinksLoad = OutreachLoad<CampaignLinkRollup | null>
+export type OutreachSequenceLinksLoad = OutreachLoad<SendLinkRollup | null>
 
 export function useOutreachSequenceLinks(
   orgId: string | null,
@@ -245,7 +245,7 @@ export function useOutreachSequenceLinks(
       (snapshot) =>
         setResult({
           status: 'ready',
-          data: snapshot.exists() ? (snapshot.data() as CampaignLinkRollup) : null,
+          data: snapshot.exists() ? (snapshot.data() as SendLinkRollup) : null,
         }),
       (error) => setResult(failed(null, error, 'the link report')),
     )

@@ -29,9 +29,7 @@
 import { ConsoleWidgetSlotContext } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
-import type {
-  CampaignStats,
-} from '@aglyn/shared-ui-email-campaigns/model/campaign-report'
+import type { SendStats } from '@aglyn/shared-ui-email-campaigns/model/send-report'
 import { standInEmailsPageRoutes } from '../testing/stand-in-emails-page-routes'
 
 // The Emails page this campaign links into is the email plugin's (AGL-3080).
@@ -180,7 +178,7 @@ const NODES = {
 }
 
 /** 100 sent, 90 delivered — two different numbers to divide by. */
-const STATS: CampaignStats = {
+const STATS: SendStats = {
   recipients: 100,
   sent: 100,
   delivered: 90,

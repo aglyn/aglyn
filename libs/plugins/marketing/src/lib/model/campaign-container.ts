@@ -73,11 +73,11 @@ import {
   type ListUnsubscribeForcedReason,
 } from '@aglyn/shared-util-email/list-unsubscribe'
 import {
-  CAMPAIGN_SEQUENCE_REPORTS_COLLECTION,
-  campaignRate,
-  type CampaignRate,
-  type CampaignStats,
-} from './campaign-report'
+  sendRate,
+  type SendRate,
+  type SendStats,
+} from '@aglyn/shared-ui-email-campaigns/model/send-report'
+import { CAMPAIGN_SEQUENCE_REPORTS_COLLECTION } from './campaign-report'
 
 /** The org collection holding campaign CONTAINERS. */
 export const EMAIL_CAMPAIGNS_COLLECTION = 'emailCampaigns'
@@ -296,7 +296,7 @@ export interface CampaignSend {
    * neither `sentAt` nor `sendAtMs`, so this is the only time it has.
    */
   createdAtMs?: number
-  stats?: CampaignStats
+  stats?: SendStats
   /** How far a send that goes out over several batches has got. */
   resume?: CampaignResume
   /** What it did with the List-Unsubscribe header. Absent before AGL-3307. */
@@ -643,18 +643,18 @@ export interface CampaignRollup {
   complained: CampaignAggregate
   unsubscribes: CampaignAggregate
   /** Distinct openers over delivered, across every send that recorded both. */
-  openRate: CampaignRate | null
+  openRate: SendRate | null
   /** Distinct clickers over delivered. */
-  clickRate: CampaignRate | null
+  clickRate: SendRate | null
   /** Unsubscribes over delivered. */
-  unsubscribeRate: CampaignRate | null
+  unsubscribeRate: SendRate | null
   /** The most recent send time in the campaign, for ordering a list. */
   lastSentAtMs: number | null
 }
 
 const aggregate = (
   sends: CampaignSend[],
-  read: (stats: CampaignStats) => number | undefined,
+  read: (stats: SendStats) => number | undefined,
 ): CampaignAggregate => {
   let total = 0
   let recorded = 0
@@ -747,17 +747,17 @@ export function campaignRollup(sends: CampaignSend[]): CampaignRollup {
     bounced: aggregate(gone, (stats) => stats.bounced),
     complained: aggregate(gone, (stats) => stats.complained),
     unsubscribes: aggregate(gone, (stats) => stats.unsubscribes),
-    openRate: campaignRate(
+    openRate: sendRate(
       aggregate(measurable, (stats) => stats.uniqueOpens).value ?? undefined,
       deliveredTotal.value ?? undefined,
       'delivered',
     ),
-    clickRate: campaignRate(
+    clickRate: sendRate(
       aggregate(measurable, (stats) => stats.uniqueClicks).value ?? undefined,
       deliveredTotal.value ?? undefined,
       'delivered',
     ),
-    unsubscribeRate: campaignRate(
+    unsubscribeRate: sendRate(
       aggregate(measurable, (stats) => stats.unsubscribes).value ?? undefined,
       deliveredTotal.value ?? undefined,
       'delivered',

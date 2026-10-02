@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+
 /**
  * THE ARITHMETIC, AND WHICH POPULATION EACH NUMBER IS OVER.
  *
@@ -31,19 +32,16 @@
  * be equal, which for a campaign with no bounces is always.
  */
 
+import type { SendStats } from '@aglyn/shared-ui-email-campaigns/model/send-report'
 import {
-  CAMPAIGN_LINK_ROLLUP_MAX,
   CAMPAIGN_SEQUENCE_OUTCOMES,
-  campaignLinkKey,
-  campaignLinkReport,
-  campaignRate,
   campaignReport,
   campaignSequencesReport,
-  type CampaignStats,
 } from './campaign-report'
 
+
 /** A campaign that sent to 1,000, delivered 900, with real engagement. */
-const SENT: CampaignStats = {
+const SENT: SendStats = {
   audienceSize: 1200,
   recipients: 1000,
   sent: 1000,
@@ -57,47 +55,6 @@ const SENT: CampaignStats = {
   unsubscribes: 18,
   clickTracked: true,
 }
-
-describe('campaignRate', () => {
-  it('divides and names the population it divided by', () => {
-    const rate = campaignRate(300, 900, 'delivered')
-    expect(rate).toEqual({
-      value: 1 / 3,
-      numerator: 300,
-      denominator: 900,
-      denominatorLabel: 'delivered',
-    })
-  })
-
-  /*
-   * The refusal that the whole module rests on. 0 out of 0 is not 0% — a
-   * campaign whose delivery events have not arrived yet and a campaign that
-   * genuinely reached nobody are different situations, and a rendered `0.0%`
-   * makes them identical on screen.
-   */
-  it('refuses a zero denominator rather than reporting 0%', () => {
-    expect(campaignRate(0, 0, 'delivered')).toBeNull()
-    expect(campaignRate(5, 0, 'delivered')).toBeNull()
-  })
-
-  it('refuses a negative or non-finite denominator', () => {
-    expect(campaignRate(5, -1, 'delivered')).toBeNull()
-    expect(campaignRate(5, Number.NaN, 'delivered')).toBeNull()
-    expect(campaignRate(Number.POSITIVE_INFINITY, 10, 'delivered')).toBeNull()
-  })
-
-  it('treats an absent numerator as zero, not as absent', () => {
-    // A campaign with delivery events and no opens really does have a 0%
-    // open rate, and that is a fact worth showing. Only the DENOMINATOR
-    // being missing makes a rate unreportable.
-    expect(campaignRate(undefined, 900, 'delivered')).toEqual({
-      value: 0,
-      numerator: 0,
-      denominator: 900,
-      denominatorLabel: 'delivered',
-    })
-  })
-})
 
 describe('campaignReport — which population each rate is over', () => {
   /*
@@ -186,7 +143,7 @@ describe('campaignReport — which population each rate is over', () => {
 
 describe('campaignReport — a denominator that was never recorded', () => {
   /** The fixture with delivery events removed, as an old campaign reads. */
-  const legacy: CampaignStats = { ...SENT }
+  const legacy: SendStats = { ...SENT }
   delete legacy.delivered
   delete legacy.uniqueOpens
   delete legacy.uniqueClicks
@@ -251,7 +208,7 @@ describe('campaignReport — a denominator that was never recorded', () => {
 
 describe('campaignReport — the window where clicks were structurally zero', () => {
   /** A send that never recorded carrying an HTML part. */
-  const untracked: CampaignStats = { ...SENT }
+  const untracked: SendStats = { ...SENT }
   delete untracked.clickTracked
 
   it('computes no click rate for a send whose links were not trackable', () => {
@@ -289,7 +246,7 @@ describe('campaignReport — the window where clicks were structurally zero', ()
 })
 
 describe('campaignReport — the populations the send measured', () => {
-  const withPopulations: CampaignStats = {
+  const withPopulations: SendStats = {
     ...SENT,
     consented: 700,
     consentedByOperator: 120,
@@ -335,7 +292,7 @@ describe('campaignReport — the populations the send measured', () => {
       zeroed.populations.find((one) => one.id === 'consentWithheld'),
     ).toMatchObject({ count: 0 })
 
-    const legacy: CampaignStats = { ...withPopulations }
+    const legacy: SendStats = { ...withPopulations }
     delete legacy.consentWithheld
     expect(
       campaignReport(legacy).populations.find(
@@ -379,135 +336,6 @@ describe('campaignReport — the caveats that qualify a figure', () => {
   })
 })
 
-describe('campaignLinkKey', () => {
-  /*
-   * The normalisation that makes an aggregate possible at all. A campaign
-   * body goes through `resolveMergeTags` per recipient, so a link carrying a
-   * personalised query would mint one rollup row per RECIPIENT — the
-   * aggregate degenerates into the per-recipient log, and it blows the cap on
-   * the first campaign that does it.
-   */
-  it('folds a per-recipient query string onto one key', () => {
-    expect(campaignLinkKey('https://shop.example/sale?u=alice@example.com')).toBe(
-      campaignLinkKey('https://shop.example/sale?u=bob@example.com'),
-    )
-  })
-
-  it('does not put a recipient address in the key it stores', () => {
-    expect(campaignLinkKey('https://shop.example/sale?u=alice@example.com')).toBe(
-      'https://shop.example/sale',
-    )
-  })
-
-  it('keeps different paths apart', () => {
-    expect(campaignLinkKey('https://shop.example/a')).not.toBe(
-      campaignLinkKey('https://shop.example/b'),
-    )
-  })
-
-  it('keeps different hosts apart', () => {
-    expect(campaignLinkKey('https://a.example/x')).not.toBe(
-      campaignLinkKey('https://b.example/x'),
-    )
-  })
-
-  it('folds a trailing slash but keeps a bare origin valid', () => {
-    expect(campaignLinkKey('https://shop.example/sale/')).toBe(
-      'https://shop.example/sale',
-    )
-    expect(campaignLinkKey('https://shop.example/')).toBe('https://shop.example/')
-  })
-
-  it('refuses anything that is not an http(s) URL', () => {
-    expect(campaignLinkKey('mailto:someone@example.com')).toBeNull()
-    expect(campaignLinkKey('javascript:alert(1)')).toBeNull()
-    expect(campaignLinkKey('not a url')).toBeNull()
-    expect(campaignLinkKey('')).toBeNull()
-    expect(campaignLinkKey(null)).toBeNull()
-  })
-})
-
-describe('campaignLinkReport', () => {
-  const rollup = {
-    links: {
-      a: { url: 'https://shop.example/sale', clicks: 60 },
-      b: { url: 'https://shop.example/new', clicks: 30 },
-      c: { url: 'https://shop.example/help', clicks: 10 },
-    },
-  }
-
-  it('sorts by clicks, busiest first', () => {
-    expect(campaignLinkReport(rollup).rows.map((row) => row.clicks)).toEqual([
-      60, 30, 10,
-    ])
-  })
-
-  /*
-   * The share is over the clicks THIS TABLE accounts for, not over
-   * `stats.clicks`. A share column that failed to reach 100% because of rows
-   * that are not on screen is arithmetic a reader cannot check — and the
-   * excluded figures are returned separately so the screen can state them.
-   */
-  it('takes each share over the clicks the table counted', () => {
-    const report = campaignLinkReport(rollup)
-    expect(report.attributedClicks).toBe(100)
-    expect(report.rows[0].share).toMatchObject({
-      denominator: 100,
-      denominatorLabel: 'link clicks counted',
-    })
-    expect(
-      report.rows.reduce((total, row) => total + (row.share?.value ?? 0), 0),
-    ).toBeCloseTo(1, 10)
-  })
-
-  it('reports overflow and unattributed clicks rather than folding them in', () => {
-    const report = campaignLinkReport({
-      ...rollup,
-      overflowClicks: 7,
-      unattributedClicks: 3,
-    })
-    expect(report.attributedClicks).toBe(100)
-    expect(report.overflowClicks).toBe(7)
-    expect(report.unattributedClicks).toBe(3)
-    expect(report.truncated).toBe(true)
-  })
-
-  it('is not truncated when the cap has not bitten', () => {
-    expect(campaignLinkReport(rollup).truncated).toBe(false)
-  })
-
-  it('is truncated once the map is full, even with no overflow yet', () => {
-    const full = {
-      links: Object.fromEntries(
-        Array.from({ length: CAMPAIGN_LINK_ROLLUP_MAX }, (_, index) => [
-          `k${index}`,
-          { url: `https://shop.example/${index}`, clicks: 1 },
-        ]),
-      ),
-    }
-    expect(campaignLinkReport(full).truncated).toBe(true)
-  })
-
-  it('drops a row with no URL rather than rendering a blank destination', () => {
-    const report = campaignLinkReport({
-      links: { a: { clicks: 5 }, b: { url: 'https://x.example/y', clicks: 2 } },
-    })
-    expect(report.rows).toHaveLength(1)
-    expect(report.attributedClicks).toBe(2)
-  })
-
-  it('answers an empty table for a campaign with no rollup', () => {
-    const report = campaignLinkReport(undefined)
-    expect(report.rows).toEqual([])
-    expect(report.attributedClicks).toBe(0)
-    expect(report.truncated).toBe(false)
-  })
-})
-
-/*
- * The Sequences block (AGL-3254): five figures in funnel order, absent
- * distinguished from zero, and no total anywhere.
- */
 describe('campaignSequencesReport', () => {
   it('reports every outcome in funnel order and never a total', () => {
     const report = campaignSequencesReport({

@@ -32,9 +32,7 @@
 
 import { render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
-import type {
-  CampaignStats,
-} from '@aglyn/shared-ui-email-campaigns/model/campaign-report'
+import type { SendStats } from '@aglyn/shared-ui-email-campaigns/model/send-report'
 import { standInEmailsPageRoutes } from '../testing/stand-in-emails-page-routes'
 
 // The Emails page this campaign links into is the email plugin's (AGL-3080).
@@ -90,7 +88,7 @@ const LINKS_PATH = 'orgs/org-1/campaigns/camp_1/reports/links'
  * campaign with no bounces every candidate denominator is the same number and
  * the test would pass against any of them.
  */
-const STATS: CampaignStats = {
+const STATS: SendStats = {
   audienceSize: 1200,
   recipients: 1000,
   sent: 1000,
@@ -108,7 +106,7 @@ const STATS: CampaignStats = {
 }
 
 async function renderReport(
-  stats: CampaignStats | undefined,
+  stats: SendStats | undefined,
   links?: unknown,
 ): Promise<void> {
   mockDocs.clear()
@@ -157,7 +155,7 @@ describe('the campaign report names its denominators on screen', () => {
   })
 
   it('shows a rate it cannot compute as a dash, never as 0%', async () => {
-    const legacy: CampaignStats = { ...STATS }
+    const legacy: SendStats = { ...STATS }
     delete legacy.delivered
     delete legacy.uniqueOpens
     delete legacy.uniqueClicks
@@ -175,7 +173,7 @@ describe('the campaign report names its denominators on screen', () => {
   })
 
   it('shows an unrecorded delivered count as a dash, not as zero', async () => {
-    const legacy: CampaignStats = { ...STATS }
+    const legacy: SendStats = { ...STATS }
     delete legacy.delivered
 
     await renderReport(legacy)
@@ -212,7 +210,7 @@ describe('the campaign report names its denominators on screen', () => {
   })
 
   it('withholds the click rate for a send whose links were untrackable', async () => {
-    const untracked: CampaignStats = { ...STATS }
+    const untracked: SendStats = { ...STATS }
     delete untracked.clickTracked
 
     await renderReport(untracked)

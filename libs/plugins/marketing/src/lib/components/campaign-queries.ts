@@ -20,7 +20,7 @@ import {
   orgCampaignSendsPath,
   orgCampaignSequenceReportsPath,
   orgEmailCampaignsPath,
-} from '@aglyn/shared-ui-email-campaigns/model/campaign-container'
+} from '../model/campaign-container'
 import {
   collection,
   doc,

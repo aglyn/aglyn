@@ -499,7 +499,7 @@ export interface OutreachSequenceSettings {
  * loaded would report the first page's numbers as the sequence's.
  *
  * Every field is optional and every absence means "not recorded", never
- * zero. The distinction is the whole of `campaign-report.ts`'s honesty and
+ * zero. The distinction is the whole of `send-report.ts`'s honesty and
  * it is kept here for the same reason: a sequence that ran before this
  * existed has no counters, and reporting its click rate as 0% would publish
  * a fact about our schema as a fact about its recipients.
@@ -583,13 +583,13 @@ export interface OutreachEnrollmentEngagement {
   /** The first, which is what makes them one of the sequence's `uniqueClicks`. */
   firstClickAtMs: number | null
   lastClickAtMs: number | null
-  /** The destination they followed last, as `campaignLinkKey` reduces it. */
+  /** The destination they followed last, as `sendLinkKey` reduces it. */
   lastClickUrl: string | null
   /** Clicks on this person's links that were a machine's. */
   machineClicks: number
   /**
    * Every distinct destination this person followed since the per-click
-   * history began (AGL-3332), as `campaignLinkKey` reduces it, oldest first
+   * history began (AGL-3332), as `sendLinkKey` reduces it, oldest first
    * and at most {@link OUTREACH_ENGAGEMENT_LINKS_MAX}. What the table counts
    * as "links" and filters "followed this link" by, without a read of the
    * history. A click from before the history kept only `lastClickUrl`.
@@ -654,7 +654,7 @@ export interface OutreachClickHistoryEntry {
   id: string
   kind: 'click'
   atMs: number
-  /** The destination as `campaignLinkKey` reduces it — the link rollup's key; `null` when unreadable. */
+  /** The destination as `sendLinkKey` reduces it — the link rollup's key; `null` when unreadable. */
   url: string | null
   /** The step whose email carried the link. */
   stepIndex: number

@@ -1113,8 +1113,8 @@ const NOT_A_LIST: Array<[string, string]> = [
       'number of rows as a fifty-recipient one.',
   ],
   [
-    'libs/plugins/email/src/lib/components/email-template-detail.tsx',
-    'One template’s report. The audiences table is one row per named ' +
+    'libs/plugins/marketing/src/lib/components/email-template-report-card.tsx',
+    'What one template’s emails did, drawn on the Email plugin’s template page. The audiences table is one row per named ' +
       'audience the template has been sent to and the caveats are a fixed ' +
       'set; the messages table is the ceilinged window the card already ' +
       'holds, and it owns up to the ceiling rather than paging a window that ' +

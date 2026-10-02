@@ -69,7 +69,7 @@ import {
   campaignHeldForReviewNotice,
   campaignSendDisplay,
   CAMPAIGN_SEND_CONTAINER_FIELD,
-} from '@aglyn/shared-ui-email-campaigns/model/campaign-container'
+} from '../model/campaign-container'
 import CampaignComposer from './campaign-composer'
 import { campaignSendDoc } from './campaign-queries'
 import { useMarketingOrgId } from './marketing-org-mount'

@@ -18,7 +18,7 @@
 /*==========================================
  * WHAT A SEQUENCE MEASURED, AND WHAT IT DID NOT (AGL-3239).
  *
- * The rules are `campaign-report.ts`'s, applied to a channel that can
+ * The rules are `send-report.ts`'s, applied to a channel that can
  * measure less, and the sameness is deliberate: a rate called "click rate"
  * on the Sequences screen and a rate called "click rate" on a campaign's
  * report are taken over comparably named denominators, and each says which
@@ -27,7 +27,7 @@
  * Three refusals carry over unchanged:
  *
  * 1. **A rate over a zero or unknown denominator is `null`**, never 0%. The
- *    rate helper itself is `campaignRate`, imported rather than rewritten,
+ *    rate helper itself is `sendRate`, imported rather than rewritten,
  *    so the two reports cannot drift into two definitions of a percentage.
  * 2. **An absent counter is "not recorded", not nought.** A sequence that
  *    ran before the counters existed reports nothing rather than zeroes.
@@ -48,12 +48,12 @@
  *=========================================*/
 
 import {
-  campaignLinkReport,
-  campaignRate,
-  type CampaignLinkReport,
-  type CampaignLinkRollup,
-  type CampaignRate,
-} from '@aglyn/shared-ui-email-campaigns/model'
+  sendLinkReport,
+  sendRate,
+  type SendLinkReport,
+  type SendLinkRollup,
+  type SendRate,
+} from '@aglyn/shared-ui-email-campaigns/model/send-report'
 import type { OutreachSequenceStats } from './outreach.types'
 
 /** Why a number a reader expects is missing, or must not be read the obvious way. */
@@ -107,14 +107,14 @@ export interface OutreachSequenceReport {
      * `null` when the sequence never sent a tracked link, when nobody has
      * been emailed yet, and when the counters predate the feature.
      */
-    click: CampaignRate | null
+    click: SendRate | null
     /**
      * Distinct people who opened, over the people sent the image.
      *
      * `null` when no email carried the image, and when nobody has been sent
      * one yet.
      */
-    open: CampaignRate | null
+    open: SendRate | null
   }
   caveats: OutreachReportCaveat[]
 }
@@ -164,7 +164,7 @@ export function outreachSequenceReport(
   }
   const sent = count(source.sent)
   /*
-   * ABSENT, not zero — the distinction `campaign-report.ts` makes about
+   * ABSENT, not zero — the distinction `send-report.ts` makes about
    * `delivered` and for the same reason. `people` is the denominator of the
    * click rate, and `?? 0` here would turn "we never counted" into "nobody
    * was emailed" and render that beside a non-zero send count.
@@ -227,10 +227,10 @@ export function outreachSequenceReport(
         : null,
     rates: {
       click: clickTracked
-        ? campaignRate(uniqueClicks, people ?? undefined, 'people emailed')
+        ? sendRate(uniqueClicks, people ?? undefined, 'people emailed')
         : null,
       open: openTracked
-        ? campaignRate(uniqueOpens, openPeople ?? undefined, 'people sent a tracked email')
+        ? sendRate(uniqueOpens, openPeople ?? undefined, 'people sent a tracked email')
         : null,
     },
     caveats,
@@ -245,7 +245,7 @@ export function outreachSequenceReport(
  * the same table a marketer reads.
  */
 export function outreachSequenceLinkReport(
-  rollup: CampaignLinkRollup | undefined,
-): CampaignLinkReport {
-  return campaignLinkReport(rollup)
+  rollup: SendLinkRollup | undefined,
+): SendLinkReport {
+  return sendLinkReport(rollup)
 }

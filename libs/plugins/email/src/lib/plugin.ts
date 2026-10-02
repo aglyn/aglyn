@@ -22,6 +22,7 @@ import { lazy } from 'react'
 import {
   EMAIL_MESSAGES_ZONE,
   EMAIL_TEMPLATE_RECIPIENTS_ZONE,
+  EMAIL_TEMPLATE_REPORT_ZONE,
 } from './components/email-zones'
 import { EMAILS_CONSOLE_SECTIONS } from './components/emails-console-sections'
 import { BUNDLE_ID } from './constants/bundle-common'
@@ -79,6 +80,16 @@ export function registerEmailConsole(): void {
       layout: 'bare',
       description:
         'The whole body of `/emails/messages` and the routes under it, under a site and on the organization’s Emails page. A widget here is handed the site (or `null` and the org mount at the organization level), the Emails page’s base path and the segments under `messages`, and draws the list, one message’s report or its composer.',
+    },
+    { pluginId: BUNDLE_ID },
+  )
+  registerPluginZone(
+    {
+      zone: EMAIL_TEMPLATE_REPORT_ZONE,
+      label: 'What a template’s emails did',
+      surface: 'console',
+      description:
+        'On one template’s page, under its name. A widget here reports the messages sent from that template — their figures, the audiences they went to and the messages themselves — read from the plugin that sends them; it is handed the site, the template’s id and the Emails page’s base path.',
     },
     { pluginId: BUNDLE_ID },
   )

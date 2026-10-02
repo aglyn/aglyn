@@ -16,9 +16,9 @@
  */
 
 import {
-  CAMPAIGN_LINK_ROLLUP_MAX,
-  campaignLinkKey,
-} from '@aglyn/shared-ui-email-campaigns/model'
+  SEND_LINK_ROLLUP_MAX,
+  sendLinkKey,
+} from '@aglyn/shared-ui-email-campaigns/model/send-report'
 import { FieldValue } from 'firebase-admin/firestore'
 import { OUTREACH_PLUGIN_ID } from '../constants/bundle-common'
 import {
@@ -139,7 +139,7 @@ export async function recordOutreachClick(
     })
     const held = readOutreachEngagement(enrollment.engagement)
     const first = judgement.human && held.firstClickAtMs === null
-    const key = campaignLinkKey(url)
+    const key = sendLinkKey(url)
     // A row for this visit, while the person's history has room for one.
     const logged = outreachLoggedEngagementRows(held) < OUTREACH_ENROLLMENT_HISTORY_MAX
     /*
@@ -252,11 +252,11 @@ async function bumpSequenceStats(
 /**
  * The per-destination rollup for one sequence.
  *
- * Keyed by `campaignLinkKey`, which drops the query string — a step body
+ * Keyed by `sendLinkKey`, which drops the query string — a step body
  * goes through the merge resolver per recipient, so keying on the full URL
  * would mint one row per PERSON and turn the aggregate into the
  * per-recipient list it exists to summarise. Capped at
- * `CAMPAIGN_LINK_ROLLUP_MAX` for the same reason the campaign rollup is: it
+ * `SEND_LINK_ROLLUP_MAX` for the same reason the campaign rollup is: it
  * is one document with a size ceiling. Past the cap a click is counted in
  * `overflowClicks` rather than dropped, so the table still reconciles.
  */
@@ -265,7 +265,7 @@ async function bumpLinkRollup(
   input: { orgId: string; sequenceId: string; url: string },
 ): Promise<void> {
   if (!input.sequenceId) return
-  const key = campaignLinkKey(input.url)
+  const key = sendLinkKey(input.url)
   const ref = outreachOrgCollection(firestore, input.orgId, 'sequences')
     .doc(input.sequenceId)
     .collection(OUTREACH_LINK_ROLLUP_PATH[0])
@@ -283,7 +283,7 @@ async function bumpLinkRollup(
         | Record<string, { url?: string; clicks?: number }>
         | undefined
       const held = links?.[campaignRollupField(key)]
-      if (!held && Object.keys(links ?? {}).length >= CAMPAIGN_LINK_ROLLUP_MAX) {
+      if (!held && Object.keys(links ?? {}).length >= SEND_LINK_ROLLUP_MAX) {
         transaction.set(ref, { overflowClicks: FieldValue.increment(1) }, { merge: true })
         return
       }
@@ -338,7 +338,7 @@ async function fileFirstClick(
       sourcePluginId: OUTREACH_PLUGIN_ID,
       kind: 'note',
       atMs: input.nowMs,
-      body: `Followed a link in a sequence email: ${campaignLinkKey(input.url) ?? input.url}`,
+      body: `Followed a link in a sequence email: ${sendLinkKey(input.url) ?? input.url}`,
       byUid: '',
       byName: null,
     })

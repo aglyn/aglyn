@@ -122,7 +122,7 @@ import {
   campaignPlacedOnHost,
   campaignSiteIds,
   campaignVisibleTo,
-} from '@aglyn/shared-ui-email-campaigns/model'
+} from '../model/campaign-container'
 import {
   campaignSendSiteStamp,
   orgCampaignSends,

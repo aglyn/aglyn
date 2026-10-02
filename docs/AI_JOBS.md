@@ -1452,8 +1452,9 @@ is one thing to build and a plan over it would be a plan of one.
   - **The list** a campaign is for is suggested when the brief names one of
     the org's lists, and is set on nothing. It reaches the person as the
     output's `note`.
-  - **The send time** is `campaignSendTime` in `@aglyn/shared-ui-email-campaigns`
-    over that list's past sends on this site, and is said only in the note.
+  - **The send time** is the Marketing plugin's (`model/campaign-send-time.ts`),
+    asked for through `plugin-record-facts` (`listSendTime`) over that list's
+    past sends on this site, and is said only in the note.
 - **Outputs.** An `emailScreen` output for the design (which opens in the
   screen besigner, as the Emails page's Edit design does) and, for a campaign,
   a `campaign` output carrying the note. A campaign that could not be drafted

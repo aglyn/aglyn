@@ -16,7 +16,7 @@
  */
 'use client'
 
-import type { CampaignRate } from '@aglyn/shared-ui-email-campaigns/model'
+import type { SendRate } from '@aglyn/shared-ui-email-campaigns/model/send-report'
 import {
   Alert,
   ButtonBase,
@@ -137,7 +137,7 @@ const count = (value: number): string => value.toLocaleString()
  * the percentage, never dropped: "12% of people emailed" and "12% of people
  * who opened" are different claims and a bare "12%" is neither.
  */
-function rateText(rate: CampaignRate | null): { value: string; hint?: string } {
+function rateText(rate: SendRate | null): { value: string; hint?: string } {
   if (!rate) return { value: '—' }
   return {
     value: `${(rate.value * 100).toFixed(1)}%`,

@@ -65,6 +65,11 @@ const EmailMessagesWidget = lazy(
   () => import('./components/email-messages-widget'),
 )
 
+/** What the sends built from one template did, on the template's page. */
+const EmailTemplateReportCard = lazy(
+  () => import('./components/email-template-report-card'),
+)
+
 /** Who received the sends built from one template, on the template's page. */
 const EmailRecipientsCard = lazy(
   () => import('./components/email-recipients-card'),
@@ -201,6 +206,14 @@ export function registerMarketingConsole(): void {
         widgetId: 'marketing-email-messages',
         title: 'Messages',
         Component: EmailMessagesWidget,
+      },
+      // A template's page: what the sends built from it did, then who
+      // received them. The template is the Email plugin's; the sends are ours.
+      {
+        slot: 'emailTemplateReport',
+        widgetId: 'marketing-email-template-report',
+        title: 'Sent from this template',
+        Component: EmailTemplateReportCard,
       },
       {
         slot: 'emailTemplateRecipients',

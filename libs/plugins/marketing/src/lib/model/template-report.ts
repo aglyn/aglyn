@@ -59,16 +59,14 @@
  */
 
 import {
-  campaignRate,
-  type CampaignRate,
-  type CampaignStats,
-} from '@aglyn/shared-ui-email-campaigns/model/campaign-report'
-import {
-  emailAudienceLabel,
-} from '@aglyn/shared-ui-email-campaigns/model/email-record'
+  sendRate,
+  type SendRate,
+  type SendStats,
+} from '@aglyn/shared-ui-email-campaigns/model/send-report'
+import { emailAudienceLabel } from './email-record'
 
 /** A rate over a sum, carrying how many campaigns the sum covers. */
-export type TemplateRate = CampaignRate
+export type TemplateRate = SendRate
 
 /**
  * One campaign that used the design, as the report reads it.
@@ -91,7 +89,7 @@ export interface TemplateCampaign {
   listId?: string
   /** The list's name AS IT WAS at send time, when the send recorded one. */
   listName?: string
-  stats: CampaignStats | undefined
+  stats: SendStats | undefined
 }
 
 /**
@@ -179,7 +177,7 @@ function wasSent(campaign: TemplateCampaign): boolean {
 /** Sums one stats field over a set of campaigns, defaulting absent to zero. */
 function total(
   campaigns: readonly TemplateCampaign[],
-  field: keyof CampaignStats,
+  field: keyof SendStats,
 ): number {
   return campaigns.reduce(
     (running, campaign) => running + Number(campaign.stats?.[field] ?? 0),
@@ -268,24 +266,24 @@ export function templateReport(
      */
     delivery: delivered === null
       ? null
-      : campaignRate(
+      : sendRate(
           delivered,
           total(withDelivery, 'sent'),
           acrossLabel('sent', withDelivery.length, all),
         ),
-    open: campaignRate(
+    open: sendRate(
       uniqueOpens ?? undefined,
       withUniqueOpens.length ? total(withUniqueOpens, 'delivered') : undefined,
       acrossLabel('delivered', withUniqueOpens.length, all),
     ),
-    click: campaignRate(
+    click: sendRate(
       uniqueClicks ?? undefined,
       withClickTracking.length
         ? total(withClickTracking, 'delivered')
         : undefined,
       acrossLabel('delivered', withClickTracking.length, all),
     ),
-    clickToOpen: campaignRate(
+    clickToOpen: sendRate(
       withOpenersAndClicks.length
         ? total(withOpenersAndClicks, 'uniqueClicks')
         : undefined,
@@ -301,17 +299,17 @@ export function templateReport(
      * event means nothing bounced, unlike `delivered`, whose absence means
      * nothing was measured.
      */
-    bounce: campaignRate(
+    bounce: sendRate(
       total(sentCampaigns, 'bounced'),
       sent,
       acrossLabel('sent', all, all),
     ),
-    complaint: campaignRate(
+    complaint: sendRate(
       withDelivery.length ? total(withDelivery, 'complained') : undefined,
       delivered ?? undefined,
       acrossLabel('delivered', withDelivery.length, all),
     ),
-    unsubscribe: campaignRate(
+    unsubscribe: sendRate(
       withDelivery.length ? total(withDelivery, 'unsubscribes') : undefined,
       delivered ?? undefined,
       acrossLabel('delivered', withDelivery.length, all),

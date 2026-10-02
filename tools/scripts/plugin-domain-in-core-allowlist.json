@@ -330,24 +330,6 @@
       "why": "Generic field definitions for any data-driven form; nothing of the forms plugin."
     },
     {
-      "path": "libs/shared/ui/email-campaigns/src/lib/model/campaign-container.ts",
-      "rules": [
-        "domain-name",
-        "domain-exports:marketing",
-        "domain-declares:marketing"
-      ],
-      "lane": "marketing"
-    },
-    {
-      "path": "libs/shared/ui/email-campaigns/src/lib/model/campaign-report.ts",
-      "rules": [
-        "domain-name",
-        "domain-exports:marketing",
-        "domain-declares:marketing"
-      ],
-      "lane": "marketing"
-    },
-    {
       "path": "libs/shared/ui/jsx-forms/src/lib/mapper/form-field-grid.tsx",
       "rules": [
         "domain-name"
