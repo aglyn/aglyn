@@ -207,7 +207,12 @@ beforeAll(async () => {
   await registerPluginServerDeclarations()
 })
 
-import { POST } from '../app/api/forms/submit/route'
+// The door as the tenant serves it: the forms plugin's route, through the
+// plugin API dispatcher, with the forms plugin's surface loaded (AGL-3080).
+jest.mock('../utils/server-plugin-loader', () => ({
+  serverPluginLoader: jest.requireActual('./plugin-door-dispatch').formsOnlyServerPluginLoader(),
+}))
+import { POST } from './plugin-door-dispatch'
 
 const WIRE = 'utm_source=google&utm_campaign=sept-launch&t=1700000000000'
 

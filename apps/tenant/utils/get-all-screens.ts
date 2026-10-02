@@ -48,7 +48,9 @@ import getHost from './get-host'
  * who has never read this file. Note that `seo` is projected as a whole map
  * but copied key by key, for the same reason one level down.
  *
- * `visibility` is read but never returned. It is here to DECIDE: gated screens
+ * `visibility` and `kind` are read but never returned. `kind` is there to
+ * resolve a page's parent through any page GROUP above it (AGL-3463) and to
+ * keep a group out of the listing; `visibility` is there to DECIDE: gated screens
  * (`PRIVATE`, `PASSWORD`, `AUTHENTICATED`, `AUTHORIZED`, and `UNLISTED`) are
  * dropped from the listing entirely, via the same `isScreenIndexable` predicate
  * `/api/sitemap` uses — an anonymous listing should not advertise the titles
@@ -68,6 +70,7 @@ const PUBLIC_SCREEN_PROJECTION = [
   'seo',
   // Read to decide, never returned. See the note above.
   'visibility',
+  'kind',
 ] as const
 
 /** Exactly what `GET /api/screen` publishes about a page. */
@@ -81,6 +84,12 @@ export interface PublicScreen {
    */
   path?: string
   slug?: string
+  /**
+   * The nearest parent PAGE, for a nested page (AGL-3463). A page group is a
+   * folder in the console with no address and no listing of its own, so it is
+   * passed over — the same page a path is composed under, which is what a
+   * caller rebuilding the site's hierarchy needs. Absent at the top level.
+   */
   parentId?: string
   order?: number
   displayName?: string
@@ -104,13 +113,14 @@ function toPublicScreen(
   id: string,
   doc: Record<string, unknown>,
   path: string,
+  parentId: string | undefined,
 ): PublicScreen {
   const seo = (doc.seo ?? undefined) as Record<string, unknown> | undefined
   return {
     $id: id,
     path,
     slug: doc.slug as string | undefined,
-    parentId: doc.parentId as string | undefined,
+    parentId,
     order: doc.order as number | undefined,
     displayName: doc.displayName as string | undefined,
     description: doc.description as string | undefined,
@@ -252,8 +262,11 @@ export async function getAllScreens(
       .get()
 
     const documents = new Map<string, Record<string, unknown>>()
+    const routeNodes: Record<string, Aglyn.ScreenRouteNode> = {}
     for (const snapshot of screenDocs.docs) {
-      documents.set(snapshot.id, (snapshot.data() ?? {}) as Record<string, unknown>)
+      const doc = (snapshot.data() ?? {}) as Record<string, unknown>
+      documents.set(snapshot.id, doc)
+      routeNodes[snapshot.id] = Aglyn.toScreenRouteNode(doc)
     }
 
     /*
@@ -277,6 +290,8 @@ export async function getAllScreens(
           nothing to render — and it is not an error either.
         */
         if (!doc) return false
+        // A group is never a page, whatever entry something wrote for it.
+        if (Aglyn.isScreenGroup(doc)) return false
         return Aglyn.isScreenIndexable(doc as Aglyn.SearchIndexingScreen)
       })
       .map(([screenId, path]) => [screenId, path as string] as const)
@@ -295,6 +310,7 @@ export async function getAllScreens(
           screenId,
           documents.get(screenId) as Record<string, unknown>,
           Aglyn.screenRoutePathToUrl(path),
+          Aglyn.screenRouteParentId(screenId, routeNodes),
         ),
       )
     }

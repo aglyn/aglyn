@@ -15,15 +15,6 @@
  * limitations under the License.
  */
 
-import {
-  DATASET_FILTER_PREFIX_MAX,
-  type DatasetModel,
-  datasetFilterTextKey,
-  datasetFilterToken,
-  datasetFilterValuePath,
-  datasetFilterWords,
-  datasetSearchToken,
-} from '@aglyn/aglyn'
 import type { ListFilterField, ListFilterRequest } from '@aglyn/shared-ui-jsx/const/list-filter'
 import type {
   ListFilterClause,
@@ -36,6 +27,7 @@ import {
   type ListQueryPlan,
   planListQuery,
 } from '@aglyn/shared-ui-jsx/const/list-query-plan'
+import { DATASET_FILTER_PREFIX_MAX, type DatasetModel, datasetFilterTextKey, datasetFilterToken, datasetFilterValuePath, datasetFilterWords, datasetSearchToken } from '../model/dataset-models'
 
 /*
  * THE RECORDS TABLE IS ONE QUERY (AGL-3321).

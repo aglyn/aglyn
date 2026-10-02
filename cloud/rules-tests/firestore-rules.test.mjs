@@ -3815,6 +3815,198 @@ describe('hosts', () => {
       updateDoc(doc(authed(OWNER), 'hosts', SUSPENDED_HOST), { displayName: 'N' }),
     )
   })
+
+  /**
+   * A CLIENT WRITE NEVER DROPS A LIVE ROUTE AS A SIDE EFFECT (AGL-3463).
+   *
+   * The routing map is the whole of what the tenant serves. A client write may
+   * remove ONE entry, and nothing else in the map may change with it — that is
+   * an explicit unpublish or delete of that one page. The only exception is
+   * the placeholder home page handing `/` to the first real home page
+   * (AGL-3408), which clears `defaultHomeScreenId` in the same write.
+   *
+   * Every allowed case below is the exact shape a console writer sends
+   * (`constants/screen-publishing.ts`); every refused one is a shape that
+   * would take a page off the site that nobody pointed at.
+   */
+  describe('a client write never drops a live route as a side effect (AGL-3463)', () => {
+    const LIVE = {
+      home: '/',
+      company: 'company',
+      about: 'company/about',
+      team: 'company/about/team',
+    }
+    const hostRef = (uid = EDITOR) => doc(authed(uid), 'hosts', HOST)
+    const screenRef = (id, uid = EDITOR) =>
+      doc(authed(uid), 'hosts', HOST, 'screens', id)
+
+    beforeEach(async () => {
+      await env.withSecurityRulesDisabled(async (context) => {
+        const db = context.firestore()
+        await updateDoc(doc(db, 'hosts', HOST), {
+          screens: LIVE,
+          defaultHomeScreenId: 'home',
+        })
+        for (const id of [...Object.keys(LIVE), 'draft', 'group-1']) {
+          await setDoc(doc(db, 'hosts', HOST, 'screens', id), {
+            name: id,
+            ...(id in LIVE ? { publishedAt: new Date() } : {}),
+            ...(id === 'group-1' ? { kind: 'group' } : {}),
+          })
+        }
+      })
+    })
+
+    it('allows a single unpublish — one entry, alone, with its screen', async () => {
+      const db = authed(EDITOR)
+      const batch = writeBatch(db)
+      batch.update(doc(db, 'hosts', HOST), { 'screens.company': deleteField() })
+      batch.set(
+        doc(db, 'hosts', HOST, 'screens', 'company'),
+        { publishedAt: deleteField() },
+        { merge: true },
+      )
+      await mustAllow('unpublishScreenRoute', batch.commit())
+    })
+
+    it('allows deleting a page — the soft delete plus its one entry', async () => {
+      await mustAllow(
+        'delete: deletedAt + one routing removal',
+        Promise.all([
+          updateDoc(screenRef('about'), { deletedAt: new Date() }),
+          updateDoc(hostRef(), { 'screens.about': deleteField() }),
+        ]),
+      )
+    })
+
+    it('allows a publish, a rename cascade and a move', async () => {
+      await mustAllow(
+        'publish a draft',
+        updateDoc(hostRef(), { 'screens.draft': 'draft' }),
+      )
+      await mustAllow(
+        'rename a live parent: the subtree follows',
+        updateDoc(hostRef(), {
+          'screens.company': 'firm',
+          'screens.about': 'firm/about',
+          'screens.team': 'firm/about/team',
+        }),
+      )
+      // Into or out of a group at the same level: the sync rewrites nothing,
+      // or rewrites an entry to the value it already holds.
+      await mustAllow(
+        'move into a group',
+        updateDoc(hostRef(), { 'screens.about': 'firm/about' }),
+      )
+    })
+
+    it('allows dissolving a group — its pages move up, the map is untouched', async () => {
+      const db = authed(EDITOR)
+      const batch = writeBatch(db)
+      batch.update(doc(db, 'hosts', HOST, 'screens', 'draft'), {
+        parentId: deleteField(),
+        order: 0,
+      })
+      batch.update(doc(db, 'hosts', HOST, 'screens', 'group-1'), {
+        deletedAt: new Date(),
+      })
+      await mustAllow('group dissolve batch', batch.commit())
+    })
+
+    it('allows the placeholder home handing `/` over, marker and all', async () => {
+      await mustAllow(
+        'first real home page takes `/` (AGL-3408)',
+        updateDoc(hostRef(), {
+          'screens.draft': '/',
+          'screens.home': deleteField(),
+          defaultHomeScreenId: deleteField(),
+        }),
+      )
+    })
+
+    it('allows releasing the placeholder alone (releaseDefaultHomeRoot)', async () => {
+      await mustAllow(
+        'releaseDefaultHomeRoot',
+        updateDoc(hostRef(), {
+          'screens.home': deleteField(),
+          defaultHomeScreenId: deleteField(),
+        }),
+      )
+    })
+
+    it('still allows a write that does not touch the map', async () => {
+      await mustAllow(
+        'a settings write',
+        updateDoc(hostRef(), { displayName: 'Renamed' }),
+      )
+    })
+
+    it('refuses removing two routes in one write', async () => {
+      await mustDeny(
+        'two removals',
+        updateDoc(hostRef(), {
+          'screens.about': deleteField(),
+          'screens.team': deleteField(),
+        }),
+      )
+    })
+
+    it('refuses removing a route while another route changes', async () => {
+      await mustDeny(
+        'a removal beside a path change',
+        updateDoc(hostRef(), {
+          'screens.company': deleteField(),
+          'screens.about': 'about',
+        }),
+      )
+    })
+
+    it('refuses removing a route while another is added', async () => {
+      await mustDeny(
+        'a removal beside an add',
+        updateDoc(hostRef(), {
+          'screens.company': deleteField(),
+          'screens.draft': 'draft',
+        }),
+      )
+    })
+
+    it('refuses replacing the map with a smaller one', async () => {
+      await mustDeny(
+        'a wholesale map that drops entries',
+        updateDoc(hostRef(), { screens: { home: '/', company: 'company' } }),
+      )
+    })
+
+    it('refuses a batch that unpublishes a parent and its children together', async () => {
+      const db = authed(EDITOR)
+      const batch = writeBatch(db)
+      batch.update(doc(db, 'hosts', HOST), {
+        'screens.company': deleteField(),
+        'screens.about': deleteField(),
+        'screens.team': deleteField(),
+      })
+      await mustDeny('a cascading unpublish', batch.commit())
+    })
+
+    it('holds the placeholder exception to the placeholder, with its marker', async () => {
+      await mustDeny(
+        'a non-placeholder removal dressed as the handover',
+        updateDoc(hostRef(), {
+          'screens.draft': '/',
+          'screens.company': deleteField(),
+          defaultHomeScreenId: deleteField(),
+        }),
+      )
+      await mustDeny(
+        'the handover without clearing the marker',
+        updateDoc(hostRef(), {
+          'screens.draft': '/',
+          'screens.home': deleteField(),
+        }),
+      )
+    })
+  })
 })
 
 describe('org-shared data (AGL-237)', () => {

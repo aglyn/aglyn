@@ -93,22 +93,6 @@
       "why": "The published page's resolution of the operator's own advertising tags (see advertising-tags.ts): it installs nothing on a customer's site (`isPlatformMarketingHost`), and on the platform's marketing site hands the verdict to the shared mount."
     },
     {
-      "path": "apps/tenant/app/api/forms/submit/route.ts",
-      "rules": [
-        "domain-name",
-        "plugin-collection:forms",
-        "domain-declares:forms"
-      ],
-      "lane": "forms"
-    },
-    {
-      "path": "apps/tenant/app/api/health/funnel/funnel-probe.ts",
-      "rules": [
-        "plugin-collection:forms"
-      ],
-      "lane": "forms"
-    },
-    {
       "path": "apps/tenant/app/api/health/funnel/funnel-verdict.ts",
       "rules": [
         "domain-declares:marketing"
@@ -223,23 +207,6 @@
         "domain-declares:marketing"
       ],
       "lane": "crm"
-    },
-    {
-      "path": "libs/aglyn/src/lib/app-utils/dataset-models.ts",
-      "rules": [
-        "domain-name",
-        "domain-exports:data",
-        "domain-declares:data"
-      ],
-      "lane": "data"
-    },
-    {
-      "path": "libs/aglyn/src/lib/app-utils/datasets.ts",
-      "rules": [
-        "domain-name",
-        "domain-declares:data"
-      ],
-      "lane": "data"
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/dynamic-list-rule.ts",
@@ -386,22 +353,7 @@
     {
       "path": "libs/plugins/inbox/src/lib/components/inbox-glance-card.component.tsx",
       "rules": [
-        "plugin-collection:crm",
-        "plugin-collection:forms"
-      ],
-      "lane": "coupling"
-    },
-    {
-      "path": "libs/plugins/inbox/src/lib/components/submissions-card.component.tsx",
-      "rules": [
-        "plugin-collection:forms"
-      ],
-      "lane": "coupling"
-    },
-    {
-      "path": "libs/plugins/inbox/src/lib/server.ts",
-      "rules": [
-        "plugin-collection:forms"
+        "plugin-collection:crm"
       ],
       "lane": "coupling"
     },

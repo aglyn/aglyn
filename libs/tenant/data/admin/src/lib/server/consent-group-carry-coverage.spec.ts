@@ -104,7 +104,6 @@ const NOT_CARRIED: Readonly<Record<string, string>> = {
     'The platform list: a bounce or complaint on it holds every site of every workspace, grouped or not.',
   lists: 'Org-wide lists, which every site of the org shares whatever the declaration.',
   listAssignments: 'The inbox’s assignment of a list, read for the one site whose inbox asked.',
-  formSubmissions: 'A site’s own submissions, read for that site alone.',
   replies: 'A submission’s replies, read for that submission’s site alone.',
   subcollection: 'The parameter of `getAllAcrossSites`, whose callers are checked by name.',
 }

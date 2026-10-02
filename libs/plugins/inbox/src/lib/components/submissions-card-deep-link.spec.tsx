@@ -30,6 +30,11 @@ import { render, screen, waitFor } from '@testing-library/react'
 import { getDoc, updateDoc } from 'firebase/firestore'
 import type { ReactNode } from 'react'
 import SubmissionsCard from './submissions-card.component'
+import { standInFormSubmissionList } from '../testing/stand-in-form-submissions'
+
+// The submissions are the forms plugin's, walked and opened through the list
+// source it publishes (AGL-3080); stood in over this file's Firestore double.
+standInFormSubmissionList()
 
 let search = ''
 let stored: Record<string, unknown> | null = null

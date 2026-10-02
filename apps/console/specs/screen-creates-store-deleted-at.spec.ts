@@ -78,13 +78,13 @@ const NOT_SCREEN_CREATES: Readonly<Record<string, string>> = {
   'apps/console/app/api/hosts/versions/route.ts': 'creates versions under a screen, never the screen',
   'apps/console/utils/api-v1-resources.ts': 'creates media; reads the routing map',
   'apps/console/constants/screen-publishing.ts': 'merge-sets the publish fields of a screen that exists',
-  'apps/tenant/app/api/forms/submit/route.ts':
-    'writes submissions and counters; reads the page’s screen for the campaigns it is filed under (AGL-3461)',
   'apps/console/utils/server/page-security-hold.ts':
     'reads a held page’s screen and version; merge-sets the abuse report row (AGL-3450)',
   'libs/tenant/runtime/src/lib/apply-publish-schedule.ts':
     'unpublishes the placeholder home page, a screen that exists (AGL-3408)',
   'libs/plugins/ai/src/lib/server/ai-seo-apply.ts': 'creates a version under a screen that exists',
+  'libs/plugins/forms/src/lib/server/form-submit.ts':
+    'writes submissions and counters; reads the page’s screen for the campaigns it is filed under (AGL-3461)',
   'libs/plugins/marketing/src/lib/server/campaign-manage.ts': 'creates campaigns and sends; reads a design screen',
   'libs/plugins/marketing/src/lib/server/campaign-send.ts': 'writes sends; reads a design screen',
   'libs/plugins/marketing/src/lib/components/host-experiments-card.component.tsx':

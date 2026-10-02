@@ -58,17 +58,9 @@ describe('expandRepeatables reference hops (AGL-180)', () => {
     nodes['label'].props.children = '{{item.name}} by {{item.author.name}}'
     const posts = {
       records: [{ $id: 'p1', name: 'Hello', author: 'a1' }],
-      model: {
-        order: ['name', 'author'],
-        fields: {
-          name: { name: 'Name', type: 'text' },
-          author: {
-            name: 'Author',
-            type: 'reference',
-            reference: { datasetId: 'authors' },
-          },
-        },
-      },
+      // The rows' references, as the plugin keeping them states them: the
+      // `author` field points into the rows answered under `authors`.
+      model: { references: { author: 'authors' } },
     } as any
     const authors = {
       records: [{ $id: 'a1', name: 'Ada' }],
@@ -84,16 +76,7 @@ describe('expandRepeatables reference hops (AGL-180)', () => {
     nodes['label'].props.children = '{{item.tags.name}} / {{item.ghost.name}}'
     const posts = {
       records: [{ $id: 'p1', tags: ['t1', 't2'] }],
-      model: {
-        order: ['tags'],
-        fields: {
-          tags: {
-            name: 'Tags',
-            type: 'reference',
-            reference: { datasetId: 'tags', multiple: true },
-          },
-        },
-      },
+      model: { references: { tags: 'tags' } },
     } as any
     const tags = {
       records: [

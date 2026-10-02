@@ -216,9 +216,6 @@ jest.mock('@aglyn/aglyn/server', () => {
     apiRequestEnforcementShape: entitlements.apiRequestEnforcementShape,
     checkApiRequestQuota: entitlements.checkApiRequestQuota,
     checkEntitlement: () => true,
-    effectiveDatasetModel: () => ({ fields: [] }),
-    coerceDocumentValues: (_m: unknown, v: Record<string, unknown>) => v,
-    validateDocument: () => ({}),
     createResourceUid: () => 'unused',
     checkContactQuota: () => ({ allowed: true, included: 1000 }),
     checkDatasetQuota: () => ({ allowed: true, limit: 100 }),
@@ -227,6 +224,15 @@ jest.mock('@aglyn/aglyn/server', () => {
     ORG_SCOPE_TOKEN: 'org',
   }
 })
+
+// The data plugin's dataset model, as the dataset handlers read it
+// (AGL-3080: the model is the data plugin's own).
+jest.mock('../../../libs/plugins/data/src/lib/model/dataset-models', () => ({
+  ...jest.requireActual('../../../libs/plugins/data/src/lib/model/dataset-models'),
+  effectiveDatasetModel: () => ({ fields: [] }),
+  coerceDocumentValues: (_m: unknown, v: Record<string, unknown>) => v,
+  validateDocument: () => ({}),
+}))
 
 jest.mock('firebase-admin/firestore', () => {
   class MockTimestamp {

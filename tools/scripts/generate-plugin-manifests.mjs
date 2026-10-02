@@ -2542,6 +2542,72 @@ function notificationCategoryRows() {
 }
 
 /**
+ * Where a person reads a record kind, declared by the plugin whose console
+ * page shows it (AGL-3080), compiled so a server that tells a person about a
+ * record — a notification's link — can ask for the kind without loading the
+ * plugin that draws the page.
+ *
+ * Checked here: a plain kind no other plugin shows, and a path under one of
+ * the declaring plugin's OWN site console routes, so a plugin can only point
+ * at a page it draws. The optional `record` — where one record opens, and the
+ * query key its id rides under (AGL-3461) — is held to the same routes.
+ */
+function recordPageRows() {
+  const owners = new Map()
+  const rows = []
+  for (const plugin of config.plugins) {
+    const declared = plugin.recordPages
+    if (declared === undefined) continue
+    const where = `plugins.config.json: "${plugin.id}" recordPages`
+    if (!Array.isArray(declared) || !declared.length) {
+      throw new Error(`${where} is present and declares nothing — drop it, or name the kinds its pages show`)
+    }
+    const routes = plugin.contributes?.console?.routes ?? []
+    for (const declaration of declared) {
+      const { kind, path, record } = declaration ?? {}
+      const what = `${where} "${kind ?? ''}"`
+      const unknown = Object.keys(declaration ?? {}).filter(
+        (key) => key !== 'kind' && key !== 'path' && key !== 'record',
+      )
+      if (unknown.length) throw new Error(`${what}: unknown key(s) ${unknown.join(', ')}`)
+      if (typeof kind !== 'string' || !PLAIN_NAME.test(kind)) {
+        throw new Error(`${what}: "kind" is the plain record kind the page shows`)
+      }
+      if (owners.has(kind)) throw new Error(`${what} is already shown by "${owners.get(kind)}"`)
+      owners.set(kind, plugin.id)
+      if (
+        typeof path !== 'string' ||
+        !/^\/[a-z0-9/-]+$/.test(path) ||
+        !routes.some((route) => path === route || path.startsWith(`${route}/`))
+      ) {
+        throw new Error(`${what}: "path" "${path ?? ''}" is not under one of "${plugin.id}"'s own console routes (${routes.join(', ') || 'none'})`)
+      }
+      if (record !== undefined) {
+        const extra = Object.keys(record ?? {}).filter((key) => key !== 'path' && key !== 'param')
+        if (extra.length) throw new Error(`${what}: "record" has unknown key(s) ${extra.join(', ')}`)
+        if (
+          typeof record?.path !== 'string' ||
+          !/^\/[a-z0-9/-]+$/.test(record.path) ||
+          !routes.some((route) => record.path === route || record.path.startsWith(`${route}/`))
+        ) {
+          throw new Error(`${what}: "record.path" "${record?.path ?? ''}" is not under one of "${plugin.id}"'s own console routes`)
+        }
+        if (typeof record.param !== 'string' || !/^[a-z][a-zA-Z0-9]*$/.test(record.param)) {
+          throw new Error(`${what}: "record.param" is the plain query key the page opens one record by`)
+        }
+      }
+      rows.push({
+        pluginId: plugin.id,
+        kind,
+        path,
+        ...(record ? { record: { path: record.path, param: record.param } } : {}),
+      })
+    }
+  }
+  return rows
+}
+
+/**
  * Digests a plugin sends on its own schedule (AGL-3080), compiled into core
  * so the settings page draws each switch without loading the plugin.
  *
@@ -2828,7 +2894,7 @@ function catalogContent(videoEmbedRows, planEntitlements, usageAxes) {
  * the types and the resolvers in \`enabled-plugins.ts\`; it holds no row.
  */
 
-import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'\nimport type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'\nimport type { ResolvedPluginSitemapSection } from './plugin-sitemap-sections'\nimport type { ResolvedPluginSiteBundleSectionDeclaration } from './plugin-site-bundle'\nimport type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'\nimport type { ResolvedPluginEntityPicker } from './plugin-entity-pickers'\nimport type { ResolvedPluginCostAxis, ResolvedPluginSpendLine, ResolvedPluginUsageBand, ResolvedPluginUsageMeter } from './plugin-usage-axes'\nimport type { ResolvedPluginPlanFeature, ResolvedPluginPlanQuota } from './plugin-plan-entitlements'\nimport type { FunctionBindings } from './plugin-contributions'\nimport type { PluginDistribution } from './plugin-distribution'\nimport type { RepeatSourceDeclaration } from './repeat-rows'\nimport type { PluginTemplateSource } from './plugin-template-sources'\nimport type { FormRecordTargetDeclaration } from './submission-record-target'\nimport type { ArtifactTypeDeclaration } from './plugin-artifact-types'\nimport type { ResolvedBesignerDocument } from './besigner-documents'\nimport type { PluginOrgKeyedCollection } from './plugin-org-erasure'\nimport type { ResolvedVideoEmbedProvider } from './video-embed-provider'\nimport type { AnalyticsProviderDeclaration } from '../app-utils/analytics-provider'\nimport type { InteractionStepDeclaration } from '../app-utils/site-interactions'\nimport type { ServerStepDeclaration } from './plugin-server-steps'\nimport type { InteractionRecipeDeclaration } from './interaction-recipes'\nimport type { NotificationCategoryDeclaration, NotificationDigestDeclaration } from '../app-utils/notifications'
+import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'\nimport type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'\nimport type { ResolvedPluginSitemapSection } from './plugin-sitemap-sections'\nimport type { ResolvedPluginSiteBundleSectionDeclaration } from './plugin-site-bundle'\nimport type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'\nimport type { ResolvedPluginEntityPicker } from './plugin-entity-pickers'\nimport type { ResolvedPluginRecordPage } from './plugin-record-pages'\nimport type { ResolvedPluginCostAxis, ResolvedPluginSpendLine, ResolvedPluginUsageBand, ResolvedPluginUsageMeter } from './plugin-usage-axes'\nimport type { ResolvedPluginPlanFeature, ResolvedPluginPlanQuota } from './plugin-plan-entitlements'\nimport type { FunctionBindings } from './plugin-contributions'\nimport type { PluginDistribution } from './plugin-distribution'\nimport type { RepeatSourceDeclaration } from './repeat-rows'\nimport type { PluginTemplateSource } from './plugin-template-sources'\nimport type { FormRecordTargetDeclaration } from './submission-record-target'\nimport type { ArtifactTypeDeclaration } from './plugin-artifact-types'\nimport type { ResolvedBesignerDocument } from './besigner-documents'\nimport type { PluginOrgKeyedCollection } from './plugin-org-erasure'\nimport type { ResolvedVideoEmbedProvider } from './video-embed-provider'\nimport type { AnalyticsProviderDeclaration } from '../app-utils/analytics-provider'\nimport type { InteractionStepDeclaration } from '../app-utils/site-interactions'\nimport type { ServerStepDeclaration } from './plugin-server-steps'\nimport type { InteractionRecipeDeclaration } from './interaction-recipes'\nimport type { NotificationCategoryDeclaration, NotificationDigestDeclaration } from '../app-utils/notifications'
 
 export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
 ${rows.map((row) => `  ${indent(JSON.stringify(row.plugin, null, 2))},`).join('\n')}
@@ -2892,6 +2958,14 @@ ${orgCapacityRows().map((row) => `  ${indent(JSON.stringify(row, null, 2))},`).j
  */
 export const PLUGIN_ENTITY_PICKERS_DECLARED: readonly ResolvedPluginEntityPicker[] = [
 ${entityPickerRows().map((row) => `  ${indent(JSON.stringify(row, null, 2))},`).join('\n')}
+]
+
+/**
+ * Where a person reads each record kind a first-party plugin's console page
+ * shows, declared by that plugin (AGL-3080), for a server's notification link.
+ */
+export const PLUGIN_RECORD_PAGES_DECLARED: readonly ResolvedPluginRecordPage[] = [
+${recordPageRows().map((row) => `  ${indent(JSON.stringify(row, null, 2))},`).join('\n')}
 ]
 
 /**

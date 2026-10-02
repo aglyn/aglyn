@@ -1838,13 +1838,8 @@ service cloud.firestore {
              .data.get('visibleTo', []).hasAny(orgMember().get('scopeTokens', ['org'])));
         allow write: if false;
       }
-      // Who a campaign reached on the site (AGL-3461) — first visits and views
-      // of the pages filed under it, one document per campaign, written only
-      // by the site collector's `campaignVisit` beacon on the Admin SDK. Read
-      // through the campaign's own scope for the sequence rollup's reason:
-      // counts, never a visitor, on the page of a campaign the reader may
-      // open. A client that could write one would author the reach a
-      // campaign is judged by.
+      // A campaign's site reach (AGL-3461): counts written only by the
+      // `campaignVisit` beacon, read on the sequence rollup's terms.
       match /campaignVisitReports/{campaignId} {
         allow read: if isStaff() || isOrgWideMember() ||
           (isOrgMember() &&
@@ -2474,6 +2469,19 @@ service cloud.firestore {
     function canPublishHostContent(hostId) {
       return isVerified() && hostMemberRole(hostId) in ['admin', 'editor'];
     }
+    // AGL-3463: a client write removes at most one route, and nothing else
+    // in the map changes with it — one explicit unpublish or delete. The one
+    // exception is the placeholder home handing `/` over (AGL-3408), which
+    // clears its `defaultHomeScreenId` marker in the same write.
+    function routeRemovalAllowed() {
+      let d = request.resource.data.get('screens', {})
+        .diff(resource.data.get('screens', {}));
+      let r = d.removedKeys();
+      return r.size() == 0 || (r.size() == 1 &&
+        (d.affectedKeys().size() == 1 ||
+          (r.hasOnly([resource.data.get('defaultHomeScreenId', '')]) &&
+            !('defaultHomeScreenId' in request.resource.data))));
+    }
     /**
      * May this member read the site's SENSITIVE documents — the `webhooks`
      * that carry an HMAC signing secret and a target URL, and the `orders`
@@ -2847,7 +2855,8 @@ service cloud.firestore {
           // defaultHomeScreenId (AGL-3408) picks what a publish at / unroutes.
           (canPublishHostContent(hostId) ||
             !request.resource.data.diff(resource.data).affectedKeys()
-              .hasAny(['screens', 'defaultHomeScreenId'])));
+              .hasAny(['screens', 'defaultHomeScreenId'])) &&
+          routeRemovalAllowed());
       allow delete: if isStaff() ||
         (hostMemberRole(hostId) == 'admin' && isVerified() &&
           !hostWritesFrozen(hostId));

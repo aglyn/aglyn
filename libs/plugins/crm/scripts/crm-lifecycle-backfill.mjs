@@ -775,7 +775,7 @@ export const DOOR_FLOORS = [
   // holds. The guard now holds them to THAT, because a door that went back
   // to stamping `lead` on a contact would be rebuilding the duplicates the
   // one-record backfill removes.
-  { path: 'apps/tenant/app/api/forms/submit/route.ts', floor: null, surface: 'lead' },
+  { path: 'libs/plugins/forms/src/lib/server/form-submit.ts', floor: null, surface: 'lead' },
   { path: 'libs/plugins/bookings/src/lib/server.ts', floor: null, surface: 'lead' },
   { path: 'libs/plugins/bookings/src/lib/server/billing-webhook.ts', floor: 'customer' },
   { path: 'libs/plugins/commerce/src/lib/server/billing-webhook.ts', floor: 'customer' },

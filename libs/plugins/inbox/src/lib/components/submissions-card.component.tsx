@@ -24,6 +24,9 @@ import {
 import { INBOX_SUBMISSION_PARAM } from '../model/inbox-record-routes'
 import { hostPublicOrigin } from '@aglyn/aglyn/app-utils/host-naming'
 import { submissionFiledUnder, submissionLinks } from '../model/submission-links'
+
+/** The forms plugin's record kind this card reads (AGL-3080). */
+const FORM_SUBMISSION_KIND = 'formSubmission'
 // A deep import, NOT the plugin barrel (AGL-1151): the barrel is the entry
 // point the tenant's loader dynamically imports to activate the marketing
 // plugin's SITE half, so a console card named there ships to every published
@@ -85,15 +88,19 @@ import {
 import type { GridColDef } from '@mui/x-data-grid'
 import {
   collection,
-  collectionGroup,
   deleteDoc,
-  doc,
   getDoc,
   limit,
   orderBy,
   query,
   updateDoc,
 } from 'firebase/firestore'
+// The submissions are the forms plugin's records, walked and opened through
+// the list source it publishes (AGL-3080).
+import {
+  pluginRecordListDoc,
+  pluginRecordListWalk,
+} from '@aglyn/aglyn/plugin-manager/plugin-record-lists'
 import { useSearchParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
@@ -296,7 +303,7 @@ export function SubmissionsCard({
    * as an unreachable inbox.
    *
    * `createdAt` is safe to order on, checked against the writer rather than
-   * assumed: `apps/tenant/app/api/forms/submit/route.ts` is the only path
+   * assumed: `libs/plugins/forms/src/lib/server/form-submit.ts` is the only path
    * that creates one and stamps `createdAt: serverTimestamp()` on every add,
    * the v1 API only ever reads and deletes, and `formSubmissions` is absent
    * from `IMPORTABLE_FIELDS`, so no restore path can make one without it.
@@ -319,11 +326,7 @@ export function SubmissionsCard({
     setPageSize: setSubmissionPageSize,
     plan,
   } = useListQuery<any>({
-    collection: hostId
-      ? collection(firestore, 'hosts', hostId, 'formSubmissions')
-      : orgId
-        ? collectionGroup(firestore, 'formSubmissions')
-        : null,
+    collection: pluginRecordListWalk(FORM_SUBMISSION_KIND, firestore, { hostId, orgId }),
     declaration,
     request: { clauses: gridFilter.clauses, search: gridFilter.searchWords, base },
     deps: [firestore, hostId, orgId],
@@ -375,11 +378,11 @@ export function SubmissionsCard({
     (submission: any) => () => {
       setReader(submission)
       const site = siteOf(submission)
-      if (!submission.read && site) {
-        void updateDoc(
-          doc(firestore, 'hosts', site, 'formSubmissions', submission.$id),
-          { read: true },
-        )
+      const submissionDoc = site
+        ? pluginRecordListDoc(FORM_SUBMISSION_KIND, firestore, { hostId: site, id: submission.$id })
+        : null
+      if (!submission.read && submissionDoc) {
+        void updateDoc(submissionDoc, { read: true })
       }
     },
     [firestore, siteOf],
@@ -388,11 +391,11 @@ export function SubmissionsCard({
   const handleToggleRead = useCallback(
     (submission: any) => () => {
       const site = siteOf(submission)
-      if (!site) return
-      void updateDoc(
-        doc(firestore, 'hosts', site, 'formSubmissions', submission.$id),
-        { read: !submission.read },
-      )
+      const submissionDoc = site
+        ? pluginRecordListDoc(FORM_SUBMISSION_KIND, firestore, { hostId: site, id: submission.$id })
+        : null
+      if (!submissionDoc) return
+      void updateDoc(submissionDoc, { read: !submission.read })
     },
     [firestore, siteOf],
   )
@@ -425,7 +428,12 @@ export function SubmissionsCard({
     if (!hostId) return
     if (!seededSubmissionId || seededOpened.current === seededSubmissionId) return
     seededOpened.current = seededSubmissionId
-    void getDoc(doc(firestore, 'hosts', hostId, 'formSubmissions', seededSubmissionId))
+    const seededDoc = pluginRecordListDoc(FORM_SUBMISSION_KIND, firestore, {
+      hostId,
+      id: seededSubmissionId,
+    })
+    if (!seededDoc) return
+    void getDoc(seededDoc)
       .then((snapshot) => {
         if (seededOpened.current !== snapshot.id) return
         if (!snapshot.exists()) {
@@ -443,7 +451,10 @@ export function SubmissionsCard({
   const handleDelete = useCallback(
     (submission: any) => async () => {
       const site = siteOf(submission)
-      if (!site) return
+      const submissionDoc = site
+        ? pluginRecordListDoc(FORM_SUBMISSION_KIND, firestore, { hostId: site, id: submission.$id })
+        : null
+      if (!site || !submissionDoc) return
       const confirmed = await confirm({
         title: 'Delete this submission?',
         description: 'The submission is removed permanently.',
@@ -453,9 +464,7 @@ export function SubmissionsCard({
         .then(() => true)
         .catch(() => false)
       if (!confirmed) return
-      await deleteDoc(
-        doc(firestore, 'hosts', site, 'formSubmissions', submission.$id),
-      )
+      await deleteDoc(submissionDoc)
       enqueueSnackbar('Submission deleted', {
         variant: 'success',
         persist: false,

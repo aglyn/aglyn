@@ -131,6 +131,10 @@ import { refusalsOf, withRetainedRefusals } from '@aglyn/aglyn/app-utils/retaine
 import { consentGroupOptOutHosts } from '@aglyn/aglyn/app-utils/consent-groups'
 import { messageFromName, sendEmail } from '@aglyn/shared-util-email'
 import { FieldValue } from 'firebase-admin/firestore'
+// The registries' own modules: a reply finds the submission it answers
+// through the index the forms plugin publishes (AGL-3080).
+import { pluginRecordIndex } from '@aglyn/aglyn/plugin-manager/plugin-record-index'
+import { runPluginDeclarationsRepair } from '@aglyn/aglyn/plugin-manager/plugin-declarations-repair'
 import {
   REPLY_BODY_MAX,
   REPLY_SUBJECT_MAX,
@@ -256,11 +260,9 @@ export const inboxReplyHandler: PluginApiHandler = async (req, res) => {
       })
     }
 
-    const submissionRef = hostRef
-      .collection('formSubmissions')
-      .doc(submissionId)
-    const submission = await submissionRef.get()
-    if (!submission.exists) {
+    const submissionRef = await formSubmissionRef(hostId, submissionId)
+    const submission = await submissionRef?.get()
+    if (!submissionRef || !submission?.exists) {
       return res.status(404).json({ error: 'Unknown submission' })
     }
 
@@ -363,6 +365,29 @@ export const inboxReplyHandler: PluginApiHandler = async (req, res) => {
     console.error('[inbox] reply failed', error)
     return res.status(500).json({ error: 'The reply could not be sent.' })
   }
+}
+
+/**
+ * The submission a reply answers or an assignment acts on, or `null` (AGL-3080).
+ *
+ * Submissions are the forms plugin's records, kept where it keeps them, and
+ * this plugin is their reader: it finds one through the record index the
+ * forms plugin publishes for `formSubmission`, which hands back the one
+ * document — to mark it answered and to keep this plugin's own replies and
+ * assignments under it, as the forms plugin documents a reader may. A process
+ * whose boot failed runs the app's declarations step once and asks again; a
+ * build with no forms plugin keeps no submissions, which is `null`.
+ */
+async function formSubmissionRef(
+  hostId: string,
+  submissionId: string,
+): Promise<FirebaseFirestore.DocumentReference | null> {
+  let owner = pluginRecordIndex('formSubmission')
+  if (!owner && (await runPluginDeclarationsRepair().catch(() => false))) {
+    owner = pluginRecordIndex('formSubmission')
+  }
+  const ref = await owner?.index.ref?.({ hostId, id: submissionId })
+  return (ref as FirebaseFirestore.DocumentReference | null | undefined) ?? null
 }
 
 /** Where an assignment is recorded, under the submission that occasioned it. */
@@ -480,9 +505,9 @@ async function resolveAssignmentContext(
     }
   }
 
-  const submissionRef = hostRef.collection('formSubmissions').doc(submissionId)
-  const submission = await submissionRef.get()
-  if (!submission.exists) {
+  const submissionRef = await formSubmissionRef(hostId, submissionId)
+  const submission = await submissionRef?.get()
+  if (!submissionRef || !submission?.exists) {
     return { ok: false, status: 404, body: { error: 'Unknown submission' } }
   }
   const recipient = replyRecipient(

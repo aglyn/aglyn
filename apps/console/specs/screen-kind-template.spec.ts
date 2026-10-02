@@ -703,6 +703,20 @@ describe('a list screen must be a page (AGL-3107)', () => {
     expect(kindOf('s1')).toBe('template')
   })
 
+  // A page group (AGL-3463) is a folder with no design, so neither pointer
+  // may name one — an entry template that is a group renders nothing.
+  it('refuses a page group for either pointer, and stores neither', async () => {
+    seedTwo()
+    mockStore.screens.s1 = { displayName: 'Campaigns', kind: 'group' }
+    for (const field of ['entryScreenId', 'listScreenId']) {
+      const refused = await setTemplate({ [field]: 's1' }, 'news')
+      expect(refused.status).toBe(400)
+      expect(refused.body.error).toContain('page group')
+      expect(mockStore.collections.news[field]).toBeUndefined()
+    }
+    expect(kindOf('s1')).toBe('group')
+  })
+
   it('does not overwrite an error screen designated as an entry template', async () => {
     // `kind: 'error'` binds the screen to one of the host's four error slots,
     // and the error render path resolves it WITHOUT `allowTemplate` — so

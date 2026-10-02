@@ -118,6 +118,7 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
 }))
 
 import InboxGlanceCard from './inbox-glance-card.component'
+import { standInFormSubmissionList } from '../testing/stand-in-form-submissions'
 import { registerPluginRecordRoute } from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
 import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
 
@@ -172,6 +173,9 @@ async function renderCard() {
 
 beforeEach(() => {
   resetPluginServicesForTests()
+  // The submissions are the forms plugin's, walked and opened through the
+  // list source it publishes (AGL-3080); stood in over this file's double.
+  standInFormSubmissionList()
   publishLeadRoutes()
   submissions = []
   askedLimit = undefined

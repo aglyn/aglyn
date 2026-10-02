@@ -895,9 +895,13 @@ const GRID_FOOTER_SWITCHED_OFF = /hideFooter/
  * sight whether or not it grew a footer. That is the shape of a guard that
  * retires itself — the more of this list is fixed the right way, the less of
  * the console the check can still see.
+ *
+ * `pluginRecordListQuery` counts for the same reason (AGL-3080): a plugin
+ * reading ANOTHER plugin's records asks the owner's list source for a window
+ * of `limit` documents, and the `limit(` is in the owner's module, not here.
  */
 const READS_A_CAPPED_COLLECTION =
-  /\blimit\(|\bcollection(?:Page|Ceiling)\(/
+  /\blimit\(|\bcollection(?:Page|Ceiling)\(|\bpluginRecordListQuery\(/
 /**
  * The repeated ROW elements, as this codebase actually writes them.
  *
@@ -1217,12 +1221,6 @@ const NOT_A_LIST: Array<[string, string]> = [
    * Caught by the widened shape: a row built from a CAPPED READ, with no
    * footer. Everything below draws repeated rows and is still not a list.
    *=======================================================================*/
-  [
-    'apps/console/app/(editor)/[orgSlug]/hosts/[host]/screens/[screenId]/versions/[versionId]/besigner/page.tsx',
-    'The editor. Its capped reads are the layout and screen PICKERS a node ' +
-      'binds to, and the rows it maps are one screen’s node definitions — an ' +
-      'editing working set, not a collection anybody pages through.',
-  ],
   [
     'apps/console/components/content/content-scope.context.tsx',
     'A provider. It reads collections, authors and screens to fill the ' +
@@ -1929,7 +1927,12 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     // IS a new table: the organization's sharing rules, a settings table the
     // card caps at `CRM_SHARING_RULES_MAX` (20), like the other CRM settings
     // rows above it.
-    expect(NOT_A_LIST).toHaveLength(69)
+    //
+    // 68 since the besigner's Parent page picker filters its options first
+    // (AGL-3463): the detector no longer reads a list in the editor, whose
+    // only mapped rows were picker options and node definitions, so its row
+    // retires.
+    expect(NOT_A_LIST).toHaveLength(68)
   })
 })
 

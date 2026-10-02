@@ -15,9 +15,9 @@
  * limitations under the License.
  */
 
-import { effectiveDatasetModel, type DatasetModel } from '@aglyn/aglyn/app-utils/dataset-models'
-import { datasetDisplayName } from '@aglyn/aglyn/app-utils/datasets'
 import type { PluginIndexedRecord } from '@aglyn/aglyn/plugin-manager/plugin-record-index'
+import { type DatasetModel, effectiveDatasetModel } from './dataset-models'
+import { datasetDisplayName } from './datasets'
 
 /**
  * One stored dataset as this plugin shares it with another (AGL-3080) — the

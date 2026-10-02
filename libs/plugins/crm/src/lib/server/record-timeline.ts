@@ -424,6 +424,13 @@ export function createCrmRecordTimelineWriter(deps: CrmRecordTimelineDeps): Plug
       if (outcome === 'failed') return refuse(409, 'The delivery state could not be written.')
       return { ok: true, id: ref.id, created: outcome === 'advanced' }
     },
+
+    // An automation's email to the person its event is about (AGL-2615):
+    // see `automation-steps.ts`, loaded with the first one.
+    async prepareEmail(request) {
+      const { prepareCrmRecordEmail } = await import('./automation-steps')
+      return prepareCrmRecordEmail(request)
+    },
   }
 }
 

@@ -16,9 +16,6 @@
  */
 
 import {
-  effectiveDatasetModel,
-  type HostDataset,
-  type HostDatasetRecord,
   REPEAT_MAX_RECORDS,
   type RepeatableDataset,
   visibleToHost,
@@ -33,8 +30,10 @@ import {
   tenantDataTag,
   withRenderCache,
 } from '@aglyn/tenant-data-admin/render-cache'
-import { repeatRecordsFromPages } from '@aglyn/tenant-runtime/repeat-record-pages'
+import { repeatRecordsFromPages } from './repeat-record-pages'
 import { FieldPath } from 'firebase-admin/firestore'
+import { effectiveDatasetModel, repeatRowsModelOf } from '../model/dataset-models'
+import type { HostDataset, HostDatasetRecord } from '../model/datasets'
 
 /**
  * The render path's largest read (AGL-1302): up to two pages of records per
@@ -78,7 +77,10 @@ export async function readPublishedDatasetRows(
   if (!keys.length) return {}
   try {
     return await withRenderCache({
-      key: ['tenant-datasets', options.hostId, ...keys],
+      // `rows-v2`: the cached answer carries the rows' references
+      // (`repeatRowsModelOf`) rather than the whole model (AGL-3080), so an
+      // answer cached before that shape is never read as this one.
+      key: ['tenant-datasets', 'rows-v2', options.hostId, ...keys],
       revalidate: DATASETS_TTL_SECONDS,
       tags: [tenantDataTag(options.hostId)],
       read: () => readDatasets(options.hostId, keys),
@@ -110,9 +112,7 @@ async function readDatasets(
       if (!dataset) {
         dataset = readRepeatRecords(snapshot.ref).then((records) => ({
           records,
-          model: effectiveDatasetModel(
-            snapshot.data() as HostDataset,
-          ),
+          model: repeatRowsModelOf(effectiveDatasetModel(snapshot.data() as HostDataset)),
         }))
         loads.set(snapshot.id, dataset)
       }
@@ -151,10 +151,7 @@ async function readDatasets(
     // rows by id, so the target has to be loaded even though no repeat names it.
     const targets = new Set<string>()
     for (const dataset of resolved) {
-      for (const fieldId of dataset?.model?.order ?? []) {
-        const field = dataset?.model?.fields[fieldId]
-        const targetId =
-          field?.type === 'reference' ? field.reference?.datasetId : undefined
+      for (const targetId of Object.values(dataset?.model?.references ?? {})) {
         if (targetId && !targetId.includes('/') && !datasets[targetId]) {
           targets.add(targetId)
         }

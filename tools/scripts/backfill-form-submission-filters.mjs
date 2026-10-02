@@ -77,7 +77,7 @@ import { sameSearchTokens } from './lib/name-search-tokens.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = join(here, '..', '..')
-const SUBMIT_ROUTE = join(REPO_ROOT, 'apps', 'tenant', 'app', 'api', 'forms', 'submit', 'route.ts')
+const SUBMIT_ROUTE = join(REPO_ROOT, 'libs', 'plugins', 'forms', 'src', 'lib', 'server', 'form-submit.ts')
 
 /*
  * ARGUMENTS FAIL CLOSED (AGL-1489): `--aply` would otherwise leave a run the

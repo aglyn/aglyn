@@ -1,7 +1,7 @@
 ---
 sidebar_position: 2
 title: Pages
-description: How each page of your site gets a slug, how the hierarchy builds your URLs, and which pages count against your plan.
+description: How each page of your site gets a slug, how the hierarchy builds your URLs, how groups organize pages without changing them, and which pages count against your plan.
 ---
 
 # Pages
@@ -30,8 +30,10 @@ publish.
   site **routing map**.
 - Pages form a **hierarchy**: pick a parent and the child inherits a nested path
   (`/services/pricing`). Changing a slug or parent cascades safe rewrites across the map,
-  with cycle guards so you can't create a loop.
-- Reorder the hierarchy with **drag-and-drop** in the pages list.
+  with cycle guards so you can't create a loop. See
+  [What a move does to a URL](#what-a-move-does-to-a-url).
+- Reorder the hierarchy with **drag-and-drop** in the pages list. To organize pages
+  without changing their addresses, put them in a [group](#page-groups).
 - The pages list shows each page's **Published** date, and the page's detail view
   shows **Date published**. Both stay empty until the page goes live, and clear again if
   you unpublish it (including a scheduled unpublish) — so the column tells you what's
@@ -41,6 +43,56 @@ publish.
   pages list (on published pages), on the page's detail view under **Publishing**,
   and on the Besigner toolbar. The page, its versions and its slug are all kept, so
   publishing again puts it back at the same address.
+- Unpublishing or deleting a page takes **that page alone** off your site. Pages
+  nested under it stay live at their own addresses, and the confirmation lists them,
+  so you can unpublish them one by one if that's what you meant. A scheduled
+  unpublish works the same way.
+
+## Page groups {#page-groups}
+
+A **group** is a folder in the pages list. It holds pages and is not one: it has no
+slug, no content and no address of its own, and it's never published, previewed or
+listed in your sitemap or navigation.
+
+A group adds **nothing** to the URLs of the pages in it. A page inside a group is
+served exactly where it would be if it sat at the group's own level, so a group of
+landing pages keeps `/launch-waitlist` at `/launch-waitlist`. Groups can sit inside
+other groups, and inside a page: a group under **Services** holds pages at
+`/services/...`, just as if they were Services' own children.
+
+- **New group** on the pages list creates one. Drag pages onto it to move them in, and
+  drag them out again the same way. Click a group's row to open or close it.
+- Moving a page **into or out of a group never changes its address**, because the
+  page it's composed under stays the same. The pages list checks this before it saves
+  the move, and refuses the move rather than change a live address.
+- **Rename** and **Delete** are in a group's **⋮** menu. Deleting a group keeps
+  everything in it: its pages move up a level, to where the group was, at the same
+  addresses. Nothing is unpublished.
+- A group doesn't count against your page allowance, and you can't pick one where a
+  page is expected, such as an error page, a sign-in page, an A/B test, a redirect or
+  a collection template. In the Besigner's **Parent page** picker, groups are marked
+  **(group)**.
+
+## What a move does to a URL {#what-a-move-does-to-a-url}
+
+A page's address is its own slug under the slugs of the **pages** above it. Moving a
+page changes its address only when the page it's composed under changes:
+
+| Move | Address |
+| --- | --- |
+| Into or out of a group at the same level | Unchanged |
+| Under a published page, say **Services** | Becomes `/services/your-page` |
+| Under a page that has a slug but isn't published | Becomes the composed path. The page stays live there; the parent stays unpublished. |
+| Under a page with no slug | Unchanged. It keeps its current address until you publish it again. |
+| To the top level | Becomes `/your-page` |
+
+Pages nested under the one you move come along with it. A move never takes a live page
+off your site, and it never publishes a page that wasn't live: a draft you move stays
+a draft.
+
+A page that keeps its address when the page above it loses its slug, or is deleted,
+stays at that address from then on. If you later publish that parent again, the page
+doesn't move with it; publish the page itself to give it the new address.
 
 ![The pages list](/img/getting-started/screens-list.png)
 
@@ -60,6 +112,7 @@ those don't count:
 | An [error page](../site-protection/error-screens.md) you've assigned | No | It renders on addresses that matched nothing. |
 | An [email](../../marketing-and-automation/email-campaigns/overview.md) you design | No | It's sent, never served at a URL. |
 | A page you've deleted | No | Deleting frees the slot straight away. |
+| A [group](#page-groups) | No | It holds pages; it has no address or content of its own. |
 
 The rule behind the table is one question: **does the page occupy a URL of its own?**
 So an error page that is *also* still published at its own address — say a 404 page

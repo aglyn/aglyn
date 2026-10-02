@@ -224,7 +224,6 @@ jest.mock('@aglyn/aglyn/server', () => ({
   // would let this suite pass against a route enforcing nothing.
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/plan-entitlements'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/collection-kind'),
-  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/dataset-models'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/scope-tokens'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/name-search'),
   // And the REAL list keys every restored artifact is stamped with (AGL-3321).

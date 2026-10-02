@@ -21,7 +21,7 @@
 import {
   type HostDatasetRecord,
   sortDatasetRecords,
-} from '@aglyn/aglyn/app-utils/datasets'
+} from '../model/datasets'
 import { REPEAT_MAX_RECORDS } from '@aglyn/aglyn/app-utils/expand-repeatables'
 
 /** One record document as either Firestore SDK hands it back. */

@@ -19,7 +19,6 @@ import {
   COLLECTION_TOKEN_CATALOG,
   ENTRY_TOKEN_CATALOG,
   hostTokenDefinition,
-  humanizeDatasetFieldId,
 } from '@aglyn/aglyn'
 
 import type { BindingOption } from '../contexts/binding-picker-context'
@@ -315,11 +314,20 @@ export function resolveTokenLabel(
     )
     const label = field
       ? hopId
-        ? `${field.label} → ${humanizeDatasetFieldId(hopId)}`
+        ? `${field.label} → ${humanizeFieldId(hopId)}`
         : field.label
       : inner
     return { label, group: 'item', known: Boolean(field) }
   }
 
   return { label: inner || token, group: 'unknown', known: false }
+}
+
+/**
+ * A stored field id read as words, for a hop the canvas names without the
+ * target's own label: "roast_preference" → "Roast preference".
+ */
+function humanizeFieldId(id: string): string {
+  const words = id.replace(/_/g, ' ').trim()
+  return words ? words.charAt(0).toUpperCase() + words.slice(1) : id
 }

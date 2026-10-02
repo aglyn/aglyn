@@ -165,7 +165,13 @@ beforeAll(async () => {
 })
 
 import { normalizeNotificationLink } from '@aglyn/aglyn/app-utils/notifications'
-import { POST } from '../app/api/forms/submit/route'
+
+// The door as the tenant serves it: the forms plugin's route, through the
+// plugin API dispatcher, with the forms plugin's surface loaded (AGL-3080).
+jest.mock('../utils/server-plugin-loader', () => ({
+  serverPluginLoader: jest.requireActual('./plugin-door-dispatch').formsOnlyServerPluginLoader(),
+}))
+import { POST } from './plugin-door-dispatch'
 
 const submit = (body: Record<string, unknown> = {}) =>
   POST(
@@ -271,9 +277,9 @@ describe('the alert', () => {
   it('is the Inbox’s own address for that submission once followed', async () => {
     await submit({ formId: 'f1' })
 
-    // The rewrite the console and the email apply. The Inbox pins the same
-    // address for its record route in `inbox-record-routes.spec.ts`; an app
-    // spec may not import the plugin, so both ends hold the literal.
+    // The rewrite the console and the email apply, over the record address
+    // the Inbox declares for `formSubmission`. The Inbox's own spec holds
+    // that declaration to the record route it registers.
     expect(
       normalizeNotificationLink(mockNotifications[0].link, {
         orgSlug: 'acme',

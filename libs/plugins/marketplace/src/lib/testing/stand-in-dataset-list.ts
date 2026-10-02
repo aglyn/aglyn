@@ -15,11 +15,18 @@
  * limitations under the License.
  */
 
-import { datasetDisplayName } from '@aglyn/aglyn/app-utils/datasets'
 import { scopeTokensForHost } from '@aglyn/aglyn/app-utils/scope-tokens'
 import { registerPluginRecordListSource } from '@aglyn/aglyn/plugin-manager/plugin-record-lists'
 import { unregisterPluginServices } from '@aglyn/aglyn/plugin-manager/plugin-services'
 import { collection, documentId, limit, orderBy, query, where } from 'firebase/firestore'
+
+/** A dataset's name as the Data page shows it: its display name, else its legacy name. */
+function datasetName(data: Readonly<Record<string, unknown>>): string {
+  for (const candidate of [data['displayName'], data['name']]) {
+    if (typeof candidate === 'string' && candidate.trim()) return candidate.trim()
+  }
+  return ''
+}
 
 /**
  * The `dataset` list source the plugin that keeps the workspace's datasets
@@ -53,7 +60,7 @@ export function standInDatasetList(): void {
         const listingId = typeof source['listingId'] === 'string' ? source['listingId'] : ''
         return {
           id,
-          name: datasetDisplayName(data) || id,
+          name: datasetName(data) || id,
           facts: {
             fields: [],
             visibleTo: Array.isArray(data['visibleTo']) ? data['visibleTo'] : [],

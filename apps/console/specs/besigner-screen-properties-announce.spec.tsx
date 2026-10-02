@@ -197,6 +197,17 @@ jest.mock('@aglyn/aglyn', () => ({
   ownScreenSlugFromRoutePath: jest.requireActual(
     '@aglyn/aglyn/app-utils/screen-route',
   ).ownScreenSlugFromRoutePath,
+  // The page-group helpers (AGL-3463), real for the same reason.
+  isScreenGroup: jest.requireActual('@aglyn/aglyn/app-utils/screen-route')
+    .isScreenGroup,
+  liveScreenDescendants: jest.requireActual(
+    '@aglyn/aglyn/app-utils/screen-route',
+  ).liveScreenDescendants,
+  screenClaimsToBeAPage: jest.requireActual(
+    '@aglyn/aglyn/app-utils/screen-route',
+  ).screenClaimsToBeAPage,
+  toScreenRouteNode: jest.requireActual('@aglyn/aglyn/app-utils/screen-route')
+    .toScreenRouteNode,
   collectReferencedComponentIds: jest.requireActual(
     '../../../libs/aglyn/src/lib/app-utils/compose-reusable-components',
   ).collectReferencedComponentIds,

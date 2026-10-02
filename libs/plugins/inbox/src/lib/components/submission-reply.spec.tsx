@@ -30,6 +30,11 @@
 import { fireEvent, render, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { SubmissionReply } from './submission-reply.component'
+import { standInFormSubmissionList } from '../testing/stand-in-form-submissions'
+
+// The submissions are the forms plugin's, walked and opened through the list
+// source it publishes (AGL-3080); stood in over this file's Firestore double.
+standInFormSubmissionList()
 
 let host: Record<string, unknown> | undefined
 let sentReplies: Array<Record<string, unknown>>

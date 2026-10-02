@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { ACCOUNTS_PLUGIN_ID } from '@aglyn/aglyn'
+import { ACCOUNTS_PLUGIN_ID, isScreenGroup } from '@aglyn/aglyn'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Alert, MenuItem, Stack, TextField, Typography } from '@mui/material'
@@ -82,8 +82,10 @@ export function AuthScreensCard(props: AuthScreensCardProps) {
     [firestore, hostId],
     { idField: '$id' },
   )
+  // A page group (AGL-3463) has no content of its own to render on a
+  // sign-in address, so it is never offered.
   const screens = [...(screenDocs ?? [])]
-    .filter((screen: any) => !screen.deletedAt)
+    .filter((screen: any) => !screen.deletedAt && !isScreenGroup(screen))
     .sort((a: any, b: any) =>
       String(a.displayName ?? '').localeCompare(String(b.displayName ?? '')),
     )

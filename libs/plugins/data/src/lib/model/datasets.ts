@@ -21,10 +21,13 @@
  * repeatable components (AGL-103) via `{{item.field}}` bindings.
  */
 
+import type { ScopeToken } from '@aglyn/aglyn/foundation/definitions/platform.types'
 import {
   coerceDocumentValues,
+  type DatasetFieldEntry,
   type DatasetModel,
   effectiveDatasetModel,
+  humanizeDatasetFieldId,
   validateDocument,
 } from './dataset-models'
 
@@ -44,7 +47,7 @@ export interface HostDataset {
    * Which sites may see this dataset (AGL-1037). Absent = org-wide, until
    * the AGL-1040 backfill stamps it. See `app-utils/scope-tokens`.
    */
-  visibleTo?: import('../foundation').ScopeToken[]
+  visibleTo?: ScopeToken[]
 }
 
 export interface HostDatasetRecord {
@@ -59,14 +62,6 @@ export interface HostDatasetRecord {
   order?: number
 }
 
-/**
- * A human field entry from the quick creator: the stable id plus the
- * display name shown in table headers and bindings pickers (AGL-558).
- */
-export interface DatasetFieldEntry {
-  id: string
-  name: string
-}
 
 /**
  * Stable field id from a human name: "Roast preference" → "roast_preference".
@@ -122,11 +117,6 @@ export function validateDatasetFieldId(
   return null
 }
 
-/** Display fallback for raw ids: "roast_preference" → "Roast preference". */
-export function humanizeDatasetFieldId(id: string): string {
-  const words = id.replace(/_/g, ' ').trim()
-  return words ? words.charAt(0).toUpperCase() + words.slice(1) : id
-}
 
 /**
  * Parses a comma/newline separated list of HUMAN field names into

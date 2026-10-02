@@ -253,6 +253,12 @@ import {
 } from './server'
 import { personKey } from '@aglyn/aglyn/app-utils/person-key'
 import { standInPersonRecords } from './testing/stand-in-person-records'
+import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { standInFormSubmissionIndex } from './testing/stand-in-form-submissions'
+
+// The submissions are the forms plugin's, found through the index it
+// publishes (AGL-3080); stood in over this file's Firestore double.
+standInFormSubmissionIndex(() => firebaseAdmin.app().firestore() as never)
 
 async function drive(
   handler: typeof inboxAssignListHandler,

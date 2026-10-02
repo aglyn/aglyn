@@ -21,6 +21,7 @@ import {
   checkEntitlement,
   createResourceUid,
   HOST_EVENT_TYPES,
+  isScreenGroup,
   pluginDocsHelp,
   SITE_EVENT_TYPES,
 } from '@aglyn/aglyn'
@@ -244,8 +245,9 @@ export function HostExperimentsCard(props: HostExperimentsCardProps) {
     [firestore, hostId, editorOpen],
     { idField: '$id' },
   )
+  // A page group (AGL-3463) has no versions to test against each other.
   const screenOptions = [...(screenDocs ?? [])]
-    .filter((screen: any) => !screen.deletedAt)
+    .filter((screen: any) => !screen.deletedAt && !isScreenGroup(screen))
     .map((screen: any) => ({
       id: screen.$id as string,
       name: (screen.displayName ?? screen.name ?? screen.$id) as string,

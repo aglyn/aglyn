@@ -44,15 +44,16 @@ import {
 import { messageSearchFields } from '@aglyn/aglyn/app-utils/message-search'
 // By path: the server-only contract a submission is filed as a record through.
 import { writeFormRecordTarget } from '@aglyn/aglyn/plugin-manager/submission-record-target'
+// By path: where a manager reads submissions, declared by the plugin whose
+// page shows them, for the notifications below (AGL-3080).
+import { pluginRecordPageLink } from '@aglyn/aglyn/plugin-manager/plugin-record-pages'
 import { FieldValue } from 'firebase-admin/firestore'
 import { isCredentialFieldName } from '@aglyn/shared-util-email/hosted-page-screen'
-import { incrementFormStats } from '../../../../utils/increment-form-stats'
+import { incrementFormStats } from './increment-form-stats'
 import {
   NO_CLIENT_ADDRESS_BUCKET,
   readClientIp,
 } from '@aglyn/aglyn/app-utils/request-ip'
-
-export const dynamic = 'force-dynamic'
 
 const MAX_FIELDS = 20
 const MAX_PAYLOAD_CHARS = 10000
@@ -154,12 +155,24 @@ async function recordAbuseCeilingTrip(
           'unusual volume. Submissions sent now are refused and not saved, ' +
           `and none of them are billed. Forms accept submissions again on ` +
           `${reopens}. Contact support if this is real traffic.`,
-        link: `/${hostId}/inbox`,
+        ...submissionsLink(hostId),
       })
     }
   } catch (error) {
     console.error('form abuse ceiling bookkeeping failed', error)
   }
+}
+
+/**
+ * A notification's link to where the site's managers read submissions — the
+ * page the plugin that shows `formSubmission` records declares, opened on one
+ * submission when `submissionId` is given and that page can open one — and no
+ * link where no plugin in this build shows them. A key left out rather than
+ * set to `undefined`, which Firestore rejects.
+ */
+function submissionsLink(hostId: string, submissionId?: string): { link?: string } {
+  const link = pluginRecordPageLink('formSubmission', hostId, submissionId)
+  return link ? { link } : {}
 }
 
 /**
@@ -256,6 +269,19 @@ function readDeclaredMarketingConsent(
 }
 
 /**
+ * `POST /api/forms/submit` — every form's door, and a Marketing popup's
+ * (AGL-76, AGL-3080).
+ *
+ * This plugin's route, served by the tenant's plugin API dispatcher at the
+ * address it has always had, and registered as a route that KEEPS ITS OWN
+ * VISITOR GATES (`ownVisitorGates`): the dispatcher hands it the request
+ * untouched, because every gate below is a published answer — which plugin's
+ * switch decides a submission (the door it came through, not this route's
+ * owner), the "not accepting" notice a site with Forms off gives, the
+ * per-(site, address) limit and the monthly ceiling, and where lockdown sits
+ * among them. The dispatcher's own versions of those would answer first and
+ * differently.
+ *
  * Lead-capture submissions endpoint (AGL-76): validates the target host,
  * drops honeypot hits silently, applies the plan's monthly submission quota
  * via a per-month counter — a hard wall on free, a meter on plans that carry
@@ -269,6 +295,11 @@ function readDeclaredMarketingConsent(
  * being flooded. Only the ceiling refusal carries `code`.
  */
 export async function POST(request: Request): Promise<Response> {
+  // The dispatcher serves every method at its catch-all; this door takes a
+  // POST alone, as the route it replaced did.
+  if (request.method !== 'POST') {
+    return new Response(null, { status: 405, headers: { Allow: 'POST' } })
+  }
   const payload = (await request.json().catch(() => ({}))) as Record<string, any>
   // `datasetId`, `dataset` and `fieldMap` are deliberately not read: the
   // dataset a record lands in comes from the page's signed binding (below).
@@ -955,12 +986,12 @@ export async function POST(request: Request): Promise<Response> {
      * how, and what the form and page are filed under, as the crediting
      * plugin names them.
      *
-     * It opens THIS submission's reader, not the list: the Inbox's address
-     * for one submission (`inbox/submissions?submission={id}`, the record
-     * route it registers), stored in the host-link shape every host
-     * notification uses and rewritten onto the site's address when it is
-     * followed, in the console and in the email alike. A notification holds
-     * one link, so the lead and the campaign are links inside the reader.
+     * It opens THIS submission, not the list: the address the plugin that
+     * shows submissions declares for one record (`submissionsLink`), stored
+     * in the host-link shape every host notification uses and rewritten onto
+     * the site's address when it is followed, in the console and in the email
+     * alike. A notification holds one link, so the lead and the campaign are
+     * links inside the reader.
      */
     const alertPath = typeof path === 'string' ? path.slice(0, 500) : ''
     void notifyHostManagers(hostId, {
@@ -971,7 +1002,7 @@ export async function POST(request: Request): Promise<Response> {
           (alertPath ? ` (page ${alertPath}).` : '.'),
         ...conversionDescriptionSentences(await describing),
       ].join(' '),
-      link: `/${hostId}/inbox/submissions?${new URLSearchParams({ submission: submissionRef.id })}`,
+      ...submissionsLink(hostId, submissionRef.id),
     })
     const submittedEmail =
       typeof sanitizedFields['email'] === 'string' ? sanitizedFields['email'] : ''
