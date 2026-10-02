@@ -33,6 +33,10 @@
 import {
   ATTRIBUTION_WINDOW_MS,
   UTM_TOUCH_STORAGE_KEY,
+  notePageCampaigns,
+  pageTouchWire,
+  parsePageTouch,
+  readPageTouch,
   utmTouchField,
   utmTouchWire,
   parseUtmTouch,
@@ -58,6 +62,8 @@ beforeEach(() => {
   window.localStorage.clear()
   // Unresolved, which is the state every pageview starts in.
   setUtmTouchConsent(null)
+  // And on no page filed under a campaign.
+  notePageCampaigns(null)
   landOn('https://shop.example.com/')
 })
 
@@ -324,5 +330,261 @@ describe('a store that is writable by anything on the page', () => {
     window.localStorage.setItem(UTM_TOUCH_STORAGE_KEY, `t=${LANDED_AT}`)
 
     expect(readUtmTouch(LANDED_AT)).toBe(null)
+  })
+})
+
+
+/*==========================================
+ * THE PAGE TOUCH (AGL-3461): a page filed under a campaign is a touch, with
+ * no label on the address at all — held in the SAME entry as the labels, so
+ * remembering it puts nothing new on the visitor's device.
+ *=========================================*/
+
+const LANDING = { screenId: 'scr_landing', containerIds: ['camp_ai'], path: '/ai-website-draft' }
+
+/** Every key this module has left on the device. */
+function storedKeys(): string[] {
+  const keys: string[] = []
+  for (let index = 0; index < window.localStorage.length; index += 1) {
+    const key = window.localStorage.key(index)
+    if (key) keys.push(key)
+  }
+  return keys
+}
+
+describe('the page touch', () => {
+  it('round-trips the campaigns, the screen, the path and the instant', () => {
+    const wire = pageTouchWire({ ...LANDING, atMs: LANDED_AT })
+
+    expect(parsePageTouch(wire, LANDED_AT + DAY)).toEqual({ ...LANDING, atMs: LANDED_AT })
+  })
+
+  it('is refused past the window, in the future, or naming no campaign', () => {
+    const wire = pageTouchWire({ ...LANDING, atMs: LANDED_AT })
+
+    expect(parsePageTouch(wire, LANDED_AT + ATTRIBUTION_WINDOW_MS + 1)).toBe(null)
+    expect(parsePageTouch(wire, LANDED_AT - 1)).toBe(null)
+    expect(pageTouchWire({ ...LANDING, containerIds: [], atMs: LANDED_AT })).toBe('')
+    expect(parsePageTouch(`ps=scr_landing&pt=${LANDED_AT}`, LANDED_AT)).toBe(null)
+  })
+
+  it('carries ids and a path only — a hand-edited entry claims nothing else', () => {
+    const touch = parsePageTouch(
+      `pc=${encodeURIComponent('camp_ai,../etc,camp_ai,x y')}&ps=scr_landing&pp=https%3A%2F%2Fevil.example&pt=${LANDED_AT}`,
+      LANDED_AT,
+    )
+
+    expect(touch).toEqual({ containerIds: ['camp_ai'], screenId: 'scr_landing', path: '', atMs: LANDED_AT })
+  })
+
+  it('THE PAGE THE VISITOR IS ON is reported with no grant and nothing written', () => {
+    landOn('https://shop.example.com/ai-website-draft')
+    notePageCampaigns(LANDING, LANDED_AT)
+
+    expect(readPageTouch(LANDED_AT + 60_000)).toEqual({ ...LANDING, atMs: LANDED_AT })
+    expect(storedKeys()).toEqual([])
+    expect(utmTouchField(LANDED_AT + 60_000)).toEqual({
+      campaignTouch: pageTouchWire({ ...LANDING, atMs: LANDED_AT }),
+    })
+  })
+
+  it('a re-render of the same page keeps the instant it was first viewed', () => {
+    notePageCampaigns(LANDING, LANDED_AT)
+    notePageCampaigns(LANDING, LANDED_AT + 5_000)
+
+    expect(readPageTouch(LANDED_AT + 6_000)?.atMs).toBe(LANDED_AT)
+  })
+
+  it('survives the walk to a page filed under nothing, under the grant', () => {
+    setUtmTouchConsent(true)
+    notePageCampaigns(LANDING, LANDED_AT)
+    // The pricing page is filed under no campaign.
+    notePageCampaigns(null, LANDED_AT + DAY)
+
+    expect(readPageTouch(LANDED_AT + 2 * DAY)).toEqual({ ...LANDING, atMs: LANDED_AT })
+  })
+
+  it('without the grant, the walk away from the page loses it', () => {
+    notePageCampaigns(LANDING, LANDED_AT)
+    notePageCampaigns(null, LANDED_AT + DAY)
+
+    expect(readPageTouch(LANDED_AT + DAY)).toBe(null)
+    expect(storedKeys()).toEqual([])
+  })
+
+  it('a grant given after the landing remembers the page being read', () => {
+    notePageCampaigns(LANDING, LANDED_AT)
+    setUtmTouchConsent(true)
+
+    expect(parsePageTouch(stored(), LANDED_AT)).toEqual({ ...LANDING, atMs: LANDED_AT })
+  })
+
+  it('a withdrawal removes the one entry, page and labels together', () => {
+    landOn('https://shop.example.com/ai-website-draft?utm_campaign=onejob-ai')
+    setUtmTouchConsent(true)
+    notePageCampaigns(LANDING, LANDED_AT)
+    rememberUtmTouch(undefined, LANDED_AT)
+
+    setUtmTouchConsent(false)
+
+    expect(storedKeys()).toEqual([])
+  })
+
+  it('rides the same wire field as the labels, each half parsed by its own reader', () => {
+    setUtmTouchConsent(true)
+    landOn('https://shop.example.com/ai-website-draft?utm_source=google&utm_campaign=onejob-ai')
+    notePageCampaigns(LANDING, LANDED_AT)
+
+    const wire = utmTouchField(LANDED_AT)['campaignTouch']
+
+    expect(parseUtmTouch(wire, LANDED_AT)).toEqual({
+      source: 'google',
+      campaign: 'onejob-ai',
+      atMs: LANDED_AT,
+    })
+    expect(parsePageTouch(wire, LANDED_AT)).toEqual({ ...LANDING, atMs: LANDED_AT })
+  })
+})
+
+describe('one entry on the device for both touches', () => {
+  it('the page and the labels share the existing key — no second key is written', () => {
+    landOn('https://shop.example.com/ai-website-draft?utm_source=google&utm_campaign=onejob-ai')
+    setUtmTouchConsent(true)
+    rememberUtmTouch(undefined, LANDED_AT)
+    notePageCampaigns(LANDING, LANDED_AT + 1_000)
+
+    expect(storedKeys()).toEqual([UTM_TOUCH_STORAGE_KEY])
+    expect(parseUtmTouch(stored(), LANDED_AT + 2_000)?.campaign).toBe('onejob-ai')
+    expect(parsePageTouch(stored(), LANDED_AT + 2_000)?.containerIds).toEqual(['camp_ai'])
+  })
+
+  it('a new label keeps the page, and a new page keeps the label', () => {
+    setUtmTouchConsent(true)
+    landOn('https://shop.example.com/?utm_campaign=spring')
+    rememberUtmTouch(undefined, LANDED_AT)
+    landOn('https://shop.example.com/ai-website-draft')
+    notePageCampaigns(LANDING, LANDED_AT + DAY)
+    landOn('https://shop.example.com/?utm_campaign=autumn')
+    rememberUtmTouch(undefined, LANDED_AT + 2 * DAY)
+
+    expect(parseUtmTouch(stored(), LANDED_AT + 2 * DAY)?.campaign).toBe('autumn')
+    expect(parsePageTouch(stored(), LANDED_AT + 2 * DAY)?.atMs).toBe(LANDED_AT + DAY)
+  })
+
+  it('reads an entry written before the page touch existed', () => {
+    setUtmTouchConsent(true)
+    landOn('https://shop.example.com/contact')
+    window.localStorage.setItem(UTM_TOUCH_STORAGE_KEY, `utm_campaign=sept&t=${LANDED_AT}`)
+
+    expect(readUtmTouch(LANDED_AT + DAY)).toEqual({ campaign: 'sept', atMs: LANDED_AT })
+    expect(readPageTouch(LANDED_AT + DAY)).toBe(null)
+    // An entry already in its canonical form is not rewritten by a read.
+    expect(stored()).toBe(`utm_campaign=sept&t=${LANDED_AT}`)
+  })
+
+  it('an aged-out half is dropped and the other kept', () => {
+    setUtmTouchConsent(true)
+    landOn('https://shop.example.com/?utm_campaign=spring')
+    rememberUtmTouch(undefined, LANDED_AT)
+    landOn('https://shop.example.com/ai-website-draft')
+    notePageCampaigns(LANDING, LANDED_AT + 5 * DAY)
+    notePageCampaigns(null)
+    landOn('https://shop.example.com/contact')
+
+    const at = LANDED_AT + ATTRIBUTION_WINDOW_MS + DAY
+    expect(readUtmTouch(at)).toBe(null)
+    expect(readPageTouch(at)?.atMs).toBe(LANDED_AT + 5 * DAY)
+    expect(stored()).toBe(pageTouchWire({ ...LANDING, atMs: LANDED_AT + 5 * DAY }))
+  })
+})
+
+/*==========================================
+ * THE FIRST CAMPAIGN TOUCH IN THE WINDOW — read off the entry above, once per
+ * page load. Each case loads the module afresh, because a page load is what
+ * the answer is scoped to.
+ *=========================================*/
+
+type UtmTouchModule = typeof import('./utm-touch')
+
+/** The module as a fresh page load sees it. */
+function freshPageLoad(): UtmTouchModule {
+  let fresh: UtmTouchModule | undefined
+  jest.isolateModules(() => {
+    fresh = require('./utm-touch')
+  })
+  return fresh as UtmTouchModule
+}
+
+describe('the first campaign touch', () => {
+  it('a device holding nothing is a first touch, answered once per page load', () => {
+    const page = freshPageLoad()
+    page.setUtmTouchConsent(true)
+    page.notePageCampaigns(LANDING, LANDED_AT)
+
+    expect(page.claimFirstCampaignTouch(['c:camp_ai', 'u:onejob-ai'], LANDED_AT)).toEqual([
+      'c:camp_ai',
+      'u:onejob-ai',
+    ])
+    // A second page in the same visit was preceded by this one.
+    page.notePageCampaigns({ ...LANDING, screenId: 'scr_other', containerIds: ['camp_b'] }, LANDED_AT + 60_000)
+    expect(page.claimFirstCampaignTouch(['c:camp_b'], LANDED_AT + 60_000)).toEqual([])
+  })
+
+  it('the next page load reads the touch it left, and is not a first', () => {
+    const first = freshPageLoad()
+    first.setUtmTouchConsent(true)
+    first.notePageCampaigns(LANDING, LANDED_AT)
+    first.claimFirstCampaignTouch(['c:camp_ai'], LANDED_AT)
+
+    const next = freshPageLoad()
+    next.setUtmTouchConsent(true)
+    next.notePageCampaigns(LANDING, LANDED_AT + DAY)
+
+    expect(next.claimFirstCampaignTouch(['c:camp_ai'], LANDED_AT + DAY)).toEqual([])
+  })
+
+  it('a touch past the window no longer counts, so the visit is a first again', () => {
+    const first = freshPageLoad()
+    first.setUtmTouchConsent(true)
+    first.notePageCampaigns(LANDING, LANDED_AT)
+
+    const later = freshPageLoad()
+    later.setUtmTouchConsent(true)
+    const at = LANDED_AT + ATTRIBUTION_WINDOW_MS + DAY
+    later.notePageCampaigns(LANDING, at)
+
+    expect(later.claimFirstCampaignTouch(['c:camp_ai'], at)).toEqual(['c:camp_ai'])
+  })
+
+  it('is read BEFORE this page load writes — a grant given on the page still counts it', () => {
+    const page = freshPageLoad()
+    landOn('https://shop.example.com/ai-website-draft?utm_campaign=onejob-ai')
+    page.notePageCampaigns(LANDING, LANDED_AT)
+    let claimed: string[] = []
+    page.whenUtmTouchConsentSettles(() => {
+      claimed = page.claimFirstCampaignTouch(['c:camp_ai', 'u:onejob-ai'], LANDED_AT)
+    })
+
+    page.setUtmTouchConsent(true)
+
+    expect(claimed).toEqual(['c:camp_ai', 'u:onejob-ai'])
+    expect(storedKeys()).toEqual([UTM_TOUCH_STORAGE_KEY])
+  })
+
+  it('claims nothing without the grant — a visit it cannot tell from the next is not a first', () => {
+    const page = freshPageLoad()
+    page.notePageCampaigns(LANDING, LANDED_AT)
+
+    expect(page.claimFirstCampaignTouch(['c:camp_ai'], LANDED_AT)).toEqual([])
+    expect(storedKeys()).toEqual([])
+  })
+
+  it('claims nothing when nothing could be remembered', () => {
+    const page = freshPageLoad()
+    page.setUtmTouchConsent(true)
+    landOn('https://shop.example.com/pricing')
+
+    // No page filed under a campaign and no label: no touch to remember.
+    expect(page.claimFirstCampaignTouch(['u:onejob-ai'], LANDED_AT)).toEqual([])
   })
 })

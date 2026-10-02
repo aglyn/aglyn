@@ -36,15 +36,27 @@ export interface RecordAttributionWidgetProps {
   hostId?: string | null
   recordKind?: string
   recordId?: string
+  /**
+   * The campaigns the host's record is filed under, when the host knows them
+   * (AGL-3461) — the Inbox hands a submission's form and page campaigns.
+   */
+  filedUnder?: readonly string[]
 }
 
 const isConversionKind = (kind: unknown): kind is CampaignConversionKind =>
   (CAMPAIGN_CONVERSION_KINDS as readonly unknown[]).includes(kind)
 
 export function RecordAttributionWidget(props: RecordAttributionWidgetProps) {
-  const { hostId, recordKind, recordId } = props
+  const { hostId, recordKind, recordId, filedUnder } = props
   if (!hostId || !recordId || !isConversionKind(recordKind)) return null
-  return <ConversionAttribution hostId={hostId} kind={recordKind} refId={recordId} />
+  return (
+    <ConversionAttribution
+      hostId={hostId}
+      kind={recordKind}
+      refId={recordId}
+      {...(Array.isArray(filedUnder) && filedUnder.length ? { filedUnder } : {})}
+    />
+  )
 }
 RecordAttributionWidget.displayName = 'RecordAttributionWidget'
 

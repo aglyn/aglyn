@@ -48,7 +48,8 @@ somewhere to say yes. Until one does, nothing changes — in either consent mode
 for visitors anywhere in the world.
 
 Built-in Aglyn analytics are unaffected by all of this: the pageview beacon is
-**cookieless** and stores no visitor identifier, so it needs no consent.
+**cookieless** and stores no visitor identifier, so it needs no consent. The view of a
+page filed under a campaign is counted the same way.
 
 ## What needs consent
 
@@ -65,8 +66,9 @@ Built-in Aglyn analytics are unaffected by all of this: the pageview beacon is
 - **Cross-visit A/B test identity**: without an analytics grant, experiment variant
   assignment is remembered only for the visit (sessionStorage) instead of across
   visits.
-- **Remembering the campaign a visitor first arrived from.** Reading the
-  campaign on the click itself needs no grant; keeping it across visits does.
+- **Remembering the campaign that last touched a visitor.** Reading it on the page
+  they are on needs no grant; keeping it across visits does. See
+  [The campaign a visitor came from](#campaign-touch).
 - **A Wistia player loaded with the page** — see
   [Videos that load with the page](#videos-that-load-with-the-page).
 - **Advertising storage** (`ad_storage`, `ad_user_data`, `ad_personalization`),
@@ -101,6 +103,22 @@ because the site cannot function without them:
 - Popup and announcement "don't show this again" stamps (stored locally, never
   transmitted).
 - The stored consent state itself.
+
+## The campaign a visitor came from {#campaign-touch}
+
+Your site remembers the campaign that last touched a visitor for up to seven days, so a
+form, sign-up or booking on a later page or visit can be credited to it:
+
+- the `utm_` labels on the link they arrived from, and
+- the last page they read that you filed under a campaign — its campaign and page ids,
+  its path and when.
+
+Both are kept in one entry in the browser's local storage, and it holds no name, address
+or identifier. Reading the campaign on the page the visitor is on needs no grant;
+keeping it across pages and visits waits for analytics consent, and withdrawing consent
+deletes it. The same entry is what tells a campaign's **First visits** figure that a
+visitor is new to it, so a visitor who declined is never counted there — see
+[Who it reached](../email-campaigns/overview.md#who-it-reached).
 
 ## Videos that load with the page {#videos-that-load-with-the-page}
 

@@ -90,6 +90,7 @@ import {
   campaignRollup,
   campaignSendDisplay,
   campaignSiteIds,
+  campaignUtmLabels,
   campaignVisibleTo,
   campaignWindowState,
   emailListTimeMs,
@@ -112,6 +113,7 @@ import {
   CampaignDestinationsSection,
   CampaignRevenueSection,
   CampaignSequencesSection,
+  CampaignVisitsSection,
 } from './campaign-reach-sections'
 import CampaignMembersSection from './campaign-members-section'
 import CampaignReportCard from './campaign-report-card'
@@ -437,6 +439,9 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
           listIds: values.listIds,
           topicId: values.topicId ? values.topicId : deleteField(),
           listUnsubscribe: values.listUnsubscribe,
+          // The utm_campaign labels that mean this campaign (AGL-3461),
+          // normalized the way the conversion join looks them up.
+          utmCampaigns: campaignUtmLabels(values.utmCampaigns),
           ...placement,
         })
         setEditing(false)
@@ -885,6 +890,12 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
         ) : null}
 
         <Typography variant="body2" color="text.secondary">
+          {campaignUtmLabels(campaign.utmCampaigns).length
+            ? `Links labeled utm_campaign=${campaignUtmLabels(campaign.utmCampaigns).join(', ')} credit this campaign`
+            : 'No utm_campaign labels — pages filed under it and its emails ' +
+              'credit it; edit the campaign to add the labels its ads carry'}
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
           {listUnsubscribeOn
             ? 'Mail-client unsubscribe button: on'
             : 'Mail-client unsubscribe button: off — the footer link is ' +
@@ -952,6 +963,7 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
           <CampaignConversionsSection
             key={conversionsHost}
             hostId={conversionsHost}
+            campaignId={campaignId}
             sendIds={sendIds}
             truncated={sendsTruncated}
             basePath={conversionsBasePath}
@@ -962,6 +974,16 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
               'placed on one yet.'}
           </Typography>
         )}
+
+        <Divider />
+        {/*
+          WHO IT REACHED (AGL-3461), right under what it caused: the visitors
+          who reached the campaign — on a page filed under it, or from a link
+          labeled for it — are what the outcomes above are read against. Below
+          them, not above: the page opens on what the campaign did. One keyed
+          read, keyed by this campaign's id.
+         */}
+        <CampaignVisitsSection orgId={orgId} campaignId={campaignId} />
 
         <Divider />
         {/*

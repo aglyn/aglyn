@@ -18,13 +18,19 @@
 import type {
   PluginConversionClick,
   PluginConversionCreditor,
+  PluginConversionDescription,
   PluginConversionTouch,
 } from '@aglyn/aglyn/plugin-manager/plugin-conversion-credit'
+import { resolveOrgIdForHost } from '@aglyn/tenant-data-admin/server/organizations'
+import type { Firestore } from 'firebase-admin/firestore'
+import firebaseAdmin from '@aglyn/tenant-data-admin/server/firebase-admin'
+import { CAMPAIGN_SEND_CONTAINER_FIELD } from '@aglyn/shared-ui-email-campaigns/model/campaign-container'
 import { CAMPAIGN_CONVERSION_KINDS, type CampaignConversionKind } from '../model/campaign-conversions'
 import {
   attributeCampaignConversion,
   creditCampaignSequenceOutcome,
   eraseCampaignAttributionsForPersonKey,
+  resolveCampaignSendRef,
   resolveCampaignTouch,
   type CampaignSequenceOutcome,
   type CampaignTouchChannel,
@@ -32,6 +38,7 @@ import {
 } from './campaign-conversion-attribution'
 import { eraseEmailCampaignTouches, recordEmailCampaignTouch } from './email-campaign-touch'
 import { attributeOrderToEmail, reverseEmailAttributedRevenue } from './email-revenue-attribution'
+import { readLiveCampaign } from './campaign-touch-targets'
 
 /**
  * The Marketing plugin's conversion creditor: the platform's
@@ -57,7 +64,7 @@ import { attributeOrderToEmail, reverseEmailAttributedRevenue } from './email-re
  * already never throws.
  */
 
-const CHANNELS: readonly CampaignTouchChannel[] = ['email', 'web', 'sequence']
+const CHANNELS: readonly CampaignTouchChannel[] = ['email', 'web', 'sequence', 'page']
 
 /** A touch as this plugin resolved it, or `null` for anything else. */
 function asResolvedTouch(value: PluginConversionTouch | null | undefined): ResolvedCampaignTouch | null {
@@ -84,6 +91,52 @@ function touchOfClick(click: PluginConversionClick): ResolvedCampaignTouch {
 
 const isConversionKind = (kind: string): kind is CampaignConversionKind =>
   (CAMPAIGN_CONVERSION_KINDS as readonly string[]).includes(kind)
+
+/** How many of a record's containers an alert names. */
+const DESCRIBE_CONTAINERS_MAX = 5
+
+/** How a touch reached the visitor, in the phrase an alert prints. */
+function howTouched(touch: ResolvedCampaignTouch): string {
+  switch (touch.channel) {
+    case 'page':
+      return touch.path ? `viewed ${touch.path}, a page filed under it` : 'viewed a page filed under it'
+    case 'email':
+      return 'clicked one of its emails'
+    case 'sequence':
+      return 'clicked a sequence email in it'
+    default:
+      return touch.campaign ? `followed a link labeled ${touch.campaign}` : 'followed a labeled link'
+  }
+}
+
+/**
+ * The campaign a touch names, by name: the container it carries, or — for a
+ * click on a campaign's mail, which carries the SEND — the container that
+ * send is in, else the send's subject.
+ */
+async function creditedCampaignName(
+  hostId: string,
+  orgId: string | null,
+  touch: ResolvedCampaignTouch,
+  db: Firestore,
+): Promise<{ label: string; containerId?: string } | null> {
+  const campaignId = String(touch.campaignId ?? '')
+  if (!campaignId) return null
+  if (touch.channel !== 'email') {
+    if (!orgId) return null
+    const campaign = await readLiveCampaign({ orgId, campaignId }, db)
+    return campaign ? { label: campaign.name, containerId: campaign.id } : null
+  }
+  const sendRef = await resolveCampaignSendRef({ hostId, sendId: campaignId, orgId, firestore: db })
+  const send = sendRef ? ((await sendRef.get()).data() ?? {}) : {}
+  const containerId = String(send[CAMPAIGN_SEND_CONTAINER_FIELD] ?? '')
+  if (containerId && orgId) {
+    const campaign = await readLiveCampaign({ orgId, campaignId: containerId }, db)
+    if (campaign) return { label: campaign.name, containerId: campaign.id }
+  }
+  const subject = String(send['subject'] ?? '').trim()
+  return subject ? { label: subject } : null
+}
 
 export const marketingConversionCreditor: PluginConversionCreditor = {
   async resolveTouch(request) {
@@ -139,5 +192,48 @@ export const marketingConversionCreditor: PluginConversionCreditor = {
     const touches = await eraseEmailCampaignTouches(key)
     const credits = await eraseCampaignAttributionsForPersonKey(key)
     return credits + (touches ? 1 : 0)
+  },
+
+  async describeConversion(request) {
+    try {
+      const touch = asResolvedTouch(request.touch)
+      const ids = [...new Set((request.containerIds ?? []).map((id) => String(id ?? '').trim()))]
+        .filter(Boolean)
+        .slice(0, DESCRIBE_CONTAINERS_MAX)
+      if (!touch && !ids.length) return null
+      const orgId = await resolveOrgIdForHost(request.hostId).catch(() => null)
+      const db = firebaseAdmin.app().firestore()
+      // Read side by side, kept in the order asked; a campaign since deleted
+      // is left out rather than named by its id.
+      const filedUnder: PluginConversionDescription['filedUnder'] = orgId
+        ? (
+            await Promise.all(
+              ids.map((campaignId) => readLiveCampaign({ orgId, campaignId }, db)),
+            )
+          )
+            .filter((campaign): campaign is NonNullable<typeof campaign> => Boolean(campaign))
+            .map((campaign) => ({ id: campaign.id, label: campaign.name }))
+        : []
+      let credited: PluginConversionDescription['credited']
+      if (touch) {
+        const named = await creditedCampaignName(request.hostId, orgId, touch, db)
+        const label =
+          named?.label ??
+          (touch.channel === 'web'
+            ? [touch.source, touch.medium, touch.campaign].filter(Boolean).join(' / ')
+            : '')
+        if (label) {
+          credited = {
+            label,
+            how: howTouched(touch),
+            ...(named?.containerId ? { containerId: named.containerId } : {}),
+          }
+        }
+      }
+      return { ...(credited ? { credited } : {}), filedUnder }
+    } catch (error) {
+      console.error('[conversion-credit] describe failed', error)
+      return null
+    }
   },
 }

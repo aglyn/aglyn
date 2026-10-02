@@ -35,6 +35,7 @@ import { useEffect, useState } from 'react'
 import {
   campaignListUnsubscribe,
   campaignSiteIds,
+  campaignUtmLabels,
 } from '@aglyn/shared-ui-email-campaigns/model/campaign-container'
 
 /** One option in the list or topic picker. */
@@ -52,6 +53,11 @@ export interface CampaignEditValues {
   topicId: string
   /** Whether its emails carry the mail-client unsubscribe button (AGL-3307). */
   listUnsubscribe: boolean
+  /**
+   * The `utm_campaign` labels that mean this campaign (AGL-3461), as typed —
+   * the save normalizes them with `campaignUtmLabels`.
+   */
+  utmCampaigns: string[]
   /**
    * The sites it is placed on — `null` for every site. Present only when the
    * drawer was handed `sites`, which only the org hub does (a site hub never
@@ -72,6 +78,7 @@ export interface CampaignEditDrawerProps {
     topicId?: string
     visibleTo?: string[]
     listUnsubscribe?: boolean
+    utmCampaigns?: string[]
   } | null
   /** The org's email lists, which this campaign may be aimed at. */
   lists: CampaignEditOption[]
@@ -142,6 +149,8 @@ export function CampaignEditDrawer(props: CampaignEditDrawerProps) {
   const [listIds, setListIds] = useState<string[]>([])
   const [topicId, setTopicId] = useState('')
   const [listUnsubscribe, setListUnsubscribe] = useState(true)
+  /** The utm_campaign labels, as the field holds them: one per line or comma. */
+  const [utmLabels, setUtmLabels] = useState('')
   /** The chosen sites; empty is every site, as the create drawer reads it. */
   const [siteIds, setSiteIds] = useState<string[]>([])
   /*
@@ -165,6 +174,7 @@ export function CampaignEditDrawer(props: CampaignEditDrawerProps) {
     setListIds((campaign?.listIds ?? []).map(String))
     setTopicId(String(campaign?.topicId ?? ''))
     setListUnsubscribe(campaignListUnsubscribe(campaign))
+    setUtmLabels(campaignUtmLabels(campaign?.utmCampaigns).join(', '))
     setSiteIds(campaignSiteIds(campaign) ?? [])
     setSitesTouched(false)
   }, [open, campaign])
@@ -298,6 +308,24 @@ export function CampaignEditDrawer(props: CampaignEditDrawerProps) {
             ))}
           </TextField>
           {/*
+            THE LABELS THAT MEAN THIS CAMPAIGN (AGL-3461). An ad or a social
+            post carries `utm_campaign=…`; a label named here credits this
+            campaign the way a page filed under it does. Lowercased and
+            deduped on save, which is how the lookup matches them.
+           */}
+          <TextField
+            label="utm_campaign labels"
+            value={utmLabels}
+            onChange={(event) => setUtmLabels(event.target.value)}
+            helperText={
+              'Links carrying one of these utm_campaign values credit this ' +
+              'campaign. Separate them with commas. A label two campaigns ' +
+              'both list credits neither.'
+            }
+            placeholder="spring-launch, spring-retargeting"
+            fullWidth
+          />
+          {/*
             The mail-client unsubscribe button (AGL-3307), the setting a
             sequence carries too with the same label. ON for a campaign,
             because campaigns are bulk mail. Off warns, and the send path
@@ -397,6 +425,7 @@ export function CampaignEditDrawer(props: CampaignEditDrawerProps) {
                 listIds,
                 topicId,
                 listUnsubscribe,
+                utmCampaigns: campaignUtmLabels(utmLabels),
                 ...(sites && sitesTouched
                   ? { siteIds: siteIds.length ? siteIds : null }
                   : {}),

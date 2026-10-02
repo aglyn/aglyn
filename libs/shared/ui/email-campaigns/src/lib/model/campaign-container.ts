@@ -227,9 +227,60 @@ export interface EmailCampaign {
    * in every email either way.
    */
   listUnsubscribe?: boolean
+  /**
+   * The `utm_campaign` labels that mean this campaign (AGL-3461), stored as
+   * {@link campaignUtmLabels} normalizes them. A visitor who arrives on a
+   * link carrying one is credited to this campaign, as a visitor who reads a
+   * page filed under it is. Read it through {@link campaignUtmLabels}.
+   */
+  utmCampaigns?: string[]
   createdAtMs?: number
   createdBy?: string
   deletedAt?: unknown
+}
+
+/**
+ * How many `utm_campaign` labels one campaign may answer to. A ceiling on the
+ * field, so an `array-contains` lookup stays one cheap index entry per label.
+ */
+export const CAMPAIGN_UTM_LABELS_MAX = 20
+
+/**
+ * One `utm_campaign` label as it is stored and looked up: trimmed, lowercase,
+ * at most 100 characters (the length the label parser keeps).
+ *
+ * Lowercase because the same push is routinely tagged `OneJob-AI` in one ad
+ * and `onejob-ai` in the next, and a match that told them apart would leave
+ * half a campaign's arrivals on a label nobody looks at. Empty for a value
+ * that is not a label at all.
+ */
+export function normalizeCampaignUtmLabel(raw: unknown): string {
+  if (typeof raw !== 'string') return ''
+  const label = raw.trim().toLowerCase().slice(0, 100)
+  // An address is never a campaign label — the label parser refuses one too.
+  if (!label || /[^\s@]+@[^\s@]+\.[^\s@]+/.test(label)) return ''
+  return label
+}
+
+/**
+ * A campaign's `utm_campaign` labels as a clean list: normalized, deduped,
+ * capped. Accepts the stored array or a comma- or newline-separated string,
+ * which is how the edit drawer collects them.
+ */
+export function campaignUtmLabels(raw: unknown): string[] {
+  const parts = Array.isArray(raw)
+    ? raw
+    : typeof raw === 'string'
+      ? raw.split(/[\n,]/)
+      : []
+  const labels: string[] = []
+  for (const part of parts) {
+    const label = normalizeCampaignUtmLabel(part)
+    if (!label || labels.includes(label)) continue
+    labels.push(label)
+    if (labels.length >= CAMPAIGN_UTM_LABELS_MAX) break
+  }
+  return labels
 }
 
 /**

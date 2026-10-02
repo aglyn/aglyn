@@ -36,6 +36,12 @@ export interface InboxRecordAttributionZoneProps {
   /** What the record is, in the Inbox's own words. */
   recordKind: 'lead' | 'form'
   recordId: string
+  /**
+   * The containers the record is FILED under, by id (AGL-3461): for a
+   * submission, the campaigns its form and its page were filed under when it
+   * arrived. A widget draws them apart from what the record was credited to.
+   */
+  filedUnder?: readonly string[]
 }
 
 export const INBOX_RECORD_ATTRIBUTION_ZONE =

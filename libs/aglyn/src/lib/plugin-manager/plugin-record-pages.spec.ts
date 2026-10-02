@@ -29,8 +29,21 @@ describe('record pages', () => {
       pluginId: 'inbox',
       kind: 'formSubmission',
       path: '/inbox',
+      record: { path: '/inbox/submissions', param: 'submission' },
     })
     expect(pluginRecordPageLink('formSubmission', 'host-1')).toBe('/host-1/inbox')
+  })
+
+  it('opens ONE record where the page declares how, and the list otherwise (AGL-3461)', () => {
+    expect(pluginRecordPageLink('formSubmission', 'host-1', 'sub-1')).toBe(
+      '/host-1/inbox/submissions?submission=sub-1',
+    )
+    // An id that needs escaping is escaped, never spliced.
+    expect(pluginRecordPageLink('formSubmission', 'host-1', 'a&b=c')).toBe(
+      '/host-1/inbox/submissions?submission=a%26b%3Dc',
+    )
+    expect(pluginRecordPageLink('formSubmission', 'host-1', '')).toBe('/host-1/inbox')
+    expect(pluginRecordPageLink('formSubmission', 'host-1', null)).toBe('/host-1/inbox')
   })
 
   it('answers nothing for a kind no plugin shows, or with no site to address', () => {

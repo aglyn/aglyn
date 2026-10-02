@@ -30,6 +30,7 @@ import {
   type Firestore,
   type Query,
 } from 'firebase/firestore'
+import { CAMPAIGN_VISIT_REPORTS_COLLECTION } from '../model/campaign-visits'
 
 /**
  * WHERE A CAMPAIGN AND ITS SENDS ARE READ FROM, at either level of the hub.
@@ -157,4 +158,16 @@ export function campaignSequenceReportDoc(
   campaignId: string,
 ): DocumentReference {
   return doc(firestore, ...orgCampaignSequenceReportsPath(orgId), campaignId)
+}
+
+/**
+ * A container's visit rollup (AGL-3461),
+ * `orgs/{orgId}/campaignVisitReports/{id}` — first visits and page views.
+ */
+export function campaignVisitReportDoc(
+  firestore: Firestore,
+  orgId: string,
+  campaignId: string,
+): DocumentReference {
+  return doc(firestore, 'orgs', orgId, CAMPAIGN_VISIT_REPORTS_COLLECTION, campaignId)
 }

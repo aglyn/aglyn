@@ -23,6 +23,7 @@ import { OVERLAY_COPY_FIELDS, resolveOverlayCopy } from '../model/overlay-copy'
 import { getClientAutomations, type ClientAutomation } from './get-client-automations'
 import { getScreenExperiments, type ScreenExperiment } from './get-screen-experiments'
 import getOverlays from './get-overlays'
+import { CAMPAIGN_KIND } from '../model/campaign-kind'
 
 /**
  * Marketing contributions to a rendered site page (AGL-418), relocated
@@ -232,7 +233,25 @@ export const marketingSitePageEnricher: SitePageEnricher = async ({
     }
   }
 
+  /*
+   * THE CAMPAIGNS THIS PAGE IS FILED UNDER (AGL-3461), off the screen this
+   * render already read — no read of its own. The runtime notes them as the
+   * visitor's page touch and reports the visit to each campaign; the ids are
+   * re-checked on the server at both ends, so a page cached before a refiling
+   * can claim no campaign the screen no longer names.
+   *
+   * Absent for a page filed under nothing, so the ordinary page carries no
+   * bytes for it.
+   */
+  const campaignIds =
+    screenId && screen
+      ? Aglyn.readContainerIds(screen as Record<string, unknown>, CAMPAIGN_KIND)
+      : []
+
   return {
+    ...(campaignIds.length
+      ? { campaignPage: { screenId, campaignIds: campaignIds.slice(0, 5) } }
+      : {}),
     announcementBar,
     popup,
     clientAutomations: JSON.parse(JSON.stringify(clientAutomations)),

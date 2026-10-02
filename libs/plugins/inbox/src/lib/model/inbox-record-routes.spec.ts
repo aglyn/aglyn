@@ -27,6 +27,8 @@ import {
   pluginRecordRoute,
 } from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
 import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
+import { pluginRecordPageLink } from '@aglyn/aglyn/plugin-manager/plugin-record-pages'
+import { normalizeNotificationLink } from '@aglyn/aglyn/app-utils/notifications'
 import { registerInboxRecordRoutes } from './inbox-record-routes'
 
 const SITE = { orgSlug: 'acme', host: 'shop' }
@@ -47,6 +49,22 @@ describe('the inbox record route', () => {
       '/acme/hosts/shop/inbox/submissions?submission=sub-1',
     )
     expect(pluginRecordListHref('formSubmission', SITE)).toBe('/acme/hosts/shop/inbox/submissions')
+  })
+
+  /*
+   * A server's notification about one submission (the forms door's alert)
+   * links through what this plugin DECLARES in plugins.config.json
+   * (`recordPages`), because the tenant never loads this registrar. The two
+   * must open the same reader, or the alert lands somewhere this route does
+   * not (AGL-3461).
+   */
+  it('declares the same address for one submission as the route it registers', () => {
+    const declared = normalizeNotificationLink(
+      pluginRecordPageLink('formSubmission', 'host-doc-1', 'sub-1'),
+      { orgSlug: SITE.orgSlug, hostId: 'host-doc-1', hostSubdomain: SITE.host },
+    )
+
+    expect(declared).toBe(pluginRecordHref('formSubmission', SITE, 'sub-1'))
   })
 
   it('lists the organization’s submissions, but opens one only on its site', () => {

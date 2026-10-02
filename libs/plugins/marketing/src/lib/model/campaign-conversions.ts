@@ -68,6 +68,15 @@ import type { CampaignCaveat } from '@aglyn/shared-ui-email-campaigns/model/camp
  * this reader states that where the figure is drawn, and web-channel records
  * are read as records — see {@link campaignConversionsCoverage}.
  *
+ * ## A PAGE OR A DECLARED LABEL NAMES THE CAMPAIGN ITSELF (AGL-3461)
+ *
+ * Two more touches name a campaign CONTAINER rather than a send: a page filed
+ * under the campaign, and a `utm_campaign` label the campaign declares as its
+ * own. Their records carry the container's id as `campaignId`, so the
+ * campaign's page counts them with the same `kind` + `campaignId` aggregation
+ * it counts its sends' conversions with — keyed by a document id, so bounded
+ * by the campaigns that exist, and needing no rollup document of their own.
+ *
  * ## A CONVERSION WITH NO TOUCH IS NOT IN HERE AT ALL
  *
  * Direct traffic writes no record. There is deliberately no
@@ -116,7 +125,58 @@ export type CampaignConversionKind = (typeof CAMPAIGN_CONVERSION_KINDS)[number]
  * the campaign whose mail was clicked, plus the sequence and the enrollment
  * it came through, so a record can say which rep's outreach it credits.
  */
-export type CampaignTouchChannel = 'email' | 'web' | 'sequence'
+export type CampaignTouchChannel = 'email' | 'web' | 'sequence' | 'page'
+
+/**
+ * THE RULE an identify moment is credited under (AGL-3461), stamped on every
+ * record as `model` so a reader can print what was counted.
+ *
+ * `last-click` — the revenue join's rule, which an order still uses — named
+ * the later of a campaign email click and a labeled link. A page filed under a
+ * campaign is a touch too now, and it is not a click, so the identify moment
+ * says so:
+ *
+ *  - the later of a campaign email click and a link carrying `utm_` labels
+ *    wins, exactly as before;
+ *  - a page filed under a campaign competes with that winner. Within
+ *    {@link CAMPAIGN_VISIT_MINUTES} of it the two are one visit: a click that
+ *    names a campaign — its mail, or a label the campaign declares — keeps
+ *    the credit for the page it landed on, and a label that names none
+ *    yields to the page. Further apart, the later one wins;
+ *  - all of it inside the seven-day window, as before.
+ */
+export const CAMPAIGN_TOUCH_MODEL = 'last-touch'
+
+/** How close a page view and a click are to be one visit, in minutes. */
+export const CAMPAIGN_VISIT_MINUTES = 30
+
+/** The same, in milliseconds. */
+export const CAMPAIGN_VISIT_MS = CAMPAIGN_VISIT_MINUTES * 60 * 1000
+
+/**
+ * The rule a record or a rollup was credited under, as one sentence a reader
+ * can check the figure against. Keyed off the STORED model, so a conversion
+ * credited under an older rule prints the rule it was credited under.
+ */
+export function campaignCreditRule(
+  model: string | null | undefined,
+  windowDays: number | null | undefined,
+): string {
+  const days = Number(windowDays ?? 0) || EMAIL_ATTRIBUTION_WINDOW_DAYS
+  if (model === CAMPAIGN_TOUCH_MODEL) {
+    return (
+      `Credited to the visitor’s latest campaign touch within ${days} days — a ` +
+      'campaign email they clicked, a link labeled for a campaign, or a page ' +
+      `filed under one. A page viewed within ${CAMPAIGN_VISIT_MINUTES} minutes of ` +
+      'a click is that click’s visit, and the click keeps the credit when it ' +
+      'names a campaign.'
+    )
+  }
+  if (model === EMAIL_ATTRIBUTION_MODEL) {
+    return `Credited to the last campaign whose link they clicked, within ${days} days of that click.`
+  }
+  return `Credited under the ${String(model ?? 'recorded')} model, within ${days} days.`
+}
 
 /**
  * The record each conversion kind credits, as its owner publishes the kind
@@ -208,6 +268,10 @@ export interface CampaignConversionRecord {
   touchedAtMs?: number
   /** When the visitor became identifiable, epoch ms. */
   convertedAtMs?: number
+  /** The screen the visitor viewed, for a `page` touch (AGL-3461). */
+  screenId?: string
+  /** That page's path, for a `page` touch. */
+  path?: string
   model?: string
   windowDays?: number
 }
@@ -336,10 +400,10 @@ export function campaignConversionsReport(options: {
     caveats.push({
       id: 'conversions-web-not-rolled-up',
       message:
-        'Campaign emails only. A conversion credited to a link tagged with ' +
-        'utm_ parameters is recorded against that label rather than against ' +
-        'a campaign, so it is not in the figures above — those conversions ' +
-        'are listed under Conversions in the marketing console.',
+        'This email only. A conversion credited to a page filed under the ' +
+        'campaign, or to a link labeled for it, is counted on the ' +
+        'campaign’s own page; one credited to a utm_ label no campaign ' +
+        'declares is listed under Conversions in the marketing console.',
     })
   }
 
@@ -472,8 +536,10 @@ export function campaignConversionsCoverage(options: {
  *
  * The email channel names a campaign document, so the screen can link to it,
  * and so does a sequence touch: the campaign the sequence is in is a
- * container with a page. The web channel names a label the marketer typed,
- * which is text and never a link — there is nothing at the other end of it.
+ * container with a page — as does a page touch, the campaign the viewed page
+ * is filed under (AGL-3461). The web channel names a label the marketer
+ * typed, which is text unless a campaign declares the label as its own; then
+ * the record carries that campaign's id too and the screen links it.
  *
  * The `utm_` triple is joined in the order a marketer set it, with the parts
  * that are absent left out rather than filled with a placeholder.
@@ -484,7 +550,11 @@ export function campaignTouchLabel(
   record: CampaignConversionRecord | null | undefined,
 ): string {
   if (!record) return ''
-  if (record.channel === 'email' || record.channel === 'sequence') {
+  if (
+    record.channel === 'email' ||
+    record.channel === 'sequence' ||
+    record.channel === 'page'
+  ) {
     return String(record.campaignId ?? '')
   }
   const parts = [record.source, record.medium, record.campaign]
