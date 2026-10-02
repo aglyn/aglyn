@@ -16,6 +16,7 @@
  */
 
 import type { OutreachClickMachineReason } from '../engine/click-tracking'
+import { OUTREACH_OPEN_SOURCES, type OutreachOpenSource } from '../engine/open-source'
 import type { OutreachOpenMachineReason } from '../engine/open-tracking'
 import type {
   OutreachEnrollmentHistoryEntry,
@@ -39,6 +40,7 @@ const OPEN_MACHINE_REASONS: readonly OutreachOpenMachineReason[] = [
   'method',
   'image_proxy',
   'privacy_proxy',
+  'scanner',
 ]
 const ACTIONS: readonly OutreachHistoryAction[] = ['pause', 'resume', 'stop', 'do_not_contact']
 
@@ -60,12 +62,18 @@ export function outreachClickHistoryRow(input: {
   }
 }
 
-/** An open row as the short-link route writes it for a tracking image (AGL-3395). */
+/**
+ * An open row as the short-link route writes it for a tracking image
+ * (AGL-3395), with the evidence it was judged on (AGL-3488): the agent the
+ * fetch sent, and the network it came from — never its address.
+ */
 export function outreachOpenHistoryRow(input: {
   atMs: number
   stepIndex: number
   human: boolean
   machineReason: OutreachOpenMachineReason | null
+  userAgent?: string | null
+  source?: OutreachOpenSource | null
 }): Record<string, unknown> {
   return {
     kind: 'open',
@@ -73,6 +81,8 @@ export function outreachOpenHistoryRow(input: {
     stepIndex: input.stepIndex,
     human: input.human,
     machineReason: input.human ? null : input.machineReason,
+    userAgent: input.userAgent ?? null,
+    source: input.source ?? null,
   }
 }
 
@@ -145,6 +155,11 @@ export function readOutreachHistoryEntry(
         : (OPEN_MACHINE_REASONS as readonly unknown[]).includes(reason)
           ? (reason as OutreachOpenMachineReason)
           : null,
+      // Absent on every row from before AGL-3488, which recorded neither.
+      userAgent: typeof data['userAgent'] === 'string' && data['userAgent'] ? data['userAgent'] : null,
+      source: (OUTREACH_OPEN_SOURCES as readonly unknown[]).includes(data['source'])
+        ? (data['source'] as OutreachOpenSource)
+        : null,
     }
   }
   if (data['kind'] === 'action') {

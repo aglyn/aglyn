@@ -50,7 +50,11 @@ import { type MouseEvent, type ReactNode, useMemo } from 'react'
 import {
   outreachClickCountLabel,
   outreachClickSummary,
+  outreachMachineOpenLabel,
+  outreachOpenCountLabel,
+  outreachOpenSummary,
   type OutreachClickSummary,
+  type OutreachOpenSummary,
 } from '../model/enrollment-engagement'
 import {
   OUTREACH_ENROLLMENT_CLICK_FIELDS,
@@ -98,6 +102,12 @@ export interface OutreachEnrollmentsTableProps {
    * and a false one.
    */
   trackClicks?: boolean
+  /**
+   * Whether this sequence counts opens, or once did (AGL-3488). The Opens
+   * column is shown only then, for the reason the Clicks column is: a
+   * column of dashes where nothing was measured reads as "nobody opened".
+   */
+  countOpens?: boolean
   /** The mailbox's IANA zone, which next sends are read in; `null` for the reader's own. */
   timeZone: string | null
   /**
@@ -216,6 +226,8 @@ const CLICKED_OPTIONS: readonly ListFilterOption[] = [
 ]
 /** Columns a reader can show from the column chooser, off until they do (AGL-3332). */
 const CLICK_DETAIL_COLUMNS = ['linksFollowed', 'lastClick', 'scannerClicks'] as const
+/** The opens column a reader can show from the column chooser, off until they do. */
+const OPEN_DETAIL_COLUMNS = ['lastOpen'] as const
 
 /** The table's grammar, with the click fields when the sequence counts clicks. */
 function filterFieldsFor(trackClicks: boolean): readonly ListFilterField[] {
@@ -275,10 +287,43 @@ function StopReasonCell(props: { enrollment: OutreachEnrollment }) {
   )
 }
 
+/**
+ * The Opens cell (AGL-3488): the person's opens, and under them the fetches
+ * a machine made — counted apart and never in the person's number, as
+ * scanner clicks are never in their clicks.
+ */
+function OpensCell(props: { opens: OutreachOpenSummary }) {
+  const { opens } = props
+  const machines = outreachMachineOpenLabel(opens)
+  return (
+    <Stack spacing={0} sx={{ justifyContent: 'center', height: '100%' }}>
+      <Typography variant="body2" color={opens.opens ? undefined : 'text.secondary'}>
+        {opens.opens ? String(opens.opens) : '—'}
+      </Typography>
+      {machines ? (
+        <Tooltip
+          title="Fetches of the tracking image by a mail provider’s proxy or a security scanner. They aren’t counted as the person’s opens."
+          describeChild
+        >
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            noWrap
+            sx={{ textDecoration: 'underline dotted', textUnderlineOffset: 3, cursor: 'help' }}
+          >
+            {machines}
+          </Typography>
+        </Tooltip>
+      ) : null}
+    </Stack>
+  )
+}
+
 /** The table's columns; the person and the actions are drawn from the row's enrollment. */
 function columns(
   rowActions: (enrollment: OutreachEnrollment) => ReactNode,
   trackClicks: boolean,
+  countOpens: boolean,
   timeZone: string | null,
 ): NonNullable<ListTableProps['columns']> {
   return [
@@ -355,6 +400,22 @@ function columns(
       width: 170,
       sortable: false,
     },
+    ...(countOpens
+      ? [
+          {
+            field: 'opens',
+            headerName: 'Opens',
+            description:
+              'A person’s opens of the emails. Fetches by mail proxies and security scanners are shown under them and not counted.',
+            width: 130,
+            sortable: false,
+            renderCell: ({ row }: { row: { openSummary: OutreachOpenSummary } }) => (
+              <OpensCell opens={row.openSummary} />
+            ),
+          },
+          { field: 'lastOpen', headerName: 'Last open', width: 170, sortable: false },
+        ]
+      : []),
     ...(trackClicks
       ? [
           {
@@ -419,6 +480,7 @@ const plainClick = (event: MouseEvent) =>
 export function OutreachEnrollmentsTable(props: OutreachEnrollmentsTableProps) {
   const { steps, timeZone, api, onOpen, hrefFor } = props
   const trackClicks = props.trackClicks === true
+  const countOpens = props.countOpens === true
   const nowMs = useOutreachNowMs()
   const theme = useTheme()
   const narrow = useMediaQuery(theme.breakpoints.down('md'))
@@ -482,8 +544,11 @@ export function OutreachEnrollmentsTable(props: OutreachEnrollmentsTableProps) {
       ...(trackClicks
         ? Object.fromEntries(CLICK_DETAIL_COLUMNS.map((column) => [column, false]))
         : {}),
+      ...(countOpens
+        ? Object.fromEntries(OPEN_DETAIL_COLUMNS.map((column) => [column, false]))
+        : {}),
     }),
-    [fields, trackClicks],
+    [fields, trackClicks, countOpens],
   )
   /*
    * A person who followed this destination before each click was recorded
@@ -612,6 +677,7 @@ export function OutreachEnrollmentsTable(props: OutreachEnrollmentsTableProps) {
         >
           {pageRows.map((enrollment) => {
             const clicks = clicksOf(enrollment)
+            const opens = outreachOpenSummary(enrollment.engagement)
             return (
               <Card key={enrollment.id} variant="outlined" component="li">
                 <CardContent>
@@ -646,6 +712,11 @@ export function OutreachEnrollmentsTable(props: OutreachEnrollmentsTableProps) {
                         {`· Last activity: ${formatOutreachTime(lastActivityMs(enrollment), timeZone)}`}
                       </Typography>
                     </Stack>
+                    {countOpens && (opens.opens || opens.machineOpens) ? (
+                      <Typography variant="body2" color="text.secondary">
+                        {`Opens: ${outreachOpenCountLabel(opens)}`}
+                      </Typography>
+                    ) : null}
                     {trackClicks && clicks.clicks ? (
                       <Typography variant="body2" color="text.secondary">
                         {`Clicks: ${outreachClickCountLabel(clicks)}`}
@@ -666,7 +737,7 @@ export function OutreachEnrollmentsTable(props: OutreachEnrollmentsTableProps) {
         <ListTable
           aria-label="Enrollments"
           columns={listFilterGridColumns(
-            columns(rowActions, trackClicks, timeZone),
+            columns(rowActions, trackClicks, countOpens, timeZone),
             fields,
             filterOptions,
             ENROLLMENT_FILTER_HEADERS,
@@ -675,6 +746,7 @@ export function OutreachEnrollmentsTable(props: OutreachEnrollmentsTableProps) {
           loading={enrollments.status === 'loading'}
           rows={pageRows.map((enrollment) => {
             const clicks = clicksOf(enrollment)
+            const opens = outreachOpenSummary(enrollment.engagement)
             const next = nextSendState(enrollment)
             return {
               $id: enrollment.id,
@@ -689,6 +761,9 @@ export function OutreachEnrollmentsTable(props: OutreachEnrollmentsTableProps) {
                 timeZone,
               ),
               // What the export writes; the cells draw these their own way.
+              openSummary: opens,
+              opens: outreachOpenCountLabel(opens),
+              lastOpen: opens.opens ? formatOutreachTime(opens.lastOpenAtMs, timeZone) : '—',
               clicks: outreachClickCountLabel(clicks),
               linksFollowed: clicks.followed.join(' ') || '—',
               lastClick: clicks.clicks

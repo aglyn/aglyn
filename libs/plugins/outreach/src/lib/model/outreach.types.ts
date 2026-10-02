@@ -38,6 +38,7 @@
 
 import type { OutreachClickMachineReason } from '../engine/click-tracking'
 import type { OutreachOpenMachineReason } from '../engine/open-tracking'
+import type { OutreachOpenSource } from '../engine/open-source'
 import type { OutreachGatewayDayCounts, OutreachMailGateway } from '../engine/mail-gateway'
 
 /**
@@ -686,6 +687,10 @@ export interface OutreachOpenHistoryEntry {
   human: boolean
   /** Why it was read as a machine's; `null` for a person's. */
   machineReason: OutreachOpenMachineReason | null
+  /** The agent the fetch sent (AGL-3488); `null` on rows from before it was kept. */
+  userAgent?: string | null
+  /** The network the fetch came from (AGL-3488); `null` when unknown or not kept. */
+  source?: OutreachOpenSource | null
 }
 
 export type OutreachEnrollmentHistoryEntry =

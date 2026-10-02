@@ -538,10 +538,14 @@ const STORED = {
   url: TARGET,
 }
 
-const shortVisit = (id: string, overrides: { method?: string; userAgent?: string } = {}) =>
+const shortVisit = (id: string, overrides: { method?: string; userAgent?: string; address?: string } = {}) =>
   new Request(`${ORIGIN}${OUTREACH_SHORT_LINK_PATH}/${id}`, {
     method: overrides.method ?? 'GET',
-    headers: { 'user-agent': overrides.userAgent ?? 'Mozilla/5.0 (Macintosh) Safari/605.1' },
+    headers: {
+      'user-agent': overrides.userAgent ?? 'Mozilla/5.0 (Macintosh) Safari/605.1',
+      // The one proxy in front writes the address it saw (AGL-3488).
+      ...(overrides.address ? { 'x-forwarded-for': overrides.address } : {}),
+    },
   })
 
 const callShort = (request: Request, firestore: () => FirebaseFirestore.Firestore = fakeFirestore) =>
@@ -724,7 +728,7 @@ describe('the tracking image on the short-link route (AGL-3395)', () => {
     expect(engagement()).toMatchObject({ opens: 1, firstOpenAtMs: clock, lastOpenAtMs: clock, machineOpens: 0, loggedOpens: 1 })
     expect(stats()).toMatchObject({ opens: 1, uniqueOpens: 1, lastOpenAtMs: clock })
     expect(historyRows().map(([, row]) => row)).toEqual([
-      { kind: 'open', atMs: clock, stepIndex: 0, human: true, machineReason: null },
+      { kind: 'open', atMs: clock, stepIndex: 0, human: true, machineReason: null, userAgent: MAIL_CLIENT, source: null },
     ])
     // An open is not a click, and files nothing on the person's record.
     expect(stats()).not.toHaveProperty('clicks')
@@ -759,6 +763,26 @@ describe('the tracking image on the short-link route (AGL-3395)', () => {
       'privacy_proxy',
       'too_soon',
     ])
+  })
+
+  it('keeps each fetch’s agent and network as evidence, never its address, and judges by both (AGL-3488)', async () => {
+    // The bare agent from Google's network: a scanner, not Apple.
+    await callShort(shortVisit(OPEN_ID, { userAgent: 'Mozilla/5.0', address: '66.249.84.10' }))
+    // The bare agent from Apple's relay: Mail Privacy Protection.
+    await callShort(shortVisit(OPEN_ID, { userAgent: 'Mozilla/5.0', address: '172.225.9.1' }))
+    // A reader's Gmail, through Google's image proxy, an hour after the send.
+    const gmail = 'Mozilla/5.0 (Windows NT 5.1; rv:11.0) Gecko Firefox/11.0 (via ggpht.com GoogleImageProxy)'
+    await callShort(shortVisit(OPEN_ID, { userAgent: gmail, address: '66.249.84.12' }))
+    const rows = historyRows().map(([, row]) => row as Data)
+    expect(rows.map((row) => [row['machineReason'], row['source'], row['userAgent']])).toEqual([
+      ['scanner', 'google', 'Mozilla/5.0'],
+      ['privacy_proxy', 'apple', 'Mozilla/5.0'],
+      [null, 'google', gmail],
+    ])
+    expect(JSON.stringify(rows)).not.toMatch(/66\.249|172\.225/)
+    expect(engagement()).toMatchObject({ opens: 1, machineOpens: 2 })
+    // Only the proxy is a proxy; the scanner is a machine open and nothing more.
+    expect(stats()).toMatchObject({ opens: 1, uniqueOpens: 1, machineOpens: 2, proxyOpens: 1 })
   })
 
   it('answers a test’s image and records nothing', async () => {

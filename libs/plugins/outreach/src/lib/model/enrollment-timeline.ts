@@ -45,6 +45,7 @@
 
 import type { OutreachClickMachineReason } from '../engine/click-tracking'
 import type { OutreachOpenMachineReason } from '../engine/open-tracking'
+import type { OutreachOpenSource } from '../engine/open-source'
 import { OUTREACH_MAIL_GATEWAY_LABELS, type OutreachMailGateway } from '../engine/mail-gateway'
 import {
   outreachClickSummary,
@@ -147,6 +148,17 @@ export const OUTREACH_OPEN_MACHINE_REASON_LABELS: Record<OutreachOpenMachineReas
   method: 'it checked the image without loading it',
   image_proxy: 'Yahoo’s image proxy fetched it, which it does whether or not the person reads it',
   privacy_proxy: 'Apple Mail’s privacy protection fetched it as the email arrived',
+  scanner: 'a mail provider’s or a security product’s scanner fetched it, not the person',
+}
+
+/** Where a fetch of the tracking image came from (AGL-3488), as the timeline says it. */
+export const OUTREACH_OPEN_SOURCE_LABELS: Record<OutreachOpenSource, string> = {
+  google: 'From Google’s network',
+  microsoft_filter: 'From Microsoft’s mail filter',
+  microsoft: 'From Microsoft’s mail servers',
+  apple: 'From Apple’s privacy relay',
+  yahoo: 'From Yahoo’s mail proxy',
+  other: 'From an address outside the mail providers’ networks',
 }
 
 const ACTION_TITLES: Record<OutreachHistoryAction, string> = {
@@ -341,7 +353,10 @@ export function outreachEnrollmentTimeline(input: OutreachTimelineInput): Outrea
             kind: 'open',
             atMs: row.atMs,
             title: 'Opened an email',
-            facts: [`${outreachStepName(steps, row.stepIndex)}`],
+            facts: [
+              outreachStepName(steps, row.stepIndex),
+              row.source ? OUTREACH_OPEN_SOURCE_LABELS[row.source] : null,
+            ].filter((fact): fact is string => Boolean(fact)),
             tone: 'info',
           }
         : {
@@ -352,6 +367,7 @@ export function outreachEnrollmentTimeline(input: OutreachTimelineInput): Outrea
             facts: [
               outreachStepName(steps, row.stepIndex),
               row.machineReason ? `Read as a machine: ${OUTREACH_OPEN_MACHINE_REASON_LABELS[row.machineReason]}` : null,
+              row.source ? OUTREACH_OPEN_SOURCE_LABELS[row.source] : null,
             ].filter((fact): fact is string => Boolean(fact)),
             tone: 'default',
           },

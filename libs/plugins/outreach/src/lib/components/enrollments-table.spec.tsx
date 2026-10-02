@@ -617,3 +617,41 @@ describe('the Clicks column counts, and the click filters are on the query (AGL-
     expect(onClausesChange).toHaveBeenCalledWith([])
   })
 })
+
+describe('the Opens column counts a person’s opens, with machine fetches apart (AGL-3488)', () => {
+  const opened = (id: string, name: string, engagement: Record<string, unknown> | undefined) =>
+    enrollment({
+      id,
+      contactId: id,
+      contactName: name,
+      email: `${id}@example.com`,
+      ...(engagement ? { engagement } : {}),
+    } as never)
+  const people = [
+    // Two opens of their own, and three fetches a proxy or a scanner made.
+    opened('o-1', 'Casey Morgan', { opens: 2, machineOpens: 3, firstOpenAtMs: DUE, lastOpenAtMs: DUE, loggedOpens: 5 }),
+    // Only machines fetched the image: no open of theirs, and the fetch still said.
+    opened('o-2', 'Jordan Lee', { machineOpens: 1, loggedOpens: 1 }),
+    opened('o-3', 'Avery Quinn', undefined),
+  ]
+
+  it('shows the person’s opens beside Clicks, and the machine fetches under them', () => {
+    renderTable(loaded(people), { countOpens: true, trackClicks: true })
+    const headers = screen.getAllByRole('columnheader').map((header) => header.textContent)
+    expect(headers.indexOf('Opens')).toBe(headers.indexOf('Clicks') - 1)
+    const opensOf = (name: string) =>
+      rowOf(name).querySelector('[data-field="opens"]')?.textContent
+    expect(opensOf('Casey Morgan')).toBe('23 by machines')
+    expect(within(rowOf('Casey Morgan')).getByText('3 by machines')).toBeTruthy()
+    expect(opensOf('Jordan Lee')).toBe('—1 by a machine')
+    expect(opensOf('Avery Quinn')).toBe('—')
+  })
+
+  it('has no Opens column for a sequence that does not count them', () => {
+    renderTable(loaded(people), { trackClicks: true })
+    const headers = screen.getAllByRole('columnheader').map((header) => header.textContent)
+    expect(headers).toContain('Clicks')
+    expect(headers).not.toContain('Opens')
+    expect(screen.queryByText('3 by machines')).toBeNull()
+  })
+})

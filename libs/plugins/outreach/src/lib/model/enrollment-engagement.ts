@@ -123,3 +123,36 @@ export function outreachClickCountLabel(summary: OutreachClickSummary): string {
   const links = `${summary.linkCount}${summary.linksCapped ? '+' : ''}`
   return `${summary.clicks} · ${links} ${summary.linkCount === 1 && !summary.linksCapped ? 'link' : 'links'}`
 }
+
+/**
+ * What the enrollments table says about one person's opens (AGL-3488): the
+ * fetches judged theirs, and the ones a machine made — a mail provider's
+ * proxy or a scanner — beside them and never in them, as `machineClicks`
+ * sits beside `clicks`.
+ */
+export interface OutreachOpenSummary {
+  opens: number
+  machineOpens: number
+  lastOpenAtMs: number | null
+}
+
+export function outreachOpenSummary(raw: unknown): OutreachOpenSummary {
+  const engagement = readOutreachEngagement(raw)
+  return {
+    opens: engagement.opens,
+    machineOpens: engagement.machineOpens,
+    lastOpenAtMs: engagement.lastOpenAtMs,
+  }
+}
+
+/** The machine half of the Opens cell: "3 by machines", or `''` when there were none. */
+export function outreachMachineOpenLabel(summary: OutreachOpenSummary): string {
+  return summary.machineOpens ? `${summary.machineOpens} by ${summary.machineOpens === 1 ? 'a machine' : 'machines'}` : ''
+}
+
+/** The Opens cell as the export writes it: "2", "2 (3 by machines)", or "—" when nothing fetched it. */
+export function outreachOpenCountLabel(summary: OutreachOpenSummary): string {
+  const machines = outreachMachineOpenLabel(summary)
+  if (!summary.opens) return machines ? `0 (${machines})` : '—'
+  return machines ? `${summary.opens} (${machines})` : String(summary.opens)
+}
