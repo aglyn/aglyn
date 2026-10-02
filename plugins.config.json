@@ -204,8 +204,10 @@
         "console": "registerBookingsConsole",
         "tenantApi": "registerBookingsApi",
         "consoleApi": "registerBookingsConsoleApi",
+        "consoleServerDeclarations": "registerBookingsConsoleServerDeclarations",
         "tenantEmails": "bookingsTenantEmails"
       },
+      "requiredPersonEraser": true,
       "modules": {
         "site": "site"
       },
@@ -307,6 +309,7 @@
         "planEntitlements": "commercePlanEntitlements",
         "starterTemplates": "commerceStarterTemplates"
       },
+      "requiredPersonEraser": true,
       "modules": {
         "site": "site"
       },
@@ -771,6 +774,7 @@
         "planEntitlements": "crmPlanEntitlements",
         "usageAxes": "crmUsageAxes"
       },
+      "requiredPersonEraser": true,
       "apiPrefixes": [
         "crm"
       ],
@@ -1118,6 +1122,7 @@
         "consoleApi": "registerEmailConsoleApi",
         "consoleServerDeclarations": "registerEmailConsoleServerDeclarations"
       },
+      "requiredPersonEraser": true,
       "consoleRedirects": [
         {
           "$comment": "The hub's first section is named for the record it lists (`Emails / Messages`), not for the surface holding it. `:path*` matches zero segments as well as many, so the bare section and every message's own page arrive. A redirect rather than a section alias: a second id answering to the same body would give one page two addresses, which is what a canonical URL is for.",

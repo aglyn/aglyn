@@ -1270,6 +1270,12 @@ export const PLUGIN_ORG_KEYED_COLLECTIONS: readonly PluginOrgKeyedCollection[] =
 export const PLUGIN_REQUIRED_ORG_ERASERS: readonly string[] = ["marketplace"]
 
 /**
+ * The plugins whose person eraser a person erasure may not run without
+ * (AGL-3080): each keeps a share of the person the erasure promises to remove.
+ */
+export const PLUGIN_REQUIRED_PERSON_ERASERS: readonly string[] = ["bookings","commerce","crm","email"]
+
+/**
  * The plugins whose sales the operator's sales tax return may not be filed
  * without (AGL-3080): each registers a tax return source, and one that did
  * not is refused rather than read as nothing sold.

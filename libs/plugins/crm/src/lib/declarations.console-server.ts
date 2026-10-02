@@ -26,6 +26,7 @@ import {
   listPluginMembershipDetachers,
   registerPluginMembershipDetacher,
 } from '@aglyn/aglyn/plugin-manager/plugin-membership-detach'
+import { registerPluginPersonRecordsEraser } from '@aglyn/aglyn/plugin-manager/plugin-person-erasure'
 import { BUNDLE_ID } from './constants/bundle-common'
 
 /**
@@ -87,6 +88,17 @@ const CRM_API_V1_RESOURCES: ReadonlyArray<readonly [string, ApiV1ResourceHandler
  * hot reload, a spec) is harmless.
  */
 export function registerCrmConsoleServerDeclarations(): void {
+  // The record system's share of a person erasure (AGL-2623, AGL-3080): it
+  // names the person's contacts before anybody erases, and erases them, their
+  // satellites and their lead after everybody else. Required, and loaded with
+  // the first erasure.
+  registerPluginPersonRecordsEraser(
+    {
+      locate: async (target) => (await import('./server/person-eraser')).crmPersonEraser().locate(target),
+      erase: async (request) => (await import('./server/person-eraser')).crmPersonEraser().erase(request),
+    },
+    { pluginId: BUNDLE_ID },
+  )
   for (const [resource, handle] of CRM_API_V1_RESOURCES) {
     registerApiV1Resource(
       resource,

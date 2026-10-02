@@ -2881,6 +2881,30 @@ function requiredOrgEraserIds() {
     .map((plugin) => plugin.id)
 }
 
+/**
+ * The plugins whose person eraser a person erasure may not run without
+ * (AGL-3080): each keeps a share of a person the erasure promises to remove —
+ * the record system's people, a shop's buyers, a calendar's bookers, an
+ * audience's members.
+ */
+function requiredPersonEraserIds() {
+  return config.plugins
+    .filter((plugin) => {
+      if (plugin.requiredPersonEraser === undefined) return false
+      if (plugin.requiredPersonEraser !== true) {
+        throw new Error(`plugins.config.json: "${plugin.id}" requiredPersonEraser is true, or is left out`)
+      }
+      if (!plugin.register?.serverDeclarations && !plugin.register?.consoleServerDeclarations) {
+        throw new Error(
+          `plugins.config.json: "${plugin.id}" requiredPersonEraser needs a serverDeclarations or ` +
+            'consoleServerDeclarations entry to register the eraser from',
+        )
+      }
+      return true
+    })
+    .map((plugin) => plugin.id)
+}
+
 const ANALYTICS_MANIFESTS = [
   'apps/console/constants/plugins.analytics.generated.ts',
   'apps/tenant/utils/plugins.analytics.generated.ts',
@@ -3116,6 +3140,12 @@ ${orgKeyedCollectionRows().map((row) => `  ${indent(JSON.stringify(row, null, 2)
  * (AGL-3080): each holds a record the erasure promises to destroy.
  */
 export const PLUGIN_REQUIRED_ORG_ERASERS: readonly string[] = ${JSON.stringify(requiredOrgEraserIds())}
+
+/**
+ * The plugins whose person eraser a person erasure may not run without
+ * (AGL-3080): each keeps a share of the person the erasure promises to remove.
+ */
+export const PLUGIN_REQUIRED_PERSON_ERASERS: readonly string[] = ${JSON.stringify(requiredPersonEraserIds())}
 
 /**
  * The plugins whose sales the operator's sales tax return may not be filed

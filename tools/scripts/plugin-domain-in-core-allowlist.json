@@ -448,17 +448,6 @@
       "why": "The platform's email meters, which every sender increments whatever plugin it is: the cost meter counts all mail, and the enforceable meter counts the mail rail's refusable `campaign` send priority (`send-rate.ts`), the only tier a plan's `emailSendsPerMonth` may refuse — so a password reset is never blocked by a quota. `campaign` here is the rail's priority tier, and the counter it trips on is persisted as `campaignEmailSends` under every org and site and read by billing; renaming it is a data migration of every workspace's meter for a word."
     },
     {
-      "path": "libs/tenant/data/admin/src/lib/server/erase-person.ts",
-      "rules": [
-        "plugin-id",
-        "plugin-collection:bookings",
-        "plugin-collection:commerce",
-        "plugin-collection:crm",
-        "domain-declares:email"
-      ],
-      "lane": "crm"
-    },
-    {
       "path": "libs/tenant/data/admin/src/lib/server/ga4-measurement-protocol.ts",
       "rules": [
         "domain-name",

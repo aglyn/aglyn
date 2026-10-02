@@ -18,6 +18,7 @@
 // The registry's own module, not the `@aglyn/aglyn/server` barrel: boot needs
 // one registry, not the whole server surface.
 import { registerPluginEmailStreams } from '@aglyn/aglyn/plugin-manager/plugin-email-streams'
+import { registerPluginPersonEraser } from '@aglyn/aglyn/plugin-manager/plugin-person-erasure'
 import { BUNDLE_ID } from './constants/bundle-common'
 
 /**
@@ -41,6 +42,13 @@ export function registerEmailConsoleServerDeclarations(): void {
     {
       rejoin: async (request) => (await import('./server')).rejoinStreamForAccount(request),
     },
+    { pluginId: BUNDLE_ID },
+  )
+  // The email plugin's share of a person erasure (AGL-2623, AGL-3080): the
+  // person comes off every audience list. Required, and loaded with the first
+  // erasure.
+  registerPluginPersonEraser(
+    async (request) => (await import('./server/person-eraser')).emailPersonEraser(request),
     { pluginId: BUNDLE_ID },
   )
 }

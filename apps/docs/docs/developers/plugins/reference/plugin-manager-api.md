@@ -2105,32 +2105,61 @@ which the tenant runtime never loads.
 
 ## Person erasure — `plugin-person-erasure` (`/server`)
 
-The person erasure removes one person from one workspace: the contact, what
-the CRM files beside it, and the leads, list memberships and delivery log
-under the address. A plugin that keeps records about such a person under the
-organization — keyed by the contact or by the address — registers an eraser
-from its declarations:
+The person erasure removes one person from one workspace. The platform closes
+every site's door to the address (an address-free suppression row per site),
+sweeps the delivery log filed under it and keeps the audit; everything else
+the workspace keeps ABOUT the person is a plugin's, and each plugin that keeps
+some registers an eraser from its declarations:
 
 ```ts
 registerPluginPersonEraser(
-  async ({ orgId, email, key, contactIds, dryRun }) => {
+  async ({ orgId, email, key, contactIds, dryRun, atMs }) => {
     const { eraseEnrollmentsFor } = await import('./server/enrollments')
-    return eraseEnrollmentsFor({ orgId, email, contactIds, dryRun })
+    return eraseEnrollmentsFor({ orgId, email, contactIds, dryRun, atMs })
   },
   { pluginId: 'acme-mail' },
+)
+```
+
+The plugin that keeps the PEOPLE registers a records eraser instead, with two
+halves: `locate` names the person's records before anybody erases — the ids
+every other eraser is handed as `contactIds`, because what they keep is filed
+by them — and `erase` runs after every other eraser, while nothing else needs
+the records to find what it keeps.
+
+```ts
+registerPluginPersonRecordsEraser(
+  {
+    locate: async ({ orgId, email }) => (await import('./server/people')).idsFor(orgId, email),
+    erase: async (request) => (await import('./server/people')).erase(request),
+  },
+  { pluginId: 'acme-people' },
 )
 ```
 
 | API | Semantics |
 | --- | --- |
 | `registerPluginPersonEraser(eraser, { pluginId? })` | One eraser per plugin; registering again replaces it in place. |
-| `runPluginPersonErasers({ orgId, email, key, contactIds, dryRun })` | What the erasure calls after every site's suppression row is written and before the contacts are deleted. Every eraser in registration order; each plugin's report by plugin id, or `null` for an eraser that threw — logged, and never the erasure's failure. |
+| `registerPluginPersonRecordsEraser({ locate, erase }, { pluginId? })` | The record system's. One per process: the same plugin replaces its own, another is refused naming both. |
+| `runPluginPersonErasure({ orgId, email, key, dryRun, atMs })` | What the erasure calls after every site's door is closed: `locate`, every other eraser in registration order, then the records eraser's `erase`. Answers `{ contactIds, reports }`, each plugin's report by plugin id or `null` for an eraser that threw — logged, and isolated, unless the share is required. |
+| `missingRequiredPersonErasers()` | The required erasers not registered in this process; the erasure asks before it writes anything. |
+
+A share the erasure PROMISES the person — their contact record, their leads,
+their name on an order or a booking, their place on an audience list — is
+declared `"requiredPersonEraser": true` in `plugins.config.json`, compiled into
+`PLUGIN_REQUIRED_PERSON_ERASERS`. The erasure refuses to start while one is not
+registered, a records eraser that cannot `locate` stops it before anything is
+erased, and a required eraser that throws fails it after every other eraser
+ran; the request stays queued and the job retries it. A share that is a
+courtesy is isolated as before.
 
 `key` is `personKey(email)`: how every suppression list names the person
 without the address. A record that the person asked not to be contacted,
 keyed that way, is kept — the promise outlives the data — with anything that
-could identify the person removed from it. A dry run counts and writes
-nothing. Reports land under `plugins` on the erasure's counts and audit row.
+could identify the person removed from it. `atMs` is the erasure's one time,
+for every stamp it leaves. A dry run counts and writes nothing. Reports land
+under `plugins` on the erasure's counts and audit row, beside `records`, the
+count the record system located.
 
 ## Consent group changes — `plugin-consent-group-change` (`/server`)
 

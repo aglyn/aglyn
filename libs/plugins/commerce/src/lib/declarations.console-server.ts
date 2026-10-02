@@ -18,6 +18,7 @@
 // The registry's own module, not the data layer's barrel: boot needs the
 // registry, not the whole server surface.
 import { registerApiV1SiteResource } from '@aglyn/tenant-data-admin/server/api-v1-resources'
+import { registerPluginPersonEraser } from '@aglyn/aglyn/plugin-manager/plugin-person-erasure'
 import { BUNDLE_ID } from './constants/bundle-common'
 
 /**
@@ -42,6 +43,13 @@ import { BUNDLE_ID } from './constants/bundle-common'
  * this plugin's own entries.
  */
 export function registerCommerceConsoleServerDeclarations(): void {
+  // Commerce's share of a person erasure (AGL-2623, AGL-3080): every order the
+  // person placed keeps its amounts, with the buyer taken off it. Required,
+  // and loaded with the first erasure.
+  registerPluginPersonEraser(
+    async (request) => (await import('./server/person-eraser')).commercePersonEraser(request),
+    { pluginId: BUNDLE_ID },
+  )
   registerApiV1SiteResource(
     'products',
     {
