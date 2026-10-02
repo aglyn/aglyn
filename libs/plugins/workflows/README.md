@@ -26,13 +26,15 @@ runs an automation:
 - `run-event-workflows.ts` and `run-event-actions.ts` — the runners. A host
   event runs the workflows triggered by it and the actions listening for it;
   the site-event dispatch runs one action a published page fired.
-- `run-event-actions.ts` also holds the step executors — datasets, email,
-  webhooks, lists, campaigns, alerts, custom events — and the flow steps —
-  behind `runServerStep`, one step at a time, which is what lets a workflow
-  perform an Actions step without a second copy of any of them. Its
-  `executeWorkflow` is the workflow half: function calls through the pure
-  evaluator, Actions steps through that executor, in one scope.
-- `crm-action-steps.ts` — the five CRM steps.
+- `run-event-actions.ts` also holds the step executors — email, webhooks,
+  lists, campaigns, alerts, custom events — and the flow steps — behind
+  `runServerStep`, one step at a time, which is what lets a workflow perform
+  an Actions step without a second copy of any of them. A step that writes
+  another plugin's records — a dataset row, a contact's stage — is handed to
+  the executor that plugin registered on the server-step seam
+  (`plugin-server-steps`). Its `executeWorkflow` is the workflow half:
+  function calls through the pure evaluator, Actions steps through that
+  executor, in one scope.
 - `flow-enrollments.ts` — where a person waits between one step of a flow and
   the next, resumed by the `resume-flow-waits` job. A workflow's enrollment id
   is kept apart from an action's, so the two kinds never share a row.
@@ -75,8 +77,7 @@ the page view is core's own, and every other event is declared under
 `hostEvents` by the plugin whose doors raise it. What only the engine reads
 is this plugin's: the run history's past-tense step phrases
 (`model/step-outcomes.ts`), a webhook's stored shape and its URL guard
-(`model/webhooks.ts`), the CRM steps' grouping (`engine/crm-action-steps.ts`)
-and the event-chaining depth (`model/workflows.ts`). The automation
+(`model/webhooks.ts`) and the event-chaining depth (`model/workflows.ts`). The automation
 vocabulary the other plugins author against — the server steps, flows,
 recipes and their validation — is still in the core
 (`@aglyn/aglyn/app-utils/actions`), because the AI plugin drafts automations

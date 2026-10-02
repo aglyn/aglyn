@@ -1444,6 +1444,32 @@ previous call, or a copy through another door, already filed — or a refusal
 activity ceiling), and never throw for a refusal. The registry authenticates
 nobody: the caller has already decided the entry is the workspace's to write.
 
+An email a plugin is about to send can land on the timeline with its delivery
+state, the way a member's own send does — but only the record system can say
+whether the address is the person the sender means. So the sender offers the
+message BEFORE it goes, carries the tags it is answered with (the delivery
+webhook has nothing else to find the entry by), and files the entry once the
+provider accepted it:
+
+```ts
+const entry = await preparePluginRecordEmail({
+  orgId, hostId, to,
+  link: { contactId, email }, // the person the sender means
+  org,                         // the billing document, when already read
+})
+const result = await sendEmail({ to, subject, text, ...(entry ? { tags: [...entry.tags] } : {}) })
+if (result.sent) await entry?.file({ subject, body: text, to, sourceRef: automationId })
+```
+
+| API | Semantics |
+| --- | --- |
+| `preparePluginRecordEmail(request)` | `{ tags, file }`, or `null` when no plugin keeps records, the one that does files no sent mail, or the message earns no entry — it is not addressed to the person `link` finds, the plan carries no record system, or the record is at its activity ceiling. Never throws; neither does `file`. |
+| `writer.prepareEmail(request)` | Optional on the writer: what the record system answers. Nothing is written until `file`. |
+
+The automation engine offers every `sendEmail` step this way; the CRM files
+the entry when the message goes to the contact the event is about, with the
+automation as its source.
+
 ## Text generation — `plugin-text-generation` (`/server`)
 
 A plugin that wants a paragraph drafted — a sequence's email for one person,

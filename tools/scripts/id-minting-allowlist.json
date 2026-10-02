@@ -62,13 +62,13 @@
       "reason": "To fix: a company, deal or task an import or the task route creates; routed at /v1/companies/{companyId}, /v1/deals/{dealId}, /v1/tasks/{taskId} and in the console."
     },
     {
-      "site": "libs/plugins/workflows/src/lib/engine/crm-action-steps.ts: orgRef.collection(CRM_COLLECTIONS.activities).add(…)",
+      "site": "libs/plugins/crm/src/lib/server/automation-steps.ts: orgRef.collection(CRM_COLLECTIONS.activities).add(…)",
       "class": "RESOURCE",
       "issue": "AGL-3083",
       "reason": "To fix: a company, pipeline, deal, task or activity created by lead conversion, domain matching or an automation step; routed by the console and the public API."
     },
     {
-      "site": "libs/plugins/workflows/src/lib/engine/crm-action-steps.ts: orgRef.collection(CRM_COLLECTIONS.tasks).add(…)",
+      "site": "libs/plugins/crm/src/lib/server/automation-steps.ts: orgRef.collection(CRM_COLLECTIONS.tasks).add(…)",
       "class": "RESOURCE",
       "issue": "AGL-3083",
       "reason": "To fix: a company, pipeline, deal, task or activity created by lead conversion, domain matching or an automation step; routed by the console and the public API."

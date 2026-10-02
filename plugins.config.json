@@ -800,6 +800,23 @@
           "description": "Each morning: your overdue and due-today tasks and the leads nobody has worked, here and by email."
         }
       ],
+      "serverSteps": [
+        {
+          "type": "setContactStage"
+        },
+        {
+          "type": "addContactTag"
+        },
+        {
+          "type": "assignContactOwner"
+        },
+        {
+          "type": "createCrmTask"
+        },
+        {
+          "type": "logCrmActivity"
+        }
+      ],
       "hostEvents": [
         {
           "type": "lead",

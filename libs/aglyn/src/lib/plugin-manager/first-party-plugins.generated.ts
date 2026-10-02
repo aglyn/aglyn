@@ -1374,6 +1374,26 @@ export const PLUGIN_INTERACTION_STEPS_DECLARED: readonly InteractionStepDeclarat
  */
 export const PLUGIN_SERVER_STEPS_DECLARED: readonly ServerStepDeclaration[] = [
   {
+    "pluginId": "crm",
+    "type": "setContactStage"
+  },
+  {
+    "pluginId": "crm",
+    "type": "addContactTag"
+  },
+  {
+    "pluginId": "crm",
+    "type": "assignContactOwner"
+  },
+  {
+    "pluginId": "crm",
+    "type": "createCrmTask"
+  },
+  {
+    "pluginId": "crm",
+    "type": "logCrmActivity"
+  },
+  {
     "pluginId": "data",
     "type": "datasetAppend"
   },

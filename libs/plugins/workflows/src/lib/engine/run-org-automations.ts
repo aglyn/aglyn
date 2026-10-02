@@ -206,7 +206,6 @@ export async function resumeOrgAutomationEnrollment(
     // Admitted by the `actions` gate above.
     actionsAllowed: true,
     webhooksAllowed: checkEntitlement(owner.org as any, 'webhooks'),
-    crmAllowed: checkEntitlement(owner.org as any, 'crm'),
     depth: 0,
     org: owner.org ?? null,
     orgId: owner.orgId,

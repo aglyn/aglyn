@@ -38,8 +38,9 @@ import {
   type PluginRecordTimelineWriter,
 } from '@aglyn/aglyn/plugin-manager/plugin-record-timeline'
 import { registerPluginRecordWrittenListener } from '@aglyn/aglyn/plugin-manager/plugin-record-written'
+import { registerServerStepExecutor } from '@aglyn/aglyn/plugin-manager/plugin-server-steps'
 import { registerPluginUsageMeter } from '@aglyn/aglyn/plugin-manager/plugin-usage-meters'
-import { BUNDLE_ID, CRM_RECORDS_METER_ID } from './constants/bundle-common'
+import { BUNDLE_ID, CRM_RECORDS_METER_ID, CRM_STEP_TYPES } from './constants/bundle-common'
 import { summarizeConsentGroupChange } from './model/consent-group-summary'
 
 /**
@@ -144,6 +145,12 @@ export const crmRecordTimelineWriter: PluginRecordTimelineWriter = {
     const { createCrmRecordTimelineWriter, defaultCrmRecordTimelineDeps } =
       await import('./server/record-timeline')
     return createCrmRecordTimelineWriter(defaultCrmRecordTimelineDeps()).recordEmailDelivery!(request)
+  },
+  // An automation's email to the person its event is about, filed on that
+  // person's timeline with its delivery state (AGL-2615, AGL-3080).
+  async prepareEmail(request) {
+    const { prepareCrmRecordEmail } = await import('./server/automation-steps')
+    return prepareCrmRecordEmail(request)
   },
 }
 
@@ -272,6 +279,14 @@ export function registerCrmServerDeclarations(): void {
   // sequence reads them (AGL-3080). Deferred like the rest.
   registerPluginRecordIndex('company', crmCompanyRecordIndex, { pluginId: BUNDLE_ID })
   registerPluginRecordIndex('messageTemplate', crmMessageTemplateRecordIndex, { pluginId: BUNDLE_ID })
+  // The automation steps that write the CRM (AGL-2605, AGL-3080), run for the
+  // workflows engine through the server-step seam and declared under
+  // `serverSteps`. Deferred like the rest: the writes load with the first step.
+  registerServerStepExecutor(
+    CRM_STEP_TYPES,
+    async (request) => (await import('./server/automation-steps')).runCrmAutomationStep(request),
+    { pluginId: BUNDLE_ID },
+  )
   registerPluginConsentGroupParticipant(
     {
       async preview(request) {
