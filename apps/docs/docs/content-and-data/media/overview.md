@@ -10,7 +10,11 @@ The **media library** stores your images, video, and files, keeps them organized
 serves them quickly. Media plugs into components like **Image** and **Video** and into the
 theme's favicon.
 
-![The Media page in the Aglyn console: the site library in the Grid view, with its folder rail, the Filters and Search toolbar beside the Sort control, a folder card and thumbnails, above the organization-shared media section](/img/media/media-page.png)
+![The Media page in the Aglyn console: the site library in the Grid view, with its folder rail, the Filters and Search toolbar beside the Sort control, a folder card and thumbnails](/img/media/media-page.png)
+
+A site's **Media** page has two tabs: **This site**, the site's own library, and
+**Organization (shared)**, the workspace assets this site may use. The organization
+library loads only when you open its tab.
 
 ```mermaid
 flowchart LR
