@@ -23,7 +23,12 @@
 //   1. npx -y firebase-tools@13 emulators:start --config firebase.e2e.json …
 //   2. npm run seed:e2e
 //   3. dev server with the emulator flags
-//   4. E2E_BASE_URL=http://localhost:4210 node tools/e2e/capture-docs-screenshots.mjs
+//   4. E2E_BASE_URL=http://localhost:4210 npm run docs:screenshots
+//
+// `docs:screenshots` seeds tools/e2e/seed-docs-fixtures.mjs before it runs
+// this. Running this file alone (`--only=<part of the out path>`) needs that
+// seed first: it enables Sequences on the e2e org, and without it the
+// staff-only preflight finds no `release_outreach` marker and refuses the run.
 //
 // Each shot waits for seeded content, strips the emulator warning
 // banner and the Next dev indicator, and lets images/fonts settle.
@@ -137,10 +142,9 @@ const shots = [
     settleMs: 4000,
   },
   {
-    // The List view (AGL-3327): the same files as a table, the site
-    // library's card only — the organization library below it is empty on
-    // the seeded workspace. Put back to the Grid view by the shot above on
-    // the next run.
+    // The List view (AGL-3327): the same files as a table, the Library card
+    // on its This site tab (AGL-3457). Put back to the Grid view by the shot
+    // above on the next run.
     out: 'media/media-list-view.png',
     path: `/${HOST_BASE}/media`,
     waitFor: 'hero.jpg',
