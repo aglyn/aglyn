@@ -56,9 +56,11 @@
 import { createHash } from 'crypto'
 import { ABUSE_REPORT_COLLECTION } from '@aglyn/aglyn/app-utils/abuse-report'
 import { TENANT_APEX } from '@aglyn/aglyn/app-utils/host-naming'
+import { linkReputationSignals } from '@aglyn/shared-util-email/link-reputation'
 import {
   describePhishingScreenSignals,
   isYoungWorkspaceAge,
+  linkHostsIn,
   OUTBOUND_REVIEW_YOUNG_DAYS,
   type PhishingScreenInput,
   type PhishingScreenSignal,
@@ -75,6 +77,7 @@ import { FieldValue } from 'firebase-admin/firestore'
 import { orgAgeDays } from './org-age'
 import firebaseAdmin from './firebase-admin'
 import { notifyRiskEvent, type RiskEventInput, type RiskEventItem } from './risk-notice'
+import { installLinkReputationLookup } from './web-risk'
 
 /** A workspace younger than this many days has the soft rules applied. */
 export { OUTBOUND_REVIEW_YOUNG_DAYS }
@@ -456,6 +459,7 @@ export async function screenOutboundSend(
     (request.org as { createdAt?: unknown } | null)?.createdAt,
     nowMs,
   )
+  const identity = workspaceScreenIdentity({ org: request.org, host: request.host })
   const verdict = screenOutboundEmail({
     subject: request.subject,
     fromName: request.fromName ?? null,
@@ -463,9 +467,15 @@ export async function screenOutboundSend(
     replyTo: request.replyTo ?? null,
     preheader: request.preheader ?? null,
     bodies: request.bodies,
-    ...workspaceScreenIdentity({ org: request.org, host: request.host }),
+    ...identity,
   })
-  const signals = signalsThatHold(verdict.signals, { ageDays })
+  // Every foreign host it links to, against the reputation list (AGL-3451):
+  // a listed host holds for every workspace, a failed lookup holds nothing.
+  const reputation = await linkReputationSignals(
+    linkHostsIn([request.subject, request.preheader, ...request.bodies].filter(Boolean).join('\n')),
+    { ownDomains: identity.ownDomains },
+  )
+  const signals = signalsThatHold([...verdict.signals, ...reputation], { ageDays })
   if (!signals.length) return { outcome: 'send' }
 
   const contentHash = outboundContentHash([
@@ -638,6 +648,8 @@ export async function screenSeamMessage(
 export function installOutboundScreenGate(): void {
   if (typeof setOutboundScreenGate !== 'function') return
   setOutboundScreenGate((request) => screenSeamMessage(request))
+  // And the link reputation lookup the same screen asks (AGL-3451).
+  installLinkReputationLookup()
 }
 
 /**

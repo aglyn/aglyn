@@ -37,6 +37,11 @@ export interface StaffSiteRow {
     slug: string | null
     plan: string | null
     ownerUid: string | null
+    /**
+     * When the workspace's sites stop sending outside links through the
+     * leaving notice (epoch ms), or null when they do not (AGL-3452).
+     */
+    leavingNoticeUntil?: number | null
   } | null
   owner: { uid: string; email: string | null; displayName: string | null } | null
   publishedPages: number

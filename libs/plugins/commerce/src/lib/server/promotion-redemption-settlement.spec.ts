@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import type { PluginContactCaptureRequest } from '@aglyn/aglyn/plugin-manager/plugin-contact-capture'
+import { standInRecordSystem } from '../testing/stand-in-record-system'
 import {
   holdPromotionSlot,
   releasePromotionHold,
@@ -192,7 +194,7 @@ const fakeFirestore: any = {
   runTransaction,
 }
 
-const contactUpserts: any[] = []
+let contactUpserts: PluginContactCaptureRequest[] = []
 
 jest.mock('@aglyn/tenant-data-admin', () => {
   const { updateExisting } = jest.requireActual(
@@ -217,9 +219,6 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     }),
     meterHostEmail: async () => undefined,
     notifyHostManagers: async () => undefined,
-    upsertHostContact: async (options: any) => {
-      contactUpserts.push(options)
-    },
     renderHostEmailWithTokens: async () => null,
   }
 })
@@ -282,7 +281,7 @@ beforeAll(() => {
 beforeEach(() => {
   docs.clear()
   readFailures.clear()
-  contactUpserts.length = 0
+  contactUpserts = standInRecordSystem({ reset: false })
   autoIdCounter = 0
   fetchMock.mockClear()
   docs.set(COUPON_PATH, {

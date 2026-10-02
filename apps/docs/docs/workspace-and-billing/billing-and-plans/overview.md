@@ -47,6 +47,16 @@ Every plan also includes an amount of monthly **traffic** — 2 GB on Free, risi
 billed on a paid plan, and pauses the site until the start of next month on Free. See [Bandwidth](bandwidth.md) for the table and
 for what a paused site shows a visitor.
 
+### Links on a new Free site {#leaving-notice}
+
+For a Free workspace's first 14 days, its sites send links and redirects to other
+websites through a short "You're leaving" page on the site's own address first. The page
+shows the full address the link goes to, says Aglyn doesn't operate that website and that
+neither Aglyn nor your site will ever ask for a password there, and offers **Continue**
+and **Go back**. Links to your own pages, your custom domain and Aglyn, and email and
+phone links, open as usual, and search indexing is unaffected. The page stops appearing
+as soon as the workspace is on a paid plan or 14 days old.
+
 ### Enterprise
 
 **Enterprise** is the one tier you cannot buy from the Billing page. It has no list

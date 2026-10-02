@@ -24,6 +24,7 @@ import type { PluginOrgKeyedCollection } from './plugin-org-erasure'
 import type { ResolvedVideoEmbedProvider } from './video-embed-provider'
 import type { AnalyticsProviderDeclaration } from '../app-utils/analytics-provider'
 import type { InteractionStepDeclaration } from '../app-utils/site-interactions'
+import type { ServerStepDeclaration } from './plugin-server-steps'
 import type { NotificationCategoryDeclaration, NotificationDigestDeclaration } from '../app-utils/notifications'
 
 export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
@@ -1258,6 +1259,14 @@ export const PLUGIN_INTERACTION_STEPS_DECLARED: readonly InteractionStepDeclarat
       "missing": "pick a workflow"
     }
   },
+]
+
+/**
+ * Every server step a first-party plugin runs for the automation engine,
+ * declared by that plugin (AGL-3080). Core names no plugin step.
+ */
+export const PLUGIN_SERVER_STEPS_DECLARED: readonly ServerStepDeclaration[] = [
+
 ]
 
 /**

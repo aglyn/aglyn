@@ -22,7 +22,7 @@ import {
   getOrgForHost,
   getPluginConfig,
 } from '@aglyn/tenant-data-admin'
-import { captureHostContact } from '@aglyn/tenant-runtime'
+import recordCapturedContact from '@aglyn/aglyn/plugin-manager/record-captured-contact'
 import { merchantAccountIsReady } from '@aglyn/tenant-data-admin/server/payment-provider'
 import { checkoutSessionCardAuthenticationParams } from '@aglyn/tenant-data-admin/server/stripe-card-authentication'
 import {
@@ -1176,14 +1176,22 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
       // again on the same key. A duplicate paid order is a far larger defect
       // than a missing contact row. So the failure is logged and dropped
       // here, and the sale still returns 200.
-      await captureHostContact({
+      //
+      // Through the contact-capture contract (AGL-3080): the plugin that keeps
+      // people records the sale, and commerce imports none of it. The seam
+      // never throws, and the `catch` stays as the last line of defence.
+      await recordCapturedContact({
+        orgId: '',
         hostId,
-        email: contactEmail,
-        ...(contactName ? { name: contactName } : {}),
-        source: 'order',
+        identity: {
+          email: contactEmail,
+          ...(contactName ? { name: contactName } : {}),
+        },
+        // A sale makes the person a relationship (AGL-3232).
+        surface: 'relationship',
         // A sale makes a customer of anybody who was not yet one and never
         // moves anybody back (AGL-2612).
-        initialLifecycleStage: 'customer',
+        lifecycleFloor: 'customer',
         // AGL-1748: the amount was formatted into the summary STRING below and
         // never passed to the field that exists to hold it, so `ltvCents`
         // counted online sales only — a shop-counter merchant's best customers
@@ -1200,6 +1208,7 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
         // write does not already have.
         purchaseCents: totals.totalCents,
         interaction: {
+          source: 'order',
           refId: orderRef.id,
           // `source` stays `'order'` for both (AGL-1757): a folio sale is a
           // shop sale that happens to be settled against a stay, and the

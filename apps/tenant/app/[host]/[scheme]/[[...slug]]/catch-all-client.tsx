@@ -35,6 +35,7 @@ import { resolveMediaSrc } from '@aglyn/aglyn/app-utils/media-ref'
 // which is the largest first-party module a published page can reach. The
 // badge needs the brand, not the plan table.
 import { PLATFORM_BRANDING_PROFILE } from '@aglyn/aglyn/app-utils/platform-brand'
+import { installLeavingNoticeInterceptor } from '@aglyn/aglyn/app-utils/leaving-notice'
 import { ScreenLinkContext } from '@aglyn/aglyn/app-utils/screen-link-context-value'
 // The leaf, not the barrel: a published page pays for what it names.
 import { parseEntryLinkValue } from '@aglyn/aglyn/app-utils/screen-link-value'
@@ -475,13 +476,38 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
   const screenLocale = (props.data?.screen?.data as any)?.locale
   const screenLocaleVariants = (props.data?.screen?.data as any)
     ?.localeVariants
+  /**
+   * The leaving notice (AGL-3452), when the server put this site in its
+   * window: links to other domains resolve to the notice on this host.
+   *
+   * A gated page's signatures arrive with its nodes, for the reason its entry
+   * routes do above — the server signed what the page had, and the page had
+   * no tree yet. Taking them from a visitor-controlled response is harmless:
+   * the notice route verifies every signature it is shown.
+   */
+  const gatedLeavingSignatures = gatedPageProps?.['leavingSignatures'] as
+    | Record<string, string>
+    | undefined
+  const leavingNotice = useMemo(() => {
+    const base = props.leavingNotice
+    if (!base || !gatedLeavingSignatures) return base
+    return { ...base, sigs: { ...base.sigs, ...gatedLeavingSignatures } }
+  }, [props.leavingNotice, gatedLeavingSignatures])
+  // Every anchor `useLinkTarget` never resolved — a Markdown body, rich text,
+  // a plugin's own link — is pointed at the notice as the visitor reaches
+  // for it. See `installLeavingNoticeInterceptor`.
+  useEffect(() => {
+    if (!leavingNotice) return undefined
+    return installLeavingNoticeInterceptor(document, leavingNotice)
+  }, [leavingNotice])
   const screenLinks = useMemo(
     () => ({
       screens,
       currentLocale: screenLocale,
       localeVariants: screenLocaleVariants,
+      ...(leavingNotice ? { leavingNotice } : {}),
     }),
-    [screens, screenLocale, screenLocaleVariants],
+    [screens, screenLocale, screenLocaleVariants, leavingNotice],
   )
 
   // The SEO head — title, description, social image, canonical, noindex — is

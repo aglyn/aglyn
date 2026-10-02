@@ -113,7 +113,12 @@ export async function captureContactForCrm(
         hostId: request.hostId,
         email: request.identity.email,
         contactId: verdict.contactId,
-        by: request.interaction.source === 'order' ? 'purchase' : 'signup',
+        // Money changing hands is a purchase whichever door took it — a paid
+        // booking or a stay is one as much as an order is.
+        by:
+          request.interaction.source === 'order' || (request.purchaseCents ?? 0) > 0
+            ? 'purchase'
+            : 'signup',
       })
     }
     return verdict

@@ -172,4 +172,28 @@ describe('the staff Sites list', () => {
     const { sites } = await (await get()).json()
     expect(sites[1]).toMatchObject({ $id: 'host-2', orgId: 'gone', org: null, owner: null })
   })
+
+  /*
+   * The leaving notice (AGL-3452): the site page says whether this site sends
+   * outside links through "You're leaving" and until when, read from the same
+   * rule the published site applies.
+   */
+  it('says until when a young free workspace’s sites carry the leaving notice', async () => {
+    const createdAt = Date.now() - 3 * 86_400_000
+    orgs = { 'org-1': { name: 'New Co', plan: 'free', ownerUid: 'owner-1', createdAt } }
+    const { sites } = await (await get()).json()
+    expect(sites[0].org.leavingNoticeUntil).toBe(createdAt + 14 * 86_400_000)
+  })
+
+  it('says it is off for a paid workspace, and for an older free one', async () => {
+    const createdAt = Date.now() - 3 * 86_400_000
+    orgs = {
+      'org-1': { name: 'Paid Co', plan: 'pro', billingStatus: 'active', createdAt },
+    }
+    expect((await (await get()).json()).sites[0].org.leavingNoticeUntil).toBeNull()
+    orgs = {
+      'org-1': { name: 'Old Co', plan: 'free', createdAt: Date.now() - 40 * 86_400_000 },
+    }
+    expect((await (await get()).json()).sites[0].org.leavingNoticeUntil).toBeNull()
+  })
 })

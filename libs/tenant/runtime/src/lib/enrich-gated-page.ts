@@ -17,6 +17,7 @@
 
 import * as Aglyn from '@aglyn/aglyn/server'
 import { getHostDocAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
+import { leavingNoticeSignatures } from '@aglyn/tenant-data-admin/server/leaving-notice'
 
 /**
  * Where the entries a gated tree links to are served (AGL-3118), or
@@ -136,7 +137,20 @@ export async function enrichGatedScreenPage(options: {
       nodes,
     })
     const entryRoutes = await entryRoutesPromise
-    return entryRoutes ? { ...enriched.props, entryRoutes } : enriched.props
+    // The leaving notice's signatures for this tree (AGL-3452): the page was
+    // signed before the gate opened, from a payload that had no tree, so the
+    // outside links the visitor just unlocked are signed here.
+    const leavingSignatures = leavingNoticeSignatures({
+      hostId,
+      site: host as { subdomain?: string | null; cname?: string | null } | null,
+      org: orgRes?.org,
+      content: { nodes, enriched: enriched.props },
+    })
+    return {
+      ...enriched.props,
+      ...(entryRoutes ? { entryRoutes } : {}),
+      ...(leavingSignatures ? { leavingSignatures } : {}),
+    }
   } catch (error) {
     console.error('gated page enrichment failed', error)
     return {}

@@ -219,3 +219,54 @@ describe('the entry links of a gated tree (AGL-3118)', () => {
     expect(props).toEqual(SLICE)
   })
 })
+
+/**
+ * The leaving notice's signatures for a gated tree (AGL-3452). The page was
+ * signed before the gate opened, from a payload with no tree, so the outside
+ * links the visitor just unlocked are signed here — or they would all reach
+ * the notice's refusal instead of its Continue.
+ */
+describe('the leaving-notice signatures of a gated tree (AGL-3452)', () => {
+  const OUTSIDE = 'https://partner.example.org/brochure'
+  const TREE = { root: { props: {} }, cta: { props: { href: OUTSIDE } } }
+  const ORIGINAL_SECRET = process.env['TOKEN_SIGNING_SECRET']
+  beforeEach(() => {
+    process.env['TOKEN_SIGNING_SECRET'] = 'test-signing-secret'
+  })
+  afterAll(() => {
+    if (ORIGINAL_SECRET === undefined) delete process.env['TOKEN_SIGNING_SECRET']
+    else process.env['TOKEN_SIGNING_SECRET'] = ORIGINAL_SECRET
+  })
+
+  it('signs the tree’s outside links for a young free workspace', async () => {
+    mockOrgForHost.mockResolvedValue({
+      orgId: 'org-1',
+      org: { $id: 'org-1', plan: 'free', createdAt: Date.now() - 2 * 86_400_000 },
+    })
+    const props = await enrichGatedScreenPage({
+      hostId: 'host-1',
+      screenId: 'members-only',
+      screen: {},
+      nodes: TREE,
+      host: { $id: 'host-1', subdomain: 'harbor', screens: {} },
+    })
+    expect(props['leavingSignatures']).toEqual({ [OUTSIDE]: expect.any(String) })
+  })
+
+  it('adds nothing for a paid or older workspace', async () => {
+    for (const org of [
+      { $id: 'org-1', plan: 'pro', billingStatus: 'active', createdAt: Date.now() },
+      { $id: 'org-1', plan: 'free', createdAt: Date.now() - 60 * 86_400_000 },
+    ]) {
+      mockOrgForHost.mockResolvedValue({ orgId: 'org-1', org })
+      const props = await enrichGatedScreenPage({
+        hostId: 'host-1',
+        screenId: 'members-only',
+        screen: {},
+        nodes: TREE,
+        host: { $id: 'host-1', subdomain: 'harbor', screens: {} },
+      })
+      expect(props).not.toHaveProperty('leavingSignatures')
+    }
+  })
+})

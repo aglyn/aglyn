@@ -42,7 +42,7 @@ import {
   reverseDestinationTransfer,
   type TransferReversalFailure,
 } from '@aglyn/tenant-data-admin/server/stripe-transfer-reversal'
-import { captureHostContact } from '@aglyn/tenant-runtime'
+import recordCapturedContact from '@aglyn/aglyn/plugin-manager/record-captured-contact'
 import {
   bookingPlatformNetCents,
   shouldSendBookingPlatformPurchase,
@@ -543,14 +543,19 @@ export const bookingsBillingWebhookHandler: BillingWebhookHandler = async ({
         // The amount is `amount_total`, the money that moved, per AGL-1698 and
         // AGL-1711 — the booking document stores no price to re-derive it from.
         if (booking['email']) {
-          void captureHostContact({
+          void recordCapturedContact({
+            orgId: '',
             hostId: String(hostId),
-            email: booking['email'],
-            ...(booking['name'] ? { name: String(booking['name']) } : {}),
-            source: 'booking',
+            identity: {
+              email: booking['email'],
+              ...(booking['name'] ? { name: String(booking['name']) } : {}),
+            },
+            // Paid, so a relationship (AGL-3232): the lead the request-time
+            // capture filed for the address is closed onto the contact.
+            surface: 'relationship',
             // Paid, so a customer (AGL-2612) — the request-time capture
             // said `lead`, and this is the door that has seen the money.
-            initialLifecycleStage: 'customer',
+            lifecycleFloor: 'customer',
             // The SERVICE, not the charge (AGL-2028). `amount_total` now
             // includes the merchant's service tax where they set one, and
             // tax is collected for an authority rather than earned — booking
@@ -559,6 +564,7 @@ export const bookingsBillingWebhookHandler: BillingWebhookHandler = async ({
             // store, which sets no rate.
             ...(serviceCents > 0 ? { purchaseCents: serviceCents } : {}),
             interaction: {
+              source: 'booking',
               refId: String(bookingId),
               summary: `Paid for "${String(
                 booking['serviceName'] ?? 'a service',

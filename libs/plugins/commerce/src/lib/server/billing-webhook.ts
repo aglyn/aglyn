@@ -30,7 +30,7 @@ import {
   hostSendingIdentity,
 } from '@aglyn/tenant-data-admin'
 import { paymentProvider } from '@aglyn/tenant-data-admin/server/payment-provider'
-import { captureHostContact } from '@aglyn/tenant-runtime'
+import recordCapturedContact from '@aglyn/aglyn/plugin-manager/record-captured-contact'
 import { formatOperatorAlertAmount } from '@aglyn/aglyn/app-utils/operator-alerts'
 import { resolveSiteTimeZone } from '@aglyn/aglyn/app-utils/collection-entry-date'
 import {
@@ -2335,9 +2335,9 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           .doc(String(object.subscription))
         // Redelivery guard (AGL-1732, the AGL-498 shape). Stripe delivers at
         // least once, and the effects below this write are NOT idempotent —
-        // `upsertHostContact`'s `purchaseCents` is a `FieldValue.increment`, so
-        // a replay would inflate the subscriber's lifetime value and their
-        // order count on every retry.
+        // the capture's `purchaseCents` is added to the person's lifetime
+        // value, so a replay would inflate the subscriber's lifetime value and
+        // their order count on every retry.
         //
         // Keyed on `checkoutSessionId` rather than on the document existing:
         // `customer.subscription.created` writes the SAME doc path (status and
@@ -2444,25 +2444,36 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           link: `/${hostId}/products`,
         })
         // AWAITED SINCE AGL-2473, here and at the five sibling call sites in
-        // this file. `upsertHostContact` carries `purchaseCents`, so it is what
-        // feeds `ltvCents` and the RFM ranking — a `void`ed one is a paying
-        // customer quietly missing from the segment the merchant emails. It
-        // touches only our own Firestore, which is the whole line AGL-2473
-        // drew: Aglyn's own storage is awaited, a stranger's server is queued.
-        // `refund.ts` already awaited its sibling for exactly this reason.
-        await captureHostContact({
+        // this file. The capture carries `purchaseCents`, which is what the
+        // record system adds to a person's lifetime value and the RFM ranking
+        // — a `void`ed one is a paying customer quietly missing from the
+        // segment the merchant emails. It touches only our own Firestore,
+        // which is the whole line AGL-2473 drew: Aglyn's own storage is
+        // awaited, a stranger's server is queued. `refund.ts` already awaited
+        // its sibling for exactly this reason.
+        //
+        // Through the contact-capture contract (AGL-3080), like every other
+        // door commerce owns: the plugin that keeps people decides what a
+        // purchase makes of them, and commerce imports none of it.
+        await recordCapturedContact({
+          orgId: '',
           hostId: String(hostId),
-          email: object?.customer_details?.email,
-          name: object?.customer_details?.name ?? undefined,
-          source: 'order',
+          identity: {
+            email: object?.customer_details?.email,
+            name: object?.customer_details?.name ?? null,
+          },
+          // A purchase makes the person a relationship (AGL-3232): a contact,
+          // with an open lead for the address closed onto it.
+          surface: 'relationship',
           // Every order door names `customer` (AGL-2612): a floor, so the
           // stage fills or advances and never moves anybody back.
-          initialLifecycleStage: 'customer',
+          lifecycleFloor: 'customer',
           // RFM (AGL-328) counted a subscriber as having spent nothing, so
           // the customer paying every month looked colder than a one-off
           // buyer. The initial charge is real money and belongs in LTV.
           ...(subscriptionCents > 0 ? { purchaseCents: subscriptionCents } : {}),
           interaction: {
+            source: 'order',
             refId: String(object.subscription),
             summary: `Started a subscription ($${(subscriptionCents / 100).toFixed(2)})`,
           },
@@ -3106,16 +3117,20 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           // counting only the first charge ranks them as a one-purchase
           // customer forever. Keyed to the invoice so the guard above is what
           // stops a redelivery inflating it.
-          await captureHostContact({
+          await recordCapturedContact({
+            orgId: '',
             hostId: invoiceHostId,
-            email: renewalEmail,
-            ...(soldSnapshot.get('customerName')
-              ? { name: String(soldSnapshot.get('customerName')) }
-              : {}),
-            source: 'order',
-            initialLifecycleStage: 'customer',
+            identity: {
+              email: renewalEmail,
+              ...(soldSnapshot.get('customerName')
+                ? { name: String(soldSnapshot.get('customerName')) }
+                : {}),
+            },
+            surface: 'relationship',
+            lifecycleFloor: 'customer',
             purchaseCents: paidCents,
             interaction: {
+              source: 'order',
               refId: invoiceId,
               summary: `Subscription renewed ($${(paidCents / 100).toFixed(2)})`,
             },
@@ -3347,19 +3362,23 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           const guestContactEmail =
             object?.customer_details?.email ?? reservation['guestEmail'] ?? null
           if (guestContactEmail) {
-            await captureHostContact({
+            await recordCapturedContact({
+              orgId: '',
               hostId: String(hostId),
-              email: guestContactEmail,
-              name:
-                object?.customer_details?.name ??
-                reservation['guestName'] ??
-                undefined,
-              source: 'booking',
+              identity: {
+                email: guestContactEmail,
+                name:
+                  object?.customer_details?.name ??
+                  reservation['guestName'] ??
+                  null,
+              },
+              surface: 'relationship',
               // A paid stay is a sale (AGL-2612), whatever the source says
               // about the kind of thing that was bought.
-              initialLifecycleStage: 'customer',
+              lifecycleFloor: 'customer',
               ...(paidCents > 0 ? { purchaseCents: paidCents } : {}),
               interaction: {
+                source: 'booking',
                 refId: String(reservationId),
                 summary: `Reserved a stay ($${(paidCents / 100).toFixed(2)})`,
               },
@@ -3842,15 +3861,19 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               : '.'),
           link: `/${hostId}/products`,
         })
-        await captureHostContact({
+        await recordCapturedContact({
+          orgId: '',
           hostId: String(hostId),
-          email: object?.customer_details?.email,
-          name: object?.customer_details?.name ?? undefined,
-          source: 'order',
-          initialLifecycleStage: 'customer',
+          identity: {
+            email: object?.customer_details?.email,
+            name: object?.customer_details?.name ?? null,
+          },
+          surface: 'relationship',
+          lifecycleFloor: 'customer',
           ...(marketingOptIn ? { marketingConsent: true } : {}),
           purchaseCents: Number(object?.amount_total ?? 0),
           interaction: {
+            source: 'order',
             refId: String(object.id),
             summary: `Placed an order ($${(Number(object?.amount_total ?? 0) / 100).toFixed(2)})`,
           },
@@ -4396,14 +4419,18 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             const chargedCents =
               Number(object?.amount_total ?? 0) ||
               Number(order.totals?.totalCents ?? 0)
-            await captureHostContact({
+            await recordCapturedContact({
+              orgId: '',
               hostId: String(hostId),
-              email: draftEmail,
-              name: object?.customer_details?.name ?? undefined,
-              source: 'order',
-              initialLifecycleStage: 'customer',
+              identity: {
+                email: draftEmail,
+                name: object?.customer_details?.name ?? null,
+              },
+              surface: 'relationship',
+              lifecycleFloor: 'customer',
               ...(chargedCents > 0 ? { purchaseCents: chargedCents } : {}),
               interaction: {
+                source: 'order',
                 refId: String(orderId),
                 summary: `Paid ${CommerceModel.formatOrderNumber(
                   order,
@@ -4849,14 +4876,18 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           }
         })()
         // Contacts ingestion (AGL-197): buyers become contacts.
-        await captureHostContact({
+        await recordCapturedContact({
+          orgId: '',
           hostId: String(hostId),
-          email: object?.customer_details?.email,
-          name: object?.customer_details?.name ?? undefined,
-          source: 'order',
-          initialLifecycleStage: 'customer',
+          identity: {
+            email: object?.customer_details?.email,
+            name: object?.customer_details?.name ?? null,
+          },
+          surface: 'relationship',
+          lifecycleFloor: 'customer',
           purchaseCents: Number(object?.amount_total ?? 0),
           interaction: {
+            source: 'order',
             refId: String(object.id),
             summary: `Placed an order ($${(Number(object?.amount_total ?? 0) / 100).toFixed(2)})`,
           },

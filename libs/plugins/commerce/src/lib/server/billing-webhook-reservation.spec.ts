@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import type { PluginContactCaptureRequest } from '@aglyn/aglyn/plugin-manager/plugin-contact-capture'
+import { standInRecordSystem } from '../testing/stand-in-record-system'
 import { commerceBillingWebhookHandler } from './billing-webhook'
 
 /**
@@ -119,7 +121,7 @@ const fakeFirestore = {
 }
 
 const notifications: any[] = []
-const contactUpserts: any[] = []
+let contactUpserts: PluginContactCaptureRequest[] = []
 const sentEmails: any[] = []
 const meteredHosts: string[] = []
 
@@ -177,9 +179,6 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   },
   notifyHostManagers: async (hostId: string, notification: any) => {
     notifications.push({ hostId, ...notification })
-  },
-  upsertHostContact: async (options: any) => {
-    contactUpserts.push(options)
   },
   renderHostEmailWithTokens: async () => null,
 }))
@@ -252,7 +251,7 @@ beforeAll(() => {
 beforeEach(() => {
   docs.clear()
   notifications.length = 0
-  contactUpserts.length = 0
+  contactUpserts = standInRecordSystem({ reset: false })
   sentEmails.length = 0
   meteredHosts.length = 0
   autoIdCounter = 0
@@ -325,8 +324,11 @@ describe('paid reservation (AGL-1755)', () => {
     await deliver(RESERVATION_SESSION)
     const upsert = contactUpserts[0]
     expect(upsert.hostId).toBe('host-1')
-    expect(upsert.source).toBe('booking')
-    expect(upsert.name).toBe('Otto Held')
+    // A sale is a relationship at the customer floor (AGL-3232, AGL-2612).
+    expect(upsert.surface).toBe('relationship')
+    expect(upsert.lifecycleFloor).toBe('customer')
+    expect(upsert.interaction.source).toBe('booking')
+    expect(upsert.identity.name).toBe('Otto Held')
     expect(upsert.interaction.refId).toBe('res-1')
     expect(upsert.interaction.summary).toBe('Reserved a stay ($210.00)')
   })
@@ -334,13 +336,13 @@ describe('paid reservation (AGL-1755)', () => {
   /** The paying buyer wins; the stored guest address is the fallback. */
   it('prefers the paying buyer over the address the hold carried', async () => {
     await deliver(RESERVATION_SESSION)
-    expect(contactUpserts[0].email).toBe('Paid@Example.com')
+    expect(contactUpserts[0].identity.email).toBe('Paid@Example.com')
   })
 
   it('falls back to the address the hold carried', async () => {
     await deliver({ ...RESERVATION_SESSION, customer_details: null })
     expect(contactUpserts).toHaveLength(1)
-    expect(contactUpserts[0].email).toBe('held@example.com')
+    expect(contactUpserts[0].identity.email).toBe('held@example.com')
     expect(contactUpserts[0].purchaseCents).toBe(21000)
   })
 

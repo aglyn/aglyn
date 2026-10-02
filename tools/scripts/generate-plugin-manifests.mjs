@@ -2506,6 +2506,51 @@ function interactionStepRows() {
   return rows
 }
 
+/**
+ * The server steps another plugin runs (AGL-3080): a plugin whose records an
+ * automation step writes declares the step under `serverSteps`, and registers
+ * its executor from its server declarations (`registerServerStepExecutor`).
+ * The declaration is compiled into core so the engine can tell a step whose
+ * executor did not register — a broken boot, refused as the step's failure —
+ * from a step no plugin runs.
+ *
+ * Checked here: an array of `{ type }` rows, only the known keys, a plain
+ * type, and one owner per type — no other plugin declares it as a server step
+ * or offers it as an interaction step.
+ */
+function serverStepRows() {
+  const offered = new Map()
+  for (const plugin of config.plugins) {
+    for (const step of plugin.interactionSteps ?? []) offered.set(step?.type, plugin.id)
+  }
+  const claimed = new Map()
+  const rows = []
+  const plain = /^[a-z][A-Za-z0-9]*$/
+  for (const plugin of config.plugins) {
+    const declared = plugin.serverSteps
+    if (declared === undefined) continue
+    const where = `plugins.config.json: "${plugin.id}" serverSteps`
+    if (!Array.isArray(declared) || !declared.length) {
+      throw new Error(`${where} is present and declares nothing — drop it, or name the steps the plugin runs`)
+    }
+    for (const step of declared) {
+      const { type, ...rest } = step ?? {}
+      if (typeof type !== 'string' || !plain.test(type)) {
+        throw new Error(`${where}: "type" is the plain name a step is stored under`)
+      }
+      const what = `${where} "${type}"`
+      if (Object.keys(rest).length) throw new Error(`${what}: unknown key(s) ${Object.keys(rest).join(', ')}`)
+      if (claimed.has(type)) throw new Error(`${what} is already declared by "${claimed.get(type)}"`)
+      if (offered.has(type) && offered.get(type) !== plugin.id) {
+        throw new Error(`${what} is an interaction step "${offered.get(type)}" declares — one plugin owns a step`)
+      }
+      claimed.set(type, plugin.id)
+      rows.push({ pluginId: plugin.id, type })
+    }
+  }
+  return rows
+}
+
 /** The plugins whose org eraser an erasure may not run without (AGL-3080). */
 function requiredOrgEraserIds() {
   return config.plugins
@@ -2609,7 +2654,7 @@ function catalogContent(videoEmbedRows, planEntitlements, usageAxes) {
  * the types and the resolvers in \`enabled-plugins.ts\`; it holds no row.
  */
 
-import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'\nimport type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'\nimport type { ResolvedPluginSitemapSection } from './plugin-sitemap-sections'\nimport type { ResolvedPluginSiteBundleSectionDeclaration } from './plugin-site-bundle'\nimport type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'\nimport type { ResolvedPluginCostAxis, ResolvedPluginSpendLine, ResolvedPluginUsageBand, ResolvedPluginUsageMeter } from './plugin-usage-axes'\nimport type { ResolvedPluginPlanFeature, ResolvedPluginPlanQuota } from './plugin-plan-entitlements'\nimport type { FunctionBindings } from './plugin-contributions'\nimport type { PluginDistribution } from './plugin-distribution'\nimport type { RepeatSourceDeclaration } from './repeat-rows'\nimport type { PluginTemplateSource } from './plugin-template-sources'\nimport type { FormRecordTargetDeclaration } from './submission-record-target'\nimport type { ResolvedBesignerDocument } from './besigner-documents'\nimport type { PluginOrgKeyedCollection } from './plugin-org-erasure'\nimport type { ResolvedVideoEmbedProvider } from './video-embed-provider'\nimport type { AnalyticsProviderDeclaration } from '../app-utils/analytics-provider'\nimport type { InteractionStepDeclaration } from '../app-utils/site-interactions'\nimport type { NotificationCategoryDeclaration, NotificationDigestDeclaration } from '../app-utils/notifications'
+import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'\nimport type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'\nimport type { ResolvedPluginSitemapSection } from './plugin-sitemap-sections'\nimport type { ResolvedPluginSiteBundleSectionDeclaration } from './plugin-site-bundle'\nimport type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'\nimport type { ResolvedPluginCostAxis, ResolvedPluginSpendLine, ResolvedPluginUsageBand, ResolvedPluginUsageMeter } from './plugin-usage-axes'\nimport type { ResolvedPluginPlanFeature, ResolvedPluginPlanQuota } from './plugin-plan-entitlements'\nimport type { FunctionBindings } from './plugin-contributions'\nimport type { PluginDistribution } from './plugin-distribution'\nimport type { RepeatSourceDeclaration } from './repeat-rows'\nimport type { PluginTemplateSource } from './plugin-template-sources'\nimport type { FormRecordTargetDeclaration } from './submission-record-target'\nimport type { ResolvedBesignerDocument } from './besigner-documents'\nimport type { PluginOrgKeyedCollection } from './plugin-org-erasure'\nimport type { ResolvedVideoEmbedProvider } from './video-embed-provider'\nimport type { AnalyticsProviderDeclaration } from '../app-utils/analytics-provider'\nimport type { InteractionStepDeclaration } from '../app-utils/site-interactions'\nimport type { ServerStepDeclaration } from './plugin-server-steps'\nimport type { NotificationCategoryDeclaration, NotificationDigestDeclaration } from '../app-utils/notifications'
 
 export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
 ${rows.map((row) => `  ${indent(JSON.stringify(row.plugin, null, 2))},`).join('\n')}
@@ -2797,6 +2842,14 @@ ${analyticsProviderRows().map((row) => `  ${indent(JSON.stringify({ pluginId: ro
  */
 export const PLUGIN_INTERACTION_STEPS_DECLARED: readonly InteractionStepDeclaration[] = [
 ${interactionStepRows().map((row) => `  ${indent(JSON.stringify(row, null, 2))},`).join('\n')}
+]
+
+/**
+ * Every server step a first-party plugin runs for the automation engine,
+ * declared by that plugin (AGL-3080). Core names no plugin step.
+ */
+export const PLUGIN_SERVER_STEPS_DECLARED: readonly ServerStepDeclaration[] = [
+${serverStepRows().map((row) => `  ${indent(JSON.stringify(row, null, 2))},`).join('\n')}
 ]
 
 /**

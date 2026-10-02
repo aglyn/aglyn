@@ -1381,6 +1381,43 @@ in `plugins.config.json`, not from code:
 | `isClientActionStep(step)` / `isClientStepEntitled(step, tiers)` | Whether the page runs a step, and whether the site's plan lets it. |
 | `SiteAlert` | What a `siteAlert` step, or a listener, hands back to the visitor's page. |
 
+## Server steps — `plugin-server-steps` (`/server`)
+
+Every interaction step that is not a client step is the server's to run. The
+automation engine runs its own; a step that writes ANOTHER plugin's records —
+a dataset row, a contact's stage — is that plugin's, and the plugin registers
+the executor that runs it from its `serverDeclarations` entry. The engine keeps
+the step's guard, the run's order, the run history and the nesting cap, and
+hands the executor one step at a time:
+
+```ts
+// your plugin's serverDeclarations entry
+registerServerStepExecutor(
+  ['stampVisitor'],
+  async (request) => (await import('./server/stamp-step')).runStampStep(request),
+  { pluginId: 'stamps' },
+)
+
+// runStampStep({ hostId, org, orgId, run, event, payload, step })
+// answers { detail? } when it did its work, { error } when it did not,
+// and { emit: { event, payload } } for an event its write earned
+```
+
+A first-party plugin also declares the steps it runs, so a boot that skipped
+the registration is refused rather than read as a step that ran:
+
+```json
+"serverSteps": [{ "type": "stampVisitor" }]
+```
+
+| API | Semantics |
+| --- | --- |
+| `registerServerStepExecutor(types, run, { pluginId? })` | Owner = the loader's marker, else `pluginId`; no owner throws. A type another plugin declares or already holds throws, and nothing is registered unless every type is accepted. Registering again replaces the plugin's own. Returns the unregister. |
+| `ServerStepRequest` | The site, the owning organization's billing document and id (already read by the run's gate), the automation (`run`: kind, id, name), the event, its payload and the step as stored. |
+| `ServerStepAnswer` | `error` is the step's line in the run history when nothing was written; the run goes on to the next step, and a throw reads the same. `detail` is the fact the history carries. `emit` is an event the write earned, which the ENGINE raises one level deeper under its nesting cap. |
+| `pluginServerStepExecutor(type)` | What the engine asks: the registered executor; for a declared step with none, the app's declarations step once more and then a `ServerStepUnavailableError` (the step's failure); `null` for a type nobody declares or runs. A type the engine runs itself never reaches it. |
+| `declaredServerSteps()` / `declaredServerStep(type)` | The compiled `serverSteps` rows. |
+
 ## Host events — `host-events`
 
 A host event is what happened on a site that an automation can start on: a

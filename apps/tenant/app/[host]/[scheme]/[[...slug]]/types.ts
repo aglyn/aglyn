@@ -16,6 +16,7 @@
  */
 
 import type * as Aglyn from '@aglyn/aglyn/server'
+import type { LeavingNoticeConfig } from '@aglyn/aglyn/app-utils/leaving-notice'
 import type { CollectionContent } from '@aglyn/tenant-runtime/get-collection-content'
 
 /**
@@ -82,6 +83,12 @@ export interface Props {
   realmPlugins?: Aglyn.RealmPluginInstall[]
   /** Free-tier "Made with Aglyn" badge (AGL-69, removeBranding gate). */
   showBranding?: boolean
+  /**
+   * Present while the site is in its leaving-notice window (AGL-3452): links
+   * to other domains go through the notice on the site's own host. Read
+   * into `ScreenLinkContext`; see `@aglyn/aglyn/app-utils/leaving-notice`.
+   */
+  leavingNotice?: LeavingNoticeConfig
   /**
    * Resolved white-label brand for the org (White-Label Phase 1): product
    * name, logo, colors, support URL. The tenant runtime renders the agency

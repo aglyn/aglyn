@@ -86,7 +86,6 @@ import {
   userLockdownDocId,
 } from '@aglyn/aglyn/server'
 import {
-  authForPool,
   emailUnverifiedResponse,
   featureLockdownRefusal,
   findUserByUidAcrossPools,
@@ -95,8 +94,6 @@ import {
   invalidateDomainLockdownCache,
   invalidateFeatureLockdownCache,
   invalidatePlatformLockdownCache,
-  invalidateTokenRevocationCache,
-  invalidateUserLockdownCache,
   isImpersonationSession,
   listOrgMembers,
   lockdownJsonResponse,
@@ -109,6 +106,7 @@ import {
   applyHostLockdown,
   applyOrgLockdown,
 } from '../../../../utils/server/org-lockdown'
+import { applyUserLockdown } from '../../../../utils/server/user-lockdown'
 import {
   LOCKDOWN_RESEND_MAX_TARGETS,
   type LockdownNoticeEffects,
@@ -1813,7 +1811,6 @@ async function handler(request: Request): Promise<Response> {
         .collection(LOCKDOWNS_COLLECTION)
         .doc(userLockdownDocId(targetId))
       const before = (await ref.get()).data() ?? null
-      const pool = authForPool(found.tenantId)
       const mailStep = () =>
         accountMailStep({
           action,
@@ -1826,35 +1823,17 @@ async function handler(request: Request): Promise<Response> {
       // A lift takes the account off the lists BEFORE its notice goes, so
       // the "restored" email reaches an address nothing still refuses.
       const liftedMail = action === 'unlock' ? await mailStep() : undefined
-      if (action === 'lock') {
-        await ref.set({
-          scope: 'user',
-          // Stored ONLY for takedowns (AGL-1621), same discipline as `mode`:
-          // a standard lock's document stays byte-identical to one written
-          // before the field existed, so absent keeps meaning fail-open.
-          ...(enforcement === 'takedown' ? { enforcement } : {}),
-          reason: lock.reason,
-          ...(message ? { message } : {}),
-          ...(untilMs !== undefined ? { untilMs } : {}),
-          atMs: Date.now(),
-          actorUid: decoded.uid,
-        })
-        // The logout is real: disable stops new sign-ins, the revoke kills
-        // the session cookie at its next `verifySessionCookie(…, true)`
-        // exchange and the SDK's next token refresh. Pool-scoped — the
-        // project-pool revoke would silently miss an SSO-tenant account.
-        await pool.updateUser(targetId, { disabled: true })
-        await pool.revokeRefreshTokens(targetId)
-        invalidateTokenRevocationCache(targetId, found.tenantId ?? null)
-      } else {
-        await ref.delete()
-        await pool.updateUser(targetId, { disabled: false })
-      }
-      // The process that took the action refuses (or readmits) this uid NOW;
-      // other processes converge within the reader's 15s TTL (AGL-1522). The
-      // hard kill never rode that cache — the disable + revoke above stand
-      // on their own.
-      invalidateUserLockdownCache(targetId)
+      // The account's lock document, its auth `disabled` flag and its
+      // sessions, through the one user-scope core the page screen's
+      // automatic hold shares (AGL-3450).
+      await applyUserLockdown({
+        firestore,
+        uid: targetId,
+        tenantId: found.tenantId,
+        action,
+        lock: { reason: lock.reason, message, untilMs, enforcement },
+        actorUid: decoded.uid,
+      })
       await audit({
         ...actor,
         action: `lockdown.${action}`,

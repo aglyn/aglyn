@@ -190,6 +190,25 @@ export const CORE_OPERATOR_ALERTS: readonly OperatorAlertDefinition[] = [
     notificationType: 'system.abuseReportUrgent',
   },
   {
+    // The one lock no person placed (AGL-3450): staff confirm it before the
+    // customer's appeal arrives, and re-place it as `abuse` or lift it.
+    type: 'security.pageSecurityHold',
+    label: 'Automatic security hold on a new workspace',
+    description:
+      'The page screen held a phishing page from a workspace in its first two weeks and locked the workspace, the site and the publishing account as security. Confirm it on Staff → Abuse reports, then re-place it as abuse on Staff → Lockdown, or lift it there if it is a false positive.',
+    tier: 'must',
+    category: 'security',
+    title: 'Security hold placed on {{orgName}}',
+    body:
+      '{{page}} on {{siteName}} ({{hostId}}) was held for review: {{signal}} Locked as security, pending your review: {{locks}}. The abuse row is {{reference}}. Lift the hold, or re-place it as abuse, on Staff → Lockdown (/admin/lockdown).',
+    link: '/admin/abuse-reports?report={{reviewId}}',
+    delivery: 'immediate',
+    // One hold per workspace; a repeat inside the day is the same event.
+    dedupeWindowMinutes: DAY,
+    defaultEnabled: true,
+    notificationType: 'system.abuseReportUrgent',
+  },
+  {
     type: 'system.disputeUnattributed',
     label: 'Card dispute with no owner',
     description:

@@ -52,10 +52,15 @@ import {
   realmPluginsInUse,
   requiredSitePlugins,
 } from '@aglyn/tenant-runtime/required-site-plugins'
+import { leavingNoticeConfig } from '@aglyn/tenant-data-admin/server/leaving-notice'
 import { cache } from 'react'
 import { serverPluginLoader } from '../../../../utils/server-plugin-loader'
 import getHost, { CNAME_HOST_PREFIX } from '../../../../utils/get-host'
 import getOrgBilling from '../../../../utils/get-org-billing'
+import {
+  applyLeavingNotice,
+  type LeavingNoticeFacts,
+} from '../../../../utils/leaving-notice'
 import { resolveNotFoundScreenId } from '../../../../utils/not-found-screen-id'
 import { startRenderTimer } from '../../../../utils/render-timings'
 import type { LoadResult, Props } from './types'
@@ -159,6 +164,28 @@ const loadPageDataCached = cache(
     slugKey: string,
     previewToken: string,
   ): Promise<LoadResult> => {
+    // The site and its workspace as the body read them, for the one decision
+    // that applies to every exit alike — a page, a redirect — rather than to
+    // each of them by hand: the leaving notice (AGL-3452).
+    const facts: LeavingNoticeFacts = {}
+    return applyLeavingNotice(
+      await composePageResult(hostParam, slugKey, previewToken, facts),
+      facts,
+    )
+  },
+)
+
+/**
+ * The composition body {@link loadPageDataCached} wraps. Every value it
+ * returns passes through `applyLeavingNotice` on the way out, so it records
+ * the host and org it loaded in `facts` rather than each exit deciding.
+ */
+const composePageResult = async (
+    hostParam: string,
+    slugKey: string,
+    previewToken: string,
+    facts: LeavingNoticeFacts,
+  ): Promise<LoadResult> => {
     const slug = JSON.parse(slugKey) as string[]
     const context = { params: { host: hostParam, slug } }
 
@@ -188,6 +215,7 @@ const loadPageDataCached = cache(
 
     const hostRes = await getHost({ host })
     timer.mark('getHost')
+    facts.host = hostRes.host
 
     if (hostRes.error || !hostRes.host) {
       return {
@@ -329,6 +357,7 @@ const loadPageDataCached = cache(
     // branches below, as before.
     const orgRes = await getOrgBilling({ hostId })
     timer.mark('getOrgBilling')
+    facts.org = orgRes.org
     /*
      * The zone this site's dates read in (AGL-3237).
      *
@@ -1571,8 +1600,7 @@ const loadPageDataCached = cache(
   } finally {
     timer.report({ host: hostParam, path: (slug ?? []).join('/') || '/' })
   }
-  },
-)
+  }
 
 /**
  * Server data loader for the catch-all tenant render (AGL-398). Thin, uncached
@@ -1777,11 +1805,23 @@ export async function loadNotFoundScreen(
     ])
     const entryRoutes = await entryRoutesPromise
 
+    // The designed 404 is a page of the site like any other, and the one a
+    // link to a made-up address always lands on — so its links go through
+    // the leaving notice too (AGL-3452). Path-independent, as this cached
+    // body must be.
+    const leavingNotice = leavingNoticeConfig({
+      hostId,
+      site: hostRes.host,
+      org: orgRes.org,
+      content: { nodes, enriched: notFoundEnriched.props },
+    })
+
     return JSON.parse(
       JSON.stringify({
         data: { host: hostRes.host, screen: { data: screenRes.screen } },
         nodes,
         notFoundFallback: true,
+        ...(leavingNotice ? { leavingNotice } : {}),
         enabledPlugins: notFoundEnabledPlugins,
         ...notFoundEnriched.props,
         ...blockingPluginsFor(

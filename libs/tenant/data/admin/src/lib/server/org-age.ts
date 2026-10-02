@@ -20,21 +20,23 @@
 import { daysBetween } from '@aglyn/shared-util-email/sender-reputation'
 
 /**
- * How old a workspace is, in days, from whatever its `createdAt` turns out to
- * be.
+ * When a workspace was created, in epoch ms, from whatever its `createdAt`
+ * turns out to be — or `null` when it cannot be read.
  *
  * Firestore hands back a `Timestamp`, a restore or a fixture can leave a
- * number, and an org written before the field existed has nothing. All three
- * are handled and the last one answers `null`, which
- * `claimOrgEmailSendDay` reads as graduated — the only safe direction,
- * for the reason stated there.
+ * number, and an org written before the field existed has nothing. A
+ * `Timestamp` that has been through JSON — the render cache stores plain
+ * values, so the tenant's copy of an org arrives this way — is a bare
+ * `{ _seconds, _nanoseconds }` with no methods left, and is read like the
+ * live one rather than as missing (AGL-3452).
  */
-export function orgAgeDays(
-  createdAt: unknown,
-  now: number = Date.now(),
-): number | null {
+export function orgCreatedMs(createdAt: unknown): number | null {
   const raw = createdAt as
-    | { toMillis?: () => number; seconds?: number }
+    | {
+        toMillis?: () => number
+        seconds?: number
+        _seconds?: number
+      }
     | number
     | string
     | null
@@ -44,6 +46,7 @@ export function orgAgeDays(
   else if (typeof raw === 'string') createdMs = Date.parse(raw)
   else if (typeof raw?.toMillis === 'function') createdMs = raw.toMillis()
   else if (typeof raw?.seconds === 'number') createdMs = raw.seconds * 1000
+  else if (typeof raw?._seconds === 'number') createdMs = raw._seconds * 1000
   /*
    * The one check, and it has to answer `null` rather than 0. A creation date
    * that could not be read is an org whose record predates the field, which
@@ -51,5 +54,20 @@ export function orgAgeDays(
    * paying tenant on the platform down to the first step.
    */
   if (!Number.isFinite(createdMs) || createdMs <= 0) return null
-  return daysBetween(createdMs, now)
+  return createdMs
+}
+
+/**
+ * How old a workspace is, in days, from whatever its `createdAt` turns out to
+ * be (see {@link orgCreatedMs}).
+ *
+ * An unreadable date answers `null`, which `claimOrgEmailSendDay` reads as
+ * graduated — the only safe direction, for the reason stated there.
+ */
+export function orgAgeDays(
+  createdAt: unknown,
+  now: number = Date.now(),
+): number | null {
+  const createdMs = orgCreatedMs(createdAt)
+  return createdMs === null ? null : daysBetween(createdMs, now)
 }
