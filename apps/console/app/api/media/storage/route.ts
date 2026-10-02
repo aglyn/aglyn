@@ -19,15 +19,106 @@ import { planMetersInfraOverage, pluginRequestFromWeb } from '@aglyn/aglyn/serve
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
+  getOrgDoc,
+  getOrgForHost,
   isImpersonationSession,
+  lockdownRefusal,
+  resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
-import { resolveMediaScope } from '../../../../utils/server/media-scope'
 import { resolveOrgMediaBand } from '../../../../utils/server/media-storage-band'
 import { scopeBillsStorageOverage } from '../../../../utils/storage-overage'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
+/** The library a band request names, and the org whose pool it reads. */
+interface StorageReader {
+  collection: 'hosts' | 'orgs'
+  /** Host or org id — the library whose share is `scopeBytes`. */
+  scopeId: string
+  /** The OWNING org; empty for a site that has none. */
+  orgId: string
+  /** The owning org's doc — the plan, and the lockdown verdict's org scope. */
+  org: Record<string, unknown>
+  /** The site's doc on a site scope — the verdict's host scope. */
+  host?: Record<string, unknown>
+}
+
 /**
- * The org's media storage band, as the library's toolbar states it (AGL-3470).
+ * Who may read the band, and of which org (AGL-3482).
+ *
+ * The bar is MEMBERSHIP, not the editor role uploading asks for. What this
+ * answers is a count of bytes the caller's own console already shows them: the
+ * rules let any member of an org read `orgs/{orgId}/counters`, and any member of
+ * a site — viewers included — read the site's library and its counters. A
+ * viewer opens Billing and the media library like anyone else, and refusing
+ * them here left Billing's storage meter "not yet metered" and the banner with
+ * no storage row.
+ *
+ * The pool read is always one the caller belongs to. The org scope proves
+ * membership in the org it names; a site scope proves membership on the SITE
+ * and takes the org from the site's own index entry, never from an id in the
+ * request. Naming both answers for the org alone, as the ingress resolver does.
+ */
+async function resolveStorageReader(
+  query: Partial<Record<string, string | string[]>>,
+  uid: string,
+): Promise<{ reader?: StorageReader; error?: Response }> {
+  const orgId = String(query['orgId'] ?? '') || null
+  const hostId = String(query['hostId'] ?? '') || null
+  if (orgId) {
+    const membership = await resolveOrgMembership(uid, orgId)
+    if (!membership) {
+      return {
+        error: Response.json(
+          { error: 'Not a member of this organization' },
+          { status: 403 },
+        ),
+      }
+    }
+    return {
+      reader: {
+        collection: 'orgs',
+        scopeId: orgId,
+        orgId,
+        org: ((await getOrgDoc(orgId)) ?? {}) as Record<string, unknown>,
+      },
+    }
+  }
+  if (!hostId) {
+    return {
+      error: Response.json({ error: 'Missing hostId or orgId' }, { status: 400 }),
+    }
+  }
+  const hostSnapshot = await firebaseAdmin
+    .app()
+    .firestore()
+    .collection('hosts')
+    .doc(hostId)
+    .get()
+  if (!hostSnapshot.exists) {
+    return { error: Response.json({ error: 'Unknown site' }, { status: 404 }) }
+  }
+  // Any role at all, as the rules' `isHostMember` — `memberRoles` holds no
+  // entry for someone who is not on the site.
+  if (!(hostSnapshot.get('memberRoles') ?? {})[uid]) {
+    return {
+      error: Response.json({ error: 'Not a member of this site' }, { status: 403 }),
+    }
+  }
+  const resolvedOrg = await getOrgForHost(hostId)
+  return {
+    reader: {
+      collection: 'hosts',
+      scopeId: hostId,
+      orgId: resolvedOrg?.orgId ?? '',
+      org: (resolvedOrg?.org ?? {}) as Record<string, unknown>,
+      host: hostSnapshot.data(),
+    },
+  }
+}
+
+/**
+ * The org's media storage band, as the library's toolbar, the Billing meter
+ * and the quota banner state it (AGL-3470, AGL-3479).
  *
  * The band is ORG-WIDE (AGL-2075): every site's library and the org's shared
  * one count against `hostLimit × storagePerHostMb`. The browser cannot add
@@ -46,8 +137,9 @@ import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
  * is refused rather than billed. The console's pre-check refuses only then, so
  * it can never turn away a paid upload the server would accept.
  *
- * Scope resolution is the ingress routes' own (`resolveMediaScope`): whoever
- * may upload into this library may see the band it uploads against.
+ * A READ, gated as one (AGL-3482): any member of the library's org or site may
+ * ask — see `resolveStorageReader` — and the lockdown verdict takes its intent
+ * from the method, so a read-only lock lets it through and a full one does not.
  */
 async function handler(request: Request): Promise<Response> {
   const { method, query, headers: rawHeaders } = await pluginRequestFromWeb(request)
@@ -66,29 +158,32 @@ async function handler(request: Request): Promise<Response> {
     if (!decoded.email_verified && !isImpersonationSession(decoded)) {
       return emailUnverifiedResponse()
     }
-    // lockdown-423: via apps/console/utils/server/media-scope.ts — the scope
-    // resolver runs the verdict on the org/host docs it already reads and
-    // hands the 423 refusal back as `error.response`.
-    const { scope, error } = await resolveMediaScope(undefined, query, decoded.uid, {
-      staff: decoded['staff'] === true,
-    })
-    if (!scope) {
-      return (
-        error?.response ??
-        Response.json({ error: error?.message ?? 'Bad request' }, { status: error?.status ?? 400 })
-      )
+    const { reader, error } = await resolveStorageReader(query, decoded.uid)
+    if (!reader) {
+      return error ?? Response.json({ error: 'Bad request' }, { status: 400 })
     }
+    // Lockdown verdict (AGL-1506) on the org and site docs already in hand.
+    // The intent comes from the method — this handler answers GET alone and
+    // writes nothing — so a read-only lock passes it and a full lock refuses.
+    const locked = await lockdownRefusal({
+      request,
+      staff: decoded['staff'] === true,
+      uid: decoded.uid,
+      org: reader.org,
+      host: reader.host,
+    })
+    if (locked) return locked
     // A site with no owning org has no pool to read; the console then shows
     // the library's own total and no cap, as it did before this route.
-    if (!scope.orgId) {
+    if (!reader.orgId) {
       return Response.json({ error: 'No organization' }, { status: 404 })
     }
-    const org = scope.billing as Parameters<typeof planMetersInfraOverage>[0]
+    const org = reader.org as Parameters<typeof planMetersInfraOverage>[0]
     const band = await resolveOrgMediaBand({
-      firestore: scope.scopeRef.firestore,
-      orgId: scope.orgId,
+      firestore: firebaseAdmin.app().firestore(),
+      orgId: reader.orgId,
       org,
-      currentHostId: scope.collection === 'hosts' ? scope.scopeId : null,
+      currentHostId: reader.collection === 'hosts' ? reader.scopeId : null,
     })
     const unlimited = !Number.isFinite(band.allowanceMb)
     return Response.json(
@@ -98,12 +193,13 @@ async function handler(request: Request): Promise<Response> {
         allowanceMb: unlimited ? null : band.allowanceMb,
         unlimited,
         usedBytes: band.usedBytes,
-        scopeBytes: band.byScope[`${scope.collection}/${scope.scopeId}`] ?? 0,
+        scopeBytes: band.byScope[`${reader.collection}/${reader.scopeId}`] ?? 0,
         hardBand:
           !planMetersInfraOverage(org) ||
-          !scopeBillsStorageOverage(scope.collection),
+          !scopeBillsStorageOverage(reader.collection),
       },
-      { status: 200 },
+      // One org's figures, for one member: never held by a shared cache.
+      { status: 200, headers: { 'Cache-Control': 'no-store, private' } },
     )
   } catch (error) {
     // A refused credential is a 401, not a fault of ours (AGL-1993).
