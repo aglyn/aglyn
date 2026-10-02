@@ -19,6 +19,7 @@ content on the marketing site and is written separately.
 - **abuse:** a young workspace's held phishing page places an automatic security hold ([AGL-3450](https://linear.app/aglyn/issue/AGL-3450))
 - **plugins:** a plugin runs the automation steps that write its records ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
 - **tenant:** a new free site's outside links pass a "You're leaving" notice ([AGL-3452](https://linear.app/aglyn/issue/AGL-3452))
+- **console:** a site's Media page loads the org library only when its tab opens ([AGL-3457](https://linear.app/aglyn/issue/AGL-3457))
 
 ### Fixed
 
