@@ -994,7 +994,7 @@ labels on its address, are read on the spot and need nothing stored. Carrying a 
 a later page or a later visit is remembered in the browser under the visitor's
 **analytics** consent — the same entry that has always held the labels — so a visitor
 who declined analytics is credited only for what they converted on. See
-[What needs consent](../analytics/cookie-consent.md#what-needs-consent).
+[The campaign a visitor came from](../analytics/cookie-consent.md#campaign-touch).
 
 #### The labels a campaign answers to {#utm-labels}
 
