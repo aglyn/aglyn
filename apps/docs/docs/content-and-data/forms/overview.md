@@ -265,7 +265,9 @@ row actions.
   derived from the name, so one sender keeps one color on every machine.
 - Unread submissions are **bold with a dot** at the left of the row. There is no "New"
   chip — bold text and a chip saying *New* are the same fact twice. Site managers also
-  get an in-app notification per submission.
+  get an in-app notification per submission, and an email too for anyone who switched
+  that on. It names the form, the page and the campaign, and opens **that submission**
+  rather than the list — see [What an open submission links to](#what-it-links-to).
 - The row's **⋮** menu holds **Open contact in CRM** — the person this submission
   updated, found by the address they gave — beside **Mark read** and **Delete**. A
   submission that carried no email address updated no contact, and the item says so.
@@ -336,6 +338,29 @@ A form whose fields are named something else entirely — `q1`, `who`, `sender` 
 it is worse than a generic one, and the console will not guess which of your fields is a
 person. Rename the field to one of the conventional names if you want the sender on the
 row; the submission itself is unaffected, and every field is still in the detail dialog.
+
+#### What an open submission links to {#what-it-links-to}
+
+Under the sender, an open submission lists where it came in and what it made, each as a
+link:
+
+- **Form** — the form that took it, opening the form's own page.
+- **Page** — the page it was sent from, opening the live page in a new tab.
+- **Lead** or **Contact** — the person the [CRM](../crm/overview.md) filed it as,
+  opening their record. Absent when the submission carried no email address.
+
+Below the fields, its **Campaign** block keeps two facts apart, because a submission can
+be one without the other:
+
+- **Filed under** — the campaigns its form and its page were in when it arrived. That is
+  where you put them, and it is true of everyone who submits there.
+- **Credited to** — the campaign the visitor arrived through: a click on one of its
+  emails, a link carrying a `utm_campaign` label it declares, or a page filed under it,
+  with the channel and the time. It can be a different campaign from the ones it is
+  filed under, or none — see
+  [How a visit is credited to a campaign](../../marketing-and-automation/email-campaigns/overview.md#how-a-visit-is-credited).
+
+Each campaign is a link to its page.
 
 #### Where this one went {#where-this-one-went}
 

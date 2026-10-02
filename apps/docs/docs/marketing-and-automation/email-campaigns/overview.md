@@ -207,14 +207,17 @@ what the sequences in it did: people **enrolled**, the first email **sent** to e
 they are read across, never added. A person's own page says which sequence's campaign
 they came from when nothing else was credited first.
 
-**This is grouping, not crediting.** Filing a page under a campaign does not decide who
-that campaign mails, and it does not credit a visit, a signup or a sale to it. Those
-figures come from the links a campaign's emails actually carried — see
-[Revenue from a campaign](#revenue-from-a-campaign) — and they read the same whatever is
-assigned here. A contact's or a lead's campaigns are likewise a label on your CRM record:
-they never add anybody to a send. A sequence's are the exception in one direction only:
-what the sequence produces is counted on the campaign, because the sequence's emails
-are the campaign's outreach.
+**Filing decides who is counted, never who is mailed.** Filing a page under a campaign
+does not decide who that campaign mails. It does make the page one of the campaign's
+**touches**: a visitor who reads it and then fills in a form, signs up or books within
+seven days is credited to the campaign, with no `utm_` label on the link — see
+[How a visit is credited to a campaign](#how-a-visit-is-credited). A form's, a
+contact's and a lead's campaigns are a label on the record and credit nothing on their
+own; they never add anybody to a send either. Order revenue still comes from the links a
+campaign's emails carried — see [Revenue from a campaign](#revenue-from-a-campaign). A
+sequence's campaigns are the exception in one direction only: what the sequence
+produces is counted on the campaign, because the sequence's emails are the campaign's
+outreach.
 
 **Deleting a campaign** clears it off everything assigned to it. The pages, forms,
 contacts, leads, sequences and their enrollments stay exactly where they are, minus that
@@ -964,6 +967,66 @@ with no recorded delivery count shows amounts but no per-message figure.
 
 If a campaign earned in more than one currency, each is reported on its own.
 Nothing converts between currencies, so there is deliberately no combined total.
+
+### How a visit is credited to a campaign {#how-a-visit-is-credited}
+
+When somebody fills in a form, signs up as a member or for your newsletter, or books, the
+moment they say who they are is credited to **one** campaign, or to none. (An order's
+money is credited by the email click rule in
+[Revenue from a campaign](#revenue-from-a-campaign).) Three things count as a campaign
+**touch**:
+
+- **A click on one of its emails**, or on a sequence email in it.
+- **A link carrying a `utm_campaign` label the campaign declares** — see
+  [The labels a campaign answers to](#utm-labels). A label no campaign declares is
+  still recorded, as the label it is, and links to nothing.
+- **A page filed under the campaign**, viewed — with no label on the link at all.
+
+**The rule, in one sentence:** the visitor's latest touch within **7 days** wins. One
+exception keeps a landing page from taking the credit away from what sent the reader
+there: a page viewed within 30 minutes of a click is that click's visit, and the click
+keeps the credit when it names a campaign. Each credit records which touch won, when, and
+the rule it was credited under, and the submission's
+[Campaign block](../../content-and-data/forms/overview.md#what-it-links-to) shows them.
+
+**What it needs from the visitor's browser.** The page a visitor converts on, and the
+labels on its address, are read on the spot and need nothing stored. Carrying a touch to
+a later page or a later visit is remembered in the browser under the visitor's
+**analytics** consent — the same entry that has always held the labels — so a visitor
+who declined analytics is credited only for what they converted on. See
+[What needs consent](../analytics/cookie-consent.md#what-needs-consent).
+
+#### The labels a campaign answers to {#utm-labels}
+
+Ads and social posts are usually tagged with `utm_campaign=…` rather than linked from an
+email. Open the campaign, choose **Edit campaign**, and list those values under
+**utm_campaign labels**, separated by commas: a visitor who arrives on a link carrying
+one is credited to this campaign. The campaign's page shows the labels under its
+settings.
+
+- Labels are matched **without regard to case** (`OneJob-AI` and `onejob-ai` are one
+  label), and a campaign may list up to 20.
+- A label **two campaigns both list credits neither** — it stays the label it is — so
+  give each label to one campaign.
+- Only a campaign **placed on the site** the visitor is on answers to its labels.
+
+#### Who it reached {#who-it-reached}
+
+The campaign's page counts the visitors it reached on your sites, above what they did:
+
+- **First visits** — visitors whose first campaign touch in the last 7 days was this
+  campaign: a page filed under it, or a link carrying one of its labels. It is counted
+  only where the visitor's browser may remember the touch, so visitors who declined
+  analytics are not in it and the figure is a floor.
+- **Page views** — views of the pages filed under it, from every visitor. Counting a
+  view stores nothing in the browser.
+
+Both are counted across every site the campaign is placed on, from the day counting
+started rather than the day the campaign did, and the page says from when.
+
+**What it caused** then counts what is credited to the campaign — submissions, leads,
+contacts and bookings, one kind at a time and never added together — whether the touch
+was an email, a labeled link or a page.
 
 ### Everything the campaigns caused {#conversions}
 

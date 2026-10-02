@@ -1233,6 +1233,7 @@ await recordCapturedContact({ …, detail: { [CONVERSION_TOUCH_DETAIL]: touch } 
 | `recordConversionClick({ email, hostId, creditTo, atMs, via? })` | A person followed a link in mail a plugin sent them; `via` is the sender's own facts (its sequence, its enrollment). |
 | `creditConversionOutcome({ hostId, orgId?, containerIds, outcome, atMs? })` | What a plugin's own record produced, counted under the containers it is filed in (`plugin-containers`). |
 | `eraseConversionCredits(key)` | Everything the creditor holds about a person, by `personKey`, on every site — called by the platform's address erasure beside the delivery log. |
+| `describeConversion({ hostId, touch?, containerIds? })` | The touch a door resolved and the containers its record is filed under, in words: `credited` (`label`, `how`, `containerId?`) and `filedUnder` (`id`, `label`, in the order asked, deleted ones left out) — what a door's alert says about where an outcome came from. `null` when nobody credits, or the creditor does not describe (the method is optional). |
 
 Nothing here throws: every door has already done the thing being credited.
 The first call that finds no creditor runs the app's boot step once and asks
