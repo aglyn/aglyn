@@ -61,8 +61,8 @@ type UsageConfig = { orgLibraryBilledFrom: string | null } | 'unknown'
  * misstate every metered rate on the platform. Four decimals covers all
  * three, and the trailing
  * zeros PAST THE CENT are stripped so `$0.3600` does not read as spurious
- * precision — but a rate is never shorter than the cent, so `$0.7000` reads
- * `$0.70`, the figure `/pricing` states, and not `$0.7`.
+ * precision — but a rate is never shorter than the cent, so `$0.8000` reads
+ * `$0.80`, the figure `/pricing` states, and not `$0.8`.
  */
 function rateText(usd: number): string {
   const [whole, fraction = ''] = usd.toFixed(4).split('.')

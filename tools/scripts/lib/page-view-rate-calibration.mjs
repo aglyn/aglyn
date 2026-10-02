@@ -121,11 +121,13 @@
  * the pair is applied to, from 627 KB to 1012.8 KB. Keeping the anchor fixed
  * is what makes the rate checkable: a re-peg that also re-based the cost per
  * KB would be two changes wearing one number, and no gate could tell which of
- * them a later edit had undone. The one re-pricing the anchor does take is
- * named separately below: its TRANSFER share, at the dearest region.
+ * them a later edit had undone. The re-pricings the anchor does take are
+ * named separately below: its TRANSFER share at the dearest region and by a
+ * decimal GB, and its READS at the database's own location.
  *
  * @see PAGE_VIEW_CALIBRATION_BASIS_KB
- * @see TRANSFER_REPRICE_USD_PER_GB
+ * @see TRANSFER_REPRICE_USD_PER_KB
+ * @see READ_REPRICE_USD_PER_KB
  */
 export const CALIBRATED_USD_PER_VIEW = 0.0001
 
@@ -138,29 +140,52 @@ export const PAGE_VIEW_CALIBRATION_BASIS_KB = 627
  *
  * The CDN bills transfer in the region that serves a visitor, from $0.15 to
  * $0.35 per GB, and "at cost + 30%" has to hold wherever that is. The
- * calibration's ~$0.000088 of transfer on a 627 KB page was the $0.15 figure;
- * the reads and the edge/ISR share beside it are not transfer and do not move.
- * So the anchor stays, and every KB of page carries the $0.20-a-GB difference
- * on top of it — a separate, named term rather than a re-based anchor, for
- * the reason the anchor's own docblock gives.
+ * calibration's ~$0.000088 of transfer on a 627 KB page was the $0.15 figure,
+ * divided by a BINARY GB; Vercel counts a DECIMAL one (its docs write 5 TB as
+ * 5,000 GB, and never a GiB), so the priced side divides by 1,000,000,000
+ * bytes. The reads and the edge/ISR share beside the transfer are not
+ * transfer and do not move with it. So the anchor stays, and every KB of page
+ * carries the difference on top of it — a separate, named term rather than a
+ * re-based anchor, for the reason the anchor's own docblock gives.
  */
 export const TRANSFER_USD_PER_GB = Object.freeze({ calibrated: 0.15, priced: 0.35 })
 
-/** KB in one GB — binary, the unit a `bandwidthGb` band is denominated in. */
+/** KB in the binary GB the calibration divided by. A KB here is 1,024 bytes. */
 const KB_PER_GB = 1024 * 1024
 
-/** What the transfer re-price adds to every KB of page weight. */
-export const TRANSFER_REPRICE_USD_PER_GB =
-  TRANSFER_USD_PER_GB.priced - TRANSFER_USD_PER_GB.calibrated
+/** KB in the decimal GB Vercel bills transfer by. */
+const KB_PER_BILLED_GB = 1_000_000_000 / 1024
+
+/** What the transfer re-price adds to every KB of page weight, in USD. */
+export const TRANSFER_REPRICE_USD_PER_KB =
+  TRANSFER_USD_PER_GB.priced / KB_PER_BILLED_GB -
+  TRANSFER_USD_PER_GB.calibrated / KB_PER_GB
+
+/**
+ * The calibration's Firestore reads, re-priced at the database's location.
+ *
+ * The 627 KB load made ~40 reads, priced at $0.0000003 — the single-region
+ * list. Production's Firestore is `nam5` (read from the Admin API on
+ * 2026-10-01), at $0.0000006 a read, so the reads cost $0.000012 more on the
+ * calibration page. Carried per KB, the way the anchor has always carried its
+ * reads, so the rate stays proportional to the weight it prices.
+ */
+export const CALIBRATION_READS = Object.freeze({ count: 40, calibratedUsd: 0.0000003, pricedUsd: 0.0000006 })
+
+/** What the read re-price adds to every KB of page weight, in USD. */
+export const READ_REPRICE_USD_PER_KB =
+  (CALIBRATION_READS.count * (CALIBRATION_READS.pricedUsd - CALIBRATION_READS.calibratedUsd)) /
+  PAGE_VIEW_CALIBRATION_BASIS_KB
 
 /**
  * Dollars per encoded KB of page weight: the calibration's, with its transfer
- * share at the dearest region. The one per-KB figure both directions below
- * use.
+ * share at the dearest region and its reads at `nam5`. The one per-KB figure
+ * both directions below use.
  */
 export const USD_PER_KB =
   CALIBRATED_USD_PER_VIEW / PAGE_VIEW_CALIBRATION_BASIS_KB +
-  TRANSFER_REPRICE_USD_PER_GB / KB_PER_GB
+  TRANSFER_REPRICE_USD_PER_KB +
+  READ_REPRICE_USD_PER_KB
 
 /**
  * The grid `pricedForKb` and `measuredKb` are recorded on: a tenth of a KB.
@@ -196,10 +221,10 @@ export function rateForWeightKb(weightKb) {
  *
  * The comparison runs in THIS direction, in kilobytes, rather than forwards in
  * dollars, because the checked-in rate is not a round number of dollars per
- * view and cannot be. It is pinned at eleven decimals — $0.00035471473 a view
+ * view and cannot be. It is pinned at eleven decimals — $0.00039902751 a view
  * for 1012.8 KB — and no rounding of dollars-per-view reproduces a weight on
- * the tenth-of-a-KB grid. (The published $0.70 adds the CDN request term,
- * which this module does not read.)
+ * the tenth-of-a-KB grid. (The published $0.80 adds the request term, which
+ * this module does not read.)
  *
  * Kilobytes have no such problem. The record already writes both weights to a
  * tenth of a KB, so rounding the recovered weight to the same grid compares

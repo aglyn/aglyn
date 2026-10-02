@@ -31,12 +31,12 @@
  *
  * Free's ceiling is `BANDWIDTH_ABUSE_CEILING_FLOOR` = 100,000 page views
  * (3× its 2 GB band is only ~6,212, so the floor wins and gives a hobby
- * site real headroom). Pro's is 3× its 35 GB band = 108,709. 105,000 views
- * sits between the two, so the same count on the two plans takes opposite
- * branches — the negative control is the same number, not a smaller one.
- * Pro rather than Starter because Starter's 20 GB band, ×3, is under the
- * floor too, so Starter shares Free's ceiling and differs only in not being
- * degraded past it.
+ * site real headroom). Business's is 3× its 45 GB band = 139,769. 105,000
+ * views sits between the two, so the same count on the two plans takes
+ * opposite branches — the negative control is the same number, not a smaller
+ * one. Business rather than Starter or Pro because their 20 and 30 GB bands,
+ * ×3, are under the floor too, so they share Free's ceiling and differ only
+ * in not being degraded past it.
  *
  * ## What the loader reads
  *
@@ -205,18 +205,18 @@ const tripFor = (plan: string, pageViews: number, month = MONTH) => {
 describe('the ceiling arithmetic the loader is driven by', () => {
   it('separates the two plans at the same count — 105,000 views', () => {
     const free = tripFor('free', 105_000)
-    const pro = tripFor('pro', 105_000)
+    const business = tripFor('business', 105_000)
     expect(free.ceiling).toBe(100_000)
     expect(free.exceeded).toBe(true)
     expect(free.degraded).toBe(true)
-    expect(pro.ceiling).toBe(108_709)
-    expect(pro.exceeded).toBe(false)
+    expect(business.ceiling).toBe(139_769)
+    expect(business.exceeded).toBe(false)
     // Starter sits at the floor with Free, and is still not degraded past it.
     expect(tripFor('starter', 105_000).ceiling).toBe(100_000)
     expect(tripFor('starter', 105_000).degraded).toBe(false)
     // The metered plan never degrades even past its OWN ceiling.
-    expect(tripFor('pro', 1_000_000).exceeded).toBe(true)
-    expect(tripFor('pro', 1_000_000).degraded).toBe(false)
+    expect(tripFor('business', 1_000_000).exceeded).toBe(true)
+    expect(tripFor('business', 1_000_000).degraded).toBe(false)
   })
 
   it('the ladder never inverts — a bigger plan never gets a smaller ceiling', () => {
@@ -238,7 +238,7 @@ describe('the ceiling arithmetic the loader is driven by', () => {
     for (let i = 1; i < ladder.length; i++) {
       expect(ladder[i]).toBeGreaterThanOrEqual(ladder[i - 1])
     }
-    expect(ladder[ladder.length - 1]).toBe(3_012_792)
+    expect(ladder[ladder.length - 1]).toBe(2_453_718)
     expect(Number.isFinite(ladder[ladder.length - 1])).toBe(true)
     const contracted = Aglyn.checkBandwidthAbuseCeiling(
       { plan: 'enterprise', entitlements: { bandwidthGb: Aglyn.UNLIMITED } } as never,
@@ -287,7 +287,7 @@ describe('the tenant loader refuses a contained FREE site (AGL-2155)', () => {
   })
 
   it('THE NEGATIVE CONTROL: a PAYING host at the same 105,000 serves normally', async () => {
-    const trip = tripFor('pro', 105_000)
+    const trip = tripFor('business', 105_000)
     expect(trip.exceeded).toBe(false)
     // Nothing would have been written at all; planting it anyway is the
     // stronger test — even a flag that somehow existed must not degrade a

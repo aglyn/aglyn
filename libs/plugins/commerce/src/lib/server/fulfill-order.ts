@@ -16,14 +16,49 @@
  */
 
 import * as CommerceModel from '../model'
-import {
-  createResourceUid,
-  type OrderFulfilmentTarget,
-  type PluginApiHandler,
-  type RecordShipmentOutcome,
-  type RecordShipmentRequest,
-} from '@aglyn/aglyn/server'
+import { createResourceUid, type PluginApiHandler } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+
+/**
+ * The two fulfilment-side transitions, and ONLY those.
+ *
+ * `cancelled` releases stock under its own transaction and `refunded` moves
+ * money under another, so neither belongs to a write whose contract is "a
+ * forward status flip plus a timeline entry, no stock moved, no money moved".
+ * Widening this union is how a caller gets a door around the specifics those
+ * routes exist to enforce — the type is the door being shut.
+ */
+export type OrderFulfilmentTarget = 'fulfilled' | 'delivered'
+
+export interface RecordShipmentRequest {
+  /** Site that owns the order. The CALLER has already proven ownership. */
+  hostId: string
+  orderId: string
+  to: OrderFulfilmentTarget
+  /** Free text, e.g. `'UPS'`. Bounded by the caller. */
+  carrier?: string
+  trackingNumber?: string
+}
+
+/**
+ * What happened, as a domain fact rather than an HTTP status — each caller
+ * maps it into its own error vocabulary (the console route into its JSON
+ * shape, `/v1` into the published error envelope), because those two
+ * vocabularies are contracts with different audiences and neither may leak
+ * into the other.
+ *
+ * `already` is a SUCCESS and is distinct from `recorded` on purpose: a retried
+ * request finds the order in the target status and returns without writing, so
+ * a lost response can never append a second copy of the same shipment. A
+ * caller that folded the two together would still be correct about the state
+ * and would lose the only signal that says "this was your retry".
+ */
+export type RecordShipmentOutcome =
+  | { outcome: 'recorded' }
+  | { outcome: 'already' }
+  | { outcome: 'no_such_order' }
+  /** The transition rule refused. `from` is the status that refused it. */
+  | { outcome: 'blocked'; from: string }
 
 /**
  * Record a shipment — the transaction, with NO authorization of any kind
@@ -31,16 +66,13 @@ import { firebaseAdmin } from '@aglyn/tenant-data-admin'
  *
  * This is the whole of what `fulfillOrderHandler` used to do below its auth
  * preamble, lifted out unchanged so a SECOND caller can have it: the customer
- * REST API's `PATCH /v1/sites/{id}/orders/{id}`, which authenticates an org
- * API key and so shares not one line of this function's former preamble.
+ * REST API's `PATCH /v1/sites/{id}/orders/{id}`
+ * (`api-v1/orders-and-products.ts`), which authenticates an org API key and
+ * so shares not one line of this function's former preamble.
  *
- * Lifted rather than copied, and that is the entire point of the change. The
- * console app may not import this library (the `scope:app` boundary), so the
- * alternative on the table was a second `ORDER_TRANSITIONS` inside `/v1` —
- * two tables that drift into the API writing a status the console forbids.
- * One implementation, reached from the app through the core
- * `registerOrderFulfilmentService` registry, is the fix; see that registry's
- * docblock for why the edge runs that way.
+ * Lifted rather than copied, and that is the entire point: a second
+ * `ORDER_TRANSITIONS` inside `/v1` would be two tables that drift into the
+ * API writing a status the console forbids.
  *
  * **The caller authorizes.** Everything this function knows is the transition
  * rule. It does not know who is asking, and it will happily move any order on

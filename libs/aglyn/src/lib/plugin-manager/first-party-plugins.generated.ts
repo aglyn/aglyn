@@ -1276,7 +1276,14 @@ export const PLUGIN_INTERACTION_STEPS_DECLARED: readonly InteractionStepDeclarat
  * declared by that plugin (AGL-3080). Core names no plugin step.
  */
 export const PLUGIN_SERVER_STEPS_DECLARED: readonly ServerStepDeclaration[] = [
-
+  {
+    "pluginId": "data",
+    "type": "datasetAppend"
+  },
+  {
+    "pluginId": "data",
+    "type": "updateDataset"
+  },
 ]
 
 /**

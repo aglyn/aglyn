@@ -668,8 +668,8 @@ const rate = (v: number): string => {
  * columns are computed from the unrounded rate. Rounding the cost to six
  * decimals and then applying the markup to the rounded figure loses the
  * published price when the cost is not a clean decimal: a billed page view's
- * cost is pinned so that cost × 1.3 is exactly $0.70 per 1,000 views, and a
- * cost rounded to $0.538462 first would be ×1.3 = $0.700001, the right
+ * cost is pinned so that cost × 1.3 is exactly $0.80 per 1,000 views, and a
+ * cost rounded to $0.615385 first would be ×1.3 = $0.800001, the right
  * number rendered as the wrong one.
  */
 const METERED_ROWS: Array<{
@@ -1214,9 +1214,9 @@ const FRAME_STALE_CELLS: Record<string, { frame: string; why: string }> = {}
  */
 const BANDWIDTH_RESIZE_WHY =
   'the paid bandwidth bands were re-sized so every tier holds the margin ' +
-  "rule with an included gigabyte's transfer and CDN requests priced at the " +
-  'dearest region (AGL-3444). Redraw the four frames, re-extract, and this ' +
-  'entry comes out.'
+  "rule with every Vercel cost of an included gigabyte priced at the dearest " +
+  'region and its reads at nam5 (AGL-3444). Redraw the four frames, ' +
+  're-extract, and this entry comes out.'
 for (const [plan, frame] of [
   ['Starter', '50 GB'],
   ['Pro', '125 GB'],
@@ -1226,6 +1226,25 @@ for (const [plan, frame] of [
   ['Agency', '1.54 TB'],
 ] as const) {
   FRAME_STALE_CELLS[`Bandwidth / mo · ${plan}`] = { frame, why: BANDWIDTH_RESIZE_WHY }
+}
+
+/**
+ * The API bands re-sized once an API request is priced as the function it is
+ * (AGL-3444): each paid band is cut to the dollars it was sized to cost, at
+ * $0.117 per 1,000 requests. The Figma frames still carry the old bands.
+ */
+const API_RESIZE_WHY =
+  'every `/v1` request is now priced as a function invocation behind a CDN ' +
+  "request, at Vercel's dearest region, with its nam5 reads and its response " +
+  'transfer, and each API band is cut to the dollars it was sized to cost ' +
+  '(AGL-3444). Redraw the four frames, re-extract, and this entry comes out.'
+for (const [plan, frame] of [
+  ['Business', '100k / mo'],
+  ['Scale', '300k / mo'],
+  ['Advanced', '1M / mo'],
+  ['Agency', '5M / mo'],
+] as const) {
+  FRAME_STALE_CELLS[`API access · ${plan}`] = { frame, why: API_RESIZE_WHY }
 }
 
 /*
@@ -1339,19 +1358,21 @@ const FRAME_STALE_METERED: Record<
     why:
       'a billed page view now carries the CDN per-request charge past the ' +
       "hosting plan's allowance (`PAGE_VIEW_CDN_REQUEST_COST_USD`, AGL-1879), " +
-      "and both it and the view's transfer are priced at the CDN's dearest " +
-      'region (AGL-3444), so the published figure is $0.538462 / $0.70 per 1k ' +
-      'views. The four Figma frames still draw the cheapest-region weight-only ' +
-      'cost. Redraw them, re-extract, and this entry comes out.',
+      "and every Vercel term of a view — its transfer by the decimal GB, its " +
+      "requests and the analytics beacon's function — is priced at the dearest " +
+      'region and its reads at nam5 (AGL-3444), so the published figure is ' +
+      '$0.615385 / $0.80 per 1k views. The four Figma frames still draw the ' +
+      'cheapest-region weight-only cost. Redraw them, re-extract, and this ' +
+      'entry comes out.',
   },
   'Form submissions': {
     ourCost: '$0.05 / 1k',
     youPay: '$0.065 / 1k',
     why:
-      "a submission's function invocation is priced at Vercel's dearest region " +
-      '(AGL-3444), so the published figure is $0.053846 / $0.07 per 1k. The ' +
-      'four Figma frames still draw the cheapest-region figure. Redraw them, ' +
-      're-extract, and this entry comes out.',
+      "a submission's function invocation, CDN request and transfer are priced " +
+      "at Vercel's dearest region (AGL-3444), so the published figure is " +
+      '$0.061538 / $0.08 per 1k. The four Figma frames still draw the ' +
+      'cheapest-region figure. Redraw them, re-extract, and this entry comes out.',
   },
 }
 
@@ -1699,6 +1720,9 @@ columns.finish()
  *=========================================*/
 const TIERS_STALE: Record<string, Divergence> = {
   'Scale · spec 6': { frame: '290 GB bandwidth', why: BANDWIDTH_RESIZE_WHY },
+  'Scale · spec 4': { frame: '300k API requests/mo', why: API_RESIZE_WHY },
+  'Advanced · spec 4': { frame: '1M API requests/mo', why: API_RESIZE_WHY },
+  'Agency · spec 4': { frame: '5M API requests/mo', why: API_RESIZE_WHY },
 }
 
 const tierStrip = reconciler('scale strip', TIERS_STALE)
@@ -1775,7 +1799,12 @@ tierStrip.finish()
  * bound achieves nothing. The pair is only ever right together, and this is
  * what reads the half of it that lives on the page.
  *=========================================*/
-const USAGE_STALE: Record<string, Divergence> = {}
+const USAGE_STALE: Record<string, Divergence> = {
+  // At $0.117 per 1,000 requests of cost, the 50% retail floor is $0.234, so
+  // the two lowest rungs rose to $0.25 (AGL-3444); the frames still draw them.
+  'API requests, per 1,000 over limit · Advanced': { frame: '$0.20', why: API_RESIZE_WHY },
+  'API requests, per 1,000 over limit · Agency': { frame: '$0.15', why: API_RESIZE_WHY },
+}
 
 /**
  * The rate the product BILLS and the page has never stated.
@@ -2265,6 +2294,7 @@ for (const [label, d] of Object.entries(FRAME_STALE_METERED)) {
 for (const [key, d] of [
   ...Object.entries(FRAME_STALE_CELLS),
   ...Object.entries(TIERS_STALE).map(([k, v]) => [`scale strip · ${k}`, v] as const),
+  ...Object.entries(USAGE_STALE).map(([k, v]) => [`add-on capacity · ${k}`, v] as const),
 ]) {
   console.log(`  stale cell: ${key} — frame draws ${d.frame}`)
 }

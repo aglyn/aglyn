@@ -191,6 +191,11 @@ jest.mock('@aglyn/aglyn/server', () => ({
 }))
 
 import { GET } from '../app/api/v1/[[...route]]/route'
+import { registerPluginServerDeclarations } from '../constants/plugins.declarations.server.generated'
+// The console's boot, which registers the plugins' resources under a site —
+// the forms plugin's submissions, the commerce plugin's orders and products
+// (AGL-3080).
+beforeAll(() => registerPluginServerDeclarations())
 
 const BASE = 'https://app.aglyn.com/api/v1'
 

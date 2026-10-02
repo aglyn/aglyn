@@ -20,8 +20,10 @@
  * that points at a listed host is held through the page review, at any
  * workspace age; a lookup that fails holds nothing; and the daily re-check
  * finds a host listed after the page went live and sends the page back
- * through the same review. The screen, the review, the cache and the
- * re-check are real; the store, the workspace reads and Google are faked.
+ * through the same review. In `'url'` mode (AGL-3459) a listing that names
+ * one page on a clean site holds too, and the re-check walks the addresses
+ * the review noted. The screen, the review, the cache and the re-check are
+ * real; the store, the workspace reads and Google are faked.
  */
 
 type Doc = Record<string, unknown>
@@ -70,7 +72,9 @@ function collectionRef(path: string): any {
           docs: childrenOf(path)
             .filter((key) => {
               const actual = store.get(key)?.[field]
-              return op === '>' ? Number(actual) > Number(value) : actual === value
+              if (op === '>') return Number(actual) > Number(value)
+              if (op === '<') return Number(actual) < Number(value)
+              return actual === value
             })
             .map(snapshotOf),
         }),
@@ -108,6 +112,9 @@ function docRef(path: string): any {
     id: path.split('/').pop(),
     get: async () => snapshotOf(path),
     set: async (value: Doc) => write(path, value),
+    delete: async () => {
+      store.delete(path)
+    },
     collection: (name: string) => collectionRef(`${path}/${name}`),
   }
 }
@@ -158,10 +165,17 @@ import { recordServedPageVersion, resetHostedPageReviewMemoForTests, reviewHoste
 import { recheckLivePageLinks } from './link-reputation-review'
 import { screenOutboundSend } from './outbound-send-review'
 import { resetPageSecurityHoldMemoForTests } from './page-security-hold'
-import { resetWebRiskForTests, type WebRiskClient } from './web-risk'
+import {
+  resetWebRiskForTests,
+  WEB_RISK_URL_CACHE_COLLECTION,
+  WEB_RISK_URL_VERDICT_GRACE_MS,
+  type WebRiskClient,
+} from './web-risk'
 
 const HARVESTER = 'conservascaorvi.example'
 const listed = new Set<string>([HARVESTER])
+/** Addresses Web Risk lists on hosts it does not (AGL-3459). */
+const listedUrls = new Set<string>()
 const asked: string[] = []
 let failing = false
 const client: WebRiskClient = {
@@ -169,7 +183,7 @@ const client: WebRiskClient = {
     asked.push(uri)
     if (failing) throw new Error('deadline exceeded')
     const host = new URL(uri).hostname
-    return listed.has(host)
+    return listed.has(host) || listedUrls.has(uri)
       ? { threats: ['SOCIAL_ENGINEERING'], expireTimeMs: Date.now() + 5 * 60_000 }
       : { threats: [], expireTimeMs: null }
   },
@@ -193,6 +207,7 @@ beforeEach(() => {
   failing = false
   listed.clear()
   listed.add(HARVESTER)
+  listedUrls.clear()
   mockOrg = { name: 'Review', createdAt: NOW - 400 * DAY }
   mockNotifyRisk.mockClear()
   resetHostedPageReviewMemoForTests()
@@ -367,5 +382,94 @@ describe('the daily re-check', () => {
     const chunk = await recheckLivePageLinks({ nowMs: NOW })
     expect(chunk).toMatchObject({ listed: 0, unknown: 2, reviewed: 0, held: 0 })
     expect(rows()).toEqual([])
+  })
+})
+
+describe("a listed page on a clean site ('url' mode, AGL-3459)", () => {
+  const SITE = 'old-bakery.example'
+  const KIT = `https://${SITE}/wp-includes/js/secure/login.html`
+  /** A clean, established site, compromised at one path. */
+  const KIT_PAGE = {
+    a: node('muiTypography', { children: 'Your invoice' }),
+    b: node('muiButton', { children: 'View', href: `${KIT}?invoice=4471&email=jane@doe.example#pay` }),
+  }
+  const urlMode = () => store.set('platformSettings/webRisk', { lookupMode: 'url' })
+
+  beforeEach(() => {
+    listedUrls.add(KIT)
+  })
+
+  it('holds the page, asking about the host first and then the address — without its query or fragment', async () => {
+    urlMode()
+    mockOrg = { name: 'Review', createdAt: NOW - 2 * DAY }
+    await expect(review(KIT_PAGE)).resolves.toMatchObject({ outcome: 'held' })
+    expect(asked).toEqual([`https://${SITE}/`, KIT])
+    const [row] = rows()
+    expect((row['heldSend'] as Doc)['signals']).toEqual([
+      { code: 'web-risk-link', host: SITE, url: KIT, threats: ['SOCIAL_ENGINEERING'] },
+    ])
+    expect(String(row['details'])).toContain(`Links to ${KIT}, which Google Web Risk lists`)
+    expect(JSON.stringify(row)).not.toContain('jane@doe.example')
+  })
+
+  it("serves the same page in the default 'host' mode, having sent only the host", async () => {
+    mockOrg = { name: 'Review', createdAt: NOW - 2 * DAY }
+    await expect(review(KIT_PAGE)).resolves.toEqual({ outcome: 'serve' })
+    expect(asked).toEqual([`https://${SITE}/`])
+    expect(rows()).toEqual([])
+  })
+
+  it('notes the addresses beside the hosts for the re-check, without their query strings', async () => {
+    listedUrls.clear()
+    listed.clear()
+    await expect(review(KIT_PAGE, 'v8')).resolves.toEqual({ outcome: 'serve' })
+    await recordServedPageVersion('host-1', 'screen-1', 'v8')
+    expect(store.get('hosts/host-1/pageReviews/screen-1')).toMatchObject({
+      servedVersionId: 'v8',
+      foreignHosts: [SITE],
+      foreignHostCount: 1,
+      foreignLinks: [KIT],
+    })
+  })
+
+  it('re-checks the noted addresses, and sends a page whose address was listed later back through the review', async () => {
+    urlMode()
+    mockOrg = { name: 'Review', createdAt: NOW - 5 * DAY }
+    store.set('hosts/host-1', { name: 'Review' })
+    store.set('hosts/host-1/pageReviews/screen-1', {
+      servedVersionId: 'v3',
+      foreignHosts: [SITE],
+      foreignHostCount: 1,
+      foreignLinks: [KIT, `https://${SITE}/menu`],
+    })
+    const chunk = await recheckLivePageLinks({ nowMs: NOW })
+    expect(chunk).toMatchObject({ pages: 1, hosts: 1, addresses: 2, listed: 1, reviewed: 1, held: 1 })
+    expect((rows()[0]['heldSend'] as Doc)['signals']).toEqual([
+      { code: 'web-risk-link', host: SITE, url: KIT, threats: ['SOCIAL_ENGINEERING'] },
+    ])
+  })
+
+  it("re-checks hosts only in 'host' mode, whatever addresses were noted", async () => {
+    store.set('hosts/host-1', { name: 'Review' })
+    store.set('hosts/host-1/pageReviews/screen-1', {
+      servedVersionId: 'v3',
+      foreignHosts: [SITE],
+      foreignHostCount: 1,
+      foreignLinks: [KIT],
+    })
+    const chunk = await recheckLivePageLinks({ nowMs: NOW })
+    expect(chunk).toMatchObject({ addresses: 0, listed: 0, reviewed: 0 })
+    expect(asked).toEqual([`https://${SITE}/`])
+  })
+
+  it('deletes addresses’ answers long expired on the first chunk of a walk, and not on a later one', async () => {
+    const stale = `${WEB_RISK_URL_CACHE_COLLECTION}/stale`
+    store.set(stale, { url: KIT, expiresAtMs: NOW - WEB_RISK_URL_VERDICT_GRACE_MS - 1 })
+    await expect(recheckLivePageLinks({ nowMs: NOW, cursor: 'host-0' })).resolves.toMatchObject({
+      reapedAddressVerdicts: 0,
+    })
+    expect(store.has(stale)).toBe(true)
+    await expect(recheckLivePageLinks({ nowMs: NOW })).resolves.toMatchObject({ reapedAddressVerdicts: 1 })
+    expect(store.has(stale)).toBe(false)
   })
 })

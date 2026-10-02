@@ -60,7 +60,7 @@ import { linkReputationSignals } from '@aglyn/shared-util-email/link-reputation'
 import {
   describePhishingScreenSignals,
   isYoungWorkspaceAge,
-  linkHostsIn,
+  linkUrlsIn,
   OUTBOUND_REVIEW_YOUNG_DAYS,
   type PhishingScreenInput,
   type PhishingScreenSignal,
@@ -469,10 +469,11 @@ export async function screenOutboundSend(
     bodies: request.bodies,
     ...identity,
   })
-  // Every foreign host it links to, against the reputation list (AGL-3451):
-  // a listed host holds for every workspace, a failed lookup holds nothing.
+  // Every foreign link it carries, against the reputation list (AGL-3451):
+  // its host, and in 'url' mode its address (AGL-3459). A listing holds for
+  // every workspace, a failed lookup holds nothing.
   const reputation = await linkReputationSignals(
-    linkHostsIn([request.subject, request.preheader, ...request.bodies].filter(Boolean).join('\n')),
+    linkUrlsIn([request.subject, request.preheader, ...request.bodies].filter(Boolean).join('\n')),
     { ownDomains: identity.ownDomains },
   )
   const signals = signalsThatHold([...verdict.signals, ...reputation], { ageDays })

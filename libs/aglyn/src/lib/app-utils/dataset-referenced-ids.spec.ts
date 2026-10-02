@@ -168,7 +168,8 @@ describe('every record write path carries the index', () => {
   // The form-submit leg: the data plugin's form record target (AGL-3080).
   const FORM_SUBMIT =
     'libs/plugins/data/src/lib/form-target/dataset-form-record-target.server.ts'
-  const EVENT_ACTIONS = 'libs/plugins/workflows/src/lib/engine/run-event-actions.ts'
+  // The automation steps: the data plugin runs them for the engine (AGL-3080).
+  const EVENT_ACTIONS = 'libs/plugins/data/src/lib/server/dataset-steps.server.ts'
   // A site restore: the data plugin's section of the bundle (AGL-3080).
   const SITE_IMPORT =
     'libs/plugins/data/src/lib/site-bundle/datasets-site-bundle.server.ts'

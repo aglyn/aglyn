@@ -93,6 +93,7 @@
         "console": "registerFormsConsole",
         "consoleApi": "registerFormsConsoleApi",
         "serverDeclarations": "registerFormsServerDeclarations",
+        "consoleServerDeclarations": "registerFormsConsoleServerDeclarations",
         "planEntitlements": "formsPlanEntitlements",
         "usageAxes": "formsUsageAxes"
       },
@@ -266,6 +267,7 @@
         "tenantApi": "registerCommerceApi",
         "consoleApi": "registerCommerceConsoleApi",
         "serverDeclarations": "registerCommerceServerDeclarations",
+        "consoleServerDeclarations": "registerCommerceConsoleServerDeclarations",
         "tenantEmails": "commerceTenantEmails",
         "planEntitlements": "commercePlanEntitlements",
         "starterTemplates": "commerceStarterTemplates"
@@ -891,6 +893,14 @@
         {
           "$comment": "A dataset's schema, published from a dataset and installed as a new, empty one; the installer asks this plugin to read, write and update the copy, and never reads the datasets collection itself.",
           "type": "datasetSchema"
+        }
+      ],
+      "serverSteps": [
+        {
+          "type": "datasetAppend"
+        },
+        {
+          "type": "updateDataset"
         }
       ],
       "catalog": {

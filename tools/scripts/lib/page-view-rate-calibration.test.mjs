@@ -45,7 +45,9 @@ import { createResolver } from '../../lint-rules/lib/app-router-graph.mjs'
 import {
   CALIBRATED_USD_PER_VIEW,
   PAGE_VIEW_CALIBRATION_BASIS_KB,
-  TRANSFER_REPRICE_USD_PER_GB,
+  CALIBRATION_READS,
+  READ_REPRICE_USD_PER_KB,
+  TRANSFER_REPRICE_USD_PER_KB,
   TRANSFER_USD_PER_GB,
   USD_PER_KB,
   basisKbForRate,
@@ -139,25 +141,30 @@ function consistentInput(overrides = {}) {
 
 // ── the formula's anchor ───────────────────────────────────────────────────
 
-/** Equal to within float noise — the per-KB figure is a sum of two quotients. */
+/** Equal to within float noise — the per-KB figure is a sum of quotients. */
 const close = (a, b) => Math.abs(a - b) < 1e-15
 
-test('the formula reproduces the calibration it was derived from, plus the transfer re-price', () => {
+test('the formula reproduces the calibration it was derived from, plus the named re-prices', () => {
   // The one fixed point: $0.0001 was measured at 627 KB. If this ever fails,
   // the rate for every other weight is being derived from a moved anchor. The
   // 2026-09-09 re-peg moved the WEIGHT the anchor is applied to and left the
   // anchor itself alone, which is the only reason the rate is checkable — and
-  // the 2026-10-01 re-price (AGL-3444) adds a NAMED term to it rather than
-  // moving it: the calibration's transfer, re-priced from the cheapest
-  // region's $0.15 a GB to the dearest's $0.35.
+  // the 2026-10-01 re-prices (AGL-3444) add NAMED terms to it rather than
+  // moving it: the calibration's transfer, from the cheapest region's $0.15
+  // per binary GB to the dearest's $0.35 per decimal GB, and its ~40 reads
+  // from the single-region $0.0000003 to nam5's $0.0000006.
   assert.equal(TRANSFER_USD_PER_GB.calibrated, 0.15)
   assert.equal(TRANSFER_USD_PER_GB.priced, 0.35)
-  assert.ok(close(TRANSFER_REPRICE_USD_PER_GB, 0.2))
-  const transferAddedAtBasis =
-    (PAGE_VIEW_CALIBRATION_BASIS_KB * TRANSFER_REPRICE_USD_PER_GB) / (1024 * 1024)
+  assert.ok(
+    close(TRANSFER_REPRICE_USD_PER_KB, (0.35 * 1024) / 1e9 - 0.15 / (1024 * 1024)),
+  )
+  assert.deepEqual({ ...CALIBRATION_READS }, { count: 40, calibratedUsd: 0.0000003, pricedUsd: 0.0000006 })
+  assert.ok(close(READ_REPRICE_USD_PER_KB * PAGE_VIEW_CALIBRATION_BASIS_KB, 0.000012))
+  const addedAtBasis =
+    PAGE_VIEW_CALIBRATION_BASIS_KB * (TRANSFER_REPRICE_USD_PER_KB + READ_REPRICE_USD_PER_KB)
   assert.ok(
     close(
-      rateForWeightKb(PAGE_VIEW_CALIBRATION_BASIS_KB) - transferAddedAtBasis,
+      rateForWeightKb(PAGE_VIEW_CALIBRATION_BASIS_KB) - addedAtBasis,
       CALIBRATED_USD_PER_VIEW,
     ),
   )
@@ -166,7 +173,8 @@ test('the formula reproduces the calibration it was derived from, plus the trans
     PAGE_VIEW_CALIBRATION_BASIS_KB,
   )
   // …and the anchor alone is now a LIGHTER page than it was measured at: the
-  // same dollars buy less page once every KB carries the dearer transfer.
+  // same dollars buy less page once every KB carries the dearer transfer and
+  // reads.
   assert.ok(basisKbForRate(CALIBRATED_USD_PER_VIEW) < PAGE_VIEW_CALIBRATION_BASIS_KB)
 })
 
@@ -232,24 +240,26 @@ test('the rate matches the weight it CLAIMS to be priced for', () => {
 
 test('the checked-in rate is priced in dollars, not in kilobytes', () => {
   // Why the gate compares kilobytes and not dollars. The rate is the
-  // 2026-09-09 peg — pinned so it marked up to a round $0.21 — plus the
-  // transfer re-price at the 1012.8 KB basis, so it is a long decimal that no
+  // 2026-09-09 peg — pinned so it marked up to a round $0.21 — plus the two
+  // re-prices at the 1012.8 KB basis, so it is a long decimal that no
   // rounding of a weight reproduces. It sits within a grid step of the exact
   // implication, and that is the whole of the slack the comparison allows.
   const { meteredRate } = realRates()
   const exact = rateForWeightKb(CALIBRATION.pricedForKb)
   assert.equal(
     meteredRate,
-    Number((0.00016153846 + (1012.8 * TRANSFER_REPRICE_USD_PER_GB) / (1024 * 1024)).toFixed(11)),
+    Number(
+      (0.00016153846 + 1012.8 * (TRANSFER_REPRICE_USD_PER_KB + READ_REPRICE_USD_PER_KB)).toFixed(11),
+    ),
   )
   assert.notEqual(meteredRate, exact)
   const apartInKb = Math.abs(meteredRate - exact) / USD_PER_KB
   assert.ok(apartInKb < 0.05, `${apartInKb} KB apart is past the grid`)
   // The marked-up weight term alone is not a published figure any more: a
-  // billed view adds the CDN request term, and the sum lands on $0.70.
+  // billed view adds the request term, and the sum lands on $0.80.
   assert.notEqual(
     Math.round(meteredRate * METERED_MARKUP * 1000 * 100) / 100,
-    0.7,
+    0.8,
   )
 })
 
@@ -378,16 +388,27 @@ test('the pair states the cost of a gigabyte, which neither half does alone', ()
   // this file rather than believed.
   const { meteredRate, transferBytes } = realRates()
   assert.ok(
-    Math.abs(costPerGbUsd(meteredRate, transferBytes) - 0.36724) < 0.00001,
+    Math.abs(costPerGbUsd(meteredRate, transferBytes) - 0.41312) < 0.00001,
     `a GB costs ${costPerGbUsd(meteredRate, transferBytes)}`,
   )
-  // A gigabyte of included bandwidth IS a gigabyte of transfer, so the
-  // re-price adds exactly the $0.20 a GB it names to the cost of a gigabyte.
+  // A gigabyte of included bandwidth IS a binary gigabyte of transfer, which
+  // Vercel bills as 1.0737 of its decimal ones — so the transfer re-price
+  // adds $0.35 × 1.0737 − $0.15 = $0.22581 to the cost of a gigabyte, and
+  // the read re-price the calibration's reads per KB × 1,048,576 KB.
+  const transferPerGb = 0.35 * (1024 ** 3 / 1e9) - 0.15
+  const readsPerGb = READ_REPRICE_USD_PER_KB * 1024 * 1024
+  assert.ok(Math.abs(transferPerGb - 0.22581) < 0.00001)
+  assert.ok(Math.abs(readsPerGb - 0.02007) < 0.00001)
   assert.ok(
     Math.abs(
       costPerGbUsd(meteredRate, transferBytes) -
-        costPerGbUsd(rateForWeightKb(1012.8) - (1012.8 * 0.2) / (1024 * 1024), transferBytes) -
-        0.2,
+        costPerGbUsd(
+          rateForWeightKb(1012.8) -
+            1012.8 * (TRANSFER_REPRICE_USD_PER_KB + READ_REPRICE_USD_PER_KB),
+          transferBytes,
+        ) -
+        transferPerGb -
+        readsPerGb,
     ) < 0.00001,
   )
   // …and the unpaired shape the 2026-09-09 re-peg once left behind: the same
@@ -707,5 +728,5 @@ test('the CLI passes on the real tree and states the headroom', () => {
   // The pair, and the quantity it implies. A green run that printed the rate
   // without the bytes beside it would let the two part again in silence.
   assert.match(out, /paired with 1037107\.2 bytes per view/)
-  assert.match(out, /one GB of included bandwidth costs \$0\.36724 in weight/)
+  assert.match(out, /one GB of included bandwidth costs \$0\.41312 in weight/)
 })

@@ -660,32 +660,28 @@ describe('access', () => {
 })
 
 /**
- * AGL-2461: the transaction is now a CAPABILITY, and `/v1` is its second
- * caller.
+ * AGL-2461: the transaction is shared, and `/v1` is its second caller.
  *
  * Everything above exercises the console route, which authenticates a Firebase
  * ID token. The customer REST API authenticates an org API key with no uid, so
- * it shares none of that preamble — and `apps/console` may not import this
- * library at all (`eslint.config.mjs`, `scope:app` →
- * `notDependOnLibsWithTags:['aglyn:addons']`). The write therefore had to be
- * reachable without the route: `recordOrderShipment` is exactly what the route
- * used to do below its auth, lifted out, and the app reaches it through the
- * core `registerOrderFulfilmentService` registry.
+ * it shares none of that preamble. `recordOrderShipment` is exactly what the
+ * route used to do below its auth, lifted out, and this plugin's `/v1` orders
+ * handler (`api-v1/orders-and-products.ts`) calls it.
  *
  * These cases assert the two halves that could rot independently:
  *
  * - the lifted function still enforces AGL-1819's guarantees when called with
  *   no authentication anywhere in sight (that is the whole risk of lifting
  *   it), and
- * - the capability is actually REGISTERED — an unregistered one is a `/v1`
- *   404 with every unit test in both projects still green, which is the
- *   AGL-2227 shape.
+ * - the `/v1` resource is actually REGISTERED and records through it — an
+ *   unregistered one is a `/v1` 404 with every unit test in both projects
+ *   still green, which is the AGL-2227 shape.
  *
  * Non-vacuity, each mutation reverted: dropping the `canTransitionOrder` call
  * reddens the refunded case, dropping the already-in-target return reddens the
  * duplicate-shipment case, computing the timeline from an empty order reddens
- * the timeline case, and deleting the `registerOrderFulfilmentService(...)`
- * call from `server.ts` reddens all four wire cases.
+ * the timeline case, and deleting the `orders` registration from the console
+ * server declarations reddens the wiring cases.
  */
 describe('recordOrderShipment is the shared, PRE-AUTHORIZED transaction (AGL-2461)', () => {
   it('re-asks the transition rule with no caller identity at all', async () => {
@@ -759,48 +755,42 @@ describe('recordOrderShipment is the shared, PRE-AUTHORIZED transaction (AGL-246
   })
 })
 
-describe('the capability is WIRED, not merely written (AGL-2461)', () => {
+describe('the /v1 orders resource is WIRED, not merely written (AGL-2461, AGL-3080)', () => {
   /**
    * Source-text assertions rather than an import, for the reason
-   * `recovery-jobs-scheduled.spec.ts` gives: `server.ts` pulls in
-   * firebase-admin and Stripe at module scope, so importing it here would
-   * mean a closed-world mock of the entire commerce backend to observe one
-   * registry call.
+   * `recovery-jobs-scheduled.spec.ts` gives: the handler module pulls in
+   * firebase-admin at module scope, so importing it here would mean a
+   * closed-world mock of the commerce backend to observe one registration.
+   * The handler's behavior on the wire is `api-v1-order-fulfilment.spec.ts`'s.
    */
-  const serverBarrel = readFileSync(
-    join(__dirname, '..', 'server.ts'),
+  const declarations = readFileSync(
+    join(__dirname, '..', 'declarations.console-server.ts'),
+    'utf8',
+  )
+  const handler = readFileSync(
+    join(__dirname, 'api-v1', 'orders-and-products.ts'),
     'utf8',
   )
 
-  it('registers the order-fulfilment service', () => {
-    expect(serverBarrel).toContain('registerOrderFulfilmentService({')
+  it('serves /v1/sites/{siteId}/orders under the commerce plugin id', () => {
+    expect(declarations).toMatch(/registerApiV1SiteResource\(\s*'orders'/)
+    // A literal that drifts from the catalog id would refuse the
+    // registration against the loader's marker.
+    expect(declarations).toContain('pluginId: BUNDLE_ID')
   })
 
-  it('registers it under the commerce plugin id, from the shared BUNDLE_ID', () => {
-    const block = new RegExp(
-      'registerOrderFulfilmentService\\(\\{[\\s\\S]*?\\n {2}\\}\\)',
-    ).exec(serverBarrel)
-    expect(block).not.toBeNull()
-    // `pluginId` is what the app gates per-site enablement on, so a literal
-    // that drifts from the catalog id would silently 404 every write.
-    expect(block?.[0]).toContain('pluginId: BUNDLE_ID')
-    // The SAME function the console route calls — a second implementation
-    // here is the drift this whole change exists to prevent.
-    expect(block?.[0]).toContain('recordShipment: recordOrderShipment')
+  it('records a shipment through the SAME function the console route calls', () => {
+    // A second implementation in the handler is the drift this whole change
+    // exists to prevent.
+    expect(handler).toContain('await recordOrderShipment({')
+    expect(handler).not.toMatch(/\.update\(|runTransaction/)
   })
 
-  it('registers inside the consoleApi surface the /v1 loader activates', () => {
-    // `/v1` reaches the registry through `ensureAll(['consoleApi'])`. A
-    // registration at module scope, or inside the site-facing
-    // `registerCommerceApi`, would leave the capability absent for the caller
-    // that needs it while every test here still passed.
-    const consoleApi = serverBarrel.slice(
-      serverBarrel.indexOf('export function registerCommerceConsoleApi'),
-    )
-    expect(consoleApi).toContain('registerOrderFulfilmentService({')
+  it('gates the write on the commerce plugin being on for the site', () => {
+    expect(handler).toContain('isHostPluginEnabled(ctx.org, hostSnap.data(), BUNDLE_ID)')
   })
 
-  it('exports recordOrderShipment for that registration to reference', () => {
+  it('exports recordOrderShipment for that handler to reference', () => {
     expect(
       readFileSync(join(__dirname, 'fulfill-order.ts'), 'utf8'),
     ).toContain('export async function recordOrderShipment(')
