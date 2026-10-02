@@ -48,6 +48,13 @@ import {
   pluginSitemapSectionPath,
   type ResolvedPluginSitemapSection,
 } from '@aglyn/aglyn/plugin-manager/plugin-sitemap-sections'
+import {
+  isPluginSitemapChildKey,
+  listPluginSitemapReaders,
+  parsePluginSitemapChildSection,
+  pluginSitemapChildSection,
+  pluginSitemapReader,
+} from '@aglyn/aglyn/plugin-manager/plugin-sitemap-readers'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import {
   tenantDataTag,
@@ -301,6 +308,26 @@ async function buildSitemapIndex(
     }
   }
 
+  // The families a plugin's reader lists (AGL-3475) — a child per record
+  // template, say — each sized by the count its reader gives. A reader that
+  // is declared but cannot answer degrades the index rather than shrinking
+  // it, so the cached index keeps every section it had.
+  for (const declared of listPluginSitemapReaders()) {
+    try {
+      const reader = await pluginSitemapReader(declared)
+      for (const child of await reader.children({ hostId: host.$id })) {
+        if (!isPluginSitemapChildKey(child.key)) continue
+        sections.push({
+          section: pluginSitemapChildSection(declared.section, child.key),
+          pages: sitemapPageCount(child.urls),
+        })
+      }
+    } catch (error) {
+      console.error('sitemap reader failed', declared.section, error)
+      degraded = true
+    }
+  }
+
   try {
     const collections = await readCollections(host.$id)
     // Entry counts are independent, so they overlap instead of queueing: one
@@ -411,6 +438,8 @@ async function buildSectionUrls(
   }
   const declared = pluginSitemapSection(section)
   if (declared) return buildDeclaredSectionUrls(host.$id, base, declared, page)
+  const child = parsePluginSitemapChildSection(section)
+  if (child) return buildReaderSectionUrls(host.$id, base, child, page)
   if (section === SITEMAP_SECTION_AUTHORS) {
     return buildAuthorUrls(host.$id, base, page)
   }
@@ -640,6 +669,40 @@ async function buildDeclaredSectionUrls(
     return { urls, degraded: true }
   }
   return { urls, degraded: false }
+}
+
+/**
+ * One page of a child a plugin's reader lists (AGL-3475): the reader pages its
+ * own URLs, and the route only makes them absolute and dates them. A path
+ * that is not site-absolute is dropped rather than published as a broken
+ * `<loc>`; a reader that throws degrades the response, which keeps the copy
+ * already cached.
+ */
+async function buildReaderSectionUrls(
+  hostId: string,
+  base: string,
+  child: NonNullable<ReturnType<typeof parsePluginSitemapChildSection>>,
+  page: number,
+): Promise<{ urls: SitemapLocation[]; degraded: boolean }> {
+  try {
+    const reader = await pluginSitemapReader(child.declaration)
+    const rows = await reader.urls({
+      hostId,
+      key: child.key,
+      page,
+      perPage: SITEMAP_URLS_PER_FILE,
+    })
+    return {
+      urls: rows
+        .filter((row) => typeof row.path === 'string' && row.path.startsWith('/'))
+        .slice(0, SITEMAP_URLS_PER_FILE)
+        .map((row) => ({ loc: `${base}${row.path}`, lastmod: sitemapLastmod(row.lastmod) })),
+      degraded: false,
+    }
+  } catch (error) {
+    console.error('sitemap reader failed', child.declaration.section, error)
+    return { urls: [], degraded: true }
+  }
 }
 
 /**

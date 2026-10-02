@@ -1952,6 +1952,54 @@ function sitemapSectionRows() {
 }
 
 /**
+ * The child-sitemap families each plugin's READER lists (AGL-3475), for pages
+ * no single site collection describes — record pages, served at a base each
+ * site picks from rows the organization keeps.
+ *
+ * Checked here: one owner per family, a lowercase segment that is none of the
+ * platform's sections, no `content-` and no plugin's declared collection
+ * section, no family that is a prefix of another (a child name has to say
+ * which family it is), and a `serverDeclarations` registrar to register the
+ * reader from.
+ */
+function sitemapReaderRows() {
+  const rows = []
+  const owners = new Map()
+  const collectionSections = new Set(sitemapSectionRows().map((row) => row.section))
+  for (const plugin of config.plugins) {
+    const declared = plugin.sitemapReaders
+    if (!declared) continue
+    const where = `plugins.config.json: "${plugin.id}" sitemapReaders`
+    if (!Array.isArray(declared) || !declared.length) {
+      throw new Error(`${where} is present and declares nothing — drop it, or name the section`)
+    }
+    if (!plugin.register?.serverDeclarations) {
+      throw new Error(`${where}: a reader registers from serverDeclarations, which "${plugin.id}" does not declare`)
+    }
+    for (const entry of declared) {
+      const { $comment: _note, ...declaration } = entry
+      const { section, ...rest } = declaration
+      if (Object.keys(rest).length) throw new Error(`${where}: a reader declares only its "section"`)
+      if (typeof section !== 'string' || !/^[a-z][a-z0-9]*$/.test(section)) {
+        throw new Error(`${where}: a section is a lowercase word, no hyphens — its children are "{section}-{key}"`)
+      }
+      const what = `${where} "${section}"`
+      if (CORE_SITEMAP_SECTIONS.includes(section) || section === 'content') {
+        throw new Error(`${what} is a section the platform builds itself`)
+      }
+      if ([...collectionSections].some((name) => name === section || name.startsWith(`${section}-`))) {
+        throw new Error(`${what} collides with a declared sitemap section`)
+      }
+      const held = owners.get(section)
+      if (held) throw new Error(`${what} is already declared by "${held}" — one section has one owner`)
+      owners.set(section, plugin.id)
+      rows.push({ pluginId: plugin.id, section })
+    }
+  }
+  return rows
+}
+
+/**
  * The ORG collections each plugin owns, for the media-usage scan (AGL-3273).
  *
  * The same checks as the host rows, minus the ones that only mean something
@@ -2998,7 +3046,7 @@ function catalogContent(videoEmbedRows, planEntitlements, usageAxes) {
  * the types and the resolvers in \`enabled-plugins.ts\`; it holds no row.
  */
 
-import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'\nimport type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'\nimport type { ResolvedPluginSitemapSection } from './plugin-sitemap-sections'\nimport type { ResolvedPluginSiteBundleSectionDeclaration } from './plugin-site-bundle'\nimport type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'\nimport type { ResolvedPluginEntityPicker } from './plugin-entity-pickers'\nimport type { ResolvedPluginRecordPage } from './plugin-record-pages'\nimport type { ResolvedVisitorDoor } from './plugin-visitor-doors'\nimport type { ResolvedPluginCostAxis, ResolvedPluginSpendLine, ResolvedPluginUsageBand, ResolvedPluginUsageMeter } from './plugin-usage-axes'\nimport type { ResolvedPluginPlanFeature, ResolvedPluginPlanQuota } from './plugin-plan-entitlements'\nimport type { FunctionBindings } from './plugin-contributions'\nimport type { PluginDistribution } from './plugin-distribution'\nimport type { RepeatSourceDeclaration } from './repeat-rows'\nimport type { PluginTemplateSource } from './plugin-template-sources'\nimport type { FormRecordTargetDeclaration } from './submission-record-target'\nimport type { ArtifactTypeDeclaration } from './plugin-artifact-types'\nimport type { ResolvedBesignerDocument } from './besigner-documents'\nimport type { PluginOrgKeyedCollection } from './plugin-org-erasure'\nimport type { ResolvedVideoEmbedProvider } from './video-embed-provider'\nimport type { AnalyticsProviderDeclaration } from '../app-utils/analytics-provider'\nimport type { InteractionStepDeclaration } from '../app-utils/site-interactions'\nimport type { ServerStepDeclaration } from './plugin-server-steps'\nimport type { InteractionRecipeDeclaration } from './interaction-recipes'\nimport type { NotificationCategoryDeclaration, NotificationDigestDeclaration } from '../app-utils/notifications'
+import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'\nimport type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'\nimport type { ResolvedPluginSitemapSection } from './plugin-sitemap-sections'\nimport type { ResolvedPluginSitemapReaderDeclaration } from './plugin-sitemap-readers'\nimport type { ResolvedPluginSiteBundleSectionDeclaration } from './plugin-site-bundle'\nimport type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'\nimport type { ResolvedPluginEntityPicker } from './plugin-entity-pickers'\nimport type { ResolvedPluginRecordPage } from './plugin-record-pages'\nimport type { ResolvedVisitorDoor } from './plugin-visitor-doors'\nimport type { ResolvedPluginCostAxis, ResolvedPluginSpendLine, ResolvedPluginUsageBand, ResolvedPluginUsageMeter } from './plugin-usage-axes'\nimport type { ResolvedPluginPlanFeature, ResolvedPluginPlanQuota } from './plugin-plan-entitlements'\nimport type { FunctionBindings } from './plugin-contributions'\nimport type { PluginDistribution } from './plugin-distribution'\nimport type { RepeatSourceDeclaration } from './repeat-rows'\nimport type { PluginTemplateSource } from './plugin-template-sources'\nimport type { FormRecordTargetDeclaration } from './submission-record-target'\nimport type { ArtifactTypeDeclaration } from './plugin-artifact-types'\nimport type { ResolvedBesignerDocument } from './besigner-documents'\nimport type { PluginOrgKeyedCollection } from './plugin-org-erasure'\nimport type { ResolvedVideoEmbedProvider } from './video-embed-provider'\nimport type { AnalyticsProviderDeclaration } from '../app-utils/analytics-provider'\nimport type { InteractionStepDeclaration } from '../app-utils/site-interactions'\nimport type { ServerStepDeclaration } from './plugin-server-steps'\nimport type { InteractionRecipeDeclaration } from './interaction-recipes'\nimport type { NotificationCategoryDeclaration, NotificationDigestDeclaration } from '../app-utils/notifications'
 
 export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
 ${rows.map((row) => `  ${indent(JSON.stringify(row.plugin, null, 2))},`).join('\n')}
@@ -3031,6 +3079,12 @@ ${hostCollectionRows().map((row) => `  ${indent(JSON.stringify(row, null, 2))},`
 export const PLUGIN_SITEMAP_SECTIONS_DECLARED: readonly ResolvedPluginSitemapSection[] = [
 ${sitemapSectionRows().map((row) => `  ${indent(JSON.stringify(row, null, 2))},`).join('\n')}
 ]
+
+/**
+ * Every child-sitemap family a first-party plugin's reader lists, declared by
+ * that plugin (AGL-3475), in the order the index lists them.
+ */
+export const PLUGIN_SITEMAP_READERS_DECLARED: readonly ResolvedPluginSitemapReaderDeclaration[] = ${JSON.stringify(sitemapReaderRows(), null, 2)}
 
 /**
  * Every section of the whole-site backup a first-party plugin answers for,

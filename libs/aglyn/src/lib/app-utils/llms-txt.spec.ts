@@ -175,3 +175,36 @@ describe('buildLlmsTxt — escaping', () => {
     expect(out).toContain('- [Two lines](https://acme.test/x)')
   })
 })
+
+describe('buildLlmsTxt — pages served one per record (AGL-3475)', () => {
+  it('links a group to its listing page when the site publishes one', () => {
+    const out = buildLlmsTxt({
+      siteName: 'EDR Construction',
+      origin: ORIGIN,
+      pageGroups: [{ name: 'Services', base: 'services', count: 12, hasListing: true }],
+    })
+    expect(out).toContain(
+      '- [Services](https://acme.test/services): 12 pages under `/services/`, one per services entry, linked from this page',
+    )
+  })
+
+  it('sends a group with no listing to the sitemap rather than to an address that serves nothing', () => {
+    const out = buildLlmsTxt({
+      siteName: 'EDR Construction',
+      origin: ORIGIN,
+      pageGroups: [{ name: 'Locations', base: 'service-areas', count: 1 }],
+    })
+    expect(out).toContain(
+      '- [Locations](https://acme.test/sitemap.xml): 1 page under `/service-areas/`, one per entry; the sitemap lists every one',
+    )
+  })
+
+  it('names no group that has no pages yet', () => {
+    const out = buildLlmsTxt({
+      siteName: 'EDR Construction',
+      origin: ORIGIN,
+      pageGroups: [{ name: 'Team', base: 'team', count: 0 }],
+    })
+    expect(out).not.toContain('/team/')
+  })
+})

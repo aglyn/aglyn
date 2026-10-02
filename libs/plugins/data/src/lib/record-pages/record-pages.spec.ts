@@ -37,6 +37,7 @@ import {
   recordPagePath,
   referencedRecordIds,
   uniqueRecordAddresses,
+  withRecordPageUrls,
 } from './record-pages'
 
 const SERVICES: DatasetModel = {
@@ -284,5 +285,33 @@ describe('the records a page’s references point at', () => {
       ['people', ['p1', 'p2']],
       ['areas', ['a1']],
     ])
+  })
+})
+
+describe('a listing’s link to each record page', () => {
+  const binding = { base: 'services', slugField: 'slug' }
+  const rows = [
+    { $id: 'r1', name: 'Roofing', slug: 'roofing' },
+    { $id: 'r2', name: 'No address yet' },
+  ]
+
+  it('is {{item.url}} on every row that has an address', () => {
+    expect(withRecordPageUrls(rows, binding, SERVICES)).toEqual([
+      { $id: 'r1', name: 'Roofing', slug: 'roofing', url: '/services/roofing' },
+      { $id: 'r2', name: 'No address yet' },
+    ])
+  })
+
+  it('is nothing on a site with no record template for the dataset', () => {
+    expect(withRecordPageUrls(rows, null, SERVICES)).toBe(rows)
+  })
+
+  it('never shadows a field of the dataset’s own called url', () => {
+    const model: DatasetModel = {
+      ...SERVICES,
+      order: [...SERVICES.order, 'url'],
+      fields: { ...SERVICES.fields, url: { name: 'Website', type: 'text' } },
+    }
+    expect(withRecordPageUrls(rows, binding, model)).toBe(rows)
   })
 })

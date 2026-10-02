@@ -474,3 +474,35 @@ export function referencedRecordIds(
   }
   return wanted
 }
+
+/**
+ * The row key `{{item.url}}` reads: a record's page on this site.
+ * Persisted in nothing — it is computed on every read — but bound by authors,
+ * so never rename.
+ */
+export const RECORD_PAGE_URL_KEY = 'url'
+
+/**
+ * A dataset's repeated rows, each carrying its page as `url` when this site
+ * has a record template for the dataset (AGL-3475) — so a listing card links
+ * to the record's page with `{{item.url}}`, and the canvas previews the same
+ * link the page renders.
+ *
+ * A model that declares a field of its own called `url` keeps it: the token
+ * always means the dataset's field first. A row with no address has no page,
+ * and so no `url`, and its token stays as written. Returns the rows
+ * themselves when there is nothing to add.
+ */
+export function withRecordPageUrls<R extends Record<string, unknown>>(
+  rows: R[],
+  binding: Pick<DatasetRecordPageBinding, 'base' | 'slugField'> | null | undefined,
+  model: DatasetModel,
+): R[] {
+  if (!binding || model.fields[RECORD_PAGE_URL_KEY]) return rows
+  return rows.map((row) => {
+    const address = recordAddressOf(row, binding.slugField)
+    return address
+      ? { ...row, [RECORD_PAGE_URL_KEY]: recordPagePath(binding.base, address) }
+      : row
+  })
+}

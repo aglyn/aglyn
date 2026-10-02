@@ -10,6 +10,7 @@
 import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'
 import type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'
 import type { ResolvedPluginSitemapSection } from './plugin-sitemap-sections'
+import type { ResolvedPluginSitemapReaderDeclaration } from './plugin-sitemap-readers'
 import type { ResolvedPluginSiteBundleSectionDeclaration } from './plugin-site-bundle'
 import type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'
 import type { ResolvedPluginEntityPicker } from './plugin-entity-pickers'
@@ -735,6 +736,17 @@ export const PLUGIN_SITEMAP_SECTIONS_DECLARED: readonly ResolvedPluginSitemapSec
       "createdAt"
     ]
   },
+]
+
+/**
+ * Every child-sitemap family a first-party plugin's reader lists, declared by
+ * that plugin (AGL-3475), in the order the index lists them.
+ */
+export const PLUGIN_SITEMAP_READERS_DECLARED: readonly ResolvedPluginSitemapReaderDeclaration[] = [
+  {
+    "pluginId": "data",
+    "section": "records"
+  }
 ]
 
 /**

@@ -40,6 +40,11 @@ import {
 } from 'firebase/firestore'
 import { effectiveDatasetModel, repeatRowsModelOf } from '../model/dataset-models'
 import { type HostDataset, type HostDatasetRecord, datasetDisplayName } from '../model/datasets'
+import {
+  DATASET_RECORD_PAGES_COLLECTION,
+  parseRecordPageBinding,
+  withRecordPageUrls,
+} from '../record-pages/record-pages'
 
 export interface DatasetRepeatRowsRequest {
   firestore: Firestore
@@ -102,11 +107,17 @@ export async function readDatasetRepeatRows(
   }
   if (!dataset) return { status: 'missing' }
 
-  const load = async (snapshot: DocumentSnapshot): Promise<RepeatableDataset> => ({
-    records: await readRepeatRows(snapshot.ref),
-    model: repeatRowsModelOf(effectiveDatasetModel(snapshot.data() as HostDataset)),
-  })
-  const rows = await load(dataset)
+  const load = async (
+    snapshot: DocumentSnapshot,
+    page?: ReturnType<typeof parseRecordPageBinding>,
+  ): Promise<RepeatableDataset> => {
+    const model = effectiveDatasetModel(snapshot.data() as HostDataset)
+    return {
+      records: withRecordPageUrls(await readRepeatRows(snapshot.ref), page, model),
+      model: repeatRowsModelOf(model),
+    }
+  }
+  const rows = await load(dataset, await readRecordPageBinding(firestore, hostId, dataset.id))
   const rowsByKey: Record<string, RepeatableDataset> = {
     [key]: rows,
     [dataset.id]: rows,
@@ -135,6 +146,32 @@ export async function readDatasetRepeatRows(
     status: 'ready',
     label: datasetDisplayName(dataset.data() as HostDataset) || key,
     rowsByKey,
+  }
+}
+
+/**
+ * This site's record template for a dataset (AGL-3475), so a copy previews
+ * the `{{item.url}}` the page renders. `null` when there is none, or when the
+ * read is refused — a preview without links rather than no preview.
+ */
+async function readRecordPageBinding(
+  firestore: Firestore,
+  hostId: string,
+  datasetId: string,
+) {
+  try {
+    const found = await getDocs(
+      query(
+        collection(firestore, 'hosts', hostId, DATASET_RECORD_PAGES_COLLECTION),
+        where('datasetId', '==', datasetId),
+        limit(1),
+      ),
+    )
+    const [binding] = found.docs
+    return binding ? parseRecordPageBinding(binding.id, binding.data()) : null
+  } catch (error) {
+    console.error(error)
+    return null
   }
 }
 

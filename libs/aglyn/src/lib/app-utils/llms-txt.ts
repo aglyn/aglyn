@@ -66,6 +66,25 @@ export interface LlmsTxtCollection {
   entryCount?: number
 }
 
+/**
+ * A group of pages served under one base, one page per record of a dataset
+ * (AGL-3475): `Services`, twelve pages at `/services/…`.
+ */
+export interface LlmsTxtPageGroup {
+  /** What the pages are. */
+  name: string
+  /** The path the pages share, without slashes at either end. */
+  base: string
+  /** How many pages the group holds. */
+  count: number
+  /**
+   * Whether a page is published at the base itself — a listing the group can
+   * be linked to. Without one the group links to the sitemap, which lists
+   * every page in it, rather than to an address that serves nothing.
+   */
+  hasListing?: boolean
+}
+
 /** One curated page link. */
 export interface LlmsTxtPage {
   /** Route path, with or without its leading slash. */
@@ -94,6 +113,8 @@ export interface LlmsTxtOptions {
   agent?: LlmsTxtAgentGuidance | null
   pages?: readonly LlmsTxtPage[]
   collections?: readonly LlmsTxtCollection[]
+  /** Pages served one per record, grouped by base (AGL-3475). */
+  pageGroups?: readonly LlmsTxtPageGroup[]
   /** Whether this site serves `/search`. */
   hasSearch?: boolean
   /** Where a human is reached, when the site publishes one. */
@@ -160,6 +181,24 @@ function derivedGuidance(options: LlmsTxtOptions): string[] {
           : `${count}, newest first. Read this when you need ${label(
               name.toLowerCase(),
             )} published by ${label(siteName)}`,
+      ),
+    )
+  }
+  for (const group of options.pageGroups ?? []) {
+    if (!(group.count > 0)) continue
+    const where = `/${group.base}/`
+    const count = `${group.count} ${group.count === 1 ? 'page' : 'pages'}`
+    lines.push(
+      item(
+        group.name || nameForSlug(group.base),
+        group.hasListing
+          ? absoluteSiteUrl(origin, group.base)
+          : absoluteSiteUrl(origin, 'sitemap.xml'),
+        group.hasListing
+          ? `${count} under \`${where}\`, one per ${label(
+              (group.name || nameForSlug(group.base)).toLowerCase(),
+            )} entry, linked from this page`
+          : `${count} under \`${where}\`, one per entry; the sitemap lists every one`,
       ),
     )
   }

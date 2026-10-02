@@ -23,6 +23,7 @@ import { registerPluginSiteBundleSection } from '@aglyn/aglyn/plugin-manager/plu
 import { registerPluginUsageMeter } from '@aglyn/aglyn/plugin-manager/plugin-usage-meters'
 import { registerServerStepExecutor } from '@aglyn/aglyn/plugin-manager/plugin-server-steps'
 import { registerCustomFieldType } from '@aglyn/aglyn/plugin-manager/custom-fields'
+import { registerPluginSitemapReader } from '@aglyn/aglyn/plugin-manager/plugin-sitemap-readers'
 import {
   BUNDLE_ID,
   DATASET_REPEAT_SOURCE_ID,
@@ -65,7 +66,10 @@ import { RECORD_PAGE_ADDRESS_FIELD } from './record-pages/record-pages'
  * step.
  *
  * And the "Page address" field type a record template reads a record's page
- * from, so every write path holds an address to the shape a URL can carry.
+ * from, so every write path holds an address to the shape a URL can carry, and
+ * the reader that lists record pages in the sitemap — declared too
+ * (`sitemapReaders`), so a boot that skipped this degrades the sitemap rather
+ * than dropping every record page from it.
  */
 export function registerDataServerDeclarations(): void {
   registerRepeatRowReader(
@@ -114,4 +118,18 @@ export function registerDataServerDeclarations(): void {
   // A record's page address (AGL-3475) is checked on every server path that
   // writes a record, the tenant's form and automation writes included.
   registerCustomFieldType(RECORD_PAGE_ADDRESS_FIELD)
+  // Record pages in the sitemap and `/llms.txt` (AGL-3475), declared as the
+  // `records` family in `plugins.config.json`; the reads load with the first
+  // sitemap a crawler asks for.
+  const sitemap = async () =>
+    (await import('./record-pages/record-page-sitemap.server')).recordPagesSitemapReader
+  registerPluginSitemapReader(
+    'records',
+    {
+      children: async (request) => (await sitemap()).children(request),
+      urls: async (request) => (await sitemap()).urls(request),
+      listings: async (request) => (await sitemap()).listings?.(request) ?? [],
+    },
+    { pluginId: BUNDLE_ID },
+  )
 }
