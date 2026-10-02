@@ -21,6 +21,7 @@ import {
   hostEventLabel,
   hostEventPayloadHint,
   type TriggerCombinator,
+  triggerFilterProblem,
 } from '@aglyn/aglyn'
 import {
   hostIdsFromScope,
@@ -69,7 +70,11 @@ import {
 import { EDITOR_OPTION_CEILING } from './use-automation-step-pickers'
 import { useOrgAutomationStepPickers } from './use-org-automation-step-pickers'
 import { orgSiteOptions, type WorkflowsOrgMount } from './workflows-org-mount'
-import type { HostActionStep, HostActionStepType } from '../model/host-actions'
+import {
+  type HostActionStep,
+  type HostActionStepType,
+  stepRunsAfterWait,
+} from '../model/host-actions'
 
 /** An org automation as the editor holds it. */
 export interface OrgAutomationDraft {
@@ -232,8 +237,14 @@ export function OrgAutomationEditor(props: OrgAutomationEditorProps) {
           </TextField>
           <TextField
             label="Filter (optional)"
-            placeholder={'source == "form"'}
-            helperText={hostEventPayloadHint(draft?.event) ?? undefined}
+            placeholder="subscribe"
+            // A comparison belongs in the conditions below (AGL-3458): the
+            // filter's evaluator is arithmetic, and `source == "form"` throws
+            // on every event, so it is refused here.
+            error={Boolean(triggerFilterProblem(draft?.filter))}
+            helperText={
+              triggerFilterProblem(draft?.filter) ?? hostEventPayloadHint(draft?.event) ?? undefined
+            }
             value={draft?.filter ?? ''}
             onChange={(event) =>
               onDraft((previous) => ({ ...previous, filter: event.target.value }))
@@ -339,6 +350,10 @@ export function OrgAutomationEditor(props: OrgAutomationEditorProps) {
                 steps: update(previous.steps),
               }))
             }
+            replyContext={{
+              event: draft?.event,
+              afterWait: stepRunsAfterWait(draft?.steps, index),
+            }}
           />
         ))}
         <Button

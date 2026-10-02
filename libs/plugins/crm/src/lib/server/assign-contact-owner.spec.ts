@@ -136,7 +136,11 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 }))
 
 import { personKey } from '@aglyn/aglyn/server'
-import { assignOwnerForCapture, reassignContactOwner } from './assign-contact-owner'
+import {
+  assignOwnerForCapture,
+  reassignContactOwner,
+  reassignLeadOwner,
+} from './assign-contact-owner'
 
 const HOST = 'site-1'
 const EMAIL = 'ada@acme.com'
@@ -393,6 +397,82 @@ describe('a deliberate reassignment', () => {
       reassignContactOwner({ hostId: HOST, contactId: 'c1', email: EMAIL, assign: { roundRobin: true } }),
     ).resolves.toMatchObject({ ownerUid: 'uid-kim', by: 'roundRobin' })
     expect(pointer()).toBe('uid-kim')
+  })
+})
+
+/*
+ * AGL-3458. A lead-routed form files a lead and no contact, so "Welcome a new
+ * lead" assigns the LEAD: its own `ownerUid`, from the same rotation, with
+ * the pointer moved in the same commit, and the owner told about a lead.
+ */
+describe('a lead with no contact', () => {
+  const leadOnly = (data: Record<string, unknown> = {}) => {
+    docs.delete(CONTACT)
+    docs.set(LEAD, { email: EMAIL, name: 'Lin Lead', ...data })
+  }
+  const assignLead = (assign: Parameters<typeof reassignLeadOwner>[0]['assign']) =>
+    reassignLeadOwner({ hostId: HOST, leadId: personKey(EMAIL) as string, assign })
+
+  it('takes the next member of the rotation, and moves the pointer in the same commit', async () => {
+    seed({ roundRobin: { memberUids: ['uid-sam', 'uid-kim'], lastAssignedUid: 'uid-sam' } })
+    leadOnly()
+
+    await expect(assignLead({ roundRobin: true })).resolves.toMatchObject({
+      outcome: 'assigned',
+      ownerUid: 'uid-kim',
+      by: 'roundRobin',
+      notified: true,
+    })
+    expect(docs.get(LEAD)?.ownerUid).toBe('uid-kim')
+    expect(pointer()).toBe('uid-kim')
+    expect(transactionReads).toEqual(expect.arrayContaining([ORG, LEAD, `${ORG}/members/uid-kim`]))
+    expect(notified[0]?.payload).toMatchObject({
+      type: 'content.leadAssigned',
+      body: 'Lin Lead was assigned to you as a lead on Harbor View.',
+      link: `/${HOST}/crm/leads/${encodeURIComponent(personKey(EMAIL) as string)}`,
+    })
+  })
+
+  it('hands it to a named member, and changes nothing for the owner it already has', async () => {
+    leadOnly()
+    await expect(assignLead({ memberUid: 'uid-lee' })).resolves.toMatchObject({
+      outcome: 'assigned',
+      ownerUid: 'uid-lee',
+      by: 'member',
+    })
+    notified = []
+    await expect(assignLead({ memberUid: 'uid-lee' })).resolves.toEqual({
+      outcome: 'unchanged',
+      ownerUid: 'uid-lee',
+    })
+    expect(notified).toEqual([])
+  })
+
+  it('refuses an empty pool, a stranger and a lead that is gone, writing nothing', async () => {
+    leadOnly()
+    await expect(assignLead({ roundRobin: true })).resolves.toEqual({
+      outcome: 'none',
+      reason: 'empty-pool',
+    })
+    await expect(assignLead({ memberUid: 'uid-stranger' })).resolves.toEqual({
+      outcome: 'none',
+      reason: 'not-a-member',
+    })
+    docs.delete(LEAD)
+    await expect(assignLead({ memberUid: 'uid-sam' })).resolves.toEqual({
+      outcome: 'none',
+      reason: 'no-lead',
+    })
+    expect(notified).toEqual([])
+  })
+
+  it('never rejects', async () => {
+    leadOnly()
+    transactionFails = true
+    await expect(assignLead({ memberUid: 'uid-sam' })).resolves.toEqual({
+      outcome: 'none',
+      reason: 'failed',
+    })
   })
 })
 

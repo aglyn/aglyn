@@ -89,20 +89,29 @@ export const CRM_ACTION_RECIPES: readonly CrmActionRecipe[] = [
     id: 'welcomeNewLead',
     title: 'Welcome a new lead',
     description:
-      'When a form makes a new contact: rotate in an owner, book a call for ' +
+      'When a form makes a new lead: rotate in an owner, book a call for ' +
       'tomorrow, send a thank-you, and tag them website.',
     /*
+     * ON A NEW LEAD (AGL-3458), because that is the record a lead-routed form
+     * makes: under the one-record model (AGL-3232) a form with lead routing
+     * on files a LEAD and no contact, so a new-contact trigger would never
+     * reach the people this recipe is named for. `formId` is on the `lead`
+     * event exactly when a form filed the lead, so the condition keeps the
+     * recipe to forms and leaves a booking request to the booking's own
+     * confirmation. Every step below acts on the lead the event names when
+     * the workspace holds no contact for the person.
+     *
      * The owner first, because the task that follows names no assignee and
-     * so goes to whoever owns the contact when it is created — the member
-     * the rotation just chose. Round robin rather than a named member: a
-     * recipe cannot know who is on the team, and the pool under CRM →
-     * Settings is the one place that does. On a workspace with no pool the
-     * step fails and the run continues, so the call, the email and the tag
-     * still land and the run history says who was not assigned.
+     * so goes to whoever owns the lead when it is created — the member the
+     * rotation just chose. Round robin rather than a named member: a recipe
+     * cannot know who is on the team, and the pool under CRM → Settings is
+     * the one place that does. On a workspace with no pool the step fails
+     * and the run continues, so the call, the email and the tag still land
+     * and the run history says who was not assigned.
      *
      * The email comes before any wait, which makes it an immediate reply to
-     * what the visitor just did — transactional, sent from the org's own
-     * identity, to the address the event carries.
+     * what the visitor just did — a transactional reply, sent from the org's
+     * own identity to the address the event carries, with no unsubscribe.
      *
      * Its words promise no response time. The org hub installs this recipe
      * into a site without its editor opening, so the business never reads
@@ -113,8 +122,8 @@ export const CRM_ACTION_RECIPES: readonly CrmActionRecipe[] = [
       recipe: 'welcomeNewLead',
       name: 'Welcome a new lead',
       trigger: {
-        event: 'contactCreated',
-        conditions: [{ field: 'source', op: 'equals', value: 'form' }],
+        event: 'lead',
+        conditions: [{ field: 'formId', op: 'notEmpty' }],
         combinator: 'and',
       },
       steps: [
@@ -129,8 +138,8 @@ export const CRM_ACTION_RECIPES: readonly CrmActionRecipe[] = [
           type: 'sendEmail',
           subject: 'Thanks for getting in touch',
           body:
-            'Thanks for reaching out. We have your message and will reply ' +
-            'to this email address.',
+            'Hi {{firstName|there}},\n\nThanks for reaching out. We have your ' +
+            'message and will reply to this email address.',
         },
         { type: 'addContactTag', tag: 'website' },
       ],
@@ -211,22 +220,29 @@ export const CRM_ACTION_RECIPES: readonly CrmActionRecipe[] = [
     id: 'tagByForm',
     title: 'Tag by form',
     description:
-      'When a form you pick makes a new contact: tag them with the form’s ' +
-      'name.',
+      'When a form you pick makes a new lead or contact: tag them with the ' +
+      'form’s name.',
     picks: {
       kind: 'form',
       label: 'Form',
       plural: 'forms',
-      prompt: 'Pick the form whose new contacts get the tag.',
+      prompt: 'Pick the form whose new leads or contacts get the tag.',
       none: 'This site has no forms yet. Add one in the besigner, then come back.',
     },
+    /*
+     * The event follows the form's routing (AGL-3458): a lead-routed form
+     * makes a lead and no contact, so keyed on `contactCreated` it would
+     * never fire. The Forms plugin shares the routing as the picked form's
+     * `routesLeads` fact; both events carry `formId` when a form made the
+     * record.
+     */
     build: (input) => {
       const form = input?.picked
       return {
         recipe: 'tagByForm',
         name: form ? `Tag ${form.name.trim()} submissions` : 'Tag by form',
         trigger: {
-          event: 'contactCreated',
+          event: form?.facts?.['routesLeads'] === true ? 'lead' : 'contactCreated',
           conditions: [{ field: 'formId', op: 'equals', value: form?.id ?? '' }],
           combinator: 'and',
         },

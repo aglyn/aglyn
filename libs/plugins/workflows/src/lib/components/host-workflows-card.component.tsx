@@ -26,6 +26,7 @@ import {
   type HostFunction,
   type HostVariable,
   pluginDocsHelp,
+  triggerFilterProblem,
 } from '@aglyn/aglyn'
 /*
  * The MODULE, not the barrel, for the two PURE helpers — every spec that
@@ -107,7 +108,11 @@ import {
   runWorkflow,
   WORKFLOW_MAX_STEPS,
 } from '../model/workflows'
-import type { HostActionStep, HostActionStepType } from '../model/host-actions'
+import {
+  type HostActionStep,
+  type HostActionStepType,
+  stepRunsAfterWait,
+} from '../model/host-actions'
 
 /**
  * How many workflows the card reads.
@@ -471,7 +476,12 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
    * can run.
    */
   const stepProblem = useMemo(
-    () => (draft ? validateWorkflowSteps(draft.steps) : null),
+    () =>
+      draft
+        ? // A filter the evaluator can never run saves fine and never fires
+          // (AGL-3458), so it is refused with the steps.
+          (triggerFilterProblem(draft.trigger?.filter, { remedy: 'action' }) ?? validateWorkflowSteps(draft.steps))
+        : null,
     [draft],
   )
 
@@ -849,6 +859,12 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
                     ) as WorkflowStep[],
                   }))
                 }
+                // A workflow with no trigger runs from another automation, so
+                // its email step is a reply only on its own event.
+                replyContext={{
+                  event: draft?.trigger?.event,
+                  afterWait: stepRunsAfterWait(draft?.steps as HostActionStep[], index),
+                }}
                 fields={
                   call ? (
                     <Stack
@@ -1000,13 +1016,19 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
             {draft?.trigger ? (
               <TextField
                 label="Filter (optional)"
-                placeholder={'path == "/pricing"'}
-                helperText={[
-                  'Runs only when this expression is truthy.',
-                  hostEventPayloadHint(draft?.trigger?.event),
-                ]
-                  .filter(Boolean)
-                  .join(' ')}
+                placeholder="subscribe"
+                // The evaluator is arithmetic and has no comparison (AGL-3458):
+                // `path == "/pricing"` throws on every event and never runs.
+                error={Boolean(triggerFilterProblem(draft?.trigger?.filter, { remedy: 'action' }))}
+                helperText={
+                  triggerFilterProblem(draft?.trigger?.filter, { remedy: 'action' }) ??
+                  [
+                    'Runs only when this expression is truthy — a field name, or arithmetic. It cannot compare values.',
+                    hostEventPayloadHint(draft?.trigger?.event),
+                  ]
+                    .filter(Boolean)
+                    .join(' ')
+                }
                 value={draft?.trigger?.filter ?? ''}
                 onChange={(event) =>
                   patch((previous) => ({

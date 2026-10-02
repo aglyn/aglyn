@@ -218,11 +218,14 @@ jest.mock('./host-run-history-card.component', () => ({
 import { HostActionsCard } from './host-actions-card.component'
 import { standInDatasetList } from '../testing/stand-in-dataset-list'
 import { standInOverlayList } from '../testing/stand-in-overlay-list'
+import { standInFormList } from '../testing/stand-in-recipes'
 
 // The datasets the pickers offer are the data plugin's, and the overlays
 // the marketing plugin's (AGL-3080).
 standInDatasetList()
 standInOverlayList()
+// The forms the trigger's "Form is" condition lists (AGL-3458).
+standInFormList()
 
 const ORG = { $id: 'org-1', plan: 'scale' } as any
 
@@ -274,18 +277,21 @@ describe('the actions list is ceilinged and paged (AGL-2501)', () => {
     expect(Object.keys(mockCapsAsked).sort()).toEqual(['actions'])
   })
 
-  it('buys the six option lists on the click that opens the editor, not before', async () => {
+  it('buys the option lists on the click that opens the editor, not before', async () => {
     await mount()
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Add action' }))
     })
     // Every picker at the shared editor ceiling plus its probe. Named
-    // individually because they are six independent queries: a check on the
+    // individually because they are independent queries: a check on the
     // KEYS alone would pass with one of them still asking for five hundred.
+    // `forms` is the trigger's "Form is" picker (AGL-3458): a new action
+    // starts on Form submitted, whose payload names the form.
     expect(Object.keys(mockCapsAsked).sort()).toEqual([
       'actions',
       'datasets',
       'emailCampaigns',
+      'forms',
       'lists',
       'overlays',
       'webhooks',
@@ -294,6 +300,7 @@ describe('the actions list is ceilinged and paged (AGL-2501)', () => {
     for (const picker of [
       'datasets',
       'emailCampaigns',
+      'forms',
       'lists',
       'overlays',
       'webhooks',

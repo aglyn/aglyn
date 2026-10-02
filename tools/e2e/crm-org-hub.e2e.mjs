@@ -456,7 +456,7 @@ await step(tally, page, 'a recipe installed from the org hub’s Settings lands 
     'a recipe installed from the org hub’s Settings lands stamped in the site’s actions',
     action?.recipe === RECIPE.id &&
       action?.name === RECIPE.title &&
-      action?.trigger?.event === 'contactCreated' &&
+      action?.trigger?.event === 'lead' &&
       action?.enabled === true &&
       action?.createdBy === OWNER_UID,
     JSON.stringify({

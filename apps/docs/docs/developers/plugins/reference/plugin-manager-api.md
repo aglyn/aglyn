@@ -1886,7 +1886,10 @@ plugin's declarations never ran:
 A recipe that needs a record picked first — "Tag by form" needs the form —
 names it in `picks`: the record `kind`, listed through the kind's
 `plugin-record-lists` source, and the words the picker asks in (`label`,
-`plural`, `prompt`, `none`). It receives the pick as `build({ picked: { id, name } })`.
+`plural`, `prompt`, `none`). It receives the pick as `build({ picked: { id, name, facts } })`,
+where `facts` are what the kind's owner shares about the record through its list source —
+the Forms plugin shares `routesLeads`, so "Tag by form" listens for a new lead on a form
+that files leads.
 
 | API | Semantics |
 | --- | --- |

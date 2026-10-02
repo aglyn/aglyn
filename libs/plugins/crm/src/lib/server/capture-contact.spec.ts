@@ -292,13 +292,70 @@ describe('a lead surface', () => {
     )
     expect(contactCaptures).toEqual([])
     expect(childPaths(CONTACTS)).toEqual([])
-    // A NEW lead announces itself, by the id it was filed under.
+    // A NEW lead announces itself, by the id it was filed under — and, as a
+    // new contact does, by the site and the form that filed it (AGL-3458).
     expect(events).toEqual([
       {
         event: 'lead',
-        payload: { email: EMAIL, source: 'form:form-1', leadId: personKey(EMAIL), name: 'Dana Marsh' },
+        payload: {
+          leadId: personKey(EMAIL),
+          email: EMAIL,
+          name: 'Dana Marsh',
+          source: 'form:form-1',
+          hostId: HOST,
+          formId: 'form-1',
+        },
       },
     ])
+  })
+
+  /*
+   * AGL-3458. A lead-routed form filed under a campaign files its lead under
+   * that campaign: `containers` reaches the lead door as it reaches the
+   * contact door.
+   */
+  it('files the lead under the form’s campaigns, and the Campaign filter finds it', async () => {
+    await captureContactForCrm(
+      request({ surface: 'lead', containers: { campaign: ['camp-1', 'camp-2'] } }),
+    )
+
+    expect(docs.get(leadPath())).toMatchObject({
+      campaignIds: ['camp-1', 'camp-2'],
+      scopedCampaignIds: [`host:${HOST}~camp-1`, `host:${HOST}~camp-2`],
+    })
+    expect(events[0]?.payload).toMatchObject({ campaignIds: 'camp-1,camp-2' })
+  })
+
+  it('adds a returning lead to the form’s campaigns and keeps the ones it was in', async () => {
+    docs.set(leadPath(), {
+      email: EMAIL,
+      sources: ['booking'],
+      submissionCount: 1,
+      visibleTo: [`host:${HOST}`],
+      campaignIds: ['camp-0', 'camp-1'],
+    })
+
+    await captureContactForCrm(request({ surface: 'lead', containers: { campaign: ['camp-1', 'camp-2'] } }))
+
+    expect(docs.get(leadPath())).toMatchObject({
+      campaignIds: ['camp-0', 'camp-1', 'camp-2'],
+      scopedCampaignIds: [`host:${HOST}~camp-0`, `host:${HOST}~camp-1`, `host:${HOST}~camp-2`],
+    })
+  })
+
+  it('leaves the campaigns alone for a surface filed under none', async () => {
+    docs.set(leadPath(), {
+      email: EMAIL,
+      sources: ['booking'],
+      submissionCount: 1,
+      visibleTo: [`host:${HOST}`],
+      campaignIds: ['camp-0'],
+    })
+
+    await captureContactForCrm(request({ surface: 'lead' }))
+
+    expect(docs.get(leadPath())?.['campaignIds']).toEqual(['camp-0'])
+    expect(docs.get(leadPath())?.['scopedCampaignIds']).toEqual([`host:${HOST}~camp-0`])
   })
 
   it('updates the lead the site already holds, and announces nothing', async () => {

@@ -25,7 +25,12 @@ describes the outcome (e.g. "Welcome new member").
 Pick the **site event** that starts the workflow — for example a form submission, a new
 member, a booking, or a [CRM event](actions-builder.md#crm-events) such as **Contact
 created**. The event's data is available to every step that follows, and the **Filter**
-field's helper text names the keys the chosen event puts in scope.
+field's helper text names the keys the chosen event puts in scope. A filter runs the
+workflow when it is truthy — a field name such as `subscribe`, or arithmetic — and can't
+compare values, so the editor refuses `path == "/pricing"` and its like. To start a
+workflow only when a field matches, start it from an
+[action with a condition](actions-builder.md#only-run-when-a-field-matches) and a
+**Run a workflow** step.
 
 ## 3. Add steps
 
