@@ -9,6 +9,34 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.221 — 2026-10-01
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.220...v1.0.0-beta.221)
+
+### Added
+
+- **abuse:** outside links on pages, redirects and tenant mail are checked with Web Risk ([AGL-3451](https://linear.app/aglyn/issue/AGL-3451), [AGL-3450](https://linear.app/aglyn/issue/AGL-3450))
+- **abuse:** a young workspace's held phishing page places an automatic security hold ([AGL-3450](https://linear.app/aglyn/issue/AGL-3450))
+- **plugins:** a plugin runs the automation steps that write its records ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **tenant:** a new free site's outside links pass a "You're leaving" notice ([AGL-3452](https://linear.app/aglyn/issue/AGL-3452))
+- **console:** a site's Media page loads the org library only when its tab opens ([AGL-3457](https://linear.app/aglyn/issue/AGL-3457))
+
+### Fixed
+
+- **abuse:** a Web Risk lookup that cannot reach the store reads unknown, not notFound ([AGL-3451](https://linear.app/aglyn/issue/AGL-3451))
+- **tenant:** the leaving notice draws in CSS system colors, not a palette ([AGL-3452](https://linear.app/aglyn/issue/AGL-3452))
+
+### Changed
+
+- **commerce:** a sale reports its buyer through the contact-capture contract ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+
+<details>
+<summary>Also in this release: 1 chore</summary>
+
+- **tools:** the Nurturing lead backfill converged on prod; delete it ([AGL-3446](https://linear.app/aglyn/issue/AGL-3446))
+
+</details>
+
 ## v1.0.0-beta.220 — 2026-10-01
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.219...v1.0.0-beta.220)
