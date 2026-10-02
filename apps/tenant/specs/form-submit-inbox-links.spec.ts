@@ -164,6 +164,7 @@ beforeAll(async () => {
   await registerPluginServerDeclarations()
 })
 
+import { normalizeNotificationLink } from '@aglyn/aglyn/app-utils/notifications'
 import { POST } from '../app/api/forms/submit/route'
 
 const submit = (body: Record<string, unknown> = {}) =>
@@ -267,6 +268,21 @@ describe('the alert', () => {
     )
   })
 
+  it('is the Inbox’s own address for that submission once followed', async () => {
+    await submit({ formId: 'f1' })
+
+    // The rewrite the console and the email apply. The Inbox pins the same
+    // address for its record route in `inbox-record-routes.spec.ts`; an app
+    // spec may not import the plugin, so both ends hold the literal.
+    expect(
+      normalizeNotificationLink(mockNotifications[0].link, {
+        orgSlug: 'acme',
+        hostId: HOST_ID,
+        hostSubdomain: 'shop',
+      }),
+    ).toBe('/acme/hosts/shop/inbox/submissions?submission=submission-1')
+  })
+
   it('asks the crediting plugin to name the touch and every campaign the row is filed under', async () => {
     const touch = { channel: 'page', campaignId: 'camp-ai', touchedAtMs: 1 }
     mockResolved = touch
@@ -286,7 +302,7 @@ describe('the alert', () => {
     expect(mockNotifications[0].body).toBe(
       'Someone submitted “AI website draft” on {site} (page /ai-website-draft). ' +
         'Credited to “One job — AI”: the visitor viewed /ai-website-draft, a page filed under it. ' +
-        'The form and page are filed under “Forms” and “One job — AI”.',
+        'Filed under “Forms” and “One job — AI”.',
     )
   })
 

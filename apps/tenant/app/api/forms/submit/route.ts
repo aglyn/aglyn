@@ -29,6 +29,7 @@ import recordCapturedContact from '@aglyn/aglyn/plugin-manager/record-captured-c
 // By path: the server-only contract a door credits its outcome through.
 import {
   CONVERSION_TOUCH_DETAIL,
+  conversionDescriptionSentences,
   creditConversion,
   describeConversion,
   resolveConversionTouch,
@@ -46,10 +47,6 @@ import { writeFormRecordTarget } from '@aglyn/aglyn/plugin-manager/submission-re
 import { FieldValue } from 'firebase-admin/firestore'
 import { isCredentialFieldName } from '@aglyn/shared-util-email/hosted-page-screen'
 import { incrementFormStats } from '../../../../utils/increment-form-stats'
-import {
-  formSubmissionAlertBody,
-  formSubmissionAlertLink,
-} from '../../../../utils/form-submission-alert'
 import {
   NO_CLIENT_ADDRESS_BUCKET,
   readClientIp,
@@ -948,21 +945,33 @@ export async function POST(request: Request): Promise<Response> {
     // Event trigger (AGL-128/148): field values join the automation
     // scope; action-produced site alerts ride back to the visitor.
     // In-app notification to the site's managers (AGL-259).
-    // The body names the form and the site on its own (AGL-3432): a manager
-    // of several sites reads the email body, not always the subject, and
-    // "Page: /contact" said neither. It names the campaigns too, and opens
-    // this submission's reader rather than the list (AGL-3461) — see
-    // `form-submission-alert.ts`. `{site}` is filled by `notifyHostManagers`
-    // from the host doc it already reads.
+    /*
+     * The body names the form and the site on its own (AGL-3432): a manager
+     * of several sites reads the email body, not always the subject, and
+     * "Page: /contact" said neither. `{site}` is filled by
+     * `notifyHostManagers` from the host doc it already reads.
+     *
+     * Then the campaigns (AGL-3461): the one the visitor was credited to and
+     * how, and what the form and page are filed under, as the crediting
+     * plugin names them.
+     *
+     * It opens THIS submission's reader, not the list: the Inbox's address
+     * for one submission (`inbox/submissions?submission={id}`, the record
+     * route it registers), stored in the host-link shape every host
+     * notification uses and rewritten onto the site's address when it is
+     * followed, in the console and in the email alike. A notification holds
+     * one link, so the lead and the campaign are links inside the reader.
+     */
+    const alertPath = typeof path === 'string' ? path.slice(0, 500) : ''
     void notifyHostManagers(hostId, {
       type: 'content.formSubmission',
       title: `New form submission — ${resolvedFormName}`,
-      body: formSubmissionAlertBody({
-        formName: resolvedFormName,
-        path,
-        description: await describing,
-      }),
-      link: formSubmissionAlertLink(hostId, submissionRef.id),
+      body: [
+        `Someone submitted “${resolvedFormName}” on {site}` +
+          (alertPath ? ` (page ${alertPath}).` : '.'),
+        ...conversionDescriptionSentences(await describing),
+      ].join(' '),
+      link: `/${hostId}/inbox/submissions?${new URLSearchParams({ submission: submissionRef.id })}`,
     })
     const submittedEmail =
       typeof sanitizedFields['email'] === 'string' ? sanitizedFields['email'] : ''

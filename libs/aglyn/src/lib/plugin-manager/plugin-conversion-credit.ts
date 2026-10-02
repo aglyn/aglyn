@@ -346,3 +346,43 @@ export function describeConversion(
     found.describeConversion ? found.describeConversion(request) : null,
   )
 }
+
+/** How many containers {@link conversionDescriptionSentences} names before it counts the rest. */
+const DESCRIBED_CONTAINERS_NAMED = 3
+
+/** `“A”`, `“A” and “B”`, `“A”, “B” and 2 more`. */
+function quotedList(labels: readonly string[]): string {
+  const quoted = labels.map((label) => `“${label}”`)
+  if (quoted.length <= 1) return quoted.join('')
+  if (quoted.length <= DESCRIBED_CONTAINERS_NAMED) {
+    return `${quoted.slice(0, -1).join(', ')} and ${quoted[quoted.length - 1]}`
+  }
+  const shown = quoted.slice(0, DESCRIBED_CONTAINERS_NAMED - 1)
+  return `${shown.join(', ')} and ${quoted.length - shown.length} more`
+}
+
+/**
+ * A description as the sentences a door's alert appends to its own (AGL-3461):
+ * what the outcome was CREDITED to and how the visitor was touched, then what
+ * the record is FILED under — two facts, kept in two sentences, because a
+ * record can be filed under one container and credited to another, or to none.
+ * Empty for `null` and for a description that names nothing.
+ */
+export function conversionDescriptionSentences(
+  description: PluginConversionDescription | null | undefined,
+): string[] {
+  const sentences: string[] = []
+  const credited = description?.credited
+  const creditedLabel = String(credited?.label ?? '').trim()
+  if (creditedLabel) {
+    const how = String(credited?.how ?? '').trim()
+    sentences.push(
+      how ? `Credited to “${creditedLabel}”: the visitor ${how}.` : `Credited to “${creditedLabel}”.`,
+    )
+  }
+  const filed = (description?.filedUnder ?? [])
+    .map((entry) => String(entry?.label ?? '').trim())
+    .filter(Boolean)
+  if (filed.length) sentences.push(`Filed under ${quotedList(filed)}.`)
+  return sentences
+}
