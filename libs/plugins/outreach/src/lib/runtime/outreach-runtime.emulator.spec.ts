@@ -1169,7 +1169,7 @@ describeEmulated('the person eraser (AGL-2981)', () => {
       detail: '550 5.1.1 the address: no such user',
     })
     const eraser = createOutreachPersonEraser({ firestore: () => firestore })
-    const request = { orgId, email: one.email, key, contactIds: ['contact-1'] }
+    const request = { orgId, email: one.email, key, contactIds: ['contact-1'], atMs: 1 }
 
     // A plan counts and writes nothing.
     expect(await eraser({ ...request, dryRun: true })).toEqual({
