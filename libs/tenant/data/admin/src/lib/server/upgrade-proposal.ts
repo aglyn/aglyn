@@ -36,6 +36,7 @@ import type {
   OrgUpgradeProposal,
 } from '@aglyn/aglyn/server'
 import { PLAN_LABELS } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import {
   isUpgradeProposalPlan,
   normalizeUpgradeProposalNote,
@@ -322,7 +323,7 @@ async function emailUpgradeProposal(options: {
       ? `${origin}${upgradeProposalDestination(slug, proposal)}`
       : origin
     const label = planName(proposal.plan)
-    const productName = brand.merge['brand.productName'] || 'Aglyn'
+    const productName = brand.merge['brand.productName'] || PLATFORM_BRAND_NAME
     const content = await renderSystemEmailContent(
       'org-upgrade-proposal',
       {
