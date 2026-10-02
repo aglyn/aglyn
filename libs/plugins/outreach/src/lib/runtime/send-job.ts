@@ -16,8 +16,6 @@
  */
 
 import { consentGroupForHost } from '@aglyn/aglyn/app-utils/consent-groups'
-import { CRM_COLLECTIONS } from '@aglyn/aglyn/app-utils/crm'
-import { normalizeCrmEmailTemplate } from '@aglyn/aglyn/app-utils/crm-email-templates'
 import { FieldValue } from 'firebase-admin/firestore'
 import { randomUUID } from 'node:crypto'
 import { composeOutreachEmail } from '../engine/compose'
@@ -31,6 +29,7 @@ import {
   type OutreachDueCandidate,
 } from '../engine/sending-capacity'
 import { readOutreachEnrollCandidates, type OutreachEnrollCandidate } from '../enrollment/enroll-people'
+import { readOutreachTemplateBody } from '../enrollment/message-templates'
 import { readOutreachGateLookups } from '../enrollment/gate-lookups'
 import { mailboxRef } from '../mailboxes/mailbox-credentials'
 import { outreachEffectiveDailyCap, outreachLocalDay } from '../mailboxes/mailbox-settings'
@@ -68,7 +67,7 @@ import {
 } from './click-link'
 import { applyOutreachEvent } from './enrollment-events'
 import { outreachSiteHeld } from './host-suspension'
-import { markOutreachLeadNurturing } from './lead-records'
+import { stampRecordEmailReach } from '@aglyn/aglyn/plugin-manager/plugin-record-email-state'
 import { outreachSendDigest, withRecentSend } from './mailbox-health-store'
 import { noteOutreachMailboxReconnectRequired } from './mailbox-notices'
 import type { OutreachRuntimeDeps } from './runtime-deps'
@@ -335,7 +334,7 @@ async function runMailbox(
     // Each by the record it names — the contact, or the lead while the
     // person is one (AGL-3234) — keyed by that record's id.
     const [candidatesRead, lookupsRead, host] = await Promise.all([
-      readOutreachEnrollCandidates(firestore, {
+      readOutreachEnrollCandidates({
         orgId,
         hostId,
         contactGroupId,
@@ -709,19 +708,10 @@ async function runTaskStep(
   })
 }
 
-/** A CRM template's body, read once per run. */
-async function templateBody(firestore: Firestore, run: MailboxRun, templateId: string): Promise<string | null> {
+/** A template's body, read through the record system once per run. */
+async function templateBody(run: MailboxRun, templateId: string): Promise<string | null> {
   if (!run.templates.has(templateId)) {
-    const snapshot = await firestore
-      .collection('orgs')
-      .doc(run.orgId)
-      .collection(CRM_COLLECTIONS.emailTemplates)
-      .doc(templateId)
-      .get()
-    run.templates.set(
-      templateId,
-      snapshot.exists ? normalizeCrmEmailTemplate(snapshot.data() as Record<string, unknown>).body : null,
-    )
+    run.templates.set(templateId, await readOutreachTemplateBody(run.orgId, templateId))
   }
   return run.templates.get(templateId) ?? null
 }
@@ -900,7 +890,7 @@ async function runEmailStep(
       sender: { name: mailbox.displayName, email: sender.address },
       site: { name: input.siteName },
     },
-    templateBody: step?.kind === 'email' && step.templateId ? await templateBody(firestore, run, step.templateId) : null,
+    templateBody: step?.kind === 'email' && step.templateId ? await templateBody(run, step.templateId) : null,
     listUnsubscribeUrl: unsubscribe.status === 'ready' ? unsubscribe.url : null,
     listUnsubscribeMailto: unsubscribe.status === 'ready' ? unsubscribe.mailto : null,
   })
@@ -1079,21 +1069,19 @@ async function runEmailStep(
   // campaigns, and the person's record credited to the first of them.
   // Judged on the enrollment as it was read, before this step's record.
   await creditOutreachFirstSend(deps, { enrollment, atMs: record.atMs })
-  await nurtureEnrolledLead(firestore, run, enrollment)
+  await nurtureEnrolledLead(run, enrollment)
 }
 
 /**
- * A lead an email step reached is no longer untouched (AGL-3446): New moves
- * to Nurturing. Called only once a send is recorded, so an enrollment whose
- * steps never go out leaves its lead where it stood.
+ * A lead an email step reached is no longer untouched (AGL-3446): the record
+ * system hears the send was delivered, and moves a New lead to Nurturing
+ * through the record email-state seam's `reached` (AGL-3080). Called only
+ * once a send is recorded, so an enrollment whose steps never go out leaves
+ * its lead where it stood. Never throws.
  */
-async function nurtureEnrolledLead(
-  firestore: Firestore,
-  run: MailboxRun,
-  enrollment: OutreachEnrollment,
-): Promise<void> {
-  if (enrollment.target !== 'lead' || !enrollment.leadId) return
-  await markOutreachLeadNurturing(firestore, { orgId: run.orgId, leadId: enrollment.leadId })
+async function nurtureEnrolledLead(run: MailboxRun, enrollment: OutreachEnrollment): Promise<void> {
+  if (enrollment.target !== 'lead' || !enrollment.leadId || !enrollment.email) return
+  await stampRecordEmailReach({ orgId: run.orgId, hostId: enrollment.hostId, emails: [enrollment.email] })
 }
 
 /**
@@ -1148,7 +1136,7 @@ async function recoverClaim(
   // A recovered first email is still the first email (AGL-3254).
   if (completed) {
     await creditOutreachFirstSend(deps, { enrollment, atMs })
-    await nurtureEnrolledLead(firestore, run, enrollment)
+    await nurtureEnrolledLead(run, enrollment)
   }
   return completed
 }

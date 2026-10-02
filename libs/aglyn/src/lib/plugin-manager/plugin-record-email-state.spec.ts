@@ -22,9 +22,11 @@ import {
   registerPluginRecordEmailStateWriter,
   stampRecordEmailEngagement,
   stampRecordEmailReach,
+  stampRecordEmailReply,
   stampRecordEmailState,
   type PluginRecordEmailEngagementRequest,
   type PluginRecordEmailReachRequest,
+  type PluginRecordEmailReplyRequest,
   type PluginRecordEmailStateRequest,
   type PluginRecordEmailStateWriter,
 } from './plugin-record-email-state'
@@ -177,5 +179,46 @@ describe('a delivered marketing send, told to the record system (AGL-3446)', () 
       { pluginId: 'records' },
     )
     expect(await stampRecordEmailReach(REACH)).toBeNull()
+  })
+})
+
+describe('a reply to the workspace’s mail, told to the record system (AGL-3080)', () => {
+  const REPLY: PluginRecordEmailReplyRequest = { orgId: 'org-1', hostId: 'host-1', emails: ['pat@example.com'] }
+
+  it('answers null while no plugin keeps records, or for one with no such stage', async () => {
+    expect(await stampRecordEmailReply(REPLY)).toBeNull()
+    registerPluginRecordEmailStateWriter(writer('records'), { pluginId: 'records' })
+    expect(await stampRecordEmailReply(REPLY)).toBeNull()
+  })
+
+  it('hands the organization, the site and the addresses to the record system', async () => {
+    const seen: PluginRecordEmailReplyRequest[] = []
+    registerPluginRecordEmailStateWriter(
+      {
+        ...writer('records'),
+        async replied(request) {
+          seen.push(request)
+          return { records: 1 }
+        },
+      },
+      { pluginId: 'records' },
+    )
+    expect(await stampRecordEmailReply(REPLY)).toEqual({ records: 1 })
+    expect(seen).toEqual([REPLY])
+    expect(await stampRecordEmailReply({ ...REPLY, emails: [] })).toBeNull()
+    expect(seen).toHaveLength(1)
+  })
+
+  it('never throws at the reader of the reply: a failing note is logged and answered as null', async () => {
+    registerPluginRecordEmailStateWriter(
+      {
+        ...writer('records'),
+        async replied() {
+          throw new Error('storage down')
+        },
+      },
+      { pluginId: 'records' },
+    )
+    expect(await stampRecordEmailReply(REPLY)).toBeNull()
   })
 })

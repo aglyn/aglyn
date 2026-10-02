@@ -41,7 +41,7 @@
  */
 
 import { consentGroupTopicState } from '@aglyn/aglyn/app-utils/consent-groups'
-import { CRM_COLLECTIONS } from '@aglyn/aglyn/app-utils/crm'
+import { pluginPeopleWroteIn } from '@aglyn/aglyn/plugin-manager/plugin-person-records'
 import {
   readTopicSubscriptionState,
   TOPIC_OPT_OUTS_SUBCOLLECTION,
@@ -201,9 +201,8 @@ export async function readOutreachGateLookups(
     ...new Set((input.consentHostIds ?? []).filter((id) => id && id !== hostId)),
   ]
   const enrollments = outreachOrgCollection(firestore, orgId, 'enrollments')
-  const activities = firestore.collection('orgs').doc(orgId).collection(CRM_COLLECTIONS.activities)
 
-  const [platform, site, sales, doNotContact, doNotContactDomain, gateway, roster, perPerson] = await Promise.all([
+  const [platform, site, sales, doNotContact, doNotContactDomain, gateway, roster, perPerson, wroteIn] = await Promise.all([
     keyedLookup(
       firestore,
       people,
@@ -294,24 +293,24 @@ export async function readOutreachGateLookups(
             console.error('[outreach] enrollment lookup failed; reading as unchecked', error)
             return null
           })
-        // An email the person wrote: filed on the contact, or on the lead
-        // while they were one (AGL-3234).
-        const inbound = await activities
-          .where(person.contactId ? 'contactId' : 'leadId', '==', person.contactId ?? person.leadId ?? '')
-          .where('direction', '==', 'inbound')
-          .limit(1)
-          .get()
-          .then((snapshot) => !snapshot.empty)
-          .catch((error: unknown) => {
-            console.error('[outreach] inbound email lookup failed; reading as cold', error)
-            return null
-          })
-        return { personId: person.personId, open, inbound }
+        return { personId: person.personId, open }
       }),
     ),
+    // An email the person wrote — filed on the contact, or on the lead while
+    // they were one (AGL-3234) — as the record system answers it (AGL-3080).
+    // Unknown, never cold, when it cannot say.
+    pluginPeopleWroteIn({
+      orgId,
+      records: people.map((person) =>
+        person.contactId
+          ? { kind: 'contact', id: person.contactId }
+          : { kind: 'lead', id: person.leadId ?? '' },
+      ),
+    }),
   ])
 
   const byPerson = new Map(perPerson.map((entry) => [entry.personId, entry]))
+  const inboundOf = new Map(people.map((person, index) => [person.personId, wroteIn?.[index] ?? null]))
   const lookups = new Map<string, OutreachGateLookups>()
   for (const person of people) {
     const own = byPerson.get(person.personId)
@@ -324,7 +323,7 @@ export async function readOutreachGateLookups(
       gateway: gateway.get(person.email) ?? null,
       workspaceMembers: roster,
       openEnrollments: own?.open ?? null,
-      hasInboundEmail: own?.inbound ?? null,
+      hasInboundEmail: inboundOf.get(person.personId) ?? null,
     })
   }
   return lookups

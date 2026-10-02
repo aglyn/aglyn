@@ -59,7 +59,7 @@ import {
 } from './mailbox-health-store'
 import { noteOutreachMailboxReconnectRequired } from './mailbox-notices'
 import type { OutreachRuntimeDeps } from './runtime-deps'
-import { markOutreachLeadWorking } from './lead-records'
+import { stampRecordEmailReply } from '@aglyn/aglyn/plugin-manager/plugin-record-email-state'
 import { fileOutreachEmail, fileOutreachNote, fileOutreachTask, markOutreachEmailDelivery } from './timeline'
 import { outreachUnsubscribeMailbox } from './unsubscribe-link'
 
@@ -506,9 +506,15 @@ async function applyMessages(
           console.error('[outreach] the reply task could not be filed', error)
         }
       }
-      // A lead somebody wrote back to is being worked (AGL-3234).
-      if (enrollment.target === 'lead' && enrollment.leadId) {
-        await markOutreachLeadWorking(firestore, { orgId: context.orgId, leadId: enrollment.leadId })
+      // A lead somebody wrote back to is being worked (AGL-3234): the record
+      // system hears of the reply, and moves a lead nobody had worked to
+      // Working (AGL-3080). Never throws.
+      if (enrollment.target === 'lead' && enrollment.leadId && enrollment.email) {
+        await stampRecordEmailReply({
+          orgId: context.orgId,
+          hostId: enrollment.hostId,
+          emails: [enrollment.email],
+        })
       }
       context.delta.replies += 1
       event = { type: 'reply', atMs: decidedBy?.atMs || nowMs, detail: decidedBy?.evidence ?? null }

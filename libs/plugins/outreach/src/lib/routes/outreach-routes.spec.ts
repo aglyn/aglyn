@@ -53,13 +53,15 @@ import { OUTREACH_SEQUENCE_ACTIVITY_TARGET } from './route-deps'
 import type { OutreachRouteGateDeps } from './route-gate'
 import { createOutreachSequenceRoutes, OUTREACH_SEQUENCE_ACTIVITY } from './sequence-routes'
 import { createOutreachStepTestRoute, type OutreachStepTestDeps } from './step-test-routes'
+import { standInRecordSystem } from '../testing/stand-in-record-system'
 
 /**
  * The sequence, enroll, enrollment and preview routes (AGL-2980), end to end
  * against an in-memory document store. Every route runs for real — the
  * engine's validator, gates, state machine and composer included — and only
  * the platform's edges are stubbed: the token verifier, the permission
- * resolver, the lockdown verdict, the activity log and the saved-view sweep.
+ * resolver, the lockdown verdict and the activity log — and the record
+ * system, which a stand-in keeps in the same store.
  */
 
 // ── In-memory Firestore ─────────────────────────────────────────────────────
@@ -314,7 +316,6 @@ const deps = (): OutreachEnrollRouteDeps => ({
   logOrgActivity: async (_orgId, _actor, action, target) => {
     activity.push({ action, target })
   },
-  crmViewEmails: async () => ({ emails: viewEmails, complete: true }),
   creditCampaign: async (input) => {
     credits.push(input)
   },
@@ -425,6 +426,15 @@ const lead = (email: string, fields: Data) => {
 
 beforeEach(() => {
   docs = new Map()
+  // The people, companies, templates and saved views are the record system's
+  // (AGL-3080); the stand-in keeps them in this suite's store.
+  standInRecordSystem({
+    firestore: () => fakeFirestore(docs),
+    viewEmails: () => ({ emails: viewEmails, complete: true }),
+    // A name filter is one only the Contacts list itself applies.
+    unsupported: (filters) =>
+      filters.filter((clause) => clause['field'] === 'name').map((clause) => String(clause['label'] ?? clause['field'])),
+  })
   // The platform's MX and ledger reads are remembered per process
   // (AGL-3328); each test starts from its own store.
   resetMailDeliverabilityMemoryForTests()

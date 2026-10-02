@@ -37,10 +37,11 @@
  *     wrote the dangling string anyway would make that finding untrue the
  *     moment it fired, and would leave a value the campaign's own deletion
  *     could never clear.
- *  3. **It writes inside the site's own facet.** A contact row is shared by
- *     every site in the org. Written at the top of the document, one
- *     merchant's segmentation of a person would be readable by every other
- *     site in an agency's account — the disclosure the facets exist to end.
+ *  3. **It files the person the record system found, as this site holds
+ *     them.** Where the filing lives on the person is the record system's
+ *     (`plugin-person-records`, AGL-3080): a contact row is shared by every
+ *     site in the org, and the CRM's own spec holds that the filing lands in
+ *     the site's facet rather than at the top of the document.
  */
 
 const HOST_ID = 'site-1'
@@ -51,16 +52,14 @@ let mockActions: { id: string; data: Record<string, any> }[] = []
 /** `orgs/o1/emailCampaigns` — the containers the site's org holds. */
 const CAMPAIGNS_PATH = 'orgs/o1/emailCampaigns'
 let mockCampaigns: Record<string, Record<string, any>> = {}
-/** Every `update()` the run made on the contact, in order. */
-let contactUpdates: Record<string, any>[] = []
+/** Every filing the run asked the record system for, in order. */
+let filings: PluginPersonFileRequest[] = []
 /** Everything added to `hosts/{id}/activity`. */
 let mockActivity: Record<string, any>[] = []
 /** Whether the org holds a contact for the payload address at all. */
 let contactExists = true
 /** The one contact the org holds, when it holds one. */
 let mockContactData: Record<string, any> = {}
-/** `orgs/{org}/emailIndex/{personKey}` → `{ email, contactId }` (AGL-2625). */
-let mockEmailIndex: Record<string, Record<string, any>> = {}
 
 jest.mock('firebase-admin/firestore', () => ({
   __esModule: true,
@@ -79,19 +78,6 @@ const docSnapshot = (id: string, data: Record<string, any>) => ({
     field.split('.').reduce<any>((value, key) => value?.[key], data),
   ref: { collection: () => collectionHandle('nested') },
 })
-
-/**
- * The contact the run finds, and the writes it makes on it.
- *
- * `update` rather than `set`, because a dotted field path is a PATH to
- * `update()` and a literal key with dots in it to `set()`. A double that
- * offered both would let a write of the wrong shape pass.
- */
-const contactRef = {
-  update: async (patch: Record<string, any>) => {
-    contactUpdates.push(patch)
-  },
-}
 
 const collectionHandle = (path: string): any => {
   const query = (matcher: (data: Record<string, any>) => boolean): any => ({
@@ -118,16 +104,6 @@ const collectionHandle = (path: string): any => {
           .map(([id, data]) => docSnapshot(id, data))
         return { docs, empty: docs.length === 0 }
       }
-      if (path.endsWith('contacts')) {
-        // Matched on the address, as the real query is: a double that
-        // answered the contact for any address could never show an
-        // alternate address being resolved.
-        const docs =
-          contactExists && matcher(mockContactData)
-            ? [{ ...docSnapshot('contact-1', mockContactData), ref: contactRef }]
-            : []
-        return { docs, empty: docs.length === 0 }
-      }
       return { docs: [], empty: true }
     },
   })
@@ -146,16 +122,7 @@ const collectionHandle = (path: string): any => {
       get: async () =>
         path === CAMPAIGNS_PATH && mockCampaigns[id]
           ? docSnapshot(id, mockCampaigns[id] as Record<string, any>)
-          : path.endsWith('contacts') && contactExists && id === 'contact-1'
-            ? { ...docSnapshot(id, mockContactData), ref: contactRef }
-            : path.endsWith('emailIndex') && mockEmailIndex[id]
-              ? docSnapshot(id, mockEmailIndex[id])
-              : { id, exists: false, data: () => undefined, get: () => undefined },
-      set: async (data: Record<string, any>) => {
-        if (path.endsWith('emailIndex')) {
-          mockEmailIndex[id] = { ...(mockEmailIndex[id] ?? {}), ...data }
-        }
-      },
+          : { id, exists: false, data: () => undefined, get: () => undefined },
       collection: (name: string) => collectionHandle(`${path}/${id}/${name}`),
     }),
     add: async (data: Record<string, any>) => {
@@ -190,13 +157,6 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   meterHostEmail: async () => ({ allowed: true }),
   notifyHostManagers: async () => undefined,
   orgDataCollectionForHost: async () => collectionHandle('orgs/o1/datasets'),
-  // `{ ref, query }`, the shape the helper answers with: the run destructures
-  // the scoped QUERY off it, and a double handing back a bare collection
-  // would fail before the branch under test ever ran.
-  orgDataQueryForHost: async () => ({
-    ref: collectionHandle('orgs/o1/contacts'),
-    query: collectionHandle('orgs/o1/contacts'),
-  }),
   resolveOrgIdForHost: async () => 'o1',
   hostSendingIdentity: async () => ({
     from: 'hello@site.mail.aglyn.app',
@@ -221,12 +181,31 @@ jest.mock('@aglyn/shared-util-email', () => ({
   sendFailureReason: () => null,
 }))
 
-import { personKey } from '@aglyn/aglyn/app-utils/person-key'
-import { containerMembershipField } from '@aglyn/aglyn/server'
+import { visibleToHost } from '@aglyn/aglyn/app-utils/scope-tokens'
+import type { PluginPersonFileRequest } from '@aglyn/aglyn/plugin-manager/plugin-person-records'
 import { runEventActions } from './run-event-actions'
+import { standInPersonRecords } from '../testing/stand-in-person-records'
 
-/** The field a contact's facet holds its campaigns in. */
-const CAMPAIGN_MEMBERSHIP_FIELD = containerMembershipField('campaign')
+/**
+ * The record system, standing in: the contact the org holds, found by its
+ * address or by an alternate one a merge folded in (AGL-2633), and only as a
+ * site that may see it.
+ */
+function standInRecordSystem(): void {
+  filings = standInPersonRecords({
+    find: (request) => {
+      const email = String(request.email ?? '')
+      const alternates: string[] = mockContactData['alternateEmails'] ?? []
+      if (!contactExists || (mockContactData['email'] !== email && !alternates.includes(email))) {
+        return null
+      }
+      if (request.onlyVisibleToSite && !visibleToHost(mockContactData['visibleTo'], String(request.hostId))) {
+        return null
+      }
+      return { kind: 'contact', id: 'contact-1', email: mockContactData['email'], data: mockContactData }
+    },
+  }).filings
+}
 
 /** An action that always matches, carrying one `assignCampaign` step. */
 const assigning = (step: Record<string, any>) => ({
@@ -245,12 +224,11 @@ const run = (email = 'ada@example.com') =>
 beforeEach(() => {
   mockActions = []
   mockActivity = []
-  contactUpdates = []
   contactExists = true
   // Scoped to the org, as a stamped contact is: the lookup narrows to what
   // the site may see, and a row with no `visibleTo` is visible to nobody.
   mockContactData = { email: 'ada@example.com', visibleTo: ['org'] }
-  mockEmailIndex = {}
+  standInRecordSystem()
   mockCampaigns = { 'spring-2026': { name: 'Spring sale', visibleTo: ['org'] } }
 })
 
@@ -260,10 +238,8 @@ describe('assigning a contact to a campaign', () => {
 
     await run()
 
-    expect(contactUpdates).toHaveLength(1)
-    expect(
-      contactUpdates[0][`facets.${GROUP_ID}.${CAMPAIGN_MEMBERSHIP_FIELD}`],
-    ).toEqual({ __arrayUnion: ['spring-2026'] })
+    expect(filings).toHaveLength(1)
+    expect(filings[0]?.ids).toEqual(['spring-2026'])
     expect(mockActivity[0].result).toBe('succeeded')
   })
 
@@ -274,68 +250,48 @@ describe('assigning a contact to a campaign', () => {
 
     await run()
 
-    expect(
-      contactUpdates[0][`facets.${GROUP_ID}.${CAMPAIGN_MEMBERSHIP_FIELD}`],
-    ).toEqual({ __arrayUnion: ['spring-2026'] })
+    expect(filings[0]?.ids).toEqual(['spring-2026'])
   })
 
-  it('adds to the campaigns already on the record', async () => {
-    // `arrayUnion`, so a person filed under the spring push stays filed under
-    // it when the summer automation reaches them.
+  it('files the person the record system found, as this site, under the campaign kind', async () => {
+    // The control for property (3): the filing names the record the owner
+    // handed back and the site it is filed as; where it lands on the person
+    // is the owner's, held by the CRM's own spec.
     mockActions = [assigning({ campaignId: 'spring-2026' })]
 
     await run()
 
-    const patch =
-      contactUpdates[0][`facets.${GROUP_ID}.${CAMPAIGN_MEMBERSHIP_FIELD}`]
-    expect(patch).toHaveProperty('__arrayUnion')
-  })
-
-  it('writes inside the site’s facet, never at the top of the document', async () => {
-    // The control for property (3).
-    mockActions = [assigning({ campaignId: 'spring-2026' })]
-
-    await run()
-
-    expect(Object.keys(contactUpdates[0])).toContain(
-      `facets.${GROUP_ID}.${CAMPAIGN_MEMBERSHIP_FIELD}`,
-    )
-    expect(Object.keys(contactUpdates[0])).not.toContain('campaigns')
-    expect(Object.keys(contactUpdates[0])).not.toContain(
-      CAMPAIGN_MEMBERSHIP_FIELD,
-    )
+    expect(filings).toEqual([
+      {
+        hostId: HOST_ID,
+        orgId: 'o1',
+        record: { kind: 'contact', id: 'contact-1' },
+        containerKind: 'campaign',
+        ids: ['spring-2026'],
+      },
+    ])
   })
 })
 
 describe('finding the person (AGL-2633)', () => {
   it('files the survivor when the event carries an address a merge folded in', async () => {
     mockContactData['alternateEmails'] = ['ada@gmail.com']
-    mockEmailIndex[personKey('ada@gmail.com')!] = {
-      email: 'ada@gmail.com',
-      contactId: 'contact-1',
-    }
     mockActions = [assigning({ campaignId: 'spring-2026' })]
 
     await run('ada@gmail.com')
 
-    expect(contactUpdates).toHaveLength(1)
-    expect(contactUpdates[0][`facets.${GROUP_ID}.${CAMPAIGN_MEMBERSHIP_FIELD}`]).toEqual({
-      __arrayUnion: ['spring-2026'],
-    })
+    expect(filings).toHaveLength(1)
+    expect(filings[0]?.ids).toEqual(['spring-2026'])
   })
 
   it('reports an alternate whose survivor this site cannot see as no contact', async () => {
     mockContactData['visibleTo'] = ['host:other-site']
     mockContactData['alternateEmails'] = ['ada@gmail.com']
-    mockEmailIndex[personKey('ada@gmail.com')!] = {
-      email: 'ada@gmail.com',
-      contactId: 'contact-1',
-    }
     mockActions = [assigning({ campaignId: 'spring-2026' })]
 
     await run('ada@gmail.com')
 
-    expect(contactUpdates).toHaveLength(0)
+    expect(filings).toHaveLength(0)
     expect(mockActivity[0].result).toBe('failed')
     expect(mockActivity[0].action).toContain('no contact for ada@gmail.com')
   })
@@ -349,7 +305,7 @@ describe('what it refuses rather than storing', () => {
 
     await run()
 
-    expect(contactUpdates).toHaveLength(0)
+    expect(filings).toHaveLength(0)
     expect(mockActivity[0].result).toBe('failed')
     expect(mockActivity[0].action).toContain('unknown campaign "Autumn sale"')
   })
@@ -359,7 +315,7 @@ describe('what it refuses rather than storing', () => {
 
     await run()
 
-    expect(contactUpdates).toHaveLength(0)
+    expect(filings).toHaveLength(0)
     expect(mockActivity[0].result).toBe('failed')
   })
 
@@ -369,7 +325,7 @@ describe('what it refuses rather than storing', () => {
 
     await run()
 
-    expect(contactUpdates).toHaveLength(0)
+    expect(filings).toHaveLength(0)
     expect(mockActivity[0].result).toBe('failed')
     expect(mockActivity[0].action).toContain('no contact for')
   })
@@ -389,9 +345,7 @@ describe('the organization’s campaigns, as this site sees them', () => {
 
     await run()
 
-    expect(contactUpdates[0][`facets.${GROUP_ID}.${CAMPAIGN_MEMBERSHIP_FIELD}`]).toEqual({
-      __arrayUnion: ['site-push'],
-    })
+    expect(filings[0]?.ids).toEqual(['site-push'])
   })
 
   it('refuses a campaign placed only on a sibling site', async () => {
@@ -400,7 +354,7 @@ describe('the organization’s campaigns, as this site sees them', () => {
 
     await run()
 
-    expect(contactUpdates).toHaveLength(0)
+    expect(filings).toHaveLength(0)
     expect(mockActivity[0].result).toBe('failed')
     expect(mockActivity[0].action).toContain('not placed on this site')
   })
@@ -413,7 +367,7 @@ describe('the organization’s campaigns, as this site sees them', () => {
 
     await run()
 
-    expect(contactUpdates).toHaveLength(0)
+    expect(filings).toHaveLength(0)
     expect(mockActivity[0].result).toBe('failed')
   })
 
@@ -423,7 +377,7 @@ describe('the organization’s campaigns, as this site sees them', () => {
 
     await run()
 
-    expect(contactUpdates).toHaveLength(0)
+    expect(filings).toHaveLength(0)
     expect(mockActivity[0].result).toBe('failed')
     expect(mockActivity[0].action).toContain('was deleted')
   })
@@ -438,9 +392,7 @@ describe('the organization’s campaigns, as this site sees them', () => {
 
     await run()
 
-    expect(contactUpdates[0][`facets.${GROUP_ID}.${CAMPAIGN_MEMBERSHIP_FIELD}`]).toEqual({
-      __arrayUnion: ['spring-2026'],
-    })
+    expect(filings[0]?.ids).toEqual(['spring-2026'])
   })
 
   it('reports a name whose only match is deleted as unknown', async () => {
@@ -449,7 +401,7 @@ describe('the organization’s campaigns, as this site sees them', () => {
 
     await run()
 
-    expect(contactUpdates).toHaveLength(0)
+    expect(filings).toHaveLength(0)
     expect(mockActivity[0].action).toContain('unknown campaign "Spring sale"')
   })
 })

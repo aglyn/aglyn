@@ -23,6 +23,7 @@ import { CrmGlanceCard } from './components/crm-glance-card'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { withCrmOrgMount } from './hooks/use-crm-org-mount'
 import { registerCrmRecordRoutes } from './model/crm-record-routes'
+import { registerCrmRecordLists } from './model/crm-record-lists'
 import { CRM_SEARCH_SOURCES } from './model/crm-search-sources'
 import { registerPluginZone } from '@aglyn/aglyn/plugin-manager/plugin-zones'
 import { CRM_RECORD_ATTRIBUTION_ZONE } from './components/crm-attribution-zone'
@@ -59,6 +60,8 @@ const CrmTasksDueCard = lazy(
  */
 export function registerCrmConsole(): void {
   registerCrmRecordRoutes()
+  // The CRM's records as another plugin's picker lists them (AGL-3080).
+  registerCrmRecordLists()
   registerPluginZone(
     {
       zone: CRM_RECORD_BOOKING_ZONE,

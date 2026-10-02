@@ -18,8 +18,6 @@
 import { readContainerIds, readContactContainerIds } from '@aglyn/aglyn/app-utils/container-membership'
 import { consentGroupForHost } from '@aglyn/aglyn/app-utils/consent-groups'
 import { readContactFacet } from '@aglyn/aglyn/app-utils/contacts'
-import { CRM_COLLECTIONS } from '@aglyn/aglyn/app-utils/crm'
-import { normalizeCrmEmailTemplate } from '@aglyn/aglyn/app-utils/crm-email-templates'
 import type { PluginTextGenerator } from '@aglyn/aglyn/plugin-manager/plugin-text-generation'
 import type { PluginWebApiHandler } from '@aglyn/aglyn/server'
 import { readOrgContainers } from '@aglyn/tenant-data-admin/server/org-containers'
@@ -39,6 +37,7 @@ import {
   validateOutreachCuratedStep,
 } from '../engine/sequence-validation'
 import { readOutreachEnrollCandidates, type OutreachEnrollCandidate } from '../enrollment/enroll-people'
+import { readOutreachTemplateBody } from '../enrollment/message-templates'
 import { readOutreachStepOverrideRequest } from '../enrollment/step-overrides'
 import type {
   OutreachCurateDraft,
@@ -300,15 +299,13 @@ async function curationSteps(
   stepIndexes: readonly number[],
 ): Promise<OutreachCurationStep[]> {
   const emails = emailStepIndexes(sequence)
-  const templates = firestore.collection('orgs').doc(orgId).collection(CRM_COLLECTIONS.emailTemplates)
   return Promise.all(
     stepIndexes.map(async (stepIndex) => {
       const step = sequence.steps[stepIndex]
       if (step?.kind !== 'email') throw new Error(`step ${stepIndex} is not an email`)
       let body = step.body
       if (step.templateId) {
-        const template = await templates.doc(step.templateId).get()
-        body = template.exists ? normalizeCrmEmailTemplate(template.data() as Record<string, unknown>).body : ''
+        body = (await readOutreachTemplateBody(orgId, step.templateId)) ?? ''
       }
       return {
         stepIndex,
@@ -351,7 +348,7 @@ export function createOutreachCurateRoutes(deps: OutreachEnrollRouteDeps): Outre
     const subject = await draftSubject(firestore, caller, body)
     if (subject instanceof Response) return subject
     const contactGroupId = consentGroupForHost(caller.org, subject.sequence.hostId).groupId
-    const [candidate] = await readOutreachEnrollCandidates(firestore, {
+    const [candidate] = await readOutreachEnrollCandidates({
       orgId: caller.orgId,
       hostId: subject.sequence.hostId,
       contactGroupId,

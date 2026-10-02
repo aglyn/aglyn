@@ -252,6 +252,7 @@ import {
   inboxReplyHandler,
 } from './server'
 import { personKey } from '@aglyn/aglyn/app-utils/person-key'
+import { standInPersonRecords } from './testing/stand-in-person-records'
 
 async function drive(
   handler: typeof inboxAssignListHandler,
@@ -293,6 +294,9 @@ const seedContact = (consent: Record<string, unknown>) => {
 
 beforeEach(() => {
   store = {}
+  // The person behind the sender's address is the record system's to find
+  // (AGL-3080); the stand-in finds them in this suite's store.
+  standInPersonRecords({ store: () => store, orgId: ORG_ID })
   autoId = 0
   mockGroupHostIds = null
   decodedToken = { uid: 'editor-uid', email: 'owner@lumen.co' }

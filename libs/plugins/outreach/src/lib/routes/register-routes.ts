@@ -79,7 +79,6 @@ export function defaultOutreachRouteDeps(): OutreachEnrollRouteDeps {
     random: Math.random,
     logOrgActivity: async (orgId, actor, action, target) =>
       (await platform()).logOrgActivity(orgId, actor, action, target),
-    crmViewEmails: async (input) => (await platform()).crmViewEmails(input),
     stampRecordEmailState: async (stamp) => {
       await (await platform()).stampRecordEmailState(stamp)
     },

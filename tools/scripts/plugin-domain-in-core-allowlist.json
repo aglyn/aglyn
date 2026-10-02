@@ -421,41 +421,6 @@
       "lane": "coupling"
     },
     {
-      "path": "libs/plugins/outreach/src/lib/components/use-outreach-crm.ts",
-      "rules": [
-        "plugin-collection:crm"
-      ],
-      "lane": "coupling"
-    },
-    {
-      "path": "libs/plugins/outreach/src/lib/enrollment/enroll-people.ts",
-      "rules": [
-        "plugin-collection:crm"
-      ],
-      "lane": "coupling"
-    },
-    {
-      "path": "libs/plugins/outreach/src/lib/routes/enroll-routes.ts",
-      "rules": [
-        "plugin-collection:crm"
-      ],
-      "lane": "coupling"
-    },
-    {
-      "path": "libs/plugins/outreach/src/lib/routes/preview-routes.ts",
-      "rules": [
-        "plugin-collection:crm"
-      ],
-      "lane": "coupling"
-    },
-    {
-      "path": "libs/plugins/outreach/src/lib/runtime/lead-records.ts",
-      "rules": [
-        "plugin-collection:crm"
-      ],
-      "lane": "coupling"
-    },
-    {
       "path": "libs/shared/data/forms/src/lib/forms.ts",
       "rules": [
         "domain-name"

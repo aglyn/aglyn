@@ -17,13 +17,13 @@
 
 import { consentGroupForHost } from '@aglyn/aglyn/app-utils/consent-groups'
 import { normalizeContactEmail } from '@aglyn/aglyn/app-utils/contacts'
-import { CRM_COLLECTIONS } from '@aglyn/aglyn/app-utils/crm'
-import { normalizeCrmEmailTemplate } from '@aglyn/aglyn/app-utils/crm-email-templates'
 import { visibleToHost } from '@aglyn/aglyn/app-utils/scope-tokens'
+import { readPluginPeople } from '@aglyn/aglyn/plugin-manager/plugin-person-records'
 import type { PluginWebApiHandler } from '@aglyn/aglyn/server'
 import { readOutreachStartStepIndex } from '../engine/enrollment-state'
 import { firstEmailStepIndex } from '../engine/sequence-validation'
 import { leadAsContact } from '../enrollment/enroll-people'
+import { readOutreachTemplateBody } from '../enrollment/message-templates'
 import { outreachStepOverridesRefused, readOutreachStepOverrideRequests } from '../enrollment/step-overrides'
 import type { OutreachPreviewResponse } from '../model/outreach-api'
 import type { OutreachEmailStep, OutreachMailbox, OutreachSequence } from '../model/outreach.types'
@@ -110,7 +110,6 @@ export async function readOutreachStepRender(
   const sequenceId = readOutreachDocumentId(body['sequenceId'])
   if (!sequenceId) return outreachRefusal(400, 'invalid-request', 'Name the sequence to preview.')
   const firestore = deps.firestore()
-  const org = firestore.collection('orgs').doc(caller.orgId)
   const snapshot = await outreachOrgCollection(firestore, caller.orgId, 'sequences').doc(sequenceId).get()
   const sequence = readStoredOutreachSequence(sequenceId, snapshot.exists ? snapshot.data() : undefined)
   if (!sequence) return outreachRefusal(404, 'sequence-not-found', 'That sequence no longer exists.')
@@ -151,24 +150,31 @@ export async function readOutreachStepRender(
     )
   }
 
-  const [orgSettings, mailboxSnapshot, host, template, contact, lead] = await Promise.all([
+  // The person, as the record system keeps them (AGL-3080). A lead is one
+  // org row (AGL-3275); the site is still required because a lead preview is
+  // rendered in a site's context.
+  const person = contactId
+    ? ({ kind: 'contact', id: contactId } as const)
+    : leadId && sequence.hostId
+      ? ({ kind: 'lead', id: leadId } as const)
+      : null
+  const [orgSettings, mailboxSnapshot, host, templateBody, people] = await Promise.all([
     readOutreachComplianceSettingsDoc(firestore, caller.orgId),
     sequence.mailboxId ? outreachOrgCollection(firestore, caller.orgId, 'mailboxes').doc(sequence.mailboxId).get() : null,
     sequence.hostId ? firestore.collection('hosts').doc(sequence.hostId).get() : null,
-    step.templateId ? org.collection(CRM_COLLECTIONS.emailTemplates).doc(step.templateId).get() : null,
-    contactId ? org.collection('contacts').doc(contactId).get() : null,
-    // One org row (AGL-3275); the site is still required because a lead
-    // preview is rendered in a site's context.
-    leadId && sequence.hostId ? org.collection('leads').doc(leadId).get() : null,
+    step.templateId ? readOutreachTemplateBody(caller.orgId, step.templateId) : null,
+    person ? readPluginPeople({ orgId: caller.orgId, records: [person] }) : null,
   ])
-  const leadData = lead?.exists ? (lead.data() as Record<string, unknown>) : null
+  const record = people?.[0] ?? null
+  const leadData = person?.kind === 'lead' && record ? { ...record.data } : null
   if (leadId && !leadData) {
     return outreachRefusal(404, 'contact-not-found', "That lead isn't in this sequence's site's CRM.")
   }
   const contactGroupId = consentGroupForHost(caller.org, sequence.hostId).groupId
-  const contactData = contact?.exists
-    ? (contact.data() as Record<string, unknown>)
-    : leadData
+  const contactData =
+    person?.kind === 'contact' && record
+      ? { ...record.data }
+      : leadData
       ? leadAsContact(leadData, contactGroupId)
       : null
   if (
@@ -211,9 +217,7 @@ export async function readOutreachStepRender(
       merge,
       email: contactData ? (normalizeContactEmail(contactData['email']) ?? '') : OUTREACH_SAMPLE_PERSON.email,
       personalLine,
-      templateBody: template?.exists
-        ? normalizeCrmEmailTemplate(template.data() as Record<string, unknown>).body
-        : null,
+      templateBody,
       stepOverrides: overrides.overrides,
       ...(startStepIndex > 0 ? { startStepIndex } : {}),
     },

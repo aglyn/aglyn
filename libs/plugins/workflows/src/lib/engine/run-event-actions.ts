@@ -36,7 +36,6 @@ import {
   type HostEventType,
   type HostFunction,
   type HostVariable,
-  contactContainerFieldPath,
   normalizeTriggerConditions,
   type PluginJobHostGate,
   resolveOrgEntitlements,
@@ -59,15 +58,18 @@ import {
   meterHostEmail,
   notifyHostManagers,
   consentGroupForSite,
-  orgDataQueryForHost,
   resolveOrgIdForHost,
 } from '@aglyn/tenant-data-admin'
 import { activitySearchTokens } from '@aglyn/aglyn/app-utils/activity-search'
 import { visibleToHost } from '@aglyn/aglyn/app-utils/scope-tokens'
 import { triggerFilterProblem } from '@aglyn/aglyn/app-utils/site-interactions'
-// The leaf, not the barrel: this library's specs substitute the barrel
-// wholesale, and the lookup must reach the real index logic under them.
-import { findContactByEmail } from '@aglyn/tenant-data-admin/server/contact-email-index'
+// The person behind an address, and their filing under a campaign, through
+// the plugin that keeps people (AGL-3080): the engine opens none of its
+// collections.
+import {
+  filePluginPersonUnder,
+  findPluginPerson,
+} from '@aglyn/aglyn/plugin-manager/plugin-person-records'
 import {
   findOrgContainersByName,
   readOrgContainers,
@@ -982,11 +984,11 @@ async function runServerStep(
         return failed('no contact email to assign')
       }
       // Scoped to this host (AGL-1039): a site must not reach a contact
-      // it cannot see, even to tag it onto a campaign. Through the org's
-      // address index (AGL-2633), so an address a merge folded into
-      // another record still names the person who now holds it.
-      const { ref: contactsRef } = await orgDataQueryForHost(hostId, 'contacts')
-      const contact = await findContactByEmail(contactsRef, email, { hostId })
+      // it cannot see, even to tag it onto a campaign. Asked of the plugin
+      // that keeps people (AGL-3080), whose lookup answers an address a
+      // merge folded into another record (AGL-2633) with the person who now
+      // holds it.
+      const contact = await findPluginPerson({ hostId, email, onlyVisibleToSite: true })
       if (!contact) return failed(`no contact for ${email}`)
       /*
        * THE CAMPAIGN IS RESOLVED TO A DOCUMENT, exactly as `enrollList`
@@ -1043,26 +1045,20 @@ async function runServerStep(
         return failed(`campaign "${campaignLabel}" is not placed on this site`)
       }
       /*
-       * INSIDE THIS SITE'S FACET, not at the top of the document.
-       *
-       * A contact is one row shared by every site in the org, and which
-       * campaigns a merchant has filed somebody under is that merchant's
-       * business record on the same footing as their notes and their tags.
-       * Written at the top it would be readable by every other site in an
-       * agency's account.
-       *
-       * `update` with a dotted path, never `set({merge:true})`: a `set`
-       * treats the string as a literal field NAME and would mint a
-       * top-level key with dots in it. The document was just read, so the
-       * update cannot fail for absence.
+       * Filed by the plugin that keeps people, as THIS SITE holds them
+       * (AGL-3080): which campaigns a merchant has filed somebody under is
+       * that merchant's business record, on the same footing as their notes
+       * and their tags, and where it lives on the person is the owner's to
+       * know. A person the owner no longer finds for the site is not filed.
        */
-      const group = await consentGroupForSite(hostId)
-      await contact.ref.update({
-        [contactContainerFieldPath(group.groupId, 'campaign')]: FieldValue.arrayUnion(
-          campaign.id,
-        ),
-        updatedAt: FieldValue.serverTimestamp(),
+      const filed = await filePluginPersonUnder({
+        hostId,
+        orgId: campaignOrgId,
+        record: { kind: contact.kind, id: contact.id },
+        containerKind: 'campaign',
+        ids: [campaign.id],
       })
+      if (!filed?.filed) return failed(`no contact for ${email}`)
     } else if (isCrmActionStep(step)) {
       // The plan gate, the way `webhookPost` takes the `webhooks` one:
       // refused into the run history with the tier that carries it, so
