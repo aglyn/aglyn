@@ -163,6 +163,21 @@ describe('the timeline: what happened, newest first', () => {
     ])
   })
 
+  it('says where a fetch came from, when the row kept it (AGL-3488)', () => {
+    const entries = build({
+      history: [
+        { id: 'o3', kind: 'open', atMs: T + 9 * 60 * MIN, stepIndex: 0, human: false, machineReason: 'scanner', userAgent: 'Mozilla/5.0', source: 'google' },
+      ],
+    })
+    expect(entries.find((entry) => entry.kind === 'machine-open')).toMatchObject({
+      facts: [
+        'Email 1 · step 1',
+        expect.stringMatching(/scanner fetched it, not the person/),
+        'From Google’s network',
+      ],
+    })
+  })
+
   it('says clicks from before the history as ONE honest line, never a row apiece', () => {
     // Keith's case: two clicks counted before each was recorded on its own.
     const entries = build({
@@ -380,7 +395,20 @@ describe('the history rows, as written and read back', () => {
       stepIndex: 1,
       human: false,
       machineReason: 'image_proxy',
+      userAgent: null,
+      source: null,
     })
+    // The evidence it was judged on (AGL-3488), and nothing it cannot name.
+    const scanned = outreachOpenHistoryRow({
+      atMs: T,
+      stepIndex: 0,
+      human: false,
+      machineReason: 'scanner',
+      userAgent: 'Mozilla/5.0',
+      source: 'google',
+    })
+    expect(readOutreachHistoryEntry('h7', scanned)).toMatchObject({ machineReason: 'scanner', userAgent: 'Mozilla/5.0', source: 'google' })
+    expect(readOutreachHistoryEntry('h8', { ...scanned, source: 'mars' })).toMatchObject({ source: null })
     expect(readOutreachHistoryEntry('h3', { kind: 'click' })).toBeNull()
     expect(readOutreachHistoryEntry('h4', { kind: 'action', atMs: T, action: 'delete' })).toBeNull()
     expect(readOutreachHistoryEntry('h5', undefined)).toBeNull()

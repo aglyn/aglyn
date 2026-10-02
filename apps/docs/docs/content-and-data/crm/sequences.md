@@ -403,13 +403,28 @@ It has a cost, which is why it is off by default:
   the sender. Use it to measure a slice of your sends — a new segment for a
   week, say — rather than leaving it on everywhere.
 
-Not every image load is a person reading. Gmail opens count: Gmail loads the
-image through its own proxy only when the reader opens the email. Apple Mail
-Privacy Protection opens don't: Apple loads every image the moment the email
-arrives, whether or not anyone reads it. Yahoo's image proxy, security gateways
-that open messages to inspect them, and any load within 30 seconds of delivery
-don't count either. Those loads are counted as **Machine opens**, shown beside
-the open figures and left out of the open rate. The
+Not every image load is a person reading. Each load is judged by what it says
+it is and by whose network it came from:
+
+- **Gmail opens count.** Gmail loads the image through its own proxy when the
+  reader opens the email.
+- **Apple Mail Privacy Protection doesn't count.** Apple loads every image
+  through its privacy relay the moment the email arrives, whether or not
+  anyone reads it.
+- **Mail scanners don't count.** That covers loads from Google's mail network
+  other than Gmail's proxy, loads from Microsoft's mail filter, and loads that
+  borrow Apple's anonymous signature from anywhere but Apple's relay. Mail
+  sent to Google Workspace and Microsoft 365 addresses is often scanned this
+  way, at delivery and again later.
+- **These don't count either:** Yahoo's image proxy, security gateways that
+  name themselves, and any load within 30 seconds of delivery.
+
+Those loads are counted as **Machine opens**, shown beside the open figures
+and left out of the open rate. When every load so far was a machine's, the
+card shows the **Open rate** as **Unmeasured** rather than 0%: the scanners
+answered for everyone, and whether a person read the email behind them can't
+be told. A person's page lists each load with why it was or wasn't counted
+and which network it came from. The address itself is never kept. The
 **Open rate** is taken over the people who were sent at least one email
 carrying the image, not everyone the sequence emailed, so turning the switch
 on part-way through doesn't dilute it.
@@ -641,7 +656,11 @@ times the person clicked and how many different links they followed — *2 · 1
 link*. Clicks made by security scanners aren't in it. **Filters** adds
 **Clicked** and **Link followed**, and the column chooser adds **Links
 followed**, **Last click** and **Scanner clicks**, which the export then
-includes. **Stop reason** shows the short reason; hover it for the whole of it.
+includes. On a sequence that counts opens, the **Opens** column beside it shows
+the person's own opens, with any loads by mail proxies and scanners under them
+— *2*, then *3 by machines* — which aren't in the number. The column chooser
+adds **Last open**. **Stop reason** shows the short reason; hover it for the
+whole of it.
 
 The sequence's **Results** card leads to the same list: select the **Clicked**
 figure to see the people who clicked, or a destination under **Links followed**

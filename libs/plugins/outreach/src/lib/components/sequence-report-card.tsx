@@ -186,7 +186,12 @@ export function OutreachSequenceReportCard(props: OutreachSequenceReportCardProp
                     report.opens === report.uniqueOpens ? undefined : `${count(report.opens)} opens in all`
                   }
                 />
-                <OutreachFigure label="Open rate" value={openRate.value} hint={openRate.hint} />
+                <OutreachFigure
+                  label="Open rate"
+                  {...(report.opensUnmeasured
+                    ? { value: 'Unmeasured', hint: 'Only machines fetched the image' }
+                    : { value: openRate.value, hint: openRate.hint })}
+                />
                 {report.machineOpens > 0 ? (
                   <OutreachFigure
                     label="Machine opens"

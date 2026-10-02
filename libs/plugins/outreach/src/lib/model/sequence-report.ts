@@ -64,6 +64,7 @@ export interface OutreachReportCaveat {
     | 'opens-unrecorded'
     | 'opens-counted'
     | 'opens-stopped'
+    | 'opens-all-machine'
     | 'clicks-not-tracked'
     | 'clicks-unrecorded'
     | 'machine-clicks-excluded'
@@ -100,6 +101,13 @@ export interface OutreachSequenceReport {
   proxyOpens: number
   /** When a person last opened one of the emails. */
   lastOpenAtMs: number | null
+  /**
+   * Whether the image was fetched and EVERY fetch was a machine's
+   * (AGL-3488): the open rate is then unmeasured rather than nought — the
+   * scanners in front of these inboxes answered for everyone, and whether
+   * a person read the mail behind them cannot be told from here.
+   */
+  opensUnmeasured: boolean
   rates: {
     /**
      * Distinct people who clicked, over the people emailed.
@@ -111,8 +119,8 @@ export interface OutreachSequenceReport {
     /**
      * Distinct people who opened, over the people sent the image.
      *
-     * `null` when no email carried the image, and when nobody has been sent
-     * one yet.
+     * `null` when no email carried the image, when nobody has been sent
+     * one yet, and when only machines fetched it (`opensUnmeasured`).
      */
     open: SendRate | null
   }
@@ -126,7 +134,9 @@ const CAVEATS: Record<OutreachReportCaveat['id'], string> = {
   'opens-unrecorded':
     'Opens are counted for this sequence, and no email with the tracking image has gone out yet. Emails sent from now on carry it.',
   'opens-counted':
-    'Opens are counted from a tracking image in an HTML copy of each email, and the open rate is taken over the people sent one. Gmail readers’ opens count. Fetches Apple Mail makes as the email arrives, whether or not anyone reads it, and those by Yahoo’s image proxy and security scanners, are counted separately and left out of the rate.',
+    'Opens are counted from a tracking image in an HTML copy of each email, and the open rate is taken over the people sent one. Gmail readers’ opens count. Fetches made whether or not anyone reads the email — by Apple Mail as it arrives, by Yahoo’s image proxy, and by Google’s, Microsoft’s and other security scanners — are counted separately and left out of the rate.',
+  'opens-all-machine':
+    'Every fetch of the tracking image so far was made by a machine — a mail provider’s proxy or a security scanner fetching it for the recipient — so whether anyone read these emails can’t be told from opens, and no open rate is shown. That is common when the people emailed are behind company mail security.',
   'opens-stopped':
     'Opens were counted while this sequence’s emails carried a tracking image. It’s turned off now, so the figures cover only the emails sent while it was on.',
   'clicks-not-tracked':
@@ -178,6 +188,7 @@ export function outreachSequenceReport(
   const openPeople = source.openPeople === undefined ? null : count(source.openPeople)
   const uniqueOpens = count(source.uniqueOpens)
   const machineOpens = count(source.machineOpens)
+  const opensUnmeasured = openTracked && uniqueOpens === 0 && machineOpens > 0
 
   /*
    * Opens (AGL-3395). A sequence that never carried the image says opens
@@ -189,6 +200,7 @@ export function outreachSequenceReport(
   const caveats: OutreachReportCaveat[] = []
   if (!openTracked) caveats.push(caveat(countOpens ? 'opens-unrecorded' : 'opens-not-measured'))
   else caveats.push(caveat(countOpens ? 'opens-counted' : 'opens-stopped'))
+  if (opensUnmeasured) caveats.push(caveat('opens-all-machine'))
   if (!clickTracked) {
     /*
      * Two ways to have no click figures, and they are not the same
@@ -225,11 +237,12 @@ export function outreachSequenceReport(
       typeof source.lastOpenAtMs === 'number' && Number.isFinite(source.lastOpenAtMs)
         ? source.lastOpenAtMs
         : null,
+    opensUnmeasured,
     rates: {
       click: clickTracked
         ? sendRate(uniqueClicks, people ?? undefined, 'people emailed')
         : null,
-      open: openTracked
+      open: openTracked && !opensUnmeasured
         ? sendRate(uniqueOpens, openPeople ?? undefined, 'people sent a tracked email')
         : null,
     },

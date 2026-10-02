@@ -494,6 +494,8 @@ export function OutreachSequenceDetail(props: OutreachSequenceDetailProps) {
           // A sequence that counted clicks once has them to show, whether or
           // not it counts them now.
           trackClicks={sequence.settings.trackClicks || sequence.stats?.clickTracked === true}
+          // The same for opens (AGL-3488).
+          countOpens={sequence.settings.countOpens || sequence.stats?.openTracked === true}
           timeZone={mailbox?.timezone ?? null}
           mailbox={props.mailboxes.status === 'ready' ? mailbox : undefined}
           sequence={sequence}
