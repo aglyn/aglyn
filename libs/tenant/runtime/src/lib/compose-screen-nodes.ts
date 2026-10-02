@@ -446,6 +446,13 @@ export async function composeNodesWithChrome(options: {
   screenNodes: Record<string, any> | Promise<Record<string, any>>
   /** Entry-template tokens (AGL-105) substituted before denormalize. */
   tokens?: Record<string, string>
+  /**
+   * The one record this page renders (AGL-3475) — a record template's routed
+   * record. Its `{{item.*}}` tokens are put into the page after the repeats
+   * expand, and into each repeat's filter before, exactly as a repeat puts
+   * its rows into its copies.
+   */
+  record?: Aglyn.PageRecordScope | null
   /** Routed content collection (AGL-551) for Collection entries blocks. */
   collection?: ComposeCollectionContext
   /**
@@ -675,7 +682,17 @@ export async function composeNodesWithChrome(options: {
         ...(await readRepeatRows({ hostId, keys: unreadRepeatKeys })),
       }
     : screenRepeatRows
-  const repeated = Aglyn.expandRepeatables(grafted as any, repeatRows)
+  // A record template's routed record (AGL-3475): its values reach each
+  // repeat's filter before the expansion, and every token the expansion left
+  // — the page's own `{{item.*}}`, never a copy's — right after it.
+  const filtered = Aglyn.substituteRepeatFilterRecordTokens(
+    grafted as Record<string, any>,
+    options.record,
+  )
+  const repeated = Aglyn.substituteNodesRecordTokens(
+    Aglyn.expandRepeatables(filtered, repeatRows),
+    options.record,
+  )
   // Collection entries blocks (AGL-551) expand alongside repeatables:
   // per-entry {{entry.*}} tokens substitute inside the clones here, while
   // page-level tokens wait for resolveNamedTokens below.
@@ -876,6 +893,8 @@ export async function composeScreenNodes(options: {
   screen: Aglyn.AglynScreen
   /** Entry-template tokens (AGL-105) substituted before denormalize. */
   tokens?: Record<string, string>
+  /** The one record a record template renders (AGL-3475). */
+  record?: Aglyn.PageRecordScope | null
   /** Routed content collection (AGL-551) for Collection entries blocks. */
   collection?: ComposeCollectionContext
   /**
@@ -990,6 +1009,7 @@ export async function composeScreenNodes(options: {
       () => ({}) as any,
     ),
     tokens: options.tokens,
+    ...(options.record ? { record: options.record } : {}),
     collection: options.collection,
     host: options.host,
     socialImages: options.socialImages,

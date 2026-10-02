@@ -228,6 +228,70 @@ export function substituteRecordTokens<T>(
   return substituteValue(props, context) as T
 }
 
+/**
+ * The one record a whole page is rendered for (AGL-3475): a record template's
+ * routed record, in the shape a repeat hands each of its copies.
+ */
+export interface PageRecordScope {
+  record: Record<string, unknown>
+  /** The record's references (AGL-180). */
+  model?: RepeatRowsModel
+  /** Rows by key, for a one-hop reference (AGL-180). */
+  datasetsByKey?: Record<string, RepeatableDataset | undefined>
+}
+
+/**
+ * Every node's props with the page's record put into its `{{item.field}}`
+ * tokens — the substitution a repeat makes on each copy, made once over a
+ * page that renders one record (AGL-3475).
+ *
+ * Run AFTER {@link expandRepeatables}: a repeat inside the page has already
+ * spent its own `{{item.*}}` tokens on its own rows by then, so what is left
+ * is the page's. A token naming a field the record does not have stays as
+ * written, exactly as in a repeat. Returns the input when there is no record.
+ */
+export function substituteNodesRecordTokens<N>(
+  nodes: Record<NodeId, N>,
+  scope: PageRecordScope | null | undefined,
+): Record<NodeId, N> {
+  if (!scope) return nodes
+  const next: Record<NodeId, N> = {}
+  for (const [id, node] of Object.entries(nodes) as Array<[NodeId, N]>) {
+    const props = (node as { props?: unknown })?.props
+    next[id] = props
+      ? ({ ...node, props: substituteValue(props, scope) } as N)
+      : node
+  }
+  return next
+}
+
+/**
+ * The page's record put into each repeat's FILTER, before the repeats expand
+ * (AGL-3475): on a record template, `category == {{item.category}}` lists the
+ * other records in the routed record's category. Only `repeatFilter` is
+ * touched — everything else inside a repeat is its template, whose
+ * `{{item.*}}` belongs to its own rows. Returns the input when there is no
+ * record or no filter names one.
+ */
+export function substituteRepeatFilterRecordTokens<N>(
+  nodes: Record<NodeId, N>,
+  scope: PageRecordScope | null | undefined,
+): Record<NodeId, N> {
+  if (!scope) return nodes
+  let next: Record<NodeId, N> | null = null
+  for (const [id, node] of Object.entries(nodes) as Array<[NodeId, N]>) {
+    const props = (node as { props?: Record<string, unknown> })?.props
+    const filter = props?.['repeatFilter']
+    if (typeof filter !== 'string' || !filter.includes('{{')) continue
+    next ??= { ...nodes }
+    next[id] = {
+      ...node,
+      props: { ...props, repeatFilter: substituteValue(filter, scope) },
+    } as N
+  }
+  return next ?? nodes
+}
+
 /** The node minus its repeat directives, or the node itself when it has none. */
 export function withoutRepeatDirective<N>(node: N): N {
   const props = (node as { props?: Record<string, unknown> })?.props

@@ -41,6 +41,7 @@ import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { announceDatasetRecords as announceDatasetChange } from '../announce-dataset-records'
 import { loadCustomFieldTypes } from '../custom-field-types'
 import { coerceDocumentValues, datasetIntegrityFields, datasetIntegrityUpdate, effectiveDatasetModel, validateDocument } from '../../model/dataset-models'
+import { fillRecordAddresses } from '../../record-pages/record-pages'
 
 /**
  * The organization's datasets on the customer REST API, `/v1/datasets/…`
@@ -468,7 +469,10 @@ async function createRecord(
   // A plugin's field validator only runs once its plugin has registered it.
   await loadCustomFieldTypes(model, ctx.loadPluginSurfaces)
   const body = await readJsonBody(request)
-  const coerced = coerceDocumentValues(model, (body.values as Record<string, unknown>) ?? {})
+  const coerced = fillRecordAddresses(
+    model,
+    coerceDocumentValues(model, (body.values as Record<string, unknown>) ?? {}),
+  )
   const errors = validateDocument(model, coerced)
   if (Object.keys(errors).length) {
     return ApiErrors.badRequest({
@@ -610,10 +614,10 @@ async function updateRecord(
   await loadCustomFieldTypes(model, ctx.loadPluginSurfaces)
   const body = await readJsonBody(request)
   // PATCH merges the supplied fields over the stored values.
-  const merged = {
+  const merged = fillRecordAddresses(model, {
     ...((snap.get('values') as Record<string, unknown>) ?? {}),
     ...coerceDocumentValues(model, (body.values as Record<string, unknown>) ?? {}),
-  }
+  })
   const errors = validateDocument(model, merged)
   if (Object.keys(errors).length) {
     return ApiErrors.badRequest({

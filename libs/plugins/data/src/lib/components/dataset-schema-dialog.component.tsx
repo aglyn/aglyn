@@ -60,6 +60,7 @@ import {
 } from '@aglyn/tenant-feature-instance'
 import { DATASET_FIELD_TYPES, DATASET_FIELD_TYPE_LABELS, type DatasetFieldDefinition, type DatasetFieldType, type DatasetModel, effectiveDatasetModel } from '../model/dataset-models'
 import { defaultDatasetFieldId, validateDatasetFieldId } from '../model/datasets'
+import { RECORD_PAGE_ADDRESS_FIELD_TYPE, isRecordAddressField } from '../record-pages/record-pages'
 
 /** Types surfaced in the picker; the rest exist for compat, not authoring. */
 const AUTHORABLE_TYPES: DatasetFieldType[] = [
@@ -920,6 +921,38 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
               </MenuItem>
             ))}
           </TextField>
+          {editorDefinition?.customType === RECORD_PAGE_ADDRESS_FIELD_TYPE ? (
+            <TextField
+              select
+              size="small"
+              label="Fill in from"
+              value={editorDefinition.slugFrom ?? ''}
+              onChange={(event) =>
+                setFieldEditor((prev) => {
+                  if (!prev) return prev
+                  const definition = { ...prev.definition }
+                  if (event.target.value) definition.slugFrom = event.target.value
+                  else delete definition.slugFrom
+                  return { ...prev, definition }
+                })
+              }
+              helperText="An empty address fills in from this field once, and stays put when the record is renamed"
+            >
+              <MenuItem value="">Nothing — type each address</MenuItem>
+              {model.order
+                .filter(
+                  (fieldId) =>
+                    fieldId !== fieldEditor?.fieldId &&
+                    model.fields[fieldId]?.type === 'text' &&
+                    !isRecordAddressField(model.fields[fieldId]),
+                )
+                .map((fieldId) => (
+                  <MenuItem key={fieldId} value={fieldId}>
+                    {model.fields[fieldId]?.name ?? fieldId}
+                  </MenuItem>
+                ))}
+            </TextField>
+          ) : null}
           {editorDefinition?.type === 'reference' ? (
             <>
               <TextField

@@ -23,6 +23,7 @@ import { lazy } from 'react'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { registerDatasetRecordList } from './model/dataset-record-list'
 import { DATASET_REPEAT_SOURCE } from './repeat/dataset-repeat-source'
+import { RECORD_PAGE_ADDRESS_FIELD } from './record-pages/record-pages'
 
 /** Code-split: the Data console page only loads when opened. */
 const DataConsolePage = lazy(() => import('./components/data-console-page'))
@@ -45,6 +46,9 @@ const DataConsolePage = lazy(() => import('./components/data-console-page'))
  */
 export function registerDataConsole(): void {
   registerRepeatSource(DATASET_REPEAT_SOURCE)
+  // The "Page address" field type (AGL-3475), for the schema dialog's type
+  // list and the record editor's checks.
+  Aglyn.registerCustomFieldType(RECORD_PAGE_ADDRESS_FIELD)
   // The workspace's datasets, for another plugin's picker (AGL-3080).
   registerDatasetRecordList()
   Aglyn.registerConsoleExtension({

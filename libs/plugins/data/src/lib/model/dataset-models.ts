@@ -126,6 +126,12 @@ export interface DatasetFieldDefinition {
    * plugin-manager/custom-fields. Unknown names degrade to the base type.
    */
   customType?: string
+  /**
+   * A page-address field's source (AGL-3475): the field an EMPTY address
+   * fills in from, once — see `fillRecordAddresses` in `record-pages`.
+   * Meaningful only on a field of the page-address custom type.
+   */
+  slugFrom?: string
   description?: string
   required?: boolean
   /** Default applied by editors when creating documents; never coerced. */

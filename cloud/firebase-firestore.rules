@@ -3426,13 +3426,19 @@ service cloud.firestore {
               'emailAttributions', 'campaignAttributions',
               'campaignSequenceReports',
               'flowEnrollments', 'leads', 'siteMembers',
-              'siteMemberCredentials']) &&
+              'siteMemberCredentials', 'recordPages']) &&
             // The org Inbox's collection-group read (AGL-3303) lists EVERY
             // `formSubmissions` collection, at any depth, filed under the org
             // a row names, so none may be minted beneath another name here.
             !string(document).matches('.*/formSubmissions/[^/]+')));
         // More names on all THREE lists, each server-written with no client
         // writer to break:
+        //
+        //  - `recordPages` (AGL-3475): a site's record templates. A binding
+        //    decides which page serves `/{base}/…` for every record of a
+        //    dataset, so the record-pages route writes it on the Admin SDK
+        //    after checking the dataset is shared with the site, the base is
+        //    free and the page is a template. Read stays with the catch-all.
         //
         //  - `campaigns`: one document per email SEND. `campaign-send.ts`
         //    stamps the audience and the consent and suppression populations,
@@ -3538,7 +3544,7 @@ service cloud.firestore {
               'emailAttributions', 'campaignAttributions',
               'campaignSequenceReports',
               'flowEnrollments', 'leads', 'siteMembers',
-              'siteMemberCredentials'])));
+              'siteMemberCredentials', 'recordPages'])));
         // `collections` joins the delete exclusion (AGL-947): a collection
         // owns `entries`, Firestore doesn't cascade, and a client delete
         // orphaned them — /api/resources/erase recursiveDeletes instead.
@@ -3587,7 +3593,8 @@ service cloud.firestore {
               'topicOptOuts', 'emailFrequency', 'campaigns', 'emailCampaigns',
               'emailAttributions', 'campaignAttributions',
               'campaignSequenceReports',
-              'flowEnrollments', 'siteMembers', 'siteMemberCredentials'])));
+              'flowEnrollments', 'siteMembers', 'siteMemberCredentials',
+              'recordPages'])));
       }
       // Members-only posts (AGL-2372). Create and update are denied outright
       // by the exclusions above — /api/commerce/member-post is the only

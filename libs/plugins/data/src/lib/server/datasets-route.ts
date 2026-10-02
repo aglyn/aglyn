@@ -44,6 +44,7 @@ import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refus
 import { Timestamp } from 'firebase-admin/firestore'
 import { announceDatasetRecords as announceDatasetChange } from './announce-dataset-records'
 import { coerceDocumentValues, datasetIntegrityFields, effectiveDatasetModel, validateDocument } from '../model/dataset-models'
+import { fillRecordAddresses } from '../record-pages/record-pages'
 
 /**
  * `dataStorageMbPerOrg` for this route, rendered as the console's 403.
@@ -400,7 +401,10 @@ export const datasetsHandler: PluginWebApiHandler = async (request) => {
         `Record limit reached (${limit}) — upgrade in Billing`
 
       if (action === 'create-record') {
-        const coerced = coerceDocumentValues(model, body?.values ?? {})
+        const coerced = fillRecordAddresses(
+          model,
+          coerceDocumentValues(model, body?.values ?? {}),
+        )
         const errors = validateDocument(model, coerced)
         if (Object.keys(errors).length) {
           return Response.json({ error: 'Record failed validation', errors }, { status: 400 })
@@ -504,9 +508,12 @@ export const datasetsHandler: PluginWebApiHandler = async (request) => {
       const importStorageRefusal = await refuseIfDataStorageBlocked(org, orgRef)
       if (importStorageRefusal) return importStorageRefusal
       const prepared = rows.map((row, index) => {
-        const coerced = coerceDocumentValues(
+        const coerced = fillRecordAddresses(
           model,
-          (row?.values ?? {}) as Record<string, unknown>,
+          coerceDocumentValues(
+            model,
+            (row?.values ?? {}) as Record<string, unknown>,
+          ),
         )
         const errors = validateDocument(model, coerced)
         return { index, coerced, valid: Object.keys(errors).length === 0 }

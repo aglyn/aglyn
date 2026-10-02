@@ -1012,10 +1012,22 @@
       "register": {
         "console": "registerDataConsole",
         "consoleApi": "registerDataConsoleApi",
+        "tenantApi": "registerDataTenantApi",
         "serverDeclarations": "registerDataServerDeclarations",
         "consoleServerDeclarations": "registerDataConsoleServerDeclarations",
         "usageAxes": "dataUsageAxes"
       },
+      "modules": {
+        "tenantApi": "tenant-api"
+      },
+      "hostCollections": [
+        {
+          "name": "recordPages",
+          "label": "record template",
+          "mediaScan": "none",
+          "mediaScanReason": "A binding holds a dataset id, a base path and field ids — never a value. The images a record page shows are the record's own, in the organization's dataset records, which no site collection holds."
+        }
+      ],
       "repeatSource": {
         "id": "dataset"
       },
@@ -1068,7 +1080,7 @@
           "defaultEnabled": true,
           "navTabId": "nav-tab-data"
         },
-        "publishedSiteImpact": "console-only"
+        "publishedSiteImpact": "routes"
       },
       "orgCapacities": [
         {

@@ -22,12 +22,14 @@ import { registerRepeatRowReader } from '@aglyn/aglyn/plugin-manager/repeat-rows
 import { registerPluginSiteBundleSection } from '@aglyn/aglyn/plugin-manager/plugin-site-bundle'
 import { registerPluginUsageMeter } from '@aglyn/aglyn/plugin-manager/plugin-usage-meters'
 import { registerServerStepExecutor } from '@aglyn/aglyn/plugin-manager/plugin-server-steps'
+import { registerCustomFieldType } from '@aglyn/aglyn/plugin-manager/custom-fields'
 import {
   BUNDLE_ID,
   DATASET_REPEAT_SOURCE_ID,
   DATASET_STEP_TYPES,
   DATASET_STORAGE_METER_ID,
 } from './constants/bundle-common'
+import { RECORD_PAGE_ADDRESS_FIELD } from './record-pages/record-pages'
 
 /**
  * The data plugin's server declarations: the light registrations core reads
@@ -61,6 +63,9 @@ import {
  * so a boot that skipped this fails the step with its reason rather than
  * reporting a record that was never written; the writes load with the first
  * step.
+ *
+ * And the "Page address" field type a record template reads a record's page
+ * from, so every write path holds an address to the shape a URL can carry.
  */
 export function registerDataServerDeclarations(): void {
   registerRepeatRowReader(
@@ -106,4 +111,7 @@ export function registerDataServerDeclarations(): void {
     async (request) => (await import('./server/dataset-steps.server')).runDatasetStep(request),
     { pluginId: BUNDLE_ID },
   )
+  // A record's page address (AGL-3475) is checked on every server path that
+  // writes a record, the tenant's form and automation writes included.
+  registerCustomFieldType(RECORD_PAGE_ADDRESS_FIELD)
 }

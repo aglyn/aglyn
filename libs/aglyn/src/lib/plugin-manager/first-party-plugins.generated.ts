@@ -175,7 +175,7 @@ export const PUBLISHED_SITE_IMPACT: Readonly<Record<string, PublishedSiteImpact>
   "marketplace": "console-only",
   "crm": "console-only",
   "outreach": "console-only",
-  "data": "console-only",
+  "data": "routes",
   "email": "elements",
   "events-calendar": "elements",
   "inbox": "console-only",
@@ -479,6 +479,13 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
     "name": "leads",
     "mediaScan": "none",
     "mediaScanReason": "Captured leads, on the same footing as `formSubmissions`: visitor-submitted, unbounded, and never a place an author places an asset."
+  },
+  {
+    "pluginId": "data",
+    "name": "recordPages",
+    "label": "record template",
+    "mediaScan": "none",
+    "mediaScanReason": "A binding holds a dataset id, a base path and field ids — never a value. The images a record page shows are the record's own, in the organization's dataset records, which no site collection holds."
   },
   {
     "pluginId": "email",

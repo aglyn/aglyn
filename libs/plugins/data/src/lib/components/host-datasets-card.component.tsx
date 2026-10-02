@@ -86,6 +86,7 @@ import {
   recordColumn,
 } from './dataset-record-filter'
 import { coerceDocumentValues, datasetIntegrityUpdate, datasetValueToInput, effectiveDatasetModel, formatDatasetValue, modelFromFieldEntries, validateDocument } from '../model/dataset-models'
+import { fillRecordAddresses } from '../record-pages/record-pages'
 import { parseDatasetFieldEntries } from '../model/datasets'
 
 export interface HostDatasetsCardProps {
@@ -877,7 +878,12 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
   )
   const handleSaveRecord = useCallback(async () => {
     if (!editor || !selected || !dataScope) return
-    const coerced = coerceDocumentValues(model, editor.values)
+    // The editor holds the record's WHOLE values, so an address it already
+    // has stays and an empty one fills in from its source (AGL-3475).
+    const coerced = fillRecordAddresses(
+      model,
+      coerceDocumentValues(model, editor.values),
+    )
     const errors = validateDocument(model, coerced)
     if (Object.keys(errors).length) {
       return void setEditor((prev) => (prev ? { ...prev, errors } : prev))
@@ -1189,7 +1195,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
       for (const [column, fieldId] of Object.entries(mapping)) {
         input[fieldId] = raw[column] ?? ''
       }
-      const values = coerceDocumentValues(model, input)
+      const values = fillRecordAddresses(model, coerceDocumentValues(model, input))
       const errors = validateDocument(model, values)
       return { values, errors, valid: !Object.keys(errors).length }
     })
