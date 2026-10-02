@@ -20,6 +20,7 @@ import {
   extendTheme as muiExtendTheme,
 } from '@mui/material/styles'
 import {
+  alpha,
   createTheme,
   darken,
   getContrastRatio,
@@ -30,6 +31,12 @@ import {
   type Theme,
   type ThemeOptions,
 } from '../../vendor/mui'
+import {
+  ACCENT_HOVER_FILL,
+  ACCENT_HOVER_TEXT,
+  hoverFillShade,
+  inkOnFill,
+} from './accent-text'
 import {
   accessibleShade,
   contrastRatio,
@@ -213,6 +220,81 @@ function ensureAccessibleShades(
 }
 
 /**
+ * Post-`createTheme` pass giving every palette color a defined HOVER
+ * (AGL-3465): `palette[color].hover`, the fill ({@link ACCENT_HOVER_FILL}),
+ * and `palette[color].hoverText`, the label ({@link ACCENT_HOVER_TEXT}).
+ * The `MuiButton` and `MuiFab` overrides read both.
+ *
+ * - **The fill.** MUI fills a hovered contained Button and Fab with
+ *   `palette[color].dark`, which this theme uses as the accent-as-TEXT
+ *   shade: lighter than `main` in a dark scheme, so a white label on it
+ *   sinks to ~2:1. Every entry with a string `main` and `contrastText` gets
+ *   one — the built-in accents, `tertiary`, `surface`, and any custom color
+ *   a palette adds — so a color a component can be asked to wear always has
+ *   a hover that carries its own ink at AA.
+ * - **The label.** A hovered text or outlined Button keeps `dark` as its
+ *   label and lays `main` at `action.hoverOpacity` under it. Foreground
+ *   colors get `dark` walked in the scheme's foreground direction until it
+ *   clears AA on that wash over both `background.default` and
+ *   `background.paper`; it stays `dark`, byte-identical, wherever `dark`
+ *   already does. `surface` gets none: its `dark` is a surface step, not
+ *   text, so it has no label to protect.
+ *
+ * A slot the caller authored passes through untouched.
+ */
+function ensureHoverShades(
+  theme: Theme,
+  inputPalette: PaletteOptions | undefined,
+) {
+  const palette = theme.palette as unknown as Record<string, unknown>
+  const providedColors = inputPalette as Record<string, unknown> | undefined
+  const tonalOffsetDark = resolveTonalOffsets(theme.palette.tonalOffset).dark
+  const foregroundDirection: ShadeDirection =
+    theme.palette.mode === 'dark' ? 'lighten' : 'darken'
+  const backgrounds = [
+    theme.palette.background?.default,
+    theme.palette.background?.paper,
+  ].filter((background): background is string => typeof background === 'string')
+  const hoverOpacity = theme.palette.action?.hoverOpacity ?? 0
+
+  for (const [key, value] of Object.entries(palette)) {
+    if (!value || typeof value !== 'object') continue
+    const color = value as Record<string, unknown>
+    const { main, dark, contrastText } = color
+    if (typeof main !== 'string' || typeof contrastText !== 'string') continue
+    const provided = (providedColors?.[key] ?? {}) as Record<string, unknown>
+    try {
+      if (typeof provided[ACCENT_HOVER_FILL] !== 'string') {
+        color[ACCENT_HOVER_FILL] = hoverFillShade(
+          {
+            main,
+            contrastText,
+            dark: typeof dark === 'string' ? dark : undefined,
+          },
+          tonalOffsetDark,
+        )
+      }
+      if (
+        typeof provided[ACCENT_HOVER_TEXT] !== 'string' &&
+        (FOREGROUND_COLOR_KEYS as readonly string[]).includes(key) &&
+        typeof dark === 'string' &&
+        backgrounds.length
+      ) {
+        const wash = alpha(main, hoverOpacity)
+        color[ACCENT_HOVER_TEXT] = accessibleShade(
+          dark,
+          backgrounds.map((background) => inkOnFill(wash, background)),
+          foregroundDirection,
+        )
+      }
+    } catch {
+      // Unparseable colour (CSS variable, color-mix()): no slot, so the
+      // component overrides fall back to MUI's own hover for this color.
+    }
+  }
+}
+
+/**
  * MUI's own default `responsiveFontSizes` variant list, spelled out because
  * passing `variants` replaces it rather than extending it.
  */
@@ -308,6 +390,9 @@ export function createResponsiveTheme(
   // Scheme- and AA-aware repair of DERIVED shades only (AGL-1297); explicit
   // palette values pass through byte-identical.
   ensureAccessibleShades(theme, themeOptions?.palette)
+  // After the shade repair, because both hover slots start from `dark` and
+  // have to see the value that ships.
+  ensureHoverShades(theme, themeOptions?.palette)
 
   theme = responsiveFontSizes(theme, {
     // Override to include `xs` and `xl` - default: ['sm', 'md', 'lg']
