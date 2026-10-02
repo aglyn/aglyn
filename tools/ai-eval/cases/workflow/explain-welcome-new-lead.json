@@ -9,8 +9,8 @@
       "recipe": "welcomeNewLead",
       "name": "Welcome a new lead",
       "trigger": {
-        "event": "contactCreated",
-        "conditions": [{ "field": "source", "op": "equals", "value": "form" }],
+        "event": "lead",
+        "conditions": [{ "field": "formId", "op": "notEmpty" }],
         "combinator": "and"
       },
       "steps": [
@@ -19,7 +19,7 @@
         {
           "type": "sendEmail",
           "subject": "Thanks for getting in touch",
-          "body": "Thanks for reaching out. We have your message and will reply to this email address."
+          "body": "Hi {{firstName|there}},\n\nThanks for reaching out. We have your message and will reply to this email address."
         },
         { "type": "addContactTag", "tag": "website" }
       ],
@@ -35,13 +35,13 @@
       "note": "A reference explanation written by hand of the Welcome a new lead recipe: what starts it, each step in order in the editor's words, and the one thing worth checking.",
       "plan": null,
       "answer": {
-        "summary": "When a form on your site makes a new contact, this automation gives them an owner, books a call for the next day, thanks them by email and tags them.",
+        "summary": "When a form on your site files a new lead, this automation gives them an owner, books a call for the next day, thanks them by email and tags them.",
         "points": [
-          "It starts when a new contact is created, but only when the contact came in through a form.",
-          "It gives the contact an owner, taking turns among the teammates in the CRM’s round robin.",
+          "It starts when a new lead is filed, but only when a form filed it.",
+          "It gives the lead an owner, taking turns among the teammates in the CRM’s round robin.",
           "It creates a call task due the next day, which goes to that owner.",
-          "It emails the contact a thank-you saying their message arrived and will be answered at that address.",
-          "It tags the contact website."
+          "It emails the lead a thank-you, greeting them by first name, saying their message arrived and will be answered at that address.",
+          "It tags the lead website."
         ],
         "suggestions": [
           "Check that the round robin under CRM Settings has teammates in it: with nobody in it, the owner step fails and the call task goes to no one."
@@ -62,11 +62,11 @@
       "answer": {
         "summary": "",
         "points": [
-          "It starts when a new contact is created, but only when the contact came in through a form.",
-          "It gives the contact an owner, taking turns among the teammates in the CRM’s round robin.",
+          "It starts when a new lead is filed, but only when a form filed it.",
+          "It gives the lead an owner, taking turns among the teammates in the CRM’s round robin.",
           "It creates a call task due the next day, which goes to that owner.",
-          "It emails the contact a thank-you saying their message arrived and will be answered at that address.",
-          "It tags the contact website."
+          "It emails the lead a thank-you, greeting them by first name, saying their message arrived and will be answered at that address.",
+          "It tags the lead website."
         ],
         "suggestions": []
       },
@@ -77,13 +77,13 @@
     {
       "why": "Names an email address, which nothing it was shown holds.",
       "answer": {
-        "summary": "It thanks each new contact, such as jane@example.com, by email.",
+        "summary": "It thanks each new lead, such as jane@example.com, by email.",
         "points": [
-          "It starts when a new contact is created, but only when the contact came in through a form.",
-          "It gives the contact an owner, taking turns among the teammates in the CRM’s round robin.",
+          "It starts when a new lead is filed, but only when a form filed it.",
+          "It gives the lead an owner, taking turns among the teammates in the CRM’s round robin.",
           "It creates a call task due the next day, which goes to that owner.",
-          "It emails the contact a thank-you saying their message arrived and will be answered at that address.",
-          "It tags the contact website."
+          "It emails the lead a thank-you, greeting them by first name, saying their message arrived and will be answered at that address.",
+          "It tags the lead website."
         ],
         "suggestions": []
       },
