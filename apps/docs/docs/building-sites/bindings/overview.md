@@ -34,8 +34,9 @@ Bindings appear inside text props as tokens:
 | Dataset field bindings | A value from a [dataset](../../content-and-data/datasets/overview.md) record. |
 
 The Besigner resolves bindings **WYSIWYG** on the canvas and marks bound content so you can
-see what's dynamic. The **`{ }`** button in the canvas toolbar switches to the raw tokens
-and back.
+see what's dynamic. That includes the shared layout around a page, and the inside of a
+placed component or form, which show the same values the published page shows. The
+**`{ }`** button in the canvas toolbar switches to the raw tokens and back.
 
 ## Rename-safe id tokens
 

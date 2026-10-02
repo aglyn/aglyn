@@ -51,6 +51,7 @@ import ComponentPromotionContext from '../contexts/component-promotion-context'
 import { useRenderedCanvasElements } from '../contexts/rendered-canvas-elements'
 import useAglynBesignerFlag from '../hooks/use-aglyn-besigner-flag'
 import { useNodeWithMediaAssetFacts } from '../hooks/use-media-asset-facts-overlay'
+import useNodeWithBindings from '../hooks/use-node-with-bindings'
 import useNodeWithHostTokens from '../hooks/use-node-with-host-tokens'
 import {
   useNodeWithRepeatRecord,
@@ -68,18 +69,22 @@ import EmptyDocumentSlot from './empty-document-slot'
 
 /**
  * The plain `Leaf`, drawing a node the way the published page composes it: its
- * host variables filled in from the site being edited (AGL-2881), and a placed
- * image or film with its DAM asset's current facts (AGL-2838, AGL-2856).
+ * site variables and functions resolved (AGL-3480), its host variables filled
+ * in from the site being edited (AGL-2881), and a placed image or film with
+ * its DAM asset's current facts (AGL-2838, AGL-2856).
  *
  * For the nodes the canvas renders that are not canvas nodes — a component
  * instance's definition, a placed form's design, the layout chrome — and so
- * never reach `NodeLeaf`. A footer's `{{host.businessName}}` still has to read
- * as the site's name, an asset inside one of them still has to show the shape
- * the published page gives it, and a film its poster.
+ * never reach `NodeLeaf`. A header's `{{var:…}}` phone number still has to
+ * read as the number, a footer's `{{host.businessName}}` as the site's name,
+ * an asset inside one of them still has to show the shape the published page
+ * gives it, and a film its poster. Bindings before host tokens, the order the
+ * published page composes in.
  */
 export const MediaFactsLeaf = forwardRef<any, LeafProps>((props, ref) => {
   const { node, ...rest } = props
-  const withHostTokens = useNodeWithHostTokens(node)
+  const withBindings = useNodeWithBindings(node)
+  const withHostTokens = useNodeWithHostTokens(withBindings)
   const withRecord = useNodeWithRepeatRecord(withHostTokens)
   const shown = useNodeWithMediaAssetFacts(withRecord)
   return <Leaf ref={ref} node={shown} {...rest} />
