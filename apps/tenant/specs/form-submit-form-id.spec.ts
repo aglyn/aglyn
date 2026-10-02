@@ -48,6 +48,8 @@ let mockLeads: Record<string, any>[] = []
 let mockLeadStored = true
 /** Whether the stored lead is new to the form's source (AGL-3330). */
 let mockSourceAdded = true
+/** Every host event the route announced: its type and its payload. */
+let mockEvents: Array<{ event: string; payload: Record<string, any> }> = []
 
 jest.mock('firebase-admin/firestore', () => ({
   __esModule: true,
@@ -171,7 +173,10 @@ jest.mock('@aglyn/tenant-runtime', () => ({
     return (runtime.upsertHostContact ?? dataAdmin.upsertHostContact)?.(...args)
   },
   __esModule: true,
-  emitHostEvent: async () => ({ alerts: [] }),
+  emitHostEvent: async (_hostId: string, event: string, payload: Record<string, any>) => {
+    mockEvents.push({ event, payload })
+    return { alerts: [] }
+  },
   resolveDatasetDoc: async () => null,
 }))
 
@@ -255,6 +260,7 @@ beforeEach(() => {
   mockLeads = []
   mockLeadStored = true
   mockSourceAdded = true
+  mockEvents = []
 })
 
 describe('a submission is stamped with the form it was sent to', () => {
@@ -317,6 +323,48 @@ describe('a submission is stamped with the form it was sent to', () => {
     )
     expect(stats?.patch['stats.submissions']).toEqual({ __increment: 1 })
     expect(typeof stats?.patch['stats.lastSubmissionAtMs']).toBe('number')
+  })
+})
+
+/**
+ * AGL-3458 — the `formSubmission` event names the form by id, so an
+ * automation's "Form is" condition survives a rename where one on `formName`
+ * stops matching. The id is the VERIFIED form's: a field the visitor typed
+ * cannot stand in for it.
+ */
+describe('the formSubmission event carries the form’s id', () => {
+  const announced = () => mockEvents.find((one) => one.event === 'formSubmission')?.payload
+
+  beforeEach(() => {
+    mockStore[`hosts/${HOST_ID}/forms/form-1`] = {
+      displayName: 'Contact',
+      slug: 'contact',
+      fields: [{ fieldName: 'email', fieldType: 'email' }],
+    }
+  })
+
+  it('names the form it was sent to, beside its name', async () => {
+    await submit({ formId: 'form-1' })
+    expect(announced()).toEqual(
+      expect.objectContaining({ formId: 'form-1', formName: 'Contact', email: 'visitor@example.com' }),
+    )
+  })
+
+  it('never lets a submitted field called formId claim another form', async () => {
+    await submit({
+      formId: 'form-1',
+      fields: { email: 'visitor@example.com', formId: 'form-other' },
+    })
+    expect(announced()?.['formId']).toBe('form-1')
+  })
+
+  it('names no form for an id the site does not have, whatever the fields say', async () => {
+    await submit({
+      formId: 'not-a-form',
+      fields: { email: 'visitor@example.com', formId: 'form-1' },
+    })
+    expect(announced()).toBeDefined()
+    expect(announced()).not.toHaveProperty('formId')
   })
 })
 

@@ -50,6 +50,12 @@ let flowGateCalls: Record<string, any>[] = []
 
 /** Addresses a transactional reply's suppression check refuses (AGL-3458). */
 let mockUnsendable: string[] | null = null
+/**
+ * When set, the message goes through the REAL send seam to a stubbed
+ * provider, so a case can read what would have left: its headers, its text
+ * and its HTML.
+ */
+let mockWire = false
 
 jest.mock('firebase-admin/firestore', () => ({
   __esModule: true,
@@ -224,7 +230,7 @@ jest.mock('@aglyn/shared-util-email', () => {
     isEmailConfigured: () => true,
     sendEmail: async (message: Record<string, any>) => {
       sent.push(message)
-      return sendResult
+      return mockWire ? actual.sendEmail(message) : sendResult
     },
   }
 })
@@ -771,6 +777,107 @@ describe('a transactional reply to the person’s own submission (AGL-3458)', ()
 
     expect(sent[0].marketing).toEqual(expect.objectContaining({ hostId: HOST_ID }))
     expect(sent[0].priority).toBe('bulk')
+  })
+})
+
+/**
+ * BOTH SIDES, ON THE WIRE (AGL-3458). The cases above read what the engine
+ * hands the send seam; these read what the seam hands the provider, with the
+ * site's marketing gate installed and minting a real opt-out — the setup in
+ * which a mailing gains its header pair and its visible link. A reply to the
+ * person's own form fill leaves with neither; the same step switched to a
+ * mailing, and a step in a topic, leave with both.
+ */
+describe('what leaves for the provider: a reply carries no unsubscribe, a mailing does', () => {
+  const ONE_CLICK = 'https://site.example/api/email/unsubscribe?sig=one-click'
+  const PREFERENCES = 'https://site.example/email/preferences?sig=page'
+  const env = { ...process.env }
+  const realFetch = global.fetch
+  let wire: Array<Record<string, any>> = []
+
+  beforeEach(() => {
+    mockWire = true
+    mockUnsendable = null
+    wire = []
+    process.env['RESEND_API_KEY'] = 're_test'
+    process.env['USAGE_EMAIL_FROM'] = 'Aglyn <noreply@aglyn.com>'
+    global.fetch = (async (_url: string, init: { body: string }) => {
+      wire.push(JSON.parse(init.body))
+      return { ok: true, status: 200, json: async () => ({ id: 'email_1' }), text: async () => '' }
+    }) as unknown as typeof fetch
+    const { setMarketingSendGate } = jest.requireActual('@aglyn/shared-util-email')
+    setMarketingSendGate(async () => ({
+      allowed: true,
+      unsubscribeUrl: PREFERENCES,
+      oneClickUrl: ONE_CLICK,
+    }))
+  })
+
+  afterEach(() => {
+    mockWire = false
+    global.fetch = realFetch
+    process.env = { ...env }
+    jest.requireActual('@aglyn/shared-util-email').setMarketingSendGate(null)
+  })
+
+  const everything = (message: Record<string, any>) =>
+    `${message['text'] ?? ''}\n${message['html'] ?? ''}`
+
+  it('a form-fill auto-reply: no List-Unsubscribe header, no unsubscribe link or line', async () => {
+    seedAction([{ type: 'sendEmail', subject: 'Thanks', body: 'We have your message' }])
+
+    await runEventActions(HOST_ID, 'formSubmission', { email: 'a@b.co' })
+
+    expect(wire).toHaveLength(1)
+    expect(Object.keys(wire[0]['headers'] ?? {})).not.toEqual(
+      expect.arrayContaining(['List-Unsubscribe']),
+    )
+    expect(everything(wire[0])).toContain('We have your message')
+    expect(everything(wire[0])).not.toContain(PREFERENCES)
+    expect(everything(wire[0])).not.toContain(ONE_CLICK)
+    expect(everything(wire[0]).toLowerCase()).not.toContain('unsubscribe')
+  })
+
+  it('the same step switched to a mailing: the RFC 8058 pair and the visible link', async () => {
+    seedAction([{ type: 'sendEmail', subject: 'Thanks', body: 'We have your message', transactional: false }])
+
+    await runEventActions(HOST_ID, 'formSubmission', { email: 'a@b.co' })
+
+    expect(wire).toHaveLength(1)
+    expect(wire[0]['headers']).toEqual(
+      expect.objectContaining({
+        'List-Unsubscribe': expect.stringContaining(ONE_CLICK),
+        'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+      }),
+    )
+    expect(everything(wire[0])).toContain(PREFERENCES)
+  })
+
+  it('a step in an email topic: still a mailing, with both', async () => {
+    seedAction([{ type: 'sendEmail', subject: 'News', body: 'a', topicId: 'promotions' }])
+
+    await runEventActions(HOST_ID, 'formSubmission', { email: 'a@b.co' })
+
+    expect(wire[0]['headers']).toEqual(
+      expect.objectContaining({ 'List-Unsubscribe': expect.stringContaining(ONE_CLICK) }),
+    )
+    expect(everything(wire[0])).toContain(PREFERENCES)
+  })
+
+  it('an email after a wait: a mailing, with both', async () => {
+    seedAction([
+      { type: 'wait', delayMinutes: 60 },
+      { type: 'sendEmail', subject: 'Day one', body: 'a' },
+    ])
+    await runEventActions(HOST_ID, 'formSubmission', { email: 'a@b.co' })
+    const [id, enrollment] = onlyEnrollment()
+
+    await resumeFlowEnrollment(enrollment, enrollmentRef(id), { nowMs: NOW })
+
+    expect(wire[0]['headers']).toEqual(
+      expect.objectContaining({ 'List-Unsubscribe': expect.stringContaining(ONE_CLICK) }),
+    )
+    expect(everything(wire[0])).toContain(PREFERENCES)
   })
 })
 
