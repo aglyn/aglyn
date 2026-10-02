@@ -390,7 +390,9 @@ export class RouteRemovalRefusedError extends Error {
  * computes one; this refuses one anyway, before anything is read or written,
  * so a caller that builds its own entries cannot reach around that. The way
  * to take a page off the site is {@link unpublishScreenRoute}, which removes
- * that page's entry and nothing else.
+ * that page's entry and nothing else. The Firestore rules hold the same line
+ * for any client write (`routeRemovalAllowed`): one removal per write, with
+ * nothing else in the map changing beside it.
  */
 export async function syncScreenRouteEntries(
   firestore: Firestore,
