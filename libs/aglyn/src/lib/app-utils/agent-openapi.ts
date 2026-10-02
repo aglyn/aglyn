@@ -887,7 +887,9 @@ export function buildAgentOpenApi(options: AgentOpenApiOptions): Schema {
             slug: { type: 'string', description: 'The page’s own path segment.' },
             parentId: {
               type: 'string',
-              description: 'Parent page, for a nested page.',
+              description:
+                'Nearest parent page, for a nested page. Page groups are ' +
+                'skipped: they hold pages in the editor and have no address.',
             },
             order: { type: 'integer', description: 'Sort order among siblings.' },
             displayName: { type: 'string', description: 'The page’s name.' },

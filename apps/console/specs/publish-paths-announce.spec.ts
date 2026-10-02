@@ -93,6 +93,7 @@ jest.mock('@aglyn/aglyn/app-utils/analytics-events', () => ({
 import {
   publishScreenRoute,
   releaseDefaultHomeRoot,
+  RouteRemovalRefusedError,
   syncScreenRouteEntries,
   unpublishScreenRoute,
 } from '../constants/screen-publishing'
@@ -173,6 +174,19 @@ describe('unpublishing announces the address that is going away', () => {
       unpublishScreenRoute(firestore, { hostId: 'host', screenId: 's', user }),
     ).resolves.toBeUndefined()
     expect(mockCommit).toHaveBeenCalled()
+  })
+
+  it('removes THIS screen’s entry and leaves the live pages under it routed (AGL-3463)', async () => {
+    mockGetDoc.mockResolvedValue(
+      hostDoc({ s: 'company', child: 'company/about' }) as never,
+    )
+    await unpublishScreenRoute(firestore, { hostId: 'host', screenId: 's', user })
+    const hostWrites = mockBatchUpdate.mock.calls.filter(
+      ([ref]) => (ref as { path: string }).path === 'hosts/host',
+    )
+    expect(hostWrites).toHaveLength(1)
+    expect(hostWrites[0][1]).toEqual({ 'screens.s': '__deleted__' })
+    expect(announced()?.paths).toEqual(['/company'])
   })
 })
 
@@ -286,13 +300,30 @@ describe('a routing-map sync announces both sides of every move', () => {
     expect(announced()?.paths).toEqual(['/docs/old', '/docs/new'])
   })
 
-  it('drops a removed entry, which is what the toolbar Unpublish writes', async () => {
-    // `handleTogglePublish` — the publish button people actually use — takes
-    // a screen off the site by syncing a `null` entry, not by calling
-    // `unpublishScreenRoute`.
-    mockGetDoc.mockResolvedValue(hostDoc({ s: 'gone' }) as never)
-    await syncScreenRouteEntries(firestore, 'host', { s: null }, { user })
-    expect(announced()?.paths).toEqual(['/gone'])
+  it('refuses a removal before reading or writing anything (AGL-3463)', async () => {
+    // A sync is what a move, a rename or a parent's publish writes for a
+    // whole subtree, so a removal in it would take down a page nobody pointed
+    // at. Every unpublish surface calls `unpublishScreenRoute` instead.
+    mockGetDoc.mockResolvedValue(hostDoc({ s: 'gone', t: 'kept' }) as never)
+    await expect(
+      syncScreenRouteEntries(
+        firestore,
+        'host',
+        { s: null, t: 'kept' } as unknown as Record<string, string>,
+        { user },
+      ),
+    ).rejects.toBeInstanceOf(RouteRemovalRefusedError)
+    expect(mockGetDoc).not.toHaveBeenCalled()
+    expect(mockBatchUpdate).not.toHaveBeenCalled()
+    expect(mockCommit).not.toHaveBeenCalled()
+    expect(mockRevalidateLivePages).not.toHaveBeenCalled()
+  })
+
+  it('refuses an empty path as a removal too', async () => {
+    await expect(
+      syncScreenRouteEntries(firestore, 'host', { s: '' }, { user }),
+    ).rejects.toMatchObject({ screenIds: ['s'] })
+    expect(mockCommit).not.toHaveBeenCalled()
   })
 
   it('ignores entries rewritten to the address they already had', async () => {
@@ -361,9 +392,17 @@ const ROUTE = 'apps/console/app/api/screens/revalidate/route.ts'
 describe('every editor publish surface reaches the seam', () => {
   it('the one-click Publish button announces on both branches', () => {
     const source = readRepo(BESIGNER)
-    // Unpublish, then publish — the two writes `handleTogglePublish` makes.
+    // Publish syncs the subtree's entries with the announcer…
     expect(source).toMatch(/buildRouteEntries\(candidateById\),\s*\{ user \},/)
-    expect(source).toMatch(/\}\),\s*\{ user \},\s*\)\s*\/\/ The slug stays/)
+    // …and Unpublish goes through the seam that removes this page's entry
+    // alone and announces its address (AGL-3463) — never a sync with a
+    // removal in it, which the sync now refuses.
+    expect(source).toMatch(
+      /await unpublishScreenRoute\(firestore, \{ hostId, screenId, user \}\)/,
+    )
+    expect(source).toMatch(
+      /unpublishScreenRoute\(\s*firestore,\s*\{ hostId, screenId, user \},\s*\{ clearSlug: true \},?\s*\)/,
+    )
   })
 
   it('route publish and unpublish both announce', () => {

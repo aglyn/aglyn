@@ -25,6 +25,7 @@ import {
   blockingRouteOwner,
   formatQuotaLimit,
   isScreenGroup,
+  liveScreenDescendants,
   normalizeScreenSlug,
   reservedScreenRouteMessage,
   reservedScreenRouteSegment,
@@ -113,6 +114,9 @@ import ArtifactDeleteConfirmDescription, {
   fetchArtifactUsage,
 } from '../../../../../../components/artifacts/artifact-delete-confirm.component'
 import HostDisplayNameComponent from '../../../../../../components/host-display-name.component'
+import LiveDescendantsNote, {
+  type LiveDescendantPage,
+} from '../../../../../../components/live-descendants-note.component'
 import SaveAsTemplateDialog, {
   type SaveAsTemplateSource,
 } from '../../../../../../components/templates/save-as-template-dialog.component'
@@ -288,6 +292,20 @@ function Screens(props) {
     for (const screen of screens) map[screen.$id] = toScreenRouteNode(screen)
     return map
   }, [screens])
+  /**
+   * The pages under `id` that keep serving when `id` is unpublished or
+   * deleted (AGL-3463): neither act removes more than its own routing entry,
+   * so the confirmations name these rather than leave the author believing
+   * the whole section went down.
+   */
+  const liveDescendantPages = useCallback(
+    (id: ScreenUid): LiveDescendantPage[] =>
+      liveScreenDescendants(id, screensById, routingMap).map((page) => ({
+        ...page,
+        name: screens.find((screen) => screen.$id === page.id)?.displayName,
+      })),
+    [screens, screensById, routingMap],
+  )
   const { enqueueSnackbar, closeSnackbar } = useSnackbar()
   // Duplicate (AGL-2936): the copy is a draft — no routing entry — so the
   // list gains a row and the live site gains nothing until it is published.
@@ -500,14 +518,17 @@ function Screens(props) {
       await confirm({
         title: 'Delete this page?',
         description: (
-          <ArtifactDeleteConfirmDescription
-            kind="screen"
-            name={
-              screens.find((screen: any) => screen.$id === id)?.displayName ??
-              id
-            }
-            scan={scan}
-          />
+          <>
+            <ArtifactDeleteConfirmDescription
+              kind="screen"
+              name={
+                screens.find((screen: any) => screen.$id === id)
+                  ?.displayName ?? id
+              }
+              scan={scan}
+            />
+            <LiveDescendantsNote pages={liveDescendantPages(id)} />
+          </>
         ),
         confirmationText: 'Delete',
         confirmationButtonProps: { color: 'error' },
@@ -531,7 +552,16 @@ function Screens(props) {
           dequeueLoading && dequeueLoading()
         })
     },
-    [confirm, firestore, hostId, queueLoading, logActivity, screens, user],
+    [
+      confirm,
+      firestore,
+      hostId,
+      queueLoading,
+      logActivity,
+      screens,
+      user,
+      liveDescendantPages,
+    ],
   )
 
   /**
@@ -551,18 +581,27 @@ function Screens(props) {
    *
    * `unpublishScreenRoute` removes the routing-map entry and drops
    * `publishedAt`; the screen, its versions and its slug are untouched, so
-   * Publish puts it back at the same address.
+   * Publish puts it back at the same address. Pages nested under it keep
+   * their own entries, and the dialog names them (AGL-3463).
    */
   const handleUnpublishScreen = useCallback(
     (id: string, name: string, path: string | undefined) => async () => {
       const confirmed = await confirm({
         title: 'Unpublish this page?',
-        description: path
-          ? `${screenRoutePathToUrl(path)} will stop resolving on the live ` +
-            'site. The page, its content and its address are kept — ' +
-            'publishing again puts it back.'
-          : 'This page will stop resolving on the live site. Its content ' +
-            'and address are kept — publishing again puts it back.',
+        description: (
+          <>
+            <span>
+              {path
+                ? `${screenRoutePathToUrl(path)} will stop resolving on the ` +
+                  'live site. The page, its content and its address are ' +
+                  'kept — publishing again puts it back.'
+                : 'This page will stop resolving on the live site. Its ' +
+                  'content and address are kept — publishing again puts it ' +
+                  'back.'}
+            </span>
+            <LiveDescendantsNote pages={liveDescendantPages(id)} />
+          </>
+        ),
         confirmationText: 'Unpublish',
       })
         .then(() => true)
@@ -591,13 +630,17 @@ function Screens(props) {
       enqueueSnackbar,
       logActivity,
       user,
+      liveDescendantPages,
     ],
   )
 
   // Drop handler for the hierarchy table: re-parents/reorders the screen,
   // rewrites sibling `order` values, then cascades routing-map paths for the
   // moved screen and its descendants (parent `company` + own `about` →
-  // /company/about, same rules as the besigner Publishing section).
+  // /company/about, same rules as the besigner Publishing section). A live
+  // page whose new chain does not compose — dropped under a page with no
+  // slug — keeps the address it has; a move never takes a page off the site
+  // (AGL-3463).
   const handleMoveScreen = useCallback(
     async ({ screenId, nextParentId, beforeId }: ScreenMoveRequest) => {
       if (loading) return
@@ -635,6 +678,7 @@ function Screens(props) {
       const nextRouteEntries = parentChanged
         ? buildScreenRouteEntries(screenId, nextById, routingMap, {
             publish: false,
+            currentById: screensById,
           })
         : undefined
       /*
@@ -656,11 +700,12 @@ function Screens(props) {
       const routeLevelKept =
         screenRouteParentId(screenId, screensById) ===
         screenRouteParentId(screenId, nextById)
-      const changedRouteEntries = Object.fromEntries(
-        Object.entries(nextRouteEntries ?? {}).filter(
-          ([id, path]) => (routingMap?.[id] ?? null) !== path,
-        ),
-      )
+      const changedRouteEntries: Record<ScreenUid, string> =
+        Object.fromEntries(
+          Object.entries(nextRouteEntries ?? {}).filter(
+            ([id, path]) => routingMap?.[id] !== path,
+          ),
+        )
       const [movedAddress] = Object.entries(changedRouteEntries)
       if (routeLevelKept && movedAddress) {
         const [movedId, movedTo] = movedAddress
@@ -672,7 +717,7 @@ function Screens(props) {
         enqueueSnackbar(
           `Not moved — this would change ${
             from ? screenRoutePathToUrl(from) : 'a page'
-          }${movedTo ? ` to ${screenRoutePathToUrl(movedTo)}` : ''}. ` +
+          } to ${screenRoutePathToUrl(movedTo)}. ` +
             'Its slug and its published address disagree; publish it again ' +
             'so they match, then move it.',
           { variant: 'warning', persist: false },
@@ -705,11 +750,7 @@ function Screens(props) {
        */
       const reservedMove = Object.values(nextRouteEntries ?? {}).reduce<
         string | undefined
-      >(
-        (found, path) =>
-          found ?? (path ? reservedScreenRouteSegment(path) : undefined),
-        undefined,
-      )
+      >((found, path) => found ?? reservedScreenRouteSegment(path), undefined)
       if (reservedMove) {
         enqueueSnackbar(reservedScreenRouteMessage(reservedMove), {
           variant: 'warning',
@@ -763,16 +804,22 @@ function Screens(props) {
             user,
           })
         }
-        const isLive = routingMap?.[screenId] !== undefined
+        const livePath = routingMap?.[screenId]
         enqueueSnackbar(
           // "Now served at" only for a screen that IS served (AGL-2571) —
           // an unpublished screen is moved, not routed, and saying otherwise
           // is the same false report the toolbar was making.
-          parentChanged && nextSelfPath && isLive && !routeLevelKept
-            ? `Page moved — now served at ${screenRoutePathToUrl(nextSelfPath)}`
-            : parentChanged && nextSelfPath && isLive
-              ? `Page moved — still served at ${screenRoutePathToUrl(nextSelfPath)}`
-              : 'Page moved',
+          parentChanged && livePath && !nextSelfPath
+            ? // Kept, not dropped (AGL-3463): the new parent composes no
+              // address, so the page stays where it is until it is
+              // published again.
+              `Page moved — still served at ${screenRoutePathToUrl(livePath)}` +
+                ', its address until you publish it again'
+            : parentChanged && nextSelfPath && livePath && !routeLevelKept
+              ? `Page moved — now served at ${screenRoutePathToUrl(nextSelfPath)}`
+              : parentChanged && nextSelfPath && livePath
+                ? `Page moved — still served at ${screenRoutePathToUrl(nextSelfPath)}`
+                : 'Page moved',
           { variant: 'success', persist: false },
         )
       } catch (error) {
@@ -915,8 +962,9 @@ function Screens(props) {
         Object.entries(
           buildScreenRouteEntries(childId, nextById, routingMap, {
             publish: false,
+            currentById: screensById,
           }),
-        ).filter(([screenId, path]) => (routingMap?.[screenId] ?? null) !== path),
+        ).filter(([screenId, path]) => routingMap?.[screenId] !== path),
       )
       if (moved.length) {
         console.error('[screens] deleting a group would move addresses', moved)

@@ -16,7 +16,11 @@
  */
 'use client'
 
-import { HOST_ERROR_SCREEN_SLOTS, type HostErrorScreenSlot } from '@aglyn/aglyn'
+import {
+  HOST_ERROR_SCREEN_SLOTS,
+  isScreenGroup,
+  type HostErrorScreenSlot,
+} from '@aglyn/aglyn'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -144,8 +148,10 @@ export function ErrorScreensCard(props: ErrorScreensCardProps) {
     [firestore, hostId],
     { idField: '$id' },
   )
+  // A page group (AGL-3463) has no content to render on an error path, and
+  // /api/hosts/screens refuses one in a slot, so it is never offered.
   const screens = [...(screenDocs ?? [])]
-    .filter((screen: any) => !screen.deletedAt)
+    .filter((screen: any) => !screen.deletedAt && !isScreenGroup(screen))
     .sort((a: any, b: any) =>
       String(a.displayName ?? '').localeCompare(String(b.displayName ?? '')),
     )

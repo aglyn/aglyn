@@ -67,7 +67,7 @@ const routingMap: Record<string, string> = {
 }
 
 /** Every entry a write would make equals the address it already has. */
-function expectRoutesUnchanged(entries: Record<string, string | null>) {
+function expectRoutesUnchanged(entries: Record<string, string>) {
   for (const [screenId, path] of Object.entries(entries)) {
     expect([screenId, path]).toEqual([screenId, routingMap[screenId]])
   }
@@ -165,38 +165,35 @@ describe('composeScreenRoutePath through groups', () => {
 })
 
 describe('buildScreenRouteEntries around groups', () => {
-  it('never writes an entry for a group, and removes a stray one', () => {
-    expect(buildScreenRouteEntries('campaigns', screens, {})).toEqual({
-      landing: 'landing',
-      deep: 'deep',
-      deepChild: 'deep/child',
-    })
-    expect(
-      buildScreenRouteEntries('campaigns', screens, {
-        ...routingMap,
-        campaigns: 'campaigns',
-      }),
-    ).toEqual({
-      campaigns: null,
-      landing: 'landing',
-      deep: 'deep',
-      deepChild: 'deep/child',
-    })
+  /** A call that changes nothing about the tree. */
+  const unchanged = { currentById: screens }
+
+  it('never writes an entry for a group', () => {
     // A publish of the group itself — the toolbar a group never shows —
-    // would write nothing for it.
-    expect(buildScreenRouteEntries('inner', screens, {})).toEqual({
-      deep: 'deep',
-      deepChild: 'deep/child',
-    })
+    // writes nothing for it, and puts none of the drafts inside it live.
+    expect(buildScreenRouteEntries('campaigns', screens, {}, unchanged)).toEqual(
+      {},
+    )
+    expect(buildScreenRouteEntries('inner', screens, {}, unchanged)).toEqual({})
+    // A stray entry is left for `unpublishScreenRoute` to remove — this never
+    // answers a removal — and the live pages inside keep theirs.
+    expect(
+      buildScreenRouteEntries(
+        'campaigns',
+        screens,
+        { ...routingMap, campaigns: 'campaigns' },
+        unchanged,
+      ),
+    ).toEqual({ landing: 'landing', deep: 'deep', deepChild: 'deep/child' })
   })
 
   it('publishes a group’s child normally', () => {
-    expect(buildScreenRouteEntries('landing', screens, {})).toEqual({
+    expect(buildScreenRouteEntries('landing', screens, {}, unchanged)).toEqual({
       landing: 'landing',
     })
-    expect(buildScreenRouteEntries('deepChild', screens, {})).toEqual({
-      deepChild: 'deep/child',
-    })
+    expect(
+      buildScreenRouteEntries('deepChild', screens, {}, unchanged),
+    ).toEqual({ deepChild: 'deep/child' })
   })
 
   it('leaves the routing map unchanged when a page moves INTO a group', () => {
@@ -216,6 +213,7 @@ describe('buildScreenRouteEntries around groups', () => {
       )
       const entries = buildScreenRouteEntries(id, after, routingMap, {
         publish: false,
+        currentById: before,
       })
       expect(Object.keys(entries).length).toBeGreaterThan(0)
       expectRoutesUnchanged(entries)
@@ -224,12 +222,18 @@ describe('buildScreenRouteEntries around groups', () => {
 
   it('leaves the routing map unchanged when a page moves OUT of a group', () => {
     for (const id of ['landing', 'deep'] as const) {
-      const after = { ...screens, [id]: { ...screens[id], parentId: undefined } }
+      const after: Record<string, ScreenRouteNode> = {
+        ...screens,
+        [id]: { ...screens[id], parentId: undefined },
+      }
       expect(screenRouteParentId(id, after)).toBe(
         screenRouteParentId(id, screens),
       )
       expectRoutesUnchanged(
-        buildScreenRouteEntries(id, after, routingMap, { publish: false }),
+        buildScreenRouteEntries(id, after, routingMap, {
+          publish: false,
+          currentById: screens,
+        }),
       )
     }
   })
@@ -238,7 +242,10 @@ describe('buildScreenRouteEntries around groups', () => {
     // Nesting one top-level group in another moves every page inside it.
     const after = { ...screens, inner: group() }
     expectRoutesUnchanged(
-      buildScreenRouteEntries('inner', after, routingMap, { publish: false }),
+      buildScreenRouteEntries('inner', after, routingMap, {
+        publish: false,
+        currentById: screens,
+      }),
     )
   })
 
@@ -250,7 +257,10 @@ describe('buildScreenRouteEntries around groups', () => {
     }
     expect(screenRouteParentId('landing', after)).toBe('company')
     expect(
-      buildScreenRouteEntries('landing', after, routingMap, { publish: false }),
+      buildScreenRouteEntries('landing', after, routingMap, {
+        publish: false,
+        currentById: screens,
+      }),
     ).toEqual({ landing: 'company/landing' })
   })
 })
@@ -290,7 +300,10 @@ describe('screenGroupDissolveMoves', () => {
       }
       for (const id of Object.keys(moves)) {
         expectRoutesUnchanged(
-          buildScreenRouteEntries(id, after, routingMap, { publish: false }),
+          buildScreenRouteEntries(id, after, routingMap, {
+            publish: false,
+            currentById: screens,
+          }),
         )
       }
     }

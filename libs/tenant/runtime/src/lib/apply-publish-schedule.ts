@@ -181,6 +181,11 @@ export async function applyDuePublishSchedule(options: {
   // Scheduled unpublish (AGL-113, screens only): drop the routing-map entry
   // so the path 404s on the next revalidate. This render still serves the
   // current version — the map is matched before this runs.
+  //
+  // THIS screen's entry only (AGL-3463). A scheduled unpublish of a parent
+  // leaves every page nested under it serving at its own address, exactly as
+  // the console's unpublish does; a page below only goes when it is
+  // unpublished itself.
   if (schedule.action === 'unpublish') {
     if (collectionName === 'screens') {
       try {
@@ -223,6 +228,10 @@ export async function applyDuePublishSchedule(options: {
   //
   // Screens only. A layout has no address of its own, exactly as the
   // unpublish branch above is screens-only.
+  //
+  // Only THIS screen's entry is written, never a descendant's (AGL-3463): a
+  // scheduled publish of a parent neither puts the drafts beneath it live
+  // nor moves a page below that kept its own address.
   //
   // In practice the CRON BEAT is the only caller that reaches a first publish:
   // the lazy ISR path resolves a request path through the routing map before

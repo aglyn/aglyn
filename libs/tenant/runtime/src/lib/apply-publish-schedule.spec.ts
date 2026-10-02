@@ -475,3 +475,74 @@ describe('a scheduled first publish registers the route (AGL-1589)', () => {
     expect(commitMock).not.toHaveBeenCalled()
   })
 })
+
+/**
+ * A scheduled publish or unpublish of a PARENT touches the parent's own
+ * routing entry and nothing else (AGL-3463). Pages nested under it keep
+ * serving at their own addresses, and drafts under it stay drafts — exactly
+ * what the console's unpublish and publish do, with no browser present to
+ * show a confirmation.
+ */
+describe('a scheduled publish or unpublish of a parent (AGL-3463)', () => {
+  /** Every routing-map key any write in this run touched. */
+  const routingKeysWritten = () =>
+    [
+      ...updateMock.mock.calls.map((call) => call[0]),
+      ...batchUpdateMock.mock.calls.map((call) => call[1]),
+    ]
+      .flatMap((data) => Object.keys((data ?? {}) as object))
+      .filter((key) => key.startsWith('screens.'))
+
+  beforeEach(() => {
+    screenDocs = {
+      'screen-1': { slug: 'company' },
+      about: { slug: 'about', parentId: 'screen-1' },
+      team: { slug: 'team', parentId: 'about' },
+      draft: { slug: 'draft', parentId: 'screen-1' },
+    }
+  })
+
+  it('an unpublish removes the parent’s entry and leaves its live children routed', async () => {
+    routingMap = {
+      'screen-1': 'company',
+      about: 'company/about',
+      team: 'company/about/team',
+    }
+
+    await run({
+      versionId: 'v-live',
+      publishSchedule: schedule({ action: 'unpublish' }),
+    })
+
+    expect(routingKeysWritten()).toEqual(['screens.screen-1'])
+    expect(updateMock).toHaveBeenCalledWith(
+      expect.objectContaining({ 'publishSchedule.status': 'applied' }),
+    )
+  })
+
+  it('a first publish registers the parent alone — no draft below it goes live', async () => {
+    // The parent was unpublished with its slug cleared and has a new one now;
+    // `about` kept its address and is detached from it.
+    screenDocs['screen-1'] = { slug: 'firm' }
+    routingMap = { about: 'company/about', team: 'company/about/team' }
+
+    await run({ versionId: 'v-live', publishSchedule: schedule() })
+
+    expect(batchUpdateMock.mock.calls[0][1]).toEqual({
+      'screens.screen-1': 'firm',
+    })
+    expect(routingKeysWritten()).toEqual(['screens.screen-1'])
+  })
+
+  it('a republish of a live parent writes no routing entry at all', async () => {
+    routingMap = {
+      'screen-1': 'company',
+      about: 'company/about',
+      team: 'company/about/team',
+    }
+
+    await run({ versionId: 'v-live', publishSchedule: schedule() })
+
+    expect(routingKeysWritten()).toEqual([])
+  })
+})

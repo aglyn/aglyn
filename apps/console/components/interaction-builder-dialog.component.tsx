@@ -31,6 +31,7 @@ import {
   isClientActionStep,
   isClientStepEntitled,
   isInteractionAttributeAllowed,
+  isScreenGroup,
   planLabelGrantingFeature,
   SCROLL_TO_MAX_OFFSET_PX,
   validateInteraction,
@@ -1267,11 +1268,15 @@ export function InteractionBuilderDialog(props: InteractionBuilderDialogProps) {
                     sx={{ flex: 1 }}
                   >
                     <MenuItem value="">{'Custom URL…'}</MenuItem>
-                    {(screenDocs ?? []).map((screen: any) => (
-                      <MenuItem key={screen.$id} value={screen.$id}>
-                        {screen.displayName ?? screen.slug ?? screen.$id}
-                      </MenuItem>
-                    ))}
+                    {/* A page group (AGL-3463) has no address to send a
+                        visitor to, so it is not a redirect target. */}
+                    {(screenDocs ?? [])
+                      .filter((screen: any) => !isScreenGroup(screen))
+                      .map((screen: any) => (
+                        <MenuItem key={screen.$id} value={screen.$id}>
+                          {screen.displayName ?? screen.slug ?? screen.$id}
+                        </MenuItem>
+                      ))}
                   </TextField>
                   {!step.screenId ? (
                     <TextField
