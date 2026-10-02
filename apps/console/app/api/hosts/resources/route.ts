@@ -888,11 +888,21 @@ async function handler(request: Request): Promise<Response> {
       ) {
         const existing = nonPageScreenIds(screenRows, routingMap).size
         if (existing >= NON_PAGE_SCREEN_MAX_PER_HOST) {
+          // Groups share the bucket (AGL-3463), so a refused group names them
+          // first. The email sentence stays word for word: the email plugin's
+          // writer refuses in these words too, and a spec holds the two equal.
+          if (requestedKind === SCREEN_KIND_GROUP) {
+            return {
+              error:
+                'This site is at its limit of ' +
+                `${NON_PAGE_SCREEN_MAX_PER_HOST} page groups, email designs ` +
+                'and template pages — delete some to make room',
+            }
+          }
           return {
             error:
               'This site is at its limit of ' +
-              `${NON_PAGE_SCREEN_MAX_PER_HOST} email designs, template pages ` +
-              'and page groups — ' +
+              `${NON_PAGE_SCREEN_MAX_PER_HOST} email designs and template pages — ` +
               'delete some to make room',
           }
         }
