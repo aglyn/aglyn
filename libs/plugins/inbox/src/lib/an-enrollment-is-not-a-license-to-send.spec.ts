@@ -340,6 +340,12 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 import { inboxAssignListHandler } from './server'
 import { standInPersonRecords } from './testing/stand-in-person-records'
 import { performCampaignSend } from '@aglyn/plugins-marketing/server/campaign-send'
+import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { standInFormSubmissionIndex } from './testing/stand-in-form-submissions'
+
+// The submissions are the forms plugin's, found through the index it
+// publishes (AGL-3080); stood in over this file's Firestore double.
+standInFormSubmissionIndex(() => firebaseAdmin.app().firestore() as never)
 
 /** Drives the real Inbox route the merchant's button posts to. */
 async function addToList(body: Record<string, unknown> = {}) {

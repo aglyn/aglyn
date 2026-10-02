@@ -45,6 +45,7 @@ import {
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { Alert, Box, Button, Stack, TextField, Typography } from '@mui/material'
 import { collection, doc, limit, orderBy, query } from 'firebase/firestore'
+import { pluginRecordListDoc } from '@aglyn/aglyn/plugin-manager/plugin-record-lists'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   REPLY_BODY_MAX,
@@ -101,24 +102,23 @@ export function SubmissionReply(props: SubmissionReplyProps) {
   }, [siteName, submission?.$id, submission?.formName])
 
   const { data: sentReplies } = useFirestoreCollection<any>(
-    () =>
-      submission?.$id
+    () => {
+      // Kept under the submission they answer: the forms plugin's document,
+      // which the list source it publishes hands this plugin (AGL-3080).
+      const submissionDoc = submission?.$id
+        ? pluginRecordListDoc('formSubmission', firestore, { hostId, id: submission.$id })
+        : null
+      return submissionDoc
         ? query(
-            collection(
-              firestore,
-              'hosts',
-              hostId,
-              'formSubmissions',
-              submission.$id,
-              'replies',
-            ),
+            collection(submissionDoc, 'replies'),
             orderBy('sentAtMs', 'desc'),
             // One past the window, so a thread longer than the cap can say
             // so rather than silently dropping its oldest replies. The probe row
             // is never rendered.
             limit(SENT_REPLIES_LIMIT + 1),
           )
-        : null,
+        : null
+    },
     [firestore, hostId, submission?.$id],
     { idField: '$id' },
   )

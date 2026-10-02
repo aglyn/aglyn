@@ -855,6 +855,7 @@ const { records } = bottles ? await bottles.list({ hostId, limit: 20 }) : { reco
 | `registerPluginRecordIndex(kind, index, { pluginId? })` | A kind another plugin keeps throws naming both; the incumbent keeps serving, and the owner re-registering replaces its own. |
 | `pluginRecordIndex(kind)` | `{ pluginId, index }`, or **`null` when no plugin keeps the kind here** — a reader treats that as "none here", never as a reason to read the collection itself. The `pluginId` is also how a reader asks whether the keeper is switched on for a site. |
 | `index.list({ orgId?, hostId?, limit })` / `index.get({ orgId?, hostId?, id })` | Live, named records only — the owner decides what "deleted" is — each `{ id, name, facts }`, with `facts` in the shape the owner documents. `truncated` says the scope holds more. |
+| `index.ref?({ orgId?, hostId?, id })` | Optional: one record's document, a Firestore Admin `DocumentReference`, for a reader that changes what the owner documents a reader may change, or keeps records of its own under it. Whether the record exists is the reader's read. The reader proves who is asking first — the index authenticates nobody. |
 
 Import it by its own subpath (`@aglyn/aglyn/plugin-manager/plugin-record-index`).
 Commerce publishes `product` and `productCategory`; Workflows publishes a site's
@@ -866,7 +867,9 @@ console-only server declarations. The CRM publishes its `pipeline` records
 with their stages, the `company` a person works for (facts: the company as
 stored — name, domain, address and the rest), and its `messageTemplate`
 records (facts: `{ kind, subject, body }`, the body in the CRM's merge-field
-grammar).
+grammar). Forms publishes a site's `formSubmission`
+records — the door's rows — and their documents (`ref`), which the Inbox marks
+answered and keeps its replies and list assignments under.
 
 ## What depends on a thing — `plugin-dependents` (`/server`)
 
@@ -937,6 +940,8 @@ const bottles = pluginRecordsFromRows('bottle', data)
 | `source.query(firestore, { orgId?, hostId?, search?, memberScope?, installedFrom?, consentGroupId?, viewerUid?, limit })` | The query the signed-in member's read of the scope is proved by — the owner applies the filter its security rules require — at most `limit` documents, or `null` for a scope the kind has none in. `search` is what a person typed, matched the owner's way. `memberScope` is the reading member's own scope tokens where they are not organization-wide, for an org-scoped kind to narrow by when no site is named. `installedFrom` keeps the records installed from that listing (their install stamp's `listingId`); a kind that is never installed answers none. `consentGroupId` is the group the named site presents as, for a kind whose records say different things to different groups. `viewerUid` is the signed-in member, for a kind some of whose records are one member's own. |
 | `source.record(id, data, request?)` | One stored document as the owner shares it, in the same shape its server index answers, or `null` to leave it out (deleted, unnamed, not this reader's). `request` is the one the query was built from, when the reader hands it back: a rule the query cannot state — a site's view of an org-wide row, a member's private record — is applied here. |
 | `pluginRecordListQuery(kind, firestore, request)` / `pluginRecordsFromRows(kind, rows, idField?, request?)` | The reader's half: the query to listen to, and the rows read back through the owner — hand the request back so the owner applies what the query could not state. Both answer nothing where no plugin keeps the kind here. |
+| `source.walk?(firestore, { orgId?, hostId? })` / `pluginRecordListWalk(kind, firestore, scope)` | Optional: the base a reader WALKS the kind from with the console's paged list query, which adds its own filters, order and pages over the stored fields the owner documents — for a reader that pages a whole list rather than picking from a window. Where the rules admit a read only narrowed by a field, the owner says which and the reader adds it. |
+| `source.doc?(firestore, { orgId?, hostId?, id })` / `pluginRecordListDoc(kind, firestore, request)` | Optional: one record's document, for a reader that opens it whole or changes what the owner documents a reader may change; the security rules hold the rest. |
 
 The reader runs the query with the console's own collection listener, so the
 read is bounded, retried and reported like every other list. Import it by its
@@ -951,7 +956,9 @@ and priced variants. The CRM lists the saved views of its Contacts and Leads
 lists a member may list (`savedView`, with whether each can be taken whole as
 an audience), its email templates (`messageTemplate`), a search of a site's
 `contact` records named as the site's group knows them, and a site's `lead`
-records with whether each is still open.
+records with whether each is still open. Forms lists a site's `formSubmission` records — the
+newest for a glance, a site's or every site's for the Inbox to walk, and one
+submission's document for it to open, mark and delete.
 
 ## The tenant's tax rule — `plugin-tax-profile` (`/server`)
 

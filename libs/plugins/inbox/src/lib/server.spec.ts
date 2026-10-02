@@ -140,6 +140,12 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 }))
 
 import { inboxReplyHandler } from './server'
+import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { standInFormSubmissionIndex } from './testing/stand-in-form-submissions'
+
+// The submissions are the forms plugin's, found through the index it
+// publishes (AGL-3080); stood in over this file's Firestore double.
+standInFormSubmissionIndex(() => firebaseAdmin.app().firestore() as never)
 
 function makeResponse() {
   const out: { code: number; body: any } = { code: 0, body: undefined }

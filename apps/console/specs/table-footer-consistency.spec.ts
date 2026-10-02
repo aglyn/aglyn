@@ -895,9 +895,13 @@ const GRID_FOOTER_SWITCHED_OFF = /hideFooter/
  * sight whether or not it grew a footer. That is the shape of a guard that
  * retires itself — the more of this list is fixed the right way, the less of
  * the console the check can still see.
+ *
+ * `pluginRecordListQuery` counts for the same reason (AGL-3080): a plugin
+ * reading ANOTHER plugin's records asks the owner's list source for a window
+ * of `limit` documents, and the `limit(` is in the owner's module, not here.
  */
 const READS_A_CAPPED_COLLECTION =
-  /\blimit\(|\bcollection(?:Page|Ceiling)\(/
+  /\blimit\(|\bcollection(?:Page|Ceiling)\(|\bpluginRecordListQuery\(/
 /**
  * The repeated ROW elements, as this codebase actually writes them.
  *

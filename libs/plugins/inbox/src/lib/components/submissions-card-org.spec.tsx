@@ -41,6 +41,7 @@ import { messageSearchFields } from '@aglyn/aglyn/app-utils/message-search'
 import { registerPluginRecordRoute } from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
 import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
 import SubmissionsCard from './submissions-card.component'
+import { standInFormSubmissionList } from '../testing/stand-in-form-submissions'
 
 /** Every query the card built: what it reads, and its predicates. */
 let queries: Array<{ source: string; predicates: string[] }>
@@ -192,6 +193,9 @@ const row = (
 beforeEach(() => {
   jest.clearAllMocks()
   resetPluginServicesForTests()
+  // The submissions are the forms plugin's, walked and opened through the
+  // list source it publishes (AGL-3080); stood in over this file's double.
+  standInFormSubmissionList()
   queries = []
   rows = []
   mockListQuery = null

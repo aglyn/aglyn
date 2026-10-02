@@ -45,6 +45,11 @@ import { messageSearchFields } from '@aglyn/aglyn/app-utils/message-search'
 import { nameSearchTokens } from '@aglyn/aglyn/app-utils/name-search'
 import { InboxConsolePage } from './inbox-console-page'
 import { INBOX_CONSOLE_SECTIONS } from './inbox-console-sections'
+import { standInFormSubmissionList } from '../testing/stand-in-form-submissions'
+
+// The submissions are the forms plugin's, walked and opened through the list
+// source it publishes (AGL-3080); stood in over this file's Firestore double.
+standInFormSubmissionList()
 
 jest.setTimeout(30_000)
 

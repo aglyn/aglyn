@@ -44,6 +44,11 @@ import {
   INBOX_ORG_CONSOLE_SECTIONS,
 } from './inbox-console-sections'
 import { inboxSitePickKey } from './use-inbox-site-pick'
+import { standInFormSubmissionList } from '../testing/stand-in-form-submissions'
+
+// The submissions are the forms plugin's, walked and opened through the list
+// source it publishes (AGL-3080); stood in over this file's Firestore double.
+standInFormSubmissionList()
 
 /**
  * Every query built during a render, as `path` + the `limit()` on it.

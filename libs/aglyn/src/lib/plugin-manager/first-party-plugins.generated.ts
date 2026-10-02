@@ -213,6 +213,12 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
     "routeSlug": "forms"
   },
   {
+    "pluginId": "forms",
+    "name": "formSubmissions",
+    "mediaScan": "none",
+    "mediaScanReason": "Visitor form submissions. Unbounded, PII-heavy, and a file attached to one is the visitor's upload — not a library asset an author picked, and not something deleting a library asset would break."
+  },
+  {
     "pluginId": "bookings",
     "name": "services",
     "routeSlug": "bookings",
@@ -482,12 +488,6 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
     "pluginId": "events-calendar",
     "name": "events",
     "routeSlug": "events"
-  },
-  {
-    "pluginId": "inbox",
-    "name": "formSubmissions",
-    "mediaScan": "none",
-    "mediaScanReason": "Visitor form submissions. Unbounded, PII-heavy, and a file attached to one is the visitor's upload — not a library asset an author picked, and not something deleting a library asset would break."
   },
   {
     "pluginId": "logic",

@@ -386,22 +386,7 @@
     {
       "path": "libs/plugins/inbox/src/lib/components/inbox-glance-card.component.tsx",
       "rules": [
-        "plugin-collection:crm",
-        "plugin-collection:forms"
-      ],
-      "lane": "coupling"
-    },
-    {
-      "path": "libs/plugins/inbox/src/lib/components/submissions-card.component.tsx",
-      "rules": [
-        "plugin-collection:forms"
-      ],
-      "lane": "coupling"
-    },
-    {
-      "path": "libs/plugins/inbox/src/lib/server.ts",
-      "rules": [
-        "plugin-collection:forms"
+        "plugin-collection:crm"
       ],
       "lane": "coupling"
     },
