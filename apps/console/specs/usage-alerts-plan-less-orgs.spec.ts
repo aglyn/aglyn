@@ -418,6 +418,7 @@ jest.mock('../utils/screen-cap-reconciliation', () => ({
 import { POST } from '../app/api/billing/usage-alerts/route'
 import { pageViewsFromBandwidthGb } from '../utils/usage-metering'
 import { PLAN_ENTITLEMENTS } from '@aglyn/aglyn/server'
+import { ORIGIN_MEDIA_BANDWIDTH_WEIGHT } from '@aglyn/aglyn/app-utils/plan-entitlements'
 
 /** ~8.7k views. Free's 5 GB band, in the unit the counter is in. */
 const FREE_BAND_VIEWS = Math.round(
@@ -755,7 +756,10 @@ describe('the seed suppresses ALERTS, never ENFORCEMENT (AGL-2413)', () => {
   })
 
   it('NEGATIVE: the same media inside the band engages nothing', async () => {
-    const bandBytes = PLAN_ENTITLEMENTS.free.bandwidthGb * 1024 * 1024 * 1024
+    // Inside it at the weight a film counts — 0.8 of the band once weighted.
+    const bandBytes =
+      (PLAN_ENTITLEMENTS.free.bandwidthGb * 1024 * 1024 * 1024) /
+      ORIGIN_MEDIA_BANDWIDTH_WEIGHT
     orgStore = neverSubscribedOrg()
     mockHosts = [
       { id: 'site-a', orgId: 'org-organic', pageViews: 0, mediaBytes: bandBytes * 0.4 },

@@ -5168,6 +5168,167 @@ export function bandwidthGbFromPageViews(pageViews: number): number {
   )
 }
 
+/** The decimal GB Vercel bills transfer in (AGL-3444). */
+const DECIMAL_GB_BYTES = 1_000_000_000
+
+/** The binary GB `bandwidthGb` and GCS egress are counted in. */
+const BINARY_GB_BYTES = 1024 * 1024 * 1024
+
+/**
+ * How long one decimal GB keeps a streaming function open: a viewer draws a
+ * 720p film at about 5 Mbit/s, and the media route reads Storage only as fast
+ * as the viewer takes the bytes (AGL-2810), so the function lives for the
+ * film, not for the transfer — 1,600 seconds a GB.
+ */
+const ORIGIN_MEDIA_STREAM_SECONDS_PER_GB = (DECIMAL_GB_BYTES * 8) / 5_000_000
+
+/**
+ * The range requests one decimal GB arrives in: a player asks for a film a
+ * slice at a time, and a slice of about a megabyte is the small end of what
+ * players ask for, so per-request costs are counted a thousand times a GB.
+ */
+const ORIGIN_MEDIA_REQUESTS_PER_GB = 1_000
+
+/**
+ * What ONE DECIMAL GB of video, audio or a file costs to SERVE FROM ORIGIN, by
+ * term, at the dearest region every Vercel term is billed in (AGL-3474).
+ *
+ * The media CDN serves every type the edge must never hold (AGL-1515) on
+ * every request, from origin, so a GB of it pays both of Vercel's transfer
+ * meters and Storage's egress — where a page's GB is mostly answered by the
+ * edge. This is the basis {@link ORIGIN_MEDIA_BANDWIDTH_WEIGHT} is derived
+ * from, and the figure the published "at cost + 30%" has to be true of.
+ *
+ * | term | basis | per decimal GB |
+ * |---|---|---|
+ * | `fastDataTransfer` | Vercel Fast Data Transfer, dearest region, decimal GB | $0.35 |
+ * | `fastOriginTransfer` | Vercel Fast Origin Transfer, dearest region, decimal GB | $0.43 |
+ * | `storageEgress` | GCS internet egress at list, $0.12 per GiB (0–1 TiB) | $0.111759 |
+ * | `streamingMemory` | 2 GB (the function default) at $0.0183/GB-hour, held 1,600 s | $0.016267 |
+ * | `streamingCpu` | 60 s of active CPU at $0.221/hour — an allowance, see below | $0.003683 |
+ * | `requests` | 1,000 range requests × $0.0000070 | $0.007 |
+ * | **total** | | **$0.918709** |
+ *
+ * Each request is a CDN request ($3.20 per million), a function invocation
+ * ($0.60 per million), the media document's read ($0.0000006 at `nam5`), the
+ * day document's counter write ($0.0000018) and two Storage Class B
+ * operations, the metadata read and the object read ($0.0000004 each). The
+ * lockdown, quarantine and rate-limit reads are cached across requests and
+ * cost nothing a request.
+ *
+ * `streamingCpu` is the one unmeasured term. The bytes are copied, not
+ * computed — piping a GB through Node is a few seconds of CPU — and the
+ * minute allowed here is chosen to err high, as every other basis in this
+ * file does.
+ *
+ * ## Storing the bytes is NOT here
+ *
+ * A file in the library is already metered as storage (`storagePerGbMonth`)
+ * and billed past the plan's storage at cost + 30% after card fees; serving
+ * it does not store it again. Adding storage here would charge for the same
+ * bytes twice.
+ */
+export const ORIGIN_MEDIA_SERVE_COST_USD_PER_GB = {
+  fastDataTransfer: 0.35,
+  fastOriginTransfer: 0.43,
+  storageEgress: (0.12 * DECIMAL_GB_BYTES) / BINARY_GB_BYTES,
+  streamingMemory: (2 * 0.0183 * ORIGIN_MEDIA_STREAM_SECONDS_PER_GB) / 3600,
+  streamingCpu: (60 * 0.221) / 3600,
+  requests:
+    ORIGIN_MEDIA_REQUESTS_PER_GB *
+    (3.2 / 1_000_000 + 0.6 / 1_000_000 + 0.0000006 + 0.0000018 + 2 * 0.0000004),
+} as const
+
+/** {@link ORIGIN_MEDIA_SERVE_COST_USD_PER_GB}, summed: about $0.9187 a decimal GB. */
+export const ORIGIN_MEDIA_COST_USD_PER_GB = Object.values(
+  ORIGIN_MEDIA_SERVE_COST_USD_PER_GB,
+).reduce((sum, term) => sum + term, 0)
+
+/**
+ * The published page-view overage, per view: what a billed view costs us
+ * (`perPageView` and the request term) at {@link METERED_PRICE_MULTIPLE},
+ * rounded up to the cent per 1,000 it is quoted in — $0.83 per 1,000. The
+ * same expression as the console's `METERED_BILLED_RATES_USD.perPageView`,
+ * computed here because the weight below is, and a spec holds the two equal.
+ */
+export const PAGE_VIEW_PUBLISHED_PRICE_USD =
+  publishedMeteredPrice(
+    (ORG_COGS_UNIT_RATES_USD.perPageView + PAGE_VIEW_CDN_REQUEST_COST_USD) * 1000,
+    2,
+  ) / 1000
+
+/**
+ * (a) THE OVERAGE: does counting origin media at `weight` bill a GB of it past
+ * the band at cost + 30%, kept after Stripe's percentage fee?
+ *
+ * A counted GB is `weight` GB of page views at {@link PAGE_VIEW_PUBLISHED_PRICE_USD}.
+ */
+export function originMediaOverageHolds(weight: number): boolean {
+  const billedPerGbUsd =
+    weight * PAGE_VIEW_PUBLISHED_PRICE_USD * (DECIMAL_GB_BYTES / ESTIMATED_PAGE_TRANSFER_BYTES)
+  return (
+    billedPerGbUsd * (1 - STRIPE_PROCESSOR_FEE_PCT) >=
+    METERED_MARKUP * ORIGIN_MEDIA_COST_USD_PER_GB
+  )
+}
+
+/**
+ * (b) THE BAND: does counting origin media at `weight` keep a plan that spends
+ * its whole bandwidth band on it inside what the band was sized on?
+ *
+ * Every `bandwidthGb` band is sized at the cost of the views one GiB buys —
+ * their weight (`perPageView`) and their requests
+ * (`PAGE_VIEW_CDN_REQUEST_COST_USD`), $0.63712 a GiB — and
+ * `tier-margin-floor.spec.ts` holds every tier at 1.3× its full-use cost on
+ * that figure. A GiB of origin media spends `weight` GiB of the band, so the
+ * band holds while `weight` GiB of band costs at least one GiB of media.
+ */
+export function originMediaBandHolds(weight: number): boolean {
+  const bandCostPerGibUsd =
+    (ORG_COGS_UNIT_RATES_USD.perPageView + PAGE_VIEW_CDN_REQUEST_COST_USD) *
+    pageViewsFromBandwidthGb(1)
+  const originCostPerGibUsd =
+    (ORIGIN_MEDIA_COST_USD_PER_GB * BINARY_GB_BYTES) / DECIMAL_GB_BYTES
+  return weight * bandCostPerGibUsd >= originCostPerGibUsd
+}
+
+/**
+ * How many GB of bandwidth one GB of video, audio or a file served from origin
+ * counts as (AGL-3474, decided by the account owner 2026-10-02): the smallest
+ * weight, in tenths and never below 1, that satisfies BOTH
+ * {@link originMediaOverageHolds} and {@link originMediaBandHolds}.
+ *
+ * One weight rather than a second meter or a second rate, because it moves
+ * the band and the overage together: the Free wall, the abuse ceiling, the
+ * meters, the alerts and the invoice all read media through
+ * `pageViewsFromMediaBytes`, which applies it. At today's bases the overage
+ * needs 1.54 and the band 1.55, so it is 1.6 — the published sentence names
+ * it, and the docs and `/pricing` have to change before it does.
+ *
+ * Derived, never written down: a rate or a band basis that moves re-derives
+ * it, and `media-bandwidth.spec.ts` pins the figure so that a move is a
+ * decision with a red test attached rather than a silent re-price.
+ */
+export const ORIGIN_MEDIA_BANDWIDTH_WEIGHT = ((): number => {
+  for (let tenths = 10; tenths <= 1000; tenths += 1) {
+    const weight = tenths / 10
+    if (originMediaOverageHolds(weight) && originMediaBandHolds(weight)) return weight
+  }
+  throw new Error('no origin-media weight up to 100 covers its cost')
+})()
+
+/**
+ * The sentence every customer surface states the weight in — `/pricing`
+ * beside the metered rates (`tools/marketing/build-pricing-tables.mts`), and
+ * the bandwidth, billing and media docs, which
+ * `media-bandwidth-weight-copy.spec.ts` holds to this exact text. Built from
+ * the derived figure, so a weight that moves turns those red before it can
+ * bill anyone.
+ */
+export const ORIGIN_MEDIA_BANDWIDTH_SENTENCE =
+  `Video, audio and file downloads count ${ORIGIN_MEDIA_BANDWIDTH_WEIGHT}× ` +
+  'toward bandwidth, because serving them costs more than serving pages.'
+
 /**
  * How far past a plan's own included bandwidth the abuse ceiling sits
  * (AGL-2155). Three times the bandwidth the customer bought is not growth; it

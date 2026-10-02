@@ -51,6 +51,8 @@ import {
   POS_REGISTERS_ADDON_MAX,
   ORG_COGS_UNIT_RATES_USD,
   METERED_MARKUP,
+  ORIGIN_MEDIA_BANDWIDTH_SENTENCE,
+  ORIGIN_MEDIA_BANDWIDTH_WEIGHT,
   PAGE_VIEW_CDN_REQUEST_COST_USD,
   publishedMeteredPrice,
 } from '../../libs/aglyn/src/lib/app-utils/plan-entitlements.ts'
@@ -723,6 +725,12 @@ const metered = {
     'over the included amount is a separate retail rate ' +
     `(${rate(PLAN_PRICING.pro.extraDataGbMonthlyUsd ?? 0)} / GB-mo), not this ` +
     'pass-through.',
+  /**
+   * The origin-media weight (AGL-3474), in the sentence the page states it
+   * in beside the page-view row: video and files count against the same
+   * bandwidth, at a weight derived so they earn cost + 30% after card fees.
+   */
+  mediaNote: ORIGIN_MEDIA_BANDWIDTH_SENTENCE,
 }
 
 const fees = {
@@ -1916,6 +1924,36 @@ for (const v of frames) {
 }
 
 addOnRates.finish()
+
+/**
+ * The origin-media weight, wherever the page states one (AGL-3474).
+ *
+ * `metered.mediaNote` is the sentence; every breakpoint is searched for a
+ * weight stated in its shape ("count 1.6× toward bandwidth"), in any group,
+ * because where the page sets it is design's call. A frame that states none
+ * is not a failure — the sentence lands with a republish this check cannot
+ * order — but a frame that states one must state the code's: a weight is a
+ * price, and a stale one on the page is a price nobody is billed.
+ */
+const mediaWeightDiffs: string[] = []
+for (const v of frames) {
+  for (const section of v.data.sections) {
+    for (const group of section.groups) {
+      for (const record of group.records) {
+        for (const cell of record.cells) {
+          const stated = /count\s+([\d.]+)\s*×\s*toward bandwidth/i.exec(cell)?.[1]
+          if (stated !== undefined && Number(stated) !== ORIGIN_MEDIA_BANDWIDTH_WEIGHT) {
+            mediaWeightDiffs.push(
+              `${v.name} · ${section.name} / ${group.name}: states ${stated}×, ` +
+                `the code counts ${ORIGIN_MEDIA_BANDWIDTH_WEIGHT}×`,
+            )
+          }
+        }
+      }
+    }
+  }
+}
+fail('the published origin-media weight disagrees with the code', mediaWeightDiffs)
 
 /*==========================================
  * THE TRANSACTION-FEE LADDER.

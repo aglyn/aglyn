@@ -1150,7 +1150,8 @@
         "youPay": "$0.083 / 1k"
       }
     ],
-    "note": "Applies only to plans with `meteredInfraPassThrough`. Dataset storage over the included amount is a separate retail rate ($0.36 / GB-mo), not this pass-through."
+    "note": "Applies only to plans with `meteredInfraPassThrough`. Dataset storage over the included amount is a separate retail rate ($0.36 / GB-mo), not this pass-through.",
+    "mediaNote": "Video, audio and file downloads count 1.6× toward bandwidth, because serving them costs more than serving pages."
   },
   "fees": {
     "rows": [

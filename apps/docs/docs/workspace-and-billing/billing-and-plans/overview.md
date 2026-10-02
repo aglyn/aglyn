@@ -47,6 +47,8 @@ Every plan also includes an amount of monthly **traffic** — 2 GB on Free, risi
 billed on a paid plan, and pauses the site until the start of next month on Free. See [Bandwidth](bandwidth.md) for the table and
 for what a paused site shows a visitor.
 
+Video, audio and file downloads count 1.6× toward bandwidth, because serving them costs more than serving pages. See [how usage is counted](bandwidth.md#how-usage-is-counted).
+
 ### Links on a new Free site {#leaving-notice}
 
 For a Free workspace's first 14 days, its sites send links and redirects to other

@@ -22,6 +22,7 @@ import {
   bandwidthCapMonthKey,
   bandwidthCapShouldEngage,
   bandwidthGbFromPageViews,
+  ORIGIN_MEDIA_BANDWIDTH_WEIGHT,
   pageViewsFromBandwidthGb,
   resolveOrgEntitlements,
 } from '@aglyn/aglyn/server'
@@ -218,9 +219,10 @@ export async function engageMediaBandwidthCap(
           title: '{site} paused — monthly traffic limit reached',
           body:
             `{site} has used the ${included} GB of traffic its plan includes ` +
-            'this month. Video and files served from your media library count ' +
-            'toward it as well as page views, so visitors see a temporary ' +
-            'notice instead of its pages, and its video and files do not load, ' +
+            'this month. Video, audio and files served from your media library ' +
+            `count ${ORIGIN_MEDIA_BANDWIDTH_WEIGHT}× toward it, as well as page ` +
+            'views, so visitors see a temporary notice instead of its pages, ' +
+            'and its video and files do not load, ' +
             `until ${monthRolloverLabel(month)}. Nothing is charged for the ` +
             'extra traffic. The site comes back on its own then, or as soon as ' +
             'you upgrade in Billing.',

@@ -46,6 +46,7 @@ import {
   bandwidthCapEngaged,
   bandwidthCapMonthKey,
   MEDIA_BANDWIDTH_DAY_FIELD,
+  ORIGIN_MEDIA_BANDWIDTH_WEIGHT,
   PLAN_ENTITLEMENTS,
   pageViewsFromBandwidthGb,
 } from '@aglyn/aglyn/server'
@@ -274,8 +275,12 @@ function meteredBytesOf(scope: string): number {
   return analyticsBandwidthReading(days).mediaBytes
 }
 
-/** The Free band, in bytes — read from the table, never restated. */
-const freeBandBytes = () => PLAN_ENTITLEMENTS.free.bandwidthGb * GIB
+/**
+ * The film bytes that fill the Free band, at the weight a film counts —
+ * read from the table and the derived weight, never restated.
+ */
+const freeBandBytes = () =>
+  (PLAN_ENTITLEMENTS.free.bandwidthGb * GIB) / ORIGIN_MEDIA_BANDWIDTH_WEIGHT
 
 beforeEach(() => {
   for (const key of Object.keys(mockStore)) delete mockStore[key]
@@ -467,6 +472,10 @@ describe('video alone engages the Free cap (AGL-3474)', () => {
     expect(mockNotices[0]?.hostId).toBe('site-1')
     expect(mockNotices[0]?.payload['type']).toBe('system.bandwidthCapEngaged')
     expect(mockNotices[0]?.payload['body']).toContain('Nothing is charged')
+    // …and says why a film spent it faster than pages would have.
+    expect(mockNotices[0]?.payload['body']).toContain(
+      `count ${ORIGIN_MEDIA_BANDWIDTH_WEIGHT}× toward it`,
+    )
 
     // Once the verdict cache turns over, the film stops.
     invalidateMediaCdnLockCache()
@@ -496,6 +505,17 @@ describe('video alone engages the Free cap (AGL-3474)', () => {
     expect((await film()).statusCode).toBe(200)
     expect(mockStore['orgs/org-1']?.['bandwidthCap']).toBeUndefined()
     expect(mockNotices).toHaveLength(0)
+  })
+
+  it('counts a film at its weight: bytes that would fit the band 1:1 cross it', async () => {
+    // Inside the band at one-for-one, past it at the weight — the case a
+    // weight applied anywhere but the shared conversion would get wrong.
+    mockStore['orgs/org-1'] = freeOrg()
+    mockStore[`hosts/site-1/analytics/${MONTH}-01`] = {
+      [MEDIA_BANDWIDTH_DAY_FIELD]: PLAN_ENTITLEMENTS.free.bandwidthGb * GIB * 0.9,
+    }
+    expect((await film()).statusCode).toBe(200)
+    expect(mockStore['orgs/org-1']?.['bandwidthCap']?.month).toBe(MONTH)
   })
 
   it('NEGATIVE: a paying org a hundred bands over is never stamped, and costs no read', async () => {

@@ -266,6 +266,23 @@ Comparison pages that quoted the seat ladder are why the seat row is a pricing
 surface: a band quoted in prose is as live as a cell here. Prefer not to quote
 one.
 
+### 2026-10-02 — video, audio and file downloads count 1.6× (AGL-3474) — REPUBLISH OWED
+
+Origin-served media counts against bandwidth at `ORIGIN_MEDIA_BANDWIDTH_WEIGHT`
+(1.6, derived), so it bills past the band at 1.6× the page-view rate. That is a
+price rise for anyone serving video, so the page goes first: the promotion that
+carries it must not go out before `/pricing` states the sentence.
+
+- `/pricing`, in the metered section beside the page-view row: the sentence in
+  `tables.json` → `metered.mediaNote` (`ORIGIN_MEDIA_BANDWIDTH_SENTENCE`).
+  `check:pricing-tables` fails any breakpoint that states a different weight,
+  and reads nothing until one states it.
+- The calculator converts a band to views and has no media input, so it moves
+  only if a video line is added to it.
+- The docs (`bandwidth.md`, `billing-and-plans/overview.md`,
+  `media/overview.md`) already state it; `media-bandwidth-weight-copy.spec.ts`
+  holds them to the code's sentence.
+
 ## Enterprise has no price here, but it has bands
 
 `PLAN_ENTITLEMENTS.enterprise` is a row of **finite fallbacks** — twice

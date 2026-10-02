@@ -21,6 +21,10 @@ import {
   PLAN_ENTITLEMENTS,
   pageViewsFromBandwidthGb,
 } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import {
+  ORIGIN_MEDIA_BANDWIDTH_WEIGHT,
+  PAGE_VIEW_PUBLISHED_PRICE_USD,
+} from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { MEDIA_BANDWIDTH_DAY_FIELD } from '@aglyn/aglyn/app-utils/media-bandwidth'
 import { METERED_BILLED_RATES_USD } from '../utils/usage-metering'
 
@@ -31,7 +35,8 @@ import { METERED_BILLED_RATES_USD } from '../utils/usage-metering'
  * The media CDN counts the bytes of every video and file it serves on the
  * scope's analytics day documents. This suite plants a month of them and
  * asserts what `report-usage` does with it: a paying org past its band is
- * billed for the excess at the page-view rate, exactly as page traffic is;
+ * billed for the excess at the page-view rate, each byte counted at the
+ * origin-media weight;
  * the org library's delivery is billed beside the sites' (it is bandwidth,
  * not the library STORAGE that waits behind `BILL_ORG_LIBRARY_STORAGE_FROM`);
  * and Free, at the same traffic, posts nothing.
@@ -237,13 +242,21 @@ const ORIGINAL_ENV = process.env
 const MONTH = '2026-07'
 /** Page views inside every band, so the media alone crosses it. */
 const PAGE_VIEWS = 1_000
-/** How far past the band the org library's delivery takes the org. */
+/** The org library's films served past the band, in GiB as served. */
 const LIBRARY_GIB = 10
+const WEIGHT = ORIGIN_MEDIA_BANDWIDTH_WEIGHT
 
 /**
  * One org, one site. The site's pages and films fill the band exactly; the
  * org library's films go `LIBRARY_GIB` past it.
  */
+/** The site's film bytes that, with its page views, fill the band exactly. */
+function siteFilmBytes(plan: 'free' | 'starter'): number {
+  const band = PLAN_ENTITLEMENTS[plan].bandwidthGb
+  const pageViewGib = (PAGE_VIEWS * band) / pageViewsFromBandwidthGb(band)
+  return ((band - pageViewGib) * GIB) / WEIGHT
+}
+
 function seedOrg(plan: 'free' | 'starter', options: { library?: boolean } = {}) {
   mockDocs.clear()
   mockDocs.set('hosts/host-1', { orgId: 'org-1', screens: {} })
@@ -254,11 +267,9 @@ function seedOrg(plan: 'free' | 'starter', options: { library?: boolean } = {}) 
   const bandBytes = PLAN_ENTITLEMENTS[plan].bandwidthGb * GIB
   mockDocs.set(`hosts/host-1/analytics/${MONTH}-15`, {
     total: PAGE_VIEWS,
-    // Exactly the band less what the page views weigh.
-    [MEDIA_BANDWIDTH_DAY_FIELD]:
-      bandBytes - (PAGE_VIEWS * bandBytes) / pageViewsFromBandwidthGb(
-        PLAN_ENTITLEMENTS[plan].bandwidthGb,
-      ),
+    // Exactly the band less what the page views weigh, at the weight a film
+    // counts.
+    [MEDIA_BANDWIDTH_DAY_FIELD]: siteFilmBytes(plan),
     media: { film: { serves: 9, bytes: bandBytes } },
   })
   if (options.library !== false) {
@@ -328,13 +339,21 @@ afterEach(() => {
 const rollup = () => mockDocs.get(`orgs/org-1/usage/${MONTH}`)!
 
 describe('report-usage bills video and files past the band (AGL-3474)', () => {
+  it('derives the weight from the price the invoice actually bills', () => {
+    // The weight is derived in `plan-entitlements` from its own copy of the
+    // page-view price; this is the console's. One figure, or the weight was
+    // sized against a price nobody pays.
+    expect(PAGE_VIEW_PUBLISHED_PRICE_USD).toBe(METERED_BILLED_RATES_USD.perPageView)
+  })
+
   it('a paying org is billed for the excess at the page-view rate', async () => {
     seedOrg('starter')
     const response = await runRollup(loadRoute())
     expect(response.status).toBe(200)
 
-    // The excess is the org library's films, in the band's own units.
-    const billableViews = pageViewsFromBandwidthGb(LIBRARY_GIB)
+    // The excess is the org library's films, at their weight, in the band's
+    // own units.
+    const billableViews = pageViewsFromBandwidthGb(LIBRARY_GIB * WEIGHT)
     const expectedCents = Math.round(
       billableViews * METERED_BILLED_RATES_USD.perPageView * 100,
     )
@@ -349,12 +368,13 @@ describe('report-usage bills video and files past the band (AGL-3474)', () => {
     await runRollup(loadRoute())
     const band = PLAN_ENTITLEMENTS.starter.bandwidthGb
     expect(rollup()['pageViews']).toBeCloseTo(
-      pageViewsFromBandwidthGb(band + LIBRARY_GIB),
+      pageViewsFromBandwidthGb(band + LIBRARY_GIB * WEIGHT),
       3,
     )
-    // The media share: the band less the page views' weight, plus the library.
+    // The media share, as served — unweighted, so the audit doc says how much
+    // video left rather than how much band it took.
     expect(rollup()['mediaBandwidthGb']).toBeCloseTo(
-      band + LIBRARY_GIB - (PAGE_VIEWS * band) / pageViewsFromBandwidthGb(band),
+      siteFilmBytes('starter') / GIB + LIBRARY_GIB,
       6,
     )
   })

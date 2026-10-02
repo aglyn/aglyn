@@ -7,9 +7,10 @@ description: How much traffic each plan includes, what happens when a site goes 
 # Bandwidth
 
 **Bandwidth** is how much traffic your published sites serve in a calendar month: their
-pages, and the video, audio and files they serve from your media library. Every plan
-includes an amount. What happens when you pass it is the part worth reading, because it is
-**not the same on Free as it is on a paid plan**.
+pages, and the video, audio and files they serve from your media library. Video, audio
+and file downloads count 1.6× toward bandwidth, because serving them costs more than
+serving pages. Every plan includes an amount. What happens when you pass it is the part
+worth reading, because it is **not the same on Free as it is on a paid plan**.
 
 :::info Plan availability
 Every plan has a bandwidth allowance. On a **paid** plan going past it is metered and
@@ -100,7 +101,7 @@ The reverse is much faster still: an upgrade releases within roughly a minute.
 
 Your meter counts **page views**, not what a page weighs, plus the **video and files** your
 media library serves, by their size. Every counted view moves it by the same fixed amount,
-and every gigabyte of video moves it by a gigabyte (see
+and every gigabyte of video moves it by 1.6 gigabytes (see
 [How usage is counted](#how-usage-is-counted)), so using less of the allowance means having
 fewer views counted and serving less video.
 
@@ -122,8 +123,8 @@ What a page's images weigh does not change the meter, but its video does:
   [CDN delivery](../../content-and-data/media/overview.md#deliver-over-cdn) makes the page
   faster; it does not stretch your band.
 - **Video, audio and files.** Every byte your media library sends of a video, an audio
-  file, a PDF or another document counts toward the allowance, wherever it is played or
-  downloaded from. A seek counts the part the player asked for, not the whole file again.
+  file, a PDF or another document counts 1.6× toward the allowance, wherever it is played
+  or downloaded from. A seek counts the part the player asked for, not the whole file again.
   A shorter clip, a smaller encoding, or a poster frame that loads before anyone presses
   play all use less.
 
@@ -138,17 +139,24 @@ For developers and operators. None of this is needed to use the feature.
 Bandwidth from pages is derived from page views rather than measured byte-for-byte at the
 edge. The platform uses a fixed accounting figure of **1,012.8 KB per page view** and
 converts in both directions, so the meter you read in GB and the counters the analytics
-pipeline writes are the same number expressed differently.
+pipeline writes are the same number expressed differently. On Free, 2 GB works out to
+roughly **2,070 page views** a month; on Starter, 20 GB is roughly **20,700**, and the same
+division gives every other band.
 
 Video, audio and files are measured: the media library counts the bytes each request
-sends, and converts them through the same 1,012.8 KB, so a gigabyte of video takes exactly
-a gigabyte of the band and is billed past it at the same rate as page views. Images are
-the exception — they are part of what a page weighs, which the 1,012.8 KB already
-includes, so counting them again would charge for them twice. A video the platform serves
-from a delivery partner rather than from its own servers counts the same way, at the
-file's size each time a viewer starts it. On Free, 2 GB works out to roughly **2,070 page
-views** a month; on Starter, 20 GB is roughly **20,700**, and the same division gives every
-other band.
+sends, and converts them through the same 1,012.8 KB at **1.6×**, so a gigabyte of video
+takes 1.6 GB of the band, and past the band those 1.6 GB are billed at the page-view rate.
+Video, audio and file downloads count 1.6× toward bandwidth, because serving them costs
+more than serving pages: pages are mostly answered from the CDN's cache, while video and
+files are sent from our servers and from storage on every request, so each gigabyte pays
+for both. The weight is the smallest that keeps video at cost plus 30%, after card fees,
+the same as everything else metered — both inside your allowance and past it. Storing a
+file is billed separately, as storage, and is not counted again here. A video the platform
+serves from a delivery partner rather than from its own servers counts the same way, at
+the file's size each time a viewer starts it.
+
+Images are the exception — they are part of what a page weighs, which the 1,012.8 KB
+already includes, so counting them again would charge for them twice.
 
 ### Which views are counted
 

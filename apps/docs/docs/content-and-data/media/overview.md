@@ -424,8 +424,9 @@ and cache well.
 Video, audio and documents are sent fresh on every request, so they count toward your
 organization's [bandwidth allowance](../../workspace-and-billing/billing-and-plans/bandwidth.md#how-usage-is-counted)
 by the bytes they send — a play, a seek or a download, from your site or from anywhere
-else the link is used. Images do not count separately: they are part of what a page
-weighs, which the allowance already counts.
+else the link is used. Video, audio and file downloads count 1.6× toward bandwidth,
+because serving them costs more than serving pages. Images do not count separately: they
+are part of what a page weighs, which the allowance already counts.
 
 ### URLs are stable
 

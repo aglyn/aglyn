@@ -18,6 +18,7 @@
 
 import type { AglynOrgBilling } from '@aglyn/aglyn'
 import { analyticsBandwidthReading } from '@aglyn/aglyn/app-utils/media-bandwidth'
+import { ORIGIN_MEDIA_BANDWIDTH_WEIGHT } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import {
   billsOrgLibraryStorage,
   estimateMonthlyUsageCost,
@@ -451,14 +452,17 @@ export function BillingMeteredEstimateComponent(
             billedEstimate.billableUsdByMeter.pageViews,
           )}
           {estimate.mediaBandwidthBytes > 0 ? (
-            // Video and files are counted in page views (AGL-3474), so the
-            // row above already prices them; this says how much of it they are.
+            // Video and files are counted in page views at their weight
+            // (AGL-3474), so the row above already prices them; this says how
+            // much of it they are, as served.
             <Typography variant="caption" color="text.secondary">
               {`Includes ${(
                 estimate.mediaBandwidthBytes /
                 (1024 * 1024 * 1024)
-              ).toFixed(2)} GB of video and files served from your media ` +
-                'library, counted against the same bandwidth as your pages.'}
+              ).toFixed(2)} GB of video, audio and files served from your ` +
+                `media library, which count ${ORIGIN_MEDIA_BANDWIDTH_WEIGHT}× ` +
+                'toward bandwidth because serving them costs more than ' +
+                'serving pages.'}
             </Typography>
           ) : null}
           {meteredBands().map((metered) => (

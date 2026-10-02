@@ -330,6 +330,34 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
     assert.match(run.stderr, /\$9\.99 \/ 1k/)
   })
 
+  it('fails when the page states an origin-media weight the code does not count (AGL-3474)', () => {
+    resetFixtures()
+    const data = readFrame()
+    passThrough(data).records.push({
+      cells: [
+        'Video, audio and file downloads count 1.4× toward bandwidth, because ' +
+          'serving them costs more than serving pages.',
+      ],
+    })
+    writeFrame(data)
+
+    const run = check()
+    assert.equal(run.status, 1)
+    assert.match(run.stderr, /published origin-media weight disagrees/)
+    assert.match(run.stderr, /states 1\.4×/)
+  })
+
+  it('…and passes a page that states the weight the code counts', () => {
+    resetFixtures()
+    const tables = JSON.parse(readFileSync(TABLES, 'utf8'))
+    const data = readFrame()
+    passThrough(data).records.push({ cells: [tables.metered.mediaNote] })
+    writeFrame(data)
+
+    const run = check()
+    assert.doesNotMatch(run.stderr, /origin-media weight/)
+  })
+
   it('fails when a DECLARED-stale row drifts to a third value', () => {
     // The failure mode a plain "these two are known-wrong" exemption would
     // miss entirely: the page is edited, lands on neither the code's figure

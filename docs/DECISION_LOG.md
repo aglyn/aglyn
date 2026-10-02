@@ -92,6 +92,33 @@ introduce a price or an entitlement the account owner has not chosen.
 
 ---
 
+## 2026-10-02 — Video, audio and file downloads count 1.6× toward bandwidth (AGL-3474)
+
+- **Decided by:** the account owner, 2026-10-02, approving the proposal on AGL-3474 that origin-served media count at a weight against both the bandwidth band and its overage, so it earns cost + 30% after Stripe's fee — serving and storing included. The weight is derived in code, not chosen.
+- **Scope:** pricing, packaging
+- **Evidence:** `ORIGIN_MEDIA_SERVE_COST_USD_PER_GB`, `ORIGIN_MEDIA_BANDWIDTH_WEIGHT`, `ORIGIN_MEDIA_BANDWIDTH_SENTENCE` in `libs/aglyn/src/lib/app-utils/plan-entitlements.ts`; `pageViewsFromMediaBytes` in `media-bandwidth.ts`; `media-bandwidth.spec.ts`; `media-bandwidth-weight-copy.spec.ts`; `tools/marketing/pricing-copy/tables.json` (`metered.mediaNote`); `bandwidth.md`, `billing-and-plans/overview.md`, `media/overview.md`; AGL-3474.
+
+**What it costs.** A decimal GB of video, audio or a file served from origin, at
+the dearest region: Vercel Fast Data Transfer $0.35, Fast Origin Transfer $0.43,
+GCS internet egress $0.111759 ($0.12/GiB list), function memory held while the
+stream plays $0.016267 (2 GB × $0.0183/GB-hr × 1,600 s at 5 Mbit/s), an active-CPU
+allowance $0.003683 (60 s at $0.221/hr), and 1,000 range requests $0.007 — **$0.918709**
+($0.986456 a GiB). Storage is not in it: stored bytes are already billed as storage.
+
+**The weight** is the smallest, in tenths, that satisfies both:
+
+| Condition | Rule | Minimum |
+|---|---|---|
+| (a) overage | w × $0.83/1k views × (1e9 ÷ 1,037,107.2 B) × (1 − 0.029) ≥ 1.3 × $0.918709 | 1.5369 |
+| (b) band | w × $0.63712 a GiB of band ≥ $0.986456 a GiB of media | 1.5483 |
+
+So **1.6**. At 1.6 a GB past the band bills $1.2805 and keeps $1.2434 after the fee
+against $1.1943 required; a band spent wholly on media costs $0.6165 per GiB of band
+against the $0.63712 it was sized on. At 1.5 both fail.
+
+**Page first.** It changes what a customer is billed, so `/pricing` must carry
+the sentence before the promotion that bills it goes out.
+
 ## 2026-10-02 — Every plan covers its full-use cost plus 30% after Stripe's fee: per-site and purchasable bands cut, overage priced to keep 30% after card fees (AGL-3469, AGL-3476)
 
 - **Decided by:** the account owner, 2026-10-01/02, in four answers: the full-use rule is cost + 30% (a markup, not a margin on price); overage keeps 30% after Stripe's fee; coupons never take a fully-used plan below cost; and the included count of anything a customer can buy more of — collaborators per site, team seats, datasets — is small (five to ten at most) so buying more is a real choice. The approved ladder is the one below. This entry supersedes the 2026-10-01 entries below it on the bands it names.

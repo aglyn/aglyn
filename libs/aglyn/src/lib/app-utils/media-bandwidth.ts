@@ -44,14 +44,25 @@
  * And as PAGE VIEWS wherever bandwidth is measured, because the band is a
  * page-view band: `bandwidthGb` is converted to views through
  * `ESTIMATED_PAGE_TRANSFER_BYTES`, the meter counts views, and the invoice
- * prices views. Media bytes are converted through the same constant, so a
- * gigabyte of video moves the meter by exactly what a gigabyte of pages does,
- * and every reader — the invoice, the Free cap, the abuse ceiling, the usage
+ * prices views. Media bytes are converted through the same constant, and
+ * every reader — the invoice, the Free cap, the abuse ceiling, the usage
  * alerts and the Billing meter — sums one figure through
  * {@link analyticsBandwidthReading} rather than each deciding for itself.
+ *
+ * ## At a weight
+ *
+ * A gigabyte served from origin costs more than a gigabyte of pages, so it
+ * counts as {@link ORIGIN_MEDIA_BANDWIDTH_WEIGHT} gigabytes of the band —
+ * derived beside the cost basis in `plan-entitlements.ts`, as the smallest
+ * weight at which both the overage and the band earn cost + 30% after card
+ * fees. It is applied in {@link pageViewsFromMediaBytes} and nowhere else, so
+ * the wall, the meter and the bill cannot count a film differently.
  */
 
-import { ESTIMATED_PAGE_TRANSFER_BYTES } from './plan-entitlements'
+import {
+  ESTIMATED_PAGE_TRANSFER_BYTES,
+  ORIGIN_MEDIA_BANDWIDTH_WEIGHT,
+} from './plan-entitlements'
 
 /**
  * The analytics day-document field the media CDN adds its counted bytes to.
@@ -62,11 +73,14 @@ import { ESTIMATED_PAGE_TRANSFER_BYTES } from './plan-entitlements'
  */
 export const MEDIA_BANDWIDTH_DAY_FIELD = 'mediaBandwidthBytes'
 
-/** Counted media bytes as the page views the bandwidth band is kept in. */
+/**
+ * Counted media bytes as the page views the bandwidth band is kept in, at
+ * {@link ORIGIN_MEDIA_BANDWIDTH_WEIGHT} — the one place the weight is applied.
+ */
 export function pageViewsFromMediaBytes(bytes: unknown): number {
   const value = Number(bytes)
   return Number.isFinite(value) && value > 0
-    ? value / ESTIMATED_PAGE_TRANSFER_BYTES
+    ? (value * ORIGIN_MEDIA_BANDWIDTH_WEIGHT) / ESTIMATED_PAGE_TRANSFER_BYTES
     : 0
 }
 
@@ -74,12 +88,12 @@ export function pageViewsFromMediaBytes(bytes: unknown): number {
 export interface AnalyticsBandwidthReading {
   /** Page views the analytics beacon counted. */
   pageViews: number
-  /** Video and file bytes the media CDN counted. */
+  /** Video and file bytes the media CDN counted, as served — unweighted. */
   mediaBytes: number
   /**
-   * Both, in page views — the figure the band, the cap, the ceiling and the
-   * invoice are measured in. Fractional once media is in it; round only for
-   * display.
+   * Both, in page views, the media at its weight — the figure the band, the
+   * cap, the ceiling and the invoice are measured in. Fractional once media
+   * is in it; round only for display.
    */
   meteredPageViews: number
 }
