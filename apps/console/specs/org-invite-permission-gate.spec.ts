@@ -117,6 +117,13 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
    */
   managerSeatRefusal: async () => null,
   managerSeatRefusalResponse: () => null,
+  // The staff-seat and owner-handoff helpers (AGL-3466), with their real
+  // answers for an ordinary invite: not staff, no handoff refusal.
+  isStaffAddress: async () => false,
+  ownerHandoffSeatRefusal: async () => null,
+  ownerHandoffRefusalResponse: () => null,
+  acceptOwnerHandoff: async () => ({ previousOwnerUid: 'owner', previousOwner: 'stay' }),
+  orgOwnerSeatRefusalResponse: () => null,
   memberHasOrgPermission: (...args: unknown[]) =>
     (memberHasOrgPermissionDouble as never as (...a: unknown[]) => unknown)(
       ...args,

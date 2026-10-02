@@ -64,6 +64,7 @@ import HostIcon from '../../../../components/host-icon.component'
 import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
 import PlatformMarketingConsentPrompt from '../../../../components/marketing-consent-prompt.component'
 import OrgDashboardWidgets from '../../../../components/org-dashboard-widgets.component'
+import OrgUpgradeProposalCard from '../../../../components/org-upgrade-proposal-card.component'
 import PluginWidgetSlot from '../../../../components/plugin-widget-slot.component'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../components/layouts/main.layout'
@@ -516,6 +517,10 @@ function HostsContent() {
             member is sent straight here from the workspace chooser, so this
             is where most accounts land. Renders nothing once answered. */}
         <PlatformMarketingConsentPrompt />
+        {/* The plan the platform team proposed (AGL-3466): the org home is
+            where an owner handed a workspace lands, so the ask meets them
+            here. Renders nothing for anyone who cannot buy it. */}
+        <OrgUpgradeProposalCard />
         {/* The `invites.length === 0` deferral is about which CALL TO ACTION
             leads (AGL-234) and only applies to a genuine zero-state; a read we
             could not finish still has to say so. */}

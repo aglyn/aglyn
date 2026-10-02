@@ -89,6 +89,9 @@ import StaffSiteDoorFlags from '../../../../../components/staff-site-door-flags.
 import StaffEmailDeliveriesCard from '../../../../../components/staff-email-deliveries-card.component'
 import StaffOrgActions from '../../../../../components/staff-org-actions.component'
 import StaffOrgOwnershipTransfer from '../../../../../components/staff-org-ownership-transfer.component'
+import StaffOrgOwnerHandoff from '../../../../../components/org-owner-handoff.component'
+import StaffOrgUpgradeProposal from '../../../../../components/staff-org-upgrade-proposal.component'
+import { countManagerSeats, isStaffSeat } from '@aglyn/aglyn/app-utils/organizations'
 import { StaffSiteRowActions } from '../../../../../components/staff-site-row-actions.component'
 import StaffOrgRefundCard from '../../../../../components/staff-org-refund-card.component'
 import StaffOrgSubscriptionCard from '../../../../../components/staff-org-subscription-card.component'
@@ -660,14 +663,21 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
       active = false
     }
   }, [firestore, orgId])
+  // Manager seats as the gates count them (AGL-3466): org-wide members only,
+  // and never platform staff. The raw roster length billed every site
+  // collaborator and every staff helper as a manager seat.
+  const managerSeatsUsed = useMemo(
+    () => countManagerSeats(memberDocs ?? []),
+    [memberDocs],
+  )
   const usageByKey = useMemo<Record<string, number>>(
     () => ({
       hostLimit: (hostDocs ?? []).length,
-      managersPerOrg: (memberDocs ?? []).length,
-      maxManagersPerOrg: (memberDocs ?? []).length,
+      managersPerOrg: managerSeatsUsed,
+      maxManagersPerOrg: managerSeatsUsed,
       ...capacityCounts,
     }),
-    [hostDocs, memberDocs, capacityCounts],
+    [hostDocs, managerSeatsUsed, capacityCounts],
   )
 
   // Direct org editing (AGL-358): name/logo/contacts through the same
@@ -1292,6 +1302,21 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                           ownerUid={org?.ownerUid}
                           onTransferred={() => setOrgNonce((nonce) => nonce + 1)}
                         />
+                        {/* A client the workspace was built for usually has
+                            no account yet, so the handoff is an invitation
+                            (AGL-3466). Staff take no seat, so no override. */}
+                        <StaffOrgOwnerHandoff
+                          orgId={orgId}
+                          orgName={org?.name}
+                          onSent={() => setOrgNonce((nonce) => nonce + 1)}
+                        />
+                        {/* The separate step after the evaluation: ask the
+                            owner to buy the plan (AGL-3466). */}
+                        <StaffOrgUpgradeProposal
+                          orgId={orgId}
+                          org={org as never}
+                          onChanged={() => setOrgNonce((nonce) => nonce + 1)}
+                        />
                       </Stack>
                     </CardDisplay>
                   ),
@@ -1442,6 +1467,14 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                                   <Chip
                                     label="all sites"
                                     size="small"
+                                  />
+                                ) : null}
+                                {/* Platform staff hold no seat (AGL-3466). */}
+                                {isStaffSeat(member) ? (
+                                  <Chip
+                                    label="staff · no seat"
+                                    size="small"
+                                    variant="outlined"
                                   />
                                 ) : null}
                               </Stack>

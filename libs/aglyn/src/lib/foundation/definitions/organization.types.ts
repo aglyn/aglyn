@@ -31,6 +31,7 @@ import type {
   OrgPlan,
   OrgSeatAddons,
   OrgSubscription,
+  OrgUpgradeProposal,
 } from './org-billing.types'
 import type {
   AglynDocument,
@@ -189,6 +190,8 @@ export interface AglynOrganization extends AglynDocument {
   defaultResourceScope?: 'org' | 'host'
   /** The CRM's organization-wide settings (AGL-2613) — see `OrgCrmSettings`. */
   crm?: OrgCrmSettings
+  /** The plan staff asked the workspace to move to (AGL-3466). */
+  upgradeProposal?: OrgUpgradeProposal
 }
 
 /**
@@ -254,15 +257,56 @@ export interface AglynOrgMember extends AglynDocument {
    * single rules read; maintained by the staff suspension API.
    */
   orgSuspended?: boolean
+  /**
+   * The row belongs to platform staff and takes none of the customer's seats
+   * (AGL-3466).
+   *
+   * Stamped by the server whenever it writes a row for an account that holds
+   * the `staff` claim at that moment — `createOrganization`, `upsertOrgMember`,
+   * `grantHostAccess` — and cleared on every row the account holds when the
+   * claim is revoked. Every seat counter and every seat gate skips a stamped
+   * row, so a staff member who builds a workspace for a prospect, or joins one
+   * to help, never fills the seat the customer is paying for. The rules refuse
+   * client writes to `members`, so nobody can stamp themselves.
+   */
+  staffSeat?: boolean
+}
+
+/**
+ * What happens to the outgoing owner when an owner handoff is accepted
+ * (AGL-3466): `stay` keeps them on as an admin, `leave` takes them off the
+ * roster.
+ */
+export type OwnerHandoffPreviousOwner = 'stay' | 'leave'
+
+/** The handoff half of an owner-handoff invite (AGL-3466). */
+export interface AglynOrgOwnerHandoff {
+  previousOwner: OwnerHandoffPreviousOwner
 }
 
 /** `orgs/{orgId}/invites/{inviteId}` — pending email invites. */
 export interface AglynOrgInvite extends AglynDocument {
   $id: string
   email?: string
+  /**
+   * `owner` only on an owner-handoff invite, which always carries `handoff`
+   * beside it (AGL-3466). Every other invite is admin, editor or viewer.
+   */
   role?: OrgRole
   allHosts?: boolean
   hostAccess?: Record<HostUid, HostAccessRole>
+  /**
+   * Accepting this invite moves the workspace to the invitee (AGL-3466). It
+   * reserves no seat: the owner seat moves rather than being added, and the
+   * send-time check refuses a `stay` that would need a seat the plan lacks.
+   */
+  handoff?: AglynOrgOwnerHandoff
+  /**
+   * The address belongs to an account holding the `staff` claim, checked when
+   * the invite is sent, so it reserves no seat (AGL-3466). Checked again at
+   * acceptance, against the account that actually accepts.
+   */
+  staffSeat?: boolean
   invitedBy?: UserUid
   createdAt?: ITimestamp
   acceptedAt?: ITimestamp | null

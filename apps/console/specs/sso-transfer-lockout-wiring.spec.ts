@@ -135,3 +135,34 @@ describe('AGL-1888 · every ownership transfer passes the lockout check', () => 
     expect(block).not.toContain('staff')
   })
 })
+
+/*
+ * The owner-handoff invite (AGL-3466) is the second door that moves the owner
+ * seat. It does not call `transferOrgOwnership` — it shares its writes through
+ * `writeOwnershipMove` — so the guard above cannot see it, and the same
+ * property is pinned on it here: one production caller, checking first.
+ */
+const HANDOFF_ROUTE_PATH = 'apps/console/app/api/orgs/invites/route.ts'
+const handoffCallers = SOURCES.filter((file) =>
+  /\bacceptOwnerHandoff\s*\(/.test(readFileSync(file, 'utf8')),
+).map((file) => relative(REPO, file))
+const HANDOFF_ROUTE = readFileSync(join(REPO, HANDOFF_ROUTE_PATH), 'utf8')
+
+describe('AGL-3466 · every owner handoff passes the lockout check', () => {
+  it('has exactly ONE production call site besides the definition', () => {
+    expect(handoffCallers.sort()).toEqual([DEFINITION, HANDOFF_ROUTE_PATH].sort())
+  })
+
+  it('the route checks BEFORE it accepts, and a refusal is logged', () => {
+    const check = HANDOFF_ROUTE.indexOf('assessOwnershipTransferLockout(')
+    const accept = HANDOFF_ROUTE.indexOf('await acceptOwnerHandoff(')
+    expect(check).toBeGreaterThan(-1)
+    expect(accept).toBeGreaterThan(-1)
+    expect(check).toBeLessThan(accept)
+    const block = HANDOFF_ROUTE.slice(check, accept)
+    expect(block).toContain('lockout.refused')
+    expect(block).toContain('status: 409')
+    expect(block).toContain('logOrgActivity')
+    expect(block).not.toContain('staff')
+  })
+})

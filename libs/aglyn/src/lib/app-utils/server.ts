@@ -179,6 +179,9 @@ export * from './host-permissions'
 export * from './password-policy'
 export * from './idp-profile'
 export * from './onboarding-deep-link'
+// The platform team's ask that a workspace buy a plan (AGL-3466), beside the
+// plan intent its button carries into Billing.
+export * from './upgrade-proposal'
 // Where an account came from (AGL-1731). Beside the plan intent because
 // they are the same hop — the marketing CTA's query string — and both are
 // remembered on `users/{uid}` across the verification wall.

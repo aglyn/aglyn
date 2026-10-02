@@ -214,6 +214,9 @@ async function handler(request: Request): Promise<Response> {
       // a customer's behalf is exempt: a ceiling that stops support from
       // fixing a workspace produces the ticket it was meant to prevent.
       bypassFreeWorkspaceCap: decoded['staff'] === true,
+      // A staff creator takes none of the workspace's seats (AGL-3466); the
+      // verified token already says whether they are staff.
+      ownerStaffSeat: decoded['staff'] === true,
       ownerEmail: decoded.email ?? null,
       // Not `decoded['name']` (AGL-1131): a SAML assertion puts its mapped
       // attributes under `firebase.sign_in_attributes` and never promotes

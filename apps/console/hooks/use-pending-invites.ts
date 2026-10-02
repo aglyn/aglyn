@@ -33,6 +33,11 @@ export interface PendingInvite {
   orgName: string | null
   orgSlug?: string | null
   role: string | null
+  /**
+   * Present on an owner handoff (AGL-3466): accepting makes the invitee the
+   * workspace's owner, and the current owner stays on as an admin or leaves.
+   */
+  handoff?: { previousOwner: 'stay' | 'leave' } | null
 }
 
 export interface PendingInvitesState {

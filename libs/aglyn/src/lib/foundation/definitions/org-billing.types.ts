@@ -1260,8 +1260,40 @@ export interface AglynOrgBilling extends AglynDocument {
    * the section can grow without a rules change each time.
    */
   crm?: OrgCrmSettings
+  /**
+   * The plan the platform team has asked this workspace to move to
+   * (AGL-3466) — see `OrgUpgradeProposal`.
+   *
+   * SERVER-OWNED: written only by /api/admin/org-upgrade-proposal (staff,
+   * audited) and cleared by `writeOrgBilling` once a subscription is live,
+   * both Admin SDK. Denied to every client in the rules, staff included,
+   * because `standingUpgradeProposal` reads it in `app-utils` and the
+   * proposal is the platform's statement to the customer, not theirs.
+   */
+  upgradeProposal?: OrgUpgradeProposal
   createdAt?: ITimestamp
   updatedAt?: ITimestamp
+}
+
+/**
+ * The platform team's request that a workspace move to a paid plan
+ * (AGL-3466).
+ *
+ * The separate step that follows an evaluation: a client handed a workspace
+ * looks around first, on whatever the workspace already has, and is asked to
+ * upgrade only once staff record this. While it stands and no subscription
+ * is live, the workspace's billing managers see it on the org home and on
+ * Billing, with the plan preselected. Nothing about it grants or bills.
+ */
+export interface OrgUpgradeProposal {
+  /** A paid plan the workspace can buy itself — never `free` or `enterprise`. */
+  plan: OrgPlan
+  /** The staff member who proposed it. */
+  proposedBy: string
+  /** Epoch millis, so every cache serialization reads it back unchanged. */
+  proposedAt: number
+  /** An optional line from staff, shown with the proposal. */
+  note?: string
 }
 
 /**

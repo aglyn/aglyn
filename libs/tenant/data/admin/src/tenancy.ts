@@ -121,6 +121,10 @@ export * from './lib/server/operator-alerts'
 export * from './lib/server/operator-health'
 export * from './lib/server/org-billing'
 export * from './lib/server/organizations'
+// Platform staff take no customer seat, and a workspace is asked to upgrade
+// as a separate step after it is handed over (AGL-3466).
+export * from './lib/server/staff-seat'
+export * from './lib/server/upgrade-proposal'
 export * from './lib/server/duplicate-activity'
 export * from './lib/server/duplicate-resource'
 export * from './lib/server/workspace-domains'

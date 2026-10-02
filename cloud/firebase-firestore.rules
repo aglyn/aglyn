@@ -620,7 +620,7 @@ service cloud.firestore {
              'suspendedMessage', 'suspendedUntilMs', 'suspendedMode',
              'suspendedEnforcement', 'suspended', 'crmInbound', 'acquisition',
              'consentGroups', 'consentGroupsAwaitConfirmation', 'consentGroupsChange',
-             'marketingConsentPolicy'])) ||
+             'marketingConsentPolicy', 'upgradeProposal'])) ||
         (isBillingStaff() &&
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(
             ['slug', 'ownerUid', 'createdByUid', 'hosts', 'enabledPlugins',
@@ -635,7 +635,7 @@ service cloud.firestore {
              'suspendedEnforcement', 'suspended',
              'erasureRequestedAt', 'crmInbound', 'acquisition',
              'consentGroups', 'consentGroupsAwaitConfirmation', 'consentGroupsChange',
-             'marketingConsentPolicy'])) ||
+             'marketingConsentPolicy', 'upgradeProposal'])) ||
         // `isVerified()` here rather than inside `canManageOrg()` (AGL-2589):
         // that helper is a READ gate too — `billing/stripe` and the member
         // roster ask it — and folding verification in would refuse those.
@@ -698,7 +698,12 @@ service cloud.firestore {
              'marketingConsentPolicy',
              // AGL-3320. The lock a consent group change holds; only the
              // Admin-SDK executor sets and clears it.
-             'consentGroupsChange']));
+             'consentGroupsChange',
+             // AGL-3466. The plan staff asked the workspace to buy. Written
+             // only by /api/admin/org-upgrade-proposal and the Stripe webhook,
+             // both Admin SDK and audited; on all three lists, because the
+             // proposal is the platform's statement to the customer.
+             'upgradeProposal']));
 
       /**
        * The commercial keys, moved off the org doc so a scoped site

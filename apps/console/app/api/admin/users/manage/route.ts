@@ -22,6 +22,7 @@ import {
 } from '@aglyn/aglyn/server'
 import {
   authForPool,
+  clearStaffSeatStamps,
   consumePasswordResetSend,
   emailUnverifiedResponse,
   eraseUser,
@@ -505,6 +506,15 @@ async function handler(request: Request): Promise<Response> {
       await targetAuth.updateUser(uid, { disabled: action === 'disable' })
     }
 
+    // A former staff member takes a seat like anyone else (AGL-3466). The
+    // stamp that exempted their rows and pending invites comes off with the
+    // claim, so no workspace keeps carrying them for free. Access is not
+    // touched: a workspace this pushes over its cap keeps everyone it has.
+    const staffSeatsCleared =
+      action === 'revokeStaff'
+        ? await clearStaffSeatStamps(uid, target.email ?? null)
+        : null
+
     // DE-STAFFING HAS TO REACH THE TOKEN (AGL-1881).
     //
     // Custom claims live in the ID token, and the ID token is not reissued
@@ -558,6 +568,7 @@ async function handler(request: Request): Promise<Response> {
             : action === 'enable'
               ? false
               : before.disabled,
+        ...(staffSeatsCleared ? { staffSeatsCleared } : {}),
       },
       at: FieldValue.serverTimestamp(),
     })

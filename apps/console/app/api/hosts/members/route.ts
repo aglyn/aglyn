@@ -18,6 +18,7 @@
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import { createResourceUid } from '@aglyn/aglyn/server'
 import {
+  claimsHoldStaff,
   collaboratorSeatRefusal,
   collaboratorSeatRefusalResponse,
   emailUnverifiedResponse,
@@ -152,16 +153,6 @@ async function handler(request: Request): Promise<Response> {
       // where every door lands. Early refusal only: the hard cap is the
       // transaction inside `grantHostAccess` (and inside invite acceptance,
       // for the address that has no account yet).
-      {
-        const refusal = await collaboratorSeatRefusal({
-          orgId,
-          org: org as any,
-          hostIds: [hostId],
-          self: { email },
-        })
-        if (refusal) return refusal
-      }
-
       // Known account → org membership scoped to this host (projected
       // into memberRoles for console access); unknown → invited roster
       // record, linked through the org-invite acceptance flow.
@@ -171,6 +162,17 @@ async function handler(request: Request): Promise<Response> {
       // instead of linking their real account.
       const authUser =
         (await findUserByEmailAcrossPools(email))?.record ?? null
+      {
+        const refusal = await collaboratorSeatRefusal({
+          orgId,
+          org: org as any,
+          hostIds: [hostId],
+          // Platform staff take no seat (AGL-3466); `grantHostAccess` asks
+          // the claim again inside its transaction.
+          self: { email, staffSeat: claimsHoldStaff(authUser) },
+        })
+        if (refusal) return refusal
+      }
       const memberId = authUser?.uid ?? createResourceUid()
       if (authUser) {
         await grantHostAccess({
