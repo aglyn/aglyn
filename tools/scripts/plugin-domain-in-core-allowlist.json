@@ -120,7 +120,6 @@
       "path": "libs/aglyn/src/lib/app-utils/actions.ts",
       "rules": [
         "domain-name",
-        "domain-exports:workflows",
         "domain-declares:data",
         "domain-declares:workflows"
       ],
