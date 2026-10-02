@@ -218,11 +218,14 @@ jest.mock('./host-run-history-card.component', () => ({
 import { HostActionsCard } from './host-actions-card.component'
 import { standInDatasetList } from '../testing/stand-in-dataset-list'
 import { standInOverlayList } from '../testing/stand-in-overlay-list'
+import { standInFormList } from '../testing/stand-in-recipes'
 
 // The datasets the pickers offer are the data plugin's, and the overlays
 // the marketing plugin's (AGL-3080).
 standInDatasetList()
 standInOverlayList()
+// The forms the trigger's "Form is" condition lists (AGL-3458).
+standInFormList()
 
 const ORG = { $id: 'org-1', plan: 'scale' } as any
 

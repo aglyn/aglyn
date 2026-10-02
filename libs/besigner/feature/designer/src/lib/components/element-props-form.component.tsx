@@ -79,6 +79,11 @@ import {
 // an editor offers are editor business, and a published page must not pull
 // either in behind them.
 import { repeatScope } from '@aglyn/aglyn/app-utils/expand-repeatables'
+import {
+  entityFieldsPickerForAttribute,
+  entityPickerForAttribute,
+  pluginEntityPicker,
+} from '@aglyn/aglyn/plugin-manager/plugin-entity-pickers'
 import { REPEAT_NODE_CAPABILITY } from '@aglyn/aglyn/app-utils/node-capabilities'
 import {
   type RepeatSource,
@@ -1098,9 +1103,11 @@ export function resolveAttributeField<T extends Record<string, any>>(
       typeof field['datasetId'] === 'string' && field['datasetId']
         ? field['datasetId']
         : ancestorDatasetId
-    const modelFields = boundId
-      ? entityOptions.entityFields?.datasets?.[boundId] ?? []
-      : []
+    const fieldsKind = entityFieldsPickerForAttribute(field.component)?.kind
+    const modelFields =
+      boundId && fieldsKind
+        ? entityOptions.entityFields?.[fieldsKind]?.[boundId] ?? []
+        : []
     return {
       ...field,
       component: FieldComponentType.SELECT,
@@ -1124,7 +1131,7 @@ export function resolveAttributeField<T extends Record<string, any>>(
   // of one that is not there. The stored value travels with the field: a
   // selection outside the browse window is offered from its own keyed read,
   // so a bound element never renders as unbound.
-  const entityKind = ENTITY_PICKER_KINDS[field.component as Aglyn.FieldComponentType]
+  const entityKind = entityPickerKindOf(field.component)
   if (entityKind) {
     return buildEntityPickerField(
       field as unknown as Aglyn.AglynAttributeSchema,
@@ -1601,58 +1608,38 @@ export function buildRepeatFields(options: {
 }
 
 /**
- * The list each entity picker DISPLAYS, keyed by the attribute type a
- * component schema declares.
+ * The kind of entity an attribute type's picker DISPLAYS, or `undefined` for
+ * an attribute that is no picker.
  *
- * One table rather than two switches, because the demand signal and the
- * option list have to agree about which list a picker means. When they
- * disagreed the failure was silent and total: the panel would open a
- * listener on one collection and read its options out of another, and the
- * dropdown stayed empty on a site full of data.
+ * Read from the kinds the plugins declare (`plugin-entity-pickers`), the one
+ * table the provider reads too, because the demand signal and the option list
+ * have to agree about which list a picker means. When they disagreed the
+ * failure was silent and total: the panel would open a listener on one
+ * collection and read its options out of another, and the dropdown stayed
+ * empty on a site full of data.
  *
- * `DATASET_FIELD_SELECT` is deliberately absent. Its options are the model
- * fields of the dataset an ANCESTOR chose, so it needs the dataset list to
- * resolve against but is not itself a picker OF datasets — it asks for the
- * list below and renders its own options.
+ * A field attribute — `DATASET_FIELD_SELECT` — is deliberately not a picker
+ * of its kind. Its options are the fields of the entity an ANCESTOR chose, so
+ * it needs that kind's list to resolve against but is not itself a picker OF
+ * it — it asks for the list below and renders its own options.
  */
-export const ENTITY_PICKER_KINDS: Readonly<
-  Partial<Record<Aglyn.FieldComponentType, Aglyn.EntityPickerKind>>
-> = {
-  [FieldComponentType.PRODUCT_SELECT]: 'products',
-  [FieldComponentType.COLLECTION_SELECT]: 'collections',
-  [FieldComponentType.CATEGORY_SELECT]: 'categories',
-  [FieldComponentType.DATASET_SELECT]: 'datasets',
-  [FieldComponentType.FORM_SELECT]: 'forms',
+export function entityPickerKindOf(
+  component: string | undefined,
+): Aglyn.EntityPickerKind | undefined {
+  return entityPickerForAttribute(component)?.kind
 }
 
-/** Where an author makes more of each kind, named in the empty picker. */
-const ENTITY_PICKER_ORIGIN: Readonly<
-  Record<
-    Aglyn.EntityPickerKind,
-    { singular: string; plural: string; page: string }
-  >
-> = {
-  products: {
-    singular: 'product',
-    plural: 'products',
-    page: 'the Products page',
-  },
-  collections: {
-    singular: 'collection',
-    plural: 'collections',
-    page: 'the Collections page',
-  },
-  categories: {
-    singular: 'category',
-    plural: 'categories',
-    page: 'the Categories page',
-  },
-  datasets: {
-    singular: 'dataset',
-    plural: 'datasets',
-    page: 'the Data page',
-  },
-  forms: { singular: 'form', plural: 'forms', page: 'the Forms page' },
+/**
+ * Where an author makes more of a kind, named in the empty picker — the words
+ * its plugin declares, or the kind itself for one no plugin here declares.
+ */
+function entityPickerWords(kind: Aglyn.EntityPickerKind): {
+  singular: string
+  plural: string
+  page: string
+} {
+  const declared = pluginEntityPicker(kind)
+  return declared ?? { singular: kind, plural: kind, page: 'its page' }
 }
 
 /**
@@ -1669,7 +1656,7 @@ export function entityPickerPlaceholder(
   count: number,
 ): string {
   if (count > 0) return 'None'
-  const { plural, page } = ENTITY_PICKER_ORIGIN[kind]
+  const { plural, page } = entityPickerWords(kind)
   switch (state) {
     case 'error':
       return `Could not load ${plural} — reopen this panel to try again`
@@ -1701,7 +1688,7 @@ export function entityPickerBrowseNotice(
   context: Aglyn.EntityPickerContextValue | undefined,
 ): string | undefined {
   if (!context?.truncated?.[kind]) return undefined
-  const { plural } = ENTITY_PICKER_ORIGIN[kind]
+  const { plural } = entityPickerWords(kind)
   const first = `Showing the first ${ENTITY_PICKER_BROWSE_LIMIT} ${plural} — this site has more. `
   return context.searchable?.[kind]
     ? `${first}Type to search all of them.`
@@ -1720,7 +1707,7 @@ export function entityPickerNoMatchText(
   kind: Aglyn.EntityPickerKind,
   context: Aglyn.EntityPickerContextValue | undefined,
 ): string {
-  const { plural } = ENTITY_PICKER_ORIGIN[kind]
+  const { plural } = entityPickerWords(kind)
   if (context?.truncated?.[kind] && !context?.searchable?.[kind]) {
     return `No match in the first ${ENTITY_PICKER_BROWSE_LIMIT} ${plural} — this site has more.`
   }
@@ -1756,12 +1743,12 @@ export function entitySelectionOption(
 ): { value: string; label: string } | undefined {
   const id = typeof value === 'string' ? value.trim() : ''
   if (!id) return undefined
-  if ((context?.[kind] ?? []).some((entity) => entity.id === id)) {
+  if ((context?.options?.[kind] ?? []).some((entity) => entity.id === id)) {
     return undefined
   }
   const resolved = context?.resolved?.[kind]?.[id]
   if (resolved) return { value: id, label: resolved.label }
-  const { singular } = ENTITY_PICKER_ORIGIN[kind]
+  const { singular } = entityPickerWords(kind)
   if (resolved === null) {
     return { value: id, label: `⚠ Unavailable ${singular} (${id}) — deleted` }
   }
@@ -1807,7 +1794,7 @@ export function buildEntityPickerField<
   context: Aglyn.EntityPickerContextValue | undefined,
   value?: unknown,
 ) {
-  const entities = context?.[kind] ?? []
+  const entities = context?.options?.[kind] ?? []
   const selected = entitySelectionOption(context, kind, value)
   const notice = entityPickerBrowseNotice(kind, context)
   const search = context?.search
@@ -1882,25 +1869,23 @@ export function buildEntityPickerField<
  * editing sessions never open. This is the demand signal that replaced that:
  * a node whose schema declares the picker.
  *
- * `DATASET_FIELD_SELECT` asks for `datasets` and not for some list of its
- * own, which is the one mapping worth stating: its options are the model
- * fields of the dataset an ANCESTOR chose, so it cannot resolve one without
- * the dataset list to resolve it against.
+ * A field attribute (`DATASET_FIELD_SELECT`) asks for the kind whose fields it
+ * offers and not for some list of its own, which is the one mapping worth
+ * stating: its options are the fields of the entity an ANCESTOR chose, so it
+ * cannot resolve one without that kind's list to resolve it against.
  *
  * Exported for the test that pins the mapping — a picker silently missing
- * from {@link ENTITY_PICKER_KINDS} renders as a permanently empty dropdown,
- * which looks exactly like a site with no products.
+ * from the declarations renders as a permanently empty dropdown, which looks
+ * exactly like a site with no products.
  */
 export function entityKindsForAttributes(
   attributes: readonly Aglyn.AglynAttributeSchema[] | undefined,
 ): Aglyn.EntityPickerKind[] {
   const kinds = new Set<Aglyn.EntityPickerKind>()
   for (const field of attributes ?? []) {
-    if (field.component === FieldComponentType.DATASET_FIELD_SELECT) {
-      kinds.add('datasets')
-      continue
-    }
-    const kind = ENTITY_PICKER_KINDS[field.component]
+    const kind =
+      entityPickerKindOf(field.component) ??
+      entityFieldsPickerForAttribute(field.component)?.kind
     if (kind) kinds.add(kind)
   }
   return [...kinds]
@@ -1984,7 +1969,7 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
     useEffect(() => {
       if (!resolveEntity) return
       for (const field of demandAttributes) {
-        const kind = ENTITY_PICKER_KINDS[field.component]
+        const kind = entityPickerKindOf(field.component)
         if (!kind) continue
         const id = entityValueNeedsResolution(
           entityOptions,
@@ -2007,8 +1992,7 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
     useEffect(() => {
       if (!resolveEntity) return
       const repeat = repeatSourceOf({ props: nodeProps })
-      const kind = repeat && ENTITY_PICKER_KINDS[repeat.source.keyAttribute
-        .component as Aglyn.FieldComponentType]
+      const kind = repeat && entityPickerKindOf(repeat.source.keyAttribute.component)
       if (!kind) return
       const id = entityValueNeedsResolution(entityOptions, kind, repeat?.key)
       if (id) resolveEntity(kind, id)
@@ -2058,6 +2042,11 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
       (field) =>
         field.component === FieldComponentType.DATASET_FIELD_SELECT,
     )
+    // The kind those fields come from, whose list a legacy name is matched in.
+    const fieldsKind = entityFieldsPickerForAttribute(
+      FieldComponentType.DATASET_FIELD_SELECT,
+    )?.kind
+    const fieldsKindOptions = fieldsKind ? entityOptions.options?.[fieldsKind] : undefined
     const ancestorDatasetId = useMemo(() => {
       if (!hasDatasetFieldSelect || !node?.$id) return undefined
       const nodes = canvas.toJSON().nodes as Record<string, any>
@@ -2068,7 +2057,7 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
           return props.datasetId as string
         }
         if (typeof props.datasetName === 'string' && props.datasetName) {
-          const byLabel = (entityOptions.datasets ?? []).find(
+          const byLabel = (fieldsKindOptions ?? []).find(
             (dataset) => dataset.label === props.datasetName,
           )
           if (byLabel) return byLabel.id
@@ -2077,7 +2066,7 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
       }
       return undefined
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [hasDatasetFieldSelect, node, entityOptions.datasets])
+    }, [hasDatasetFieldSelect, node, fieldsKindOptions])
     // Insert-picker options + pill display-name inputs (AGL-583/586),
     // assembled from this node's ancestor context — shared with the
     // inline text editor via the extracted hook.
@@ -2313,10 +2302,7 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
       // The key as an author knows it, when the source's control is a picker
       // that can name it. A source drawn with anything else — and a picker
       // whose list has not answered — is named by the stored key itself.
-      const kind =
-        ENTITY_PICKER_KINDS[
-          repeat.source.keyAttribute.component as Aglyn.FieldComponentType
-        ]
+      const kind = entityPickerKindOf(repeat.source.keyAttribute.component)
       const label =
         (kind
           ? entitySelectionOption(entityOptions, kind, repeat.key)?.label

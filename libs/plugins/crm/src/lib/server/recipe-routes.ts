@@ -55,8 +55,7 @@ import {
   type AglynOrganization,
   checkEntitlement,
   createResourceUid,
-  crmActionRecipe,
-  type CrmActionRecipeId,
+  type HostAction,
   hostActionDocument,
   hostActionRecipeId,
   hostRoleCanWrite,
@@ -79,6 +78,7 @@ import {
   type CrmRecipeInstallResult,
   type CrmRecipeSiteStatus,
 } from '../constants/api-routes'
+import { crmActionRecipe, type CrmActionRecipeId } from '../model/crm-recipes'
 import { authorizeOrgCaller, orgHostIds, readCrmRouteScope } from './org-caller'
 import { crmSuiteRefusal } from './suite-gate'
 
@@ -201,7 +201,9 @@ function readSiteStamps(rows: FirebaseFirestore.QuerySnapshot): {
     live += 1
     const stamp = hostActionRecipeId(row.data())
     if (stamp === undefined) unstamped += 1
-    else if (stamp && !installed.has(stamp)) installed.set(stamp, row.id)
+    else if (stamp && !installed.has(stamp as CrmActionRecipeId)) {
+      installed.set(stamp as CrmActionRecipeId, row.id)
+    }
   }
   return { installed, unstamped, live }
 }
@@ -300,8 +302,8 @@ export const crmRecipeInstallHandler: PluginApiHandler = async (req, res) => {
     }
 
     const hostRef = writer.host.ref
-    let form: { id: string; name: string; routesLeads: boolean } | undefined
-    if (recipe.needs === 'form') {
+    let form: { id: string; name: string; facts: { routesLeads: boolean } } | undefined
+    if (recipe.picks?.kind === 'form') {
       if (!formId) {
         res.status(400).json({ error: 'Pick one of the site’s forms' })
         return
@@ -320,12 +322,13 @@ export const crmRecipeInstallHandler: PluginApiHandler = async (req, res) => {
       form = {
         id: snapshot.id,
         name: String(snapshot.get('displayName') ?? '').trim() || snapshot.id,
-        // A lead-routed form makes leads, so its recipe listens for one (AGL-3458).
-        routesLeads: snapshot.get('routing')?.lead === true,
+        // The fact the Forms plugin's list source shares (AGL-3458): a
+        // lead-routed form makes leads, so its recipe listens for one.
+        facts: { routesLeads: snapshot.get('routing')?.lead === true },
       }
     }
 
-    const action = recipe.build(form ? { form } : undefined)
+    const action = recipe.build(form ? { picked: form } : undefined) as unknown as HostAction
     const problem = validateHostAction(action)
     if (problem) {
       res.status(400).json({ error: problem })

@@ -174,34 +174,50 @@ bandwidth row 20 · 35 · 55 · 90 · 105 · 485 GB in the desktop cells and the
 mobile panels, and the Scale strip's "90 GB bandwidth"; `/alternatives/webflow`
 went to version `-jEj6Vk0Eq` and the calculator's variables followed.
 
-### Owed before the next promotion: Vercel's decimal GB, nam5, and the API as a function
+### 2026-10-02 — Vercel's decimal GB, nam5, and the API as a function
 
-The same day the cost model took three facts on board (AGL-3444): Vercel bills
-transfer by the decimal GB, production's Firestore is `nam5`, and a page
+On 2026-10-01 the cost model took three facts on board (AGL-3444): Vercel
+bills transfer by the decimal GB, production's Firestore is `nam5`, and a page
 view's analytics beacon and every `/v1` request are functions. Page views
 $0.70 → $0.80 and form submissions $0.07 → $0.08 per 1,000; the bandwidth
 bands 20 · 35 · 55 · 90 · 105 · 485 → 20 · 30 · 45 · 70 · 80 · 395 GB; the API
 bands 100k · 300k · 1M · 5M → 1.5k · 5k · 17k · 85k a month; and the API
 overage on Advanced and Agency $0.20 and $0.15 → $0.25 per 1,000. Per the rule
-above they are republished BEFORE the promotion that bills them:
+above they were republished on 2026-10-02, BEFORE the promotion that bills
+them:
 
-- `/pricing`: the page-view cell (`aQCceq6U4W`) and the form-submission cell
-  (`_4aeO1e1lf`); the six desktop bandwidth cells and the six mobile panels;
-  the Scale strip in both nodes ("90 GB bandwidth", "300k API requests/mo");
-  the Advanced and Agency strips' API figures; the "API access" row; and the
-  Advanced and Agency cells of "API requests, per 1,000 over limit".
-- `/alternatives/webflow`: the sentence quoting the three metered rates.
+- `/pricing` went to version `-jejSg7GLa`: the page-view cell (`aQCceq6U4W`)
+  and the form-submission cell (`_4aeO1e1lf`); the bandwidth row in the
+  desktop cells and the six mobile panels; the "API access" row in the four
+  desktop cells (`LO-C0ctVsX`, `1Ch9wpFueA`, `ZzoEjN9-fJ`, `0tmOwxBwQI`) and
+  the four mobile panels (`OKAvIuz-_u`, `O_JkndyspV`, `78l74v-ICr`,
+  `rCJmfDzHG_`); the Advanced and Agency cells of "API requests, per 1,000
+  over limit" (desktop `qjVxdVCQdN`, `A9RzUA2JGM`, mobile `HC8_EHkl6l`,
+  `Ld97lqZz0Z`); the Business plan card's feature line "API access · 1.5k
+  req/mo" (`7HnQ3s4-jo`, `aHQGeLTPgE`); and the room-to-grow strips, each in
+  two nodes: Scale's "5k API requests/mo" and "70 GB bandwidth" (`1vMwEC7XXV`,
+  `_99Id5AtWv`), Advanced's "17k" (`lf2hQCN09V`, `WHZY4HVAaB`) and Agency's
+  "85k" (`a2mSWiFsmr`, `_LxrAWxlN3`).
+- `/alternatives/webflow` went to version `MmyN28bYIs`: the sentence quoting
+  the metered rates.
+- `/use-cases/saas-websites` (screen `RW-hQ3pFrd`) went to version
+  `x5iCQ0J0dn`. Its API card had quoted the request bands ("100k requests/mo
+  on Business, 1M on Advanced"); it now names none ("REST API with scoped keys,
+  on Business and above"), so a band change no longer reaches it. A product
+  page that quotes a band is a pricing surface; prefer not to quote one.
 - The pricing calculator (`/resources/pricing-calculator`) and the simple cost
   sheet (`/resources/multi-site-cost-sheet`) read Aglyn's figures from SITE
   VARIABLES rather than from the page body: `plan_rates.page_views_per_1k`
-  and `.forms_per_1k`, and, per paid plan, `plan_<id>.bandwidth_gb`, `.views`,
-  `.views_ceiling`, `.api` and `.api_rate`. No parity spec reads them, so a
-  rate or band change owes them an edit too.
-- The four Figma frames, declared stale in `build-pricing-tables.mts` until
-  they are redrawn.
+  and `.forms_per_1k`, and, per paid plan, `plan_<id>.bandwidth_gb`, `.views`
+  (the band × 1,048,576 ÷ 1,012.8 KB a view), `.views_ceiling` (the larger of
+  100,000 and three times `.views`), `.api` and `.api_rate`. No parity spec
+  reads them, so a rate or band change owes them an edit too. They moved with
+  this republish.
 
-The parity spec pins each gap by name; fold each back into one row with the
-version id when the page catches up.
+The parity spec's gaps were folded back into single rows the same day.
+
+Still owed: the four Figma frames, which `build-pricing-tables.mts` declares
+stale until they are redrawn.
 
 ## Enterprise has no price here, but it has bands
 

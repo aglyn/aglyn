@@ -156,6 +156,29 @@ export interface PluginUsageBandDeclaration {
     approach: string
   }
   /**
+   * The console's quota banner WARNS an organization-wide reader on every
+   * console page as the workspace approaches and reaches this band
+   * (AGL-2898, AGL-3080). `standing` is a console API path the plugin
+   * serves, asked `?orgId=` with the reader's token, that answers the
+   * band's standing in its own unit under `member` — `{ used, limit }`,
+   * `limit: null` for a plan with no band, which is no row — and
+   * `stopsAtBand`: whether reaching it stops the feature (the reading when
+   * the route does not say) or bills past it. `approach` is the sentence
+   * above 80%; `reached.stops` and `reached.bills` the two at the band.
+   * `linksUsage` says the sentences name Billing → Usage, and the banner
+   * offers the link.
+   *
+   * A route, not a counter: a band's meter may be one no client may read,
+   * and the route answers in the unit the customer was sold.
+   */
+  consoleWarning?: {
+    standing: string
+    member: string
+    approach: string
+    reached: { stops: string; bills: string }
+    linksUsage?: boolean
+  }
+  /**
    * The band is one of the INFRASTRUCTURE meters (AGL-1280): what the
    * workspace uses past it is billed at our cost × `METERED_MARKUP`, beside
    * storage and bandwidth, on the same invoice line and the same estimate.

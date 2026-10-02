@@ -16,6 +16,7 @@
  */
 
 import {
+  CONTACT_TAG_MAX_LENGTH,
   type ContactLifecycleStage,
   CRM_TASK_MAX_DUE_DAYS,
   type CrmActivityKind,
@@ -36,6 +37,7 @@ import {
   validateInteraction,
 } from './site-interactions'
 import { HOST_EVENT_TYPES, hostEventRecipientActed } from './host-events'
+import { isKnownInteractionRecipe } from '../plugin-manager/interaction-recipes'
 
 /**
  * Actions builder (AGL-148): HubSpot-style event → action automation on
@@ -48,7 +50,8 @@ import { HOST_EVENT_TYPES, hostEventRecipientActed } from './host-events'
  * added: its trigger, its conditions, its client steps and its storage are
  * the platform's, and are re-exported here for the readers that take both
  * from this module. What is declared below is the automation's own — the
- * server steps, flows, recipes and webhooks.
+ * server steps, flows and the stored shape. The recipes that open the editor
+ * prefilled are the plugins' that write them (`interaction-recipes`).
  */
 export * from './site-interactions'
 
@@ -279,264 +282,12 @@ export function sendEmailIsTransactionalReply(
   return step.transactional !== false && sendEmailReplyIneligibility(step, context) === null
 }
 
-/** Longest tag an automation may write — the console's own tag field cap. */
-export const CONTACT_TAG_MAX_LENGTH = 60
-
-/*
- * THE RECIPES (AGL-2626).
- *
- * A recipe is a ready-to-edit action — a trigger, its conditions and an
- * ordered step list — built from the vocabulary the editor already offers
- * and handed to the editor as a draft. Nothing is written until the person
- * saves, and every field is theirs to change first: the recipe decides
- * where the editor starts, not what the site runs.
- *
- * Defined here, beside the step catalog, rather than in the builder, so the
- * docs page that lists the recipes and the menu that offers them read ONE
- * list, and so a step the catalog renames or retires breaks a recipe at
- * compile time rather than in a menu nobody tests.
- *
- * Definitions only. Three of the four are complete as written. `tagByForm`
- * needs a form, and a form belongs to a site (`hosts/{hostId}/forms`), so
- * the picker that supplies it is the builder's business and host-scoped by
- * nature. That is the seam an org-level mount keeps: the recipes are the
- * same at either level, and only the form picker knows where it is.
- */
-export const CRM_ACTION_RECIPE_IDS = [
-  'welcomeNewLead',
-  'followUpWonDeal',
-  'reengageStaleLead',
-  'tagByForm',
-] as const
-
-export type CrmActionRecipeId = (typeof CRM_ACTION_RECIPE_IDS)[number]
-
-/** What a recipe is handed before it builds — today only the form `tagByForm` reads. */
-export interface CrmActionRecipeInput {
-  form?: {
-    id: string
-    name: string
-    /**
-     * Whether the form files its people as LEADS (`routing.lead`, AGL-3458).
-     * Such a form makes a lead and no contact, so a recipe keyed on it
-     * listens for a new lead rather than a new contact.
-     */
-    routesLeads?: boolean
-  }
-}
-
-export interface CrmActionRecipe {
-  id: CrmActionRecipeId
-  /** How the recipe reads in the menu; also the action's starting name. */
-  title: string
-  /** One sentence under the title. */
-  description: string
-  /**
-   * What must be picked before the recipe can be built. A recipe that needs
-   * nothing opens the editor at once; one that needs a form opens a picker
-   * first. Built WITHOUT its pick, such a recipe yields an action the
-   * validator refuses — a condition with no value — rather than one that
-   * saves and then silently matches nothing.
-   */
-  needs?: 'form'
-  /**
-   * A fresh action each call, because the draft is edited in place. The
-   * action carries `recipe: id` — the provenance is the builder's to stamp,
-   * so a writer that saves what it was handed cannot forget it.
-   */
-  build: (input?: CrmActionRecipeInput) => HostAction
-}
-
-/**
- * How long the stale-lead recipe holds before it decides a lead has gone
- * quiet. A week: long enough that a rep who is working the lead has had a
- * chance to move its stage, short enough that a lead nobody touched is
- * still warm when the reminder lands.
- */
-export const STALE_LEAD_WAIT_MINUTES = 7 * 24 * 60
-
-/**
- * The tag a form's captures get: the form's own name, cut to the tag cap.
- * The name is what the person calls the form, so it is the tag they would
- * have typed; the editor is open to change it before anything is saved.
- */
-export function crmRecipeTagForForm(formName: string): string {
-  return formName.trim().slice(0, CONTACT_TAG_MAX_LENGTH)
-}
-
-export const CRM_ACTION_RECIPES: readonly CrmActionRecipe[] = [
-  {
-    id: 'welcomeNewLead',
-    title: 'Welcome a new lead',
-    description:
-      'When a form makes a new lead: rotate in an owner, book a call for ' +
-      'tomorrow, send a thank-you, and tag them website.',
-    /*
-     * ON A NEW LEAD (AGL-3458), because that is the record a lead-routed form
-     * makes: under the one-record model (AGL-3232) a form with lead routing
-     * on files a LEAD and no contact, so a new-contact trigger would never
-     * reach the people this recipe is named for. `formId` is on the `lead`
-     * event exactly when a form filed the lead, so the condition keeps the
-     * recipe to forms and leaves a booking request to the booking's own
-     * confirmation. Every step below acts on the lead the event names when
-     * the workspace holds no contact for the person.
-     *
-     * The owner first, because the task that follows names no assignee and
-     * so goes to whoever owns the lead when it is created — the member the
-     * rotation just chose. Round robin rather than a named member: a recipe
-     * cannot know who is on the team, and the pool under CRM → Settings is
-     * the one place that does. On a workspace with no pool the step fails
-     * and the run continues, so the call, the email and the tag still land
-     * and the run history says who was not assigned.
-     *
-     * The email comes before any wait, which makes it an immediate reply to
-     * what the visitor just did — a transactional reply, sent from the org's
-     * own identity to the address the event carries, with no unsubscribe.
-     *
-     * Its words promise no response time. The org hub installs this recipe
-     * into a site without its editor opening, so the business never reads
-     * the sentence it is sending, and a "within a day" written here would be
-     * a commitment made on its behalf that nothing in the run keeps.
-     */
-    build: () => ({
-      recipe: 'welcomeNewLead',
-      name: 'Welcome a new lead',
-      trigger: {
-        event: 'lead',
-        conditions: [{ field: 'formId', op: 'notEmpty' }],
-        combinator: 'and',
-      },
-      steps: [
-        { type: 'assignContactOwner', roundRobin: true },
-        {
-          type: 'createCrmTask',
-          title: 'Call the new lead',
-          kind: 'call',
-          dueInDays: 1,
-        },
-        {
-          type: 'sendEmail',
-          subject: 'Thanks for getting in touch',
-          body:
-            'Hi {{firstName|there}},\n\nThanks for reaching out. We have your ' +
-            'message and will reply to this email address.',
-        },
-        { type: 'addContactTag', tag: 'website' },
-      ],
-      enabled: true,
-    }),
-  },
-  {
-    id: 'followUpWonDeal',
-    title: 'Follow up a won deal',
-    description:
-      'When a deal is won — which makes the contact a Customer on its own — ' +
-      'book a check-in call a week out.',
-    /*
-     * No stage step (AGL-2641): the win itself floors the contact at
-     * `customer` before `dealWon` is announced, so a step setting the stage
-     * here would at best repeat the write and at worst move an evangelist
-     * back to customer — a SET, which is what the step is, and not the
-     * floor the win applies. The recipe books the follow-up and nothing
-     * else.
-     */
-    build: () => ({
-      recipe: 'followUpWonDeal',
-      name: 'Follow up a won deal',
-      trigger: { event: 'dealWon' },
-      steps: [
-        {
-          type: 'createCrmTask',
-          title: 'Check in with the new customer',
-          kind: 'call',
-          dueInDays: 7,
-        },
-      ],
-      enabled: true,
-    }),
-  },
-  {
-    id: 'reengageStaleLead',
-    title: 'Re-engage a stale lead',
-    description:
-      'When a contact becomes a lead: wait a week, and if their stage has ' +
-      'not moved, book a call to bring them back.',
-    /*
-     * "Unless the stage moved on" is the wait's own event: the flow watches
-     * for the next stage change on this person and gives up after a week.
-     * Resumed by the clock, the run carries `_waitTimedOut`, and the task
-     * step's guard reads it; resumed by the event, the field is absent and
-     * the task is skipped — the lead was worked, and nobody is told to
-     * re-engage somebody who just moved to Sales qualified.
-     */
-    build: () => ({
-      recipe: 'reengageStaleLead',
-      name: 'Re-engage a stale lead',
-      trigger: {
-        event: 'contactStageChanged',
-        conditions: [{ field: 'lifecycleStage', op: 'equals', value: 'lead' }],
-        combinator: 'and',
-      },
-      steps: [
-        {
-          type: 'waitForEvent',
-          eventName: 'contactStageChanged',
-          timeoutMinutes: STALE_LEAD_WAIT_MINUTES,
-        },
-        {
-          type: 'createCrmTask',
-          title: 'Re-engage a lead that has gone quiet',
-          kind: 'call',
-          dueInDays: 1,
-          when: {
-            conditions: [{ field: FLOW_TIMED_OUT_FIELD, op: 'notEmpty' }],
-          },
-        },
-      ],
-      enabled: true,
-    }),
-  },
-  {
-    id: 'tagByForm',
-    title: 'Tag by form',
-    description:
-      'When a form you pick makes a new lead or contact: tag them with the ' +
-      'form’s name.',
-    needs: 'form',
-    /*
-     * The event follows the form's routing (AGL-3458): a lead-routed form
-     * makes a lead and no contact, so keyed on `contactCreated` it would
-     * never fire. Both events carry `formId` when a form made the record.
-     */
-    build: (input) => {
-      const form = input?.form
-      return {
-        recipe: 'tagByForm',
-        name: form ? `Tag ${form.name.trim()} submissions` : 'Tag by form',
-        trigger: {
-          event: form?.routesLeads ? 'lead' : 'contactCreated',
-          conditions: [{ field: 'formId', op: 'equals', value: form?.id ?? '' }],
-          combinator: 'and',
-        },
-        steps: [
-          { type: 'addContactTag', tag: form ? crmRecipeTagForForm(form.name) : '' },
-        ],
-        enabled: true,
-      }
-    },
-  },
-]
-
-/** The recipe with this id, or null for a string that names none. */
-export function crmActionRecipe(id: unknown): CrmActionRecipe | null {
-  return CRM_ACTION_RECIPES.find((recipe) => recipe.id === id) ?? null
-}
-
 /**
  * The recipe a STORED action came from, read off its document (AGL-2639).
  *
  * Three answers, and the third is the one that matters. A known id: the
- * action was installed from, or begun as, that recipe. `null`: the action
+ * action was installed from, or begun as, that recipe — one a plugin declares
+ * or registered (`isKnownInteractionRecipe`). `null`: the action
  * was begun blank, or from a recipe this build no longer knows — the
  * editor wrote the field and said "no recipe". `undefined`: the document
  * carries no `recipe` field at all, which is every action saved before the
@@ -547,10 +298,10 @@ export function crmActionRecipe(id: unknown): CrmActionRecipe | null {
  */
 export function hostActionRecipeId(
   action: { recipe?: unknown } | null | undefined,
-): CrmActionRecipeId | null | undefined {
+): string | null | undefined {
   const stamp = action?.recipe
   if (stamp === undefined) return undefined
-  return crmActionRecipe(stamp)?.id ?? null
+  return isKnownInteractionRecipe(stamp) ? stamp : null
 }
 
 /**
@@ -636,7 +387,7 @@ export interface HostAction extends SiteInteraction<HostActionStep> {
    * existed — read it through {@link hostActionRecipeId}, which keeps the
    * three cases apart.
    */
-  recipe?: CrmActionRecipeId | null
+  recipe?: string | null
 }
 
 /**
@@ -721,7 +472,7 @@ export function validateHostAction(action: HostAction): string | null {
   if (!action.name?.trim()) return 'Name the action'
   // A stamp is provenance, and provenance naming a recipe that does not
   // exist is a document nothing can read back; `null` and absent both pass.
-  if (action.recipe != null && !crmActionRecipe(action.recipe)) {
+  if (action.recipe != null && !isKnownInteractionRecipe(action.recipe)) {
     return 'Unknown recipe'
   }
   // The trigger, the step guards, the client steps and every declared step's

@@ -21,9 +21,6 @@ import {
   type AglynOrgBilling,
   checkEntitlement,
   createResourceUid,
-  CRM_ACTION_RECIPES,
-  type CrmActionRecipe,
-  type CrmActionRecipeId,
   ELEMENT_SCOPED_SITE_EVENTS,
   HOST_ACTION_STEP_LABELS,
   HOST_EVENT_TYPES,
@@ -48,6 +45,15 @@ import {
   describeAutomationPlaceholder,
 } from '@aglyn/aglyn/app-utils/automation-placeholders'
 import { useConsoleWidgetSlot } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
+import {
+  type InteractionRecipe,
+  interactionRecipe,
+  interactionRecipes,
+} from '@aglyn/aglyn/plugin-manager/interaction-recipes'
+import {
+  pluginRecordListQuery,
+  pluginRecordsFromRows,
+} from '@aglyn/aglyn/plugin-manager/plugin-record-lists'
 import {
   AUTOMATION_EDITOR_ZONE,
   HOST_AUTOMATIONS_ZONE,
@@ -139,7 +145,7 @@ interface ActionDraft extends HostAction {
    * before the stamp existed — which Save leaves as it found it, so an
    * edit never turns "unknown" into "no recipe".
    */
-  recipe: CrmActionRecipeId | null | undefined
+  recipe: string | null | undefined
 }
 
 
@@ -397,65 +403,83 @@ export function HostActionsCard(props: {
    *
    * A recipe opens the editor prefilled and writes nothing: the draft it
    * builds is the one Save would persist, and until then it is state in
-   * this card and nowhere else. Three recipes open at once; "Tag by form"
-   * needs a form first, and the form is this site's — `hosts/{hostId}/forms`
-   * — so the picker is the one host-scoped piece of the feature, held here
-   * rather than in the catalog.
+   * this card and nowhere else. The recipes are the plugins' that write them
+   * (`interaction-recipes`, AGL-3080) — the CRM's "Welcome a new lead" is the
+   * CRM's — and this card offers whatever they registered. Most open at once;
+   * one that picks a record first opens a picker, and the records are listed
+   * through the list source the plugin that keeps them publishes, for this
+   * site — the one host-scoped piece of the feature, held here rather than in
+   * the recipe.
    */
   const [recipesAnchor, setRecipesAnchor] = useState<HTMLElement | null>(null)
-  const [formPickFor, setFormPickFor] = useState<CrmActionRecipe | null>(null)
-  const [pickedFormId, setPickedFormId] = useState('')
+  const [pickFor, setPickFor] = useState<InteractionRecipe | null>(null)
+  const [pickedId, setPickedId] = useState('')
   /**
-   * The form picker has been opened at least once — the `editorOpened`
-   * latch's twin, and for the same reason: the forms window is read for
-   * this picker only, and a reader who never opens it pays nothing.
+   * The picker has been opened at least once — the `editorOpened` latch's
+   * twin, and for the same reason: the records are read for this picker only,
+   * and a reader who never opens it pays nothing.
    */
-  const [formPickerOpened, setFormPickerOpened] = useState(false)
+  const pickKind = pickFor?.picks?.kind ?? null
+  const [pickedKind, setPickedKind] = useState<string | null>(null)
+  if (pickKind && pickKind !== pickedKind) setPickedKind(pickKind)
+  const { data: pickRead } = useFirestoreCollection<any>(
+    () =>
+      pickedKind
+        ? pluginRecordListQuery(pickedKind, firestore, {
+            hostId,
+            limit: EDITOR_OPTION_CEILING + 1,
+          })
+        : null,
+    [firestore, hostId, pickedKind],
+    { idField: '$id' },
+  )
+  const { rows: pickRows, truncated: pickTruncated } = ceilingedWindow<any>(
+    pickRead,
+    EDITOR_OPTION_CEILING,
+  )
+  // What the owner leaves out (an archived form collects nothing, so a recipe
+  // keyed on it would never fire) is not offered. The facts the owner shares
+  // ride along to the recipe, which may shape its draft by them (AGL-3458).
+  const pickOptions = pluginRecordsFromRows(pickedKind ?? '', pickRows)
+    .map((record) => ({ id: record.id, name: record.name, facts: record.facts }))
+    .sort((a, b) => a.name.localeCompare(b.name))
+
   /*
-   * The same window serves the trigger's "Form is" condition (AGL-3458), for
-   * an event that carries the form's id — read once the editor is open on
-   * such an event, on the same latch, so it is never bought twice.
+   * The site's forms for the trigger's "Form is" condition (AGL-3458), for an
+   * event that carries the form's id — through the same list source the
+   * recipe picker reads, latched like it: read once the editor is open on
+   * such an event, and never before.
    */
   const eventCarriesFormId = Boolean(
     draft && HOST_EVENT_PAYLOAD_KEYS[draft.trigger.event as HostEventType]?.includes('formId'),
   )
-  if ((formPickFor || eventCarriesFormId) && !formPickerOpened) setFormPickerOpened(true)
-  const { data: formRead } = useFirestoreCollection<any>(
+  const [formConditionOpened, setFormConditionOpened] = useState(false)
+  if (eventCarriesFormId && !formConditionOpened) setFormConditionOpened(true)
+  const { data: formConditionRead } = useFirestoreCollection<any>(
     () =>
-      formPickerOpened
-        ? collectionCeiling(
-            collection(firestore, 'hosts', hostId, 'forms'),
-            EDITOR_OPTION_CEILING,
-          )
+      formConditionOpened
+        ? pluginRecordListQuery('form', firestore, {
+            hostId,
+            limit: EDITOR_OPTION_CEILING + 1,
+          })
         : null,
-    [firestore, hostId, formPickerOpened],
+    [firestore, hostId, formConditionOpened],
     { idField: '$id' },
   )
-  const { rows: formDocs, truncated: formsTruncated } = ceilingedWindow<any>(
-    formRead,
-    EDITOR_OPTION_CEILING,
+  const formOptions = pluginRecordsFromRows(
+    'form',
+    ceilingedWindow<any>(formConditionRead, EDITOR_OPTION_CEILING).rows,
   )
-  // An archived form collects nothing, so a recipe keyed on it would never
-  // fire; the name falls back to the id the way every form list's does.
-  const formOptions = (formDocs ?? [])
-    .filter((form: any) => !form.archivedAt)
-    .map((form: any) => ({
-      id: form.$id as string,
-      name: (String(form.displayName ?? '').trim() || form.$id) as string,
-      // A lead-routed form makes leads, so its recipe listens for one (AGL-3458).
-      routesLeads: form.routing?.lead === true,
-    }))
-    .sort((a: { name: string }, b: { name: string }) =>
-      a.name.localeCompare(b.name),
-    )
+    .map((record) => ({ id: record.id, name: record.name }))
+    .sort((a, b) => a.name.localeCompare(b.name))
 
   const handleRecipe = useCallback(
-    (recipe: CrmActionRecipe) => {
+    (recipe: InteractionRecipe) => {
       setRecipesAnchor(null)
       if (!actionsEntitled()) return
-      if (recipe.needs === 'form') {
-        setPickedFormId('')
-        setFormPickFor(recipe)
+      if (recipe.picks) {
+        setPickedId('')
+        setPickFor(recipe)
         return
       }
       setDraft(draftFromAction(recipe.build(), null))
@@ -463,13 +487,13 @@ export function HostActionsCard(props: {
     [actionsEntitled],
   )
 
-  const handleFormPicked = useCallback(() => {
-    const recipe = formPickFor
-    const form = formOptions.find((option) => option.id === pickedFormId)
-    if (!recipe || !form) return
-    setFormPickFor(null)
-    setDraft(draftFromAction(recipe.build({ form }), null))
-  }, [formPickFor, formOptions, pickedFormId])
+  const handlePicked = useCallback(() => {
+    const recipe = pickFor
+    const picked = pickOptions.find((option) => option.id === pickedId)
+    if (!recipe || !picked) return
+    setPickFor(null)
+    setDraft(draftFromAction(recipe.build({ picked }), null))
+  }, [pickFor, pickOptions, pickedId])
 
   // Run log + test runs (AGL-266).
   const [runsFor, setRunsFor] = useState<any | null>(null)
@@ -839,7 +863,7 @@ export function HostActionsCard(props: {
           open={Boolean(recipesAnchor)}
           onClose={() => setRecipesAnchor(null)}
         >
-          {CRM_ACTION_RECIPES.map((recipe) => (
+          {interactionRecipes().map((recipe) => (
             <MenuItem key={recipe.id} onClick={() => handleRecipe(recipe)}>
               <ListItemText
                 primary={recipe.title}
@@ -885,8 +909,7 @@ export function HostActionsCard(props: {
           {draft?.recipe ? (
             <Typography variant="body2" color="text.secondary">
               {`Started from the “${
-                CRM_ACTION_RECIPES.find((recipe) => recipe.id === draft.recipe)
-                  ?.title ?? 'recipe'
+                interactionRecipe(draft.recipe)?.title ?? 'recipe'
               }” recipe — change anything, then save.`}
             </Typography>
           ) : null}
@@ -1185,35 +1208,36 @@ export function HostActionsCard(props: {
         </DialogActions>
       </Dialog>
       <Dialog
-        open={Boolean(formPickFor)}
-        onClose={() => setFormPickFor(null)}
+        open={Boolean(pickFor)}
+        onClose={() => setPickFor(null)}
         maxWidth="xs"
         fullWidth
       >
-        <DialogTitle>{formPickFor?.title ?? ''}</DialogTitle>
+        <DialogTitle>{pickFor?.title ?? ''}</DialogTitle>
         <DialogContent
           sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, pt: 1 }}
         >
           <Typography variant="body2" color="text.secondary">
-            {'Pick the form whose new contacts get the tag. The action opens ' +
-              'ready to edit; nothing is saved until you save it.'}
+            {`${pickFor?.picks?.prompt ?? ''} The action opens ready to edit; ` +
+              'nothing is saved until you save it.'}
           </Typography>
-          {formsTruncated ? (
+          {pickTruncated ? (
             <Alert severity="info">
-              {`Offering the first ${EDITOR_OPTION_CEILING} forms, ordered by ` +
-                'id. This site has more, so the form you want may not be listed.'}
+              {`Offering the first ${EDITOR_OPTION_CEILING} ${pickFor?.picks?.plural ?? ''}, ` +
+                `ordered by id. This site has more, so the ` +
+                `${(pickFor?.picks?.label ?? '').toLowerCase()} you want may not be listed.`}
             </Alert>
           ) : null}
-          {formOptions.length ? (
+          {pickOptions.length ? (
             <TextField
               select
-              label="Form"
-              value={pickedFormId}
-              onChange={(event) => setPickedFormId(event.target.value)}
+              label={pickFor?.picks?.label ?? ''}
+              value={pickedId}
+              onChange={(event) => setPickedId(event.target.value)}
               size="small"
               sx={{ mt: 1 }}
             >
-              {formOptions.map((option) => (
+              {pickOptions.map((option) => (
                 <MenuItem key={option.id} value={option.id}>
                   {option.name}
                 </MenuItem>
@@ -1221,18 +1245,18 @@ export function HostActionsCard(props: {
             </TextField>
           ) : (
             <Typography variant="body2" color="text.secondary">
-              {'This site has no forms yet. Add one in the besigner, then come back.'}
+              {pickFor?.picks?.none ?? ''}
             </Typography>
           )}
         </DialogContent>
         <DialogActions>
-          <Button color="inherit" onClick={() => setFormPickFor(null)}>
+          <Button color="inherit" onClick={() => setPickFor(null)}>
             {'Cancel'}
           </Button>
           <Button
             variant="contained"
-            disabled={!pickedFormId}
-            onClick={handleFormPicked}
+            disabled={!pickedId}
+            onClick={handlePicked}
           >
             {'Use recipe'}
           </Button>

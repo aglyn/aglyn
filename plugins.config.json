@@ -148,6 +148,18 @@
           "recipientActed": true
         }
       ],
+      "entityPickers": [
+        {
+          "kind": "forms",
+          "attribute": "form-select",
+          "scope": "host",
+          "collection": "forms",
+          "nameField": "displayName",
+          "singular": "form",
+          "plural": "forms",
+          "page": "the Forms page"
+        }
+      ],
       "contributes": {
         "site": {
           "components": [
@@ -571,6 +583,45 @@
           "order": 30
         }
       ],
+      "entityPickers": [
+        {
+          "kind": "products",
+          "attribute": "product-select",
+          "scope": "host",
+          "collection": "products",
+          "nameField": "name",
+          "searchable": true,
+          "singular": "product",
+          "plural": "products",
+          "page": "the Products page"
+        },
+        {
+          "kind": "collections",
+          "attribute": "collection-select",
+          "scope": "host",
+          "collection": "collections",
+          "nameField": "name",
+          "where": [
+            {
+              "field": "kind",
+              "equals": "catalog"
+            }
+          ],
+          "singular": "collection",
+          "plural": "collections",
+          "page": "the Collections page"
+        },
+        {
+          "kind": "categories",
+          "attribute": "category-select",
+          "scope": "host",
+          "collection": "productCategories",
+          "nameField": "name",
+          "singular": "category",
+          "plural": "categories",
+          "page": "the Categories page"
+        }
+      ],
       "contributes": {
         "site": {
           "components": [
@@ -695,6 +746,7 @@
       "register": {
         "console": "registerCrmConsole",
         "consoleApi": "registerCrmConsoleApi",
+        "declarations": "registerCrmDeclarations",
         "serverDeclarations": "registerCrmServerDeclarations",
         "consoleServerDeclarations": "registerCrmConsoleServerDeclarations",
         "planEntitlements": "crmPlanEntitlements",
@@ -792,6 +844,20 @@
           "order": 130,
           "label": "Deal lost",
           "payloadKeys": ["dealId", "title", "amountCents", "currency", "stageId", "previousStageId", "ownerUid", "contactId", "companyId", "lostReason"]
+        }
+      ],
+      "interactionRecipes": [
+        {
+          "id": "welcomeNewLead"
+        },
+        {
+          "id": "followUpWonDeal"
+        },
+        {
+          "id": "reengageStaleLead"
+        },
+        {
+          "id": "tagByForm"
         }
       ],
       "contributes": {
@@ -937,6 +1003,20 @@
           }
         }
       ],
+      "entityPickers": [
+        {
+          "kind": "datasets",
+          "attribute": "dataset-select",
+          "fieldsAttribute": "dataset-field-select",
+          "fieldsFrom": "dataset",
+          "scope": "orgData",
+          "collection": "datasets",
+          "nameField": "displayName",
+          "singular": "dataset",
+          "plural": "datasets",
+          "page": "the Data page"
+        }
+      ],
       "contributes": {
         "console": {
           "shell": true,
@@ -944,6 +1024,7 @@
             "/data"
           ],
           "slots": [
+            "entityPickers",
             "orgData"
           ]
         }

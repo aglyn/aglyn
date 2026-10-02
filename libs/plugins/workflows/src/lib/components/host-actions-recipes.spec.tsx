@@ -25,10 +25,10 @@
  * this suite asserts stay silent.
  */
 
-import { CRM_ACTION_RECIPES } from '@aglyn/aglyn'
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { setDoc } from 'firebase/firestore'
 import type { ReactNode } from 'react'
+import { STAND_IN_RECIPES, standInFormList, standInRecipes } from '../testing/stand-in-recipes'
 import HostActionsCard from './host-actions-card.component'
 
 const collections: Record<string, Array<Record<string, unknown>>> = {
@@ -42,7 +42,8 @@ const collections: Record<string, Array<Record<string, unknown>>> = {
   screens: [],
   forms: [
     { $id: 'form-contact', displayName: 'Contact us' },
-    { $id: 'form-quote', displayName: 'Request a quote' },
+    // A form with lead routing on files a lead and no contact (AGL-3458).
+    { $id: 'form-quote', displayName: 'Request a quote', routing: { lead: true } },
     // Archived forms collect nothing and are not offered.
     { $id: 'form-old', displayName: 'Old campaign', archivedAt: 1 },
   ],
@@ -99,6 +100,13 @@ jest.mock('./host-activity-card.component', () => ({
 const PRO = { plan: 'business' } as never
 const FREE = { plan: 'free' } as never
 
+// The recipes are the CRM's, and the forms the Forms plugin's, both reached
+// through the platform's seams (AGL-3080); this plugin's specs stand them in.
+beforeAll(() => {
+  standInRecipes()
+  standInFormList()
+})
+
 beforeEach(() => {
   jest.clearAllMocks()
 })
@@ -124,8 +132,8 @@ describe('the Recipes menu (AGL-2626)', () => {
     expect(screen.getByRole('button', { name: 'Add action' })).toBeTruthy()
     const menu = openRecipes()
     const items = within(menu).getAllByRole('menuitem')
-    expect(items).toHaveLength(CRM_ACTION_RECIPES.length)
-    for (const recipe of CRM_ACTION_RECIPES) {
+    expect(items).toHaveLength(STAND_IN_RECIPES.length)
+    for (const recipe of STAND_IN_RECIPES) {
       expect(within(menu).getByText(recipe.title)).toBeTruthy()
       expect(within(menu).getByText(recipe.description)).toBeTruthy()
     }
@@ -211,6 +219,20 @@ describe('the Recipes menu (AGL-2626)', () => {
     ).toBe('Contact us')
     expect(mockCreateResource).not.toHaveBeenCalled()
     expect(setDoc).not.toHaveBeenCalled()
+  })
+
+  it('listens for a new lead when the form picked for Tag by form files leads (AGL-3458)', () => {
+    render(<HostActionsCard hostId="host-1" org={PRO} />)
+    chooseRecipe('Tag by form')
+
+    const picker = screen.getByRole('dialog', { name: 'Tag by form' })
+    fireEvent.mouseDown(within(picker).getByRole('combobox', { name: 'Form' }))
+    fireEvent.click(within(screen.getByRole('listbox')).getByText('Request a quote'))
+    fireEvent.click(within(picker).getByRole('button', { name: 'Use recipe' }))
+
+    const dialog = editor()
+    expect(within(dialog).getByDisplayValue('lead')).toBeTruthy()
+    expect(within(dialog).getByDisplayValue('form-quote')).toBeTruthy()
   })
 
   it('refuses a recipe on a plan without the builder, the way Add action does', () => {

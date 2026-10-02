@@ -54,11 +54,14 @@ import {
 } from './workflows-console-sections'
 import { standInDatasetList } from '../testing/stand-in-dataset-list'
 import { standInOverlayList } from '../testing/stand-in-overlay-list'
+import { standInFormList } from '../testing/stand-in-recipes'
 
 // The datasets the pickers offer are the data plugin's, and the overlays
 // the marketing plugin's (AGL-3080).
 standInDatasetList()
 standInOverlayList()
+// The forms the trigger's "Form is" condition lists (AGL-3458).
+standInFormList()
 
 /**
  * Every query built during a render, as `path` + the `limit()` on it.

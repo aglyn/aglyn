@@ -19,8 +19,9 @@
 
 import { mdiImageMultipleOutline } from '@aglyn/shared-data-mdi'
 import { CardDisplay, Container } from '@aglyn/shared-ui-jsx'
-import { Box } from '@mui/material'
+import { Tab, Tabs } from '@mui/material'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
+import { useTabParam } from '@aglyn/shared-ui-next/hooks/use-tab-param'
 import { useHostId, useHostSubdomain } from '../../../../../../components/host-id-provider'
 import AuthenticatedLayout from '../../../../../../components/layouts/authenticated.layout'
 import DashboardLayout from '../../../../../../components/layouts/dashboard.layout'
@@ -33,15 +34,25 @@ import { buildRoute, Route } from '../../../../../../constants/route-links'
 import { useOrgSlug } from '../../../../../../hooks/use-org-scope'
 import { CONTENT_MAX_WIDTH } from '../../../../../../constants/shared'
 
+/** `?tab=` ids. The first is the default. */
+const WITH_ORG_TAB = ['site', 'org'] as const
+const SITE_TAB_ONLY = ['site'] as const
+
 const HostMedia: NextPageWithLayout<Record<string, never>> = () => {
   const hostId = useHostId()
   const orgSlug = useOrgSlug()
   const host = useHostSubdomain()
   // `ready` rather than truthiness (AGL-1061): `useHostOrgId` cannot tell
-  // "still looking" from "no owning org", so branching on the id alone
-  // renders the site-only page for a beat on every mount and then pops the
-  // shared library in underneath it.
+  // "still looking" from "no owning org". The Organization tab is therefore
+  // drawn WHILE the org resolves and dropped only once the site is known to
+  // have none — so the rail does not pop in above the library a beat after
+  // mount, and a `?tab=org` link is not bounced to This site before the org
+  // it names has had a chance to arrive.
   const { orgId: hostOrgId, ready: orgResolved } = useOrgDataScope({ hostId })
+  const hasOrgTab = !orgResolved || Boolean(hostOrgId)
+  const { tab, onTabChange } = useTabParam({
+    ids: hasOrgTab ? WITH_ORG_TAB : SITE_TAB_ONLY,
+  })
 
   return (
     <DashboardLayout
@@ -67,39 +78,34 @@ const HostMedia: NextPageWithLayout<Record<string, never>> = () => {
           help={docsHelp('media', {
             excerpt:
               "This site's private library — organize uploads into " +
-              'folders and serve them fast over the CDN.',
+              'folders and serve them fast over the CDN. The Organization ' +
+              'tab holds the workspace assets this site is allowed to use.',
           })}
           contentGutterX
           contentGutterY
           contentBordered="all"
         >
-          <MediaLibraryComponent hostId={hostId} />
+          {hasOrgTab ? (
+            <Tabs value={tab} onChange={onTabChange} sx={{ mb: 2 }}>
+              <Tab value="site" label="This site" />
+              <Tab value="org" label="Organization (shared)" />
+            </Tabs>
+          ) : null}
+          {/* One library mounted at a time. The shared one is a second full
+              listing — folder rail, file query, thumbnails — and most visits
+              to a site's media never look at it, so it costs nothing until
+              its tab is opened. */}
+          {tab === 'site' ? <MediaLibraryComponent hostId={hostId} /> : null}
+          {/* `forHostId` narrows the shared library to what THIS site may
+              render (AGL-1045) — the same rule the picker follows. Without
+              it this tab would list every workspace asset the VIEWER can
+              see, so an agency owner sitting on a client's media page would
+              find the agency's internal artwork under a label promising the
+              opposite. */}
+          {tab === 'org' && hostOrgId ? (
+            <MediaLibraryComponent orgId={hostOrgId} forHostId={hostId} />
+          ) : null}
         </CardDisplay>
-        {/* Shared org library (AGL-237/821) below the host-private one —
-            now the same canonical DAM component as the org media page. */}
-        {orgResolved && hostOrgId ? (
-          <Box sx={{ mt: 3 }}>
-            <CardDisplay
-              header={'Organization media (shared with this site)'}
-              help={docsHelp('media', {
-                excerpt:
-                  'Workspace assets this site is allowed to use, unlike the ' +
-                  'site-private library above.',
-              })}
-              contentGutterX
-              contentGutterY
-              contentBordered="all"
-            >
-              {/* `forHostId` narrows the shared library to what THIS site
-                  may render (AGL-1045) — the same rule the picker follows.
-                  Without it this page listed every workspace asset the
-                  VIEWER can see, so an agency owner sitting on a client's
-                  media page saw the agency's internal artwork under a
-                  heading promising the opposite. */}
-              <MediaLibraryComponent orgId={hostOrgId} forHostId={hostId} />
-            </CardDisplay>
-          </Box>
-        ) : null}
       </Container>
     </DashboardLayout>
   )

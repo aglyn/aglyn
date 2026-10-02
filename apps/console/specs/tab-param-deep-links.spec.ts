@@ -201,6 +201,7 @@ describe('a ?tab= link opens that section (AGL-2486, AGL-2501)', () => {
     // owns.
     const pages = [
       ['app', '(app)', '[orgSlug]', 'hosts', '[host]', 'setup', 'page.tsx'],
+      ['app', '(app)', '[orgSlug]', 'hosts', '[host]', 'media', 'page.tsx'],
     ]
     for (const segments of pages) {
       const source = read(...segments)
