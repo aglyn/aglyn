@@ -23,6 +23,7 @@ import {
 } from '@aglyn/aglyn/app-utils/upgrade-proposal'
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
 import { Button, Typography } from '@mui/material'
+import { docsHelp } from '../constants/docs-links'
 import useBranding from '../hooks/use-branding'
 import useCurrentOrg from '../hooks/use-current-org'
 import useOrgPermissions from '../hooks/use-org-permissions'
@@ -56,6 +57,7 @@ export function OrgUpgradeProposalCard() {
         orgName: org?.name ?? currentOrg?.orgName ?? null,
         productName: branding.productName,
       })}
+      help={docsHelp('billing', { anchor: '#plan-total' })}
       HeaderProps={{
         action: (
           <Button
