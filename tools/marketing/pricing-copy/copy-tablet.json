@@ -5,7 +5,7 @@
   "frameName": "Pricing — Tablet",
   "frameSize": {
     "width": 768,
-    "height": 9405
+    "height": 9449
   },
   "notes": "Extracted verbatim from the Figma frame by tools/marketing/extract-pricing-copy.mjs (AGL-1278). `kind` and `notes` are left null for a human pass — the frame does not name its own section types. THE CODE WINS OVER THE FRAME: this file is a record of the design, not of the truth. Prices here have been caught drifting from libs/aglyn/src/lib/app-utils/plan-entitlements.ts twice; that file is the source of truth for every number.",
   "sections": [
@@ -1304,7 +1304,7 @@
       "name": "Usage pricing",
       "order": 3,
       "widthPx": 768,
-      "heightPx": 1457,
+      "heightPx": 1501,
       "groups": [
         {
           "figmaNodeId": "572:4087",
@@ -1531,7 +1531,8 @@
               "name": "h",
               "cells": [
                 "Metered infrastructure — passed through at cost + 30%, after card fees",
-                "Usage of storage, bandwidth, and form submissions is metered monthly at our actual provider cost (Firebase + Vercel) plus a flat 30% after card fees — no hidden markup, itemized on every invoice."
+                "Usage of storage, bandwidth, and form submissions is metered monthly at our actual provider cost (Firebase + Vercel) plus a flat 30% after card fees — no hidden markup, itemized on every invoice.",
+                "Video, audio and file downloads count 1.6× toward bandwidth, because serving them costs more than serving pages."
               ]
             },
             {

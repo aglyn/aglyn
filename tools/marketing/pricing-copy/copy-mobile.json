@@ -5,7 +5,7 @@
   "frameName": "Pricing — Mobile",
   "frameSize": {
     "width": 375,
-    "height": 11180
+    "height": 11220
   },
   "notes": "Extracted verbatim from the Figma frame by tools/marketing/extract-pricing-copy.mjs (AGL-1278). `kind` and `notes` are left null for a human pass — the frame does not name its own section types. THE CODE WINS OVER THE FRAME: this file is a record of the design, not of the truth. Prices here have been caught drifting from libs/aglyn/src/lib/app-utils/plan-entitlements.ts twice; that file is the source of truth for every number.",
   "sections": [
@@ -946,7 +946,7 @@
       "name": "Usage pricing",
       "order": 3,
       "widthPx": 375,
-      "heightPx": 1277,
+      "heightPx": 1317,
       "groups": [
         {
           "figmaNodeId": "268:2170",
@@ -981,6 +981,13 @@
               "name": null,
               "cells": [
                 "Pass-through at cost + 30%, after card fees."
+              ]
+            },
+            {
+              "figmaNodeId": "2253:2354",
+              "name": null,
+              "cells": [
+                "Video, audio and file downloads count 1.6× toward bandwidth, because serving them costs more than serving pages."
               ]
             },
             {

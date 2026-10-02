@@ -277,6 +277,10 @@ carries it must not go out before `/pricing` states the sentence.
   `tables.json` → `metered.mediaNote` (`ORIGIN_MEDIA_BANDWIDTH_SENTENCE`).
   `check:pricing-tables` fails any breakpoint that states a different weight,
   and reads nothing until one states it.
+- The four Figma frames state it directly under the metered paragraph (under
+  the sub-line on mobile), in a clone of that text node, and `copy-*.json` is
+  re-extracted. So `check:pricing-tables` now reads a stated weight on every
+  breakpoint, and a frame that drifts from 1.6× fails it.
 - The calculator converts a band to views and has no media input, so it moves
   only if a video line is added to it.
 - The docs (`bandwidth.md`, `billing-and-plans/overview.md`,
