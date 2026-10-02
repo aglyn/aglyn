@@ -210,7 +210,6 @@
       "path": "libs/aglyn/src/lib/app-utils/forms.ts",
       "rules": [
         "domain-name",
-        "plugin-id",
         "domain-declares:crm",
         "domain-declares:data",
         "domain-declares:forms",

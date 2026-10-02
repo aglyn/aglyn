@@ -42,6 +42,7 @@ import { writeFormRecordTarget } from '@aglyn/aglyn/plugin-manager/submission-re
 import { pluginRecordPageLink } from '@aglyn/aglyn/plugin-manager/plugin-record-pages'
 import { FieldValue } from 'firebase-admin/firestore'
 import { isCredentialFieldName } from '@aglyn/shared-util-email/hosted-page-screen'
+import { FORMS_OFF_FOR_SITE_REFUSAL, formSubmissionDoorPlugin } from '../model/form-door'
 import { FORM_ABUSE_CEILING_CODE } from '../model/form-unavailable'
 import { incrementFormStats } from './increment-form-stats'
 import {
@@ -391,10 +392,10 @@ export async function POST(request: Request): Promise<Response> {
       !Aglyn.isHostPluginEnabled(
         orgBilling as never,
         hostSnapshot.data() as never,
-        Aglyn.formSubmissionDoorPlugin(payload),
+        formSubmissionDoorPlugin(payload),
       )
     ) {
-      return json({ error: Aglyn.FORMS_OFF_FOR_SITE_REFUSAL }, 404)
+      return json({ error: FORMS_OFF_FOR_SITE_REFUSAL }, 404)
     }
     // Shared with the console surface that reads these counters back
     // (AGL-1666) — a differently-derived key there would read 0 refusals on
