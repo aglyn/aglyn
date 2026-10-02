@@ -63,7 +63,7 @@ import { FieldValue } from 'firebase-admin/firestore'
 import {
   OWNER_ASSIGNMENT_REFUSALS,
   reassignContactOwner,
-} from '@aglyn/tenant-runtime/assign-contact-owner'
+} from './assign-contact-owner'
 import type { HostActionStep } from '@aglyn/aglyn/app-utils/actions'
 import type { CRM_STEP_TYPES } from '../constants/bundle-common'
 import { CRM_SUITE_FEATURE } from './suite-gate'

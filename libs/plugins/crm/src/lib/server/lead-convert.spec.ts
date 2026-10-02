@@ -252,7 +252,7 @@ const mockNotifyRecordAssigned = jest.fn(async () => true)
  * wrapper so `contactCreated` fires (AGL-2605); the double answers what the
  * case under test needs.
  */
-jest.mock('../../../../../tenant/runtime/src/lib/capture-host-contact', () => ({
+jest.mock('./capture-host-contact', () => ({
   __esModule: true,
   captureHostContact: (...args: unknown[]) => (mockUpsertHostContact as any)(...args),
 }))
@@ -265,7 +265,7 @@ jest.mock('../../../../../tenant/runtime/src/lib/hand-off-lead', () => ({
   __esModule: true,
   handOffLeadRecords: (...args: unknown[]) => (mockHandOff as any)(...args),
 }))
-jest.mock('../../../../../tenant/runtime/src/lib/assign-contact-owner', () => ({
+jest.mock('./assign-contact-owner', () => ({
   __esModule: true,
   assignOwnerForCapture: (...args: unknown[]) => (mockAssignOwnerForCapture as any)(...args),
   notifyRecordAssigned: (...args: unknown[]) => (mockNotifyRecordAssigned as any)(...args),

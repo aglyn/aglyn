@@ -47,7 +47,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
   upsertHostContact: (options: never) => upsertHostContact(options),
 }))
-jest.mock('./emit-host-event', () => ({
+jest.mock('@aglyn/tenant-runtime/emit-host-event', () => ({
   __esModule: true,
   emitHostEvent: (...args: unknown[]) => emitHostEvent(...(args as [])),
 }))
@@ -66,7 +66,7 @@ import {
   captureHostContact,
   contactCreatedPayload,
 } from './capture-host-contact'
-import { contactCaptureActor } from './capture-actor'
+import { contactCaptureActor } from '@aglyn/tenant-runtime/capture-actor'
 
 const capture = (
   facet?: { companyId?: string; ownerUid?: string },
@@ -339,7 +339,7 @@ describe('contactCreatedPayload', () => {
  * them, so a hit is a door that bypassed the event.
  */
 describe('every server door captures through the wrapper', () => {
-  const REPO_ROOT = join(__dirname, '../../../../..')
+  const REPO_ROOT = join(__dirname, '../../../../../..')
   const ROOTS = ['apps/tenant/app', 'apps/console/app', 'libs/plugins']
 
   const sourceFiles = (dir: string): string[] => {
@@ -383,6 +383,8 @@ describe('every server door captures through the wrapper', () => {
     const direct: string[] = []
     let throughWrapper = 0
     for (const file of files) {
+      // The wrapper itself is the one module that calls the writer.
+      if (file === join(__dirname, 'capture-host-contact.ts')) continue
       const source = readFileSync(file, 'utf8')
       if (/\bupsertHostContact\(/.test(source)) direct.push(file)
       if (/\bcaptureHostContact\(/.test(source)) throughWrapper += 1

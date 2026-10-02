@@ -235,7 +235,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   enrollListMember: async () => undefined,
 }))
 
-jest.mock('@aglyn/tenant-runtime/assign-contact-owner', () => ({
+jest.mock('../../../libs/plugins/crm/src/lib/server/assign-contact-owner', () => ({
   __esModule: true,
   OWNER_ASSIGNMENT_REFUSALS: {
     'no-org': 'this site has no organization',

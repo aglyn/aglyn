@@ -558,20 +558,6 @@
       ],
       "lane": "stays",
       "why": "The console's Firebase boot, not a tenant feature: its analytics is the platform Firebase project's own, under the operator's measurement id (NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID), and the comment names what the SDK's boot sends. Swapped with the operator's Firebase project on a self-host."
-    },
-    {
-      "path": "libs/tenant/runtime/src/lib/assign-contact-owner.ts",
-      "rules": [
-        "plugin-collection:crm"
-      ],
-      "lane": "crm"
-    },
-    {
-      "path": "libs/tenant/runtime/src/lib/associate-company-by-domain.ts",
-      "rules": [
-        "plugin-collection:crm"
-      ],
-      "lane": "crm"
     }
   ]
 }

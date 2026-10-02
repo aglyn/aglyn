@@ -150,8 +150,8 @@ jest.mock('@aglyn/tenant-runtime', () => ({
 /*
  * The route captures through the platform's contact-capture contract now
  * (AGL-3080), and the plugin that keeps people is what calls
- * `captureHostContact`. The CRM imports the LEAF module, so the barrel double
- * above does not intercept it; this forwards the leaf to that same double.
+ * `captureHostContact` from its own module, which the barrel double above
+ * does not intercept; this forwards that module to the same double.
  *
  * Deliberately not a double of the contract itself. Every assertion below is
  * on the options the writer receives, so routing them through the real CRM
@@ -159,7 +159,7 @@ jest.mock('@aglyn/tenant-runtime', () => ({
  * this one loses nothing — which is the half of this move that could fail
  * silently.
  */
-jest.mock('@aglyn/tenant-runtime/capture-host-contact', () => ({
+jest.mock('../../../libs/plugins/crm/src/lib/server/capture-host-contact', () => ({
   captureHostContact: (...args: unknown[]) =>
     (
       jest.requireMock('@aglyn/tenant-runtime') as {
