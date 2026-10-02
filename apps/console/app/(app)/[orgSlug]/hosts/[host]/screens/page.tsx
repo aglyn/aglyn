@@ -1231,6 +1231,10 @@ function Screens(props) {
                   <MdiIcon path={ICON_VARIANT_MODIFY_DELETE.path} size={0.8} />
                 ),
                 onClick: () => void handleDeleteGroup(row.$id),
+                // The delete stamps `deletedAt`, which the rules hold for the
+                // roles that may publish (AGL-2334).
+                disabled: !canPublish,
+                disabledReason: canPublish ? undefined : publishBlock,
               },
             ]}
           />
