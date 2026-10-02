@@ -26,6 +26,7 @@ import {
   resolveOrgEntitlements,
 } from '@aglyn/aglyn/server'
 import { activitySearchTokens } from '@aglyn/aglyn/app-utils/activity-search'
+import { triggerFilterProblem } from '@aglyn/aglyn/app-utils/site-interactions'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import type { HostEventPayload } from '@aglyn/tenant-runtime/host-event-listeners'
 import { FieldValue } from 'firebase-admin/firestore'
@@ -41,6 +42,7 @@ import {
   automationRunEnv,
   executeWorkflow,
   FLOW_CLAIM_RETRY_MS,
+  SKIP_LOG_EXCLUDED_EVENTS,
   stopFlowEnrollment,
   type WorkflowContext,
   type WorkflowExecution,
@@ -238,11 +240,31 @@ export async function runEventWorkflows(
       const workflow = doc.data() as AutomationWorkflow
       const filter = workflow.trigger?.filter?.trim()
       if (filter) {
+        /*
+         * A filter no event can ever satisfy — a comparison the evaluator
+         * does not have, text it cannot read — answers "why didn't it run?"
+         * in the run history, on every event it would have run on, rather
+         * than leaving the workflow silent. The editor refuses to save one;
+         * this is the one stored before it did, or written around it.
+         */
+        const unrunnable = triggerFilterProblem(filter, { remedy: 'action' })
+        if (unrunnable) {
+          if (!SKIP_LOG_EXCLUDED_EVENTS.has(event)) {
+            await recordWorkflowRun(hostRef, {
+              action: `Workflow skipped on ${event}`,
+              result: 'skipped',
+              trigger: event,
+              ...runSummaryFields(unrunnable.slice(0, 300)),
+              target: { type: 'workflow', id: doc.id, name: workflow.name ?? '' },
+            })
+          }
+          continue
+        }
         try {
           const scope: HostEventPayload = { event, ...payload }
           if (!evaluateExpression(filter, scope)) continue
         } catch {
-          continue // A broken filter never fires.
+          continue // A field the filter names is not on this event.
         }
       }
       const startedAt = Date.now()

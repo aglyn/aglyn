@@ -38,8 +38,8 @@ const field = (key: string, context: CrmMergeContext): string =>
 
 /**
  * A `sendEmail` step's subject or body with its merge tags filled from the
- * contact or the lead the run is about (AGL-3458) — which went out literally
- * before, so a reply greeted somebody as `{{firstName|there}}`.
+ * contact or the lead the run is about (AGL-3458), so a reply greets the
+ * person by name rather than as `{{firstName|there}}`.
  *
  * Both spellings a merchant has been shown resolve, because a workflow email
  * is written by the same people who write the other two:

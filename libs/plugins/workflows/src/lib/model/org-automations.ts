@@ -291,7 +291,7 @@ const STEP_FIELDS: Record<
   OrgAutomationStepType,
   Readonly<Record<string, 'string' | 'number' | 'boolean' | number>>
 > = {
-  sendEmail: { subject: 200, body: 5000, toField: 64, topicId: 128 },
+  sendEmail: { subject: 200, body: 5000, toField: 64, topicId: 128, transactional: 'boolean' },
   notifyAdmins: { title: 200, body: 500 },
   enrollList: { listId: 128, listName: 200 },
   assignCampaign: { campaignId: 128, campaignName: 200 },

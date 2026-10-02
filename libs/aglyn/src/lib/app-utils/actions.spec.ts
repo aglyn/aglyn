@@ -1053,8 +1053,8 @@ describe('showHtml sanitizer feedback (AGL-2486)', () => {
  * AGL-3458 — a trigger filter the evaluator can never run is refused at save.
  *
  * The filter's evaluator is the functions' arithmetic, with no comparison, so
- * `source == "form"` saved fine, threw on every event, and the automation
- * never fired. The refusal points at the conditions, which do compare.
+ * `source == "form"` throws on every event and an automation saved with it
+ * never fires. The refusal points at the conditions, which do compare.
  */
 describe('a trigger filter the evaluator cannot run (AGL-3458)', () => {
   it.each([

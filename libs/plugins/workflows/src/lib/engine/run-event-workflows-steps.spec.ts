@@ -685,6 +685,42 @@ describe('a workflow of function calls', () => {
   })
 })
 
+describe('a filter no event can satisfy (AGL-3458)', () => {
+  it('runs nothing, bills nothing, and says why in the run history', async () => {
+    seed(`${hostPath}/workflows/wf-compare`, {
+      name: 'Compares',
+      trigger: { event: 'formSubmission', filter: 'formName == "Contact"' },
+      returnValue: '',
+      steps: [{ functionName: 'score', args: ['budget'], resultName: 'score' }],
+    })
+
+    await runEventWorkflows(HOST_ID, 'formSubmission', SUBMISSION)
+
+    expect(history()).toEqual([
+      expect.objectContaining({
+        action: 'Workflow skipped on formSubmission',
+        result: 'skipped',
+        summary: expect.stringContaining('can’t compare values'),
+        target: { type: 'workflow', id: 'wf-compare', name: 'Compares' },
+      }),
+    ])
+    expect(counter('workflowRuns')).toBeUndefined()
+  })
+
+  it('runs a readable filter as it always has', async () => {
+    seed(`${hostPath}/workflows/wf-budget`, {
+      name: 'Has a budget',
+      trigger: { event: 'formSubmission', filter: 'budget' },
+      returnValue: '',
+      steps: [{ functionName: 'score', args: ['budget'], resultName: 'score' }],
+    })
+
+    await runEventWorkflows(HOST_ID, 'formSubmission', SUBMISSION)
+
+    expect(history().map((row) => row['result'])).toEqual(['succeeded'])
+  })
+})
+
 describe('a wait inside a workflow', () => {
   const WAITING_STEPS = [
     { functionName: 'score', args: ['budget'], resultName: 'score' },

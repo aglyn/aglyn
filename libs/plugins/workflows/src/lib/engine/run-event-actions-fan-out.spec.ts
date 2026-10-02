@@ -21,15 +21,14 @@
  */
 
 /**
- * AGL-3458 — EVERY ACTION ON THE EVENT RUNS, and another form's action is
- * not a skip.
+ * AGL-3458 — EVERY ACTION ON THE EVENT RUNS, another form's action is not
+ * a skip, and a filter no event can satisfy is.
  *
- * The dispatch read ten documents for the event, unordered, and dropped the
- * deleted and the switched-off ones after the limit: a site with one
- * auto-reply per form ran some ten of them. The store below answers the
- * query the way Firestore does — the equality, the document-id order, the
- * page size and the cursor — so a dispatch that stopped at the first page,
- * or let a dead document take a live one's place, fails here.
+ * A site with one auto-reply per form holds more than ten actions on
+ * `formSubmission`, and every live one has to run. The store below answers
+ * the query the way Firestore does — the equality, the document-id order,
+ * the page size and the cursor — so a dispatch that stopped at the first
+ * page, or let a dead document take a live one's place, fails here.
  *
  * Each action's one step is a `siteAlert` carrying its own id, so the alerts
  * the dispatch returns are the actions that ran, in the order they ran.
@@ -165,7 +164,7 @@ describe('every live action on the event runs (AGL-3458)', () => {
   })
 
   it('lets no deleted or switched-off action take a live one’s place', async () => {
-    // The ten that sort first are dead; the old read stopped at ten.
+    // The ten that sort first are dead, so a read of ten would run none.
     for (let index = 0; index < 6; index += 1) seed(`a-deleted-${index}`, { deletedAt: 'yesterday' })
     for (let index = 0; index < 4; index += 1) seed(`b-off-${index}`, { enabled: false })
     seed('c-live-1')
@@ -261,6 +260,47 @@ describe('another form’s action is not a skip (AGL-3458)', () => {
     await runEventActions(HOST_ID, 'formSubmission', { email: 'a@b.co', formId: 'form-a' })
 
     expect(mockActivity.map((row) => row.result)).toEqual(['skipped'])
+  })
+})
+
+describe('a filter no event can satisfy is a skip, with its reason (AGL-3458)', () => {
+  it('runs nothing and says why, for a comparison the evaluator does not have', async () => {
+    seed('compare', { trigger: { event: 'formSubmission', filter: 'source == "form"' } })
+
+    const alerts = await runEventActions(HOST_ID, 'formSubmission', { email: 'a@b.co', source: 'form' })
+
+    expect(ran(alerts)).toEqual([])
+    expect(mockActivity).toEqual([
+      expect.objectContaining({
+        result: 'skipped',
+        summary: expect.stringContaining('can’t compare values'),
+        target: expect.objectContaining({ id: 'compare' }),
+      }),
+    ])
+  })
+
+  it('says so for text the evaluator cannot read', async () => {
+    seed('unreadable', { trigger: { event: 'formSubmission', filter: 'subscribe +' } })
+
+    await runEventActions(HOST_ID, 'formSubmission', { email: 'a@b.co', subscribe: 'yes' })
+
+    expect(mockActivity.map((row) => [row.result, row.summary])).toEqual([
+      ['skipped', expect.stringContaining('can’t be read')],
+    ])
+  })
+
+  it('keeps a readable filter quiet when the field is not on this event', async () => {
+    // `subscribe` is a filter that runs when the field is filled in; an event
+    // without it is not a misconfigured automation.
+    seed('reads', { trigger: { event: 'formSubmission', filter: 'subscribe' } })
+    seed('ok', { trigger: { event: 'formSubmission', filter: 'subscribe' } })
+
+    const quiet = await runEventActions(HOST_ID, 'formSubmission', { email: 'a@b.co' })
+    expect(ran(quiet)).toEqual([])
+    expect(mockActivity).toEqual([])
+
+    const loud = await runEventActions(HOST_ID, 'formSubmission', { email: 'a@b.co', subscribe: 'yes' })
+    expect(ran(loud)).toEqual(['ok', 'reads'])
   })
 })
 

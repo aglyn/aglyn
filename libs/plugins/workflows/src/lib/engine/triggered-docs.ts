@@ -18,19 +18,18 @@
 /**
  * EVERY LIVE AUTOMATION ON AN EVENT RUNS (AGL-3458).
  *
- * The dispatch read ten documents for the event, in no order, and dropped the
- * deleted and the switched-off ones AFTER the limit — so a site with one
- * auto-reply per form ran some ten of them, fewer once any had been deleted,
- * and an eleventh form's reply silently never went. This reads the event's
- * documents in pages, in document-id order, keeps the ones that may run, and
- * hands back every one of them, in that order, up to `max`.
+ * A site with one auto-reply per form holds more automations on
+ * `formSubmission` than any fixed first page, and every live one of them has
+ * to run. This reads the event's documents in pages, in document-id order,
+ * keeps the ones that may run, and hands back every one of them, in that
+ * order, up to `max` — so which automations run never depends on how many
+ * deleted or switched-off ones sort ahead of them.
  *
  * `deletedAt` and a missing `enabled` cannot be asked of a query — a field's
- * absence matches nothing — so `keep` still judges them here, but on every
- * page rather than on a truncated first one. Equality on `trigger.event` and
- * an order by document id need only the automatic single-field index. The
- * reads are bounded twice: by `max`, and by `maxReads` for a site whose
- * deleted automations on one event have piled up.
+ * absence matches nothing — so `keep` judges them here, on every page.
+ * Equality on `trigger.event` and an order by document id need only the
+ * automatic single-field index. The reads are bounded twice: by `max`, and by
+ * `maxReads` for a site whose deleted automations on one event have piled up.
  */
 
 /** One page of an event's automations. */

@@ -188,6 +188,35 @@ describe('what a save stores', () => {
     })
   })
 
+  it('refuses a trigger filter the evaluator can never run, before it is stored (AGL-3458)', () => {
+    const read = readOrgAutomation(
+      body({ trigger: { event: 'formSubmission', filter: 'source == "form"' } }),
+    )
+    expect(read).toEqual({
+      ok: false,
+      problem: expect.stringMatching(/can’t compare values.*use a condition instead/),
+    })
+  })
+
+  it('keeps an email step’s transactional-reply switch, and refuses one that cannot be a reply (AGL-3458)', () => {
+    const off = readOrgAutomation(
+      body({ steps: [{ type: 'sendEmail', subject: 'Hi', body: 'x', transactional: false }] }),
+    )
+    expect(off.ok && off.value.steps[0]).toEqual(
+      expect.objectContaining({ type: 'sendEmail', transactional: false }),
+    )
+    expect(
+      readOrgAutomation(
+        body({
+          steps: [
+            { type: 'wait', delayMinutes: 60 },
+            { type: 'sendEmail', subject: 'Hi', body: 'x', transactional: true },
+          ],
+        }),
+      ),
+    ).toEqual({ ok: false, problem: expect.stringMatching(/^Step 2: an email after a wait is a mailing/) })
+  })
+
   it('refuses a nameless automation, and caps a long name', () => {
     expect(readOrgAutomation(body({ name: '  ' }))).toEqual({
       ok: false,

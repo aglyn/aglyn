@@ -64,6 +64,7 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { activitySearchTokens } from '@aglyn/aglyn/app-utils/activity-search'
 import { visibleToHost } from '@aglyn/aglyn/app-utils/scope-tokens'
+import { triggerFilterProblem } from '@aglyn/aglyn/app-utils/site-interactions'
 // The leaf, not the barrel: this library's specs substitute the barrel
 // wholesale, and the lookup must reach the real index logic under them.
 import { findContactByEmail } from '@aglyn/tenant-data-admin/server/contact-email-index'
@@ -141,7 +142,7 @@ import { pluginServerStepExecutor } from '@aglyn/aglyn/plugin-manager/plugin-ser
 /**
  * Every live, switched-on action a site holds for an event runs, in
  * document-id order (AGL-3458) — up to the most live actions a site may hold
- * at all. See `triggered-docs.ts`.
+ * at all, so no matching action is ever left out. See `triggered-docs.ts`.
  */
 const MAX_TRIGGERED_ACTIONS = ACTIONS_MAX_PER_HOST
 
@@ -663,13 +664,14 @@ async function runServerStep(
           | undefined) ?? null
       const siteBase = hostPublicOrigin(hostData as never) ?? ''
       /*
-       * MARKETING. The subject and body are merchant-authored and the
-       * recipient comes out of the event payload — which, for the collect
-       * route, is a write triggered by an anonymous visitor. So this is a
-       * site mailing an address on the merchant's say-so, and it owes what
-       * every other such message owes: the unsubscribe header pair and a
-       * visible link, both suppression lists, and a share of the ceiling on
-       * how much one person receives from this site.
+       * MARKETING, unless it is a transactional reply (below). The subject
+       * and body are merchant-authored and the recipient comes out of the
+       * event payload — which, for the collect route, is a write triggered
+       * by an anonymous visitor. So a step that is not a reply is a site
+       * mailing an address on the merchant's say-so, and it owes what every
+       * other such message owes: the unsubscribe header pair and a visible
+       * link, both suppression lists, and a share of the ceiling on how much
+       * one person receives from this site.
        *
        * Priority stays transactional. An action run is not resumable — the
        * event has already happened and there is no beat that comes back for
@@ -1478,16 +1480,16 @@ async function suspendFlow(
  * actually debug are the server-emitted ones (a form submission, a
  * booking, a sign-up), and those are low-volume by construction.
  */
-const SKIP_LOG_EXCLUDED_EVENTS = new Set(['pageView'])
+export const SKIP_LOG_EXCLUDED_EVENTS: ReadonlySet<string> = new Set(['pageView'])
 
 /**
  * Whether an action's unmet conditions only say it is ANOTHER FORM'S
  * (AGL-3458) — the case that is noise rather than an answer.
  *
- * A site with one auto-reply per form keyed on `formId equals …` wrote a
- * `Skipped` row for every other form's reply on every submission: eight rows
- * a fill on a nine-form site, burying the one row that explains a real miss.
- * A form picked by id cannot be mistyped, so its mismatch against a
+ * A site with one auto-reply per form keyed on `formId equals …` would write
+ * a `Skipped` row for every other form's reply on every submission: eight
+ * rows a fill on a nine-form site, burying the one row that explains a real
+ * miss. A form picked by id cannot be mistyped, so its mismatch against a
  * submission that names a DIFFERENT form says only "not this form", and it
  * is not recorded. Every other unmet condition still is: a hand-typed
  * `formName`, a field condition, a submission that names no form at all.
@@ -1534,6 +1536,8 @@ async function recordSkippedRun(
   action: Pick<HostAction, 'name' | 'trigger'>,
   event: string,
   kind: 'action' | 'orgAutomation' = 'action',
+  /** What stopped it, when it was not an unmet condition. */
+  because?: string,
 ): Promise<void> {
   if (SKIP_LOG_EXCLUDED_EVENTS.has(event)) return
   // `normalizeTriggerConditions`, not `trigger.conditions` — a pre-AGL-565
@@ -1542,9 +1546,11 @@ async function recordSkippedRun(
   const named = normalizeTriggerConditions(action.trigger)
     .map((condition) => String(condition?.field ?? '').trim())
     .filter(Boolean)
-  const reason = named.length
-    ? `Condition on ${named.slice(0, 3).join(', ')} not met`
-    : 'Trigger condition not met'
+  const reason =
+    because ??
+    (named.length
+      ? `Condition on ${named.slice(0, 3).join(', ')} not met`
+      : 'Trigger condition not met')
   await hostRef
     .collection('activity')
     .add({
@@ -1683,10 +1689,15 @@ export async function runEventActions(
       const action = doc.data() as HostAction
       const filter = action.trigger?.filter?.trim()
       if (filter) {
+        const unrunnable = triggerFilterProblem(filter)
+        if (unrunnable) {
+          await recordSkippedRun(hostRef, doc.id, action, event, 'action', unrunnable)
+          continue
+        }
         try {
           if (!evaluateExpression(filter, { event, ...payload })) continue
         } catch {
-          continue // A broken filter never fires.
+          continue // A field the filter names is not on this event.
         }
       }
       // Structured payload conditions (AGL-557; AND/OR chaining AGL-565):
@@ -1714,10 +1725,15 @@ export async function runEventActions(
       const automation = doc.data() as OrgAutomation
       const filter = automation.trigger?.filter?.trim()
       if (filter) {
+        const unrunnable = triggerFilterProblem(filter)
+        if (unrunnable) {
+          await recordSkippedRun(hostRef, doc.id, automation, event, 'orgAutomation', unrunnable)
+          continue
+        }
         try {
           if (!evaluateExpression(filter, { event, ...payload })) continue
         } catch {
-          continue // A broken filter never fires.
+          continue // A field the filter names is not on this event.
         }
       }
       if (

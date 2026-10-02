@@ -242,7 +242,7 @@ export function stepRunsAfterWait(
 export type SendEmailReplyIneligibility = 'event' | 'wait' | 'topic' | 'recipient'
 
 export function sendEmailReplyIneligibility(
-  step: Pick<Extract<HostActionStep, { type: 'sendEmail' }>, 'topicId' | 'toField'>,
+  step: Pick<Extract<HostActionStep, { type: 'sendEmail' }>, 'type' | 'topicId' | 'toField'>,
   context: { event: string | null | undefined; afterWait: boolean },
 ): SendEmailReplyIneligibility | null {
   if (!hostEventRecipientActed(context.event)) return 'event'
@@ -270,7 +270,10 @@ export const SEND_EMAIL_REPLY_INELIGIBLE_REASONS: Record<SendEmailReplyIneligibi
  * without anybody editing it.
  */
 export function sendEmailIsTransactionalReply(
-  step: Pick<Extract<HostActionStep, { type: 'sendEmail' }>, 'topicId' | 'toField' | 'transactional'>,
+  step: Pick<
+    Extract<HostActionStep, { type: 'sendEmail' }>,
+    'type' | 'topicId' | 'toField' | 'transactional'
+  >,
   context: { event: string | null | undefined; afterWait: boolean },
 ): boolean {
   return step.transactional !== false && sendEmailReplyIneligibility(step, context) === null
@@ -370,13 +373,13 @@ export const CRM_ACTION_RECIPES: readonly CrmActionRecipe[] = [
       'tomorrow, send a thank-you, and tag them website.',
     /*
      * ON A NEW LEAD (AGL-3458), because that is the record a lead-routed form
-     * makes. Since the one-record model (AGL-3232) a form with lead routing
-     * on files a LEAD and no contact, so this recipe — which listened for a
-     * new contact — never reached the people it is named for. `formId` is
-     * on the `lead` event exactly when a form filed the lead, so the
-     * condition keeps the recipe to forms and leaves a booking request to
-     * the booking's own confirmation. Every step below acts on the lead the
-     * event names when the workspace holds no contact for the person.
+     * makes: under the one-record model (AGL-3232) a form with lead routing
+     * on files a LEAD and no contact, so a new-contact trigger would never
+     * reach the people this recipe is named for. `formId` is on the `lead`
+     * event exactly when a form filed the lead, so the condition keeps the
+     * recipe to forms and leaves a booking request to the booking's own
+     * confirmation. Every step below acts on the lead the event names when
+     * the workspace holds no contact for the person.
      *
      * The owner first, because the task that follows names no assignee and
      * so goes to whoever owns the lead when it is created — the member the
