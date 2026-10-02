@@ -228,7 +228,7 @@ import { POST } from './plugin-door-dispatch'
 // the per-form series and the site-wide counter agree about which month a
 // submission belongs to, and a spec that derived its own would pass while
 // they disagreed.
-import { submissionMonthKey } from '@aglyn/aglyn/server'
+import { utcMonthKey } from '@aglyn/aglyn/server'
 
 const submit = (body: Record<string, unknown> = {}) =>
   POST(
@@ -545,7 +545,7 @@ describe('a lead-capture form finally captures a lead', () => {
  * collection that grows without bound and the one the customer is billed on.
  */
 describe('a submission counts itself onto the form it names', () => {
-  const month = submissionMonthKey()
+  const month = utcMonthKey()
   const statsPatch = () =>
     mockUpdates.find((update) => update.path.endsWith('forms/form-1'))?.patch
 

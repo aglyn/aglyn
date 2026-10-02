@@ -19,7 +19,7 @@ import {
   checkFormSubmissionAbuseCeiling,
   checkFormSubmissionQuota,
   isHostPluginEnabled,
-  submissionMonthKey,
+  utcMonthKey,
 } from '@aglyn/aglyn/server'
 import type { PluginIntakeGate } from '@aglyn/aglyn/plugin-manager/plugin-intake-gates'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin/server/firebase-admin'
@@ -51,7 +51,7 @@ export const formIntakeGate: PluginIntakeGate = async ({ hostId, host, org }) =>
     .collection('counters')
     .doc('formSubmissions')
     .get()
-  const used = Number(counter.get(submissionMonthKey()) ?? 0)
+  const used = Number(counter.get(utcMonthKey()) ?? 0)
   if (!checkFormSubmissionQuota(org as never, used).allowed) return 'plan-exhausted'
   if (checkFormSubmissionAbuseCeiling(org as never, used).exceeded) return 'flood-ceiling'
   return 'open'

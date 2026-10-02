@@ -20,6 +20,10 @@ import { trackEventBeforeNavigation } from '@aglyn/aglyn/app-utils/analytics-eve
 import { utmTouchField } from '@aglyn/aglyn/app-utils/utm-touch'
 import * as Aglyn from '@aglyn/aglyn'
 import {
+  type FormUnavailableNotice,
+  parseFormUnavailableRefusal,
+} from '../model/form-unavailable'
+import {
   mdiEmailFastOutline,
   mdiEmailOutline,
   mdiFormTextbox,
@@ -348,7 +352,7 @@ const Form = forwardRef<HTMLFormElement, FormProps>((props, ref) => {
   const [pausedMessage, setPausedMessage] = useState('')
   /** The abuse ceiling's visitor notice (AGL-1666); see `unavailable` below. */
   const [unavailable, setUnavailable] =
-    useState<Aglyn.FormUnavailableNotice | null>(null)
+    useState<FormUnavailableNotice | null>(null)
   const [alerts, setAlerts] = useState<
     Array<{ message: string; severity?: string }>
   >([])
@@ -524,7 +528,7 @@ const Form = forwardRef<HTMLFormElement, FormProps>((props, ref) => {
           // exactly that reason. A plan-wall 429 keeps falling through to
           // the generic branch below, which is right: it is the owner's
           // billing problem, and nothing about waiting fixes it.
-          const notice = Aglyn.parseFormUnavailableRefusal(body)
+          const notice = parseFormUnavailableRefusal(body)
           if (notice) {
             setUnavailable(notice)
             setStatus('unavailable')

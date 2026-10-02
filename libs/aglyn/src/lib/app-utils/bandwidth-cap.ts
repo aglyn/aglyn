@@ -98,7 +98,7 @@ import {
 
 /**
  * The month key the marker is stamped with: UTC `YYYY-MM`, the same shape as
- * `submissionMonthKey` and the `orgs/{id}/usage/{month}` document id, and the
+ * `utcMonthKey` and the `orgs/{id}/usage/{month}` document id, and the
  * same key `usage-alerts` dedupes its own guards by. One month boundary
  * across the platform — a cap that reset on a different day from the counter
  * it is derived from would engage against last month's traffic.

@@ -152,6 +152,23 @@
           "payloadKeys": ["formName", "path", "and every submitted field by name"]
         }
       ],
+      "visitorDoors": [
+        {
+          "door": "form",
+          "refusedCounter": "formSubmissionsRefused",
+          "caughtCounter": "formSubmissionsSpam",
+          "words": {
+            "pausedTitle": "Form submissions are paused",
+            "noun": { "one": "submission", "other": "submissions" },
+            "staffNoun": { "one": "form submission", "other": "form submissions" },
+            "cause": "This usually means a bot is filling in one of your forms — if it is real traffic, contact support and we will raise the limit.",
+            "pausedChip": "forms paused",
+            "caught": { "one": "bot submission", "other": "bot submissions" },
+            "caughtBy": "the honeypot",
+            "caughtChip": { "one": "bot hit", "other": "bot hits" }
+          }
+        }
+      ],
       "entityPickers": [
         {
           "kind": "forms",

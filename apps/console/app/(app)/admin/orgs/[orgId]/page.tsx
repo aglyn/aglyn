@@ -85,7 +85,7 @@ import { docsHelp } from '../../../../../constants/docs-links'
 import MediaUrlField from '../../../../../components/media-url-field.component'
 import { buildRoute, Route } from '../../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
-import StaffHostFormCountersChips from '../../../../../components/staff-host-form-counters.component'
+import StaffSiteDoorFlags from '../../../../../components/staff-site-door-flags.component'
 import StaffEmailDeliveriesCard from '../../../../../components/staff-email-deliveries-card.component'
 import StaffOrgActions from '../../../../../components/staff-org-actions.component'
 import StaffOrgOwnershipTransfer from '../../../../../components/staff-org-ownership-transfer.component'
@@ -1359,12 +1359,10 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                                 spacing={1}
                                 sx={{ alignItems: 'center' }}
                               >
-                                {/* Form-abuse flag (AGL-1681): a refusing
+                                {/* Door-abuse flags (AGL-1681): a refusing
                                     site is visible here, without opening
                                     each host or the Firebase console. */}
-                                <StaffHostFormCountersChips
-                                  forms={host.forms}
-                                />
+                                <StaffSiteDoorFlags doors={host.doors} />
                                 <Typography
                                   variant="caption"
                                   color="text.secondary"

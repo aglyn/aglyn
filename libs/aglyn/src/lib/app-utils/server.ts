@@ -203,7 +203,8 @@ export * from './plan-entitlements'
 // The free plan's bandwidth hard cap (AGL-1967/2070/2155). After
 // `plan-entitlements`, which owns the predicate it keys off.
 export * from './bandwidth-cap'
-export * from './form-abuse-ceiling'
+// The month every monthly counter is keyed by, and the boundary it lifts on.
+export * from './utc-month'
 export * from './forms'
 // What a form's DESIGN must still satisfy for its submissions to arrive.
 // After `forms`, whose field walk it reads the drawn fields with.

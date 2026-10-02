@@ -2542,6 +2542,67 @@ function notificationCategoryRows() {
 }
 
 /**
+ * A plugin's public door, as its owner and staff are told about a flood
+ * (AGL-3080): the two site counters its ceiling refusals and its honeypot
+ * catches are kept in, and the words the notices are built from. Compiled so
+ * the Inbox and the staff pages read every door without loading the plugin
+ * that keeps it.
+ *
+ * Checked here: a plain door no other plugin declares, two plain counters no
+ * other door keeps, every word, and each noun in both its counts.
+ */
+const VISITOR_DOOR_WORDS = ['pausedTitle', 'cause', 'pausedChip', 'caughtBy']
+const VISITOR_DOOR_NOUNS = ['noun', 'staffNoun', 'caught', 'caughtChip']
+
+function visitorDoorRows() {
+  const doors = new Map()
+  const counters = new Map()
+  const rows = []
+  for (const plugin of config.plugins) {
+    const declared = plugin.visitorDoors
+    if (declared === undefined) continue
+    const where = `plugins.config.json: "${plugin.id}" visitorDoors`
+    if (!Array.isArray(declared) || !declared.length) {
+      throw new Error(`${where} is present and declares nothing — drop it, or name the door`)
+    }
+    for (const declaration of declared) {
+      const { door, refusedCounter, caughtCounter, words } = declaration ?? {}
+      const what = `${where} "${door ?? ''}"`
+      const unknown = Object.keys(declaration ?? {}).filter(
+        (key) => !['door', 'refusedCounter', 'caughtCounter', 'words'].includes(key),
+      )
+      if (unknown.length) throw new Error(`${what}: unknown key(s) ${unknown.join(', ')}`)
+      if (typeof door !== 'string' || !PLAIN_NAME.test(door)) throw new Error(`${what}: "door" is a plain name`)
+      if (doors.has(door)) throw new Error(`${what} is already kept by "${doors.get(door)}"`)
+      doors.set(door, plugin.id)
+      for (const [field, counter] of [['refusedCounter', refusedCounter], ['caughtCounter', caughtCounter]]) {
+        if (typeof counter !== 'string' || !PLAIN_NAME.test(counter)) {
+          throw new Error(`${what}: "${field}" is the plain id of a site counter`)
+        }
+        if (counters.has(counter)) throw new Error(`${what}: counter "${counter}" is already ${counters.get(counter)}'s`)
+        counters.set(counter, door)
+      }
+      if (!words || typeof words !== 'object') throw new Error(`${what} needs its "words"`)
+      const unknownWords = Object.keys(words).filter(
+        (key) => !VISITOR_DOOR_WORDS.includes(key) && !VISITOR_DOOR_NOUNS.includes(key),
+      )
+      if (unknownWords.length) throw new Error(`${what}: unknown word(s) ${unknownWords.join(', ')}`)
+      for (const key of VISITOR_DOOR_WORDS) {
+        if (typeof words[key] !== 'string' || !words[key].trim()) throw new Error(`${what}: "words.${key}" is a sentence`)
+      }
+      for (const key of VISITOR_DOOR_NOUNS) {
+        const noun = words[key]
+        if ([noun?.one, noun?.other].some((form) => typeof form !== 'string' || !form.trim())) {
+          throw new Error(`${what}: "words.${key}" is { one, other }`)
+        }
+      }
+      rows.push({ pluginId: plugin.id, door, refusedCounter, caughtCounter, words })
+    }
+  }
+  return rows
+}
+
+/**
  * Where a person reads a record kind, declared by the plugin whose console
  * page shows it (AGL-3080), compiled so a server that tells a person about a
  * record — a notification's link — can ask for the kind without loading the
@@ -2910,7 +2971,7 @@ function catalogContent(videoEmbedRows, planEntitlements, usageAxes) {
  * the types and the resolvers in \`enabled-plugins.ts\`; it holds no row.
  */
 
-import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'\nimport type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'\nimport type { ResolvedPluginSitemapSection } from './plugin-sitemap-sections'\nimport type { ResolvedPluginSiteBundleSectionDeclaration } from './plugin-site-bundle'\nimport type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'\nimport type { ResolvedPluginEntityPicker } from './plugin-entity-pickers'\nimport type { ResolvedPluginRecordPage } from './plugin-record-pages'\nimport type { ResolvedPluginCostAxis, ResolvedPluginSpendLine, ResolvedPluginUsageBand, ResolvedPluginUsageMeter } from './plugin-usage-axes'\nimport type { ResolvedPluginPlanFeature, ResolvedPluginPlanQuota } from './plugin-plan-entitlements'\nimport type { FunctionBindings } from './plugin-contributions'\nimport type { PluginDistribution } from './plugin-distribution'\nimport type { RepeatSourceDeclaration } from './repeat-rows'\nimport type { PluginTemplateSource } from './plugin-template-sources'\nimport type { FormRecordTargetDeclaration } from './submission-record-target'\nimport type { ArtifactTypeDeclaration } from './plugin-artifact-types'\nimport type { ResolvedBesignerDocument } from './besigner-documents'\nimport type { PluginOrgKeyedCollection } from './plugin-org-erasure'\nimport type { ResolvedVideoEmbedProvider } from './video-embed-provider'\nimport type { AnalyticsProviderDeclaration } from '../app-utils/analytics-provider'\nimport type { InteractionStepDeclaration } from '../app-utils/site-interactions'\nimport type { ServerStepDeclaration } from './plugin-server-steps'\nimport type { InteractionRecipeDeclaration } from './interaction-recipes'\nimport type { NotificationCategoryDeclaration, NotificationDigestDeclaration } from '../app-utils/notifications'
+import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'\nimport type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'\nimport type { ResolvedPluginSitemapSection } from './plugin-sitemap-sections'\nimport type { ResolvedPluginSiteBundleSectionDeclaration } from './plugin-site-bundle'\nimport type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'\nimport type { ResolvedPluginEntityPicker } from './plugin-entity-pickers'\nimport type { ResolvedPluginRecordPage } from './plugin-record-pages'\nimport type { ResolvedVisitorDoor } from './plugin-visitor-doors'\nimport type { ResolvedPluginCostAxis, ResolvedPluginSpendLine, ResolvedPluginUsageBand, ResolvedPluginUsageMeter } from './plugin-usage-axes'\nimport type { ResolvedPluginPlanFeature, ResolvedPluginPlanQuota } from './plugin-plan-entitlements'\nimport type { FunctionBindings } from './plugin-contributions'\nimport type { PluginDistribution } from './plugin-distribution'\nimport type { RepeatSourceDeclaration } from './repeat-rows'\nimport type { PluginTemplateSource } from './plugin-template-sources'\nimport type { FormRecordTargetDeclaration } from './submission-record-target'\nimport type { ArtifactTypeDeclaration } from './plugin-artifact-types'\nimport type { ResolvedBesignerDocument } from './besigner-documents'\nimport type { PluginOrgKeyedCollection } from './plugin-org-erasure'\nimport type { ResolvedVideoEmbedProvider } from './video-embed-provider'\nimport type { AnalyticsProviderDeclaration } from '../app-utils/analytics-provider'\nimport type { InteractionStepDeclaration } from '../app-utils/site-interactions'\nimport type { ServerStepDeclaration } from './plugin-server-steps'\nimport type { InteractionRecipeDeclaration } from './interaction-recipes'\nimport type { NotificationCategoryDeclaration, NotificationDigestDeclaration } from '../app-utils/notifications'
 
 export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
 ${rows.map((row) => `  ${indent(JSON.stringify(row.plugin, null, 2))},`).join('\n')}
@@ -2974,6 +3035,14 @@ ${orgCapacityRows().map((row) => `  ${indent(JSON.stringify(row, null, 2))},`).j
  */
 export const PLUGIN_ENTITY_PICKERS_DECLARED: readonly ResolvedPluginEntityPicker[] = [
 ${entityPickerRows().map((row) => `  ${indent(JSON.stringify(row, null, 2))},`).join('\n')}
+]
+
+/**
+ * Every public door a first-party plugin keeps a ceiling and a honeypot on,
+ * with its counters and words, declared by that plugin (AGL-3080).
+ */
+export const PLUGIN_VISITOR_DOORS_DECLARED: readonly ResolvedVisitorDoor[] = [
+${visitorDoorRows().map((row) => `  ${indent(JSON.stringify(row, null, 2))},`).join('\n')}
 ]
 
 /**

@@ -14,6 +14,7 @@ import type { ResolvedPluginSiteBundleSectionDeclaration } from './plugin-site-b
 import type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'
 import type { ResolvedPluginEntityPicker } from './plugin-entity-pickers'
 import type { ResolvedPluginRecordPage } from './plugin-record-pages'
+import type { ResolvedVisitorDoor } from './plugin-visitor-doors'
 import type { ResolvedPluginCostAxis, ResolvedPluginSpendLine, ResolvedPluginUsageBand, ResolvedPluginUsageMeter } from './plugin-usage-axes'
 import type { ResolvedPluginPlanFeature, ResolvedPluginPlanQuota } from './plugin-plan-entitlements'
 import type { FunctionBindings } from './plugin-contributions'
@@ -864,6 +865,41 @@ export const PLUGIN_ENTITY_PICKERS_DECLARED: readonly ResolvedPluginEntityPicker
     "singular": "dataset",
     "plural": "datasets",
     "page": "the Data page"
+  },
+]
+
+/**
+ * Every public door a first-party plugin keeps a ceiling and a honeypot on,
+ * with its counters and words, declared by that plugin (AGL-3080).
+ */
+export const PLUGIN_VISITOR_DOORS_DECLARED: readonly ResolvedVisitorDoor[] = [
+  {
+    "pluginId": "forms",
+    "door": "form",
+    "refusedCounter": "formSubmissionsRefused",
+    "caughtCounter": "formSubmissionsSpam",
+    "words": {
+      "pausedTitle": "Form submissions are paused",
+      "noun": {
+        "one": "submission",
+        "other": "submissions"
+      },
+      "staffNoun": {
+        "one": "form submission",
+        "other": "form submissions"
+      },
+      "cause": "This usually means a bot is filling in one of your forms — if it is real traffic, contact support and we will raise the limit.",
+      "pausedChip": "forms paused",
+      "caught": {
+        "one": "bot submission",
+        "other": "bot submissions"
+      },
+      "caughtBy": "the honeypot",
+      "caughtChip": {
+        "one": "bot hit",
+        "other": "bot hits"
+      }
+    }
   },
 ]
 

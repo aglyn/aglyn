@@ -25,24 +25,25 @@
  * Sites card, and that projection used to be identity-only — so a support
  * conversation about "my form stopped working" still started with a raw
  * Firestore read of `hosts/{id}/counters/formSubmissionsRefused`. The route
- * now joins that counter per host for the org-narrowed case — and, with it,
- * the honeypot spam counter `formSubmissionsSpam` (AGL-1831) that `9db4f322a`
- * made the revisit trigger for the App Check / CAPTCHA decision.
+ * now joins, per host for the org-narrowed case, the two counters of every
+ * public door a plugin declares (`visitorDoors`, AGL-3080) — here the form
+ * door's: its ceiling refusals and its honeypot catches (AGL-1831), the
+ * revisit trigger `9db4f322a` made for the App Check / CAPTCHA decision.
  *
  * The load-bearing assertions:
  *
- * - The month read is `submissionMonthKey()` — the SAME key the submit route
+ * - The month read is `utcMonthKey()` — the SAME key the submit route
  *   writes. A separately derived key is how a staff view reads zero refusals
  *   on exactly the sites being refused, so the spec pins the real function's
  *   current-month key, not a hardcoded string.
  * - A host with no counter document reports `refused: 0`, not an absent
  *   field — the page must be able to tell "nothing refused" from "not
  *   joined".
- * - The picker case (no `orgId`) does not read counters at all: `forms` is
+ * - The picker case (no `orgId`) does not read counters at all: `doors` is
  *   null and no `getAll` happens, so the global 200-row list stays cheap.
  */
 
-import { submissionMonthKey } from '@aglyn/aglyn/server'
+import { utcMonthKey } from '@aglyn/aglyn/server'
 
 const mockVerifyIdToken = jest.fn()
 const mockListGet = jest.fn()
@@ -95,8 +96,8 @@ jest.mock('@aglyn/aglyn/server', () => ({
   // The REAL month key. Stubbing it would let this spec pass while the route
   // derives a different key than the submit route writes — the exact defect
   // AGL-1681 warns about.
-  submissionMonthKey: jest.requireActual('@aglyn/aglyn/server')
-    .submissionMonthKey,
+  utcMonthKey: jest.requireActual('@aglyn/aglyn/server')
+    .utcMonthKey,
   pluginRequestFromWeb: async (request: Request) => {
     const url = new URL(request.url)
     return {
@@ -128,7 +129,7 @@ const staffToken = () =>
     staff: true,
   })
 
-describe('/api/admin/hosts form counters (AGL-1681)', () => {
+describe('/api/admin/hosts door counters (AGL-1681)', () => {
   beforeEach(() => jest.clearAllMocks())
 
   it('joins this month’s refusal, ceiling and spam counts per host when orgId narrows the list', async () => {
@@ -139,7 +140,7 @@ describe('/api/admin/hosts form counters (AGL-1681)', () => {
         hostDoc('host-b', { displayName: 'B', subdomain: 'b', orgId: 'org-1' }),
       ],
     })
-    const month = submissionMonthKey()
+    const month = utcMonthKey()
     // The route asks for BOTH counter documents per host in one getAll, so
     // the double answers by path — an index-shaped double would keep passing
     // if the route's interleaving drifted from its own expectations.
@@ -167,18 +168,18 @@ describe('/api/admin/hosts form counters (AGL-1681)', () => {
     )
     const payload = await (await get({ orgId: 'org-1' })).json()
     expect(payload.hosts).toHaveLength(2)
-    expect(payload.hosts[0].forms).toEqual({
+    expect(payload.hosts[0].doors.form).toEqual({
       month,
       refused: 12,
       ceiling: 500,
-      spam: 7,
+      caught: 7,
     })
     // Missing counter documents are real zeros, not absent fields.
-    expect(payload.hosts[1].forms).toEqual({
+    expect(payload.hosts[1].doors.form).toEqual({
       month,
       refused: 0,
       ceiling: null,
-      spam: 0,
+      caught: 0,
     })
     // Both counter documents, per host, in ONE getAll.
     expect(mockGetAll).toHaveBeenCalledTimes(1)
@@ -221,11 +222,11 @@ describe('/api/admin/hosts form counters (AGL-1681)', () => {
       ),
     )
     const payload = await (await get({ orgId: 'org-1' })).json()
-    expect(payload.hosts[0].forms).toEqual({
-      month: submissionMonthKey(),
+    expect(payload.hosts[0].doors.form).toEqual({
+      month: utcMonthKey(),
       refused: 0,
       ceiling: 500,
-      spam: 0,
+      caught: 0,
     })
   })
 
@@ -235,7 +236,7 @@ describe('/api/admin/hosts form counters (AGL-1681)', () => {
       docs: [hostDoc('host-a', { orgId: 'org-1' })],
     })
     const payload = await (await get()).json()
-    expect(payload.hosts[0].forms).toBeNull()
+    expect(payload.hosts[0].doors).toBeNull()
     expect(mockGetAll).not.toHaveBeenCalled()
   })
 })

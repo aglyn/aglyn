@@ -32,7 +32,7 @@ import {
   marketingConsentFieldsForGroup,
   personKey,
   readMarketingBasis,
-  submissionMonthKey,
+  utcMonthKey,
   VISITOR_RECORD_NOTICE_SENT_FIELD,
   visitorRecordAcceptFillsCeiling,
   visitorRecordCeilingAnnounced,
@@ -249,7 +249,7 @@ export async function recordVisitorRecordCeilingTrip(options: {
   monthKey?: string
 }): Promise<void> {
   const { hostRef, hostId, kind, ceiling } = options
-  const monthKey = options.monthKey ?? submissionMonthKey()
+  const monthKey = options.monthKey ?? utcMonthKey()
   try {
     const refusedRef = hostRef
       .collection('counters')
