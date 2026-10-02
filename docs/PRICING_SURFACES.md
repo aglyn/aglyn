@@ -216,8 +216,11 @@ them:
 
 The parity spec's gaps were folded back into single rows the same day.
 
-Still owed: the four Figma frames, which `build-pricing-tables.mts` declares
-stale until they are redrawn.
+The four Figma frames caught up on 2026-10-02, redrawn together with the
+AGL-3469 and AGL-3476 figures below and re-extracted into `copy-*.json`. Every
+`FRAME_STALE_CELLS`, `TIERS_STALE`, `USAGE_STALE` and `FRAME_STALE_METERED`
+entry those three issues had declared is deleted, and `check:pricing-tables` is
+clean again with zero declared divergences from the frames.
 
 ### 2026-10-02, later — every plan covers its full-use cost plus 30% after card fees
 
