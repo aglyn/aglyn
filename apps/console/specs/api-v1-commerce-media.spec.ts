@@ -184,10 +184,16 @@ jest.mock('@aglyn/aglyn/server', () => ({
   ).checkApiRequestQuota,
   checkEntitlement: (_org: unknown, entitlement: string) =>
     mockEntitlements[entitlement] ?? false,
+  createResourceUid: () => 'rec_1',
+}))
+
+// The data plugin's dataset model, as the dataset handlers read it
+// (AGL-3080: the model is the data plugin's own).
+jest.mock('../../../libs/plugins/data/src/lib/model/dataset-models', () => ({
+  ...jest.requireActual('../../../libs/plugins/data/src/lib/model/dataset-models'),
   effectiveDatasetModel: () => ({ fields: [] }),
   coerceDocumentValues: (_m: unknown, v: Record<string, unknown>) => v,
   validateDocument: () => ({}),
-  createResourceUid: () => 'rec_1',
 }))
 
 import { GET } from '../app/api/v1/[[...route]]/route'

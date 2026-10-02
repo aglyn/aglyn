@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-import { prepareDatasetRecordWrite } from '@aglyn/aglyn/server'
 import { resolveDatasetDoc } from './resolve-dataset'
+import { prepareDatasetRecordWrite } from '../model/datasets'
 
 interface FakeDoc {
   id: string

@@ -15,7 +15,6 @@
  * limitations under the License.
  */
 
-import { effectiveDatasetModel, type DatasetModel } from '@aglyn/aglyn/app-utils/dataset-models'
 import { hostRoleFor, isOrgWideMember, memberCanSee } from '@aglyn/aglyn/app-utils/organizations'
 import { visibleToHost } from '@aglyn/aglyn/app-utils/scope-tokens'
 import type { AglynOrgMember } from '@aglyn/aglyn/foundation/definitions/organization.types'
@@ -28,6 +27,7 @@ import {
   type PluginFigureRow,
 } from '@aglyn/aglyn/plugin-manager/plugin-figures'
 import { BUNDLE_ID } from '../constants/bundle-common'
+import { type DatasetModel, effectiveDatasetModel } from '../model/dataset-models'
 
 /**
  * The figures an insight reads about the workspace's datasets (AGL-2915),

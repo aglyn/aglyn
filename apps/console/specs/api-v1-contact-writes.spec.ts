@@ -332,10 +332,16 @@ jest.mock('@aglyn/aglyn/server', () => ({
   // block below is about, and a fake would make it a statement about the fake.
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/crm'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/contact-custom-fields'),
+  createResourceUid: () => `con_${++mockUidSeq}`,
+}))
+
+// The data plugin's dataset model, as the dataset handlers read it
+// (AGL-3080: the model is the data plugin's own).
+jest.mock('../../../libs/plugins/data/src/lib/model/dataset-models', () => ({
+  ...jest.requireActual('../../../libs/plugins/data/src/lib/model/dataset-models'),
   effectiveDatasetModel: () => ({ fields: [] }),
   coerceDocumentValues: (_model: unknown, values: Record<string, unknown>) => values,
   validateDocument: () => ({}),
-  createResourceUid: () => `con_${++mockUidSeq}`,
 }))
 
 jest.mock('firebase-admin/firestore', () => {

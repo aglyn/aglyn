@@ -250,7 +250,6 @@ export * from './variables'
 // What happened on a site that an automation can start on: the platform's
 // own event and the ones plugins declare (AGL-3080).
 export * from './host-events'
-export * from './datasets'
 export * from './expand-repeatables'
 export * from './org-roles'
 export * from './markdown-lite'
@@ -295,7 +294,6 @@ export * from './paid-media-source'
 export * from './author-css'
 // The isomorphic HTML rule (AGL-1901), after the CSS one it depends on.
 export * from './author-html'
-export * from './dataset-models'
 export * from './csv'
 export * from './csv-upload'
 export * from './artifact-provenance'

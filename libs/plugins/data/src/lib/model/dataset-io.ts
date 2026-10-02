@@ -26,8 +26,8 @@
  * about DATASETS — mapping a file's columns onto a `DatasetModel`.
  */
 
-import type { DatasetModel } from '@aglyn/aglyn'
 import { parseCsv } from '@aglyn/aglyn/app-utils/csv'
+import type { DatasetModel } from './dataset-models'
 export {
   countCsvDataRows,
   exportShortfall,

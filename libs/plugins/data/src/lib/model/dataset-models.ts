@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-import { validateCustomFieldValue } from '../plugin-manager/custom-fields'
-import { type DatasetFieldEntry, humanizeDatasetFieldId } from './datasets'
+import type { RepeatRowsModel } from '@aglyn/aglyn/app-utils/expand-repeatables'
+import { validateCustomFieldValue } from '@aglyn/aglyn/plugin-manager/custom-fields'
 
 /**
  * Dataset models (AGL-177): the runtime promotion of the type-level
@@ -34,6 +34,21 @@ import { type DatasetFieldEntry, humanizeDatasetFieldId } from './datasets'
  * numbers, coordinates as `{ latitude, longitude }`, `sorted` as arrays,
  * `map` as plain objects, references as target-document id strings.
  */
+
+/**
+ * A human field entry from the quick creator: the stable id plus the
+ * display name shown in table headers and bindings pickers (AGL-558).
+ */
+export interface DatasetFieldEntry {
+  id: string
+  name: string
+}
+
+/** Display fallback for raw ids: "roast_preference" → "Roast preference". */
+export function humanizeDatasetFieldId(id: string): string {
+  const words = id.replace(/_/g, ' ').trim()
+  return words ? words.charAt(0).toUpperCase() + words.slice(1) : id
+}
 
 /** dod.ts `FT.Tag` vocabulary plus `reference` (AGL-180 builds on it). */
 export type DatasetFieldType =
@@ -167,6 +182,21 @@ export function modelFromFieldEntries(
     model.order.push(entry.id)
   }
   return model
+}
+
+/**
+ * The part of a dataset's model a repeat reads (AGL-180): each reference
+ * field, by the id of the dataset it points into, which is a key the rows map
+ * answers under. Every field the model declares, in `order` or not — a hop
+ * resolves wherever its target's rows were loaded.
+ */
+export function repeatRowsModelOf(model: DatasetModel): RepeatRowsModel {
+  const references: Record<string, string> = {}
+  for (const [fieldId, field] of Object.entries(model.fields)) {
+    const target = field?.type === 'reference' ? field.reference?.datasetId : undefined
+    if (target) references[fieldId] = target
+  }
+  return { references }
 }
 
 /** The dataset's model, deriving one from v1 `fields` when absent. */

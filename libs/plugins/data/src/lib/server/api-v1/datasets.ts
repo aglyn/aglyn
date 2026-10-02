@@ -19,14 +19,9 @@ import {
   checkDatasetQuota,
   checkEntitlement,
   checkQuota,
-  coerceDocumentValues,
   createResourceUid,
-  datasetIntegrityFields,
-  datasetIntegrityUpdate,
   defaultScopeForNewResource,
-  effectiveDatasetModel,
   newResourceScopeFields,
-  validateDocument,
 } from '@aglyn/aglyn/server'
 import {
   ApiErrors,
@@ -45,6 +40,7 @@ import {
 import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { announceDatasetRecords as announceDatasetChange } from '../announce-dataset-records'
 import { loadCustomFieldTypes } from '../custom-field-types'
+import { coerceDocumentValues, datasetIntegrityFields, datasetIntegrityUpdate, effectiveDatasetModel, validateDocument } from '../../model/dataset-models'
 
 /**
  * The organization's datasets on the customer REST API, `/v1/datasets/…`

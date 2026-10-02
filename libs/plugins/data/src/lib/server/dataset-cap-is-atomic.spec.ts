@@ -259,20 +259,6 @@ jest.mock('@aglyn/aglyn/server', () => ({
   // bug.
   ...jest.requireActual('@aglyn/aglyn/app-utils/plan-entitlements'),
   createResourceUid: () => `uid-${(mockUid += 1)}`,
-  // The REAL referential-integrity index: both record writes on this route
-  // derive `referencedIds` from their values, and an omitted helper is a
-  // CLOSED WORLD — every create 500s and the cap this suite is about is never
-  // reached.
-  datasetIntegrityFields: jest.requireActual(
-    '@aglyn/aglyn/app-utils/dataset-models',
-  ).datasetIntegrityFields,
-  // Validation is not what this suite is about; the model below accepts the
-  // one field every seeded row carries.
-  effectiveDatasetModel: () => ({
-    fields: [{ id: 'name', type: 'text', label: 'Name' }],
-  }),
-  coerceDocumentValues: (_model: unknown, values: unknown) => values,
-  validateDocument: () => ({}),
   // The model below names no custom field type, so there is none to load.
   ensureDeclaredCustomFieldTypes: async () => undefined,
   defaultScopeForNewResource: () => 'org',
@@ -290,6 +276,23 @@ jest.mock('@aglyn/aglyn/server', () => ({
       authorization: request.headers.get('authorization') ?? undefined,
     },
   }),
+}))
+
+// The data plugin's dataset model, as the dataset handlers read it
+// (AGL-3080: the model is the data plugin's own).
+jest.mock('../model/dataset-models', () => ({
+  // The REAL referential-integrity index: both record writes on this route
+  // derive `referencedIds` from their values, and an omitted helper is a
+  // CLOSED WORLD — every create 500s and the cap this suite is about is never
+  // reached.
+  ...jest.requireActual('../model/dataset-models'),
+  // Validation is not what this suite is about; the model below accepts the
+  // one field every seeded row carries.
+  effectiveDatasetModel: () => ({
+    fields: [{ id: 'name', type: 'text', label: 'Name' }],
+  }),
+  coerceDocumentValues: (_model: unknown, values: unknown) => values,
+  validateDocument: () => ({}),
 }))
 
 import { PLAN_ENTITLEMENTS } from '@aglyn/aglyn/app-utils/plan-entitlements'

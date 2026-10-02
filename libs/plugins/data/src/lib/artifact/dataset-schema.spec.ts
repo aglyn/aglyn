@@ -17,13 +17,13 @@
  * @jest-environment node
  */
 
-import { DATASET_FIELD_TYPES } from '@aglyn/aglyn'
 import { PORTABLE_DATASET_FIELD_TYPES } from '@aglyn/aglyn/app-utils/node-definition-sanitizer'
 import {
   resolveInstalledDatasetSchema,
   sanitizeDatasetSchema,
   summarizeSchemaChange,
 } from './dataset-schema'
+import { DATASET_FIELD_TYPES } from '../model/dataset-models'
 
 /**
  * A dataset's schema as it travels between workspaces (AGL-657): what publish

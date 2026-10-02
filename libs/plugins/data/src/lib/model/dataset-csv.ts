@@ -29,10 +29,7 @@
  */
 
 import { escapeCsvCell as csvEscape } from '@aglyn/aglyn/app-utils/csv'
-import type {
-  DatasetFieldDefinition,
-  DatasetModel,
-} from '@aglyn/aglyn/app-utils/dataset-models'
+import type { DatasetFieldDefinition, DatasetModel } from './dataset-models'
 
 
 /** Storage value → portable string (CSV cell / JSON value). */
