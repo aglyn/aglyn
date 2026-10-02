@@ -29,6 +29,7 @@ import {
   SCREEN_ROOT_PATH,
   SCREEN_SLUG_PATH_SEPARATOR_MESSAGE,
   screenClaimsToBeAPage,
+  screenRoutePathFromUrl,
   screenRoutePathToUrl,
   screenSlugHasPathSeparator,
   wouldCreateScreenCycle,
@@ -156,6 +157,33 @@ describe('findScreenIdByRoutePath', () => {
   it('returns undefined for unowned paths or missing maps', () => {
     expect(findScreenIdByRoutePath(screens, 'missing')).toBeUndefined()
     expect(findScreenIdByRoutePath(undefined, '/')).toBeUndefined()
+  })
+})
+
+describe('screenRoutePathFromUrl', () => {
+  it('is the inverse of screenRoutePathToUrl for every routed path', () => {
+    for (const path of ['/', 'about', 'company/about']) {
+      expect(screenRoutePathFromUrl(screenRoutePathToUrl(path))).toBe(path)
+    }
+  })
+
+  it('drops a trailing slash, a query string and a fragment', () => {
+    expect(screenRoutePathFromUrl('/company/about/')).toBe('company/about')
+    expect(screenRoutePathFromUrl('/ai-website-draft?utm_campaign=onejob-ai#form')).toBe(
+      'ai-website-draft',
+    )
+    expect(screenRoutePathFromUrl('/?ref=x')).toBe('/')
+  })
+
+  it('reads an empty path as the root', () => {
+    expect(screenRoutePathFromUrl('')).toBe('/')
+    expect(screenRoutePathFromUrl(undefined)).toBe('/')
+  })
+
+  it('names no routing key for a value that is not a site-relative path', () => {
+    expect(screenRoutePathFromUrl('https://evil.example/about')).toBeUndefined()
+    expect(screenRoutePathFromUrl('//evil.example/about')).toBeUndefined()
+    expect(screenRoutePathFromUrl('about')).toBeUndefined()
   })
 })
 
