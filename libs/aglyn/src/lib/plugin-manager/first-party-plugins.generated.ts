@@ -1341,6 +1341,78 @@ export const ANALYTICS_PROVIDERS_DECLARED: readonly AnalyticsProviderDeclaration
  */
 export const PLUGIN_INTERACTION_STEPS_DECLARED: readonly InteractionStepDeclaration[] = [
   {
+    "pluginId": "crm",
+    "type": "setContactStage",
+    "label": "Set the contact’s lifecycle stage",
+    "offered": false
+  },
+  {
+    "pluginId": "crm",
+    "type": "addContactTag",
+    "label": "Tag the contact",
+    "offered": false,
+    "typedFields": [
+      {
+        "key": "tag",
+        "names": "the tag"
+      }
+    ]
+  },
+  {
+    "pluginId": "crm",
+    "type": "assignContactOwner",
+    "label": "Assign the contact an owner",
+    "offered": false
+  },
+  {
+    "pluginId": "crm",
+    "type": "createCrmTask",
+    "label": "Create a CRM task",
+    "offered": false,
+    "typedFields": [
+      {
+        "key": "title",
+        "names": "the title"
+      }
+    ]
+  },
+  {
+    "pluginId": "crm",
+    "type": "logCrmActivity",
+    "label": "Log a CRM activity",
+    "offered": false,
+    "typedFields": [
+      {
+        "key": "body",
+        "names": "the text"
+      }
+    ]
+  },
+  {
+    "pluginId": "data",
+    "type": "datasetAppend",
+    "label": "Write to a dataset",
+    "offered": false,
+    "typedFields": [
+      {
+        "key": "datasetName",
+        "names": "the dataset"
+      }
+    ]
+  },
+  {
+    "pluginId": "data",
+    "type": "updateDataset",
+    "label": "Update a dataset record",
+    "offered": false,
+    "typedFields": [
+      {
+        "key": "datasetName",
+        "names": "the dataset"
+      }
+    ]
+  },
+  {
     "pluginId": "marketing",
     "type": "showOverlay",
     "label": "Open an overlay",
@@ -1357,6 +1429,12 @@ export const PLUGIN_INTERACTION_STEPS_DECLARED: readonly InteractionStepDeclarat
     "pluginId": "workflows",
     "type": "runWorkflow",
     "label": "Run a workflow",
+    "typedFields": [
+      {
+        "key": "workflowName",
+        "names": "the workflow"
+      }
+    ],
     "picks": {
       "collection": "workflows",
       "limit": 100,
@@ -1365,6 +1443,107 @@ export const PLUGIN_INTERACTION_STEPS_DECLARED: readonly InteractionStepDeclarat
       "label": "Workflow",
       "missing": "pick a workflow"
     }
+  },
+  {
+    "pluginId": "workflows",
+    "type": "customEvent",
+    "label": "Fire a custom event",
+    "offered": false
+  },
+  {
+    "pluginId": "workflows",
+    "type": "webhookPost",
+    "label": "Send a webhook (Business)",
+    "offered": false,
+    "typedFields": [
+      {
+        "key": "webhookName",
+        "names": "the webhook"
+      }
+    ]
+  },
+  {
+    "pluginId": "workflows",
+    "type": "sendEmail",
+    "label": "Send an email",
+    "offered": false,
+    "typedFields": [
+      {
+        "key": "subject",
+        "names": "the subject"
+      },
+      {
+        "key": "body",
+        "names": "the text"
+      }
+    ]
+  },
+  {
+    "pluginId": "workflows",
+    "type": "notifyAdmins",
+    "label": "Notify site admins",
+    "offered": false,
+    "typedFields": [
+      {
+        "key": "title",
+        "names": "the title"
+      },
+      {
+        "key": "body",
+        "names": "the text"
+      }
+    ]
+  },
+  {
+    "pluginId": "workflows",
+    "type": "enrollList",
+    "label": "Enroll in a list",
+    "offered": false,
+    "typedFields": [
+      {
+        "key": "listName",
+        "names": "the list"
+      }
+    ]
+  },
+  {
+    "pluginId": "workflows",
+    "type": "assignCampaign",
+    "label": "Assign to a campaign",
+    "offered": false,
+    "typedFields": [
+      {
+        "key": "campaignName",
+        "names": "the campaign"
+      }
+    ]
+  },
+  {
+    "pluginId": "workflows",
+    "type": "wait",
+    "label": "Wait",
+    "offered": false,
+    "holds": {
+      "minMinutes": 1,
+      "maxMinutes": 129600
+    }
+  },
+  {
+    "pluginId": "workflows",
+    "type": "waitForEvent",
+    "label": "Wait for something to happen",
+    "offered": false,
+    "holds": {
+      "minMinutes": 1,
+      "maxMinutes": 129600,
+      "timeoutField": "_waitTimedOut"
+    }
+  },
+  {
+    "pluginId": "workflows",
+    "type": "exitFlow",
+    "label": "End the flow here",
+    "offered": false
   },
 ]
 

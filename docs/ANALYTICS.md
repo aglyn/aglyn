@@ -1116,7 +1116,7 @@ the old name.
 tell the author anything — it is executing for a _visitor_ of their site, and
 turning an author's config mistake into something a visitor sees would be worse
 than the missing metric — so it drops the event and warns once per name in the
-browser console. The author-facing half is `validateHostAction`, which refuses
+browser console. The author-facing half is `validateInteraction`, which refuses
 to **save** a name the runtime would refuse to send. A silent drop is therefore
 only possible for a step authored before AGL-1587.
 
@@ -1130,7 +1130,7 @@ least trustworthy analytics input on the platform, and a bounded list is one an
 author can read back in full before publishing, which is the only review a
 parameter ever gets.
 
-`validateHostAction` runs the **real** `sanitizeEventParams` over the authored
+`validateInteraction` runs the **real** `sanitizeEventParams` over the authored
 params and refuses to save a step carrying a parameter the runtime would strip,
 naming it. Same shape as the reserved-name refusal above and the `showHtml`
 check beside it: the runtime can only drop and stay quiet, so the strip is

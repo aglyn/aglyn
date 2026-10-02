@@ -18,8 +18,6 @@
 import {
   checkEntitlement,
   evaluateExpression,
-  FLOW_TIMED_OUT_FIELD,
-  type HostActionAlert,
   type HostEventType,
   type HostFunction,
   type HostVariable,
@@ -50,6 +48,7 @@ import {
   workflowHasActionSteps,
 } from './workflow-steps'
 import { runTriggeredByFields } from './run-trigger-actor'
+import { FLOW_TIMED_OUT_FIELD, type HostActionAlert } from '../model/host-actions'
 
 /** Bounded fan-out per event: at most this many triggered workflows run. */
 const MAX_TRIGGERED_WORKFLOWS = 10

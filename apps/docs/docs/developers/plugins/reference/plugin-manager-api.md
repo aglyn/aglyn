@@ -1688,15 +1688,78 @@ in `plugins.config.json`, not from code:
   `hostCollections`), stores the pick's id in `idField` and its name, as a
   display hint, in `nameField`. `validateInteraction` refuses a step that names
   neither, with `Step N: <missing>`.
+- A step only an automation holds — one that acts on the server after the
+  page that started it has gone — is declared too, with `"offered": false`, so
+  the builder leaves it out while an editor, a run history and a drafter still
+  read its `label`:
+
+  ```json
+  {
+    "type": "waitForEvent",
+    "label": "Wait for something to happen",
+    "offered": false,
+    "holds": { "minMinutes": 1, "maxMinutes": 129600, "timeoutField": "_waitTimedOut" }
+  }
+  ```
+
+- `holds` marks a step that SUSPENDS the run reaching it, to be continued later
+  from a beat: the band of whole minutes it may hold and, where a hold can end
+  on the clock, the scope field the continued run carries to say so. A
+  visitor's page never runs a step past one (`interactionStepsForClient`).
+- `typedFields` are the step's fields a person types words into, each with the
+  words a sentence calls it (`{ "key": "listName", "names": "the list" }`):
+  where a drafted step may leave a bracketed placeholder
+  (`draft-placeholders`).
 - The declarations are compiled into core (`declaredInteractionSteps()`),
-  because the builder and every validator read them with no plugin loaded.
+  because the builder, every validator, a visitor's page and a drafter read
+  them with no plugin loaded.
 
 | API | Semantics |
 | --- | --- |
-| `SiteInteraction<Step>` / `InteractionTrigger` / `InteractionStepBase` | The stored shape. `Step` is the platform's client vocabulary (`ClientInteractionStep`) unless a reader names more. |
-| `validateInteraction(interaction, { validateStep? })` | The name, the trigger and its conditions, the step count, each step's guard, the client steps and every declared pick. `validateStep` is the owner's check for its own step types. |
+| `SiteInteraction<Step>` / `InteractionTrigger` / `InteractionStepBase` | The stored shape. `Step` is the platform's client vocabulary (`ClientInteractionStep`) unless a reader names more. `recipe` is the stamp of the recipe it began as (`interaction-recipes`). |
+| `validateInteraction(interaction, { validateStep? })` | The name, the recipe stamp, the trigger and its conditions, the step count, each step's guard, the client steps and every declared pick. `validateStep` is the owner's check for its own step types. |
+| `siteInteractionDocument(interaction)` | The shape every writer of `hosts/{hostId}/actions` stores: each trigger cap written out, the legacy single `condition` nulled, the stamp carried only when it says something. |
+| `interactionStepLabel(type)` / `interactionStepHolds(type)` / `interactionStepTypedFields(type)` | The platform's own for a client step, else the declaring plugin's; `null` (or none) for a type nobody declares. |
+| `interactionStepsForClient(steps)` | The steps a visitor's page may run: the list cut at the first step that holds the run. |
 | `isClientActionStep(step)` / `isClientStepEntitled(step, tiers)` | Whether the page runs a step, and whether the site's plan lets it. |
 | `SiteAlert` | What a `siteAlert` step, or a listener, hands back to the visitor's page. |
+
+## Step checks — `interaction-step-checks`
+
+`validateInteraction` judges what is the platform's and leaves a step it does
+not know to its owner. A plugin that edits interactions passes its own checks.
+A plugin that only WRITES one — a recipe installed into a site, a drafted
+automation graded before it is handed over — cannot import the plugin whose
+steps it wrote, and asks here instead. The plugin that holds a step type's
+check registers it from its `declarations` entry:
+
+```ts
+registerInteractionStepChecks(['bakeBread'], (step, label) =>
+  String(step['loaves'] ?? '').trim() ? null : `${label}: say how many loaves`,
+  { pluginId: 'bakery' },
+)
+```
+
+| API | Semantics |
+| --- | --- |
+| `registerInteractionStepChecks(types, check, { pluginId? })` | Owner = the loader's marker, else `pluginId`; no owner throws. A type another plugin's check holds throws; nothing is registered unless every type is accepted. Returns the unregister. |
+| `validateStoredInteraction(interaction)` | `validateInteraction` with every registered check. A step with no registered check is judged by the platform alone. |
+| `registeredInteractionStepCheck(type)` | The registered check and its owner, or `null`. |
+
+## Placeholders — `draft-placeholders`
+
+A drafted interaction marks a value a person still has to supply with square
+brackets where it belongs: `[newsletter]` where a list is named. A bracketed
+record name matches no record, and a bracketed condition value matches no
+event, so a placeholder can never act on the wrong record. Only the
+conditions and each step's typed fields are read; a selector, HTML or a script
+uses brackets as syntax.
+
+| API | Semantics |
+| --- | --- |
+| `draftPlaceholder(words)` / `draftPlaceholderIn(value)` | Writes words as a placeholder; reads the words of the first placeholder in a value, or `null`. A written link is not a placeholder. |
+| `interactionPlaceholders(interaction)` | Every placeholder, the trigger's conditions first, then each step's guard and typed fields: `{ step, field, names, text }`. |
+| `describeInteractionPlaceholder(placeholder)` | One as a person reads it: `Step 1: the list (“newsletter”)`. |
 
 ## Server steps — `plugin-server-steps` (`/server`)
 

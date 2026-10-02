@@ -15,7 +15,6 @@
  * limitations under the License.
  */
 
-import type { HostAction } from '@aglyn/aglyn/app-utils/actions'
 import { actionRunResult } from '@aglyn/aglyn/app-utils/activity-presenter'
 import { isFormArchived } from '@aglyn/aglyn/app-utils/forms'
 import {
@@ -31,6 +30,7 @@ import type {
 } from '../model/ai-automation-draft'
 import type { AiIndexedWorkflow, AiRunRecord } from '../model/ai-automation-outline'
 import type { AiWorkflowTargetType } from '../model/ai-workflow-job'
+import type { AiAutomation } from '../model/ai-automation-format'
 
 /**
  * What a `workflow` job reads (AGL-2919), scoped to the job's own site and
@@ -190,7 +190,7 @@ export async function readAiWorkflowFunctions(
 }
 
 export type AiWorkflowTarget =
-  | { type: 'action'; id: string; name: string; action: HostAction }
+  | { type: 'action'; id: string; name: string; action: AiAutomation }
   | { type: 'workflow'; id: string; name: string; workflow: AiIndexedWorkflow }
 
 /**
@@ -206,7 +206,7 @@ export async function readAiWorkflowTarget(
   if (!record) return null
   const stored = { name: record.name, ...record.facts }
   return input.type === 'action'
-    ? { type: 'action', id: record.id, name: record.name, action: stored as unknown as HostAction }
+    ? { type: 'action', id: record.id, name: record.name, action: stored as unknown as AiAutomation }
     : { type: 'workflow', id: record.id, name: record.name, workflow: stored as unknown as AiIndexedWorkflow }
 }
 

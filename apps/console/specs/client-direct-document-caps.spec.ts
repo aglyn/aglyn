@@ -222,7 +222,7 @@ jest.mock('@aglyn/aglyn/server', () => ({
   // throws inside the route and its own catch answers 500, which reads
   // exactly like the behaviour under test regressing.
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/stored-nodes'),
-  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/actions'),
+  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/site-interactions'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/collection-entries'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/collection-kind'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/screen-route'),

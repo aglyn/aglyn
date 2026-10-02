@@ -223,7 +223,6 @@ jest.mock('@aglyn/shared-util-email', () => ({
     !result || result.sent ? null : 'failed',
 }))
 
-import { validateHostAction, type HostAction } from '@aglyn/aglyn/app-utils/actions'
 import { contactFacetPath } from '@aglyn/aglyn/app-utils/contacts'
 import { standInCrmSteps } from '../testing/stand-in-crm-steps'
 import { runWorkflow, type HostWorkflow } from '../model/workflows'
@@ -235,6 +234,7 @@ import {
   validateWorkflowSteps,
   workflowHasActionSteps,
 } from './workflow-steps'
+import { type HostAction, validateHostAction } from '../model/host-actions'
 
 const hostPath = `hosts/${HOST_ID}`
 

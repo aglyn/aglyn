@@ -101,16 +101,6 @@
       "why": "The operator's own lead-funnel probe (AGL-2586) on the health board: can a prospect still reach the platform's marketing host through its contact, sales and demo forms. Not a tenant feature; a self-host points it at its own marketing host or leaves it unset. It reads a form's campaigns through the core's container seam by kind, as any non-owner does, and the word it trips on is `campaignCount`, the fact it grades: a lead form filed under no campaign is mailed by nobody."
     },
     {
-      "path": "libs/aglyn/src/lib/app-utils/actions.ts",
-      "rules": [
-        "domain-name",
-        "domain-exports:workflows",
-        "domain-declares:data",
-        "domain-declares:workflows"
-      ],
-      "lane": "workflows"
-    },
-    {
       "path": "libs/aglyn/src/lib/app-utils/advertising-tag-mounts.tsx",
       "rules": [
         "vendor:ga4",
@@ -135,16 +125,6 @@
       ],
       "lane": "stays",
       "why": "The install-provenance contract every installed document carries and every reader of installed content shares (the theme editor, a template's page, the site's theme resolution, the AI plugin); named for installed content, not its installer, since AGL-3080. The one marketplace word left is `publisherOrgId`, a PERSISTED field of the stamp on every installed document, named in the Firestore rules and their tests: renaming it is a data migration of every installed artifact on every site for a word, and the field means the org that authored the content whoever installed it."
-    },
-    {
-      "path": "libs/aglyn/src/lib/app-utils/automation-placeholders.ts",
-      "rules": [
-        "domain-name",
-        "domain-exports:workflows",
-        "domain-declares:data",
-        "domain-declares:workflows"
-      ],
-      "lane": "workflows"
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/contact-custom-fields.ts",

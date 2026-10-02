@@ -75,7 +75,7 @@ describe('interaction builder doc serialization (AGL-570)', () => {
 
     // get-client-automations will surface it: the action validates, the
     // event is a site event, and the step is a client step.
-    expect(Aglyn.validateHostAction(candidate)).toBeNull()
+    expect(Aglyn.validateInteraction(candidate)).toBeNull()
     expect(Aglyn.isSiteEventType(candidate.trigger.event)).toBe(true)
     expect(Aglyn.isClientActionStep(candidate.steps[0])).toBe(true)
   })

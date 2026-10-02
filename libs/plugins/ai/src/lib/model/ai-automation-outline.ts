@@ -15,20 +15,22 @@
  * limitations under the License.
  */
 
+import { draftPlaceholderIn } from '@aglyn/aglyn/app-utils/draft-placeholders'
 import {
   CLIENT_ACTION_STEP_TYPES,
-  HOST_ACTION_STEP_LABELS,
-  type HostAction,
-  type HostActionStep,
-  type HostActionStepType,
-  type HostActionTriggerCondition,
+  type InteractionCondition,
   normalizeTriggerConditions,
-} from '@aglyn/aglyn/app-utils/actions'
-import { automationPlaceholderIn } from '@aglyn/aglyn/app-utils/automation-placeholders'
+} from '@aglyn/aglyn/app-utils/site-interactions'
 import { CONTACT_LIFECYCLE_STAGE_LABELS, type ContactLifecycleStage } from '@aglyn/aglyn/app-utils/crm'
 import { aiAutomationTriggerLabel } from './ai-workflow-job'
 import type { AiAutomationNamedRecord, AiAutomationRecords } from './ai-automation-draft'
 import type { AiWorkflowExplanation } from '../tools/ai-workflow-tool'
+import {
+  type AiAutomation,
+  type AiAutomationFormatStepType,
+  type AiAutomationStep,
+  aiStepLabel,
+} from './ai-automation-format'
 
 /**
  * What an explanation is asked from (AGL-2919): a saved automation, and one of
@@ -68,18 +70,18 @@ function quoted(value: unknown, max = AI_OUTLINE_VALUE_MAX_CHARS): string {
   return `"${text.length > max ? `${text.slice(0, max)}…` : text}"`
 }
 
-function conditionLine(condition: HostActionTriggerCondition): string {
+function conditionLine(condition: InteractionCondition): string {
   const field = String(condition.field ?? '')
   if (condition.op === 'notEmpty') return `${field} is not empty`
   const value = String(condition.value ?? '')
   const stage = CONTACT_LIFECYCLE_STAGE_LABELS[value as ContactLifecycleStage]
-  const placeholder = automationPlaceholderIn(value) ? ' (a placeholder nobody has filled in)' : ''
+  const placeholder = draftPlaceholderIn(value) ? ' (a placeholder nobody has filled in)' : ''
   return `${field} ${condition.op} ${stage ? `"${stage}"` : quoted(value)}${placeholder}`
 }
 
 /** The kind of site record each step that names one names. */
 export const AI_OUTLINE_RECORD_KINDS: Readonly<
-  Partial<Record<HostActionStepType, 'lists' | 'campaigns' | 'workflows' | 'webhooks' | 'datasets'>>
+  Partial<Record<AiAutomationFormatStepType, 'lists' | 'campaigns' | 'workflows' | 'webhooks' | 'datasets'>>
 > = {
   enrollList: 'lists',
   assignCampaign: 'campaigns',
@@ -90,8 +92,8 @@ export const AI_OUTLINE_RECORD_KINDS: Readonly<
 }
 
 /** The kinds of site record an action's steps name, each once. */
-export function aiActionRecordKinds(action: Pick<HostAction, 'steps'>): Array<keyof AiAutomationRecords> {
-  const kinds = (action.steps ?? []).map((step) => AI_OUTLINE_RECORD_KINDS[step?.type as HostActionStepType])
+export function aiActionRecordKinds(action: Pick<AiAutomation, 'steps'>): Array<keyof AiAutomationRecords> {
+  const kinds = (action.steps ?? []).map((step) => AI_OUTLINE_RECORD_KINDS[step?.type as AiAutomationFormatStepType])
   return [...new Set(kinds.filter((kind): kind is NonNullable<typeof kind> => Boolean(kind)))]
 }
 
@@ -101,7 +103,7 @@ function standing(
   name: unknown,
   records: readonly AiAutomationNamedRecord[] | null,
 ): string {
-  if (automationPlaceholderIn(name) && !String(id ?? '').trim()) {
+  if (draftPlaceholderIn(name) && !String(id ?? '').trim()) {
     return ' — a placeholder nobody has filled in'
   }
   if (!records) return ''
@@ -114,10 +116,10 @@ function standing(
 }
 
 function stepLine(
-  step: HostActionStep,
+  step: AiAutomationStep,
   records: AiAutomationRecords | null,
 ): string {
-  const label = HOST_ACTION_STEP_LABELS[step.type as HostActionStepType] ?? step.type
+  const label = aiStepLabel(step.type)
   const detail = (() => {
     switch (step.type) {
       case 'sendEmail':
@@ -189,7 +191,7 @@ function durationOf(minutes: unknown): string {
 
 /** A saved action as an outline. */
 export function aiActionOutline(
-  action: HostAction,
+  action: AiAutomation,
   records: AiAutomationRecords | null,
 ): string {
   const lines = [

@@ -15,18 +15,14 @@
  * limitations under the License.
  */
 
-import type {
-  HostAction,
-  HostActionStep,
-  HostActionStepGuard,
-  HostActionTriggerCondition,
-} from '@aglyn/aglyn/app-utils/actions'
 import {
-  automationPlaceholder,
-  automationPlaceholders,
-  describeAutomationPlaceholder,
-  type AutomationPlaceholder,
-} from '@aglyn/aglyn/app-utils/automation-placeholders'
+  describeInteractionPlaceholder,
+  draftPlaceholder,
+  type InteractionPlaceholder,
+  interactionPlaceholders,
+} from '@aglyn/aglyn/app-utils/draft-placeholders'
+import type { InteractionCondition, InteractionStepGuard } from '@aglyn/aglyn/app-utils/site-interactions'
+import type { AiAutomation, AiAutomationStep } from './ai-automation-format'
 import type {
   AiAutomationAnswer,
   AiAutomationAnswerStep,
@@ -127,20 +123,20 @@ function formOf(value: string, forms: readonly AiAutomationForm[]): AiAutomation
 function conditionOf(
   condition: AiAutomationCondition,
   records: AiAutomationRecords,
-): HostActionTriggerCondition {
+): InteractionCondition {
   const { field, op, value } = condition
   if (op === 'notEmpty' || value === null) return { field, op }
   if (field === 'formId') {
     const form = formOf(value, records.forms)
-    return { field, op, value: form ? form.id : automationPlaceholder(value) }
+    return { field, op, value: form ? form.id : draftPlaceholder(value) }
   }
   if (field === 'formName') {
     const form = formOf(value, records.forms)
-    return { field, op, value: form ? form.name : automationPlaceholder(value) }
+    return { field, op, value: form ? form.name : draftPlaceholder(value) }
   }
   if (field === 'stageId' || field === 'previousStageId') {
     const stage = aiMatchNamedRecord(value, records.stages, 'stage')
-    return { field, op, value: stage ? stage.id : automationPlaceholder(value) }
+    return { field, op, value: stage ? stage.id : draftPlaceholder(value) }
   }
   return { field, op, value }
 }
@@ -148,7 +144,7 @@ function conditionOf(
 function guardOf(
   when: AiAutomationCondition | null,
   records: AiAutomationRecords,
-): { when?: HostActionStepGuard } {
+): { when?: InteractionStepGuard } {
   return when ? { when: { conditions: [conditionOf(when, records)] } } : {}
 }
 
@@ -159,10 +155,10 @@ function referenceOf(
   noun: string,
 ): { id: string | null; name: string } {
   const record = aiMatchNamedRecord(words ?? '', records, noun)
-  return record ? { id: record.id, name: record.name } : { id: null, name: automationPlaceholder(words ?? '') }
+  return record ? { id: record.id, name: record.name } : { id: null, name: draftPlaceholder(words ?? '') }
 }
 
-function stepOf(step: AiAutomationAnswerStep, records: AiAutomationRecords): HostActionStep {
+function stepOf(step: AiAutomationAnswerStep, records: AiAutomationRecords): AiAutomationStep {
   const guard = guardOf(step.when, records)
   switch (step.type) {
     case 'sendEmail':
@@ -235,9 +231,9 @@ export const AI_AUTOMATION_DEFAULT_NAME = 'New automation'
 
 export interface AiAutomationDraft {
   /** The automation as the workflows plugin stores it: OFF. */
-  action: HostAction
+  action: AiAutomation
   /** What a person still has to supply before switching it on. */
-  placeholders: AutomationPlaceholder[]
+  placeholders: InteractionPlaceholder[]
 }
 
 /** An answer as the automation to store, with every record it names looked up. */
@@ -246,7 +242,7 @@ export function aiAutomationDraft(
   records: AiAutomationRecords,
 ): AiAutomationDraft {
   const conditions = answer.trigger.conditions.map((condition) => conditionOf(condition, records))
-  const action: HostAction = {
+  const action: AiAutomation = {
     name: answer.name || AI_AUTOMATION_DEFAULT_NAME,
     trigger: {
       event: answer.trigger.event,
@@ -255,7 +251,7 @@ export function aiAutomationDraft(
     steps: answer.steps.map((step) => stepOf(step, records)),
     enabled: false,
   }
-  return { action, placeholders: automationPlaceholders(action) }
+  return { action, placeholders: interactionPlaceholders(action) }
 }
 
 /**
@@ -267,7 +263,7 @@ export function aiAutomationDraftNote(draft: AiAutomationDraft, notes: readonly 
   if (draft.placeholders.length) {
     parts.push(
       `Fill in ${draft.placeholders.length === 1 ? 'its placeholder' : `its ${draft.placeholders.length} placeholders`} first — ${draft.placeholders
-        .map(describeAutomationPlaceholder)
+        .map(describeInteractionPlaceholder)
         .join('; ')}.`,
     )
   } else {

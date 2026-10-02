@@ -26,7 +26,7 @@
  * to the platform's own readers of a stored interaction.
  */
 
-import { validateHostAction } from '@aglyn/aglyn/app-utils/actions'
+import { validateStoredInteraction } from '@aglyn/aglyn/plugin-manager/interaction-step-checks'
 import { collectNodeInteractions } from '@aglyn/aglyn/app-utils/node-interactions'
 import {
   aiPageLinkSection,
@@ -96,7 +96,7 @@ describe('the interaction a link to a section carries', () => {
       ...interaction,
       trigger: { event: 'elementClick', everyTime: true, selector: '[data-aglyn="leaf:cta"]' },
     })
-    expect(validateHostAction(collected.action)).toBeNull()
+    expect(validateStoredInteraction(collected.action)).toBeNull()
   })
 
   it('is read back from a stored node by the section it scrolls to, and nothing else is', () => {

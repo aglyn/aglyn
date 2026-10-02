@@ -16,7 +16,7 @@
  */
 
 import type { HostTheme } from '@aglyn/shared-data-types'
-import { validateHostAction, type HostAction } from '@aglyn/aglyn/app-utils/actions'
+import { validateStoredInteraction } from '@aglyn/aglyn/plugin-manager/interaction-step-checks'
 import type { HostThemeSource } from '@aglyn/aglyn/app-utils/site-theme'
 import {
   aiAutomationDraft,
@@ -114,6 +114,7 @@ import {
 } from './ai-doctrine-validators'
 import { AI_TEXT_LIMITS, type AiOutputKind } from './ai-palette'
 import { expandAiRepeatedItems } from './ai-repeated-items'
+import type { AiAutomation } from '../model/ai-automation-format'
 
 /**
  * THE EVAL HARNESS (AGL-2937): the measure that gates every token lever.
@@ -470,7 +471,7 @@ export const AI_EVAL_AUTOMATION_CAPABILITIES: AiAutomationCapabilities = { crm: 
 /** A saved automation an automation brief asks about, as the workflow step reads one. */
 export interface AiEvalAutomation {
   /** The action as `hosts/{hostId}/actions/{id}` holds it. */
-  action: HostAction
+  action: AiAutomation
   /** A failed run of it; given, the brief asks why that run failed. */
   run?: AiRunRecord
 }
@@ -877,7 +878,7 @@ function checkWorkflow(evalCase: AiEvalCase, answer: unknown): Checked {
   const broken = found.filter((code) => !unreadable.includes(code) && !oversize.includes(code))
   const invalid =
     read.value && !read.value.unsupported
-      ? validateHostAction(aiAutomationDraft(read.value, evalCase.automationRecords ?? emptyAiAutomationRecords()).action)
+      ? validateStoredInteraction(aiAutomationDraft(read.value, evalCase.automationRecords ?? emptyAiAutomationRecords()).action)
       : null
   return {
     readable: unreadable.length === 0,
@@ -1325,7 +1326,7 @@ export function readAiEvalCase(raw: unknown, file: string): AiEvalCase {
   const automation = raw['automation']
   if (automation !== undefined) {
     const action = isRecord(automation) ? automation['action'] : undefined
-    const problem = isRecord(action) ? validateHostAction(action as unknown as HostAction) : 'it holds no action'
+    const problem = isRecord(action) ? validateStoredInteraction(action as unknown as AiAutomation) : 'it holds no action'
     if (problem) fail(`automation.action is not an action the Actions editor would save: ${problem}`)
     if (isRecord(automation) && automation['run'] !== undefined && !isRecord(automation['run'])) {
       fail('automation.run, where given, is what the run history recorded')

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { HostAction } from '@aglyn/aglyn'
+import type { InteractionStepBase, SiteInteraction } from '@aglyn/aglyn'
 import type { HostVariable } from '@aglyn/aglyn'
 
 /**
@@ -65,8 +65,35 @@ export interface AuditedVariable extends HostVariable {
   workflowName?: string
 }
 
+/**
+ * A stored automation step, as this audit reads it (AGL-3080): whatever its
+ * type, the references a step that acts on a record may carry, each by id and
+ * by the name it had when picked. The step vocabulary is the workflows
+ * plugin's; the audit reads only these fields of it.
+ */
+export interface AuditedActionStep extends InteractionStepBase {
+  workflowId?: string
+  workflowName?: string
+  datasetId?: string
+  datasetName?: string
+  listId?: string
+  listName?: string
+  campaignId?: string
+  campaignName?: string
+  overlayId?: string
+  overlayName?: string
+  webhookId?: string
+  webhookName?: string
+  screenId?: string
+}
+
+/** A stored automation, as this audit reads it. */
+export interface AuditedAction extends SiteInteraction<AuditedActionStep> {
+  $id: string
+}
+
 export interface ReferenceAuditInput {
-  actions?: Array<HostAction & { $id: string }>
+  actions?: AuditedAction[]
   workflows?: AuditedWorkflow[]
   variables?: AuditedVariable[]
   /** Screen node maps to scan for entity/screen-link references. */
@@ -148,8 +175,8 @@ export function auditHostReferences(
       } else if (step.type === 'redirect') {
         // Screen-id redirects (AGL-339) go stale when the screen is
         // deleted/unpublished.
-        if (!resolves(known.screens, (step as any).screenId)) {
-          push('screen', (step as any).screenId || '')
+        if (!resolves(known.screens, step.screenId)) {
+          push('screen', step.screenId || '')
         }
       }
     }

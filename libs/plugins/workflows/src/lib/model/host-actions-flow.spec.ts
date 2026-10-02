@@ -1,3 +1,15 @@
+import {
+  evaluateStepGuard,
+  interactionStepsForClient,
+} from '@aglyn/aglyn/app-utils/site-interactions'
+import {
+  FLOW_WAIT_MAX_MINUTES,
+  FLOW_WAIT_MIN_MINUTES,
+  type HostAction,
+  type HostActionStep,
+  isFlowSuspendingStep,
+  validateHostAction,
+} from './host-actions'
 /**
  * @license
  * Copyright 2026 Aglyn LLC
@@ -24,16 +36,6 @@
  * server half is still waiting on.
  */
 
-import {
-  evaluateStepGuard,
-  FLOW_WAIT_MAX_MINUTES,
-  FLOW_WAIT_MIN_MINUTES,
-  hostActionStepsForClient,
-  isFlowSuspendingStep,
-  type HostAction,
-  type HostActionStep,
-  validateHostAction,
-} from './actions'
 
 const flow = (steps: HostActionStep[]): HostAction => ({
   name: 'Welcome series',
@@ -213,7 +215,7 @@ describe('the browser never gets the steps the server is still waiting on', () =
       { type: 'wait', delayMinutes: 4320 },
       { type: 'showOverlay', overlayId: 'promo' },
     ]
-    expect(hostActionStepsForClient(steps).map((step) => step.type)).toEqual([
+    expect(interactionStepsForClient(steps).map((step) => step.type)).toEqual([
       'siteAlert',
     ])
   })
@@ -223,7 +225,7 @@ describe('the browser never gets the steps the server is still waiting on', () =
       { type: 'waitForEvent', eventName: 'orderPaid', timeoutMinutes: 60 },
       { type: 'siteAlert', message: 'Nope' },
     ]
-    expect(hostActionStepsForClient(steps)).toEqual([])
+    expect(interactionStepsForClient(steps)).toEqual([])
   })
 
   it('leaves a flow with no wait completely alone', () => {
@@ -231,7 +233,7 @@ describe('the browser never gets the steps the server is still waiting on', () =
       { type: 'siteAlert', message: 'Thanks' },
       { type: 'showOverlay', overlayId: 'promo' },
     ]
-    expect(hostActionStepsForClient(steps)).toHaveLength(2)
+    expect(interactionStepsForClient(steps)).toHaveLength(2)
   })
 
   it('names both suspending steps and nothing else', () => {

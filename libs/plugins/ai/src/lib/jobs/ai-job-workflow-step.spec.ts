@@ -56,7 +56,8 @@ jest.mock('./ai-jobs', () => ({
   registerAiJobStep: jest.fn(),
 }))
 
-import { validateHostAction, type HostAction } from '@aglyn/aglyn/app-utils/actions'
+import { validateStoredInteraction } from '@aglyn/aglyn/plugin-manager/interaction-step-checks'
+import type { AiAutomation } from '../model/ai-automation-format'
 import {
   registerPluginResourceDraftWriter,
   type PluginDraftRecord,
@@ -133,7 +134,7 @@ const firestore = {
 
 // ── The automation writer, as the workflows plugin registers one ─────────
 
-let drafts: Array<{ id: string; name: string; action: HostAction }> = []
+let drafts: Array<{ id: string; name: string; action: AiAutomation }> = []
 let refusal: { status: 403; error: string } | null = null
 
 const record = (draft: { id: string; name: string }): PluginDraftRecord => ({
@@ -146,7 +147,7 @@ const record = (draft: { id: string; name: string }): PluginDraftRecord => ({
 const automationWriter: PluginResourceDraftWriter = {
   refusal: async () => refusal,
   check: (content) => {
-    const problem = validateHostAction(content['action'] as HostAction)
+    const problem = validateStoredInteraction(content['action'] as AiAutomation)
     return problem ? { ok: false, problems: [problem] } : { ok: true, facts: {} }
   },
   read: async ({ id }) => {
@@ -156,8 +157,8 @@ const automationWriter: PluginResourceDraftWriter = {
   write: async (request) => {
     const existing = drafts.find((one) => one.id === request.id)
     if (existing) return { ok: true, replayed: true, ...record(existing) }
-    const action = request.content['action'] as HostAction
-    const problem = validateHostAction(action)
+    const action = request.content['action'] as AiAutomation
+    const problem = validateStoredInteraction(action)
     if (problem) return { ok: false, status: 400, error: problem }
     const draft = { id: request.id, name: request.name, action }
     drafts.push(draft)
@@ -235,7 +236,7 @@ function job(patch: Partial<AiJob> = {}): AiJob {
   } as AiJob
 }
 
-const SAVED_ACTION: HostAction = {
+const SAVED_ACTION: AiAutomation = {
   name: 'Welcome a new lead',
   trigger: {
     event: 'contactCreated',
@@ -323,7 +324,7 @@ describe('drafting an automation', () => {
         body: 'Thanks for joining our newsletter. Call us on [your phone number] with any question.',
       },
     ])
-    expect(validateHostAction(action)).toBeNull()
+    expect(validateStoredInteraction(action)).toBeNull()
     expect(outcome.outputs).toEqual([
       {
         resource: 'workflow',
