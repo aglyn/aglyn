@@ -939,15 +939,6 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
           omitted.
          */}
         {/*
-          WHO IT REACHED, before what it caused (AGL-3461): the visitors who
-          reached the campaign — on a page filed under it, or from a link
-          labeled for it — are the denominator every outcome below is read
-          against. One keyed read, keyed by this campaign's id.
-         */}
-        <CampaignVisitsSection orgId={orgId} campaignId={campaignId} />
-
-        <Divider />
-        {/*
           Conversions are recorded per SITE — they are that site's visitors —
           so the org hub reads them for one site at a time, defaulting to the
           first site the campaign is placed on.
@@ -983,6 +974,16 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
               'placed on one yet.'}
           </Typography>
         )}
+
+        <Divider />
+        {/*
+          WHO IT REACHED (AGL-3461), right under what it caused: the visitors
+          who reached the campaign — on a page filed under it, or from a link
+          labeled for it — are what the outcomes above are read against. Below
+          them, not above: the page opens on what the campaign did. One keyed
+          read, keyed by this campaign's id.
+         */}
+        <CampaignVisitsSection orgId={orgId} campaignId={campaignId} />
 
         <Divider />
         {/*
