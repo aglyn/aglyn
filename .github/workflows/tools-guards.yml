@@ -1071,6 +1071,12 @@ jobs:
       # and which enrollments are owed nothing.
       - run: npm run test:enrollment-activity-backfill
 
+      # AGL-3458. The lead form-campaign backfill's decisions — which campaigns
+      # a form lead is missing, the Campaign filter's keys they imply, that
+      # nothing is ever taken away and a filed lead plans zero — with the
+      # constants it restates held to the TypeScript that owns them.
+      - run: npm run test:lead-form-campaigns-backfill
+
       # AGL-3235. The one-record migration's decisions — which contact is a
       # duplicate of a lead and which a relationship, what a fold writes onto
       # the lead and never clears, what follows the person between records —
