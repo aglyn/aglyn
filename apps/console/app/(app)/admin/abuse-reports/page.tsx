@@ -289,8 +289,9 @@ interface SellerPatternRow {
 
 /**
  * An early fraud warning, a Radar review or a dispute on a charge, as
- * `paymentSignalPayload()` hands it over. Nothing was refunded or canceled;
- * the row links the org's Subscription card, where staff decide.
+ * `paymentSignalPayload()` hands it over: the newest signal, with every one
+ * the charge drew in `signals` (AGL-3490). The alert refunded and canceled
+ * nothing; the row links the org's Subscription card, where staff decide.
  */
 interface PaymentSignalRow {
   kind: string | null
@@ -302,6 +303,14 @@ interface PaymentSignalRow {
   detail: string | null
   livemode: boolean
   subscriptionCard: string | null
+  /** Every signal on the charge, oldest first; empty on an older row. */
+  signals: Array<{
+    kind: string
+    stripeObjectId: string
+    atMs: number | null
+    /** The row's status when it arrived, if staff had already closed it. */
+    arrivedAfter: string | null
+  }>
   checks: {
     cvcCheck: string | null
     addressPostalCodeCheck: string | null
@@ -1472,9 +1481,14 @@ function AdminAbuseReports() {
                       <Alert severity="error">
                         {report.category === 'csam'
                           ? 'CSAM is handled outside this queue: preserve the evidence, report to NCMEC, and follow the runbook. There is deliberately no self-service takedown button for this category, and there must not be one.'
-                          : 'Urgent and still open. The victim of this page is not our customer, and the reporter’s next move if we are silent is a domain-level block on *.' +
-                            TENANT_APEX +
-                            '.'}
+                          : report.paymentSignal ||
+                              report.source === 'stripe-seller-fraud-pattern'
+                            ? // A card, not a page (AGL-3490): there is no
+                              // reporter and no domain block in prospect.
+                              'Urgent and still open. A card that may not be its holder’s paid for this, and an unanswered fraud signal tends to end as a chargeback.'
+                            : 'Urgent and still open. The victim of this page is not our customer, and the reporter’s next move if we are silent is a domain-level block on *.' +
+                              TENANT_APEX +
+                              '.'}
                       </Alert>
                     ) : null}
 
@@ -1746,8 +1760,27 @@ function AdminAbuseReports() {
                                 `Radar risk ${report.paymentSignal.checks.riskLevel ?? 'unknown'}`}
                             </Typography>
                           ) : null}
+                          {report.paymentSignal.signals.length > 1 ? (
+                            <Typography variant="body2">
+                              {`Every signal on this charge: ${report.paymentSignal.signals
+                                .map(
+                                  (entry) =>
+                                    `${PAYMENT_SIGNAL_TITLES[entry.kind] ?? entry.kind}` +
+                                    (entry.atMs
+                                      ? ` ${new Date(entry.atMs).toLocaleDateString()}`
+                                      : '') +
+                                    (entry.arrivedAfter
+                                      ? ` (after the row was ${entry.arrivedAfter})`
+                                      : ''),
+                                )
+                                .join(' · ')}`}
+                            </Typography>
+                          ) : null}
                           <Typography variant="body2">
-                            {'Nothing has been refunded or canceled. Decide on the Subscription card, lock the workspace if it is fraud, then close this report with what you did.'}
+                            {report.status === 'actioned' ||
+                            report.status === 'dismissed'
+                              ? `This alert refunded and canceled nothing. The row is ${report.status}; what staff did is below.`
+                              : 'This alert refunded and canceled nothing. Decide on the Subscription card, lock the workspace if it is fraud, then close this report with what you did.'}
                           </Typography>
                           {report.paymentSignal.subscriptionCard ? (
                             <AppLink href={report.paymentSignal.subscriptionCard}>
