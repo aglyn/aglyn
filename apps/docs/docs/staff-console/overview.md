@@ -931,18 +931,37 @@ type — **Percent off** or **Fixed amount off** — a **Duration** of *Once*, *
 redemptions** cap and an expiry date. A coupon with no code is applied by staff to a
 subscription; a coupon with one can be typed by the customer at checkout.
 
-Before you commit, the form shows two verdicts.
+The three durations cover the usual deal terms:
 
-The **full-use floor** is binding. A code can be redeemed on any paid plan, monthly or
-annual, so the form prices the discount on every one of them as if the customer used
-everything the plan includes — every band at 100%, at the platform's own cost rates —
-and checks that the discounted price, after Stripe's fee, still covers that cost. A
-discount may spend the margin a plan carries above its full-use cost, never the cost
-itself. The form shows the worst case with its figures and the deepest percentage every
-plan can carry, and **Create coupon** stays disabled under the floor. The server refuses
-the same coupon, and the 40% sign-off does not lift the refusal. Turning a code back on is
-held to the same floor, and so is a code typed at checkout: one that would take that plan
-under its full-use cost is declined there, whoever minted it.
+| To offer | Choose | What it comes off |
+|---|---|---|
+| The first month off | *Once* | The first charge — the first month on monthly billing |
+| Off the annual purchase | *Once* | The first charge — on annual billing, the whole first year |
+| The first two (or N) months off | *Repeating*, 2 (or N) months | The charges in those months — on annual billing, the first annual charge |
+| A standing discount | *Forever* | Every charge |
+
+A fixed amount comes off each charge it reaches, so $100 off an annual purchase is $100
+off the year, not $100 a month.
+
+Before you commit, the form shows two readings. Neither stops you creating the coupon,
+apart from the sign-off a discount of 40% or more asks for.
+
+The **full-use cost** warning says what the discount spends. A code can be redeemed on
+any paid plan, monthly or annual, so the form prices the discount on every one of them as
+if the customer used everything the plan includes — every band at 100%, at the
+platform's own cost rates — on the charges the chosen duration reaches, after Stripe's
+fee. A discount that only spends the margin a plan carries above that cost is marked as
+covering it. One that reaches into the cost is shown as a warning: how many plan and
+billing combinations it is under on, and for the worst one, what each discounted charge
+keeps against what it costs, how far under that is, how many of the first twelve months
+it touches, and how the first year covers its cost as a whole. A first-month coupon
+can be under cost on its one charge and still leave the year well covered, and the
+warning says so. The form also shows the deepest percentage every plan carries on every
+charge. The coupon is created either way, and the server returns the same warning with it.
+Turning a code back on shows and returns the warning too, and a code a customer types at
+checkout is always applied — its verdict is recorded on the subscription in Stripe
+(`full_use_ok`, `full_use_coverage`, `full_use_first_year_coverage`) for staff to read,
+never shown to the customer.
 
 The **net-margin rating** is what is left after Stripe's fees and the cost of serving a
 typical customer. It is illustrative only: the binding check runs on the server when the
@@ -956,13 +975,19 @@ costs more than the floor, which no organization's usage does yet.
 
 #### Applying a coupon and quoting a custom price {#discount-floors}
 
-A coupon applied from an organization's page is rated on **that** organization: its plan,
-its entitlement overrides, the sites and seats it bought, and the price it actually pays.
-The card shows the full-use verdict beside the net-margin rating. **Apply to
-subscription** is refused below the full-use floor, and **Override the margin floor**
-overrides only the net-margin rating.
+A coupon applied from an organization's page is judged on **that** organization: its
+plan, its entitlement overrides, the sites and seats it bought, the price it actually pays
+and its billing interval, on the charges the coupon's duration reaches. The card shows the
+full-use warning beside the net-margin rating, and the apply route returns it with its
+answer. It does not stop the discount: only the net-margin rating's **block** asks for
+**Override the margin floor**, exactly as before.
 
-The **Enterprise custom billing** card holds a negotiated price to a higher bar: after
+The cancel flow's winback discount (50% off for two months) is offered and applied as
+before. Its full-use verdict on this organization is recorded on the applied winback for
+staff, never shown to the customer.
+
+The **Enterprise custom billing** card is the one place the full-use cost is a hard
+limit. A negotiated price is held to a higher bar: after
 Stripe's fee it must cover **1.3×** what the organization would cost using every band
 the deal's base plan, its overrides and its add-ons include. The card shows the figure as
 you type, and provisioning is refused below it, with the floor and the figures in the
@@ -995,9 +1020,10 @@ that is active, so a deactivated code is reported to the customer as one we do n
 recognize — deactivating is how a code is pulled mid-campaign, and activating is how a
 code that was turned off is put back. Both directions ask for confirmation first and are
 recorded in the staff audit log; turning a code back on for a discount of 40% or more
-also asks for the same sign-off creating it would, and a code under the full-use floor
-cannot be turned back on at all. A discount already applied to a subscription is
-unaffected either way.
+also asks for the same sign-off creating it would, and shows the code's full-use warning.
+A discount already applied to a subscription is unaffected either way. The list's
+**Full-use cost** column marks each coupon as covering its cost or under it, with the
+worst plan's coverage; hover it for the figures.
 
 ### Do not contact {#contact-suppressions}
 

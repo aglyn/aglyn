@@ -59,14 +59,20 @@ import {
  * a purchased add-on all cost what they deliver. That spec holds its own
  * independent model and asserts this function agrees with it on every plan.
  *
+ * Two readers, held to it differently. An enterprise quote must clear
+ * `FULL_USE_QUOTE_MULTIPLE` × the cost and is refused below it. A coupon or
+ * discount is judged on the charges it reaches and WARNED about below 1× —
+ * never refused, because a first-month or first-year discount that spends
+ * cost to close a deal is a decision staff are allowed to make.
+ *
  * ## An unbounded band costs Infinity, never 0
  *
  * A band that is `UNLIMITED` cannot be costed, and every cost model in this
  * repo that scored one as zero reported the largest line item on a plan as
  * contributing nothing. So a non-finite term — or one that is `NaN` because a
  * zero met an infinity — is `Infinity`, the total is `Infinity`, and no price
- * clears it. The term is named in `unbounded` so a refusal can say which band
- * to bound.
+ * clears it. The term is named in `unbounded` so a refusal or a warning can
+ * say which band to bound.
  */
 
 /**
@@ -96,9 +102,10 @@ const VIEWS_PER_GB = (1024 * 1024 * 1024) / ESTIMATED_PAGE_TRANSFER_BYTES
 export const FULL_USE_QUOTE_MULTIPLE = METERED_MARKUP
 
 /**
- * How many times its full-use cost a discounted price must still cover, net
- * of Stripe: 1×. A discount may spend the 30% the price carries above cost,
- * never the cost itself.
+ * The full-use cost a discounted charge is judged against, net of Stripe: 1×.
+ * A discount that spends only the 30% a price carries above cost clears it;
+ * one that reaches into the cost is WARNED about, never refused — a coupon is
+ * a tool for closing a deal, and staff choose to spend cost on one knowingly.
  */
 export const FULL_USE_DISCOUNT_MULTIPLE = 1
 
@@ -332,11 +339,10 @@ export function rateAgainstFullUse(input: {
 
 /**
  * An org's subscription after `discount`, against `multiple` × its full-use
- * cost — the per-org check behind applying a coupon, the winback offer and
- * an enterprise quote (whose negotiated `customMonthlyUsd` is the list
- * price). `org` must carry its subscription: a list price of 0 rates against
- * nothing and fails, so a caller holding a stale mirror is refused rather
- * than waved through.
+ * cost — the enterprise quote floor, where the negotiated `customMonthlyUsd`
+ * is the list price. `org` must carry its subscription: a list price of 0
+ * rates against nothing and fails, so a caller holding a stale mirror is
+ * refused rather than waved through.
  */
 export function orgFullUseFloor(
   org: Partial<AglynOrgBilling> | null | undefined,
@@ -354,54 +360,210 @@ export function orgFullUseFloor(
   })
 }
 
-/** One plan and interval a coupon could be redeemed on, rated. */
-export interface CouponFullUseCase extends FullUseFloorResult {
+/** How long a coupon takes its discount off — Stripe's `duration` and `duration_in_months`. */
+export interface CouponDuration {
+  duration?: string | null
+  durationInMonths?: number | null
+}
+
+/** Which charges a discount reaches on one billing interval. */
+export interface DiscountReach {
+  /** Stripe's duration, or `unknown` when none is on record — judged as `forever`. */
+  duration: 'once' | 'repeating' | 'forever' | 'unknown'
+  /** How many charges it comes off; `Infinity` for every one. */
+  charges: number
+  /** The months one charge pays for: 1 billed monthly, 12 billed annually. */
+  monthsPerCharge: 1 | 12
+  /** How many of the first twelve months the discounted charges pay for. */
+  monthsOfFirstYear: number
+}
+
+/**
+ * Which charges a coupon of `duration` comes off (AGL-3473).
+ *
+ * `once` is the first charge: the first month billed monthly, the whole first
+ * year billed annually. `repeating` covers the invoices dated within its
+ * months of redemption: N monthly charges, or — billed annually — the annual
+ * charges that fall inside them, which is the first one for any N up to 12.
+ * `forever` is every charge. A duration not on record is judged as
+ * `forever`, the reading that cannot understate what a discount gives away.
+ */
+export function discountReach(
+  coupon: CouponDuration | null | undefined,
+  annual: boolean,
+): DiscountReach {
+  const monthsPerCharge = annual ? 12 : 1
+  const months = Math.floor(Number(coupon?.durationInMonths))
+  if (coupon?.duration === 'once') {
+    return { duration: 'once', charges: 1, monthsPerCharge, monthsOfFirstYear: monthsPerCharge }
+  }
+  if (coupon?.duration === 'repeating' && months >= 1) {
+    return annual
+      ? { duration: 'repeating', charges: Math.ceil(months / 12), monthsPerCharge, monthsOfFirstYear: 12 }
+      : { duration: 'repeating', charges: months, monthsPerCharge, monthsOfFirstYear: Math.min(months, 12) }
+  }
+  return {
+    duration: coupon?.duration === 'forever' ? 'forever' : 'unknown',
+    charges: Number.POSITIVE_INFINITY,
+    monthsPerCharge,
+    monthsOfFirstYear: 12,
+  }
+}
+
+/**
+ * A discount against full-use cost on the charges it actually reaches, and on
+ * the first year as a whole. `ok` and `coverage` are one DISCOUNTED charge's:
+ * the warning is about the charges a coupon touches, never about the ones it
+ * does not.
+ */
+export interface DiscountFullUseAssessment extends FullUseFloorResult {
+  reach: DiscountReach
+  /** What one discounted charge keeps, net of Stripe. */
+  chargeNetUsd: number
+  /** What the months one charge pays for cost at full use. */
+  chargeCogsUsd: number
+  /** How far under its full-use cost each discounted charge falls; 0 when it clears. */
+  chargeUnderCostUsd: number
+  /** The first twelve months together: the discounted charges, the rest at list. */
+  firstYearNetUsd: number
+  firstYearCogsUsd: number
+  /** `firstYearNetUsd / firstYearCogsUsd`; 0 when the cost is unbounded. */
+  firstYearCoverage: number
+  /** How far under twelve months of full-use cost the first year falls; 0 when covered. */
+  firstYearUnderCostUsd: number
+}
+
+/** `cost − net`, never negative; an unbounded cost is an unbounded shortfall. */
+function shortfall(cogsUsd: number, netUsd: number): number {
+  if (!Number.isFinite(cogsUsd)) return Number.POSITIVE_INFINITY
+  return Math.max(0, Math.round((cogsUsd - netUsd) * 100) / 100)
+}
+
+/**
+ * Judge a discount on one price against full-use cost — pure: the callers
+ * below bring the price, the cost and the coupon.
+ */
+export function assessDiscountAgainstFullUse(input: {
+  listMonthlyUsd: number
+  annual: boolean
+  cogs: FullUseCogsResult
+  discount: Pick<OrgDiscount, 'percentOff' | 'amountOffUsd'> | null | undefined
+  duration: CouponDuration | null | undefined
+}): DiscountFullUseAssessment {
+  const charge = rateAgainstFullUse({ ...input, multiple: FULL_USE_DISCOUNT_MULTIPLE })
+  const undiscounted = rateAgainstFullUse({
+    ...input,
+    discount: null,
+    multiple: FULL_USE_DISCOUNT_MULTIPLE,
+  })
+  const reach = discountReach(input.duration, input.annual)
+  const chargeNetUsd = Math.round(charge.netUsd * reach.monthsPerCharge * 100) / 100
+  const chargeCogsUsd = charge.fullUseCogsUsd * reach.monthsPerCharge
+  const firstYearNetUsd =
+    Math.round(
+      (charge.netUsd * reach.monthsOfFirstYear +
+        undiscounted.netUsd * (12 - reach.monthsOfFirstYear)) *
+        100,
+    ) / 100
+  const firstYearCogsUsd = charge.fullUseCogsUsd * 12
+  return {
+    ...charge,
+    reach,
+    chargeNetUsd,
+    chargeCogsUsd,
+    chargeUnderCostUsd: shortfall(chargeCogsUsd, chargeNetUsd),
+    firstYearNetUsd,
+    firstYearCogsUsd,
+    firstYearCoverage:
+      Number.isFinite(firstYearCogsUsd) && firstYearCogsUsd > 0
+        ? firstYearNetUsd / firstYearCogsUsd
+        : 0,
+    firstYearUnderCostUsd: shortfall(firstYearCogsUsd, firstYearNetUsd),
+  }
+}
+
+/**
+ * A discount on an org as it bills — its plan, overrides, add-ons, interval
+ * and the price it pays — against its full-use cost: the warning behind
+ * applying a coupon to an org and behind the winback. A list price of 0 (no
+ * subscription on record) is reported as such, never as covered.
+ */
+export function orgDiscountFullUse(
+  org: Partial<AglynOrgBilling> | null | undefined,
+  discount: Pick<OrgDiscount, 'percentOff' | 'amountOffUsd'> | null | undefined,
+  duration: CouponDuration | null | undefined,
+): DiscountFullUseAssessment {
+  return assessDiscountAgainstFullUse({
+    listMonthlyUsd: orgListPriceMonthlyUsd(org),
+    annual: org?.subscription?.interval === 'year',
+    cogs: orgFullUseCogs(org),
+    discount,
+    duration,
+  })
+}
+
+/** One plan and interval a coupon could be redeemed on, judged. */
+export interface CouponFullUseCase extends DiscountFullUseAssessment {
   plan: OrgPlan
   interval: 'month' | 'year'
 }
 
 export interface CouponFullUseVerdict {
+  /** Every case clears: no discounted charge, on any plan, falls under its full-use cost. */
   ok: boolean
-  /** Every paid self-serve plan, monthly and annual, rated. */
+  /** Every paid self-serve plan, monthly and annual, judged. */
   cases: CouponFullUseCase[]
-  /** The case with the least cover — the one that decides `ok`. */
+  /** The case with the least cover — the one the warning leads with. */
   worst: CouponFullUseCase
+  /** The cases under full-use cost, as "Agency, annual". */
+  under: string[]
+  /** The staff warning, with the figures; `null` when every case clears. */
+  warning: string | null
 }
 
 /**
- * Rate a coupon or promotion code before it exists (AGL-3473).
+ * Judge a coupon or promotion code against full-use cost before it is minted
+ * (AGL-3473) — a WARNING for staff, never a refusal.
  *
- * A coupon minted here carries no plan restriction, so it can be redeemed on
- * any paid self-serve plan, on either interval, and its worst case is the
- * case it has to clear. Each is priced at that plan's list price for the
- * interval, against the plan's own bands at 100% — at
- * `FULL_USE_DISCOUNT_MULTIPLE`, so the discount may spend the margin above
- * cost and never the cost. Enterprise is quoted per deal and never takes a
- * code at checkout; a coupon applied to one is rated on that org.
+ * A coupon here carries no plan restriction, so its code can be redeemed on
+ * any paid self-serve plan, on either interval, by a customer using
+ * everything the plan includes; each case is that plan's list price against
+ * its own bands at 100%, on the charges `duration` reaches. Enterprise is
+ * quoted per deal and never takes a code at checkout; a coupon applied to one
+ * is judged on that org.
  */
 export function rateCouponAgainstFullUse(
   discount: Pick<OrgDiscount, 'percentOff' | 'amountOffUsd'>,
+  duration?: CouponDuration | null,
 ): CouponFullUseVerdict {
   const cases: CouponFullUseCase[] = []
   for (const plan of SELF_SERVE_PLANS) {
     if (!(PLAN_PRICING[plan]?.basePriceMonthlyUsd > 0)) continue
     for (const interval of ['month', 'year'] as const) {
       const org = { plan, subscription: { status: 'active', interval } } as never
-      cases.push({
-        plan,
-        interval,
-        ...orgFullUseFloor(org, { multiple: FULL_USE_DISCOUNT_MULTIPLE, discount }),
-      })
+      cases.push({ plan, interval, ...orgDiscountFullUse(org, discount, duration) })
     }
   }
   const worst = cases.reduce((least, one) => (one.coverage < least.coverage ? one : least))
-  return { ok: cases.every((one) => one.ok), cases, worst }
+  const under = cases.filter((one) => !one.ok).map(couponCaseLabel)
+  const ok = under.length === 0
+  return {
+    ok,
+    cases,
+    worst,
+    under,
+    warning: ok
+      ? null
+      : `Under full-use cost on ${under.length} of ${cases.length} plan and billing ` +
+        `combinations (${under.join('; ')}). Worst case ` +
+        describeDiscountFullUse(worst, couponCaseLabel(worst)),
+  }
 }
 
 /**
- * The deepest whole percent off a coupon can take and still clear the
- * full-use floor on every paid self-serve plan, or `null` when a plan is
- * under it at list price and no discount clears.
+ * The deepest whole percent off a coupon can take with every discounted
+ * charge, on every paid self-serve plan, still covering its full-use cost —
+ * or `null` when a plan is under it at list price.
  */
 export function deepestCouponPercentWithinFullUse(): number | null {
   if (!rateCouponAgainstFullUse({}).ok) return null
@@ -412,14 +574,67 @@ export function deepestCouponPercentWithinFullUse(): number | null {
   return deepest
 }
 
+/** Which charges a reach names, in words. */
+function chargesReached(reach: DiscountReach): string {
+  const annual = reach.monthsPerCharge === 12
+  if (reach.duration === 'unknown') return 'every charge (no duration on record)'
+  if (!Number.isFinite(reach.charges)) {
+    return annual ? 'every annual charge' : 'every monthly charge'
+  }
+  if (annual) {
+    return reach.charges === 1
+      ? 'the first annual charge (the whole first year)'
+      : `the first ${reach.charges} annual charges`
+  }
+  return reach.charges === 1
+    ? "the first month's charge"
+    : `the first ${reach.charges} monthly charges`
+}
+
+/**
+ * The staff sentence for a discount against full-use cost: which charges it
+ * reaches, what each keeps against what its months cost, how far under, and
+ * the first year as a whole. Staff-facing only — it names Aglyn's cost.
+ */
+export function describeDiscountFullUse(
+  result: DiscountFullUseAssessment,
+  subject?: string,
+): string {
+  const about = subject ? `${subject}: ` : ''
+  if (result.unbounded.length) {
+    return (
+      `${about}cannot be costed — ${result.unbounded.join(', ')} ` +
+      `${result.unbounded.length === 1 ? 'is' : 'are'} unbounded, so the full-use cost is too.`
+    )
+  }
+  if (!(result.listUsd > 0)) {
+    return `${about}no subscription price is on record to judge the discount against.`
+  }
+  const each =
+    `${chargesReached(result.reach)}: each keeps ${usd(result.chargeNetUsd)} net of ` +
+    `Stripe against ${usd(result.chargeCogsUsd)} of full-use cost ` +
+    `(${result.coverage.toFixed(2)}×`
+  if (result.ok) return `${about}clears full-use cost on ${each}).`
+  const year =
+    `It touches ${result.reach.monthsOfFirstYear} of the first 12 months; the first ` +
+    `year as a whole covers ${result.firstYearCoverage.toFixed(2)}×` +
+    (result.firstYearUnderCostUsd > 0
+      ? ` (${usd(result.firstYearUnderCostUsd)} under).`
+      : '.')
+  return (
+    `${about}under full-use cost on ${each}, ${usd(result.chargeUnderCostUsd)} under ` +
+    `each). ${year}`
+  )
+}
+
 /** Two decimals, or "unbounded". */
 function usd(value: number): string {
   return Number.isFinite(value) ? `$${value.toFixed(2)}` : 'unbounded'
 }
 
 /**
- * The sentence a refusal or a staff verdict states: the floor, and the
- * figures that missed it. Staff-facing only — it names Aglyn's cost.
+ * The sentence an enterprise quote refusal or verdict states: the floor, and
+ * the figures that missed it. Staff-facing only — it names Aglyn's cost.
  */
 export function describeFullUseFloor(
   result: FullUseFloorResult,

@@ -20,9 +20,12 @@ import {
   FULL_USE_QUOTE_MULTIPLE,
   SEAT_COGS_USD_PER_MONTH,
   deepestCouponPercentWithinFullUse,
+  describeDiscountFullUse,
   describeFullUseFloor,
+  discountReach,
   fullUseCogs,
   fullUseMonthlyCogsUsd,
+  orgDiscountFullUse,
   orgFullUseCogs,
   orgFullUseFloor,
   rateAgainstFullUse,
@@ -148,23 +151,109 @@ describe('the enterprise quote floor — cost + 30% net of Stripe', () => {
   })
 })
 
-describe('the coupon floor — never below cost', () => {
-  it('lets a ~20% discount spend the margin of a price with headroom, and refuses one that crosses 1.0×', () => {
-    const cogs = fullUseMonthlyCogsUsd(PLAN_ENTITLEMENTS.pro)
-    const org = quoted('pro', priceNetting(1.3, cogs))
-    const twenty = orgFullUseFloor(org, {
-      multiple: FULL_USE_DISCOUNT_MULTIPLE,
-      discount: { percentOff: 20 },
-    })
+describe('the coupon warning — judged on the charges a coupon reaches, never a refusal', () => {
+  const proCogs = () => fullUseMonthlyCogsUsd(PLAN_ENTITLEMENTS.pro)
+  /** Pro at a price netting exactly cost + 30%, billed `interval`. */
+  const proWithHeadroom = (interval = 'month') =>
+    quoted('pro', priceNetting(1.3, proCogs()), interval)
+
+  it('lets a ~20% discount spend the margin of a price with headroom, and warns at one that crosses 1.0×', () => {
+    const twenty = orgDiscountFullUse(proWithHeadroom(), { percentOff: 20 }, { duration: 'forever' })
     expect(twenty.ok).toBe(true)
     expect(twenty.coverage).toBeGreaterThanOrEqual(1)
     expect(twenty.coverage).toBeLessThan(1.3)
-    const twentyFive = orgFullUseFloor(org, {
-      multiple: FULL_USE_DISCOUNT_MULTIPLE,
-      discount: { percentOff: 25 },
-    })
+    expect(describeDiscountFullUse(twenty)).toMatch(/^clears full-use cost on every monthly charge/)
+
+    const twentyFive = orgDiscountFullUse(proWithHeadroom(), { percentOff: 25 }, { duration: 'forever' })
     expect(twentyFive.ok).toBe(false)
     expect(twentyFive.coverage).toBeLessThan(1)
+    expect(twentyFive.chargeUnderCostUsd).toBeGreaterThan(0)
+    const sentence = describeDiscountFullUse(twentyFive)
+    expect(sentence).toMatch(/^under full-use cost on every monthly charge/)
+    expect(sentence).toContain(`$${twentyFive.chargeUnderCostUsd.toFixed(2)} under each`)
+    expect(sentence).toContain('It touches 12 of the first 12 months')
+  })
+
+  it('reads Stripe’s three durations as the charges they reach', () => {
+    expect(discountReach({ duration: 'once' }, false)).toEqual({
+      duration: 'once',
+      charges: 1,
+      monthsPerCharge: 1,
+      monthsOfFirstYear: 1,
+    })
+    // Off the annual purchase: one charge, and it pays for the whole year.
+    expect(discountReach({ duration: 'once' }, true)).toMatchObject({
+      charges: 1,
+      monthsPerCharge: 12,
+      monthsOfFirstYear: 12,
+    })
+    expect(discountReach({ duration: 'repeating', durationInMonths: 2 }, false)).toMatchObject({
+      charges: 2,
+      monthsOfFirstYear: 2,
+    })
+    expect(discountReach({ duration: 'repeating', durationInMonths: 18 }, false)).toMatchObject({
+      charges: 18,
+      monthsOfFirstYear: 12,
+    })
+    // Billed annually, N months reach the annual charges dated inside them.
+    expect(discountReach({ duration: 'repeating', durationInMonths: 2 }, true)).toMatchObject({
+      charges: 1,
+      monthsOfFirstYear: 12,
+    })
+    expect(discountReach({ duration: 'repeating', durationInMonths: 13 }, true)).toMatchObject({
+      charges: 2,
+    })
+    expect(discountReach({ duration: 'forever' }, false).charges).toBe(Number.POSITIVE_INFINITY)
+    // No duration on record is judged as every charge, never as one.
+    expect(discountReach(null, false)).toMatchObject({
+      duration: 'unknown',
+      charges: Number.POSITIVE_INFINITY,
+      monthsOfFirstYear: 12,
+    })
+  })
+
+  it('judges a first-month discount on the first month, and the year as a whole beside it', () => {
+    const once = orgDiscountFullUse(proWithHeadroom(), { percentOff: 25 }, { duration: 'once' })
+    // The one discounted charge is under cost, exactly as a forever one would be…
+    expect(once.ok).toBe(false)
+    expect(once.reach.monthsOfFirstYear).toBe(1)
+    // …but the other eleven months are at list, and the year covers its cost.
+    expect(once.firstYearCoverage).toBeGreaterThan(1)
+    expect(once.firstYearUnderCostUsd).toBe(0)
+    expect(once.firstYearNetUsd).toBeCloseTo(
+      once.netUsd + 11 * netOfProcessorFee(priceNetting(1.3, proCogs())),
+      2,
+    )
+    const sentence = describeDiscountFullUse(once)
+    expect(sentence).toMatch(/^under full-use cost on the first month's charge/)
+    expect(sentence).toContain('It touches 1 of the first 12 months')
+    expect(sentence).not.toMatch(/\(\$[\d.]+ under\)\.$/)
+
+    const twoMonths = orgDiscountFullUse(
+      proWithHeadroom(),
+      { percentOff: 25 },
+      { duration: 'repeating', durationInMonths: 2 },
+    )
+    expect(describeDiscountFullUse(twoMonths)).toMatch(/^under full-use cost on the first 2 monthly charges/)
+    expect(twoMonths.firstYearCoverage).toBeLessThan(once.firstYearCoverage)
+  })
+
+  it('judges a discount off the annual purchase on the whole first year', () => {
+    const annual = orgDiscountFullUse(proWithHeadroom('year'), { percentOff: 25 }, { duration: 'once' })
+    expect(annual.ok).toBe(false)
+    expect(annual.reach).toMatchObject({ charges: 1, monthsPerCharge: 12, monthsOfFirstYear: 12 })
+    // One charge pays for twelve months, so it is costed as twelve.
+    expect(annual.chargeCogsUsd).toBeCloseTo(12 * annual.fullUseCogsUsd, 6)
+    expect(annual.firstYearCoverage).toBeCloseTo(annual.coverage, 2)
+    expect(describeDiscountFullUse(annual)).toMatch(
+      /^under full-use cost on the first annual charge \(the whole first year\)/,
+    )
+  })
+
+  it('says when there is no price to judge against, rather than calling it covered', () => {
+    const none = orgDiscountFullUse({ plan: 'pro' } as never, { percentOff: 10 }, { duration: 'once' })
+    expect(none.ok).toBe(false)
+    expect(describeDiscountFullUse(none)).toMatch(/no subscription price is on record/)
   })
 
   it('takes an amount off each CHARGE — a twelfth of it a month on annual billing', () => {
@@ -193,25 +282,34 @@ describe('the coupon floor — never below cost', () => {
     expect(annual.discountedUsd).toBe(95)
   })
 
-  it('rates a coupon on every paid plan at both intervals, and the worst case decides', () => {
-    const verdict = rateCouponAgainstFullUse({ percentOff: 10 })
+  it('judges a coupon on every paid plan at both intervals, and leads with the worst case', () => {
+    const duration = { duration: 'repeating', durationInMonths: 2 }
+    const verdict = rateCouponAgainstFullUse({ percentOff: 10 }, duration)
     const paid = SELF_SERVE_PLANS.filter((plan) => PLAN_PRICING[plan].basePriceMonthlyUsd > 0)
     expect(verdict.cases).toHaveLength(paid.length * 2)
     for (const one of verdict.cases) {
       expect(one.coverage).toBeGreaterThanOrEqual(verdict.worst.coverage)
-      // Each case is the per-org check on that plan's own list price.
-      const direct = orgFullUseFloor(
+      // Each case is the per-org judgment on that plan's own list price.
+      const direct = orgDiscountFullUse(
         { plan: one.plan, subscription: { status: 'active', interval: one.interval } } as never,
-        { multiple: FULL_USE_DISCOUNT_MULTIPLE, discount: { percentOff: 10 } },
+        { percentOff: 10 },
+        duration,
       )
       expect(one.netUsd).toBe(direct.netUsd)
       expect(one.ok).toBe(direct.ok)
+      expect(one.firstYearCoverage).toBe(direct.firstYearCoverage)
     }
     expect(verdict.ok).toBe(verdict.cases.every((one) => one.ok))
-    // CONTROL: the detector can say no on every plan.
-    const free = rateCouponAgainstFullUse({ percentOff: 100 })
+    expect(verdict.warning === null).toBe(verdict.ok)
+    // CONTROL: the detector can say "under" on every plan — and it is a
+    // warning with the figures, which is all it ever is.
+    const free = rateCouponAgainstFullUse({ percentOff: 100 }, { duration: 'once' })
     expect(free.ok).toBe(false)
-    expect(free.cases.every((one) => !one.ok)).toBe(true)
+    expect(free.under).toHaveLength(free.cases.length)
+    expect(free.warning).toMatch(
+      new RegExp(`^Under full-use cost on ${free.cases.length} of ${free.cases.length} plan`),
+    )
+    expect(free.warning).toContain('Worst case')
   })
 
   it('reports the deepest percent every plan carries, and it is the edge', () => {

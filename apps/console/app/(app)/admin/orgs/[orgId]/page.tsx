@@ -37,9 +37,10 @@ import {
 } from '@aglyn/aglyn'
 import { pluginOrgCapacities } from '@aglyn/aglyn/plugin-manager/plugin-org-capacity'
 import {
-  FULL_USE_DISCOUNT_MULTIPLE,
   FULL_USE_QUOTE_MULTIPLE,
+  describeDiscountFullUse,
   describeFullUseFloor,
+  orgDiscountFullUse,
   orgFullUseFloor,
 } from '@aglyn/aglyn/app-utils/full-use-cost'
 import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
@@ -801,6 +802,8 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
       name: string | null
       percentOff: number | null
       amountOffUsd: number | null
+      duration: string | null
+      durationInMonths: number | null
     }>
   >([])
   const [selectedCoupon, setSelectedCoupon] = useState('')
@@ -855,20 +858,24 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
     )
   }, [org, selectedCouponObj, cogsReady, usageLatest])
   /**
-   * The same coupon against the full-use floor (AGL-3473) — the org using
-   * every band it resolves to, at the discounted price, net of Stripe. The
-   * apply route refuses below it and the override above does not lift it,
-   * so it is shown beside the rating and holds the button.
+   * The same coupon against this org's full-use cost (AGL-3473) — the org
+   * using every band it resolves to, on the charges the coupon's duration
+   * reaches, net of Stripe. A warning beside the rating, never a gate: the
+   * apply route returns the same verdict and applies the coupon all the same.
    */
   const discountFullUse = useMemo(() => {
     if (!org || !selectedCouponObj) return null
-    return orgFullUseFloor(org as never, {
-      multiple: FULL_USE_DISCOUNT_MULTIPLE,
-      discount: {
+    return orgDiscountFullUse(
+      org as never,
+      {
         percentOff: selectedCouponObj.percentOff ?? undefined,
         amountOffUsd: selectedCouponObj.amountOffUsd ?? undefined,
       },
-    })
+      {
+        duration: selectedCouponObj.duration,
+        durationInMonths: selectedCouponObj.durationInMonths,
+      },
+    )
   }, [org, selectedCouponObj])
 
   const handleApplyDiscount = async () => {
@@ -893,6 +900,12 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
         })
       }
       enqueueSnackbar('Discount applied', { variant: 'success' })
+      if (payload?.fullUse?.warning) {
+        enqueueSnackbar(`Under full-use cost. ${payload.fullUse.warning}`, {
+          variant: 'warning',
+          autoHideDuration: 15000,
+        })
+      }
       setSelectedCoupon('')
       setDiscountReason('')
       setConfirmBelowFloor(false)
@@ -1902,6 +1915,10 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                                 coupon.percentOff != null
                                   ? `${coupon.percentOff}%`
                                   : `$${coupon.amountOffUsd}`
+                              } · ${
+                                coupon.duration === 'repeating'
+                                  ? `${coupon.durationInMonths ?? '?'} mo`
+                                  : (coupon.duration ?? 'duration unknown')
                               }`}
                             </MenuItem>
                           ))}
@@ -1967,14 +1984,16 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                         ) : null}
                         {discountFullUse ? (
                           <Alert
-                            severity={discountFullUse.ok ? 'success' : 'error'}
+                            severity={discountFullUse.ok ? 'success' : 'warning'}
                           >
+                            {/* A warning, not a gate (AGL-3473): applying
+                                is staff's call, and this is what it spends
+                                if the org uses everything it bought. */}
                             {(discountFullUse.ok
-                              ? 'Full-use floor: clears. '
-                              : 'Full-use floor: under it — the apply route ' +
-                                'refuses this, with no override. ') +
-                              'Discounted, it ' +
-                              describeFullUseFloor(discountFullUse)}
+                              ? 'Covers full-use cost. '
+                              : 'Under full-use cost — the discount can still ' +
+                                'be applied. ') +
+                              describeDiscountFullUse(discountFullUse, 'On this org')}
                           </Alert>
                         ) : null}
                         {discountRating?.rating === 'block' ? (
@@ -2003,7 +2022,6 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                             // is the same "act before the answer arrives"
                             // failure one layer up.
                             !discountRating ||
-                            discountFullUse?.ok === false ||
                             (discountRating.rating === 'block' &&
                               !confirmBelowFloor)
                           }

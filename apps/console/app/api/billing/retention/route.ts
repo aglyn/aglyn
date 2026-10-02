@@ -44,10 +44,7 @@ import {
   WINBACK_PERCENT_OFF,
 } from '../../_lib/retention'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
-import {
-  FULL_USE_DISCOUNT_MULTIPLE,
-  orgFullUseFloor,
-} from '@aglyn/aglyn/app-utils/full-use-cost'
+import { orgDiscountFullUse } from '@aglyn/aglyn/app-utils/full-use-cost'
 
 // lockdown-423: exempt — the retention funnel is part of the LEAVE path
 // (survey → downsell → winback → cancel); a billing lockdown must not trap
@@ -94,19 +91,6 @@ function hasExistingDiscount(subscription: any): boolean {
     return true
   }
   return Boolean(subscription?.discount)
-}
-
-/**
- * Whether THE winback discount keeps this org, fully used, at or above its
- * full-use cost net of Stripe (AGL-3473): never below cost. `org` is the org
- * as it bills — plan and overrides beside its subscription and add-ons — and
- * an org with no subscription price on record does not clear it.
- */
-function winbackClearsFullUse(org: Record<string, unknown>): boolean {
-  return orgFullUseFloor(org as never, {
-    multiple: FULL_USE_DISCOUNT_MULTIPLE,
-    discount: { percentOff: WINBACK_PERCENT_OFF },
-  }).ok
 }
 
 /**
@@ -219,26 +203,14 @@ async function handler(request: Request): Promise<Response> {
       // decided in the browser. The dialog renders what it is told: which tier
       // to offer, what the discount is, and whether the org still has its one
       // winback. A client that computed any of these would eventually offer a
-      // tier the server refuses, or a discount the guard will not mint — so a
-      // winback the full-use floor refuses on this org is not offered either.
+      // tier the server refuses, or a discount the guard will not mint.
       const winbackUsed = (await retention.doc('winback').get()).exists
-      // A billing read that fails withholds the offer rather than failing the
-      // survey: the answer is already stored, and the funnel moves on.
-      const billingForOffer = winbackUsed
-        ? null
-        : await readOrgBilling(orgId).catch(() => null)
-      const winbackAffordable =
-        billingForOffer !== null &&
-        winbackClearsFullUse({
-          ...(orgSnapshot.data() ?? {}),
-          ...billingForOffer,
-        })
       return Response.json(
         {
           ok: true,
           funnelId: surveyRef.id,
           downsellPlan: downsellTargetPlan(plan),
-          winbackAvailable: winbackAffordable,
+          winbackAvailable: !winbackUsed,
           winbackPercentOff: WINBACK_PERCENT_OFF,
           winbackDurationMonths: WINBACK_DURATION_MONTHS,
         },
@@ -351,38 +323,6 @@ async function handler(request: Request): Promise<Response> {
         ...(stripeInterval ? { interval: String(stripeInterval) } : {}),
       },
     }
-    // NEVER BELOW COST (AGL-3473), on the same Stripe-truth subscription: the
-    // org using every band it bought must still be covered at the winback
-    // price.
-    // Refused in the same words and the same shape as the guardrail below —
-    // the customer is told the offer is not available, never our figures.
-    const billedSubscription = (billing.subscription ??
-      orgSnapshot.get('subscription') ??
-      {}) as Record<string, unknown>
-    if (
-      !winbackClearsFullUse({
-        ...(orgSnapshot.data() ?? {}),
-        ...billing,
-        subscription: {
-          ...billedSubscription,
-          status: String(subscription?.status ?? ''),
-          ...(stripeInterval ? { interval: String(stripeInterval) } : {}),
-        },
-      })
-    ) {
-      return Response.json(
-        {
-          error:
-            'This workspace costs more to run than a discounted subscription ' +
-            'would cover, so the winback offer is not available. Switching to ' +
-            'a smaller plan is the better fit.',
-          code: 'margin_floor',
-          rating: 'block',
-        },
-        { status: 409 },
-      )
-    }
-
     const measuredCogsUsd = await latestMeasuredCogsUsd(orgId)
     const marginRating = checkDiscountMargin(
       orgForMargin as never,
@@ -415,6 +355,35 @@ async function handler(request: Request): Promise<Response> {
         },
         { status: 409 },
       )
+    }
+
+    // The full-use verdict, for staff reporting (AGL-3473): the org using
+    // every band it bought, on the months the winback discounts, on the same
+    // Stripe-truth subscription the guardrail read. Recorded on the applied
+    // winback, never enforced and never in the customer's response — and
+    // worked out before anything is minted, so a fault in it cannot strand
+    // an applied coupon behind a released reservation.
+    let fullUse: Record<string, unknown> | null = null
+    try {
+      const assessed = orgDiscountFullUse(
+        {
+          ...orgForMargin,
+          ...billing,
+          subscription: {
+            ...((billing.subscription ?? {}) as Record<string, unknown>),
+            ...orgForMargin.subscription,
+          },
+        } as never,
+        { percentOff: WINBACK_PERCENT_OFF },
+        { duration: 'repeating', durationInMonths: WINBACK_DURATION_MONTHS },
+      )
+      fullUse = {
+        fullUseOk: assessed.ok,
+        fullUseCoverage: Math.round(assessed.coverage * 1000) / 1000,
+        fullUseFirstYearCoverage: Math.round(assessed.firstYearCoverage * 1000) / 1000,
+      }
+    } catch (error) {
+      console.error('[billing/retention] full-use verdict unavailable', error)
     }
 
     const funnelId = typeof body?.funnelId === 'string' ? body.funnelId : null
@@ -477,6 +446,7 @@ async function handler(request: Request): Promise<Response> {
           couponId: String(coupon.id),
           percentOff: WINBACK_PERCENT_OFF,
           durationMonths: WINBACK_DURATION_MONTHS,
+          ...(fullUse ?? {}),
           appliedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
         },
         { merge: true },

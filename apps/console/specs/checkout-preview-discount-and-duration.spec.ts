@@ -359,48 +359,47 @@ describe('the subscribe path applies the code it is sent', () => {
 })
 
 /**
- * NEVER BELOW COST, where the code is applied (AGL-3473). Only checkout knows
- * the plan, the interval and the add-on a code is being redeemed against, so
- * a code minted before the floor existed — or in the Stripe Dashboard — is
- * held to it here: the purchase, fully used, must still cover its full-use
- * cost net of Stripe after the discount. Refused in the preview AND the
- * subscribe path, before Stripe prices or charges anything, and the customer
- * is told only that the code does not apply.
+ * A CODE IS NEVER REFUSED FOR WHAT IT COSTS US (AGL-3473). Codes are a sales
+ * tool staff hand out to close a deal, and the customer redeeming one at
+ * checkout is not the person to tell it spends cost — nobody who could act
+ * on that is there. So the code is applied exactly as before, and its
+ * full-use verdict rides on the subscription Stripe creates, for staff
+ * reporting, in the one request the route was already making.
  */
-describe('a code that would take the plan under its full-use cost (AGL-3473)', () => {
-  /** Every request the route sent to the upcoming-invoice endpoint. */
-  const upcomingCalls = () =>
-    (global.fetch as jest.Mock).mock.calls.filter(([url]) =>
-      /\/invoices\/upcoming/.test(String(url)),
-    )
-
-  it('is refused in the preview, before an invoice is priced', async () => {
+describe('a code under full-use cost is applied, and its verdict recorded (AGL-3473)', () => {
+  it('prices the preview with the code, however deep it goes', async () => {
     coupon = { duration: 'once', percent_off: 97 }
     const response = await post(loadCheckout(), {
       action: 'preview',
       promotionCode: 'LAUNCH97',
     })
-    expect(response.status).toBe(400)
+    expect(response.status).toBe(200)
     const payload = await response.json()
-    expect(payload.code).toBe('promotion_code_not_applicable')
-    expect(payload.error).toContain('LAUNCH97')
-    // What the purchase costs us never reaches the customer.
-    expect(payload.error).not.toMatch(/\$|cost/i)
-    expect(upcomingCalls()).toHaveLength(0)
+    expect(payload.promotionCodeApplied).toBe('LAUNCH97')
+    expect(JSON.stringify(payload)).not.toMatch(/full_use|fullUse|coverage/)
   })
 
-  it('is refused on subscribe, before a subscription is created', async () => {
+  it('subscribes with the code, and records the verdict on the subscription', async () => {
     coupon = { duration: 'forever', amount_off: 2400 }
     const response = await post(loadCheckout(), { promotionCode: 'LAUNCH97' })
-    expect(response.status).toBe(400)
-    expect((await response.json()).code).toBe('promotion_code_not_applicable')
-    expect(subscriptionBodies).toHaveLength(0)
+    expect(response.status).toBe(200)
+    expect(subscriptionBodies).toHaveLength(1)
+    const body = subscriptionBodies[0]
+    expect(body.get('discounts[0][promotion_code]')).toBe('promo_1')
+    expect(body.get('metadata[full_use_ok]')).toBe('false')
+    expect(Number(body.get('metadata[full_use_coverage]'))).toBeLessThan(1)
+    expect(body.get('metadata[full_use_first_year_coverage]')).not.toBeNull()
   })
 
-  it('POSITIVE CONTROL: a discount inside the plan’s margin is applied', async () => {
+  it('records a code inside the plan’s margin as covering its cost', async () => {
     coupon = { duration: 'once', percent_off: 5 }
     const response = await post(loadCheckout(), { promotionCode: 'LAUNCH97' })
     expect(response.status).toBe(200)
-    expect(subscriptionBodies[0].get('discounts[0][promotion_code]')).toBe('promo_1')
+    expect(subscriptionBodies[0].get('metadata[full_use_ok]')).toBe('true')
+  })
+
+  it('records nothing when no code was applied', async () => {
+    await post(loadCheckout(), {})
+    expect(subscriptionBodies[0].get('metadata[full_use_ok]')).toBeNull()
   })
 })

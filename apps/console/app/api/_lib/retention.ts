@@ -142,11 +142,12 @@ export function churnSurveyDetailExpiry(now = new Date()): Date {
 
 /**
  * The winback offer, as constants rather than request inputs — the CLIENT
- * never chooses the discount. It is held to two floors on the org that would
- * bear it: the measured contribution margin (`checkDiscountMargin`), and the
- * full-use floor (AGL-3473) — the org using every band it bought must still
- * be covered, net of Stripe, at the discounted price. An org whose plan
- * cannot carry the discount is not offered it.
+ * never chooses the discount. 50% for 2 months is held to the measured
+ * contribution margin on the org that would bear it (`checkDiscountMargin`),
+ * and its full-use verdict — the org using every band it bought, on the two
+ * discounted months — is recorded on the applied winback for staff (AGL-3473)
+ * without refusing it: two months at half price spend cost on a fully used
+ * plan, and keeping the customer is what they are spent on.
  */
 export const WINBACK_PERCENT_OFF = 50
 export const WINBACK_DURATION_MONTHS = 2

@@ -45,9 +45,8 @@ import {
 } from '@aglyn/tenant-data-admin/server/billing-addons'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 import {
-  FULL_USE_DISCOUNT_MULTIPLE,
-  describeFullUseFloor,
-  orgFullUseFloor,
+  describeDiscountFullUse,
+  orgDiscountFullUse,
 } from '@aglyn/aglyn/app-utils/full-use-cost'
 
 // lockdown-423: exempt — the payment recovery path — a billing-locked org must be able to pay
@@ -242,54 +241,56 @@ export async function resolvePromotionCode(
 }
 
 /**
- * The refusal for a promotion code that would put this purchase, fully used,
- * under its full-use cost net of Stripe — or `null` when it clears (AGL-3473).
+ * What a promotion code does to this purchase against its full-use cost
+ * (AGL-3473): the subscription metadata that records the verdict for staff
+ * reporting, or none when no code was applied — or the verdict could not be
+ * worked out.
  *
- * Checked where the code is APPLIED, because only here are the plan, the
- * interval and the add-on known: the staff Coupons page refuses to mint a
- * code whose worst case breaks the floor, and this covers what that cannot —
- * a code minted before the floor existed, or in the Stripe Dashboard. A
- * discount may spend the margin a plan carries above cost, never the cost.
- *
- * The customer is told the code does not apply to the plan and nothing else:
- * the figures are what the purchase costs us, and they go to the log.
+ * NEVER a refusal. A code is a sales tool staff hand out to close a deal, and
+ * the customer redeeming it at checkout is not the person to tell that it
+ * spends cost — no one who could act on that is here. So the code is applied
+ * as it always was; the verdict rides on the subscription Stripe creates
+ * (one request it was already making) and a code under cost is logged, so
+ * staff can read what each discount spent.
  */
-function promotionCodeFloorRefusal(
+function promotionCodeFullUseMetadata(
   plan: OrgPlan,
   interval: 'month' | 'year',
   aiAddon: boolean,
   promo: Awaited<ReturnType<typeof resolvePromotionCode>>,
-): Response | null {
-  if (!promo.id) return null
-  const verdict = orgFullUseFloor(
-    {
-      plan,
-      subscription: { status: 'active', interval },
-      seatAddons: aiAddon ? { aiAddon: 1 } : {},
-    } as never,
-    {
-      multiple: FULL_USE_DISCOUNT_MULTIPLE,
-      discount: {
+): Record<string, string> {
+  if (!promo.id) return {}
+  try {
+    const assessed = orgDiscountFullUse(
+      {
+        plan,
+        subscription: { status: 'active', interval },
+        seatAddons: aiAddon ? { aiAddon: 1 } : {},
+      } as never,
+      {
         percentOff: promo.percentOff ?? undefined,
         amountOffUsd: promo.amountOffUsd ?? undefined,
       },
-    },
-  )
-  if (verdict.ok) return null
-  console.warn('[billing/checkout] promotion code under the full-use floor', {
-    code: promo.code,
-    plan,
-    interval,
-    aiAddon,
-    verdict: describeFullUseFloor(verdict),
-  })
-  return Response.json(
-    {
-      error: `The code “${String(promo.code ?? '').slice(0, 40)}” can’t be used on this plan.`,
-      code: 'promotion_code_not_applicable',
-    },
-    { status: 400 },
-  )
+      { duration: promo.duration ?? null, durationInMonths: promo.durationInMonths ?? null },
+    )
+    if (!assessed.ok) {
+      console.info('[billing/checkout] promotion code under full-use cost', {
+        code: promo.code,
+        plan,
+        interval,
+        aiAddon,
+        verdict: describeDiscountFullUse(assessed),
+      })
+    }
+    return {
+      'metadata[full_use_ok]': String(assessed.ok),
+      'metadata[full_use_coverage]': assessed.coverage.toFixed(3),
+      'metadata[full_use_first_year_coverage]': assessed.firstYearCoverage.toFixed(3),
+    }
+  } catch (error) {
+    console.error('[billing/checkout] full-use verdict unavailable', error)
+    return {}
+  }
 }
 
 /**
@@ -531,13 +532,6 @@ async function handler(request: Request): Promise<Response> {
         String(body?.promotionCode ?? ''),
       )
       if (promo.error) return Response.json({ error: promo.error }, { status: 400 })
-      const promoRefused = promotionCodeFloorRefusal(
-        plan as OrgPlan,
-        interval,
-        aiAddonWanted,
-        promo,
-      )
-      if (promoRefused) return promoRefused
       if (promo.id) preview.set('discounts[0][promotion_code]', promo.id)
       const upcoming = await fetch(
         `https://api.stripe.com/v1/invoices/upcoming?${preview.toString()}`,
@@ -634,20 +628,12 @@ async function handler(request: Request): Promise<Response> {
       )
     }
 
-    // The promotion code, resolved ABOVE the point of no return so a code the
-    // full-use floor refuses (AGL-3473) is a refusal like the ones above and
-    // does not burn the key.
+    // The promotion code, resolved ABOVE the point of no return: a lookup is
+    // a read, and a failed one must not burn the key.
     const promo = await resolvePromotionCode(
       secretKey,
       String(body?.promotionCode ?? ''),
     )
-    const promoRefused = promotionCodeFloorRefusal(
-      plan as OrgPlan,
-      interval,
-      aiAddonWanted,
-      promo,
-    )
-    if (promoRefused) return promoRefused
 
     // Point of no return (AGL-1697): the only thing left is the subscription
     // itself. Every refusal — lockdown, membership, permission, the
@@ -756,6 +742,11 @@ async function handler(request: Request): Promise<Response> {
       subParams.set(`metadata[${INTERNAL_TRAFFIC_PARAM}]`, INTERNAL_TRAFFIC_VALUE)
     }
     if (promo.id) subParams.set('discounts[0][promotion_code]', promo.id)
+    for (const [key, value] of Object.entries(
+      promotionCodeFullUseMetadata(plan as OrgPlan, interval, aiAddonWanted, promo),
+    )) {
+      subParams.set(key, value)
+    }
 
     const created = await fetch('https://api.stripe.com/v1/subscriptions', {
       method: 'POST',

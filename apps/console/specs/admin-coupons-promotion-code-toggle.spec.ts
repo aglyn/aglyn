@@ -84,24 +84,6 @@ jest.mock('@aglyn/aglyn/server', () => ({
   },
 }))
 
-/**
- * The full-use floor (AGL-3473), REAL when `mockFullUseReal` is set and
- * otherwise reported as clearing, so the toggle tests below are about the
- * toggle rather than the price list's bands. The floor's own block at the
- * bottom drives the real arithmetic.
- */
-let mockFullUseReal = false
-jest.mock('@aglyn/aglyn/app-utils/full-use-cost', () => {
-  const actual = jest.requireActual('@aglyn/aglyn/app-utils/full-use-cost')
-  return {
-    ...actual,
-    rateCouponAgainstFullUse: (discount: unknown) => {
-      const verdict = actual.rateCouponAgainstFullUse(discount)
-      return mockFullUseReal ? verdict : { ...verdict, ok: true }
-    },
-  }
-})
-
 const { POST } = require('../app/api/admin/coupons/route')
 
 /** Every Stripe call the handler made, in order. */
@@ -129,7 +111,6 @@ const promotionCode = (over: Record<string, unknown> = {}) => ({
 
 beforeEach(() => {
   jest.clearAllMocks()
-  mockFullUseReal = false
   stripeCalls = []
   stripeReadReply = { body: promotionCode() }
   mockVerifyIdToken.mockResolvedValue({
@@ -183,7 +164,7 @@ describe('POST /api/admin/coupons — promotion code activate/deactivate', () =>
     const response = await post({ action: 'activate', promotionCodeId: CODE_ID })
 
     expect(response.status).toBe(200)
-    await expect(response.json()).resolves.toEqual({
+    await expect(response.json()).resolves.toMatchObject({
       code: {
         id: CODE_ID,
         code: 'AGLYNSMOKELIVE',
@@ -191,6 +172,8 @@ describe('POST /api/admin/coupons — promotion code activate/deactivate', () =>
         timesRedeemed: 2,
         maxRedemptions: null,
       },
+      // Turning a code on answers with its full-use verdict (AGL-3473).
+      fullUse: { ok: expect.any(Boolean) },
     })
     expect(writeCall()).toMatchObject({
       path: `promotion_codes/${CODE_ID}`,
@@ -239,7 +222,14 @@ describe('POST /api/admin/coupons — promotion code activate/deactivate', () =>
         action: 'coupon.promotion_code.update',
         target: `stripe/promotion_codes/${CODE_ID}`,
         before: { active: false },
-        after: { active: true, code: 'AGLYNSMOKELIVE', couponId: 'cpn_1' },
+        after: {
+          active: true,
+          code: 'AGLYNSMOKELIVE',
+          couponId: 'cpn_1',
+          // What the code was turned on under (AGL-3473).
+          fullUseOk: expect.any(Boolean),
+          fullUseWorstCoverage: expect.any(Number),
+        },
       }),
     )
   })
@@ -409,63 +399,96 @@ describe('POST /api/admin/coupons — promotion code activate/deactivate', () =>
 })
 
 /**
- * NEVER BELOW COST (AGL-3473). A coupon carries no plan restriction, so its
- * code can be typed on any paid plan at either interval by a customer using
- * everything the plan includes; the route refuses one whose worst case puts
- * that customer under the plan's full-use cost net of Stripe — at creation
- * and at re-activation, which is minting again — and no sign-off lifts it.
+ * THE FULL-USE WARNING (AGL-3473). A coupon carries no plan restriction, so
+ * its code can be redeemed on any paid plan at either interval by a customer
+ * using everything the plan includes. The route judges each discounted charge
+ * against that plan's full-use cost net of Stripe and answers with the
+ * verdict — at creation and at re-activation, which is minting again — but it
+ * refuses nothing for it: a coupon is a tool for closing a deal, and staff
+ * may spend cost on one knowingly. The ≥40% sign-off is unchanged.
  */
-describe('POST /api/admin/coupons — the full-use floor (AGL-3473)', () => {
-  it('refuses to create a coupon that takes a plan under its full-use cost, before Stripe', async () => {
-    mockFullUseReal = true
+describe('POST /api/admin/coupons — the full-use warning (AGL-3473)', () => {
+  /** The coupon create Stripe was asked for, if any. */
+  const couponCreate = () =>
+    stripeCalls.find((call) => call.method === 'POST' && call.path === 'coupons')
+
+  it('creates a coupon that takes a plan under its full-use cost, and answers with the warning', async () => {
     const response = await post({
       percentOff: 97,
       duration: 'once',
       code: 'GIVEAWAY',
       confirmHighDiscount: true,
     })
-    expect(response.status).toBe(400)
+    expect(response.status).toBe(200)
     const payload = await response.json()
-    expect(payload.code).toBe('full_use_floor')
-    // The floor and the figures, named: staff are the only readers.
-    expect(payload.error).toMatch(/full-use cost/)
-    expect(payload.error).toMatch(/net of Stripe/)
-    expect(payload.fullUse.worst.ok).toBe(false)
-    expect(stripeCalls).toEqual([])
-    expect(mockAuditAdd).not.toHaveBeenCalled()
+    expect(payload.fullUse.ok).toBe(false)
+    // The figures, for staff: how far under and on which charges.
+    expect(payload.fullUse.warning).toMatch(/^Under full-use cost on \d+ of \d+ plan/)
+    expect(payload.fullUse.warning).toMatch(/net of Stripe against \$[\d.]+ of full-use cost/)
+    expect(payload.fullUse.worst.coverage).toBeLessThan(1)
+    expect(payload.fullUse.worst.chargeUnderCostUsd).toBeGreaterThan(0)
+    expect(couponCreate()?.body).toContain('percent_off=97')
+    expect(mockAuditAdd).toHaveBeenCalledWith(
+      'adminAudit',
+      expect.objectContaining({
+        action: 'coupon.create',
+        after: expect.objectContaining({ fullUseOk: false }),
+      }),
+    )
   })
 
-  it('refuses an amount off the same way', async () => {
-    mockFullUseReal = true
+  it('creates an amount off the same way', async () => {
     const response = await post({ amountOffUsd: 5000, duration: 'once' })
+    expect(response.status).toBe(200)
+    expect((await response.json()).fullUse.ok).toBe(false)
+    expect(couponCreate()?.body).toContain('amount_off=500000')
+  })
+
+  it('judges a first-month coupon on the charges it reaches, not on every charge', async () => {
+    const once = await (await post({ percentOff: 40, duration: 'once', confirmHighDiscount: true })).json()
+    const forever = await (
+      await post({ percentOff: 40, duration: 'forever', confirmHighDiscount: true })
+    ).json()
+    // The same discount on the same worst case: the charge is under either
+    // way, but a first-charge coupon leaves the rest of the year at list.
+    expect(once.fullUse.worst.coverage).toBeCloseTo(forever.fullUse.worst.coverage, 6)
+    expect(once.fullUse.worst.firstYearCoverage).toBeGreaterThanOrEqual(
+      forever.fullUse.worst.firstYearCoverage,
+    )
+  })
+
+  it('still asks for the ≥40% sign-off, exactly as before', async () => {
+    const response = await post({ percentOff: 40, duration: 'once' })
     expect(response.status).toBe(400)
-    expect((await response.json()).code).toBe('full_use_floor')
+    expect((await response.json()).requiresConfirmation).toBe(true)
     expect(stripeCalls).toEqual([])
   })
 
-  it('refuses to re-activate such a code, after the read and before the write', async () => {
-    mockFullUseReal = true
+  it('re-activates a code under full-use cost, and answers with the warning', async () => {
     stripeReadReply = {
-      body: promotionCode({ coupon: { id: 'cpn_1', percent_off: 97 } }),
+      body: promotionCode({
+        coupon: { id: 'cpn_1', percent_off: 97, duration: 'once' },
+      }),
     }
     const response = await post({
       action: 'activate',
       promotionCodeId: CODE_ID,
       confirmHighDiscount: true,
     })
-    expect(response.status).toBe(400)
-    expect((await response.json()).code).toBe('full_use_floor')
-    expect(writeCall()).toBeUndefined()
-    expect(mockAuditAdd).not.toHaveBeenCalled()
+    expect(response.status).toBe(200)
+    const payload = await response.json()
+    expect(payload.fullUse.ok).toBe(false)
+    expect(payload.fullUse.warning).toMatch(/^Under full-use cost/)
+    expect(writeCall()).toMatchObject({ body: 'active=true' })
   })
 
-  it('never holds back a DEACTIVATE — pulling a code can only shrink what is redeemable', async () => {
-    mockFullUseReal = true
+  it('answers no verdict for a DEACTIVATE — pulling a code spends nothing', async () => {
     stripeReadReply = {
       body: promotionCode({ active: true, coupon: { id: 'cpn_1', percent_off: 97 } }),
     }
     const response = await post({ action: 'deactivate', promotionCodeId: CODE_ID })
     expect(response.status).toBe(200)
+    expect((await response.json()).fullUse).toBeUndefined()
     expect(writeCall()).toMatchObject({ body: 'active=false' })
   })
 })

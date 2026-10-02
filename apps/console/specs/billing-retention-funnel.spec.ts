@@ -148,26 +148,8 @@ function mockMakeCollection(path: string): any {
   }
 }
 
-/**
- * The full-use floor (AGL-3473), REAL when `mockFullUseReal` is set and
- * otherwise reported as clearing. Half price puts every plan on the ladder
- * under what its bands cost at 100% — the winback is never offered to anyone
- * while the price list sits within 2× of full-use cost — so the funnel tests
- * above the floor's own block would otherwise all be about the floor.
- */
-let mockFullUseReal = false
 /** The org's billing document as `readOrgBilling` answers it. */
 let mockBilling: Record<string, unknown> = { stripeCustomerId: 'cus_test_1' }
-jest.mock('@aglyn/aglyn/app-utils/full-use-cost', () => {
-  const actual = jest.requireActual('@aglyn/aglyn/app-utils/full-use-cost')
-  return {
-    ...actual,
-    orgFullUseFloor: (...args: unknown[]) => {
-      const verdict = actual.orgFullUseFloor(...args)
-      return mockFullUseReal ? verdict : { ...verdict, ok: true }
-    },
-  }
-})
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
@@ -309,7 +291,6 @@ function detailDocs(): Array<Record<string, unknown>> {
 }
 
 beforeEach(() => {
-  mockFullUseReal = false
   mockBilling = { stripeCustomerId: 'cus_test_1' }
   mockStoredDocs = new Map()
   mockAutoId = 0
@@ -821,54 +802,50 @@ describe('cancel and delete record funnel completion or skip (AGL-1863)', () => 
 })
 
 /**
- * NEVER BELOW COST (AGL-3473). The winback is held to the full-use floor on
- * the org that would bear it, on the same Stripe-truth subscription the
- * margin guardrail reads: the org using every band it bought must still be
- * covered, net of Stripe, at half price. No plan is, so it is refused — in
- * the guardrail's own words and shape, never with our figures — and the
- * survey stops offering it.
+ * THE FULL-USE VERDICT IS RECORDED, NEVER ENFORCED (AGL-3473). Half price for
+ * two months spends cost on a fully used plan, and keeping the customer is
+ * what it is spent on: the winback is offered and applied as before, and the
+ * verdict — on the two discounted months, the first year beside them — is
+ * written on the applied winback for staff, never into the customer's
+ * response.
  */
-describe('/api/billing/retention — the full-use floor (AGL-3473)', () => {
+describe('/api/billing/retention — the full-use verdict (AGL-3473)', () => {
   const ROUTE = '../app/api/billing/retention/route'
 
-  it('refuses the half-price winback on Pro, before Stripe and before the one-shot is spent', async () => {
-    mockFullUseReal = true
-    // A light month: the measured guardrail alone would approve this.
-    mockStoredDocs.set('orgs/org-1/usage/2026-08', { month: '2026-08', pageViews: 1_000 })
-    const response = await call(loadRoute(ROUTE), { action: 'winback', funnelId: 'f-1' })
-    expect(response.status).toBe(409)
-    const payload = await response.json()
-    expect(payload.code).toBe('margin_floor')
-    expect(JSON.stringify(payload)).not.toMatch(/fullUse|cogs|coverage|\$/i)
-    expect(capturedCouponBody).toBeNull()
-    expect(capturedSubUpdateBody).toBeNull()
-    expect(mockStoredDocs.get('orgs/org-1/retention/winback')).toBeUndefined()
-  })
-
-  it('POSITIVE CONTROL: the same request mints once the floor clears', async () => {
-    mockStoredDocs.set('orgs/org-1/usage/2026-08', { month: '2026-08', pageViews: 1_000 })
-    const response = await call(loadRoute(ROUTE), { action: 'winback', funnelId: 'f-1' })
-    expect(response.status).toBe(200)
-  })
-
-  it('the survey does not offer a winback the floor would refuse', async () => {
-    const survey = {
-      action: 'survey',
-      surface: 'subscription_cancel',
-      reason: 'too_expensive',
-    }
-    const offered = await call(loadRoute(ROUTE), survey)
-    expect((await offered.json()).winbackAvailable).toBe(true)
-
-    // A live monthly Pro subscription on record, so the refusal below is the
-    // floor's arithmetic and not a missing price.
+  it('offers the winback at the survey whatever its full-use verdict', async () => {
     mockBilling = {
       stripeCustomerId: 'cus_test_1',
       subscription: { status: 'active', interval: 'month' },
     }
-    mockFullUseReal = true
-    const withheld = await call(loadRoute(ROUTE), survey)
-    expect(withheld.status).toBe(200)
-    expect((await withheld.json()).winbackAvailable).toBe(false)
+    const response = await call(loadRoute(ROUTE), {
+      action: 'survey',
+      surface: 'subscription_cancel',
+      reason: 'too_expensive',
+    })
+    expect(response.status).toBe(200)
+    expect((await response.json()).winbackAvailable).toBe(true)
+  })
+
+  it('applies the half-price winback and records the verdict for staff, not the customer', async () => {
+    // A light month: the measured guardrail approves it.
+    mockStoredDocs.set('orgs/org-1/usage/2026-08', { month: '2026-08', pageViews: 1_000 })
+    const response = await call(loadRoute(ROUTE), { action: 'winback', funnelId: 'f-1' })
+    expect(response.status).toBe(200)
+    expect(capturedCouponBody?.get('percent_off')).toBe('50')
+    const payload = await response.json()
+    expect(JSON.stringify(payload)).not.toMatch(/fullUse|coverage|cogs/i)
+    const winback = mockStoredDocs.get('orgs/org-1/retention/winback') as Record<string, unknown>
+    expect(winback).toMatchObject({
+      kind: 'winback_applied',
+      fullUseOk: expect.any(Boolean),
+      fullUseCoverage: expect.any(Number),
+      fullUseFirstYearCoverage: expect.any(Number),
+    })
+    // The verdict is about the discounted months: under cost on them is
+    // `fullUseOk: false`, and the year as a whole carries ten at list.
+    expect(winback.fullUseOk).toBe((winback.fullUseCoverage as number) >= 1)
+    expect(winback.fullUseFirstYearCoverage as number).toBeGreaterThan(
+      winback.fullUseCoverage as number,
+    )
   })
 })

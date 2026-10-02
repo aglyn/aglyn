@@ -21,20 +21,20 @@
  */
 
 /**
- * APPLYING A COUPON TO AN ORG IS HELD TO THE FULL-USE FLOOR (AGL-3473).
+ * APPLYING A COUPON TO AN ORG ANSWERS WITH ITS FULL-USE VERDICT (AGL-3473).
  *
  * `/api/admin/org-discount` is where staff commit a discount to one org's live
- * subscription. Its guardrail rated the discount against what the org had
- * USED, so a deal was approved on the strength of a quiet month. The floor is
- * what the org would cost using every band it resolves to: a discount may
- * spend the margin a price carries above that, never the cost — and
- * `confirmBelowFloor`, the override for the measured guardrail, does not
- * reach it.
+ * subscription. Its guardrail rates the discount against what the org has
+ * USED; beside it, the route now judges the discount against what the org
+ * would cost using every band it resolves to, on the charges the coupon
+ * reaches, and returns that verdict for the console to warn with. It refuses
+ * nothing for it — a discount that spends cost to close a deal is staff's
+ * call — and the measured guardrail behaves exactly as it did.
  *
  * The org here is priced so that it covers exactly cost + 30% at full use:
- * 20% off spends part of the margin and is applied; 25% off crosses 1.0× and
- * is refused. Real arithmetic throughout — only Firebase, the audit write and
- * Stripe are doubles.
+ * 20% off spends part of the margin; 25% off crosses 1.0× and is applied
+ * with a warning. Real arithmetic throughout — only Firebase, the audit
+ * write and Stripe are doubles.
  */
 
 export {}
@@ -149,45 +149,72 @@ const apply = (extra: Record<string, unknown> = {}) =>
     }),
   ) as Promise<Response>
 
-describe('POST /api/admin/org-discount — the full-use floor (AGL-3473)', () => {
-  it('applies a ~20% coupon on a price with headroom — it spends margin, not cost', async () => {
-    coupon = { id: 'cpn_1', percent_off: 20 }
+describe('POST /api/admin/org-discount — the full-use verdict (AGL-3473)', () => {
+  it('applies a ~20% coupon on a price with headroom, and says it covers cost', async () => {
+    coupon = { id: 'cpn_1', percent_off: 20, duration: 'forever' }
     const response = await apply()
     expect(response.status).toBe(200)
+    const payload = await response.json()
+    expect(payload.fullUse).toMatchObject({ ok: true, warning: null })
     expect(subscriptionWrites).toEqual(['coupon=cpn_1'])
     expect(mockOrgWrites[0]).toMatchObject({ discount: { percentOff: 20 } })
   })
 
-  it('refuses a coupon that crosses 1.0× full-use cost, with the floor and the figures', async () => {
-    coupon = { id: 'cpn_1', percent_off: 25 }
+  it('applies a coupon that crosses 1.0× full-use cost, and warns with the figures', async () => {
+    coupon = { id: 'cpn_1', percent_off: 25, duration: 'forever' }
     const response = await apply()
-    expect(response.status).toBe(400)
+    expect(response.status).toBe(200)
     const payload = await response.json()
-    expect(payload.code).toBe('full_use_floor')
-    expect(payload.error).toContain('full-use cost')
-    expect(payload.error).toContain(`$${PRO_FULL_USE_USD.toFixed(2)}`)
     expect(payload.fullUse.ok).toBe(false)
     expect(payload.fullUse.coverage).toBeLessThan(1)
-    expect(subscriptionWrites).toEqual([])
-    expect(mockOrgWrites).toEqual([])
-    expect(mockAuditAdd).not.toHaveBeenCalled()
+    expect(payload.fullUse.warning).toMatch(/^under full-use cost on every monthly charge/)
+    expect(payload.fullUse.warning).toContain(`$${PRO_FULL_USE_USD.toFixed(2)} of full-use cost`)
+    expect(subscriptionWrites).toEqual(['coupon=cpn_1'])
+    expect(mockAuditAdd).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        action: 'org.discount.apply',
+        after: expect.objectContaining({ fullUseOk: false }),
+      }),
+    )
   })
 
-  it('is not lifted by the measured guardrail’s override', async () => {
-    coupon = { id: 'cpn_1', percent_off: 25 }
-    const response = await apply({ confirmBelowFloor: true })
-    expect(response.status).toBe(400)
-    expect((await response.json()).code).toBe('full_use_floor')
-    expect(subscriptionWrites).toEqual([])
+  it('judges a first-month coupon on the first month, with the year beside it', async () => {
+    coupon = { id: 'cpn_1', percent_off: 25, duration: 'once' }
+    const payload = await (await apply()).json()
+    expect(payload.fullUse.ok).toBe(false)
+    expect(payload.fullUse.warning).toMatch(/^under full-use cost on the first month's charge/)
+    expect(payload.fullUse.warning).toContain('It touches 1 of the first 12 months')
+    // Eleven months at a price netting cost + 30% carry the one under it.
+    expect(payload.fullUse.firstYearCoverage).toBeGreaterThan(1)
   })
 
-  it('refuses an org with no subscription price on record rather than rating it free', async () => {
+  it('leaves the measured guardrail exactly as it was — a 75% coupon still needs the override', async () => {
+    // The guardrail reads the subscription off the org document, as it always
+    // has; an org that still carries it inline is the one it can rate.
+    mockOrgDoc = { ...mockOrgDoc, subscription: mockBilling.subscription }
+    coupon = { id: 'cpn_1', percent_off: 75, duration: 'once' }
+    const refused = await apply()
+    expect(refused.status).toBe(400)
+    const payload = await refused.json()
+    expect(payload.requiresConfirmation).toBe(true)
+    expect(payload.rating).toMatchObject({ rating: 'block', reason: 'depth' })
+    // The warning travels with the refusal, so the override is taken knowing it.
+    expect(payload.fullUse.ok).toBe(false)
+    expect(subscriptionWrites).toEqual([])
+
+    const overridden = await apply({ confirmBelowFloor: true })
+    expect(overridden.status).toBe(200)
+    expect(subscriptionWrites).toEqual(['coupon=cpn_1'])
+  })
+
+  it('says when the org has no subscription price to judge against — and applies all the same', async () => {
     mockBilling = { stripeCustomerId: 'cus_1' }
-    coupon = { id: 'cpn_1', percent_off: 5 }
+    coupon = { id: 'cpn_1', percent_off: 5, duration: 'once' }
     const response = await apply()
-    expect(response.status).toBe(400)
+    expect(response.status).toBe(200)
     const payload = await response.json()
-    expect(payload.code).toBe('full_use_floor')
-    expect(payload.error).toMatch(/no subscription price on record/)
+    expect(payload.fullUse.ok).toBe(false)
+    expect(payload.fullUse.warning).toMatch(/no subscription price is on record/)
   })
 })
