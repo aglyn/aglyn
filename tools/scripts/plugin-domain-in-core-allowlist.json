@@ -35,13 +35,6 @@
       "lane": "crm"
     },
     {
-      "path": "apps/console/components/entity-picker-provider.component.tsx",
-      "rules": [
-        "domain-declares:data"
-      ],
-      "lane": "data"
-    },
-    {
       "path": "apps/console/components/notifications-menu.component.tsx",
       "rules": [
         "plugin-id"
@@ -56,13 +49,6 @@
       ],
       "lane": "stays",
       "why": "The member it trips on is `commerceGlance`'s layout entry. That zone is a tile the console's own site dashboard and Analytics page draw (`hosts/[host]/page.tsx`, `hosts/[host]/analytics/page.tsx`), beside `hostDashboard` in the same grid, so the layout is the page's to state. Its id is a documented zone of the guaranteed `CONSOLE_WIDGET_SLOTS` catalog that any plugin may fill; renaming it would orphan every widget registered for it."
-    },
-    {
-      "path": "apps/console/components/quota-warnings-banner.component.tsx",
-      "rules": [
-        "domain-declares:ai"
-      ],
-      "lane": "data"
     },
     {
       "path": "apps/console/components/staff-user-email-history-card.component.tsx",

@@ -138,7 +138,6 @@ jest.mock('@aglyn/aglyn', () => ({
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/entity-picker-context'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/name-match'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/name-search'),
-  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/dataset-models'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/scope-tokens'),
 }))
 jest.mock('@aglyn/besigner', () => ({
@@ -265,6 +264,9 @@ jest.mock('../hooks/use-coediting', () => ({
   default: () => ({ clearMirror: () => undefined }),
 }))
 jest.mock('../hooks/use-org-scope', () => ({ useOrgSlug: () => 'acme' }))
+// The picker provider loads the plugins whose list sources share an entity's
+// fields (AGL-3080); this spec's registry has none to fetch.
+jest.mock('../hooks/use-console-plugins', () => ({ useConsoleSlotPlugins: () => true }))
 jest.mock('../hooks/use-is-staff', () => ({ useIsStaff: () => true }))
 jest.mock('../constants/app-setup', () => ({}))
 jest.mock('../constants/console-plugin-loader', () => ({

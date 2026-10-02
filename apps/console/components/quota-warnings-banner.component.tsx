@@ -24,6 +24,10 @@ import {
   UNLIMITED,
 } from '@aglyn/aglyn'
 import { pluginOrgCapacities } from '@aglyn/aglyn/plugin-manager/plugin-org-capacity'
+import {
+  pluginUsageBands,
+  type ResolvedPluginUsageBand,
+} from '@aglyn/aglyn/plugin-manager/plugin-usage-axes'
 import { AppLink } from '@aglyn/shared-ui-jsx'
 import { Alert, Button } from '@mui/material'
 import { collection, doc, getCountFromServer, getDoc } from 'firebase/firestore'
@@ -74,20 +78,41 @@ interface QuotaState {
   used: number
   limit: number
   /**
-   * The AI credits row (AGL-2898) carries a key because its sentence is its
-   * own: what happens at the band differs by plan, and the generic "upgrade
-   * to keep adding" is wrong for a band that is sold past.
+   * A plugin band's row (AGL-2898, AGL-3080) carries the band's id, because
+   * its sentence is its own: what happens at a band can differ by plan, and
+   * the generic "upgrade to keep adding" is wrong for a band that is sold
+   * past.
    */
-  key?: 'assistCredits'
-  /**
-   * What happens at the band, as the AI plugin's credits route reports the
-   * reservation's own verdict: `true` stops, `false` sells past.
-   */
-  stopsAtBand?: boolean
+  key?: string
+  /** The band's own sentence, as its declaration words it for this standing. */
+  sentence?: string
+  /** The sentence names Billing → Usage, so the banner links it. */
+  linksUsage?: boolean
 }
 
-/** The AI credits row's label, used to find it again among the others. */
-const ASSIST_CREDITS_LABEL = 'AI assist credits'
+/** The bands a plugin warns about here, from its compiled declaration. */
+type WarnedBand = ResolvedPluginUsageBand & {
+  consoleWarning: NonNullable<ResolvedPluginUsageBand['consoleWarning']>
+}
+
+const warnedBands = (): WarnedBand[] =>
+  pluginUsageBands().filter((band): band is WarnedBand => Boolean(band.consoleWarning))
+
+/**
+ * A band's sentence for its standing: approaching it, or at it — and at it,
+ * whether the plugin's route reports that the band stops there or bills past
+ * it. A route that did not say reads as the wall: promising a charge the plan
+ * may not bill is the worse of the two sentences.
+ */
+function bandSentence(
+  warning: WarnedBand['consoleWarning'],
+  used: number,
+  limit: number,
+  stopsAtBand: unknown,
+): string {
+  if (used < limit) return warning.approach
+  return stopsAtBand === false ? warning.reached.bills : warning.reached.stops
+}
 
 /**
  * Site-wide quota warnings (AGL-136, grown from the AGL-98 dashboard
@@ -230,11 +255,10 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
       if (!active) return
       const mediaBytes = media?.exists() ? (media.data()?.bytes ?? 0) : 0
       setQuotas((previous) => [
-        // The org-level rows — seats and AI credits — are owned by their
-        // own effects and survive a host change untouched.
+        // The org-level rows — seats and the plugins' bands — are owned by
+        // their own effects and survive a host change untouched.
         ...previous.filter(
-          (quota) =>
-            quota.label === 'team seats' || quota.key === 'assistCredits',
+          (quota) => quota.label === 'team seats' || quota.key !== undefined,
         ),
         {
           label: 'pages',
@@ -361,48 +385,52 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
   const userRef = useRef(user)
   userRef.current = user
 
-  // The AI credits band (AGL-2898), from the billing route that owns the
-  // meter. Not a Firestore read: `orgs/{id}/assistUsage` is default-deny for
-  // every client, and the route answers in CREDITS, the unit the customer was
-  // sold — no dollar figure of ours crosses this boundary. Gated exactly as
-  // the seat count is: an org-scoped route, and a viewer who can see org
-  // totals. `credits: null` is a plan with no band, and no band is no row.
+  // The plugins' bands that warn here (AGL-2898, AGL-3080) — the AI plugin's
+  // assist credits — each from the console route its plugin declares, which
+  // answers the standing in the band's own unit. Not a Firestore read: a
+  // band's meter may be default-deny for every client (`assistUsage` is), and
+  // the route answers in the unit the customer was sold, so no dollar figure
+  // of ours crosses this boundary. Gated exactly as the seat count is: an
+  // org-scoped route, and a viewer who can see org totals. A standing with
+  // `limit: null` is a plan with no band, and no band is no row.
   useEffect(() => {
     if (!orgInScope || !plan || !orgId || !orgWideViewer) return
     let active = true
-    void (async () => {
-      try {
-        const response = await authorizedFetch(
-          userRef.current,
-          `/api/ai/billing/credits?orgId=${encodeURIComponent(orgId)}`,
-        )
-        if (!response.ok || !active) return
-        const payload = await response.json().catch(() => null)
-        const credits = payload?.credits
-        // A standing with no band — an uncapped staff comp (AGL-3049) — is
-        // no row, and `null` must not reach `Number()`, which reads it as 0.
-        if (credits?.limit === null) return
-        const used = Number(credits?.used)
-        const limit = Number(credits?.limit)
-        // A standing we could not read is not a standing of zero — the
-        // datasets and seats rows hold the same line, for the same reason.
-        if (!active || !Number.isFinite(used) || !Number.isFinite(limit)) return
-        setQuotas((previous) => [
-          ...previous.filter((quota) => quota.key !== 'assistCredits'),
-          {
-            key: 'assistCredits',
-            label: ASSIST_CREDITS_LABEL,
-            used,
-            limit,
-            // A route that did not say reads as the wall: promising a charge
-            // the plan may not bill is the worse of the two sentences.
-            stopsAtBand: payload?.stopsAtBand !== false,
-          },
-        ])
-      } catch {
-        // Network trouble: no AI credits row, and no stale one either.
-      }
-    })()
+    for (const band of warnedBands()) {
+      const warning = band.consoleWarning
+      void (async () => {
+        try {
+          const response = await authorizedFetch(
+            userRef.current,
+            `${warning.standing}?orgId=${encodeURIComponent(orgId)}`,
+          )
+          if (!response.ok || !active) return
+          const payload = await response.json().catch(() => null)
+          const standing = payload?.[warning.member]
+          // A standing with no band — an uncapped staff comp (AGL-3049) — is
+          // no row, and `null` must not reach `Number()`, which reads it as 0.
+          if (standing?.limit === null) return
+          const used = Number(standing?.used)
+          const limit = Number(standing?.limit)
+          // A standing we could not read is not a standing of zero — the
+          // datasets and seats rows hold the same line, for the same reason.
+          if (!active || !Number.isFinite(used) || !Number.isFinite(limit)) return
+          setQuotas((previous) => [
+            ...previous.filter((quota) => quota.key !== band.id),
+            {
+              key: band.id,
+              label: band.label,
+              used,
+              limit,
+              sentence: bandSentence(warning, used, limit, payload?.stopsAtBand),
+              linksUsage: warning.linksUsage === true,
+            },
+          ])
+        } catch {
+          // Network trouble: no row for the band, and no stale one either.
+        }
+      })()
+    }
     return () => {
       active = false
     }
@@ -577,26 +605,11 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
   )
   if (!breached.length) return null
   const exceeded = breached.some((quota) => quota.used >= quota.limit)
-  // The AI credits row speaks for itself (AGL-2898); every other row shares
+  // A plugin band's row speaks for itself (AGL-2898); every other row shares
   // the one sentence below.
-  const assistRow = breached.find((quota) => quota.key === 'assistCredits')
-  const others = breached.filter((quota) => quota.key !== 'assistCredits')
+  const ownWords = breached.filter((quota) => quota.sentence)
+  const others = breached.filter((quota) => !quota.sentence)
   const names = others.map((quota) => quota.label).join(' and ')
-  // What happens at the AI band is a fact about the plan and the org's own
-  // switch, and the credits route answers it with the same predicate the
-  // reservation refuses on — so the banner cannot promise a stop the
-  // assistant will not make, or a charge the plan cannot bill.
-  const assistStops = assistRow?.stopsAtBand !== false
-  const assistSentence = !assistRow
-    ? ''
-    : assistRow.used >= assistRow.limit
-      ? assistStops
-        ? "You've used your included AI assist credits — AI assist stops " +
-          'until next month or an upgrade, and nothing is billed for it.'
-        : "You've used your included AI assist credits — extra credits are " +
-          'billed at your plan’s rate unless you set a stop under ' +
-          'Billing → Usage.'
-      : "You're above 80% of your included AI assist credits."
 
   return (
     <Alert
@@ -606,8 +619,8 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
         // MUI's action slot replaces the onClose icon, so the dismiss
         // button lives beside Upgrade explicitly.
         <>
-          {orgWideViewer && assistRow ? (
-            // Where the AI stop and ceiling live (AGL-2898): the sentence
+          {orgWideViewer && ownWords.some((quota) => quota.linksUsage) ? (
+            // Where a band's stop and ceiling live (AGL-2898): the sentence
             // names the page, so the button takes the reader there.
             <AppLink
               componentVariant="button"
@@ -660,7 +673,7 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
             : others.some((quota) => quota.used >= quota.limit)
               ? `You've reached your ${names} limit — upgrade to keep adding.`
               : `You're above 80% of your ${names} quota.`,
-        assistSentence,
+        ...ownWords.map((quota) => quota.sentence),
       ]
         .filter(Boolean)
         .join(' ')}

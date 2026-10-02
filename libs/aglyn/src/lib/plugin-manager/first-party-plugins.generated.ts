@@ -12,6 +12,7 @@ import type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from '
 import type { ResolvedPluginSitemapSection } from './plugin-sitemap-sections'
 import type { ResolvedPluginSiteBundleSectionDeclaration } from './plugin-site-bundle'
 import type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'
+import type { ResolvedPluginEntityPicker } from './plugin-entity-pickers'
 import type { ResolvedPluginCostAxis, ResolvedPluginSpendLine, ResolvedPluginUsageBand, ResolvedPluginUsageMeter } from './plugin-usage-axes'
 import type { ResolvedPluginPlanFeature, ResolvedPluginPlanQuota } from './plugin-plan-entitlements'
 import type { FunctionBindings } from './plugin-contributions'
@@ -793,6 +794,78 @@ export const PLUGIN_ORG_CAPACITIES_DECLARED: readonly ResolvedPluginOrgCapacity[
 ]
 
 /**
+ * Every kind of entity a besigner picker lists, declared by the plugin that
+ * keeps it (AGL-3080). Core reads, browses and resolves; this says where and
+ * in what words.
+ */
+export const PLUGIN_ENTITY_PICKERS_DECLARED: readonly ResolvedPluginEntityPicker[] = [
+  {
+    "pluginId": "forms",
+    "kind": "forms",
+    "attribute": "form-select",
+    "scope": "host",
+    "collection": "forms",
+    "nameField": "displayName",
+    "singular": "form",
+    "plural": "forms",
+    "page": "the Forms page"
+  },
+  {
+    "pluginId": "commerce",
+    "kind": "products",
+    "attribute": "product-select",
+    "scope": "host",
+    "collection": "products",
+    "nameField": "name",
+    "searchable": true,
+    "singular": "product",
+    "plural": "products",
+    "page": "the Products page"
+  },
+  {
+    "pluginId": "commerce",
+    "kind": "collections",
+    "attribute": "collection-select",
+    "scope": "host",
+    "collection": "collections",
+    "nameField": "name",
+    "where": [
+      {
+        "field": "kind",
+        "equals": "catalog"
+      }
+    ],
+    "singular": "collection",
+    "plural": "collections",
+    "page": "the Collections page"
+  },
+  {
+    "pluginId": "commerce",
+    "kind": "categories",
+    "attribute": "category-select",
+    "scope": "host",
+    "collection": "productCategories",
+    "nameField": "name",
+    "singular": "category",
+    "plural": "categories",
+    "page": "the Categories page"
+  },
+  {
+    "pluginId": "data",
+    "kind": "datasets",
+    "attribute": "dataset-select",
+    "fieldsAttribute": "dataset-field-select",
+    "fieldsFrom": "dataset",
+    "scope": "orgData",
+    "collection": "datasets",
+    "nameField": "displayName",
+    "singular": "dataset",
+    "plural": "datasets",
+    "page": "the Data page"
+  },
+]
+
+/**
  * What each plan includes of every quota a first-party plugin owns, declared
  * by that plugin (AGL-3080). `PLAN_ENTITLEMENTS` composes these; core names
  * no key.
@@ -1049,7 +1122,17 @@ export const PLUGIN_USAGE_BANDS_DECLARED: readonly ResolvedPluginUsageBand[] = [
       "assistCostUsd"
     ],
     "entitlement": "assistCreditsPerMonth",
-    "unitCostUsd": 0.001
+    "unitCostUsd": 0.001,
+    "consoleWarning": {
+      "standing": "/api/ai/billing/credits",
+      "member": "credits",
+      "approach": "You're above 80% of your included AI assist credits.",
+      "reached": {
+        "stops": "You've used your included AI assist credits — AI assist stops until next month or an upgrade, and nothing is billed for it.",
+        "bills": "You've used your included AI assist credits — extra credits are billed at your plan’s rate unless you set a stop under Billing → Usage."
+      },
+      "linksUsage": true
+    }
   },
   {
     "pluginId": "workflows",
