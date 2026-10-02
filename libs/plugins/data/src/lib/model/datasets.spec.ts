@@ -15,16 +15,15 @@
  * limitations under the License.
  */
 
-import type { DatasetModel } from './dataset-models'
+import { type DatasetModel, humanizeDatasetFieldId } from './dataset-models'
 import {
   registerCustomFieldType,
   type CustomFieldType,
-} from '../plugin-manager/custom-fields'
+} from '@aglyn/aglyn/plugin-manager/custom-fields'
 import {
   datasetDisplayName,
   describeDatasetRecordErrors,
   defaultDatasetFieldId,
-  humanizeDatasetFieldId,
   parseDatasetFieldEntries,
   parseDatasetFields,
   pickDatasetRecordInput,

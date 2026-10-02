@@ -17,17 +17,9 @@
 'use client'
 
 import {
-  DATASET_FIELD_TYPE_LABELS,
-  DATASET_FIELD_TYPES,
-  defaultDatasetFieldId,
   getCustomFieldType,
   listCustomFieldTypes,
-  validateDatasetFieldId,
-  type DatasetFieldDefinition,
-  type DatasetFieldType,
-  type DatasetModel,
   describeScope,
-  effectiveDatasetModel,
   HOST_ACCESS_ROLES,
   hostScopeToken,
   narrowsScope,
@@ -66,6 +58,8 @@ import {
   useUser,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
+import { DATASET_FIELD_TYPES, DATASET_FIELD_TYPE_LABELS, type DatasetFieldDefinition, type DatasetFieldType, type DatasetModel, effectiveDatasetModel } from '../model/dataset-models'
+import { defaultDatasetFieldId, validateDatasetFieldId } from '../model/datasets'
 
 /** Types surfaced in the picker; the rest exist for compat, not authoring. */
 const AUTHORABLE_TYPES: DatasetFieldType[] = [

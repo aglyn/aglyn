@@ -15,7 +15,6 @@
  * limitations under the License.
  */
 
-import { coerceDocumentValues, type DatasetModel } from '@aglyn/aglyn'
 import {
   datasetRecordsToCsv,
   mapImportColumns,
@@ -23,6 +22,7 @@ import {
   parseImportRows,
   serializeDatasetValue,
 } from './dataset-io'
+import { type DatasetModel, coerceDocumentValues } from './dataset-models'
 
 const model: DatasetModel = {
   order: ['title', 'price', 'launchedAt', 'location', 'tags'],

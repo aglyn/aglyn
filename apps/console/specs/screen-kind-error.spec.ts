@@ -435,6 +435,21 @@ describe('an assigned error screen does not spend the allowance (AGL-2092)', () 
     expect(slotOf('notFound')).toBeUndefined()
   })
 
+  // A page group (AGL-3463) has nothing to render, and stamping `error` over
+  // it would turn the folder into a slugless page that unroutes its pages.
+  it('refuses to overwrite a page group, and refuses converting one', async () => {
+    mockStore.screens.s1 = { displayName: 'Campaigns', kind: 'group' }
+    expect((await assign('notFound', 's1')).status).toBe(400)
+    expect(kindOf('s1')).toBe('group')
+    expect(slotOf('notFound')).toBeUndefined()
+    for (const kind of ['page', 'template']) {
+      const refused = await convert('s1', kind)
+      expect(refused.status).toBe(400)
+      expect(refused.body.error).toContain('page group')
+      expect(kindOf('s1')).toBe('group')
+    }
+  })
+
   it('refuses an unknown or deleted screen', async () => {
     expect((await assign('notFound', 'nope')).status).toBe(404)
     mockStore.screens.s1 = { displayName: 'Old', deletedAt: { seconds: 1 } }

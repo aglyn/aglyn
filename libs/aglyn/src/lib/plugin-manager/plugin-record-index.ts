@@ -84,6 +84,14 @@ export interface PluginRecordIndex {
   ): Promise<{ records: PluginIndexedRecord[]; truncated: boolean }>
   /** One live record, or `null` — gone, deleted, or not the scope's. */
   get(request: PluginRecordIndexScope & { id: string }): Promise<PluginIndexedRecord | null>
+  /**
+   * One record's document — a Firestore Admin `DocumentReference` — for a
+   * reader that changes what the owner documents a reader may change, or
+   * keeps its own records under it; `null` for a scope the kind has none in.
+   * Whether the record exists is the reader's read to make. Optional: a kind
+   * whose owner offers no such thing is read through `get` alone.
+   */
+  ref?(request: PluginRecordIndexScope & { id: string }): Promise<unknown>
 }
 
 export const PLUGIN_RECORD_INDEXES = definePluginServiceContract<PluginRecordIndex>(

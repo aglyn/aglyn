@@ -54,7 +54,7 @@ Three findings dominate everything else in this document:
    (`libs/plugins/commerce/src/lib/server/membership-register.ts:169`,
    `libs/plugins/bookings/src/lib/server.ts:634` and `:653`). The form-submit
    route calls `upsertHostContact` and never `addHostLead`
-   (`apps/tenant/app/api/forms/submit/route.ts:363-375`). A lead-capture form
+   (`libs/plugins/forms/src/lib/server/form-submit.ts:363-375`). A lead-capture form
    — the thing the endpoint's own docblock calls itself, "Lead-capture
    submissions endpoint (AGL-76)" — has never created a lead.
 
@@ -87,7 +87,7 @@ before a reusable form can honestly claim to capture leads.
 | Honeypot | :371-378 | `name="website"`, `tabIndex={-1}`, off-canvas at `left: -5000px`. |
 | Field→dataset mapping | :525-532, `FIELD_MAP_INPUT_PREFIX = '__map__'` (:85) | A hidden input per mapped field carries `datasetFieldId`; the route re-validates every id against the dataset model and drops unknowns. |
 | After-submit outcomes | `FormProps` :47-77 | `message \| redirect \| reveal`, with `sanitizeRedirectUrl` (:102) refusing anything that is not https-absolute or same-origin. |
-| Submit endpoint | `apps/tenant/app/api/forms/submit/route.ts` | Honeypot drop + count → shape validation (`MAX_FIELDS = 20`, `MAX_PAYLOAD_CHARS = 10000`) → per-(site, IP) rate limit 10/60s → host exists → lockdown → plan quota → abuse ceiling → write → contact → dataset → counter → notify → event. |
+| Submit endpoint | `libs/plugins/forms/src/lib/server/form-submit.ts` | Honeypot drop + count → shape validation (`MAX_FIELDS = 20`, `MAX_PAYLOAD_CHARS = 10000`) → per-(site, IP) rate limit 10/60s → host exists → lockdown → plan quota → abuse ceiling → write → contact → dataset → counter → notify → event. |
 | Submission document | route :332-360 | `formName`, `path`, `fields` (keys ≤ 64 chars, values ≤ 2000), `read`, `createdAt`, optional `rateDegraded`, optional `routing.dataset { id, name, recordId }`. |
 | Containment, fully built | `libs/aglyn/src/lib/app-utils/plan-entitlements.ts:3384-3440`, `form-abuse-ceiling.ts` | `FORM_ABUSE_CEILING_MULTIPLE = 10`, `FORM_ABUSE_CEILING_FLOOR = 5_000`, `FORM_ABUSE_CEILING_UNLIMITED = 1_000_000`, counted per site per month, with a refusal counter, a manager notification on the month's first trip, and a visitor-facing fallback address. |
 | Metered, not walled, on paid plans | `checkFormSubmissionQuota` :3368-3382 | `allowed: metered ? true : used < included`. Free hard-walls at `formSubmissionsPerMonth` (20); every plan carrying `meteredInfraPassThrough` accepts and bills the excess. |

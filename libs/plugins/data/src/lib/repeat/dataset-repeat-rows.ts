@@ -16,17 +16,13 @@
  */
 
 import {
-  datasetDisplayName,
-  effectiveDatasetModel,
-  type HostDataset,
-  type HostDatasetRecord,
   REPEAT_MAX_RECORDS,
   type RepeatableDataset,
   scopeTokensForHost,
   visibleToHost,
 } from '@aglyn/aglyn'
 import type { RepeatRowsAnswer } from '@aglyn/aglyn/app-utils/repeat-sources'
-import { repeatRecordsFromPages } from '@aglyn/tenant-runtime/repeat-record-pages'
+import { repeatRecordsFromPages } from './repeat-record-pages'
 import {
   collection,
   doc,
@@ -42,6 +38,8 @@ import {
   type QuerySnapshot,
   where,
 } from 'firebase/firestore'
+import { effectiveDatasetModel, repeatRowsModelOf } from '../model/dataset-models'
+import { type HostDataset, type HostDatasetRecord, datasetDisplayName } from '../model/datasets'
 
 export interface DatasetRepeatRowsRequest {
   firestore: Firestore
@@ -106,7 +104,7 @@ export async function readDatasetRepeatRows(
 
   const load = async (snapshot: DocumentSnapshot): Promise<RepeatableDataset> => ({
     records: await readRepeatRows(snapshot.ref),
-    model: effectiveDatasetModel(snapshot.data() as HostDataset),
+    model: repeatRowsModelOf(effectiveDatasetModel(snapshot.data() as HostDataset)),
   })
   const rows = await load(dataset)
   const rowsByKey: Record<string, RepeatableDataset> = {
@@ -115,10 +113,7 @@ export async function readDatasetRepeatRows(
   }
 
   const targets = new Set<string>()
-  for (const fieldId of rows.model?.order ?? []) {
-    const field = rows.model?.fields[fieldId]
-    const targetId =
-      field?.type === 'reference' ? field.reference?.datasetId : undefined
+  for (const targetId of Object.values(rows.model?.references ?? {})) {
     if (targetId && !targetId.includes('/') && !rowsByKey[targetId]) {
       targets.add(targetId)
     }

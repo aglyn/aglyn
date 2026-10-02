@@ -120,7 +120,7 @@ export { METERED_MARKUP } from '@aglyn/aglyn/app-utils/plan-entitlements'
  *   `npm run check:page-view-rate` fails if a later measurement pushes a
  *   published page back above the weight this rate is priced for.
  * - `perFormSubmission` **0.000061538462** (2026-10-01, AGL-3444) — measured
- *   from `apps/tenant/app/api/forms/submit/route.ts` on 2026-08-09: ~12
+ *   from `libs/plugins/forms/src/lib/server/form-submit.ts` on 2026-08-09: ~12
  *   Firestore reads, ~9 writes, one ~0.4s function invocation. No email is
  *   sent (`notifyHostManagers` is in-app only) and there is no reCAPTCHA
  *   assessment — spam control is a honeypot plus a Firestore rate limiter.

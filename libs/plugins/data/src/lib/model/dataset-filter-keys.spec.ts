@@ -287,7 +287,7 @@ describe('the integrity writers carry the tokens', () => {
     // cannot drift apart without one of them going red.
     const fixtures = JSON.parse(
       readFileSync(
-        join(__dirname, '..', '..', '..', '..', '..', 'tools', 'scripts', 'lib', 'dataset-filter-keys.fixtures.json'),
+        join(__dirname, '..', '..', '..', '..', '..', '..', 'tools', 'scripts', 'lib', 'dataset-filter-keys.fixtures.json'),
         'utf8',
       ),
     )

@@ -170,7 +170,7 @@ export const DOCS_HELP_EXCERPTS = {
   salesTaxReturn: 'The quarterly Texas return — pick a period, read the Form 01-114 figures, check the rows that need attention, and export the working papers.',
   sandboxSecurity: 'How sandboxed marketplace plugins are isolated — separate origin, per-manifest CSP, pinned artifacts — and what that means when you write one.',
   saveATemplate: 'Turn a site into a reusable template and install marketplace templates.',
-  screens: 'How each page of your site gets a slug, how the hierarchy builds your URLs, and which pages count against your plan.',
+  screens: 'How each page of your site gets a slug, how the hierarchy builds your URLs, how groups organize pages without changing them, and which pages count against your plan.',
   screensAndLayouts: 'The four building blocks of a site\'s structure — pages, layouts, reusable components and templates — and which one you want.',
   securityAndCompliance: 'Where the security material for a procurement review lives, and what we do not have.',
   selfHosting: 'Run the whole Aglyn platform on your own infrastructure with Docker — your own Firebase project, your own domains, your own keys.',

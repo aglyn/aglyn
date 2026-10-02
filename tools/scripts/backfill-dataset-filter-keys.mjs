@@ -21,7 +21,7 @@
  * field, `datasetFilterValues`), and its one word-level clause — a text
  * `contains`, a list member, or the search word — asks `filterKeys
  * array-contains` (`datasetFilterKeys`), both in
- * `libs/aglyn/src/lib/app-utils/dataset-models.ts`. Every writer stamps them
+ * `libs/plugins/data/src/lib/model/dataset-models.ts`. Every writer stamps them
  * through `datasetIntegrityFields` / `datasetIntegrityUpdate`; a record
  * written before carries neither, or only `filterKeys`, and answers no
  * filter that asks the missing one until it is edited or this script

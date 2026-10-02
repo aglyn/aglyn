@@ -191,6 +191,7 @@ a component the first did not still reaches the plugin.
 | `options.recipientLink` / `isPluginRecipientLinkRoute(path)` | A route that answers a link the platform mailed to somebody — an unsubscribe in a `List-Unsubscribe` header. Both dispatchers skip their per-site enablement and release gates for it and nothing else: lockdown and the rate limit still apply. An opt-out has to keep working after its plugin is paused for the workspace (CAN-SPAM holds it open for thirty days after the send), so the route authenticates the link itself, by a signature it verifies. |
 | `options.machine` / `isPluginMachineRoute(path)` | A route a machine calls — a scheduler's sweep on the cron secret, a provider's signed webhook — that names no site and no member. Both dispatchers skip their per-site enablement and release gates for it, and exempt it from their write limit and cross-origin check (`isMachinePluginApiPath` answers `true` for it); lockdown still applies. The flag grants nothing by itself: the route authenticates its caller, and judges the plugin's release and plan for each organization it resolves. |
 | `options.portability` / `isPluginPortabilityRoute(path)` | A route that hands a workspace the records the plugin keeps for it — a data-portability export — which the workspace is owed whether or not the plugin is switched on or released for it now. Both dispatchers skip their per-site enablement and release gates for it and nothing else: lockdown, the email-verification gate and the write limit still apply. The flag grants nothing by itself: the route authenticates the member, and asks the plugin's release and plan itself of anything it serves beyond what the workspace is owed. |
+| `options.ownVisitorGates` / `isPluginOwnVisitorGatesRoute(path)` | A public visitor door that runs EVERY visitor gate itself, because its answers to them are a published contract — the forms plugin's `forms/submit`, whose "not accepting" notice, per-(site, address) limit, monthly ceiling and lockdown placement are its own, and which is judged by the switch of the plugin whose door a submission came through. The tenant dispatcher hands such a route the request untouched: no cross-origin check, no site read from the body, no enablement or release gate, no lockdown, no write limit, no card velocity. Declaring it takes all of those on, so it is honored only for a first-party plugin's registration under the loader's marker; anyone else's keeps the dispatcher's gates and the drop is logged. The console's dispatcher does not read it. |
 | `handler` as `(req, res)` or `{ web }` | The node shape takes `PluginApiRequest` / `PluginApiResponse`. The Web shape, `{ web: (request, { params }) => Response }`, takes the dispatcher's own `Request` and answers a `Response` — the form for a door that streams (server-sent events, a chat answer) or reads the raw body itself; `params` carries the path segments and every `:name` filled. |
 | `PluginApiRequest` | `{ method, query, body, headers, rawBody? }` — `rawBody` carries the unparsed payload for Stripe/Svix signature verification. |
 | `resolvePluginApiMatch(path)` / `runPluginApiMatch(match, request, params, runLegacy)` | What a dispatcher does: the route and its filled `:name` params for a path, then either shape run — the host app supplies `runLegacy` for the node shape. `resolvePluginApiRoute(path)` answers the node handler alone, for the specs that drive one directly. |
@@ -237,7 +238,7 @@ idempotency key means the same thing on every resource whoever serves it.
 | `registerSiteRedirectResolver(fn)` | Runs before route resolution; first non-null redirect wins. |
 | `registerSitePageResolver(fn)` | Composes plugin-owned pages (commerce PDP/PLP). |
 | `registerSitePageEnricher(fn)` | Contributes page-prop slices to every page that renders nodes — published pages, collection routes, designed auth pages and a resolver's own page alike; a resolver's keys win, and `pageData` merges per plugin. Gated screens (password-protected, members-only) enrich behind the gate and deliver the slice with their nodes. The designed 404 body sets `pathUnknown` — it is cached per host, so contribute only what does not depend on a path and never substitute one. Maintenance, lockdown and bandwidth-containment notices are not enriched. **Enricher errors are isolated** — a broken plugin drops its slice, never the page. |
-| `registerRepeatRowReader(sourceId, reader, { pluginId })` (`plugin-manager/repeat-rows`) | Answers the rows a published page repeats an element over: the composition calls `readRepeatRows({ hostId, keys })` with the keys its tree repeats over and renders what comes back, naming no collection itself. Register from your `serverDeclarations` entry, loading the reader with `import()` inside the function, and declare the same source in `plugins.config.json` (`"repeatSource": { "id": … }`, one plugin at most). A declared source with no registered reader is **refused, not emptied**: the app's declarations step runs once more and the render then throws, so a broken boot keeps the last good page instead of turning every list into one row. A key your reader cannot answer is left out, and that element renders once, as written. The editor's canvas preview is the separate `registerRepeatSource` (`app-utils/repeat-sources`); give that source an `entityKind` naming the entity picker kind its keys are, and the insert-token menu inside a repeat offers `{{item.<field>}}` for each field the picker reports for that entity (`entityFields`). |
+| `registerRepeatRowReader(sourceId, reader, { pluginId })` (`plugin-manager/repeat-rows`) | Answers the rows a published page repeats an element over: the composition calls `readRepeatRows({ hostId, keys })` with the keys its tree repeats over and renders what comes back, naming no collection itself. Register from your `serverDeclarations` entry, loading the reader with `import()` inside the function, and declare the same source in `plugins.config.json` (`"repeatSource": { "id": … }`, one plugin at most). A declared source with no registered reader is **refused, not emptied**: the app's declarations step runs once more and the render then throws, so a broken boot keeps the last good page instead of turning every list into one row. A key your reader cannot answer is left out, and that element renders once, as written. Each answer is `{ records, model? }`: the rows' value maps in display order, each with its `$id`, and `model.references`, which maps a reference field's id to the key its target rows are answered under — the one thing a `{{item.ref.field}}` hop reads, so answer the target's rows under that key too. The editor's canvas preview is the separate `registerRepeatSource` (`app-utils/repeat-sources`); give that source an `entityKind` naming the entity picker kind its keys are, and the insert-token menu inside a repeat offers `{{item.<field>}}` for each field the picker reports for that entity (`entityFields`). |
 | `registerFormRecordTarget({ stamp, write }, { pluginId })` (`plugin-manager/submission-record-target`) | Makes your plugin the place a form's submissions are also filed as records. `stamp(nodes, hostId)` runs on the tree a page ships and marks each form you write for with whatever you will trust when it comes back — the submit route is public, so never trust the body alone; `write({ hostId, orgId, orgBilling, body, fields })` runs after the submission is stored and answers the `routing` note the Inbox shows (where it went, or why not). Register from `serverDeclarations` with the work behind `import()`, and declare `"formRecordTarget": { "id": … }` in `plugins.config.json` (one plugin at most). A declared target that is not registered fails loud: a page with a form throws at render, and a submission is kept with `routing.recordTargetUnavailable`. |
 
 ## Stylesheets — `plugin-styles`
@@ -772,6 +773,27 @@ address. A plugin that links to another plugin's page asks for
 one of these; `check:plugin-domain-in-core` refuses one that spells the other
 plugin's slug or core route itself.
 
+### Record pages, for a server — `plugin-record-pages`
+
+A server has no console registrar, so it cannot ask the routes above. The
+forms plugin's door tells a site's managers about a new submission, and the
+notification's link is where they read submissions — a page another plugin
+draws. The plugin whose console page shows a kind declares it in
+`plugins.config.json`, and the manifest generator compiles it:
+
+```json
+"recordPages": [{ "kind": "formSubmission", "path": "/inbox" }]
+```
+
+| Field / API | Semantics |
+| --- | --- |
+| `kind` | The record kind, as the routes and indexes key it. One page per kind. |
+| `path` | The site console path the kind is read on, under one of the declaring plugin's own console routes, or the generator refuses it. |
+| `pluginRecordPage(kind)` | The declaration, or `null` when no plugin in the build shows the kind. |
+| `pluginRecordPageLink(kind, hostId)` | `/{hostId}{path}`, the shape a notification's `link` takes, or `null`, in which case the notification goes without a link. |
+
+The Inbox declares `formSubmission`.
+
 ## Record cards — `plugin-record-cards` (`/server`)
 
 What a plugin's record looks like in one line and one image, published by the
@@ -855,6 +877,7 @@ const { records } = bottles ? await bottles.list({ hostId, limit: 20 }) : { reco
 | `registerPluginRecordIndex(kind, index, { pluginId? })` | A kind another plugin keeps throws naming both; the incumbent keeps serving, and the owner re-registering replaces its own. |
 | `pluginRecordIndex(kind)` | `{ pluginId, index }`, or **`null` when no plugin keeps the kind here** — a reader treats that as "none here", never as a reason to read the collection itself. The `pluginId` is also how a reader asks whether the keeper is switched on for a site. |
 | `index.list({ orgId?, hostId?, limit })` / `index.get({ orgId?, hostId?, id })` | Live, named records only — the owner decides what "deleted" is — each `{ id, name, facts }`, with `facts` in the shape the owner documents. `truncated` says the scope holds more. |
+| `index.ref?({ orgId?, hostId?, id })` | Optional: one record's document, a Firestore Admin `DocumentReference`, for a reader that changes what the owner documents a reader may change, or keeps records of its own under it. Whether the record exists is the reader's read. The reader proves who is asking first — the index authenticates nobody. |
 
 Import it by its own subpath (`@aglyn/aglyn/plugin-manager/plugin-record-index`).
 Commerce publishes `product` and `productCategory`; Workflows publishes a site's
@@ -866,7 +889,33 @@ console-only server declarations. The CRM publishes its `pipeline` records
 with their stages, the `company` a person works for (facts: the company as
 stored — name, domain, address and the rest), and its `messageTemplate`
 records (facts: `{ kind, subject, body }`, the body in the CRM's merge-field
-grammar).
+grammar). Forms publishes a site's `formSubmission`
+records — the door's rows — and their documents (`ref`), which the Inbox marks
+answered and keeps its replies and list assignments under.
+
+## Intake gates — `plugin-intake-gates` (`/server`)
+
+Whether a visitor's next write through a plugin's public door would be
+accepted, asked by a monitor that must not write to find out — the funnel
+probe on `/api/health/funnel`, which would otherwise file fake leads, bill the
+customer and notify the site's managers. The plugin that keeps the door
+registers a gate under the door's name, from its server declarations:
+
+```ts
+registerPluginIntakeGate('form', async ({ hostId, host, org }) => {
+  if (!isHostPluginEnabled(org, host, 'forms')) return 'switched-off'
+  // …the plan's allowance and the flood ceiling, over the door's own reads
+  return 'open'
+})
+```
+
+| API | Semantics |
+| --- | --- |
+| `registerPluginIntakeGate(door, gate, { pluginId? })` | One gate per door; a door another plugin answers throws naming both. |
+| `gate({ hostId, host, org })` | The door's own gates, evaluated the way the door evaluates them before its first write, writing nothing: `open`, `switched-off`, `plan-exhausted` or `flood-ceiling`. The caller hands over the site and organization documents it has read; the gate reads only what is its own. The platform's own gates — lockdown, who would be told — are the caller's to ask. |
+| `pluginIntakeGate(door)` | `{ pluginId, gate }`, or `null` when no plugin keeps the door here; a caller runs the app's declarations step once before it concludes the door is shut. |
+
+Forms gates the `form` door.
 
 ## What depends on a thing — `plugin-dependents` (`/server`)
 
@@ -937,6 +986,8 @@ const bottles = pluginRecordsFromRows('bottle', data)
 | `source.query(firestore, { orgId?, hostId?, search?, memberScope?, installedFrom?, consentGroupId?, viewerUid?, limit })` | The query the signed-in member's read of the scope is proved by — the owner applies the filter its security rules require — at most `limit` documents, or `null` for a scope the kind has none in. `search` is what a person typed, matched the owner's way. `memberScope` is the reading member's own scope tokens where they are not organization-wide, for an org-scoped kind to narrow by when no site is named. `installedFrom` keeps the records installed from that listing (their install stamp's `listingId`); a kind that is never installed answers none. `consentGroupId` is the group the named site presents as, for a kind whose records say different things to different groups. `viewerUid` is the signed-in member, for a kind some of whose records are one member's own. |
 | `source.record(id, data, request?)` | One stored document as the owner shares it, in the same shape its server index answers, or `null` to leave it out (deleted, unnamed, not this reader's). `request` is the one the query was built from, when the reader hands it back: a rule the query cannot state — a site's view of an org-wide row, a member's private record — is applied here. |
 | `pluginRecordListQuery(kind, firestore, request)` / `pluginRecordsFromRows(kind, rows, idField?, request?)` | The reader's half: the query to listen to, and the rows read back through the owner — hand the request back so the owner applies what the query could not state. Both answer nothing where no plugin keeps the kind here. |
+| `source.walk?(firestore, { orgId?, hostId? })` / `pluginRecordListWalk(kind, firestore, scope)` | Optional: the base a reader WALKS the kind from with the console's paged list query, which adds its own filters, order and pages over the stored fields the owner documents — for a reader that pages a whole list rather than picking from a window. Where the rules admit a read only narrowed by a field, the owner says which and the reader adds it. |
+| `source.doc?(firestore, { orgId?, hostId?, id })` / `pluginRecordListDoc(kind, firestore, request)` | Optional: one record's document, for a reader that opens it whole or changes what the owner documents a reader may change; the security rules hold the rest. |
 
 The reader runs the query with the console's own collection listener, so the
 read is bounded, retried and reported like every other list. Import it by its
@@ -951,7 +1002,9 @@ and priced variants. The CRM lists the saved views of its Contacts and Leads
 lists a member may list (`savedView`, with whether each can be taken whole as
 an audience), its email templates (`messageTemplate`), a search of a site's
 `contact` records named as the site's group knows them, and a site's `lead`
-records with whether each is still open.
+records with whether each is still open. Forms lists a site's `formSubmission` records — the
+newest for a glance, a site's or every site's for the Inbox to walk, and one
+submission's document for it to open, mark and delete.
 
 ## The tenant's tax rule — `plugin-tax-profile` (`/server`)
 
@@ -1390,6 +1443,32 @@ previous call, or a copy through another door, already filed — or a refusal
 (`{ ok: false, status, error }`: no record system on the plan, a record at its
 activity ceiling), and never throw for a refusal. The registry authenticates
 nobody: the caller has already decided the entry is the workspace's to write.
+
+An email a plugin is about to send can land on the timeline with its delivery
+state, the way a member's own send does — but only the record system can say
+whether the address is the person the sender means. So the sender offers the
+message BEFORE it goes, carries the tags it is answered with (the delivery
+webhook has nothing else to find the entry by), and files the entry once the
+provider accepted it:
+
+```ts
+const entry = await preparePluginRecordEmail({
+  orgId, hostId, to,
+  link: { contactId, email }, // the person the sender means
+  org,                         // the billing document, when already read
+})
+const result = await sendEmail({ to, subject, text, ...(entry ? { tags: [...entry.tags] } : {}) })
+if (result.sent) await entry?.file({ subject, body: text, to, sourceRef: automationId })
+```
+
+| API | Semantics |
+| --- | --- |
+| `preparePluginRecordEmail(request)` | `{ tags, file }`, or `null` when no plugin keeps records, the one that does files no sent mail, or the message earns no entry — it is not addressed to the person `link` finds, the plan carries no record system, or the record is at its activity ceiling. Never throws; neither does `file`. |
+| `writer.prepareEmail(request)` | Optional on the writer: what the record system answers. Nothing is written until `file`. |
+
+The automation engine offers every `sendEmail` step this way; the CRM files
+the entry when the message goes to the contact the event is about, with the
+automation as its source.
 
 ## Text generation — `plugin-text-generation` (`/server`)
 

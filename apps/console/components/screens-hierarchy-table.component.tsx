@@ -17,7 +17,9 @@
 'use client'
 
 import {
+  isScreenGroup,
   screenRoutePathToUrl,
+  toScreenRouteNode,
   wouldCreateScreenCycle,
   type ScreenRouteNode,
   type ScreenUid,
@@ -27,6 +29,7 @@ import {
   ICON_VARIANT_COLLAPSIBLE_OPEN,
   ICON_VARIANT_MODIFY_DRAG,
 } from '@aglyn/shared-data-enums'
+import { mdiFolderOpenOutline, mdiFolderOutline } from '@aglyn/shared-data-mdi'
 import { AppLink, MdiIcon } from '@aglyn/shared-ui-jsx'
 // Subpath, not the barrel: `empty-state.component` is deliberately kept out
 // of `@aglyn/shared-ui-jsx`'s index (nothing in the tenant page graph shows an
@@ -84,6 +87,11 @@ export interface ScreenHierarchyRow {
   description?: string
   slug?: string
   parentId?: ScreenUid
+  /**
+   * The screen's `kind`. A `'group'` row (AGL-3463) is a folder: it has no
+   * address, opens nothing, and composes nothing into the paths below it.
+   */
+  kind?: string
   order?: number
   versionId?: string
   createdAt?: { toDate?: () => Date; seconds?: number }
@@ -335,7 +343,17 @@ function ScreenTableRow(props: {
   } = props
   const { row, depth } = entry
   const hasChildren = entry.children.length > 0
-  const href = rowHref?.(row) ?? null
+  // A group is a folder (AGL-3463): no address, no detail page, no besigner.
+  // Its row opens and closes the folder instead of navigating anywhere.
+  const isGroup = isScreenGroup(row)
+  const href = isGroup ? null : (rowHref?.(row) ?? null)
+  const handleRowClick = isGroup
+    ? hasChildren
+      ? () => onToggleCollapse(row.$id)
+      : undefined
+    : onRowOpen
+      ? () => onRowOpen(row)
+      : undefined
   const { isOver, setNodeRef: setDropRef } = useDroppable({
     id: `drop:nest:${row.$id}`,
     disabled: nestDisabled,
@@ -368,9 +386,9 @@ function ScreenTableRow(props: {
         setDragRef(node)
       }}
       hover
-      onClick={onRowOpen ? () => onRowOpen(row) : undefined}
+      onClick={handleRowClick}
       sx={{
-        cursor: onRowOpen ? 'pointer' : undefined,
+        cursor: handleRowClick ? 'pointer' : undefined,
         opacity: isDragging ? 0.4 : 1,
         ...(isOver &&
           !nestDisabled && {
@@ -406,6 +424,7 @@ function ScreenTableRow(props: {
             <IconButton
               size="small"
               aria-label={collapsed ? 'Expand children' : 'Collapse children'}
+              aria-expanded={!collapsed}
               onClick={() => onToggleCollapse(row.$id)}
             >
               <MdiIcon
@@ -427,6 +446,17 @@ function ScreenTableRow(props: {
       </TableCell>
       <TableCell>
         <Stack direction="row" sx={{ alignItems: 'center', gap: 0.5 }}>
+          {isGroup ? (
+            <MdiIcon
+              path={
+                hasChildren && !collapsed
+                  ? mdiFolderOpenOutline.path
+                  : mdiFolderOutline.path
+              }
+              aria-hidden
+              sx={{ flexShrink: 0, fontSize: '1.25rem', color: 'text.secondary' }}
+            />
+          ) : null}
           {href ? (
             // The row's own click handler would fire too and push the same
             // route twice — one history entry per back press.
@@ -434,14 +464,30 @@ function ScreenTableRow(props: {
               {row.displayName || row.$id}
             </AppLink>
           ) : (
-            <Typography variant="body2">{row.displayName || '--'}</Typography>
+            <Typography
+              variant="body2"
+              sx={isGroup ? { fontWeight: 'fontWeightMedium' } : undefined}
+            >
+              {row.displayName || '--'}
+            </Typography>
           )}
           {renderRowPresence?.(row)}
         </Stack>
       </TableCell>
       <TableCell>{row.$id}</TableCell>
       <TableCell>
-        {isCollectionTemplate ? (
+        {isGroup ? (
+          <Tooltip
+            title={
+              'A group has no address of its own. The pages in it keep ' +
+              'theirs — moving a page in or out never changes its URL.'
+            }
+          >
+            <Typography variant="body2" color="text.secondary" component="span">
+              {'Group — no address'}
+            </Typography>
+          </Tooltip>
+        ) : isCollectionTemplate ? (
           <Tooltip
             title={
               'A collection template is not served at a path of its own — ' +
@@ -541,9 +587,7 @@ export function ScreensHierarchyTableComponent(
 
   const screensById = useMemo(() => {
     const map: Record<ScreenUid, ScreenRouteNode> = {}
-    for (const screen of screens) {
-      map[screen.$id] = { slug: screen.slug, parentId: screen.parentId }
-    }
+    for (const screen of screens) map[screen.$id] = toScreenRouteNode(screen)
     return map
   }, [screens])
 

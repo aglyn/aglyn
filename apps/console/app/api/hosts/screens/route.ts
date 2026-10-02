@@ -23,6 +23,7 @@ import {
   screenRoutePathToUrl,
   SCREEN_KIND_EMAIL,
   SCREEN_KIND_ERROR,
+  SCREEN_KIND_GROUP,
   SCREEN_KIND_TEMPLATE,
 } from '@aglyn/aglyn/server'
 import {
@@ -172,6 +173,15 @@ export async function assignErrorScreen(options: {
         error: 'A collection entry template cannot also be an error page',
       }
     }
+    // A page group (AGL-3463) has no content to render, and stamping
+    // `kind: 'error'` over it would turn the folder into a slugless page — one
+    // every page inside it would then compose its path under, and lose.
+    if (currentKind === SCREEN_KIND_GROUP) {
+      return {
+        status: 400 as const,
+        error: 'A page group has no content of its own to show as an error page',
+      }
+    }
 
     // THE BOUND (AGL-2092), against the POST-state — the AGL-1390 rule, because a
     // create-time count that asks about the present can always be walked around
@@ -266,6 +276,17 @@ export async function convertScreenKind(options: {
       return {
         status: 400 as const,
         error: 'An email document is not a page of this site',
+      }
+    }
+    // Nor is a page GROUP (AGL-3463), and converting one is worse than
+    // meaningless: a group composes nothing into the paths below it, so the
+    // moment it became a slugless page or template every page inside it would
+    // lose its address on the next move or publish. A group is created as a
+    // group, and deleting it is the way out.
+    if (target.get('kind') === SCREEN_KIND_GROUP) {
+      return {
+        status: 400 as const,
+        error: 'A page group is not a page — move its pages out, then delete it',
       }
     }
     // A screen still bound to an error slot is refused in BOTH directions

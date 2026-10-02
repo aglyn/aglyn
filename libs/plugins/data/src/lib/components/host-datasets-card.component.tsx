@@ -21,16 +21,8 @@ import {
   checkDatasetQuota,
   checkEntitlement,
   checkQuota,
-  coerceDocumentValues,
-  datasetIntegrityUpdate,
-  datasetValueToInput,
-  effectiveDatasetModel,
-  formatDatasetValue,
   getCustomFieldType,
-  modelFromFieldEntries,
-  parseDatasetFieldEntries,
   pluginDocsHelp,
-  validateDocument,
 } from '@aglyn/aglyn'
 import { exportShortfall, mapImportColumns, parseImportRows } from '../model'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
@@ -93,6 +85,8 @@ import {
   planRecordQuery,
   recordColumn,
 } from './dataset-record-filter'
+import { coerceDocumentValues, datasetIntegrityUpdate, datasetValueToInput, effectiveDatasetModel, formatDatasetValue, modelFromFieldEntries, validateDocument } from '../model/dataset-models'
+import { parseDatasetFieldEntries } from '../model/datasets'
 
 export interface HostDatasetsCardProps {
   /** Host context: resolves the owning org and logs host activity. */

@@ -16,6 +16,9 @@
  */
 
 import { FieldValue } from 'firebase-admin/firestore'
+// The reporter the tenant's own server errors go through, so a failed
+// increment is counted where they are.
+import { reportServerError } from '@aglyn/tenant-data-admin'
 
 /**
  * The per-form counters a stored submission moves (`docs/specs/reusable-forms.md`
@@ -112,10 +115,8 @@ export async function incrementFormStats(options: {
   try {
     const report =
       options.report ??
-      (async (event: { message: string; route: string }) => {
-        const { reportServerError } = await import('./report-server-error')
-        return reportServerError(event, { service: 'tenant-web' })
-      })
+      ((event: { message: string; route: string }) =>
+        reportServerError(event, { service: 'tenant-web' }))
     await report({ message, route: '/api/forms/submit' })
   } catch {
     // The console line above is the record of last resort; a reporter that

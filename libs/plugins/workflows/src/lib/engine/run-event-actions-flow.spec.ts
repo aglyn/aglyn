@@ -238,6 +238,8 @@ jest.mock('@aglyn/shared-util-email', () => {
 import { DEFAULT_SUBSCRIPTION_TOPIC_ID } from '@aglyn/aglyn/app-utils/subscription-topics'
 import { enrollInFlow, type FlowEnrollment } from './flow-enrollments'
 import { resumeFlowEnrollment, runEventActions } from './run-event-actions'
+import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
+import { standInPersonRecords } from '../testing/stand-in-person-records'
 
 const WELCOME_STEPS = [
   { type: 'sendEmail', subject: 'Thanks', body: 'Welcome aboard' },
@@ -902,6 +904,56 @@ describe('the merge tags in an automation’s email (AGL-3458)', () => {
 
     expect(sent[0].text).not.toContain('{{')
     expect(sent[0].text).toContain('Hi  there')
+  })
+})
+
+describe('the merge tags, from the person the record system holds (AGL-3458)', () => {
+  afterEach(() => resetPluginServicesForTests())
+
+  it('fills both spellings from the contact as this site knows them', async () => {
+    const { asked } = standInPersonRecords({
+      find: () => ({
+        kind: 'contact',
+        id: 'contact-1',
+        email: 'a@b.co',
+        data: {
+          email: 'a@b.co',
+          name: 'Ada Lovelace',
+          facets: { [HOST_ID]: { name: 'Countess Ada', jobTitle: 'Analyst' } },
+        },
+      }),
+    })
+    seedAction([
+      { type: 'sendEmail', subject: 'Hi {{firstName|there}}', body: '{{contact.title|friend}} at {{site.name}}' },
+    ])
+
+    await runEventActions(HOST_ID, 'formSubmission', { email: 'a@b.co', name: 'Typed Name' })
+
+    expect(sent[0].subject).toBe('Hi Countess')
+    expect(sent[0].text).toContain('Analyst at ')
+    // Asked as this site, of any kind of record, by the event's address.
+    expect(asked[0]).toEqual(
+      expect.objectContaining({ hostId: HOST_ID, email: 'a@b.co', onlyVisibleToSite: true, anyKind: true }),
+    )
+  })
+
+  it('fills them from the lead a lead-routed form filed, when nobody holds a contact', async () => {
+    standInPersonRecords({
+      find: () => ({
+        kind: 'lead',
+        id: 'lead-1',
+        email: 'a@b.co',
+        data: { email: 'a@b.co', name: 'Charles Babbage', company: 'Analytical Engines' },
+      }),
+    })
+    seedAction([{ type: 'sendEmail', subject: 'Hi {{firstName|there}}', body: 'From {{lead.company}}' }], {
+      trigger: { event: 'lead' },
+    })
+
+    await runEventActions(HOST_ID, 'lead', { email: 'a@b.co', leadId: 'lead-1' })
+
+    expect(sent[0].subject).toBe('Hi Charles')
+    expect(sent[0].text).toContain('From Analytical Engines')
   })
 })
 

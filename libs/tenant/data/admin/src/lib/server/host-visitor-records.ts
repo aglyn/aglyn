@@ -218,7 +218,7 @@ export async function leadForWrite(
  * count as shipped.
  *
  * Two audiences, one call, in exactly `recordAbuseCeilingTrip`'s shape
- * (`apps/tenant/app/api/forms/submit/route.ts`, AGL-1655):
+ * (`libs/plugins/forms/src/lib/server/form-submit.ts`, AGL-1655):
  *
  *  - A durable per-month refusal count at
  *    `hosts/{id}/counters/{siteMembers|leads}Refused`. Counters are excluded

@@ -21,6 +21,7 @@ import {
   type CrmMergeResult,
   resolveCrmMergeFields,
 } from '@aglyn/aglyn/app-utils/crm-email-templates'
+import { findPluginPerson } from '@aglyn/aglyn/plugin-manager/plugin-person-records'
 import { resolveMergeTags } from '@aglyn/shared-util-email/email-merge'
 
 /**
@@ -74,4 +75,46 @@ export function resolveStepEmailMerge(
     text: resolveMergeTags(crm.text, { email, ...(name ? { name } : {}) }),
     unresolved: crm.unresolved,
   }
+}
+
+/**
+ * The records a step's email is about, for its merge tags: the person the
+ * event names, as the plugin that keeps people holds them — a contact, else
+ * the lead a lead-routed form filed — and the site's name, in the shape the
+ * one-to-one email's resolver takes (`resolveStepEmailMerge`).
+ *
+ * Asked through the person-records seam (`findPluginPerson`), narrowed to
+ * what this site may see, so the engine opens no record system's storage. A
+ * workspace with no record system, or a person nobody holds yet, leaves both
+ * records out, and the tags fall back to the name and address the event
+ * carried.
+ *
+ * **Never throws.** A lookup that fails is an email with its fallbacks, never
+ * an email that did not leave.
+ */
+export async function stepEmailMergeContext(input: {
+  hostId: string
+  /** The address of the person the event is about. */
+  email: unknown
+  /** The holder group whose facet names a contact: the sending site's. */
+  contactGroupId: string
+  siteName: string
+}): Promise<CrmMergeContext> {
+  const context: CrmMergeContext = { site: { name: input.siteName } }
+  try {
+    const person = await findPluginPerson({
+      hostId: input.hostId,
+      email: input.email,
+      onlyVisibleToSite: true,
+      anyKind: true,
+    })
+    const data = person ? { ...person.data } : null
+    if (person?.kind === 'contact') {
+      return { ...context, contact: data, contactGroupId: input.contactGroupId }
+    }
+    if (person?.kind === 'lead') return { ...context, lead: data }
+  } catch (error) {
+    console.error('[workflow] email merge context could not be read', input.hostId, error)
+  }
+  return context
 }

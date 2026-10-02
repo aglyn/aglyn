@@ -337,7 +337,7 @@ describe('no field on a dataset record is written by every writer', () => {
     // root is asserted outright.
     expect(readRepo('package.json')).toContain('"name"')
     expect(
-      readRepo('apps/tenant/app/api/forms/submit/route.ts').length,
+      readRepo('libs/plugins/forms/src/lib/server/form-submit.ts').length,
     ).toBeGreaterThan(1000)
   })
 

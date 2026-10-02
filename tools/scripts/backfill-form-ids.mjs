@@ -264,7 +264,7 @@ function routeStampsFormId(routeSource) {
   const source = stripComments(
     routeSource ??
       readFileSync(
-        join(REPO_ROOT, 'apps', 'tenant', 'app', 'api', 'forms', 'submit', 'route.ts'),
+        join(REPO_ROOT, 'libs', 'plugins', 'forms', 'src', 'lib', 'server', 'form-submit.ts'),
         'utf8',
       ),
   )

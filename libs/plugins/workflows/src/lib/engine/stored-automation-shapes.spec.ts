@@ -174,9 +174,6 @@ const firestoreHandle: any = {
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
-  // The list-fields restamp (AGL-3321) is `crm-records`' own spec's; here a no-op.
-  restampCrmListFieldsAt: async () => 'current',
-  restampCrmListFieldsOf: async () => ({ restamped: 0, current: 0, missing: 0 }),
   firebaseAdmin: {
     app: () => ({ firestore: () => firestoreHandle }),
     firestore: {
@@ -217,24 +214,6 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     notices.push(notice)
   },
   enrollListMember: async () => undefined,
-  countCrmActivitiesForRecord: async () => 0,
-  recomputeCrmNextTaskAt: async () => ({ records: 0, missing: 0 }),
-  newCrmActivityRef: (_firestore: unknown, orgId: string) =>
-    collectionRef(`orgs/${orgId}/crmActivities`).doc(),
-  writeCrmEmailActivity: async (ref: any, activity: Record<string, any>) =>
-    ref.set(activity),
-}))
-
-jest.mock('@aglyn/tenant-runtime/assign-contact-owner', () => ({
-  __esModule: true,
-  OWNER_ASSIGNMENT_REFUSALS: { failed: 'the owner could not be assigned' },
-  reassignContactOwner: async () => ({
-    outcome: 'assigned',
-    ownerUid: 'uid-sam',
-    by: 'member',
-    leadMirrored: false,
-    notified: true,
-  }),
 }))
 
 jest.mock('@aglyn/shared-util-email', () => ({
@@ -251,6 +230,7 @@ jest.mock('@aglyn/shared-util-email', () => ({
 
 import { validateHostAction, type HostAction } from '@aglyn/aglyn/app-utils/actions'
 import { contactFacetPath } from '@aglyn/aglyn/app-utils/contacts'
+import { standInCrmSteps } from '../testing/stand-in-crm-steps'
 import { runWorkflow, type HostWorkflow } from '../model/workflows'
 import { runEventActions, runSingleAction } from './run-event-actions'
 import { runEventWorkflows } from './run-event-workflows'
@@ -438,6 +418,22 @@ const STORED_ACTIONS: Record<string, Record<string, any>> = {
     updatedAt: 'ts',
   },
 }
+
+// The CRM steps are the CRM's, run through the server-step seam; this
+// plugin's specs stand them in over the store (AGL-3080).
+let unregisterCrmSteps: () => void = () => undefined
+beforeAll(() => {
+  unregisterCrmSteps = standInCrmSteps({
+    groupId: GROUP_ID,
+    contact: async (request) => {
+      const id = String(request.payload['contactId'] ?? '')
+      return id && store[`orgs/${ORG_ID}/contacts/${id}`]
+        ? docRef(`orgs/${ORG_ID}/contacts/${id}`)
+        : null
+    },
+  })
+})
+afterAll(() => unregisterCrmSteps())
 
 beforeEach(() => {
   store = {}

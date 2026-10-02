@@ -16,7 +16,6 @@
  */
 
 import {
-  effectiveDatasetModel,
   memberCanSee,
   pluginRequestFromWeb,
   type PluginWebApiHandler,
@@ -37,6 +36,7 @@ import {
   datasetCsvRow,
   datasetRecordToJson,
 } from '../model/dataset-csv'
+import { effectiveDatasetModel } from '../model/dataset-models'
 
 /**
  * Records read per round trip. Not a cap — the stream keeps paging until

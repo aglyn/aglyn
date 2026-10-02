@@ -25,13 +25,9 @@ import {
   checkDatasetQuota,
   checkEntitlement,
   checkQuota,
-  coerceDocumentValues,
   createResourceUid,
-  datasetIntegrityFields,
-  effectiveDatasetModel,
   ensureDeclaredCustomFieldTypes,
   memberCanSee,
-  validateDocument,
 } from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
@@ -47,6 +43,7 @@ import {
 import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 import { Timestamp } from 'firebase-admin/firestore'
 import { announceDatasetRecords as announceDatasetChange } from './announce-dataset-records'
+import { coerceDocumentValues, datasetIntegrityFields, effectiveDatasetModel, validateDocument } from '../model/dataset-models'
 
 /**
  * `dataStorageMbPerOrg` for this route, rendered as the console's 403.

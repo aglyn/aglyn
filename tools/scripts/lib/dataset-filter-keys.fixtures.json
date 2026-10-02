@@ -1,5 +1,5 @@
 {
-  "note": "Worked examples for the dataset filter builders (AGL-3321): datasetFilterKeys, datasetFilterToken, datasetSearchToken, datasetFilterValues and datasetFilterValuePath. Asserted by libs/aglyn/src/lib/app-utils/dataset-filter-keys.spec.ts against dataset-models.ts, and by tools/scripts/backfill-dataset-filter-keys.mjs --self-test against the script-side copy in tools/scripts/lib/record-filter-keys.mjs. Regenerate only from the library, never by hand.",
+  "note": "Worked examples for the dataset filter builders (AGL-3321): datasetFilterKeys, datasetFilterToken, datasetSearchToken, datasetFilterValues and datasetFilterValuePath. Asserted by libs/plugins/data/src/lib/model/dataset-filter-keys.spec.ts against dataset-models.ts, and by tools/scripts/backfill-dataset-filter-keys.mjs --self-test against the script-side copy in tools/scripts/lib/record-filter-keys.mjs. Regenerate only from the library, never by hand.",
   "model": {
     "order": [
       "title",

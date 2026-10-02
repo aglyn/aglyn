@@ -201,22 +201,28 @@ jest.mock('@aglyn/aglyn/server', () => ({
     '../../../libs/aglyn/src/lib/app-utils/plan-entitlements',
   ).dataStorageEnforcementShape,
   checkEntitlement: () => true,
+  createResourceUid: () => `rec_${++mockUidSeq}`,
+}))
+
+// The data plugin's dataset model, as the dataset handlers read it
+// (AGL-3080: the model is the data plugin's own).
+jest.mock('../../../libs/plugins/data/src/lib/model/dataset-models', () => ({
+  ...jest.requireActual('../../../libs/plugins/data/src/lib/model/dataset-models'),
   // The REAL referential-integrity index, for the same closed-world reason: a
   // record create and a PATCH both derive `referencedIds` from their values,
   // and an omitted helper is a `TypeError` the route serves as a 500 — which
   // reads here as a DELETE answering 405, because the create it retries never
   // returned an id.
   datasetIntegrityFields: jest.requireActual(
-    '../../../libs/aglyn/src/lib/app-utils/dataset-models',
+    '../../../libs/plugins/data/src/lib/model/dataset-models',
   ).datasetIntegrityFields,
   datasetIntegrityUpdate: jest.requireActual(
-    '../../../libs/aglyn/src/lib/app-utils/dataset-models',
+    '../../../libs/plugins/data/src/lib/model/dataset-models',
   ).datasetIntegrityUpdate,
   effectiveDatasetModel: () => ({ fields: [] }),
   coerceDocumentValues: (_model: unknown, values: Record<string, unknown>) =>
     values,
   validateDocument: () => mockValidationErrors,
-  createResourceUid: () => `rec_${++mockUidSeq}`,
 }))
 
 jest.mock('firebase-admin/firestore', () => {

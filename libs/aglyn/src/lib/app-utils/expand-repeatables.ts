@@ -36,6 +36,19 @@ const ITEM_TOKEN_PATTERN =
 /** Hard bound on rows a single repeatable renders, before `repeatLimit`. */
 export const REPEAT_MAX_RECORDS = 100
 
+/**
+ * What the expansion reads of the rows' field model (AGL-177, AGL-180): which
+ * fields are references, each with the key its target's rows are answered
+ * under (`datasetsByKey`). The model itself is the plugin's that keeps the
+ * rows, and it states this much of it when it hands the rows over
+ * (`plugin-manager/repeat-rows`, `repeat-sources`); a field it does not name
+ * here hops nowhere, and its token is left as written.
+ */
+export interface RepeatRowsModel {
+  /** Reference field id → the key of the rows it points into. */
+  references?: Readonly<Record<string, string>>
+}
+
 export interface RepeatableDataset {
   /**
    * Row value maps, in display order. Rows carry `$id` (needed to resolve
@@ -43,14 +56,14 @@ export interface RepeatableDataset {
    * substitution.
    */
   records: Array<Record<string, unknown>>
-  /** Typed model (AGL-177); required for reference-hop bindings. */
-  model?: import('./dataset-models').DatasetModel
+  /** The rows' references; required for reference-hop bindings. */
+  model?: RepeatRowsModel
 }
 
 interface SubstituteContext {
   record: Record<string, unknown>
-  /** Model of the repeated dataset (reference hops need field configs). */
-  model?: import('./dataset-models').DatasetModel
+  /** The repeated rows' references (AGL-180). */
+  model?: RepeatRowsModel
   /** All host datasets keyed by id (and name) for hop resolution. */
   datasetsByKey?: Record<string, RepeatableDataset | undefined>
 }
@@ -64,9 +77,9 @@ function resolveReferenceHop(
   fieldId: string,
   targetFieldId: string,
 ): string | null {
-  const field = context.model?.fields?.[fieldId]
-  if (field?.type !== 'reference' || !field.reference?.datasetId) return null
-  const target = context.datasetsByKey?.[field.reference.datasetId]
+  const targetKey = context.model?.references?.[fieldId]
+  if (!targetKey) return null
+  const target = context.datasetsByKey?.[targetKey]
   if (!target) return null
   const keys = context.record[fieldId]
   const ids = Array.isArray(keys) ? keys : keys != null ? [keys] : []
@@ -206,8 +219,8 @@ export function substituteRecordTokens<T>(
   props: T,
   context: {
     record: Record<string, unknown>
-    /** Model of the repeated rows; reference hops need field configs. */
-    model?: import('./dataset-models').DatasetModel
+    /** The repeated rows' references (AGL-180). */
+    model?: RepeatRowsModel
     /** Rows by key, for a one-hop reference (AGL-180). */
     datasetsByKey?: Record<string, RepeatableDataset | undefined>
   },

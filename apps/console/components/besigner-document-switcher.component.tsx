@@ -16,7 +16,12 @@
  */
 'use client'
 
-import { canvas, nameSearchKey, screenRoutePathToUrl } from '@aglyn/aglyn'
+import {
+  canvas,
+  isScreenGroup,
+  nameSearchKey,
+  screenRoutePathToUrl,
+} from '@aglyn/aglyn'
 import {
   ICON_VARIANT_COMPONENT,
   ICON_VARIANT_DOCUMENT,
@@ -115,7 +120,9 @@ export const BesignerDocumentSwitcherComponent = observer(
       path: ['hosts', hostId, 'screens'],
       query: queryText,
       idField: '$id',
-      filter: (screen) => !screen.deletedAt && screen.kind !== 'email',
+      // A page group (AGL-3463) has no canvas to switch to.
+      filter: (screen) =>
+        !screen.deletedAt && screen.kind !== 'email' && !isScreenGroup(screen),
       deps: [firestore, hostId],
     })
 

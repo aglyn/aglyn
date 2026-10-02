@@ -174,7 +174,12 @@ beforeAll(async () => {
 
 // Below the mocks by intent, not by accident: babel hoists `jest.mock` above
 // every import, so the route under test resolves the fakes above.
-import { POST } from '../app/api/forms/submit/route'
+// The door as the tenant serves it: the forms plugin's route, through the
+// plugin API dispatcher, with the forms plugin's surface loaded (AGL-3080).
+jest.mock('../utils/server-plugin-loader', () => ({
+  serverPluginLoader: jest.requireActual('./plugin-door-dispatch').formsOnlyServerPluginLoader(),
+}))
+import { POST } from './plugin-door-dispatch'
 
 const submit = () =>
   POST(

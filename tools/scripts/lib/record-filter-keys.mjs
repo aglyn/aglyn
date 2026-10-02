@@ -21,7 +21,7 @@
  * The records table queries `filterKeys` (word tokens, `array-contains`) and
  * `filterValues` (one scalar per field, `==`), which every writer stamps
  * through `datasetIntegrityFields` / `datasetIntegrityUpdate` in
- * `libs/aglyn/src/lib/app-utils/dataset-models.ts`. A script cannot import
+ * `libs/plugins/data/src/lib/model/dataset-models.ts`. A script cannot import
  * that module (it imports other modules at run time), yet a backfill or a
  * seed must stamp exactly what the library stamps: a record spelled any
  * other way answers no filter. This file is the ONE script-side
@@ -37,7 +37,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const here = dirname(fileURLToPath(import.meta.url))
-const APP_UTILS = join(here, '..', '..', '..', 'libs', 'aglyn', 'src', 'lib', 'app-utils')
+const DATA_MODEL = join(here, '..', '..', '..', 'libs', 'plugins', 'data', 'src', 'lib', 'model')
 
 /** `DATASET_FILTER_KEYS_MAX`: the most tokens one record carries. */
 export const DATASET_FILTER_KEYS_MAX = 500
@@ -302,7 +302,7 @@ export function effectiveModel(dataset) {
 
 /** The source guard: {@link effectiveModel} still restates the library's rule. */
 export function modelShimAgrees(source) {
-  const code = source ?? readFileSync(join(APP_UTILS, 'dataset-models.ts'), 'utf8')
+  const code = source ?? readFileSync(join(DATA_MODEL, 'dataset-models.ts'), 'utf8')
   const at = code.indexOf('export function effectiveDatasetModel(')
   if (at < 0) {
     return { ok: false, why: '`effectiveDatasetModel` not found in dataset-models.ts' }

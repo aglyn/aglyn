@@ -62,13 +62,13 @@
       "reason": "To fix: a company, deal or task an import or the task route creates; routed at /v1/companies/{companyId}, /v1/deals/{dealId}, /v1/tasks/{taskId} and in the console."
     },
     {
-      "site": "libs/plugins/workflows/src/lib/engine/crm-action-steps.ts: orgRef.collection(CRM_COLLECTIONS.activities).add(…)",
+      "site": "libs/plugins/crm/src/lib/server/automation-steps.ts: orgRef.collection(CRM_COLLECTIONS.activities).add(…)",
       "class": "RESOURCE",
       "issue": "AGL-3083",
       "reason": "To fix: a company, pipeline, deal, task or activity created by lead conversion, domain matching or an automation step; routed by the console and the public API."
     },
     {
-      "site": "libs/plugins/workflows/src/lib/engine/crm-action-steps.ts: orgRef.collection(CRM_COLLECTIONS.tasks).add(…)",
+      "site": "libs/plugins/crm/src/lib/server/automation-steps.ts: orgRef.collection(CRM_COLLECTIONS.tasks).add(…)",
       "class": "RESOURCE",
       "issue": "AGL-3083",
       "reason": "To fix: a company, pipeline, deal, task or activity created by lead conversion, domain matching or an automation step; routed by the console and the public API."
@@ -190,7 +190,7 @@
       "reason": "To fix: a dataset record a form or an automation appends; routed at /v1/datasets/{datasetId}/records/{recordId} and referenced by other records and by the submission."
     },
     {
-      "site": "apps/tenant/app/api/forms/submit/route.ts: hostRef.collection('formSubmissions').add(…)",
+      "site": "libs/plugins/forms/src/lib/server/form-submit.ts: hostRef.collection('formSubmissions').add(…)",
       "class": "RESOURCE",
       "issue": "AGL-3088",
       "reason": "To fix: a form submission; routed at /v1/sites/{siteId}/form-submissions/{submissionId}, linked from the inbox as ?submission=, and referenced by contact interactions and campaign conversions."

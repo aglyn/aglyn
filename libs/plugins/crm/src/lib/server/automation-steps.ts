@@ -17,6 +17,7 @@
 
 import {
   buildCrmEmailActivity,
+  checkEntitlement,
   CONTACT_LIFECYCLE_STAGE_LABELS,
   CONTACT_TAG_MAX_LENGTH,
   contactFacetPath,
@@ -30,13 +31,21 @@ import {
   crmScopeTokens,
   crmTaskListFields,
   crmTaskReminderAfterEdit,
-  type CrmMergeContext,
   normalizeContactEmail,
   parseCrmMemberRef,
   personKey,
+  planLabelGrantingFeature,
   readContactFacet,
   visibleToHost,
 } from '@aglyn/aglyn/server'
+import type {
+  PluginRecordEmailPrepareRequest,
+  PluginRecordPreparedEmail,
+} from '@aglyn/aglyn/plugin-manager/plugin-record-timeline'
+import type {
+  ServerStepAnswer,
+  ServerStepRequest,
+} from '@aglyn/aglyn/plugin-manager/plugin-server-steps'
 import {
   consentGroupForSite,
   countCrmActivitiesForRecord,
@@ -47,102 +56,78 @@ import {
   restampCrmListFieldsAt,
   writeCrmEmailActivity,
 } from '@aglyn/tenant-data-admin'
-// The leaf, not the barrel: this library's specs substitute the barrel
-// wholesale, and the lookup must reach the real index logic under them.
+// The leaf, not the barrel: the specs substitute the barrel wholesale, and
+// the lookup must reach the real index logic under them.
 import { findContactByEmail } from '@aglyn/tenant-data-admin/server/contact-email-index'
 import { FieldValue } from 'firebase-admin/firestore'
-// The leaves, not the runtime barrel, for the reason `run-event-actions.ts`
-// gives: the specs substitute each one.
+// The leaf, not the runtime barrel: the specs substitute it.
 import {
   OWNER_ASSIGNMENT_REFUSALS,
   reassignContactOwner,
   reassignLeadOwner,
 } from '@aglyn/tenant-runtime/assign-contact-owner'
-import type { HostEventPayload } from '@aglyn/tenant-runtime/host-event-listeners'
+import type { HostActionStep } from '@aglyn/aglyn/app-utils/actions'
 import { createResourceUid } from '@aglyn/aglyn/app-utils/create-resource-uid'
-import type { HostActionStep, HostActionStepType } from '@aglyn/aglyn/app-utils/actions'
+import type { CRM_STEP_TYPES } from '../constants/bundle-common'
+import { CRM_SUITE_FEATURE } from './suite-gate'
 
 /**
- * The steps that act on the CRM (AGL-2605) — named as a set because the
- * executor dispatches all five to one module and the docs list them as one
- * group, and a step added to the union but not here would be a server step
- * the executor silently skipped.
- */
-export const CRM_ACTION_STEP_TYPES: ReadonlySet<HostActionStepType> = new Set([
-  'setContactStage',
-  'addContactTag',
-  'assignContactOwner',
-  'createCrmTask',
-  'logCrmActivity',
-] as const)
-
-/** The CRM steps, as the type the executor narrows to. */
-export type CrmActionStep = Extract<
-  HostActionStep,
-  {
-    type:
-      | 'setContactStage'
-      | 'addContactTag'
-      | 'assignContactOwner'
-      | 'createCrmTask'
-      | 'logCrmActivity'
-  }
->
-
-export function isCrmActionStep(step: HostActionStep): step is CrmActionStep {
-  return CRM_ACTION_STEP_TYPES.has(step.type)
-}
-
-/**
- * The CRM steps of an action run (AGL-2605): what `setContactStage`,
- * `addContactTag`, `assignContactOwner`, `createCrmTask` and
- * `logCrmActivity` actually write.
+ * THE AUTOMATION STEPS THAT WRITE THE CRM (AGL-2605), run for the automation
+ * engine through the platform's server-step seam (`plugin-server-steps`,
+ * AGL-3080): `setContactStage`, `addContactTag`, `assignContactOwner`,
+ * `createCrmTask` and `logCrmActivity`.
  *
- * Split out of `run-event-actions.ts` because the five share one shape the
- * other server steps do not: each begins by finding THE PERSON the event is
- * about, and each writes either inside the site's facet on that person or a
- * record stamped with the site's scope. One resolver and one scope
- * expression, used five times, rather than five copies drifting apart.
+ * The engine keeps the step's guard, the run's order, its history and the
+ * nesting cap; this answers what the step did. A refusal is ANSWERED as
+ * `error`, never thrown, and its words are the line the run history carries —
+ * the same words the engine wrote when these steps were its own.
+ *
+ * The five share one shape no other step has: each begins by finding THE
+ * PERSON the event is about, and each writes either inside the site's facet on
+ * that person or a record stamped with the site's scope. One resolver and one
+ * scope expression, used five times, rather than five copies drifting apart.
  *
  * ## The person is the event's, never the step's
  *
  * A step carries no contact reference. The contact is whoever the event
  * names — by `contactId` when the emitting door knew the document, and by
- * `email` otherwise, which is what every pre-CRM event carries. Both
- * lookups are scoped to what THIS site may see: a document the id names
- * but the site cannot read is treated as absent, exactly as the scoped
- * query would have treated it, so an event replayed against the wrong site
- * reaches nobody.
+ * `email` otherwise, which is what every pre-CRM event carries. Both lookups
+ * are scoped to what THIS site may see: a document the id names but the site
+ * cannot read is treated as absent, exactly as the scoped query would have
+ * treated it, so an event replayed against the wrong site reaches nobody.
  *
  * ## A missing person is a reported no-op
  *
  * Nothing is written and the step's error names the reason, which lands in
- * the run summary beside the trigger — the same place "why didn't it
- * fire?" is answered for every other step. Silence here would make a
- * mis-wired trigger (a form with no email field) indistinguishable from a
- * working one.
+ * the run summary beside the trigger — the same place "why didn't it fire?"
+ * is answered for every other step. Silence here would make a mis-wired
+ * trigger (a form with no email field) indistinguishable from a working one.
+ *
+ * ## The plan gate is the CRM's
+ *
+ * Every step is refused on a workspace whose plan does not carry the CRM,
+ * into the run history with the tier that carries it, so a Free workspace
+ * whose flow names a CRM step reads why the step did nothing rather than a
+ * log that says it ran. The org document is the one the run's gate already
+ * read, handed over with the step, so the check costs no read.
+ *
+ * The same module answers the record timeline's `prepareEmail` (AGL-2615): an
+ * automation's email addressed to the contact the event is about is filed on
+ * that contact's timeline — see {@link prepareCrmRecordEmail}.
  */
 
-export interface CrmStepEnv {
+/** One of the steps this module runs. */
+export type CrmStepType = (typeof CRM_STEP_TYPES)[number]
+
+/** A CRM step, as it is stored. */
+export type CrmAutomationStep = Extract<HostActionStep, { type: CrmStepType }>
+
+/** The site, the plan and the org a step or an email is answered for. */
+interface CrmStepEnv {
   hostId: string
   /** The owning org's billing doc, already read by the run's gate. */
   org: unknown
   orgId: string | null
-}
-
-export interface CrmStepOutcome {
-  /** The reason nothing was written, when nothing was. */
-  error?: string
-  /** The one fact worth carrying into the run summary. */
-  detail?: string
-  /**
-   * An event this step's write earned, for the CALLER to fan out under its
-   * own depth guard. Not emitted from here: a stage set by an automation is
-   * itself a stage change, and the action listening for it must run — but
-   * through the same nesting cap a `customEvent` chain has, or an action
-   * that sets the stage it listens for would run until the meter ran dry.
-   */
-  emit?: { event: 'contactStageChanged'; payload: HostEventPayload }
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -169,28 +154,27 @@ type ResolvedPerson =
   | ({ kind: 'lead' } & ResolvedContact)
 
 /**
- * The contact an event payload names, as this site may see it.
+ * The contact an event names, as this site may see it.
  *
- * Id first, because a CRM event carries the document the door just wrote
- * and a lookup by id is a read, not a query. The address second, through
- * the org's address index narrowed to this site (AGL-2633), for every
- * event that predates the CRM and knows only who filled in the form — so
- * an address a merge folded into another record still reaches the person
- * who now holds it.
+ * Id first, because a CRM event carries the document the door just wrote and
+ * a lookup by id is a read, not a query. The address second, through the
+ * org's address index narrowed to this site (AGL-2633), for every event that
+ * predates the CRM and knows only who filled in the form — so an address a
+ * merge folded into another record still reaches the person who now holds it.
  */
 async function resolveEventContact(
   hostId: string,
-  payload: HostEventPayload,
+  named: { contactId?: unknown; email?: unknown },
 ): Promise<ResolvedContact | null> {
   const { ref: contactsRef } = await orgDataQueryForHost(hostId, 'contacts')
-  const contactId = String(payload['contactId'] ?? '').trim()
+  const contactId = String(named.contactId ?? '').trim()
   if (contactId) {
     const doc = await contactsRef.doc(contactId).get()
     if (doc.exists && visibleToHost(doc.get('visibleTo'), hostId)) {
       return { id: doc.id, ref: doc.ref, data: doc.data() ?? {} }
     }
   }
-  const hit = await findContactByEmail(contactsRef, payload['email'], { hostId })
+  const hit = await findContactByEmail(contactsRef, named.email, { hostId })
   return hit ? { id: hit.id, ref: hit.ref, data: hit.data() ?? {} } : null
 }
 
@@ -201,9 +185,9 @@ async function resolveEventContact(
  */
 async function resolveEventLead(
   hostId: string,
-  payload: HostEventPayload,
+  named: { leadId?: unknown; email?: unknown },
 ): Promise<ResolvedContact | null> {
-  const key = String(payload['leadId'] ?? '').trim() || personKey(payload['email']) || ''
+  const key = String(named.leadId ?? '').trim() || personKey(named.email) || ''
   if (!key) return null
   const { ref: leadsRef } = await orgDataQueryForHost(hostId, 'leads')
   const doc = await leadsRef.doc(key).get()
@@ -214,11 +198,11 @@ async function resolveEventLead(
 /** The contact the event names, else its lead — see {@link ResolvedPerson}. */
 async function resolveEventPerson(
   hostId: string,
-  payload: HostEventPayload,
+  named: { contactId?: unknown; leadId?: unknown; email?: unknown },
 ): Promise<ResolvedPerson | null> {
-  const contact = await resolveEventContact(hostId, payload)
+  const contact = await resolveEventContact(hostId, named)
   if (contact) return { kind: 'contact', ...contact }
-  const lead = await resolveEventLead(hostId, payload)
+  const lead = await resolveEventLead(hostId, named)
   return lead ? { kind: 'lead', ...lead } : null
 }
 
@@ -228,30 +212,29 @@ async function resolveEventPerson(
  *
  * A step names a member by uid when a picker wrote it and by address when a
  * person typed it, and the editor's one text field accepts either — so both
- * fields are read through `parseCrmMemberRef`, and an address typed into
- * the uid slot or a uid typed into the address slot still names the person.
+ * fields are read through `parseCrmMemberRef`, and an address typed into the
+ * uid slot or a uid typed into the address slot still names the person.
  *
- * Both are RESOLVED, not trusted. `orgs/{orgId}/members/{uid}` is keyed by
- * the uid, so a uid costs one document read and must exist: `ownerUid` and
- * `assigneeUid` are fields every reader resolves as a member, and a
- * stranger's uid in one is a task nobody on the team can find. An address
- * is matched on the roster's own `email` field, and two production paths
- * create a member document WITHOUT one (a host-access re-grant, and an add
- * whose auth record carried none) — such a member is named by uid, which
- * is the reason the editor takes one.
+ * Both are RESOLVED, not trusted. `orgs/{orgId}/members/{uid}` is keyed by the
+ * uid, so a uid costs one document read and must exist: `ownerUid` and
+ * `assigneeUid` are fields every reader resolves as a member, and a stranger's
+ * uid in one is a task nobody on the team can find. An address is matched on
+ * the roster's own `email` field, and two production paths create a member
+ * document WITHOUT one (a host-access re-grant, and an add whose auth record
+ * carried none) — such a member is named by uid, which is the reason the
+ * editor takes one.
  *
- * The roster is the only directory consulted. A project-level Auth lookup
- * by address would resolve people who are not on this organization at all
- * (AGL-1122). A reference that resolves neither way is an error, not a
- * stored string.
+ * The roster is the only directory consulted. A project-level Auth lookup by
+ * address would resolve people who are not on this organization at all
+ * (AGL-1122). A reference that resolves neither way is an error, not a stored
+ * string.
  */
 async function resolveMemberUid(
   orgId: string | null,
   named: { uid?: string; email?: string },
   role: 'owner' | 'assignee',
 ): Promise<{ uid: string; detail: string } | { error: string }> {
-  const ref =
-    parseCrmMemberRef(named.uid) ?? parseCrmMemberRef(named.email)
+  const ref = parseCrmMemberRef(named.uid) ?? parseCrmMemberRef(named.email)
   if (!ref) return { error: `no ${role} named on the step` }
   if (!orgId) return { error: 'this site has no organization' }
   const members = firebaseAdmin
@@ -265,29 +248,34 @@ async function resolveMemberUid(
     if (member.exists) return { uid: ref.uid, detail: ref.uid }
     return { error: `no team member with the id ${ref.uid}` }
   }
-  const byField = (await members.where('email', '==', ref.email).limit(1).get())
-    .docs[0]
+  const byField = (await members.where('email', '==', ref.email).limit(1).get()).docs[0]
   if (byField) return { uid: byField.id, detail: ref.email }
   return { error: `no team member with the address ${ref.email}` }
 }
 
 /**
- * Runs one CRM step for the person the event names. Never throws for a
- * missing person, an unknown owner or a site with no org — those are
- * answered as `error` so the run records them; a Firestore failure
- * propagates to the executor's catch like every other step's would.
+ * Runs one CRM step for the person the event names: the executor the CRM
+ * registers on the server-step seam for every type in `CRM_STEP_TYPES`.
+ *
+ * Never throws for a plan without the CRM, a missing person, an unknown owner
+ * or a site with no org — those are answered as `error` so the run records
+ * them; a Firestore failure propagates, and the engine records it the same
+ * way.
  */
-export async function runCrmActionStep(
-  env: CrmStepEnv,
-  actionId: string,
-  step: CrmActionStep,
-  payload: HostEventPayload,
+export async function runCrmAutomationStep(
+  request: ServerStepRequest,
   nowMs = Date.now(),
-): Promise<CrmStepOutcome> {
+): Promise<ServerStepAnswer> {
+  if (!checkEntitlement(request.org as Parameters<typeof checkEntitlement>[0], CRM_SUITE_FEATURE)) {
+    return { error: `CRM steps require the ${planLabelGrantingFeature(CRM_SUITE_FEATURE)} plan` }
+  }
+  const env: CrmStepEnv = { hostId: request.hostId, org: request.org, orgId: request.orgId }
+  const step = request.step as unknown as CrmAutomationStep
+  const actionId = request.run.id
   const { hostId } = env
-  const person = await resolveEventPerson(hostId, payload)
+  const person = await resolveEventPerson(hostId, request.payload)
   if (!person) {
-    const named = String(payload['contactId'] ?? payload['email'] ?? '').trim()
+    const named = String(request.payload['contactId'] ?? request.payload['email'] ?? '').trim()
     return {
       error: named
         ? `no contact or lead this site can see for ${named}`
@@ -299,8 +287,8 @@ export async function runCrmActionStep(
   /*
    * THE HOLDER whose facet the write addresses — the site's consent group,
    * which is the site alone unless the org declared the site one of a set
-   * that presents as one sender. Same resolution the capture doors use, so
-   * a stage set here lands in the facet the console reads.
+   * that presents as one sender. Same resolution the capture doors use, so a
+   * stage set here lands in the facet the console reads.
    */
   const group = await consentGroupForSite(hostId)
   const facet = readContactFacet(contact.data, group.groupId)
@@ -311,10 +299,10 @@ export async function runCrmActionStep(
     const label = CONTACT_LIFECYCLE_STAGE_LABELS[step.lifecycleStage]
     /*
      * A stage set to what it already is changes nothing and ANNOUNCES
-     * nothing. The write is skipped so the row's `updatedAt` does not move
-     * for a non-event, and the absent emit is what stops an action that
-     * sets the stage it listens for from re-running on its own write —
-     * the depth guard bounds that chain, this ends it at once.
+     * nothing. The write is skipped so the row's `updatedAt` does not move for
+     * a non-event, and the absent emit is what stops an action that sets the
+     * stage it listens for from re-running on its own write — the engine's
+     * nesting cap bounds that chain, this ends it at once.
      */
     if (previous === step.lifecycleStage) {
       return { detail: `${label} (already)` }
@@ -325,6 +313,11 @@ export async function runCrmActionStep(
     })
     // The stage is what the Contacts list filters by (AGL-3321).
     await restampCrmListFieldsAt(contact.ref, 'contacts')
+    /*
+     * A stage set by an automation IS a stage change, and the action
+     * listening for it must run — but through the engine's nesting cap, so
+     * the event is answered back for the engine to raise, never raised here.
+     */
     return {
       detail: label,
       emit: {
@@ -358,13 +351,12 @@ export async function runCrmActionStep(
   if (step.type === 'assignContactOwner') {
     /*
      * Through the one server assignment (AGL-2618), in both of the step's
-     * modes, rather than a facet write of its own: the helper is what
-     * moves the round-robin pointer inside the transaction that writes the
-     * owner, mirrors the owner onto the site's lead, and tells the new
-     * owner. A member named on the step is still resolved here — by
-     * address against the roster, as before — and handed over by uid; the
-     * helper checks the roster document again, which is one read and the
-     * same answer.
+     * modes, rather than a facet write of its own: the helper is what moves
+     * the round-robin pointer inside the transaction that writes the owner,
+     * mirrors the owner onto the site's lead, and tells the new owner. A
+     * member named on the step is still resolved here — by address against
+     * the roster, as before — and handed over by uid; the helper checks the
+     * roster document again, which is one read and the same answer.
      */
     let assign: { memberUid: string } | { roundRobin: true }
     let named = 'round robin'
@@ -393,26 +385,18 @@ export async function runCrmActionStep(
       return { detail: `${named} (already)` }
     }
     return {
-      detail:
-        step.roundRobin === true ? `round robin → ${verdict.ownerUid}` : named,
+      detail: step.roundRobin === true ? `round robin → ${verdict.ownerUid}` : named,
     }
   }
 
-  // The two record creators: a task and an activity are documents of
-  // their own beside the contact, stamped with the scope a contact
-  // captured on this site would carry — `crmScopeTokens` is the create
-  // path's own expression, so a record an automation made is visible to
-  // exactly the sites a record a person made would be.
+  // The two record creators: a task and an activity are documents of their
+  // own beside the contact, stamped with the scope a contact captured on this
+  // site would carry — `crmScopeTokens` is the create path's own expression,
+  // so a record an automation made is visible to exactly the sites a record a
+  // person made would be.
   if (!env.orgId) return { error: 'this site has no organization' }
-  const orgRef = firebaseAdmin
-    .app()
-    .firestore()
-    .collection('orgs')
-    .doc(env.orgId)
-  const visibleTo = crmScopeTokens(
-    (env.org ?? null) as Record<string, unknown> | null,
-    group,
-  )
+  const orgRef = firebaseAdmin.app().firestore().collection('orgs').doc(env.orgId)
+  const visibleTo = crmScopeTokens((env.org ?? null) as Record<string, unknown> | null, group)
   const links = {
     contactId: contact.id,
     ...(facet.companyId ? { companyId: facet.companyId } : {}),
@@ -425,12 +409,12 @@ export async function runCrmActionStep(
     if (!title) return { error: 'the task has no title' }
     const dueInDays = Math.max(0, Math.round(Number(step.dueInDays) || 0))
     /*
-     * The assignee the step names, else the person who OWNS the contact,
-     * else nobody. A follow-up task belongs to whoever holds the
-     * relationship, and an automation that had to name one person for
-     * every contact it touches would assign the whole list to one rep. A
-     * named assignee who cannot be resolved is an error rather than a
-     * fallback to the owner: the author named somebody on purpose.
+     * The assignee the step names, else the person who OWNS the contact, else
+     * nobody. A follow-up task belongs to whoever holds the relationship, and
+     * an automation that had to name one person for every contact it touches
+     * would assign the whole list to one rep. A named assignee who cannot be
+     * resolved is an error rather than a fallback to the owner: the author
+     * named somebody on purpose.
      */
     let assignee = facet.ownerUid ?? ''
     if (step.assigneeUid?.trim() || step.assigneeEmail?.trim()) {
@@ -464,9 +448,11 @@ export async function runCrmActionStep(
     await orgRef.collection(CRM_COLLECTIONS.tasks).add({ ...task, ...crmTaskListFields(task) })
     // The contact and company the task names carry `nextTaskAtMs` (AGL-2661);
     // a figure that could not move is the Fields section's recompute's.
-    await recomputeCrmNextTaskAt(firebaseAdmin.app().firestore(), env.orgId, [links]).catch((error: unknown) => {
-      console.error('[workflow] next activity could not be recomputed', env.orgId, error)
-    })
+    await recomputeCrmNextTaskAt(firebaseAdmin.app().firestore(), env.orgId, [links]).catch(
+      (error: unknown) => {
+        console.error('[crm] next activity could not be recomputed', env.orgId, error)
+      },
+    )
     return { detail: title.slice(0, 60) }
   }
 
@@ -476,11 +462,11 @@ export async function runCrmActionStep(
       .slice(0, 2000)
     if (!body) return { error: 'the activity has no body' }
     /*
-     * The per-record ceiling (AGL-2611), and this step is the writer it
-     * exists for: a flow that logs on every page view fills one person's
-     * log in an afternoon. Refused into the run history as an error, the
-     * way an unresolvable assignee is, so the merchant reads why the flow
-     * stopped writing rather than finding a log that silently stopped.
+     * The per-record ceiling (AGL-2611), and this step is the writer it exists
+     * for: a flow that logs on every page view fills one person's log in an
+     * afternoon. Refused into the run history as an error, the way an
+     * unresolvable assignee is, so the merchant reads why the flow stopped
+     * writing rather than finding a log that silently stopped.
      */
     const logged = await countCrmActivitiesForRecord(orgRef, links)
     if (!crmActivityLogHasRoom(logged)) {
@@ -513,10 +499,10 @@ export async function runCrmActionStep(
 async function runLeadStep(
   env: CrmStepEnv,
   actionId: string,
-  step: CrmActionStep,
+  step: CrmAutomationStep,
   lead: ResolvedContact,
   nowMs: number,
-): Promise<CrmStepOutcome> {
+): Promise<ServerStepAnswer> {
   const { hostId } = env
   if (step.type === 'setContactStage') {
     return {
@@ -568,10 +554,7 @@ async function runLeadStep(
   if (!env.orgId) return { error: 'this site has no organization' }
   const orgRef = firebaseAdmin.app().firestore().collection('orgs').doc(env.orgId)
   const group = await consentGroupForSite(hostId)
-  const visibleTo = crmScopeTokens(
-    (env.org ?? null) as Record<string, unknown> | null,
-    group,
-  )
+  const visibleTo = crmScopeTokens((env.org ?? null) as Record<string, unknown> | null, group)
   // Filed under the lead, as a sequence's call step files one (AGL-3233); a
   // conversion stamps the contact beside it, and the task follows the person.
   const links = { leadId: lead.id }
@@ -647,86 +630,52 @@ async function runLeadStep(
 }
 
 /**
- * The records an automation's email is about, for its merge tags (AGL-3458):
- * the contact the event names, else its lead, and the site's name — what
- * `resolveStepEmailMerge` reads, in the shape the one-to-one email's
- * resolver takes. A person nobody holds yet leaves both records out, and the
- * tags fall back to the name and address the event carried.
+ * Whether — and where — an email a plugin is about to send lands on a
+ * timeline: the CRM's answer to the record timeline's `prepareEmail`.
  *
- * **Never throws.** A lookup that fails is an email with its fallbacks, never
- * an email that did not leave.
+ * An automation's `sendEmail` step is not a CRM step: it mails whatever
+ * address the event carries, to a person who may be nobody the CRM knows. It
+ * earns a row on exactly one condition, that the message is ADDRESSED TO THE
+ * PERSON the sender means — a contact, else the lead a lead-routed form filed
+ * (AGL-3458), whose row lands on the lead's timeline — the person the request's link finds, at the
+ * address the row holds. A welcome sequence to a new contact is that; an
+ * internal alert routed to a merchant's own address through `toField` is not,
+ * and a row for it would put the merchant's inbox on a customer's history.
+ *
+ * Prepared ahead of the send, for the reason the console route mints its id
+ * first: the delivery webhook has nothing but the tags on the message to find
+ * the row with. Nothing is written until `file` is called, once the provider
+ * accepted the message. A workspace whose plan does not carry the CRM, a
+ * record at the activity ceiling and a site with no org earn no row — the
+ * message still goes, because the ceiling bounds the log and not the mail.
+ *
+ * **Never throws**, and neither does `file`. The row is bookkeeping beside a
+ * send, and a lookup that fails must not become a message that never left —
+ * the posture every meter beside a send takes. A failure is logged and the
+ * message goes out untagged.
  */
-export async function automationEmailMergeContext(
-  hostId: string,
-  payload: HostEventPayload,
-  site: { name?: string | null } | null,
-): Promise<CrmMergeContext> {
-  const context: CrmMergeContext = { ...(site ? { site } : {}) }
-  try {
-    const person = await resolveEventPerson(hostId, payload)
-    if (person?.kind === 'contact') {
-      const group = await consentGroupForSite(hostId)
-      return { ...context, contact: person.data, contactGroupId: group.groupId }
-    }
-    if (person?.kind === 'lead') return { ...context, lead: person.data }
-  } catch (error) {
-    console.error('[workflow] email merge context could not be read', hostId, error)
-  }
-  return context
-}
-
-/**
- * The activity row a `sendEmail` step's message will be logged as, prepared
- * BEFORE the send (AGL-2615): the minted reference whose id rides the
- * message as a tag, the links it files under, and the scope it is stamped
- * with. `null` when the message earns no row.
- */
-export interface PreparedCrmEmailActivity {
-  ref: FirebaseFirestore.DocumentReference
-  /** The provider tags the delivery webhook finds the row by. */
-  tags: { name: string; value: string }[]
-  link: CrmActivityLink
-  visibleTo: string[]
-}
-
-/**
- * Whether — and where — an automation's email lands on a timeline.
- *
- * A `sendEmail` step is not a CRM step: it mails whatever address the event
- * carries, to a person who may be nobody the CRM knows. It earns a row on
- * exactly one condition, that the message is ADDRESSED TO THE CONTACT the
- * event is about — the person `resolveEventContact` finds, at the address
- * the row holds. A welcome sequence to a new contact is that; an internal
- * alert routed to a merchant's own address through `toField` is not, and a
- * row for it would put the merchant's inbox on a customer's history.
- *
- * Prepared ahead of the send, for the reason the console route mints its
- * id first: the webhook has nothing but the tags on the message to find
- * the row with. Nothing is written here. A record at the activity ceiling
- * earns no row — the message still goes, because the ceiling bounds the
- * log and not the mail — and neither does a site with no org to hold one.
- *
- * **Never throws.** The row is bookkeeping beside a send, and a lookup that
- * fails must not become a message that never left — the posture every
- * meter beside `sendEmail` takes. A failure here is logged and the message
- * goes out untagged.
- */
-export async function prepareCrmEmailActivity(
-  env: CrmStepEnv,
-  to: string,
-  payload: HostEventPayload,
-): Promise<PreparedCrmEmailActivity | null> {
-  if (!env.orgId) return null
-  const address = normalizeContactEmail(to)
+export async function prepareCrmRecordEmail(
+  request: PluginRecordEmailPrepareRequest,
+): Promise<PluginRecordPreparedEmail | null> {
+  const orgId = String(request.orgId ?? '').trim()
+  const hostId = String(request.hostId ?? '').trim()
+  if (!orgId || !hostId) return null
+  const address = normalizeContactEmail(request.to)
   if (!address) return null
   try {
-    const person = await resolveEventPerson(env.hostId, payload)
+    const firestore = firebaseAdmin.app().firestore()
+    const orgRef = firestore.collection('orgs').doc(orgId)
+    // The org the caller already read, or the one read here once.
+    const org =
+      request.org !== undefined ? request.org : ((await orgRef.get()).data() ?? null)
+    if (!checkEntitlement(org as Parameters<typeof checkEntitlement>[0], CRM_SUITE_FEATURE)) {
+      return null
+    }
+    const person = await resolveEventPerson(hostId, request.link)
     if (!person || normalizeContactEmail(person.data['email']) !== address) {
       return null
     }
-    const group = await consentGroupForSite(env.hostId)
-    // A lead's email lands on the lead's timeline (AGL-3458), as a person's
-    // own send to a lead does.
+    const group = await consentGroupForSite(hostId)
     const facet = person.kind === 'contact' ? readContactFacet(person.data, group.groupId) : null
     const link: CrmActivityLink =
       person.kind === 'lead'
@@ -735,62 +684,42 @@ export async function prepareCrmEmailActivity(
             contactId: person.id,
             ...(facet?.companyId ? { companyId: facet.companyId } : {}),
           }
-    const firestore = firebaseAdmin.app().firestore()
-    const orgRef = firestore.collection('orgs').doc(env.orgId)
     if (!crmActivityLogHasRoom(await countCrmActivitiesForRecord(orgRef, link))) {
       return null
     }
-    const ref = newCrmActivityRef(firestore, env.orgId)
+    const ref = newCrmActivityRef(firestore, orgId)
+    const visibleTo = crmScopeTokens((org ?? null) as Record<string, unknown> | null, group)
     return {
-      ref,
-      tags: crmEmailDeliveryTags({
-        orgId: env.orgId,
-        hostId: env.hostId,
-        activityId: ref.id,
-      }),
-      link,
-      visibleTo: crmScopeTokens(
-        (env.org ?? null) as Record<string, unknown> | null,
-        group,
-      ),
+      tags: crmEmailDeliveryTags({ orgId, hostId, activityId: ref.id }),
+      /*
+       * The same shape the console route logs — `buildCrmEmailActivity` is the
+       * one builder — with the sender's id as its source and nobody as its
+       * author. Never throws: the message has left, and a row that could not
+       * be written is a gap on the timeline rather than a failed send.
+       */
+      async file(sent) {
+        try {
+          await writeCrmEmailActivity(
+            ref,
+            buildCrmEmailActivity({
+              subject: sent.subject,
+              body: sent.body,
+              to: normalizeContactEmail(sent.to) ?? sent.to,
+              atMs: sent.atMs ?? Date.now(),
+              byUid: '',
+              sourceActionId: sent.sourceRef,
+              link,
+              hostId,
+              visibleTo,
+            }),
+          )
+        } catch (error) {
+          console.error('[crm] automation email activity write failed', ref.id, error)
+        }
+      },
     }
   } catch (error) {
-    console.error('[crm] automation email activity could not be prepared', env.hostId, error)
+    console.error('[crm] automation email activity could not be prepared', hostId, error)
     return null
-  }
-}
-
-/**
- * Writes the prepared row, once the provider has accepted the message.
- *
- * The same shape the console route logs — `buildCrmEmailActivity` is the
- * one builder — with the automation as its source and nobody as its
- * author. **Never throws**: the message has left, and a row that could not
- * be written is a gap on the timeline rather than a failed step.
- */
-export async function logCrmEmailActivity(
-  env: CrmStepEnv,
-  prepared: PreparedCrmEmailActivity,
-  message: { subject: string; body: string; to: string },
-  actionId: string,
-  nowMs = Date.now(),
-): Promise<void> {
-  try {
-    await writeCrmEmailActivity(
-      prepared.ref,
-      buildCrmEmailActivity({
-        subject: message.subject,
-        body: message.body,
-        to: normalizeContactEmail(message.to) ?? message.to,
-        atMs: nowMs,
-        byUid: '',
-        sourceActionId: actionId,
-        link: prepared.link,
-        hostId: env.hostId,
-        visibleTo: prepared.visibleTo,
-      }),
-    )
-  } catch (error) {
-    console.error('[crm] automation email activity write failed', prepared.ref.id, error)
   }
 }

@@ -41,7 +41,7 @@ import {
  * check reads "nothing references it", and the UI tells the user the record is
  * safe to remove. The document that pointed at it is left pointing at nothing.
  */
-const REPO_ROOT = join(__dirname, '..', '..', '..', '..', '..')
+const REPO_ROOT = join(__dirname, '..', '..', '..', '..', '..', '..')
 const read = (path: string) => readFileSync(join(REPO_ROOT, path), 'utf8')
 
 const model: DatasetModel = {

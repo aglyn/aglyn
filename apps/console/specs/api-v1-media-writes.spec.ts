@@ -259,10 +259,16 @@ jest.mock('@aglyn/aglyn/server', () => ({
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/media-embedded-metadata'),
   createResourceUid: () => `med_${++mockUidSeq}`,
   readImageDimensions: () => ({ width: 800, height: 600 }),
+  PLATFORM_BRAND_NAME: 'Aglyn',
+}))
+
+// The data plugin's dataset model, as the dataset handlers read it
+// (AGL-3080: the model is the data plugin's own).
+jest.mock('../../../libs/plugins/data/src/lib/model/dataset-models', () => ({
+  ...jest.requireActual('../../../libs/plugins/data/src/lib/model/dataset-models'),
   effectiveDatasetModel: () => ({ fields: [] }),
   coerceDocumentValues: (_m: unknown, v: Record<string, unknown>) => v,
   validateDocument: () => ({}),
-  PLATFORM_BRAND_NAME: 'Aglyn',
 }))
 
 jest.mock('../utils/server/media-scope', () => ({

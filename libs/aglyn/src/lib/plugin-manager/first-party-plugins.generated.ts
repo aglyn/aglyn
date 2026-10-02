@@ -13,6 +13,7 @@ import type { ResolvedPluginSitemapSection } from './plugin-sitemap-sections'
 import type { ResolvedPluginSiteBundleSectionDeclaration } from './plugin-site-bundle'
 import type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'
 import type { ResolvedPluginEntityPicker } from './plugin-entity-pickers'
+import type { ResolvedPluginRecordPage } from './plugin-record-pages'
 import type { ResolvedPluginCostAxis, ResolvedPluginSpendLine, ResolvedPluginUsageBand, ResolvedPluginUsageMeter } from './plugin-usage-axes'
 import type { ResolvedPluginPlanFeature, ResolvedPluginPlanQuota } from './plugin-plan-entitlements'
 import type { FunctionBindings } from './plugin-contributions'
@@ -211,6 +212,12 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
     "pluginId": "forms",
     "name": "forms",
     "routeSlug": "forms"
+  },
+  {
+    "pluginId": "forms",
+    "name": "formSubmissions",
+    "mediaScan": "none",
+    "mediaScanReason": "Visitor form submissions. Unbounded, PII-heavy, and a file attached to one is the visitor's upload — not a library asset an author picked, and not something deleting a library asset would break."
   },
   {
     "pluginId": "bookings",
@@ -482,12 +489,6 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
     "pluginId": "events-calendar",
     "name": "events",
     "routeSlug": "events"
-  },
-  {
-    "pluginId": "inbox",
-    "name": "formSubmissions",
-    "mediaScan": "none",
-    "mediaScanReason": "Visitor form submissions. Unbounded, PII-heavy, and a file attached to one is the visitor's upload — not a library asset an author picked, and not something deleting a library asset would break."
   },
   {
     "pluginId": "logic",
@@ -863,6 +864,18 @@ export const PLUGIN_ENTITY_PICKERS_DECLARED: readonly ResolvedPluginEntityPicker
     "singular": "dataset",
     "plural": "datasets",
     "page": "the Data page"
+  },
+]
+
+/**
+ * Where a person reads each record kind a first-party plugin's console page
+ * shows, declared by that plugin (AGL-3080), for a server's notification link.
+ */
+export const PLUGIN_RECORD_PAGES_DECLARED: readonly ResolvedPluginRecordPage[] = [
+  {
+    "pluginId": "inbox",
+    "kind": "formSubmission",
+    "path": "/inbox"
   },
 ]
 
@@ -1360,6 +1373,26 @@ export const PLUGIN_INTERACTION_STEPS_DECLARED: readonly InteractionStepDeclarat
  * declared by that plugin (AGL-3080). Core names no plugin step.
  */
 export const PLUGIN_SERVER_STEPS_DECLARED: readonly ServerStepDeclaration[] = [
+  {
+    "pluginId": "crm",
+    "type": "setContactStage"
+  },
+  {
+    "pluginId": "crm",
+    "type": "addContactTag"
+  },
+  {
+    "pluginId": "crm",
+    "type": "assignContactOwner"
+  },
+  {
+    "pluginId": "crm",
+    "type": "createCrmTask"
+  },
+  {
+    "pluginId": "crm",
+    "type": "logCrmActivity"
+  },
   {
     "pluginId": "data",
     "type": "datasetAppend"

@@ -17,13 +17,7 @@
 
 import {
   checkQuota,
-  datasetDisplayName,
-  datasetIntegrityFields,
-  datasetIntegrityUpdate,
-  describeDatasetRecordErrors,
-  effectiveDatasetModel,
   ensureDeclaredCustomFieldTypes,
-  prepareDatasetRecordWrite,
   resolveOrgEntitlements,
 } from '@aglyn/aglyn/server'
 import type {
@@ -39,6 +33,8 @@ import { FieldValue } from 'firebase-admin/firestore'
 import type { DATASET_STEP_TYPES } from '../constants/bundle-common'
 import { announceDatasetRecordChange } from './dataset-live-pages'
 import { resolveDatasetDoc } from './resolve-dataset'
+import { datasetIntegrityFields, datasetIntegrityUpdate, effectiveDatasetModel } from '../model/dataset-models'
+import { datasetDisplayName, describeDatasetRecordErrors, prepareDatasetRecordWrite } from '../model/datasets'
 
 /**
  * THE TWO AUTOMATION STEPS THAT WRITE A DATASET RECORD (AGL-257, AGL-556,

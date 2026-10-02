@@ -61,7 +61,7 @@ Three facts settle it, and each was verified in code rather than assumed:
    `libs/plugins/marketing/src/lib/server/campaign-send.ts` filters an audience
    against `hosts/{hostId}/suppressions` and nothing else.
 3. **A form submitter has no consent record to copy through.**
-   `apps/tenant/app/api/forms/submit/route.ts` calls `upsertHostContact` with
+   `libs/plugins/forms/src/lib/server/form-submit.ts` calls `upsertHostContact` with
    `source: 'form'` and does **not** pass `marketingConsent`, so the org contact
    it creates carries no consent flag. An assignment that read a consent record
    would therefore refuse essentially every sender in the Inbox — and one that
@@ -346,7 +346,7 @@ never opted in.
 ⛔ **Explicitly not proposed, restating email-overhaul §3f:** inferring consent
 from the submission itself. Someone filling in a contact form asked to be
 answered. They did not ask to be marketed to, and the checkbox that would let
-them say so is not on the form-submit path — `apps/tenant/app/api/forms/submit/route.ts`
+them say so is not on the form-submit path — `libs/plugins/forms/src/lib/server/form-submit.ts`
 never passes `marketingConsent` to `upsertHostContact`.
 
 > ✅ **Built as specified, with two additions the spec did not anticipate.**

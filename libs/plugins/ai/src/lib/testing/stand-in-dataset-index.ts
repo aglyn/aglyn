@@ -15,8 +15,6 @@
  * limitations under the License.
  */
 
-import { effectiveDatasetModel, type DatasetModel } from '@aglyn/aglyn/app-utils/dataset-models'
-import { datasetDisplayName } from '@aglyn/aglyn/app-utils/datasets'
 import { visibleToHost } from '@aglyn/aglyn/app-utils/scope-tokens'
 import {
   registerPluginRecordIndex,
@@ -38,12 +36,39 @@ const OWNER = 'data'
 
 const str = (value: unknown): string => (typeof value === 'string' ? value.trim() : '')
 
+/** A field as a dataset document stores it, as far as this stand-in reads one. */
+interface StoredField {
+  name?: unknown
+  type?: unknown
+}
+
+/**
+ * The fields a dataset document declares, in the Data page's order: its
+ * model's, or for a dataset from before models, each name in `fields` as a
+ * text field — the derivation the data plugin applies.
+ */
+function storedFields(data: Record<string, unknown>): { order: string[]; fields: Record<string, StoredField> } {
+  const model = data['model'] as { order?: unknown; fields?: unknown } | undefined
+  if (model && Array.isArray(model.order) && model.order.length && model.fields && typeof model.fields === 'object') {
+    return { order: model.order.map(String), fields: model.fields as Record<string, StoredField> }
+  }
+  const names = Array.isArray(data['fields']) ? data['fields'].map(String) : []
+  const titled = (name: string) => {
+    const words = name.replace(/_/g, ' ').trim()
+    return words ? words.charAt(0).toUpperCase() + words.slice(1) : name
+  }
+  return {
+    order: names,
+    fields: Object.fromEntries(names.map((name) => [name, { name: titled(name), type: 'text' }])),
+  }
+}
+
 function record(id: string, data: Record<string, unknown> | undefined): PluginIndexedRecord | null {
   if (!data || data['deletedAt'] != null) return null
-  const model = effectiveDatasetModel(data as { model?: DatasetModel; fields?: string[] })
+  const model = storedFields(data)
   return {
     id,
-    name: datasetDisplayName(data) || id,
+    name: str(data['displayName']) || str(data['name']) || id,
     facts: {
       fields: model.order.map((fieldId) => ({
         id: fieldId,

@@ -15,10 +15,10 @@
  * limitations under the License.
  */
 
-import { type DatasetModel, datasetIntegrityFields } from '@aglyn/aglyn'
 import { listQueryIndexes } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import { answerListQuery } from '@aglyn/tenant-feature-instance/testing/list-query-double'
 import { datasetRecordFilter, planRecordQuery, recordColumn } from './dataset-record-filter'
+import { type DatasetModel, datasetIntegrityFields } from '../model/dataset-models'
 
 const model: DatasetModel = {
   order: ['title', 'status', 'done', 'price', 'tags', 'due', 'owner', 'e.mail'],

@@ -618,7 +618,7 @@ await put(
 
 // ── Inbox (AGL-3319) ──────────────────────────────────────────────────────
 // Contact-form submissions in the shape the tenant's submit route writes
-// (`apps/tenant/app/api/forms/submit/route.ts`), so the Inbox shows people
+// (`libs/plugins/forms/src/lib/server/form-submit.ts`), so the Inbox shows people
 // writing in, not only the guide's anonymous survey.
 console.log('Inbox:')
 const submissionsRef = firestore.collection('hosts').doc(hostId).collection('formSubmissions')

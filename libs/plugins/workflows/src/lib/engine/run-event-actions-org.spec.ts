@@ -228,17 +228,6 @@ jest.mock('@aglyn/tenant-data-admin/server/contact-email-index', () => ({
   findContactByEmail: async () => null,
 }))
 
-// The CRM steps are held to their own suites; here a CRM write is a line in
-// the run history, and the email's timeline row is somebody else's question.
-jest.mock('./crm-action-steps', () => ({
-  __esModule: true,
-  prepareCrmEmailActivity: async () => null,
-  logCrmEmailActivity: async () => undefined,
-  // Nobody to merge from: the tags fall back to the event's own name and address.
-  automationEmailMergeContext: async () => ({}),
-  runCrmActionStep: async () => ({ detail: 'tagged' }),
-}))
-
 jest.mock('@aglyn/shared-util-email', () => {
   const actual = jest.requireActual('@aglyn/shared-util-email')
   return {

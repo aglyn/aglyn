@@ -30,7 +30,15 @@ jest.mock('firebase-admin/firestore', () => ({
   FieldValue: { increment: (by: number) => ({ __increment: by }) },
 }))
 
-import { incrementFormStats } from '../utils/increment-form-stats'
+// The reporter the tenant's own server errors go through, observed: its
+// module is the tenant's data layer, which this spec has no reason to boot.
+const mockReportServerError = jest.fn(async (..._args: unknown[]) => undefined)
+jest.mock('@aglyn/tenant-data-admin', () => ({
+  __esModule: true,
+  reportServerError: (...args: unknown[]) => mockReportServerError(...args),
+}))
+
+import { incrementFormStats } from './increment-form-stats'
 
 function formRef(failures: unknown[]) {
   const updates: Record<string, unknown>[] = []
@@ -110,6 +118,18 @@ describe('incrementFormStats (AGL-3330)', () => {
     expect(event.message).toContain('host-1')
     expect(event.message).toContain('form-1')
     expect(event.message).toContain('code 4')
+  })
+
+  it('reports through the tenant’s own server error reporter when no reporter is given', async () => {
+    const deadline = Object.assign(new Error('DEADLINE_EXCEEDED'), { code: 4 })
+    const { ref } = formRef([deadline, deadline, deadline])
+    mockReportServerError.mockClear()
+    await expect(
+      incrementFormStats({ ...base, formRef: ref, leadCounted: false }),
+    ).resolves.toBe('failed')
+    expect(mockReportServerError).toHaveBeenCalledTimes(1)
+    expect(mockReportServerError.mock.calls[0]?.[0]).toMatchObject({ route: '/api/forms/submit' })
+    expect(mockReportServerError.mock.calls[0]?.[1]).toEqual({ service: 'tenant-web' })
   })
 
   it('treats a deleted form as nothing to count, without a report', async () => {
