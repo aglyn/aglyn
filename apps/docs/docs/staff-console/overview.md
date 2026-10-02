@@ -121,7 +121,13 @@ below the cards, **Emails sent** across its sites, then the
 [Email campaigns](#staff-org-email) and [Organization
 automations](#staff-automations) cards when those plugins are installed.
 **Transfer organization ownership** is under **Edit organization**, and asks
-for a confirmation before it hands the organization over.
+for a confirmation before it hands the organization over. Beside it, **Hand off
+to a new owner** invites an address to take the organization over, and **Ask to
+upgrade** proposes a plan to its owner; see
+[Build a site for a client](#build-for-a-client). The **Members** card marks a
+staff member's row **staff · no seat**, and the seat usage in **Effective
+entitlements** counts managers the way the seat gates do, never staff and never
+site collaborators.
 
 #### Organization email campaigns {#staff-org-email}
 
@@ -269,10 +275,14 @@ A comp **bills nothing**, capped or uncapped:
 - **Old purchases don't come back.** Add-ons bought on the subscription that
   ended still don't count.
 
-A comp lasts until it is removed. If the organization later subscribes, the
-live subscription outranks the comp, which then shows as **dormant**. If that
-subscription ends, the comp applies again, so remove a comp when it should end.
-Only **Remove the comp on save** removes one. A save that doesn't mention the
+A comp lasts until it is removed, with one exception. A comp granted with the
+reason **Sales trial or proof of concept** is removed by the platform the moment
+the organization's subscription goes live, with an audit row
+(`org.subscriptionStarted.settle`) and an activity entry that say why, so a trial
+cannot hand the tier back for free if the customer later cancels. Any other comp
+stays: the live subscription outranks it, it shows as **dormant**, and if that
+subscription ends the comp applies again, so remove it when it should end. Only
+**Remove the comp on save** removes one by hand. A save that doesn't mention the
 comp, such as a quota edit or an older console tab, leaves it exactly as stored.
 The success message quotes the server's account of what took effect, for
 example *"Pro comp granted. Effective plan: Free → Pro."* or *"Uncapped
@@ -285,6 +295,41 @@ plan, a **stored:** chip when it differs from the stored plan, and a **comp:**
 chip that says **uncapped** and **dormant** where they apply. The override
 dialog's comp chip does the same, and the organization's AI card says when an
 uncapped comp is why the workspace has no AI credit band.
+
+### Build a site for a client {#build-for-a-client}
+
+How staff build a site for a prospect and hand it over. No seat override is needed
+at any step: staff take none of a workspace's seats.
+
+1. **Create the workspace and comp it.** Sign in with your staff account and create
+   a workspace for the client from the workspace chooser. Staff are not held to the
+   [free workspace limit](#free-workspace-limit), and your owner row is marked
+   **staff · no seat**, so the workspace's one Free team seat stays free. In the
+   [entitlement editor](#plan-comps), comp it to the tier you are selling with the
+   reason **Sales trial or proof of concept**.
+2. **Build the site.**
+3. **Hand it over.** On the organization's page (or the site's **Ownership** card),
+   choose **Hand off to a new owner**, enter the client's email, and choose whether
+   you **Stay on as an admin after the handoff** or **Leave after the handoff**. The
+   client is emailed. The invitation reserves no seat, and when the client accepts
+   they own the workspace and land on its home. Nothing asks them to upgrade.
+4. **The client evaluates** with the full tier the comp gives them.
+5. **Ask to upgrade.** When the evaluation is done, choose **Ask to upgrade**, pick
+   the plan, and add a note if you like. The owner gets an email, and the
+   workspace's billing managers see a card on the workspace's home and on Billing
+   with the plan preselected. **Withdraw proposal** takes it back.
+6. **The owner subscribes from Billing.** The comped tier's card offers **Start your
+   *plan* subscription** even though it shows as their current plan, and it runs the
+   ordinary checkout.
+7. **It cleans up after itself.** When the subscription goes live, the proposal and
+   the sales-trial comp are removed, each with an audit row. A comp granted for any
+   other reason stays dormant until you remove it.
+
+A non-staff owner on a plan with no free team seat cannot hand off and stay on: the
+handoff is refused when it is sent and points them to **Leave after the handoff**,
+because staying would add a second manager the plan does not include. Revoking
+someone's staff role takes the **no seat** mark off their rows and pending invites,
+so they take a seat like anyone else from then on.
 
 ### Site management {#sites-admin}
 
@@ -350,6 +395,9 @@ transfer the owner makes from Settings › Ownership: the new owner takes over
 billing and every site of the organization, and the previous owner stays on as
 an admin. A transfer that would lock the organization out of its own single
 sign-on is refused, with the reason shown.
+
+The same card carries **Hand off to a new owner** and **Ask to upgrade**, the
+two steps of [Build a site for a client](#build-for-a-client).
 
 #### Move a site to another organization {#site-transfer}
 

@@ -38,9 +38,13 @@ Use **a separate organization per client** when the client ultimately owns the
 account and you're only building it — they hold the card, the domain, and the risk.
 You then join their organization as a member and can leave cleanly.
 
-The awkward middle — building in your workspace and later moving the site to theirs —
-is the one thing that isn't self-serve, so decide before you start. Ask support if
-you're not sure which side a project falls on.
+To build first and hand over later, create a workspace for the client, build the
+site there, and then send the client an
+[owner handoff](/workspace-and-billing/teams-and-roles/invite-teammates#owner-handoff)
+from its **Team** page: **Role → Owner (hand off this workspace)**. When they accept,
+the workspace and every site in it are theirs. You choose whether you stay on as an
+admin or leave. Staying needs a free team seat on their plan, so on Free choose
+**Leave after the handoff**, or have them add a seat first.
 :::
 
 ## Step 1 — Pick the plan by site count, not by features {#step-1-plan}

@@ -57,6 +57,27 @@ and **Go back**. Links to your own pages, your custom domain and Aglyn, and emai
 phone links, open as usual, and search indexing is unaffected. The page stops appearing
 as soon as the workspace is on a paid plan or 14 days old.
 
+### A plan the Aglyn team set up for you {#plan-without-subscription}
+
+Sometimes a workspace is on a paid plan with no subscription behind it. Most often the
+Aglyn team built the workspace for you and put it on the plan you are evaluating, so you
+can try every feature of it before you pay. The plan's card on the Billing page shows
+**Current plan**, and says the workspace is on that plan with no subscription behind it.
+
+When you are ready to keep it, choose **Start your *plan* subscription** on that card.
+It runs the same checkout as any upgrade, and from then on the subscription is what
+keeps the workspace on the plan. You can also pick a higher plan instead. Moving to a
+lower plan still goes through us, because there is no subscription to move down from.
+
+#### When the Aglyn team proposes a plan {#upgrade-proposal}
+
+When the Aglyn team proposes a plan for your workspace, the owner gets an email, and
+everyone who manages billing sees a card on the workspace's home and at the top of the
+Billing page: **"*Workspace*'s Aglyn team proposed the *Plan* plan"**. **Review the
+plan** opens Billing with that plan selected. Nothing is charged until you start the
+subscription yourself. The card goes away once a subscription is live, or when the team
+withdraws the proposal. Other members never see it.
+
 ### Enterprise
 
 **Enterprise** is the one tier you cannot buy from the Billing page. It has no list
@@ -314,6 +335,8 @@ warning you against the new number straight away.
   [Aglyn AI](add-ons.md#aglyn-ai).
 - **Site member accounts are not seats**: visitors who sign up to your published
   site are unlimited on every plan.
+- **Aglyn staff take no seat**, whether they built the workspace or joined it to help.
+  See [Aglyn staff on your team](../teams-and-roles/invite-teammates.md#aglyn-staff).
 
 ## CRM records {#crm-records}
 
