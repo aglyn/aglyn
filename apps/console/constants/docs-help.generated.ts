@@ -609,6 +609,10 @@ export const DOCS_HELP_TOPICS = {
     path: '/developers/plugins/guides/server-apis',
     title: 'Guide: server APIs, webhooks & jobs',
   },
+  serviceAndLocationPagesFromADataset: {
+    path: '/guides/service-and-location-pages-from-a-dataset',
+    title: 'Service and location pages from a dataset',
+  },
   settings: {
     path: '/content-and-data/crm/settings',
     title: 'CRM settings',
@@ -867,6 +871,7 @@ export const DOCS_HELP_ANCHORS = {
   seoByAi: ['#write-a-pages-listing', '#write-a-products-listing', '#fix-what-the-seo-check-finds', '#apply-all-as-drafts', '#structured-data-and-llmstxt', '#related'],
   sequences: ['#what-it-is-for', '#sent-from-your-own-mailbox', '#where-it-lives', '#self-hosted', '#connect-a-mailbox', '#send-as', '#daily-cap', '#mailbox-status', '#auto-pause', '#mailbox-actions', '#link-domains', '#compliance-settings', '#allowed-countries', '#do-not-contact-domains', '#sequences', '#build-a-sequence', '#count-opens', '#send-a-test', '#sequence-status', '#enroll', '#start-at-step', '#mail-gateways', '#cold-contacts', '#enrollments', '#person-history', '#curate', '#sending', '#what-stops-a-sequence', '#unsubscribe', '#related'],
   serverApis: ['#an-api-route', '#route-subject', '#webhooks-with-signature-verification', '#platform-billing-events', '#scheduled-jobs', '#lockdown--lockdown-is-required', '#troubleshooting'],
+  serviceAndLocationPagesFromADataset: ['#1-model-the-data', '#2-design-the-template', '#3-make-it-the-record-template', '#4-link-to-the-pages', '#what-visitors-and-search-engines-get', '#when-records-go-away', '#locations-team-members-portfolio', '#related'],
   settings: ['#companies', '#create-companies-from-work-email-domains', '#default-owner', '#assignment-rules', '#round-robin', '#email-templates', '#email-capture', '#your-sending-addresses', '#recipes', '#related'],
   sharing: ['#what-a-shared-record-looks-like', '#share-a-record-by-hand', '#several-records-at-once', '#sharing-rules', '#access-read-only-or-read-and-edit', '#sharing-is-not-consent', '#who-can-do-this', '#related'],
   siteProtection: ['#where-these-controls-live', '#per-screen-passwords', '#custom-error-screens', '#maintenance-mode', '#related'],

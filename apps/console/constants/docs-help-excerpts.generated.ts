@@ -179,6 +179,7 @@ export const DOCS_HELP_EXCERPTS = {
   seoByAi: 'AI SEO for websites, on the pages you already have: have AI write a page or product\'s search listing, propose a fix for each finding of the SEO check, and draft your structured data and /llms.txt.',
   sequences: 'One-to-one email sequences a rep sends to a person from their own connected mailbox, kept with the CRM. Rolling out.',
   serverApis: 'Plugin API routes behind the dispatchers, Stripe/Svix signature verification, billing hooks, and scheduled jobs.',
+  serviceAndLocationPagesFromADataset: 'Give every record of a dataset its own page from one design — a page per service, per location or per team member, each at its own address, with search titles from your fields and every page in the sitemap.',
   settings: 'What the CRM does on its own for every site — whether a company is created from a contact\'s work email domain, who a new contact is assigned to, the address that files replies on a record, and each site\'s recipes.',
   sharing: 'Let another of your sites see a lead, a contact, a company or a deal — one record by hand, a selection from a list, or every record a sharing rule matches, now and later — without sharing the person\'s consent.',
   siteProtection: 'Password-protect pages, design custom error pages, and put your site in maintenance mode.',

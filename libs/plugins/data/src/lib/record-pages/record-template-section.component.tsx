@@ -242,7 +242,7 @@ export function RecordTemplateSection(props: ConsoleBesignerPagePropertiesZonePr
       title: 'Stop serving record pages?',
       description:
         `Every page under /${current?.base ?? ''}/ stops answering. This page stays a ` +
-        'template; make it a page again from the Pages list.',
+        'template, so it doesn’t answer at its own address either.',
       confirmationText: 'Stop serving them',
       confirmationButtonProps: { color: 'error' },
     })
