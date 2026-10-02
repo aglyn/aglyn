@@ -214,6 +214,7 @@ jest.mock('@aglyn/aglyn/server', () => ({
 import {
   NON_PAGE_SCREEN_MAX_PER_HOST,
   SCREEN_KIND_EMAIL,
+  SCREEN_KIND_GROUP,
   SCREEN_KIND_TEMPLATE,
 } from '@aglyn/aglyn/app-utils/screen-route'
 import { PLAN_ENTITLEMENTS } from '@aglyn/aglyn/app-utils/plan-entitlements'
@@ -416,6 +417,66 @@ describe('non-page screen documents are capped server-side (AGL-1399)', () => {
   it('refuses while the owning org is suspended — 423, the distinct lockdown status (AGL-1501)', async () => {
     state.org = { plan: 'business', suspendedAt: { seconds: 1 } }
     expect((await createEmail()).status).toBe(423)
+    expect(mockCreate).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * PAGE GROUPS (AGL-3463): a folder in the Pages list, born as
+ * `kind: 'group'` and never anything else. It is the second non-page kind
+ * this route lets a client create — the first being an email document — and
+ * the reason it can is that no route promotes a group into a page.
+ */
+describe('page groups are created as non-page screens (AGL-3463)', () => {
+  const createGroup = (data: Record<string, unknown> = {}) =>
+    createScreen({ displayName: 'Campaign landing pages', kind: SCREEN_KIND_GROUP, ...data })
+
+  it('creates a group, and stores nothing that could give it an address', async () => {
+    const response = await createGroup({
+      slug: 'campaigns',
+      versionId: 'v-1',
+      seo: { title: 'x' },
+    })
+    expect(response.status).toBe(200)
+    expect(mockCreate).toHaveBeenCalledTimes(1)
+    const stored = mockCreate.mock.calls[0][0]
+    expect(stored).toMatchObject({
+      kind: SCREEN_KIND_GROUP,
+      displayName: 'Campaign landing pages',
+    })
+    expect(stored).not.toHaveProperty('slug')
+    expect(stored).not.toHaveProperty('versionId')
+    expect(stored).not.toHaveProperty('seo')
+  })
+
+  it('spends none of the plan: a site at its page limit can still make one', async () => {
+    state.org = { plan: 'free' }
+    state.screens = screensOfKind(
+      PLAN_ENTITLEMENTS.free.screensPerHost,
+      undefined,
+      'page',
+    )
+    routePages()
+    // The page limit refuses a page…
+    expect((await createScreen({ displayName: 'Sixth' })).status).toBe(403)
+    // …and a group is not one.
+    expect((await createGroup()).status).toBe(200)
+  })
+
+  it('is bounded by the same flat cap as every other non-page screen', async () => {
+    state.screens = [
+      ...screensOfKind(NON_PAGE_SCREEN_MAX_PER_HOST - 1, SCREEN_KIND_EMAIL, 'email'),
+      { id: 'group-0', kind: SCREEN_KIND_GROUP },
+    ]
+    const response = await createGroup()
+    expect(response.status).toBe(403)
+    expect((await response.json()).error).toContain('page groups')
+    expect(mockCreate).not.toHaveBeenCalled()
+  })
+
+  it('still refuses every other non-page kind at create', async () => {
+    const response = await createScreen({ kind: SCREEN_KIND_TEMPLATE })
+    expect(response.status).toBe(403)
     expect(mockCreate).not.toHaveBeenCalled()
   })
 })

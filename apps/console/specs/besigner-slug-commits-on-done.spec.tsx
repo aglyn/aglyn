@@ -66,6 +66,9 @@ const mockUpdateScreenDoc = jest.fn((data: Record<string, unknown>) => {
  */
 const mockSyncScreenRouteEntries = jest.fn().mockResolvedValue(undefined)
 
+/** Taking ONE page off the site — the only way a route is removed (AGL-3463). */
+const mockUnpublishScreenRoute = jest.fn().mockResolvedValue(undefined)
+
 /** The CANVAS save behind `DONE` — the one whose "Already saved" misled. */
 const mockHandleSave = jest.fn().mockResolvedValue(undefined)
 
@@ -75,7 +78,7 @@ const mockCreateResource = jest.fn(async () => ({ id: 'created-id' }))
  * The screen under test and the parent it nests under. `screen-1`'s own slug
  * is `old`; the composed path is therefore `alternatives/old`.
  */
-const mockScreenDocs = [
+const mockScreenDocs: Array<Record<string, unknown>> = [
   {
     $id: 'parent-1',
     slug: 'alternatives',
@@ -193,6 +196,10 @@ jest.mock('@aglyn/aglyn', () => ({
   linkableScreenRoutes: mockRealScreenRoute.linkableScreenRoutes,
   normalizeScreenSlug: mockRealScreenRoute.normalizeScreenSlug,
   ownScreenSlugFromRoutePath: mockRealScreenRoute.ownScreenSlugFromRoutePath,
+  isScreenGroup: mockRealScreenRoute.isScreenGroup,
+  liveScreenDescendants: mockRealScreenRoute.liveScreenDescendants,
+  screenClaimsToBeAPage: mockRealScreenRoute.screenClaimsToBeAPage,
+  toScreenRouteNode: mockRealScreenRoute.toScreenRouteNode,
   reservedScreenRouteMessage: mockRealScreenRoute.reservedScreenRouteMessage,
   reservedScreenRouteSegment: mockRealScreenRoute.reservedScreenRouteSegment,
   screenRoutePathToUrl: mockRealScreenRoute.screenRoutePathToUrl,
@@ -416,6 +423,8 @@ jest.mock('../constants/preview-state', () => ({
 jest.mock('../constants/screen-publishing', () => ({
   syncScreenRouteEntries: (...args: unknown[]) =>
     mockSyncScreenRouteEntries(...args),
+  unpublishScreenRoute: (...args: unknown[]) =>
+    mockUnpublishScreenRoute(...args),
 }))
 jest.mock('../constants/tenant-links', () => ({
   resolveScreenLiveUrl: () => ({ url: undefined, unavailableReason: undefined }),
@@ -739,5 +748,96 @@ describe('Screen Properties ▸ Slug · a typed path (AGL-2572)', () => {
     clickDone()
 
     await waitFor(() => expect(stored.slug).toBe('webflow'))
+  })
+})
+
+/**
+ * NOTHING BELOW A PAGE GOES DOWN WITH IT (AGL-3463).
+ *
+ * Clearing the slug and pressing Unpublish used to sync a removal for this
+ * screen AND every live page nested under it, so taking a section's landing
+ * page down took the section with it. It now removes this screen's own entry
+ * through `unpublishScreenRoute` and says which pages stay live.
+ */
+describe('Screen Properties ▸ Unpublish takes this page alone off the site (AGL-3463)', () => {
+  const child = {
+    $id: 'child-1',
+    slug: 'faq',
+    parentId: 'screen-1',
+    displayName: 'FAQ',
+  }
+
+  beforeEach(() => {
+    mockScreenDocs.push(child)
+  })
+
+  afterEach(() => {
+    mockScreenDocs.splice(mockScreenDocs.indexOf(child), 1)
+  })
+
+  it('removes only its own entry, and clears its slug, when the field is emptied', async () => {
+    mockRoutingMap = {
+      'parent-1': 'alternatives',
+      'screen-1': 'alternatives/old',
+      'child-1': 'alternatives/old/faq',
+    }
+    render(<ScreenBesigner />)
+
+    typeSlug('')
+    fireEvent.click(screen.getByRole('button', { name: 'Unpublish' }))
+
+    await waitFor(() => expect(mockUnpublishScreenRoute).toHaveBeenCalled())
+    expect(mockUnpublishScreenRoute).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ hostId: 'host-1', screenId: 'screen-1' }),
+      { clearSlug: true },
+    )
+    // No subtree sync: nothing else's route is touched.
+    expect(mockSyncScreenRouteEntries).not.toHaveBeenCalled()
+    await waitFor(() =>
+      expect(mockEnqueueSnackbar).toHaveBeenCalledWith(
+        'Page unpublished — the page under it stays live at its own address',
+        expect.objectContaining({ variant: 'success' }),
+      ),
+    )
+  })
+})
+
+/**
+ * The Parent page picker offers pages and page GROUPS, and never a screen
+ * that is not a page (AGL-3463).
+ */
+describe('Screen Properties ▸ Parent page offers groups, not other kinds (AGL-3463)', () => {
+  const extras = [
+    { $id: 'group-1', kind: 'group', displayName: 'Campaigns' },
+    { $id: 'email-1', kind: 'email', displayName: 'Newsletter' },
+    { $id: 'error-1', kind: 'error', displayName: 'Not found' },
+    { $id: 'template-1', kind: 'template', displayName: 'Post template' },
+    { $id: 'gone-1', slug: 'gone', displayName: 'Deleted', deletedAt: 1 },
+  ]
+
+  beforeEach(() => {
+    mockScreenDocs.push(...extras)
+  })
+
+  afterEach(() => {
+    for (const extra of extras) {
+      mockScreenDocs.splice(mockScreenDocs.indexOf(extra), 1)
+    }
+  })
+
+  it('labels a group as one and leaves out every non-page kind', async () => {
+    render(<ScreenBesigner />)
+
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Parent page' }))
+
+    const options = (await screen.findAllByRole('option')).map(
+      (option) => option.textContent,
+    )
+    expect(options).toContain('Campaigns (group)')
+    expect(options).toContain('Alternatives')
+    for (const name of ['Newsletter', 'Not found', 'Post template', 'Deleted']) {
+      expect(options).not.toContain(name)
+    }
   })
 })

@@ -93,6 +93,37 @@ const storedScreens: StoredScreen[] = [
     id: 'screen-404',
     doc: { visibility: HostScreenVisibility.PUBLIC, slug: '404' },
   },
+  /*
+    PAGE GROUPS (AGL-3463): folders in the console with no address. A page
+    inside one is listed, its `parentId` names the nearest PAGE above it, and
+    the group itself never appears — even with a stray routing entry.
+  */
+  {
+    id: 'group-campaigns',
+    doc: { kind: 'group', displayName: 'Campaign landing pages' },
+  },
+  {
+    id: 'group-under-about',
+    doc: { kind: 'group', parentId: 'screen-about', displayName: 'Team' },
+  },
+  {
+    id: 'screen-waitlist',
+    doc: {
+      visibility: HostScreenVisibility.PUBLIC,
+      slug: 'launch-waitlist',
+      parentId: 'group-campaigns',
+      displayName: 'Launch waitlist',
+    },
+  },
+  {
+    id: 'screen-leadership',
+    doc: {
+      visibility: HostScreenVisibility.PUBLIC,
+      slug: 'leadership',
+      parentId: 'group-under-about',
+      displayName: 'Leadership',
+    },
+  },
   {
     // In the collection but NOT in the routing map: an unpublished draft. The
     // routing map is what the router serves, so this is not a page.
@@ -117,6 +148,9 @@ const mockRoutes: Record<string, string> = {
   'screen-template': 'products',
   'screen-404': '404',
   'screen-orphan': 'ghost',
+  'screen-waitlist': 'launch-waitlist',
+  'screen-leadership': 'company/about/leadership',
+  'group-campaigns': 'stray-group-entry',
 }
 
 let requestedProjection: string[] | null = null
@@ -495,5 +529,37 @@ describe('GET /api/screen pagination (AGL-2716)', () => {
   it('still refuses when there is no site to resolve at all', async () => {
     const response = await GET(new Request('https://demo.aglyn.app/api/screen'))
     expect(response.status).not.toBe(200)
+  })
+})
+
+describe('GET /api/screen and page groups (AGL-3463)', () => {
+  it('names the nearest parent PAGE, passing over any group', async () => {
+    const { body } = await callRoute('?host=demo&limit=100')
+    const byId = new Map(
+      body.data.screens.map((screen: any) => [screen.$id, screen]),
+    )
+    // Inside a top-level group: a top-level page, so no parent at all.
+    expect(byId.get('screen-waitlist')).toMatchObject({
+      path: '/launch-waitlist',
+    })
+    expect((byId.get('screen-waitlist') as any).parentId).toBeUndefined()
+    // Inside a group under a page: that page.
+    expect((byId.get('screen-leadership') as any).parentId).toBe('screen-about')
+  })
+
+  it('never lists a group, whatever entry something wrote for it', async () => {
+    const { raw, body } = await callRoute('?host=demo&limit=100')
+    const ids = body.data.screens.map((screen: any) => screen.$id)
+    expect(ids).not.toContain('group-campaigns')
+    expect(raw).not.toContain('group-campaigns')
+    expect(raw).not.toContain('group-under-about')
+  })
+
+  it('reads `kind` to decide, and never returns it', async () => {
+    const { body } = await callRoute('?host=demo&limit=100')
+    expect(requestedProjection).toContain('kind')
+    for (const screen of body.data.screens) {
+      expect(screen).not.toHaveProperty('kind')
+    }
   })
 })

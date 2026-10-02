@@ -362,24 +362,56 @@ export async function publishScreenRoute(
 }
 
 /**
- * Applies a set of routing-map changes in one write: a `path` string sets
- * the entry, `null` removes it. Used to cascade descendant path rewrites
- * when a screen's slug or parent changes (hierarchical slugs).
+ * Thrown by {@link syncScreenRouteEntries} for an entry that would remove a
+ * route. Names the screens, so the caller that computed it can be found.
+ */
+export class RouteRemovalRefusedError extends Error {
+  readonly screenIds: ScreenUid[]
+
+  constructor(screenIds: ScreenUid[]) {
+    super(
+      `A routing sync never takes a page off the site (${screenIds.join(', ')}). ` +
+        'Unpublish the page itself instead.',
+    )
+    this.name = 'RouteRemovalRefusedError'
+    this.screenIds = screenIds
+  }
+}
+
+/**
+ * Sets a group of routing-map entries in one write. Used to cascade
+ * descendant path rewrites when a screen's slug or parent changes
+ * (hierarchical slugs), and by the besigner's publish.
+ *
+ * It SETS entries and never removes one (AGL-3463). A sync is what a move, a
+ * rename or a parent's publish writes for a whole subtree, and a removal in
+ * it would take a page off the site that nobody pointed at — a live child,
+ * gone because something above it changed. `buildScreenRouteEntries` never
+ * computes one; this refuses one anyway, before anything is read or written,
+ * so a caller that builds its own entries cannot reach around that. The way
+ * to take a page off the site is {@link unpublishScreenRoute}, which removes
+ * that page's entry and nothing else. The Firestore rules hold the same line
+ * for any client write (`routeRemovalAllowed`): one removal per write, with
+ * nothing else in the map changing beside it.
  */
 export async function syncScreenRouteEntries(
   firestore: Firestore,
   hostId: HostUid,
-  entries: Record<ScreenUid, string | null>,
+  entries: Record<ScreenUid, string>,
   announcer: PublishAnnouncer,
 ): Promise<void> {
+  const removals = Object.entries(entries)
+    .filter(([, path]) => typeof path !== 'string' || !path)
+    .map(([screenId]) => screenId)
+  if (removals.length) throw new RouteRemovalRefusedError(removals)
   if (!Object.keys(entries).length) return
-  // Read before the write: an entry being REMOVED carries `null`, so the
-  // address that is about to stop resolving exists nowhere else by the time
-  // the announcement is made (AGL-2573).
+  // Read before the write: a rewritten entry's OLD address is about to stop
+  // resolving, and it exists nowhere else by the time the announcement is
+  // made (AGL-2573).
   const state = await readRouteState(firestore, hostId)
   const updates: Record<string, unknown> = {}
   for (const [screenId, path] of Object.entries(entries)) {
-    updates[`screens.${screenId}`] = path ?? deleteField()
+    updates[`screens.${screenId}`] = path
   }
   const batch = writeBatch(firestore)
   const released = stagePlaceholderRelease(batch, firestore, {
@@ -448,7 +480,14 @@ export async function releaseDefaultHomeRoot(
 /**
  * Removes a screen's routing-map entry (and its stored slug when
  * `clearSlug`), making the path 404 after the tenant's ISR revalidate.
- * Used on unpublish and on screen delete.
+ * Used on unpublish and on screen delete, from every surface that offers
+ * them.
+ *
+ * THIS screen's entry and nothing else (AGL-3463). Pages nested under it keep
+ * their own entries and keep serving at the addresses they have: unpublishing
+ * or deleting a parent never takes a page below it off the site. The
+ * confirmations that lead here list those pages (`liveScreenDescendants`),
+ * so the author can take them down one by one if that is what they meant.
  */
 export async function unpublishScreenRoute(
   firestore: Firestore,

@@ -26,6 +26,7 @@ import {
   linkableScreenRoutes,
   normalizeScreenSlug,
   ownScreenSlugFromRoutePath,
+  SCREEN_KIND_GROUP,
   SCREEN_ROOT_PATH,
   SCREEN_SLUG_PATH_SEPARATOR_MESSAGE,
   screenClaimsToBeAPage,
@@ -233,26 +234,61 @@ describe('buildScreenRouteEntries', () => {
     team: { slug: 'team', parentId: 'about' },
     draft: { parentId: 'company' },
   }
+  /** A call that changes nothing about the tree: the publish buttons' shape. */
+  const unchanged = { currentById: screens }
 
-  it('returns composed paths for the screen and its descendants', () => {
-    expect(buildScreenRouteEntries('company', screens, {})).toEqual({
+  it('registers the published screen and rewrites the live pages below it', () => {
+    expect(
+      buildScreenRouteEntries(
+        'company',
+        screens,
+        { about: 'company/about', team: 'company/about/team' },
+        unchanged,
+      ),
+    ).toEqual({
       company: 'company',
       about: 'company/about',
       team: 'company/about/team',
     })
   })
 
-  it('nulls previously published entries whose chain broke', () => {
-    const unslugged = { ...screens, about: { parentId: 'company' } }
-    const routingMap = { about: 'company/about', team: 'company/about/team' }
-    expect(buildScreenRouteEntries('about', unslugged, routingMap)).toEqual({
-      about: null,
-      team: null,
+  /**
+   * Publishing a parent is not publishing the drafts beneath it: they would
+   * go live with no `publishedAt`, nobody having asked (AGL-3463).
+   */
+  it('never registers a descendant that has no entry today', () => {
+    expect(buildScreenRouteEntries('company', screens, {}, unchanged)).toEqual({
+      company: 'company',
     })
   })
 
+  /**
+   * A broken chain keeps every live route it reaches (AGL-3463). This used to
+   * answer `{ about: null, team: null }` — clearing a parent's slug took the
+   * whole section off the site.
+   */
+  it('keeps the routes of live pages whose chain no longer composes', () => {
+    const unslugged = { ...screens, about: { parentId: 'company' } }
+    const routingMap = { about: 'company/about', team: 'company/about/team' }
+    expect(
+      buildScreenRouteEntries('about', unslugged, routingMap, unchanged),
+    ).toEqual({})
+  })
+
   it('omits unresolvable screens that were never published', () => {
-    expect(buildScreenRouteEntries('draft', screens, {})).toEqual({})
+    expect(buildScreenRouteEntries('draft', screens, {}, unchanged)).toEqual({})
+  })
+
+  it('never answers a removal, whatever the tree', () => {
+    const broken = { team: { slug: 'team', parentId: 'gone' } }
+    const entries = buildScreenRouteEntries(
+      'team',
+      broken,
+      { team: 'company/about/team' },
+      { currentById: screens },
+    )
+    expect(Object.values(entries)).not.toContain(null)
+    expect(entries).toEqual({})
   })
 
   /**
@@ -267,7 +303,10 @@ describe('buildScreenRouteEntries', () => {
   describe('publish: false', () => {
     it('never registers a screen that has no entry today', () => {
       expect(
-        buildScreenRouteEntries('about', screens, {}, { publish: false }),
+        buildScreenRouteEntries('about', screens, {}, {
+          publish: false,
+          ...unchanged,
+        }),
       ).toEqual({})
     })
 
@@ -276,28 +315,32 @@ describe('buildScreenRouteEntries', () => {
       expect(
         buildScreenRouteEntries('about', screens, routingMap, {
           publish: false,
+          currentById: { ...screens, about: { slug: 'about' } },
         }),
       ).toEqual({ about: 'company/about' })
     })
 
     it('leaves an unpublished descendant out while moving a live one', () => {
-      // `team` is live under `about`; `about` itself is live; `draft` is not.
+      // `about` moves under `company`; `team` is live under it; `draft` is not.
+      const before = { ...screens, about: { slug: 'about' } }
       const routingMap = { about: 'about', team: 'about/team' }
       expect(
-        buildScreenRouteEntries('company', screens, routingMap, {
+        buildScreenRouteEntries('about', screens, routingMap, {
           publish: false,
+          currentById: before,
         }),
       ).toEqual({ about: 'company/about', team: 'company/about/team' })
     })
 
-    it('still removes an entry whose chain no longer resolves', () => {
+    it('keeps an entry whose chain no longer composes', () => {
       const unslugged = { ...screens, about: { parentId: 'company' } }
       const routingMap = { about: 'company/about', team: 'company/about/team' }
       expect(
         buildScreenRouteEntries('about', unslugged, routingMap, {
           publish: false,
+          ...unchanged,
         }),
-      ).toEqual({ about: null, team: null })
+      ).toEqual({})
     })
   })
 })
@@ -380,6 +423,8 @@ describe('screenClaimsToBeAPage', () => {
     // address of its own. It is the third exclusion, and the first one that is
     // a fact about the screen rather than about some other document.
     expect(screenClaimsToBeAPage({ kind: 'template' })).toBe(false)
+    // AGL-3463: a page group is a folder, not a page.
+    expect(screenClaimsToBeAPage({ kind: SCREEN_KIND_GROUP })).toBe(false)
     expect(screenClaimsToBeAPage({ deletedAt: { seconds: 1 } })).toBe(false)
     // A Firestore Timestamp is an object; so is the `_seconds` shape a JSON
     // round trip leaves. Any non-null value means deleted.

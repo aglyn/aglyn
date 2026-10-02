@@ -2460,6 +2460,19 @@ service cloud.firestore {
     function canPublishHostContent(hostId) {
       return isVerified() && hostMemberRole(hostId) in ['admin', 'editor'];
     }
+    // AGL-3463: a client write removes at most one route, and nothing else
+    // in the map changes with it — one explicit unpublish or delete. The one
+    // exception is the placeholder home handing `/` over (AGL-3408), which
+    // clears its `defaultHomeScreenId` marker in the same write.
+    function routeRemovalAllowed() {
+      let d = request.resource.data.get('screens', {})
+        .diff(resource.data.get('screens', {}));
+      let r = d.removedKeys();
+      return r.size() == 0 || (r.size() == 1 &&
+        (d.affectedKeys().size() == 1 ||
+          (r.hasOnly([resource.data.get('defaultHomeScreenId', '')]) &&
+            !('defaultHomeScreenId' in request.resource.data))));
+    }
     /**
      * May this member read the site's SENSITIVE documents — the `webhooks`
      * that carry an HMAC signing secret and a target URL, and the `orders`
@@ -2833,7 +2846,8 @@ service cloud.firestore {
           // defaultHomeScreenId (AGL-3408) picks what a publish at / unroutes.
           (canPublishHostContent(hostId) ||
             !request.resource.data.diff(resource.data).affectedKeys()
-              .hasAny(['screens', 'defaultHomeScreenId'])));
+              .hasAny(['screens', 'defaultHomeScreenId'])) &&
+          routeRemovalAllowed());
       allow delete: if isStaff() ||
         (hostMemberRole(hostId) == 'admin' && isVerified() &&
           !hostWritesFrozen(hostId));
