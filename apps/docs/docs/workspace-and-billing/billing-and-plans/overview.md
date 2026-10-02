@@ -133,7 +133,18 @@ Nothing here guarantees that a price or feature set will remain the same.
   one-to-one emails sent today, [AI assist credits](#assist-overage), workflow and action
   runs, and more — with redesigned plan cards. Workflow and action runs are one monthly
   allowance for the whole workspace, so every site's runs count against them.
+- **Storage** is one allowance for the whole workspace too — see
+  [storage overage](#storage-overage). **Storage (organization)** shows everything your
+  workspace stores — every site's media library and the organization library — out of
+  that allowance, with how much of it the organization library holds. Under each site,
+  **Storage on this site** lists what that site's library holds: its share of the one
+  allowance, not a limit of its own. The **Metered usage estimate** counts the
+  organization library in the same Storage line; it has no separate allowance.
 - A **usage-cap banner** appears site-wide at 80% and 100% of a quota, with an upgrade link.
+  Its storage warning is about the whole workspace's storage, and says what happens at the
+  allowance on your plan: on a paid plan, extra storage is billed unless you set a
+  [storage cap](#if-you-would-rather-uploads-stopped), with a link to **Billing → Usage**;
+  on Free, new uploads stop until you free up space or upgrade.
 - Org admins also get an in-app **notification** and an email when sites, pages on a site,
   storage, datasets, email sends, or [bandwidth](bandwidth.md) crosses 75%, 80%, 90% or 100%,
   so nobody has to be watching the console to find out. Only the highest step reached is
@@ -211,7 +222,8 @@ takes effect immediately.
 
 :::info Free plans are never billed for storage
 On the Free plan there is no storage overage at all. Your included storage is a fixed
-cap: uploads stop there, nothing is metered, and no amount of usage produces a charge —
+cap, shared the same way: uploads stop when the workspace reaches it, wherever they are
+going, nothing is metered, and no amount of usage produces a charge —
 so there is nothing to cap and nothing to configure. Enterprise storage is a fixed
 default that an agreement raises, with no overage either: uploads stop there.
 :::

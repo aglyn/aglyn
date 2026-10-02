@@ -62,8 +62,13 @@ import {
   planExceedsDeliverableMonthly,
   type OrgEmailSendCeiling,
 } from '../../utils/email-send-ceiling'
-import { orgBandwidthGb } from '../../utils/usage-metering'
+import {
+  meteredIncludedAllowance,
+  orgBandwidthGb,
+} from '../../utils/usage-metering'
 import { docsHelp } from '../../constants/docs-links'
+import { formatMediaBytes } from '../media/media-storage-copy'
+import { useMediaStorageBand } from '../media/use-media-storage-band'
 
 export interface BillingUsageProps {
   org: Partial<AglynOrgBilling> | null | undefined
@@ -228,7 +233,9 @@ function HostUsageMeters(props: {
         functions: functions?.data().count ?? null,
         members: members?.data().count ?? null,
         forms: forms?.data().count ?? null,
-        storageMb: Math.round((bytes / (1024 * 1024)) * 10) / 10,
+        // A read that failed is not an empty library: it stays unmetered.
+        storageMb:
+          media == null ? null : Math.round((bytes / (1024 * 1024)) * 10) / 10,
         counted: Object.fromEntries(
           COUNTED_BANDS.map((band, index) => {
             const counter = counters[index]
@@ -295,12 +302,23 @@ function HostUsageMeters(props: {
         used={counts.functions}
         limit={entitlements.functionsPerHost}
       />
-      <UsageMeter
-        label="Storage"
-        used={counts.storageMb}
-        limit={entitlements.storagePerHostMb}
-        unit="MB"
-      />
+      {/* What this site's library stores — a share of the organization's
+          storage, not a meter (AGL-3479). Storage is one band for the whole
+          workspace (AGL-2075), metered once in `BillingUsageComponent`; this
+          site's bytes written "of" a cap would read as room the other
+          libraries may already have used. */}
+      <Stack
+        direction="row"
+        sx={{ justifyContent: 'space-between', mb: 2 }}
+        data-testid="site-storage-share"
+      >
+        <Typography variant="body2">{'Storage on this site'}</Typography>
+        <Typography variant="body2" color="text.secondary">
+          {counts.storageMb == null
+            ? 'not yet metered'
+            : `${counts.storageMb} MB · counts toward the organization’s storage`}
+        </Typography>
+      </Stack>
       {COUNTED_BANDS.map((band) => (
         <UsageMeter
           key={band.id}
@@ -324,7 +342,9 @@ function HostUsageMeters(props: {
 
 /**
  * Usage section of the billing page (AGL-70): the hosts meter plus per-host
- * screens/layouts/members/storage meters, and the org-level bandwidth row.
+ * screens/layouts/members meters and each site's share of storage, and the
+ * org-level rows — storage, bandwidth and the rest — whose bands are the
+ * workspace's.
  */
 export function BillingUsageComponent(props: BillingUsageProps) {
   const { org, hosts, billingHref = '' } = props
@@ -819,6 +839,62 @@ export function BillingUsageComponent(props: BillingUsageProps) {
     recordsQuota.overageRecords > 0 &&
     recordsQuota.overageRateUsd != null &&
     releaseFlagsReady
+  /*
+   * Media storage, metered ONCE for the organization (AGL-3479).
+   *
+   * One band for the whole workspace since AGL-2075 — every site's library and
+   * the org's shared one, against `hostLimit × storagePerHostMb` — and that
+   * band is what ingress refuses at, what the invoice subtracts and what the
+   * usage alerts warn on. So the meter reads `/api/media/storage`, the route
+   * that answers with `resolveOrgMediaBand`, the function the upload gate
+   * itself calls: the pool and the band arrive in one request (one `getAll`
+   * server-side), whatever the site count, and the figure on this meter is the
+   * figure an upload is gated on. Summing counters here instead would be a
+   * second pooled sum, and a low one wherever this viewer cannot read a site.
+   *
+   * Until it answers — or if it cannot — the meter is "not yet metered"
+   * against the band the invoice subtracts, `meteredIncludedAllowance`: the
+   * same arithmetic, so the limit does not move when the reading lands.
+   */
+  const storageBand = useMediaStorageBand({ orgId, user })
+  const includedStorage = meteredIncludedAllowance(org)
+  const storageLimitMb = storageBand
+    ? storageBand.allowanceMb
+    : includedStorage.storageGb * 1024
+  const storageUnlimited = !Number.isFinite(storageLimitMb)
+  const storageUsedMb =
+    storageBand && !storageUnlimited
+      ? Math.round((storageBand.usedBytes / (1024 * 1024)) * 10) / 10
+      : null
+  /*
+   * What the band is, and what happens at it — the gate's answer
+   * (`mediaStorageGate`), never one sentence for every plan. An unmetered
+   * plan (Free, a staff comp) refuses past the band; a metered plan accepts
+   * and bills, and only a cap the customer sets stops it. The org library
+   * is refused at the band on a metered plan too while its storage is not
+   * on the invoice yet — the route's `hardBand` for the org scope says so.
+   */
+  const storageCaption = [
+    'Every site’s media library and the organization library share this ' +
+      'one allowance.',
+    storageBand && storageBand.scopeBytes > 0
+      ? `${formatMediaBytes(storageBand.scopeBytes)} of it is in the ` +
+        'organization library.'
+      : '',
+    storageUnlimited
+      ? ''
+      : !includedStorage.metered
+        ? 'Uploads stop when your workspace reaches it — free up space or ' +
+          'upgrade to add more.'
+        : 'Past it, extra storage is billed on your invoice unless you set ' +
+          'a storage cap.' +
+          (storageBand?.hardBand
+            ? ' Uploads to the organization library stop at it for now, ' +
+              'because its storage is not billed yet.'
+            : ''),
+  ]
+    .filter(Boolean)
+    .join(' ')
   return (
     <>
       <UsageMeter
@@ -850,6 +926,34 @@ export function BillingUsageComponent(props: BillingUsageProps) {
           limit={checkPluginOrgCapacityQuota(org, capacity.kind, 0).limit}
         />
       ))}
+      {storageUnlimited ? (
+        // No figure "of" a band that caps nothing — and the route reads no
+        // counter for one, so a used figure here would be an invented zero.
+        <Stack
+          direction="row"
+          sx={{ justifyContent: 'space-between', mb: 2 }}
+        >
+          <Typography variant="body2">{'Storage (organization)'}</Typography>
+          <Typography variant="body2" color="text.secondary">
+            {'Unlimited'}
+          </Typography>
+        </Stack>
+      ) : (
+        <UsageMeter
+          label="Storage (organization)"
+          used={storageUsedMb}
+          limit={storageLimitMb}
+          unit="MB"
+          help={docsHelp('billing', { anchor: '#storage-overage' })}
+        />
+      )}
+      <Typography
+        variant="caption"
+        color="text.secondary"
+        sx={{ display: 'block', mt: -1.5, mb: 2 }}
+      >
+        {storageCaption}
+      </Typography>
       <UsageMeter
         label="Data storage (organization)"
         used={dataStorageMb}

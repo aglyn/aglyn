@@ -256,6 +256,22 @@ describe('the organization is read once, whatever the site count', () => {
     expect(asked).toHaveLength(1)
   })
 
+  it('asks for the storage band exactly once, for the org (AGL-3479)', async () => {
+    // Storage is one band for the workspace: the pool and the band arrive
+    // from the route the upload gate's own resolver answers, in one request
+    // and one `getAll` server-side — never one request per site, and never
+    // the org library's counter summed client-side beside the sites'.
+    await mount(HOSTS_3)
+    await waitFor(() => {
+      expect(
+        mockFetched.filter((url) => url.startsWith('/api/media/storage')),
+      ).toEqual(['/api/media/storage?orgId=org-1'])
+    })
+    expect(
+      mockReads.filter((read) => read.path === 'orgs/org-1/counters/media'),
+    ).toEqual([])
+  })
+
   it('adds no Firestore read for the hourly ceiling', async () => {
     // Its counter lives in `rateLimits`, which the rules deny to every client.
     // A client read there would not be expensive — it would be denied, and the

@@ -492,7 +492,9 @@ subscription product, Stripe records them and charges no one.
      written only by `/api/billing/storage-overage`), and only then are
      uploads refused, citing their own number. Free still hard-bands.
    - The Billing card shows the library's usage **against its own allowance**,
-     before any invoice.
+     before any invoice. *(Superseded: since AGL-2075 the library has no
+     allowance of its own — it shares the org-wide band — and since AGL-3479
+     the card names its bytes as a share of that band.)*
    - The rollup records `orgLibraryBilledFrom` verbatim beside
      `orgLibraryBilled`, so a month's audit document says why it billed.
 

@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { resolveOrgEntitlements, type AglynOrgBilling } from '@aglyn/aglyn'
+import type { AglynOrgBilling } from '@aglyn/aglyn'
 import { analyticsBandwidthReading } from '@aglyn/aglyn/app-utils/media-bandwidth'
 import {
   billsOrgLibraryStorage,
@@ -299,19 +299,34 @@ export function BillingMeteredEstimateComponent(
   const { included } = estimate
   const orgLibraryGb = (orgLibraryBytes ?? 0) / (1024 * 1024 * 1024)
   /**
-   * The org library's OWN allowance (AGL-1886), which is not the org-wide
-   * band beside it.
+   * What the org library's share of the "Storage" row means (AGL-3479).
    *
-   * Uploads are enforced PER SCOPE against `storagePerHostMb` — the upload
-   * route reads the very counter it increments — so the org library fills up
-   * and starts refusing at this number, while the "Storage" row above
-   * compares an org-wide total to `hostLimit × storagePerHostMb`. On any plan
-   * with more than one site those are different numbers, and the one that
-   * stops an upload is this one. Showing only the other is how a customer
-   * ends up refused at 33% of the band the card told them about.
+   * The library has no allowance of its own. Since AGL-2075 ingress measures
+   * every site's library and the org's against ONE band — the
+   * `hostLimit × storagePerHostMb` the row above is "of", resolved by
+   * `resolveOrgMediaBand` — so the caption names the library's bytes as part
+   * of that pool and never "of" a figure.
+   *
+   * What happens AT the band is the gate's answer (`mediaStorageGate`), not
+   * one sentence for every plan: an unmetered plan refuses past it, a metered
+   * plan accepts and bills — and while the library's storage is not yet on
+   * the invoice (`libraryBilled` false), uploads into it are refused at the
+   * band like Free's, because there is no price to attach. An unlimited band
+   * stops nothing.
    */
-  const orgLibraryAllowanceGb =
-    resolveOrgEntitlements(org as never).storagePerHostMb / 1024
+  const orgLibraryCaption = (() => {
+    const share =
+      `Includes ${orgLibraryGb.toFixed(2)} GB in your organization library, ` +
+      'which shares this allowance with your sites.'
+    if (!Number.isFinite(included.storageGb)) return share
+    if (!included.metered) {
+      return `${share} New uploads stop when your workspace reaches it.`
+    }
+    return libraryBilled
+      ? share
+      : `${share} Organization-library storage is measured but not yet ` +
+          'billed, so uploads into it stop at the allowance for now.'
+  })()
   // `UNLIMITED` is Infinity, and a band derived from it stays Infinity —
   // `Number.isFinite` catches both that and a NaN from bad override data.
   const band = (value: number, digits = 0) =>
@@ -421,13 +436,7 @@ export function BillingMeteredEstimateComponent(
           )}
           {orgLibraryGb > 0 ? (
             <Typography variant="caption" color="text.secondary">
-              {`Includes ${orgLibraryGb.toFixed(2)} of ` +
-                `${band(orgLibraryAllowanceGb, 2)} GB in your organization ` +
-                'library, which has its own allowance — new uploads there ' +
-                'stop at it. ' +
-                (libraryBilled
-                  ? ''
-                  : 'Organization-library storage is measured but not yet billed.')}
+              {orgLibraryCaption}
             </Typography>
           ) : null}
           {usageRow(
