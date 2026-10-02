@@ -24,6 +24,7 @@ import { registerPluginUsageMeter } from '@aglyn/aglyn/plugin-manager/plugin-usa
 import { registerServerStepExecutor } from '@aglyn/aglyn/plugin-manager/plugin-server-steps'
 import { registerCustomFieldType } from '@aglyn/aglyn/plugin-manager/custom-fields'
 import { registerPluginSitemapReader } from '@aglyn/aglyn/plugin-manager/plugin-sitemap-readers'
+import { registerPluginLivePaths } from '@aglyn/aglyn/plugin-manager/plugin-live-paths'
 import {
   BUNDLE_ID,
   DATASET_REPEAT_SOURCE_ID,
@@ -130,6 +131,15 @@ export function registerDataServerDeclarations(): void {
       urls: async (request) => (await sitemap()).urls(request),
       listings: async (request) => (await sitemap()).listings?.(request) ?? [],
     },
+    { pluginId: BUNDLE_ID },
+  )
+  // And the record pages a publish makes stale, which no routing-map entry
+  // names (AGL-3475).
+  registerPluginLivePaths(
+    async (request) =>
+      (await import('./record-pages/record-page-live-paths.server')).recordPageLivePaths(
+        request,
+      ),
     { pluginId: BUNDLE_ID },
   )
 }

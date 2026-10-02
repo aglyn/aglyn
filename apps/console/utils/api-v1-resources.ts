@@ -100,6 +100,7 @@ import {
   findSubdomainConflict,
 } from './server/provision-host'
 import { postTenantRevalidate } from './server/tenant-revalidate'
+import { pluginLivePaths } from '@aglyn/aglyn/plugin-manager/plugin-live-paths'
 import { mediaStorageGate, scopeBillsStorageOverage } from './storage-overage'
 
 // ── Sites & form submissions ────────────────────────────────────────────────
@@ -494,9 +495,14 @@ async function handlePublish(
   // did not perform, which is the "reported fast, still slow" confusion the
   // original bug was made of.
   const screens = (snap.get('screens') ?? {}) as Record<string, unknown>
-  const paths = Object.values(screens)
-    .filter((path) => typeof path === 'string')
-    .map((path) => screenRoutePathToUrl(path as string))
+  const paths = [
+    ...Object.values(screens)
+      .filter((path) => typeof path === 'string')
+      .map((path) => screenRoutePathToUrl(path as string)),
+    // The pages plugins serve from the site's screens with no routing-map
+    // entry of their own — a record template's (AGL-3475).
+    ...(await pluginLivePaths({ hostId })),
+  ].filter((path, index, all) => all.indexOf(path) === index)
   if (!paths.length) {
     return apiJson(
       {

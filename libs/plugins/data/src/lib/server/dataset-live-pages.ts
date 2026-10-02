@@ -39,6 +39,9 @@
  * the day repeat stopped being the Stack's: a heading bound to a dataset
  * renders rows exactly as a Stack does, and would have been missed.
  *
+ * And the dataset's own record pages (AGL-3475): every page a record template
+ * on the site draws from it, by each record's address.
+ *
  * Three corpora, because the composer reads repeat keys after the layout chain
  * and the reusable-component graft: a repeat in a layout's chrome or inside a
  * component reaches every screen that renders it.
@@ -290,6 +293,7 @@ async function targetForHost(
   firestore: Firestore,
   hostId: string,
   keys: ReadonlySet<string>,
+  datasetId: string,
 ): Promise<LivePageTarget | null> {
   const hostRef = firestore.collection('hosts').doc(hostId)
   const hostSnapshot = await hostRef.get()
@@ -299,13 +303,28 @@ async function targetForHost(
   // this site — the ordinary state of one not yet given a name, not a failure.
   if (!subdomain) return null
 
-  const sources = await readUsageSources(hostRef, DATASET_SCAN_LIMIT)
+  const [sources, recordPages] = await Promise.all([
+    readUsageSources(hostRef, DATASET_SCAN_LIMIT),
+    // The dataset's own record pages (AGL-3475), which no routing-map entry
+    // names: a template draws them all from one screen.
+    // Loaded on first use, like every other read here: this module is on
+    // every record write's path, and the record pages read reaches the whole
+    // admin barrel.
+    import('../record-pages/record-page-live-paths.server')
+      .then((module) => module.recordPagePathsForDataset(hostId, datasetId))
+      .catch((error: unknown) => {
+        console.error('[dataset-live-pages] record pages scan failed', hostId, error)
+        return { paths: [] as string[], truncated: false }
+      }),
+  ])
   const screens = (hostSnapshot.get('screens') ?? {}) as Record<string, string>
-  const paths = screenIdsRepeatingDataset(keys, sources.candidates)
-    .map((screenId) => screens[screenId])
-    .filter((path): path is string => Boolean(path))
-    .map((path) => screenRoutePathToUrl(path))
-    .filter((path, index, all) => all.indexOf(path) === index)
+  const paths = [
+    ...screenIdsRepeatingDataset(keys, sources.candidates)
+      .map((screenId) => screens[screenId])
+      .filter((path): path is string => Boolean(path))
+      .map((path) => screenRoutePathToUrl(path)),
+    ...recordPages.paths,
+  ].filter((path, index, all) => all.indexOf(path) === index)
   if (!paths.length) return null
 
   const cname = String(hostSnapshot.get('cname') ?? '')
@@ -314,7 +333,7 @@ async function targetForHost(
     subdomain,
     ...(cname ? { cname } : {}),
     paths,
-    truncated: sources.truncated,
+    truncated: sources.truncated || recordPages.truncated,
   }
 }
 
@@ -360,7 +379,7 @@ export async function datasetLivePageScope(options: {
     const resolved = await Promise.all(
       hostIds.map(async (hostId) => {
         try {
-          return await targetForHost(firestore, hostId, keys)
+          return await targetForHost(firestore, hostId, keys, snapshot.id)
         } catch (error) {
           // One unreadable site must not cost the others their refresh.
           console.error('[dataset-live-pages] site scan failed', hostId, error)
