@@ -876,7 +876,7 @@ async function pluginUsageAxes() {
       costAxes.push({ pluginId: plugin.id, ...axis })
     }
     for (const band of declaredBands) {
-      const { id, label, order, fields, fallbackFields, entitlement, perHost, unitCostUsd, hostCounter, alert, metered } = band ?? {}
+      const { id, label, order, fields, fallbackFields, entitlement, perHost, unitCostUsd, hostCounter, alert, metered, consoleWarning } = band ?? {}
       const what = `${where} band "${id ?? ''}"`
       if (typeof id !== 'string' || !PLAIN_NAME.test(id)) throw new Error(`${where}: a band needs a plain "id"`)
       if (bandOwners.has(id)) throw new Error(`${what} is already measured by ${bandOwners.get(id)}`)
@@ -906,6 +906,21 @@ async function pluginUsageAxes() {
       }
       if (alert !== undefined && hostCounter === undefined) {
         throw new Error(`${what}: "alert" needs the "hostCounter" the band is measured by`)
+      }
+      if (consoleWarning !== undefined) {
+        const { standing, member, approach, reached, linksUsage } = consoleWarning ?? {}
+        if (typeof standing !== 'string' || !/^\/api\/[a-z0-9/-]+$/.test(standing)) {
+          throw new Error(`${what}: "consoleWarning.standing" is the console API path the band's standing is read from`)
+        }
+        if (typeof member !== 'string' || !PLAIN_NAME.test(member)) {
+          throw new Error(`${what}: "consoleWarning.member" is the plain name the route answers the standing under`)
+        }
+        if ([approach, reached?.stops, reached?.bills].some((sentence) => typeof sentence !== 'string' || !sentence.trim())) {
+          throw new Error(`${what}: "consoleWarning" needs its "approach" sentence and the two at the band, "reached.stops" and "reached.bills"`)
+        }
+        if (linksUsage !== undefined && typeof linksUsage !== 'boolean') {
+          throw new Error(`${what}: "consoleWarning.linksUsage" is a boolean`)
+        }
       }
       if (metered !== undefined) {
         const { rate, quotedPer, noun, withheldUntil } = metered ?? {}

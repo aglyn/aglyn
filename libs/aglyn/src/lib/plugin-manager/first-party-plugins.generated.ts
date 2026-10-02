@@ -1122,7 +1122,17 @@ export const PLUGIN_USAGE_BANDS_DECLARED: readonly ResolvedPluginUsageBand[] = [
       "assistCostUsd"
     ],
     "entitlement": "assistCreditsPerMonth",
-    "unitCostUsd": 0.001
+    "unitCostUsd": 0.001,
+    "consoleWarning": {
+      "standing": "/api/ai/billing/credits",
+      "member": "credits",
+      "approach": "You're above 80% of your included AI assist credits.",
+      "reached": {
+        "stops": "You've used your included AI assist credits — AI assist stops until next month or an upgrade, and nothing is billed for it.",
+        "bills": "You've used your included AI assist credits — extra credits are billed at your plan’s rate unless you set a stop under Billing → Usage."
+      },
+      "linksUsage": true
+    }
   },
   {
     "pluginId": "workflows",
