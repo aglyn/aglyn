@@ -24,11 +24,13 @@ announces nothing; what each event carries is in
 | **Deal won** | A deal was marked won. | [Moving, winning and losing](./deals.md#moving-winning-and-losing) |
 | **Deal lost** | A deal was marked lost; the reason given travels with the event. | [Moving, winning and losing](./deals.md#moving-winning-and-losing) |
 | **CRM task completed** | A task was ticked done. Reopening a task fires nothing. | [Completing and reopening](./tasks.md#completing-and-reopening) |
+| **New lead** | A capture filed a **new** lead — a form with lead routing on, or a booking request. Such a form makes a lead and no contact, so **Contact created** does not fire for it. The event carries `formId` when a form filed the lead, and the form's `campaignIds` when it is filed under a campaign. | [Leads](./leads.md) |
 
 Pick one and the **Filter** field's helper text lists the keys the event puts
-in scope, so a filter such as `lifecycleStage == "customer"` or a condition
-such as *`stageId` equals `negotiation`* can be written without leaving the
-editor.
+in scope, so a condition such as *`lifecycleStage` equals `customer`* or
+*`stageId` equals `negotiation`* can be written without leaving the editor. A
+filter can't compare values; see
+[Only run when a field matches](../../marketing-and-automation/workflows-and-actions/actions-builder.md#only-run-when-a-field-matches).
 
 ## The steps
 
@@ -44,8 +46,11 @@ Five server steps act on the CRM: **Set the contact's lifecycle stage**, **Tag
 the contact**, **Assign the contact an owner**, **Create a CRM task** and **Log
 a CRM activity**. Each acts on the contact the triggering event names — by
 `contactId` when the event carries one, otherwise by the `email` in the event's
-data — and does nothing, with the reason in the run history, when the event
-names nobody this site can see. Fields and behavior are in
+data — or, when the workspace holds that person only as a **lead**, on the lead:
+its owner, its tags, a task or an activity filed under it. A lead has no
+lifecycle stage, so a stage step on one fails and says so. Each does nothing,
+with the reason in the run history, when the event names nobody this site can
+see. Fields and behavior are in
 [CRM steps](../../marketing-and-automation/workflows-and-actions/actions-builder.md#crm-steps).
 
 ### Assigning an owner, or rotating one
@@ -95,10 +100,10 @@ steps — with a line saying which recipe it started from. Change anything, then
 
 | Recipe | Starts on | What it builds |
 | --- | --- | --- |
-| **Welcome a new lead** | **Contact created**, with the condition *`source` equals `form`* | **Assign the contact an owner** on **Round robin** (the pool under [CRM → Settings](./settings.md#round-robin); with no pool the step fails, the run carries on, and the run history says so), then **Create a CRM task** — a call, due in 1 day, assignee blank so it goes to the owner just chosen — then **Send an email** thanking them (sent from your workspace's identity to the address the event carries, as an immediate reply rather than marketing, and [logged on the contact's timeline](#an-automated-email-on-the-timeline)), then **Tag the contact** `website`. |
+| **Welcome a new lead** | **New lead**, with the condition *`formId` is not empty* — a lead a form filed | **Assign the contact an owner** on **Round robin** (the pool under [CRM → Settings](./settings.md#round-robin); with no pool the step fails, the run carries on, and the run history says so), then **Create a CRM task** — a call, due in 1 day, assignee blank so it goes to the owner just chosen — then **Send an email** thanking them by name (`Hi {{firstName|there}}`, sent from your workspace's identity to the address the event carries, as a [transactional reply](../../marketing-and-automation/workflows-and-actions/actions-builder.md#transactional-replies) with no unsubscribe, and [logged on the lead's timeline](#an-automated-email-on-the-timeline)), then **Tag the contact** `website`. Each step acts on the lead the form filed. |
 | **Follow up a won deal** | **Deal won** | **Create a CRM task** — a call, due in 7 days, to the contact's owner. No stage step: [a won deal makes its contact a customer](./deals.md#a-won-deal-makes-its-contact-a-customer) on its own before the event fires, and a step that *set* the stage here would move an evangelist back. |
 | **Re-engage a stale lead** | **Contact changed stage**, with the condition *`lifecycleStage` equals `lead`* | **Wait for something to happen** — the next **Contact changed stage** for this person, giving up after a week — then **Create a CRM task** (a call, due in 1 day) with the step condition *`_waitTimedOut` is not empty*, so the call is booked only when the week ran out. A lead whose stage moved on in the meantime skips it. |
-| **Tag by form** | **Contact created**, with the condition *`formId` equals* the form you pick | **Tag the contact** with the form's name. This recipe asks for one of the site's forms first — the picker offers the site's live forms, not archived ones — because the form is what the trigger is keyed on. Change the tag in the editor if the form's name is not the tag you want. |
+| **Tag by form** | **Contact created** — or **New lead** for a form with lead routing on — with the condition **Form is** the form you pick | **Tag the contact** with the form's name. This recipe asks for one of the site's forms first — the picker offers the site's live forms, not archived ones — because the form is what the trigger is keyed on. Change the tag in the editor if the form's name is not the tag you want. |
 
 Recipes are definitions, the same on every site; only the form picker is the site's
 own. A recipe that reaches the CRM needs the plan the [CRM steps](#the-steps) need, and
