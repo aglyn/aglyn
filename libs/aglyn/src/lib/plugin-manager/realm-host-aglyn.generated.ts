@@ -54,6 +54,7 @@ export const AGLYN_HOST_SURFACE: Readonly<Record<string, unknown>> = Object.free
   evaluateExpression: m3.evaluateExpression,
   evaluateHostFunction: m3.evaluateHostFunction,
   expressionIdentifiers: m3.expressionIdentifiers,
+  expressionSyntaxError: m3.expressionSyntaxError,
   formatFunctionParameterOptions: m3.formatFunctionParameterOptions,
   functionReferencedNames: m3.functionReferencedNames,
   parseFunctionParameterOptions: m3.parseFunctionParameterOptions,

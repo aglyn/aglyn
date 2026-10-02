@@ -59,6 +59,7 @@ import {
   reassignLeadOwner,
 } from '@aglyn/tenant-runtime/assign-contact-owner'
 import type { HostEventPayload } from '@aglyn/tenant-runtime/host-event-listeners'
+import { createResourceUid } from '@aglyn/aglyn/app-utils/create-resource-uid'
 import type { HostActionStep, HostActionStepType } from '@aglyn/aglyn/app-utils/actions'
 
 /**
@@ -613,7 +614,10 @@ async function runLeadStep(
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     }
-    await orgRef.collection(CRM_COLLECTIONS.tasks).add({ ...task, ...crmTaskListFields(task) })
+    await orgRef
+      .collection(CRM_COLLECTIONS.tasks)
+      .doc(createResourceUid())
+      .set({ ...task, ...crmTaskListFields(task) })
     return { detail: `${title.slice(0, 60)} (lead)` }
   }
   if (step.type === 'logCrmActivity') {
@@ -636,7 +640,7 @@ async function runLeadStep(
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     }
-    await orgRef.collection(CRM_COLLECTIONS.activities).add(activity)
+    await orgRef.collection(CRM_COLLECTIONS.activities).doc(createResourceUid()).set(activity)
     return { detail: `${step.kind} (lead)` }
   }
   return { error: `unknown CRM step "${(step as { type: string }).type}"` }
