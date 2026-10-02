@@ -52,10 +52,11 @@ import {
 // record staff have of what we sent someone, and a mocked-away writer is a
 // green test over an empty log.
 import {
-  recordEmailCampaignTouch,
   recordEmailDeliveryEvents,
   recordPersonEngagement,
 } from '@aglyn/tenant-data-admin/server/email-delivery-log'
+// This plugin's touch map, on the same person document.
+import { recordEmailCampaignTouch } from './email-campaign-touch'
 // The contact's own stamp is the record system's, asked through the core's
 // seam: what the record page, the list and the re-engagement audience read.
 import { stampRecordEmailEngagement } from '@aglyn/aglyn/plugin-manager/plugin-record-email-state'
@@ -68,7 +69,7 @@ import { getOrgForHost } from '@aglyn/tenant-data-admin/server/organizations'
 // The leaf again: which document a delivery event counts against is the
 // question every counter below depends on, and a stub would answer it for
 // them.
-import { resolveCampaignSendRef } from '@aglyn/tenant-data-admin/server/campaign-conversion-attribution'
+import { resolveCampaignSendRef } from './campaign-conversion-attribution'
 import { recordEmailReputationFailure } from '@aglyn/tenant-data-admin/server/email-sender-reputation'
 // The leaf again: the ledger is what holds a sending domain's bulk mail, and
 // a wholesale mock would green a webhook that taught it nothing.

@@ -90,8 +90,6 @@ const mockCollectionHandle = (path: string) => ({
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
-  resolveCampaignTouch: async () => null,
-  attributeCampaignConversion: async () => null,
   firebaseAdmin: {
     app: () => ({
       firestore: () => ({

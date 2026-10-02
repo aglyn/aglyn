@@ -81,9 +81,10 @@ describe('orgMonthlyCogsUsd', () => {
      * view the meter carried on 2026-08-24. The 2026-09-09 re-peg (AGL-2711)
      * moved that rate, not the usage, and the 2026-10-01 re-price (AGL-3444)
      * moved it again — page-view transfer and a submission's invocation at
-     * Vercel's dearest region: the busiest org's 2,169 views cost $0.5528
-     * more than they did, so its measured total is $0.77182 and its floor is
-     * 2.6x rather than 9.1x. The other rows move the same way and their view
+     * Vercel's dearest region, by a decimal GB, and every Firestore read at
+     * nam5: the busiest org's 2,169 views cost $0.6486 more than they did, so
+     * its measured total is $0.86799 and its floor is 2.3x rather than 9.1x.
+     * The other rows move the same way and their view
      * counts were not recorded, so they are left at the figures the
      * measurement produced rather than restated at a rate they were not read
      * under.
@@ -99,7 +100,7 @@ describe('orgMonthlyCogsUsd', () => {
       1,
     )
     expect(busiestRealOrg.basis).toBe('floor')
-    expect(busiestRealOrg.measuredUsd).toBeCloseTo(0.7718, 4)
+    expect(busiestRealOrg.measuredUsd).toBeCloseTo(0.868, 4)
     const gap = INFRA_COGS_PER_SITE_USD / busiestRealOrg.measuredUsd
     expect(gap).toBeGreaterThan(1)
     expect(gap).toBeLessThan(100)
@@ -112,8 +113,8 @@ describe('orgMonthlyCogsUsd', () => {
     // rollups — so the thresholds cannot be calibrated against measurement
     // until at least one org crosses this line.
     //
-    // One site, page views alone: $2.00 / $0.00035471473 = 5,638 views/month.
-    // The busiest real org is at 2,169 — 38% of the way. It was 20,000 views
+    // One site, page views alone: $2.00 / $0.00039902751 = 5,012 views/month.
+    // The busiest real org is at 2,169 — 43% of the way. It was 20,000 views
     // until the 2026-09-09 re-peg and 12,381 until the 2026-10-01 dearest-
     // region re-price raised what a view costs; the line moved toward the
     // traffic rather than the traffic toward the line, which is the one
@@ -123,7 +124,7 @@ describe('orgMonthlyCogsUsd', () => {
     // below cannot drift from the constant that sets them.
     const breakEvenViews =
       INFRA_COGS_PER_SITE_USD / ORG_COGS_UNIT_RATES_USD.perPageView
-    expect(Math.round(breakEvenViews)).toBe(5_638)
+    expect(Math.round(breakEvenViews)).toBe(5_012)
     expect(orgMonthlyCogsUsd({ pageViews: Math.floor(breakEvenViews) }, 1).basis).toBe('floor')
     expect(orgMonthlyCogsUsd({ pageViews: Math.ceil(breakEvenViews) }, 1).basis).toBe('measured')
     // Assist is the one input that can clear the floor without any traffic at
@@ -163,13 +164,14 @@ describe('orgMonthlyCogsUsd', () => {
       { pageViews: 5_000_000, storageGb: 50, apiRequests: 2_000_000 },
       1,
     )
-    // 5M views × $0.00035471473 = $1,773.57 (AGL-2711 re-pegged the rate
-    // from $0.0001; AGL-3444 priced its transfer at the dearest region), plus
-    // 50 GB × $0.026 = $1.30 storage (AGL-1280 corrected that one from
-    // $0.03), plus $4 API.
-    expect(result.measuredUsd).toBeCloseTo(1773.57365 + 1.3 + 4, 4)
+    // 5M views × $0.00039902751 = $1,995.14 (AGL-2711 re-pegged the rate
+    // from $0.0001; AGL-3444 priced its transfer at the dearest region by
+    // the decimal GB and its reads at nam5), plus 50 GB × $0.026 = $1.30
+    // storage (AGL-1280 corrected that one from $0.03), plus 2M API requests
+    // at $0.000117 — the function each one is — = $234.
+    expect(result.measuredUsd).toBeCloseTo(1995.13755 + 1.3 + 234, 4)
     expect(result.basis).toBe('measured')
-    expect(result.cogsUsd).toBeCloseTo(1778.87365, 4)
+    expect(result.cogsUsd).toBeCloseTo(2230.43755, 4)
   })
 
   it('prices the three meters the old costUsd ignored', () => {
@@ -184,7 +186,7 @@ describe('orgMonthlyCogsUsd', () => {
       ORG_COGS_UNIT_RATES_USD.dataStoragePerGbMonth,
       10,
     )
-    expect(only.breakdown.apiRequests).toBeCloseTo(2, 10)
+    expect(only.breakdown.apiRequests).toBeCloseTo(117, 10)
     expect(only.breakdown.contacts).toBeCloseTo(2, 10)
     expect(only.measuredUsd).toBeGreaterThan(0)
   })

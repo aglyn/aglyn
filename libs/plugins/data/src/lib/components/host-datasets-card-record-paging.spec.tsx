@@ -353,8 +353,8 @@ describe('no field on a dataset record is written by every writer', () => {
     expect(block).not.toMatch(/\border:/)
   })
 
-  it('the workflow append actions write `createdAt` and no `order`', () => {
-    const source = readRepo('libs/plugins/workflows/src/lib/engine/run-event-actions.ts')
+  it('the automation dataset steps write `createdAt` and no `order`', () => {
+    const source = readRepo('libs/plugins/data/src/lib/server/dataset-steps.server.ts')
     const appends = [
       ...source.matchAll(/\.collection\('records'\)\.add\(\{[\s\S]{0,800}?\}\)/g),
     ].map((match) => match[0])

@@ -236,6 +236,16 @@ describe('the premise (AGL-899)', () => {
     )
   })
 
+  it('advertises each top-level resource once, the data plugin’s datasets among them', async () => {
+    // RED CHECK: put the literal `'datasets'` back beside the platform's own
+    // and the root lists it twice once the data plugin registers it — and a
+    // build without the data plugin would advertise a path that 404s.
+    const root = await json(await call('GET', ''))
+    expect(root.resources.slice(0, 2)).toEqual(['sites', 'media'])
+    expect(root.resources).toContain('datasets')
+    expect(new Set(root.resources).size).toBe(root.resources.length)
+  })
+
   it('is refused by scope before method — a read key cannot write', async () => {
     mockScopes = ['crm:read']
     const denied = await call('POST', 'companies', { name: 'Acme' })

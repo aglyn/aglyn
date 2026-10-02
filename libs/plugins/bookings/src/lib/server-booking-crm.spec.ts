@@ -137,8 +137,6 @@ jest.mock('@aglyn/tenant-data-admin', () => {
       notices.push({ hostId, ...payload })
     },
     hostSendingIdentity: async () => ({ from: 'hello@shop.example.com' }),
-    resolveCampaignTouch: async () => null,
-    attributeCampaignConversion: async () => null,
     getPluginConfig: async () => ({}),
     renderHostEmailWithTokens: async () => null,
     addHostLead: async () => true,

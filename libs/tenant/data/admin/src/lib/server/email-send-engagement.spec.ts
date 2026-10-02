@@ -35,8 +35,8 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
-  EMAIL_CAMPAIGN_ENGAGEMENT_MAX_CAMPAIGNS,
-  readCampaignEngagement,
+  EMAIL_SEND_ENGAGEMENT_MAX_SENDS,
+  readSendEngagement,
 } from './email-delivery-log'
 
 interface RecordedQuery {
@@ -114,12 +114,12 @@ const ROW = {
   campaignId: 'msg_1',
 }
 
-describe('the campaign engagement read is scoped to one site', () => {
+describe('the send engagement read is scoped to one site', () => {
   it('filters on hostId as well as on the messages asked for', async () => {
     const firestore = fakeFirestore()
-    await readCampaignEngagement({
+    await readSendEngagement({
       hostId: 'site1',
-      campaignIds: ['msg_1'],
+      sendIds: ['msg_1'],
       firestore,
     })
     const [query] = firestore.recorded
@@ -132,9 +132,9 @@ describe('the campaign engagement read is scoped to one site', () => {
 
   it('reads nothing at all when no message is named', async () => {
     const firestore = fakeFirestore()
-    const page = await readCampaignEngagement({
+    const page = await readSendEngagement({
       hostId: 'site1',
-      campaignIds: [],
+      sendIds: [],
       firestore,
     })
     // An unfiltered collection-group query over this store would return every
@@ -146,9 +146,9 @@ describe('the campaign engagement read is scoped to one site', () => {
   it('caps the message list and reports what it left out', async () => {
     const firestore = fakeFirestore()
     const ids = Array.from({ length: 35 }, (_, index) => `msg_${index}`)
-    const page = await readCampaignEngagement({
+    const page = await readSendEngagement({
       hostId: 'site1',
-      campaignIds: ids,
+      sendIds: ids,
       firestore,
     })
     const [query] = firestore.recorded
@@ -156,18 +156,18 @@ describe('the campaign engagement read is scoped to one site', () => {
     // Firestore's own ceiling on `in`. Exceeding it is an error, not a slower
     // query, so the cap is the store's rather than a tuning choice.
     expect((inList as string[]).length).toBe(
-      EMAIL_CAMPAIGN_ENGAGEMENT_MAX_CAMPAIGNS,
+      EMAIL_SEND_ENGAGEMENT_MAX_SENDS,
     )
-    expect(page.campaignsOmitted).toBe(5)
+    expect(page.sendsOmitted).toBe(5)
   })
 })
 
 describe('each engagement filter orders on what it filters', () => {
   const orderingFor = async (filter: 'all' | 'opened' | 'clicked') => {
     const firestore = fakeFirestore()
-    await readCampaignEngagement({
+    await readSendEngagement({
       hostId: 'site1',
-      campaignIds: ['msg_1'],
+      sendIds: ['msg_1'],
       filter,
       firestore,
     })
@@ -202,9 +202,9 @@ describe('paging through the recipients', () => {
     const full = Array.from({ length: 3 }, (_, index) =>
       messageDoc(`m${index}`, ROW),
     )
-    const page = await readCampaignEngagement({
+    const page = await readSendEngagement({
       hostId: 'site1',
-      campaignIds: ['msg_1'],
+      sendIds: ['msg_1'],
       limit: 3,
       firestore: fakeFirestore({ docs: full }),
     })
@@ -213,9 +213,9 @@ describe('paging through the recipients', () => {
   })
 
   it('ends the feed on a short page', async () => {
-    const page = await readCampaignEngagement({
+    const page = await readSendEngagement({
       hostId: 'site1',
-      campaignIds: ['msg_1'],
+      sendIds: ['msg_1'],
       limit: 3,
       firestore: fakeFirestore({ docs: [messageDoc('m0', ROW)] }),
     })
@@ -226,9 +226,9 @@ describe('paging through the recipients', () => {
 
   it('resumes from the cursor DOCUMENT, not from its sort value', async () => {
     const firestore = fakeFirestore({ docs: [messageDoc('m0', ROW)] })
-    await readCampaignEngagement({
+    await readSendEngagement({
       hostId: 'site1',
-      campaignIds: ['msg_1'],
+      sendIds: ['msg_1'],
       cursor: 'emailDeliveries/key_m0/messages/m0',
       firestore,
     })
@@ -245,9 +245,9 @@ describe('paging through the recipients', () => {
       docs: [messageDoc('m0', ROW)],
       missingCursors: ['emailDeliveries/key_gone/messages/gone'],
     })
-    const page = await readCampaignEngagement({
+    const page = await readSendEngagement({
       hostId: 'site1',
-      campaignIds: ['msg_1'],
+      sendIds: ['msg_1'],
       cursor: 'emailDeliveries/key_gone/messages/gone',
       firestore,
     })
@@ -260,9 +260,9 @@ describe('paging through the recipients', () => {
 
 describe('a read that could not run', () => {
   it('is reported as a failure, never as nobody having opened', async () => {
-    const page = await readCampaignEngagement({
+    const page = await readSendEngagement({
       hostId: 'site1',
-      campaignIds: ['msg_1'],
+      sendIds: ['msg_1'],
       firestore: fakeFirestore({ throwOnGet: true }),
     })
     // A missing collection-group index is the likely cause, and rendering it
@@ -273,9 +273,9 @@ describe('a read that could not run', () => {
   })
 
   it('CONTROL: a read that ran reports no failure', async () => {
-    const page = await readCampaignEngagement({
+    const page = await readSendEngagement({
       hostId: 'site1',
-      campaignIds: ['msg_1'],
+      sendIds: ['msg_1'],
       firestore: fakeFirestore({ docs: [messageDoc('m0', ROW)] }),
     })
     expect(page.lookupFailed).toBe(false)
@@ -331,15 +331,15 @@ describe('each engagement shape has its collection-group index', () => {
 
   it.each(['all', 'opened', 'clicked'] as const)('the %s shape is declared', async (filter) => {
     const firestore = fakeFirestore()
-    await readCampaignEngagement({ hostId: 'site1', campaignIds: ['msg_1'], filter, firestore })
+    await readSendEngagement({ hostId: 'site1', sendIds: ['msg_1'], filter, firestore })
     expect(declared).toContain(shapeOf(firestore.recorded[0]))
   })
 
   it('CONTROL: the file was read, and a range leads its own order', async () => {
     const firestore = fakeFirestore()
-    await readCampaignEngagement({
+    await readSendEngagement({
       hostId: 'site1',
-      campaignIds: ['msg_1'],
+      sendIds: ['msg_1'],
       filter: 'opened',
       firestore,
     })

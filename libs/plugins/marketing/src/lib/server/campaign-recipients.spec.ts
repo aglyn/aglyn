@@ -20,7 +20,7 @@
  *
  * Every assertion here is about who is allowed to ask and what they are
  * allowed to ask for. The reader behind it is proven separately
- * (`email-campaign-engagement.spec.ts`); this file is the gate.
+ * (the data layer's `email-send-engagement.spec.ts`); this file is the gate.
  */
 
 const mockState: {
@@ -79,8 +79,8 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 
 jest.mock('@aglyn/tenant-data-admin/server/email-delivery-log', () => ({
   __esModule: true,
-  EMAIL_CAMPAIGN_ENGAGEMENT_MAX_CAMPAIGNS: 30,
-  readCampaignEngagement: async (options: Record<string, unknown>) => {
+  EMAIL_SEND_ENGAGEMENT_MAX_SENDS: 30,
+  readSendEngagement: async (options: Record<string, unknown>) => {
     mockState.engagementCalls.push(options)
     return {
       /*
@@ -109,7 +109,7 @@ jest.mock('@aglyn/tenant-data-admin/server/email-delivery-log', () => ({
       ],
       cursor: null,
       lookupFailed: false,
-      campaignsOmitted: 0,
+      sendsOmitted: 0,
     }
   },
 }))
@@ -311,7 +311,7 @@ describe('what a caller may ask for', () => {
 
   it('reads one message when asked for one', async () => {
     await call({ hostId: 'site1', emailId: 'msg_1' })
-    expect(mockState.engagementCalls[0]['campaignIds']).toEqual(['msg_1'])
+    expect(mockState.engagementCalls[0]['sendIds']).toEqual(['msg_1'])
   })
 
   it('answers 404 for a message that does not exist', async () => {
@@ -322,7 +322,7 @@ describe('what a caller may ask for', () => {
     await call({ hostId: 'site1', screenId: 'scr_1' })
     // Ids are never taken from the request: a caller who could name them
     // could name another site's.
-    expect(mockState.engagementCalls[0]['campaignIds']).toEqual([
+    expect(mockState.engagementCalls[0]['sendIds']).toEqual([
       'msg_1',
       'msg_2',
     ])
@@ -342,7 +342,7 @@ describe('what a caller may ask for', () => {
     await call({ hostId: 'site1', screenId: 'scr_1' })
     // A message with no `sentAt` would otherwise sort last forever, which is
     // the same drop `orderBy` would have caused in the query.
-    expect(mockState.engagementCalls[0]['campaignIds']).toEqual([
+    expect(mockState.engagementCalls[0]['sendIds']).toEqual([
       'scheduled',
       'sent',
     ])
@@ -373,7 +373,7 @@ describe('whose messages are read', () => {
       ['hostId', '==', 'site1'],
       ['templateScreenId', '==', 'scr_1'],
     ])
-    expect(mockState.engagementCalls[0]['campaignIds']).toEqual(['msg_1', 'msg_2'])
+    expect(mockState.engagementCalls[0]['sendIds']).toEqual(['msg_1', 'msg_2'])
   })
 
   it('answers a sibling site’s message as one that does not exist', async () => {

@@ -46,9 +46,10 @@ jest.mock('@aglyn/aglyn/server', () => ({
 }))
 
 /*
- * The campaign revenue reversal, mocked. Whether it lands correctly on the
- * rollup is settled against a real double in
- * `email-revenue-attribution.spec.ts`; what this file is the only place to
+ * The revenue reversal, asked of whichever plugin credits outcomes through
+ * the platform's contract (`plugin-conversion-credit`), mocked. Whether it
+ * lands correctly on the rollup is settled against a real double in the
+ * crediting plugin's own spec; what this file is the only place to
  * prove is that a booking refund REACHES it. A paid booking is credited to a
  * campaign the same way a store order is — through `upsertHostContact` with
  * this booking's id — so without the reversal a booking site's campaign
@@ -56,10 +57,10 @@ jest.mock('@aglyn/aglyn/server', () => ({
  */
 const reverseAttributedRevenue = jest.fn(async () => true)
 jest.mock(
-  '@aglyn/tenant-data-admin/server/email-revenue-attribution',
+  '@aglyn/aglyn/plugin-manager/plugin-conversion-credit',
   () => ({
     __esModule: true,
-    reverseEmailAttributedRevenue: (...args: unknown[]) =>
+    reverseOrderConversion: (...args: unknown[]) =>
       (reverseAttributedRevenue as any)(...args),
   }),
 )

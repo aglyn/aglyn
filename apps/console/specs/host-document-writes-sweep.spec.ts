@@ -437,13 +437,13 @@ describe('/v1: every write handler of rendered data announces', () => {
       unrendered: 'A new site has no cached pages to be stale.',
     },
     'api-v1-resources.ts#handlePublish': { announces: 'postTenantRevalidate' },
-    'api-v1-resources.ts#updateFormSubmission': {
+    'forms:form-submissions.ts#updateFormSubmission': {
       unrendered: 'Inbox state; submissions never render on the site.',
     },
-    'api-v1-resources.ts#deleteFormSubmission': {
+    'forms:form-submissions.ts#deleteFormSubmission': {
       unrendered: 'Inbox state; submissions never render on the site.',
     },
-    'api-v1-resources.ts#updateOrder': {
+    'commerce:orders-and-products.ts#updateOrder': {
       unrendered:
         'Status, carrier and tracking number only — the order book is not ' +
         'on any page, and a shipment moves no stock.',
@@ -465,6 +465,12 @@ describe('/v1: every write handler of rendered data announces', () => {
    */
   const CRM_API_V1 = join(PLUGINS, 'crm', 'src', 'lib', 'server', 'api-v1')
   const CRM_MODULES = /^crm-|^contacts(?:-merge)?\.ts$/
+  /**
+   * A site's form submissions, orders and products, served from the forms
+   * and commerce plugins (AGL-3080): classified above beside the platform's.
+   */
+  const FORMS_API_V1 = join(PLUGINS, 'forms', 'src', 'lib', 'server', 'api-v1')
+  const COMMERCE_API_V1 = join(PLUGINS, 'commerce', 'src', 'lib', 'server', 'api-v1')
 
   const WRITE = [
     /\bawait\s+[\w$]+(?:\s*(?:\.\w+|\((?:[^()]|\([^()]*\))*\)))*?\s*\.(?:create|update|set|delete)\(/,
@@ -487,6 +493,8 @@ describe('/v1: every write handler of rendered data announces', () => {
   const functions = [
     ...functionsOf(join(CONSOLE, 'utils', 'api-v1-resources.ts'), 'api-v1-resources.ts'),
     ...functionsOf(join(DATA_API_V1, 'datasets.ts'), 'data:datasets.ts'),
+    ...functionsOf(join(FORMS_API_V1, 'form-submissions.ts'), 'forms:form-submissions.ts'),
+    ...functionsOf(join(COMMERCE_API_V1, 'orders-and-products.ts'), 'commerce:orders-and-products.ts'),
   ]
   const writeHandlers = functions.filter(({ body }) =>
     WRITE.some((pattern) => pattern.test(body)),
@@ -497,6 +505,7 @@ describe('/v1: every write handler of rendered data announces', () => {
       expect.arrayContaining([
         'data:datasets.ts#createRecord',
         'data:datasets.ts#updateDataset',
+        'forms:form-submissions.ts#deleteFormSubmission',
         'api-v1-resources.ts#createMedia',
       ]),
     )

@@ -223,19 +223,9 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   orgDataQueryForHost: async () => ({ ref: mockCollection(`orgs/${ORG_ID}/contacts`) }),
 }))
 
-jest.mock('@aglyn/tenant-data-admin/server/dataset-live-pages', () => ({
-  __esModule: true,
-  announceDatasetRecordChange: async () => undefined,
-}))
-
 jest.mock('@aglyn/tenant-data-admin/server/contact-email-index', () => ({
   __esModule: true,
   findContactByEmail: async () => null,
-}))
-
-jest.mock('@aglyn/tenant-runtime/resolve-dataset', () => ({
-  __esModule: true,
-  resolveDatasetDoc: async () => null,
 }))
 
 // The CRM steps are held to their own suites; here a CRM write is a line in

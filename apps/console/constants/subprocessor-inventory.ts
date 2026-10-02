@@ -600,20 +600,32 @@ const DECLARED_EGRESS_HOSTS: Record<string, EgressHost> = {
   // NOT `no-request`: both are really fetched. That disposition would be a
   // lie, and the lie is the failure mode this registry exists to prevent.
 
-  // Google Web Risk (AGL-3451). Google LLC is already an Annex III
+  // Google Web Risk (AGL-3451, AGL-3459). Google LLC is already an Annex III
   // recipient; this host is declared on its own terms, like every Google
-  // host here, and it is `not-a-subprocessor` on the FIRST admissible reason:
-  // nothing personal reaches it. The request-serving code asks it about the
-  // bare origin of a third-party site and nothing else — `webRiskUriForHost`
-  // builds `https://<host>/` and the callers hand it hosts only, never a path,
-  // a query, page content, a recipient or an account. Sending paths would
-  // make it a subprocessor for a new purpose, which is a published row first.
+  // host here.
+  //
+  // TWO MODES, ONE DISPOSITION — read before changing either. What is sent
+  // is a runtime switch, `platformSettings/webRisk.lookupMode`:
+  //
+  //  - `'host'`, the default and production's setting: the bare origin of a
+  //    third-party site and nothing else — `webRiskUriForHost` builds
+  //    `https://<host>/`. Nothing personal reaches Google, which is what keeps
+  //    this entry `not-a-subprocessor` on the FIRST admissible reason.
+  //  - `'url'`, built and OFF: each link's address as well — scheme, host and
+  //    path, as `normalizeReputationLink` reduces it. A path can name a person
+  //    (`/team/jane-doe`), so this mode makes Google a recipient for a new
+  //    purpose. The order is fixed: the Subprocessors page names the purpose
+  //    first (gdoc master, then the page; the draft is
+  //    `Legal/Proposed/2026-10-01-web-risk-full-links/`), then this entry
+  //    becomes `subprocessor` with its entity, region, purpose and that
+  //    change-log date as `publishedOn`, and only then is the switch flipped.
+  //    No check can see the switch, so this paragraph is the gate.
   'webrisk.googleapis.com': {
     disposition: 'not-a-subprocessor',
     reason:
-      "Google Web Risk `uris.search`, asked by the phishing screen whether a third-party site that a published page, a redirect rule or an outgoing tenant email links to is listed as phishing, malware or unwanted software (`libs/tenant/data/admin/src/lib/server/web-risk.ts`). It authenticates as the platform's own service account, and is asked only about hosts that are neither the workspace's nor the platform's own, a known brand's or a common social link.",
+      "Google Web Risk `uris.search`, asked by the phishing screen whether a third-party site that a published page, a redirect rule or an outgoing tenant email links to is listed as phishing, malware or unwanted software (`libs/tenant/data/admin/src/lib/server/web-risk.ts`). It authenticates as the platform's own service account, and is asked only about hosts that are neither the workspace's nor the platform's own, a known brand's or a common social link. Declared on the default `'host'` lookup mode, the one production runs; the `'url'` mode below is off until the Subprocessors page names it.",
     dataReceived:
-      "The bare origin `https://<host>/` of the third-party site, plus the platform's own service-account access token. Nothing personal: never a path, a query string, page or email content, a recipient address, or any customer, member or visitor identifier; what comes back is the list the host is on, if any, and how long that answer holds.",
+      "In the default `'host'` mode: the bare origin `https://<host>/` of the third-party site, plus the platform's own service-account access token. Nothing personal: never a path, a query string, page or email content, a recipient address, or any customer, member or visitor identifier. In `'url'` mode (AGL-3459), which is built and switched off: also each link's address — its scheme, host and a path of at most 512 characters, cut before any segment carrying an email address or an unrendered merge tag — never its query string, fragment or `user:password@`, and at most 20 addresses per page, redirect or email. What comes back is the list the host or address is on, if any, and how long that answer holds.",
   },
   'firebase.googleapis.com': {
     disposition: 'not-a-subprocessor',

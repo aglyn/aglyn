@@ -27,29 +27,25 @@
  *
  * ## What this file is really testing
  *
- * The endpoint's whole design is that `apps/console` implements NONE of the
- * order semantics: the transition rule, the transaction, the fulfillment
- * append and the timeline all live in the commerce plugin, which this app may
- * not import (`eslint.config.mjs`, `scope:app` →
- * `notDependOnLibsWithTags:['aglyn:addons']`), and are reached through the
- * core `registerOrderFulfilmentService` capability registry. So the app's
- * responsibilities are exactly two — **authorize**, and **translate** — and
- * those are what is asserted here. The commerce half is proved in
+ * The resource is the commerce plugin's (AGL-3080): its console server
+ * declarations register `orders` under a site, and its handler records a
+ * shipment through `recordOrderShipment`, the same transaction the console's
+ * `commerce/fulfill-order` route runs — the transition rule, the fulfillment
+ * append and the timeline. The router owns the key, the pipeline and the
+ * site's ownership; the handler owns the scope, the plan and the plugin's
+ * per-site switch, and translates the outcome. Those gates and that
+ * translation are what is asserted here, through the real router and the
+ * real registration. The transaction itself is proved in
  * `libs/plugins/commerce/src/lib/server/fulfill-order.spec.ts`.
  *
- * ## The registry is REAL here, and the double is faithful on the one point
+ * ## The transaction is a faithful double, and the registration is real
  *
- * `getOrderFulfilmentService` is `requireActual`, not a stub: a handler that
- * quietly wrote the order itself would pass a mocked lookup and fail here.
- * And the fake service is registered INSIDE the mocked `ensureAll` — exactly
- * as production registers it inside the loader's activation of the commerce
- * `consoleApi` surface — so a handler that forgets to `ensureAll` finds no
- * service and 404s, rather than being handed one for free by the test.
- *
- * The service double models the semantics the real transaction guarantees
- * (`already` on a repeat, `blocked` carrying the refusing status, no write on
- * either), because a double that always answered `recorded` would make the
- * conflict and retry cases pass against a handler that mishandled both.
+ * The console's boot runs here as in production, so a handler the plugin
+ * stopped registering 404s. Only `recordOrderShipment` is a double, and it
+ * models the semantics the real transaction guarantees (`already` on a
+ * repeat, `blocked` carrying the refusing status, no write on either),
+ * because a double that always answered `recorded` would make the conflict
+ * and retry cases pass against a handler that mishandled both.
  *
  * ## Authorization is the point, not a detail
  *
@@ -145,25 +141,12 @@ jest.mock('@aglyn/tenant-data-admin', () => {
   }
 })
 
-/** Surfaces each `ensureAll` asked for. */
-const mockEnsured: string[][] = []
-
 /** Calls the double received, in order. */
 const mockShipments: Array<Record<string, unknown>> = []
-/** Set false to model a deployment whose plugins register no fulfilment. */
-let mockServicePresent = true
-
-const mockRegistry = jest.requireActual(
-  '../../../libs/aglyn/src/lib/plugin-manager/order-fulfilment',
-)
 
 jest.mock('@aglyn/aglyn/server', () => ({
   __esModule: true,
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/api-idempotency'),
-  // The REAL registry, so the handler must genuinely go through the seam.
-  ...jest.requireActual(
-    '../../../libs/aglyn/src/lib/plugin-manager/order-fulfilment',
-  ),
   // The REAL per-site enablement resolution — the gate is only as good as
   // this function, and stubbing it would assert nothing about the gate.
   ...jest.requireActual(
@@ -181,50 +164,46 @@ jest.mock('@aglyn/aglyn/server', () => ({
 }))
 
 /**
- * The commerce plugin's `consoleApi` surface, as the loader activates it: the
- * capability exists only AFTER `ensureAll`, exactly as in production.
+ * The commerce plugin's shared transaction, as a double faithful to its
+ * outcomes. Everything around it — the registration, the handler, the router
+ * — is real.
  */
-jest.mock('../utils/server-plugin-loader', () => ({
+jest.mock('../../../libs/plugins/commerce/src/lib/server/fulfill-order', () => ({
   __esModule: true,
-  serverPluginLoader: {
-    ensureAll: jest.fn(async (surfaces: string[]) => {
-      mockEnsured.push(surfaces)
-      if (!mockServicePresent) return
-      mockRegistry.registerOrderFulfilmentService({
-        pluginId: 'commerce',
-        recordShipment: async (request: Record<string, unknown>) => {
-          mockShipments.push(request)
-          const path = `hosts/${request.hostId}/orders/${request.orderId}`
-          const order = mockDocs.get(path)
-          if (!order) return { outcome: 'no_such_order' }
-          if (order.status === request.to) return { outcome: 'already' }
-          // The double models the real transition rule on the one axis these
-          // cases turn on: a terminal order refuses, and nothing is written.
-          if (order.status === 'refunded' || order.status === 'cancelled') {
-            return { outcome: 'blocked', from: order.status }
-          }
-          mockDocs.set(path, {
-            ...order,
-            status: request.to,
-            fulfillments: [
-              ...((order.fulfillments as unknown[]) ?? []),
-              {
-                id: 'ful_1',
-                lineItemIds: [0],
-                carrier: request.carrier || undefined,
-                trackingNumber: request.trackingNumber || undefined,
-                atMs: 1_700_000_000_000,
-              },
-            ],
-          })
-          return { outcome: 'recorded' }
+  recordOrderShipment: async (request: Record<string, unknown>) => {
+    mockShipments.push(request)
+    const path = `hosts/${request.hostId}/orders/${request.orderId}`
+    const order = mockDocs.get(path)
+    if (!order) return { outcome: 'no_such_order' }
+    if (order.status === request.to) return { outcome: 'already' }
+    // The double models the real transition rule on the one axis these
+    // cases turn on: a terminal order refuses, and nothing is written.
+    if (order.status === 'refunded' || order.status === 'cancelled') {
+      return { outcome: 'blocked', from: order.status }
+    }
+    mockDocs.set(path, {
+      ...order,
+      status: request.to,
+      fulfillments: [
+        ...((order.fulfillments as unknown[]) ?? []),
+        {
+          id: 'ful_1',
+          lineItemIds: [0],
+          carrier: request.carrier || undefined,
+          trackingNumber: request.trackingNumber || undefined,
+          atMs: 1_700_000_000_000,
         },
-      })
-    }),
+      ],
+    })
+    return { outcome: 'recorded' }
   },
 }))
 
 import { GET, PATCH } from '../app/api/v1/[[...route]]/route'
+import { registerPluginServerDeclarations } from '../constants/plugins.declarations.server.generated'
+// The console's boot, which registers the commerce plugin's `orders` under a
+// site (AGL-3080).
+beforeAll(() => registerPluginServerDeclarations())
 
 const BASE = 'https://app.aglyn.com/api/v1'
 
@@ -262,9 +241,6 @@ const stored = (id = 'ord_1') =>
 beforeEach(() => {
   mockDocs.clear()
   mockShipments.length = 0
-  mockEnsured.length = 0
-  mockServicePresent = true
-  mockRegistry.resetOrderFulfilmentServiceForTests()
   mockScopes = ['orders:read', 'orders:write']
   mockEntitlements = { apiAccess: true, commerce: true }
   mockOrg = { plan: 'business', hosts: { host_1: true } }
@@ -335,14 +311,14 @@ describe('the four gates in front of the write', () => {
     expect(status).toBe(404)
     expect(body.error.message).toBe('No such site')
     expect(mockDocs.get('hosts/host_other/orders/ord_x')?.status).toBe('paid')
-    // Not merely refused — never even reached the capability.
+    // Not merely refused — never even reached the transaction.
     expect(mockShipments).toHaveLength(0)
   })
 
   it('refuses a site the org switched commerce OFF for', async () => {
     // RED CHECK: delete the `isHostPluginEnabled` gate and this returns 200.
-    // The registry is process-global and filled by `ensureAll`, so a
-    // registered service says nothing about one org's configuration — without
+    // The resource is registered for every organization the console serves,
+    // so its being there says nothing about one org's configuration — without
     // this gate, a site with commerce switched off still takes order writes,
     // which every other commerce door (AGL-1014) refuses.
     mockDocs.set('hosts/host_1', {
@@ -356,48 +332,28 @@ describe('the four gates in front of the write', () => {
     expect(stored().status).toBe('paid')
     expect(mockShipments).toHaveLength(0)
   })
-
-  it('gates on the SERVICE’s own pluginId, never a hard-coded name', async () => {
-    // The app must not know addon-layer names. Register the capability under
-    // a different plugin id and disable THAT id: the gate has to follow.
-    mockRegistry.resetOrderFulfilmentServiceForTests()
-    mockRegistry.registerOrderFulfilmentService({
-      pluginId: 'other-commerce',
-      recordShipment: async () => ({ outcome: 'recorded' }),
-    })
-    mockServicePresent = false // ensureAll must not overwrite the registration
-    mockDocs.set('hosts/host_1', { disabledPlugins: ['other-commerce'] })
-    const { status } = await patch('/sites/host_1/orders/ord_1', {
-      status: 'fulfilled',
-    })
-    expect(status).toBe(404)
-  })
 })
 
 describe('the seam itself', () => {
-  it('activates the plugin surface, and finds the capability only after', async () => {
-    // RED CHECK: remove the `serverPluginLoader.ensureAll(['consoleApi'])`
-    // call and every write 404s "not available on this deployment" — the
-    // registry is empty until the loader activates the plugin, exactly as in
-    // production.
+  it('is served by the commerce plugin, through its shared transaction', async () => {
     const { status } = await patch('/sites/host_1/orders/ord_1', {
       status: 'fulfilled',
     })
     expect(status).toBe(200)
-    expect(mockEnsured).toContainEqual(['consoleApi'])
+    expect(mockShipments).toHaveLength(1)
   })
 
-  it('404s honestly on a deployment where no plugin provides fulfilment', async () => {
-    // A self-host build without commerce. The endpoint genuinely does not
-    // exist there; a 500 would blame the caller's request for a
+  it('404s honestly for a resource no plugin serves under the site', async () => {
+    // What a self-host build without commerce answers for `orders`: nothing
+    // registered the name, and the router's unknown-endpoint 404 is the truth
+    // rather than a 500 that would blame the caller's request for a
     // configuration.
-    mockServicePresent = false
-    const { status, body } = await patch('/sites/host_1/orders/ord_1', {
+    const { status, body } = await patch('/sites/host_1/shipments/ord_1', {
       status: 'fulfilled',
     })
     expect(status).toBe(404)
     expect(body.error.type).toBe('not_found')
-    expect(body.error.message).toMatch(/not available on this deployment/)
+    expect(mockShipments).toHaveLength(0)
   })
 
   it('passes the shipment through verbatim, and writes nothing itself', async () => {
@@ -429,7 +385,7 @@ describe('the seam itself', () => {
 })
 
 describe('what the endpoint will and will not accept', () => {
-  it('refuses `cancelled` by NAME, saying why, and never calls the capability', async () => {
+  it('refuses `cancelled` by NAME, saying why, and never reaches the transaction', async () => {
     // RED CHECK: drop the `ORDER_WRITE_REFUSED` branch and this becomes the
     // generic "must be one of" 400 — accurate, and it stops telling a
     // merchant's integrator the one thing they need to know, which is where
@@ -495,7 +451,7 @@ describe('what the caller gets back', () => {
     expect(status).toBe(200)
     expect(body.object).toBe('order')
     expect(body.status).toBe('fulfilled')
-    // RED CHECK: read the order BEFORE calling the capability and this shows
+    // RED CHECK: read the order BEFORE recording the shipment and this shows
     // the pre-write state — a 200 whose body contradicts what it just did.
     expect(body.fulfillments).toEqual([
       expect.objectContaining({ carrier: 'UPS', trackingNumber: '1Z999' }),
@@ -506,7 +462,7 @@ describe('what the caller gets back', () => {
 
   it('a retry lands the same state AND returns the same 200 — no key needed', async () => {
     // RED CHECK: map `already` to a 409 and this fails. The endpoint takes no
-    // `Idempotency-Key`; the capability's already-in-target return is what
+    // `Idempotency-Key`; the transaction's already-in-target return is what
     // makes the retry safe, and answering it as a conflict would send every
     // fulfilment poller into an error path on its own successful work.
     const first = await patch('/sites/host_1/orders/ord_1', {

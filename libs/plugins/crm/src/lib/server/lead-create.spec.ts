@@ -183,13 +183,6 @@ jest.mock('@aglyn/aglyn/server', () => ({
   },
 }))
 
-jest.mock(
-  '../../../../../tenant/data/admin/src/lib/server/campaign-conversion-attribution',
-  () => ({
-    __esModule: true,
-    attributeCampaignConversion: jest.fn(async () => undefined),
-  }),
-)
 jest.mock('../../../../../tenant/data/admin/src/lib/server/notifications', () => ({
   __esModule: true,
   notifyHostManagers: jest.fn(async () => undefined),

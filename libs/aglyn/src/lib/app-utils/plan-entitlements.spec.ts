@@ -357,7 +357,7 @@ describe('plan entitlements', () => {
         extraCollaboratorMonthlyUsd: 1,
         extraDatasetMonthlyUsd: 1,
         extraDataGbMonthlyUsd: 0.36,
-        extraApiRequestsUsdPer1k: 0.2,
+        extraApiRequestsUsdPer1k: 0.25,
         extraAssistCreditsUsdPer1k: 2.25,
         aiAddonMonthlyUsd: 99,
         extraContactsUsdPer1k: 0.4,
@@ -372,7 +372,7 @@ describe('plan entitlements', () => {
         extraCollaboratorMonthlyUsd: 1,
         extraDatasetMonthlyUsd: 1,
         extraDataGbMonthlyUsd: 0.36,
-        extraApiRequestsUsdPer1k: 0.15,
+        extraApiRequestsUsdPer1k: 0.25,
         extraAssistCreditsUsdPer1k: 2,
         aiAddonMonthlyUsd: 299,
         extraContactsUsdPer1k: 0.4,
@@ -513,8 +513,8 @@ describe('plan entitlements', () => {
     expect(checkDatasetQuota(org, 10_000).allowed).toBe(false)
     expect(checkDataStorageQuota(org, 1_023_999).allowed).toBe(true)
     expect(checkDataStorageQuota(org, 1_024_000).allowed).toBe(false)
-    expect(checkApiRequestQuota(org, 9_999_999).allowed).toBe(true)
-    expect(checkApiRequestQuota(org, 10_000_000).allowed).toBe(false)
+    expect(checkApiRequestQuota(org, 169_999).allowed).toBe(true)
+    expect(checkApiRequestQuota(org, 170_000).allowed).toBe(false)
     expect(checkCrmRecordsQuota(org, 999_999).allowed).toBe(true)
     expect(checkCrmRecordsQuota(org, 1_000_000).allowed).toBe(false)
     expect(checkCrmEmailQuota(org, 1_999).allowed).toBe(true)
@@ -558,7 +558,7 @@ describe('plan entitlements', () => {
         .bandwidthGb,
     ).toBe(UNLIMITED)
     // CONTROL: without the override the fallback stands.
-    expect(resolveOrgEntitlements({ plan: 'enterprise' } as any).bandwidthGb).toBe(970)
+    expect(resolveOrgEntitlements({ plan: 'enterprise' } as any).bandwidthGb).toBe(790)
   })
 
   it('reports no list-price revenue for an enterprise org without a deal price', () => {
@@ -946,21 +946,22 @@ describe('plan entitlements', () => {
   })
 
   it('checkApiRequestQuota meters overage on Business/Advanced, blocks below (AGL-634)', () => {
-    // Business includes 100k requests; 150k used → 50k over at $0.50/1k = $25.
-    const business = checkApiRequestQuota({ plan: 'business' } as any, 150_000)
+    // Business includes 1,500 requests; 51,500 used → 50k over at $0.50/1k = $25.
+    const business = checkApiRequestQuota({ plan: 'business' } as any, 51_500)
     expect(business.allowed).toBe(true)
-    expect(business.included).toBe(100_000)
+    expect(business.included).toBe(1_500)
     expect(business.overageRequests).toBe(50_000)
     expect(business.overageMonthlyUsd).toBeCloseTo(25)
     expect(business.overageRateUsd).toBe(0.5)
-    // Advanced: 1M included, cheaper overage ($0.20/1k). 1.1M → 100k over = $20.
-    const advanced = checkApiRequestQuota({ plan: 'advanced' } as any, 1_100_000)
-    expect(advanced.included).toBe(1_000_000)
-    expect(advanced.overageMonthlyUsd).toBeCloseTo(20)
+    // Advanced: 17,000 included, cheaper overage ($0.25/1k). 117,000 → 100k
+    // over = $25.
+    const advanced = checkApiRequestQuota({ plan: 'advanced' } as any, 117_000)
+    expect(advanced.included).toBe(17_000)
+    expect(advanced.overageMonthlyUsd).toBeCloseTo(25)
     // Within the included quota there is no overage; remaining is tracked.
-    const within = checkApiRequestQuota({ plan: 'business' } as any, 40_000)
+    const within = checkApiRequestQuota({ plan: 'business' } as any, 400)
     expect(within.overageRequests).toBe(0)
-    expect(within.remaining).toBe(60_000)
+    expect(within.remaining).toBe(1_100)
     // Plans without API access have zero included and always block.
     const pro = checkApiRequestQuota({ plan: 'pro' } as any, 1)
     expect(pro.allowed).toBe(false)

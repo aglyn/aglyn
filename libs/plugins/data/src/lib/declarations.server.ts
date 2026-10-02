@@ -21,9 +21,11 @@ import { registerFormRecordTarget } from '@aglyn/aglyn/plugin-manager/submission
 import { registerRepeatRowReader } from '@aglyn/aglyn/plugin-manager/repeat-rows'
 import { registerPluginSiteBundleSection } from '@aglyn/aglyn/plugin-manager/plugin-site-bundle'
 import { registerPluginUsageMeter } from '@aglyn/aglyn/plugin-manager/plugin-usage-meters'
+import { registerServerStepExecutor } from '@aglyn/aglyn/plugin-manager/plugin-server-steps'
 import {
   BUNDLE_ID,
   DATASET_REPEAT_SOURCE_ID,
+  DATASET_STEP_TYPES,
   DATASET_STORAGE_METER_ID,
 } from './constants/bundle-common'
 
@@ -52,6 +54,13 @@ import {
  * And the monthly usage sweep, a core cron, measures what the datasets store
  * through this plugin's meter — declared in `usageAxes`, so the sweep refuses
  * to bill a month without it. Its reads load with the first sweep.
+ *
+ * An automation that writes a dataset record runs that step through this
+ * plugin: the workflows engine reaches it through the platform's server-step
+ * seam, in whichever process runs the automation. Declared too (`serverSteps`),
+ * so a boot that skipped this fails the step with its reason rather than
+ * reporting a record that was never written; the writes load with the first
+ * step.
  */
 export function registerDataServerDeclarations(): void {
   registerRepeatRowReader(
@@ -92,4 +101,9 @@ export function registerDataServerDeclarations(): void {
     measure: async (context) =>
       (await import('./server/dataset-storage-meter')).measureDatasetStorage(context),
   })
+  registerServerStepExecutor(
+    DATASET_STEP_TYPES,
+    async (request) => (await import('./server/dataset-steps.server')).runDatasetStep(request),
+    { pluginId: BUNDLE_ID },
+  )
 }

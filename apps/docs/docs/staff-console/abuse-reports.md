@@ -228,8 +228,19 @@ message around it says.
 - **What is asked.** Every host a published page, a redirect rule, a campaign or any
   other site email points to, except the workspace's own, the platform's own sites, a
   listed brand's own domain and common social, maps and review links. At most 20 hosts
-  per page or message. Only the bare origin (`https://<host>/`) is sent: never the path,
-  the query, the page or the message.
+  per page or message. By default only the bare origin (`https://<host>/`) is sent: never
+  the path, the query, the page or the message.
+- **The lookup mode.** `platformSettings/webRisk.lookupMode` is `'host'` (the default:
+  hosts only) or `'url'`. A phishing kit often sits at a path on a compromised site that
+  is otherwise clean, which a host lookup reads as clean. In `'url'` mode each host is
+  asked about first, and then, unless the host itself is listed, the addresses the page
+  or message links to on it: scheme, host and path. The query string, the fragment and
+  any `user:password@` are never sent; the path stops before a segment that carries an
+  email address or an unfilled merge tag, and is cut back to 512 characters. At most 20
+  addresses per page or message, taken a host at a time, inside the same 1.2-second
+  budget. A listed address holds the page while its host stays clean, and the row reads
+  "Links to `<address>`". `'url'` mode sends more than a host to Google, so it stays off
+  until the Subprocessors page names that purpose (AGL-3459).
 - **What a listing does.** It is a strong signal, `web-risk-link`. A new page or a new
   version is held, email is held, and a redirect does not fire, for every workspace. A
   page that is already live on an established workspace keeps serving and is flagged as
@@ -240,15 +251,19 @@ message around it says.
   a page) or a refused credential reads the host as unknown. It never holds anything,
   and the server logs a `[web-risk]` warning. When Google refuses the credential, the
   lookups pause for 15 minutes and log one error.
-- **Cache.** One answer per host in `webRiskVerdicts/{host}`, server-only: a listing for
-  as long as Google's `expireTime` allows (minutes), a clean answer for 12 hours. Each
+- **Cache.** One answer per host in `webRiskVerdicts/{host}`, and in `'url'` mode one per
+  address in `webRiskUrlVerdicts/{sha256 of the address}`, server-only: a listing for as
+  long as Google's `expireTime` allows (minutes), a clean answer for 12 hours. Each
   server process also remembers a clean answer for 10 minutes, so a listing the daily
-  re-check writes reaches every page within minutes.
+  re-check writes reaches every page within minutes. The re-check deletes an address's
+  answer a day after it expires.
 - **The daily re-check.** A harvester is often listed only after the page linking to it
   went live. `/api/admin/web-risk-recheck` (Cloud Scheduler, 09:30 UTC) walks every live
   page's foreign hosts, which the review notes beside the version it served
-  (`hosts/{hostId}/pageReviews/{screenId}.foreignHosts`), asks again, and sends a page
-  with a newly listed host back through the page review. It drops the cached pages of a
+  (`hosts/{hostId}/pageReviews/{screenId}.foreignHosts`, and the addresses on them,
+  without query strings, in `foreignLinks`), asks again, and sends a page with a newly
+  listed host — or, in `'url'` mode, a newly listed address — back through the page
+  review. It drops the cached pages of a
   site it held, and places the security holds those holds asked for before it returns.
 - **The kill switch.** Set `platformSettings/webRisk` to `{ enabled: false }` in
   Firestore and every lookup stops within a minute. Every host then reads unknown, so

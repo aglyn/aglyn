@@ -436,6 +436,29 @@ defaults stay. `check:tenant-wire-weight`'s `duplication` entry measures the
 copies a page placing every element holds, so a new sibling import shows up
 as a number rather than as a slower site.
 
+#### aglyn.com/press: the last 9 KB (measured 2026-10-01, AGL-3438)
+
+Live on beta.219 the page was 521,096 B served (45 scripts, 438,829 B, plus
+82,267 B of HTML): 508.9 KiB. Two changes, each projected from a clean tenant
+production build replaying production's module set, and the HTML re-encoded
+with the page's real node map:
+
+| change | where | press, served |
+| --- | --- | --- |
+| Collection Entries fetches its search box only when `search` is on (`prepare` in `plugin.ts`) | JS | −9,011 B brotli-3, one file fewer |
+| The node map ships as a tree that states each id once (`wire-nodes.ts`) | HTML | −6,655 B brotli (82,267 → about 75,600 B) |
+
+The node map is nearly all of a page's flight payload (346 of 376 KB on press)
+and its ids are random, so a repeat costs close to its full length: dropping
+the default `pluginId`/`type` instead was worth 0.5 KB.
+
+Rejected: moving the collection blocks' ids and `collectionListUrl` out of
+`collection-entries.ts` into a leaf. It took another 5.7 KB off press and
+6.7 KB off every aglyn.com page, but the chunker re-cut the collection
+elements around it and the every-element duplication measure went from
+179.3 KB to 220.1 KB of a 223.0 KB budget. Moving only `collectionListUrl`
+saved the marketing site 6.9 KB and cost press 0.9 KB.
+
 #### `sideEffects` is the build-config lever that pays (measured 2026-09-08)
 
 A library whose `package.json` says nothing about `sideEffects` forces the bundler to

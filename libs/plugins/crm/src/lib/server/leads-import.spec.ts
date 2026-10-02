@@ -189,18 +189,11 @@ jest.mock('@aglyn/aglyn/server', () => ({
 }))
 
 /*
- * The door's two side effects on the way past. Neither is reached by an
- * import — no campaign touch travels with a file, and nothing here trips
- * the platform ceiling — but both modules would otherwise be loaded for
- * real by the door this spec deliberately does not stub.
+ * The door's side effect on the way past. It is not reached by an import —
+ * nothing here trips the platform ceiling — but the module would otherwise
+ * be loaded for real by the door this spec deliberately does not stub. No
+ * touch travels with a file, so nothing is credited.
  */
-jest.mock(
-  '../../../../../tenant/data/admin/src/lib/server/campaign-conversion-attribution',
-  () => ({
-    __esModule: true,
-    attributeCampaignConversion: jest.fn(async () => undefined),
-  }),
-)
 jest.mock('../../../../../tenant/data/admin/src/lib/server/notifications', () => ({
   __esModule: true,
   notifyHostManagers: jest.fn(async () => undefined),

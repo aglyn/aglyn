@@ -370,7 +370,7 @@ describe('the billed rate and the cost rate are different numbers', () => {
   const RETAIL_LINES = [
     { rate: 'extraEmailSendsUsdPer1k', cost: 0.0009 * 1000, unit: 'per 1,000 emails' },
     { rate: 'extraContactsUsdPer1k', cost: 0.0002 * 1000, unit: 'per 1,000 contact-months' },
-    { rate: 'extraApiRequestsUsdPer1k', cost: 0.000002 * 1000, unit: 'per 1,000 API requests' },
+    { rate: 'extraApiRequestsUsdPer1k', cost: 0.000117 * 1000, unit: 'per 1,000 API requests' },
   ] as const
 
   /** Retail lines below the floor, from any pricing table shape. */
@@ -475,9 +475,9 @@ describe('the billed rate and the cost rate are different numbers', () => {
     }
     expect(METERED_MARKUP).toBe(1.3)
     expect(METERED_BILLED_RATES_USD.storagePerGbMonth).toBeCloseTo(0.0338, 6)
-    expect(METERED_BILLED_RATES_USD.perPageView * 1000).toBeCloseTo(0.7, 6)
+    expect(METERED_BILLED_RATES_USD.perPageView * 1000).toBeCloseTo(0.8, 6)
     expect(METERED_BILLED_RATES_USD.perFormSubmission * 1000).toBeCloseTo(
-      0.07,
+      0.08,
       6,
     )
   })

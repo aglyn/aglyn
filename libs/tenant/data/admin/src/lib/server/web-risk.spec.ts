@@ -18,7 +18,9 @@
 /**
  * The Web Risk lookup (AGL-3451): the `uris.search` client over a mocked
  * HTTP layer, the two-layer cache, the deadline, the failure modes and the
- * kill switch. Nothing here reaches Google.
+ * kill switch; and the `'url'` lookup mode (AGL-3459) — what it sends, its
+ * cache, its cap and a listing that names one path on a clean host. Nothing
+ * here reaches Google.
  */
 
 type Doc = Record<string, unknown>
@@ -35,14 +37,29 @@ const snapshotOf = (path: string) => {
   }
 }
 
+const docRef = (path: string) => ({
+  path,
+  get: async () => snapshotOf(path),
+  set: async (value: Doc) => {
+    store.set(path, { ...value })
+  },
+  delete: async () => {
+    store.delete(path)
+  },
+})
+
 const db = {
   collection: (name: string) => ({
-    doc: (id: string) => ({
-      path: `${name}/${id}`,
-      get: async () => snapshotOf(`${name}/${id}`),
-      set: async (value: Doc) => {
-        store.set(`${name}/${id}`, { ...value })
-      },
+    doc: (id: string) => docRef(`${name}/${id}`),
+    where: (field: string, op: string, value: number) => ({
+      limit: (take: number) => ({
+        get: async () => ({
+          docs: [...store.keys()]
+            .filter((key) => key.startsWith(`${name}/`) && op === '<' && Number(store.get(key)?.[field]) < value)
+            .slice(0, take)
+            .map((key) => ({ id: key.split('/').pop(), ref: docRef(key) })),
+        }),
+      }),
     }),
   }),
   getAll: async (...refs: Array<{ path: string }>) => {
@@ -58,18 +75,24 @@ jest.mock('./firebase-admin', () => ({
 
 import {
   getLinkReputationLookup,
+  MAX_REPUTATION_URLS_PER_LOOKUP,
   resetLinkReputationLookupForTests,
 } from '@aglyn/shared-util-email/link-reputation'
 import {
   createWebRiskHttpClient,
   installLinkReputationLookup,
-  lookupHostReputation,
+  lookupLinkReputation,
   parseWebRiskSearch,
+  reapExpiredWebRiskUrlVerdicts,
   resetWebRiskForTests,
   WEB_RISK_CACHE_COLLECTION,
   WEB_RISK_CLEAN_TTL_MS,
+  WEB_RISK_URL_CACHE_COLLECTION,
+  WEB_RISK_URL_VERDICT_GRACE_MS,
   WEB_RISK_MEMORY_CLEAN_TTL_MS,
   WebRiskHttpError,
+  webRiskLookupMode,
+  webRiskUrlVerdictId,
   type WebRiskClient,
   type WebRiskSearchResult,
 } from './web-risk'
@@ -165,7 +188,7 @@ describe('a reputation lookup', () => {
         : { threats: [], expireTimeMs: null },
     )
     resetWebRiskForTests(client)
-    const answer = await lookupHostReputation(['conservascaorvi.example', 'bakery.example', 'neighbour.aglyn.app'])
+    const answer = await lookupLinkReputation(['conservascaorvi.example', 'bakery.example', 'neighbour.aglyn.app'])
     expect(answer.hits).toEqual([{ host: 'conservascaorvi.example', threats: ['SOCIAL_ENGINEERING'] }])
     expect(answer.clean.sort()).toEqual(['bakery.example', 'neighbour.aglyn.app'])
     expect(answer.unknown).toEqual([])
@@ -175,7 +198,7 @@ describe('a reputation lookup', () => {
   it('caches each answer: memory first, then the store, then the API', async () => {
     const { client, asked } = fakeClient(clean)
     resetWebRiskForTests(client)
-    await lookupHostReputation(['bakery.example'])
+    await lookupLinkReputation(['bakery.example'])
     expect(store.get(`${WEB_RISK_CACHE_COLLECTION}/bakery.example`)).toMatchObject({
       host: 'bakery.example',
       threats: [],
@@ -183,12 +206,12 @@ describe('a reputation lookup', () => {
     })
     // Memory: no store read, no call.
     getAllCalls = 0
-    await lookupHostReputation(['bakery.example'])
+    await lookupLinkReputation(['bakery.example'])
     expect(asked).toHaveLength(1)
     expect(getAllCalls).toBe(0)
     // A fresh process: the store answers, still no call.
     resetWebRiskForTests(client)
-    await lookupHostReputation(['bakery.example'])
+    await lookupLinkReputation(['bakery.example'])
     expect(asked).toHaveLength(1)
     expect(getAllCalls).toBe(1)
   })
@@ -200,10 +223,10 @@ describe('a reputation lookup', () => {
       expireTimeMs: now + 5 * 60_000,
     }))
     resetWebRiskForTests(client)
-    await lookupHostReputation(['listed.example'], { nowMs: now })
-    await lookupHostReputation(['listed.example'], { nowMs: now + 4 * 60_000 })
+    await lookupLinkReputation(['listed.example'], { nowMs: now })
+    await lookupLinkReputation(['listed.example'], { nowMs: now + 4 * 60_000 })
     expect(asked).toHaveLength(1)
-    await lookupHostReputation(['listed.example'], { nowMs: now + 6 * 60_000 })
+    await lookupLinkReputation(['listed.example'], { nowMs: now + 6 * 60_000 })
     expect(asked).toHaveLength(2)
 
     const stored = store.get(`${WEB_RISK_CACHE_COLLECTION}/listed.example`) as Doc
@@ -214,13 +237,15 @@ describe('a reputation lookup', () => {
     const now = Date.now()
     const { client, asked } = fakeClient(clean)
     resetWebRiskForTests(client)
-    await lookupHostReputation(['fine.example'], { nowMs: now })
+    await lookupLinkReputation(['fine.example'], { nowMs: now })
     const stored = store.get(`${WEB_RISK_CACHE_COLLECTION}/fine.example`) as Doc
     expect(Number(stored['expiresAtMs']) - Number(stored['checkedAtMs'])).toBe(WEB_RISK_CLEAN_TTL_MS)
     // Past the memory window the store answers — a listing the daily re-check
-    // wrote there reaches a warm process this way.
+    // wrote there reaches a warm process this way. An API answer is stamped
+    // with the clock when it arrives, a few ms after `now`, so the step past
+    // the window is a minute rather than a millisecond.
     getAllCalls = 0
-    await lookupHostReputation(['fine.example'], { nowMs: now + WEB_RISK_MEMORY_CLEAN_TTL_MS + 1 })
+    await lookupLinkReputation(['fine.example'], { nowMs: now + WEB_RISK_MEMORY_CLEAN_TTL_MS + 60_000 })
     expect(getAllCalls).toBe(1)
     expect(asked).toHaveLength(1)
   })
@@ -230,7 +255,7 @@ describe('a reputation lookup', () => {
       throw new Error('socket hang up')
     })
     resetWebRiskForTests(client)
-    const answer = await lookupHostReputation(['flaky.example'])
+    const answer = await lookupLinkReputation(['flaky.example'])
     expect(answer).toMatchObject({ hits: [], clean: [], unknown: ['flaky.example'] })
     expect(console.warn).toHaveBeenCalled()
     expect(store.has(`${WEB_RISK_CACHE_COLLECTION}/flaky.example`)).toBe(false)
@@ -246,7 +271,7 @@ describe('a reputation lookup', () => {
     )
     resetWebRiskForTests(client)
     const started = Date.now()
-    const answer = await lookupHostReputation(['slow.example'], { deadlineMs: 30 })
+    const answer = await lookupLinkReputation(['slow.example'], { deadlineMs: 30 })
     expect(Date.now() - started).toBeLessThan(1_000)
     expect(answer.unknown).toEqual(['slow.example'])
     finish({ threats: [], expireTimeMs: null })
@@ -260,8 +285,8 @@ describe('a reputation lookup', () => {
       throw new WebRiskHttpError(403, 'Web Risk API has not been used in project')
     })
     resetWebRiskForTests(client)
-    await lookupHostReputation(['one.example'])
-    const answer = await lookupHostReputation(['two.example'])
+    await lookupLinkReputation(['one.example'])
+    const answer = await lookupLinkReputation(['two.example'])
     expect(answer.unknown).toEqual(['two.example'])
     expect(asked).toEqual(['https://one.example/'])
   })
@@ -270,14 +295,37 @@ describe('a reputation lookup', () => {
     store.set('platformSettings/webRisk', { enabled: false })
     const { client, asked } = fakeClient(clean)
     resetWebRiskForTests(client)
-    const answer = await lookupHostReputation(['any.example'])
+    const answer = await lookupLinkReputation(['any.example'])
     expect(answer.unknown).toEqual(['any.example'])
     expect(asked).toEqual([])
   })
 
+  it('never throws when the store cannot be reached: every host reads unknown', async () => {
+    const firebase = jest.requireMock('./firebase-admin') as { default: { app: () => unknown } }
+    const app = firebase.default.app
+    firebase.default.app = () => {
+      throw new Error('The default Firebase app does not exist.')
+    }
+    try {
+      const { client, asked } = fakeClient(clean)
+      resetWebRiskForTests(client)
+      const answer = await lookupLinkReputation(['harvester.example', 'Bakery.Example'])
+      expect(answer).toEqual({
+        hits: [],
+        clean: [],
+        unknown: ['harvester.example', 'bakery.example'],
+        looked: 0,
+      })
+      expect(asked).toEqual([])
+      expect(console.warn).toHaveBeenCalled()
+    } finally {
+      firebase.default.app = app
+    }
+  })
+
   it('reads every host unknown when the deployment has no credential at all', async () => {
     resetWebRiskForTests(null)
-    const answer = await lookupHostReputation(['any.example'])
+    const answer = await lookupLinkReputation(['any.example'])
     expect(answer.unknown).toEqual(['any.example'])
   })
 
@@ -285,7 +333,7 @@ describe('a reputation lookup', () => {
     const { client, asked } = fakeClient(clean)
     resetWebRiskForTests(client)
     const hosts = Array.from({ length: 25 }, (_, index) => `site${index}.example`)
-    const answer = await lookupHostReputation(hosts)
+    const answer = await lookupLinkReputation(hosts)
     expect(asked).toHaveLength(20)
     expect(answer.unknown).toHaveLength(5)
   })
@@ -298,5 +346,197 @@ describe('a reputation lookup', () => {
     await expect(getLinkReputationLookup()?.(['bad.example'])).resolves.toMatchObject({
       hits: [{ host: 'bad.example', threats: ['UNWANTED_SOFTWARE'] }],
     })
+  })
+})
+
+describe('the lookup mode (AGL-3459)', () => {
+  const KIT = 'https://bakery.example/wp-content/uploads/secure/login.php'
+  const urlMode = () => store.set('platformSettings/webRisk', { lookupMode: 'url' })
+  /** Lists one address and nothing else. */
+  const listsKit = () =>
+    fakeClient(async (uri) =>
+      uri === KIT
+        ? { threats: ['SOCIAL_ENGINEERING'], expireTimeMs: Date.now() + 5 * 60_000 }
+        : { threats: [], expireTimeMs: null },
+    )
+
+  it('sends only the host by default, whatever addresses it is handed', async () => {
+    const { client, asked } = listsKit()
+    resetWebRiskForTests(client)
+    const answer = await lookupLinkReputation(['bakery.example'], { urls: [KIT] })
+    expect(asked).toEqual(['https://bakery.example/'])
+    expect(answer).toMatchObject({ hits: [], clean: ['bakery.example'], unknown: [] })
+    await expect(webRiskLookupMode()).resolves.toBe('host')
+  })
+
+  it("reads anything but exactly 'url' as 'host', and a switched-off lookup as 'host'", async () => {
+    for (const lookupMode of ['URL', 'path', true, null]) {
+      store.set('platformSettings/webRisk', { lookupMode })
+      resetWebRiskForTests(null)
+      await expect(webRiskLookupMode()).resolves.toBe('host')
+    }
+    store.set('platformSettings/webRisk', { lookupMode: 'url', enabled: false })
+    resetWebRiskForTests(null)
+    await expect(webRiskLookupMode()).resolves.toBe('host')
+    urlMode()
+    resetWebRiskForTests(null)
+    await expect(webRiskLookupMode()).resolves.toBe('url')
+  })
+
+  it("in 'url' mode asks about the host first, then its address — and a listed path holds while the host is clean", async () => {
+    urlMode()
+    const { client, asked } = listsKit()
+    resetWebRiskForTests(client)
+    const answer = await lookupLinkReputation(['bakery.example'], { urls: [KIT] })
+    expect(asked).toEqual(['https://bakery.example/', KIT])
+    expect(answer.hits).toEqual([{ host: 'bakery.example', url: KIT, threats: ['SOCIAL_ENGINEERING'] }])
+    expect(answer.clean).toEqual(['bakery.example'])
+    expect(answer.looked).toBe(2)
+  })
+
+  it('never sends a query string, a fragment or a user:password@, even when handed one', async () => {
+    urlMode()
+    const { client, asked } = fakeClient(clean)
+    resetWebRiskForTests(client)
+    await lookupLinkReputation(['bakery.example'], {
+      urls: [
+        'https://jane:hunter2@Bakery.example:443/a/./b/../order?email=jane@doe.example&token=abc#jane@doe.example',
+      ],
+    })
+    expect(asked).toEqual(['https://bakery.example/', 'https://bakery.example/a/order'])
+    for (const uri of asked) expect(uri).not.toMatch(/[?#@]|jane|hunter2|token/)
+  })
+
+  it('does not ask about the addresses of a host that is itself listed', async () => {
+    urlMode()
+    const { client, asked } = fakeClient(async (uri) =>
+      uri === 'https://kit.example/'
+        ? { threats: ['MALWARE'], expireTimeMs: Date.now() + 60_000 }
+        : { threats: [], expireTimeMs: null },
+    )
+    resetWebRiskForTests(client)
+    const answer = await lookupLinkReputation(['kit.example'], { urls: ['https://kit.example/a/b'] })
+    expect(asked).toEqual(['https://kit.example/'])
+    expect(answer.hits).toEqual([{ host: 'kit.example', threats: ['MALWARE'] }])
+  })
+
+  it('caches each address like a host: memory, then the store under its hash, with the same TTLs', async () => {
+    urlMode()
+    const now = Date.now()
+    const { client, asked } = listsKit()
+    resetWebRiskForTests(client)
+    const menu = 'https://bakery.example/menu'
+    await lookupLinkReputation(['bakery.example'], { urls: [KIT, menu], nowMs: now })
+    expect(asked).toHaveLength(3)
+    const listedDoc = store.get(`${WEB_RISK_URL_CACHE_COLLECTION}/${webRiskUrlVerdictId(KIT)}`) as Doc
+    expect(listedDoc).toMatchObject({
+      url: KIT,
+      host: 'bakery.example',
+      listed: true,
+      threats: ['SOCIAL_ENGINEERING'],
+    })
+    const cleanDoc = store.get(`${WEB_RISK_URL_CACHE_COLLECTION}/${webRiskUrlVerdictId(menu)}`) as Doc
+    expect(Number(cleanDoc['expiresAtMs']) - Number(cleanDoc['checkedAtMs'])).toBe(WEB_RISK_CLEAN_TTL_MS)
+
+    // Memory: no store read, no call.
+    getAllCalls = 0
+    await lookupLinkReputation(['bakery.example'], { urls: [KIT, menu], nowMs: now })
+    expect(asked).toHaveLength(3)
+    expect(getAllCalls).toBe(0)
+
+    // A fresh process: the store answers hosts and addresses in one round trip.
+    resetWebRiskForTests(client)
+    const answer = await lookupLinkReputation(['bakery.example'], { urls: [KIT, menu], nowMs: now })
+    expect(asked).toHaveLength(3)
+    expect(getAllCalls).toBe(1)
+    expect(answer.hits).toEqual([{ host: 'bakery.example', url: KIT, threats: ['SOCIAL_ENGINEERING'] }])
+
+    // Past the listing's expireTime the address is asked again.
+    resetWebRiskForTests(client)
+    await lookupLinkReputation(['bakery.example'], { urls: [KIT], nowMs: now + 6 * 60_000 })
+    expect(asked.filter((uri) => uri === KIT)).toHaveLength(2)
+  })
+
+  it(`asks about at most ${MAX_REPUTATION_URLS_PER_LOOKUP} addresses per lookup, deduplicated and a host at a time`, async () => {
+    urlMode()
+    const { client, asked } = fakeClient(clean)
+    resetWebRiskForTests(client)
+    const urls = [
+      ...Array.from({ length: 40 }, (_, index) => `https://docs.example/page/${index}`),
+      ...Array.from({ length: 40 }, (_, index) => `https://docs.example/page/${index}?utm=${index}`),
+      'https://other.example/the-one-link',
+    ]
+    await lookupLinkReputation(['docs.example', 'other.example'], { urls })
+    const addresses = asked.filter((uri) => !/^https:\/\/[^/]+\/$/.test(uri))
+    expect(addresses).toHaveLength(MAX_REPUTATION_URLS_PER_LOOKUP)
+    expect(new Set(addresses).size).toBe(addresses.length)
+    // The one link to another site is not crowded out by forty to the first.
+    expect(addresses).toContain('https://other.example/the-one-link')
+  })
+
+  it('answers hosts and addresses by the same deadline; a late address reads unknown and still fills the cache', async () => {
+    urlMode()
+    let finish: (value: WebRiskSearchResult) => void = () => undefined
+    const { client } = fakeClient((uri) =>
+      uri === KIT
+        ? new Promise<WebRiskSearchResult>((resolve) => {
+            finish = resolve
+          })
+        : clean(),
+    )
+    resetWebRiskForTests(client)
+    const started = Date.now()
+    const answer = await lookupLinkReputation(['bakery.example'], { urls: [KIT], deadlineMs: 30 })
+    expect(Date.now() - started).toBeLessThan(1_000)
+    expect(answer).toMatchObject({ hits: [], clean: ['bakery.example'], unknown: [KIT] })
+    finish({ threats: ['MALWARE'], expireTimeMs: Date.now() + 60_000 })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(store.get(`${WEB_RISK_URL_CACHE_COLLECTION}/${webRiskUrlVerdictId(KIT)}`)).toMatchObject({
+      listed: true,
+    })
+  })
+
+  it('reads a failed address as unknown, never as a listing', async () => {
+    urlMode()
+    const { client } = fakeClient(async (uri) => {
+      if (uri === KIT) throw new Error('socket hang up')
+      return { threats: [], expireTimeMs: null }
+    })
+    resetWebRiskForTests(client)
+    const answer = await lookupLinkReputation(['bakery.example'], { urls: [KIT] })
+    expect(answer).toMatchObject({ hits: [], clean: ['bakery.example'], unknown: [KIT] })
+  })
+
+  it('looks nothing up while the kill switch is off, whatever the mode', async () => {
+    store.set('platformSettings/webRisk', { lookupMode: 'url', enabled: false })
+    const { client, asked } = listsKit()
+    resetWebRiskForTests(client)
+    const answer = await lookupLinkReputation(['bakery.example'], { urls: [KIT] })
+    expect(asked).toEqual([])
+    expect(answer).toMatchObject({ hits: [], unknown: ['bakery.example'] })
+  })
+
+  it('hands the addresses through the shared seam', async () => {
+    urlMode()
+    const { client } = listsKit()
+    resetWebRiskForTests(client)
+    installLinkReputationLookup()
+    await expect(getLinkReputationLookup()?.(['bakery.example'], { urls: [KIT] })).resolves.toMatchObject({
+      hits: [{ host: 'bakery.example', url: KIT }],
+    })
+  })
+
+  it('deletes addresses’ stored answers a day after they expire, and keeps the rest', async () => {
+    const now = Date.now()
+    const old = `${WEB_RISK_URL_CACHE_COLLECTION}/old`
+    const recent = `${WEB_RISK_URL_CACHE_COLLECTION}/recent`
+    store.set(old, { url: 'https://a.example/x', expiresAtMs: now - WEB_RISK_URL_VERDICT_GRACE_MS - 1 })
+    store.set(recent, { url: 'https://a.example/y', expiresAtMs: now - 60_000 })
+    store.set(`${WEB_RISK_CACHE_COLLECTION}/a.example`, { host: 'a.example', expiresAtMs: 0 })
+    await expect(reapExpiredWebRiskUrlVerdicts({ nowMs: now })).resolves.toBe(1)
+    expect(store.has(old)).toBe(false)
+    expect(store.has(recent)).toBe(true)
+    expect(store.has(`${WEB_RISK_CACHE_COLLECTION}/a.example`)).toBe(true)
   })
 })

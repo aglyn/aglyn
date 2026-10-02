@@ -92,6 +92,85 @@ introduce a price or an entitlement the account owner has not chosen.
 
 ---
 
+## 2026-10-01 — Vercel bills a decimal GB, Firestore is nam5, and an API request is a function: page views $0.80 and form submissions $0.08 per 1k, bandwidth and API bands re-sized (AGL-3444, AGL-1879)
+
+- **Decided by:** the account owner, 2026-10-01, under the same day's "worst case everywhere" decision, asked to settle three open questions with facts and fix any that held: where production's Firestore is, which GB Vercel bills transfer in, and what a `/v1` request costs. All three held. Overage = cost × 1.3 rounded up to the cent; bandwidth bands = the largest multiple of 5 GB that clears the floor at the annual price after Stripe's fee; an API band that would take its plan under water re-sized the same way. This entry supersedes the 2026-10-01 entry below it on the two rates and the bands.
+- **Scope:** pricing, packaging
+- **Evidence:** the Firestore Admin API (`projects/aglyn-main/databases/(default)`: `locationId` `nam5`, `FIRESTORE_NATIVE`) and the Cloud Billing catalog (Read Ops North America 5 $0.0000006, Entity Writes $0.0000018; Iowa $0.0000003 and $0.0000009), read 2026-10-01; Vercel's docs (regional pricing, Fluid compute pricing, CDN usage, Blob pricing); `ORG_COGS_UNIT_RATES_USD` and `METERED_UNIT_RATES_USD` — `perPageView` 0.00035471473 → **0.00039902751**, `perFormSubmission` 0.000053846154 → **0.000061538462** (identical in both), `ORG_COGS_UNIT_RATES_USD.perApiRequest` 0.000002 → **0.000117**; `PAGE_VIEW_CDN_REQUEST_COST_USD` 0.00018374681 → **0.00021635711**; `PLAN_ENTITLEMENTS[*].bandwidthGb` and `.apiRequestsPerMonth`; `PLAN_PRICING.{advanced,agency}.extraApiRequestsUsdPer1k` → **0.25**; `TRANSFER_REPRICE_USD_PER_KB` and `READ_REPRICE_USD_PER_KB` in `tools/scripts/lib/page-view-rate-calibration.mjs`; the Sept-1 `LOCKED` pin ($0.80, $0.08); `apps/console/specs/tier-margin-floor.spec.ts`; `published-pricing-table-parity.spec.ts`, transcribed from `/pricing` version `4goVJMQCh9`; `tools/marketing/pricing-copy/tables.json` (regenerated); docs; the same-dated entry in Drive → Pricing & Packaging → 05-Pricing-Decision-Log; AGL-3444, AGL-1879.
+
+**The three facts.**
+
+1. **Production's Firestore is `nam5`** (Admin API, 2026-10-01), at $0.06 per
+   100,000 reads and $0.18 per 100,000 writes — twice the single-region
+   list. One place in the model used the single-region price: the ~40 reads
+   inside the page-view calibration. They are re-priced, per KB as the anchor
+   has always carried them. The form-submission ledger, the run rate, the CRM
+   seat and dataset storage were already at nam5; the contacts rate is an
+   operator estimate not built from a per-read price, and at nam5 still
+   covers ~333 reads a record a month.
+2. **Vercel's GB is decimal.** Its docs never define a GB in bytes, never use
+   GiB, and the one stated relation between prefixes is decimal ("5TB
+   (5,000GB)", Blob pricing); the GCP catalog, by contrast, says "gibibyte".
+   Taken as decimal — the dearer reading — a binary GB of included bandwidth
+   is 1.0737 billed GB, so its transfer at the dearest region is $0.3758, not
+   $0.35.
+3. **An API request is a function.** Every `/v1` request is an invocation
+   behind a CDN request that reads (key, rate-limit window, org, quota
+   counter, scope, page) and writes (rate-limit window, usage counter) before
+   it answers. `perApiRequest` was $0.000002 — about three reads — and
+   counted none of the Vercel cost. Priced for a default page of 25 records
+   at the dearest region and nam5, with the response at 3 KB a record (the
+   largest mean document size measured on production across the collections
+   `/v1` lists), it is $0.0001161, carried as **$0.000117**.
+
+**Two omissions found and fixed on the way.** A page view's analytics beacon
+is itself a function with two counter writes (0.4 s of CPU, 2 GB, $0.60/M,
+2 × $0.0000018, 1 KB of origin transfer: $0.0000333 a view), and a form
+submission's POST is a CDN request with bytes through the CDN and the
+function ($0.0000064). Neither was in the model.
+
+**The rates.**
+
+| | Was (`4goVJMQCh9` live) | Now | Basis, per unit at the dearest region |
+|---|---|---|---|
+| Page views, per 1,000 | $0.70 | **$0.80** | weight $0.399028 + 57 requests $0.1824 + beacon $0.033263 = $0.614690 → ×1.3 = $0.7991 → $0.80; "Our cost $0.615385" |
+| Form submissions, per 1,000 | $0.07 | **$0.08** | function $0.0000292 + CDN request $0.0000032 + transfer $0.0000032 + nam5 $0.0000234 = $0.0000590 → ×1.3 = $0.0767 → $0.08 |
+| API requests over the band, per 1,000 (Advanced / Agency) | $0.20 / $0.15 | **$0.25 / $0.25** | the 50% retail floor over $0.117 is $0.234; Business $0.50 and Scale $0.35 already clear it |
+| Storage, per GB-month | $0.0338 | $0.0338 | GCS, unchanged |
+
+**The bands**, each plan at 100% of every band, the annual price net of
+Stripe and the CRM terms counted. Bandwidth on $0.63712 an included GB
+($0.41312 weight + $0.22400 requests); API bands cut to the dollars they were
+sized to cost at $0.000002, the largest multiple of 500 requests inside them:
+
+| Plan | Bandwidth, was → now | API requests, was → now | Annual at 100% | Monthly at 100% |
+|---|---|---|---|---|
+| Starter | 20 → **20 GB** | — | +0.2% | +34.0% |
+| Pro | 35 → **30 GB** | — | +7.3% | +34.1% |
+| Business | 55 → **45 GB** | 100,000 → **1,500** | +3.0% | +29.9% |
+| Scale | 90 → **70 GB** | 300,000 → **5,000** | +1.7% | +28.4% |
+| Advanced | 105 → **80 GB** | 1,000,000 → **17,000** | +0.4% | +24.5% |
+| Agency | 485 → **395 GB** | 5,000,000 → **85,000** | +0.1% | +18.8% |
+| Enterprise (fallback) | 970 → **790 GB** | 10,000,000 → **170,000** | no list price | no list price |
+
+At this model the bands live on `4goVJMQCh9` read −0.9% (Pro) to −5.5%
+(Scale) annually; Starter's 20 GB holds and does not move. Had the API bands
+kept their size, Agency's 5,000,000 requests alone would cost $585 a month
+against a $1,018.55 net annual price.
+
+**What it leaves open.** A `/v1` page of 100 — the most a client may ask
+for — costs about three times the default request priced here; the rate is
+the default request and the ceiling is named, not priced. The 0.4 s function
+duration is the one on record (the form-submission route), billed whole as
+CPU, for the beacon and the API as well; nothing measures either.
+
+**Existing subscribers.** As recorded in the entry below: no outside
+organization holds a paid plan, so nothing is carried to a renewal.
+
+**Published surfaces.** `/pricing`, `/alternatives/webflow` and the
+calculator's variables carry the previous figures (`4goVJMQCh9`); they are
+republished with these BEFORE the promotion that bills them.
+
 ## 2026-10-01 — Every price and band holds its margin in Vercel's dearest region: page views $0.70 and form submissions $0.07 per 1k, bands re-sized again (AGL-3444, AGL-1879)
 
 - **Decided by:** the account owner, 2026-10-01, after the band re-size earlier the same day priced an included gigabyte's CDN requests at Vercel's dearest region and its transfer at the cheapest: price every Vercel-billed cost at the dearest region — transfer, requests, and the function invocation inside any metered rate — raise the page-view overage so "at cost + 30%" holds in every region, and re-size the bands on that cost, each the largest multiple of 5 GB that clears the floor at the annual price after Stripe's fee. GCP-billed inputs stay as they are. This entry supersedes the two 2026-10-01 entries below it on the page-view rate and the bands.

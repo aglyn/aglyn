@@ -98,13 +98,13 @@ jest.mock('firebase/firestore', () => ({
 
 import BillingUsageComponent from '../components/billing/billing-usage.component'
 
-/** Business: `apiRequestsPerMonth: 100,000`, `extraApiRequestsUsdPer1k: 0.5`. */
+/** Business: `apiRequestsPerMonth: 1,500`, `extraApiRequestsUsdPer1k: 0.5`. */
 const BUSINESS = { $id: 'org-1', plan: 'business' } as any
 /** Pro: no API requests included at all, so there is no meter to caption. */
 const PRO = { $id: 'org-1', plan: 'pro' } as any
 /**
  * Enterprise with a contracted `UNLIMITED` request band, and no published
- * overage rate. The plan row itself is a finite fallback of 10,000,000 since
+ * overage rate. The plan row itself is a finite fallback of 170,000 since
  * 2026-09-07; the sentinel is what an agreement writes as an override.
  */
 const ENTERPRISE = {
@@ -129,8 +129,8 @@ beforeEach(() => {
 
 describe('the fixture is a plan that really is charged for overage', () => {
   it('Business includes a band and publishes a rate', () => {
-    const quota = checkApiRequestQuota(BUSINESS, 137_500)
-    expect(quota.included).toBe(100_000)
+    const quota = checkApiRequestQuota(BUSINESS, 39_000)
+    expect(quota.included).toBe(1_500)
     expect(quota.overageRequests).toBe(37_500)
     expect(quota.overageRateUsd).toBe(0.5)
     // 37.5 thousand × $0.50 = $18.75, the figure the cron adds to billedCents.
@@ -140,8 +140,8 @@ describe('the fixture is a plan that really is charged for overage', () => {
 
 describe('a workspace over the band is told the price', () => {
   it('names the excess, the rate and the estimated charge', async () => {
-    mockApiRequests = 137_500
-    const quota = checkApiRequestQuota(BUSINESS, 137_500)
+    mockApiRequests = 39_000
+    const quota = checkApiRequestQuota(BUSINESS, 39_000)
     render(<BillingUsageComponent org={BUSINESS} hosts={HOSTS} />)
 
     await waitFor(() => {
@@ -164,13 +164,13 @@ describe('a workspace over the band is told the price', () => {
     // The meter itself is unchanged and still reads against the month's band.
     expect(
       (screen.getByText(METER).parentElement as HTMLElement).textContent,
-    ).toContain('137500 / 100000')
+    ).toContain('39000 / 1500')
   })
 
   it('prints a rate with its cents column', async () => {
     // Business bills $0.5/1,000 and a bare interpolation renders "$0.5",
     // which on the one line that is about money reads as a typo.
-    mockApiRequests = 137_500
+    mockApiRequests = 39_000
     render(<BillingUsageComponent org={BUSINESS} hosts={HOSTS} />)
     await waitFor(() => {
       expect(screen.getByText(/\$0\.50\/1,000/)).toBeTruthy()
@@ -179,12 +179,12 @@ describe('a workspace over the band is told the price', () => {
   })
 
   it('says nothing while inside the band', async () => {
-    mockApiRequests = 42_000
+    mockApiRequests = 420
     render(<BillingUsageComponent org={BUSINESS} hosts={HOSTS} />)
     await waitFor(() => {
       expect(
         (screen.getByText(METER).parentElement as HTMLElement).textContent,
-      ).toContain('42000 / 100000')
+      ).toContain('420 / 1500')
     })
     expect(screen.queryByText(/API overage/)).toBeNull()
   })

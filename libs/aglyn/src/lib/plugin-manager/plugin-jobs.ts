@@ -52,8 +52,8 @@
  *
  * `@aglyn/tenant-data-admin` imports `@aglyn/aglyn/server`, so a core import
  * of it is a project CYCLE. Hence the same registry shape the platform uses
- * for every other app↔core edge (`registerOrderFulfilmentService`,
- * `registerBillingWebhookHandler`, `registerSitePageResolver`): the host app
+ * for every other app↔core edge (`registerBillingWebhookHandler`,
+ * `registerSitePageResolver`): the host app
  * registers the resolver from a place that may import the admin lib, and core
  * looks it up. Nothing is imported statically in either direction and a
  * self-host build with a different carrier registers its own.
@@ -82,11 +82,11 @@ let hostLockedResolver: PluginJobHostLockedResolver | null = null
  * `apps/tenant/utils/plugin-job-lockdown.ts`, loaded for its side effect by
  * the runner route beside the core job registrations.
  *
- * Idempotent and last-registration-wins, unlike `registerOrderFulfilmentService`
- * next door: that one holds a capability with a plugin OWNER, where a second
- * claimant is a misconfiguration. This is infrastructure the deployment
- * supplies exactly once, and a process that loads the module twice must not
- * throw on the second pass.
+ * Idempotent and last-registration-wins, unlike a registry that holds a
+ * capability with a plugin OWNER, where a second claimant is a
+ * misconfiguration. This is infrastructure the deployment supplies exactly
+ * once, and a process that loads the module twice must not throw on the
+ * second pass.
  */
 export function registerPluginJobHostLockdown(
   resolver: PluginJobHostLockedResolver,

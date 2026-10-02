@@ -18,6 +18,11 @@
 // The seam from its own module, not the plugin-manager barrel: boot needs the
 // registry and nothing else, and the barrel reaches the client contexts.
 import { registerOperatorAlerts } from '@aglyn/aglyn/plugin-manager/operator-alerts'
+import {
+  registerPluginConversionCreditor,
+  type PluginConversionCreditor,
+} from '@aglyn/aglyn/plugin-manager/plugin-conversion-credit'
+import { registerPluginSendTally } from '@aglyn/aglyn/plugin-manager/plugin-send-tallies'
 import { registerPluginSiteBeacon } from '@aglyn/aglyn/plugin-manager/plugin-site-beacons'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { MARKETING_OPERATOR_ALERTS } from './constants/operator-alerts'
@@ -28,6 +33,13 @@ import { MARKETING_OPERATOR_ALERTS } from './constants/operator-alerts'
  * so Staff → Operator alerts lists them before the first one is raised, and
  * its overlay beacons, which the site collector hands it on any published
  * page. The counting code and the Admin SDK load with the first beacon.
+ *
+ * And the conversion creditor (`plugin-conversion-credit`): every door that
+ * produces an outcome — a form, a booking, a sign-up, an order, a sequence's
+ * mail — asks it which campaign to credit, in any process, before any of
+ * this plugin's surfaces has loaded. The joins load with the first credit.
+ * Beside it, the tally the site's unsubscribe page tells when a recipient
+ * leaves from a campaign send's mail (`plugin-send-tallies`).
  */
 export function registerMarketingServerDeclarations(): void {
   registerOperatorAlerts(MARKETING_OPERATOR_ALERTS, { pluginId: BUNDLE_ID })
@@ -45,4 +57,32 @@ export function registerMarketingServerDeclarations(): void {
     },
     { pluginId: BUNDLE_ID },
   )
+  registerPluginConversionCreditor(lazyConversionCreditor(), { pluginId: BUNDLE_ID })
+  registerPluginSendTally(
+    {
+      async unsubscribed(request) {
+        const { countCampaignSendUnsubscribe } = await import('./server/send-tally')
+        return countCampaignSendUnsubscribe(request)
+      },
+    },
+    { pluginId: BUNDLE_ID },
+  )
+}
+
+/**
+ * The creditor, its module loaded on the first call: the plugin's own module,
+ * which brings the data layer with it, for the reason the beacon's counter
+ * is loaded that way.
+ */
+function lazyConversionCreditor(): PluginConversionCreditor {
+  const load = async () => (await import('./server/conversion-creditor')).marketingConversionCreditor
+  return {
+    resolveTouch: async (request) => (await load()).resolveTouch(request),
+    creditConversion: async (request) => (await load()).creditConversion(request),
+    creditOrder: async (request) => (await load()).creditOrder(request),
+    reverseOrder: async (request) => (await load()).reverseOrder(request),
+    recordClick: async (click) => (await load()).recordClick(click),
+    creditOutcome: async (request) => (await load()).creditOutcome(request),
+    erasePerson: async (key) => (await load()).erasePerson(key),
+  }
 }

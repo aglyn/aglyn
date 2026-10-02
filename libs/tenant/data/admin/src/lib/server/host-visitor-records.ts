@@ -43,9 +43,9 @@ import {
 } from '@aglyn/aglyn/server'
 import { FieldValue } from 'firebase-admin/firestore'
 import {
-  attributeCampaignConversion,
-  type ResolvedCampaignTouch,
-} from './campaign-conversion-attribution'
+  creditConversion,
+  type PluginConversionTouch,
+} from '@aglyn/aglyn/plugin-manager/plugin-conversion-credit'
 import { notifyHostManagers } from './notifications'
 import { scheduleCapturedEmailCheck } from './capture-email-check'
 import firebaseAdmin from './firebase-admin'
@@ -455,7 +455,9 @@ export async function addHostLeadOutcome(options: {
    */
   ceiling?: number
   /**
-   * The campaign this person came from, already resolved by the door.
+   * Where this person arrived from, already resolved by the door through the
+   * plugin that credits outcomes (`plugin-conversion-credit`), and opaque
+   * here.
    *
    * Resolved rather than raw, and passed rather than looked up, because one
    * visitor action reaches several writers: a form submission that creates a
@@ -463,7 +465,7 @@ export async function addHostLeadOutcome(options: {
    * door that hands none — every order path, every import — attributes
    * nothing, which is how a lead that no campaign caused stays uncredited.
    */
-  touch?: ResolvedCampaignTouch | null
+  touch?: PluginConversionTouch | null
 }): Promise<HostLeadOutcome> {
   const { hostRef, hostId, lead } = options
   const maxPerHost = options.ceiling ?? LEADS_MAX_PER_HOST
@@ -736,7 +738,7 @@ export async function addHostLeadOutcome(options: {
       predicted,
     })
     if (created && options.touch) {
-      await attributeCampaignConversion({
+      await creditConversion({
         hostId,
         kind: 'lead',
         refId: leadRef.id,

@@ -22,10 +22,10 @@ import {
   EMAIL_ATTRIBUTION_WINDOW_MS,
   emailTouchIsInWindow,
 } from '@aglyn/shared-util-email'
+import { isDocumentId } from '@aglyn/tenant-data-admin/server/document-id'
+import firebaseAdmin from '@aglyn/tenant-data-admin/server/firebase-admin'
 import { resolveCampaignSendRef } from './campaign-conversion-attribution'
-import { readEmailCampaignTouch } from './email-delivery-log'
-import { isDocumentId } from './document-id'
-import firebaseAdmin from './firebase-admin'
+import { readEmailCampaignTouch } from './email-campaign-touch'
 
 const defaultFirestore = () => firebaseAdmin.app().firestore()
 
@@ -45,9 +45,9 @@ const defaultFirestore = () => firebaseAdmin.app().firestore()
  * ## Three writes, and what each one is for
  *
  *  - **The touch**, `emailDeliveries/{personKey}.campaignTouches[hostId]`,
- *    written by the delivery webhook on a click. Owned by
- *    `email-delivery-log.ts`, because it lives on the person's document and
- *    the erasure path has to be able to remove it.
+ *    written by the delivery webhook on a click (`email-campaign-touch.ts`).
+ *    It lives on the person's delivery document, where the erasure that
+ *    removes the person's mail asks this plugin to remove it too.
  *  - **The attribution record**, `hosts/{hostId}/emailAttributions/{orderId}`,
  *    written here when an order is credited. It is the audit trail — which
  *    campaign, which click, which model, which window — and it is what the
@@ -70,8 +70,9 @@ const defaultFirestore = () => firebaseAdmin.app().firestore()
  *
  * ## Never throws
  *
- * Same contract as `upsertHostContact`, which calls it, and for the same
- * reason: the money has already moved and the order already records it, so
+ * Same contract as the purchase door that asks for it (the person capture's
+ * `upsertHostContact`, through `plugin-conversion-credit.ts`), and for the
+ * same reason: the money has already moved and the order already records it, so
  * nothing here may fail a sale. A lost attribution understates a campaign; a
  * thrown one loses a checkout.
  */

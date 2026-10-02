@@ -15,7 +15,6 @@
  * limitations under the License.
  */
 
-import { creditCampaignSequenceOutcome } from '@aglyn/tenant-data-admin/server/campaign-conversion-attribution'
 import { collectDynamicListCandidates } from '@aglyn/tenant-data-admin/server/dynamic-list-materialize'
 import { stampRecordEmailState } from '@aglyn/aglyn/plugin-manager/plugin-record-email-state'
 import { lockdownRefusal } from '@aglyn/tenant-data-admin/server/lockdown'
@@ -48,7 +47,6 @@ import {
  */
 
 export {
-  creditCampaignSequenceOutcome,
   listTrackingHosts,
   lockdownRefusal,
   logOrgActivity,

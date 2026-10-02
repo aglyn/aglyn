@@ -143,7 +143,7 @@ What this API is and what it serves.
   "name": "Aglyn REST API",
   "version": "v1",
   "documentation": "https://docs.aglyn.com/api",
-  "resources": ["datasets", "contacts", "companies", "pipelines", "deals", "tasks", "activities", "leads", "email-templates", "sites", "media"]
+  "resources": ["sites", "media", "contacts", "companies", "pipelines", "deals", "tasks", "activities", "leads", "email-templates", "datasets"]
 }
 ```
 

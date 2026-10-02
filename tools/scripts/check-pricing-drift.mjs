@@ -75,7 +75,9 @@ const USAGE_METERING_TS = 'apps/console/utils/usage-metering.ts'
  * $0.21 → $0.36, recorded in "2026-10-01 — Page-view overage $0.21 → $0.36
  * per 1k", then $0.36 → $0.70 the same day, with form submissions $0.065 →
  * $0.07, recorded in "2026-10-01 — Every price and band holds its margin in
- * Vercel's dearest region". Each is pinned here because the decision is
+ * Vercel's dearest region", then $0.70 → $0.80 and $0.07 → $0.08, recorded
+ * in "2026-10-01 — Vercel bills a decimal GB, Firestore is nam5, and an API
+ * request is a function". Each is pinned here because the decision is
  * written down, not because the check was red: a pin moved to silence a
  * failure records nothing and can catch nothing afterwards. Every other
  * column is where Sept 1 put it.
@@ -95,8 +97,8 @@ const LOCKED = {
   // What `/pricing` publishes: unit cost × 1.30, in the units the page quotes.
   publishedMetered: {
     storagePerGbMonth: 0.0338,
-    perThousandPageViews: 0.7,
-    perThousandFormSubmissions: 0.07,
+    perThousandPageViews: 0.8,
+    perThousandFormSubmissions: 0.08,
   },
 }
 

@@ -317,19 +317,19 @@ describe('/api/admin/org-usage authorization (AGL-939)', () => {
     // Hand-computed, NOT snapshotted — a snapshot would happily record a
     // wrong number. All USD/month:
     //   storage           10 GB      × $0.026        = $0.26
-    //   page views        200,000    × $0.00035471473  = $70.942946
-    //   form submissions  1,000      × $0.000053846154 = $0.053846
+    //   page views        200,000    × $0.00039902751  = $79.805502
+    //   form submissions  1,000      × $0.000061538462 = $0.061538
     //   dataset storage   10,240 MB  = 10 GB × $0.18   = $1.80   ← MB, per-GB rate
-    //   API requests      1,000,000  × $0.000002       = $2.00
+    //   API requests      1,000,000  × $0.000117       = $117.00
     //   contacts          5,000      × $0.0002         = $1.00
     //                                                   ----------
-    //                                                   $76.056792
+    //                                                   $199.927040
     expect(payload.latest.month).toBe('2026-07')
-    expect(payload.latest.measuredCogsUsd).toBeCloseTo(76.056792, 6)
+    expect(payload.latest.measuredCogsUsd).toBeCloseTo(199.92704, 5)
     // The MEASURED half only — the per-site floor belongs to the caller, and
     // `checkDiscountMargin` applies it itself. Returning a floored figure
     // here would charge the floor twice.
-    expect(payload.latest.measuredCogsUsd).not.toBeCloseTo(76.056792 + 2, 6)
+    expect(payload.latest.measuredCogsUsd).not.toBeCloseTo(199.92704 + 2, 5)
   })
 
   it('reports no rollup as null rather than a zero cost', async () => {

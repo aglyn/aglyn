@@ -67,8 +67,8 @@
  * (`npm run firebase:emulate`), then:
  *
  *   FIRESTORE_EMULATOR_HOST=localhost:8082 \
- *     npx jest -c libs/plugins/workflows/jest.config.ts \
- *       --testPathPatterns run-event-actions-update-dataset.emulator
+ *     npx jest -c libs/plugins/data/jest.config.ts \
+ *       --testPathPatterns dataset-steps.emulator
  */
 
 import { readFileSync } from 'node:fs'
@@ -260,25 +260,17 @@ function recordQueriesSentThrough(
   }
 }
 
+/** The org the step runs for: Pro carries a finite row band, so the append leg also takes its capacity read. */
+const ORG_DOC = { name: 'Update dataset', plan: 'pro', hosts: { [HOST]: true } }
+
 async function seed(db: Firestore): Promise<void> {
   const org = db.collection('orgs').doc(ORG)
   const host = db.collection('hosts').doc(HOST)
   await db.recursiveDelete(org)
   await db.recursiveDelete(host)
-  // Pro carries `actions` and a finite row band, so the append leg also takes
-  // its capacity read.
-  await org.set({ name: 'Update dataset', plan: 'pro', hosts: { [HOST]: true } })
+  await org.set(ORG_DOC)
   await db.collection('hostIndex').doc(HOST).set({ orgId: ORG })
   await host.set({ orgId: ORG })
-  await host
-    .collection('actions')
-    .doc('upsert-lead')
-    .set({
-      name: 'Upsert the lead',
-      enabled: true,
-      trigger: { event: EVENT },
-      steps: [{ type: 'updateDataset', datasetId: DATASET }],
-    })
   const dataset = org.collection('datasets').doc(DATASET)
   await dataset.set({
     displayName: 'Leads',
@@ -299,8 +291,20 @@ async function seed(db: Firestore): Promise<void> {
 
 describeEmulated('updateDataset against a real Firestore (AGL-2773)', () => {
   let db: Firestore
-  let runEventActions: typeof import('./run-event-actions').runEventActions
+  let runDatasetStep: typeof import('./dataset-steps.server').runDatasetStep
   const restores: Array<() => void> = []
+
+  /** The step as the automation engine hands it over, for one event. */
+  const runUpdate = (payload: Record<string, unknown>) =>
+    runDatasetStep({
+      hostId: HOST,
+      org: ORG_DOC,
+      orgId: ORG,
+      run: { kind: 'action', id: 'upsert-lead', name: 'Upsert the lead' },
+      event: EVENT,
+      payload,
+      step: { type: 'updateDataset', datasetId: DATASET },
+    })
 
   const records = () =>
     db
@@ -310,14 +314,10 @@ describeEmulated('updateDataset against a real Firestore (AGL-2773)', () => {
       .doc(DATASET)
       .collection('records')
 
-  const runResults = async () =>
-    (await db.collection('hosts').doc(HOST).collection('activity').get()).docs
-      .map((doc) => doc.get('result'))
-
   beforeAll(async () => {
     db = getFirestore()
     await seed(db)
-    runEventActions = (await import('./run-event-actions')).runEventActions
+    runDatasetStep = (await import('./dataset-steps.server')).runDatasetStep
     restores.push(
       recordQueriesSentThrough(Query.prototype, (target) => target as Sendable),
       // `AggregateQuery` is exported as a type only, so its prototype is taken
@@ -338,7 +338,7 @@ describeEmulated('updateDataset against a real Firestore (AGL-2773)', () => {
   })
 
   it('merges into the record whose email matches, and appends nothing', async () => {
-    await runEventActions(HOST, EVENT, {
+    const answer = await runUpdate({
       email: KNOWN_EMAIL,
       name: 'Ada Lovelace',
     })
@@ -350,14 +350,16 @@ describeEmulated('updateDataset against a real Firestore (AGL-2773)', () => {
       name: 'Ada Lovelace',
       company: 'Analytical Engines',
     })
-    expect(await runResults()).toEqual(['succeeded'])
+    expect(answer).toEqual({})
   }, 60_000)
 
   it('appends a row when no record carries the email', async () => {
-    await runEventActions(HOST, EVENT, {
-      email: 'grace@example.com',
-      name: 'Grace',
-    })
+    expect(
+      await runUpdate({
+        email: 'grace@example.com',
+        name: 'Grace',
+      }),
+    ).toEqual({})
 
     const emails = (await records().get()).docs
       .map((doc) => doc.get('values.email'))
@@ -368,8 +370,8 @@ describeEmulated('updateDataset against a real Firestore (AGL-2773)', () => {
   it('sends records only queries the index file lets production plan', async () => {
     // Both legs: the merge sends the lookup, and the append sends the lookup
     // plus the row count its capacity check reads.
-    await runEventActions(HOST, EVENT, { email: KNOWN_EMAIL, name: 'Ada' })
-    await runEventActions(HOST, EVENT, {
+    await runUpdate({ email: KNOWN_EMAIL, name: 'Ada' })
+    await runUpdate({
       email: 'hopper@example.com',
       name: 'Grace Hopper',
     })

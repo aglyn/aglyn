@@ -132,6 +132,29 @@ describe('a plugin describes the resources it serves (AGL-3080)', () => {
     expect(paths).not.toContain('/v1/datasets')
     expect(platformOnly().components.schemas.ContactMerge).toBeUndefined()
     expect(platformOnly().components.schemas.DatasetRecord).toBeUndefined()
+    // A site's orders, products and form submissions are the commerce and
+    // forms plugins' (AGL-3080); the site itself and its media stay.
+    expect(paths).toContain('/v1/sites/{siteId}/media')
+    for (const path of ['/v1/sites/{siteId}/orders', '/v1/sites/{siteId}/products', '/v1/sites/{siteId}/form-submissions']) {
+      expect(paths).not.toContain(path)
+    }
+    expect(platformOnly().components.schemas.Order).toBeUndefined()
+    expect(platformOnly().components.schemas.FormSubmission).toBeUndefined()
+  })
+
+  it('describes a site’s orders, products and form submissions once their plugins registered them', () => {
+    const paths = Object.keys(document.paths)
+    for (const path of [
+      '/v1/sites/{siteId}/orders',
+      '/v1/sites/{siteId}/orders/{orderId}',
+      '/v1/sites/{siteId}/products/{productId}',
+      '/v1/sites/{siteId}/form-submissions/{submissionId}',
+    ]) {
+      expect(paths).toContain(path)
+    }
+    expect(document.paths['/v1/sites/{siteId}/orders/{orderId}'].patch.operationId).toBe('updateOrder')
+    expect(document.components.schemas.OrderWrite.required).toEqual(['status'])
+    expect(document.components.schemas.FormSubmissionWrite.required).toEqual(['read'])
   })
 
   it('describes the data plugin’s datasets once it has registered them', () => {
