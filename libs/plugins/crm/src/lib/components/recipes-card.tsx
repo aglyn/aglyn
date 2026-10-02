@@ -19,9 +19,6 @@
 import {
   type AglynOrgBilling,
   checkEntitlement,
-  CRM_ACTION_RECIPES,
-  type CrmActionRecipe,
-  type CrmActionRecipeId,
   planLabelGrantingFeature,
   pluginDocsHelp,
 } from '@aglyn/aglyn'
@@ -55,6 +52,11 @@ import type {
   CrmRecipeSiteStatus,
 } from '../constants/api-routes'
 import { type CrmOrgMount, useCrmOrgMount } from '../hooks/use-crm-org-mount'
+import {
+  CRM_ACTION_RECIPES,
+  type CrmActionRecipe,
+  type CrmActionRecipeId,
+} from '../model/crm-recipes'
 import { useCrmApi } from './use-crm-api'
 
 /** How many of a site's forms the picker offers before it says it stopped. */
@@ -200,7 +202,7 @@ function RecipeInstallForm(props: RecipeInstallFormProps) {
   const { recipe, mount, status, onClose, onInstalled } = props
   const firestore = useFirestore()
   const api = useCrmApi(null)
-  const needsForm = recipe.needs === 'form'
+  const needsForm = recipe.picks?.kind === 'form'
   const [hostId, setHostId] = useState(() => {
     const pick = mount.createHostId
     return pick && standingOf(status, pick, recipe.id) !== 'installed' ? pick : ''

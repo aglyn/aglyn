@@ -338,6 +338,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 }))
 
 import { inboxAssignListHandler } from './server'
+import { standInPersonRecords } from './testing/stand-in-person-records'
 import { performCampaignSend } from '@aglyn/plugins-marketing/server/campaign-send'
 
 /** Drives the real Inbox route the merchant's button posts to. */
@@ -397,6 +398,8 @@ afterAll(() => {
 
 beforeEach(() => {
   mockStore = {}
+  // The person behind an address is the record system's to find (AGL-3080).
+  standInPersonRecords({ store: () => mockStore, orgId: ORG_ID })
   mockAutoId = 0
   mockSentMessages.length = 0
   mockStore[`hosts/${HOST_ID}`] = {

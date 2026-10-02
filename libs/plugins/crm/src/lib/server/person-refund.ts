@@ -20,19 +20,28 @@ import {
   normalizeContactEmail,
   type ContactInteraction,
 } from '@aglyn/aglyn/server'
+import type {
+  PluginPersonRefundOutcome,
+  PluginPersonRefundRequest,
+} from '@aglyn/aglyn/plugin-manager/plugin-person-records'
 import {
   firebaseAdmin,
   orgDataCollectionForHost,
 } from '@aglyn/tenant-data-admin'
-// Leaf imports, not the barrel: `refund.spec.ts` and most specs in this
-// library mock `@aglyn/tenant-data-admin` wholesale, and a permissive stub of
-// either function would turn every case below green without a document ever
-// having to exist.
+// Leaf imports, not the barrel: most specs in this library mock
+// `@aglyn/tenant-data-admin` wholesale, and a permissive stub of either
+// function would turn every case below green without a document ever having
+// to exist.
 import { findContactByEmail } from '@aglyn/tenant-data-admin/server/contact-email-index'
 import { updateExisting } from '@aglyn/tenant-data-admin/server/update-existing'
 
 /**
  * Money going BACK to a customer, recorded on their contact (AGL-1754).
+ *
+ * The CRM's answer to `plugin-person-records`' `recordRefund` (AGL-3080):
+ * commerce reports a refund or a lost dispute through the seam, and what it
+ * does to the person is decided here, by the plugin that keeps them. It used
+ * to be commerce's own module, writing these fields onto the CRM's contacts.
  *
  * `upsertHostContact` accumulates `ltvCents` and nothing anywhere decremented
  * it, so a customer who bought $500 and returned all of it read identically to
@@ -105,112 +114,109 @@ import { updateExisting } from '@aglyn/tenant-data-admin/server/update-existing'
  * with the same fields: money reversed is money reversed, whichever door it
  * left by, and only the wording of the timeline entry differs.
  */
-export async function recordContactRefund(options: {
-  hostId: string
-  /** The order the money went back on — the contact timeline's `refId`. */
-  orderId: string
-  /**
-   * The buyer as the ORDER recorded them, raw. Normalized here, because that
-   * is the key the contacts collection is stored under and orders are not
-   * consistent about it (AGL-1753 item 3). No `name` rides along on purpose: a
-   * refund is not a capture point and must not rewrite who the contact is.
+export async function recordPersonRefund(
+  request: PluginPersonRefundRequest,
+): Promise<PluginPersonRefundOutcome> {
+  /*
+   * The request's fields, as the seam names them. `refId` is the order the
+   * money went back on — the contact timeline's `refId`. `email` is the buyer
+   * as the ORDER recorded them, raw, normalized here because that is the key
+   * the contacts are stored under and orders are not consistent about it
+   * (AGL-1753 item 3); no name rides along on purpose — a refund is not a
+   * capture point and must not rewrite who the contact is. `amountCents` is
+   * what THIS attempt reversed, never the order total: the seller caps each
+   * attempt against what is left, so several partials sum to at most the
+   * total. `closedTheSale` is true only for the write that moved the order
+   * INTO `refunded` — two partials settling at once can both observe a fully
+   * refunded total, so the caller decides it from the transition it made.
    */
-  email: unknown
-  /**
-   * Cents reversed by THIS attempt, never the order total. `refund.ts` caps
-   * each attempt against what is left, so several partials on one order sum to
-   * at most the order total; this follows that number rather than recomputing
-   * it.
-   */
-  amountCents: number
-  /**
-   * True only for the write that moved the order INTO `refunded`. Two partials
-   * settling concurrently can both observe a fully refunded total, so the
-   * caller decides this from the status transition it made, not from the
-   * total it read.
-   */
-  closedTheOrder: boolean
-  kind?: 'refund' | 'chargeback'
-}): Promise<void> {
-  // Swallow-all, like `upsertHostContact`: the money has already moved and the
-  // order already records it, so nothing here may fail the refund.
-  try {
-    const amountCents = Math.round(Number(options.amountCents))
-    if (!(amountCents > 0)) return
-    const email = normalizeContactEmail(options.email)
-    if (!email) {
-      await recordUnmatchedRefund(options.hostId, options.orderId, 'no-email')
-      return
-    }
-    // Contacts are ORG-scoped (AGL-237), not `hosts/{h}/contacts`, and reads
-    // narrow to what this host may see (AGL-1039) — the same lookup
-    // `upsertHostContact` makes, through the org's address index
-    // (AGL-2633), so both writers resolve the same document even when the
-    // order's address is one a merge folded into the buyer's record.
-    const contactsRef = await orgDataCollectionForHost(
-      options.hostId,
-      'contacts',
-    )
-    const snapshot = await findContactByEmail(contactsRef, email, {
-      hostId: options.hostId,
-    })
-    if (!snapshot) {
-      await recordUnmatchedRefund(options.hostId, options.orderId, 'no-contact')
-      return
-    }
-    const atMs = Date.now()
-    const interaction: ContactInteraction = {
-      // `refId` names an order, so the interaction is an order interaction.
-      // There is no `'refund'` ContactSource and this deliberately does not
-      // add one: `sources` records which capture silo produced the contact,
-      // and a refund captures nobody.
-      type: 'order',
-      atMs,
-      refId: options.orderId,
-      summary:
-        `$${(amountCents / 100).toFixed(2)} ` +
-        (options.kind === 'chargeback' ? 'charged back' : 'refunded') +
-        (options.closedTheOrder ? ' (full)' : ''),
-    }
-    // Reused for the newest-first ordering and the interactions cap; only the
-    // timeline is taken. The `sources` half of the merge is discarded on
-    // purpose, per the note above.
-    const { interactions } = mergeContactInteraction(
-      {
-        sources: snapshot.get('sources') ?? {},
-        interactions: snapshot.get('interactions') ?? [],
-      },
-      { source: 'order', interaction },
-    )
-
-    const FieldValue = firebaseAdmin.firestore.FieldValue
-    // Every field is top-level. `update()` replaces a nested map wholesale
-    // rather than merging into it, so anything under a map would have to be
-    // written as a dotted path; there is nothing here that is.
-    //
-    // The amounts are increments, so two refunds settling at once both land.
-    // `interactions` is a read-modify-write and therefore CAN lose one of two
-    // concurrent entries — the same exposure `upsertHostContact` has on the
-    // same array, and it costs a timeline line rather than a number.
-    const landed = await updateExisting(snapshot.ref, {
-      refundedCents: FieldValue.increment(amountCents),
-      ...(options.closedTheOrder
-        ? { refundedOrdersCount: FieldValue.increment(1) }
-        : {}),
-      lastRefundAtMs: atMs,
-      interactions,
-      updatedAt: FieldValue.serverTimestamp(),
-    })
-    if (!landed) {
-      await recordUnmatchedRefund(
-        options.hostId,
-        options.orderId,
-        'contact-deleted',
-      )
-    }
-  } catch (error) {
-    console.error('recordContactRefund failed', error)
+  const options = {
+    hostId: request.hostId,
+    orderId: request.refId,
+    email: request.email,
+    amountCents: request.amountCents,
+    closedTheOrder: request.closedTheSale,
+    kind: request.reason,
   }
+  // The money has already moved and the order already records it, so nothing
+  // here may fail the refund: a throw reaches `recordPluginPersonRefund`,
+  // which logs it and answers the seller `null`.
+  const amountCents = Math.round(Number(options.amountCents))
+  // Nothing went back, so there is nothing to record against anybody.
+  if (!(amountCents > 0)) return 'recorded'
+  const email = normalizeContactEmail(options.email)
+  if (!email) {
+    await recordUnmatchedRefund(options.hostId, options.orderId, 'no-email')
+    return 'no-email'
+  }
+  // Contacts are ORG-scoped (AGL-237), not `hosts/{h}/contacts`, and reads
+  // narrow to what this host may see (AGL-1039) — the same lookup
+  // `upsertHostContact` makes, through the org's address index
+  // (AGL-2633), so both writers resolve the same document even when the
+  // order's address is one a merge folded into the buyer's record.
+  const contactsRef = await orgDataCollectionForHost(
+    options.hostId,
+    'contacts',
+  )
+  const snapshot = await findContactByEmail(contactsRef, email, {
+    hostId: options.hostId,
+  })
+  if (!snapshot) {
+    await recordUnmatchedRefund(options.hostId, options.orderId, 'no-contact')
+    return 'no-person'
+  }
+  const atMs = Date.now()
+  const interaction: ContactInteraction = {
+    // `refId` names an order, so the interaction is an order interaction.
+    // There is no `'refund'` ContactSource and this deliberately does not
+    // add one: `sources` records which capture silo produced the contact,
+    // and a refund captures nobody.
+    type: 'order',
+    atMs,
+    refId: options.orderId,
+    summary:
+      `$${(amountCents / 100).toFixed(2)} ` +
+      (options.kind === 'chargeback' ? 'charged back' : 'refunded') +
+      (options.closedTheOrder ? ' (full)' : ''),
+  }
+  // Reused for the newest-first ordering and the interactions cap; only the
+  // timeline is taken. The `sources` half of the merge is discarded on
+  // purpose, per the note above.
+  const { interactions } = mergeContactInteraction(
+    {
+      sources: snapshot.get('sources') ?? {},
+      interactions: snapshot.get('interactions') ?? [],
+    },
+    { source: 'order', interaction },
+  )
+
+  const FieldValue = firebaseAdmin.firestore.FieldValue
+  // Every field is top-level. `update()` replaces a nested map wholesale
+  // rather than merging into it, so anything under a map would have to be
+  // written as a dotted path; there is nothing here that is.
+  //
+  // The amounts are increments, so two refunds settling at once both land.
+  // `interactions` is a read-modify-write and therefore CAN lose one of two
+  // concurrent entries — the same exposure `upsertHostContact` has on the
+  // same array, and it costs a timeline line rather than a number.
+  const landed = await updateExisting(snapshot.ref, {
+    refundedCents: FieldValue.increment(amountCents),
+    ...(options.closedTheOrder
+      ? { refundedOrdersCount: FieldValue.increment(1) }
+      : {}),
+    lastRefundAtMs: atMs,
+    interactions,
+    updatedAt: FieldValue.serverTimestamp(),
+  })
+  if (!landed) {
+    await recordUnmatchedRefund(
+      options.hostId,
+      options.orderId,
+      'contact-deleted',
+    )
+    return 'gone'
+  }
+  return 'recorded'
 }
 
 /**

@@ -23,7 +23,6 @@ import {
   evaluateTriggerConditions,
   type HostAction,
   type HostActionStep,
-  CONTACT_TAG_MAX_LENGTH,
   HOST_ACTION_STEP_LABELS,
   isBasicClientActionStep,
   isClientStepEntitled,
@@ -34,7 +33,7 @@ import {
   SCROLL_TO_MAX_OFFSET_PX,
   validateHostAction,
 } from './actions'
-import { CRM_TASK_MAX_DUE_DAYS } from './crm'
+import { CONTACT_TAG_MAX_LENGTH, CRM_TASK_MAX_DUE_DAYS } from './crm'
 
 const base: HostAction = {
   name: 'Welcome',

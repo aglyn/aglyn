@@ -27,6 +27,8 @@ import {
   declineMarketingConsentFields,
   marketingConsentFieldsForGroup,
 } from '@aglyn/aglyn/app-utils/marketing-consent'
+import { registerPluginPersonRecords } from '@aglyn/aglyn/plugin-manager/plugin-person-records'
+import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
 import { emailSuppressionKey } from './email-suppression'
 import {
   platformMarketingHold,
@@ -54,11 +56,19 @@ jest.mock('./organizations', () => ({
       .consentGroupForHost(org, hostId),
 }))
 const mockFindContactByEmail = jest.fn()
-jest.mock('./contact-email-index', () => ({
-  __esModule: true,
-  findContactByEmail: (_ref: unknown, email: string) =>
-    mockFindContactByEmail(email),
-}))
+/**
+ * The plugin that keeps people, standing in for the one that does (AGL-3080):
+ * the operator's person for the address is the record system's to find.
+ */
+function standInPersonRecords(): void {
+  registerPluginPersonRecords(
+    {
+      find: async (request) => mockFindContactByEmail(request.email),
+      read: async (request) => request.records.map(() => null),
+    },
+    { pluginId: 'records' },
+  )
+}
 
 const HOST = 'host-platform-marketing'
 const ORG = 'org-operator'
@@ -105,11 +115,15 @@ function fakeFirestore(lists: {
 }
 
 const contactWith = (data: Record<string, unknown>) => ({
+  kind: 'contact',
   id: 'contact-1',
-  data: () => ({ email: EMAIL, ...data }),
+  email: EMAIL,
+  data: { email: EMAIL, ...data },
 })
 
 beforeEach(() => {
+  resetPluginServicesForTests()
+  standInPersonRecords()
   mockGetOrgForHost.mockReset()
   mockGetOrgForHost.mockResolvedValue({ orgId: ORG, org: { slug: 'aglyn-org' } })
   mockFindContactByEmail.mockReset()

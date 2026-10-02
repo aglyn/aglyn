@@ -18,12 +18,15 @@
 import {
   ACTION_MAX_CONDITIONS,
   ACTION_MAX_STEPS,
-  CONTACT_TAG_MAX_LENGTH,
   FLOW_TIMED_OUT_FIELD,
   FLOW_WAIT_MAX_MINUTES,
   HOST_ACTION_STEP_LABELS,
 } from '@aglyn/aglyn/app-utils/actions'
-import { CONTACT_LIFECYCLE_STAGES, CRM_TASK_MAX_DUE_DAYS } from '@aglyn/aglyn/app-utils/crm'
+import {
+  CONTACT_LIFECYCLE_STAGES,
+  CONTACT_TAG_MAX_LENGTH,
+  CRM_TASK_MAX_DUE_DAYS,
+} from '@aglyn/aglyn/app-utils/crm'
 import { HOST_EVENT_PAYLOAD_KEYS, type HostEventType } from '@aglyn/aglyn/app-utils/host-events'
 import { isHostPluginEnabled } from '@aglyn/aglyn/plugin-manager/enabled-plugins'
 import { filterEnabledPluginsByReleaseFlags } from '@aglyn/tenant-data-admin/server/release-flags'

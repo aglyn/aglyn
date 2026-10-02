@@ -56,6 +56,8 @@ import type { OutreachMailboxNoticeRequest, OutreachRuntimeDeps } from './runtim
 import { runOutreachSendJob } from './send-job'
 import { runOutreachSyncJob } from './sync-job'
 import { createOutreachPersonEraser } from './person-erasure'
+import { personKey } from '@aglyn/aglyn/app-utils/person-key'
+import { standInRecordSystem } from '../testing/stand-in-record-system'
 import { outreachShortLinkUrl } from './click-link'
 import { createOutreachShortLinkRoute } from './click-route'
 import { mintOutreachUnsubscribeToken, outreachUnsubscribeUrl } from './unsubscribe-link'
@@ -318,10 +320,15 @@ async function enroll(n: number, overrides: Partial<OutreachEnrollment> = {}): P
 
 /**
  * A lead — the org's own record, captured by a form — and its enrollment,
- * due now (AGL-3234). The lead's stage is what a send and a reply move.
+ * due now (AGL-3234). The lead's stage is what a send and a reply move. Keyed
+ * by the person and scoped to the site, as every lead the capture door files
+ * is (AGL-3275): the record system finds a lead by its address and moves it
+ * only for a site that holds it.
  */
+const leadIdOf = (n: number) => personKey(`person${n}@example.org`) as string
+
 async function enrollLead(n: number, lead: Record<string, unknown> = {}): Promise<OutreachEnrollment> {
-  const leadId = `lead-${n}`
+  const leadId = leadIdOf(n)
   const email = `person${n}@example.org`
   await org()
     .collection('leads')
@@ -332,6 +339,7 @@ async function enrollLead(n: number, lead: Record<string, unknown> = {}): Promis
       company: `Company ${n}`,
       sources: ['form:contact'],
       address: { country: 'US' },
+      visibleTo: [`host:${HOST}`],
       ...lead,
     })
   return enroll(n, {
@@ -343,7 +351,7 @@ async function enrollLead(n: number, lead: Record<string, unknown> = {}): Promis
 }
 
 async function leadStatus(n: number): Promise<unknown> {
-  return (await org().collection('leads').doc(`lead-${n}`).get()).get('status')
+  return (await org().collection('leads').doc(leadIdOf(n)).get()).get('status')
 }
 
 async function enrollment(id: string): Promise<OutreachEnrollment> {
@@ -365,6 +373,9 @@ const sync = () => runOutreachSyncJob(deps(), { nowMs: clock, deadlineMs: clock 
 beforeAll(() => {
   if (!EMULATED) return
   firestore = getFirestore()
+  // The people and their stages are the record system's (AGL-3080); the
+  // stand-in keeps them where the CRM would, in the emulator.
+  standInRecordSystem({ firestore: () => firestore })
   process.env['EMAIL_UNSUBSCRIBE_SECRET'] = SECRET
 })
 

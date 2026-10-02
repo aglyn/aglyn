@@ -119,9 +119,9 @@ import {
   orgDataCollectionForHost,
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
-// The leaf, not the barrel: this plugin's specs substitute the barrel
-// wholesale, and the lookup must reach the real index logic under them.
-import { findContactByEmail } from '@aglyn/tenant-data-admin/server/contact-email-index'
+// The person behind the address, through the plugin that keeps people
+// (AGL-3080): the Inbox never opens the record system's collections.
+import { findPluginPerson } from '@aglyn/aglyn/plugin-manager/plugin-person-records'
 // And for the refusal a deleted contact left behind (AGL-3338): the real store
 // and the real merge, under whatever the specs put in the barrels' place.
 import { readRetainedRefusals } from '@aglyn/tenant-data-admin/server/retained-refusals'
@@ -510,12 +510,15 @@ async function resolveAssignmentContext(
 }
 
 /**
- * The person's own consent facts, read off the org contact for this address.
+ * The person's own consent facts, read off the person record the workspace
+ * keeps for this address — asked of the plugin that keeps people
+ * (`plugin-person-records`, AGL-3080), never read off its storage here.
  *
- * The CRM record is where a refusal lives: `marketingConsent` is written
- * `false` by exactly one path in the product and it writes a contact. So this
- * is the read that makes `declined` mean something at enrollment time, and an
- * absent contact is honestly `unrecorded` rather than a reason to guess.
+ * The person record is where a refusal lives: `marketingConsent` is written
+ * `false` by exactly one path in the product and it writes that record. So
+ * this is the read that makes `declined` mean something at enrollment time,
+ * and an absent person is honestly `unrecorded` rather than a reason to guess
+ * — as is a workspace with no record system, where nobody was ever asked.
  *
  * Read UNSCOPED, deliberately. `scopedToHost` narrows an org collection to
  * what one site may see, and a refusal filtered out by that narrowing is a
@@ -524,10 +527,11 @@ async function resolveAssignmentContext(
  * proved an org-wide member, which is the tier the rules grant the whole
  * org's contacts to.
  *
- * Through the org's address index (AGL-2633), for the same failure mode
- * from the other side: a refusal recorded on a record that was later
- * merged into another is the survivor's refusal, and the sender's address
- * may be the one that became an alternate.
+ * By the owner's address lookup, which answers an alternate address a merge
+ * folded in (AGL-2633), for the same failure mode from the other side: a
+ * refusal recorded on a record that was later merged into another is the
+ * survivor's refusal, and the sender's address may be the one that became an
+ * alternate.
  *
  * The person's grants come back beside the verdict, off the same document
  * (AGL-3320): a pass-through carries them onto the membership as the record
@@ -552,11 +556,11 @@ async function storedConsentForAddress(
   try {
     const contacts = await orgDataCollectionForHost(hostId, 'contacts')
     const [found, retained] = await Promise.all([
-      findContactByEmail(contacts, email),
+      findPluginPerson({ hostId, email }),
       readRetainedRefusals(contacts, [email]),
     ])
     const data = withRetainedRefusals(
-      found ? (found.data() as Record<string, unknown>) : null,
+      found ? { ...found.data } : null,
       refusalsOf([...retained.values()][0]),
     )
     return {

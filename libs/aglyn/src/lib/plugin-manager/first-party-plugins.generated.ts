@@ -27,6 +27,7 @@ import type { ResolvedVideoEmbedProvider } from './video-embed-provider'
 import type { AnalyticsProviderDeclaration } from '../app-utils/analytics-provider'
 import type { InteractionStepDeclaration } from '../app-utils/site-interactions'
 import type { ServerStepDeclaration } from './plugin-server-steps'
+import type { InteractionRecipeDeclaration } from './interaction-recipes'
 import type { NotificationCategoryDeclaration, NotificationDigestDeclaration } from '../app-utils/notifications'
 
 export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
@@ -1366,6 +1367,30 @@ export const PLUGIN_SERVER_STEPS_DECLARED: readonly ServerStepDeclaration[] = [
   {
     "pluginId": "data",
     "type": "updateDataset"
+  },
+]
+
+/**
+ * Every ready-to-edit interaction a first-party plugin offers, by the id a
+ * stored interaction's stamp names it with, declared by that plugin
+ * (AGL-3080). Core names no recipe.
+ */
+export const PLUGIN_INTERACTION_RECIPES_DECLARED: readonly InteractionRecipeDeclaration[] = [
+  {
+    "pluginId": "crm",
+    "id": "welcomeNewLead"
+  },
+  {
+    "pluginId": "crm",
+    "id": "followUpWonDeal"
+  },
+  {
+    "pluginId": "crm",
+    "id": "reengageStaleLead"
+  },
+  {
+    "pluginId": "crm",
+    "id": "tagByForm"
   },
 ]
 

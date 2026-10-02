@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { CrmActionRecipeId } from '@aglyn/aglyn'
+import type { CrmActionRecipeId } from '../model/crm-recipes'
 
 /**
  * The CRM plugin's console API routes, as the dispatcher keys them.
@@ -119,7 +119,7 @@ export interface CrmRecipeInstallRequest {
   hostId: string
   orgId?: string
   recipeId: CrmActionRecipeId
-  /** The site's form a recipe that `needs: 'form'` is keyed on. */
+  /** The site's form a recipe that picks one (`picks: 'form'`) is keyed on. */
   formId?: string
 }
 

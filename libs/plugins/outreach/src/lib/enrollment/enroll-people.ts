@@ -52,7 +52,11 @@
 import { normalizeContactEmail, contactDisplayName, readContactFacet } from '@aglyn/aglyn/app-utils/contacts'
 import { crmLeadDisplayName, crmLeadStatus } from '@aglyn/aglyn/app-utils/crm'
 import { seenOnlyThroughGrant, visibleToHost } from '@aglyn/aglyn/app-utils/scope-tokens'
-import { findContactByEmail } from '@aglyn/tenant-data-admin/server/contact-email-index'
+import {
+  findPluginPerson,
+  readPluginPeople,
+} from '@aglyn/aglyn/plugin-manager/plugin-person-records'
+import { pluginRecordIndex } from '@aglyn/aglyn/plugin-manager/plugin-record-index'
 import {
   evaluateOutreachGates,
   type OutreachGateBlock,
@@ -72,8 +76,6 @@ import type {
   OutreachEnrollPreviewPerson,
   OutreachPersonRef,
 } from '../model/outreach-api'
-
-type Firestore = FirebaseFirestore.Firestore
 
 /**
  * One person as the preview and the enroll read them: a contact, or a lead
@@ -103,9 +105,9 @@ export interface OutreachEnrollCandidate {
   /** The lead's person key; `null` for a contact. */
   leadId: string | null
   /**
-   * The contact document (`orgs/{orgId}/contacts/{id}`), or for a lead the
-   * contact-shaped view of it — see the module note. `null` when the record
-   * no longer exists.
+   * The contact as the record system keeps it (`plugin-person-records`), or
+   * for a lead the contact-shaped view of it — see the module note. `null`
+   * when the record no longer exists.
    */
   contact: Record<string, unknown> | null
   /** The lead document as stored, for a lead; `null` for a contact. */
@@ -160,48 +162,33 @@ export function leadAsContact(
   }
 }
 
-/** `getAll` takes this many references at most per call. */
-const GET_ALL_CHUNK = 300
-
-async function getAllChunked(
-  firestore: Firestore,
-  refs: readonly FirebaseFirestore.DocumentReference[],
-): Promise<FirebaseFirestore.DocumentSnapshot[]> {
-  const snapshots: FirebaseFirestore.DocumentSnapshot[] = []
-  for (let start = 0; start < refs.length; start += GET_ALL_CHUNK) {
-    snapshots.push(...(await firestore.getAll(...refs.slice(start, start + GET_ALL_CHUNK))))
-  }
-  return snapshots
-}
-
 /**
  * The people, as the sequence's site knows them, and the company each
- * contact is filed under there — batched reads for everyone: the contacts
- * and the leads by id, the companies once, and for each lead one address
- * lookup, because a lead the workspace already holds as a contact is that
- * contact's to enroll.
+ * contact is filed under there — asked of the plugin that keeps people
+ * (`plugin-person-records`, AGL-3080), never read off its storage: the
+ * contacts and the leads at once, the companies once each through its
+ * `company` record index, and for each lead one address lookup, because a
+ * lead the workspace already holds as a contact is that contact's to enroll.
+ * With no plugin keeping people, every person reads as gone.
  */
-export async function readOutreachEnrollCandidates(
-  firestore: Firestore,
-  input: { orgId: string; hostId: string; contactGroupId: string; people: readonly OutreachPersonRef[] },
-): Promise<OutreachEnrollCandidate[]> {
+export async function readOutreachEnrollCandidates(input: {
+  orgId: string
+  hostId: string
+  contactGroupId: string
+  people: readonly OutreachPersonRef[]
+}): Promise<OutreachEnrollCandidate[]> {
   if (!input.people.length) return []
-  const org = firestore.collection('orgs').doc(input.orgId)
-  // Beside the contacts, on the org (AGL-3275).
-  const leads = org.collection('leads')
-  const snapshots = await getAllChunked(
-    firestore,
-    input.people.map((person) =>
-      person.kind === 'lead' ? leads.doc(person.id) : org.collection('contacts').doc(person.id),
-    ),
-  )
+  const records =
+    (await readPluginPeople({
+      orgId: input.orgId,
+      records: input.people.map((person) => ({ kind: person.kind, id: person.id })),
+    })) ?? input.people.map(() => null)
   const read = await Promise.all(
     input.people.map(async (person, index) => {
-      const data = snapshots[index]?.exists ? (snapshots[index].data() as Record<string, unknown>) : null
+      const data = records[index] ? { ...records[index]!.data } : null
       if (person.kind === 'lead') {
         const email = data ? normalizeContactEmail(data['email']) : null
-        const held =
-          data && email ? await findContactByEmail(org.collection('contacts'), email) : null
+        const held = data && email ? await findPluginPerson({ orgId: input.orgId, email }) : null
         return {
           personId: person.id,
           target: 'lead' as const,
@@ -241,13 +228,13 @@ export async function readOutreachEnrollCandidates(
   )
   const companyIds = [...new Set(read.map((entry) => entry.companyId).filter(Boolean))]
   const companies = new Map<string, Record<string, unknown>>()
-  if (companyIds.length) {
-    const found = await getAllChunked(
-      firestore,
-      companyIds.map((id) => org.collection('companies').doc(id)),
+  const companyIndex = companyIds.length ? pluginRecordIndex('company') : null
+  if (companyIndex) {
+    const found = await Promise.all(
+      companyIds.map((id) => companyIndex.index.get({ orgId: input.orgId, id })),
     )
-    found.forEach((snapshot, index) => {
-      if (snapshot.exists) companies.set(companyIds[index], snapshot.data() as Record<string, unknown>)
+    found.forEach((company, index) => {
+      if (company) companies.set(companyIds[index], { ...company.facts })
     })
   }
   return read.map(({ companyId, ...candidate }) => ({

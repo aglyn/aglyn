@@ -21,13 +21,9 @@ import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 import { createHash } from 'crypto'
-import { recordContactRefund } from './contact-refund'
+import { recordPluginPersonRefund } from '@aglyn/aglyn/plugin-manager/plugin-person-records'
 import { applyGiftCardRiskToOrder } from './gift-card-risk'
 import { flagOrderRestock } from './restock-flag'
-// Leaf import, not the barrel, for the reason `contact-refund.ts` states about
-// `updateExisting`: the specs in this library mock `@aglyn/tenant-data-admin`
-// wholesale, and a permissive stub would turn a reversal that never happened
-// green.
 import { reverseOrderConversion } from '@aglyn/aglyn/plugin-manager/plugin-conversion-credit'
 
 /**
@@ -662,9 +658,13 @@ export const refundHandler: PluginApiHandler = async (req, res) => {
     // the recorded 200 instead of being turned away with "already being
     // processed". Awaited rather than fired off with `void` — the handler is
     // serverless, and work left running past the response is work the
-    // container may be frozen before it finishes. `recordContactRefund`
-    // swallows its own failures, so awaiting adds no way for this to fail a
-    // refund that has already left the merchant's account.
+    // container may be frozen before it finishes. The seam never throws, so
+    // awaiting adds no way for this to fail a refund that has already left
+    // the merchant's account.
+    //
+    // Through the plugin that keeps people (AGL-3080): what a refund does to
+    // the customer's record is that plugin's to decide, and commerce writes
+    // none of it.
     //
     // Amount is THIS attempt's `refundCents`, already capped against what was
     // left, so several partials sum to at most the order total — the same
@@ -672,12 +672,12 @@ export const refundHandler: PluginApiHandler = async (req, res) => {
     // cases need no key of their own: a keyed retry never reaches here (it
     // replays at the claim), and a keyless one is a genuinely new refund that
     // moved more money and should be counted.
-    await recordContactRefund({
+    await recordPluginPersonRefund({
       hostId,
-      orderId,
+      refId: orderId,
       email: order.customerEmail,
       amountCents: refundCents,
-      closedTheOrder,
+      closedTheSale: closedTheOrder,
     })
     /*
      * The campaign's side of the same ledger.
@@ -686,8 +686,8 @@ export const refundHandler: PluginApiHandler = async (req, res) => {
      * or wholly wrong — a campaign cannot go on being paid for a sale the
      * merchant reversed, and revenue attribution that only ever rises is the
      * flattering half of a measurement. Recorded beside the gross rather than
-     * subtracted from it, for the reason `recordContactRefund` above records
-     * `refundedCents` beside `ltvCents`.
+     * subtracted from it, for the reason the customer's record keeps its
+     * refunds beside what they spent.
      *
      * Keyed by the ORDER and not by the buyer, so it needs no email and works
      * for a guest checkout: the attribution record holds which campaign and

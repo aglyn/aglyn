@@ -81,6 +81,18 @@ export interface PluginRecordListRequest {
    * owner keeps it. A kind that is never installed answers none.
    */
   installedFrom?: string | null
+  /**
+   * The consent group the named site presents as (`app-utils/consent-groups`),
+   * for a kind whose records say different things to different groups — a
+   * person's name as one brand knows them. Absent reads as the site alone.
+   */
+  consentGroupId?: string | null
+  /**
+   * The signed-in member, for a kind some of whose records are one member's
+   * own — a saved view kept private: the owner leaves out what this member
+   * may not list. Absent reads as nobody's, which lists only what is shared.
+   */
+  viewerUid?: string | null
   /** The most documents the query may answer — a reader asks one past its window to learn it was cut. */
   limit: number
 }
@@ -92,8 +104,18 @@ export interface PluginRecordListSource {
    * kind asked at the organization, a search with nothing to match).
    */
   query(firestore: Firestore, request: PluginRecordListRequest): Query<DocumentData> | null
-  /** One stored document as the owner shares it, or `null` to leave it out (deleted, unnamed). */
-  record(id: string, data: Readonly<Record<string, unknown>>): PluginIndexedRecord | null
+  /**
+   * One stored document as the owner shares it, or `null` to leave it out
+   * (deleted, unnamed, or not the reader's to list). `request` is the one the
+   * query was built from, when the reader hands it back: a rule the query
+   * cannot state — a site's view of an org-wide row, a member's own view —
+   * is applied here.
+   */
+  record(
+    id: string,
+    data: Readonly<Record<string, unknown>>,
+    request?: PluginRecordListRequest,
+  ): PluginIndexedRecord | null
 }
 
 export const PLUGIN_RECORD_LISTS = definePluginServiceContract<PluginRecordListSource>(
@@ -152,17 +174,20 @@ export function pluginRecordListQuery(
 /**
  * The documents a reader's listener answered for `kind`, as their owner
  * shares them: each row's id is read from `idField` (the listener's), and a
- * row the owner leaves out (deleted, unnamed) is not answered. None where no
- * plugin keeps the kind here.
+ * row the owner leaves out (deleted, unnamed, not this reader's) is not
+ * answered. None where no plugin keeps the kind here. `request` is the one
+ * the query was built from: hand it back, so the owner can apply what the
+ * query could not state.
  */
 export function pluginRecordsFromRows(
   kind: string,
   rows: ReadonlyArray<Readonly<Record<string, unknown>>> | null | undefined,
   idField = '$id',
+  request?: PluginRecordListRequest,
 ): PluginIndexedRecord[] {
   const source = pluginRecordListSource(kind)?.source
   if (!source) return []
   return (rows ?? [])
-    .map((row) => source.record(String(row[idField] ?? ''), row))
+    .map((row) => source.record(String(row[idField] ?? ''), row, request))
     .filter((record): record is PluginIndexedRecord => record !== null)
 }

@@ -49,6 +49,7 @@ import { personKey } from '@aglyn/aglyn/app-utils/person-key'
 import { OUTREACH_USE_PERMISSION } from '../constants/bundle-common'
 import { outreachDoNotContactKey } from '../engine/do-not-contact'
 import { createOutreachEnrollRoutes, type OutreachEnrollRouteDeps } from './enroll-routes'
+import { standInRecordSystem } from '../testing/stand-in-record-system'
 import { createOutreachEnrollmentActionRoute } from './enrollment-routes'
 import { createOutreachSequenceRoutes } from './sequence-routes'
 
@@ -82,7 +83,6 @@ const deps = (): OutreachEnrollRouteDeps => ({
   now: () => AT,
   random: () => 0.5,
   logOrgActivity: async () => undefined,
-  crmViewEmails: async () => ({ emails: [], complete: true }),
   resolveMx: async () => [{ exchange: 'mx.example.com', priority: 10 }],
   stampRecordEmailState: async () => undefined,
   creditCampaign: async (input) => {
@@ -114,6 +114,9 @@ const orgRef = () => firestore.collection('orgs').doc(ORG)
 beforeAll(async () => {
   if (!EMULATED) return
   firestore = getFirestore()
+  // The people, companies and templates are the record system's (AGL-3080);
+  // the stand-in keeps them where the CRM would, in the emulator.
+  standInRecordSystem({ firestore: () => firestore })
   await firestore.collection('hosts').doc(HOST).set({ orgId: ORG, name: 'Example Shop' })
   await orgRef().collection('members').doc(REP).set({ role: 'admin', email: 'rep@example.com' })
   await orgRef().collection('outreachMailboxes').doc(MAILBOX).set({

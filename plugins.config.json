@@ -742,6 +742,7 @@
       "register": {
         "console": "registerCrmConsole",
         "consoleApi": "registerCrmConsoleApi",
+        "declarations": "registerCrmDeclarations",
         "serverDeclarations": "registerCrmServerDeclarations",
         "consoleServerDeclarations": "registerCrmConsoleServerDeclarations",
         "planEntitlements": "crmPlanEntitlements",
@@ -837,6 +838,20 @@
           "order": 130,
           "label": "Deal lost",
           "payloadKeys": ["dealId", "title", "amountCents", "currency", "stageId", "previousStageId", "ownerUid", "contactId", "companyId", "lostReason"]
+        }
+      ],
+      "interactionRecipes": [
+        {
+          "id": "welcomeNewLead"
+        },
+        {
+          "id": "followUpWonDeal"
+        },
+        {
+          "id": "reengageStaleLead"
+        },
+        {
+          "id": "tagByForm"
         }
       ],
       "contributes": {

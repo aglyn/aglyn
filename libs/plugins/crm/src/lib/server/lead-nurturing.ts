@@ -16,31 +16,36 @@
  */
 
 /**
- * WHAT A DELIVERED MARKETING EMAIL DOES TO A LEAD (AGL-3446).
+ * WHAT MAIL DOES TO A LEAD'S STAGE: delivered (AGL-3446), and answered
+ * (AGL-3080).
  *
- * A lead nobody has touched, once a campaign email has been delivered to
- * it, moves from New to Nurturing: automated email is reaching it, so the
- * CRM digest must not count it as unworked, but no person has engaged yet.
- * Sequences make the same move from their own send job. A sender reaches
- * this through the record email-state seam's `reached`
- * (`stampRecordEmailReach`), never by importing the CRM.
+ * A lead nobody has touched, once a campaign email or a sequence step has
+ * been delivered to it, moves from New to Nurturing: automated email is
+ * reaching it, so the CRM digest must not count it as unworked, but no person
+ * has engaged yet. A lead that WROTE BACK — New or Nurturing — moves to
+ * Working: somebody answered, the lead is being worked, and a queue that
+ * still showed it as New would send a rep to open a conversation already
+ * open. A sender reaches both through the record email-state seam's
+ * `reached` and `replied` (`stampRecordEmailReach`, `stampRecordEmailReply`),
+ * never by importing the CRM.
  *
  * Found by address rather than by audience: a lead's document id IS the
  * `personKey` of its address (`orgs/{orgId}/leads/{personKey}`, AGL-3275),
- * so every audience — the leads, a list, a segment, typed-in addresses —
- * resolves the people it reached to their lead rows by one batched read,
- * with no query and no index.
+ * so every audience — the leads, a list, a segment, typed-in addresses, a
+ * sequence's enrollment — resolves the people it reached to their lead rows
+ * by one batched read, with no query and no index.
  *
  * Only a lead the sending site holds is moved — `visibleTo` names it — so
- * one brand's campaign never writes the stage of a lead another brand in
- * the same organization keeps. Only `new` moves; Nurturing, Working, the
- * closed states and a converted lead are left as they stand.
+ * one brand's mail never writes the stage of a lead another brand in the
+ * same organization keeps. Only the stages named move; Working, the closed
+ * states and a converted lead are left as they stand, so mail never reopens
+ * a verdict or moves a contact's record.
  *
  * Never throws: the mail has already gone, and a stage that could not be
  * written is one a rep sets by hand.
  */
 
-import { crmLeadStatus } from '@aglyn/aglyn/app-utils/crm'
+import { type CrmLeadStatus, crmLeadStatus } from '@aglyn/aglyn/app-utils/crm'
 import { personKey } from '@aglyn/aglyn/app-utils/person-key'
 import { visibleToHost } from '@aglyn/aglyn/app-utils/scope-tokens'
 import { FieldValue, type Firestore } from 'firebase-admin/firestore'
@@ -48,10 +53,12 @@ import { FieldValue, type Firestore } from 'firebase-admin/firestore'
 /** `getAll` takes this many references per call, and a batch this many writes. */
 const CHUNK = 300
 
-/** Move the delivered-to leads still New to Nurturing; how many moved. */
-export async function nurtureReachedLeads(
+/** Move the leads at these addresses that stand in `from` to `to`; how many moved. */
+async function advanceLeadsAt(
   firestore: Firestore,
   input: { orgId: string; hostId: string; emails: readonly string[] },
+  from: readonly CrmLeadStatus[],
+  to: CrmLeadStatus,
 ): Promise<number> {
   if (!input.orgId || !input.emails.length) return 0
   const keys = [
@@ -69,8 +76,8 @@ export async function nurtureReachedLeads(
         const lead = snapshot.data() ?? {}
         if (lead['convertedContactId']) continue
         if (!visibleToHost(lead['visibleTo'] as string[] | undefined, input.hostId)) continue
-        if (crmLeadStatus(lead as never) !== 'new') continue
-        batch.set(snapshot.ref, { status: 'nurturing', updatedAt: FieldValue.serverTimestamp() }, { merge: true })
+        if (!from.includes(crmLeadStatus(lead as never))) continue
+        batch.set(snapshot.ref, { status: to, updatedAt: FieldValue.serverTimestamp() }, { merge: true })
         writes += 1
       }
       if (writes) {
@@ -78,8 +85,24 @@ export async function nurtureReachedLeads(
         moved += writes
       }
     } catch (error) {
-      console.error('[crm] the reached leads could not be marked nurturing', input.orgId, error)
+      console.error(`[crm] the leads could not be marked ${to}`, input.orgId, error)
     }
   }
   return moved
+}
+
+/** Move the delivered-to leads still New to Nurturing; how many moved. */
+export function nurtureReachedLeads(
+  firestore: Firestore,
+  input: { orgId: string; hostId: string; emails: readonly string[] },
+): Promise<number> {
+  return advanceLeadsAt(firestore, input, ['new'], 'nurturing')
+}
+
+/** Move the leads that wrote back, still New or Nurturing, to Working; how many moved. */
+export function workRepliedLeads(
+  firestore: Firestore,
+  input: { orgId: string; hostId: string; emails: readonly string[] },
+): Promise<number> {
+  return advanceLeadsAt(firestore, input, ['new', 'nurturing'], 'working')
 }

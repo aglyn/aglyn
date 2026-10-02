@@ -276,6 +276,7 @@ import {
   performCampaignSend,
   type CampaignSendOptions,
 } from './campaign-send'
+import { standInPersonRecords } from '../testing/stand-in-person-records'
 
 const HOST = 'host-1'
 const CALLER = 'owner@acme-agency.com'
@@ -285,6 +286,9 @@ const STRANGER = 'someone@nowhere.example'
 
 function seed() {
   store.clear()
+  // The person behind an address is the record system's to find (AGL-3080);
+  // the stand-in finds them in this suite's store.
+  standInPersonRecords({ store: () => Object.fromEntries(store), orgId: 'org-1' })
   sent.length = 0
   metered.length = 0
   reachWrites.length = 0
