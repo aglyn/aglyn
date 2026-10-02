@@ -39,7 +39,12 @@ import {
   billsEmailSendOverage,
   pageViewsFromBandwidthGb,
 } from '../../../../utils/usage-metering'
-import { usageAlertThreshold } from '../../../../utils/storage-overage'
+import {
+  resolveStorageCap,
+  scopeBillsStorageOverage,
+  usageAlertThreshold,
+} from '../../../../utils/storage-overage'
+import { orgMediaAllowanceMb } from '../../../../utils/server/media-storage-band'
 import {
   formatBandwidthGb,
   formatCount,
@@ -283,11 +288,10 @@ interface QuotaAlertCheck {
  * published-site-size check AGL-1107 added was removed in AGL-1370 as
  * unreachable. Scheduler-invoked (x-cron-secret, like report-usage).
  *
- * AGL-1886 added `orgLibraryStorage`, the check that closes the last
- * structurally-silent case before org-library bytes start reaching invoices:
- * the org library is enforced against `storagePerHostMb` on its own but was
- * only ever compared to the ORG-WIDE band, which it cannot fill. See the
- * check itself.
+ * Storage is ONE check (AGL-3482): every site's library and the org library
+ * against the workspace's pooled band, the band ingress refuses at and the
+ * invoice subtracts (AGL-2075). The org library has no allowance of its own
+ * to warn about. See the `mediaStorage` check.
  */
 async function handler(request: Request): Promise<Response> {
   const { method, body, headers: rawHeaders } = await pluginRequestFromWeb(request)
@@ -612,9 +616,9 @@ async function handler(request: Request): Promise<Response> {
       // not one per host — it belongs to no site, so it cannot fan out.
       //
       // This is a WARNING, not a charge, so it is not behind
-      // `BILL_ORG_LIBRARY_STORAGE_FROM`: the bytes are already enforced
-      // against `storagePerHostMb` at upload, and an alert that stays silent
-      // about storage the platform will refuse the next upload for is the
+      // `BILL_ORG_LIBRARY_STORAGE_FROM`: ingress already counts these bytes
+      // against the workspace's pooled band (AGL-2075), and an alert that
+      // stays silent about storage the platform refuses or bills for is the
       // defect, not the caution.
       //
       // Beside it, the org library's DELIVERY (AGL-3474): the media CDN
@@ -780,6 +784,21 @@ async function handler(request: Request): Promise<Response> {
       // it? Read once, and only used to choose the alert's wording — the
       // thresholds themselves are identical either way.
       const metersInfra = planMetersInfraOverage(orgData as never)
+      // The workspace's pooled storage band (AGL-2075), from the expression
+      // ingress refuses at, and the library's share of what fills it.
+      const mediaBandMb = orgMediaAllowanceMb(entitlements)
+      const orgLibraryMb = orgLibraryBytes / (1024 * 1024)
+      // Past the band a metered plan bills until the customer's own storage
+      // cap, if they set one, refuses — which the storage notice has to say.
+      const storageCapSet = resolveStorageCap(orgData as never).capSet
+      // On a metered plan the org library still stops at the band while its
+      // storage is not on the invoice (`mediaStorageGate`'s `billsOverage`),
+      // which the Billing meter states in the same words.
+      const orgLibraryHardBand =
+        metersInfra && !scopeBillsStorageOverage('orgs', month)
+          ? ' Uploads to the organization library stop at the included ' +
+            'amount for now, because its storage is not billed yet.'
+          : ''
 
       // BY DOCUMENT ID, not the `rollup` read above (AGL-2219).
       //
@@ -971,92 +990,69 @@ async function handler(request: Request): Promise<Response> {
             'will need an upgrade in Billing.',
         },
         {
+          // THE WORKSPACE'S ONE STORAGE BAND (AGL-3482): every site's library
+          // plus the org's shared one (AGL-1473), against the pooled band
+          // ingress refuses at and the invoice subtracts (AGL-2075). One
+          // figure, so this notice and the upload it warns about agree.
+          //
+          // The org library has no allowance of its own, so there is no
+          // second storage check. `usageAlerts.orgLibraryStorage`, the guard
+          // of the retired per-library check (AGL-1886), may still sit on an
+          // org doc; nothing reads it.
+          //
+          // The key is `mediaStorage` because its guard already records the
+          // thresholds announced against this same pooled figure: a workspace
+          // told about one is not told again.
           key: 'mediaStorage',
           label: 'media storage',
-          // Every site's library PLUS the org's shared one (AGL-1473).
           used: mediaMb,
-          // Org-wide media allowance: per-host cap × the site allowance.
-          limit: entitlements.hostLimit * entitlements.storagePerHostMb,
+          limit: mediaBandMb,
           cadence: 'crossing',
           outcome: metersInfra ? 'bills' : 'stops',
           lead: () =>
             `${workspace.subject} is storing ` +
             usagePhrase({
               used: mediaMb,
-              limit: entitlements.hostLimit * entitlements.storagePerHostMb,
+              limit: mediaBandMb,
               usedText: formatStorageMb(mediaMb),
-              limitText: formatStorageMb(
-                entitlements.hostLimit * entitlements.storagePerHostMb,
-              ),
+              limitText: formatStorageMb(mediaBandMb),
               noun: 'of media storage',
-              suffix: 'across its sites',
+              suffix: 'across all its sites and its organization library',
             }) +
-            '.',
+            '.' +
+            // The library's share, as the Billing meter states it — the part
+            // a customer cannot see by opening any one site.
+            (orgLibraryMb >= 1
+              ? ` ${formatStorageMb(orgLibraryMb)} of it is in the ` +
+                'organization library.'
+              : ''),
+          // What the gate does at the band (`mediaStorageGate`): an unmetered
+          // plan refuses past it; a metered one accepts and bills, and only a
+          // storage cap the customer set stops it.
           reached: metersInfra
-            ? 'Your files keep working, and storage past the included amount ' +
-              'is billed on your monthly invoice — upgrade in Billing for a ' +
-              'bigger allowance, or set a monthly cap there if you would ' +
-              'rather it stopped.'
-            : 'Your files keep working and nothing is charged — to upload ' +
-              'more, free up space or upgrade in Billing.',
+            ? (storageCapSet
+                ? 'Your files keep working, and storage past the included ' +
+                  'amount is billed on your monthly invoice until the charge ' +
+                  'reaches the storage cap you set in Billing — then new ' +
+                  'uploads stop. Upgrade in Billing for a bigger allowance.'
+                : 'Your files keep working, and storage past the included ' +
+                  'amount is billed on your monthly invoice unless you set a ' +
+                  'storage cap in Billing — or upgrade there for a bigger ' +
+                  'allowance.') + orgLibraryHardBand
+            : 'Your files keep working and nothing is charged, but new ' +
+              'uploads stop until you free up space or upgrade in Billing.',
           approach: metersInfra
-            ? 'Nothing is charged yet — past the included amount, extra ' +
-              'storage is billed on your monthly invoice unless you set a ' +
-              'monthly cap in Billing.'
-            : 'Nothing changes and nothing is charged — past the included ' +
-              'amount, uploads will need more room or an upgrade in Billing.',
-        },
-        {
-          // THE ORG LIBRARY ON ITS OWN (AGL-1886), and this is the blind spot,
-          // not a duplicate of the line above.
-          //
-          // AGL-1473 got the org library's bytes INTO the org-wide sum, which
-          // is why `mediaStorage` is no longer blind to them. It is still
-          // structurally unable to WARN about them, because the two numbers
-          // are measured against different allowances: uploads are enforced
-          // PER SCOPE against `storagePerHostMb` (`api/media/upload-url` reads
-          // the very counter it increments), while the check above compares a
-          // summed total against `hostLimit × storagePerHostMb`. On a Pro org
-          // — three sites, 10 GB each — an org library sitting at its full
-          // 10 GB is AT the cap that refuses the next upload and reads as 33%
-          // of the org-wide band. It can never reach 75%, so the alert cannot
-          // fire, on the one surface whose whole job is telling somebody
-          // before a limit bites. An alert that cannot fire reads as coverage.
-          //
-          // Its own key, so it thresholds and dedupes independently: an org
-          // over its org-library allowance and comfortably inside its
-          // org-wide one must get this warning and only this one.
-          key: 'orgLibraryStorage',
-          label: 'organization library storage',
-          used: orgLibraryBytes / (1024 * 1024),
-          limit: entitlements.storagePerHostMb,
-          cadence: 'crossing',
-          outcome: metersInfra ? 'bills' : 'stops',
-          lead: () =>
-            `${workspace.possessive} shared library is storing ` +
-            usagePhrase({
-              used: orgLibraryBytes / (1024 * 1024),
-              limit: entitlements.storagePerHostMb,
-              usedText: formatStorageMb(orgLibraryBytes / (1024 * 1024)),
-              limitText: formatStorageMb(entitlements.storagePerHostMb),
-              noun: 'of storage',
-              suffix: 'for it',
-            }) +
-            '.',
-          reached: metersInfra
-            ? 'Its files keep working, and storage past the included amount ' +
-              'is billed on your monthly invoice — upgrade in Billing for a ' +
-              'bigger allowance, or set a monthly cap there if you would ' +
-              'rather it stopped.'
-            : 'Its files keep working and nothing is charged — to upload more ' +
-              'to it, free up space or upgrade in Billing.',
-          approach: metersInfra
-            ? 'Nothing is charged yet — past the included amount, extra ' +
-              'storage is billed on your monthly invoice unless you set a ' +
-              'monthly cap in Billing.'
-            : 'Nothing changes and nothing is charged — past the included ' +
-              'amount, uploads to it will need more room or an upgrade in ' +
-              'Billing.',
+            ? (storageCapSet
+                ? 'Nothing is charged yet — past the included amount, extra ' +
+                  'storage is billed on your monthly invoice until the charge ' +
+                  'reaches the storage cap you set in Billing, and then new ' +
+                  'uploads stop.'
+                : 'Nothing is charged yet — past the included amount, extra ' +
+                  'storage is billed on your monthly invoice unless you set ' +
+                  'a storage cap in Billing.') + orgLibraryHardBand
+            : 'Nothing changes and nothing is charged — at the included ' +
+              'amount, new uploads stop until you free up space or upgrade ' +
+              'in Billing.',
         },
         {
           // The only email figure a quota can refuse (AGL-1438). Reading the

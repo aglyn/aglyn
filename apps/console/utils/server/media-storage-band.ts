@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { resolveOrgEntitlements, UNLIMITED } from '@aglyn/aglyn/server'
+import { resolveOrgEntitlements } from '@aglyn/aglyn/server'
 import type { AglynOrgBilling } from '@aglyn/aglyn/server'
 
 /**
@@ -71,6 +71,30 @@ export interface OrgMediaBand {
 }
 
 /**
+ * The org-wide media band in MB, from already-resolved entitlements:
+ * `Math.max(1, hostLimit) × storagePerHostMb`, or `Infinity` when either
+ * figure is unlimited.
+ *
+ * The one expression the band is sized with. Ingress (`resolveOrgMediaBand`)
+ * and the usage alerts call it, and `meteredIncludedAllowance` sizes what the
+ * invoice subtracts with the same arithmetic, so the figure an upload is
+ * refused at, the figure a customer is warned about and the figure billing
+ * starts past are one number. `Math.max(1, …)` is part of that: a workspace
+ * whose site limit resolves to 0 still has the one site's band the invoice
+ * includes, not a band of zero.
+ */
+export function orgMediaAllowanceMb(entitlements: {
+  hostLimit: number
+  storagePerHostMb: number
+}): number {
+  const perScopeMb = entitlements.storagePerHostMb
+  if (!Number.isFinite(perScopeMb)) return Number.POSITIVE_INFINITY
+  const hostLimit = Math.max(1, entitlements.hostLimit)
+  if (!Number.isFinite(hostLimit)) return Number.POSITIVE_INFINITY
+  return hostLimit * perScopeMb
+}
+
+/**
  * `orgs/{id}.hosts` is the directory the site cap is claimed against
  * (AGL-2063), so it is the authoritative list — but it postdates some orgs,
  * and a host that predates it would silently contribute zero bytes to the
@@ -120,19 +144,10 @@ export async function resolveOrgMediaBand(options: {
   currentHostId?: string | null
 }): Promise<OrgMediaBand> {
   const { firestore, orgId, org, currentHostId } = options
-  const entitlements = resolveOrgEntitlements(org)
-  const perScopeMb = entitlements.storagePerHostMb
-  if (perScopeMb === UNLIMITED || !Number.isFinite(perScopeMb)) {
-    return { usedBytes: 0, allowanceMb: Number.POSITIVE_INFINITY, byScope: {} }
-  }
-  // `Math.max(1, …)` mirrors `meteredIncludedAllowance` exactly — the band
-  // the invoice subtracts and the band ingress refuses at must be the same
-  // arithmetic, not two expressions that happen to agree today.
-  const hostLimit = Math.max(1, entitlements.hostLimit)
-  const allowanceMb =
-    hostLimit === UNLIMITED || !Number.isFinite(hostLimit)
-      ? Number.POSITIVE_INFINITY
-      : hostLimit * perScopeMb
+  // `Math.max(1, …)` inside mirrors `meteredIncludedAllowance` exactly — the
+  // band the invoice subtracts and the band ingress refuses at must be the
+  // same arithmetic, not two expressions that happen to agree today.
+  const allowanceMb = orgMediaAllowanceMb(resolveOrgEntitlements(org))
   if (!Number.isFinite(allowanceMb)) {
     return { usedBytes: 0, allowanceMb, byScope: {} }
   }

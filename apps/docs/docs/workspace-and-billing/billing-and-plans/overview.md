@@ -155,9 +155,14 @@ Nothing here guarantees that a price or feature set will remain the same.
   workspace has — sites, pages, datasets, stored files and data — is announced when it first
   reaches a threshold and again only if it drops below and reaches it again, and a monthly
   meter — email sends, runs, bandwidth, AI credits — once per threshold each month, because
-  it starts from zero on the 1st. The bandwidth message differs by
-  plan, because what happens next differs by plan: paid organizations are told the extra is
-  billed, Free organizations are told the site will be paused.
+  it starts from zero on the 1st. The storage message is about the workspace's one
+  allowance — every site's media library and the organization library together — and
+  says how much of it the organization library holds; there is no separate notice for the
+  organization library. The storage and bandwidth messages differ by plan, because what
+  happens next differs by plan: paid organizations are told the extra is billed (for
+  storage, unless they set a [storage cap](#if-you-would-rather-uploads-stopped)); Free
+  organizations are told new uploads stop when storage is full, and that the site will be
+  paused when bandwidth is.
 - The monthly email allowance caps **campaign sends**. Transactional mail — password
   resets, invites, order confirmations, booking reminders and workflow notifications — is
   counted toward your usage but is never blocked by the cap, at any plan. Going over shows
