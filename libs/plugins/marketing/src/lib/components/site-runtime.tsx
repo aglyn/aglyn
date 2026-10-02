@@ -23,7 +23,7 @@ import {
   trackEvent,
 } from '@aglyn/aglyn/app-utils/analytics-events'
 import {
-  claimCampaignFirstVisits,
+  claimFirstCampaignTouch,
   notePageCampaigns,
   utmTouchField,
   whenUtmTouchConsentSettles,
@@ -1167,11 +1167,11 @@ const CAMPAIGN_VISIT_CONSENT_WAIT_MS = 10_000
  * live touch and keeps the remembered one.
  *
  * And it reports the visit to each campaign through the site collector's
- * `campaignVisit` beacon: a view of the campaign's page, and — when the
- * device has not been counted for that campaign in the window — a first
- * visit. A link carrying a `utm_campaign` label counts a first visit too,
- * for the campaign that declares it; the server answers which one. The
- * first-visit claim waits for consent to settle, because asked before it an
+ * `campaignVisit` beacon: a view of the campaign's page, and — when this is
+ * the device's first campaign touch in the window — a first visit. A link
+ * carrying a `utm_campaign` label is a touch too, credited as a first visit
+ * to the campaign that declares it; the server answers which one. The
+ * first-touch claim waits for consent to settle, because asked before it an
  * unresolved state would read as "may not remember", and the view would be
  * counted as nobody's first.
  *
@@ -1206,7 +1206,7 @@ function CampaignPageTouch(props: {
       done = true
       campaignVisitsReported.add(visitKey)
       const claimed = allowed
-        ? claimCampaignFirstVisits([
+        ? claimFirstCampaignTouch([
             ...ids.map((id) => `c:${id}`),
             ...(label ? [`u:${label}`] : []),
           ])

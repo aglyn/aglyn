@@ -33,14 +33,14 @@
  *  - **Page views** — views of the pages filed under the campaign, one per
  *    pageview, whoever the visitor is. It needs nothing from the visitor's
  *    device, so every view counts.
- *  - **First visits** — visitors reaching the campaign for the first time in
- *    the attribution window, by a page filed under it or a link carrying a
- *    `utm_campaign` label it declares. The device remembers which campaigns
- *    it has been counted for (`claimCampaignFirstVisits` in `utm-touch.ts`),
- *    so a visitor is counted once per campaign per window — and a visitor
- *    whose consent posture keeps nothing on their device cannot be told from
- *    the next one and is not counted at all. The figure is therefore a floor,
- *    and the page says so.
+ *  - **First visits** — visitors whose first campaign touch in the
+ *    attribution window was this campaign: a page filed under it, or a link
+ *    carrying a `utm_campaign` label it declares. The device answers from the
+ *    touch it already remembers (`claimFirstCampaignTouch` in
+ *    `utm-touch.ts`): one held from the last seven days means this visit is
+ *    not a first. A visitor whose consent posture keeps nothing on their
+ *    device cannot be told from the next one and is not counted at all, so
+ *    the figure is a floor, and the page says so.
  *
  * Both are also kept per month, under `byMonth`, so a campaign with dates can
  * be read for its own window. Twelve keys a year is the bound.
