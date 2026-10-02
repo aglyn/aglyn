@@ -36,6 +36,12 @@ import {
   UNLIMITED,
 } from '@aglyn/aglyn'
 import { pluginOrgCapacities } from '@aglyn/aglyn/plugin-manager/plugin-org-capacity'
+import {
+  FULL_USE_DISCOUNT_MULTIPLE,
+  FULL_USE_QUOTE_MULTIPLE,
+  describeFullUseFloor,
+  orgFullUseFloor,
+} from '@aglyn/aglyn/app-utils/full-use-cost'
 import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
 import {
   AppLink, CardDisplay, Container } from '@aglyn/shared-ui-jsx'
@@ -848,6 +854,22 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
       { measuredCogsUsd: usageLatest?.measuredCogsUsd ?? null },
     )
   }, [org, selectedCouponObj, cogsReady, usageLatest])
+  /**
+   * The same coupon against the full-use floor (AGL-3473) — the org using
+   * every band it resolves to, at the discounted price, net of Stripe. The
+   * apply route refuses below it and the override above does not lift it,
+   * so it is shown beside the rating and holds the button.
+   */
+  const discountFullUse = useMemo(() => {
+    if (!org || !selectedCouponObj) return null
+    return orgFullUseFloor(org as never, {
+      multiple: FULL_USE_DISCOUNT_MULTIPLE,
+      discount: {
+        percentOff: selectedCouponObj.percentOff ?? undefined,
+        amountOffUsd: selectedCouponObj.amountOffUsd ?? undefined,
+      },
+    })
+  }, [org, selectedCouponObj])
 
   const handleApplyDiscount = async () => {
     if (!selectedCoupon || discountBusy) return
@@ -996,6 +1018,30 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
       month: usageLatest?.month ?? null,
     } as const
   }, [entAmount, entInterval, org, cogsReady, usageLatest])
+
+  /**
+   * The quote against cost + 30% at full use (AGL-3473): the org as it would
+   * bill once provisioned — the chosen plan, its overrides and add-ons, the
+   * amount as its price — every band at 100%, net of Stripe. The route
+   * refuses under it with the same figures.
+   */
+  const entFullUse = useMemo(() => {
+    const amount = Number(entAmount)
+    if (!(amount > 0) || !org) return null
+    return orgFullUseFloor(
+      {
+        ...org,
+        plan: entPlan,
+        subscription: {
+          ...(org.subscription ?? {}),
+          status: 'active',
+          interval: entInterval,
+          customMonthlyUsd: amount,
+        },
+      } as never,
+      { multiple: FULL_USE_QUOTE_MULTIPLE },
+    )
+  }, [entAmount, entInterval, entPlan, org])
 
   useEffect(() => {
     // A different quote is a different deal, so it gets a different attempt.
@@ -1919,6 +1965,18 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                             </Stack>
                           </Alert>
                         ) : null}
+                        {discountFullUse ? (
+                          <Alert
+                            severity={discountFullUse.ok ? 'success' : 'error'}
+                          >
+                            {(discountFullUse.ok
+                              ? 'Full-use floor: clears. '
+                              : 'Full-use floor: under it — the apply route ' +
+                                'refuses this, with no override. ') +
+                              'Discounted, it ' +
+                              describeFullUseFloor(discountFullUse)}
+                          </Alert>
+                        ) : null}
                         {discountRating?.rating === 'block' ? (
                           <FormControlLabel
                             control={
@@ -1945,6 +2003,7 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                             // is the same "act before the answer arrives"
                             // failure one layer up.
                             !discountRating ||
+                            discountFullUse?.ok === false ||
                             (discountRating.rating === 'block' &&
                               !confirmBelowFloor)
                           }
@@ -2098,6 +2157,16 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                             </Stack>
                           </Alert>
                         ) : null}
+                        {entFullUse ? (
+                          <Alert severity={entFullUse.ok ? 'success' : 'error'}>
+                            {`Full-use floor (${FULL_USE_QUOTE_MULTIPLE.toFixed(2)}× cost): ` +
+                              (entFullUse.ok
+                                ? 'clears. '
+                                : 'under it — provisioning is refused. ') +
+                              `On ${entPlan}, it ` +
+                              describeFullUseFloor(entFullUse)}
+                          </Alert>
+                        ) : null}
                         {entResult?.checkoutUrl ? (
                           <Alert severity="success">
                             <MuiLink
@@ -2124,7 +2193,11 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                           size="small"
                           variant="contained"
                           color="primary"
-                          disabled={entBusy || !(Number(entAmount) > 0)}
+                          disabled={
+                            entBusy ||
+                            !(Number(entAmount) > 0) ||
+                            entFullUse?.ok === false
+                          }
                           onClick={() => void handleProvisionEnterprise()}
                           sx={{ alignSelf: 'flex-start' }}
                         >

@@ -44,6 +44,10 @@ import {
   WINBACK_PERCENT_OFF,
 } from '../../_lib/retention'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
+import {
+  FULL_USE_DISCOUNT_MULTIPLE,
+  orgFullUseFloor,
+} from '@aglyn/aglyn/app-utils/full-use-cost'
 
 // lockdown-423: exempt — the retention funnel is part of the LEAVE path
 // (survey → downsell → winback → cancel); a billing lockdown must not trap
@@ -90,6 +94,19 @@ function hasExistingDiscount(subscription: any): boolean {
     return true
   }
   return Boolean(subscription?.discount)
+}
+
+/**
+ * Whether THE winback discount keeps this org, fully used, at or above its
+ * full-use cost net of Stripe (AGL-3473): never below cost. `org` is the org
+ * as it bills — plan and overrides beside its subscription and add-ons — and
+ * an org with no subscription price on record does not clear it.
+ */
+function winbackClearsFullUse(org: Record<string, unknown>): boolean {
+  return orgFullUseFloor(org as never, {
+    multiple: FULL_USE_DISCOUNT_MULTIPLE,
+    discount: { percentOff: WINBACK_PERCENT_OFF },
+  }).ok
 }
 
 /**
@@ -202,14 +219,26 @@ async function handler(request: Request): Promise<Response> {
       // decided in the browser. The dialog renders what it is told: which tier
       // to offer, what the discount is, and whether the org still has its one
       // winback. A client that computed any of these would eventually offer a
-      // tier the server refuses, or a discount the guard will not mint.
+      // tier the server refuses, or a discount the guard will not mint — so a
+      // winback the full-use floor refuses on this org is not offered either.
       const winbackUsed = (await retention.doc('winback').get()).exists
+      // A billing read that fails withholds the offer rather than failing the
+      // survey: the answer is already stored, and the funnel moves on.
+      const billingForOffer = winbackUsed
+        ? null
+        : await readOrgBilling(orgId).catch(() => null)
+      const winbackAffordable =
+        billingForOffer !== null &&
+        winbackClearsFullUse({
+          ...(orgSnapshot.data() ?? {}),
+          ...billingForOffer,
+        })
       return Response.json(
         {
           ok: true,
           funnelId: surveyRef.id,
           downsellPlan: downsellTargetPlan(plan),
-          winbackAvailable: !winbackUsed,
+          winbackAvailable: winbackAffordable,
           winbackPercentOff: WINBACK_PERCENT_OFF,
           winbackDurationMonths: WINBACK_DURATION_MONTHS,
         },
@@ -222,7 +251,8 @@ async function handler(request: Request): Promise<Response> {
     if (!secretKey) {
       return Response.json({ error: 'Billing is not configured' }, { status: 501 })
     }
-    const customerId = (await readOrgBilling(orgId)).stripeCustomerId
+    const billing = await readOrgBilling(orgId)
+    const customerId = billing.stripeCustomerId
     if (!customerId) {
       return Response.json({ error: 'No billing account yet' }, { status: 409 })
     }
@@ -321,6 +351,38 @@ async function handler(request: Request): Promise<Response> {
         ...(stripeInterval ? { interval: String(stripeInterval) } : {}),
       },
     }
+    // NEVER BELOW COST (AGL-3473), on the same Stripe-truth subscription: the
+    // org using every band it bought must still be covered at the winback
+    // price.
+    // Refused in the same words and the same shape as the guardrail below —
+    // the customer is told the offer is not available, never our figures.
+    const billedSubscription = (billing.subscription ??
+      orgSnapshot.get('subscription') ??
+      {}) as Record<string, unknown>
+    if (
+      !winbackClearsFullUse({
+        ...(orgSnapshot.data() ?? {}),
+        ...billing,
+        subscription: {
+          ...billedSubscription,
+          status: String(subscription?.status ?? ''),
+          ...(stripeInterval ? { interval: String(stripeInterval) } : {}),
+        },
+      })
+    ) {
+      return Response.json(
+        {
+          error:
+            'This workspace costs more to run than a discounted subscription ' +
+            'would cover, so the winback offer is not available. Switching to ' +
+            'a smaller plan is the better fit.',
+          code: 'margin_floor',
+          rating: 'block',
+        },
+        { status: 409 },
+      )
+    }
+
     const measuredCogsUsd = await latestMeasuredCogsUsd(orgId)
     const marginRating = checkDiscountMargin(
       orgForMargin as never,

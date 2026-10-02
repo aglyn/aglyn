@@ -141,7 +141,9 @@ Things worth knowing about the offers:
   by staying. **Keep my plan** on the last step closes the dialog and changes
   nothing.
 - **A winback discount is once per organization, ever.** If you've taken one
-  before, step 3 doesn't appear at all.
+  before, step 3 doesn't appear at all. It also doesn't appear when your plan's
+  price can't carry the discount — the offer is only made where the discounted
+  price still covers what your plan includes.
 - **A winback is always time-boxed.** It runs for a stated number of months and
   then your normal price resumes. We don't mint open-ended discounts.
 - **If a step fails, it's skipped rather than blocking you.** A survey that

@@ -21,6 +21,12 @@ import {
   DISCOUNT_APPROVAL_THRESHOLD_PCT,
   MARGIN_SCOPE_NOTE,
 } from '@aglyn/aglyn'
+import {
+  couponCaseLabel,
+  deepestCouponPercentWithinFullUse,
+  describeFullUseFloor,
+  rateCouponAgainstFullUse,
+} from '@aglyn/aglyn/app-utils/full-use-cost'
 import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
 import { CardDisplay, Container } from '@aglyn/shared-ui-jsx'
 import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
@@ -176,6 +182,19 @@ const AdminCoupons: NextPageWithLayout<Record<string, never>> = () => {
         : { amountOffUsd: Number(form.amountOffUsd) || 0 }
     return checkDiscountMargin(REFERENCE_ORG as any, discount)
   }, [form.kind, form.percentOff, form.amountOffUsd])
+
+  // The full-use floor (AGL-3473), on every paid plan at both intervals:
+  // the binding half of this form. Unlike the rating above it does not
+  // depend on which org redeems the coupon — a code can be typed on any plan
+  // — so the route refuses exactly what this shows as under it.
+  const fullUse = useMemo(() => {
+    const discount =
+      form.kind === 'percent'
+        ? { percentOff: Number(form.percentOff) || 0 }
+        : { amountOffUsd: Number(form.amountOffUsd) || 0 }
+    return rateCouponAgainstFullUse(discount)
+  }, [form.kind, form.percentOff, form.amountOffUsd])
+  const deepestPercent = useMemo(() => deepestCouponPercentWithinFullUse(), [])
 
   const needsApproval =
     form.kind === 'percent' &&
@@ -604,6 +623,33 @@ const AdminCoupons: NextPageWithLayout<Record<string, never>> = () => {
                   </Stack>
                 </Alert>
 
+                {/* The full-use floor (AGL-3473) — binding, not
+                    illustrative: the route refuses a coupon under it, and no
+                    sign-off lifts it. */}
+                <Alert severity={fullUse.ok ? 'success' : 'error'}>
+                  <Stack spacing={0.5}>
+                    <Typography variant="body2">
+                      {(fullUse.ok
+                        ? 'Full-use floor: clears on every paid plan. '
+                        : 'Full-use floor: under it — this coupon cannot be created. ') +
+                        `Worst case ${describeFullUseFloor(
+                          fullUse.worst,
+                          couponCaseLabel(fullUse.worst),
+                        )}`}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {'A code can be redeemed on any paid plan, monthly or ' +
+                        'annual, by a customer using everything the plan ' +
+                        'includes. A discount may spend the margin a plan ' +
+                        'carries above that cost, never the cost. ' +
+                        (deepestPercent == null
+                          ? 'A plan is under its full-use cost at list price, ' +
+                            'so no coupon clears until its bands or price change.'
+                          : `The deepest percent every plan carries: ${deepestPercent}%.`)}
+                    </Typography>
+                  </Stack>
+                </Alert>
+
                 {needsApproval ? (
                   <FormControlLabel
                     control={
@@ -623,7 +669,11 @@ const AdminCoupons: NextPageWithLayout<Record<string, never>> = () => {
 
                 <Button
                   variant="contained"
-                  disabled={busy || (needsApproval && !form.confirmHighDiscount)}
+                  disabled={
+                    busy ||
+                    !fullUse.ok ||
+                    (needsApproval && !form.confirmHighDiscount)
+                  }
                   onClick={() => void create()}
                   sx={{ alignSelf: 'flex-start' }}
                 >

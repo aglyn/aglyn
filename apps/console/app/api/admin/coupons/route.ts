@@ -18,6 +18,11 @@
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import { DISCOUNT_APPROVAL_THRESHOLD_PCT } from '@aglyn/aglyn/server'
 import {
+  couponCaseLabel,
+  describeFullUseFloor,
+  rateCouponAgainstFullUse,
+} from '@aglyn/aglyn/app-utils/full-use-cost'
+import {
   emailUnverifiedResponse,
   firebaseAdmin,
   isImpersonationSession,
@@ -55,14 +60,17 @@ import { readStaffListQuery } from '../../../../utils/server/staff-list-query'
  *          repeating/forever; optional max redemptions and expiry) and, when
  *          a code is given, a promotion code customers can type at checkout.
  *          A ≥`DISCOUNT_APPROVAL_THRESHOLD_PCT`% coupon needs an explicit
- *          `confirmHighDiscount` flag.
+ *          `confirmHighDiscount` flag, and one that would put any paid plan,
+ *          fully used, under its full-use cost is refused outright
+ *          (`fullUseRefusal`).
  *
  *          `activate` / `deactivate` flip `active` on an existing promotion
  *          code named by `promotionCodeId`. Checkout resolves a typed code
  *          with `active=true`, so an inactive code is reported to the
  *          customer as unrecognized — the flip back is a customer-facing
  *          repair, and it belongs here rather than in a Stripe Dashboard
- *          session no audit trail can see.
+ *          session no audit trail can see. Activating is minting again, so
+ *          it is held to the same full-use floor.
  *
  *          Both actions are audited to `adminAudit`.
  *
@@ -93,6 +101,44 @@ async function stripe(
  * resource entirely.
  */
 const PROMOTION_CODE_ID = /^promo_[A-Za-z0-9]+$/
+
+/**
+ * The refusal for a coupon whose worst case puts a plan under its full-use
+ * cost, or `null` when every plan clears it (AGL-3473).
+ *
+ * A coupon here carries no plan restriction, so a customer can redeem its
+ * code on any paid plan at either interval, and the floor is "never below
+ * cost": a discount may spend the 30% a plan carries above what its bands
+ * cost at 100%, never the cost itself. No confirm flag lifts it — the ≥40%
+ * sign-off is a judgment staff may make, and this is not.
+ */
+function fullUseRefusal(
+  discount: { percentOff?: number; amountOffUsd?: number },
+): Response | null {
+  const verdict = rateCouponAgainstFullUse(discount)
+  if (verdict.ok) return null
+  const failing = verdict.cases.filter((one) => !one.ok).map(couponCaseLabel)
+  // A plan already under the floor at list price refuses every discount, and
+  // the message says so rather than blaming the size of this one.
+  const underAtList = rateCouponAgainstFullUse({})
+    .cases.filter((one) => !one.ok)
+    .map(couponCaseLabel)
+  return Response.json(
+    {
+      error:
+        'This discount would put a fully used plan under its full-use cost, ' +
+        'net of Stripe. Worst case ' +
+        describeFullUseFloor(verdict.worst, couponCaseLabel(verdict.worst)) +
+        ` Under the floor on: ${failing.join('; ')}.` +
+        (underAtList.length
+          ? ` Already under it at list price, before any discount: ${underAtList.join('; ')}.`
+          : ''),
+      code: 'full_use_floor',
+      fullUse: { worst: verdict.worst, failing, underAtList },
+    },
+    { status: 400 },
+  )
+}
 
 /** Shape one Stripe promotion code for the console. */
 function serializePromotionCode(code: any) {
@@ -289,6 +335,18 @@ async function handler(request: Request): Promise<Response> {
         )
       }
 
+      if (active) {
+        const amountOff = current.body?.coupon?.amount_off
+        const refused = fullUseRefusal(
+          typeof percentOff === 'number'
+            ? { percentOff }
+            : typeof amountOff === 'number'
+              ? { amountOffUsd: amountOff / 100 }
+              : {},
+        )
+        if (refused) return refused
+      }
+
       const updated = await stripe(
         secretKey,
         `promotion_codes/${promotionCodeId}`,
@@ -385,6 +443,11 @@ async function handler(request: Request): Promise<Response> {
         { status: 400 },
       )
     }
+
+    const refused = fullUseRefusal(
+      hasPercent ? { percentOff: percentOff! } : { amountOffUsd: amountOffUsd! },
+    )
+    if (refused) return refused
 
     const couponParams: Record<string, string> = { duration }
     if (hasPercent) couponParams.percent_off = String(percentOff)

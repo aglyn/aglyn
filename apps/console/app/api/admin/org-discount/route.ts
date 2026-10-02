@@ -31,6 +31,11 @@ import {
   readOrgBilling,
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
+import {
+  FULL_USE_DISCOUNT_MULTIPLE,
+  describeFullUseFloor,
+  orgFullUseFloor,
+} from '@aglyn/aglyn/app-utils/full-use-cost'
 import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 
 /**
@@ -42,9 +47,12 @@ import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write
  *   POST { orgId, action: 'apply', couponId, reason?, confirmBelowFloor? }
  *   POST { orgId, action: 'remove' }
  *
- * Apply runs `checkDiscountMargin` for THAT org first: a `block` rating —
- * too deep a discount, or a margin well below the net-margin floor — is
- * refused unless the caller passes `confirmBelowFloor`. StaffGuard-gated;
+ * Apply first holds the discount to the full-use floor (AGL-3473): the org,
+ * using every band it resolves to at 100%, must still cover that cost net of
+ * Stripe after the discount — refused outright, with no override. Then it
+ * runs `checkDiscountMargin` for THAT org: a `block` rating — too deep a
+ * discount, or a margin well below the net-margin floor — is refused unless
+ * the caller passes `confirmBelowFloor`. StaffGuard-gated;
  * audited to `adminAudit`; 501 without Stripe env. Uses Stripe's REST API
  * directly (no SDK).
  */
@@ -123,9 +131,8 @@ async function handler(request: Request): Promise<Response> {
     }
     const orgData = orgSnap.data() as any
     // AGL-1028: moved to `orgs/{orgId}/billing/stripe`, org doc as fallback.
-    const customerId = (await readOrgBilling(orgId)).stripeCustomerId as
-      | string
-      | undefined
+    const billing = await readOrgBilling(orgId)
+    const customerId = billing.stripeCustomerId as string | undefined
 
     if (action === 'remove') {
       const before = orgData?.discount ?? null
@@ -186,6 +193,37 @@ async function handler(request: Request): Promise<Response> {
       coupon.percent_off != null ? Number(coupon.percent_off) : undefined
     const amountOffUsd =
       coupon.amount_off != null ? Number(coupon.amount_off) / 100 : undefined
+
+    // THE FULL-USE FLOOR (AGL-3473): never below cost. Priced on the org as
+    // it bills — its plan and overrides from the org doc, its subscription
+    // and add-ons from the billing doc — so the list price is the one the
+    // coupon will come off. A discount may spend the margin above what the
+    // org's bands cost at 100%, never the cost, so `confirmBelowFloor` does
+    // not reach this; it answers before the guardrail below so staff are not
+    // asked to override a verdict that would refuse them anyway.
+    const fullUse = orgFullUseFloor(
+      { ...orgData, ...billing } as never,
+      {
+        multiple: FULL_USE_DISCOUNT_MULTIPLE,
+        discount: { percentOff, amountOffUsd },
+      },
+    )
+    if (!fullUse.ok) {
+      return Response.json(
+        {
+          error:
+            fullUse.listUsd > 0
+              ? 'This discount would put this organization, fully used, under ' +
+                'its full-use cost. Discounted, it ' +
+                describeFullUseFloor(fullUse)
+              : 'This organization has no subscription price on record to rate ' +
+                'the discount against, so it cannot be applied.',
+          code: 'full_use_floor',
+          fullUse,
+        },
+        { status: 400 },
+      )
+    }
 
     // Margin guardrail for THIS org (AGL-1105): a blocked discount needs an
     // explicit override.

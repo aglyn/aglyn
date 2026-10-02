@@ -2588,3 +2588,51 @@ describe('the Aglyn AI add-on band clears the same invariant with its revenue co
     expect(Number.isFinite(AI_ADDON_CREDITS_PER_MONTH.enterprise)).toBe(true)
   })
 })
+
+/**
+ * THE GUARDS PRICE FULL USE WITH THE SAME MULTIPLICATION (AGL-3473).
+ *
+ * The enterprise quote floor and the coupon floor refuse a price against
+ * `fullUseCogs`, a production function, because a guard cannot import a spec.
+ * Two models of one figure drift, so this holds the production one to the
+ * model above on every plan, to the cent and past it: the same terms, the
+ * same per-site floor, and an unbounded band as Infinity rather than 0.
+ *
+ * The seat population is the one the production function prices — every
+ * collaborator a site admits on every site, plus the org's managers — so the
+ * model's `crmSeats` term is replaced by it here; where the model already
+ * prices that population, the replacement changes nothing.
+ */
+it('prices full use in production exactly as this model does, on every plan (AGL-3473)', () => {
+  const production = jest.requireActual('@aglyn/aglyn/app-utils/full-use-cost') as {
+    SEAT_COGS_USD_PER_MONTH: number
+    fullUseCogs: (entitlements: (typeof PLAN_ENTITLEMENTS)[OrgPlan]) => {
+      cogsUsd: number
+      unbounded: string[]
+    }
+  }
+  expect(production.SEAT_COGS_USD_PER_MONTH).toBe(CRM_SEAT_COGS_USD_PER_MONTH)
+  for (const plan of Object.keys(PLAN_ENTITLEMENTS) as OrgPlan[]) {
+    const entitlements = PLAN_ENTITLEMENTS[plan]
+    const terms = tierCostTerms(plan)
+    const seats =
+      (entitlements.membersPerHost * entitlements.hostLimit + entitlements.managersPerOrg) *
+      CRM_SEAT_COGS_USD_PER_MONTH
+    const measured =
+      Object.values(terms).reduce((a, b) => a + b, 0) - terms.crmSeats + seats
+    const model = Number.isFinite(measured)
+      ? Math.max(measured, INFRA_COGS_PER_SITE_USD * entitlements.hostLimit)
+      : Number.POSITIVE_INFINITY
+    expect(`${plan}: ${production.fullUseCogs(entitlements).cogsUsd.toFixed(6)}`).toBe(
+      `${plan}: ${model.toFixed(6)}`,
+    )
+  }
+  // CONTROL: an unbounded band poisons the production total and is named,
+  // the shape `formSubmissionsPerMonth: UNLIMITED` once took on Agency.
+  const unbounded = production.fullUseCogs({
+    ...PLAN_ENTITLEMENTS.agency,
+    formSubmissionsPerMonth: UNLIMITED,
+  } as (typeof PLAN_ENTITLEMENTS)[OrgPlan])
+  expect(unbounded.cogsUsd).toBe(Number.POSITIVE_INFINITY)
+  expect(unbounded.unbounded).toEqual(['formSubmissions'])
+})

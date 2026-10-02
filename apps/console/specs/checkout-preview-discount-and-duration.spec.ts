@@ -357,3 +357,50 @@ describe('the subscribe path applies the code it is sent', () => {
     expect(subscriptionBodies[0].get('discounts[0][promotion_code]')).toBeNull()
   })
 })
+
+/**
+ * NEVER BELOW COST, where the code is applied (AGL-3473). Only checkout knows
+ * the plan, the interval and the add-on a code is being redeemed against, so
+ * a code minted before the floor existed — or in the Stripe Dashboard — is
+ * held to it here: the purchase, fully used, must still cover its full-use
+ * cost net of Stripe after the discount. Refused in the preview AND the
+ * subscribe path, before Stripe prices or charges anything, and the customer
+ * is told only that the code does not apply.
+ */
+describe('a code that would take the plan under its full-use cost (AGL-3473)', () => {
+  /** Every request the route sent to the upcoming-invoice endpoint. */
+  const upcomingCalls = () =>
+    (global.fetch as jest.Mock).mock.calls.filter(([url]) =>
+      /\/invoices\/upcoming/.test(String(url)),
+    )
+
+  it('is refused in the preview, before an invoice is priced', async () => {
+    coupon = { duration: 'once', percent_off: 97 }
+    const response = await post(loadCheckout(), {
+      action: 'preview',
+      promotionCode: 'LAUNCH97',
+    })
+    expect(response.status).toBe(400)
+    const payload = await response.json()
+    expect(payload.code).toBe('promotion_code_not_applicable')
+    expect(payload.error).toContain('LAUNCH97')
+    // What the purchase costs us never reaches the customer.
+    expect(payload.error).not.toMatch(/\$|cost/i)
+    expect(upcomingCalls()).toHaveLength(0)
+  })
+
+  it('is refused on subscribe, before a subscription is created', async () => {
+    coupon = { duration: 'forever', amount_off: 2400 }
+    const response = await post(loadCheckout(), { promotionCode: 'LAUNCH97' })
+    expect(response.status).toBe(400)
+    expect((await response.json()).code).toBe('promotion_code_not_applicable')
+    expect(subscriptionBodies).toHaveLength(0)
+  })
+
+  it('POSITIVE CONTROL: a discount inside the plan’s margin is applied', async () => {
+    coupon = { duration: 'once', percent_off: 5 }
+    const response = await post(loadCheckout(), { promotionCode: 'LAUNCH97' })
+    expect(response.status).toBe(200)
+    expect(subscriptionBodies[0].get('discounts[0][promotion_code]')).toBe('promo_1')
+  })
+})
