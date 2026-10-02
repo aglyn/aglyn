@@ -175,7 +175,7 @@ export function useInsertTokenOptions(
     }
     const kind = repeat?.source.entityKind
     const key = kind ? repeat?.key : undefined
-    const listed = kind ? entityOptions[kind] ?? [] : []
+    const listed = kind ? entityOptions.options?.[kind] ?? [] : []
     /*
      * The browse window is a PAGE of the site's entities, so a repeat bound to
      * one outside it matches nothing here — and this is where the token menu

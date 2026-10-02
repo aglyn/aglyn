@@ -35,13 +35,6 @@
       "lane": "crm"
     },
     {
-      "path": "apps/console/components/entity-picker-provider.component.tsx",
-      "rules": [
-        "domain-declares:data"
-      ],
-      "lane": "data"
-    },
-    {
       "path": "apps/console/components/notifications-menu.component.tsx",
       "rules": [
         "plugin-id"

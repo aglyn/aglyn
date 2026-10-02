@@ -639,6 +639,53 @@ server layout that loads no plugin code, and a segment nobody declared is a
 (`@aglyn/aglyn/plugin-manager/besigner-documents`) read them, and
 `useHostDocumentVersion` (`@aglyn/tenant-feature-instance`) reads a version.
 
+## Entity pickers — `plugin-entity-pickers`
+
+An element's attribute can name another record by id — the product a product
+grid shows, the form a Form element files into, the dataset a repeat walks —
+and the Besigner offers it as a picker of the site's records of that kind,
+listed by current name and stored by id. A plugin that keeps records an
+element can name declares each kind in an `entityPickers` block of
+`plugins.config.json`:
+
+```json
+"entityPickers": [
+  {
+    "kind": "bottles",
+    "attribute": "bottle-select",
+    "scope": "host",
+    "collection": "bottles",
+    "nameField": "label",
+    "where": [{ "field": "status", "equals": "listed" }],
+    "singular": "bottle",
+    "plural": "bottles",
+    "page": "the Cellar page"
+  }
+]
+```
+
+| Field | Semantics |
+| --- | --- |
+| `kind` | The key the picker context holds the kind under (`options[kind]`, `status[kind]`, `resolved[kind]`) and a repeat source names as its `entityKind`. One owner per kind. |
+| `attribute` | The attribute type (`FieldComponentType`) whose picker lists the kind. One kind per attribute type. |
+| `scope` | `host` — the site's own `hosts/{hostId}/{collection}`; `orgData` — the organization's data, read where the site's data scope resolves and narrowed to what the site may use (`visibleTo` against the site's scope tokens), with anything else resolved as unavailable. |
+| `collection`, `nameField` | Where the documents are and the field a document is named by; `name`, then the id, when it is empty. |
+| `where` | Equality clauses applied on the server to the browse and the search alike. |
+| `searchable` | The documents carry `nameTokens`/`nameLower`, so a typed query reaches past the browse window. |
+| `fieldsAttribute`, `fieldsFrom` | Together: an attribute type whose options are the FIELDS of an entity of this kind an ancestor chose, and the record kind whose console list source ([Record lists](#record-lists--plugin-record-lists-console)) shares each entity's `fields` as `{ id, name }`. The plugin declares the `entityPickers` load point among its `console.slots`, so the picker provider loads its source. |
+| `singular`, `plural`, `page` | The words a picker says: "No bottles yet — add one on the Cellar page". |
+
+Core keeps the machinery every kind shares: the browse window and its probe,
+the search past it, the keyed read that names a stored value outside the
+window, and the demand gate that reads nothing until a picker asks. The kinds
+are COMPILED, not registered: the Besigner decides whether an attribute IS a
+picker from them on the panel's first render. `pluginEntityPickers()`,
+`entityPickerForAttribute(type)` and `entityFieldsPickerForAttribute(type)`
+(`@aglyn/aglyn/plugin-manager/plugin-entity-pickers`) read them. Commerce
+declares `products`, `collections` (catalog collections only) and
+`categories`, Forms declares `forms`, and Data declares `datasets` with
+their fields.
+
 ## Container kinds — `plugin-containers`
 
 A container is a document other records are FILED UNDER: a form, a screen, a
