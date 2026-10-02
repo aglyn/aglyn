@@ -239,6 +239,24 @@ export interface PluginRecordPreparedEmail {
   file(sent: PluginRecordEmailSent): Promise<void>
 }
 
+/**
+ * A delivery event the provider reported for a message that carried tags
+ * (AGL-2615, AGL-3080), handed over by the webhook that heard it. The record
+ * system filed the entry the tags name when the message was prepared
+ * (`prepareEmail`, or its own send), so only it can read them: the webhook
+ * hands every tag the message carried and the event in the delivery log's
+ * own vocabulary, and the record system moves the entry the tags name, if
+ * any, to that state.
+ */
+export interface PluginRecordTaggedDeliveryRequest {
+  /** Every tag the message carried, by name, as the provider echoed them. */
+  tags: Readonly<Record<string, string>>
+  /** The normalized event — `delivered`, `opened`, `clicked`, `bounced`, `complained`. */
+  event: string
+  /** When the provider says it happened, epoch ms. */
+  atMs: number
+}
+
 export interface PluginRecordTimelineWriter {
   logActivity(request: PluginRecordActivityRequest): Promise<PluginRecordWrite>
   createTask(request: PluginRecordTaskRequest): Promise<PluginRecordWrite>
@@ -248,6 +266,13 @@ export interface PluginRecordTimelineWriter {
    * message that earns no entry. Never throws.
    */
   prepareEmail?(request: PluginRecordEmailPrepareRequest): Promise<PluginRecordPreparedEmail | null>
+  /**
+   * Moves the entry a delivered message's tags name to the event's state
+   * (AGL-3080). Optional: a record system that files no sent mail answers
+   * nothing. Tags that name no entry of its own are its to ignore. Never
+   * throws.
+   */
+  recordTaggedDelivery?(request: PluginRecordTaggedDeliveryRequest): Promise<void>
   /**
    * Marks a filed email bounced or reported (AGL-3245). Optional: a record
    * system that keeps no delivery state answers nothing, and the caller's
@@ -305,5 +330,23 @@ export async function preparePluginRecordEmail(
   } catch (error) {
     console.error('[record-timeline] the record system could not prepare an email entry', error)
     return null
+  }
+}
+
+/**
+ * Hands a delivery event to whichever plugin keeps records, for the entry the
+ * message's tags name (AGL-3080). Does nothing when no plugin keeps records or
+ * the one that does files no sent mail. Never throws: the webhook answers the
+ * provider whatever happens here.
+ */
+export async function recordPluginTaggedEmailDelivery(
+  request: PluginRecordTaggedDeliveryRequest,
+): Promise<void> {
+  const resolved = pluginRecordTimelineWriter()
+  if (!resolved?.writer.recordTaggedDelivery) return
+  try {
+    await resolved.writer.recordTaggedDelivery(request)
+  } catch (error) {
+    console.error('[record-timeline] the record system could not record a delivery', error)
   }
 }

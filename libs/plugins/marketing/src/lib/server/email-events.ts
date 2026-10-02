@@ -15,12 +15,11 @@
  * limitations under the License.
  */
 
-import {
-  claimAttempt,
-  CRM_EMAIL_ACTIVITY_TAG,
-  CRM_EMAIL_ORG_TAG,
-  type PluginApiHandler,
-} from '@aglyn/aglyn/server'
+import { claimAttempt, type PluginApiHandler } from '@aglyn/aglyn/server'
+// The record system's timeline, by its own module: a one-to-one email's
+// delivery is the record system's entry to move, found by the tags it put on
+// the message.
+import { recordPluginTaggedEmailDelivery } from '@aglyn/aglyn/plugin-manager/plugin-record-timeline'
 import { normalizeDeliveryEvents } from '@aglyn/shared-util-email'
 // By its own path, not the barrel: the check holds a `crypto` HMAC, and the
 // barrel is reached from the browser through the campaign model (AGL-2657).
@@ -61,10 +60,6 @@ import { recordEmailCampaignTouch } from './email-campaign-touch'
 // seam: what the record page, the list and the re-engagement audience read.
 import { stampRecordEmailEngagement } from '@aglyn/aglyn/plugin-manager/plugin-record-email-state'
 import { isDocumentId } from '@aglyn/tenant-data-admin/server/document-id'
-import {
-  crmEmailDeliveryStateForEvent,
-  recordCrmEmailDelivery,
-} from '@aglyn/tenant-data-admin/server/crm-email-activity'
 import { getOrgForHost } from '@aglyn/tenant-data-admin/server/organizations'
 // The leaf again: which document a delivery event counts against is the
 // question every counter below depends on, and a stub would answer it for
@@ -533,31 +528,27 @@ export const emailEventsHandler: PluginApiHandler = async (req, res) => {
     }
 
     /*==========================================
-     * THE ONE-TO-ONE EMAIL'S TIMELINE ENTRY (AGL-2615).
+     * THE ONE-TO-ONE EMAIL'S TIMELINE ENTRY (AGL-2615, AGL-3080).
      *
-     * A message sent from a CRM record carries the org and the activity row
-     * it was logged as, and the five events below are the row's delivery
-     * state — the chip a rep reads beside "Email" on the timeline. Placed
-     * above the campaign gates because a one-to-one email is not a campaign
-     * and names none; placed below the log and the engagement rollup
-     * because those are facts about the message and the person that this
-     * row merely restates.
-     *
-     * The state comes from the NORMALIZED event, not the wire string: the
-     * adapter above is the one reader of the provider's vocabulary. Both ids
-     * are path components, so both are checked the way `hostId` is. Never
-     * fatal — the writer reports rather than throws — and never behind the
-     * replay claim: the write is monotonic, so a replay finds the row
-     * already there and changes nothing.
+     * A message the record system tagged when it filed it — a one-to-one
+     * email from a record, an automation's email to its contact — carries
+     * the entry's own tags, and the five events below are that entry's
+     * delivery state: the chip a rep reads beside "Email" on the timeline.
+     * Only the record system can read its tags, so every event is handed to
+     * it with all of them, in the log's vocabulary rather than the
+     * provider's (the adapter above is the one reader of the wire), and it
+     * moves the entry they name, if any. Placed above the campaign gates
+     * because a one-to-one email is not a campaign and names none; below
+     * the log and the engagement rollup because those are facts about the
+     * message and the person that the entry merely restates. Never fatal,
+     * and never behind the replay claim: the record system's write is
+     * monotonic, so a replay changes nothing.
      *=========================================*/
-    const crmState = crmEmailDeliveryStateForEvent(deliveryEvents[0]?.type)
-    const crmActivityId = tags[CRM_EMAIL_ACTIVITY_TAG]
-    const crmOrgId = tags[CRM_EMAIL_ORG_TAG]
-    if (crmState && isDocumentId(crmActivityId) && isDocumentId(crmOrgId)) {
-      await recordCrmEmailDelivery(firestore, {
-        orgId: crmOrgId,
-        activityId: crmActivityId,
-        state: crmState,
+    const deliveryType = deliveryEvents[0]?.type
+    if (deliveryType) {
+      await recordPluginTaggedEmailDelivery({
+        tags,
+        event: deliveryType,
         atMs: deliveryEvents[0]?.at ?? Date.now(),
       })
     }

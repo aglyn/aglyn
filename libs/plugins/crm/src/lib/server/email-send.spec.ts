@@ -184,10 +184,6 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   hostSendingIdentity: (...args: unknown[]) => hostSendingIdentity(...args),
   countCrmActivitiesForRecord: (...args: unknown[]) =>
     countCrmActivitiesForRecord(...args),
-  writeCrmEmailActivity: (...args: unknown[]) => writeCrmEmailActivity(...args),
-  // The minted reference: a fixed id, so the tags and the row can be
-  // matched against it.
-  newCrmActivityRef: () => ({ id: 'act-new', path: 'orgs/org-1/crmActivities/act-new' }),
   // The REAL resolution over the org the route read, so a declaration in a
   // fixture is the declaration the route acts on.
   consentGroupForSite: async (
@@ -199,6 +195,16 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
       .consentGroupForHost(org ?? null, hostId),
   orgDataCollectionForHost: async (_hostId: string, name: string) =>
     collectionHandle(`orgs/org-1/${name}`),
+}))
+
+// The email row's write and its minted reference (AGL-2615), doubled at the
+// CRM's own module: a fixed id, so the tags and the row can be matched
+// against it.
+jest.mock('./crm-email-activity', () => ({
+  __esModule: true,
+  ...jest.requireActual('./crm-email-activity'),
+  writeCrmEmailActivity: (...args: unknown[]) => writeCrmEmailActivity(...args),
+  newCrmActivityRef: () => ({ id: 'act-new', path: 'orgs/org-1/crmActivities/act-new' }),
 }))
 
 jest.mock('@aglyn/shared-util-email', () => ({

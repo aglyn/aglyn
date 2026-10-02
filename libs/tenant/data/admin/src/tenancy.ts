@@ -168,7 +168,6 @@ export * from './lib/server/crm-records'
 // their open tasks by every server-side task writer (AGL-2661).
 // Where a one-to-one email's activity row lives and how the delivery
 // webhook advances it (AGL-2615).
-export * from './lib/server/crm-email-activity'
 // A member's own addresses in a workspace, and the signed link that
 // confirms one (AGL-2975).
 export * from './lib/server/member-email-aliases'

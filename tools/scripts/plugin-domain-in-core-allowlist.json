@@ -359,15 +359,6 @@
       "why": "`contact` here is the VERB, not the CRM's record: the operator's own do-not-contact list for the calls and texts it makes to its account holders (`contactSuppressions/{nationalKey}`, AGL-1592), the retained record Privacy Policy §11, the TSR and CCPA §1798.105(d) require to honor an opt-out. It is keyed by phone number across accounts and read by the SMS keyword handler, the user-profile erasure and the staff console; it reads and writes no CRM contact, and a self-host without the CRM still owes it."
     },
     {
-      "path": "libs/tenant/data/admin/src/lib/server/crm-email-activity.ts",
-      "rules": [
-        "domain-name",
-        "domain-exports:crm",
-        "domain-declares:crm"
-      ],
-      "lane": "crm"
-    },
-    {
       "path": "libs/tenant/data/admin/src/lib/server/crm-records.ts",
       "rules": [
         "domain-name",

@@ -60,16 +60,11 @@ const mockFirestore = {
     }),
 }
 
+// The real email-activity ids and writes (`./crm-email-activity`): the capture
+// address's `cap_` scheme is what makes a copy of the same email the same row.
 jest.mock('@aglyn/tenant-data-admin', () => {
-  const activity = jest.requireActual('@aglyn/tenant-data-admin/server/crm-email-activity')
   return {
     __esModule: true,
-    // The real ids: the capture address's `cap_` scheme is what makes a copy
-    // of the same email the same row.
-    crmActivityRef: activity.crmActivityRef,
-    crmCapturedEmailActivityRef: activity.crmCapturedEmailActivityRef,
-    createCrmEmailActivity: activity.createCrmEmailActivity,
-    recordCrmEmailDelivery: activity.recordCrmEmailDelivery,
     countCrmActivitiesForRecord: jest.fn(async () => mockActivityCount),
     firebaseAdmin: { app: () => ({ firestore: () => mockFirestore }) },
     // The org's address index, narrowed to the site, over the same store.
@@ -108,8 +103,8 @@ import {
 import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
 import { CRM_ACTIVITY_LOG_FULL_MESSAGE } from '@aglyn/aglyn/server'
 import { crmCapturedEmailKey } from '../model/crm-inbound'
-import { crmCapturedEmailActivityRef } from '@aglyn/tenant-data-admin/server/crm-email-activity'
 import { createCrmRecordTimelineWriter, registerCrmRecordTimelineWriter } from './record-timeline'
+import { crmCapturedEmailActivityRef } from './crm-email-activity'
 
 const ORG = 'org-1'
 const HOST = 'host-1'
@@ -249,6 +244,38 @@ describe('the CRM on the record-timeline seam (AGL-2981)', () => {
     const unknown = await writer.recordEmailDelivery!({ orgId: ORG, messageId: '<never@example.org>', state: 'bounced', atMs: 1 })
     expect(unknown).toMatchObject({ ok: false, status: 404 })
     expect([...mockDocs.keys()].filter((key) => key.includes('/crmActivities/'))).toHaveLength(1)
+  })
+
+  /**
+   * A delivery event for a message the CRM tagged (AGL-2615, AGL-3080): the
+   * campaign webhook hands every tag and the event, and the CRM moves the
+   * activity its own tags name — forward only — and leaves everything else.
+   */
+  it('moves the activity its tags name to the event’s state, forward only', async () => {
+    mockDocs.set(`orgs/${ORG}/crmActivities/act-42`, { kind: 'email', deliveryState: 'sent' })
+    const tags = { context: 'crm', hostId: HOST, orgId: ORG, activityId: 'act-42' }
+    await writer.recordTaggedDelivery!({ tags, event: 'delivered', atMs: 10 })
+    expect(mockDocs.get(`orgs/${ORG}/crmActivities/act-42`)).toMatchObject({
+      deliveryState: 'delivered',
+      deliveryAtMs: 10,
+    })
+    await writer.recordTaggedDelivery!({ tags, event: 'opened', atMs: 20 })
+    // An earlier state arriving late changes nothing.
+    await writer.recordTaggedDelivery!({ tags, event: 'delivered', atMs: 30 })
+    expect(mockDocs.get(`orgs/${ORG}/crmActivities/act-42`)).toMatchObject({
+      deliveryState: 'opened',
+      deliveryAtMs: 20,
+    })
+  })
+
+  it('leaves a message whose tags name no activity, a path, or an event with no state', async () => {
+    mockDocs.set(`orgs/${ORG}/crmActivities/act-42`, { kind: 'email', deliveryState: 'sent' })
+    const before = new Map(mockDocs)
+    await writer.recordTaggedDelivery!({ tags: { context: 'invite', hostId: HOST }, event: 'delivered', atMs: 1 })
+    await writer.recordTaggedDelivery!({ tags: { orgId: ORG, activityId: 'a/b' }, event: 'delivered', atMs: 1 })
+    await writer.recordTaggedDelivery!({ tags: { orgId: '__x__', activityId: 'act-42' }, event: 'delivered', atMs: 1 })
+    await writer.recordTaggedDelivery!({ tags: { orgId: ORG, activityId: 'act-42' }, event: 'delayed', atMs: 1 })
+    expect(mockDocs).toEqual(before)
   })
 
   it('stamps the org scope when the workspace widened its default', async () => {
