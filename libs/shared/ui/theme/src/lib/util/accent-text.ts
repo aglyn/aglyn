@@ -15,11 +15,22 @@
  * limitations under the License.
  */
 
-import type { Palette, PaletteColor, Theme } from '../../vendor/mui'
+import {
+  darken,
+  decomposeColor,
+  hslToRgb,
+  lighten,
+  rgbToHex,
+  type Palette,
+  type PaletteColor,
+  type Theme,
+} from '../../vendor/mui'
 import {
   AA_TEXT_CONTRAST,
   accessibleShade,
   contrastRatio,
+  relativeLuminance,
+  type ShadeDirection,
 } from './accessible-shade'
 
 /**
@@ -70,6 +81,21 @@ export function accentTextColor(
   theme: Theme | undefined,
   color: string | undefined,
 ): string | undefined {
+  return paletteSlot(theme, color, ACCENT_TEXT_SHADE)
+}
+
+/**
+ * One slot of one palette color, as a value safe to hand to a
+ * `styleOverrides` root: a `var(--mui-palette-…)` reference on a CSS-vars
+ * theme, a literal on a single-mode theme. `undefined` for anything without
+ * a PaletteColor shape (`'inherit'`, `'textPrimary'`, `undefined`) or a
+ * palette that lacks the slot.
+ */
+function paletteSlot(
+  theme: Theme | undefined,
+  color: string | undefined,
+  slot: string,
+): string | undefined {
   if (!theme || !color) return undefined
   // `theme.vars` is the CSS-variable mirror of the palette; prefer it so the
   // emitted value is a `var()` that follows the scheme.
@@ -78,8 +104,158 @@ export function accentTextColor(
   const paletteColor = source?.palette?.[color] as
     Record<string, string> | undefined
   if (!paletteColor || typeof paletteColor !== 'object') return undefined
-  const accent = paletteColor[ACCENT_TEXT_SHADE]
-  return typeof accent === 'string' ? accent : undefined
+  const value = paletteColor[slot]
+  return typeof value === 'string' ? value : undefined
+}
+
+/**
+ * The palette slot that carries "this accent's FILL under the pointer": the
+ * background a contained Button or a Fab takes on hover, painted under the
+ * accent's own `contrastText` (AGL-3465).
+ *
+ * MUI paints that hover with `palette[color].dark`, and `dark` here is
+ * {@link ACCENT_TEXT_SHADE} — chosen to be READ ON the page, so it is LIGHTER
+ * than `main` in a dark scheme. A white label on the console's dark-scheme
+ * `primary.dark` measures 1.91:1; on the tenant default's `#5e9fe0`,
+ * 2.80:1. The fill and the text shade answer different questions, so they
+ * get different slots, and `createResponsiveTheme` derives this one for
+ * every palette color with a `contrastText` — see {@link hoverFillShade}.
+ */
+export const ACCENT_HOVER_FILL = 'hover' as const
+
+/**
+ * The hover fill for `color`, as a value safe to hand to a `styleOverrides`
+ * root — the counterpart of {@link accentTextColor}, and resolved the same
+ * way: a `var()` on a CSS-vars theme so it follows the scheme, a literal on
+ * a single-mode theme. Wired into `MuiButton`'s contained hover and
+ * `MuiFab`'s hover in `console.theme.ts`.
+ */
+export function accentHoverFillColor(
+  theme: Theme | undefined,
+  color: string | undefined,
+): string | undefined {
+  return paletteSlot(theme, color, ACCENT_HOVER_FILL)
+}
+
+/**
+ * The palette slot that carries "this accent as TEXT, on its own hover
+ * wash": the label of a hovered text or outlined Button (AGL-3465).
+ *
+ * MUI hovers those two variants by laying `main` at
+ * `palette.action.hoverOpacity` over whatever they sit on, and leaves the
+ * label on {@link ACCENT_TEXT_SHADE}. That shade is held to 4.5:1 against
+ * the bare page and paper, so one sitting near the bar drops under it the
+ * moment the wash lands — the console's light-scheme `primary.dark` goes
+ * from 4.54:1 to 4.37:1 on the page. This slot is the same shade walked on
+ * until it clears the washed surfaces too, and equals `dark` wherever `dark`
+ * already does.
+ */
+export const ACCENT_HOVER_TEXT = 'hoverText' as const
+
+/**
+ * The hovered text/outlined label for `color`, resolved like
+ * {@link accentTextColor}. Wired into `MuiButton`'s hover in
+ * `console.theme.ts`.
+ */
+export function accentHoverTextColor(
+  theme: Theme | undefined,
+  color: string | undefined,
+): string | undefined {
+  return paletteSlot(theme, color, ACCENT_HOVER_TEXT)
+}
+
+/**
+ * The smallest contrast ratio between a fill and its hover shade that still
+ * reads as a change. Below it the pointer gets no feedback at all — the
+ * failure a near-white fill hits when it is lightened.
+ */
+const MIN_HOVER_STEP = 1.1
+
+/**
+ * `ink` as it actually renders on `fill`. A `contrastText` such as
+ * `#000000DE` is translucent, so the color a reader sees is the blend; the
+ * contrast of that blend is the honest number.
+ */
+export function inkOnFill(ink: string, fill: string): string {
+  const foreground = rgbChannels(ink)
+  const alpha = foreground.type.endsWith('a') ? (foreground.values[3] ?? 1) : 1
+  if (alpha >= 1) return ink
+  const background = rgbChannels(fill)
+  const channels = [0, 1, 2].map((index) =>
+    Math.round(
+      foreground.values[index] * alpha + background.values[index] * (1 - alpha),
+    ),
+  )
+  return `rgb(${channels.join(', ')})`
+}
+
+/** A color decomposed into 0–255 RGB channels, whatever notation it came in. */
+function rgbChannels(color: string) {
+  const decomposed = decomposeColor(color)
+  return decomposed.type.startsWith('hsl')
+    ? decomposeColor(hslToRgb(color))
+    : decomposed
+}
+
+/** Contrast of `ink` rendered on `fill`, alpha included. */
+export function inkContrast(ink: string, fill: string): number {
+  return contrastRatio(inkOnFill(ink, fill), fill)
+}
+
+/** How far each further step of the hover-fill walk moves the fill. */
+const HOVER_WALK_STEP = 0.1
+
+/**
+ * The hover fill of one palette color: a shade of `main` that visibly
+ * differs from it and still carries `contrastText` at `minContrast`.
+ *
+ * In order:
+ * 1. `dark`, when it already does both. That is MUI's own hover, and every
+ *    palette whose hover was legible keeps it byte-identical.
+ * 2. Otherwise `main` stepped by `tonalOffset` AWAY from the ink — darker
+ *    under a light label, lighter under a dark one — then walked further
+ *    the same way until the ink clears the bar. Away from the ink is the
+ *    one direction in which every step raises the ratio.
+ * 3. If that step is too small to see — a fill already at the pole the ink
+ *    is not, like white under black — `main` stepped TOWARD the ink, as long
+ *    as the ink still clears the bar there.
+ *
+ * Throws on an unparseable color; the theme pass that calls it leaves such
+ * a palette color without the slot.
+ */
+export function hoverFillShade(
+  color: Pick<PaletteColor, 'main' | 'contrastText'> & { dark?: string },
+  tonalOffset = 0.3,
+  minContrast: number = AA_TEXT_CONTRAST,
+): string {
+  const { main, dark, contrastText: ink } = color
+  const visible = (fill: string) => contrastRatio(main, fill) >= MIN_HOVER_STEP
+  const legible = (fill: string) => inkContrast(ink, fill) >= minContrast
+  if (typeof dark === 'string' && visible(dark) && legible(dark)) return dark
+
+  const away: ShadeDirection =
+    relativeLuminance(inkOnFill(ink, main)) > relativeLuminance(main)
+      ? 'darken'
+      : 'lighten'
+  const shift = (fill: string, direction: ShadeDirection, amount: number) =>
+    rgbToHex(
+      direction === 'darken' ? darken(fill, amount) : lighten(fill, amount),
+    )
+
+  let awayFill = shift(main, away, tonalOffset)
+  while (!legible(awayFill)) {
+    const next = shift(awayFill, away, HOVER_WALK_STEP)
+    // At the pole: nothing further exists in this direction.
+    if (next === awayFill) break
+    awayFill = next
+  }
+  if (visible(awayFill)) return awayFill
+  const towardFill = shift(
+    main,
+    away === 'darken' ? 'lighten' : 'darken',
+    tonalOffset,
+  )
+  return legible(towardFill) ? towardFill : awayFill
 }
 
 /**
