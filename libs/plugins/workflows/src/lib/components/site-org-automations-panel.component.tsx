@@ -16,13 +16,7 @@
  */
 'use client'
 
-import {
-  HOST_ACTION_STEP_LABELS,
-  type HostActionStepType,
-  hostEventLabel,
-  pluginDocsHelp,
-  scopeTokensForHost,
-} from '@aglyn/aglyn'
+import { hostEventLabel, pluginDocsHelp, scopeTokensForHost } from '@aglyn/aglyn'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -50,6 +44,7 @@ import {
 } from '../model/org-automations'
 import HostRunHistoryCard from './host-run-history-card.component'
 import { useOrgAutomationsApi } from './use-org-automations-api'
+import { HOST_ACTION_STEP_LABELS, type HostActionStepType } from '../model/host-actions'
 
 /**
  * THE ORGANIZATION'S AUTOMATIONS THAT RUN ON THIS SITE (AGL-3302), on the

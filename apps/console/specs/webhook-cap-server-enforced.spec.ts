@@ -182,7 +182,7 @@ jest.mock('@aglyn/aglyn/server', () => ({
   // throws inside the route and its own catch answers 500, which reads
   // exactly like the behaviour under test regressing.
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/stored-nodes'),
-  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/actions'),
+  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/site-interactions'),
   // The REAL host-role gate (AGL-2334). These routes ask
   // `hostRoleCanWrite` whether the caller may write at all, and this factory
   // is a CLOSED WORLD — anything it does not name is `undefined`, so leaving
@@ -205,7 +205,7 @@ jest.mock('@aglyn/aglyn/server', () => ({
 // another project's source crosses the nx boundary and fails
 // `@nx/enforce-module-boundaries`. The `requireActual` strings above are
 // runtime lookups inside a mock factory, so they stay as-is.
-import { WEBHOOK_MAX_PER_HOST } from '@aglyn/aglyn/app-utils/actions'
+import { WEBHOOK_MAX_PER_HOST } from '@aglyn/aglyn/plugin-manager/plugin-host-resources'
 import { POST } from '../app/api/hosts/resources/route'
 
 const createWebhook = (body: Record<string, unknown> = {}) =>

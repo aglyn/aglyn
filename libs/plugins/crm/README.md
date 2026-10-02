@@ -34,6 +34,7 @@ The CRM is console-only. Its records live in Firestore and it has no canvas comp
 - A "Saves to contact fields" widget in the `formContactFields` slot, a zone the forms plugin hosts on a form's page.
 - Two zones the CRM hosts for other plugins to draw in: one for booking a meeting from a record, and one that says which campaign or link a record came from.
 - The CRM's record routes, so other surfaces can link to a record.
+- Record count sources for `lead` (the leads a site captured) and `contact` (the organization's, a count that crosses sites) (`plugin-record-counts`), which a campaign's conversion report divides by.
 
 ### On the server
 

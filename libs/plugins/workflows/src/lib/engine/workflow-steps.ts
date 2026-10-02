@@ -16,17 +16,17 @@
  */
 
 import {
-  HOST_ACTION_STEP_LABELS,
-  type HostActionStep,
-  type HostActionStepType,
-  isClientActionStep,
-  validateHostAction,
-} from '@aglyn/aglyn/app-utils/actions'
-import {
   type HostWorkflow,
   type HostWorkflowStep,
   WORKFLOW_MAX_STEPS,
 } from '../model/workflows'
+import { isClientActionStep } from '@aglyn/aglyn/app-utils/site-interactions'
+import {
+  HOST_ACTION_STEP_LABELS,
+  type HostActionStep,
+  type HostActionStepType,
+  validateHostAction,
+} from '../model/host-actions'
 
 /**
  * ONE STEP MODEL FOR BOTH ENGINES.

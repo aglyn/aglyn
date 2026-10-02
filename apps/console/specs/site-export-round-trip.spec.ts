@@ -240,7 +240,7 @@ jest.mock('@aglyn/aglyn/server', () => ({
   // `undefined` there throws rather than merely mis-storing.
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/stored-nodes'),
   // The REAL flat platform caps (AGL-2266) — the import route reads both.
-  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/actions'),
+  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/site-interactions'),
   ...jest.requireActual(
     '../../../libs/aglyn/src/lib/app-utils/collection-entries',
   ),

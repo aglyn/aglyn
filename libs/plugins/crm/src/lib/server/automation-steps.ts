@@ -63,8 +63,9 @@ import { FieldValue } from 'firebase-admin/firestore'
 import {
   OWNER_ASSIGNMENT_REFUSALS,
   reassignContactOwner,
-} from '@aglyn/tenant-runtime/assign-contact-owner'
-import type { HostActionStep } from '@aglyn/aglyn/app-utils/actions'
+} from './assign-contact-owner'
+import type { InteractionStepGuard } from '@aglyn/aglyn/app-utils/site-interactions'
+import type { ContactLifecycleStage, CrmActivityKind, CrmTaskKind } from '@aglyn/aglyn/app-utils/crm-kinds'
 import type { CRM_STEP_TYPES } from '../constants/bundle-common'
 import { CRM_SUITE_FEATURE } from './suite-gate'
 
@@ -116,8 +117,25 @@ import { CRM_SUITE_FEATURE } from './suite-gate'
 /** One of the steps this module runs. */
 export type CrmStepType = (typeof CRM_STEP_TYPES)[number]
 
-/** A CRM step, as it is stored. */
-export type CrmAutomationStep = Extract<HostActionStep, { type: CrmStepType }>
+/**
+ * A CRM step, as it is stored: the CRM's own shapes of the steps it runs. The
+ * automation editor writes them and checks them; `apps/console/specs/
+ * crm-automation-steps.spec.ts` runs what it writes through this module.
+ */
+export type CrmAutomationStep = (
+  | { type: 'setContactStage'; lifecycleStage: ContactLifecycleStage }
+  | { type: 'addContactTag'; tag: string }
+  | { type: 'assignContactOwner'; ownerUid?: string; ownerEmail?: string; roundRobin?: boolean }
+  | {
+      type: 'createCrmTask'
+      title: string
+      kind: CrmTaskKind
+      dueInDays: number
+      assigneeUid?: string
+      assigneeEmail?: string
+    }
+  | { type: 'logCrmActivity'; kind: CrmActivityKind; body: string }
+) & { when?: InteractionStepGuard | null } & { type: CrmStepType }
 
 /** The site, the plan and the org a step or an email is answered for. */
 interface CrmStepEnv {

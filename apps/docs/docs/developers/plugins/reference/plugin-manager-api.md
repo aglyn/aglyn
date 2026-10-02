@@ -896,7 +896,10 @@ stored — name, domain, address and the rest), and its `messageTemplate`
 records (facts: `{ kind, subject, body }`, the body in the CRM's merge-field
 grammar). Forms publishes a site's `formSubmission`
 records — the door's rows — and their documents (`ref`), which the Inbox marks
-answered and keeps its replies and list assignments under.
+answered and keeps its replies and list assignments under. Marketing publishes
+the organization's `emailSend` records (a campaign's sends, named, with the site
+each is sent as and its subject), which a person's timeline names its campaign
+mail by.
 
 ## Intake gates — `plugin-intake-gates` (`/server`)
 
@@ -990,7 +993,8 @@ const bottles = pluginRecordsFromRows('bottle', data)
 | `registerPluginRecordListSource(kind, source, { pluginId? })` | A kind another plugin lists throws naming both; the incumbent keeps serving, and the owner re-registering replaces its own. |
 | `source.query(firestore, { orgId?, hostId?, search?, memberScope?, installedFrom?, consentGroupId?, viewerUid?, limit })` | The query the signed-in member's read of the scope is proved by — the owner applies the filter its security rules require — at most `limit` documents, or `null` for a scope the kind has none in. `search` is what a person typed, matched the owner's way. `memberScope` is the reading member's own scope tokens where they are not organization-wide, for an org-scoped kind to narrow by when no site is named. `installedFrom` keeps the records installed from that listing (their install stamp's `listingId`); a kind that is never installed answers none. `consentGroupId` is the group the named site presents as, for a kind whose records say different things to different groups. `viewerUid` is the signed-in member, for a kind some of whose records are one member's own. |
 | `source.record(id, data, request?)` | One stored document as the owner shares it, in the same shape its server index answers, or `null` to leave it out (deleted, unnamed, not this reader's). `request` is the one the query was built from, when the reader hands it back: a rule the query cannot state — a site's view of an org-wide row, a member's private record — is applied here. |
-| `pluginRecordListQuery(kind, firestore, request)` / `pluginRecordsFromRows(kind, rows, idField?, request?)` | The reader's half: the query to listen to, and the rows read back through the owner — hand the request back so the owner applies what the query could not state. Both answer nothing where no plugin keeps the kind here. |
+| `source.byIds?(firestore, { orgId?, hostId?, memberScope?, ids })` | Optional: the query for NAMED records of the scope, for a reader that already holds ids — an attribution naming the submission it credits. At most `PLUGIN_RECORD_LIST_IDS_MAX` (30, Firestore's `in` bound). A source without it reads none by name. |
+| `pluginRecordListQuery(kind, firestore, request)` / `pluginRecordListByIdsQuery(kind, firestore, request)` / `pluginRecordsFromRows(kind, rows, idField?, request?)` | The reader's half: the query to listen to (or read once by name), and the rows read back through the owner — hand the request back so the owner applies what the query could not state. Each answers nothing where no plugin keeps the kind here. |
 | `source.walk?(firestore, { orgId?, hostId? })` / `pluginRecordListWalk(kind, firestore, scope)` | Optional: the base a reader WALKS the kind from with the console's paged list query, which adds its own filters, order and pages over the stored fields the owner documents — for a reader that pages a whole list rather than picking from a window. Where the rules admit a read only narrowed by a field, the owner says which and the reader adds it. |
 | `source.doc?(firestore, { orgId?, hostId?, id })` / `pluginRecordListDoc(kind, firestore, request)` | Optional: one record's document, for a reader that opens it whole or changes what the owner documents a reader may change; the security rules hold the rest. |
 
@@ -1001,7 +1005,7 @@ workspace's `dataset` records (a site's narrowed by its scope tokens, a scoped
 member's by theirs), each with the listing an installed one came from, which
 is how the marketplace knows what a workspace has installed; Workflows lists a
 site's `workflow`, `webhook` and `action` records, Marketing lists a site's
-`overlay` records (its announcement bars and popups), and Commerce FINDS a
+`overlay` records (its announcement bars and popups), Commerce FINDS a
 site's active `product` records by the first word typed, each with its price
 and priced variants. The CRM lists the saved views of its Contacts and Leads
 lists a member may list (`savedView`, with whether each can be taken whole as
@@ -1009,7 +1013,39 @@ an audience), its email templates (`messageTemplate`), a search of a site's
 `contact` records named as the site's group knows them, and a site's `lead`
 records with whether each is still open. Forms lists a site's `formSubmission` records — the
 newest for a glance, a site's or every site's for the Inbox to walk, and one
-submission's document for it to open, mark and delete.
+submission's document for it to open, mark and delete, and by name
+(`byIds`) for a campaign's conversion report grouping the ones it was credited
+with by the page each was sent from.
+
+## Record counts — `plugin-record-counts` (console)
+
+How many of a plugin's records one site produced, counted in the console for
+another plugin's figure — a campaign's conversions out of every submission,
+booking, lead or contact the site holds — without that plugin counting the
+owner's collection itself.
+
+```ts
+// the owner, from its console registrar
+registerPluginRecordCountSource('bottle', {
+  query: (firestore, { hostId }) => (hostId ? collection(firestore, 'hosts', hostId, 'bottles') : null),
+})
+
+// any other plugin: its own aggregation over the owner's query
+const source = pluginRecordCountSource('bottle')
+const total = source?.query(firestore, { hostId, orgId })
+if (total) setCount((await getCountFromServer(total)).data().count)
+```
+
+| API | Semantics |
+| --- | --- |
+| `registerPluginRecordCountSource(kind, source, { pluginId? })` | One source per kind; another plugin claiming it throws naming both. |
+| `source.query(firestore, { hostId, orgId? })` | The query whose count is how many records of the kind the site PRODUCED, provable by the signed-in member's read — the owner decides what that means (a site's own submissions, the leads it captured) — or `null`. |
+| `source.crossesSites` | The count is the organization's, shared by every site in it (contacts), and the reader must say its total crosses sites. |
+| `pluginRecordCountSource(kind)` | The source, or `null` where no plugin counts the kind here — a reader withholds its figure rather than counting the collection itself. |
+
+Forms counts a site's `formSubmission` records, Bookings its `booking`
+records, and the CRM the `lead` records a site captured and the
+organization's `contact` records.
 
 ## The tenant's tax rule — `plugin-tax-profile` (`/server`)
 
@@ -1354,6 +1390,19 @@ again, as a person capture does. A door that hands its touch to the person
 capture puts it under `CONVERSION_TOUCH_DETAIL` in `detail`, and the plugin
 that keeps people passes it on to the contact or the lead it files.
 
+## The kill switch — `plugin-revocations` (`/server`)
+
+An artifact installed from a distribution channel carries the listing it came
+from on its install stamp. When the platform pulls the listing or a version,
+the revocation is what every reader consults; the plugin that runs the
+channel keeps it, and another reader asks through this slot — the send path
+before it mails a design that was installed rather than written.
+
+| API | Semantics |
+| --- | --- |
+| `registerPluginRevocationReader({ revocation(listingId) })` | The plugin that keeps revocations (a slot). Answers the `PluginRevocation`, or `null` for a listing never revoked. |
+| `readListingRevocation(listingId)` | The listing's revocation, or `null` — none, or nothing in this process keeps revocations (after running the app's boot step once). A reader that fails THROWS through, so the asker refuses rather than guesses. |
+
 ## Send tallies — `plugin-send-tallies` (`/server`)
 
 A bulk send's own figures, moved by a door that is not its sender: the plugin
@@ -1645,15 +1694,78 @@ in `plugins.config.json`, not from code:
   `hostCollections`), stores the pick's id in `idField` and its name, as a
   display hint, in `nameField`. `validateInteraction` refuses a step that names
   neither, with `Step N: <missing>`.
+- A step only an automation holds — one that acts on the server after the
+  page that started it has gone — is declared too, with `"offered": false`, so
+  the builder leaves it out while an editor, a run history and a drafter still
+  read its `label`:
+
+  ```json
+  {
+    "type": "waitForEvent",
+    "label": "Wait for something to happen",
+    "offered": false,
+    "holds": { "minMinutes": 1, "maxMinutes": 129600, "timeoutField": "_waitTimedOut" }
+  }
+  ```
+
+- `holds` marks a step that SUSPENDS the run reaching it, to be continued later
+  from a beat: the band of whole minutes it may hold and, where a hold can end
+  on the clock, the scope field the continued run carries to say so. A
+  visitor's page never runs a step past one (`interactionStepsForClient`).
+- `typedFields` are the step's fields a person types words into, each with the
+  words a sentence calls it (`{ "key": "listName", "names": "the list" }`):
+  where a drafted step may leave a bracketed placeholder
+  (`draft-placeholders`).
 - The declarations are compiled into core (`declaredInteractionSteps()`),
-  because the builder and every validator read them with no plugin loaded.
+  because the builder, every validator, a visitor's page and a drafter read
+  them with no plugin loaded.
 
 | API | Semantics |
 | --- | --- |
-| `SiteInteraction<Step>` / `InteractionTrigger` / `InteractionStepBase` | The stored shape. `Step` is the platform's client vocabulary (`ClientInteractionStep`) unless a reader names more. |
-| `validateInteraction(interaction, { validateStep? })` | The name, the trigger and its conditions, the step count, each step's guard, the client steps and every declared pick. `validateStep` is the owner's check for its own step types. |
+| `SiteInteraction<Step>` / `InteractionTrigger` / `InteractionStepBase` | The stored shape. `Step` is the platform's client vocabulary (`ClientInteractionStep`) unless a reader names more. `recipe` is the stamp of the recipe it began as (`interaction-recipes`). |
+| `validateInteraction(interaction, { validateStep? })` | The name, the recipe stamp, the trigger and its conditions, the step count, each step's guard, the client steps and every declared pick. `validateStep` is the owner's check for its own step types. |
+| `siteInteractionDocument(interaction)` | The shape every writer of `hosts/{hostId}/actions` stores: each trigger cap written out, the legacy single `condition` nulled, the stamp carried only when it says something. |
+| `interactionStepLabel(type)` / `interactionStepHolds(type)` / `interactionStepTypedFields(type)` | The platform's own for a client step, else the declaring plugin's; `null` (or none) for a type nobody declares. |
+| `interactionStepsForClient(steps)` | The steps a visitor's page may run: the list cut at the first step that holds the run. |
 | `isClientActionStep(step)` / `isClientStepEntitled(step, tiers)` | Whether the page runs a step, and whether the site's plan lets it. |
 | `SiteAlert` | What a `siteAlert` step, or a listener, hands back to the visitor's page. |
+
+## Step checks — `interaction-step-checks`
+
+`validateInteraction` judges what is the platform's and leaves a step it does
+not know to its owner. A plugin that edits interactions passes its own checks.
+A plugin that only WRITES one — a recipe installed into a site, a drafted
+automation graded before it is handed over — cannot import the plugin whose
+steps it wrote, and asks here instead. The plugin that holds a step type's
+check registers it from its `declarations` entry:
+
+```ts
+registerInteractionStepChecks(['bakeBread'], (step, label) =>
+  String(step['loaves'] ?? '').trim() ? null : `${label}: say how many loaves`,
+  { pluginId: 'bakery' },
+)
+```
+
+| API | Semantics |
+| --- | --- |
+| `registerInteractionStepChecks(types, check, { pluginId? })` | Owner = the loader's marker, else `pluginId`; no owner throws. A type another plugin's check holds throws; nothing is registered unless every type is accepted. Returns the unregister. |
+| `validateStoredInteraction(interaction)` | `validateInteraction` with every registered check. A step with no registered check is judged by the platform alone. |
+| `registeredInteractionStepCheck(type)` | The registered check and its owner, or `null`. |
+
+## Placeholders — `draft-placeholders`
+
+A drafted interaction marks a value a person still has to supply with square
+brackets where it belongs: `[newsletter]` where a list is named. A bracketed
+record name matches no record, and a bracketed condition value matches no
+event, so a placeholder can never act on the wrong record. Only the
+conditions and each step's typed fields are read; a selector, HTML or a script
+uses brackets as syntax.
+
+| API | Semantics |
+| --- | --- |
+| `draftPlaceholder(words)` / `draftPlaceholderIn(value)` | Writes words as a placeholder; reads the words of the first placeholder in a value, or `null`. A written link is not a placeholder. |
+| `interactionPlaceholders(interaction)` | Every placeholder, the trigger's conditions first, then each step's guard and typed fields: `{ step, field, names, text }`. |
+| `describeInteractionPlaceholder(placeholder)` | One as a person reads it: `Step 1: the list (“newsletter”)`. |
 
 ## Server steps — `plugin-server-steps` (`/server`)
 

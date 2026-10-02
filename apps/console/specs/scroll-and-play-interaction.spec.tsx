@@ -180,7 +180,7 @@ describe('Scroll to element (AGL-2867)', () => {
         offsetPx: 72,
       },
     ])
-    expect(Aglyn.validateHostAction(onSave.mock.calls[0][0])).toBeNull()
+    expect(Aglyn.validateInteraction(onSave.mock.calls[0][0])).toBeNull()
   })
 
   it('stores nothing for the defaults: smooth, no offset', () => {

@@ -18,8 +18,6 @@
 
 import {
   ACTION_MAX_STEPS,
-  type HostActionStep,
-  type HostActionStepType,
   hostEventLabel,
   hostEventPayloadHint,
   type TriggerCombinator,
@@ -71,6 +69,7 @@ import {
 import { EDITOR_OPTION_CEILING } from './use-automation-step-pickers'
 import { useOrgAutomationStepPickers } from './use-org-automation-step-pickers'
 import { orgSiteOptions, type WorkflowsOrgMount } from './workflows-org-mount'
+import type { HostActionStep, HostActionStepType } from '../model/host-actions'
 
 /** An org automation as the editor holds it. */
 export interface OrgAutomationDraft {

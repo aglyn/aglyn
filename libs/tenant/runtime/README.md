@@ -36,8 +36,10 @@ single plugin owns, and runs none of what an event triggers:
 - `listHostEventListeners` and `runHostEventListeners` for diagnostics and
   direct use.
 
-Also from the root: contact capture and owner assignment for a host
-(`captureHostContact`, `assignOwnerForCapture`, `reassignContactOwner`).
+Contact capture and owner assignment are the CRM's
+(`@aglyn/plugins-crm/server/capture-host-contact`,
+`@aglyn/plugins-crm/server/assign-contact-owner`): another plugin reports a
+person through the platform's capture contract (`plugin-contact-capture`).
 Finding a dataset by its id or name is the data plugin's
 (`@aglyn/plugins-data/server/resolve-dataset`).
 

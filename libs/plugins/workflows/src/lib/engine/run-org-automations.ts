@@ -15,11 +15,7 @@
  * limitations under the License.
  */
 
-import {
-  checkEntitlement,
-  FLOW_TIMED_OUT_FIELD,
-  type HostActionStep,
-} from '@aglyn/aglyn/server'
+import { checkEntitlement } from '@aglyn/aglyn/server'
 import { scopeTokensForHost } from '@aglyn/aglyn/app-utils/scope-tokens'
 import {
   firebaseAdmin,
@@ -48,6 +44,7 @@ import {
   makeWorkflowContextLoader,
   stopFlowEnrollment,
 } from './run-event-actions'
+import { FLOW_TIMED_OUT_FIELD, type HostActionStep } from '../model/host-actions'
 
 /**
  * THE ORGANIZATION'S AUTOMATIONS, as the engine meets them (AGL-3302).

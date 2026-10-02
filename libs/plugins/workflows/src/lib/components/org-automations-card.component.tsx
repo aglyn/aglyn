@@ -19,8 +19,6 @@
 import {
   type AglynOrgBilling,
   checkEntitlement,
-  HOST_ACTION_STEP_LABELS,
-  type HostActionStepType,
   hostEventLabel,
   pluginDocsHelp,
 } from '@aglyn/aglyn'
@@ -71,6 +69,7 @@ import {
 } from './org-automation-editor.component'
 import { useOrgAutomationsApi } from './use-org-automations-api'
 import { orgSiteName, type WorkflowsOrgMount } from './workflows-org-mount'
+import { HOST_ACTION_STEP_LABELS, type HostActionStepType } from '../model/host-actions'
 
 export interface OrgAutomationsCardProps {
   mount: WorkflowsOrgMount

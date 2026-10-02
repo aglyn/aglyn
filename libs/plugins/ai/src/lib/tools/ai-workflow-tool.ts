@@ -18,15 +18,11 @@
 import {
   ACTION_MAX_CONDITIONS,
   ACTION_MAX_STEPS,
-  FLOW_TIMED_OUT_FIELD,
-  FLOW_WAIT_MAX_MINUTES,
-  FLOW_WAIT_MIN_MINUTES,
-  HOST_ACTION_STEP_LABELS,
   TRIGGER_COMBINATORS,
   TRIGGER_CONDITION_OPS,
   type TriggerCombinator,
   type TriggerConditionOp,
-} from '@aglyn/aglyn/app-utils/actions'
+} from '@aglyn/aglyn/app-utils/site-interactions'
 import {
   CONTACT_LIFECYCLE_STAGE_LABELS,
   CONTACT_LIFECYCLE_STAGES,
@@ -55,6 +51,11 @@ import {
   type AiAutomationStepType,
   type AiAutomationUnsupported,
 } from '../model/ai-workflow-job'
+import {
+  AI_AUTOMATION_TIMED_OUT_FIELD,
+  AI_AUTOMATION_WAIT_MINUTES,
+  aiStepLabel,
+} from '../model/ai-automation-format'
 import type { AiTool } from '../providers/contract'
 import type { AiGenerationCheckResult } from '../runtime/ai-doctrine'
 import type { AiDoctrineViolation } from '../runtime/ai-doctrine-validators'
@@ -216,7 +217,7 @@ const TEXT_KEY = {
 
 const minutes = (what: string): Schema => ({
   type: 'integer',
-  description: `${what}, in whole minutes from ${FLOW_WAIT_MIN_MINUTES} to ${FLOW_WAIT_MAX_MINUTES}; an hour is 60 and a day 1440.`,
+  description: `${what}, in whole minutes from ${AI_AUTOMATION_WAIT_MINUTES.min} to ${AI_AUTOMATION_WAIT_MINUTES.max}; an hour is 60 and a day 1440.`,
 })
 
 /**
@@ -508,7 +509,7 @@ function readCondition(
   }
   // A step's guard may also read whether the wait before it ran out of time.
   const readable = fieldsFor(event)
-  if (readable && !readable.includes(field) && !(guard && field === FLOW_TIMED_OUT_FIELD)) {
+  if (readable && !readable.includes(field) && !(guard && field === AI_AUTOMATION_TIMED_OUT_FIELD)) {
     refuse(
       reader,
       'automation-condition',
@@ -611,7 +612,7 @@ function readStep(
     return null
   }
   const stepType = type as AiAutomationStepType
-  const what = `Step ${index + 1} (${HOST_ACTION_STEP_LABELS[stepType]})`
+  const what = `Step ${index + 1} (${aiStepLabel(stepType)})`
   const need = AI_AUTOMATION_STEP_NEEDS[stepType]
   if (need && !capabilities[need]) {
     refuse(
@@ -702,11 +703,11 @@ function readStep(
     case 'wait':
     case 'waitForEvent': {
       const minutes = wholeNumber(fields['minutes'])
-      if (minutes === null || minutes < FLOW_WAIT_MIN_MINUTES || minutes > FLOW_WAIT_MAX_MINUTES) {
+      if (minutes === null || minutes < AI_AUTOMATION_WAIT_MINUTES.min || minutes > AI_AUTOMATION_WAIT_MINUTES.max) {
         refuse(
           reader,
           'automation-step-field',
-          `${what} needs minutes, a whole number from ${FLOW_WAIT_MIN_MINUTES} to ${FLOW_WAIT_MAX_MINUTES}.`,
+          `${what} needs minutes, a whole number from ${AI_AUTOMATION_WAIT_MINUTES.min} to ${AI_AUTOMATION_WAIT_MINUTES.max}.`,
           path,
           fields,
         )

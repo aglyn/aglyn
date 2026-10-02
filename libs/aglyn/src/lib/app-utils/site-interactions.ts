@@ -18,6 +18,7 @@
 import { resolveAuthoredEventName, sanitizeEventParams } from './analytics-events'
 import { type AuthorHtmlRemoval, sanitizeAuthorHtml } from './author-html'
 import { PLUGIN_INTERACTION_STEPS_DECLARED } from '../plugin-manager/first-party-plugins.generated'
+import { isKnownInteractionRecipe } from '../plugin-manager/interaction-recipes'
 
 /**
  * SITE INTERACTIONS: what a published page does when a visitor does something.
@@ -398,6 +399,14 @@ export interface SiteInteraction<Step extends InteractionStepBase = ClientIntera
   steps: Step[]
   /** A disabled interaction never runs; a new one defaults enabled. */
   enabled?: boolean
+  /**
+   * The recipe this interaction was installed from or begun as (AGL-2639) —
+   * one a plugin offers through `plugin-manager/interaction-recipes` — or
+   * `null` for one begun blank. Absent on a document from before the stamp
+   * existed: read it through `interactionRecipeStamp`, which keeps the three
+   * cases apart.
+   */
+  recipe?: string | null
 }
 
 /** Steps the tenant page runtime executes client-side (AGL-257). */
@@ -430,6 +439,50 @@ export const CLIENT_ACTION_STEP_TYPES: ReadonlySet<string> =
 
 export function isClientActionStep(step: InteractionStepBase): step is ClientInteractionStep {
   return CLIENT_ACTION_STEP_TYPES.has(step.type)
+}
+
+/**
+ * How an editor, a run history and a drafter name each of the platform's
+ * client steps. Every other step is named by the plugin that declares it
+ * ({@link interactionStepLabel}).
+ */
+export const CLIENT_INTERACTION_STEP_LABELS: Readonly<Record<ClientInteractionStepType, string>> = {
+  siteAlert: 'Show a site alert',
+  showOverlay: 'Show a popup or bar',
+  stickyNav: 'Make navigation sticky',
+  addClass: 'Add a CSS class',
+  toggleClass: 'Toggle a CSS class',
+  removeClass: 'Remove a CSS class',
+  showElement: 'Show an element',
+  hideElement: 'Hide an element',
+  toggleElement: 'Show/hide an element',
+  openDrawer: 'Open a drawer',
+  closeDrawer: 'Close a drawer',
+  toggleDrawer: 'Open/close a drawer',
+  openMenu: 'Open a menu',
+  closeMenu: 'Close a menu',
+  toggleMenu: 'Open/close a menu',
+  setAttribute: 'Set an ARIA or data attribute',
+  removeAttribute: 'Remove an ARIA or data attribute',
+  scrollTo: 'Scroll to element',
+  playVideo: 'Play a video',
+  showHtml: 'Show custom HTML',
+  runJs: 'Run custom JS (Business)',
+  redirect: 'Redirect the visitor',
+  trackGaEvent: 'Track an analytics event',
+}
+
+/**
+ * The client steps' fields a person types words into, and what a sentence
+ * calls each: where a drafted interaction may leave a placeholder
+ * (`draft-placeholders.ts`). A client step absent here holds none — a
+ * selector, a class name, HTML or a script uses brackets as syntax.
+ */
+const CLIENT_INTERACTION_STEP_TYPED_FIELDS: Readonly<
+  Partial<Record<ClientInteractionStepType, readonly InteractionStepTypedField[]>>
+> = {
+  showOverlay: [{ key: 'overlayName', names: 'the popup or bar' }],
+  siteAlert: [{ key: 'message', names: 'the message' }],
 }
 
 /**
@@ -615,6 +668,36 @@ export interface InteractionStepDeclaration {
     /** What a step with no pick is told, after its `Step N:` prefix. */
     missing: string
   }
+  /**
+   * `false` for a step only an automation holds — one that acts on the server
+   * after the page that started it has gone, such as an email or a wait — so
+   * the besigner's interaction builder does not offer it. Absent means offered.
+   */
+  offered?: false
+  /** For a step that SUSPENDS the run that reaches it: see {@link InteractionStepHolds}. */
+  holds?: InteractionStepHolds
+  /** The step's fields a person types words into, in the order a sentence lists them. */
+  typedFields?: readonly InteractionStepTypedField[]
+}
+
+/**
+ * A step that suspends the run reaching it, to be continued later from a
+ * beat: the whole minutes it may hold, and — where a hold can end on the
+ * clock rather than on what it waits for — the scope field the continued run
+ * carries to say it ran out of time. A visitor's page never runs a step past
+ * one ({@link interactionStepsForClient}): everything after it belongs to a
+ * run that has not happened yet.
+ */
+export interface InteractionStepHolds {
+  minMinutes: number
+  maxMinutes: number
+  timeoutField?: string
+}
+
+/** One field of a step a person types words into, and what a sentence calls it: "the list". */
+export interface InteractionStepTypedField {
+  key: string
+  names: string
 }
 
 /** Every step the first-party plugins declare, in `plugins.config.json` order. */
@@ -628,6 +711,65 @@ export function declaredInteractionStep(
   declarations: readonly InteractionStepDeclaration[] = PLUGIN_INTERACTION_STEPS_DECLARED,
 ): InteractionStepDeclaration | null {
   return declarations.find((declaration) => declaration.type === type) ?? null
+}
+
+/**
+ * How a step type reads in an editor, a run history and a drafter's words:
+ * the platform's own label for a client step, else the label the declaring
+ * plugin gave it; `null` for a type nobody declares.
+ */
+export function interactionStepLabel(
+  type: string,
+  declarations: readonly InteractionStepDeclaration[] = PLUGIN_INTERACTION_STEPS_DECLARED,
+): string | null {
+  return (
+    CLIENT_INTERACTION_STEP_LABELS[type as ClientInteractionStepType] ??
+    declaredInteractionStep(type, declarations)?.label ??
+    null
+  )
+}
+
+/** The hold a step type declares, or `null` for one that never suspends a run. */
+export function interactionStepHolds(
+  type: string,
+  declarations: readonly InteractionStepDeclaration[] = PLUGIN_INTERACTION_STEPS_DECLARED,
+): InteractionStepHolds | null {
+  return declaredInteractionStep(type, declarations)?.holds ?? null
+}
+
+/** The fields of a step type a person types words into: the platform's, else the declaring plugin's. */
+export function interactionStepTypedFields(
+  type: string,
+  declarations: readonly InteractionStepDeclaration[] = PLUGIN_INTERACTION_STEPS_DECLARED,
+): readonly InteractionStepTypedField[] {
+  return (
+    CLIENT_INTERACTION_STEP_TYPED_FIELDS[type as ClientInteractionStepType] ??
+    declaredInteractionStep(type, declarations)?.typedFields ??
+    []
+  )
+}
+
+/**
+ * The step list as the visitor's browser may see it: cut at the first step
+ * that suspends the run.
+ *
+ * A client step AFTER a hold must never reach the page. The page runs its
+ * slice of the list the moment the trigger fires, so shipping the whole list
+ * would make "wait three days, then show the popup" show the popup at once —
+ * the delay would appear to work on the server, be ignored in the browser,
+ * and the two halves of one authored flow would disagree about when it
+ * happened.
+ *
+ * Truncating rather than filtering: everything past the first hold belongs to
+ * a run that has not happened yet, whichever side would have executed it.
+ */
+export function interactionStepsForClient<Step extends InteractionStepBase>(
+  steps: readonly Step[] | undefined | null,
+  declarations: readonly InteractionStepDeclaration[] = PLUGIN_INTERACTION_STEPS_DECLARED,
+): Step[] {
+  const list = steps ?? []
+  const holdAt = list.findIndex((step) => interactionStepHolds(step.type, declarations) !== null)
+  return [...(holdAt < 0 ? list : list.slice(0, holdAt))]
 }
 
 export interface ValidateInteractionOptions {
@@ -646,16 +788,21 @@ export interface ValidateInteractionOptions {
  * Every surface that writes one shares this, so a bad step never persists or
  * runs.
  *
- * The platform checks what is its own: the name, the trigger and its
- * conditions, the step count, each step's guard, its client steps, and the
- * pick of every declared step that picks a record. A step it does not know is
- * left to its owner, through `validateStep`.
+ * The platform checks what is its own: the name, the recipe stamp, the
+ * trigger and its conditions, the step count, each step's guard, its client
+ * steps, and the pick of every declared step that picks a record. A step it
+ * does not know is left to its owner, through `validateStep`.
  */
 export function validateInteraction(
   interaction: SiteInteraction<InteractionStepBase>,
   options: ValidateInteractionOptions = {},
 ): string | null {
   if (!interaction.name?.trim()) return 'Name the action'
+  // A stamp is provenance, and provenance naming a recipe that does not
+  // exist is a document nothing can read back; `null` and absent both pass.
+  if (interaction.recipe != null && !isKnownInteractionRecipe(interaction.recipe)) {
+    return 'Unknown recipe'
+  }
   const event = interaction.trigger?.event?.trim() ?? ''
   if (!event) return 'Pick a trigger event'
   // A server event or a custom one fired by another step is, like a site
@@ -912,6 +1059,60 @@ function clientStepProblem(step: ClientInteractionStep, label: string): string |
     }
   }
   return null
+}
+
+/**
+ * An interaction as the document at `hosts/{hostId}/actions/{id}` holds it.
+ *
+ * Every optional trigger key is written OUT — a boolean cap as `false`, a
+ * cleared list as `null` — because the editors save with a merge-set, and a
+ * merge keeps whatever key the payload omits: a frequency cap switched off,
+ * left out of the payload, would stay on. The legacy single `condition` is
+ * always nulled; `conditions` has been canonical since the list shape arrived
+ * and a document that carried both would have the reader pick. Everything
+ * else is the interaction, unchanged.
+ *
+ * `recipe` rides along only when the interaction SAYS something about it: an
+ * id or `null`. One that carries no stamp (an older document, edited and
+ * saved again) keeps carrying none — see `interactionRecipeStamp` for why an
+ * absent stamp must not become a `null` one.
+ */
+export type SiteInteractionDocument<Step extends InteractionStepBase = InteractionStepBase> =
+  SiteInteraction<Step> & {
+    trigger: InteractionTrigger & {
+      oncePerVisitor: boolean
+      oncePerSession: boolean
+      cooldownMinutes: number | null
+      everyTime: boolean
+      condition: null
+      conditions: InteractionCondition[] | null
+      combinator: TriggerCombinator | null
+    }
+    enabled: boolean
+  }
+
+/** The stored shape of an interaction: what every writer of `hosts/{hostId}/actions` saves. */
+export function siteInteractionDocument<Step extends InteractionStepBase>(
+  interaction: SiteInteraction<Step>,
+): SiteInteractionDocument<Step> {
+  const { recipe, ...rest } = interaction
+  const trigger = interaction.trigger
+  return {
+    ...rest,
+    trigger: {
+      ...trigger,
+      oncePerVisitor: trigger.oncePerVisitor === true,
+      oncePerSession: trigger.oncePerSession === true,
+      cooldownMinutes:
+        Number(trigger.cooldownMinutes) >= 1 ? Number(trigger.cooldownMinutes) : null,
+      everyTime: trigger.everyTime === true,
+      condition: null,
+      conditions: trigger.conditions ?? null,
+      combinator: trigger.combinator ?? null,
+    },
+    enabled: interaction.enabled !== false,
+    ...(recipe !== undefined ? { recipe } : {}),
+  }
 }
 
 /** Alert produced by a `siteAlert` step, surfaced to the emitting client. */

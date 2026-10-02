@@ -54,7 +54,6 @@
  */
 
 import {
-  type HostAction,
   hostRoleCanPublish,
   isSiteEventType,
   type PluginApiHandler,
@@ -74,6 +73,7 @@ import type {
   SingleActionSkip,
 } from '../engine/run-event-actions'
 import { actionTestRunPayload } from '../model/action-test-run'
+import type { HostAction } from '../model/host-actions'
 
 export { ACTION_TEST_RUN_API_ROUTE } from '../model/action-test-run'
 

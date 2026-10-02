@@ -81,7 +81,8 @@ import {
   restampCrmListFieldsAt,
 } from '@aglyn/tenant-data-admin'
 import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
-import { captureHostContact, emitHostEvent } from '@aglyn/tenant-runtime'
+import { emitHostEvent } from '@aglyn/tenant-runtime'
+import { captureHostContact } from './server/capture-host-contact'
 import { FieldValue } from 'firebase-admin/firestore'
 import { CRM_API_ROUTES } from './constants/api-routes'
 import { registerCrmServerDeclarations } from './declarations.server'

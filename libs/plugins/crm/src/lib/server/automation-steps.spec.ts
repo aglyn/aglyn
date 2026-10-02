@@ -132,7 +132,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   writeCrmEmailActivity: async (ref: any, activity: Record<string, any>) => ref.set(activity),
 }))
 
-jest.mock('@aglyn/tenant-runtime/assign-contact-owner', () => ({
+jest.mock('./assign-contact-owner', () => ({
   __esModule: true,
   OWNER_ASSIGNMENT_REFUSALS: {},
   reassignContactOwner: async () => ({ outcome: 'unchanged', ownerUid: 'uid-sam' }),

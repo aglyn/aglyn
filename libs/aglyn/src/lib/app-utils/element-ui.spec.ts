@@ -42,7 +42,7 @@ import {
   VISIBILITY_BAND_MEDIA,
   VISIBILITY_BANDS,
 } from './element-ui'
-import { SCROLL_TO_MAX_OFFSET_PX } from './actions'
+import { SCROLL_TO_MAX_OFFSET_PX } from './site-interactions'
 import { LAYOUT_NODE_ID_PREFIXES } from './compose-layout-nodes'
 
 describe('applyElementVisibility (AGL-562)', () => {

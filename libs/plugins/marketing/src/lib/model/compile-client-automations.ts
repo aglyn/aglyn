@@ -15,24 +15,26 @@
  * limitations under the License.
  */
 
-// Import the entitlement/event predicates from the context-free actions
+// Import the entitlement/event predicates from the context-free interactions
 // subpath, NOT the `@aglyn/aglyn` barrel: this file is in the marketing model,
 // which the plugin's SERVER graph re-exports, and the full barrel pulls client
 // React contexts (createContext) that break the RSC server build (AGL-830).
 import {
-  hostActionStepsForClient,
+  type ClientInteractionStep,
+  type InteractionStepBase,
+  interactionStepsForClient,
   isClientActionStep,
   isClientStepEntitled,
   isSiteEventType,
-  type HostAction,
-} from '@aglyn/aglyn/app-utils/actions'
+  type SiteInteraction,
+} from '@aglyn/aglyn/app-utils/site-interactions'
 import { overlayMatchesPath } from './overlays'
 import type { ClientAutomation } from './site-contract'
 
 /** A raw `hosts/{hostId}/actions` doc paired with its id. */
 export interface RawHostAction {
   id: string
-  action: HostAction
+  action: SiteInteraction<InteractionStepBase>
 }
 
 export interface CompileClientAutomationsOptions {
@@ -109,11 +111,11 @@ export function compileClientAutomations(
      * authored flow would disagree about when they happened. Everything past
      * the first wait belongs to a run the job beat has not started yet.
      */
-    const reachableSteps = hostActionStepsForClient(action.steps)
+    const reachableSteps = interactionStepsForClient(action.steps)
     // Step-level entitlement tiering (AGL-577): basic presentational steps
     // load on every plan; advanced client steps need `actions` and runJs
     // needs `webhooks` — see isClientStepEntitled.
-    const clientSteps = reachableSteps.filter((step) =>
+    const clientSteps = reachableSteps.filter((step): step is ClientInteractionStep =>
       isClientStepEntitled(step, {
         actionsEntitled: options.actionsEntitled,
         allowJs: options.allowJs,

@@ -2644,19 +2644,26 @@ function notificationDigestRows() {
 }
 
 /**
- * The interaction steps (AGL-3080): each plugin whose step the interaction
- * builder offers declares it under `interactionSteps` — the `type` it is
- * stored under, how the builder names it, and, for a step that PICKS one of
- * the plugin's records, the site collection the records are listed from and
- * the step fields that hold the pick. Core compiles them into the catalog,
- * because the builder and every validator read them with no plugin loaded,
- * and a step whose pick nothing checked would save naming nothing.
+ * The interaction steps (AGL-3080): each plugin that adds a step to
+ * interactions declares it under `interactionSteps` — the `type` it is stored
+ * under, how editors, run histories and drafters name it, and, for a step
+ * that PICKS one of the plugin's records, the site collection the records are
+ * listed from and the step fields that hold the pick. A step only an
+ * automation holds is `offered: false`, so the besigner's interaction builder
+ * leaves it out; a step that suspends the run `holds` it for a band of whole
+ * minutes; and `typedFields` are the fields a person types words into, where a
+ * drafted step may leave a placeholder. Core compiles them into the catalog,
+ * because the builder, every validator, a visitor's page and a drafter read
+ * them with no plugin loaded, and a step whose pick nothing checked would save
+ * naming nothing.
  *
  * Checked here: a plain type no other plugin declares, a label, only the
  * known keys, and a pick listed from a collection the SAME plugin declares
  * under `hostCollections` — a plugin offers its own records, never another's —
  * with plain, distinct field names, a limit from 1 to 200, and the words the
- * builder shows.
+ * builder shows; `offered` only as `false`; a hold band of whole minutes, at
+ * least one, its floor under its ceiling, and a plain timeout field; typed
+ * fields named once each, with the words a sentence calls them.
  */
 function interactionStepRows() {
   const claimed = new Map()
@@ -2672,7 +2679,7 @@ function interactionStepRows() {
     }
     const owned = new Set((plugin.hostCollections ?? []).map((collection) => collection.name))
     for (const step of declared) {
-      const { type, label, picks, ...rest } = step ?? {}
+      const { type, label, picks, offered, holds, typedFields, ...rest } = step ?? {}
       if (typeof type !== 'string' || !plain.test(type)) {
         throw new Error(`${where}: "type" is the plain name a step is stored under`)
       }
@@ -2682,6 +2689,37 @@ function interactionStepRows() {
       claimed.set(type, plugin.id)
       if (!words(label)) throw new Error(`${what}: "label" is how the builder names the step`)
       const row = { pluginId: plugin.id, type, label }
+      if (offered !== undefined) {
+        if (offered !== false) throw new Error(`${what}: "offered" is only ever false — a declared step is offered unless it says not`)
+        row.offered = false
+      }
+      if (holds !== undefined) {
+        const { minMinutes, maxMinutes, timeoutField, ...extra } = holds ?? {}
+        if (Object.keys(extra).length) throw new Error(`${what}: unknown "holds" key(s) ${Object.keys(extra).join(', ')}`)
+        if (!Number.isInteger(minMinutes) || !Number.isInteger(maxMinutes) || minMinutes < 1 || maxMinutes < minMinutes) {
+          throw new Error(`${what}: "holds" is a band of whole minutes, from at least 1, its floor no higher than its ceiling`)
+        }
+        if (timeoutField !== undefined && (typeof timeoutField !== 'string' || !/^_?[a-z][A-Za-z0-9]*$/.test(timeoutField))) {
+          throw new Error(`${what}: "holds.timeoutField" is the plain name of the field a timed-out hold leaves in scope`)
+        }
+        row.holds = { minMinutes, maxMinutes, ...(timeoutField !== undefined ? { timeoutField } : {}) }
+      }
+      if (typedFields !== undefined) {
+        if (!Array.isArray(typedFields) || !typedFields.length) {
+          throw new Error(`${what}: "typedFields" is present and names nothing — drop it, or name the fields a person types words into`)
+        }
+        const keys = new Set()
+        row.typedFields = typedFields.map((field) => {
+          const { key, names, ...extra } = field ?? {}
+          if (Object.keys(extra).length) throw new Error(`${what}: unknown "typedFields" key(s) ${Object.keys(extra).join(', ')}`)
+          if (typeof key !== 'string' || !plain.test(key) || keys.has(key)) {
+            throw new Error(`${what}: each of "typedFields" names one of the step's fields, once`)
+          }
+          if (!words(names)) throw new Error(`${what}: typed field "${key}" needs "names", what a sentence calls it`)
+          keys.add(key)
+          return { key, names }
+        })
+      }
       if (picks !== undefined) {
         const { collection, limit, idField, nameField, label: pickLabel, missing, ...extra } = picks ?? {}
         if (Object.keys(extra).length) throw new Error(`${what}: unknown "picks" key(s) ${Object.keys(extra).join(', ')}`)

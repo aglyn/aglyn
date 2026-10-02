@@ -76,7 +76,11 @@ import {
   readEmailDeliveryHistory,
 } from '@aglyn/tenant-data-admin/server/email-delivery-log'
 import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
+import { pluginRecordIndex } from '@aglyn/aglyn/plugin-manager/plugin-record-index'
 import { crmSuiteRefusal } from './suite-gate'
+
+/** The record kind the plugin that keeps campaign sends indexes them under. */
+const EMAIL_SEND_RECORD_KIND = 'emailSend'
 
 /** The route key, as `registerCrmConsoleApi` registers it. */
 export const CONTACT_EMAIL_HISTORY_ROUTE = 'crm/contact-email-history'
@@ -218,39 +222,38 @@ export function contactCampaignEmailFromDelivery(
 }
 
 /**
- * The names of the emails these rows name, in one `getAll`.
+ * The names of the emails these rows name, asked of the plugin that keeps
+ * the sends (AGL-3080).
  *
- * Keyed reads rather than a query: the ids are known, a `getAll` is one round
- * trip however many there are, and it needs no index. An email the team has
- * since deleted reads as `null`, which the timeline draws as the subject the
- * person received with no report to link to.
+ * A send is the campaign owner's record (`emailSend`, `plugin-record-index`),
+ * and this route only needs what a person calls it: one keyed read per
+ * distinct send, all at once, each answering the send's name or `null` for
+ * one the team has since deleted — which the timeline draws as the subject
+ * the person received with no report to link to. With no plugin keeping
+ * sends here, every name is `null` the same way.
  *
- * A send is the organization's (`orgs/{orgId}/campaigns/{sendId}`); the
- * rows reaching here were already narrowed to the reading group's sites,
- * all of which belong to that org.
+ * The sends are the organization's; the rows reaching here were already
+ * narrowed to the reading group's sites, all of which belong to that org.
  */
 async function readCampaignNames(
   orgId: string,
   rows: readonly EmailDeliveryRecord[],
 ): Promise<Map<string, string | null>> {
   const names = new Map<string, string | null>()
-  const firestore = firebaseAdmin.app().firestore()
-  const pending: { key: string; hostId: string; sendId: string }[] = []
+  const pending: { key: string; sendId: string }[] = []
   for (const row of rows) {
     const key = `${row.hostId}/${row.campaignId}`
     if (names.has(key)) continue
     names.set(key, null)
-    pending.push({ key, hostId: String(row.hostId), sendId: String(row.campaignId) })
+    pending.push({ key, sendId: String(row.campaignId) })
   }
-  if (!pending.length) return names
-  const nameOf = (snapshot: FirebaseFirestore.DocumentSnapshot) =>
-    String(snapshot.get('displayName') ?? '').trim() ||
-    String(snapshot.get('subject') ?? '').trim() ||
-    null
-  const sends = firestore.collection('orgs').doc(orgId).collection('campaigns')
-  const found = await firestore.getAll(...pending.map((entry) => sends.doc(entry.sendId)))
-  found.forEach((snapshot, index) => {
-    if (snapshot.exists) names.set(pending[index].key, nameOf(snapshot))
+  const sends = pluginRecordIndex(EMAIL_SEND_RECORD_KIND)?.index
+  if (!pending.length || !sends) return names
+  const found = await Promise.all(
+    pending.map((entry) => sends.get({ orgId, id: entry.sendId }).catch(() => null)),
+  )
+  found.forEach((record, index) => {
+    if (record) names.set(pending[index].key, record.name)
   })
   return names
 }

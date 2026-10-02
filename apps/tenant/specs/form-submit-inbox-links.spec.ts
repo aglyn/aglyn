@@ -146,7 +146,7 @@ jest.mock('@aglyn/tenant-runtime/emit-host-event', () => ({
   emitHostEvent: async () => ({ alerts: [] }),
 }))
 
-jest.mock('@aglyn/tenant-runtime/capture-host-contact', () => ({
+jest.mock('../../../libs/plugins/crm/src/lib/server/capture-host-contact', () => ({
   captureHostContact: (...args: unknown[]) =>
     (
       jest.requireMock('@aglyn/tenant-runtime') as {

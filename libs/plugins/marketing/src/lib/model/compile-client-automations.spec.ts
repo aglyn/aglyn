@@ -15,8 +15,9 @@
  * limitations under the License.
  */
 
-import type { HostAction } from '@aglyn/aglyn'
 import { compileClientAutomations, type RawHostAction } from './compile-client-automations'
+
+type HostAction = RawHostAction['action']
 
 const raw = (id: string, action: Partial<HostAction>): RawHostAction => ({
   id,

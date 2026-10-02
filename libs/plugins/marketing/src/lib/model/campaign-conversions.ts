@@ -179,6 +179,21 @@ export function campaignCreditRule(
 }
 
 /**
+ * The record each conversion kind credits, as its owner publishes the kind
+ * (`plugin-record-counts`, `plugin-record-lists`): a credited form names the
+ * SUBMISSION it credits, the rest the record of their own name. The owners
+ * count and read those records; this plugin only names the kind.
+ */
+export const CAMPAIGN_CONVERSION_RECORD_KINDS: Readonly<
+  Record<CampaignConversionKind, string>
+> = {
+  form: 'formSubmission',
+  lead: 'lead',
+  contact: 'contact',
+  booking: 'booking',
+}
+
+/**
  * What a reader calls one kind, and what the count means.
  *
  * The note is the half that stops the addition. Each one names a DIFFERENT

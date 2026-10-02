@@ -1131,7 +1131,7 @@ const warnedAuthoredNames = new Set<string>()
  * surfaced in the page. Nothing here can reach the author — the code is
  * running for a VISITOR of their site, and turning the author's configuration
  * mistake into something a visitor sees would be a worse bug than the missing
- * metric. The author-facing half lives in `validateHostAction`, which refuses
+ * metric. The author-facing half lives in `validateInteraction`, which refuses
  * to save a name this function would refuse to send, so a silent drop should
  * only ever happen to a step authored before AGL-1587.
  */

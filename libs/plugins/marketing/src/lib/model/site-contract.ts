@@ -22,7 +22,7 @@
  * runtime without pulling either's dependencies.
  */
 
-import type { HostActionStep, SiteEventType } from '@aglyn/aglyn'
+import type { ClientInteractionStep, SiteEventType } from '@aglyn/aglyn'
 import type { ExperimentStatus } from './experiments'
 
 export interface ClientAutomation {
@@ -38,7 +38,7 @@ export interface ClientAutomation {
   cooldownMinutes?: number
   /** Fire on every occurrence, not once per pageview (AGL-562). */
   everyTime?: boolean
-  steps: HostActionStep[]
+  steps: ClientInteractionStep[]
   hasServerSteps: boolean
 }
 

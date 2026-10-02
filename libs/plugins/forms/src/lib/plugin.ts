@@ -25,6 +25,7 @@ import {
   HOST_FORMS_ZONE,
 } from './components/form-zones'
 import { BUNDLE_ID } from './constants/bundle-common'
+import { registerFormSubmissionCounts } from './model/form-submission-counts'
 import { registerFormSubmissionList } from './model/form-submission-list'
 import { registerFormRecordList } from './model/forms-record-lists'
 import { registerFormsRecordRoutes } from './model/forms-record-routes'
@@ -43,6 +44,8 @@ export function registerFormsConsole(): void {
   registerFormsRecordRoutes()
   registerFormRecordList()
   registerFormSubmissionList()
+  // How many submissions a site received, for another plugin's figure.
+  registerFormSubmissionCounts()
   registerPluginZone(
     {
       zone: FORM_SUBMISSIONS_ZONE,

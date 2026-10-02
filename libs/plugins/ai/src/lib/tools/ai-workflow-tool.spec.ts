@@ -19,11 +19,11 @@ import {
   ACTION_MAX_CONDITIONS,
   ACTION_MAX_STEPS,
   CLIENT_ACTION_STEP_TYPES,
-  FLOW_WAIT_MAX_MINUTES,
-  HOST_ACTION_STEP_LABELS,
-} from '@aglyn/aglyn/app-utils/actions'
+  interactionStepLabel,
+} from '@aglyn/aglyn/app-utils/site-interactions'
 import { CRM_TASK_MAX_DUE_DAYS } from '@aglyn/aglyn/app-utils/crm'
 import { HOST_EVENT_TYPES } from '@aglyn/aglyn/app-utils/host-events'
+import { AI_AUTOMATION_WAIT_MINUTES } from '../model/ai-automation-format'
 import { AI_AUTOMATION_STEP_TYPES, AI_AUTOMATION_UNSUPPORTED } from '../model/ai-workflow-job'
 import {
   AI_AUTOMATION_NAME_MAX_CHARS,
@@ -158,7 +158,7 @@ describe('the tools', () => {
     // Nothing in the tool is a `null`: an answer that builds an automation
     // leaves `unsupported` empty.
     expect(properties['unsupported'].enum).toEqual(['', ...AI_AUTOMATION_UNSUPPORTED])
-    for (const type of AI_AUTOMATION_STEP_TYPES) expect(HOST_ACTION_STEP_LABELS[type]).toBeTruthy()
+    for (const type of AI_AUTOMATION_STEP_TYPES) expect(interactionStepLabel(type)).toBeTruthy()
     // The on-page steps need a selector on a page a description cannot name.
     // A site alert is the one the server also runs: it answers the visitor
     // whose request raised the event.
@@ -350,7 +350,7 @@ describe('reading an automation', () => {
     expect(whenOf(guard).value?.steps[0].when).toEqual(guard)
     const two = whenOf([guard, guard])
     expect(two.value).toBeNull()
-    expect(messages(two)).toEqual([`Step 1 (${HOST_ACTION_STEP_LABELS.notifyAdmins}): when holds one condition at most.`])
+    expect(messages(two)).toEqual([`Step 1 (${interactionStepLabel('notifyAdmins')}): when holds one condition at most.`])
   })
 
   it('reads an empty address field as the default one, which the step leaves out', () => {
@@ -366,8 +366,8 @@ describe('reading an automation', () => {
     const cases: Array<[ReturnType<typeof step>, string]> = [
       [step('sendEmail', { subject: 'Hi' }), 'Step 1 (Send an email) needs body.'],
       [step('enrollList'), 'Step 1 (Enroll in a list) needs reference.'],
-      [step('wait', { minutes: 0 }), `Step 1 (Wait) needs minutes, a whole number from 1 to ${FLOW_WAIT_MAX_MINUTES}.`],
-      [step('wait', { minutes: 1.5 }), `Step 1 (Wait) needs minutes, a whole number from 1 to ${FLOW_WAIT_MAX_MINUTES}.`],
+      [step('wait', { minutes: 0 }), `Step 1 (Wait) needs minutes, a whole number from 1 to ${AI_AUTOMATION_WAIT_MINUTES.max}.`],
+      [step('wait', { minutes: 1.5 }), `Step 1 (Wait) needs minutes, a whole number from 1 to ${AI_AUTOMATION_WAIT_MINUTES.max}.`],
       [step('waitForEvent', { minutes: 60, event: 'somethingElse' }), 'Step 1 (Wait for something to happen) needs the event it waits for.'],
       [step('setContactStage', { stage: 'Lead' }), 'Step 1 (Set the contact’s lifecycle stage) needs the lifecycle stage to set.'],
       [

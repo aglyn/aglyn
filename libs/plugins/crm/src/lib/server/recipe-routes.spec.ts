@@ -32,8 +32,8 @@
  * assertion reads what LANDED rather than what the handler answered.
  */
 
-import type { HostAction, PluginApiRequest, PluginApiResponse } from '@aglyn/aglyn/server'
-import { ACTIONS_MAX_PER_HOST, hostActionDocument } from '@aglyn/aglyn/server'
+import type { PluginApiRequest, PluginApiResponse } from '@aglyn/aglyn/server'
+import { ACTIONS_MAX_PER_HOST, siteInteractionDocument } from '@aglyn/aglyn/server'
 import { crmActionRecipe } from '../model/crm-recipes'
 
 // ---------------------------------------------------------------------------
@@ -255,7 +255,7 @@ describe('crm/recipe-install', () => {
     const landed = actionsOf('host-a')
     expect(Object.keys(landed)).toEqual([answer.actionId])
     expect(landed[answer.actionId]).toEqual({
-      ...hostActionDocument(crmActionRecipe('welcomeNewLead')!.build() as unknown as HostAction),
+      ...siteInteractionDocument(crmActionRecipe('welcomeNewLead')!.build()),
       createdAt: '__serverTimestamp',
       updatedAt: '__serverTimestamp',
       createdBy: 'u-1',
