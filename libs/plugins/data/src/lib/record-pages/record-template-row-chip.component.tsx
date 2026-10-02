@@ -26,8 +26,8 @@ import { datasetDisplayName, type HostDataset } from '../model/datasets'
 import { useSiteRecordPageBindings } from './record-page-source'
 
 /**
- * A Pages list row's "Record template" chip (AGL-3475): the base the page
- * serves its records under, and how many records there are — what an author
+ * A Pages list row's record template chip (AGL-3475): how many record pages the
+ * page serves, with the base they live under in its tooltip — what an author
  * scanning the list needs to know about a page that has no address of its own.
  *
  * The site's bindings come from one query however many rows ask, which the
@@ -69,12 +69,16 @@ export function RecordTemplateRowChip(props: ConsoleHostScreenRowZoneProps) {
   }, [firestore, scope, datasetId])
 
   if (!binding) return null
-  const counted = summary ? ` · ${summary.count} ${summary.count === 1 ? 'record' : 'records'}` : ''
+  // Short, because it shares the name's cell: the count is the news, and the
+  // tooltip says where the pages live.
+  const label = summary
+    ? `${summary.count} record ${summary.count === 1 ? 'page' : 'pages'}`
+    : 'Record template'
   return (
     <Tooltip
-      title={`Served once per record${summary?.name ? ` of ${summary.name}` : ''}, at /${binding.base}/ and each record's page address`}
+      title={`Record template${summary?.name ? ` of ${summary.name}` : ''}: served once per record at /${binding.base}/ and each record's page address`}
     >
-      <Chip size="small" variant="outlined" label={`Record template · /${binding.base}/${counted}`} />
+      <Chip size="small" variant="outlined" label={label} />
     </Tooltip>
   )
 }

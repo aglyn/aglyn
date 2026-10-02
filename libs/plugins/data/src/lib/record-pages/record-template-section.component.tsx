@@ -379,6 +379,9 @@ export function RecordTemplateSection(props: ConsoleBesignerPagePropertiesZonePr
                 setDraft({ ...draft, [picker.key]: event.target.value || undefined })
               }
               helperText={picker.helper}
+              // The empty choice is a real one — "use the default" — so it is
+              // shown rather than leaving the field looking blank.
+              slotProps={{ select: { displayEmpty: true }, inputLabel: { shrink: true } }}
             >
               <MenuItem value="">{picker.empty}</MenuItem>
               {model.order.map((fieldId) => (

@@ -31,6 +31,7 @@ import {
   recordPageHead,
   recordPagePath,
   recordPageRoute,
+  withRecordPageUrls,
 } from './record-pages'
 
 /**
@@ -94,7 +95,11 @@ export const recordPageResolver: SitePageResolver = async ({
     socialImages: card.socialImages,
     host,
     record: {
-      record: routed.record,
+      // The record's own page as `url` too, as its row in a repeat has, so a
+      // share link on the template reads {{item.url}} like a card does.
+      record:
+        withRecordPageUrls([routed.record], binding, routed.dataset.model)[0] ??
+        routed.record,
       model: repeatRowsModelOf(routed.dataset.model),
       datasetsByKey: routed.datasetsByKey,
     },

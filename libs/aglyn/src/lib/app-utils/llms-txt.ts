@@ -195,9 +195,7 @@ function derivedGuidance(options: LlmsTxtOptions): string[] {
           ? absoluteSiteUrl(origin, group.base)
           : absoluteSiteUrl(origin, 'sitemap.xml'),
         group.hasListing
-          ? `${count} under \`${where}\`, one per ${label(
-              (group.name || nameForSlug(group.base)).toLowerCase(),
-            )} entry, linked from this page`
+          ? `${count} under \`${where}\`, one per entry, each linked from this page`
           : `${count} under \`${where}\`, one per entry; the sitemap lists every one`,
       ),
     )

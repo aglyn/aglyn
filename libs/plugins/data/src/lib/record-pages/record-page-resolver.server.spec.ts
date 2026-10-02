@@ -174,7 +174,8 @@ describe('what the template is composed with', () => {
     const options = mockCompose.mock.calls[0][0]
     expect(options.screenId).toBe('svc-tmpl')
     expect(options.record).toEqual({
-      record: ROOFING.record,
+      // Its own page as `url`, as its row in a repeat carries.
+      record: { ...ROOFING.record, url: '/services/roofing' },
       model: { references: { lead: 'people' } },
       datasetsByKey: ROOFING.datasetsByKey,
     })
