@@ -800,8 +800,8 @@ export const CONSOLE_WIDGET_SLOTS = {
    */
   hostFirstRun: 'hostFirstRun',
   /**
-   * The host setup Theme section, between the "What you have changed" card
-   * and the editor (AGL-2938). Props: {@link ConsoleHostThemeZoneProps} — the
+   * The host setup Theme section, between the Theme picker and the editor
+   * (AGL-2938). Props: {@link ConsoleHostThemeZoneProps} — the
    * site, the theme the editor shows, where that theme came from, the
    * editor's own preview, and `proposeDraft`, which puts a theme in the
    * editor as unsaved changes.
