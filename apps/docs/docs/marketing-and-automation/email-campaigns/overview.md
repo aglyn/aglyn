@@ -1012,7 +1012,10 @@ settings.
 
 #### Who it reached {#who-it-reached}
 
-The campaign's page counts the visitors it reached on your sites, above what they did:
+The campaign's page opens on **What it caused**: what is credited to the campaign —
+submissions, leads, contacts and bookings, one kind at a time and never added together —
+whether the touch was an email, a labeled link or a page. Under it, **Who it reached**
+counts the visitors the campaign reached on your sites:
 
 - **First visits** — visitors whose first campaign touch in the last 7 days was this
   campaign: a page filed under it, or a link carrying one of its labels. It is counted
@@ -1023,10 +1026,6 @@ The campaign's page counts the visitors it reached on your sites, above what the
 
 Both are counted across every site the campaign is placed on, from the day counting
 started rather than the day the campaign did, and the page says from when.
-
-**What it caused** then counts what is credited to the campaign — submissions, leads,
-contacts and bookings, one kind at a time and never added together — whether the touch
-was an email, a labeled link or a page.
 
 ### Everything the campaigns caused {#conversions}
 
