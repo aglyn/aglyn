@@ -13,6 +13,7 @@ import type { ResolvedPluginSitemapSection } from './plugin-sitemap-sections'
 import type { ResolvedPluginSiteBundleSectionDeclaration } from './plugin-site-bundle'
 import type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'
 import type { ResolvedPluginEntityPicker } from './plugin-entity-pickers'
+import type { ResolvedPluginRecordPage } from './plugin-record-pages'
 import type { ResolvedPluginCostAxis, ResolvedPluginSpendLine, ResolvedPluginUsageBand, ResolvedPluginUsageMeter } from './plugin-usage-axes'
 import type { ResolvedPluginPlanFeature, ResolvedPluginPlanQuota } from './plugin-plan-entitlements'
 import type { FunctionBindings } from './plugin-contributions'
@@ -863,6 +864,18 @@ export const PLUGIN_ENTITY_PICKERS_DECLARED: readonly ResolvedPluginEntityPicker
     "singular": "dataset",
     "plural": "datasets",
     "page": "the Data page"
+  },
+]
+
+/**
+ * Where a person reads each record kind a first-party plugin's console page
+ * shows, declared by that plugin (AGL-3080), for a server's notification link.
+ */
+export const PLUGIN_RECORD_PAGES_DECLARED: readonly ResolvedPluginRecordPage[] = [
+  {
+    "pluginId": "inbox",
+    "kind": "formSubmission",
+    "path": "/inbox"
   },
 ]
 

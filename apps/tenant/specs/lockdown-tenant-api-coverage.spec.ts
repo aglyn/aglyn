@@ -380,7 +380,6 @@ describe('AGL-2495 · every tenant API route has a lockdown disposition', () => 
     for (const [anchor, kind] of [
       // One of each disposition, so a classifier that collapsed to a single
       // answer cannot pass this.
-      ['apps/tenant/app/api/forms/submit/route.ts', 'wired'],
       ['apps/tenant/app/api/analytics/collect/route.ts', 'wired'],
       ['apps/tenant/app/api/protection/unlock/route.ts', 'wired'],
       ['apps/tenant/app/api/screen/nodes/route.ts', 'delegated'],
@@ -446,7 +445,7 @@ describe('AGL-2495 · every tenant API route has a lockdown disposition', () => 
   it('leaves no route unwired, undelegated, unexplained and unlisted', () => {
     const violations = byKind('violation').map(
       (entry) =>
-        `${entry.file} — wire the verdict (see forms/submit), add ` +
+        `${entry.file} — wire the verdict (see analytics/collect), add ` +
         `"lockdown-423: via <module>", document ` +
         `"lockdown-423: exempt — <reason>" AND add it to TENANT_EXEMPT_AUDIT, ` +
         `or — only if it genuinely cannot be closed yet — record it in ` +
@@ -509,10 +508,11 @@ describe('AGL-2495 · every tenant API route has a lockdown disposition', () => 
   it('the write detector fires on a route that really writes', () => {
     // ANTI-VACUITY for the assertion above: without this, a regex that
     // stopped matching would report the whole known-open set as clean, which
-    // is the more dangerous direction. `forms/submit` and `counter-notice`
-    // both write, and are not in the set.
+    // is the more dangerous direction. `counter-notice` and `report-abuse`
+    // both write, and are not in the set. (The form door is the forms
+    // plugin's now, behind the plugin dispatcher, and keeps its own lockdown:
+    // `plugin-api-own-visitor-gates.spec.ts`.)
     for (const writer of [
-      'apps/tenant/app/api/forms/submit/route.ts',
       'apps/tenant/app/api/counter-notice/route.ts',
       'apps/tenant/app/api/report-abuse/route.ts',
     ]) {

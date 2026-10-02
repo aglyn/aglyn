@@ -191,6 +191,7 @@ a component the first did not still reaches the plugin.
 | `options.recipientLink` / `isPluginRecipientLinkRoute(path)` | A route that answers a link the platform mailed to somebody — an unsubscribe in a `List-Unsubscribe` header. Both dispatchers skip their per-site enablement and release gates for it and nothing else: lockdown and the rate limit still apply. An opt-out has to keep working after its plugin is paused for the workspace (CAN-SPAM holds it open for thirty days after the send), so the route authenticates the link itself, by a signature it verifies. |
 | `options.machine` / `isPluginMachineRoute(path)` | A route a machine calls — a scheduler's sweep on the cron secret, a provider's signed webhook — that names no site and no member. Both dispatchers skip their per-site enablement and release gates for it, and exempt it from their write limit and cross-origin check (`isMachinePluginApiPath` answers `true` for it); lockdown still applies. The flag grants nothing by itself: the route authenticates its caller, and judges the plugin's release and plan for each organization it resolves. |
 | `options.portability` / `isPluginPortabilityRoute(path)` | A route that hands a workspace the records the plugin keeps for it — a data-portability export — which the workspace is owed whether or not the plugin is switched on or released for it now. Both dispatchers skip their per-site enablement and release gates for it and nothing else: lockdown, the email-verification gate and the write limit still apply. The flag grants nothing by itself: the route authenticates the member, and asks the plugin's release and plan itself of anything it serves beyond what the workspace is owed. |
+| `options.ownVisitorGates` / `isPluginOwnVisitorGatesRoute(path)` | A public visitor door that runs EVERY visitor gate itself, because its answers to them are a published contract — the forms plugin's `forms/submit`, whose "not accepting" notice, per-(site, address) limit, monthly ceiling and lockdown placement are its own, and which is judged by the switch of the plugin whose door a submission came through. The tenant dispatcher hands such a route the request untouched: no cross-origin check, no site read from the body, no enablement or release gate, no lockdown, no write limit, no card velocity. Declaring it takes all of those on, so it is honored only for a first-party plugin's registration under the loader's marker; anyone else's keeps the dispatcher's gates and the drop is logged. The console's dispatcher does not read it. |
 | `handler` as `(req, res)` or `{ web }` | The node shape takes `PluginApiRequest` / `PluginApiResponse`. The Web shape, `{ web: (request, { params }) => Response }`, takes the dispatcher's own `Request` and answers a `Response` — the form for a door that streams (server-sent events, a chat answer) or reads the raw body itself; `params` carries the path segments and every `:name` filled. |
 | `PluginApiRequest` | `{ method, query, body, headers, rawBody? }` — `rawBody` carries the unparsed payload for Stripe/Svix signature verification. |
 | `resolvePluginApiMatch(path)` / `runPluginApiMatch(match, request, params, runLegacy)` | What a dispatcher does: the route and its filled `:name` params for a path, then either shape run — the host app supplies `runLegacy` for the node shape. `resolvePluginApiRoute(path)` answers the node handler alone, for the specs that drive one directly. |
@@ -772,6 +773,27 @@ address. A plugin that links to another plugin's page asks for
 one of these; `check:plugin-domain-in-core` refuses one that spells the other
 plugin's slug or core route itself.
 
+### Record pages, for a server — `plugin-record-pages`
+
+A server has no console registrar, so it cannot ask the routes above. The
+forms plugin's door tells a site's managers about a new submission, and the
+notification's link is where they read submissions — a page another plugin
+draws. The plugin whose console page shows a kind declares it in
+`plugins.config.json`, and the manifest generator compiles it:
+
+```json
+"recordPages": [{ "kind": "formSubmission", "path": "/inbox" }]
+```
+
+| Field / API | Semantics |
+| --- | --- |
+| `kind` | The record kind, as the routes and indexes key it. One page per kind. |
+| `path` | The site console path the kind is read on, under one of the declaring plugin's own console routes, or the generator refuses it. |
+| `pluginRecordPage(kind)` | The declaration, or `null` when no plugin in the build shows the kind. |
+| `pluginRecordPageLink(kind, hostId)` | `/{hostId}{path}`, the shape a notification's `link` takes, or `null`, in which case the notification goes without a link. |
+
+The Inbox declares `formSubmission`.
+
 ## Record cards — `plugin-record-cards` (`/server`)
 
 What a plugin's record looks like in one line and one image, published by the
@@ -870,6 +892,30 @@ records (facts: `{ kind, subject, body }`, the body in the CRM's merge-field
 grammar). Forms publishes a site's `formSubmission`
 records — the door's rows — and their documents (`ref`), which the Inbox marks
 answered and keeps its replies and list assignments under.
+
+## Intake gates — `plugin-intake-gates` (`/server`)
+
+Whether a visitor's next write through a plugin's public door would be
+accepted, asked by a monitor that must not write to find out — the funnel
+probe on `/api/health/funnel`, which would otherwise file fake leads, bill the
+customer and notify the site's managers. The plugin that keeps the door
+registers a gate under the door's name, from its server declarations:
+
+```ts
+registerPluginIntakeGate('form', async ({ hostId, host, org }) => {
+  if (!isHostPluginEnabled(org, host, 'forms')) return 'switched-off'
+  // …the plan's allowance and the flood ceiling, over the door's own reads
+  return 'open'
+})
+```
+
+| API | Semantics |
+| --- | --- |
+| `registerPluginIntakeGate(door, gate, { pluginId? })` | One gate per door; a door another plugin answers throws naming both. |
+| `gate({ hostId, host, org })` | The door's own gates, evaluated the way the door evaluates them before its first write, writing nothing: `open`, `switched-off`, `plan-exhausted` or `flood-ceiling`. The caller hands over the site and organization documents it has read; the gate reads only what is its own. The platform's own gates — lockdown, who would be told — are the caller's to ask. |
+| `pluginIntakeGate(door)` | `{ pluginId, gate }`, or `null` when no plugin keeps the door here; a caller runs the app's declarations step once before it concludes the door is shut. |
+
+Forms gates the `form` door.
 
 ## What depends on a thing — `plugin-dependents` (`/server`)
 

@@ -26,6 +26,7 @@ import {
   registerPluginRecordIndex,
   type PluginRecordIndex,
 } from '@aglyn/aglyn/plugin-manager/plugin-record-index'
+import { registerPluginIntakeGate } from '@aglyn/aglyn/plugin-manager/plugin-intake-gates'
 import { BUNDLE_ID } from './constants/bundle-common'
 
 /**
@@ -72,6 +73,13 @@ export function formsCountingRemovedRecords(
  * event names.
  */
 export function registerFormsServerDeclarations(): void {
+  // The form door's own gates, for a monitor that must not write to ask them
+  // (the funnel probe, AGL-2586): loaded with the first question.
+  registerPluginIntakeGate(
+    'form',
+    async (request) => (await import('./server/form-intake-gate')).formIntakeGate(request),
+    { pluginId: BUNDLE_ID },
+  )
   // Submissions are this plugin's records (AGL-3080): the Inbox reads, marks
   // and threads them through this index rather than through the collection.
   registerPluginRecordIndex('formSubmission', lazyFormSubmissionIndex, { pluginId: BUNDLE_ID })

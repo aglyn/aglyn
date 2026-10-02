@@ -93,22 +93,6 @@
       "why": "The published page's resolution of the operator's own advertising tags (see advertising-tags.ts): it installs nothing on a customer's site (`isPlatformMarketingHost`), and on the platform's marketing site hands the verdict to the shared mount."
     },
     {
-      "path": "apps/tenant/app/api/forms/submit/route.ts",
-      "rules": [
-        "domain-name",
-        "plugin-collection:forms",
-        "domain-declares:forms"
-      ],
-      "lane": "forms"
-    },
-    {
-      "path": "apps/tenant/app/api/health/funnel/funnel-probe.ts",
-      "rules": [
-        "plugin-collection:forms"
-      ],
-      "lane": "forms"
-    },
-    {
       "path": "apps/tenant/app/api/health/funnel/funnel-verdict.ts",
       "rules": [
         "domain-declares:marketing"

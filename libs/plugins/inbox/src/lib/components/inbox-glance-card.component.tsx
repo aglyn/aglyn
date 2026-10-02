@@ -69,7 +69,7 @@ const PREVIEW_ROWS = 3
  *
  * `orderBy('createdAt', 'desc')` is checked against the writer rather than
  * assumed — an `orderBy` drops documents missing the field, which on a
- * newest-first list is invisible. `apps/tenant/app/api/forms/submit/route.ts`
+ * newest-first list is invisible. `libs/plugins/forms/src/lib/server/form-submit.ts`
  * is the only path that creates one and stamps `createdAt: serverTimestamp()`
  * on every add, the v1 API only reads and deletes, and `formSubmissions` is
  * absent from `IMPORTABLE_FIELDS`, so no restore can mint one without it.

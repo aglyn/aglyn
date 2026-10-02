@@ -12,6 +12,12 @@ import type { PluginLoadManifest } from '@aglyn/aglyn/server'
 
 export const TENANT_PLUGIN_SERVER_MANIFEST: PluginLoadManifest = [
   {
+    id: 'forms',
+    apiPrefixes: ["forms"],
+    register: {"tenantApi":"registerFormsApi"},
+    load: () => import('@aglyn/plugins-forms/server'),
+  },
+  {
     id: 'bookings',
     apiPrefixes: ["bookings"],
     register: {"tenantApi":"registerBookingsApi"},

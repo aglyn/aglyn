@@ -300,7 +300,7 @@ export function SubmissionsCard({
    * as an unreachable inbox.
    *
    * `createdAt` is safe to order on, checked against the writer rather than
-   * assumed: `apps/tenant/app/api/forms/submit/route.ts` is the only path
+   * assumed: `libs/plugins/forms/src/lib/server/form-submit.ts` is the only path
    * that creates one and stamps `createdAt: serverTimestamp()` on every add,
    * the v1 API only ever reads and deletes, and `formSubmissions` is absent
    * from `IMPORTABLE_FIELDS`, so no restore path can make one without it.

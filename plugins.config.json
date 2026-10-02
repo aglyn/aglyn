@@ -91,6 +91,7 @@
       "register": {
         "site": "registerFormsPlugin",
         "console": "registerFormsConsole",
+        "tenantApi": "registerFormsApi",
         "consoleApi": "registerFormsConsoleApi",
         "serverDeclarations": "registerFormsServerDeclarations",
         "consoleServerDeclarations": "registerFormsConsoleServerDeclarations",
@@ -1185,6 +1186,12 @@
           "path": "/inbox"
         }
       },
+      "recordPages": [
+        {
+          "kind": "formSubmission",
+          "path": "/inbox"
+        }
+      ],
       "contributes": {
         "console": {
           "shell": true,

@@ -129,7 +129,12 @@ jest.mock('@aglyn/aglyn/plugin-manager/record-captured-contact', () => ({
 }))
 
 // Below the mocks by intent: babel hoists `jest.mock` above every import.
-import { POST } from '../app/api/forms/submit/route'
+// The door as the tenant serves it: the forms plugin's route, through the
+// plugin API dispatcher, with the forms plugin's surface loaded (AGL-3080).
+jest.mock('../utils/server-plugin-loader', () => ({
+  serverPluginLoader: jest.requireActual('./plugin-door-dispatch').formsOnlyServerPluginLoader(),
+}))
+import { POST } from './plugin-door-dispatch'
 
 const submit = (body: Record<string, unknown> = {}) =>
   POST(

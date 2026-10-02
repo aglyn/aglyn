@@ -297,7 +297,7 @@ const DIMENSIONS: Record<string, Dimension> = {
     refusedAt: 20,
     allowedAt: 19,
     relax: (n) => free({ formSubmissionsPerMonth: n }),
-    enforcedIn: 'apps/tenant/app/api/forms/submit/route.ts',
+    enforcedIn: 'libs/plugins/forms/src/lib/server/form-submit.ts',
     decider: 'checkFormSubmissionQuota',
   },
   contactsPerHost: {
@@ -719,7 +719,7 @@ describe('FLAT PLATFORM CEILINGS on visitor-created records (AGL-1529)', () => {
     for (const file of [
       'libs/plugins/commerce/src/lib/server/membership-register.ts',
       'libs/plugins/bookings/src/lib/server.ts',
-      'apps/tenant/app/api/forms/submit/route.ts',
+      'libs/plugins/forms/src/lib/server/form-submit.ts',
     ]) {
       const code = codeOf(file)
       expect(`${file}: ${code.includes('recordCapturedContact(') ? 'captures through the seam' : 'NO CAPTURE'}`)

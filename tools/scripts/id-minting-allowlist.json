@@ -190,7 +190,7 @@
       "reason": "To fix: a dataset record a form or an automation appends; routed at /v1/datasets/{datasetId}/records/{recordId} and referenced by other records and by the submission."
     },
     {
-      "site": "apps/tenant/app/api/forms/submit/route.ts: hostRef.collection('formSubmissions').add(…)",
+      "site": "libs/plugins/forms/src/lib/server/form-submit.ts: hostRef.collection('formSubmissions').add(…)",
       "class": "RESOURCE",
       "issue": "AGL-3088",
       "reason": "To fix: a form submission; routed at /v1/sites/{siteId}/form-submissions/{submissionId}, linked from the inbox as ?submission=, and referenced by contact interactions and campaign conversions."
