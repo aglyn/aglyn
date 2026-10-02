@@ -36,39 +36,11 @@ let campaigns: Record<string, Record<string, unknown>> = {}
 let contacts: Record<string, Record<string, unknown>> = {}
 let groupHostIds: string[] = ['site-1']
 
-const campaignRef = (root: string, id: string, sub: string, subId: string) => ({
-  id: subId,
-  path: `${root}/${id}/${sub}/${subId}`,
-  parent: { parent: { id } },
-})
-
-const firestoreHandle = {
-  collection: (name: string) => ({
-    doc: (id: string) => ({
-      collection: (sub: string) => ({
-        doc: (subId: string) => campaignRef(name, id, sub, subId),
-      }),
-    }),
-  }),
-  getAll: async (...refs: Array<ReturnType<typeof campaignRef>>) =>
-    refs.map((ref) => {
-      const data = campaigns[ref.path]
-      return {
-        id: ref.id,
-        ref,
-        exists: data !== undefined,
-        get: (field: string) => data?.[field],
-        data: () => data,
-      }
-    }),
-}
-
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
   firebaseAdmin: {
     app: () => ({
       auth: () => ({ verifyIdToken: (token: string) => verifyIdToken(token) }),
-      firestore: () => firestoreHandle,
     }),
   },
   getOrgForHost: (...args: unknown[]) => getOrgForHost(...args),
@@ -105,6 +77,13 @@ import {
   contactCampaignEmailFromDelivery,
   contactEmailHistoryHandler,
 } from './contact-email-history'
+import { standInEmailSendIndex } from '../testing/stand-in-email-send-index'
+
+/*
+ * The names come from the plugin that keeps the sends (`emailSend`,
+ * AGL-3080), stood in over this file's sends.
+ */
+standInEmailSendIndex((orgId, sendId) => campaigns[`orgs/${orgId}/campaigns/${sendId}`])
 
 const HOST_ID = 'site-1'
 const ORG_ID = 'org-1'

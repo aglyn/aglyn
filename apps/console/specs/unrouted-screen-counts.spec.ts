@@ -174,7 +174,7 @@ jest.mock('@aglyn/aglyn/server', () => ({
   // exactly like the behaviour under test regressing.
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/stored-nodes'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/screen-route'),
-  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/actions'),
+  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/site-interactions'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/organizations'),
   createResourceUid: () => 'generated-id',
   nameSearchKey: (value: string) => value.toLowerCase(),

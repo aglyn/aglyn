@@ -31,6 +31,8 @@
 
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
+import { unregisterPluginServices } from '@aglyn/aglyn/plugin-manager/plugin-services'
+import { standInConvertedRecordSources } from '../testing/stand-in-record-counts'
 
 /** Rows each paged listener answers, keyed by the query the card built. */
 const pages = new Map<string, { rows: any[]; hasMore: boolean }>()
@@ -178,7 +180,18 @@ const row = (over: Record<string, unknown>) => ({
   ...over,
 })
 
-async function renderCard(campaignId?: string): Promise<void> {
+async function renderCard(
+  campaignId?: string,
+  options: { withoutOwners?: readonly string[] } = {},
+): Promise<void> {
+  /*
+   * The records' owners publish what a total counts and where a submission
+   * was sent from (AGL-3080); this plugin may not load them, so they are
+   * stood in, building the queries their own modules build over this file's
+   * `firebase/firestore` double.
+   */
+  standInConvertedRecordSources()
+  for (const pluginId of options.withoutOwners ?? []) unregisterPluginServices(pluginId)
   const { CampaignConversionsCard } = await import(
     './campaign-conversions-card'
   )
@@ -279,6 +292,22 @@ describe('what is NOT credited', () => {
     expect(
       screen.getByText(/not a count of everything that happened/i),
     ).toBeTruthy()
+  })
+
+  /*
+   * The same refusal when nothing in this console counts the kind (AGL-3080):
+   * the total is the owning plugin's to count, and a reader with no owner to
+   * ask must not count the collection itself — nor pay for the half of the
+   * split it cannot use.
+   */
+  it('withholds the split where no plugin counts the kind', async () => {
+    counts.set(describeQuery([ATTRIBUTIONS, 'kind==form']), 12)
+    await renderCard(undefined, { withoutOwners: ['forms'] })
+    await settled()
+
+    expect(screen.queryByText('Credited to a campaign')).toBeNull()
+    expect(screen.getByText(/could not be counted, so it is not shown/i)).toBeTruthy()
+    expect(countCalls).toEqual([])
   })
 
   /**

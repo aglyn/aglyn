@@ -33,6 +33,7 @@ This package is a first-party Aglyn plugin. It is loaded through Aglyn's plugin 
 - A **Bookings** nav item and page at `/bookings`, behind the `bookings` feature flag. The page is code-split and loads when opened.
 - A "Book a meeting" widget in the `crmRecordBooking` slot. The CRM plugin hosts that zone on a record; this plugin draws the control in it, so neither package imports the other.
 - A plugin config schema (`BOOKINGS_CONFIG_SCHEMA`) with two settings: `maxDaysAhead` (the booking horizon in days) and `bookingPath` (the page on the site that holds the Booking block, used to build booking links).
+- A record count source for `booking` (`plugin-record-counts`): how many bookings a site took, which a campaign's conversion report divides by.
 
 ### On the server
 

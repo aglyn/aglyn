@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { validateHostAction } from '@aglyn/aglyn'
+import { validateInteraction } from '@aglyn/aglyn'
 import {
   buildPresetInteractionDrafts,
   collectPresetRefIds,
@@ -127,9 +127,9 @@ describe('buildPresetInteractionDrafts', () => {
     ])
   })
 
-  it('produces drafts that survive host-action validation', () => {
+  it('produces drafts that survive interaction validation', () => {
     for (const draft of buildPresetInteractionDrafts(preset, liveNode)) {
-      const problem = validateHostAction({
+      const problem = validateInteraction({
         name: draft.name,
         trigger: {
           event: draft.event,

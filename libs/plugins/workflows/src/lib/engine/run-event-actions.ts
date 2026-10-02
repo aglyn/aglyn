@@ -24,22 +24,15 @@ import {
   evaluateExpression,
   evaluateStepGuard,
   evaluateTriggerConditions,
-  FLOW_TIMED_OUT_FIELD,
   flowSubscriptionTopicId,
   hostPublicOrigin,
   isClientActionStep,
-  isFlowSuspendingStep,
-  type HostAction,
-  type HostActionAlert,
-  type HostActionStep,
-  type HostActionStepType,
   type HostEventType,
   type HostFunction,
   type HostVariable,
   normalizeTriggerConditions,
   type PluginJobHostGate,
   resolveOrgEntitlements,
-  sendEmailIsTransactionalReply,
 } from '@aglyn/aglyn/server'
 import {
   isDeferrableSendResult,
@@ -134,6 +127,15 @@ import { runTriggeredByFields } from './run-trigger-actor'
 // By path, not the barrel: only a server run asks.
 import { pluginServerStepExecutor } from '@aglyn/aglyn/plugin-manager/plugin-server-steps'
 import { preparePluginRecordEmail } from '@aglyn/aglyn/plugin-manager/plugin-record-timeline'
+import {
+  FLOW_TIMED_OUT_FIELD,
+  type HostAction,
+  type HostActionAlert,
+  type HostActionStep,
+  type HostActionStepType,
+  isFlowSuspendingStep,
+  sendEmailIsTransactionalReply,
+} from '../model/host-actions'
 
 /**
  * Every live, switched-on action a site holds for an event runs, in

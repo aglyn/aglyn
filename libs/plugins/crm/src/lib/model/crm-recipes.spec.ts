@@ -26,9 +26,12 @@
 
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { sendEmailIsTransactionalReply } from '@aglyn/aglyn/app-utils/actions'
 import { CONTACT_TAG_MAX_LENGTH } from '@aglyn/aglyn/app-utils/crm-kinds'
-import { HOST_EVENT_PAYLOAD_KEYS, HOST_EVENT_TYPES } from '@aglyn/aglyn/app-utils/host-events'
+import {
+  HOST_EVENT_PAYLOAD_KEYS,
+  HOST_EVENT_TYPES,
+  hostEventRecipientActed,
+} from '@aglyn/aglyn/app-utils/host-events'
 import { declaredInteractionRecipes } from '@aglyn/aglyn/plugin-manager/interaction-recipes'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import {
@@ -140,11 +143,16 @@ describe('Welcome a new lead', () => {
     expect(email.subject.trim()).not.toBe('')
     expect(email.body.trim()).not.toBe('')
     expect('toField' in email).toBe(false)
-    // A transactional reply, with no unsubscribe (AGL-3458), and greeting
-    // the person by name with a fallback for one who gave none.
+    // Everything that makes it a transactional reply, with no unsubscribe
+    // (AGL-3458): on the person's own act, before any wait, in no topic, to
+    // the address the event carries. The automation editor's own judgement of
+    // it is held in the workflows plugin's recipe spec, through a stand-in.
+    expect(hostEventRecipientActed(action.trigger.event)).toBe(true)
+    expect('topicId' in email).toBe(false)
     expect(
-      sendEmailIsTransactionalReply(email, { event: action.trigger.event, afterWait: false }),
-    ).toBe(true)
+      action.steps.slice(0, 2).some((step) => step.type === 'wait' || step.type === 'waitForEvent'),
+    ).toBe(false)
+    // Greeting the person by name, with a fallback for one who gave none.
     expect(email.body).toContain('{{firstName|there}}')
   })
 

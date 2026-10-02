@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { HostAction } from '@aglyn/aglyn/app-utils/actions'
+import type { AiAutomation } from './ai-automation-format'
 import { emptyAiAutomationRecords, type AiAutomationRecords } from './ai-automation-draft'
 import {
   AI_OUTLINE_RUN_ERRORS_MAX,
@@ -50,7 +50,7 @@ describe('aiRedactPersonal', () => {
 })
 
 describe('aiActionOutline', () => {
-  const action: HostAction = {
+  const action: AiAutomation = {
     name: 'Follow up quote requests',
     enabled: false,
     trigger: {
@@ -83,7 +83,7 @@ describe('aiActionOutline', () => {
       { type: 'runJs', code: 'zzscript()' },
       { type: 'setContactStage', lifecycleStage: 'sales-qualified' },
     ],
-  } as HostAction
+  } as AiAutomation
 
   it('outlines the automation by the labels the editor shows, with what each named record’s standing is', () => {
     expect(aiActionOutline(action, RECORDS).split('\n')).toEqual([

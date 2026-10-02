@@ -44,16 +44,10 @@ import {
   type CrmActivityKind,
   type CrmTaskKind,
   HOST_EVENT_TYPES,
-  type HostActionStep,
-  type HostActionStepType,
   hostEventLabel,
   isInteractionAttributeAllowed,
-  SEND_EMAIL_REPLY_INELIGIBLE_REASONS,
-  sendEmailIsTransactionalReply,
-  sendEmailReplyIneligibility,
   type TriggerConditionOp,
 } from '@aglyn/aglyn'
-import { automationPlaceholderIn } from '@aglyn/aglyn/app-utils/automation-placeholders'
 import {
   FormControlLabel,
   FormHelperText,
@@ -65,6 +59,14 @@ import {
   Typography,
 } from '@mui/material'
 import type { ReactNode } from 'react'
+import {
+  type HostActionStep,
+  type HostActionStepType,
+  SEND_EMAIL_REPLY_INELIGIBLE_REASONS,
+  sendEmailIsTransactionalReply,
+  sendEmailReplyIneligibility,
+} from '../model/host-actions'
+import { draftPlaceholderIn } from '@aglyn/aglyn/app-utils/draft-placeholders'
 
 /**
  * The durations a wait may be set to, from the picker.
@@ -122,7 +124,7 @@ export function placeholderState(
   value: unknown,
   help: string,
 ): { error?: boolean; helperText?: string } {
-  return automationPlaceholderIn(value) ? { error: true, helperText: help } : {}
+  return draftPlaceholderIn(value) ? { error: true, helperText: help } : {}
 }
 
 /**
@@ -134,7 +136,7 @@ function placeholderReference(
   id: unknown,
   noun: string,
 ): { error?: boolean; helperText?: string } {
-  const words = String(id ?? '').trim() ? null : automationPlaceholderIn(name)
+  const words = String(id ?? '').trim() ? null : draftPlaceholderIn(name)
   return words
     ? {
         error: true,

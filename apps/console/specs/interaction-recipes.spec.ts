@@ -16,11 +16,15 @@
  */
 
 import {
-  HOST_ACTION_STEP_LABELS,
-  type HostAction,
-  hostActionStepsForClient,
-  validateHostAction,
-} from '@aglyn/aglyn/app-utils/actions'
+  interactionStepLabel,
+  interactionStepsForClient,
+  isClientActionStep,
+} from '@aglyn/aglyn/app-utils/site-interactions'
+import {
+  registeredInteractionStepCheck,
+  resetInteractionStepChecksForTests,
+  validateStoredInteraction,
+} from '@aglyn/aglyn/plugin-manager/interaction-step-checks'
 import {
   declaredInteractionRecipes,
   interactionRecipe,
@@ -46,8 +50,8 @@ import { registerPluginDeclarations } from '../constants/plugins.declarations.ge
  *
  *  1. every declared recipe is registered by the plugin that declares it, and
  *     none before the boot;
- *  2. each builds an automation the automation validator accepts — picked
- *     where it picks — from steps the editor labels;
+ *  2. each builds an automation every step's registered check accepts —
+ *     picked where it picks — from steps a label names;
  *  3. a kind a recipe picks is one a plugin in this console lists;
  *  4. what a visitor's page receives of each stops at its first wait.
  *
@@ -61,6 +65,7 @@ let registeredBeforeBoot: string[]
 
 beforeAll(async () => {
   resetInteractionRecipesForTests()
+  resetInteractionStepChecksForTests()
   resetPluginServicesForTests()
   registeredBeforeBoot = interactionRecipes().map((recipe) => recipe.id)
   await registerPluginDeclarations()
@@ -79,7 +84,7 @@ beforeAll(async () => {
 const built = () =>
   interactionRecipes().map((recipe) => ({
     recipe,
-    action: recipe.build(recipe.picks ? { picked: PICKED } : undefined) as unknown as HostAction,
+    action: recipe.build(recipe.picks ? { picked: PICKED } : undefined),
   }))
 
 describe('the interaction recipes, in this console', () => {
@@ -97,21 +102,29 @@ describe('the interaction recipes, in this console', () => {
     }
   })
 
-  it('builds, from each, an automation the editor’s validator accepts, of steps the editor labels', () => {
+  it('builds, from each, an automation every step’s registered check accepts, of steps a label names', () => {
     for (const { recipe, action } of built()) {
-      expect({ id: recipe.id, problem: validateHostAction(action) }).toEqual({
+      expect({ id: recipe.id, problem: validateStoredInteraction(action) }).toEqual({
         id: recipe.id,
         problem: null,
       })
       for (const step of action.steps) {
-        expect(HOST_ACTION_STEP_LABELS[step.type]).toBeTruthy()
+        expect({ type: step.type, label: Boolean(interactionStepLabel(step.type)) }).toEqual({
+          type: step.type,
+          label: true,
+        })
+        // A server step is judged by the plugin that holds its check, which
+        // the boot registered: the control that the acceptance above meant it.
+        if (!isClientActionStep(step)) {
+          expect(registeredInteractionStepCheck(step.type)).not.toBeNull()
+        }
       }
     }
   })
 
   it('refuses a recipe that picks a record, built without its pick', () => {
     for (const recipe of interactionRecipes().filter((one) => one.picks)) {
-      expect(validateHostAction(recipe.build() as unknown as HostAction)).toMatch(/value/i)
+      expect(validateStoredInteraction(recipe.build())).toMatch(/value/i)
     }
   })
 
@@ -125,7 +138,7 @@ describe('the interaction recipes, in this console', () => {
   it('hands a visitor’s page nothing past a recipe’s first wait', () => {
     for (const { action } of built()) {
       const waitAt = action.steps.findIndex((step) => step.type === 'wait' || step.type === 'waitForEvent')
-      expect(hostActionStepsForClient(action.steps)).toHaveLength(
+      expect(interactionStepsForClient(action.steps)).toHaveLength(
         waitAt < 0 ? action.steps.length : waitAt,
       )
     }

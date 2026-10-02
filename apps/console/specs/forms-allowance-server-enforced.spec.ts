@@ -131,7 +131,7 @@ jest.mock('@aglyn/aglyn/server', () => ({
   // throws inside the route and its own catch answers 500, which reads
   // exactly like the behaviour under test regressing.
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/stored-nodes'),
-  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/actions'),
+  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/site-interactions'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/organizations'),
   // The REAL fields a new form is written with for its list (AGL-3330).
   newFormListFields: jest.requireActual('../../../libs/aglyn/src/lib/app-utils/forms')

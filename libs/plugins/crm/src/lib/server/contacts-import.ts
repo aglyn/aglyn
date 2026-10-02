@@ -106,7 +106,7 @@ import {
   firebaseAdmin,
   prepareContactCaptureBatch,
 } from '@aglyn/tenant-data-admin'
-import { captureHostContact } from '@aglyn/tenant-runtime'
+import { captureHostContact } from './capture-host-contact'
 // The leaf, so a spec that stands a partial barrel in still reaches it.
 import {
   countUndeliverableEmails,

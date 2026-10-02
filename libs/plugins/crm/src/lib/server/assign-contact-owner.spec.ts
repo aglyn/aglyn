@@ -128,7 +128,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     return docs.get(`hosts/${hostId}`) ?? null
   },
   hostDisplayName: jest.requireActual(
-    '../../../data/admin/src/lib/server/notifications',
+    '@aglyn/tenant-data-admin/server/notifications',
   ).hostDisplayName,
   notifyUsers: async (uids: Iterable<string>, payload: Record<string, any>) => {
     notified.push({ uids: [...uids], payload })

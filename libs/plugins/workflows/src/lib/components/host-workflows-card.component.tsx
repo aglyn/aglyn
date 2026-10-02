@@ -23,12 +23,9 @@ import {
   HOST_EVENT_TYPES,
   hostEventLabel,
   hostEventPayloadHint,
-  type HostActionStep,
-  type HostActionStepType,
   type HostFunction,
   type HostVariable,
   pluginDocsHelp,
-  stepRunsAfterWait,
   triggerFilterProblem,
 } from '@aglyn/aglyn'
 /*
@@ -111,6 +108,11 @@ import {
   runWorkflow,
   WORKFLOW_MAX_STEPS,
 } from '../model/workflows'
+import {
+  type HostActionStep,
+  type HostActionStepType,
+  stepRunsAfterWait,
+} from '../model/host-actions'
 
 /**
  * How many workflows the card reads.

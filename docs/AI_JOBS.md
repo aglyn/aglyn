@@ -2024,7 +2024,7 @@ when the hero was written.
   the button's interaction to the form section's root. The validators spec, the page
   section spec and `runtime/ai-page-links.spec.ts` hold each match, each refusal and the
   interaction, which the platform's own `collectNodeInteractions` collects and
-  `validateHostAction` keeps. The Free About eval case holds a failing control for each
+  `validateStoredInteraction` keeps. The Free About eval case holds a failing control for each
   new code, and the harness reads a page answer's links against the sections of the plan
   it was built from.
 - **What it costs.** The hero's re-ask names the page's four sections, and the Free page's
@@ -2512,8 +2512,9 @@ with three modes, named by `inputs.mode`: `draft` (the default), `explain` and
   campaign, run a workflow, write to a dataset, post a webhook, show a site
   alert, wait, wait for an event, end the flow, and the five CRM steps. The
   cached instructions list them from `HOST_EVENT_TYPES`,
-  `HOST_EVENT_PAYLOAD_KEYS` and `HOST_ACTION_STEP_LABELS`, so what the model is
-  shown is what its answer is held to. A trigger or step that needs the CRM,
+  `HOST_EVENT_PAYLOAD_KEYS` and each step's declared label
+  (`interactionStepLabel`), so what the model is shown is what its answer is
+  held to. A trigger or step that needs the CRM,
   webhooks or bookings is refused, with a re-ask, on a workspace whose plan
   lacks it — the entitlements the executor reads before it runs one.
 - **What the model is shown to draft.** The doctrine's cached block, the
@@ -2541,9 +2542,10 @@ with three modes, named by `inputs.mode`: `draft` (the default), `explain` and
   than one, are kept as a placeholder: the words in square brackets where the
   record belongs.
 - **Placeholders** are the core's convention
-  (`libs/aglyn/src/lib/app-utils/automation-placeholders.ts`): a value somebody
+  (`libs/aglyn/src/lib/app-utils/draft-placeholders.ts`): a value somebody
   still has to supply, in square brackets, read only in the fields a person
-  types into. A bracketed list name matches no list, and a bracketed condition
+  types into — the platform's for its client steps, and each step's declared
+  `typedFields` for every other. A bracketed list name matches no list, and a bracketed condition
   value matches no event, so a placeholder can never act on the wrong record.
   An email the description leaves a fact out of carries one too. The Actions
   list counts them on a row, the editor highlights each field and picker
@@ -2552,7 +2554,7 @@ with three modes, named by `inputs.mode`: `draft` (the default), `explain` and
 - **The draft is written OFF, by its owner.** The workflows plugin registers
   the `automation` writer on the resource-drafts seam
   (`libs/plugins/workflows/src/lib/server-automation-drafts.ts`): the stored
-  shape the editor saves, each step's own fields, `validateHostAction`, the
+  shape the editor saves, each step's own fields, the editor's validator, the
   site role, the `actions` entitlement and the live-action cap, inside one
   transaction. The write is keyed by the id the job recorded for its draft, so
   a step run again reports its draft and spends nothing, and a refusal at the

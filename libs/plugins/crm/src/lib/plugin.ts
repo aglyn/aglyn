@@ -22,6 +22,7 @@ import { CRM_CONSOLE_SECTIONS } from './components/crm-console-sections'
 import { CrmGlanceCard } from './components/crm-glance-card'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { withCrmOrgMount } from './hooks/use-crm-org-mount'
+import { registerCrmRecordCounts } from './model/crm-record-counts'
 import { registerCrmRecordRoutes } from './model/crm-record-routes'
 import { registerCrmRecordLists } from './model/crm-record-lists'
 import { CRM_SEARCH_SOURCES } from './model/crm-search-sources'
@@ -62,6 +63,9 @@ export function registerCrmConsole(): void {
   registerCrmRecordRoutes()
   // The CRM's records as another plugin's picker lists them (AGL-3080).
   registerCrmRecordLists()
+  // The leads a site captured and the organization's contacts, counted for
+  // another plugin's figure.
+  registerCrmRecordCounts()
   registerPluginZone(
     {
       zone: CRM_RECORD_BOOKING_ZONE,

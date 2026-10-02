@@ -16,26 +16,29 @@
  */
 
 /**
- * The recipe stamp an automation carries, and the stored shape a recipe
- * install and the editor both write (AGL-2639). The recipes themselves are
- * the plugins' that write them (`interaction-recipes`, AGL-3080): this spec
- * registers one of its own, and the CRM's are held in the CRM plugin and, as
- * automations, in `apps/console/specs/interaction-recipes.spec.ts`.
+ * The recipe stamp a stored interaction carries, and the stored shape every
+ * writer of `hosts/{hostId}/actions` saves (AGL-2639). The recipes themselves
+ * are the plugins' that write them (`interaction-recipes`, AGL-3080): this
+ * spec registers one of its own, and the CRM's are held in the CRM plugin and,
+ * as automations, in `apps/console/specs/interaction-recipes.spec.ts`.
  */
 
 import {
+  interactionRecipeStamp,
   registerInteractionRecipes,
   resetInteractionRecipesForTests,
 } from '../plugin-manager/interaction-recipes'
 import {
-  type HostAction,
-  hostActionDocument,
-  hostActionRecipeId,
-  validateHostAction,
-} from './actions'
+  type InteractionStepBase,
+  type SiteInteraction,
+  siteInteractionDocument,
+  validateInteraction,
+} from './site-interactions'
+
+type Stored = SiteInteraction<InteractionStepBase>
 
 /** A recipe of this spec's own, registered as a plugin's declarations would. */
-const thankBuyer = (): HostAction => ({
+const thankBuyer = (): Stored => ({
   recipe: 'specThankBuyer',
   name: 'Thank a buyer',
   trigger: { event: 'formSubmission' },
@@ -50,7 +53,7 @@ beforeAll(() => {
         id: 'specThankBuyer',
         title: 'Thank a buyer',
         description: 'Thanks a buyer.',
-        build: () => thankBuyer() as never,
+        build: () => ({ ...thankBuyer(), recipe: 'specThankBuyer' }),
       },
     ],
     { pluginId: 'spec' },
@@ -63,28 +66,28 @@ afterAll(() => {
 
 describe('the stored recipe stamp (AGL-2639)', () => {
   it('reads a known id, null for "no recipe", and UNKNOWN for a document from before the stamp', () => {
-    expect(hostActionRecipeId({ recipe: 'specThankBuyer' })).toBe('specThankBuyer')
-    expect(hostActionRecipeId({ recipe: null })).toBeNull()
+    expect(interactionRecipeStamp({ recipe: 'specThankBuyer' })).toBe('specThankBuyer')
+    expect(interactionRecipeStamp({ recipe: null })).toBeNull()
     // A retired or mistyped id says nothing usable; it reads as no recipe.
-    expect(hostActionRecipeId({ recipe: 'retiredRecipe' })).toBeNull()
+    expect(interactionRecipeStamp({ recipe: 'retiredRecipe' })).toBeNull()
     // No field at all is the older document: unknown, not absent.
-    expect(hostActionRecipeId({})).toBeUndefined()
-    expect(hostActionRecipeId(undefined)).toBeUndefined()
+    expect(interactionRecipeStamp({})).toBeUndefined()
+    expect(interactionRecipeStamp(undefined)).toBeUndefined()
   })
 
   it('refuses a stamp that names no recipe, and passes null and absent alike', () => {
     const action = thankBuyer()
-    expect(validateHostAction({ ...action, recipe: 'retiredRecipe' as never })).toBe(
+    expect(validateInteraction({ ...action, recipe: 'retiredRecipe' as never })).toBe(
       'Unknown recipe',
     )
-    expect(validateHostAction({ ...action, recipe: null })).toBeNull()
+    expect(validateInteraction({ ...action, recipe: null })).toBeNull()
     const { recipe: _stamp, ...unstamped } = action
-    expect(validateHostAction(unstamped)).toBeNull()
+    expect(validateInteraction(unstamped)).toBeNull()
   })
 })
 
-describe('hostActionDocument (AGL-2639)', () => {
-  const action: HostAction = {
+describe('siteInteractionDocument (AGL-2639)', () => {
+  const action: Stored = {
     name: 'Nudge',
     trigger: {
       event: 'scrollDepth',
@@ -99,7 +102,7 @@ describe('hostActionDocument (AGL-2639)', () => {
   }
 
   it('writes every cap and list out, so a merge-set clears what the editor switched off', () => {
-    const stored = hostActionDocument(action)
+    const stored = siteInteractionDocument(action)
     expect(stored.trigger).toEqual({
       event: 'scrollDepth',
       threshold: 50,
@@ -115,7 +118,7 @@ describe('hostActionDocument (AGL-2639)', () => {
     expect(stored.enabled).toBe(true)
     expect(stored.steps).toEqual(action.steps)
     expect(stored.name).toBe('Nudge')
-    const bare = hostActionDocument({
+    const bare = siteInteractionDocument({
       name: 'Bare',
       trigger: { event: 'formSubmission' },
       steps: [],
@@ -135,13 +138,13 @@ describe('hostActionDocument (AGL-2639)', () => {
   })
 
   it('carries the recipe stamp only when the action says something about it', () => {
-    expect('recipe' in hostActionDocument(action)).toBe(false)
-    expect(hostActionDocument({ ...action, recipe: null }).recipe).toBeNull()
-    expect(hostActionDocument(thankBuyer()).recipe).toBe('specThankBuyer')
+    expect('recipe' in siteInteractionDocument(action)).toBe(false)
+    expect(siteInteractionDocument({ ...action, recipe: null }).recipe).toBeNull()
+    expect(siteInteractionDocument(thankBuyer()).recipe).toBe('specThankBuyer')
   })
 
   it('is the shape a recipe install writes: the validator accepts it as it accepts the action', () => {
-    expect(validateHostAction(thankBuyer())).toBeNull()
-    expect(validateHostAction(hostActionDocument(thankBuyer()))).toBeNull()
+    expect(validateInteraction(thankBuyer())).toBeNull()
+    expect(validateInteraction(siteInteractionDocument(thankBuyer()))).toBeNull()
   })
 })

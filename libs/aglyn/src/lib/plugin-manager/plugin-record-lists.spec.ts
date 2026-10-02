@@ -18,6 +18,8 @@
 import type { Firestore, Query } from 'firebase/firestore'
 import { setRegisteringPluginId } from '../app-utils/registering-plugin'
 import {
+  PLUGIN_RECORD_LIST_IDS_MAX,
+  pluginRecordListByIdsQuery,
   pluginRecordListQuery,
   pluginRecordListSource,
   pluginRecordsFromRows,
@@ -143,5 +145,36 @@ describe('record list sources', () => {
   it('refuses a source with no kind or no owner', () => {
     expect(() => registerPluginRecordListSource(' ', source('x'), { pluginId: 'cellar' })).toThrow(/kind/)
     expect(() => registerPluginRecordListSource('bottle', source('x'))).toThrow(/no owner/)
+  })
+})
+
+describe('records by name', () => {
+  it('asks the owner for at most thirty named records at a time', () => {
+    const asked: string[][] = []
+    registerPluginRecordListSource(
+      'bottle',
+      {
+        ...source('cellar'),
+        byIds: (_firestore, request) => {
+          asked.push([...request.ids])
+          return { ids: request.ids } as unknown as Query
+        },
+      },
+      { pluginId: 'cellar' },
+    )
+    const ids = Array.from({ length: 40 }, (_, index) => `b${index}`)
+    expect(pluginRecordListByIdsQuery('bottle', FIRESTORE, { hostId: 'h1', ids })).toEqual({
+      ids: ids.slice(0, PLUGIN_RECORD_LIST_IDS_MAX),
+    })
+    expect(asked[0]).toHaveLength(30)
+    // No ids asks for nothing, and says so without asking.
+    expect(pluginRecordListByIdsQuery('bottle', FIRESTORE, { hostId: 'h1', ids: ['', ''] })).toBeNull()
+    expect(asked).toHaveLength(1)
+  })
+
+  it('answers nothing where the source reads none by name, or no plugin keeps the kind', () => {
+    registerPluginRecordListSource('bottle', source('cellar'), { pluginId: 'cellar' })
+    expect(pluginRecordListByIdsQuery('bottle', FIRESTORE, { hostId: 'h1', ids: ['b1'] })).toBeNull()
+    expect(pluginRecordListByIdsQuery('glass', FIRESTORE, { hostId: 'h1', ids: ['g1'] })).toBeNull()
   })
 })

@@ -15,29 +15,39 @@
  * limitations under the License.
  */
 
+import { CONTACT_TAG_MAX_LENGTH, CRM_TASK_MAX_DUE_DAYS } from '@aglyn/aglyn/app-utils/crm'
 import {
   ACTION_MAX_CONDITIONS,
   BASIC_CLIENT_ACTION_STEP_TYPES,
   CLIENT_ACTION_STEP_TYPES,
+  declaredInteractionStep,
   evaluateTriggerCondition,
   evaluateTriggerConditions,
-  type HostAction,
-  type HostActionStep,
-  HOST_ACTION_STEP_LABELS,
+  interactionStepHolds,
   isBasicClientActionStep,
   isClientStepEntitled,
-  isCustomEventName,
   isInteractionAttributeAllowed,
   isSiteEventType,
   normalizeTriggerConditions,
   SCROLL_TO_MAX_OFFSET_PX,
+  triggerFilterProblem,
+} from '@aglyn/aglyn/app-utils/site-interactions'
+import {
+  FLOW_SUSPENDING_STEP_TYPES,
+  FLOW_TIMED_OUT_FIELD,
+  FLOW_WAIT_MAX_MINUTES,
+  FLOW_WAIT_MIN_MINUTES,
+  HOST_ACTION_STEP_LABELS,
+  HOST_ACTION_STEP_TYPES,
+  type HostAction,
+  type HostActionStep,
+  isCustomEventName,
   sendEmailIsTransactionalReply,
   sendEmailReplyIneligibility,
+  SERVER_ACTION_STEP_TYPES,
   stepRunsAfterWait,
-  triggerFilterProblem,
   validateHostAction,
-} from './actions'
-import { CONTACT_TAG_MAX_LENGTH, CRM_TASK_MAX_DUE_DAYS } from './crm'
+} from './host-actions'
 
 const base: HostAction = {
   name: 'Welcome',
@@ -686,7 +696,7 @@ describe('webhookPost steps', () => {
         steps: [{ type: 'toggleClass', selector: '', className: 'x' }],
       } as any),
     ).not.toBeNull()
-    const { isClientActionStep } = jest.requireActual('./actions')
+    const { isClientActionStep } = jest.requireActual('@aglyn/aglyn/app-utils/site-interactions')
     expect(
       isClientActionStep({
         type: 'toggleClass',
@@ -1148,5 +1158,92 @@ describe('a transactional reply', () => {
     ]
     expect(stepRunsAfterWait(steps, 0)).toBe(false)
     expect(stepRunsAfterWait(steps, 2)).toBe(true)
+  })
+})
+
+describe('the vocabulary the other plugins read without loading this one (AGL-3080)', () => {
+  it('names every step as the editor’s picker always has, in the picker’s order', () => {
+    // The labels are each step's declaration (or the platform's, for a client
+    // step); this is the table the picker offered before they were.
+    expect(Object.entries(HOST_ACTION_STEP_LABELS)).toEqual(
+      Object.entries({
+        runWorkflow: 'Run a workflow',
+        siteAlert: 'Show a site alert',
+        customEvent: 'Fire a custom event',
+        datasetAppend: 'Write to a dataset',
+        webhookPost: 'Send a webhook (Business)',
+        showOverlay: 'Show a popup or bar',
+        stickyNav: 'Make navigation sticky',
+        addClass: 'Add a CSS class',
+        toggleClass: 'Toggle a CSS class',
+        removeClass: 'Remove a CSS class',
+        showElement: 'Show an element',
+        hideElement: 'Hide an element',
+        toggleElement: 'Show/hide an element',
+        openDrawer: 'Open a drawer',
+        closeDrawer: 'Close a drawer',
+        toggleDrawer: 'Open/close a drawer',
+        openMenu: 'Open a menu',
+        closeMenu: 'Close a menu',
+        toggleMenu: 'Open/close a menu',
+        setAttribute: 'Set an ARIA or data attribute',
+        removeAttribute: 'Remove an ARIA or data attribute',
+        scrollTo: 'Scroll to element',
+        playVideo: 'Play a video',
+        showHtml: 'Show custom HTML',
+        runJs: 'Run custom JS (Business)',
+        redirect: 'Redirect the visitor',
+        trackGaEvent: 'Track an analytics event',
+        sendEmail: 'Send an email',
+        notifyAdmins: 'Notify site admins',
+        enrollList: 'Enroll in a list',
+        updateDataset: 'Update a dataset record',
+        assignCampaign: 'Assign to a campaign',
+        wait: 'Wait',
+        waitForEvent: 'Wait for something to happen',
+        exitFlow: 'End the flow here',
+        setContactStage: 'Set the contact’s lifecycle stage',
+        addContactTag: 'Tag the contact',
+        assignContactOwner: 'Assign the contact an owner',
+        createCrmTask: 'Create a CRM task',
+        logCrmActivity: 'Log a CRM activity',
+      }),
+    )
+  })
+
+  it('declares every server step, and only the steps that suspend a run hold one', () => {
+    for (const type of SERVER_ACTION_STEP_TYPES) {
+      expect({ type, declared: declaredInteractionStep(type) !== null }).toEqual({ type, declared: true })
+    }
+    const holding = HOST_ACTION_STEP_TYPES.filter((type) => interactionStepHolds(type) !== null)
+    expect(new Set(holding)).toEqual(FLOW_SUSPENDING_STEP_TYPES)
+  })
+
+  it('declares the wait band and the timed-out field the engine keeps', () => {
+    for (const type of FLOW_SUSPENDING_STEP_TYPES) {
+      expect(interactionStepHolds(type)).toMatchObject({
+        minMinutes: FLOW_WAIT_MIN_MINUTES,
+        maxMinutes: FLOW_WAIT_MAX_MINUTES,
+      })
+    }
+    expect(interactionStepHolds('waitForEvent')?.timeoutField).toBe(FLOW_TIMED_OUT_FIELD)
+  })
+
+  it('accepts an automation holding placeholders: the value a person replaces in this editor (AGL-2919)', () => {
+    expect(
+      validateHostAction({
+        name: 'Welcome newsletter sign-ups',
+        trigger: {
+          event: 'formSubmission',
+          conditions: [{ field: 'formName', op: 'equals', value: '[newsletter sign-up form]' }],
+          combinator: 'and',
+        },
+        steps: [
+          { type: 'enrollList', listName: '[newsletter]' },
+          { type: 'sendEmail', subject: 'Welcome aboard', body: 'Call us on [your phone number].' },
+        ],
+        enabled: false,
+      }),
+    ).toBeNull()
   })
 })

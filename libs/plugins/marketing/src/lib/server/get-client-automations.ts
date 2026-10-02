@@ -132,7 +132,7 @@ async function readHostActions(hostId: string): Promise<RawHostAction[]> {
     .get()
   return snapshot.docs.map((doc) => ({
     id: doc.id,
-    action: doc.data() as Aglyn.HostAction,
+    action: doc.data() as RawHostAction['action'],
   }))
 }
 

@@ -24,36 +24,40 @@ import {
   isContactLifecycleStage,
   isCrmActivityKind,
   isCrmTaskKind,
-} from './crm-kinds'
+} from '@aglyn/aglyn/app-utils/crm-kinds'
+import { HOST_EVENT_TYPES, hostEventRecipientActed } from '@aglyn/aglyn/app-utils/host-events'
 import {
+  CLIENT_ACTION_STEP_TYPES,
   type ClientInteractionStep,
   CUSTOM_EVENT_PATTERN,
   type InteractionCondition,
+  type InteractionStepBase,
   type InteractionStepGuard,
+  interactionStepLabel,
   type InteractionTrigger,
   type SiteAlert,
   type SiteInteraction,
-  type TriggerCombinator,
   validateInteraction,
-} from './site-interactions'
-import { HOST_EVENT_TYPES, hostEventRecipientActed } from './host-events'
-import { isKnownInteractionRecipe } from '../plugin-manager/interaction-recipes'
+} from '@aglyn/aglyn/app-utils/site-interactions'
 
 /**
- * Actions builder (AGL-148): HubSpot-style event → action automation on
- * top of the AGL-128 event triggers. An action listens for a host event
- * (built-in or a custom name fired by another action), optionally filters
- * on the payload, and runs an ordered step list. Pure types + validation
- * here; the executor lives in the workflows plugin, where the I/O is.
+ * THE AUTOMATION VOCABULARY (AGL-148): HubSpot-style event → action
+ * automation on top of the AGL-128 event triggers. An action listens for a
+ * host event (built-in or a custom name fired by another action), optionally
+ * filters on the payload, and runs an ordered step list. Pure types and
+ * validation; the engine that runs them is this plugin's (`engine/`).
  *
- * An action is a SITE INTERACTION (`site-interactions.ts`) with server steps
- * added: its trigger, its conditions, its client steps and its storage are
- * the platform's, and are re-exported here for the readers that take both
- * from this module. What is declared below is the automation's own — the
- * server steps, flows and the stored shape. The recipes that open the editor
- * prefilled are the plugins' that write them (`interaction-recipes`).
+ * An action is a SITE INTERACTION (core `site-interactions.ts`) with server
+ * steps added: its trigger, its conditions, its client steps, its stored shape
+ * (`siteInteractionDocument`), the slice a visitor's page receives
+ * (`interactionStepsForClient`) and its recipe stamp are the platform's. What
+ * is declared below is the automation's own — the server steps' shapes, the
+ * flow's bounds and each server step's checks. How each step is named, which
+ * steps hold a run and which fields a person types words into are declared in
+ * `plugins.config.json` (`interactionSteps`), so a page, a drafter and a
+ * validator read them without loading this plugin; the checks are registered
+ * from this plugin's declarations (`interaction-step-checks`).
  */
-export * from './site-interactions'
 
 /** The automation's names for the platform's interaction shapes. */
 export type HostActionTriggerCondition = InteractionCondition
@@ -70,6 +74,8 @@ export type HostActionAlert = SiteAlert
  * list: the flow resumes either way, and the step after it carries a `when`
  * naming this field. Underscored because it shares a namespace with the
  * event payload's own fields, which are merchant-authored form field names.
+ * Declared as the step's `holds.timeoutField` for readers that do not load
+ * this plugin; this plugin's spec holds the two equal.
  */
 export const FLOW_TIMED_OUT_FIELD = '_waitTimedOut'
 
@@ -119,7 +125,7 @@ type ServerActionStep = (
    *
    * All three are SERVER steps. A delay outlives the page view that started
    * it by days, so the browser that fired the trigger is long gone by the time
-   * the flow continues; `hostActionStepsForClient` truncates the client's copy
+   * the flow continues; `interactionStepsForClient` truncates the client’s copy
    * of the step list at the first of these for that reason.
    */
   | {
@@ -204,7 +210,9 @@ export type HostActionStep = ClientInteractionStep | ServerActionStep
  * Named as a set rather than checked inline because three surfaces have to
  * agree on it: the executor stops here and writes an enrollment, the client
  * payload is truncated here, and the validator refuses a flow that waits
- * without a person to wait for.
+ * without a person to wait for. A visitor's page and a drafter read the same
+ * fact from each step's declaration (`holds`, `interactionSteps` in
+ * `plugins.config.json`), which this plugin's spec holds to this set.
  */
 export const FLOW_SUSPENDING_STEP_TYPES: ReadonlySet<HostActionStepType> =
   new Set(['wait', 'waitForEvent'] as const)
@@ -282,113 +290,13 @@ export function sendEmailIsTransactionalReply(
   return step.transactional !== false && sendEmailReplyIneligibility(step, context) === null
 }
 
-/**
- * The recipe a STORED action came from, read off its document (AGL-2639).
- *
- * Three answers, and the third is the one that matters. A known id: the
- * action was installed from, or begun as, that recipe — one a plugin declares
- * or registered (`isKnownInteractionRecipe`). `null`: the action
- * was begun blank, or from a recipe this build no longer knows — the
- * editor wrote the field and said "no recipe". `undefined`: the document
- * carries no `recipe` field at all, which is every action saved before the
- * stamp existed. Such an action may well have started from a recipe — the
- * menu opened the editor prefilled long before anything recorded it — so a
- * reader that needs to know whether a site has a recipe treats `undefined`
- * as UNKNOWN, never as absent, and never writes a `null` over it.
- */
-export function hostActionRecipeId(
-  action: { recipe?: unknown } | null | undefined,
-): string | null | undefined {
-  const stamp = action?.recipe
-  if (stamp === undefined) return undefined
-  return isKnownInteractionRecipe(stamp) ? stamp : null
-}
-
-/**
- * A HostAction as the document at `hosts/{hostId}/actions/{id}` holds it.
- *
- * Every optional trigger key is written OUT — a boolean cap as `false`, a
- * cleared list as `null` — because the editor saves with a merge-set, and
- * a merge keeps whatever key the payload omits: a frequency cap switched
- * off, left out of the payload, would stay on. The legacy single
- * `condition` is always nulled; `conditions` has been canonical since the
- * list shape arrived and a document that carried both would have the
- * reader pick. Everything else is the action, unchanged.
- *
- * `recipe` rides along only when the action SAYS something about it: an
- * id or `null`. An action that carries no stamp (an older document, edited
- * and saved again) keeps carrying none — see {@link hostActionRecipeId}
- * for why an absent stamp must not become a `null` one.
- */
-export interface HostActionDocument extends HostAction {
-  trigger: HostActionTrigger & {
-    oncePerVisitor: boolean
-    oncePerSession: boolean
-    cooldownMinutes: number | null
-    everyTime: boolean
-    condition: null
-    conditions: HostActionTriggerCondition[] | null
-    combinator: TriggerCombinator | null
-  }
-  enabled: boolean
-}
-
-export function hostActionDocument(action: HostAction): HostActionDocument {
-  const { recipe, ...rest } = action
-  const trigger = action.trigger
-  return {
-    ...rest,
-    trigger: {
-      ...trigger,
-      oncePerVisitor: trigger.oncePerVisitor === true,
-      oncePerSession: trigger.oncePerSession === true,
-      cooldownMinutes:
-        Number(trigger.cooldownMinutes) >= 1 ? Number(trigger.cooldownMinutes) : null,
-      everyTime: trigger.everyTime === true,
-      condition: null,
-      conditions: trigger.conditions ?? null,
-      combinator: trigger.combinator ?? null,
-    },
-    enabled: action.enabled !== false,
-    ...(recipe !== undefined ? { recipe } : {}),
-  }
-}
-
-/**
- * The step list as the visitor's browser may see it.
- *
- * A client step AFTER a wait must never reach the page. The client engine
- * runs its slice of the list immediately, so shipping the whole list would
- * make "wait three days, then show the popup" show the popup at once — the
- * delay would appear to work on the server, be ignored in the browser, and
- * the two halves of one authored flow would disagree about when it happened.
- *
- * Truncating rather than filtering: everything past the first wait belongs to
- * a run that has not happened yet, whichever side would have executed it.
- */
-export function hostActionStepsForClient(
-  steps: readonly HostActionStep[] | undefined | null,
-): HostActionStep[] {
-  const list = steps ?? []
-  const suspendAt = list.findIndex(isFlowSuspendingStep)
-  return [...(suspendAt < 0 ? list : list.slice(0, suspendAt))]
-}
-
 export type HostActionStepType = HostActionStep['type']
 
 /**
  * `hosts/{hostId}/actions/{id}` doc: a site interaction whose steps may be
  * the automation's server steps as well as the platform's client steps.
  */
-export interface HostAction extends SiteInteraction<HostActionStep> {
-  /**
-   * The recipe this action was installed from or begun as (AGL-2639), or
-   * `null` for one begun blank. Absent on a document from before the stamp
-   * existed — read it through {@link hostActionRecipeId}, which keeps the
-   * three cases apart.
-   */
-  recipe?: string | null
-}
+export type HostAction = SiteInteraction<HostActionStep>
 
 /**
  * The shortest and longest a flow may wait.
@@ -399,53 +307,80 @@ export interface HostAction extends SiteInteraction<HostActionStep> {
  * is the longest sequence anybody writes, and short enough that an enrollment
  * is not an unbounded lease on a document. A person waiting inside a flow is
  * storage the merchant is not looking at, and a wait measured in years is
- * indistinguishable from one nobody will ever collect.
+ * indistinguishable from one nobody will ever collect. Declared as the band
+ * each waiting step `holds`; this plugin's spec holds the two equal.
  */
 export const FLOW_WAIT_MIN_MINUTES = 1
 export const FLOW_WAIT_MAX_MINUTES = 90 * 24 * 60
 
-export const HOST_ACTION_STEP_LABELS: Record<HostActionStepType, string> = {
-  runWorkflow: 'Run a workflow',
-  siteAlert: 'Show a site alert',
-  customEvent: 'Fire a custom event',
-  datasetAppend: 'Write to a dataset',
-  webhookPost: 'Send a webhook (Business)',
-  showOverlay: 'Show a popup or bar',
-  stickyNav: 'Make navigation sticky',
-  addClass: 'Add a CSS class',
-  toggleClass: 'Toggle a CSS class',
-  removeClass: 'Remove a CSS class',
-  showElement: 'Show an element',
-  hideElement: 'Hide an element',
-  toggleElement: 'Show/hide an element',
-  openDrawer: 'Open a drawer',
-  closeDrawer: 'Close a drawer',
-  toggleDrawer: 'Open/close a drawer',
-  openMenu: 'Open a menu',
-  closeMenu: 'Close a menu',
-  toggleMenu: 'Open/close a menu',
-  setAttribute: 'Set an ARIA or data attribute',
-  removeAttribute: 'Remove an ARIA or data attribute',
-  scrollTo: 'Scroll to element',
-  playVideo: 'Play a video',
-  showHtml: 'Show custom HTML',
-  runJs: 'Run custom JS (Business)',
-  redirect: 'Redirect the visitor',
-  trackGaEvent: 'Track an analytics event',
-  sendEmail: 'Send an email',
-  notifyAdmins: 'Notify site admins',
-  enrollList: 'Enroll in a list',
-  updateDataset: 'Update a dataset record',
-  assignCampaign: 'Assign to a campaign',
-  wait: 'Wait',
-  waitForEvent: 'Wait for something to happen',
-  exitFlow: 'End the flow here',
-  setContactStage: 'Set the contact’s lifecycle stage',
-  addContactTag: 'Tag the contact',
-  assignContactOwner: 'Assign the contact an owner',
-  createCrmTask: 'Create a CRM task',
-  logCrmActivity: 'Log a CRM activity',
+/**
+ * Every step an action may hold, in the order the editor's "Do" picker offers
+ * them. Total over the step types: a type the vocabulary gains is a compile
+ * error here until it is placed.
+ */
+const STEP_ORDER: Readonly<Record<HostActionStepType, number>> = {
+  runWorkflow: 0,
+  siteAlert: 1,
+  customEvent: 2,
+  datasetAppend: 3,
+  webhookPost: 4,
+  showOverlay: 5,
+  stickyNav: 6,
+  addClass: 7,
+  toggleClass: 8,
+  removeClass: 9,
+  showElement: 10,
+  hideElement: 11,
+  toggleElement: 12,
+  openDrawer: 13,
+  closeDrawer: 14,
+  toggleDrawer: 15,
+  openMenu: 16,
+  closeMenu: 17,
+  toggleMenu: 18,
+  setAttribute: 19,
+  removeAttribute: 20,
+  scrollTo: 21,
+  playVideo: 22,
+  showHtml: 23,
+  runJs: 24,
+  redirect: 25,
+  trackGaEvent: 26,
+  sendEmail: 27,
+  notifyAdmins: 28,
+  enrollList: 29,
+  updateDataset: 30,
+  assignCampaign: 31,
+  wait: 32,
+  waitForEvent: 33,
+  exitFlow: 34,
+  setContactStage: 35,
+  addContactTag: 36,
+  assignContactOwner: 37,
+  createCrmTask: 38,
+  logCrmActivity: 39,
 }
+
+/** Every step type an action may hold, in the picker's order. */
+export const HOST_ACTION_STEP_TYPES: readonly HostActionStepType[] = (
+  Object.keys(STEP_ORDER) as HostActionStepType[]
+).sort((a, b) => STEP_ORDER[a] - STEP_ORDER[b])
+
+/** The server steps among them: every type that is not one of the platform's client steps. */
+export const SERVER_ACTION_STEP_TYPES: readonly HostActionStepType[] = HOST_ACTION_STEP_TYPES.filter(
+  (type) => !CLIENT_ACTION_STEP_TYPES.has(type),
+)
+
+/**
+ * How each step reads in the editor's picker, a run history and a sentence:
+ * the platform's label for a client step, and the label its declaration
+ * gives every other (`interactionSteps` in `plugins.config.json`), so a page,
+ * a drafter and this editor name a step alike.
+ */
+export const HOST_ACTION_STEP_LABELS: Readonly<Record<HostActionStepType, string>> =
+  Object.fromEntries(
+    HOST_ACTION_STEP_TYPES.map((type) => [type, interactionStepLabel(type) ?? type]),
+  ) as Record<HostActionStepType, string>
 
 /** A whole number of minutes inside the wait band. */
 export function isFlowWaitMinutes(value: unknown): boolean {
@@ -469,16 +404,11 @@ export function isCustomEventName(event: string): boolean {
  * Server and console share this so bad steps never persist or run.
  */
 export function validateHostAction(action: HostAction): string | null {
-  if (!action.name?.trim()) return 'Name the action'
-  // A stamp is provenance, and provenance naming a recipe that does not
-  // exist is a document nothing can read back; `null` and absent both pass.
-  if (action.recipe != null && !isKnownInteractionRecipe(action.recipe)) {
-    return 'Unknown recipe'
-  }
-  // The trigger, the step guards, the client steps and every declared step's
-  // pick are the platform's to check; the server steps are this module's.
+  // The name, the recipe stamp, the trigger, the step guards, the client
+  // steps and every declared step's pick are the platform's to check; the
+  // server steps are this module's.
   const problem = validateInteraction(action, {
-    validateStep: (step, label) => serverStepProblem(step as HostActionStep, label),
+    validateStep: (step, label) => hostActionStepProblem(step, label),
   })
   if (problem) return problem
   /*
@@ -503,8 +433,14 @@ export function validateHostAction(action: HostAction): string | null {
  * A server step's own complaint, or null. A `runWorkflow` step's pick is
  * checked with every other declared step's (`interactionSteps` in
  * `plugins.config.json`), by `validateInteraction`.
+ *
+ * Registered from this plugin's declarations as the check of every server
+ * step (`interaction-step-checks`), so a plugin that writes an automation it
+ * does not edit — a recipe installed into a site — refuses what this editor
+ * would.
  */
-function serverStepProblem(step: HostActionStep, label: string): string | null {
+export function hostActionStepProblem(candidate: InteractionStepBase, label: string): string | null {
+  const step = candidate as HostActionStep
   if (step.type === 'wait' && !isFlowWaitMinutes(step.delayMinutes)) {
     return `${label}: wait between ${FLOW_WAIT_MIN_MINUTES} minute and ${FLOW_WAIT_MAX_MINUTES} minutes`
   }
@@ -621,6 +557,3 @@ function serverStepProblem(step: HostActionStep, label: string): string | null {
   }
   return null
 }
-
-/** The most webhooks one site keeps; the site create route enforces it. */
-export const WEBHOOK_MAX_PER_HOST = 5

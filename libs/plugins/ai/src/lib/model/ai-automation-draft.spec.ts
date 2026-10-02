@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { validateHostAction } from '@aglyn/aglyn/app-utils/actions'
+import { validateStoredInteraction } from '@aglyn/aglyn/plugin-manager/interaction-step-checks'
 import { AI_AUTOMATION_STEP_TYPES } from './ai-workflow-job'
 import {
   AI_AUTOMATION_DEFAULT_NAME,
@@ -172,7 +172,7 @@ describe('aiAutomationDraft', () => {
     ])
     const covered = new Set([...first.action.steps, ...second.action.steps].map((one) => one.type))
     expect([...covered].sort()).toEqual([...AI_AUTOMATION_STEP_TYPES].sort())
-    expect([validateHostAction(first.action), validateHostAction(second.action)]).toEqual([null, null])
+    expect([validateStoredInteraction(first.action), validateStoredInteraction(second.action)]).toEqual([null, null])
     expect([first.placeholders, second.placeholders]).toEqual([[], []])
   })
 
@@ -203,12 +203,12 @@ describe('aiAutomationDraft', () => {
         when: { conditions: [{ field: 'plan', op: 'equals', value: 'pro' }] },
       },
     ])
-    expect(validateHostAction(draft.action)).toBeNull()
+    expect(validateStoredInteraction(draft.action)).toBeNull()
     expect(draft.placeholders).toEqual([
-      { step: null, field: 'condition', text: 'booking request' },
-      { step: 1, field: 'list', text: 'customers' },
-      { step: 2, field: 'campaign', text: 'winter sale' },
-      { step: 3, field: 'body', text: 'your phone number' },
+      { step: null, field: 'condition', names: 'a condition value', text: 'booking request' },
+      { step: 1, field: 'listName', names: 'the list', text: 'customers' },
+      { step: 2, field: 'campaignName', names: 'the campaign', text: 'winter sale' },
+      { step: 3, field: 'body', names: 'the text', text: 'your phone number' },
     ])
   })
 

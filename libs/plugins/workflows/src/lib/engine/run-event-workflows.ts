@@ -18,8 +18,6 @@
 import {
   checkEntitlement,
   evaluateExpression,
-  FLOW_TIMED_OUT_FIELD,
-  type HostActionAlert,
   type HostEventType,
   type HostFunction,
   type HostVariable,
@@ -53,6 +51,7 @@ import {
 } from './workflow-steps'
 import { runTriggeredByFields } from './run-trigger-actor'
 import { triggeredDocsForEvent } from './triggered-docs'
+import { FLOW_TIMED_OUT_FIELD, type HostActionAlert } from '../model/host-actions'
 
 /**
  * Every live workflow on the event runs, in document-id order, up to this

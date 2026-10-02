@@ -30,7 +30,7 @@ import {
   normalizeContactEmail,
   personKey,
 } from '@aglyn/aglyn/server'
-import { captureHostContact } from '@aglyn/tenant-runtime/capture-host-contact'
+import { captureHostContact } from './capture-host-contact'
 import { contactCaptureActor } from '@aglyn/tenant-runtime/capture-actor'
 import { emitHostEvent } from '@aglyn/tenant-runtime/emit-host-event'
 import {

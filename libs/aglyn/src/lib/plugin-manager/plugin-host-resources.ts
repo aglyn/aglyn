@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { ACTIONS_MAX_PER_HOST, WEBHOOK_MAX_PER_HOST } from '../app-utils/actions'
+import { ACTIONS_MAX_PER_HOST } from '../app-utils/site-interactions'
 import { PLUGIN_HOST_COLLECTIONS_DECLARED } from './first-party-plugins.generated'
 
 /**
@@ -144,6 +144,13 @@ export function pluginHostResource(kind: unknown): ResolvedPluginHostResource | 
   if (typeof kind !== 'string' || !kind) return null
   return listPluginHostResources().find((one) => one.kind === kind) ?? null
 }
+
+/**
+ * The most webhooks one site keeps (AGL-1360). Counted by the site create
+ * route from a server read: the rules refuse a client-direct webhook create,
+ * so no browser count can be stale.
+ */
+export const WEBHOOK_MAX_PER_HOST = 5
 
 /**
  * The flat platform caps a declaration may name (AGL-1360, AGL-2266): a

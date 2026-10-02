@@ -151,7 +151,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   ...jest.requireActual('../../../../../tenant/data/admin/src/lib/server/host-visitor-records'),
 }))
 
-jest.mock('@aglyn/tenant-runtime/capture-host-contact', () => ({
+jest.mock('./capture-host-contact', () => ({
   __esModule: true,
   captureHostContact: async (options: Record<string, any>) => {
     contactCaptures.push(options)

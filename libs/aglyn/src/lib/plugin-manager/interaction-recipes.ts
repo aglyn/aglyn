@@ -194,6 +194,28 @@ export function isKnownInteractionRecipe(id: unknown): id is string {
   return recipes.has(id) || PLUGIN_INTERACTION_RECIPES_DECLARED.some((row) => row.id === id)
 }
 
+/**
+ * The recipe a STORED interaction came from, read off its document (AGL-2639).
+ *
+ * Three answers, and the third is the one that matters. A known id: the
+ * interaction was installed from, or begun as, that recipe — one a plugin
+ * declares or registered ({@link isKnownInteractionRecipe}). `null`: it was
+ * begun blank, or from a recipe this build no longer knows — the editor wrote
+ * the field and said "no recipe". `undefined`: the document carries no
+ * `recipe` field at all, which is every interaction saved before the stamp
+ * existed. Such an interaction may well have started from a recipe — the menu
+ * opened the editor prefilled long before anything recorded it — so a reader
+ * that needs to know whether a site has a recipe treats `undefined` as
+ * UNKNOWN, never as absent, and never writes a `null` over it.
+ */
+export function interactionRecipeStamp(
+  interaction: { recipe?: unknown } | null | undefined,
+): string | null | undefined {
+  const stamp = interaction?.recipe
+  if (stamp === undefined) return undefined
+  return isKnownInteractionRecipe(stamp) ? stamp : null
+}
+
 /** Only for specs: forgets every registered recipe. */
 export function resetInteractionRecipesForTests(): void {
   recipes.clear()

@@ -16,6 +16,7 @@
  */
 
 import {
+  PLUGIN_RECORD_LIST_IDS_MAX,
   registerPluginRecordListSource,
   type PluginRecordListSource,
 } from '@aglyn/aglyn/plugin-manager/plugin-record-lists'
@@ -23,9 +24,11 @@ import {
   collection,
   collectionGroup,
   doc,
+  documentId,
   limit,
   orderBy,
   query,
+  where,
 } from 'firebase/firestore'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { formSubmissionIndexedRecord } from './form-submission-record'
@@ -48,6 +51,10 @@ const SUBMISSIONS = 'formSubmissions'
  * - `doc` — one site's submission, which the Inbox opens, marks read or
  *   unread, and deletes (a site admin's or editor's to do, by the rules), and
  *   under which it reads the replies it sent.
+ * - `byIds` — a site's submissions by name, at most
+ *   {@link PLUGIN_RECORD_LIST_IDS_MAX} at a time, for a reader that holds ids
+ *   from elsewhere: a campaign's conversion report grouping the submissions it
+ *   was credited with by the page each was sent from.
  */
 export const formSubmissionListSource: PluginRecordListSource = {
   query(firestore, request) {
@@ -65,6 +72,14 @@ export const formSubmissionListSource: PluginRecordListSource = {
   doc(firestore, request) {
     if (!request.hostId || !request.id) return null
     return doc(firestore, 'hosts', request.hostId, SUBMISSIONS, request.id)
+  },
+  byIds(firestore, request) {
+    const ids = request.ids.filter(Boolean).slice(0, PLUGIN_RECORD_LIST_IDS_MAX)
+    if (!request.hostId || !ids.length) return null
+    return query(
+      collection(firestore, 'hosts', request.hostId, SUBMISSIONS),
+      where(documentId(), 'in', ids),
+    )
   },
   record: formSubmissionIndexedRecord,
 }

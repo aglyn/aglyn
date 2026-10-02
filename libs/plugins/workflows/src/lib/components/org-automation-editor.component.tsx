@@ -18,11 +18,8 @@
 
 import {
   ACTION_MAX_STEPS,
-  type HostActionStep,
-  type HostActionStepType,
   hostEventLabel,
   hostEventPayloadHint,
-  stepRunsAfterWait,
   type TriggerCombinator,
   triggerFilterProblem,
 } from '@aglyn/aglyn'
@@ -73,6 +70,11 @@ import {
 import { EDITOR_OPTION_CEILING } from './use-automation-step-pickers'
 import { useOrgAutomationStepPickers } from './use-org-automation-step-pickers'
 import { orgSiteOptions, type WorkflowsOrgMount } from './workflows-org-mount'
+import {
+  type HostActionStep,
+  type HostActionStepType,
+  stepRunsAfterWait,
+} from '../model/host-actions'
 
 /** An org automation as the editor holds it. */
 export interface OrgAutomationDraft {

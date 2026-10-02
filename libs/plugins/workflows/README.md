@@ -77,12 +77,17 @@ the page view is core's own, and every other event is declared under
 `hostEvents` by the plugin whose doors raise it. What only the engine reads
 is this plugin's: the run history's past-tense step phrases
 (`model/step-outcomes.ts`), a webhook's stored shape and its URL guard
-(`model/webhooks.ts`) and the event-chaining depth (`model/workflows.ts`). The automation
-vocabulary the other plugins author against — the server steps, flows,
-recipes and their validation — is still in the core
-(`@aglyn/aglyn/app-utils/actions`), because the AI plugin drafts automations
-against it and the CRM plugin installs its recipes, and neither may import
-this plugin.
+(`model/webhooks.ts`) and the event-chaining depth (`model/workflows.ts`). The
+automation vocabulary — the server steps' shapes, the flow's bounds and each
+server step's checks — is this plugin's too (`model/host-actions.ts`). The
+plugins that write automations without loading this one meet it through core
+seams: each step's name, hold and typed fields are declared under
+`interactionSteps` in `plugins.config.json`; the checks are registered from
+this plugin's `declarations` entry (`interaction-step-checks`), so a recipe the
+CRM installs or a draft the AI grades is refused as this editor would refuse
+it; the stored shape and the slice a visitor's page receives are core's
+(`site-interactions`); and a drafted automation is handed over through the
+`automation` resource's draft writer (`server-automation-drafts.ts`).
 
 ## Entry points
 
@@ -91,6 +96,8 @@ this plugin.
   flow-resume job, the automation draft writer, the org automation doors, and
   the Actions card's test run (`automations/actions/test-run`, console only —
   the page runtime's `events/dispatch` is a tenant route).
+- `./declarations` — the server steps' checks, registered in both apps and in
+  the console's browser before any surface loads.
 - `./declarations.server` — the boot registration above.
 
 ## License

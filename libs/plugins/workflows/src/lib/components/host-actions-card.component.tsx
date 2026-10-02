@@ -22,12 +22,7 @@ import {
   checkEntitlement,
   createResourceUid,
   ELEMENT_SCOPED_SITE_EVENTS,
-  HOST_ACTION_STEP_LABELS,
   HOST_EVENT_TYPES,
-  type HostAction,
-  hostActionDocument,
-  hostActionRecipeId,
-  type HostActionStepType,
   hostEventLabel,
   HOST_EVENT_PAYLOAD_KEYS,
   hostEventPayloadHint,
@@ -36,19 +31,14 @@ import {
   pluginDocsHelp,
   SITE_EVENT_TYPES,
   type TriggerCombinator,
-  stepRunsAfterWait,
   triggerFilterProblem,
-  validateHostAction,
 } from '@aglyn/aglyn'
-import {
-  automationPlaceholders,
-  describeAutomationPlaceholder,
-} from '@aglyn/aglyn/app-utils/automation-placeholders'
 import { useConsoleWidgetSlot } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
 import {
   type InteractionRecipe,
   interactionRecipe,
   interactionRecipes,
+  interactionRecipeStamp,
 } from '@aglyn/aglyn/plugin-manager/interaction-recipes'
 import {
   pluginRecordListQuery,
@@ -114,6 +104,18 @@ import {
   EDITOR_OPTION_CEILING,
   useAutomationStepPickers,
 } from './use-automation-step-pickers'
+import { siteInteractionDocument } from '@aglyn/aglyn/app-utils/site-interactions'
+import {
+  HOST_ACTION_STEP_LABELS,
+  type HostAction,
+  type HostActionStepType,
+  stepRunsAfterWait,
+  validateHostAction,
+} from '../model/host-actions'
+import {
+  describeInteractionPlaceholder,
+  interactionPlaceholders,
+} from '@aglyn/aglyn/app-utils/draft-placeholders'
 
 const CUSTOM_EVENT_VALUE = '__custom__'
 
@@ -196,7 +198,7 @@ function draftFromAction(
     conditionCombinator: action.trigger?.combinator === 'or' ? 'or' : 'and',
     // A recipe stamps what it builds, and a stored action carries what it
     // was saved with — one reader for both doors, unknown kept unknown.
-    recipe: hostActionRecipeId(action),
+    recipe: interactionRecipeStamp(action),
   }
 }
 
@@ -577,7 +579,7 @@ export function HostActionsCard(props: {
       steps: draft.steps,
       enabled: draft.enabled !== false,
       // The stamp travels only when the draft knows one way or the other;
-      // an older action's silence is kept (see hostActionRecipeId).
+      // an older action's silence is kept (see interactionRecipeStamp).
       ...(draft.recipe !== undefined ? { recipe: draft.recipe } : {}),
     }
     const problem = validateHostAction(candidate)
@@ -652,7 +654,7 @@ export function HostActionsCard(props: {
               // write it out; conditions follow suit (AGL-557/565) — the
               // list + combinator write null when cleared, and the legacy
               // single `condition` is always nulled.
-              ...hostActionDocument(candidate),
+              ...siteInteractionDocument(candidate),
               updatedAt: Timestamp.now(),
               ...(draft.id ? {} : { createdAt: Timestamp.now() }),
             },
@@ -713,13 +715,13 @@ export function HostActionsCard(props: {
        * matches, so turning such an automation on is confirmed, naming what
        * is still missing.
        */
-      const missing = enabled ? automationPlaceholders(action) : []
+      const missing = enabled ? interactionPlaceholders(action) : []
       if (missing.length) {
         const confirmed = await confirm({
           title: 'Switch on with placeholders?',
           description:
             `"${action.name}" still has ${missing.length === 1 ? 'a placeholder' : `${missing.length} placeholders`} ` +
-            `to fill in: ${missing.slice(0, 3).map(describeAutomationPlaceholder).join('; ')}` +
+            `to fill in: ${missing.slice(0, 3).map(describeInteractionPlaceholder).join('; ')}` +
             `${missing.length > 3 ? '; …' : ''}. Open it with Edit to fill ` +
             `${missing.length === 1 ? 'it' : 'them'} in first.`,
           confirmationText: 'Switch on anyway',
@@ -749,7 +751,7 @@ export function HostActionsCard(props: {
             'write to a dataset. Pro plans and up.'}
         </Typography>
         {visibleActions.map((action: any) => {
-          const missing = automationPlaceholders(action).length
+          const missing = interactionPlaceholders(action).length
           return (
           <Stack
             key={action.$id}

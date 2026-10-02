@@ -133,12 +133,12 @@ const firestoreHandle = {
   }),
 }
 
-jest.mock('@aglyn/tenant-runtime', () => ({
+jest.mock('./capture-host-contact', () => ({
   __esModule: true,
-  // The route captures through the runtime wrapper (the one door every server
-  // path uses, so `contactCreated` fires); the double answers the verdict the
-  // case under test needs, exactly as the admin double below did for the
-  // function the wrapper forwards to.
+  // The route captures through the CRM's capture door (the one door every
+  // server path uses, so `contactCreated` fires); the double answers the
+  // verdict the case under test needs, exactly as the admin double below did
+  // for the function the door forwards to.
   captureHostContact: (...args: unknown[]) => upsert(...(args as [])),
 }))
 jest.mock('@aglyn/tenant-data-admin', () => ({

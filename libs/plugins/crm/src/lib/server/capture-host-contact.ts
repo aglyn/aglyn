@@ -23,9 +23,9 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { assignOwnerForCapture } from './assign-contact-owner'
 import { associateCompanyByDomain } from './associate-company-by-domain'
-import { emitHostEvent } from './emit-host-event'
-import { contactCaptureActor } from './capture-actor'
-import type { HostEventActor, HostEventPayload } from './host-event-listeners'
+import { emitHostEvent } from '@aglyn/tenant-runtime/emit-host-event'
+import { contactCaptureActor } from '@aglyn/tenant-runtime/capture-actor'
+import type { HostEventActor, HostEventPayload } from '@aglyn/tenant-runtime/host-event-listeners'
 
 
 /**

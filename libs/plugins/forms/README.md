@@ -25,6 +25,7 @@ Presets for both, including a composed contact section, appear in the Besigner's
 
 - A `Forms` nav item at `/forms`: the form catalog and one form's own page (declaration, metrics, versions, promotion, design preview). The nav item owns its subtree, because a form's URL names a document id. The page is code-split and loads when opened.
 - Two zones the plugin hosts on a form's page for other plugins to fill, registered with `registerPluginZone`: `formSubmissions`, where a reader of that form's submissions is drawn, and a zone for mapping a form's fields onto a person's fields.
+- The `formSubmission` kind on the record seams: a console list source (`plugin-record-lists`) — the newest of a site's, the base the Inbox walks, one submission's document, and a site's submissions by name — a server record index (`plugin-record-index`), and a count source (`plugin-record-counts`) for how many a site received. The Inbox and a campaign's conversion report read submissions through these instead of the collection.
 
 **Ids are persisted.** `componentId` (`form`, `formField`) is stored in every screen document and does not change. `pluginId` is stored beside it and is `forms` (`BUNDLE_ID`); the renderer reads it to decide which bundles must register before first paint, so a page with no form on it does not wait for this package.
 

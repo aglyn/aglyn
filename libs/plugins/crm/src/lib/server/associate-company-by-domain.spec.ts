@@ -158,11 +158,11 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   // site to a group of one.
   consentGroupForSite: async (hostId: string) =>
     jest
-      .requireActual('../../../../aglyn/src/lib/app-utils/consent-groups')
+      .requireActual('@aglyn/aglyn/app-utils/consent-groups')
       .soloConsentGroup(hostId),
   // The real link writer — the facet, the mirror and the count as the Admin
   // SDK writes them are what this file asserts.
-  ...jest.requireActual('../../../data/admin/src/lib/server/contact-company-link'),
+  ...jest.requireActual('@aglyn/tenant-data-admin/server/contact-company-link'),
 }))
 
 import { associateCompanyByDomain } from './associate-company-by-domain'

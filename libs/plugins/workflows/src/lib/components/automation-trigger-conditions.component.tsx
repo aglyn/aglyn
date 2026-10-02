@@ -18,8 +18,6 @@
 
 import {
   ACTION_MAX_CONDITIONS,
-  type HostActionTrigger,
-  type HostActionTriggerCondition,
   normalizeTriggerConditions,
   type TriggerCombinator,
   type TriggerConditionOp,
@@ -33,6 +31,7 @@ import {
   Typography,
 } from '@mui/material'
 import { placeholderState } from './automation-step-fields.component'
+import type { HostActionTrigger, HostActionTriggerCondition } from '../model/host-actions'
 
 /**
  * ONE TRIGGER-CONDITION EDITOR FOR EVERY AUTOMATION THAT HAS A TRIGGER.

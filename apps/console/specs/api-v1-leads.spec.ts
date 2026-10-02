@@ -223,11 +223,11 @@ jest.mock('../../../libs/tenant/data/admin/src/lib/server/notifications', () => 
   notifyHostManagers: jest.fn(async () => undefined),
 }))
 
-jest.mock('../../../libs/tenant/runtime/src/lib/capture-host-contact', () => ({
+jest.mock('../../../libs/plugins/crm/src/lib/server/capture-host-contact', () => ({
   __esModule: true,
   captureHostContact: (...args: unknown[]) => mockCapture(...args),
 }))
-jest.mock('../../../libs/tenant/runtime/src/lib/assign-contact-owner', () => ({
+jest.mock('../../../libs/plugins/crm/src/lib/server/assign-contact-owner', () => ({
   __esModule: true,
   assignOwnerForCapture: (...args: unknown[]) => mockAssignOwner(...args),
   notifyRecordAssigned: (...args: unknown[]) => mockNotifyAssigned(...args),

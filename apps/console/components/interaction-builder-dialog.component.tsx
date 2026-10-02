@@ -337,7 +337,7 @@ interface StepPlanGate {
  * Nothing is sanitized here, on purpose. Every pair typed into these fields
  * is delivered by `trackAuthoredEvent`, which runs the shared
  * `sanitizeEventParams` over it — the one sanitizing path — and
- * `validateHostAction` re-runs that same function so a parameter the runtime
+ * `validateInteraction` re-runs that same function so a parameter the runtime
  * would strip is named to the author instead of vanishing on a visitor's
  * page. A second set of rules here could only drift from those.
  *
