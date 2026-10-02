@@ -357,11 +357,32 @@ from another domain will render without those parts.
 
 :::
 
-Storage is metered per site against your plan (Free 250 MB, Starter 2 GB, Pro 10 GB,
-Business 20 GB, Scale 30 GB, Advanced 40 GB, Agency 60 GB, Enterprise 120 GB by default) —
-the library's toolbar shows the running total, and the
-[billing page](../../workspace-and-billing/billing-and-plans/overview.md#usage-meters)
-meters it alongside everything else.
+### Storage {#storage}
+
+Storage is one allowance for the whole workspace: your plan's storage per site, times
+the number of sites your plan allows, add-on sites included (the figures are on
+[the pricing page](https://aglyn.com/pricing)).
+Every site's library and the organization's shared library count toward it together,
+so room one library isn't using is there for the others.
+
+The library's toolbar says where you stand:
+
+- **Files.** With no folder open, how many files the library holds. With a folder open,
+  how many are in that folder and how many are in the library — for example
+  *15 files in Project photos · 17 in the library*. Both are totals, not how many
+  thumbnails have loaded.
+- **Storage.** How much this library holds out of your plan's allowance. When other
+  libraries in the workspace hold files too, the line shows this library's share first,
+  marked **here**, and then the workspace's total out of the allowance, marked **across
+  your workspace** — so one library's size is never read as if it were the whole
+  workspace's. A plan with unlimited storage says so instead of showing an allowance.
+- **The meter.** A slim bar under the storage line fills as the workspace uses its
+  allowance. It turns amber at 80% and red when the allowance is used up, the same as
+  the [billing page's meters](../../workspace-and-billing/billing-and-plans/overview.md#usage-meters),
+  which show storage alongside everything else.
+
+What happens past the allowance depends on your plan — see
+[storage overage](../../workspace-and-billing/billing-and-plans/overview.md#storage-overage).
 
 ### Edit images
 

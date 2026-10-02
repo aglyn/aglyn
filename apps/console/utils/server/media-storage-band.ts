@@ -61,6 +61,13 @@ export interface OrgMediaBand {
    * Feed this to `mediaStorageGate` as `allowanceMb`.
    */
   allowanceMb: number
+  /**
+   * Each library's share of `usedBytes`, keyed by its Firestore parent —
+   * `hosts/{hostId}` or `orgs/{orgId}` — from the same `getAll`, so the parts
+   * always add up to the whole they were read with. Empty on an unlimited
+   * band, which reads nothing.
+   */
+  byScope: Record<string, number>
 }
 
 /**
@@ -116,7 +123,7 @@ export async function resolveOrgMediaBand(options: {
   const entitlements = resolveOrgEntitlements(org)
   const perScopeMb = entitlements.storagePerHostMb
   if (perScopeMb === UNLIMITED || !Number.isFinite(perScopeMb)) {
-    return { usedBytes: 0, allowanceMb: Number.POSITIVE_INFINITY }
+    return { usedBytes: 0, allowanceMb: Number.POSITIVE_INFINITY, byScope: {} }
   }
   // `Math.max(1, …)` mirrors `meteredIncludedAllowance` exactly — the band
   // the invoice subtracts and the band ingress refuses at must be the same
@@ -127,9 +134,15 @@ export async function resolveOrgMediaBand(options: {
       ? Number.POSITIVE_INFINITY
       : hostLimit * perScopeMb
   if (!Number.isFinite(allowanceMb)) {
-    return { usedBytes: 0, allowanceMb }
+    return { usedBytes: 0, allowanceMb, byScope: {} }
   }
   const hostIds = await orgHostIds(firestore, orgId, org ?? {}, currentHostId)
+  // The library each counter belongs to, in the order the refs are built —
+  // `getAll` answers in request order, so index `i` names snapshot `i`.
+  const scopes = [
+    ...hostIds.map((hostId) => `hosts/${hostId}`),
+    `orgs/${orgId}`,
+  ]
   const refs = [
     ...hostIds.map((hostId) =>
       firestore.collection('hosts').doc(hostId).collection('counters').doc('media'),
@@ -138,10 +151,14 @@ export async function resolveOrgMediaBand(options: {
   ]
   const snapshots = await firestore.getAll(...refs)
   let usedBytes = 0
-  for (const snapshot of snapshots) {
+  const byScope: Record<string, number> = {}
+  snapshots.forEach((snapshot, index) => {
     const bytes = Number(snapshot.get('bytes') ?? 0)
     // A corrupt or negative counter must not become free capacity.
-    if (Number.isFinite(bytes) && bytes > 0) usedBytes += bytes
-  }
-  return { usedBytes, allowanceMb }
+    const counted = Number.isFinite(bytes) && bytes > 0 ? bytes : 0
+    usedBytes += counted
+    const scope = scopes[index]
+    if (scope) byScope[scope] = (byScope[scope] ?? 0) + counted
+  })
+  return { usedBytes, allowanceMb, byScope }
 }
