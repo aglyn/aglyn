@@ -176,11 +176,11 @@ const costCounter = (store: Store, scope: string) =>
   Number(store.docs.get(`${scope}/counters/${EMAIL_SENDS_COUNTER}`)?.[MONTH] ?? 0)
 
 describe('the premise: the band is a real, finite number', () => {
-  it('Business includes 25,000 campaign emails a month', () => {
+  it('Business includes 15,000 campaign emails a month', () => {
     // Every assertion below compares against this. A stubbed entitlements
     // module would resolve it to 0, and a cap of 0 refuses everything — so
     // "the campaign was refused" would pass while proving nothing at all.
-    expect(BAND).toBe(25_000)
+    expect(BAND).toBe(15_000)
     expect(Number.isFinite(BAND)).toBe(true)
     expect(
       resolveOrgEntitlements({ plan: 'business' } as never).emailSendsPerMonth,
@@ -294,9 +294,9 @@ describe('…while transactional mail keeps going out', () => {
 
 describe('the excess that produces is what the invoice prices', () => {
   it('prices the transactional overflow, not the campaigns', () => {
-    // The month above: 25,000 campaign emails inside the band, then 4,000
-    // transactional past it. The cost meter reads 29,000 and the band is
-    // 25,000, so 4,000 is billable at Business's $2.00/1,000.
+    // The month above: 15,000 campaign emails inside the band, then 4,000
+    // transactional past it. The cost meter reads 19,000 and the band is
+    // 15,000, so 4,000 is billable at Business's $2.00/1,000.
     const overage = emailSendsOverage(BAND + 4_000, BAND)
     expect(overage).toBe(4_000)
     const priced = priceEmailSendOverage({ plan: 'business' } as never, overage)

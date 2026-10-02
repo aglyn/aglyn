@@ -929,11 +929,11 @@ export const PLUGIN_PLAN_QUOTAS_DECLARED: readonly ResolvedPluginPlanQuota[] = [
       "free": 20,
       "starter": 200,
       "pro": 1000,
-      "business": 8000,
-      "scale": 25000,
-      "advanced": 40000,
-      "agency": 25000,
-      "enterprise": 50000
+      "business": 5000,
+      "scale": 10000,
+      "advanced": 10000,
+      "agency": 10000,
+      "enterprise": 20000
     }
   },
   {
@@ -958,7 +958,7 @@ export const PLUGIN_PLAN_QUOTAS_DECLARED: readonly ResolvedPluginPlanQuota[] = [
     "label": "One-to-one emails / day",
     "byPlan": {
       "free": 0,
-      "starter": 50,
+      "starter": 35,
       "pro": 150,
       "business": 200,
       "scale": 300,

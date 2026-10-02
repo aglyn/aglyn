@@ -37,9 +37,10 @@
  *  - a BAND names the rollup fields that measure it and the entitlement that
  *    says what the plan includes. The utilization table reads it beside
  *    core's own bands. A METERED band is also billed past what the plan
- *    includes, at cost × `METERED_MARKUP`, beside storage and bandwidth: the
- *    invoice sweep, the Billing card's estimate, the monthly summary and the
- *    staff usage rows read it from here.
+ *    includes, at its published billed rate (cost + 30% kept after card
+ *    fees), beside storage and bandwidth: the invoice sweep, the Billing
+ *    card's estimate, the monthly summary and the staff usage rows read it
+ *    from here.
  *  - a SPEND LINE names the month document holding what the plugin's usage
  *    came to at the rates it bills, the deployment variable naming the month
  *    it is first charged for, and the unit a customer sees it in. The usage
@@ -191,8 +192,9 @@ export interface PluginUsageBandDeclaration {
   }
   /**
    * The band is one of the INFRASTRUCTURE meters (AGL-1280): what the
-   * workspace uses past it is billed at our cost × `METERED_MARKUP`, beside
-   * storage and bandwidth, on the same invoice line and the same estimate.
+   * workspace uses past it is billed at its published billed rate (cost +
+   * 30% kept after card fees), beside storage and bandwidth, on the same
+   * invoice line and the same estimate.
    * A metered band names one rollup field and the `hostCounter` it is
    * measured by.
    */

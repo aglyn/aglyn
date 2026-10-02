@@ -409,12 +409,12 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     sharedLayoutsPerHost: 3,
     templatesPerHost: 50,
     storagePerHostMb: 2048,
-    membersPerHost: 3,
+    membersPerHost: 2,
     managersPerOrg: 2,
     maxManagersPerOrg: 5,
     maxMembersPerHost: 10,
     // Sized by the same annual-price invariant as Pro's — see that band.
-    bandwidthGb: 20,
+    bandwidthGb: 15,
     formsPerHost: FORMS_PER_HOST_CEILING,
     variablesPerHost: 25,
     functionsPerHost: 10,
@@ -444,10 +444,10 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     emailSendsPerMonth: 0,
     actionRunsPerMonth: 0,
     apiRequestsPerMonth: 0,
-    datasetsPerOrg: 3,
+    datasetsPerOrg: 2,
     maxDatasetsPerOrg: 10,
     recordsPerDataset: 1000,
-    dataStorageMbPerOrg: 1024,
+    dataStorageMbPerOrg: 512,
     productsPerHost: 100,
     inventoryLocations: 1,
     posRegisters: 0,
@@ -513,9 +513,9 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     screensPerHost: 100,
     sharedLayoutsPerHost: UNLIMITED,
     templatesPerHost: UNLIMITED,
-    storagePerHostMb: 10240,
-    membersPerHost: 10,
-    managersPerOrg: 5,
+    storagePerHostMb: 5120,
+    membersPerHost: 3,
+    managersPerOrg: 3,
     maxManagersPerOrg: 20,
     maxMembersPerHost: 25,
     // Page views are the largest term of this tier's modeled COGS. One GB is
@@ -531,13 +531,15 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     // The invariant the band is sized against is the ANNUAL price ($39 a
     // month) net of Stripe's fee, with every band at 100% and the CRM seat
     // and one-to-one email terms counted — the 2026-09-07 pricing decision —
-    // at that all-in gigabyte (AGL-3444). 30 GB is what it carries; every
-    // paid band on the ladder is sized the same way.
+    // at that all-in gigabyte (AGL-3444), and it must cover that cost plus
+    // 30%, the same markup the metered overages carry (AGL-3469). 25 GB is
+    // what it carries beside the storage and campaign bands it now sits
+    // with; every paid band on the ladder is sized the same way.
     // `tier-margin-floor.spec.ts` holds the model and pins the figure.
     //
     // `meteredInfraPassThrough` is true here, so traffic past the band BILLS
     // at the page-view pass-through rather than being refused or absorbed.
-    bandwidthGb: 30,
+    bandwidthGb: 25,
     formsPerHost: FORMS_PER_HOST_CEILING,
     variablesPerHost: 100,
     functionsPerHost: 50,
@@ -545,13 +547,13 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     servicesPerHost: UNLIMITED,
     redirectsPerHost: 100,
     contactsPerHost: 10000,
-    emailSendsPerMonth: 5000,
+    emailSendsPerMonth: 2500,
     actionRunsPerMonth: 5000,
     apiRequestsPerMonth: 0,
-    datasetsPerOrg: 15,
+    datasetsPerOrg: 5,
     maxDatasetsPerOrg: 50,
     recordsPerDataset: 10000,
-    dataStorageMbPerOrg: 5120,
+    dataStorageMbPerOrg: 2048,
     productsPerHost: 2500,
     inventoryLocations: 2,
     posRegisters: 1,
@@ -623,9 +625,9 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     screensPerHost: UNLIMITED,
     sharedLayoutsPerHost: UNLIMITED,
     templatesPerHost: UNLIMITED,
-    storagePerHostMb: 20480,
-    membersPerHost: 50,
-    managersPerOrg: 15,
+    storagePerHostMb: 10240,
+    membersPerHost: 5,
+    managersPerOrg: 5,
     maxManagersPerOrg: 100,
     maxMembersPerHost: 100,
     // Sized by the same annual-price invariant as Pro's — see that band.
@@ -636,14 +638,14 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     workflowsPerHost: 100,
     servicesPerHost: UNLIMITED,
     redirectsPerHost: UNLIMITED,
-    contactsPerHost: 50000,
-    emailSendsPerMonth: 25000,
+    contactsPerHost: 30000,
+    emailSendsPerMonth: 15000,
     actionRunsPerMonth: 50000,
     apiRequestsPerMonth: 1_500,
-    datasetsPerOrg: 100,
+    datasetsPerOrg: 10,
     maxDatasetsPerOrg: 250,
     recordsPerDataset: 100000,
-    dataStorageMbPerOrg: 25600,
+    dataStorageMbPerOrg: 10240,
     productsPerHost: 10000,
     inventoryLocations: 4,
     posRegisters: 2,
@@ -695,9 +697,9 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     screensPerHost: UNLIMITED,
     sharedLayoutsPerHost: UNLIMITED,
     templatesPerHost: UNLIMITED,
-    storagePerHostMb: 30720,
-    membersPerHost: 75,
-    managersPerOrg: 25,
+    storagePerHostMb: 15360,
+    membersPerHost: 5,
+    managersPerOrg: 5,
     maxManagersPerOrg: 150,
     maxMembersPerHost: 150,
     // Sized by the same annual-price invariant as Pro's — see that band.
@@ -709,13 +711,13 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     servicesPerHost: UNLIMITED,
     redirectsPerHost: UNLIMITED,
     contactsPerHost: 100000,
-    emailSendsPerMonth: 40000,
+    emailSendsPerMonth: 25000,
     actionRunsPerMonth: 100000,
     apiRequestsPerMonth: 5_000,
-    datasetsPerOrg: 250,
+    datasetsPerOrg: 15,
     maxDatasetsPerOrg: 500,
     recordsPerDataset: 500000,
-    dataStorageMbPerOrg: 51200,
+    dataStorageMbPerOrg: 25600,
     productsPerHost: 25000,
     inventoryLocations: 6,
     posRegisters: 3,
@@ -764,9 +766,9 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     screensPerHost: UNLIMITED,
     sharedLayoutsPerHost: UNLIMITED,
     templatesPerHost: UNLIMITED,
-    storagePerHostMb: 40960,
-    membersPerHost: 100,
-    managersPerOrg: 50,
+    storagePerHostMb: 20480,
+    membersPerHost: 5,
+    managersPerOrg: 10,
     maxManagersPerOrg: 250,
     maxMembersPerHost: 250,
     // Sized by the same annual-price invariant as Pro's — see that band.
@@ -781,10 +783,10 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     emailSendsPerMonth: 65000,
     actionRunsPerMonth: 250000,
     apiRequestsPerMonth: 17_000,
-    datasetsPerOrg: 500,
+    datasetsPerOrg: 25,
     maxDatasetsPerOrg: 1000,
     recordsPerDataset: 1000000,
-    dataStorageMbPerOrg: 102400,
+    dataStorageMbPerOrg: 51200,
     productsPerHost: UNLIMITED,
     inventoryLocations: 10,
     posRegisters: 5,
@@ -837,9 +839,9 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     screensPerHost: UNLIMITED,
     sharedLayoutsPerHost: UNLIMITED,
     templatesPerHost: UNLIMITED,
-    storagePerHostMb: 61440,
-    membersPerHost: 250,
-    managersPerOrg: 100,
+    storagePerHostMb: 20480,
+    membersPerHost: 5,
+    managersPerOrg: 10,
     maxManagersPerOrg: 500,
     maxMembersPerHost: 1000,
     // Sized by the same annual-price invariant as Pro's — see that band.
@@ -854,10 +856,10 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     emailSendsPerMonth: 130000,
     actionRunsPerMonth: 1000000,
     apiRequestsPerMonth: 85_000,
-    datasetsPerOrg: 2000,
+    datasetsPerOrg: 50,
     maxDatasetsPerOrg: 5000,
     recordsPerDataset: UNLIMITED,
-    dataStorageMbPerOrg: 512000,
+    dataStorageMbPerOrg: 204800,
     productsPerHost: UNLIMITED,
     inventoryLocations: 50,
     posRegisters: 20,
@@ -947,9 +949,9 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     screensPerHost: UNLIMITED,
     sharedLayoutsPerHost: UNLIMITED,
     templatesPerHost: UNLIMITED,
-    storagePerHostMb: 122_880,
-    membersPerHost: 500,
-    managersPerOrg: 200,
+    storagePerHostMb: 40_960,
+    membersPerHost: 10,
+    managersPerOrg: 20,
     maxManagersPerOrg: 1_000,
     maxMembersPerHost: 2_000,
     bandwidthGb: 790,
@@ -963,10 +965,10 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     emailSendsPerMonth: ENTERPRISE_EMAIL_SENDS_PER_MONTH,
     actionRunsPerMonth: 2_000_000,
     apiRequestsPerMonth: 170_000,
-    datasetsPerOrg: 4_000,
+    datasetsPerOrg: 100,
     maxDatasetsPerOrg: 10_000,
     recordsPerDataset: UNLIMITED,
-    dataStorageMbPerOrg: 1_024_000,
+    dataStorageMbPerOrg: 409_600,
     productsPerHost: UNLIMITED,
     inventoryLocations: 100,
     posRegisters: 40,
@@ -2395,8 +2397,37 @@ export const INFRA_COGS_PER_SITE_USD = 2
  * where the page's generator can read it.
  *
  * The console keeps importing it from `usage-metering` unchanged.
+ *
+ * It is the margin KEPT: cost + 30% after Stripe's processor fee, not before
+ * it (AGL-3476). A price of cost × 1.3 kept cost × 1.26 once 2.9% came off,
+ * so the published rates are set by {@link METERED_PRICE_MULTIPLE}, and this
+ * stays the figure every full-utilization rule is held to.
  */
 export const METERED_MARKUP = 1.3
+
+/**
+ * What a passed-through cost is multiplied by to reach its price, so that
+ * cost + 30% survives Stripe's percentage fee: 1.3 ÷ 0.971 ≈ 1.3388
+ * (AGL-3476). The fixed 30¢ is paid by the subscription charge the overage
+ * rides on, so only the percentage is grossed up.
+ */
+export const METERED_PRICE_MULTIPLE = METERED_MARKUP / (1 - STRIPE_PROCESSOR_FEE_PCT)
+
+/**
+ * A published overage price: `costPerQuotedUnitUsd` × {@link
+ * METERED_PRICE_MULTIPLE}, rounded UP at the `decimals` it is quoted in, so
+ * the price the page prints and the invoice bills is the same round figure
+ * and never less than the rule. The product is settled to six places before
+ * the ceiling so a figure that is exact in decimal — or a pinned cost carried
+ * to eleven places, like the page-view pair — is not lifted a step by its
+ * tail.
+ */
+export function publishedMeteredPrice(costPerQuotedUnitUsd: number, decimals: number): number {
+  const scale = 10 ** decimals
+  return (
+    Math.ceil(Number((costPerQuotedUnitUsd * METERED_PRICE_MULTIPLE * scale).toFixed(6))) / scale
+  )
+}
 
 /**
  * What the REQUESTS behind ONE page view cost once the platform is past its

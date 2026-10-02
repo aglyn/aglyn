@@ -355,7 +355,7 @@ describe('the premise: every bundle cap is at or over the Pro plan cap', () => {
     expect(PRO.functionsPerHost).toBe(50)
 
     expect(DATASETS_LIMIT).toBe(50)
-    expect(PRO.datasetsPerOrg).toBe(15)
+    expect(PRO.datasetsPerOrg).toBe(5)
     // Exactly the hard max: a full bundle takes the whole addon runway too.
     expect(PRO.maxDatasetsPerOrg).toBe(50)
 
@@ -390,7 +390,7 @@ describe('datasets: the leg that leaks revenue, and the org-scoped one', () => {
   it('restores an ordinary under-cap bundle completely, records and all', async () => {
     // The positive control. A refusal that also refused this would have closed
     // the bug by breaking the feature.
-    const wanted = ids(10, 'ds')
+    const wanted = ids(4, 'ds')
     const response = await runImport('host-1', bundleOf({
       datasets: wanted.map((id) => datasetItem(id, ['r-1', 'r-2'])),
     }))
@@ -399,15 +399,15 @@ describe('datasets: the leg that leaks revenue, and the org-scoped one', () => {
     expect(storedIdsIn('orgs/org-1/datasets')).toEqual(wanted)
     expect(
       writes.filter((entry) => entry.path.endsWith('/records/r-1')),
-    ).toHaveLength(10)
+    ).toHaveLength(4)
   })
 
   it('counts the addon datasets the workspace has actually bought', async () => {
     // `checkDatasetQuota` and not `checkQuota(org, 'datasetsPerOrg')`: an org
-    // that has PAID for 35 extra datasets is entitled to 50, and a check
+    // that has PAID for 45 extra datasets is entitled to 50, and a check
     // reading the plan's included number would refuse a customer their own
     // backup after taking their money for the room to hold it.
-    mockOrg = { plan: 'pro', seatAddons: { datasets: 35 } }
+    mockOrg = { plan: 'pro', seatAddons: { datasets: 45 } }
     const wanted = ids(DATASETS_LIMIT, 'ds')
     const response = await runImport('host-1', bundleOf({
       datasets: wanted.map((id) => datasetItem(id)),
@@ -420,7 +420,7 @@ describe('datasets: the leg that leaks revenue, and the org-scoped one', () => {
   it('names upgrading, not addons, once the addon runway is gone', async () => {
     // At the hard max the addon is not an escape and offering it would be a
     // dead end — `checkDatasetQuota` already knows this as `upgradeRequired`.
-    mockOrg = { plan: 'pro', seatAddons: { datasets: 35 } }
+    mockOrg = { plan: 'pro', seatAddons: { datasets: 45 } }
     seedWorkspaceDatasets('org-1', ids(50, 'have'))
     const response = await runImport('host-1', bundleOf({
       datasets: [datasetItem('one-more')],
@@ -514,7 +514,7 @@ describe('datasets: the leg that leaks revenue, and the org-scoped one', () => {
     // limit had before AGL-1382 gave it one home, which is why the slice lives
     // in the route's `sectionItems` and the section's refusal and restore both
     // read it.
-    mockOrg = { plan: 'pro', seatAddons: { datasets: 35 } }
+    mockOrg = { plan: 'pro', seatAddons: { datasets: 45 } }
     const response = await runImport('host-1', bundleOf({
       datasets: ids(DATASETS_LIMIT + 10, 'ds').map((id) =>
         datasetItem(id),

@@ -85,10 +85,12 @@ export const CRM_EMAILS_PER_DAY_BY_PLAN: Readonly<Record<OrgPlan, number>> = {
   // One-to-one email from a CRM record, per UTC day (AGL-2611). A hard daily
   // pace rather than a monthly meter, sized so the whole day spent at $0.0009
   // a message leaves the tier's CRM axis inside the 20% cost share the Drive
-  // pricing decision of 2026-09-05 sets. 50 a day is $1.35 a month against a
-  // $16 annual price. Every send still lands on the `emailSends` cost meter
-  // beside the transactional mail this tier already sends.
-  starter: 50,
+  // pricing decision of 2026-09-05 sets. 35 a day is $0.95 a month against a
+  // $16 annual price — 50 was, until the whole Starter tier had to cover its
+  // full-use cost plus 30% (AGL-3469). Every send still lands on the
+  // `emailSends` cost meter beside the transactional mail this tier already
+  // sends.
+  starter: 35,
   pro: 150,
   business: 200,
   scale: 300,

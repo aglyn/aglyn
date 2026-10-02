@@ -362,7 +362,7 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
       (r) => r.cells[0] === 'Media & file storage',
     )
     row.cells[1] = '$0.026 / GB-mo'
-    row.cells[2] = '$0.0338 / GB-mo'
+    row.cells[2] = '$0.0349 / GB-mo'
     writeFrame(data)
 
     const run = check([
@@ -396,7 +396,9 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
     // $0.07/1k — once every Vercel-billed input was priced at the dearest
     // region (AGL-3444), then $0.80 and $0.08 once Vercel's GB was read as
     // decimal, Firestore priced at nam5 and the analytics beacon and the
-    // submission's CDN request counted. Asserted on the generator's OUTPUT
+    // submission's CDN request counted, then $0.0349, $0.83 and $0.083 once the
+    // 30% was kept after Stripe's fee rather than before it and each price
+    // rounded up (AGL-3476). Asserted on the generator's OUTPUT
     // rather than on the constants, because two-decimal formatting would
     // round the cost and the +30% columns into agreement and publish a table
     // that looks internally consistent while stating neither figure.
@@ -404,7 +406,7 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
     // The page-view and form rows are where that formatting earns its keep.
     // Their costs are $0.615385 and $0.061538 / 1k — pinned so the PRICE is
     // round, which leaves the cost a long decimal — and the prices beside
-    // them must still read $0.80 and $0.08, computed from the unrounded cost
+    // them must still read $0.83 and $0.083, computed from the unrounded cost
     // rather than from the six-decimal figure printed beside it.
     resetFixtures()
     const run = check()
@@ -413,13 +415,13 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
     assert.deepEqual(
       tables.metered.rows.map((r) => [r.label, r.ourCost, r.youPay]),
       [
-        ['Media & file storage', '$0.026 / GB-mo', '$0.0338 / GB-mo'],
+        ['Media & file storage', '$0.026 / GB-mo', '$0.0349 / GB-mo'],
         [
           'Page views (bandwidth + reads)',
           '$0.615385 / 1k views',
-          '$0.80 / 1k views',
+          '$0.83 / 1k views',
         ],
-        ['Form submissions', '$0.061538 / 1k', '$0.08 / 1k'],
+        ['Form submissions', '$0.061538 / 1k', '$0.083 / 1k'],
       ],
     )
   })

@@ -474,7 +474,8 @@ export function BillingMeteredEstimateComponent(
       <Typography variant="caption" color="text.secondary">
         {included.metered
           ? `Only usage beyond your plan's included ${meteredNouns} is ` +
-            `metered, at our cost × ${METERED_MARKUP}. ` +
+            `metered, at our cost + ${Math.round((METERED_MARKUP - 1) * 100)}% ` +
+            'after card fees. ' +
             (annual
               ? 'Your subscription is annual, so usage accrues across the ' +
                 'year and settles on your renewal invoice.'

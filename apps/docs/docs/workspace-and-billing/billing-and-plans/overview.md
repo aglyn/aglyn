@@ -186,14 +186,15 @@ them requires **Manage billing**. See
 
 ## Storage overage
 
-Each site includes a fixed amount of storage. On a paid plan, going past it is **not** a
-wall:
+Your plan includes an amount of storage for each of its sites, and the workspace shares
+it as one allowance: every site's media library and the organization library draw on the
+same total. On a paid plan, going past it is **not** a wall:
 
 - **Uploads keep working.** You are never stopped from adding files because you reached
   your included storage.
 - **The extra storage is billed** on your monthly invoice at our infrastructure cost
-  plus 30% — the exact per-GB rate is on [the pricing page](https://aglyn.com/pricing)
-  and in **Billing → Storage cap**.
+  plus 30%, kept after card fees — the exact per-GB rate is on
+  [the pricing page](https://aglyn.com/pricing) and in **Billing → Storage cap**.
 - **We tell you before it happens.** You get an alert as you approach your included
   storage and another when you cross it, so the invoice is never the first you hear of
   it. See [usage meters](#usage-meters).
@@ -212,8 +213,7 @@ takes effect immediately.
 On the Free plan there is no storage overage at all. Your included storage is a fixed
 cap: uploads stop there, nothing is metered, and no amount of usage produces a charge —
 so there is nothing to cap and nothing to configure. Enterprise storage is a fixed
-default of 120 GB per site that an agreement raises, with no overage either: uploads stop
-there.
+default that an agreement raises, with no overage either: uploads stop there.
 :::
 
 :::tip No surprise bills

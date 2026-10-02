@@ -379,12 +379,12 @@ describe('the media-storage alert sees the org library (AGL-1473)', () => {
  * bill." An alert that is structurally unable to fire is not an alert.
  */
 describe('the org library is warnable on its own (AGL-1886)', () => {
-  /** Pro: 3 sites x 10240 MB. The org-wide band is 30720 MB. */
-  const PRO_SCOPE_MB = 10240
+  /** Pro: 3 sites x 5120 MB. The org-wide band is 15360 MB. */
+  const PRO_SCOPE_MB = 5120
   const PRO_BAND_MB = 3 * PRO_SCOPE_MB
 
   it('warns an org whose library is full while the org-wide band is a third used', async () => {
-    // The bytes: 10240 MB in the org library, nothing on either site. The
+    // The bytes: 5120 MB in the org library, nothing on either site. The
     // uploader refuses the next org DAM upload — `storagePerHostMb` is the
     // scope's cap and this scope is at it.
     mockOrgs = [{ id: 'org-1', plan: 'pro', orgLibraryBytes: PRO_SCOPE_MB * MB }]
@@ -393,11 +393,11 @@ describe('the org library is warnable on its own (AGL-1886)', () => {
       { id: 'site-b', orgId: 'org-1', mediaBytes: 0 },
     ]
     const notifications = await run()
-    // The org-wide check is SILENT and correct to be: 10240 of 30720 is 33%.
+    // The org-wide check is SILENT and correct to be: 5120 of 15360 is 33%.
     // Forced red by deleting the `orgLibraryStorage` check: this line still
     // passed and the next one failed, which is the shape of the whole bug.
     expect(mediaAlerts(notifications)).toHaveLength(0)
-    expect(10240 / PRO_BAND_MB).toBeLessThan(0.8)
+    expect(PRO_SCOPE_MB / PRO_BAND_MB).toBeLessThan(0.8)
     // The library check fires, at the cap.
     expect(libraryAlerts(notifications)).toHaveLength(1)
     // Pro METERS storage, so past the band the product keeps working and

@@ -52,6 +52,7 @@ import {
   ORG_COGS_UNIT_RATES_USD,
   METERED_MARKUP,
   PAGE_VIEW_CDN_REQUEST_COST_USD,
+  publishedMeteredPrice,
 } from '../../libs/aglyn/src/lib/app-utils/plan-entitlements.ts'
 import {
   onboardingSignupHref,
@@ -676,37 +677,46 @@ const METERED_ROWS: Array<{
   label: string
   costUsd: number
   quotedPer: number
+  /** The places the price is published to, rounded UP (AGL-3476). */
+  decimals: number
   unit: string
 }> = [
   {
     label: 'Media & file storage',
     costUsd: ORG_COGS_UNIT_RATES_USD.storagePerGbMonth,
     quotedPer: 1,
+    decimals: 4,
     unit: '/ GB-mo',
   },
   {
     label: 'Page views (bandwidth + reads)',
     costUsd: ORG_COGS_UNIT_RATES_USD.perPageView + PAGE_VIEW_CDN_REQUEST_COST_USD,
     quotedPer: 1000,
+    decimals: 2,
     unit: '/ 1k views',
   },
   {
     label: 'Form submissions',
     costUsd: ORG_COGS_UNIT_RATES_USD.perFormSubmission,
     quotedPer: 1000,
+    decimals: 3,
     unit: '/ 1k',
   },
 ]
 
 const metered = {
-  heading: 'Metered infrastructure — passed through at cost + 30%',
+  heading: 'Metered infrastructure — passed through at cost + 30%, after card fees',
   markupPct: Math.round((METERED_MARKUP - 1) * 100),
-  columns: ['Metered item', 'Our cost', `You pay (+${Math.round((METERED_MARKUP - 1) * 100)}%)`],
+  columns: [
+    'Metered item',
+    'Our cost',
+    `You pay (+${Math.round((METERED_MARKUP - 1) * 100)}% after card fees)`,
+  ],
   rows: METERED_ROWS.map((r) => ({
     label: r.label,
     unit: r.unit,
     ourCost: `${rate(r.costUsd * r.quotedPer)} ${r.unit}`,
-    youPay: `${rate(r.costUsd * r.quotedPer * METERED_MARKUP)} ${r.unit}`,
+    youPay: `${rate(publishedMeteredPrice(r.costUsd * r.quotedPer, r.decimals))} ${r.unit}`,
   })),
   note:
     'Applies only to plans with `meteredInfraPassThrough`. Dataset storage ' +
@@ -1247,6 +1257,55 @@ for (const [plan, frame] of [
   FRAME_STALE_CELLS[`API access · ${plan}`] = { frame, why: API_RESIZE_WHY }
 }
 
+/**
+ * The bands cut so every tier covers its full-use cost plus 30% (AGL-3469):
+ * storage and form submissions per site first, where the site count
+ * multiplies them, then dataset storage, then campaign email and CRM records
+ * on the tiers those could not carry. The Figma frames still carry the bands
+ * sold until 2026-10-02.
+ */
+const COST_PLUS_30_WHY =
+  'every paid tier must cover its cost at 100% of every band plus 30%, the ' +
+  'markup the metered overages carry, at the annual price net of Stripe ' +
+  '(AGL-3469). Redraw the four frames, re-extract, and this entry comes out.'
+for (const [row, plan, frame] of [
+  ['Storage per site', 'Pro', '10 GB'],
+  ['Storage per site', 'Business', '20 GB'],
+  ['Storage per site', 'Scale', '30 GB'],
+  ['Storage per site', 'Advanced', '40 GB'],
+  ['Storage per site', 'Agency', '60 GB'],
+  ['Form submissions / mo, per site', 'Business', '8,000'],
+  ['Form submissions / mo, per site', 'Scale', '25,000'],
+  ['Form submissions / mo, per site', 'Advanced', '40,000'],
+  ['Form submissions / mo, per site', 'Agency', '25,000'],
+  ['CRM records included (contacts, companies & deals)', 'Business', '50,000'],
+  ['One-to-one emails / day', 'Starter', '50'],
+  ['Campaign emails / mo', 'Pro', '5,000'],
+  ['Campaign emails / mo', 'Business', '25,000'],
+  ['Campaign emails / mo', 'Scale', '40,000'],
+  // The things a customer can buy more of start small, so buying more is a
+  // real choice; what a plan may buy up to did not move.
+  ['Team seats', 'Pro', '5 · max 20'],
+  ['Team seats', 'Business', '15 · max 100'],
+  ['Team seats', 'Scale', '25 · max 150'],
+  ['Team seats', 'Advanced', '50 · max 250'],
+  ['Team seats', 'Agency', '100 · max 500'],
+  ['Site collaborators', 'Starter', '3 · max 10'],
+  ['Site collaborators', 'Pro', '10 · max 25'],
+  ['Site collaborators', 'Business', '50 · max 100'],
+  ['Site collaborators', 'Scale', '75 · max 150'],
+  ['Site collaborators', 'Advanced', '100 · max 250'],
+  ['Site collaborators', 'Agency', '250 · max 1,000'],
+  ['Datasets', 'Starter', '3 · max 10'],
+  ['Datasets', 'Pro', '15 · max 50'],
+  ['Datasets', 'Business', '100 · max 250'],
+  ['Datasets', 'Scale', '250 · max 500'],
+  ['Datasets', 'Advanced', '500 · max 1,000'],
+  ['Datasets', 'Agency', '2,000 · max 5,000'],
+] as const) {
+  FRAME_STALE_CELLS[`${row} · ${plan}`] = { frame, why: COST_PLUS_30_WHY }
+}
+
 /*
  * `--declare-stale-cell='<row> · <plan>|<frame value>'`, repeatable.
  *
@@ -1373,6 +1432,15 @@ const FRAME_STALE_METERED: Record<
       "at Vercel's dearest region (AGL-3444), so the published figure is " +
       '$0.061538 / $0.08 per 1k. The four Figma frames still draw the ' +
       'cheapest-region figure. Redraw them, re-extract, and this entry comes out.',
+  },
+  'Media & file storage': {
+    ourCost: '$0.026 / GB-mo',
+    youPay: '$0.0338 / GB-mo',
+    why:
+      'the pass-through keeps cost + 30% AFTER the card fee, so each rate is ' +
+      'cost × 1.3 ÷ 0.971 rounded up (AGL-3476) and storage publishes at ' +
+      '$0.0349 / GB-mo. Redraw the four frames, re-extract, and this entry ' +
+      'comes out.',
   },
 }
 
@@ -1723,6 +1791,10 @@ const TIERS_STALE: Record<string, Divergence> = {
   'Scale · spec 4': { frame: '300k API requests/mo', why: API_RESIZE_WHY },
   'Advanced · spec 4': { frame: '1M API requests/mo', why: API_RESIZE_WHY },
   'Agency · spec 4': { frame: '5M API requests/mo', why: API_RESIZE_WHY },
+  'Scale · spec 7': { frame: '40,000 campaign emails/mo', why: COST_PLUS_30_WHY },
+  'Scale · spec 2': { frame: '75 collaborators', why: COST_PLUS_30_WHY },
+  'Advanced · spec 2': { frame: '100 collaborators', why: COST_PLUS_30_WHY },
+  'Agency · spec 2': { frame: '250 collaborators', why: COST_PLUS_30_WHY },
 }
 
 const tierStrip = reconciler('scale strip', TIERS_STALE)

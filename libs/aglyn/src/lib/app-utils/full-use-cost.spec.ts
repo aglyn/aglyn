@@ -51,9 +51,13 @@ const quoted = (plan: string, customMonthlyUsd: number, interval = 'month') =>
     subscription: { status: 'active', interval, customMonthlyUsd },
   }) as never
 
-/** The monthly price that nets, after Stripe, exactly `multiple` × `cogs`. */
+/**
+ * The lowest whole-cent monthly price that nets, after Stripe, at least
+ * `multiple` × `cogs`. The extra cent absorbs the fee's own rounding to the
+ * cent, which can otherwise leave the net a fraction of a cent short.
+ */
 const priceNetting = (multiple: number, cogs: number) =>
-  Math.ceil(((multiple * cogs + 0.3) / (1 - 0.029)) * 100) / 100
+  Math.ceil(((multiple * cogs + 0.3) / (1 - 0.029)) * 100) / 100 + 0.01
 
 describe('fullUseCogs', () => {
   it('reads RESOLVED entitlements: an override raises the cost by what it delivers', () => {

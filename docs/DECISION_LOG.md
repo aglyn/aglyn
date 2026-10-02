@@ -92,6 +92,30 @@ introduce a price or an entitlement the account owner has not chosen.
 
 ---
 
+## 2026-10-02 — Every plan covers its full-use cost plus 30% after Stripe's fee: per-site and purchasable bands cut, overage priced to keep 30% after card fees (AGL-3469, AGL-3476)
+
+- **Decided by:** the account owner, 2026-10-01/02, in four answers: the full-use rule is cost + 30% (a markup, not a margin on price); overage keeps 30% after Stripe's fee; coupons never take a fully-used plan below cost; and the included count of anything a customer can buy more of — collaborators per site, team seats, datasets — is small (five to ten at most) so buying more is a real choice. The approved ladder is the one below. This entry supersedes the 2026-10-01 entries below it on the bands it names.
+- **Scope:** pricing, packaging
+- **Evidence:** `PLAN_ENTITLEMENTS` (`storagePerHostMb`, `bandwidthGb` Starter/Pro, `dataStorageMbPerOrg`, `emailSendsPerMonth`, `contactsPerHost` Business, `membersPerHost`, `managersPerOrg`, `datasetsPerOrg`), the forms plugin's `formSubmissionsPerMonth` and the CRM plugin's `crmEmailsPerDay`; `METERED_PRICE_MULTIPLE` and `publishedMeteredPrice` beside `METERED_MARKUP`; `METERED_BILLED_RATES_USD` and the estimate in `apps/console/utils/usage-metering.ts`; `apps/console/specs/tier-margin-floor.spec.ts` (rule raised from ≥ 0 to ≥ cost × 1.3; the seat term counts `hostLimit × membersPerHost + managersPerOrg`); the Sept-1 `LOCKED` pin ($0.0349, $0.83, $0.083); `tools/marketing/pricing-copy/tables.json` (regenerated); the same-dated entry in Drive → Pricing & Packaging → 05-Pricing-Decision-Log; AGL-3469, AGL-3476.
+
+**What moved.** Storage per site Pro → Agency 5 · 10 · 15 · 20 · 20 GB (was 10 · 20 · 30 · 40 · 60);
+bandwidth Starter 15 GB, Pro 25 GB (was 20, 30); form submissions per site Business → Agency
+5,000 · 10,000 · 10,000 · 10,000; dataset storage Starter → Agency 512 MB · 2 · 10 · 25 · 50 ·
+200 GB; campaign emails Pro · Business · Scale 2,500 · 15,000 · 25,000; Business CRM records
+30,000; Starter one-to-one emails 35 a day; site collaborators per site Starter → Agency 2 · 3 ·
+5 · 5 · 5 · 5; team seats Pro → Agency 3 · 5 · 5 · 10 · 10; datasets Starter → Agency 2 · 5 ·
+10 · 15 · 25 · 50. Maxima and every add-on price unchanged; Enterprise's fallback stays Agency × 2.
+Overage: storage $0.0338 → $0.0349 per GB-month, page views $0.80 → $0.83 and form submissions
+$0.08 → $0.083 per 1,000.
+
+**Why.** At 100% of every band the ladder only broke even (0.1–7.3% of the annual price), and
+the collaborator seat term priced one site's population where the cap admits it on every site —
+Agency's 250 a site across 100 sites was 25,000 people. Every tier now covers 1.30–1.32× its
+full-use cost after Stripe's fee (22.4–23.3% of the annual price), and the pass-through keeps 30%
+after the card fee rather than before it.
+
+---
+
 ## 2026-10-01 — Vercel bills a decimal GB, Firestore is nam5, and an API request is a function: page views $0.80 and form submissions $0.08 per 1k, bandwidth and API bands re-sized (AGL-3444, AGL-1879)
 
 - **Decided by:** the account owner, 2026-10-01, under the same day's "worst case everywhere" decision, asked to settle three open questions with facts and fix any that held: where production's Firestore is, which GB Vercel bills transfer in, and what a `/v1` request costs. All three held. Overage = cost × 1.3 rounded up to the cent; bandwidth bands = the largest multiple of 5 GB that clears the floor at the annual price after Stripe's fee; an API band that would take its plan under water re-sized the same way. This entry supersedes the 2026-10-01 entry below it on the two rates and the bands.

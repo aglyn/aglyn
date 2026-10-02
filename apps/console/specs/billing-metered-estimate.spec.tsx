@@ -367,9 +367,9 @@ describe('a loading state is not an answer', () => {
  *
  * Two properties, and the second is the one that could go quietly wrong:
  *
- *  1. The published rate is the one that is CHARGED — our cost × the markup —
- *     not the cost table. They are 30% apart, and printing the input would be
- *     quoting a number no invoice uses.
+ *  1. The published rate is the one that is CHARGED — our cost + 30% kept
+ *     after the card fee, rounded up (AGL-3476) — not the cost table. Printing
+ *     the input would be quoting a number no invoice uses.
  *  2. The per-dimension charges are the same three products `billedCents` is
  *     rounded from. They are asserted to SUM to it, so a second cost model in
  *     the component (or in the split) diverges here exactly as it would
@@ -382,37 +382,36 @@ describe('each metered dimension names its overage rate', () => {
     mockUsageConfig({ orgLibraryBilledFrom: MONTH })
     seed({ hostMediaBytes: 1 * GB })
     render(<BillingMeteredEstimateComponent org={ORG} hosts={HOSTS} />)
-    // $0.026 × 1.30 = $0.0338. Both halves asserted: the charged rate is
-    // present, and the raw cost — which differs only in the third decimal —
-    // is not, so a component that printed `METERED_UNIT_RATES_USD` fails.
+    // $0.026 × 1.3 ÷ 0.971, rounded up, is $0.0349. Both halves asserted: the
+    // charged rate is present, and the raw cost — which differs only in the
+    // third decimal — is not, so a component that printed
+    // `METERED_UNIT_RATES_USD` fails.
     await waitFor(() => {
-      expect(screen.getByText(/\$0\.0338\/GB-month/)).toBeTruthy()
+      expect(screen.getByText(/\$0\.0349\/GB-month/)).toBeTruthy()
     })
-    expect(METERED_BILLED_RATES_USD.storagePerGbMonth).toBeCloseTo(
+    expect(METERED_BILLED_RATES_USD.storagePerGbMonth * 0.971).toBeGreaterThanOrEqual(
       METERED_UNIT_RATES_USD.storagePerGbMonth * METERED_MARKUP,
-      10,
     )
     expect(screen.queryByText(/\$0\.026\/GB-month/)).toBeNull()
   })
 
   it('quotes page views and form submissions PER 1,000', async () => {
-    // Per unit these are $0.0008 and $0.00008, which read as zero at any
+    // Per unit these are $0.00083 and $0.000083, which read as zero at any
     // precision a customer would trust — the reason the unit is 1,000 here
     // and a GB-month for storage.
     //
     // The page-view figure is also where `rateText` earns its trailing-zero
-    // strip, and its floor at the cent: a billed view's cost x 1.3 is
-    // $0.800000006 per 1,000, which four decimals round to $0.8000 and the
-    // strip renders as the $0.80 the published page states — never $0.8.
+    // strip, and its floor at the cent: $0.83 per 1,000 renders as $0.83,
+    // never $0.8300, and the form figure keeps its third place as $0.083.
     mockUsageConfig({ orgLibraryBilledFrom: MONTH })
     seed({ hostMonthViews: 10, hostFormSubmissions: 3 })
     render(<BillingMeteredEstimateComponent org={ORG} hosts={HOSTS} />)
     await waitFor(() => {
-      expect(screen.getByText(/\$0\.80 per 1,000/)).toBeTruthy()
+      expect(screen.getByText(/\$0\.83 per 1,000/)).toBeTruthy()
     })
-    expect(screen.queryByText(/\$0\.8 per 1,000/)).toBeNull()
-    expect(screen.queryByText(/\$0\.70 per 1,000/)).toBeNull()
-    expect(screen.getByText(/\$0\.08 per 1,000/)).toBeTruthy()
+    expect(screen.queryByText(/\$0\.80 per 1,000/)).toBeNull()
+    expect(screen.queryByText(/\$0\.8300 per 1,000/)).toBeNull()
+    expect(screen.getByText(/\$0\.083 per 1,000/)).toBeTruthy()
     // The forms plugin's band is drawn under the label it declares, and named
     // in the caption among the meters, in the order the card bills them.
     expect(screen.getByText(/^Form submissions: 3 of [\d,]+$/)).toBeTruthy()
@@ -433,7 +432,7 @@ describe('each metered dimension names its overage rate', () => {
     await waitFor(() => {
       expect(screen.getByText(/0\.50 of 2\.00 GB/)).toBeTruthy()
     })
-    expect(screen.getByText(/\$0\.0338\/GB-month past the band/)).toBeTruthy()
+    expect(screen.getByText(/\$0\.0349\/GB-month past the band/)).toBeTruthy()
     expect(screen.queryByText(/billable/)).toBeNull()
   })
 
@@ -456,7 +455,6 @@ describe('each metered dimension names its overage rate', () => {
     // THE INVARIANT: the split is the total, not a second opinion about it.
     const sum =
       byMeter.storage + byMeter.pageViews + byMeter['formSubmissions']!
-    expect(sum).toBeCloseTo(billed.billableCostUsd * METERED_MARKUP, 10)
     expect(Math.round(sum * 100)).toBe(billed.billedCents)
 
     render(<BillingMeteredEstimateComponent org={ORG} hosts={HOSTS} />)
