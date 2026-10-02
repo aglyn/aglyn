@@ -89,7 +89,7 @@ before a reusable form can honestly claim to capture leads.
 | After-submit outcomes | `FormProps` :47-77 | `message \| redirect \| reveal`, with `sanitizeRedirectUrl` (:102) refusing anything that is not https-absolute or same-origin. |
 | Submit endpoint | `libs/plugins/forms/src/lib/server/form-submit.ts` | Honeypot drop + count → shape validation (`MAX_FIELDS = 20`, `MAX_PAYLOAD_CHARS = 10000`) → per-(site, IP) rate limit 10/60s → host exists → lockdown → plan quota → abuse ceiling → write → contact → dataset → counter → notify → event. |
 | Submission document | route :332-360 | `formName`, `path`, `fields` (keys ≤ 64 chars, values ≤ 2000), `read`, `createdAt`, optional `rateDegraded`, optional `routing.dataset { id, name, recordId }`. |
-| Containment, fully built | `libs/aglyn/src/lib/app-utils/plan-entitlements.ts:3384-3440`, `form-abuse-ceiling.ts` | `FORM_ABUSE_CEILING_MULTIPLE = 10`, `FORM_ABUSE_CEILING_FLOOR = 5_000`, `FORM_ABUSE_CEILING_UNLIMITED = 1_000_000`, counted per site per month, with a refusal counter, a manager notification on the month's first trip, and a visitor-facing fallback address. |
+| Containment, fully built | `libs/aglyn/src/lib/app-utils/plan-entitlements.ts:3384-3440`, the forms plugin's `model/form-unavailable.ts` and its `visitorDoors` declaration | `FORM_ABUSE_CEILING_MULTIPLE = 10`, `FORM_ABUSE_CEILING_FLOOR = 5_000`, `FORM_ABUSE_CEILING_UNLIMITED = 1_000_000`, counted per site per month, with a refusal counter, a manager notification on the month's first trip, and a visitor-facing fallback address. |
 | Metered, not walled, on paid plans | `checkFormSubmissionQuota` :3368-3382 | `allowed: metered ? true : used < included`. Free hard-walls at `formSubmissionsPerMonth` (20); every plan carrying `meteredInfraPassThrough` accepts and bills the excess. |
 | Inbox, ordered and paged | `libs/plugins/inbox/src/lib/components/inbox-console-page.tsx:120-138` | `orderBy('createdAt', 'desc')` + `usePagedCollection`. The docblock records that this was `limit(200)` with no `orderBy` and a client sort on top, and names why the missing rows left no visible gap. |
 | Sender presentation | `libs/plugins/inbox/src/lib/model/submission-presenter.ts` | Avatar, initials, deterministic hue, relative time. |
@@ -659,7 +659,7 @@ the shape `tools/scripts/backfills/` already uses, and never in a request path.
 | **Views** | `forms/{formId}.stats.views`, incremented by the analytics beacon | **one extra write per rendered form** — see 5b |
 | **Starts** | `stats.starts`, from the same beacon on a visitor's first edit | one extra write per form a visitor types into |
 | **Completion / abandonment / lead rate** | computed in the browser from counters already on the one document the page reads | zero |
-| **Per-month series** | `stats.periods['YYYY-MM']`, the same four counters keyed by `submissionMonthKey()`, riding the same writes | **zero** — a document write is priced per write, not per field |
+| **Per-month series** | `stats.periods['YYYY-MM']`, the same four counters keyed by `utcMonthKey()`, riding the same writes | **zero** — a document write is priced per write, not per field |
 
 ⚠️ **The rates are taken over the months the denominator was recorded in, not
 over the lifetime totals.** `submissions` has counted since the form entity

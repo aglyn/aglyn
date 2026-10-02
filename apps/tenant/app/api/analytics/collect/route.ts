@@ -912,7 +912,7 @@ export async function POST(request: Request): Promise<Response> {
       const statKey = FORM_EVENTS[formEvent]
       const formId = String(body.formId ?? '')
       if (statKey && formId && formId.length <= 128) {
-        const month = Aglyn.submissionMonthKey()
+        const month = Aglyn.utcMonthKey()
         await firebaseAdmin
           .app()
           .firestore()

@@ -35,7 +35,7 @@ import type { AglynNodeSchema, NodeId } from '../foundation/definitions/componen
 import { FORMS_PLUGIN_ID } from '../plugin-manager/enabled-plugins'
 import { containerMembershipValue } from './container-membership'
 import type { PlacementKind } from './compose-reusable-components'
-import { submissionMonthKey } from './form-abuse-ceiling'
+import { utcMonthKey } from './utc-month'
 import { displayNameSearchFields, nameSearchTokens } from './name-search'
 
 /**
@@ -614,7 +614,7 @@ export interface FormStats {
    * every rate over the months that carry BOTH counters.
    *
    * Bounded by the calendar: twelve keys a year on a document with a megabyte
-   * to spend. Keys are `submissionMonthKey()` — the SAME function the
+   * to spend. Keys are `utcMonthKey()` — the SAME function the
    * site-wide counter and the abuse ceiling are keyed by, imported rather
    * than restated, because a differently-derived month key reads zero on
    * exactly the months it disagrees about.
@@ -768,14 +768,14 @@ export interface FormPeriodRange {
 /**
  * The month key a moment falls in, or `null` for a moment that is not one.
  *
- * UTC, through {@link submissionMonthKey}, because that is the function every
+ * UTC, through {@link utcMonthKey}, because that is the function every
  * writer of `stats.periods` keys by. A month derived any other way reads zero
  * on exactly the months the two definitions disagree about — which is the
  * boundary month, the one a reader is most likely to be asking about.
  */
 export function formPeriodKey(atMs: number | null | undefined): string | null {
   if (typeof atMs !== 'number' || !Number.isFinite(atMs)) return null
-  return submissionMonthKey(new Date(atMs))
+  return utcMonthKey(new Date(atMs))
 }
 
 /**

@@ -132,12 +132,12 @@ export const LEADS_MAX_PER_HOST = 200_000
  * discriminates nothing — this code is the whole discriminator, and one means
  * "slow down" while the other means "this site is not taking new accounts".
  * Shared rather than restated so producer and consumer cannot drift, exactly
- * as `FORM_ABUSE_CEILING_CODE` is.
+ * as the form door's `form-abuse-ceiling` is.
  */
 export const SITE_MEMBER_CEILING_CODE = 'site-member-ceiling'
 
 /**
- * The visitor's sentence, under the three rules `FORM_UNAVAILABLE_MESSAGE`
+ * The visitor's sentence, under the three rules the form door's refusal
  * established (AGL-1666) and for the identical reason: the person reading it
  * is a stranger to the site and NOT our customer.
  *
@@ -233,7 +233,7 @@ export function visitorRecordRefusedCounterId(kind: VisitorRecordKind): string {
  */
 export const VISITOR_RECORD_NOTICE_SENT_FIELD = 'noticeSentAtMs'
 
-/** A month key on the refusal counter — `submissionMonthKey`'s `YYYY-MM`. */
+/** A month key on the refusal counter — `utcMonthKey`'s `YYYY-MM`. */
 const REFUSAL_MONTH_KEY = /^\d{4}-\d{2}$/
 
 /**
@@ -280,7 +280,7 @@ export function visitorRecordAcceptFillsCeiling(
   return checkVisitorRecordCeiling(resolvedUsed + 1, ceiling).exceeded
 }
 
-/** What the site's owner is shown. Shaped like `FormsPausedOwnerNotice`. */
+/** What the site's owner is shown. Shaped like `VisitorDoorPausedNotice`. */
 export interface VisitorRecordsPausedNotice {
   title: string
   /** What happened, how many, and what actually clears it. */
@@ -298,7 +298,7 @@ export interface VisitorRecordsPausedNotice {
  * line for symmetry would print a date that means nothing.
  *
  * Returns `null` below one refusal, the same rule as
- * `formSubmissionsPausedNotice` and for the same reason: the counter document
+ * `visitorDoorPausedNotice` and for the same reason: the counter document
  * persists from its first trip forever, and "0 refused" on every later month
  * trains the owner to ignore the row that will one day be real.
  */

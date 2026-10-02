@@ -896,6 +896,51 @@ the organization's `emailSend` records (a campaign's sends, named, with the site
 each is sent as and its subject), which a person's timeline names its campaign
 mail by.
 
+## Visitor doors — `plugin-visitor-doors`
+
+A plugin that keeps a public door a visitor writes through — the forms
+plugin's `/api/forms/submit` — caps a flood with a monthly ceiling and drops
+what its honeypot catches, counting both per site in
+`hosts/{hostId}/counters/{counter}`, keyed by `utcMonthKey()`. The site's
+owner reads those counts on the Inbox, and staff on the organization's Sites
+card; neither surface names the plugin or loads it. The plugin declares the
+door in `plugins.config.json`, and the manifest generator compiles it:
+
+```json
+"visitorDoors": [
+  {
+    "door": "form",
+    "refusedCounter": "formSubmissionsRefused",
+    "caughtCounter": "formSubmissionsSpam",
+    "words": {
+      "pausedTitle": "Form submissions are paused",
+      "noun": { "one": "submission", "other": "submissions" },
+      "staffNoun": { "one": "form submission", "other": "form submissions" },
+      "cause": "This usually means a bot is filling in one of your forms — …",
+      "pausedChip": "forms paused",
+      "caught": { "one": "bot submission", "other": "bot submissions" },
+      "caughtBy": "the honeypot",
+      "caughtChip": { "one": "bot hit", "other": "bot hits" }
+    }
+  }
+]
+```
+
+| API | Semantics |
+| --- | --- |
+| `pluginVisitorDoors()` | Every declared door, with the plugin that keeps it. |
+| `visitorDoorPausedNotice(door, { refused, ceiling?, now? })` | The owner's `{ title, message, until }`, or `null` below one refusal. The date the ceiling lifts is rendered in UTC, the zone the month key rolls over in. |
+| `visitorDoorCaughtNotice(door, { caught })` | The month's catches as one sentence that reports protection working, or `null` below one. |
+| `visitorDoorStaffFlags(door, counts, now?)` | The staff Sites card's `{ refused, caught }` flags, each a terse label and the sentence behind it, or `null`. |
+
+The sentences are built by core from the declared nouns, because their rules
+are the platform's: nothing below one, a refusal is never billed and says so,
+and no date but the one the key rolls over on. The visitor's own sentence for
+a refused submission stays the door's (the forms plugin's
+`model/form-unavailable.ts`): it is shown to a stranger and must not say why.
+The generator refuses a door or a counter declared twice, a missing word and
+a noun without both its counts.
+
 ## Intake gates — `plugin-intake-gates` (`/server`)
 
 Whether a visitor's next write through a plugin's public door would be

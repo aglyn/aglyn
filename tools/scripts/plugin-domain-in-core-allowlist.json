@@ -199,14 +199,6 @@
       "lane": "marketing"
     },
     {
-      "path": "libs/aglyn/src/lib/app-utils/form-abuse-ceiling.ts",
-      "rules": [
-        "domain-name",
-        "domain-declares:forms"
-      ],
-      "lane": "forms"
-    },
-    {
       "path": "libs/aglyn/src/lib/app-utils/form-contract.ts",
       "rules": [
         "domain-name",

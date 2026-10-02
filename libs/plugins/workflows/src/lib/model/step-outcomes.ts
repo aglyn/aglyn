@@ -1,4 +1,3 @@
-import type { HostActionStepType } from './host-actions'
 /**
  * @license
  * Copyright 2026 Aglyn LLC
@@ -16,6 +15,7 @@ import type { HostActionStepType } from './host-actions'
  * limitations under the License.
  */
 
+import type { HostActionStepType } from './host-actions'
 
 /**
  * Past-tense phrases for a run summary (AGL-2171).

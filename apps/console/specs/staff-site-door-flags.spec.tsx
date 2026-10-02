@@ -16,38 +16,38 @@
  */
 
 import { render } from '@testing-library/react'
-import StaffHostFormCountersChips from '../components/staff-host-form-counters.component'
+import StaffSiteDoorFlags from '../components/staff-site-door-flags.component'
 
 /**
- * AGL-1681: the per-host form-counter chips on the staff org detail page's
- * Sites card.
+ * AGL-1681: the per-site door flags on the staff org detail page's Sites
+ * card, here for the form door the forms plugin declares (`visitorDoors`).
  *
- * The discipline under test is the same one `formSubmissionsPausedNotice`
+ * The discipline under test is the same one `visitorDoorPausedNotice`
  * enforces for the owner: below one refusal, render NOTHING — the counter
  * document exists from the first trip and never goes away, and a "0 refused"
  * chip on every healthy site is noise that trains staff to ignore the chip
  * that will one day be real. Above zero, the chip must carry the count, so a
  * support conversation starts with the number instead of a Firestore query.
  */
-describe('StaffHostFormCountersChips (AGL-1681)', () => {
+describe('StaffSiteDoorFlags (AGL-1681)', () => {
   it('renders nothing for a host with no refusals this month', () => {
     const { container } = render(
-      <StaffHostFormCountersChips
-        forms={{ month: '2026-08', refused: 0, ceiling: 500 }}
+      <StaffSiteDoorFlags
+        doors={{ form: { month: '2026-08', refused: 0, ceiling: 500, caught: 0 } }}
       />,
     )
     expect(container.firstChild).toBeNull()
   })
 
   it('renders nothing when the join is absent (picker rows, failed read)', () => {
-    const { container } = render(<StaffHostFormCountersChips forms={null} />)
+    const { container } = render(<StaffSiteDoorFlags doors={null} />)
     expect(container.firstChild).toBeNull()
   })
 
   it('flags a refusing host with the count', () => {
     const { getByText } = render(
-      <StaffHostFormCountersChips
-        forms={{ month: '2026-08', refused: 12, ceiling: 500 }}
+      <StaffSiteDoorFlags
+        doors={{ form: { month: '2026-08', refused: 12, ceiling: 500, caught: 0 } }}
       />,
     )
     expect(getByText('forms paused · 12 refused')).toBeTruthy()
@@ -58,8 +58,8 @@ describe('StaffHostFormCountersChips (AGL-1681)', () => {
     // job, and `aria-label` is how MUI's Tooltip title reaches the DOM
     // without a hover simulation.
     const { getByLabelText } = render(
-      <StaffHostFormCountersChips
-        forms={{ month: '2026-08', refused: 12, ceiling: 500 }}
+      <StaffSiteDoorFlags
+        doors={{ form: { month: '2026-08', refused: 12, ceiling: 500, caught: 0 } }}
       />,
     )
     expect(
@@ -69,8 +69,8 @@ describe('StaffHostFormCountersChips (AGL-1681)', () => {
 
   it('omits the ceiling clause when the counter never recorded one', () => {
     const { getByText, queryByLabelText } = render(
-      <StaffHostFormCountersChips
-        forms={{ month: '2026-08', refused: 1, ceiling: null }}
+      <StaffSiteDoorFlags
+        doors={{ form: { month: '2026-08', refused: 1, ceiling: null, caught: 0 } }}
       />,
     )
     expect(getByText('forms paused · 1 refused')).toBeTruthy()
@@ -79,17 +79,18 @@ describe('StaffHostFormCountersChips (AGL-1681)', () => {
 })
 
 /**
- * AGL-1831: the honeypot spam counter (`formSubmissionsSpam`, written by
- * `9db4f322a`) beside the refusal flag — the number the AGL-1664 assessment
- * set its App Check / CAPTCHA revisit trigger on. Same render-nothing rule
- * below one hit, and the copy says the honeypot is WORKING ("caught and
- * dropped … nothing was stored or billed"), not that something is wrong.
+ * AGL-1831: the honeypot catch counter (the form door's `caughtCounter`,
+ * written by `9db4f322a`) beside the refusal flag — the number the AGL-1664
+ * assessment set its App Check / CAPTCHA revisit trigger on. Same
+ * render-nothing rule below one hit, and the copy says the honeypot is
+ * WORKING ("caught and dropped … nothing was stored or billed"), not that
+ * something is wrong.
  */
-describe('StaffHostFormCountersChips spam counter (AGL-1831)', () => {
+describe('StaffSiteDoorFlags honeypot catches (AGL-1831)', () => {
   it('renders the month’s bot catches for a host with no refusals', () => {
     const { getByText, queryByText } = render(
-      <StaffHostFormCountersChips
-        forms={{ month: '2026-08', refused: 0, ceiling: null, spam: 7 }}
+      <StaffSiteDoorFlags
+        doors={{ form: { month: '2026-08', refused: 0, ceiling: null, caught: 7 } }}
       />,
     )
     expect(getByText('7 bot hits caught')).toBeTruthy()
@@ -98,8 +99,8 @@ describe('StaffHostFormCountersChips spam counter (AGL-1831)', () => {
 
   it('renders both chips when a host is refusing AND catching bots', () => {
     const { getByText } = render(
-      <StaffHostFormCountersChips
-        forms={{ month: '2026-08', refused: 12, ceiling: 500, spam: 3 }}
+      <StaffSiteDoorFlags
+        doors={{ form: { month: '2026-08', refused: 12, ceiling: 500, caught: 3 } }}
       />,
     )
     expect(getByText('forms paused · 12 refused')).toBeTruthy()
@@ -108,8 +109,8 @@ describe('StaffHostFormCountersChips spam counter (AGL-1831)', () => {
 
   it('says caught-and-dropped, stored-nothing, billed-nothing in the tooltip', () => {
     const { getByLabelText } = render(
-      <StaffHostFormCountersChips
-        forms={{ month: '2026-08', refused: 0, ceiling: null, spam: 2 }}
+      <StaffSiteDoorFlags
+        doors={{ form: { month: '2026-08', refused: 0, ceiling: null, caught: 2 } }}
       />,
     )
     expect(
@@ -119,8 +120,8 @@ describe('StaffHostFormCountersChips spam counter (AGL-1831)', () => {
 
   it('renders nothing below one hit — a reassuring zero is noise', () => {
     const { container } = render(
-      <StaffHostFormCountersChips
-        forms={{ month: '2026-08', refused: 0, ceiling: null, spam: 0 }}
+      <StaffSiteDoorFlags
+        doors={{ form: { month: '2026-08', refused: 0, ceiling: null, caught: 0 } }}
       />,
     )
     expect(container.firstChild).toBeNull()
@@ -128,8 +129,8 @@ describe('StaffHostFormCountersChips spam counter (AGL-1831)', () => {
 
   it('uses the singular for one catch', () => {
     const { getByText } = render(
-      <StaffHostFormCountersChips
-        forms={{ month: '2026-08', refused: 0, ceiling: null, spam: 1 }}
+      <StaffSiteDoorFlags
+        doors={{ form: { month: '2026-08', refused: 0, ceiling: null, caught: 1 } }}
       />,
     )
     expect(getByText('1 bot hit caught')).toBeTruthy()

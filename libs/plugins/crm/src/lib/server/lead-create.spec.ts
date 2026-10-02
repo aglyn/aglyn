@@ -173,7 +173,7 @@ jest.mock('@aglyn/aglyn/server', () => ({
   // The custom-field reader the route judges a lead's map with (AGL-3272).
   ...jest.requireActual('@aglyn/aglyn/app-utils/contact-custom-fields'),
   ...jest.requireActual('@aglyn/aglyn/app-utils/crm'),
-  ...jest.requireActual('@aglyn/aglyn/app-utils/form-abuse-ceiling'),
+  ...jest.requireActual('@aglyn/aglyn/app-utils/utc-month'),
   ...jest.requireActual('@aglyn/aglyn/app-utils/marketing-consent'),
   ...jest.requireActual('@aglyn/aglyn/app-utils/person-key'),
   ...jest.requireActual('@aglyn/aglyn/app-utils/scope-tokens'),
