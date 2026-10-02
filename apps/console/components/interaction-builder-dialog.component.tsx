@@ -148,17 +148,21 @@ const PLATFORM_STEP_TYPES: Array<{ value: string; label: string }> = [
  * Every step the picker offers: the platform's own, with each step a plugin
  * declares (`interactionSteps` in `plugins.config.json`) listed after the
  * message step, where the steps that act on a site's records have always
- * been. The builder names no plugin step.
+ * been. A step only an automation holds (`offered: false`) — an email, a wait,
+ * a CRM write — is the automation editor's, and is not offered here. The
+ * builder names no plugin step.
  */
 const STEP_TYPES: Array<{ value: string; label: string }> = (() => {
   const at =
     PLATFORM_STEP_TYPES.findIndex((entry) => entry.value === 'siteAlert') + 1
   return [
     ...PLATFORM_STEP_TYPES.slice(0, at),
-    ...declaredInteractionSteps().map((declaration) => ({
-      value: declaration.type,
-      label: declaration.label,
-    })),
+    ...declaredInteractionSteps()
+      .filter((declaration) => declaration.offered !== false)
+      .map((declaration) => ({
+        value: declaration.type,
+        label: declaration.label,
+      })),
     ...PLATFORM_STEP_TYPES.slice(at),
   ]
 })()

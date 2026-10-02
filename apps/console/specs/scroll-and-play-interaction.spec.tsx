@@ -242,3 +242,23 @@ describe('Play a video (AGL-2867)', () => {
     expect(screen.queryByText(/is not a Video/)).toBeNull()
   })
 })
+
+describe('the Action picker offers what a page runs (AGL-3080)', () => {
+  it('lists each step a plugin offers, and none only an automation holds', () => {
+    renderDialog([{ type: 'siteAlert', message: 'hi' }])
+    const offered = options('Action').map((option) => option.textContent ?? '')
+    const declared = Aglyn.declaredInteractionSteps()
+    const automationOnly = declared.filter((step) => step.offered === false)
+    // THE CONTROL: the catalog does declare steps of both kinds.
+    expect(automationOnly.length).toBeGreaterThan(0)
+    expect(declared.length).toBeGreaterThan(automationOnly.length)
+    for (const step of declared) {
+      // An option may carry the plan that unlocks it after its label.
+      const listed = offered.some((text) => text.startsWith(step.label))
+      expect({ type: step.type, offered: listed }).toEqual({
+        type: step.type,
+        offered: step.offered !== false,
+      })
+    }
+  })
+})
