@@ -20,8 +20,10 @@ settings. Everything you build lives under a site, and you can own several.
    [custom domain](../building-sites/custom-domains/overview.md) later. Every new site
    starts with a published **Home** page at the site root — your site's name over a
    short welcome line — so the address shows a real page from the first visit. Open
-   it from **Pages** to make it your own. Or replace it: the first page you publish
-   at the site root — one you build, one the AI drafts for you, or a
+   it from **Pages** to make it your own: once you publish your changes it is your
+   home page like any other, and a starter applied later adds its pages beside it
+   instead of replacing it. Or replace it: the first page you publish at the site
+   root — one you build, one the AI drafts for you, or a
    [starter template](../building-sites/site-templates/overview.md)'s home page —
    takes over `/`, and the placeholder Home page is kept as an unpublished draft.
 4. You land on the new site's **Setup** page (titled *Host Setup*), with tabs for

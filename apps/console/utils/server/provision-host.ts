@@ -260,7 +260,8 @@ export async function claimHostForOrg(
       // Which screen is the platform's placeholder rather than the owner's
       // page. A starter applied later may take `/` from it, and the
       // `first_publish` dimension does not count it — never any other screen.
-      // Cleared the moment a starter takes the root.
+      // Cleared the moment a starter takes the root, or the owner publishes
+      // this page themselves (AGL-3478).
       defaultHomeScreenId: home.screenId,
       /*
        * A new site starts with User Accounts ON. The catalog still marks

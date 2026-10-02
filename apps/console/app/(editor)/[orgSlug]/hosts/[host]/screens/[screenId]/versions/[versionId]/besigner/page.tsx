@@ -178,6 +178,7 @@ import {
 import { useOrgSlug } from '../../../../../../../../../../hooks/use-org-scope'
 import useCurrentOrg from '../../../../../../../../../../hooks/use-current-org'
 import {
+  publishScreenRoute,
   syncScreenRouteEntries,
   unpublishScreenRoute,
 } from '../../../../../../../../../../constants/screen-publishing'
@@ -1287,13 +1288,44 @@ function BesignerPage(props) {
       if (remoteChanged) return
     }
     const livePointer = screenResult?.data?.versionId
-    if (livePointer !== versionId) {
+    /*
+     * THE PLACEHOLDER HOME PAGE BECOMES THEIR HOME PAGE (AGL-3478).
+     *
+     * A new site is born with a Home page the platform routed at `/`, and
+     * the host names it in `defaultHomeScreenId` so a starter may take the
+     * root back from it. Editing it and pressing this button is the obvious
+     * way to make a site's home page, and from here on it is the owner's: a
+     * starter must not unpublish it, the guided start must stop reading the
+     * site as blank, and `first_publish` counts this publish. So the
+     * placeholder publishes through the route seam, which moves the pointer,
+     * restamps the route and clears the marker in one write.
+     *
+     * Reached only past the "Already published" return above, so a click
+     * that changes nothing changes nothing here either. An author cannot
+     * clear the marker (the rules hold it to the publishing roles), and is
+     * left on the pointer write alone.
+     */
+    const publishesPlaceholder =
+      canPublish &&
+      !isEmailScreen &&
+      Boolean(publishedPath) &&
+      screenId === defaultHomeScreenId
+    if (livePointer !== versionId || publishesPlaceholder) {
       // The pointer write is the publish. Unhandled, a rejection here skips
       // the success toast without ever raising one of its own, so the author
       // is told nothing at all — the same silence as a green toast over a
       // failed publish, minus even the wrong message.
       try {
-        await updateScreenDoc({ versionId } as any)
+        if (publishesPlaceholder) {
+          await publishScreenRoute(
+            firestore,
+            { hostId, screenId, versionId, user },
+            screenResult?.data?.slug ?? publishedPath,
+            publishedPath,
+          )
+        } else {
+          await updateScreenDoc({ versionId } as any)
+        }
       } catch (error) {
         return enqueueSnackbar(
           `Saved, but publishing failed: ${
@@ -1354,9 +1386,14 @@ function BesignerPage(props) {
     livePublished,
     remoteChanged,
     screenResult?.data?.versionId,
+    screenResult?.data?.slug,
     versionId,
     updateScreenDoc,
     draft.sharedDraftUnopened,
+    canPublish,
+    publishedPath,
+    defaultHomeScreenId,
+    firestore,
     user,
     hostId,
     screenId,
@@ -1390,7 +1427,7 @@ function BesignerPage(props) {
         ? // `publishedAt` rides the same write the routing entry does
           // (AGL-2571). It is what the screens list and the screen details
           // page call "published", and only `publishScreenRoute` — a
-          // different publish path, which this editor does not use — was
+          // different publish path, which this handler does not use — was
           // stamping it, so the two surfaces disagreed by construction.
           updateScreenDoc({
             slug: normalizedSlug,
@@ -1402,6 +1439,10 @@ function BesignerPage(props) {
                 hostId,
                 buildRouteEntries(candidateById),
                 { user },
+                // This screen is what the button publishes — so a placeholder
+                // home page published here is the owner's from now on
+                // (AGL-3478). Its subtree is only re-addressed.
+                { published: screenId },
               ),
             )
             .then(() => {
@@ -1528,6 +1569,9 @@ function BesignerPage(props) {
         hostId,
         buildRouteEntries(candidateById),
         { user },
+        // See `handlePublish`: a placeholder home page published here is the
+        // owner's from now on (AGL-3478).
+        { published: screenId },
       )
       // The one-click publish (AGL-452) reaches the routing map through
       // `syncScreenRouteEntries` rather than `publishScreenRoute`, so it does

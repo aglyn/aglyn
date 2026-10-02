@@ -3972,6 +3972,34 @@ describe('hosts', () => {
       )
     })
 
+    /**
+     * The owner publishing the placeholder itself makes it their home page
+     * (AGL-3478): `publishScreenRoute` re-registers its route unchanged and
+     * clears the marker in the same update. The marker is a publish key, so
+     * a role that cannot publish cannot clear it.
+     */
+    it('allows a publisher to adopt the placeholder — route kept, marker cleared', async () => {
+      const db = authed(EDITOR)
+      const batch = writeBatch(db)
+      batch.update(doc(db, 'hosts', HOST), {
+        'screens.home': '/',
+        defaultHomeScreenId: deleteField(),
+      })
+      batch.set(
+        doc(db, 'hosts', HOST, 'screens', 'home'),
+        { slug: '/', publishedAt: new Date(), versionId: 'v-mine' },
+        { merge: true },
+      )
+      await mustAllow('publishScreenRoute on the placeholder', batch.commit())
+    })
+
+    it('refuses an author clearing the marker', async () => {
+      await mustDeny(
+        'an author adopting the placeholder',
+        updateDoc(hostRef(AUTHOR), { defaultHomeScreenId: deleteField() }),
+      )
+    })
+
     it('still allows a write that does not touch the map', async () => {
       await mustAllow(
         'a settings write',

@@ -84,10 +84,15 @@ jest.mock('firebase/firestore', () => ({
   deleteField: () => '__deleted__',
 }))
 
+const mockTrackEvent = jest.fn()
 jest.mock('@aglyn/aglyn/app-utils/analytics-events', () => ({
   __esModule: true,
-  isFirstPublishedRoute: () => false,
-  trackEvent: () => undefined,
+  // The real predicate: `first_publish` over the placeholder home page is part
+  // of what AGL-3478 changes, and it is a pure function of the map.
+  isFirstPublishedRoute: jest.requireActual(
+    '@aglyn/aglyn/app-utils/analytics-events',
+  ).isFirstPublishedRoute,
+  trackEvent: (...args: unknown[]) => mockTrackEvent(...args),
 }))
 
 import {
@@ -275,12 +280,13 @@ describe('a starter taking the root from the placeholder home page (AGL-3408)', 
     )
   })
 
-  it('publishing anywhere else, or republishing the placeholder itself, leaves it alone', async () => {
+  it('publishing anywhere else leaves it alone', async () => {
     mockGetDoc.mockResolvedValue(newSite({ ph: '/' }, 'ph') as never)
     await publishScreenRoute(firestore, { hostId: 'host', screenId: 'real', user }, 'about')
-    await publishScreenRoute(firestore, { hostId: 'host', screenId: 'ph', user }, '/')
+    await syncScreenRouteEntries(firestore, 'host', { real: 'company' }, { user })
     for (const [, updates] of mockBatchUpdate.mock.calls) {
       expect(Object.keys(updates)).not.toContain('defaultHomeScreenId')
+      expect(Object.keys(updates)).not.toContain('screens.ph')
     }
   })
 
@@ -290,6 +296,146 @@ describe('a starter taking the root from the placeholder home page (AGL-3408)', 
       releaseDefaultHomeRoot(firestore, { hostId: 'host', user }),
     ).resolves.toBe(false)
     expect(mockCommit).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * AGL-3478 — THE OWNER PUBLISHING THE PLACEHOLDER MAKES IT THEIR HOME PAGE.
+ *
+ * AGL-3408 handed `/` over when ANOTHER page was published there. The obvious
+ * move — editing the placeholder itself and publishing it — left the marker
+ * behind, so the next starter would unpublish the page the owner made, the
+ * guided start still read the site as blank, and `first_publish` never
+ * counted the publish.
+ */
+describe('publishing the placeholder home page itself (AGL-3478)', () => {
+  const newSite = (routes: Record<string, string>, defaultHome?: string) => ({
+    get: (field: string) =>
+      field === 'screens'
+        ? routes
+        : field === 'defaultHomeScreenId'
+          ? defaultHome
+          : undefined,
+  })
+
+  /*
+   * A host document the seam's writes actually change, so a publish and the
+   * starter that follows it read one history rather than two fixtures.
+   */
+  let host: { screens: Record<string, string>; defaultHomeScreenId?: string }
+  const liveHost = () => {
+    mockGetDoc.mockImplementation(async () =>
+      newSite({ ...host.screens }, host.defaultHomeScreenId),
+    )
+    mockBatchUpdate.mockImplementation(
+      (ref: { path: string }, updates: Record<string, unknown>) => {
+        if (ref.path !== 'hosts/host') return
+        for (const [key, value] of Object.entries(updates)) {
+          if (key === 'defaultHomeScreenId') {
+            if (value === '__deleted__') delete host.defaultHomeScreenId
+            continue
+          }
+          const id = key.replace(/^screens\./, '')
+          if (value === '__deleted__') delete host.screens[id]
+          else host.screens[id] = value as string
+        }
+      },
+    )
+  }
+
+  beforeEach(() => {
+    host = { screens: { ph: '/' }, defaultHomeScreenId: 'ph' }
+  })
+  afterEach(() => {
+    mockGetDoc.mockReset()
+    mockBatchUpdate.mockReset()
+  })
+
+  it('clears the marker in the same host update and keeps the route where it is', async () => {
+    mockGetDoc.mockResolvedValue(newSite({ ph: '/' }, 'ph') as never)
+    await publishScreenRoute(
+      firestore,
+      { hostId: 'host', screenId: 'ph', versionId: 'v-mine', user },
+      '/',
+    )
+    expect(mockBatchUpdate).toHaveBeenCalledTimes(1)
+    expect(mockBatchUpdate).toHaveBeenCalledWith(
+      { path: 'hosts/host' },
+      { 'screens.ph': '/', defaultHomeScreenId: '__deleted__' },
+    )
+    // The pointer rides the same batch — the owner's version goes live in the
+    // write that makes the page theirs, never one without the other.
+    expect(mockBatchSet).toHaveBeenCalledWith(
+      { path: 'hosts/host/screens/ph' },
+      expect.objectContaining({ slug: '/', versionId: 'v-mine' }),
+      { merge: true },
+    )
+    expect(mockBatchSet).not.toHaveBeenCalledWith(
+      expect.anything(),
+      { publishedAt: '__deleted__' },
+      expect.anything(),
+    )
+    expect(mockCommit).toHaveBeenCalledTimes(1)
+    // No address changed, so there is nothing to announce or to outbox.
+    expect(mockRevalidateLivePages).not.toHaveBeenCalled()
+  })
+
+  it('counts it as the site’s first publish', async () => {
+    mockGetDoc.mockResolvedValue(newSite({ ph: '/' }, 'ph') as never)
+    await publishScreenRoute(firestore, { hostId: 'host', screenId: 'ph', user }, '/')
+    expect(mockTrackEvent).toHaveBeenCalledWith('site_published', {
+      first_publish: true,
+    })
+  })
+
+  it('clears it from a Publish that syncs the placeholder’s routes', async () => {
+    mockGetDoc.mockResolvedValue(newSite({}, 'ph') as never)
+    await syncScreenRouteEntries(
+      firestore,
+      'host',
+      { ph: '/' },
+      { user },
+      { published: 'ph' },
+    )
+    expect(mockBatchUpdate).toHaveBeenCalledWith(
+      { path: 'hosts/host' },
+      { 'screens.ph': '/', defaultHomeScreenId: '__deleted__' },
+    )
+  })
+
+  it('does NOT clear it for a move or a rename that only carries the placeholder along', async () => {
+    mockGetDoc.mockResolvedValue(newSite({ ph: '/' }, 'ph') as never)
+    await syncScreenRouteEntries(firestore, 'host', { ph: 'welcome' }, { user })
+    await syncScreenRouteEntries(
+      firestore,
+      'host',
+      { parent: 'company', ph: 'company/home' },
+      { user },
+      { published: 'parent' },
+    )
+    for (const [, updates] of mockBatchUpdate.mock.calls) {
+      expect(Object.keys(updates)).not.toContain('defaultHomeScreenId')
+    }
+  })
+
+  it('a starter applied after the owner published it no longer unpublishes it', async () => {
+    liveHost()
+    await publishScreenRoute(firestore, { hostId: 'host', screenId: 'ph', user }, '/')
+    mockCommit.mockClear()
+    await expect(
+      releaseDefaultHomeRoot(firestore, { hostId: 'host', user }),
+    ).resolves.toBe(false)
+    expect(mockCommit).not.toHaveBeenCalled()
+    expect(host).toEqual({ screens: { ph: '/' } })
+  })
+
+  it('a site whose placeholder was never touched still hands `/` to the starter', async () => {
+    liveHost()
+    await publishScreenRoute(firestore, { hostId: 'host', screenId: 'real', user }, 'about')
+    await expect(
+      releaseDefaultHomeRoot(firestore, { hostId: 'host', user }),
+    ).resolves.toBe(true)
+    expect(host).toEqual({ screens: { real: 'about' } })
   })
 })
 
@@ -411,6 +557,24 @@ describe('every editor publish surface reaches the seam', () => {
     expect(source).toMatch(
       /await unpublishScreenRoute\(firestore, \{ hostId, screenId, user \}\)/,
     )
+  })
+
+  /*
+   * The placeholder home page stops being one when its owner publishes it
+   * (AGL-3478), and the seam can only clear the marker on a write it sees.
+   * A version publish of an already-routed page never reaches the seam on
+   * its own, so the two that can publish the placeholder are pinned here.
+   */
+  it('a version publish of the placeholder goes through the seam', () => {
+    expect(readRepo(VIEW)).toMatch(
+      /publishScreenRoute\(\s*firestore,\s*\{ hostId, screenId, versionId: id, user \},/,
+    )
+    const besigner = readRepo(BESIGNER)
+    expect(besigner).toMatch(
+      /publishScreenRoute\(\s*firestore,\s*\{ hostId, screenId, versionId, user \},/,
+    )
+    // Both besigner Publish buttons name the screen they put on the site.
+    expect(besigner.match(/\{ published: screenId \}/g)).toHaveLength(2)
   })
 
   /*
