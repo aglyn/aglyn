@@ -488,26 +488,26 @@ describe('the cost model here is the cost model the margin floor uses', () => {
     }
   })
 
-  it('reproduces the metered part of Agency’s pinned $1,016.99 at full utilization', () => {
-    // `tier-margin-floor.spec.ts` pins Agency at $1,016.99 a month with every
-    // band at 100%. $824.73 of that is the eight metered axes this module
-    // prices; the $192.26 between them is what the rollup has no meter for
+  it('reproduces the metered part of Agency’s pinned $1,017.45 at full utilization', () => {
+    // `tier-margin-floor.spec.ts` pins Agency at $1,017.45 a month with every
+    // band at 100%. $828.97 of that is the eight metered axes this module
+    // prices; the $188.48 between them is what the rollup has no meter for
     // here — the assist band ($58), the two CRM decision terms, a seat a
-    // month per collaborator and the one-to-one email cap ($42), and the CDN
-    // requests the included bandwidth makes past the hosting plan's
-    // allowance at the dearest region ($92.27). Reaching the metered part
+    // month per collaborator and the one-to-one email cap ($42), and the
+    // requests behind the included page views past the hosting plan's
+    // allowance, at the dearest region ($88.48). Reaching the metered part
     // through this module's band table and `orgMonthlyCogsUsd` is what says
     // the two files agree about the most expensive self-serve tier — the one
     // whose uncapped band once made it read as the cheapest.
     //
     // The bandwidth axis is what moves this figure, and it moves through the
     // COST OF A GIGABYTE rather than through `perPageView` alone: Agency's
-    // 485 GB band converts to 502,132 included page views at
-    // `ESTIMATED_PAGE_TRANSFER_BYTES`, and each weighs $0.00035471473 with
-    // its transfer at the CDN's dearest region, which is $0.36724 a gigabyte
-    // and $178.11 of the total.
+    // 395 GB band converts to 408,953 included page views at
+    // `ESTIMATED_PAGE_TRANSFER_BYTES`, and each weighs $0.00039902751 with
+    // its transfer at Vercel's dearest region and its reads at nam5, which is
+    // $0.41312 a gigabyte and $163.18 of the total.
     const cogs = orgMonthlyCogsUsd(rollupAt('agency', 1) as never, PLAN_ENTITLEMENTS.agency.hostLimit)
-    expect(cogs.cogsUsd).toBeCloseTo(824.73, 2)
+    expect(cogs.cogsUsd).toBeCloseTo(828.97, 2)
     expect(cogs.basis).toBe('measured')
   })
 

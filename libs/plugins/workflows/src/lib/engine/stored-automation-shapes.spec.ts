@@ -220,14 +220,6 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     ref.set(activity),
 }))
 
-// The dataset lookup is the runtime's, and not what is under test: it answers
-// the dataset the step names by id, from the store.
-jest.mock('@aglyn/tenant-runtime/resolve-dataset', () => ({
-  __esModule: true,
-  resolveDatasetDoc: async (datasetsRef: any, step: { datasetId?: string }) =>
-    datasetsRef.doc(String(step.datasetId ?? '')).get(),
-}))
-
 jest.mock('@aglyn/tenant-runtime/assign-contact-owner', () => ({
   __esModule: true,
   OWNER_ASSIGNMENT_REFUSALS: { failed: 'the owner could not be assigned' },

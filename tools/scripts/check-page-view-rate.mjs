@@ -66,7 +66,7 @@ const COGS_PATH = join(
 const args = process.argv.slice(2)
 /*
  * Eight decimals, not six. The weight rate is pinned at eleven decimals —
- * $0.00035471473 a view — and six places round it to $0.000355, a figure that
+ * $0.00039902751 a view — and six places round it to $0.000399, a figure that
  * appears in no file and would send a reader looking for it.
  */
 const usd = (n) => `$${n.toFixed(8)}`
@@ -257,8 +257,8 @@ function main() {
         `the basis, accepted ${calibration.acceptedWeightRatio}, would imply ` +
         `${usd(verdict.rateForMeasured)}); paired with ` +
         `${transferBytes} bytes per view, so one GB of included bandwidth ` +
-        `costs $${verdict.costPerGbUsd.toFixed(5)} in weight, before its CDN ` +
-        `requests; graph within ` +
+        `costs $${verdict.costPerGbUsd.toFixed(5)} in weight, before the ` +
+        `requests behind each view; graph within ` +
         `${pct(Math.abs(verdict.drift))} of the review point ` +
         `(tolerance ±${pct(calibration.sourceGraphTolerance)})`,
     )

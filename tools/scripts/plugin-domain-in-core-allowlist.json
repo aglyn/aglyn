@@ -571,15 +571,6 @@
       "lane": "crm"
     },
     {
-      "path": "libs/tenant/data/admin/src/lib/server/dataset-live-pages.ts",
-      "rules": [
-        "domain-name",
-        "plugin-collection:data",
-        "domain-declares:data"
-      ],
-      "lane": "data"
-    },
-    {
       "path": "libs/tenant/data/admin/src/lib/server/dynamic-list-materialize.ts",
       "rules": [
         "domain-name",
@@ -679,13 +670,6 @@
         "plugin-collection:crm"
       ],
       "lane": "crm"
-    },
-    {
-      "path": "libs/tenant/runtime/src/lib/resolve-dataset.ts",
-      "rules": [
-        "domain-declares:data"
-      ],
-      "lane": "data"
     }
   ]
 }

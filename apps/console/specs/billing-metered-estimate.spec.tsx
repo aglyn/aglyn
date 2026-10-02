@@ -396,23 +396,23 @@ describe('each metered dimension names its overage rate', () => {
   })
 
   it('quotes page views and form submissions PER 1,000', async () => {
-    // Per unit these are $0.0007 and $0.00007, which read as zero at any
+    // Per unit these are $0.0008 and $0.00008, which read as zero at any
     // precision a customer would trust — the reason the unit is 1,000 here
     // and a GB-month for storage.
     //
     // The page-view figure is also where `rateText` earns its trailing-zero
     // strip, and its floor at the cent: a billed view's cost x 1.3 is
-    // $0.700000002 per 1,000, which four decimals round to $0.7000 and the
-    // strip renders as the $0.70 the published page states — never $0.7.
+    // $0.800000006 per 1,000, which four decimals round to $0.8000 and the
+    // strip renders as the $0.80 the published page states — never $0.8.
     mockUsageConfig({ orgLibraryBilledFrom: MONTH })
     seed({ hostMonthViews: 10, hostFormSubmissions: 3 })
     render(<BillingMeteredEstimateComponent org={ORG} hosts={HOSTS} />)
     await waitFor(() => {
-      expect(screen.getByText(/\$0\.70 per 1,000/)).toBeTruthy()
+      expect(screen.getByText(/\$0\.80 per 1,000/)).toBeTruthy()
     })
-    expect(screen.queryByText(/\$0\.7 per 1,000/)).toBeNull()
-    expect(screen.queryByText(/\$0\.36 per 1,000/)).toBeNull()
-    expect(screen.getByText(/\$0\.07 per 1,000/)).toBeTruthy()
+    expect(screen.queryByText(/\$0\.8 per 1,000/)).toBeNull()
+    expect(screen.queryByText(/\$0\.70 per 1,000/)).toBeNull()
+    expect(screen.getByText(/\$0\.08 per 1,000/)).toBeTruthy()
     // The forms plugin's band is drawn under the label it declares, and named
     // in the caption among the meters, in the order the card bills them.
     expect(screen.getByText(/^Form submissions: 3 of [\d,]+$/)).toBeTruthy()

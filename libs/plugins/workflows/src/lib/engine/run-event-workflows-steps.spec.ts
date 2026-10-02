@@ -227,14 +227,6 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     ref.set(activity),
 }))
 
-// The dataset lookup is the runtime's, and not what is under test: it answers
-// the dataset the step names by id, from the store.
-jest.mock('@aglyn/tenant-runtime/resolve-dataset', () => ({
-  __esModule: true,
-  resolveDatasetDoc: async (datasetsRef: any, step: { datasetId?: string }) =>
-    datasetsRef.doc(String(step.datasetId ?? '')).get(),
-}))
-
 jest.mock('@aglyn/tenant-runtime/assign-contact-owner', () => ({
   __esModule: true,
   OWNER_ASSIGNMENT_REFUSALS: {},
@@ -269,6 +261,7 @@ jest.mock('@aglyn/tenant-data-admin/server/outbound-send-review', () => ({
 
 import { activitySearchTokens } from '@aglyn/aglyn/app-utils/activity-search'
 import { contactFacetPath } from '@aglyn/aglyn/app-utils/contacts'
+import { standInDatasetSteps } from '../testing/stand-in-dataset-steps'
 import { resumeFlowEnrollment, runEventActions } from './run-event-actions'
 import { runEventWorkflows } from './run-event-workflows'
 import { validateWorkflowSteps } from './workflow-steps'
@@ -303,6 +296,18 @@ const SUBMISSION = {
   name: 'Ada',
   budget: 40,
 }
+
+// The dataset step is the data plugin's, run through the server-step seam;
+// this plugin's specs stand it in over the store (AGL-3080).
+let unregisterDatasetSteps: () => void = () => undefined
+beforeAll(() => {
+  unregisterDatasetSteps = standInDatasetSteps({
+    dataset: (_request, id) => docRef(`orgs/${ORG_ID}/datasets/${id}`).get(),
+    append: (_request, id, record) =>
+      collectionRef(`orgs/${ORG_ID}/datasets/${id}/records`).add(record),
+  })
+})
+afterAll(() => unregisterDatasetSteps())
 
 beforeEach(() => {
   store = {}

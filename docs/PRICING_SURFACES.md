@@ -168,24 +168,35 @@ and the calculator's site variables followed.
 transcription taken off the HTML finds the desktop cells only. Edit by node in
 the besigner, and count the nodes a row lives in before calling it done.
 
-### Owed before the next promotion: the dearest-region rates and bands
+Later the same day it was republished again, ahead of billing, to version
+`4goVJMQCh9`: page views $0.70 and form submissions $0.07 per 1,000, the
+bandwidth row 20 · 35 · 55 · 90 · 105 · 485 GB in the desktop cells and the six
+mobile panels, and the Scale strip's "90 GB bandwidth"; `/alternatives/webflow`
+went to version `-jEj6Vk0Eq` and the calculator's variables followed.
 
-The same day every Vercel-billed cost moved to Vercel's dearest region
-(AGL-3444): page views $0.36 → $0.70 and form submissions $0.065 → $0.07 per
-1,000, and the bands 35 · 60 · 90 · 145 · 175 · 790 → 20 · 35 · 55 · 90 · 105 ·
-485 GB. Per the rule above they are republished BEFORE the promotion that
-bills them:
+### Owed before the next promotion: Vercel's decimal GB, nam5, and the API as a function
+
+The same day the cost model took three facts on board (AGL-3444): Vercel bills
+transfer by the decimal GB, production's Firestore is `nam5`, and a page
+view's analytics beacon and every `/v1` request are functions. Page views
+$0.70 → $0.80 and form submissions $0.07 → $0.08 per 1,000; the bandwidth
+bands 20 · 35 · 55 · 90 · 105 · 485 → 20 · 30 · 45 · 70 · 80 · 395 GB; the API
+bands 100k · 300k · 1M · 5M → 1.5k · 5k · 17k · 85k a month; and the API
+overage on Advanced and Agency $0.20 and $0.15 → $0.25 per 1,000. Per the rule
+above they are republished BEFORE the promotion that bills them:
 
 - `/pricing`: the page-view cell (`aQCceq6U4W`) and the form-submission cell
-  (`_4aeO1e1lf`), the six desktop bandwidth cells and the six mobile panels
-  above, and the Scale strip in both nodes.
+  (`_4aeO1e1lf`); the six desktop bandwidth cells and the six mobile panels;
+  the Scale strip in both nodes ("90 GB bandwidth", "300k API requests/mo");
+  the Advanced and Agency strips' API figures; the "API access" row; and the
+  Advanced and Agency cells of "API requests, per 1,000 over limit".
 - `/alternatives/webflow`: the sentence quoting the three metered rates.
 - The pricing calculator (`/resources/pricing-calculator`) and the simple cost
   sheet (`/resources/multi-site-cost-sheet`) read Aglyn's figures from SITE
   VARIABLES rather than from the page body: `plan_rates.page_views_per_1k`
-  and `.forms_per_1k`, and, per paid plan, `plan_<id>.bandwidth_gb`, `.views`
-  and `.views_ceiling`. No parity spec reads them, so a rate or band change
-  owes them an edit too.
+  and `.forms_per_1k`, and, per paid plan, `plan_<id>.bandwidth_gb`, `.views`,
+  `.views_ceiling`, `.api` and `.api_rate`. No parity spec reads them, so a
+  rate or band change owes them an edit too.
 - The four Figma frames, declared stale in `build-pricing-tables.mts` until
   they are redrawn.
 
