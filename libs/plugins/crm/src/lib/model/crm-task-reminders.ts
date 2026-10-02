@@ -37,7 +37,7 @@
  * has none.
  */
 
-import type { CrmTask } from './crm'
+import type { CrmTask } from '@aglyn/aglyn/app-utils/crm'
 
 /**
  * The most due reminders one org's sweep reads per run.

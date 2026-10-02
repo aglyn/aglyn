@@ -71,7 +71,6 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     createCrmEmailActivity: activity.createCrmEmailActivity,
     recordCrmEmailDelivery: activity.recordCrmEmailDelivery,
     countCrmActivitiesForRecord: jest.fn(async () => mockActivityCount),
-    recomputeCrmNextTaskAt: (...args: unknown[]) => mockRecompute(...args),
     firebaseAdmin: { app: () => ({ firestore: () => mockFirestore }) },
     // The org's address index, narrowed to the site, over the same store.
     findContactByEmail: async (
@@ -95,6 +94,11 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     },
   }
 })
+// The CRM's own `nextTaskAtMs` writer, doubled at its module.
+jest.mock('./crm-next-activity', () => ({
+  __esModule: true,
+  recomputeCrmNextTaskAt: (...args: unknown[]) => mockRecompute(...args),
+}))
 
 import {
   pluginRecordTimelineWriter,

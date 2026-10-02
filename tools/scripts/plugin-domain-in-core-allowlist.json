@@ -160,23 +160,6 @@
       "lane": "crm"
     },
     {
-      "path": "libs/aglyn/src/lib/app-utils/crm-next-activity.ts",
-      "rules": [
-        "domain-name",
-        "domain-declares:crm"
-      ],
-      "lane": "crm"
-    },
-    {
-      "path": "libs/aglyn/src/lib/app-utils/crm-task-reminders.ts",
-      "rules": [
-        "domain-name",
-        "domain-exports:crm",
-        "domain-declares:crm"
-      ],
-      "lane": "crm"
-    },
-    {
       "path": "libs/aglyn/src/lib/app-utils/crm.ts",
       "rules": [
         "domain-name",
@@ -377,15 +360,6 @@
     },
     {
       "path": "libs/tenant/data/admin/src/lib/server/crm-email-activity.ts",
-      "rules": [
-        "domain-name",
-        "domain-exports:crm",
-        "domain-declares:crm"
-      ],
-      "lane": "crm"
-    },
-    {
-      "path": "libs/tenant/data/admin/src/lib/server/crm-next-activity.ts",
       "rules": [
         "domain-name",
         "domain-exports:crm",

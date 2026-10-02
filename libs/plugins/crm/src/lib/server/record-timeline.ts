@@ -33,7 +33,6 @@ import {
   crmScopeTokens,
   crmTaskLabelsForNew,
   crmTaskListFields,
-  crmTaskReminderAfterEdit,
   isCrmActivityKind,
   isCrmTaskKind,
   readContactFacet,
@@ -50,7 +49,6 @@ import {
   findContactByEmail,
   firebaseAdmin,
   readLeadForHost,
-  recomputeCrmNextTaskAt,
   recordCrmEmailDelivery,
 } from '@aglyn/tenant-data-admin'
 import { createHash } from 'crypto'
@@ -59,6 +57,8 @@ import { BUNDLE_ID } from '../constants/bundle-common'
 import { buildCrmCapturedEmailActivity, crmCapturedEmailKey } from '../model/crm-inbound'
 import { readCrmTaskPicklists } from './read-picklist'
 import { CRM_SUITE_FEATURE } from './suite-gate'
+import { crmTaskReminderAfterEdit } from '../model/crm-task-reminders'
+import { recomputeCrmNextTaskAt } from './crm-next-activity'
 
 /**
  * THE CRM'S WRITER ON THE CORE'S RECORD-TIMELINE SEAM (AGL-2981).

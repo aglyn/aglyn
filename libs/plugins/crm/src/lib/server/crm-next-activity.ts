@@ -49,7 +49,7 @@ import {
   nextActivityLinksOfTask,
   nextTaskAtMsOf,
   readNextTaskAtMs,
-} from '@aglyn/aglyn/app-utils/crm-next-activity'
+} from '../model/crm-next-activity'
 
 /** The collection each link field's record lives in, under `orgs/{orgId}/`. */
 export const CRM_NEXT_ACTIVITY_COLLECTIONS: Readonly<Record<CrmNextActivityLinkField, string>> = {

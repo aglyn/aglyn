@@ -15,11 +15,9 @@
  * limitations under the License.
  */
 
-import type { CrmNextActivityLink, PluginApiHandler } from '@aglyn/aglyn/server'
+import type { PluginApiHandler } from '@aglyn/aglyn/server'
 import {
   firebaseAdmin,
-  recomputeCrmNextTaskAt,
-  sweepCrmNextTaskAt,
 } from '@aglyn/tenant-data-admin'
 import {
   CRM_NEXT_ACTIVITY_LINKS_MAX,
@@ -27,6 +25,8 @@ import {
 } from '../model/next-activity'
 import { readCrmRouteScope } from './org-caller'
 import { authorizeCrmWriter } from './task-routes'
+import { type CrmNextActivityLink } from '../model/crm-next-activity'
+import { recomputeCrmNextTaskAt, sweepCrmNextTaskAt } from './crm-next-activity'
 
 /**
  * `POST crm/next-activity` — recompute `nextTaskAtMs` (AGL-2661).

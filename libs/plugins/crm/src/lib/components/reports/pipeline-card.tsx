@@ -17,6 +17,7 @@
 'use client'
 
 import * as Aglyn from '@aglyn/aglyn'
+import { stuckDeals } from '../../model/crm-next-activity'
 import { money } from '@aglyn/shared-ui-jsx/components/measured-figures.component'
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
 import { Section } from '@aglyn/shared-ui-jsx/components/measured-figures.component'
@@ -188,7 +189,7 @@ export function PipelineCard(props: PipelineCardProps) {
     }
   }, [dealWindow, pipelineWindow])
   // Open deals with nothing scheduled (AGL-2661), off the same window.
-  const stuck = useMemo(() => Aglyn.stuckDeals(dealWindow.rows), [dealWindow.rows])
+  const stuck = useMemo(() => stuckDeals(dealWindow.rows), [dealWindow.rows])
 
   const currency = summary.currency.currency
   const dealsRead = dealsStatus === 'success'
