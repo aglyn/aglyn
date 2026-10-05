@@ -1501,10 +1501,11 @@ export async function serveMediaCdn(
         // at the copy's full size — the most one sitting sends, whatever range
         // a player opens with.
         let evaluation: Promise<void> | null = null
+        let recorded: Promise<unknown> | null = null
         if (req.method === 'GET') {
           const day = new Date().toISOString().slice(0, 10)
           const bandwidthBytes = delivery.sizeBytes
-          void firestore
+          recorded = firestore
             .collection(isOrg ? 'orgs' : 'hosts')
             .doc(scopeId)
             .collection('analytics')
@@ -1527,11 +1528,14 @@ export async function serveMediaCdn(
               },
               { merge: true },
             )
-            .catch(() => undefined)
+            .catch((error: unknown) => logUncountedServe(scopeSegment, mediaId, error))
           evaluation = mediaCdnBandwidthEvaluation(scope, bandwidthBytes)
         }
         res.status(302).end()
-        await evaluation
+        // Awaited after the response, as the evaluation is, so the function
+        // lives until the count is written rather than being frozen with it
+        // in flight.
+        await Promise.all([recorded, evaluation])
         return
       }
     }
@@ -1738,7 +1742,8 @@ export async function serveMediaCdn(
     }
 
     // Delivery volume (AGL-176): per-asset serves/bytes on the AGL-82
-    // analytics day-doc, fire-and-forget. Only cache MISSES reach this
+    // analytics day-doc, awaited after the body rather than ahead of it.
+    // Only cache MISSES reach this
     // code — edge-cached responses aren't counted, so these are origin
     // serves, not user-facing totals.
     // Hot-doc note: a single day-doc caps at ~1 write/sec sustained;
@@ -1754,7 +1759,7 @@ export async function serveMediaCdn(
     // left out — they are inside the page weight the band already measures.
     const countedBytes = mediaCdnEdgeCacheable(servedType) ? 0 : servedBytes
     const day = new Date().toISOString().slice(0, 10)
-    void firestore
+    const recorded = firestore
       .collection(isOrg ? 'orgs' : 'hosts')
       .doc(scopeId)
       .collection('analytics')
@@ -1783,9 +1788,10 @@ export async function serveMediaCdn(
         },
         { merge: true },
       )
-      .catch(() => undefined)
-    // Totalled beside the stream rather than ahead of it, and awaited once
-    // the stream ends so the function lives until it is done.
+      .catch((error: unknown) => logUncountedServe(scopeSegment, mediaId, error))
+    // Totalled beside the stream rather than ahead of it, and awaited — with
+    // the count above — once the stream ends, so the function lives until
+    // both are done.
     const evaluation =
       countedBytes > 0 ? mediaCdnBandwidthEvaluation(scope, countedBytes) : null
     if (partial) res.status(206)
@@ -1805,7 +1811,7 @@ export async function serveMediaCdn(
         res,
       )
     } finally {
-      await evaluation
+      await Promise.all([recorded, evaluation])
     }
   } catch (error) {
     if (mediaCdnClientWentAway(error, res)) return
@@ -1820,4 +1826,13 @@ export async function serveMediaCdn(
       res.destroy(error instanceof Error ? error : new Error(String(error)))
     }
   }
+}
+
+/**
+ * A serve the day doc did not take. The response has already gone, so the
+ * failure is the log's to report rather than the visitor's — but reported,
+ * because a dropped count is bandwidth the band and the invoice never see.
+ */
+function logUncountedServe(scopeSegment: string, mediaId: string, error: unknown): void {
+  console.error('[media-cdn] serve not counted', scopeSegment, mediaId, error)
 }

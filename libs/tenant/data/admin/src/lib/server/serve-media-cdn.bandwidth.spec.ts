@@ -70,6 +70,8 @@ const mockWrites: Array<{ path: string; data: Data }> = []
 const mockQueries: string[] = []
 const mockNotices: Array<{ hostId: string; payload: Data }> = []
 let mockRedirect: Data | null = null
+/** Stands between a day-document write and the store; a rejection is a failed write. */
+let mockDayWriteGate: (() => Promise<void>) | null = null
 
 /** A Firestore merge: maps merge recursively, increments add at the leaves. */
 function mockMerge(target: Data, patch: Data): Data {
@@ -114,7 +116,10 @@ jest.mock('./firebase-admin', () => {
       id: path.split('/').pop(),
       collection: (name: string) => collectionRef(`${path}/${name}`),
       get: async () => snapshotOf(path),
-      set: async (data: Data, options?: { merge?: boolean }) => write(path, data, options),
+      set: async (data: Data, options?: { merge?: boolean }) => {
+        if (mockDayWriteGate && path.includes('/analytics/')) await mockDayWriteGate()
+        write(path, data, options)
+      },
     }
   }
   function collectionRef(path: string): any {
@@ -288,6 +293,7 @@ beforeEach(() => {
   mockQueries.length = 0
   mockNotices.length = 0
   mockRedirect = null
+  mockDayWriteGate = null
   invalidateMediaCdnLockCache()
   invalidateMediaBandwidthCapState()
   mockStore['hosts/site-1'] = { orgId: 'org-1', displayName: 'Acme' }
@@ -378,6 +384,70 @@ describe('a video request’s bytes reach the bandwidth total (AGL-3474)', () =>
     expect(res.getHeader('location')).toBe('https://delivery.test/film')
     expect(siteDay()?.[MEDIA_BANDWIDTH_DAY_FIELD]).toBe(5_000_000)
     expect(siteDay()?.media?.film).toEqual({ serves: 1, redirects: 1 })
+  })
+})
+
+/**
+ * THE COUNT OUTLIVES THE RESPONSE, OR IT IS NOT A COUNT.
+ *
+ * The day-document write used to be `void …catch(() => undefined)`: nothing
+ * waited for it, so a serverless instance frozen once the response left took
+ * the write with it, and a write that failed said so to nobody. Bandwidth the
+ * day document never takes is bandwidth the band and the invoice never see.
+ */
+describe('a serve is counted before the request is done', () => {
+  const released = () => {
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => (release = resolve))
+    return { gate, release }
+  }
+
+  it('holds the request open until the streamed film is counted', async () => {
+    const { gate, release } = released()
+    mockDayWriteGate = () => gate
+    let done = false
+    const pending = film().then((res) => ((done = true), res))
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(done).toBe(false)
+    release()
+    const res = await pending
+    expect(res.statusCode).toBe(200)
+    expect(siteDay()?.[MEDIA_BANDWIDTH_DAY_FIELD]).toBe(FILM.length)
+  })
+
+  it('holds the delivery provider’s redirect open until it is counted', async () => {
+    mockRedirect = {
+      location: 'https://delivery.test/film',
+      expiresAtMs: Date.now() + 60_000,
+      key: 'hosts/site-1/film/master',
+      sizeBytes: 5_000_000,
+    }
+    const { gate, release } = released()
+    mockDayWriteGate = () => gate
+    let done = false
+    const pending = film().then((res) => ((done = true), res))
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(done).toBe(false)
+    release()
+    expect((await pending).statusCode).toBe(302)
+    expect(siteDay()?.[MEDIA_BANDWIDTH_DAY_FIELD]).toBe(5_000_000)
+  })
+
+  it('reports a count the day document refused, and still serves the film', async () => {
+    const error = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    mockDayWriteGate = async () => {
+      throw new Error('ABORTED: too much contention')
+    }
+    const res = await film()
+    expect(res.statusCode).toBe(200)
+    expect(res.body).toBe(FILM.toString())
+    expect(error).toHaveBeenCalledWith(
+      '[media-cdn] serve not counted',
+      'site-1',
+      'film',
+      expect.any(Error),
+    )
+    error.mockRestore()
   })
 })
 
