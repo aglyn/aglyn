@@ -675,7 +675,7 @@ export const schema: Aglyn.ComponentSchema<ImageProps> = {
       // HTML attribute and wants to say it themselves.
       name: 'sizes',
       description:
-        'Leave empty — Aglyn works out how big the image shows on every ' +
+        'Leave empty — the image works out how big it shows on every ' +
         'screen size from where you place it, and downloads a file that ' +
         'size. Advanced: an HTML sizes value used exactly as typed, e.g. ' +
         '(min-width: 900px) 33vw, 100vw.',
