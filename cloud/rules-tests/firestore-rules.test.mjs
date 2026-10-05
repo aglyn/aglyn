@@ -4755,6 +4755,12 @@ describe('campaigns and their sends belong to the org (AGL-3273)', () => {
       await setDoc(doc(db, 'orgs', ORG, 'campaignSequenceReports', 'c-theirs'), {
         byOutcome: { enrolled: 5 },
       })
+      await setDoc(doc(db, 'orgs', ORG, 'campaignVisitReports', 'c-org'), {
+        views: 4, firstVisits: 2,
+      })
+      await setDoc(doc(db, 'orgs', ORG, 'campaignVisitReports', 'c-theirs'), {
+        views: 9, firstVisits: 3,
+      })
     })
   })
 
@@ -4794,6 +4800,9 @@ describe('campaigns and their sends belong to the org (AGL-3273)', () => {
     )
     await assertSucceeds(
       getDoc(doc(db, 'orgs', ORG, 'campaignSequenceReports', 'c-org')),
+    )
+    await assertSucceeds(
+      getDoc(doc(db, 'orgs', ORG, 'campaignVisitReports', 'c-theirs')),
     )
   })
 
@@ -4893,6 +4902,14 @@ describe('campaigns and their sends belong to the org (AGL-3273)', () => {
           byOutcome: { enrolled: 99 },
         }),
       )
+      // The visit rollup (AGL-3461) is the collector's alone: a client that
+      // could write it would author the reach a campaign is judged by.
+      await mustDeny(
+        `writing a visit rollup as ${uid}`,
+        setDoc(doc(authed(uid), 'orgs', ORG, 'campaignVisitReports', 'c-org'), {
+          views: 9999, firstVisits: 9999,
+        }),
+      )
     }
     // The rollup is read through its campaign's scope: counts on the page
     // of a campaign the collaborator may open, and nothing of a sibling's.
@@ -4902,6 +4919,14 @@ describe('campaigns and their sends belong to the org (AGL-3273)', () => {
     await mustDeny(
       'a site collaborator reading a sibling site campaign\'s sequence rollup',
       getDoc(doc(db, 'orgs', ORG, 'campaignSequenceReports', 'c-theirs')),
+    )
+    // The visit rollup is read the same way.
+    await assertSucceeds(
+      getDoc(doc(db, 'orgs', ORG, 'campaignVisitReports', 'c-org')),
+    )
+    await mustDeny(
+      'a site collaborator reading a sibling site campaign\'s visit rollup',
+      getDoc(doc(db, 'orgs', ORG, 'campaignVisitReports', 'c-theirs')),
     )
   })
 

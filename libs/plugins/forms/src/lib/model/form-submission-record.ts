@@ -36,7 +36,9 @@ import type { PluginIndexedRecord } from '@aglyn/aglyn/plugin-manager/plugin-rec
  * `formId` for a verified form entity; `formName` and `path`; `fields`, the
  * values as typed, keyed by field name; `senderTokens` and `searchTokens`,
  * the word-prefix keys a list filters and searches by; `read`, a boolean;
- * `createdAt`, the server time it arrived; and `campaignIds`, `routing` and
+ * `createdAt`, the server time it arrived; and `campaignIds`,
+ * `pageCampaignIds` (the campaigns its page was filed under), `routing`,
+ * `capturedRecord` (the lead or contact it filed, `{ kind, id }`) and
  * `rateDegraded` where they apply. A reader may change `read`, and stamp
  * `repliedAtMs` with `read` when it answers one; it may keep its own records
  * of what it did with one under the document (the Inbox's `replies` and

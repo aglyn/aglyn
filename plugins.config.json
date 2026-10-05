@@ -1730,7 +1730,11 @@
       "recordPages": [
         {
           "kind": "formSubmission",
-          "path": "/inbox"
+          "path": "/inbox",
+          "record": {
+            "path": "/inbox/submissions",
+            "param": "submission"
+          }
         }
       ],
       "contributes": {

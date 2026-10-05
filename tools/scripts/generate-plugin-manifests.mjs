@@ -2924,7 +2924,8 @@ function visitorDoorRows() {
  *
  * Checked here: a plain kind no other plugin shows, and a path under one of
  * the declaring plugin's OWN site console routes, so a plugin can only point
- * at a page it draws.
+ * at a page it draws. The optional `record` — where one record opens, and the
+ * query key its id rides under (AGL-3461) — is held to the same routes.
  */
 function recordPageRows() {
   const owners = new Map()
@@ -2938,9 +2939,11 @@ function recordPageRows() {
     }
     const routes = plugin.contributes?.console?.routes ?? []
     for (const declaration of declared) {
-      const { kind, path } = declaration ?? {}
+      const { kind, path, record } = declaration ?? {}
       const what = `${where} "${kind ?? ''}"`
-      const unknown = Object.keys(declaration ?? {}).filter((key) => key !== 'kind' && key !== 'path')
+      const unknown = Object.keys(declaration ?? {}).filter(
+        (key) => key !== 'kind' && key !== 'path' && key !== 'record',
+      )
       if (unknown.length) throw new Error(`${what}: unknown key(s) ${unknown.join(', ')}`)
       if (typeof kind !== 'string' || !PLAIN_NAME.test(kind)) {
         throw new Error(`${what}: "kind" is the plain record kind the page shows`)
@@ -2954,7 +2957,26 @@ function recordPageRows() {
       ) {
         throw new Error(`${what}: "path" "${path ?? ''}" is not under one of "${plugin.id}"'s own console routes (${routes.join(', ') || 'none'})`)
       }
-      rows.push({ pluginId: plugin.id, kind, path })
+      if (record !== undefined) {
+        const extra = Object.keys(record ?? {}).filter((key) => key !== 'path' && key !== 'param')
+        if (extra.length) throw new Error(`${what}: "record" has unknown key(s) ${extra.join(', ')}`)
+        if (
+          typeof record?.path !== 'string' ||
+          !/^\/[a-z0-9/-]+$/.test(record.path) ||
+          !routes.some((route) => record.path === route || record.path.startsWith(`${route}/`))
+        ) {
+          throw new Error(`${what}: "record.path" "${record?.path ?? ''}" is not under one of "${plugin.id}"'s own console routes`)
+        }
+        if (typeof record.param !== 'string' || !/^[a-z][a-zA-Z0-9]*$/.test(record.param)) {
+          throw new Error(`${what}: "record.param" is the plain query key the page opens one record by`)
+        }
+      }
+      rows.push({
+        pluginId: plugin.id,
+        kind,
+        path,
+        ...(record ? { record: { path: record.path, param: record.param } } : {}),
+      })
     }
   }
   return rows

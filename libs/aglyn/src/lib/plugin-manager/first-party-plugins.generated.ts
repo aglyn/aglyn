@@ -1644,7 +1644,11 @@ export const PLUGIN_RECORD_PAGES_DECLARED: readonly ResolvedPluginRecordPage[] =
   {
     "pluginId": "inbox",
     "kind": "formSubmission",
-    "path": "/inbox"
+    "path": "/inbox",
+    "record": {
+      "path": "/inbox/submissions",
+      "param": "submission"
+    }
   },
 ]
 
