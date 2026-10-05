@@ -15,6 +15,7 @@ content on the marketing site and is written separately.
 
 ### Added
 
+- **billing:** private images served through the CDN count toward bandwidth ([AGL-3518](https://linear.app/aglyn/issue/AGL-3518))
 - **sites:** a new site is born with a full home page, header and footer, theme and SEO ([AGL-3497](https://linear.app/aglyn/issue/AGL-3497))
 - **notifications:** staff hear about every new site ([AGL-3491](https://linear.app/aglyn/issue/AGL-3491))
 - **seo:** every site icon size and the web app manifest derive from one upload ([AGL-3484](https://linear.app/aglyn/issue/AGL-3484))
@@ -41,6 +42,8 @@ content on the marketing site and is written separately.
 
 ### Fixed
 
+- **console:** confirming three dialogs acts instead of reading as cancel ([AGL-3509](https://linear.app/aglyn/issue/AGL-3509))
+- **forms:** each card on a form's page saves what it shows, from its own header ([AGL-3508](https://linear.app/aglyn/issue/AGL-3508))
 - **tenant:** site search navigates with the client router instead of reloading ([AGL-3507](https://linear.app/aglyn/issue/AGL-3507))
 - **notifications:** a workspace made by creating a first site is welcomed and announced to staff ([AGL-3491](https://linear.app/aglyn/issue/AGL-3491))
 - **mui:** accordion questions use the site's font, not the browser's button face ([AGL-3497](https://linear.app/aglyn/issue/AGL-3497))
