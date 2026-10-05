@@ -146,7 +146,9 @@ describe('the health endpoints an external monitor would watch', () => {
      */
     it('answers HEAD with whatever GET would answer', () => {
       expect(text).toMatch(/export async function HEAD\(/)
-      expect(text).toContain('healthHeadOf(GET)')
+      // A door that reads its query (`/api/health/pages?site=`, AGL-3580)
+      // hands HEAD's own request to the same GET.
+      expect(text).toMatch(/healthHeadOf\((GET|\(\) => GET\(request\))\)/)
     })
 
     it('has no hardcoded success left in its HEAD', () => {

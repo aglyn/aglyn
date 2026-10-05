@@ -905,12 +905,22 @@ const CONSOLE_DAILY_CRONS = {
 /**
  * One scheduled function for one console route.
  *
- * `retryCount: 0` for the same reason the fast pair carries it: these sweeps
- * are idempotent claim-and-work passes, a retried tick can only duplicate
- * reads, and a run that failed is already visible as a silent job on
- * `/api/health/crons` well inside its six-hour grace. That visibility is the
- * signal that matters — a retry that quietly succeeded would hide a route
- * that is refusing every other call.
+ * RETRIED WHEN THE FUNCTION NEVER RAN, AND ONLY THEN (AGL-3580). Scheduler
+ * retries a tick only when the invocation itself fails, and this handler
+ * never throws: a route that refuses, answers 5xx or times out is logged as
+ * `console cron refused` and the tick ends in success, so it is NOT retried
+ * and still reads as a silent job on `/api/health/crons`. That visibility is
+ * the signal that matters, and a retry must never hide a refusing route.
+ *
+ * What is retried is the call Cloud Run turns away before any code runs.
+ * Every `firebase deploy --only functions` does that for about a minute (the
+ * scheduler's call is answered "The request was not authenticated" while the
+ * services are replaced): 2026-09-17 05:49Z, 09-20 04:34Z, 09-28 13:13Z and
+ * 10-05 18:31Z. A daily job whose one fire lands in that minute misses its
+ * only run of the day, `/api/health/crons` reds it 90 minutes later, and it
+ * stays red until the next day's fire or a hand-run — the public `Scheduled
+ * jobs` monitor read that as an outage for 5 h 20 min on 2026-09-07. Nothing
+ * ran, so a retry a minute later cannot duplicate any work.
  *
  * The one thing that IS retried — once, inside the same invocation — is the
  * edge's challenge page, in `postConsoleCron` (AGL-2642). That is not a
@@ -924,7 +934,11 @@ function consoleDailyCron(job: keyof typeof CONSOLE_DAILY_CRONS) {
       schedule,
       timeZone: 'Etc/UTC',
       secrets: [CONSOLE_CRON_SECRET],
-      retryCount: 0,
+      // A deploy refuses calls for about a minute; three tries a minute or
+      // more apart outlast it. See above for why only refusals retry.
+      retryCount: 3,
+      minBackoffSeconds: 60,
+      maxBackoffSeconds: 300,
       timeoutSeconds: 540,
     },
     async () => {
@@ -935,7 +949,12 @@ function consoleDailyCron(job: keyof typeof CONSOLE_DAILY_CRONS) {
         )
         return
       }
-      await sweepConsoleCron(route)
+      // Never throws, so a run that reached code is never retried (above).
+      try {
+        await sweepConsoleCron(route)
+      } catch (error) {
+        logger.error('console cron threw', { route, error: String(error) })
+      }
     },
   )
 }

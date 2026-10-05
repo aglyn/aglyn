@@ -171,13 +171,24 @@ async function freshRoute(): Promise<RouteModule> {
 }
 
 /**
+ * A watch window that opened `ageMs` ago, with every platform job first seen
+ * then too (AGL-3580) — the steady state a month after a deploy.
+ */
+function monthOldWindow(now: number, ageMs = 30 * DAY) {
+  return {
+    startedAtMs: now - ageMs,
+    jobFirstSeenAtMs: Object.fromEntries(SCHEDULED_JOBS.map((job) => [job.id, now - ageMs])),
+  }
+}
+
+/**
  * Every job reported a minute ago, and we have been watching for a month —
  * each mark in its own document AND in the summary, as `writeCronBeat`
  * leaves them.
  */
 function healthyStore(now: number) {
   const seeded: Record<string, Record<string, unknown>> = {
-    'watch-window': { startedAtMs: now - 30 * DAY },
+    'watch-window': monthOldWindow(now),
   }
   const beats: Record<string, number> = {}
   for (const job of SCHEDULED_JOBS) {
@@ -434,10 +445,42 @@ describe('/api/health/crons', () => {
     expect(typeof mockWrites[0].data.startedAtMs).toBe('number')
   })
 
+  it('gives a job added after the window opened its own first-run grace (AGL-3580)', async () => {
+    // beta.223 shipped `transfer-jobs` and `render-monitor` into a window that
+    // opened on 2026-08-20; both read job-never-reported within minutes of
+    // the console going live, before either had been scheduled once.
+    const now = Date.now()
+    const window = monthOldWindow(now)
+    delete (window.jobFirstSeenAtMs as Record<string, number>)['render-monitor']
+    mockStore = healthyStore(now)
+    mockStore['watch-window'] = window
+    delete mockStore['render-monitor']
+    delete (mockStore[CRON_BEAT_SUMMARY_DOC]['beats'] as Record<string, number>)['render-monitor']
+    const { GET } = await freshRoute()
+    const response = await GET()
+    const body = await response.json()
+    expect(body.checks['render-monitor'].code).toBe('awaiting-first-run')
+    expect(response.status).toBe(200)
+    const recorded = mockWrites.find((write) => write.doc === 'watch-window')
+    expect(recorded?.data).toEqual({ jobFirstSeenAtMs: { 'render-monitor': expect.any(Number) } })
+  })
+
+  it('still reds a job that never reported long after it was first seen', async () => {
+    const now = Date.now()
+    mockStore = healthyStore(now)
+    delete mockStore['render-monitor']
+    delete (mockStore[CRON_BEAT_SUMMARY_DOC]['beats'] as Record<string, number>)['render-monitor']
+    const { GET } = await freshRoute()
+    const response = await GET()
+    const body = await response.json()
+    expect(response.status).toBe(503)
+    expect(body.checks['render-monitor'].code).toBe('job-never-reported')
+  })
+
   it('does not rewrite the bootstrap window it already has', async () => {
     // A window that reset on every probe would make the check permanently
     // unable to fail: nothing would ever be overdue relative to "now".
-    mockStore = { 'watch-window': { startedAtMs: Date.now() - 30 * DAY } }
+    mockStore = { 'watch-window': monthOldWindow(Date.now()) }
     const { GET } = await freshRoute()
     await GET()
     // Asserted against the bootstrap document specifically. Nothing has

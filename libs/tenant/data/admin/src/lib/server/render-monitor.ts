@@ -49,7 +49,20 @@ import type { OperatorHealthStateDoc } from './operator-health'
  *
  * A site that fails `threshold` runs in a row raises
  * `system.siteRenderFailing` once; the first passing run after that raises
- * `system.siteRenderRecovered` once. The state lives in
+ * `system.siteRenderRecovered` once.
+ *
+ * ## A challenge is not a failed render (AGL-3580)
+ *
+ * When bot protection answers instead of the site, this run saw nothing about
+ * the site at all. On 2026-10-05 the console had no `AGLYN_PROBE_TOKEN`, every
+ * `/search` probe got the 429 checkpoint for three hours, and the monitor told
+ * the operator "Pages are not rendering on aglyn.com" and then "rendering
+ * again after 3 h" about a site that was serving pages the whole time. So a
+ * run whose only failures are challenges is BLIND: it leaves the site's
+ * verdict and failure count exactly as they were, and `threshold` blind runs
+ * in a row raise `system.renderMonitorBlind` once, which names the setup
+ * problem instead of an outage. A run with a real failure beside a challenge
+ * is still a failure, because the real one is evidence. The state lives in
  * `operatorHealthState/render-monitor--<host>`, beside every other health
  * check, so Staff → Operator alerts lists it with its status and since when.
  *
@@ -400,9 +413,15 @@ export interface RenderMonitorStateDoc extends OperatorHealthStateDoc {
   /** When the current run of failures began; null while passing. */
   failingSinceMs: number | null
   lastOkAtMs: number | null
+  /** Runs in a row where bot protection answered instead of the site. */
+  consecutiveBlindRuns?: number
+  /** When the current blind stretch began; null while the monitor can see. */
+  blindSinceMs?: number | null
+  /** When a run last saw the site itself: a pass or a real failure. */
+  lastObservedAtMs?: number | null
 }
 
-export type RenderMonitorTransition = 'failing' | 'recovered' | null
+export type RenderMonitorTransition = 'failing' | 'recovered' | 'blind' | null
 
 /**
  * The next state for one site, given what this run saw. Pure.
@@ -411,16 +430,43 @@ export type RenderMonitorTransition = 'failing' | 'recovered' | null
  * failed, so one slow cold start or one dropped connection says nothing. It
  * turns back on the first passing run, because a render that works is
  * proof, and a recovery held back is a recovery nobody hears about.
+ *
+ * A BLIND observation (every failure was a bot-protection challenge) changes
+ * nothing about the site: its status, failure count and since-time carry over
+ * untouched, and only the blind count moves. It transitions to `blind` once,
+ * on the `threshold`-th blind run in a row.
  */
 export function nextRenderMonitorState(
   prior: Partial<RenderMonitorStateDoc> | null,
-  observation: { ok: boolean; detail: string },
+  observation: { ok: boolean; detail: string; blind?: boolean },
   context: { origin: string; label: string; threshold: number; now: number },
 ): { next: RenderMonitorStateDoc; transition: RenderMonitorTransition } {
   const { origin, label, threshold, now } = context
   const checkId = renderMonitorCheckId(origin)
   const detail = String(observation.detail ?? '').slice(0, 1_000)
   const wasDegraded = prior?.status === 'degraded'
+  if (!observation.ok && observation.blind) {
+    const blindRuns = (prior?.consecutiveBlindRuns ?? 0) + 1
+    return {
+      next: {
+        checkId,
+        label,
+        origin,
+        status: wasDegraded ? 'degraded' : 'ok',
+        sinceMs: prior?.sinceMs ?? now,
+        detail: `The monitor cannot see this site: ${detail}`.slice(0, 1_000),
+        updatedAtMs: now,
+        consecutiveFailures: prior?.consecutiveFailures ?? 0,
+        failingSinceMs: prior?.failingSinceMs ?? null,
+        lastOkAtMs: prior?.lastOkAtMs ?? null,
+        consecutiveBlindRuns: blindRuns,
+        blindSinceMs: prior?.blindSinceMs ?? now,
+        lastObservedAtMs: prior?.lastObservedAtMs ?? null,
+      },
+      transition: blindRuns === Math.max(1, threshold) ? 'blind' : null,
+    }
+  }
+  const sighted = { consecutiveBlindRuns: 0, blindSinceMs: null, lastObservedAtMs: now }
   if (observation.ok) {
     return {
       next: {
@@ -434,6 +480,7 @@ export function nextRenderMonitorState(
         consecutiveFailures: 0,
         failingSinceMs: null,
         lastOkAtMs: now,
+        ...sighted,
       },
       transition: wasDegraded ? 'recovered' : null,
     }
@@ -457,6 +504,7 @@ export function nextRenderMonitorState(
       consecutiveFailures: failures,
       failingSinceMs,
       lastOkAtMs: prior?.lastOkAtMs ?? null,
+      ...sighted,
     },
     transition: degraded && !wasDegraded ? 'failing' : null,
   }
@@ -474,6 +522,8 @@ export interface RenderProbeRow extends RenderProbeVerdict {
 export interface RenderMonitorSiteResult {
   origin: string
   ok: boolean
+  /** Every failure this run was a challenge, so it saw nothing of the site. */
+  blind: boolean
   probes: RenderProbeRow[]
   /** The state written; absent on a dry run or a failed write. */
   status?: 'ok' | 'degraded'
@@ -685,10 +735,11 @@ export async function runRenderMonitor(
           : []
         const probes = await Promise.all([...layoutProbes, ...pageProbe])
         const ok = probes.every((probe) => probe.ok)
-        const result: RenderMonitorSiteResult = { origin, ok, probes }
+        const failing = probes.filter((probe) => !probe.ok)
+        const blind = !ok && failing.every((probe) => probe.challenged)
+        const result: RenderMonitorSiteResult = { origin, ok, blind, probes }
         if (dryRun) return result
         const host = new URL(origin).host
-        const failing = probes.filter((probe) => !probe.ok)
         const detail = ok
           ? 'Fresh renders pass.'
           : failing.map(probeLine).join('; ')
@@ -699,7 +750,7 @@ export async function runRenderMonitor(
             (prior) => {
               const decided = nextRenderMonitorState(
                 prior,
-                { ok, detail },
+                { ok, detail, blind },
                 {
                   origin,
                   label: `Page rendering on ${host}`,
@@ -730,6 +781,15 @@ export async function runRenderMonitor(
                 detail,
               },
             })
+          } else if (transition === 'blind') {
+            await raise('system.renderMonitorBlind', {
+              dedupeKey: host,
+              context: {
+                site: host,
+                runs: next.consecutiveBlindRuns ?? threshold,
+                detail,
+              },
+            })
           } else if (transition === 'recovered') {
             await raise('system.siteRenderRecovered', {
               dedupeKey: host,
@@ -748,4 +808,147 @@ export async function runRenderMonitor(
     ),
   )
   return { dryRun, threshold, sites }
+}
+
+/**
+ * One watched site as `/api/health/pages` reports it (AGL-3580).
+ *
+ * The shape of every other health check — `ok`, `ms`, a stable `code` — plus
+ * when the monitor last saw the site, so a reader can tell a fresh verdict
+ * from an old one without a second request.
+ */
+export interface RenderPagesCheck {
+  ok: boolean
+  ms: number
+  code?: string
+  /** When a run last rendered or failed this site's pages, ISO. */
+  lastObservedAt: string | null
+  /** When the site's current status began, ISO. */
+  since: string | null
+}
+
+/**
+ * A verdict older than this says the monitor stopped, not that the site did.
+ * Four missed five-minute runs.
+ */
+export const RENDER_PAGES_STALE_MS = 20 * 60_000
+
+/** How many sites one `?site=` may ask about. */
+export const RENDER_PAGES_MAX_SITES = 10
+
+/**
+ * Which watched hosts a `?site=` asks about. Pure.
+ *
+ * Absent or empty asks about every watched site. A host that is not watched
+ * is kept, so the caller can answer it red: a public monitor pointed at a
+ * site nobody renders is a monitor that can never go red, which is the
+ * mistake this door exists to undo.
+ */
+export function requestedRenderPagesHosts(
+  query: string | null | undefined,
+  watchedOrigins: readonly string[],
+): string[] {
+  const asked = String(query ?? '')
+    .split(/[\s,]+/)
+    .map((entry) => entry.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, ''))
+    .filter((entry) => /^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(entry))
+  const hosts = asked.length ? asked : watchedOrigins.map((origin) => new URL(origin).host)
+  return [...new Set(hosts)].slice(0, RENDER_PAGES_MAX_SITES)
+}
+
+/**
+ * The public verdict on real pages, per site, from the render monitor's
+ * stored state (AGL-3580). Pure.
+ *
+ * This is what the status page's `Published sites` and `Marketing site`
+ * monitors read. Before it they read `/api/health/render/*`, which builds a
+ * node tree inside a route handler and never draws a page, and both stayed at
+ * 100% through two outages on 2026-10-05 in which every fresh page hung.
+ *
+ * Red is reserved for the one thing a visitor would notice:
+ *
+ *  - `not-rendering` — the monitor saw the site fail to render pages it could
+ *    not have served from a cache, `threshold` runs in a row.
+ *  - `not-watched` — the monitor renders nothing for this host, so this row
+ *    could never go red; fix the monitor's config or the URL.
+ *  - `state-unavailable` — the verdicts could not be read at all.
+ *
+ * Green with a code is a verdict this door cannot improve on, and is never
+ * reported as an outage, because it is not one:
+ *
+ *  - `awaiting-first-run` — a site added since the monitor last ran.
+ *  - `monitor-blind` — bot protection answered the monitor; the site's last
+ *    real verdict stands, and the operator alert says what to fix.
+ *  - `observation-stale` — no run in {@link RENDER_PAGES_STALE_MS}; the
+ *    monitor's own `render-monitor` row on `/api/health/crons` is what goes
+ *    red for that, so a stopped scheduler is never told as a site outage.
+ */
+export function renderPagesHealth(
+  hosts: readonly string[],
+  watchedOrigins: readonly string[],
+  states: ReadonlyMap<string, Partial<RenderMonitorStateDoc>> | null,
+  ms: number,
+  now: number = Date.now(),
+): Record<string, RenderPagesCheck> {
+  const watched = new Set(watchedOrigins.map((origin) => new URL(origin).host))
+  const iso = (value: number | null | undefined) =>
+    typeof value === 'number' && Number.isFinite(value) ? new Date(value).toISOString() : null
+  const checks: Record<string, RenderPagesCheck> = {}
+  if (!hosts.length) {
+    checks['sites'] = { ok: false, ms, code: 'no-sites-watched', lastObservedAt: null, since: null }
+    return checks
+  }
+  for (const host of hosts) {
+    const blank = { ms, lastObservedAt: null, since: null }
+    if (!watched.has(host)) {
+      checks[host] = { ...blank, ok: false, code: 'not-watched' }
+      continue
+    }
+    if (states === null) {
+      checks[host] = { ...blank, ok: false, code: 'state-unavailable' }
+      continue
+    }
+    const state = states.get(`${RENDER_MONITOR_CHECK_PREFIX}${host}`)
+    if (!state) {
+      checks[host] = { ...blank, ok: true, code: 'awaiting-first-run' }
+      continue
+    }
+    const observed = state.lastObservedAtMs ?? state.lastOkAtMs ?? null
+    const row = { ms, lastObservedAt: iso(observed), since: iso(state.sinceMs) }
+    if (state.status === 'degraded') {
+      checks[host] = { ...row, ok: false, code: 'not-rendering' }
+    } else if ((state.consecutiveBlindRuns ?? 0) > 0) {
+      checks[host] = { ...row, ok: true, code: 'monitor-blind' }
+    } else if (now - (state.updatedAtMs ?? 0) > RENDER_PAGES_STALE_MS) {
+      checks[host] = { ...row, ok: true, code: 'observation-stale' }
+    } else {
+      checks[host] = { ...row, ok: true }
+    }
+  }
+  return checks
+}
+
+/**
+ * Read the stored verdicts for `hosts`, one batched read. Null when the read
+ * fails, which {@link renderPagesHealth} reports red rather than calm.
+ */
+export async function readRenderMonitorStates(
+  hosts: readonly string[],
+): Promise<Map<string, Partial<RenderMonitorStateDoc>> | null> {
+  try {
+    const { default: firebaseAdmin } = await import('./firebase-admin')
+    const db = firebaseAdmin.app().firestore()
+    const refs = hosts.map((host) =>
+      db.collection(RENDER_MONITOR_COLLECTION).doc(`${RENDER_MONITOR_CHECK_PREFIX}${host}`),
+    )
+    const snapshots = refs.length ? await db.getAll(...refs) : []
+    const states = new Map<string, Partial<RenderMonitorStateDoc>>()
+    for (const snapshot of snapshots) {
+      if (snapshot.exists) states.set(snapshot.id, snapshot.data() as Partial<RenderMonitorStateDoc>)
+    }
+    return states
+  } catch (error) {
+    console.error('[render-monitor] stored verdicts could not be read', error)
+    return null
+  }
 }

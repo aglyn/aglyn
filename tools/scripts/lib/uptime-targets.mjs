@@ -144,6 +144,10 @@ export const SUBSYSTEM_HEALTH = {
     // green through the twelve minutes on 2026-09-04 when late-shipping
     // Firestore rules refused every publish batch on the platform.
     '/api/health/journeys',
+    // Do published sites render REAL pages (AGL-3580)? The render monitor's
+    // verdict per watched site, fresh renders of client pages with images.
+    // What the status page's `Published sites` and `Marketing site` read.
+    '/api/health/pages',
   ],
   // The tenant app ships the beacon and both render canaries; the rest are
   // console-side.
