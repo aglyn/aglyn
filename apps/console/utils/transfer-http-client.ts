@@ -175,8 +175,12 @@ export function createHttpTransferClient(options: HttpTransferClientOptions): Tr
   }
 
   return {
-    async fields({ resource }) {
-      const { ok: _ok, ...info } = await post<TransferFieldsResponse>('fields', { resource, hostId })
+    async fields({ resource, filter }) {
+      const { ok: _ok, ...info } = await post<TransferFieldsResponse>('fields', {
+        resource,
+        hostId,
+        ...(filter === undefined ? {} : { filter }),
+      })
       return info
     },
 

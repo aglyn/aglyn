@@ -533,3 +533,69 @@ describe('a destination that wears another brand (AGL-3447)', () => {
     ).not.toBeNull()
   })
 })
+
+describe('the whole-set checks the page and the importer share', () => {
+  const {
+    findDuplicateRedirect,
+    redirectHitKey,
+    redirectSourceIsLivePage,
+    walkRedirectChain,
+  } =
+    require('./redirects')
+
+  const rules = [
+    { $id: 'a', source: '/old', destination: '/new' },
+    { $id: 'b', source: '/blog', destination: '/news', kind: 'prefix' },
+    { $id: 'c', source: '/new', destination: '/newer' },
+  ]
+
+  it('finds the rule holding a path in the same mode, never the rule itself', () => {
+    expect(findDuplicateRedirect(rules, { source: '/old', kind: 'exact' })?.$id).toBe('a')
+    // A stored rule with no mode is exact; a draft with no mode is too.
+    expect(findDuplicateRedirect(rules, { source: '/old' })?.$id).toBe('a')
+    expect(findDuplicateRedirect(rules, { $id: 'a', source: '/old', kind: 'exact' })).toBeUndefined()
+    // An exact /blog may stand beside the prefix /blog.
+    expect(findDuplicateRedirect(rules, { source: '/blog', kind: 'exact' })).toBeUndefined()
+    expect(findDuplicateRedirect(rules, { source: '/blog', kind: 'prefix' })?.$id).toBe('b')
+  })
+
+  it('walks internal destinations: a loop back to the rule, a chain, and a circle it only leads into', () => {
+    expect(walkRedirectChain(rules, { source: '/newer', destination: '/Old' })).toEqual({
+      loop: true,
+      hops: ['/new', '/newer'],
+      cycle: false,
+    })
+    expect(walkRedirectChain(rules, { source: '/start', destination: '/old' })).toEqual({
+      loop: false,
+      hops: ['/new', '/newer'],
+      cycle: false,
+    })
+    const circle = [
+      { $id: 'p', source: '/p', destination: '/q' },
+      { $id: 'q', source: '/q', destination: '/p' },
+    ]
+    expect(walkRedirectChain(circle, { source: '/z', destination: '/p' })).toMatchObject({
+      loop: false,
+      cycle: true,
+    })
+    // Off the site, nothing is followed; and an edit is not compared with itself.
+    expect(walkRedirectChain(rules, { source: '/x', destination: 'https://example.com/old' })).toEqual({
+      loop: false,
+      hops: [],
+      cycle: false,
+    })
+    expect(walkRedirectChain(rules, { $id: 'a', source: '/old', destination: '/old-2' }).loop).toBe(false)
+  })
+
+  it('reads the routing map for a published page at the path', () => {
+    const screens = { home: '/', about: 'about' }
+    expect(redirectSourceIsLivePage(screens, '/about')).toBe(true)
+    expect(redirectSourceIsLivePage(screens, '/')).toBe(true)
+    expect(redirectSourceIsLivePage(screens, '/contact')).toBe(false)
+    expect(redirectSourceIsLivePage(undefined, '/about')).toBe(false)
+  })
+
+  it('keys hits by an id a field path can carry', () => {
+    expect(redirectHitKey('a.b/c$d#e[f]')).toBe('a_b_c_d_e_f_')
+  })
+})

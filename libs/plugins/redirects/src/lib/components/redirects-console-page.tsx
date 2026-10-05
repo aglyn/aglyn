@@ -16,11 +16,12 @@
  */
 'use client'
 
-import { checkQuota, pluginDocsHelp } from '@aglyn/aglyn'
+import { checkQuota, pluginDocsHelp, useTransferLauncher } from '@aglyn/aglyn'
 import { type ConsolePluginPageProps } from '@aglyn/aglyn'
 import { TENANT_APEX } from '@aglyn/aglyn/app-utils/tenant-apex'
-import { isExternalRedirectDestination, isSelfRedirect, matchRedirect, normalizeRedirectDestination, normalizeRedirectSource, REDIRECT_DEFAULT_PRIORITY, validateRedirectRule, REDIRECT_STATUS_CODES } from '../model'
+import { findDuplicateRedirect, isExternalRedirectDestination, isSelfRedirect, matchRedirect, normalizeRedirectDestination, normalizeRedirectSource, REDIRECT_DEFAULT_PRIORITY, redirectHitKey, redirectSourceIsLivePage, validateRedirectRule, REDIRECT_STATUS_CODES, walkRedirectChain } from '../model'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import { REDIRECTS_TRANSFER_KEY } from '../transfer/redirects-transfer-fields'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import QuotaReadoutComponent from '@aglyn/shared-ui-jsx/components/quota-readout.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -285,7 +286,6 @@ export function RedirectsConsolePage(props: ConsolePluginPageProps) {
       active = false
     }
   }, [entitled, firestore, hostId])
-  const idKey = (value: string) => value.replace(/[.$#[\]/]/g, '_')
   const totalHits = Object.values(hits ?? {}).reduce(
     (sum, count) => sum + count,
     0,
@@ -394,12 +394,11 @@ export function RedirectsConsolePage(props: ConsolePluginPageProps) {
         persist: false,
       })
     }
-    const duplicate = redirects.find(
-      (redirect: any) =>
-        redirect.source === source &&
-        (redirect.kind ?? 'exact') === kind &&
-        redirect.$id !== draft.id,
-    )
+    const duplicate = findDuplicateRedirect(redirects, {
+      $id: draft.id,
+      source,
+      kind,
+    })
     if (duplicate) {
       return void enqueueSnackbar(`A rule for ${source} already exists`, {
         variant: 'warning',
@@ -408,30 +407,15 @@ export function RedirectsConsolePage(props: ConsolePluginPageProps) {
     }
     // Chain-loop detection (AGL-156): follow internal destinations through
     // the rule set; a walk that returns to this source can never execute.
-    if (destination.startsWith('/')) {
-      const bySource = new Map<string, string>(
-        redirects
-          .filter((redirect: any) => redirect.$id !== draft.id)
-          .map((redirect: any) => [redirect.source, redirect.destination]),
+    if (walkRedirectChain(redirects, { $id: draft.id, source, destination }).loop) {
+      return void enqueueSnackbar(
+        'That destination chains back to this rule — a redirect loop',
+        { variant: 'warning', persist: false },
       )
-      let cursor: string | undefined = destination.toLowerCase()
-      for (let hop = 0; hop < 10 && cursor; hop += 1) {
-        if (cursor === source) {
-          return void enqueueSnackbar(
-            'That destination chains back to this rule — a redirect loop',
-            { variant: 'warning', persist: false },
-          )
-        }
-        const next: string | undefined = bySource.get(cursor)
-        cursor = next && next.startsWith('/') ? next.toLowerCase() : undefined
-      }
     }
     // Screen-route collision: shadowing a live page may be intentional
     // (moved pages) — warn, don't block (decision per the issue).
-    const routedPaths = Object.values(
-      (host?.screens ?? {}) as Record<string, string>,
-    ).map((path) => (path === '/' ? '/' : `/${path}`))
-    if (routedPaths.includes(source)) {
+    if (redirectSourceIsLivePage(host?.screens, source)) {
       enqueueSnackbar(
         `${source} is a published page — the redirect takes precedence`,
         { variant: 'info', persist: false },
@@ -632,10 +616,43 @@ export function RedirectsConsolePage(props: ConsolePluginPageProps) {
     [confirm, firestore, hostId, reportWriteFailure, announceRuleChange],
   )
 
+  /*
+   * Import and Export, through the console's transfer launcher (`null`
+   * outside the console shell, where there is no workspace to move rules in
+   * or out of). The list above is a live listener, so an import's rules show
+   * up without a refresh.
+   */
+  const transfer = useTransferLauncher()
+  const transferTarget = { resource: REDIRECTS_TRANSFER_KEY, scope: 'host' as const, hostId }
+  // Import for those who may write the records, Export for those who may read them.
+  const canImport = Boolean(transfer?.can('import', transferTarget))
+  const canExport = Boolean(transfer?.can('export', transferTarget))
+  const transferActions =
+    transfer && (canImport || canExport) ? (
+      <Stack direction="row" spacing={1}>
+        {canImport && (
+          <Button size="small" onClick={() => transfer.openImport(transferTarget)}>
+            {'Import'}
+          </Button>
+        )}
+        {canExport && (
+          <Button
+            size="small"
+            onClick={() =>
+              transfer.openExport(transferTarget)
+            }
+          >
+            {'Export'}
+          </Button>
+        )}
+      </Stack>
+    ) : null
+
   return (
     <CardDisplay
       header={'URL redirects'}
       help={pluginDocsHelp('redirects', { anchor: '#manage-redirects' })}
+      HeaderProps={transferActions ? { action: transferActions } : undefined}
       contentGutterX
       contentGutterY
     >
@@ -701,7 +718,7 @@ export function RedirectsConsolePage(props: ConsolePluginPageProps) {
                 <Typography variant="caption" color="text.secondary">
                   {[
                     hits
-                      ? `${hits[idKey(redirect.$id)] ?? 0} hits (30d, sampled)`
+                      ? `${hits[redirectHitKey(redirect.$id)] ?? 0} hits (30d, sampled)`
                       : null,
                     redirect.lastHitAt
                       ? `last ${redirect.lastHitAt

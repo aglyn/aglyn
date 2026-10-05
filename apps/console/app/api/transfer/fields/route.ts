@@ -42,6 +42,7 @@ async function handler(request: Request): Promise<Response> {
       actorUid: caller.uid,
       resource: String(body['resource'] ?? ''),
       hostId: typeof body['hostId'] === 'string' ? body['hostId'] : null,
+      filter: body['filter'],
     })
     const prefs = await readTransferPrefs(caller.deps.firestore, caller.uid, info.resource.key)
     const answer: TransferFieldsResponse = { ok: true, ...info, prefs }

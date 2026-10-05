@@ -18,7 +18,26 @@
 // The registry's own module, not the data layer's barrel: boot needs the
 // registry, not the whole server surface.
 import { registerApiV1SiteResource } from '@aglyn/tenant-data-admin/server/api-v1-resources'
+import { registerPluginTransferResource } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
 import { BUNDLE_ID } from './constants/bundle-common'
+import {
+  FORM_SUBMISSIONS_MATCH_KEYS,
+  FORM_SUBMISSIONS_TRANSFER_KEY,
+} from './transfer/form-submissions-transfer-key'
+import type { FormSubmissionsTransferResource } from './transfer/form-submissions-transfer'
+
+/**
+ * The submissions resource over the console's Admin SDK, built with the first
+ * export that asks — the resource, `firebase-admin` and the Admin app load
+ * then, never at boot.
+ */
+async function formSubmissionsTransfer(): Promise<FormSubmissionsTransferResource> {
+  const [{ createFormSubmissionsTransferResource }, { firebaseAdmin }] = await Promise.all([
+    import('./transfer/form-submissions-transfer'),
+    import('@aglyn/tenant-data-admin/server/firebase-admin'),
+  ])
+  return createFormSubmissionsTransferResource({ firestore: firebaseAdmin.app().firestore() })
+}
 
 /**
  * The forms plugin's CONSOLE-ONLY server declarations, named under
@@ -33,9 +52,14 @@ import { BUNDLE_ID } from './constants/bundle-common'
  * read and marked on every plan, as they always were. The resource brings its
  * description for the API's OpenAPI document.
  *
+ * It also answers the export of a site's submissions (`forms.submissions`,
+ * export only — see `transfer/form-submissions-transfer.ts`): the console's
+ * transfer routes gate the reader on the site and read through these hooks.
+ *
  * Light at boot: the handler is imported with its first request and the
- * description when the document is first built. Registering again replaces
- * this plugin's own entry.
+ * description when the document is first built, and the transfer resource
+ * with the first export; only its match keys are read at registration.
+ * Registering again replaces this plugin's own entries.
  */
 export function registerFormsConsoleServerDeclarations(): void {
   registerApiV1SiteResource(
@@ -45,6 +69,18 @@ export function registerFormsConsoleServerDeclarations(): void {
         (await import('./server/api-v1/form-submissions')).handleFormSubmissions(...args),
       describe: async () =>
         (await import('./server/api-v1/openapi')).FORM_SUBMISSIONS_API_V1_DESCRIPTION,
+    },
+    { pluginId: BUNDLE_ID },
+  )
+  registerPluginTransferResource(
+    FORM_SUBMISSIONS_TRANSFER_KEY,
+    {
+      matchKeys: FORM_SUBMISSIONS_MATCH_KEYS,
+      fields: async (ctx) => (await formSubmissionsTransfer()).fields(ctx),
+      count: async (ctx, options) => (await formSubmissionsTransfer()).count(ctx, options),
+      readPage: async (ctx, cursor, fieldIds, options) =>
+        (await formSubmissionsTransfer()).readPage(ctx, cursor, fieldIds, options),
+      lookup: async (ctx, requests) => (await formSubmissionsTransfer()).lookup(ctx, requests),
     },
     { pluginId: BUNDLE_ID },
   )

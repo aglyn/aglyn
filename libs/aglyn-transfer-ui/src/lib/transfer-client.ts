@@ -241,7 +241,11 @@ export interface TransferCustomFieldRequest {
  */
 export interface TransferClient {
   /** The resource's fields, match keys, locked rules and the person's preferences. */
-  fields(request: { resource: string }): Promise<TransferResourceInfo>
+  fields(request: {
+    resource: string
+    /** The list filter an export was opened on, for a resource whose fields follow the records read. */
+    filter?: unknown
+  }): Promise<TransferResourceInfo>
   /** Stores the file as a new draft job. */
   upload(request: TransferFileUpload): Promise<TransferJob>
   /** Reads the job's file: header proposals, then — given choices — values and matches. */

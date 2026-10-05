@@ -954,6 +954,40 @@ export const PLUGIN_SITE_BUNDLE_SECTIONS_DECLARED: readonly ResolvedPluginSiteBu
  */
 export const PLUGIN_TRANSFER_RESOURCES_DECLARED: readonly ResolvedTransferResourceDeclaration[] = [
   {
+    "pluginId": "forms",
+    "key": "forms.submissions",
+    "label": "Form submissions",
+    "singularLabel": "Form submission",
+    "scope": "host",
+    "kinds": [
+      "records"
+    ],
+    "formats": [
+      "csv",
+      "json",
+      "ndjson"
+    ],
+    "description": "What visitors sent through this site’s forms: each answer, and when, on which page and through which form it arrived.",
+    "exportOnly": true
+  },
+  {
+    "pluginId": "bookings",
+    "key": "bookings",
+    "label": "Bookings",
+    "singularLabel": "Booking",
+    "scope": "host",
+    "kinds": [
+      "records"
+    ],
+    "formats": [
+      "csv",
+      "json",
+      "ndjson"
+    ],
+    "description": "Every booking on this site: the service, the time, the customer’s details, its status and what was paid.",
+    "exportOnly": true
+  },
+  {
     "pluginId": "commerce",
     "key": "commerce.products",
     "label": "Products",
@@ -1245,6 +1279,22 @@ export const PLUGIN_TRANSFER_RESOURCES_DECLARED: readonly ResolvedTransferResour
     "description": "Each sequence's steps and settings, imported as a draft. Never who was enrolled or what was sent."
   },
   {
+    "pluginId": "outreach",
+    "key": "outreach.do-not-contact",
+    "label": "Do-not-contact list",
+    "singularLabel": "Do-not-contact entry",
+    "scope": "org",
+    "kinds": [
+      "records"
+    ],
+    "formats": [
+      "csv",
+      "json",
+      "ndjson"
+    ],
+    "description": "The domains and addresses sequences never email. An import only adds to it; an address is kept as a fingerprint, so only domains are exported."
+  },
+  {
     "pluginId": "data",
     "key": "data.dataset",
     "label": "Dataset records",
@@ -1322,6 +1372,25 @@ export const PLUGIN_TRANSFER_RESOURCES_DECLARED: readonly ResolvedTransferResour
     "description": "Each topic's name, what recipients are told they get, and whether it is retired. Never who chose it."
   },
   {
+    "pluginId": "events-calendar",
+    "key": "events",
+    "label": "Events",
+    "singularLabel": "Event",
+    "scope": "host",
+    "kinds": [
+      "records"
+    ],
+    "formats": [
+      "csv",
+      "json",
+      "ndjson"
+    ],
+    "limits": {
+      "maxRows": 2000
+    },
+    "description": "This site’s calendar events, matched on their ID, then the title and start together."
+  },
+  {
     "pluginId": "marketing",
     "key": "marketing.campaigns",
     "label": "Campaigns",
@@ -1337,6 +1406,25 @@ export const PLUGIN_TRANSFER_RESOURCES_DECLARED: readonly ResolvedTransferResour
       "maxRows": 500
     },
     "description": "Each campaign's name, dates, lists and its emails' copy, imported as drafts. Never what was sent or its results."
+  },
+  {
+    "pluginId": "redirects",
+    "key": "redirects",
+    "label": "Redirects",
+    "singularLabel": "Redirect",
+    "scope": "host",
+    "kinds": [
+      "records"
+    ],
+    "formats": [
+      "csv",
+      "json",
+      "ndjson"
+    ],
+    "limits": {
+      "maxRows": 5000
+    },
+    "description": "This site’s redirect rules, matched on the path they redirect from."
   },
   {
     "pluginId": "workflows",

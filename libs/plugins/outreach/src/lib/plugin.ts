@@ -28,6 +28,10 @@ import {
   OUTREACH_PLUGIN_ID,
   OUTREACH_USE_PERMISSION,
 } from './constants/bundle-common'
+import {
+  OUTREACH_DO_NOT_CONTACT_TRANSFER_KEY,
+  OUTREACH_DO_NOT_CONTACT_TRANSFER_LABEL,
+} from './constants/transfer-resources'
 
 /** Code-split: the hub only loads when opened. */
 const OutreachConsolePage = lazy(
@@ -99,4 +103,11 @@ export function registerOutreachConsole(): void {
       },
     ],
   })
+  // The do-not-contact list's Import and Export, opened from the
+  // Compliance section's do-not-contact card.
+  registerPluginTransferResourceUi(
+    OUTREACH_DO_NOT_CONTACT_TRANSFER_KEY,
+    { label: OUTREACH_DO_NOT_CONTACT_TRANSFER_LABEL },
+    { pluginId: OUTREACH_PLUGIN_ID },
+  )
 }

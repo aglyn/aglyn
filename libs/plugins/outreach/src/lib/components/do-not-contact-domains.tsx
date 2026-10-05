@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { pluginDocsHelp } from '@aglyn/aglyn'
+import { pluginDocsHelp, useTransferLauncher } from '@aglyn/aglyn'
 import { mdiTrashCanOutline } from '@aglyn/shared-data-mdi'
 import { CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
 import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
@@ -34,9 +34,11 @@ import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filt
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Button, Chip, IconButton, Stack, TextField, Typography } from '@mui/material'
 import { useState } from 'react'
+import { OUTREACH_DO_NOT_CONTACT_TRANSFER_KEY } from '../constants/transfer-resources'
 import { normalizeOutreachDomain } from '../engine/do-not-contact-domain'
 import { OUTREACH_DO_NOT_CONTACT_DOMAIN_LIST_QUERY } from '../model/do-not-contact-domain-list-query'
 import {
+  OUTREACH_DO_NOT_CONTACT_REASON_LABELS,
   OUTREACH_DO_NOT_CONTACT_REASONS,
   type OutreachDoNotContactDomainEntry,
   type OutreachDoNotContactReason,
@@ -51,20 +53,19 @@ export interface OutreachDoNotContactDomainsCardProps {
 }
 
 /** Why a domain is on the list, as the card says it. */
-export const OUTREACH_DO_NOT_CONTACT_REASON_LABELS: Record<OutreachDoNotContactReason, string> = {
-  manual: 'Added by a member',
-  opt_out_reply: 'A reply asked not to be emailed',
-  unsubscribe: 'Unsubscribed',
-  hard_bounce: 'Mail bounced',
-  gateway_block: 'Its mail gateway blocked the sender',
-}
+export { OUTREACH_DO_NOT_CONTACT_REASON_LABELS }
 
 /** Accessible names of the card's controls, spelled once for the specs. */
 export const DO_NOT_CONTACT_DOMAIN_LABELS = {
   field: 'Domain',
   add: 'Add domain',
   remove: (domain: string) => `Remove ${domain}`,
+  import: 'Import',
+  export: 'Export',
 } as const
+
+/** What the export dialog calls the list's search and filters. */
+export const DO_NOT_CONTACT_EXPORT_FILTER_LABEL = 'The domains matching this list’s search and filters'
 
 /** What the field says under a value that is not a domain. */
 export const DO_NOT_CONTACT_DOMAIN_HINT = 'A domain, such as example.com. Every address at it is refused.'
@@ -86,6 +87,11 @@ const DOMAIN_FILTER_OPTIONS = {
     value: reason,
     label: OUTREACH_DO_NOT_CONTACT_REASON_LABELS[reason],
   })),
+}
+
+/** The grid toolbar without its page-only CSV and print export. */
+const GRID_EXPORT_OFF = {
+  toolbar: { csvOptions: { disableToolbarButton: true }, printOptions: { disableToolbarButton: true } },
 }
 
 function addedOn(entry: OutreachDoNotContactDomainEntry): string {
@@ -196,6 +202,51 @@ export function OutreachDoNotContactDomainsCard(props: OutreachDoNotContactDomai
   const none =
     listed.status === 'ready' && !listed.rows.length && !filtering && listed.page === 0
 
+  /*
+   * Import adds domains and addresses from a file; Export downloads the
+   * domains, narrowed to the list's search and filters when it has any (the
+   * export reads them as the same Firestore query). Outside the console
+   * shell there is no launcher, and no buttons.
+   */
+  const transfer = useTransferLauncher()
+  const transferTarget = { resource: OUTREACH_DO_NOT_CONTACT_TRANSFER_KEY, scope: 'org' as const }
+  // Import for those who may write the records, Export for those who may read them.
+  const canImport = Boolean(transfer?.can('import', transferTarget))
+  const canExport = Boolean(transfer?.can('export', transferTarget))
+  const transferActions =
+    transfer && (canImport || canExport) ? (
+      <Stack direction="row" spacing={1}>
+        {canImport && (
+          <Button size="small" onClick={() => transfer.openImport(transferTarget)}>
+            {DO_NOT_CONTACT_DOMAIN_LABELS.import}
+          </Button>
+        )}
+        {canExport && (
+          <Button
+            size="small"
+            onClick={() =>
+              transfer.openExport({
+                ...transferTarget,
+                ...(filtering
+                  ? {
+                      filter: {
+                        label: DO_NOT_CONTACT_EXPORT_FILTER_LABEL,
+                        value: {
+                          clauses: gridFilter.clauses.map(({ field, op, value }) => ({ field, op, value })),
+                          search: gridFilter.searchWords,
+                        },
+                      },
+                    }
+                  : {}),
+              })
+            }
+          >
+            {DO_NOT_CONTACT_DOMAIN_LABELS.export}
+          </Button>
+        )}
+      </Stack>
+    ) : undefined
+
   const change = async (action: 'add' | 'remove', domain: string) => {
     setBusy(domain)
     try {
@@ -222,6 +273,7 @@ export function OutreachDoNotContactDomainsCard(props: OutreachDoNotContactDomai
     <CardDisplay
       header="Do not contact domains"
       help={pluginDocsHelp('sequences', { anchor: '#do-not-contact-domains' })}
+      HeaderProps={{ action: transferActions }}
       contentGutterX
       contentGutterY
     >
@@ -230,7 +282,8 @@ export function OutreachDoNotContactDomainsCard(props: OutreachDoNotContactDomai
           {'No sequence emails anyone at these domains, whoever enrolls them. Add a company that asked not ' +
             'to hear from you, or one whose mail gateway blocks you. When an email bounces because the ' +
             'recipient’s gateway refused it — rather than because the address is unknown — the domain is ' +
-            'added here automatically, so the next person at that company is not tried.'}
+            'added here automatically, so the next person at that company is not tried. Import adds ' +
+            'domains and email addresses from a file; Export downloads the domains.'}
         </Typography>
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ alignItems: { sm: 'flex-start' } }}>
           <TextField
@@ -299,6 +352,12 @@ export function OutreachDoNotContactDomainsCard(props: OutreachDoNotContactDomai
               quickFilter
               disableColumnSorting
               noRowsLabel="No domains match these filters"
+              /*
+               * The grid's own export writes the page on screen; with the
+               * header's Export, which writes every matching domain, it
+               * would be a second button by the same name doing less.
+               */
+              slotProps={transfer ? GRID_EXPORT_OFF : undefined}
               hideFooter
             />
             <ListPagination

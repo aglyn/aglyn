@@ -67,6 +67,7 @@ export type TransferRowReason =
   | 'refusedValue'
   | 'matchedRecordMissing'
   | 'planLimit'
+  | 'resourceRule'
 
 /** A class of thing the person is warned about. */
 export type TransferWarningClass =
@@ -88,6 +89,11 @@ export type TransferWarningClass =
    * resource's `plan`, never by the core.
    */
   | 'screening'
+  /**
+   * The owning plugin's finding about one row — a rule no field policy can
+   * say — folded in by `withTransferResourceFindings`; it may refuse the row.
+   */
+  | 'resourceRule'
 
 export const TRANSFER_WARNING_CLASSES: readonly TransferWarningClass[] = [
   'derivation',
@@ -103,6 +109,7 @@ export const TRANSFER_WARNING_CLASSES: readonly TransferWarningClass[] = [
   'clearValue',
   'planLimit',
   'screening',
+  'resourceRule',
 ]
 
 /**
@@ -445,4 +452,84 @@ export function canApplyTransferPlan(
 /** The rows that will write, in file order — what the job engine applies. */
 export function plannedWrites(plan: Pick<TransferPlan, 'rows'>): PlannedTransferRow[] {
   return plan.rows.filter((row) => row.verdict === 'create' || row.verdict === 'update')
+}
+
+/**
+ * One thing the owning plugin found about a planned row that no field policy
+ * can say — a redirect that loops, an off-site destination, a rule its own
+ * write path refuses — raised from the resource's `plan` hook.
+ */
+export interface TransferResourceFinding {
+  row: number
+  /** What the person should know, in a sentence. */
+  detail: string
+  fieldId?: string
+  value?: string
+  /** Refuse the row (it fails as `resourceRule`) rather than only warn about it. */
+  refuse?: boolean
+}
+
+/**
+ * The plan with the plugin's findings folded in: each finding is a
+ * `resourceRule` warning on its row (acknowledged before Apply, like every
+ * class but a plain derivation), and a `refuse` finding fails a row that
+ * would have written. The summary and the acknowledgements follow.
+ */
+export function withTransferResourceFindings(
+  plan: TransferPlan,
+  findings: readonly TransferResourceFinding[],
+  sampleSize = 5,
+): TransferPlan {
+  if (!findings.length) return plan
+  const byIndex = new Map(plan.rows.map((row) => [row.index, row]))
+  const touched = new Map<number, PlannedTransferRow>()
+  const rowsRaised = new Set<number>()
+  const fieldIds = new Set<string>()
+  const samples: TransferWarningSample[] = []
+  let count = 0
+  for (const finding of findings) {
+    const original = byIndex.get(finding.row)
+    if (!original) continue
+    const row = touched.get(finding.row) ?? { ...original, warnings: [...original.warnings] }
+    if (!row.warnings.includes('resourceRule')) row.warnings.push('resourceRule')
+    if (finding.refuse && row.verdict !== 'skip' && row.verdict !== 'fail') {
+      row.verdict = 'fail'
+      row.reason = 'resourceRule'
+      row.diff = []
+    }
+    touched.set(finding.row, row)
+    count += 1
+    rowsRaised.add(finding.row)
+    if (finding.fieldId) fieldIds.add(finding.fieldId)
+    if (samples.length < sampleSize) {
+      samples.push({
+        row: finding.row,
+        ...(finding.fieldId ? { fieldId: finding.fieldId } : {}),
+        ...(finding.value !== undefined ? { value: finding.value } : {}),
+        detail: finding.detail,
+      })
+    }
+  }
+  if (!count) return plan
+  const rows = plan.rows.map((row) => touched.get(row.index) ?? row)
+  const summary: TransferPlanSummary = { create: 0, update: 0, unchanged: 0, skip: 0, fail: 0, total: rows.length }
+  for (const row of rows) summary[row.verdict] += 1
+  const prior = plan.warnings.find((entry) => entry.class === 'resourceRule')
+  const raised: TransferWarning = {
+    class: 'resourceRule',
+    count: (prior?.count ?? 0) + count,
+    rows: (prior?.rows ?? 0) + rowsRaised.size,
+    fieldIds: [...new Set([...(prior?.fieldIds ?? []), ...fieldIds])],
+    samples: [...(prior?.samples ?? []), ...samples].slice(0, sampleSize),
+    requiresAcknowledgement: true,
+  }
+  const warnings = TRANSFER_WARNING_CLASSES.flatMap((entry) =>
+    entry === 'resourceRule' ? [raised] : plan.warnings.filter((warning) => warning.class === entry),
+  )
+  return {
+    rows,
+    summary,
+    warnings,
+    acknowledgementsRequired: warnings.filter((entry) => entry.requiresAcknowledgement).map((entry) => entry.class),
+  }
 }

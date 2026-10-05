@@ -489,6 +489,11 @@ export interface TransferFieldsRequest extends TransferOrgRequest {
   resource: string
   /** The site, for a host-scoped resource. */
   hostId?: string | null
+  /**
+   * The list filter an export was opened on, for a resource whose fields
+   * depend on the records read (one form's questions). An object, or ignored.
+   */
+  filter?: unknown
 }
 
 export interface TransferFieldsResponse extends TransferResourceInfo {

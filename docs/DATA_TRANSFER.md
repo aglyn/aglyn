@@ -149,7 +149,13 @@ apply it to a cell.
 
 A `MatchKeySpec` is a field and a normalizer: `email`, `domain` (from a URL
 or an address), `name` (accents, case and punctuation folded), `slug`,
-`phone`, `externalId`, `aglynId`, `caseless`, `trim`, `exact`.
+`phone`, `externalId`, `aglynId`, `caseless`, `trim`, `exact`, and `instant`
+(a moment to the minute, in UTC, from epoch milliseconds, ISO text or a
+`Date`, so a file's text and a record's stored milliseconds meet). A key
+with `with` is compound: an event's title AND its start, so a weekly class
+is several events. A row carries it only when every part has a value, and
+`matchKeyValue` joins the normalized parts (`MATCH_KEY_PART_SEPARATOR`); a
+compound key is named by its first field everywhere a key is named.
 `matchLookupRequests` lists the distinct values the plugin's `lookup` must
 query; the answer comes back as a `MatchLookup` (or is built from records
 with `buildMatchLookup`). `matchRows` returns one `RowMatchOutcome` per row:
@@ -194,11 +200,19 @@ typed, counted, and sampled: `derivation`, `ambiguousDate`,
 `overwriteNonBlank`, `clearValue`, `planLimit`, and `screening` — what a
 resource's own `plan` found that only its rules can see (each sample's
 `detail` says what; a sample about the whole file, such as a column's name,
-has the row `TRANSFER_FILE_SAMPLE_ROW`). Every class but a plain
+has the row `TRANSFER_FILE_SAMPLE_ROW`), and `resourceRule` (below). Every class but a plain
 `derivation` must be acknowledged; a `derivation` class holding a flagged
 guess must be too. `missingAcknowledgements` and `canApplyTransferPlan` gate
 Apply. Earlier wizard steps (picklists, lookups) pass what they decided as
 row `notes`; a note with `refuse` fails the row.
+
+`resourceRule` is the owning plugin's own finding about a row that no field
+policy can say — a redirect that loops, an off-site destination, a value its
+write path refuses. A resource's `plan` hook builds the plan and folds its
+findings in with `withTransferResourceFindings(plan, findings)`: each
+finding (`{ row, detail, fieldId?, value?, refuse? }`) is a sampled warning
+with its sentence, and `refuse` fails a row that would have written (reason
+`resourceRule`).
 
 ### `job.ts` — jobs, chunks, the ledger and undo
 
@@ -325,7 +339,10 @@ organization, the site, the acting member and the job, and — from the job —
 the plugin steps' `extras` (in `plan`, those sent with this dry run;
 afterwards, those the plan was made with) and the file's `headers`. A package kind registers `items`,
 `dependencies`, `remapIds`, `readItems`, `writeItems` and `revertItems` (and optionally `problems`, `referenceTargets` and `rules`). Registration runs
-`transferResourceProblems` and refuses a kind whose hooks are missing. From
+`transferResourceProblems` and refuses a kind whose hooks are missing. The `fields` hook alone is handed
+`ctx.filter`, the list filter an export dialog was opened on, so a resource
+whose columns follow the records read (one form's questions) answers for
+them. From
 its console registrar it registers the client half with
 `registerPluginTransferResourceUi(key, { label, icon, extraSteps })`.
 `resolveTransferResource(key)` joins a declaration to its server half — for
@@ -410,7 +427,7 @@ site's captures — after the gate has checked `data.manage` on that site
 
 | route | does | request → response |
 | -- | -- | -- |
-| `fields` | what a resource offers: its descriptor, every field and group, its match keys (each a default, in order, and the presets' match-key hint), its own presets (`resourcePresets`, each holding only fields the catalog has), its locked rules and aliases, and the person's `TransferPrefs` from `users/{uid}/transferPrefs/{resourceKey}`. | `TransferFieldsRequest` → `TransferFieldsResponse` |
+| `fields` | what a resource offers (for the list `filter` an export was opened on, when the body names one): its descriptor, every field and group, its match keys (each a default, in order, and the presets' match-key hint), its own presets (`resourcePresets`, each holding only fields the catalog has), its locked rules and aliases, and the person's `TransferPrefs` from `users/{uid}/transferPrefs/{resourceKey}`. | `TransferFieldsRequest` → `TransferFieldsResponse` |
 | `export` | the chosen fields (checked against the catalog, in the person's order) of the selection (at most 10,000 ids), the list's filter or every record, read page by page through the resource's `readPage` and streamed as CSV (labels as the header, or the `headers` a resource preset names; an optional byte-order mark), JSON or NDJSON. The rows are counted before the first byte — by the resource's `count` hook, or by reading ahead 5,000 rows — and sent as `X-Aglyn-Export-Rows`; a resource that cannot count and holds more goes without. An org-wide member reads everything; a collaborator scoped to some sites must reach a named site and is read through their `scopeTokens` (`memberScopeTokens`), which `readPage` must honor — the Admin SDK passes the rules. Audited as `data.transfer.export` with counts, never content. 20 a minute. | `TransferExportRequest` → the file, or `TransferErrorResponse` |
 | `upload` | stores a file whole, or one part of at most 3 MB (`part`, `parts`, then `jobId`), with the CSV `delimiter` and `headerRow` the person confirmed on the first part (kept as the job's `read`); inspects each part and the whole; refuses a format the resource does not take (415), more than 24 MB or the resource's `maxBytes` (413), more rows than its `maxRows` (default 50,000; 413). Makes the job, `draft`. | `TransferUploadRequest` → `TransferUploadResponse` |
 | `analyze` | header proposal (`matchHeaders` with the resource's aliases), 20 sample rows, the catalog, match keys, locked rules, and each mapped picklist column's values against the workspace's list (`picklists` hook) with a proposed choice per unmatched value. `mapping` re-reads the values under the person's mapping and adds every mapped field's `derivations` over the whole file, each mapped lookup column's `lookups` (see below), the rows `matches` against existing records under `matchKeys` (each key, by default) and `recordLabels`; `dateOrders` reads a field's dates in the order the person chose. → `analyzed`. | `TransferAnalyzeRequest` → `TransferAnalyzeResponse` |
@@ -555,7 +572,7 @@ composed of the core's shapes.
 
 | method | takes | returns |
 | -- | -- | -- |
-| `fields` | `{ resource }` | `TransferResourceInfo`: the descriptor, every field in catalog order, the groups, the match keys (and default keys), preset hints, locked rules, alias dictionaries, the person's `TransferPrefs`, whether a custom field may be created |
+| `fields` | `{ resource, filter? }` (the dialog's filter value) | `TransferResourceInfo`: the descriptor, every field in catalog order, the groups, the match keys (and default keys), preset hints, locked rules, alias dictionaries, the person's `TransferPrefs`, whether a custom field may be created |
 | `upload` | `TransferFileUpload`: resource, file name, decoded text, bytes, the confirmed `TransferFileSettings` (format, encoding, delimiter, header row) | the new `draft` `TransferJob` |
 | `analyze` | `TransferAnalysisRequest`: `{ jobId }`, optionally the `TransferReadChoices` | `TransferAnalysis`: headers, sample rows, `HeaderMatchResult`, the `TransferPicklistAnalysis`es; with a mapping, per-field `TransferDerivationSummary`, `TransferLookupReview`s, a `TransferMatchReview` and record labels |
 | `plan` | `TransferDryRunRequest`: the read choices, the `TransferPolicy`, plugin step `extras` | `TransferDryRun`: the `TransferPlan` (its rows every row, or 50 of each verdict when `rowsComplete` is false), the `TransferConflict`s and `conflictCount`, the `TransferAmbiguity`s, record labels |
@@ -858,3 +875,12 @@ that is never voided, whatever the decision.
 dictionary (source `Shopify`), and its `shopify` preset writes Shopify's
 columns in Shopify's order under Shopify's names.
 
+## The resources
+
+| resource | plugin | scope | moves | matched on |
+| -- | -- | -- | -- | -- |
+| `forms.submissions` | forms | site | export only: the submission's details and the answers; opened on one form, that form's questions | — |
+| `bookings` | bookings | site | export only: service, times, customer, status, payment | — |
+| `redirects` | redirects | site | both ways; off-site destinations approved in the importer's name, loops refused, chains and live pages flagged | Aglyn ID, then the from-path normalized as the redirects page normalizes it |
+| `events` | events-calendar | site | both ways, through the same write rule as the events page | Aglyn ID, then title and start together |
+| `outreach.do-not-contact` | outreach | workspace | import adds addresses and domains and never changes an entry; export holds the domains (an address is kept only as a fingerprint) | Aglyn ID, then the address or domain |

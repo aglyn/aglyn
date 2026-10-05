@@ -18,6 +18,7 @@
 import * as Aglyn from '@aglyn/aglyn'
 import { mdiEmailFastOutline } from '@aglyn/shared-data-mdi'
 import { lazy } from 'react'
+import { registerPluginTransferResourceUi } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
 import { registerPluginZone } from '@aglyn/aglyn/plugin-manager/plugin-zones'
 import {
   FORM_CONTACT_FIELDS_ZONE,
@@ -30,6 +31,7 @@ import { registerFormSubmissionCounts } from './model/form-submission-counts'
 import { registerFormSubmissionList } from './model/form-submission-list'
 import { registerFormRecordList } from './model/forms-record-lists'
 import { registerFormsRecordRoutes } from './model/forms-record-routes'
+import { FORM_SUBMISSIONS_TRANSFER_KEY } from './transfer/form-submissions-transfer-key'
 
 /** Code-split: the Forms console surface only loads when opened. */
 const FormsConsolePage = lazy(() => import('./components/forms-console-page'))
@@ -50,6 +52,13 @@ export function registerFormsConsole(): void {
   registerFormSubmissionList()
   // How many submissions a site received, for another plugin's figure.
   registerFormSubmissionCounts()
+  // The export dialog's name for a site's submissions; export only, so the
+  // wizard never offers it.
+  registerPluginTransferResourceUi(
+    FORM_SUBMISSIONS_TRANSFER_KEY,
+    { label: 'Form submissions', icon: { path: mdiEmailFastOutline.path } },
+    { pluginId: BUNDLE_ID },
+  )
   registerPluginZone(
     {
       zone: FORM_SUBMISSIONS_ZONE,

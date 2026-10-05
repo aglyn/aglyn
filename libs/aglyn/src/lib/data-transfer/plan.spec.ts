@@ -24,6 +24,7 @@ import {
   canApplyTransferPlan,
   missingAcknowledgements,
   plannedWrites,
+  withTransferResourceFindings,
 } from './plan'
 import type { BuildTransferPlanInput, TransferPlanRow } from './plan'
 import { createTransferPolicy } from './policy'
@@ -311,5 +312,37 @@ describe('acknowledgement', () => {
   it('asks for acknowledgement of everything but plain derivations', () => {
     expect(ACKNOWLEDGED_WARNING_CLASSES).not.toContain('derivation')
     expect(ACKNOWLEDGED_WARNING_CLASSES).toContain('overwriteNonBlank')
+  })
+})
+
+describe('withTransferResourceFindings', () => {
+  it('flags a row for acknowledgement, and refuses one that would have written', () => {
+    const base = plan([
+      { email: 'new@example.com', name: 'New' },
+      { email: 'bob@example.com', name: 'Bob' },
+    ])
+    expect(base.summary).toMatchObject({ create: 1, update: 1, fail: 0 })
+    const result = withTransferResourceFindings(base, [
+      { row: 0, fieldId: 'name', value: 'New', detail: 'Sends visitors off this site' },
+      { row: 1, detail: 'Loops back to itself', refuse: true },
+      { row: 9, detail: 'No such row' },
+    ])
+    expect(result.rows.map((row) => [row.verdict, row.reason ?? null, row.warnings.includes('resourceRule')])).toEqual([
+      ['create', null, true],
+      ['fail', 'resourceRule', true],
+    ])
+    expect(result.rows[1]?.diff).toEqual([])
+    expect(result.summary).toMatchObject({ create: 1, update: 0, fail: 1, total: 2 })
+    const warning = result.warnings.find((entry) => entry.class === 'resourceRule')
+    expect(warning).toMatchObject({ count: 2, rows: 2, fieldIds: ['name'], requiresAcknowledgement: true })
+    expect(warning?.samples.map((sample) => sample.detail)).toEqual(['Sends visitors off this site', 'Loops back to itself'])
+    expect(result.acknowledgementsRequired).toContain('resourceRule')
+    expect(canApplyTransferPlan(result, [])).toBe(false)
+    expect(canApplyTransferPlan(result, result.acknowledgementsRequired)).toBe(true)
+  })
+
+  it('returns the plan as it was when nothing was found', () => {
+    const base = plan([{ email: 'new@example.com' }])
+    expect(withTransferResourceFindings(base, [])).toBe(base)
   })
 })

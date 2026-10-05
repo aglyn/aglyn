@@ -134,9 +134,11 @@ export function ImportMatchingStep({
           <List dense aria-label="Match keys">
             {ordered.map((key) => {
               const on = chosen.includes(key.fieldId)
-              const inFile = mapped.has(key.fieldId)
+              const parts = [key.fieldId, ...(key.with ?? []).map((part) => part.fieldId)]
+              // A compound key is in the file only when every part is.
+              const inFile = parts.every((id) => mapped.has(id))
               const position = chosen.indexOf(key.fieldId)
-              const name = fieldLabel(key.fieldId)
+              const name = parts.map(fieldLabel).join(' + ')
               return (
                 <ListItem
                   key={key.fieldId}

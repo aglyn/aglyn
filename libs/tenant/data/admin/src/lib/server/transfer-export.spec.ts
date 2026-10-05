@@ -44,19 +44,24 @@ const BOTTLES = Array.from({ length: 7 }, (_unused, index) => ({
 }))
 
 const reads: TransferReadOptions[] = []
+const catalogFilters: unknown[] = []
 let countHook: ((options: TransferReadOptions) => number) | null = null
 let pageSize = 3
 let total = BOTTLES.length
 
 function impl(): PluginTransferResource {
   return {
-    fields: () => ({
-      standard: [
-        { id: 'name', label: 'Name', type: 'text' },
-        { id: 'grapes', label: 'Grapes', type: 'tags' },
-        { id: 'meta', label: 'Meta', type: 'json' },
-      ],
-    }),
+    fields: (ctx) => {
+      catalogFilters.push(ctx.filter ?? null)
+      return {
+        standard: [
+          ...(ctx.filter?.['vintage'] ? [{ id: 'vintage', label: 'Vintage', type: 'integer' as const }] : []),
+          { id: 'name', label: 'Name', type: 'text' },
+          { id: 'grapes', label: 'Grapes', type: 'tags' },
+          { id: 'meta', label: 'Meta', type: 'json' },
+        ],
+      }
+    },
     matchKeys: [{ fieldId: 'id', normalizer: 'aglynId' }],
     ...(countHook ? { count: async (_ctx, options) => (countHook as (options: TransferReadOptions) => number)(options) } : {}),
     readPage: async (_ctx, cursor, fieldIds, options) => {
@@ -114,6 +119,7 @@ const text = async (stream: ReadableStream<Uint8Array>) =>
 
 beforeEach(() => {
   reads.length = 0
+  catalogFilters.length = 0
   countHook = null
   pageSize = 3
   total = BOTTLES.length
@@ -152,6 +158,13 @@ describe('the field-selectable export', () => {
     await run({ scope: { kind: 'filter', filter: { stage: 'open' } } })
     expect(reads.at(-1)).toMatchObject({ filter: { stage: 'open' } })
     expect(reads.at(-1)).not.toHaveProperty('scopeTokens')
+  })
+
+  it('checks the chosen fields against the catalog of the filter it reads, and only that one', async () => {
+    await run({ fieldIds: ['vintage', 'name'], scope: { kind: 'filter', filter: { vintage: 2019 } } })
+    expect(catalogFilters).toEqual([{ vintage: 2019 }])
+    await expect(run({ fieldIds: ['vintage', 'name'] })).rejects.toMatchObject({ code: 'invalid' })
+    expect(catalogFilters.at(-1)).toBeNull()
   })
 
   it('promises the resource’s own count, and no count for a file past the read-ahead it cannot count', async () => {

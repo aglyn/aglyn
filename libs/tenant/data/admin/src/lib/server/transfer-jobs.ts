@@ -504,14 +504,18 @@ export function transferJobProgress(job: TransferJobRecord): TransferProgress {
  */
 export async function readTransferResourceInfo(
   deps: TransferEngineDeps,
-  input: { orgId: string; actorUid: string; resource: string; hostId?: string | null },
+  input: { orgId: string; actorUid: string; resource: string; hostId?: string | null; filter?: unknown },
 ): Promise<Omit<TransferResourceInfo, 'prefs'>> {
   const resource = await resolveResource(deps, String(input.resource ?? '').trim())
+  const filter = input.filter
   const ctx: TransferResourceContext = {
     resource: resource.key,
     orgId: input.orgId,
     hostId: transferHostIdFor(resource, input.hostId),
     actorUid: input.actorUid,
+    ...(filter && typeof filter === 'object' && !Array.isArray(filter)
+      ? { filter: filter as Readonly<Record<string, unknown>> }
+      : {}),
   }
   const hooks = transferRecordsHooks(resource)
   const catalog = await transferResourceCatalog(resource, ctx)

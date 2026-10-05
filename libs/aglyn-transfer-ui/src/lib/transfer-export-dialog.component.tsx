@@ -100,6 +100,15 @@ const FORMAT_WORDS: Readonly<Record<TransferFormat, string>> = {
 
 const CUSTOM_SELECTION = 'custom'
 
+/**
+ * The preset a first export opens on: Re-importable, so the file comes back
+ * in — or Everything for an export-only resource, whose fields are all
+ * read-only and would leave Re-importable holding the ID alone.
+ */
+function defaultPresetOf(info: TransferResourceInfo): TransferPresetId {
+  return info.resource.exportOnly ? 'everything' : 'reimportable'
+}
+
 export interface TransferExportDialogProps {
   open: boolean
   onClose(): void
@@ -165,6 +174,8 @@ export function TransferExportDialog(props: TransferExportDialogProps) {
   )
   const selectionCount = selection?.length ?? 0
   const hasFilter = Boolean(filter)
+  // The filter's value as text, so a parent re-creating the same filter does not reload the fields.
+  const filterKey = filter ? JSON.stringify(filter.value ?? null) : null
   const hints = useMemo(() => (info ? presetHintsOf(info) : {}), [info])
   const resourcePresets = useMemo(() => info?.resourcePresets ?? [], [info])
   /*
@@ -179,7 +190,7 @@ export function TransferExportDialog(props: TransferExportDialogProps) {
     if (!open) return
     let live = true
     client
-      .fields({ resource })
+      .fields(filterKey === null ? { resource } : { resource, filter: JSON.parse(filterKey) as unknown })
       .then((loaded) => {
         if (!live) return
         setError(null)
@@ -213,10 +224,9 @@ export function TransferExportDialog(props: TransferExportDialogProps) {
           setFieldIds(resolved.fieldIds)
           setUnknown(resolved.unknown)
         } else {
-          setPresetId('reimportable')
-          setFieldIds(
-            resolveTransferPreset(built, 'reimportable', loadedHints).fieldIds,
-          )
+          const first = defaultPresetOf(loaded)
+          setPresetId(first)
+          setFieldIds(resolveTransferPreset(built, first, loadedHints).fieldIds)
           setUnknown([])
         }
       })
@@ -232,7 +242,7 @@ export function TransferExportDialog(props: TransferExportDialogProps) {
     return () => {
       live = false
     }
-  }, [open, client, resource, selectionCount, hasFilter])
+  }, [open, client, resource, selectionCount, hasFilter, filterKey])
 
   const choosePreset = (id: string) => {
     if (!catalog) return
@@ -322,8 +332,11 @@ export function TransferExportDialog(props: TransferExportDialogProps) {
   const title =
     props.title ??
     (info ? `Export ${info.resource.label.toLowerCase()}` : 'Export')
+  // A file of a resource that is never imported is not "re-importable".
   const presetOptions = [
-    ...TRANSFER_PRESET_IDS.map((id) => ({ value: id, ...PRESET_WORDS[id] })),
+    ...TRANSFER_PRESET_IDS.filter(
+      (id) => id !== 'reimportable' || !info?.resource.exportOnly,
+    ).map((id) => ({ value: id, ...PRESET_WORDS[id] })),
     ...resourcePresets.map((preset) => ({
       value: preset.id,
       label: preset.label,

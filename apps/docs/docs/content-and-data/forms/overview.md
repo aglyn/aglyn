@@ -504,6 +504,39 @@ The sender's name and email are recognized from the field name (see
 Submissions collected before a form became a form entity are filed under the name they
 were sent with rather than this form's id, so they stay in the Inbox under **All forms**.
 
+## Export submissions {#export-submissions}
+
+Take a copy of what visitors sent, as a file:
+
+- **One form's submissions.** On the form's own page, **Export** in the header of the
+  **Submissions to this form** card exports that form's submissions, newest first.
+- **Every form's at once.** On the **Forms** page, **Export submissions** in the header of
+  the **Forms** card exports every submission the site has received, including those sent
+  before a form became a form entity.
+
+You choose the columns, and their order, or start from a preset:
+
+- **Submission** — the Aglyn ID, when it was submitted, the form's ID and the name it had
+  when the submission arrived, the page it was sent from, whether it's been read, when it
+  was last replied to, the form's campaigns at the time, where else it was filed (such as
+  a dataset), and the site's ID.
+- **Answers** — one column per question, labeled with the question. Exporting one form
+  offers that form's questions; exporting the whole site offers every form's, each form
+  its own group, and a question two forms share by field name (such as *email*) is one
+  column. Answers are exported exactly as the visitor typed them.
+- **Other answers** — answers the form's recent submissions carry that its current
+  design no longer asks for, so a question you've since removed isn't lost.
+
+Files come as **CSV**, **JSON** or **NDJSON**, and your last choice of columns is
+remembered for next time.
+
+Exporting needs the **Manage data** permission on the site, and every export is recorded
+in the workspace's audit log — who exported, when and how many submissions, never the
+submissions themselves.
+
+Submissions can't be imported. A submission is what a visitor sent through a published
+form, stamped with the time and the page it came from; a file can't have sent one.
+
 ## Find a form in the list {#find-a-form}
 
 ![The site's Forms list: a table of forms with their display name, slug, submissions, leads, last submission and updated date, and an Actions column, under the Columns, Filters, Export and Search controls](/img/forms/forms-list.png)

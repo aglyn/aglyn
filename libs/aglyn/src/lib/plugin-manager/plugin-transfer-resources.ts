@@ -208,6 +208,13 @@ export interface TransferResourceContext {
   extras?: Readonly<Record<string, unknown>>
   /** The uploaded file's column names, once a job holds one. */
   headers?: readonly string[]
+  /**
+   * For a catalog read (`fields`) only: the list filter the export dialog was
+   * opened on, in the plugin's own terms. A resource whose columns depend on
+   * which records are read — one form's questions — answers for these;
+   * every other read ignores it.
+   */
+  filter?: Readonly<Record<string, unknown>>
 }
 
 /** Which records an export page reads. */

@@ -116,6 +116,8 @@ describe('the HTTP transfer client', () => {
     })
     expect(info).not.toHaveProperty('ok')
     expect(info.prefs).toEqual({ presets: [] })
+    await client.fields({ resource: 'people', filter: { formId: 'f1' } })
+    expect(sent[1]?.body).toEqual({ orgId: 'org-1', resource: 'people', hostId: 'host-1', filter: { formId: 'f1' } })
   })
 
   it('uploads a large file in parts, the read choices on the first and the job on the rest', async () => {

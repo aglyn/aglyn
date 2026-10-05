@@ -138,11 +138,15 @@ export async function streamTransferExport(
   input: TransferExportInput,
 ): Promise<TransferExportFile> {
   const resource = await resolveTransferRecordsResource(deps, String(input.resource ?? '').trim())
+  const options = readOptionsFor(input)
+  // The catalog the chosen fields are checked against is the one the dialog
+  // showed for the filter, for a resource whose columns follow the records read.
   const ctx: TransferResourceContext = {
     resource: resource.key,
     orgId: input.orgId,
     hostId: transferHostIdFor(resource, input.hostId),
     actorUid: input.actorUid,
+    ...(options.filter ? { filter: options.filter } : {}),
   }
   const format = input.format
   if (!FORMATS.includes(format) || !resource.formats.includes(format)) {
@@ -164,7 +168,6 @@ export async function streamTransferExport(
   }
   const fieldIds = selection.fieldIds
   if (!fieldIds.length) throw new TransferEngineError('invalid', 400, 'Choose at least one field to export.')
-  const options = readOptionsFor(input)
   const hooks = transferRecordsHooks(resource)
 
   // Counted before the first byte: by the resource, or by reading ahead.

@@ -46,6 +46,73 @@ A redirect that is held for review does not redirect until our review team
 releases it, and its owners get a notice that names it; see
 [Holds and reviews](/help/holds-and-reviews#page-held).
 
+## Import and export {#import-and-export}
+
+**Import** and **Export** sit at the top of the **URL redirects** card and work on the
+site you have open. Like adding a rule by hand, importing takes a publishing role
+(Editor or Admin) and a plan that includes redirects.
+
+**Export** writes every rule on the site as CSV, JSON or NDJSON. You pick the columns and
+their order; the default (*Re-importable*) puts the Aglyn ID first so the file can come
+back in and update the same rules. Deleted rules are never exported.
+
+**Import** takes a CSV, JSON or NDJSON file of up to 5,000 rules.
+
+### Columns
+
+| Column | What it holds |
+| -- | -- |
+| **Aglyn ID** | The rule's ID. Exported, and used on import to find the rule; never changed by a file. |
+| **From path** | Required for a new rule. A path like `/old-page`, saved the way the manager saves it: lowercase, without a trailing slash or a query string. For a regular expression rule, the pattern. |
+| **Kind** | `exact`, `prefix` or `regex`; *Path prefix* and *Regular expression* work too. Blank means exact. |
+| **To** | Required for a new rule. A path on your site or an `https://` address. |
+| **Status code** | `301`, `302`, `307` or `308`. Blank means 302. |
+| **Priority** | A whole number; lower fires first. Blank means 100. |
+| **Enabled** | Yes or no. Blank means on. |
+| **Hits in the last 30 days**, **Last hit**, **Off-site destination approved by**, **Created**, **Updated**, **Created by** | Exported only. |
+
+Columns from Shopify (*Redirect from*, *Redirect to*), the WordPress Redirection plugin
+(*source*, *target*, *code*), Yoast SEO (*Origin*, *Target*, *Type*), Wix (*Old URL*,
+*New URL*) and Webflow (*Old path*, *Redirect to path*) are recognized by name.
+
+### How a row finds an existing rule
+
+1. By its **Aglyn ID**, when the file has that column (an exported file does).
+2. Otherwise by its **from path** within its **kind**, read the way the manager saves it,
+   so `/Old-Page/` finds the exact rule for `/old-page`. An exact rule and a prefix rule
+   can share a path, so a row without a kind finds the exact one.
+
+A row that finds no rule creates one. A deleted rule is never found. Two rows for the
+same path refuse the second.
+
+### Conflicts, the dry run and undo
+
+When a row finds a rule that already exists, you choose per column what the file does:
+fill only blank fields (the default — so an existing rule keeps its destination), overwrite,
+or keep what is there. Choose **Overwrite** for **To** when the file is meant to change
+where rules send visitors. You can also skip matched rows instead of updating them.
+
+Before anything is written, the **Review** step is a dry run, and it checks every row the
+way the manager checks a save:
+
+- A row is **refused** when the manager would refuse the rule: a path or pattern it can't
+  use, a destination that isn't a site path or `https://` address, one whose address looks
+  like another company's website, a path redirected to itself, a second rule for a path
+  that already has one, or a destination that chains back to the rule (a loop) — counting
+  the rows above it in the file, as if they were saved in order.
+- A row is **flagged** for you to acknowledge when its destination is another site — the
+  import approves that destination in your name, the same approval saving the rule
+  yourself gives — when its destination is itself redirected (a chain), when it leads
+  into a loop other rules make, or when its from path is a published page.
+- Rules past what your plan allows are held back.
+
+An import can be **undone for seven days**. Undo removes the rules the import created
+and puts back the values it changed. A rule someone edited after the import is shown to
+you first, and you choose whether to keep the edit or undo it.
+
+Imported rules go live within about thirty seconds, like rules saved by hand, and the
+list updates on its own.
+
 ## Metrics
 
 Each rule tracks **hit metrics** (sampled), so you can see which redirects are actually

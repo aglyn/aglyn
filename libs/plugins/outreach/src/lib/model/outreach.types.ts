@@ -1218,10 +1218,25 @@ export const OUTREACH_DO_NOT_CONTACT_REASONS = [
 export type OutreachDoNotContactReason =
   (typeof OUTREACH_DO_NOT_CONTACT_REASONS)[number]
 
+/** Why an entry is on the list, as the Compliance page and an export say it. */
+export const OUTREACH_DO_NOT_CONTACT_REASON_LABELS: Record<OutreachDoNotContactReason, string> = {
+  manual: 'Added by a member',
+  opt_out_reply: 'A reply asked not to be emailed',
+  unsubscribe: 'Unsubscribed',
+  hard_bounce: 'Mail bounced',
+  gateway_block: 'Its mail gateway blocked the sender',
+}
+
 /** What put an address on the list: a member, or the sending runtime. */
 export const OUTREACH_DO_NOT_CONTACT_SOURCES = ['member', 'runtime'] as const
 export type OutreachDoNotContactSource =
   (typeof OUTREACH_DO_NOT_CONTACT_SOURCES)[number]
+
+/** Who added an entry, as an export says it. */
+export const OUTREACH_DO_NOT_CONTACT_SOURCE_LABELS: Record<OutreachDoNotContactSource, string> = {
+  member: 'A member',
+  runtime: 'Sequences, automatically',
+}
 
 /** One address on the list (`orgs/{orgId}/outreachDoNotContact/{key}`). */
 export interface OutreachDoNotContactEntry {

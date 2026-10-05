@@ -80,6 +80,24 @@ describe('TransferExportDialog', () => {
     ).toBe(false)
   })
 
+  it('opens an export-only resource on Everything, offers no Re-importable, and loads the fields for its filter', async () => {
+    const client = createPeopleClient()
+    const fields = client.fields.bind(client)
+    const asked: unknown[] = []
+    client.fields = async (request) => {
+      asked.push(request)
+      const info = await fields(request)
+      return { ...info, resource: { ...info.resource, exportOnly: true } }
+    }
+    renderDialog(client, { filter: { label: 'Team is red', value: { team: 'red' } } })
+    await screen.findByRole('dialog', { name: 'Export people' })
+    await waitFor(() => expect(order()).toHaveLength(11))
+    expect(screen.getByRole('combobox', { name: /Preset/ }).textContent).toBe('Everything')
+    expect(asked).toEqual([{ resource: 'people', filter: { team: 'red' } }])
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: /Preset/ }))
+    expect(within(screen.getByRole('listbox')).queryByRole('option', { name: /^Re-importable/ })).toBeNull()
+  })
+
   it('fills the picker from a preset, and any change after it is a hand-picked list', async () => {
     renderDialog()
     await screen.findByRole('dialog', { name: 'Export people' })

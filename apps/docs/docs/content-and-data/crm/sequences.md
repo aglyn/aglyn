@@ -302,6 +302,56 @@ page on screen; a combination it cannot answer at once is named above the table
 instead of being applied to some rows. See
 [Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
 
+#### Import and export the do-not-contact list {#import-export-do-not-contact}
+
+**Import** and **Export** are in the **Do not contact domains** card's header.
+
+**Import** takes a CSV, JSON or NDJSON file of email addresses, domains, or
+both, one per row, in a column the wizard maps to **Entry**. Each value
+decides what it adds: an email address (`casey@example.com`, or
+`Casey <casey@example.com>`) puts that one address on the list; anything else
+that reads as a domain (`example.com`, `@example.com`, `https://www.example.com`)
+puts the whole domain on it. An optional **Note** column says why, and is kept
+with the entry. Each new entry is recorded as added by you, exactly as if you
+had added it on this page.
+
+An import only adds. A row whose entry is already on the list is skipped,
+whatever you choose in the wizard: the entry keeps the reason, the date and
+the note it was first added with, because that is the record of why it is
+there. Two spellings of one entry in the same file (`Acme.com` and
+`www.acme.com`) are imported once.
+
+Before anything is written, the wizard's review step lists what each row will
+do, and asks you to acknowledge these:
+
+- **Neither an email address nor a domain** — the value cannot be read as
+  either, so the row is not imported. A value that looks like an address but
+  is not a valid one (`casey morgan@acme.com`) is refused rather than read as
+  its domain, so a typo never blocks a whole company.
+- **A public mailbox provider** — the row adds a domain such as `gmail.com`
+  or `outlook.com`. That blocks every person with an address there, not one
+  person; add their address instead unless that is what you mean.
+- **Already covered** — the row adds an address whose domain is on the list
+  already, or is added by another row of the same file. The address is still
+  added, so it stays blocked if the domain is ever taken off.
+
+Importing needs the same access as this page — **Use Sequences**, across the
+whole organization, in a workspace whose plan includes Sequences — and every
+row is refused, with the reason, for anyone without it.
+
+**Export** downloads the listed **domains** — all of them, or only the ones
+the table's search and filters show — with why each was listed, who added it
+and when. **Addresses are never exported.** The list keeps an address as a
+one-way fingerprint, never the address itself, so that it can go on refusing
+someone who asked not to be emailed without holding who they are; there is no
+address to read back out.
+
+For seven days after an import, **Undo** on its results takes off the entries
+that import added, and only those. An entry that was taken off and added again
+since is asked about rather than removed, and one that Sequences added on its
+own since — a reply asking not to be emailed, an unsubscribe or a bounce — is
+always kept.
+
 ## Sequences {#sequences}
 
 A **sequence** is the emails, and the tasks between them, one person gets from

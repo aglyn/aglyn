@@ -4,10 +4,10 @@ Status: the core (AGL-3522), the extension point (AGL-3523), the job
 engine (AGL-3524), the UI kit (AGL-3526), the console client with the
 core launcher (AGL-3539), the field-selectable export (AGL-3525), site
 packages (AGL-3533), the jobs' cleanup (AGL-3540), datasets (AGL-3530),
-email lists and suppressions (AGL-3529), and workspace packages with the
-Import & Export hub (AGL-3535) are built; everything
-else in the build plan below
-is open. Linear project P-AGL-140.
+email lists and suppressions (AGL-3529), workspace packages with the
+Import & Export hub (AGL-3535), and form submissions, bookings, redirects,
+events and the outreach do-not-contact list (AGL-3532) are built; everything
+else in the build plan below is open. Linear project P-AGL-140.
 The architecture of the core, and how the rest plugs into it, is in
 [`docs/DATA_TRANSFER.md`](../DATA_TRANSFER.md).
 
@@ -75,8 +75,10 @@ matches · **Dry** = dry-run preview · **Undo**
 | Templates and marketplace installs | Internal copy | Copies into the site library | Collision prompts, file import |
 | One page, component or layout as a file | — | None | Everything |
 | Outreach sequences and enrollments, campaigns, automations | JSON (workspace package) | Since AGL-3535: sequences, campaigns, org automations and CRM email templates as one package from Settings → Import & export, with the site packages' collision choices, missing-reference prompts and a 7-day undo. Imports never start sending | Enrollments and send history (by design) |
-| Forms, bookings, events | — | None (kept out of the site backup as personal data) | Submissions and bookings export; definitions in packages |
-| Redirects | — | None | CSV both ways, matched on the from-path |
+| Outreach do-not-contact list | CSV/JSON/NDJSON | Since AGL-3532: import adds addresses and domains through the list's own add path and never changes an entry; export holds the domains (an address is stored only as a fingerprint) | — |
+| Form submissions, bookings | CSV/JSON/NDJSON | Since AGL-3532: field-selectable exports, a form's own questions when opened on one form; audited, behind "Manage data" on the site | Import is not offered: a submission is what a visitor sent, and a booking's one write path holds the slot, charges and emails |
+| Events | CSV/JSON/NDJSON | Since AGL-3532: both ways through the events page's write rule, matched on the Aglyn ID, then title and start together | — |
+| Redirects | CSV/JSON/NDJSON | Since AGL-3532: both ways, matched on the normalized from-path; off-site destinations approved in the importer's name, invalid rules and loops refused, chains and live pages flagged, the plan's redirect quota enforced | — |
 | "Download my data" | JSON (+ CSVs) | Per user and per workspace, with a coverage block | Stays separate: a legal obligation, never plan-gated, and its coverage has to match what erasure removes |
 | Staff-only exports, REST v1, CLI | Various | Operational; no bulk endpoints | Out of scope (bulk endpoints later) |
 

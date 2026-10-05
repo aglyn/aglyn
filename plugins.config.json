@@ -212,6 +212,25 @@
           "page": "the Forms page"
         }
       ],
+      "transferResources": [
+        {
+          "$comment": "AGL-3532. Personal data: the export route needs “Manage data” on the site and audits every file. Opened on one form, the columns are that form’s questions (`ctx.filter.formId`). Export only: A submission is what a visitor sent through a published form, stamped with the time and the page it came from; a file cannot have sent one, so submissions are exported and never imported.",
+          "key": "forms.submissions",
+          "label": "Form submissions",
+          "singularLabel": "Form submission",
+          "scope": "host",
+          "kinds": [
+            "records"
+          ],
+          "formats": [
+            "csv",
+            "json",
+            "ndjson"
+          ],
+          "description": "What visitors sent through this site’s forms: each answer, and when, on which page and through which form it arrived.",
+          "exportOnly": true
+        }
+      ],
       "contributes": {
         "site": {
           "components": [
@@ -225,7 +244,8 @@
             "/forms"
           ],
           "slots": [
-            "sitePackageItemPreview"
+            "sitePackageItemPreview",
+            "transferResources"
           ]
         }
       }
@@ -318,6 +338,25 @@
           "payloadKeys": ["serviceName", "email", "startsAtMs"]
         }
       ],
+      "transferResources": [
+        {
+          "$comment": "AGL-3532. Export only: the one write path that creates a booking (`bookings/book`) emails the customer and may charge them, and the reminder job would email any booking it found. Export only: A booking is made on the booking page, which holds the slot, takes any payment and sends the confirmation and the reminder; one written from a file would skip all of that, so bookings are exported and never imported.",
+          "key": "bookings",
+          "label": "Bookings",
+          "singularLabel": "Booking",
+          "scope": "host",
+          "kinds": [
+            "records"
+          ],
+          "formats": [
+            "csv",
+            "json",
+            "ndjson"
+          ],
+          "description": "Every booking on this site: the service, the time, the customer’s details, its status and what was paid.",
+          "exportOnly": true
+        }
+      ],
       "contributes": {
         "site": {
           "components": [
@@ -331,7 +370,8 @@
           ],
           "slots": [
             "consoleSearch",
-            "crmRecordBooking"
+            "crmRecordBooking",
+            "transferResources"
           ]
         }
       }
@@ -1178,6 +1218,22 @@
             "maxRows": 500
           },
           "description": "Each sequence's steps and settings, imported as a draft. Never who was enrolled or what was sent."
+        },
+        {
+          "$comment": "AGL-3532. Add-only: a row never changes or removes an entry, because the list is a promise not to email someone.",
+          "key": "outreach.do-not-contact",
+          "label": "Do-not-contact list",
+          "singularLabel": "Do-not-contact entry",
+          "scope": "org",
+          "kinds": [
+            "records"
+          ],
+          "formats": [
+            "csv",
+            "json",
+            "ndjson"
+          ],
+          "description": "The domains and addresses sequences never email. An import only adds to it; an address is kept as a fingerprint, so only domains are exported."
         }
       ],
       "apiPrefixes": [
@@ -1187,7 +1243,8 @@
         "libs/plugins/outreach/src/lib/mailboxes/mailbox-routes.ts",
         "libs/plugins/outreach/src/lib/routes/sequence-routes.ts",
         "libs/plugins/outreach/src/lib/routes/enroll-routes.ts",
-        "libs/plugins/outreach/src/lib/runtime/mailbox-health-store.ts"
+        "libs/plugins/outreach/src/lib/runtime/mailbox-health-store.ts",
+        "libs/plugins/outreach/src/lib/transfer/do-not-contact-transfer.ts"
       ],
       "catalog": {
         "order": 9,
@@ -1530,7 +1587,8 @@
       "register": {
         "site": "registerEventsCalendarPlugin",
         "console": "registerEventsCalendarConsole",
-        "tenantApi": "registerEventsCalendarApi"
+        "tenantApi": "registerEventsCalendarApi",
+        "consoleServerDeclarations": "registerEventsCalendarConsoleServerDeclarations"
       },
       "modules": {
         "site": "site"
@@ -1576,6 +1634,27 @@
           }
         }
       ],
+      "transferResources": [
+        {
+          "$comment": "AGL-3532.",
+          "key": "events",
+          "label": "Events",
+          "singularLabel": "Event",
+          "scope": "host",
+          "kinds": [
+            "records"
+          ],
+          "formats": [
+            "csv",
+            "json",
+            "ndjson"
+          ],
+          "limits": {
+            "maxRows": 2000
+          },
+          "description": "This site’s calendar events, matched on their ID, then the title and start together."
+        }
+      ],
       "contributes": {
         "site": {
           "components": [
@@ -1586,6 +1665,9 @@
           "shell": true,
           "routes": [
             "/events"
+          ],
+          "slots": [
+            "transferResources"
           ]
         }
       }
@@ -1914,7 +1996,8 @@
       "package": "@aglyn/plugins-redirects",
       "register": {
         "console": "registerRedirectsConsole",
-        "tenantApi": "registerRedirectsApi"
+        "tenantApi": "registerRedirectsApi",
+        "consoleServerDeclarations": "registerRedirectsConsoleServerDeclarations"
       },
       "catalog": {
         "order": 16,
@@ -1956,6 +2039,27 @@
           }
         }
       ],
+      "transferResources": [
+        {
+          "$comment": "AGL-3532. Written through the same allow-list, quota, publish role and approval stamp the redirects page and the create route use; the approver of an off-site destination is the person importing, never a column of the file.",
+          "key": "redirects",
+          "label": "Redirects",
+          "singularLabel": "Redirect",
+          "scope": "host",
+          "kinds": [
+            "records"
+          ],
+          "formats": [
+            "csv",
+            "json",
+            "ndjson"
+          ],
+          "limits": {
+            "maxRows": 5000
+          },
+          "description": "This site’s redirect rules, matched on the path they redirect from."
+        }
+      ],
       "contributes": {
         "console": {
           "shell": true,
@@ -1963,7 +2067,8 @@
             "/redirects"
           ],
           "slots": [
-            "consoleSearch"
+            "consoleSearch",
+            "transferResources"
           ]
         }
       }

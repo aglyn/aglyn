@@ -22,7 +22,7 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     id: 'forms',
     apiPrefixes: ["forms"],
     register: {"site":"registerFormsPlugin","console":"registerFormsConsole"},
-    contributes: {"console":{"shell":true,"routes":["/forms"],"slots":["sitePackageItemPreview"]}},
+    contributes: {"console":{"shell":true,"routes":["/forms"],"slots":["sitePackageItemPreview","transferResources"]}},
     load: () => import('@aglyn/plugins-forms'),
     loads: {
       site: () => import('@aglyn/plugins-forms/site'),
@@ -32,7 +32,7 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     id: 'bookings',
     apiPrefixes: ["bookings"],
     register: {"site":"registerBookingsPlugin","console":"registerBookingsConsole"},
-    contributes: {"console":{"shell":true,"routes":["/bookings"],"slots":["consoleSearch","crmRecordBooking"]}},
+    contributes: {"console":{"shell":true,"routes":["/bookings"],"slots":["consoleSearch","crmRecordBooking","transferResources"]}},
     load: () => import('@aglyn/plugins-bookings'),
     loads: {
       site: () => import('@aglyn/plugins-bookings/site'),
@@ -89,7 +89,7 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     id: 'events-calendar',
     apiPrefixes: ["events"],
     register: {"site":"registerEventsCalendarPlugin","console":"registerEventsCalendarConsole"},
-    contributes: {"console":{"shell":true,"routes":["/events"]}},
+    contributes: {"console":{"shell":true,"routes":["/events"],"slots":["transferResources"]}},
     load: () => import('@aglyn/plugins-events-calendar'),
     loads: {
       site: () => import('@aglyn/plugins-events-calendar/site'),
@@ -121,7 +121,7 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
   {
     id: 'redirects',
     register: {"console":"registerRedirectsConsole"},
-    contributes: {"console":{"shell":true,"routes":["/redirects"],"slots":["consoleSearch"]}},
+    contributes: {"console":{"shell":true,"routes":["/redirects"],"slots":["consoleSearch","transferResources"]}},
     load: () => import('@aglyn/plugins-redirects'),
   },
   {

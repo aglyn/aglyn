@@ -20,6 +20,8 @@ import {
   domainOf,
   foldName,
   foldSlug,
+  MATCH_KEY_PART_SEPARATOR,
+  matchKeyValue,
   matchLookupKey,
   matchLookupRequests,
   matchRows,
@@ -127,5 +129,49 @@ describe('matchRows', () => {
 
   it('treats a row with no key as new', () => {
     expect(matchRows([{ name: 'Nobody' }], keys, lookup)).toEqual([{ kind: 'new' }])
+  })
+})
+
+describe('compound keys', () => {
+  const key: MatchKeySpec = { fieldId: 'title', normalizer: 'name', with: [{ fieldId: 'startsAt', normalizer: 'instant' }] }
+  const START = Date.UTC(2026, 9, 5, 14, 30)
+
+  it('reads a moment to the minute from milliseconds, ISO text or a Date', () => {
+    expect(normalizeMatchValue('instant', START)).toBe('2026-10-05T14:30Z')
+    expect(normalizeMatchValue('instant', '2026-10-05T09:30:41-05:00')).toBe('2026-10-05T14:30Z')
+    expect(normalizeMatchValue('instant', new Date(START))).toBe('2026-10-05T14:30Z')
+    expect(normalizeMatchValue('instant', String(START))).toBe('2026-10-05T14:30Z')
+    expect(normalizeMatchValue('instant', 'not a date')).toBeNull()
+  })
+
+  it('joins every part, and has no value when a part is missing', () => {
+    expect(matchKeyValue(key, { title: 'Yoga, Level 1', startsAt: START })).toBe(
+      `yoga level 1${MATCH_KEY_PART_SEPARATOR}2026-10-05T14:30Z`,
+    )
+    expect(matchKeyValue(key, { title: 'Yoga' })).toBeNull()
+  })
+
+  it('tells a weekly event apart by its start, and finds the one at the same moment', () => {
+    const lookup = buildMatchLookup(
+      [
+        { id: 'e1', values: { title: 'Yoga', startsAt: START } },
+        { id: 'e2', values: { title: 'Yoga', startsAt: START + 7 * 86_400_000 } },
+      ],
+      [key],
+    )
+    const outcomes = matchRows(
+      [
+        { title: 'yoga', startsAt: '2026-10-05T14:30:00Z' },
+        { title: 'Yoga', startsAt: '2026-10-19T14:30:00Z' },
+        { title: 'Yoga', startsAt: '2026-10-19T14:30:00Z' },
+      ],
+      [key],
+      lookup,
+    )
+    expect(outcomes.map((outcome) => outcome.kind)).toEqual(['matched', 'new', 'duplicateInFile'])
+    expect(outcomes[0]).toMatchObject({ recordId: 'e1' })
+    expect(matchLookupRequests([{ title: 'Yoga', startsAt: START }], [key])).toEqual([
+      { ...key, values: [`yoga${MATCH_KEY_PART_SEPARATOR}2026-10-05T14:30Z`] },
+    ])
   })
 })

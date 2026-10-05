@@ -316,6 +316,47 @@ registerPluginTransferResource('acme.playbooks', {
 - **Never start anything.** An imported item that could act on its own —
   send, run, publish — lands off, and you say so in `rules`.
 
+## Columns that follow the records
+
+When the columns depend on which records are read — one form's questions —
+your `fields` hook is handed the filter the export dialog was opened on as
+`ctx.filter`, and answers for it. Form submissions, which are only exported
+(`"exportOnly": true`), open on one form with that form's questions.
+
+## Flag rows with your own rules
+
+Some rules are about a whole row, or about other rows: a redirect that loops
+back through another, a destination off the site, a value your write path
+refuses. Answer them from a `plan` hook: build the plan, then fold your
+findings in. Each one is shown in the review with its sentence and must be
+acknowledged before Import enables; `refuse` fails the row instead of only
+flagging it.
+
+```ts
+import { buildTransferPlan, withTransferResourceFindings } from '@aglyn/aglyn/data-transfer'
+
+plan(ctx, input) {
+  const findings = input.rows.flatMap((row) =>
+    isLoop(row.values) ? [{ row: row.index, detail: 'Loops back to itself', refuse: true }] : [],
+  )
+  return withTransferResourceFindings(buildTransferPlan(input), findings)
+}
+```
+
+## Match on two fields at once
+
+A match key can be made of several fields: a calendar event is found by its
+title and its start together, so a weekly class is several events rather
+than one. Name the other fields in `with`; `instant` compares moments to the
+minute whether the file holds text and the record milliseconds:
+
+```ts
+matchKeys: [
+  { fieldId: 'id', normalizer: 'aglynId' },
+  { fieldId: 'title', normalizer: 'name', with: [{ fieldId: 'startsAt', normalizer: 'instant' }] },
+]
+```
+
 ## Try it without a server
 
 The console's own specs drive the wizard with `createMemoryTransferClient`,

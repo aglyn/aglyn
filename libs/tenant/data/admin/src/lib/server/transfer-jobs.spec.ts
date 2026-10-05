@@ -52,6 +52,15 @@ const mockDeclared: ResolvedTransferResourceDeclaration[] = [
     kinds: ['records'],
     formats: ['csv'],
   },
+  {
+    pluginId: 'cellar',
+    key: 'tastings',
+    label: 'Tastings',
+    scope: 'org',
+    kinds: ['records'],
+    formats: ['csv'],
+    exportOnly: true,
+  },
 ]
 
 jest.mock('@aglyn/aglyn/plugin-manager/first-party-plugins.generated', () => {
@@ -730,6 +739,32 @@ describe('what the wizard reads (AGL-3539)', () => {
       { id: 'cellar-x', label: 'Cellar X', fieldIds: ['name', 'id'], headers: { name: 'Wine' } },
     ])
     registerPluginTransferResource('bottles', RESOURCE, { pluginId: 'cellar' })
+  })
+
+  it('hands the export’s filter to the catalog, and only an object', async () => {
+    const seen: unknown[] = []
+    registerPluginTransferResource(
+      'tastings',
+      {
+        fields: (ctx) => {
+          seen.push(ctx.filter ?? null)
+          return { standard: [{ id: 'note', label: 'Note', type: 'text', readOnly: true }] }
+        },
+        matchKeys: [{ fieldId: 'id', normalizer: 'aglynId' }],
+        readPage: async () => ({ rows: [], next: null }),
+        lookup: async () => ({ lookup: new Map(), records: new Map() }),
+      },
+      { pluginId: 'cellar' },
+    )
+    const info = await readTransferResourceInfo(deps, {
+      orgId: ORG,
+      actorUid: ME,
+      resource: 'tastings',
+      filter: { vintage: 2019 },
+    })
+    expect(info.resource.exportOnly).toBe(true)
+    await readTransferResourceInfo(deps, { orgId: ORG, actorUid: ME, resource: 'tastings', filter: ['not', 'an object'] })
+    expect(seen).toEqual([{ vintage: 2019 }, null])
   })
 
   it('reads a CSV with the delimiter and header row the person confirmed', async () => {

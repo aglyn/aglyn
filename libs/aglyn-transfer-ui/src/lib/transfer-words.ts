@@ -102,6 +102,11 @@ export const WARNING_CLASS_WORDS: Readonly<
     description:
       'The feature you are importing into checked the file for signs of trouble. Each item says what it found and what happens to it.',
   },
+  resourceRule: {
+    title: 'Rows the feature asks you to check',
+    description:
+      'The feature that owns these records flags them; each says why. A row it refuses fails, and the rest are imported.',
+  },
 }
 
 export const VERDICT_WORDS: Readonly<Record<TransferRowVerdict, string>> = {
@@ -131,6 +136,7 @@ export const REASON_WORDS: Readonly<Record<TransferRowReason, string>> = {
   refusedValue: 'A value refuses the row',
   matchedRecordMissing: 'The matched record no longer exists',
   planLimit: 'Past what your plan allows',
+  resourceRule: 'Refused by a rule of the feature that owns it',
 }
 
 export const MODE_WORDS: Readonly<
@@ -219,6 +225,7 @@ export const NORMALIZER_WORDS: Readonly<Record<MatchNormalizer, string>> = {
   phone: 'by phone number',
   externalId: 'by external ID',
   aglynId: `by ${PLATFORM_BRAND_NAME} ID`,
+  instant: 'at the same moment, to the minute',
 }
 
 /** A field value as one line of text. */
