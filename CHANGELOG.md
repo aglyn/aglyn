@@ -15,6 +15,45 @@ content on the marketing site and is written separately.
 
 ### Added
 
+- **data:** an unfinished import can be resumed or discarded; list import ledgers expire ([AGL-3549](https://linear.app/aglyn/issue/AGL-3549))
+- **data:** every import and export button and the hub show only what the person may do ([AGL-3554](https://linear.app/aglyn/issue/AGL-3554))
+- **data:** imports suggest and create referenced records; Data page names its dataset ([AGL-3556](https://linear.app/aglyn/issue/AGL-3556))
+- **data:** a resource sets its own default handling and matching; the review shows it ([AGL-3548](https://linear.app/aglyn/issue/AGL-3548))
+- **crm:** no CRM import or export on Free but the contacts and leads files ([AGL-3555](https://linear.app/aglyn/issue/AGL-3555))
+- **sites:** import and export submissions, bookings, redirects, events, do-not-contact ([AGL-3532](https://linear.app/aglyn/issue/AGL-3532))
+- **crm:** privacy settings export every contact and lead through the export dialog ([AGL-3552](https://linear.app/aglyn/issue/AGL-3552))
+- **crm:** leads, deals and tasks import and export; deals and tasks stop duplicating ([AGL-3528](https://linear.app/aglyn/issue/AGL-3528))
+- **email:** email topics travel in workspace packages, and what uses them follows ([AGL-3550](https://linear.app/aglyn/issue/AGL-3550))
+- **commerce:** gift cards import by issuing each card, confirmed by its total ([AGL-3551](https://linear.app/aglyn/issue/AGL-3551))
+- **data:** workspace packages and one Import & export hub with history and undo ([AGL-3535](https://linear.app/aglyn/issue/AGL-3535))
+- **sites:** a package import renders forms and emails side by side, data as a table ([AGL-3545](https://linear.app/aglyn/issue/AGL-3545))
+- **crm:** contacts and companies import and export every field; other CRMs' files map ([AGL-3527](https://linear.app/aglyn/issue/AGL-3527))
+- **commerce:** products, orders, promotions, gift cards and categories import and export ([AGL-3531](https://linear.app/aglyn/issue/AGL-3531))
+- **email:** list members and suppressions import/export with matching, consent, choices ([AGL-3529](https://linear.app/aglyn/issue/AGL-3529))
+- **data:** datasets import and export with field choice, matching and conflict choices ([AGL-3530](https://linear.app/aglyn/issue/AGL-3530))
+- **sites:** a package import shows each item's diff and asks how to handle it ([AGL-3534](https://linear.app/aglyn/issue/AGL-3534))
+- **data:** an import resolves lookup columns to records, and asks about the rest ([AGL-3541](https://linear.app/aglyn/issue/AGL-3541))
+- **sites:** pick what a site package carries, and see what is new or changed first ([AGL-3533](https://linear.app/aglyn/issue/AGL-3533))
+- **data:** export lets you choose the fields, remembers your choice, and arrives whole ([AGL-3525](https://linear.app/aglyn/issue/AGL-3525))
+- **console:** import and export open from any plugin and run against the transfer routes ([AGL-3539](https://linear.app/aglyn/issue/AGL-3539))
+- **transfer-ui:** every import shows each match, conflict and warning and lets you pick ([AGL-3526](https://linear.app/aglyn/issue/AGL-3526))
+- **data:** imports run as resumable jobs with a dry run, a ledger and a 7-day undo ([AGL-3524](https://linear.app/aglyn/issue/AGL-3524))
+- **plugins:** a plugin declares what it can import and export ([AGL-3523](https://linear.app/aglyn/issue/AGL-3523))
+- **data:** one import/export core every surface will plug into ([AGL-3522](https://linear.app/aglyn/issue/AGL-3522), [AGL-3510](https://linear.app/aglyn/issue/AGL-3510))
+- **ai:** assistance in the CRM sends the whole record only once the release flag is on ([AGL-3520](https://linear.app/aglyn/issue/AGL-3520))
+- **crm:** a deleted contact is nobody's reports-to; merge preview shows it ([AGL-3537](https://linear.app/aglyn/issue/AGL-3537))
+- **crm:** deals carry Salesforce's Opportunity Contact Roles ([AGL-3521](https://linear.app/aglyn/issue/AGL-3521))
+- **ai:** drafted automations set a task's priority and a logged call's direction ([AGL-3538](https://linear.app/aglyn/issue/AGL-3538))
+- **ai:** assistance in the CRM reads the whole record, under an open-ended disclosure ([AGL-3520](https://linear.app/aglyn/issue/AGL-3520))
+- **crm:** leads carry Salesforce's standard Lead fields, and converting hands them on ([AGL-3513](https://linear.app/aglyn/issue/AGL-3513))
+- **crm:** every Aglyn door and sequence fills in its own built-in lead source ([AGL-3519](https://linear.app/aglyn/issue/AGL-3519))
+- **crm:** tasks get Salesforce's status, priority, type, subject; calls get a direction ([AGL-3517](https://linear.app/aglyn/issue/AGL-3517))
+- **crm:** deals carry Salesforce's Opportunity fields; new pipelines get its stages ([AGL-3516](https://linear.app/aglyn/issue/AGL-3516))
+- **crm:** contacts carry Salesforce's standard Contact fields ([AGL-3515](https://linear.app/aglyn/issue/AGL-3515))
+- **crm:** companies carry Salesforce's Account fields ([AGL-3514](https://linear.app/aglyn/issue/AGL-3514))
+- **crm:** lead status is an editable picklist; leads keep the meaning ([AGL-3512](https://linear.app/aglyn/issue/AGL-3512))
+- **crm:** filter, report and share leads by Inbound/Outbound; filter contacts by source ([AGL-3511](https://linear.app/aglyn/issue/AGL-3511))
+- **crm:** every picklist ships Salesforce's standard values and takes the org's own ([AGL-3510](https://linear.app/aglyn/issue/AGL-3510), [AGL-3298](https://linear.app/aglyn/issue/AGL-3298))
 - **billing:** private images served through the CDN count toward bandwidth ([AGL-3518](https://linear.app/aglyn/issue/AGL-3518))
 - **sites:** a new site is born with a full home page, header and footer, theme and SEO ([AGL-3497](https://linear.app/aglyn/issue/AGL-3497))
 - **notifications:** staff hear about every new site ([AGL-3491](https://linear.app/aglyn/issue/AGL-3491))
@@ -42,6 +81,18 @@ content on the marketing site and is written separately.
 
 ### Fixed
 
+- **crm:** an org owner can delete a lead a site holds ([AGL-3561](https://linear.app/aglyn/issue/AGL-3561))
+- **data:** every import and export asks its feature's plan and flag, like its own pages ([AGL-3548](https://linear.app/aglyn/issue/AGL-3548))
+- **plugins:** bookings, events and forms transfers lazy-load no library; lint green ([AGL-3557](https://linear.app/aglyn/issue/AGL-3557))
+- **data:** exported CSV cells can't run as spreadsheet formulas ([AGL-3548](https://linear.app/aglyn/issue/AGL-3548))
+- **tools:** a JSON key written twice fails the build instead of vanishing ([AGL-3553](https://linear.app/aglyn/issue/AGL-3553))
+- **data:** main is green again after workspace packages ([AGL-3553](https://linear.app/aglyn/issue/AGL-3553))
+- **data:** anyone who can read a dataset can export it again ([AGL-3546](https://linear.app/aglyn/issue/AGL-3546))
+- **sites:** a site package import's undo snapshots expire a day after undo closes ([AGL-3543](https://linear.app/aglyn/issue/AGL-3543))
+- **data:** stale import jobs expire, a half-done undo finishes, presets name the ID once ([AGL-3540](https://linear.app/aglyn/issue/AGL-3540))
+- **data:** the transfer layer says where a dataset record's integrity fields are derived ([AGL-3524](https://linear.app/aglyn/issue/AGL-3524))
+- **data:** the transfer core is reached by its own path and names no brand literal ([AGL-3522](https://linear.app/aglyn/issue/AGL-3522))
+- **tools:** the stale-spec-literals check pairs a short string's own quotes ([AGL-3542](https://linear.app/aglyn/issue/AGL-3542))
 - **console:** confirming three dialogs acts instead of reading as cancel ([AGL-3509](https://linear.app/aglyn/issue/AGL-3509))
 - **forms:** each card on a form's page saves what it shows, from its own header ([AGL-3508](https://linear.app/aglyn/issue/AGL-3508))
 - **tenant:** site search navigates with the client router instead of reloading ([AGL-3507](https://linear.app/aglyn/issue/AGL-3507))
@@ -115,6 +166,11 @@ content on the marketing site and is written separately.
 
 ### Documentation
 
+- **crm:** the deals board, reports and contact record show today's stages and fields ([AGL-3562](https://linear.app/aglyn/issue/AGL-3562), [AGL-3516](https://linear.app/aglyn/issue/AGL-3516), [AGL-3510](https://linear.app/aglyn/issue/AGL-3510), [AGL-3328](https://linear.app/aglyn/issue/AGL-3328))
+- **data:** import and export docs show the wizard, the field picker and the new buttons ([AGL-3547](https://linear.app/aglyn/issue/AGL-3547), [AGL-3552](https://linear.app/aglyn/issue/AGL-3552))
+- **data:** the docs capture plan shoots the import wizard and the export dialog ([AGL-3547](https://linear.app/aglyn/issue/AGL-3547))
+- **forms:** a card's Save stays grayed out, in American spelling ([AGL-3536](https://linear.app/aglyn/issue/AGL-3536))
+- **crm:** custom fields names every picklist the CRM keeps ([AGL-3517](https://linear.app/aglyn/issue/AGL-3517))
 - **media:** the media page shots state storage against the workspace band ([AGL-3470](https://linear.app/aglyn/issue/AGL-3470))
 - **data:** record pages across the datasets docs and the plugin reference ([AGL-3475](https://linear.app/aglyn/issue/AGL-3475))
 - **data:** a guide to service and location pages from a dataset ([AGL-3475](https://linear.app/aglyn/issue/AGL-3475))
@@ -124,8 +180,14 @@ content on the marketing site and is written separately.
 - **build:** record what took aglyn.com/press under 500 KiB ([AGL-3438](https://linear.app/aglyn/issue/AGL-3438))
 
 <details>
-<summary>Also in this release: 8 test, 8 chore</summary>
+<summary>Also in this release: 12 test, 8 chore, 2 build</summary>
 
+- **e2e:** the contacts bulk-bar spec exports the selection through the dialog ([AGL-3559](https://linear.app/aglyn/issue/AGL-3559), [AGL-3527](https://linear.app/aglyn/issue/AGL-3527))
+- **e2e:** the CRM specs open Closed Won and fill a task's Subject ([AGL-3558](https://linear.app/aglyn/issue/AGL-3558), [AGL-3516](https://linear.app/aglyn/issue/AGL-3516), [AGL-3517](https://linear.app/aglyn/issue/AGL-3517))
+- **e2e:** console and CRM suites read today's sections, filters, pickers and grids ([AGL-3560](https://linear.app/aglyn/issue/AGL-3560))
+- **tools:** lib-boundaries refuses lazy-loading a library also imported statically ([AGL-3557](https://linear.app/aglyn/issue/AGL-3557))
+- **rules:** rules deploy without their comments, so the source keeps its docs and room ([AGL-3544](https://linear.app/aglyn/issue/AGL-3544))
+- **tenant:** the image-sink inventory declares the starter site's SEO image ([AGL-3497](https://linear.app/aglyn/issue/AGL-3497))
 - **ai:** the palette knows the Image element's Sizes attribute ([AGL-3485](https://linear.app/aglyn/issue/AGL-3485))
 - **linear:** the issue ceiling is AGL-3501, read from Linear ([AGL-3501](https://linear.app/aglyn/issue/AGL-3501), [AGL-3500](https://linear.app/aglyn/issue/AGL-3500))
 - **linear:** the issue ceiling is AGL-3498, read from Linear ([AGL-3498](https://linear.app/aglyn/issue/AGL-3498))
