@@ -60,9 +60,17 @@ const MAX_FONT_BYTES = 2 * 1024 * 1024
 export const SELF_HOSTED_FONT_CACHE_CONTROL =
   'public, max-age=31536000, s-maxage=31536000, immutable'
 
+/**
+ * What this process learned about a stylesheet: the faces, or null for a
+ * failure, until `expires`. VALUES, never an in-flight promise. A promise held
+ * across requests is awaited by renders that did not create it, and one that
+ * never settles — a fetch whose render Next abandoned answers with a promise
+ * that never resolves, and the abort signal never fires for it — would stall
+ * every page of every site on that instance until the function times out.
+ */
 const stylesheets = new Map<
   string,
-  { expires: number; faces: Promise<GoogleFontFace[] | null> }
+  { expires: number; faces: GoogleFontFace[] | null }
 >()
 
 /** Test seam: the process cache would otherwise leak between cases. */
@@ -70,22 +78,11 @@ export function resetSelfHostedFontsForTests(): void {
   stylesheets.clear()
 }
 
-/**
- * Google's faces for a stylesheet URL, from this process's cache when it has
- * them. Null when the fetch failed or answered with nothing usable; the page
- * then links the stylesheet as it always did, rather than losing its font.
- *
- * Asked through `fetch` with a day's revalidation, which on the server is
- * Next's data cache: a cold process reads the stored stylesheet rather than
- * asking Google again.
- */
-function facesFor(url: string): Promise<GoogleFontFace[] | null> {
-  const now = Date.now()
-  const held = stylesheets.get(url)
-  if (held && held.expires > now) return held.faces
-  const faces = fetch(url, {
+/** Google's faces for a stylesheet URL, or null; never waits past `ms`. */
+function fetchFaces(url: string, ms: number): Promise<GoogleFontFace[] | null> {
+  const asked = fetch(url, {
     headers: { 'User-Agent': WOFF2_USER_AGENT },
-    signal: AbortSignal.timeout(STYLESHEET_TIMEOUT_MS),
+    signal: AbortSignal.timeout(ms),
     next: { revalidate: STYLESHEET_TTL_MS / 1000 },
   } as RequestInit)
     .then(async (response) => {
@@ -94,9 +91,30 @@ function facesFor(url: string): Promise<GoogleFontFace[] | null> {
       return parsed.length ? parsed : null
     })
     .catch(() => null)
-  stylesheets.set(url, { expires: now + STYLESHEET_TTL_MS, faces })
-  void faces.then((found) => {
-    if (!found) stylesheets.set(url, { expires: now + FAILURE_TTL_MS, faces })
+  // The abort signal bounds a real request. This bounds the promise itself,
+  // whatever fetch handed back, so a page render cannot wait on it longer.
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const deadline = new Promise<null>((resolve) => {
+    timer = setTimeout(() => resolve(null), ms)
+  })
+  return Promise.race([asked, deadline]).finally(() => clearTimeout(timer))
+}
+
+/**
+ * Google's faces for a stylesheet URL, from this process's cache when it has
+ * them. Null when the fetch failed, timed out or answered with nothing usable;
+ * the page then links the stylesheet as it always did, rather than losing its
+ * font. Asked through `fetch` with a day's revalidation, which on the server is
+ * Next's data cache: a cold process reads the stored stylesheet rather than
+ * asking Google again.
+ */
+async function facesFor(url: string): Promise<GoogleFontFace[] | null> {
+  const held = stylesheets.get(url)
+  if (held && held.expires > Date.now()) return held.faces
+  const faces = await fetchFaces(url, STYLESHEET_TIMEOUT_MS)
+  stylesheets.set(url, {
+    expires: Date.now() + (faces ? STYLESHEET_TTL_MS : FAILURE_TTL_MS),
+    faces,
   })
   return faces
 }
