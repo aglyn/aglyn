@@ -29,7 +29,10 @@
  *
  *   leads       `searchTokens`, `scopedSearchTokens`, `status` (`new` for a
  *               lead nobody touched — the Open view asks `status in [new,
- *               working]`), `leadSourceKey`, `emailStatus`
+ *               working]`), `leadSourceKey`, `emailStatus`, and
+ *               `leadSourceDirection` (AGL-3577) — the group of its lead
+ *               source in the org's Lead source list, read once per org
+ *               from `orgs/{orgId}/crmPicklists/leadSource`
  *   contacts    `searchTokens`, `scopedSearchTokens`, `facetKeys`,
  *               `emailStatus`, and `nextTaskAtMs: null` where absent
  *   companies   `searchTokens`, `scopedSearchTokens`, `nextTaskAtMs: null`
@@ -72,6 +75,7 @@ import { FieldPath, getFirestore } from 'firebase-admin/firestore'
 import { parseDeployArgs } from './lib/deploy-args.mjs'
 import {
   crmFieldListFieldsBackfillPatch,
+  crmLeadSourcePicklist,
   crmListFieldsBackfillPatch,
 } from './lib/org-record-list-fields.mjs'
 
@@ -106,13 +110,15 @@ const PAGE = 500
  *
  * @param {string} collection
  * @param {Record<string, unknown>} data
+ * @param {{ leadSources?: { values: Array<{ label: string, group: string | null }> } }} [context]
+ *   the org's Lead source list (`crmLeadSourcePicklist`), for a lead's direction
  * @returns {{ update: Record<string, unknown> } | { skip: 'current' }}
  */
-export function planRecord(collection, data) {
+export function planRecord(collection, data, context = {}) {
   const update =
     collection === 'contactFields'
       ? crmFieldListFieldsBackfillPatch(data)
-      : crmListFieldsBackfillPatch(collection, data)
+      : crmListFieldsBackfillPatch(collection, data, context)
   return Object.keys(update).length ? { update } : { skip: 'current' }
 }
 
@@ -129,8 +135,11 @@ function selfTest() {
       console.error(`FAIL ${name}`)
     }
   }
-  for (const [at, { collection, record, expected }] of fixtures.records.entries()) {
-    const plan = planRecord(collection, record)
+  for (const [at, entry] of fixtures.records.entries()) {
+    const { collection, record, expected } = entry
+    // The org's lead source list, when the fixture names one (AGL-3577).
+    const context = 'leadSources' in entry ? { leadSources: crmLeadSourcePicklist(entry.leadSources) } : {}
+    const plan = planRecord(collection, record, context)
     check(`#${at} ${collection}: a bare record is stamped`, 'update' in plan)
     const stamped = 'update' in plan ? { ...record, ...plan.update } : record
     for (const [field, value] of Object.entries(expected)) {
@@ -139,7 +148,7 @@ function selfTest() {
         JSON.stringify(stamped[field]) === JSON.stringify(value),
       )
     }
-    check(`#${at} ${collection}: a re-run is a no-op`, 'skip' in planRecord(collection, stamped))
+    check(`#${at} ${collection}: a re-run is a no-op`, 'skip' in planRecord(collection, stamped, context))
     check(`#${at} ${collection}: updatedAt is never written`, !('updatedAt' in (plan.update ?? {})))
   }
   for (const [at, { record, expected }] of fixtures.fieldDefinitions.entries()) {
@@ -187,6 +196,14 @@ async function main() {
   }
 
   for (const orgId of orgIds) {
+    // A lead's direction is its lead source's group in this org's list (AGL-3577).
+    const leadSources = collections.includes('leads')
+      ? crmLeadSourcePicklist(
+          (
+            await firestore.collection('orgs').doc(orgId).collection('crmPicklists').doc('leadSource').get()
+          ).data(),
+        )
+      : null
     for (const name of collections) {
       const tally = counts[name]
       let cursor = null
@@ -203,7 +220,7 @@ async function main() {
         const writes = []
         for (const doc of snapshot.docs) {
           tally.scanned += 1
-          const plan = planRecord(name, doc.data())
+          const plan = planRecord(name, doc.data(), name === 'leads' ? { leadSources } : {})
           if ('skip' in plan) {
             tally.current += 1
             continue

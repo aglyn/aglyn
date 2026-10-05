@@ -19,8 +19,8 @@
  * THE SCRIPT-SIDE TWIN OF THE CRM LIST FIELDS (AGL-3321).
  *
  * A CRM list queries fields derived from the record — the search tokens and
- * their scoped twins, a lead's status, lead source key and verdict key, a
- * contact's facet keys (`crmListFields` in
+ * their scoped twins, a lead's status, lead source key, lead source
+ * direction (from the org's list too) and verdict key, a contact's facet keys (`crmListFields` in
  * `libs/aglyn/src/lib/app-utils/crm.ts`). A plain Node script cannot import
  * that module, so the backfill and the seeds build the same fields here.
  * Both halves answer `org-record-list-fields.fixtures.json`: the library's
@@ -125,6 +125,107 @@ export function crmLeadSourceKey(value) {
   return nameSearchKey(label) || null
 }
 
+/*
+ * A LEAD'S LEAD SOURCE DIRECTION (AGL-3577) — `crmLeadSourceDirection`.
+ *
+ * The group of the org's Lead source picklist the lead's value sits in, read
+ * off the org's list (`orgs/{orgId}/crmPicklists/leadSource`) as
+ * `effectiveCrmLeadSourcePicklist` reads it: the stored values, each with its
+ * stored group (or a standard value's own when the entry names none), and
+ * every standard value the list lacks. The standard values are restated here
+ * and held to the library's by the fixtures' `leadSourceStandardValues`.
+ */
+
+/** `LEAD_SOURCE_DEFINITION.standardValues` in `crm.ts`, as the fixtures pin it. */
+export const LEAD_SOURCE_STANDARD_VALUES = [
+  { id: 'web', label: 'Web', group: 'inbound' },
+  { id: 'phone-inquiry', label: 'Phone inquiry', group: 'inbound' },
+  { id: 'email-inquiry', label: 'Email inquiry', group: 'inbound' },
+  { id: 'partner-referral', label: 'Partner referral', group: 'inbound' },
+  { id: 'employee-referral', label: 'Employee referral', group: 'inbound' },
+  { id: 'external-referral', label: 'External referral', group: 'inbound' },
+  { id: 'advertisement', label: 'Advertisement', group: 'inbound' },
+  { id: 'trade-show', label: 'Trade show', group: 'inbound' },
+  { id: 'webinar', label: 'Webinar', group: 'inbound' },
+  { id: 'word-of-mouth', label: 'Word of mouth', group: 'inbound' },
+  { id: 'website-form', label: 'Website form', group: 'inbound' },
+  { id: 'booking', label: 'Booking', group: 'inbound' },
+  { id: 'newsletter-sign-up', label: 'Newsletter sign-up', group: 'inbound' },
+  { id: 'site-member-sign-up', label: 'Site member sign-up', group: 'inbound' },
+  { id: 'online-purchase', label: 'Online purchase', group: 'inbound' },
+  { id: 'account-sign-up', label: 'Account sign-up', group: 'inbound' },
+  { id: 'purchased-list', label: 'Purchased list', group: 'outbound' },
+  { id: 'sequence', label: 'Sequence', group: 'outbound' },
+  { id: 'email-campaign', label: 'Email campaign', group: 'outbound' },
+  { id: 'other', label: 'Other' },
+]
+
+/** `CRM_LEAD_SOURCE_DIRECTIONS`: the Lead source picklist's groups. */
+export const CRM_LEAD_SOURCE_DIRECTIONS = ['inbound', 'outbound']
+/** `PICKLIST_VALUES_MAX` and `PICKLIST_LABEL_MAX` in `picklists.ts`. */
+const PICKLIST_VALUES_MAX = 200
+const PICKLIST_LABEL_MAX = 120
+
+const picklistLabel = (value) =>
+  String(value ?? '').trim().replace(/\s+/g, ' ').slice(0, PICKLIST_LABEL_MAX)
+const picklistLabelKey = (value) => picklistLabel(value).toLowerCase()
+const knownDirection = (value) => (CRM_LEAD_SOURCE_DIRECTIONS.includes(value) ? value : null)
+const standardById = (id) => LEAD_SOURCE_STANDARD_VALUES.find((value) => value.id === id) ?? null
+
+/**
+ * `effectiveCrmLeadSourcePicklist(raw)`, as far as a direction needs it:
+ * each label with its group. `raw` is the stored document, or nothing.
+ */
+export function crmLeadSourcePicklist(raw) {
+  const values = []
+  const stored = raw && typeof raw === 'object' && Array.isArray(raw.values) ? raw.values : []
+  const labels = new Set()
+  const ids = new Set()
+  for (const entry of stored) {
+    if (!entry || typeof entry !== 'object') continue
+    const label = picklistLabel(entry.label)
+    if (!label || labels.has(picklistLabelKey(label))) continue
+    let id = String(entry.id ?? '').trim().slice(0, 64)
+    // The library mints a fresh id here, never a standard one.
+    if (!id || id.includes('/') || ids.has(id)) id = `\u0000minted-${ids.size}`
+    labels.add(picklistLabelKey(label))
+    ids.add(id)
+    const group = 'group' in entry ? knownDirection(entry.group) : knownDirection(standardById(id)?.group)
+    values.push({ id, label, group })
+    if (values.length >= PICKLIST_VALUES_MAX) break
+  }
+  for (const standard of LEAD_SOURCE_STANDARD_VALUES) {
+    if (values.some((value) => value.id === standard.id)) continue
+    const holder = values.find((value) => picklistLabelKey(value.label) === picklistLabelKey(standard.label))
+    if (holder) {
+      // An added value spelled as a standard one becomes it, keeping its group.
+      if (!standardById(holder.id)) holder.id = standard.id
+      continue
+    }
+    values.push({ id: standard.id, label: picklistLabel(standard.label), group: knownDirection(standard.group) })
+  }
+  return { values }
+}
+
+/** `crmLeadSourceDirection`: the group `label` has in the list — `null` for none. */
+export function crmLeadSourceDirection(leadSources, label) {
+  const key = picklistLabelKey(label)
+  if (!key) return null
+  const value = leadSources.values.find((entry) => picklistLabelKey(entry.label) === key)
+  return knownDirection(value?.group)
+}
+
+/**
+ * A lead's direction field: `null` for no lead source, its group when the
+ * org's list is known (`context.leadSources`), else absent — never guessed.
+ */
+function leadSourceDirectionField(doc, context) {
+  if (!crmLeadSourceKey(doc.leadSource)) return { leadSourceDirection: null }
+  return context?.leadSources
+    ? { leadSourceDirection: crmLeadSourceDirection(context.leadSources, doc.leadSource) }
+    : {}
+}
+
 /** `crmFacetKeyValue`: a facet value as its key spells it, or `null`. */
 export function crmFacetKeyValue(value) {
   if (typeof value === 'boolean') return value ? 'true' : 'false'
@@ -223,7 +324,11 @@ export function crmDealContactRoleListFields(doc) {
   }
 }
 
-export function crmListFields(collection, record) {
+/**
+ * `crmListFields`. `context.leadSources` is the org's Lead source list
+ * (`crmLeadSourcePicklist`), which a lead's direction is read off.
+ */
+export function crmListFields(collection, record, context = {}) {
   const doc = record ?? {}
   switch (collection) {
     case 'leads':
@@ -240,6 +345,8 @@ export function crmListFields(collection, record) {
         ),
         status: CRM_LEAD_STATUSES.includes(doc.status) ? doc.status : 'new',
         leadSourceKey: crmLeadSourceKey(doc.leadSource),
+        // Its group in the org's list (AGL-3577).
+        ...leadSourceDirectionField(doc, context),
         emailStatus: crmEmailStatusKey(doc),
         // The Industry and Rating the Leads list filters by (AGL-3513).
         industryKey: crmLeadSourceKey(doc.industry),
@@ -290,8 +397,8 @@ export const CRM_LIST_NULLABLE_FIELD = {
 }
 
 /** `crmNewRecordListFields`: the list fields, and the nullable field as `null` when unset. */
-export function crmNewRecordListFields(collection, record) {
-  const fields = crmListFields(collection, record)
+export function crmNewRecordListFields(collection, record, context = {}) {
+  const fields = crmListFields(collection, record, context)
   const nullable = CRM_LIST_NULLABLE_FIELD[collection]
   if (!nullable || record?.[nullable] !== undefined) return fields
   return { ...fields, [nullable]: null }
@@ -306,9 +413,9 @@ const sameValue = (a, b) =>
  * What a stored record carries WRONGLY — `crmListFieldsPatch` — plus the
  * nullable field as `null` when it is absent. `{}` when the record is level.
  */
-export function crmListFieldsBackfillPatch(collection, record) {
+export function crmListFieldsBackfillPatch(collection, record, context = {}) {
   const patch = {}
-  for (const [field, value] of Object.entries(crmListFields(collection, record))) {
+  for (const [field, value] of Object.entries(crmListFields(collection, record, context))) {
     if (!sameValue(record?.[field], value)) patch[field] = value
   }
   const nullable = CRM_LIST_NULLABLE_FIELD[collection]
@@ -328,8 +435,12 @@ export function withCrmListFields(ref, data) {
   const collection = ref?.parent?.id
   const root = ref?.parent?.parent?.parent?.id
   if (root !== 'orgs' || !LIST_COLLECTIONS.has(collection)) return data
-  return { ...data, ...crmNewRecordListFields(collection, data) }
+  // No seed writes an org's own Lead source list, so its standard groups are the org's (AGL-3577).
+  return { ...data, ...crmNewRecordListFields(collection, data, { leadSources: STANDARD_LEAD_SOURCES }) }
 }
+
+/** The standard values alone: the Lead source list of an org that never stored its own. */
+const STANDARD_LEAD_SOURCES = crmLeadSourcePicklist(null)
 
 /** `CRM_FIELD_OBJECTS`: the records a custom field may describe. */
 const CRM_FIELD_OBJECTS = ['contact', 'company', 'deal', 'lead']

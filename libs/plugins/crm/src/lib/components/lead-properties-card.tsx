@@ -80,6 +80,8 @@ import { useCrmSharingFollowUp } from '../hooks/use-crm-sharing'
 const LEAD_CLIENT_LIST_FIELDS = [
   ...CRM_CLIENT_SEARCH_FIELDS,
   'leadSourceKey',
+  // The lead source's group, read off the org's list (AGL-3577).
+  'leadSourceDirection',
   // Industry and Rating (AGL-3513).
   'industryKey',
   'ratingKey',
@@ -385,7 +387,14 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
         crmCustomDraftWrites(storedCustom, custom),
         // The company, title, tags and lead source are what the Leads list
         // searches and filters by (AGL-3321).
-        crmClientListFields('leads', lead, profileFields, LEAD_CLIENT_LIST_FIELDS),
+        crmClientListFields(
+          'leads',
+          lead,
+          profileFields,
+          LEAD_CLIENT_LIST_FIELDS,
+          // A direction only from the org's list as the server answered it.
+          leadSources.ready ? { leadSources: leadSources.picklist } : {},
+        ),
       )
     }
     if (notesDirty) update['notes'] = notes.trim().slice(0, NOTES_MAX)

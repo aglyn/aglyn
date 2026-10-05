@@ -16,11 +16,14 @@
  */
 
 import {
+  CRM_LEAD_SOURCE_DIRECTIONS,
   CRM_LEAD_SOURCE_PICKLIST,
+  type CrmLeadSourceDirection,
   type CrmPicklist,
+  crmLeadSourceDirection,
   crmPicklistDefinition,
-  crmPicklistValueByLabel,
   effectiveCrmLeadSourcePicklist,
+  isCrmLeadSourceDirection,
 } from '@aglyn/aglyn/app-utils/crm'
 
 /*==========================================
@@ -28,17 +31,22 @@ import {
  *
  * Every lead source value sits in a group of the Lead source picklist —
  * Inbound for a person who came to the organization, Outbound for one the
- * organization went to — or in none. The direction is never stored on a
- * record: a record stores the label, and the label's group is read off the
- * organization's list when it is asked, so moving a value between groups
- * moves every record that holds it — in a filter, a sharing rule and the
- * Lead sources report alike.
+ * organization went to — or in none. A record stores the label, and the
+ * label's group is read off the organization's list: a sharing rule and
+ * the Lead sources report read it when they are asked, and a lead also
+ * carries it as `leadSourceDirection` (AGL-3577), the field the Leads
+ * filter asks, which every move of the list that changes a label's group
+ * rewrites (`crm/picklist-values`). Moving a value between groups moves
+ * every record that holds it, in all three alike.
+ *
+ * The resolution itself is core's (`crmLeadSourceDirection`), because the
+ * list-field writers that stamp a lead live there.
  *=========================================*/
 
 /** The directions a lead source can have: the Lead source picklist's groups. */
-export type LeadSourceDirection = 'inbound' | 'outbound'
+export type LeadSourceDirection = CrmLeadSourceDirection
 
-export const LEAD_SOURCE_DIRECTIONS: readonly LeadSourceDirection[] = ['inbound', 'outbound']
+export const LEAD_SOURCE_DIRECTIONS: readonly LeadSourceDirection[] = CRM_LEAD_SOURCE_DIRECTIONS
 
 /** How each direction reads, from the picklist's own group labels. */
 export const LEAD_SOURCE_DIRECTION_LABELS: Readonly<Record<LeadSourceDirection, string>> = {
@@ -54,9 +62,7 @@ function groupLabel(id: LeadSourceDirection, fallback: string): string {
   return groups.find((group) => group.id === id)?.label ?? fallback
 }
 
-export function isLeadSourceDirection(value: unknown): value is LeadSourceDirection {
-  return (LEAD_SOURCE_DIRECTIONS as readonly unknown[]).includes(value)
-}
+export const isLeadSourceDirection = isCrmLeadSourceDirection
 
 /**
  * The direction a lead source label has in `picklist` — `null` for no label,
@@ -66,20 +72,7 @@ export function leadSourceDirectionOf(
   picklist: CrmPicklist,
   label: unknown,
 ): LeadSourceDirection | null {
-  const group = crmPicklistValueByLabel(picklist, label)?.group
-  return isLeadSourceDirection(group) ? group : null
-}
-
-/**
- * Every label in `picklist` whose value is in `direction` — the inactive
- * ones too, since a record keeps a value after it is deactivated and a
- * direction asked of the records must still find it.
- */
-export function leadSourceLabelsOfDirection(
-  picklist: CrmPicklist,
-  direction: LeadSourceDirection,
-): string[] {
-  return picklist.values.filter((value) => value.group === direction).map((value) => value.label)
+  return crmLeadSourceDirection(picklist, label)
 }
 
 /** The standard values alone — the answer before an organization's own list is read. */

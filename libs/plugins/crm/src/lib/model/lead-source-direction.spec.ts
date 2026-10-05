@@ -15,7 +15,8 @@
  * limitations under the License.
  */
 
-import { crmLeadSourceKey, effectiveCrmLeadSourcePicklist } from '@aglyn/aglyn'
+import { crmLeadListFields, effectiveCrmLeadSourcePicklist } from '@aglyn/aglyn'
+import { LIST_QUERY_DISJUNCTIONS } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import { contactQueryClause } from '../constants/contact-filters'
 import { leadsByLeadSource } from './crm-reports'
 import {
@@ -26,17 +27,14 @@ import {
   sharingRulesAskLeadSourceDirection,
 } from './crm-sharing'
 import { leadQueryClause } from './lead-filters'
-import {
-  leadSourceDirectionOf,
-  leadSourceLabelsOfDirection,
-  STANDARD_LEAD_SOURCES,
-} from './lead-source-direction'
+import { leadSourceDirectionOf } from './lead-source-direction'
 
 /**
  * A lead source's direction (AGL-3511) is its value's group in the org's
- * list, read when it is asked — never stored on a record. So every place
- * that asks it — the Leads filter, a sharing rule, the Lead sources report
- * — follows a value an admin moves between groups.
+ * list. A sharing rule and the Lead sources report read it when they are
+ * asked; a lead also carries it as `leadSourceDirection` (AGL-3577), which
+ * the Leads filter asks and the picklist route rewrites on a regroup — so
+ * every place follows a value an admin moves between groups.
  */
 
 /** An org that added two values of its own and filed one as Outbound. */
@@ -58,53 +56,18 @@ describe('a lead source’s direction', () => {
     expect(leadSourceDirectionOf(ORG_LIST, 'Carrier pigeon')).toBeNull()
     expect(leadSourceDirectionOf(ORG_LIST, '')).toBeNull()
   })
-
-  it('lists every label of a group, the inactive and the regrouped ones too', () => {
-    expect(leadSourceLabelsOfDirection(ORG_LIST, 'outbound')).toEqual([
-      'Outbound · Apollo',
-      'Webinar',
-      'Purchased list',
-      'Sequence',
-      'Email campaign',
-    ])
-    expect(leadSourceLabelsOfDirection(STANDARD_LEAD_SOURCES, 'outbound')).toEqual([
-      'Purchased list',
-      'Sequence',
-      'Email campaign',
-    ])
-  })
 })
 
-describe('the Leads filter by direction', () => {
-  it('asks leadSourceKey in the keys of every value of that group', () => {
-    expect(
-      leadQueryClause(
-        { field: 'leadSourceDirection', op: 'equals', value: 'outbound' },
-        { scopeTokens: null, foldsScope: true, leadSources: ORG_LIST },
-      ),
-    ).toEqual({
-      field: 'leadSourceKey',
-      op: 'isAnyOf',
-      value: ['Outbound · Apollo', 'Webinar', 'Purchased list', 'Sequence', 'Email campaign']
-        .map(crmLeadSourceKey)
-        .join(','),
+describe('the Leads filter by direction (AGL-3577)', () => {
+  it('asks the direction stamped on the lead — one equality, however many values the group holds', () => {
+    expect(leadQueryClause({ field: 'leadSourceDirection', op: 'equals', value: 'inbound' })).toEqual({
+      field: 'leadSourceDirection',
+      op: 'equals',
+      value: 'inbound',
     })
-  })
-
-  it('reads the standard values before the org’s list has been read', () => {
-    expect(leadQueryClause({ field: 'leadSourceDirection', op: 'equals', value: 'outbound' })).toEqual({
-      field: 'leadSourceKey',
-      op: 'isAnyOf',
-      value: ['Purchased list', 'Sequence', 'Email campaign'].map(crmLeadSourceKey).join(','),
-    })
-  })
-
-  it('refuses an unknown direction, and a group the query cannot hold in one `in`', () => {
-    expect(leadQueryClause({ field: 'leadSourceDirection', op: 'equals', value: 'sideways' })).toEqual({
-      refused: 'sideways is not a lead source direction',
-    })
+    // An org whose Inbound holds more values than one `in` may: still one equality, stamped per lead.
     const crowded = effectiveCrmLeadSourcePicklist({
-      values: Array.from({ length: 25 }, (_, at) => ({
+      values: Array.from({ length: LIST_QUERY_DISJUNCTIONS }, (_, at) => ({
         id: `src-${at}`,
         label: `Source ${at}`,
         active: true,
@@ -112,11 +75,35 @@ describe('the Leads filter by direction', () => {
       })),
       defaultValueId: null,
     })
-    const asked = leadQueryClause(
-      { field: 'leadSourceDirection', op: 'equals', value: 'inbound' },
-      { scopeTokens: null, foldsScope: true, leadSources: crowded },
+    expect(crowded.values.filter((value) => value.group === 'inbound').length).toBeGreaterThan(
+      LIST_QUERY_DISJUNCTIONS,
     )
-    expect(asked).toEqual({ refused: expect.stringMatching(/^more than 30 lead sources/) })
+    expect(crmLeadListFields({ leadSource: 'Source 29' }, { leadSources: crowded }).leadSourceDirection).toBe(
+      'inbound',
+    )
+  })
+
+  it('asks both directions as one `in` of two', () => {
+    expect(
+      leadQueryClause({ field: 'leadSourceDirection', op: 'isAnyOf', value: 'inbound,outbound' }),
+    ).toEqual({ field: 'leadSourceDirection', op: 'isAnyOf', value: 'inbound,outbound' })
+  })
+
+  it('refuses an unknown direction', () => {
+    expect(leadQueryClause({ field: 'leadSourceDirection', op: 'equals', value: 'sideways' })).toEqual({
+      refused: 'sideways is not a lead source direction',
+    })
+  })
+
+  it('finds the leads the writers stamped, from the org’s own groups', () => {
+    const stamped = crmLeadListFields(
+      { leadSource: 'Outbound · Apollo' },
+      { leadSources: ORG_LIST },
+    ).leadSourceDirection
+    expect(stamped).toBe('outbound')
+    expect(crmLeadListFields({ leadSource: 'Webinar' }, { leadSources: ORG_LIST }).leadSourceDirection).toBe(
+      'outbound',
+    )
   })
 })
 

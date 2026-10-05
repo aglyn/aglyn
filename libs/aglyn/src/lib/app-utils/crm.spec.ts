@@ -1814,7 +1814,13 @@ describe('the lead source picklist', () => {
       expect.arrayContaining(['leadSource', 'leadStatus']),
     )
     expect(crmPicklistDefinition('leadSource')?.targets).toEqual([
-      { object: 'lead', field: 'leadSource', keyField: 'leadSourceKey' },
+      // A lead keeps its value's group as its direction (AGL-3577).
+      {
+        object: 'lead',
+        field: 'leadSource',
+        keyField: 'leadSourceKey',
+        groupField: 'leadSourceDirection',
+      },
       { object: 'contact', field: 'leadSource', facet: true },
       { object: 'company', field: 'accountSource', keyField: 'accountSourceKey' },
       { object: 'deal', field: 'leadSource', keyField: 'leadSourceKey' },
