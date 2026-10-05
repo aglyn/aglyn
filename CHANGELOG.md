@@ -21,12 +21,16 @@ content on the marketing site and is written separately.
 
 ### Fixed
 
+- **forms:** form leads carry their campaign, auto-replies are transactional, and every workflow runs ([AGL-3458](https://linear.app/aglyn/issue/AGL-3458))
+- **abuse:** one fraud row per charge; a late Stripe signal joins it ([AGL-3490](https://linear.app/aglyn/issue/AGL-3490))
 - **tenant:** a page render awaits no network call without a real deadline ([AGL-3569](https://linear.app/aglyn/issue/AGL-3569))
 - **tenant:** a page never waits on a theme font stylesheet past its deadline ([AGL-3564](https://linear.app/aglyn/issue/AGL-3564))
 - **theme:** every button color has a legible hover in both schemes ([AGL-3465](https://linear.app/aglyn/issue/AGL-3465))
 
 ### Tests
 
+- **tools:** the client-site seed names its fixed ids through key functions ([AGL-3566](https://linear.app/aglyn/issue/AGL-3566))
+- **aglyn:** the self-host sweep reads the production canary as operator tooling ([AGL-3567](https://linear.app/aglyn/issue/AGL-3567))
 - **tenant:** the production smoke renders a client-shaped site under a route budget ([AGL-3566](https://linear.app/aglyn/issue/AGL-3566))
 
 ### Changed
