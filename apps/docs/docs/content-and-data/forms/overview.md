@@ -456,7 +456,7 @@ narrowed to source Form and this form.
 
 Each card saves what it shows, from the **Save** in its own header: **Details** saves the
 name and campaigns, and **CRM routing** saves the lead switch and the consent field.
-A card's **Save** and **Discard changes** stay greyed out until something in that card
+A card's **Save** and **Discard changes** stay grayed out until something in that card
 differs from what's saved, and saving one card never saves the other. If you reload or
 close the page, or open the Besigner, while a card has unsaved changes, you're asked first.
 
