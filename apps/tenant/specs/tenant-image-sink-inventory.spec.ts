@@ -402,6 +402,11 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
     guard: 'off-tenant',
     why: "A thumbnail of a file the team attached to a CRM record, drawn on the record page in the console. The reader is a member of the workspace that uploaded it, so the IP at risk is the team's own, not a visitor's. The `src` is `resolveMediaSrc` over a reference this card builds itself from the org id and a stored media id — no author string reaches it — and a file the reader may not see resolves to nothing and is listed by name with no image.",
   },
+  'libs/plugins/data/src/lib/record-pages/record-page-resolver.server.ts': {
+    markers: 1,
+    guard: 'projection',
+    why: "Composes a dataset record's stored image into the record page's screen SEO, ahead of the template's (AGL-3475); page.tsx hands that SEO to resolveSocialImage, as it does a collection entry's cover. Nothing is fetched here.",
+  },
   'libs/plugins/email/src/lib/components/email-blocks.tsx': {
     markers: 1,
     guard: 'off-tenant',

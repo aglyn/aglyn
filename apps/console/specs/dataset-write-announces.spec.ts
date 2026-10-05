@@ -42,14 +42,29 @@ describe('a dataset record write announces to the live pages', () => {
     expect(route).toContain(
       "import { announceDatasetRecords as announceDatasetChange } from './announce-dataset-records'",
     )
-    // Three: the create, the import's single post-loop call, and the leg the
-    // browser's own client-direct edits reach. A fourth would mean the import
-    // loop had grown a per-chunk announce, which is the burst this bounds.
-    expect(route.match(/announceDatasetChange\(/g)).toHaveLength(3)
+    // Four: the create, the import's single post-loop call, the leg the
+    // browser's own client-direct edits reach, and the page-address fill's
+    // single post-loop call (AGL-3475). A fifth would mean a chunk loop had
+    // grown a per-chunk announce, which is the burst this bounds.
+    expect(route.match(/announceDatasetChange\(/g)).toHaveLength(4)
+    // The address fill writes in chunks too, and announces once after them.
+    const fillAt = route.indexOf("action === 'add-address-field'")
+    const fillAnnounceAt = route.indexOf(
+      'await announceDatasetChange({ firestore, orgId, datasetId })',
+      fillAt,
+    )
+    const fillLoopEnd = route.lastIndexOf('await batch.commit()', fillAnnounceAt)
+    expect(fillAt).toBeGreaterThan(0)
+    expect(fillLoopEnd).toBeGreaterThan(fillAt)
+    expect(route.slice(fillLoopEnd, fillAnnounceAt)).not.toContain('for (')
     // After the chunk loop, never inside it: a thousand rows arrive as one
     // import and make the same pages stale once.
     const loopEnd = route.indexOf('if (refusedAt !== null) {')
-    const announceAt = route.indexOf('await announceDatasetChange({ firestore, orgId, datasetId })')
+    // The import's call is the last in the file; the address fill's is earlier.
+    const announceAt = route.lastIndexOf(
+      'await announceDatasetChange({ firestore, orgId, datasetId })',
+      loopEnd,
+    )
     expect(announceAt).toBeGreaterThan(0)
     expect(announceAt).toBeLessThan(loopEnd)
     expect(route.slice(announceAt, loopEnd)).not.toContain('for (')
