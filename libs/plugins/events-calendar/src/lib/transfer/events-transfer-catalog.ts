@@ -19,8 +19,10 @@ import type {
   MatchKeySpec,
   TransferAliasDictionary,
   TransferCatalogInput,
+  TransferField,
 } from '@aglyn/aglyn/data-transfer'
 import {
+  eventStatusOf,
   EVENT_COVER_ALT_MAX_LENGTH,
   EVENT_DESCRIPTION_MAX_LENGTH,
   EVENT_LOCATION_MAX_LENGTH,
@@ -200,3 +202,15 @@ export const EVENTS_ALIASES: readonly TransferAliasDictionary[] = [
     },
   },
 ]
+
+/**
+ * Whether a file's value and an event's are the same (AGL-3548): a status is
+ * stored in lower case, so `Published` is the `published` the event holds —
+ * no conflict on the Conflicts step and no change in the dry run, as the
+ * plan already folds it. Every other field is the core's to compare.
+ */
+export function eventsValuesEqual(field: TransferField, a: unknown, b: unknown): boolean | undefined {
+  if (field.id !== 'status') return undefined
+  const status = eventStatusOf(a)
+  return status !== null && status === eventStatusOf(b) ? true : undefined
+}

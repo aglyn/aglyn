@@ -21,6 +21,7 @@ import { FieldPath, Timestamp } from 'firebase-admin/firestore'
 import {
   FORM_SUBMISSIONS_OTHER_ANSWERS_MAX,
   createFormSubmissionsTransferResource,
+  formSubmissionTransferRow,
   readFormSubmissionsFilter,
 } from './form-submissions-transfer'
 
@@ -372,12 +373,10 @@ describe('reading a page', () => {
       ['s5', 's2', 's1'],
     )
     expect((await readAll(fieldIds, { filter: { read: true } })).rows.map((row) => row['id'])).toEqual(['s2'])
-    expect(queries.filter((query) => !query.count).map((query) => query.equalities)).toEqual([
-      ['formId'],
-      ['formId'],
-      ['formId'],
-      ['read'],
-    ])
+    // The submissions' queries; the forms are read beside them for which answers are ratings.
+    expect(
+      queries.filter((query) => !query.count && query.collection === 'formSubmissions').map((query) => query.equalities),
+    ).toEqual([['formId'], ['formId'], ['formId'], ['read']])
   })
 
   it('reads a selection by id, in the order given, skipping what is gone or filtered out', async () => {
@@ -418,6 +417,18 @@ describe('reading a page', () => {
         nope: null,
       },
     ])
+  })
+
+  it('writes a rating answer that reads as a number as that number, anything else as sent (AGL-3548)', async () => {
+    const page = await resource.readPage(ctx(), null, ['id', 'answer:rating', 'answer:email'], { ids: ['s3'] })
+    expect(page.rows).toEqual([{ id: 's3', 'answer:rating': 4, 'answer:email': 'cy@example.com' }])
+    // The same name on a form where it is not a rating question stays text.
+    expect(
+      formSubmissionTransferRow('x', { formId: 'form-a', fields: { rating: '4' } }, ['answer:rating'], new Map([['form-b', new Set(['rating'])]])),
+    ).toEqual({ 'answer:rating': '4' })
+    expect(
+      formSubmissionTransferRow('x', { formId: 'form-b', fields: { rating: 'great' } }, ['answer:rating'], new Map([['form-b', new Set(['rating'])]])),
+    ).toEqual({ 'answer:rating': 'great' })
   })
 
   it('reads only this site', async () => {

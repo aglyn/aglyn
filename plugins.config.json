@@ -748,13 +748,14 @@
           "description": "The category tree products are filed under, matched by slug, then name."
         },
         {
-          "$comment": "Exported only: an order is the record of a sale. Every row a file carries is refused at the dry run.",
+          "$comment": "Exported only: an order is the record of a sale. The upload refuses a file, the hub offers no Import, and every row is still refused at the dry run.",
           "key": "commerce.orders",
           "label": "Orders",
           "singularLabel": "Order",
           "scope": "host",
           "kinds": ["records"],
           "formats": ["csv", "json", "ndjson"],
+          "exportOnly": true,
           "description": "Every order with its items, money, customer and addresses. Exported only."
         },
         {

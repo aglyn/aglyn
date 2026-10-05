@@ -85,6 +85,7 @@ import {
   canApplyTransferPlan,
   collectPicklistValues,
   createTransferPolicy,
+  withTransferPolicyDefaults,
   deriveTransferCell,
   deriveTransferRow,
   mapTransferRow,
@@ -93,7 +94,6 @@ import {
   matchHeaders,
   matchLookupRequests,
   matchPicklistValues,
-  matchRows,
   missingAcknowledgements,
   picklistChoiceProblems,
   planTransferUndo,
@@ -184,7 +184,9 @@ import { createResourceUid } from '@aglyn/aglyn/app-utils/create-resource-uid'
 import { escapeCsvCell } from '@aglyn/aglyn/app-utils/csv'
 import { inspectUploadBytes } from '@aglyn/aglyn/app-utils/upload-inspection'
 import {
+  matchTransferResourceRows,
   planTransferResourceRows,
+  transferResourcePolicyDefaults,
   resolveTransferResource,
   transferInvariantFailures,
   transferRecordsHooks,
@@ -513,6 +515,16 @@ export function transferJobProgress(job: TransferJobRecord): TransferProgress {
  * FIELDS — what a resource offers
  *=========================================*/
 
+/** The resource's starting policy as a `TransferResourceInfo` entry: absent when it starts from the core's. */
+async function policyDefaultsEntry(
+  resource: ResolvedTransferResource,
+  ctx: TransferResourceContext,
+  fields: readonly TransferField[],
+): Promise<Pick<TransferResourceInfo, 'defaultPolicy'>> {
+  const defaultPolicy = await transferResourcePolicyDefaults(resource, ctx, fields)
+  return Object.keys(defaultPolicy).length ? { defaultPolicy } : {}
+}
+
 /**
  * What a resource offers the wizard and the export dialog: its descriptor,
  * every field and group, its match keys (and the ones a person starts with,
@@ -566,6 +578,7 @@ export async function readTransferResourceInfo(
         }
       : {}),
     locked: [...(await transferResourceLockedRules(resource, ctx))],
+    ...(await policyDefaultsEntry(resource, ctx, catalog.fields)),
     ...(hooks.aliases?.length ? { dictionaries: [...hooks.aliases] } : {}),
     canCreateCustomField: false,
   }
@@ -913,13 +926,21 @@ export async function analyzeTransferJob(
     const found = keys.length
       ? await lookupAll(hooks, ctx, matchLookupRequests(values, keys))
       : { lookup: new Map<string, string[]>(), records: new Map<string, Readonly<Record<string, unknown>>>() }
-    const outcomes: RowMatchOutcome[] = matchRows(values, keys, found.lookup)
+    // The resource's own matching, when it has one: the Matching step shows
+    // the outcome the dry run will act on.
+    const matched = await matchTransferResourceRows(resource, ctx, {
+      rows: values,
+      keys,
+      lookup: found.lookup,
+      records: found.records,
+    })
+    const outcomes: RowMatchOutcome[] = matched.outcomes
     const lookups = await lookupReviews(await resolveLookupColumns(deps, hooks, ctx, mapping, byId, read))
     review = {
       derivations: summarizeTransferDerivations(mappedFields, read),
       ...(lookups.length ? { lookups } : {}),
       matches: transferMatchReview(keys, outcomes, values),
-      recordLabels: recordLabelsFor(found.records, transferMatchedRecordIds(outcomes)),
+      recordLabels: recordLabelsFor(matched.records, transferMatchedRecordIds(outcomes)),
     }
   }
 
@@ -1367,7 +1388,9 @@ export async function planTransferJob(
     throw new TransferEngineError('invalid', 422, 'Resolve the mapping before the dry run.', problems)
   }
   const lockedRules = await transferResourceLockedRules(resource, ctx)
-  const policy = createTransferPolicy({ ...(choices.policy ?? {}), locked: lockedRules })
+  // The person's choices over the resource's starting point (AGL-3548).
+  const defaults = await transferResourcePolicyDefaults(resource, ctx, catalog.fields)
+  const policy = createTransferPolicy({ ...withTransferPolicyDefaults(defaults, choices.policy ?? {}), locked: lockedRules })
   const policyProblems = transferPolicyProblems(policy, catalog.fields)
   if (policyProblems.length) throw new TransferEngineError('invalid', 422, policyProblems[0] as string, policyProblems)
   const offer = await transferResourceMatchKeys(resource, ctx)
@@ -1427,10 +1450,16 @@ export async function planTransferJob(
   }
   applyLookupChoices(rows, lookupColumns, choices.lookupChoices)
   const values = rows.map((row) => row.values)
-  const found = keys.length
+  const looked = keys.length
     ? await lookupAll(hooks, ctx, matchLookupRequests(values, keys))
     : { lookup: new Map<string, string[]>(), records: new Map<string, Readonly<Record<string, unknown>>>() }
-  const matches = matchRows(values, keys, found.lookup)
+  const { outcomes: matches, records } = await matchTransferResourceRows(resource, ctx, {
+    rows: values,
+    keys,
+    lookup: looked.lookup,
+    records: looked.records,
+  })
+  const found = { lookup: looked.lookup, records }
   const plan = await planTransferResourceRows(resource, ctx, {
     fields: catalog.fields,
     rows,
@@ -1464,7 +1493,14 @@ export async function planTransferJob(
 
   const now = clock(deps)
   const matchSummary = summarizeMatches(matches)
-  const allConflicts = transferPlanConflicts({ fields: byId, rows, matches, existing: found.records, policy })
+  const allConflicts = transferPlanConflicts({
+    fields: byId,
+    rows,
+    matches,
+    existing: found.records,
+    policy,
+    ...(hooks.valuesEqual ? { valuesEqual: hooks.valuesEqual } : {}),
+  })
   const conflicts = allConflicts.slice(0, TRANSFER_PLAN_CONFLICTS_MAX)
   const ambiguous = transferAmbiguities(matches)
   const sample = transferPlanSample(plan.rows)

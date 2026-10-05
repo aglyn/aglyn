@@ -87,6 +87,24 @@ describe('the review of a whole file', () => {
     ])
   })
 
+  it('shows no conflict for a value the resource folds, and compares an outcome it supplied (AGL-3548)', () => {
+    const fields = new Map<string, TransferField>([['status', { id: 'status', label: 'Status', type: 'text' }]])
+    const input = {
+      fields,
+      rows: [{ index: 0, values: { status: 'Published' } }],
+      matches: [{ kind: 'matched', recordId: 'e1', via: { fieldId: 'id', value: 'e1' } }] as RowMatchOutcome[],
+      existing: new Map([['e1', { status: 'published' }]]),
+      policy: createTransferPolicy({}),
+    }
+    expect(transferPlanConflicts(input)).toHaveLength(1)
+    expect(
+      transferPlanConflicts({
+        ...input,
+        valuesEqual: (field, a, b) => (field.id === 'status' ? String(a).toLowerCase() === String(b).toLowerCase() : undefined),
+      }),
+    ).toEqual([])
+  })
+
   it('samples the planned rows by verdict, in row order', () => {
     const row = (index: number, verdict: PlannedTransferRow['verdict']) =>
       ({ index, verdict, recordId: null, diff: [], heldBack: [], warnings: [], match: { kind: 'new' } }) as PlannedTransferRow

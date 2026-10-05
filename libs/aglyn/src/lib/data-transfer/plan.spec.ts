@@ -346,3 +346,15 @@ describe('withTransferResourceFindings', () => {
     expect(withTransferResourceFindings(base, [])).toBe(base)
   })
 })
+
+describe('the resource comparator (AGL-3548)', () => {
+  it('plans a value the resource folds as unchanged', () => {
+    const valuesEqual = (field: TransferField, a: unknown, b: unknown) =>
+      field.id === 'name' && typeof a === 'string' && typeof b === 'string' ? a.toLowerCase() === b.toLowerCase() : undefined
+    const overwrite = createTransferPolicy({ fieldDefault: { mode: 'overwrite', blank: 'leave' } })
+    expect(plan([{ email: 'jane@example.com', name: 'JANE' }], { policy: overwrite }).rows[0]?.verdict).toBe('update')
+    expect(plan([{ email: 'jane@example.com', name: 'JANE' }], { policy: overwrite, valuesEqual }).rows[0]?.verdict).toBe(
+      'unchanged',
+    )
+  })
+})

@@ -44,6 +44,7 @@ import {
   listDeclaredTransferResources,
   listPluginTransferResourceUis,
   listTransferResourcesFor,
+  matchTransferResourceRows,
   planTransferResourceRows,
   pluginTransferResourceProblems,
   pluginTransferResourceUi,
@@ -58,6 +59,7 @@ import {
   transferRecordsHooks,
   transferResourceCatalog,
   transferResourceMatchKeys,
+  transferResourcePolicyDefaults,
   TransferResourceUnavailableError,
   transferPlanRefusal,
   transferPlanRequired,
@@ -508,6 +510,85 @@ describe('what the engine asks of a resolved resource', () => {
     const own = { ...core, summary: { ...core.summary, create: 0, skip: 1 } }
     registerPluginTransferResource('bottles', { ...RECORDS, plan: () => own }, { pluginId: 'cellar' })
     expect(await planTransferResourceRows(await resolveTransferResource('bottles'), CTX, input)).toBe(own)
+  })
+
+  it('starts from the resource’s defaults, kept to the fields the context has (AGL-3548)', async () => {
+    registerPluginTransferResource('bottles', RECORDS, { pluginId: 'cellar' })
+    const fields = (await transferResourceCatalog(await resolveTransferResource('bottles'), CTX)).fields
+    expect(await transferResourcePolicyDefaults(await resolveTransferResource('bottles'), CTX, fields)).toEqual({})
+
+    registerPluginTransferResource(
+      'bottles',
+      {
+        ...RECORDS,
+        defaultPolicy: async (ctx) => ({
+          fieldDefault: { mode: 'overwrite' },
+          fields: { name: { blank: 'clear' }, vintage: { mode: 'overwrite' } },
+          note: `For ${ctx.orgId}`,
+        }),
+      },
+      { pluginId: 'cellar' },
+    )
+    expect(await transferResourcePolicyDefaults(await resolveTransferResource('bottles'), CTX, fields)).toEqual({
+      fieldDefault: { mode: 'overwrite' },
+      fields: { name: { blank: 'clear' } },
+      note: 'For o1',
+    })
+  })
+
+  it('matches with the core, then the resource’s own matching over it (AGL-3548)', async () => {
+    registerPluginTransferResource('bottles', RECORDS, { pluginId: 'cellar' })
+    const input = {
+      rows: [{ email: 'a@x.com' }, { email: 'b@x.com' }],
+      keys: [{ fieldId: 'email', normalizer: 'email' as const }],
+      lookup: new Map([['email\u0000a@x.com', ['r1', 'r2']]]),
+      records: new Map([['r1', { email: 'a@x.com' }]]),
+    }
+    const core = await matchTransferResourceRows(await resolveTransferResource('bottles'), CTX, input)
+    expect(core.outcomes.map((outcome) => outcome.kind)).toEqual(['ambiguous', 'new'])
+    expect(core.records).toBe(input.records)
+
+    // The resource narrows the ambiguous row to one record, which it read itself.
+    registerPluginTransferResource(
+      'bottles',
+      {
+        ...RECORDS,
+        match: (_ctx, given) => ({
+          outcomes: given.outcomes.map((outcome) =>
+            outcome.kind === 'ambiguous' ? { kind: 'matched', recordId: 'r2', via: outcome.via } : outcome,
+          ),
+          records: new Map([['r2', { email: 'a@x.com', name: 'Second' }]]),
+        }),
+      },
+      { pluginId: 'cellar' },
+    )
+    const own = await matchTransferResourceRows(await resolveTransferResource('bottles'), CTX, input)
+    expect(own.outcomes[0]).toMatchObject({ kind: 'matched', recordId: 'r2' })
+    expect([...own.records.keys()]).toEqual(['r1', 'r2'])
+
+    registerPluginTransferResource('bottles', { ...RECORDS, match: () => ({ outcomes: [] }) }, { pluginId: 'cellar' })
+    await expect(matchTransferResourceRows(await resolveTransferResource('bottles'), CTX, input)).rejects.toThrow(
+      /matched 0 of 2 rows/,
+    )
+  })
+
+  it('hands the core plan the resource’s comparator (AGL-3548)', async () => {
+    registerPluginTransferResource(
+      'bottles',
+      {
+        ...RECORDS,
+        valuesEqual: (field, a, b) => (field.id === 'name' ? String(a).toLowerCase() === String(b).toLowerCase() : undefined),
+      },
+      { pluginId: 'cellar' },
+    )
+    const plan = await planTransferResourceRows(await resolveTransferResource('bottles'), CTX, {
+      fields: [{ id: 'name', label: 'Name', type: 'text' as const }],
+      rows: [{ index: 0, values: { name: 'MALBEC' } }],
+      matches: [{ kind: 'matched' as const, recordId: 'r1', via: { fieldId: 'id', value: 'r1' } }],
+      existing: new Map([['r1', { name: 'Malbec' }]]),
+      policy: createTransferPolicy({ fieldDefault: { mode: 'overwrite', blank: 'leave' } }),
+    })
+    expect(plan.rows[0]?.verdict).toBe('unchanged')
   })
 
   it('reports each writing row that breaks an invariant, and checks no other', () => {

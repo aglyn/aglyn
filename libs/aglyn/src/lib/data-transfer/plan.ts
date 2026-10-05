@@ -41,12 +41,19 @@ import type { RowMatchOutcome } from './match'
 import {
   appendTransferList,
   applyFieldPolicy,
+  compareTransferValues,
   isBlankTransferValue,
   resolveFieldPolicy,
   resolveRecordPolicy,
   transferValuesEqual,
 } from './policy'
-import type { FieldPolicyOutcome, TransferFieldMode, TransferPolicy, TransferPolicySource } from './policy'
+import type {
+  FieldPolicyOutcome,
+  TransferFieldMode,
+  TransferPolicy,
+  TransferPolicySource,
+  TransferValuesComparator,
+} from './policy'
 import { isTransferFieldWritable } from './resource'
 import type { TransferField } from './resource'
 
@@ -225,6 +232,11 @@ export interface BuildTransferPlanInput {
   limits?: TransferPlanLimits
   /** Samples kept per warning class; default 5. */
   sampleSize?: number
+  /**
+   * The resource's answer to whether a field's value changes (AGL-3548):
+   * a value it folds on write (`Published`, `published`) is not a change.
+   */
+  valuesEqual?: TransferValuesComparator
 }
 
 interface Tally {
@@ -367,12 +379,13 @@ export function buildTransferPlan(input: BuildTransferPlanInput): TransferPlan {
       if (!field || !isTransferFieldWritable(field)) continue
       const resolved = resolveFieldPolicy(input.policy, row.index, field)
       const current = target.kind === 'update' ? before[fieldId] : null
+      const equal = (a: unknown, b: unknown) => compareTransferValues(field, a, b, input.valuesEqual)
       // A new record has nothing to keep, fill around or append to: the
       // file's value is written unless a locked rule refuses it.
       const outcome =
         target.kind === 'create'
-          ? applyFieldPolicy({ mode: 'overwrite', blank: 'leave', refuseValues: resolved.refuseValues }, null, incoming)
-          : applyFieldPolicy(resolved, current, incoming)
+          ? applyFieldPolicy({ mode: 'overwrite', blank: 'leave', refuseValues: resolved.refuseValues }, null, incoming, equal)
+          : applyFieldPolicy(resolved, current, incoming, equal)
       if (
         resolved.locked &&
         (resolved.refuseValues || resolved.source === 'locked') &&

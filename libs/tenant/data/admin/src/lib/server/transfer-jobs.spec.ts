@@ -831,6 +831,58 @@ describe('what the wizard reads (AGL-3539)', () => {
     expect(result.job.extras).toEqual({ consent: true })
   })
 
+  it('starts from the resource’s policy, matches with its own matching and compares with its comparator (AGL-3548)', async () => {
+    bottles.set('b-old', { id: 'b-old', values: { name: 'Old', email: 'bottle0@cellar.test' } })
+    bottles.set('b-other', { id: 'b-other', values: { name: 'Other', email: 'other@cellar.test' } })
+    registerPluginTransferResource(
+      'bottles',
+      {
+        ...RESOURCE,
+        defaultPolicy: { fieldDefault: { mode: 'overwrite' }, fields: { gone: { mode: 'overwrite' } }, note: 'A bottle file is the cellar.' },
+        // Row 1 is about b-other whatever its email says.
+        match: (_ctx, input) => ({
+          outcomes: input.outcomes.map((outcome, row) =>
+            row === 1 ? { kind: 'matched', recordId: 'b-other', via: { fieldId: 'email', value: 'x' } } : outcome,
+          ),
+          records: new Map([['b-other', { name: 'Other', email: 'other@cellar.test' }]]),
+        }),
+        valuesEqual: (field, a, b) => (field.id === 'name' ? String(a).toLowerCase() === String(b).toLowerCase() : undefined),
+      },
+      { pluginId: 'cellar' },
+    )
+    const info = await readTransferResourceInfo(deps, { orgId: ORG, actorUid: ME, resource: 'bottles' })
+    expect(info.defaultPolicy).toEqual({ fieldDefault: { mode: 'overwrite' }, note: 'A bottle file is the cellar.' })
+
+    const job = await uploaded('Name,Email\nOLD,bottle0@cellar.test\nRenamed,new@cellar.test')
+    const mapping = { 0: 'name', 1: 'email' }
+    const analysis = await analyzeTransferJob(deps, { orgId: ORG, jobId: job.id, actorUid: ME, mapping, matchKeys: ['email'] })
+    // The Matching step shows the resource's outcome, and names its record.
+    expect(analysis.matches?.rows.find((row) => row.row === 1)).toMatchObject({ outcome: { kind: 'matched', recordId: 'b-other' } })
+    expect(analysis.recordLabels).toMatchObject({ 'b-other': 'Other' })
+
+    // No policy sent: the resource's overwrite; `OLD` is `Old` to it, so row 0
+    // is no conflict and no change, and row 1 overwrites b-other's name.
+    const result = await planTransferJob(deps, { orgId: ORG, jobId: job.id, actorUid: ME, choices: { mapping, matchKeys: ['email'] } })
+    expect(result.job.policy?.fieldDefault.mode).toBe('overwrite')
+    expect(result.sample.map((row) => [row.verdict, row.recordId])).toEqual([
+      ['unchanged', 'b-old'],
+      ['update', 'b-other'],
+    ])
+    expect(result.conflicts.map((conflict) => [conflict.recordId, conflict.fields.map((field) => [field.fieldId, field.after])])).toEqual([
+      ['b-other', [['name', 'Renamed'], ['email', 'new@cellar.test']]],
+    ])
+
+    // The person's choice still wins.
+    const chosen = await planTransferJob(deps, {
+      orgId: ORG,
+      jobId: job.id,
+      actorUid: ME,
+      choices: { mapping, matchKeys: ['email'], policy: { fieldDefault: { mode: 'fillBlanks', blank: 'leave' } } },
+    })
+    expect(chosen.sample.map((row) => row.verdict)).toEqual(['unchanged', 'unchanged'])
+    registerPluginTransferResource('bottles', RESOURCE, { pluginId: 'cellar' })
+  })
+
   it('answers each apply call with the results it wrote, and status with every row’s result', async () => {
     const job = await planned(csv(3))
     const applied = await applyAll(job.id)

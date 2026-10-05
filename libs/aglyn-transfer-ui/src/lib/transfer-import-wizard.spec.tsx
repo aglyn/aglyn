@@ -275,6 +275,33 @@ describe('TransferImportWizard', () => {
     )
   })
 
+  it('opens the Conflicts step on the resource’s own defaults, with its reason (AGL-3548)', async () => {
+    await toConflicts(
+      createPeopleClient({
+        defaultPolicy: {
+          fieldDefault: { mode: 'overwrite' },
+          note: 'A people file is the team list.',
+        },
+      }),
+    )
+    expect(screen.getByText('A people file is the team list.')).toBeTruthy()
+    expect(
+      screen.getByRole('combobox', { name: /Every field, unless set below/ })
+        .textContent,
+    ).toMatch(/Overwrite/)
+  })
+
+  it('promises nothing is replaced unasked only where the resource starts there', async () => {
+    await toConflicts()
+    expect(
+      screen.getByText('Nothing is replaced or cleared unless you choose it here.'),
+    ).toBeTruthy()
+    expect(
+      screen.getByRole('combobox', { name: /Every field, unless set below/ })
+        .textContent,
+    ).toMatch(/Fill blanks/)
+  })
+
   it('keeps Import disabled until every warning class is acknowledged, then applies and undoes', async () => {
     const { client } = await toReview()
     const importButton = screen.getByRole('button', { name: 'Import 3 rows' })

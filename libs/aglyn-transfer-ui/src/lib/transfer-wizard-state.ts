@@ -28,13 +28,12 @@
  *=========================================*/
 
 import {
-  DEFAULT_TRANSFER_FIELD_POLICY,
-  DEFAULT_TRANSFER_RECORD_POLICY,
   createTransferPolicy,
   mappingIsUsable,
   mappingProblems,
   picklistChoiceProblems,
   proposePicklistChoice,
+  startingTransferPolicy,
   transferPolicyProblems,
 } from '@aglyn/aglyn/data-transfer'
 import type {
@@ -43,6 +42,7 @@ import type {
   TransferField,
   TransferLockedRule,
   TransferPolicy,
+  TransferPolicyDefaults,
   TransferWarningClass,
 } from '@aglyn/aglyn/data-transfer'
 
@@ -103,7 +103,13 @@ export interface TransferWizardDraft {
   extras: Record<string, unknown>
 }
 
-export function createTransferWizardDraft(): TransferWizardDraft {
+/**
+ * A fresh draft. `defaultPolicy` is the resource's starting point
+ * (`TransferResourceInfo.defaultPolicy`): the Conflicts step opens on it.
+ */
+export function createTransferWizardDraft(
+  defaultPolicy?: TransferPolicyDefaults,
+): TransferWizardDraft {
   return {
     version: 1,
     jobId: null,
@@ -115,12 +121,7 @@ export function createTransferWizardDraft(): TransferWizardDraft {
     picklistChoices: {},
     lookupChoices: {},
     matchKeys: null,
-    policy: {
-      record: { ...DEFAULT_TRANSFER_RECORD_POLICY },
-      fieldDefault: { ...DEFAULT_TRANSFER_FIELD_POLICY },
-      fields: {},
-      rows: {},
-    },
+    policy: startingTransferPolicy(defaultPolicy),
     acknowledged: [],
     extras: {},
   }

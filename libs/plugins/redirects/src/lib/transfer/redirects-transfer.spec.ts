@@ -25,6 +25,9 @@ import {
   matchLookupRequests,
   matchRows,
   transferFieldProblems,
+  transferPlanConflicts,
+  transferPolicyDefaultsFor,
+  withTransferPolicyDefaults,
   type PlannedTransferRow,
   type TransferPlan,
   type TransferPolicy,
@@ -45,8 +48,10 @@ import { registerRedirectsConsoleServerDeclarations } from '../declarations.cons
 import { createRedirectsTransferResource } from './redirects-transfer'
 import {
   REDIRECTS_ALIAS_DICTIONARIES,
+  REDIRECTS_DEFAULT_POLICY,
   REDIRECTS_MATCH_KEYS,
   canonicalRedirectKind,
+  redirectValuesEqual,
   redirectsTransferCatalog,
 } from './redirects-transfer-fields'
 
@@ -260,20 +265,41 @@ beforeEach(() => {
   seed()
 })
 
-/** The job engine's dry run, in short: match through `lookup`, then the resource's plan. */
+/**
+ * The job engine's matching, in short: `lookup`, the core's `matchRows`, then
+ * the resource's own `match` — what the Matching and Conflicts steps show.
+ */
+async function matched(values: Array<Record<string, unknown>>, actor?: string) {
+  const context = ctx(actor)
+  const found = await resource.lookup(context, matchLookupRequests(values, REDIRECTS_MATCH_KEYS))
+  const input = { rows: values, keys: REDIRECTS_MATCH_KEYS, lookup: found.lookup, records: found.records }
+  const own = await (resource.match as NonNullable<TransferRecordsHooks['match']>)(context, {
+    ...input,
+    outcomes: matchRows(values, REDIRECTS_MATCH_KEYS, found.lookup),
+  })
+  return { outcomes: own.outcomes, records: new Map([...found.records, ...(own.records ?? [])]) }
+}
+
+/** The person's policy over the resource's starting point, as the engine makes it. */
+function policyOf(chosen?: Partial<TransferPolicy>): TransferPolicy {
+  return createTransferPolicy(
+    withTransferPolicyDefaults(transferPolicyDefaultsFor(REDIRECTS_DEFAULT_POLICY, catalog.fields), chosen),
+  )
+}
+
+/** The job engine's dry run, in short: match as above, then the resource's plan. */
 async function dryRun(
   values: Array<Record<string, unknown>>,
   options: { actor?: string; policy?: Partial<TransferPolicy> } = {},
 ): Promise<TransferPlan> {
   const context = ctx(options.actor)
-  const found = await resource.lookup(context, matchLookupRequests(values, REDIRECTS_MATCH_KEYS))
-  const matches = matchRows(values, REDIRECTS_MATCH_KEYS, found.lookup)
+  const { outcomes, records } = await matched(values, options.actor)
   return (resource.plan as NonNullable<TransferRecordsHooks['plan']>)(context, {
     fields: catalog.fields,
     rows: values.map((rowValues, index) => ({ index, values: rowValues })),
-    matches,
-    existing: found.records,
-    policy: createTransferPolicy(options.policy),
+    matches: outcomes,
+    existing: records,
+    policy: policyOf(options.policy),
   })
 }
 
@@ -398,9 +424,60 @@ describe('lookup and matching', () => {
     expect(rowOf(plan, 2)).toMatchObject({ verdict: 'update', recordId: 'r2' })
   })
 
-  it('keeps an existing rule’s values unless the person chooses to overwrite them', async () => {
-    const plan = await dryRun([{ source: '/old-page', destination: '/elsewhere', statusCode: 302 }])
-    expect(rowOf(plan, 0)).toMatchObject({ verdict: 'unchanged', recordId: 'r1' })
+  it('starts by giving an existing rule the file’s values, and keeps them when the person chooses fill blanks (AGL-3548)', async () => {
+    const values = [{ source: '/old-page', destination: '/elsewhere', statusCode: 302 }]
+    const started = await dryRun(values)
+    expect(rowOf(started, 0)).toMatchObject({ verdict: 'update', recordId: 'r1' })
+    expect(rowOf(started, 0).diff.map((change) => [change.fieldId, change.after])).toEqual([
+      ['destination', '/elsewhere'],
+      ['statusCode', 302],
+    ])
+    const kept = await dryRun(values, { policy: { fieldDefault: { mode: 'fillBlanks', blank: 'leave' } } })
+    expect(rowOf(kept, 0)).toMatchObject({ verdict: 'unchanged', recordId: 'r1' })
+  })
+
+  it('shows the Matching step the rule of the row’s mode where the core finds both (AGL-3548)', async () => {
+    docs.set(`${RULES}/r5`, { source: '/blog', destination: '/journal', statusCode: 301, kind: 'exact', enabled: true })
+    const values = [{ source: '/blog', destination: '/stories' }, { source: '/Blog/', kind: 'prefix', destination: '/stories' }]
+    const found = await resource.lookup(ctx(), matchLookupRequests(values, REDIRECTS_MATCH_KEYS))
+    // The core reads one from-path for both modes, so it is ambiguous …
+    expect(matchRows(values, REDIRECTS_MATCH_KEYS, found.lookup).map((outcome) => outcome.kind)).toEqual([
+      'ambiguous',
+      'ambiguous',
+    ])
+    // … and the resource names the one rule of each row's mode, as the dry run updates it.
+    const { outcomes } = await matched(values)
+    expect(outcomes).toEqual([
+      { kind: 'matched', recordId: 'r5', via: { fieldId: 'source', value: '/blog' } },
+      { kind: 'matched', recordId: 'r2', via: { fieldId: 'source', value: '/blog' } },
+    ])
+    const plan = await dryRun(values)
+    expect(plan.rows.map((row) => [row.verdict, row.recordId])).toEqual([
+      ['update', 'r5'],
+      ['update', 'r2'],
+    ])
+  })
+
+  it('reads a value as the page stores it, so the Conflicts step lists only real differences (AGL-3548)', async () => {
+    const field = (id: string) => catalog.byId.get(id) as NonNullable<ReturnType<typeof catalog.byId.get>>
+    expect(redirectValuesEqual(field('source'), '/old-page', '/Old-Page/')).toBe(true)
+    expect(redirectValuesEqual(field('source'), '^/Blog/(.*)$', '^/blog/(.*)$')).toBe(false)
+    expect(redirectValuesEqual(field('destination'), '/new-page', '/new-page/')).toBe(true)
+    expect(redirectValuesEqual(field('kind'), 'prefix', 'Path prefix')).toBe(true)
+    expect(redirectValuesEqual(field('statusCode'), 301, '301')).toBe(true)
+    expect(redirectValuesEqual(field('enabled'), true, false)).toBeUndefined()
+
+    const values = [{ source: '/Old-Page/', destination: '/new-page/', statusCode: '301' }]
+    const { outcomes, records } = await matched(values)
+    const conflicts = transferPlanConflicts({
+      fields: catalog.byId,
+      rows: values.map((rowValues, index) => ({ index, values: rowValues })),
+      matches: outcomes,
+      existing: records,
+      policy: policyOf(),
+      valuesEqual: redirectValuesEqual,
+    })
+    expect(conflicts).toEqual([])
   })
 
   it('refuses a later row that names a rule an earlier row already does', async () => {
@@ -748,6 +825,9 @@ describe('registration', () => {
     const resolved = await resolveTransferResource('redirects')
     expect(resolved.pluginId).toBe('redirects')
     expect(resolved.impl.matchKeys).toBe(REDIRECTS_MATCH_KEYS)
+    expect(resolved.impl.defaultPolicy).toBe(REDIRECTS_DEFAULT_POLICY)
+    expect(resolved.impl.valuesEqual).toBe(redirectValuesEqual)
+    expect(typeof resolved.impl.match).toBe('function')
     expect(pluginTransferResourceProblems(resolved, resolved.impl)).toEqual([])
   })
 })

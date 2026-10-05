@@ -22,6 +22,7 @@ import {
   matchRows,
   plannedWrites,
   transferFieldProblems,
+  transferPlanConflicts,
   type TransferPlan,
   type TransferPolicy,
   type TransferRowResult,
@@ -35,7 +36,7 @@ import {
   createEventsTransferResource,
   type EventsTransferResource,
 } from './events-transfer'
-import { EVENTS_MATCH_KEYS } from './events-transfer-catalog'
+import { EVENTS_MATCH_KEYS, eventsValuesEqual } from './events-transfer-catalog'
 
 /*==========================================
  * AN IN-MEMORY FIRESTORE
@@ -537,6 +538,23 @@ describe('the dry run', () => {
   it('folds a status case and plans an unchanged row as unchanged', async () => {
     const plan = await planFor([{ id: 'yoga-1', status: 'Published' }])
     expect(plan.rows[0]?.verdict).toBe('unchanged')
+  })
+
+  it('shows no conflict for a status in another case, as the dry run plans none (AGL-3548)', async () => {
+    const rows = [{ id: 'yoga-1', status: 'Published' }]
+    const found = await resource.lookup(CTX, matchLookupRequests(rows, EVENTS_MATCH_KEYS))
+    const input = {
+      fields: catalog().byId,
+      rows: rows.map((values, index) => ({ index, values })),
+      matches: matchRows(rows, EVENTS_MATCH_KEYS, found.lookup),
+      existing: found.records,
+      policy: createTransferPolicy({ fieldDefault: { mode: 'overwrite', blank: 'leave' } }),
+    }
+    expect(transferPlanConflicts(input)).toHaveLength(1)
+    expect(transferPlanConflicts({ ...input, valuesEqual: eventsValuesEqual })).toEqual([])
+    const status = catalog().byId.get('status') as NonNullable<ReturnType<ReturnType<typeof catalog>['byId']['get']>>
+    expect(eventsValuesEqual(status, 'Published', 'published')).toBe(true)
+    expect(eventsValuesEqual(status, 'Cancelled', 'cancelled')).toBeUndefined()
   })
 
   it('refuses a status that is not draft or published', async () => {

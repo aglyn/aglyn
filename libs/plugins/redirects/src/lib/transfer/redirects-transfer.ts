@@ -52,6 +52,7 @@ import type {
   TransferApplyResult,
   TransferApplyWriter,
   TransferLookupResult,
+  TransferMatchAnswer,
   TransferReadOptions,
   TransferReadPage,
   TransferResourceContext,
@@ -75,11 +76,13 @@ import {
 } from '../model/redirects'
 import {
   REDIRECTS_ALIAS_DICTIONARIES,
+  REDIRECTS_DEFAULT_POLICY,
   REDIRECTS_MATCH_KEYS,
   REDIRECT_FIELD,
   REDIRECT_HOST_RESOURCE_KIND,
   REDIRECT_WRITABLE_FIELDS,
   canonicalRedirectKind,
+  redirectValuesEqual,
   redirectsTransferCatalog,
 } from './redirects-transfer-fields'
 
@@ -452,6 +455,51 @@ function withCreateLimit(plan: TransferPlan, remaining: number, limit: number): 
 }
 
 /*==========================================
+ * MATCHING, DEFAULTS AND SAMENESS (AGL-3548)
+ *=========================================*/
+
+/**
+ * Each row's rule, as the page tells rules apart: a row the engine found by
+ * its id keeps that rule; any other row is the rule of its mode (exact when
+ * the file gives none) at its from-path as stored — so `/blog` names the
+ * exact rule or the prefix rule beside it by the row's mode, never both.
+ * Two rows naming one rule are both matched to it here, and the plan refuses
+ * the later one, saying which row it repeats, rather than holding it back as
+ * a duplicate. `existing` holds every live rule's values by id; running this
+ * over its own outcomes changes nothing.
+ */
+export function redirectMatchOutcomes(
+  rows: ReadonlyArray<Readonly<Record<string, unknown>>>,
+  engine: readonly RowMatchOutcome[],
+  existing: ReadonlyMap<string, Readonly<Record<string, unknown>>>,
+  live: ReadonlyArray<{ id: string; data: StoredRule }>,
+): RowMatchOutcome[] {
+  // Each live rule under its mode and stored from-path.
+  const byKey = new Map<string, string[]>()
+  for (const { id, data } of live) {
+    const key = ruleKey(text(data['kind']) || 'exact', text(data['source']))
+    if (key) byKey.set(key, [...(byKey.get(key) ?? []), id])
+  }
+  return rows.map((values, at): RowMatchOutcome => {
+    const found = engine[at] ?? { kind: 'new' as const }
+    const byId = found.kind !== 'new' && found.via.fieldId === TRANSFER_ID_FIELD
+    const record = found.kind === 'matched' && byId ? existing.get(found.recordId) : undefined
+    const rowKind = isBlankTransferValue(values['kind'])
+      ? text(record?.['kind']) || 'exact'
+      : canonicalRedirectKind(values['kind'])
+    const source = isBlankTransferValue(values['source']) ? text(record?.['source']) : text(values['source'])
+    const key = rowKind && source ? ruleKey(rowKind, source) : null
+    if (byId || !key || !rowKind) return found
+    const candidates = byKey.get(key) ?? []
+    const via = { fieldId: REDIRECT_FIELD.source, value: storedSource(rowKind, source) as string }
+    if (!candidates.length) return { kind: 'new' }
+    return candidates.length === 1
+      ? { kind: 'matched', recordId: candidates[0] as string, via }
+      : { kind: 'ambiguous', recordIds: candidates, via }
+  })
+}
+
+/*==========================================
  * THE RESOURCE
  *=========================================*/
 
@@ -562,6 +610,30 @@ export function createRedirectsTransferResource(deps: RedirectsTransferDeps): Pl
     fields: () => redirectsTransferCatalog(),
     matchKeys: REDIRECTS_MATCH_KEYS,
     aliases: REDIRECTS_ALIAS_DICTIONARIES,
+    defaultPolicy: REDIRECTS_DEFAULT_POLICY,
+    valuesEqual: redirectValuesEqual,
+
+    /*
+     * Rows matched as the page tells rules apart (`redirectMatchOutcomes`),
+     * over every live rule of the site — so the Matching step and the
+     * Conflicts step show the rule the dry run will update.
+     */
+    async match(ctx, input): Promise<TransferMatchAnswer> {
+      const hostId = requireHost(ctx)
+      const live = (await readAllRules(hostId)).filter((entry) => isLive(entry.data))
+      const existing = new Map(input.records)
+      for (const { id, data } of live) existing.set(id, redirectRuleValues(id, data))
+      const outcomes = redirectMatchOutcomes(input.rows, input.outcomes, existing, live)
+      const records = new Map<string, Readonly<Record<string, unknown>>>()
+      for (const outcome of outcomes) {
+        const ids = outcome.kind === 'matched' ? [outcome.recordId] : outcome.kind === 'ambiguous' ? outcome.recordIds : []
+        for (const id of ids) {
+          const values = existing.get(id)
+          if (values && !input.records.has(id)) records.set(id, values)
+        }
+      }
+      return { outcomes, records }
+    },
 
     /*
      * `filter` is not read: the redirects page lists every rule and has no
@@ -668,35 +740,15 @@ export function createRedirectsTransferResource(deps: RedirectsTransferDeps): Pl
       const existing = new Map(input.existing)
       for (const { id, data } of live) existing.set(id, redirectRuleValues(id, data))
 
-      // Each live rule under its mode and stored from-path.
-      const byKey = new Map<string, string[]>()
-      for (const { id, data } of live) {
-        const key = ruleKey(text(data['kind']) || 'exact', text(data['source']))
-        if (key) byKey.set(key, [...(byKey.get(key) ?? []), id])
-      }
-
-      // Matching, as the page tells rules apart: a row found by its id keeps
-      // that rule; any other row is the rule of its mode (exact when the file
-      // gives none) at its from-path as stored. Two rows naming one rule are
-      // both matched to it here, and the later one is refused below, saying
-      // which row it repeats, rather than held back as a duplicate.
-      const matches = input.rows.map((row, at): RowMatchOutcome => {
-        const engine = input.matches[at] ?? { kind: 'new' as const }
-        const byId = engine.kind !== 'new' && engine.via.fieldId === TRANSFER_ID_FIELD
-        const record = engine.kind === 'matched' && byId ? existing.get(engine.recordId) : undefined
-        const rowKind = isBlankTransferValue(row.values['kind'])
-          ? text(record?.['kind']) || 'exact'
-          : canonicalRedirectKind(row.values['kind'])
-        const source = isBlankTransferValue(row.values['source']) ? text(record?.['source']) : text(row.values['source'])
-        const key = rowKind && source ? ruleKey(rowKind, source) : null
-        if (byId || !key || !rowKind) return engine
-        const candidates = byKey.get(key) ?? []
-        const via = { fieldId: REDIRECT_FIELD.source, value: storedSource(rowKind, source) as string }
-        if (!candidates.length) return { kind: 'new' }
-        return candidates.length === 1
-          ? { kind: 'matched', recordId: candidates[0] as string, via }
-          : { kind: 'ambiguous', recordIds: candidates, via }
-      })
+      // The resource's own matching (also the engine's `match` hook, so the
+      // Matching and Conflicts steps showed these outcomes): run again over
+      // the site as read here, which leaves outcomes it made unchanged.
+      const matches = redirectMatchOutcomes(
+        input.rows.map((row) => row.values),
+        input.matches,
+        existing,
+        live,
+      )
 
       // The row's values as the page would store them, so the review's
       // before → after compares like with like, and a new rule shows the

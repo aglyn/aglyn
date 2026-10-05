@@ -46,6 +46,7 @@ import type {
   TransferOnAmbiguous,
   TransferOnMatch,
   TransferOnNew,
+  TransferPolicyDefaults,
   TransferRowOverride,
 } from '@aglyn/aglyn/data-transfer'
 import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
@@ -101,6 +102,20 @@ function modeOptions(
 const BLANK_OPTIONS = (Object.keys(BLANK_WORDS) as TransferBlankMeans[]).map(
   (value) => ({ value, ...BLANK_WORDS[value] }),
 )
+
+/**
+ * What the value choices start from: the core's promise that nothing is
+ * replaced unasked, or — for a resource that starts elsewhere (a redirect
+ * re-imported is meant to point where the file says) — the resource's
+ * reason, so the screen never claims a default it does not hold.
+ */
+export function valuesSubheader(defaults: TransferPolicyDefaults | undefined): string {
+  if (defaults?.note) return defaults.note
+  if (defaults?.fieldDefault || defaults?.fields) {
+    return 'This import starts from its own choices below. Change any of them before the dry run.'
+  }
+  return 'Nothing is replaced or cleared unless you choose it here.'
+}
 
 function ConflictRow({
   conflict,
@@ -338,7 +353,7 @@ export function ImportConflictsStep({
       <Card variant="outlined">
         <CardHeader
           title="When the record already has a value"
-          subheader="Nothing is replaced or cleared unless you choose it here."
+          subheader={valuesSubheader(info?.defaultPolicy)}
         />
         <CardContent>
           <Stack

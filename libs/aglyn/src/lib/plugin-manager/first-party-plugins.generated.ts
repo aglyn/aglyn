@@ -1039,6 +1039,7 @@ export const PLUGIN_TRANSFER_RESOURCES_DECLARED: readonly ResolvedTransferResour
       "json",
       "ndjson"
     ],
+    "exportOnly": true,
     "description": "Every order with its items, money, customer and addresses. Exported only."
   },
   {

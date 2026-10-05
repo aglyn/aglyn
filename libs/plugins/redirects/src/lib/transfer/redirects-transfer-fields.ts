@@ -19,8 +19,10 @@ import type {
   MatchKeySpec,
   TransferAliasDictionary,
   TransferCatalogInput,
+  TransferField,
+  TransferPolicyDefaults,
 } from '@aglyn/aglyn/data-transfer'
-import { REDIRECT_KINDS } from '../model/redirects'
+import { REDIRECT_KINDS, normalizeRedirectDestination, normalizeRedirectSource } from '../model/redirects'
 
 /**
  * What the redirects resource is made of, without reading anything: its key,
@@ -259,4 +261,61 @@ export function canonicalRedirectKind(value: unknown): RedirectKind | null {
     .toLowerCase()
     .replace(/\s+/g, ' ')
   return KIND_SPELLINGS[text] ?? null
+}
+
+/**
+ * Where an import of redirects starts: a rule already on the site takes the
+ * file's values. A redirect file is the statement of where each path goes —
+ * re-importing one with a new destination means "point it there" — so the
+ * core's fill blanks would keep every old destination and change nothing. A
+ * blank cell still leaves the rule's value alone.
+ */
+export const REDIRECTS_DEFAULT_POLICY: TransferPolicyDefaults = {
+  fieldDefault: { mode: 'overwrite', blank: 'leave' },
+  note:
+    'A redirect file says where each path goes, so a rule already on the site takes the ' +
+    'file’s destination, status, priority and on/off. Choose Fill blanks to keep what the site has.',
+}
+
+const textOf = (value: unknown): string => (typeof value === 'string' ? value : '')
+const isBlankCell = (value: unknown): boolean =>
+  value === null || value === undefined || (typeof value === 'string' && !value.trim())
+
+/** Characters only a pattern holds; a path compared with one is compared as typed. */
+const PATTERN_CHARACTERS = /[\^$*+?()[\]{}|\\]/
+
+/**
+ * Whether a file's value and a rule's are the same as the page stores them
+ * (the review's Conflicts step and the dry run agree): a from-path by its
+ * stored form (`/Old-Page/` is `/old-page`) unless either side is a pattern,
+ * which is compared as typed; a destination by its stored form; a mode by
+ * its canonical name; a status code and a priority as numbers.
+ */
+export function redirectValuesEqual(field: TransferField, a: unknown, b: unknown): boolean | undefined {
+  if (isBlankCell(a) || isBlankCell(b)) return undefined
+  switch (field.id) {
+    case REDIRECT_FIELD.source: {
+      const left = textOf(a).trim()
+      const right = textOf(b).trim()
+      if (PATTERN_CHARACTERS.test(left) || PATTERN_CHARACTERS.test(right)) return left === right
+      const stored = normalizeRedirectSource(left)
+      return stored !== null && stored === normalizeRedirectSource(right) ? true : left === right
+    }
+    case REDIRECT_FIELD.destination: {
+      const stored = normalizeRedirectDestination(textOf(a))
+      return stored !== null && stored === normalizeRedirectDestination(textOf(b)) ? true : textOf(a).trim() === textOf(b).trim()
+    }
+    case REDIRECT_FIELD.kind: {
+      const kind = canonicalRedirectKind(a)
+      return kind !== null && kind === canonicalRedirectKind(b) ? true : undefined
+    }
+    case REDIRECT_FIELD.statusCode:
+    case REDIRECT_FIELD.priority: {
+      const left = Number(a)
+      const right = Number(b)
+      return Number.isFinite(left) && Number.isFinite(right) ? left === right : undefined
+    }
+    default:
+      return undefined
+  }
 }

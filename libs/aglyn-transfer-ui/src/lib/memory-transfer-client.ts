@@ -38,6 +38,8 @@ import {
   canApplyTransferPlan,
   collectPicklistValues,
   createTransferPolicy,
+  transferPolicyDefaultsFor,
+  withTransferPolicyDefaults,
   customTransferField,
   deriveTransferCell,
   isBlankTransferValue,
@@ -75,7 +77,10 @@ import type {
   TransferField,
   TransferJob,
   TransferJobStatus,
+  RowMatchOutcome,
   TransferLockedRule,
+  TransferPolicyDefaults,
+  TransferValuesComparator,
   TransferPlan,
   TransferPlanRow,
   TransferPresetHints,
@@ -129,6 +134,15 @@ export interface MemoryTransferClientOptions {
   /** The resource's own presets, as its server half would list them. */
   resourcePresets?: TransferResourcePreset[]
   locked?: TransferLockedRule[]
+  /** Where the resource starts the person, as its server half's `defaultPolicy`. */
+  defaultPolicy?: TransferPolicyDefaults
+  /** The resource's own matching over the core's outcomes, as its server half's `match`. */
+  match?: (
+    rows: ReadonlyArray<Readonly<Record<string, unknown>>>,
+    outcomes: readonly RowMatchOutcome[],
+  ) => RowMatchOutcome[]
+  /** The resource's comparator, as its server half's `valuesEqual`. */
+  valuesEqual?: TransferValuesComparator
   dictionaries?: TransferAliasDictionary[]
   /** Picklist id → the list's spec and the organization's values. */
   picklists?: Record<string, { spec: PicklistSpec; set: PicklistValueSet }>
@@ -437,12 +451,13 @@ export function createMemoryTransferClient(
     keys: MatchKeySpec[],
   ) => {
     const lookup = buildMatchLookup(records.values(), keys)
-    return matchRows(
-      rows.map((row) => row.values),
-      keys,
-      lookup,
-    )
+    const values = rows.map((row) => row.values)
+    const outcomes = matchRows(values, keys, lookup)
+    return options.match ? options.match(values, outcomes) : outcomes
   }
+
+  const policyDefaults = () =>
+    transferPolicyDefaultsFor(options.defaultPolicy, catalog().fields)
 
   const client: MemoryTransferClient = {
     records,
@@ -463,6 +478,9 @@ export function createMemoryTransferClient(
           ? { resourcePresets: options.resourcePresets }
           : {}),
         locked: options.locked ?? [],
+        ...(Object.keys(policyDefaults()).length
+          ? { defaultPolicy: policyDefaults() }
+          : {}),
         ...(options.dictionaries ? { dictionaries: options.dictionaries } : {}),
         prefs,
         canCreateCustomField: Boolean(options.canCreateCustomField),
@@ -549,7 +567,7 @@ export function createMemoryTransferClient(
       const keys = keySpecs(request.matchKeys)
       const outcomes = matchesFor(read.rows, keys)
       const policy = createTransferPolicy({
-        ...request.policy,
+        ...withTransferPolicyDefaults(policyDefaults(), request.policy),
         locked: options.locked ?? [],
       })
       const existing = new Map(
@@ -562,6 +580,7 @@ export function createMemoryTransferClient(
         matches: outcomes,
         existing,
         policy,
+        ...(options.valuesEqual ? { valuesEqual: options.valuesEqual } : {}),
       })
       const conflicts = transferPlanConflicts({
         fields: built.byId,
@@ -569,6 +588,7 @@ export function createMemoryTransferClient(
         matches: outcomes,
         existing,
         policy,
+        ...(options.valuesEqual ? { valuesEqual: options.valuesEqual } : {}),
       })
       const ambiguous = transferAmbiguities(outcomes)
       const ids = new Set<string>(conflicts.map((conflict) => conflict.recordId))

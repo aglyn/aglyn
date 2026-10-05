@@ -425,27 +425,54 @@ const DETAIL_READERS: Readonly<Record<string, (data: Readonly<Record<string, unk
   hostId: (data) => textOrNull(data['hostId']),
 }
 
+/** Form id → the names of its rating questions, whose answers are numbers. */
+export type FormRatingQuestions = ReadonlyMap<string, ReadonlySet<string>>
+
+/** The rating questions of each form (AGL-3548). */
+export function formRatingQuestions(forms: readonly FormQuestions[]): Map<string, Set<string>> {
+  return new Map(
+    forms.map((form) => [
+      form.id,
+      new Set(form.fields.filter((field) => field.fieldType === 'rating').map((field) => field.fieldName)),
+    ]),
+  )
+}
+
+const RATING_TEXT = /^-?\d+(?:\.\d+)?$/
+
 /**
  * One submission as an export row: only `fieldIds`, keyed by field id. An
- * answer is the value as the visitor sent it; a question they did not answer,
- * or a field id this resource does not know, is `null`.
+ * answer is the value as the visitor sent it — but an answer to a rating
+ * question of the submission's form (`ratings`) that reads as a number is
+ * that number, so a JSON file holds `4` and a CSV writes it as one, not as
+ * text. A question they did not answer, or a field id this resource does
+ * not know, is `null`.
  */
 export function formSubmissionTransferRow(
   id: string,
   data: Readonly<Record<string, unknown>>,
   fieldIds: readonly string[],
+  ratings?: FormRatingQuestions,
 ): Record<string, unknown> {
   const answers =
     data['fields'] && typeof data['fields'] === 'object' && !Array.isArray(data['fields'])
       ? (data['fields'] as Readonly<Record<string, unknown>>)
       : {}
+  const formId = typeof data['formId'] === 'string' ? data['formId'] : ''
+  const rated = ratings?.get(formId)
   const row: Record<string, unknown> = {}
   for (const fieldId of fieldIds) {
     const reader = DETAIL_READERS[fieldId]
     if (reader) row[fieldId] = reader(data, id)
     else if (fieldId.startsWith(FORM_SUBMISSION_ANSWER_PREFIX)) {
-      const answer = answers[fieldId.slice(FORM_SUBMISSION_ANSWER_PREFIX.length)]
-      row[fieldId] = answer === undefined ? null : answer
+      const name = fieldId.slice(FORM_SUBMISSION_ANSWER_PREFIX.length)
+      const answer = answers[name]
+      row[fieldId] =
+        answer === undefined
+          ? null
+          : rated?.has(name) && typeof answer === 'string' && RATING_TEXT.test(answer.trim())
+            ? Number(answer.trim())
+            : answer
     } else row[fieldId] = null
   }
   return row
@@ -564,13 +591,19 @@ export function createFormSubmissionsTransferResource(
     if (!hostId) return { rows: [], next: null }
     const filter = readFormSubmissionsFilter(options?.filter)
     const size = pageSizeOf(options)
+    // Which answers are ratings, read only when an answer is asked for.
+    const ratings = fieldIds.some((fieldId) => fieldId.startsWith(FORM_SUBMISSION_ANSWER_PREFIX))
+      ? formRatingQuestions(await readForms(hostId, filter.formId))
+      : undefined
     if (options?.ids) {
       const ids = selectionIds(options.ids)
       const from = readOffsetCursor(cursor)
       const to = from + size
       const snapshots = await readByIds(hostId, ids.slice(from, to), filter)
       return {
-        rows: snapshots.map((snapshot) => formSubmissionTransferRow(snapshot.id, snapshot.data() ?? {}, fieldIds)),
+        rows: snapshots.map((snapshot) =>
+          formSubmissionTransferRow(snapshot.id, snapshot.data() ?? {}, fieldIds, ratings),
+        ),
         next: to < ids.length ? String(to) : null,
       }
     }
@@ -584,7 +617,7 @@ export function createFormSubmissionsTransferResource(
     const page = snapshot.docs.slice(0, size)
     const last = page[page.length - 1]
     return {
-      rows: page.map((document) => formSubmissionTransferRow(document.id, document.data(), fieldIds)),
+      rows: page.map((document) => formSubmissionTransferRow(document.id, document.data(), fieldIds, ratings)),
       next: snapshot.docs.length > size && last ? formSubmissionsCursor(last.get('createdAt'), last.id) : null,
     }
   }

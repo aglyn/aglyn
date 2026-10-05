@@ -28,7 +28,13 @@ import {
 } from '../data-transfer/field-catalog'
 import { transferPlanFeature, type TransferAccessIntent } from '../data-transfer/access'
 import type { TransferAliasDictionary } from '../data-transfer/header-match'
-import type { MatchKeySpec, MatchLookup, MatchLookupRequest } from '../data-transfer/match'
+import {
+  matchRows,
+  type MatchKeySpec,
+  type MatchLookup,
+  type MatchLookupRequest,
+  type RowMatchOutcome,
+} from '../data-transfer/match'
 import type { TransferLookupSuggestion } from '../data-transfer/lookup'
 import type {
   ExistingPackageItem,
@@ -43,7 +49,12 @@ import {
   type PlannedTransferRow,
   type TransferPlan,
 } from '../data-transfer/plan'
-import type { TransferLockedRule } from '../data-transfer/policy'
+import {
+  transferPolicyDefaultsFor,
+  type TransferLockedRule,
+  type TransferPolicyDefaults,
+  type TransferValuesComparator,
+} from '../data-transfer/policy'
 import type {
   TransferChunk,
   TransferRowResult,
@@ -55,6 +66,7 @@ import {
   parseTransferResourceKey,
   transferFieldProblems,
   transferResourceProblems,
+  type TransferField,
   type TransferKind,
   type TransferResourceDescriptor,
 } from '../data-transfer/resource'
@@ -348,6 +360,28 @@ export interface TransferMatchKeyOffer {
   defaults?: readonly string[]
 }
 
+/** What a resource's own matching is handed: the rows, and what the core made of them. */
+export interface TransferMatchInput {
+  /** Each row's values by field id, in file order. */
+  rows: ReadonlyArray<Readonly<Record<string, unknown>>>
+  /** The keys the person chose, in priority order. */
+  keys: readonly MatchKeySpec[]
+  /** What the resource's `lookup` answered for those keys. */
+  lookup: MatchLookup
+  /** The records `lookup` read, by id. */
+  records: ReadonlyMap<string, Readonly<Record<string, unknown>>>
+  /** The core's outcome for each row (`matchRows`), to keep or replace. */
+  outcomes: readonly RowMatchOutcome[]
+}
+
+/** A resource's own match outcomes, and any record they name that `lookup` did not read. */
+export interface TransferMatchAnswer {
+  /** One per row, in file order. */
+  outcomes: RowMatchOutcome[]
+  /** Records the outcomes name beyond `input.records`, by id — for the review's before and the plan's. */
+  records?: ReadonlyMap<string, Readonly<Record<string, unknown>>>
+}
+
 /** The hooks a `records` resource answers with. */
 export interface TransferRecordsHooks {
   /** The field catalog: standard, custom, derived and system fields, and their groups. */
@@ -419,6 +453,34 @@ export interface TransferRecordsHooks {
     picklistId: string,
     values: readonly PicklistValue[],
   ): Promise<void>
+  /**
+   * Where the person starts on the Conflicts step (AGL-3548) — fixed, or read
+   * for the context. Without it the core's: update what matches, create what
+   * does not, ask about the rest; fill blanks and leave on blank. A resource
+   * whose file is the definition of its records (a redirect's destination)
+   * starts from overwrite. The person can change every part; the dry run
+   * fills what a request leaves out from here.
+   */
+  defaultPolicy?:
+    | TransferPolicyDefaults
+    | ((ctx: TransferResourceContext) => Promise<TransferPolicyDefaults> | TransferPolicyDefaults)
+  /**
+   * Which record each row is about, when the core's key-by-key matching is
+   * not how the resource tells its records apart (AGL-3548) — a redirect is
+   * one rule per mode at a from-path, so `/blog` names the exact rule or the
+   * prefix rule by the row's mode. The engine runs it after `matchRows` for
+   * the Matching step, the Conflicts step and the dry run alike, so all
+   * three show the outcome the write will act on; `plan` receives these
+   * outcomes as `input.matches`.
+   */
+  match?(ctx: TransferResourceContext, input: TransferMatchInput): Promise<TransferMatchAnswer> | TransferMatchAnswer
+  /**
+   * Whether two values of a field are the same value as the resource stores
+   * it (AGL-3548) — a status kept in lower case, a path kept normalized —
+   * or `undefined` to leave it to the core. Used by the Conflicts step and
+   * the dry run, so a value the write would fold is no conflict and no change.
+   */
+  valuesEqual?: TransferValuesComparator
   /** The plan, when the core's `buildTransferPlan` is not enough. */
   plan?(
     ctx: TransferResourceContext,
@@ -928,14 +990,56 @@ export async function transferResourceMatchKeys(
   return { keys, defaults }
 }
 
-/** The plan for one chunk: the resource's own `plan`, or the core's `buildTransferPlan`. */
+/**
+ * The plan for one chunk: the resource's own `plan`, or the core's
+ * `buildTransferPlan` — handed the resource's comparator when the input
+ * carries none.
+ */
 export async function planTransferResourceRows(
   resource: ResolvedTransferResource,
   ctx: TransferResourceContext,
   input: BuildTransferPlanInput,
 ): Promise<TransferPlan> {
   const hooks = transferRecordsHooks(resource)
-  return hooks.plan ? hooks.plan(ctx, input) : buildTransferPlan(input)
+  const compared = !input.valuesEqual && hooks.valuesEqual ? { ...input, valuesEqual: hooks.valuesEqual } : input
+  return hooks.plan ? hooks.plan(ctx, compared) : buildTransferPlan(compared)
+}
+
+/**
+ * The resource's starting policy for this context, kept to what holds for
+ * `fields` (`transferPolicyDefaultsFor`); `{}` for a resource that starts
+ * from the core's defaults.
+ */
+export async function transferResourcePolicyDefaults(
+  resource: ResolvedTransferResource,
+  ctx: TransferResourceContext,
+  fields: readonly TransferField[],
+): Promise<TransferPolicyDefaults> {
+  const declared = transferRecordsHooks(resource).defaultPolicy
+  const defaults = typeof declared === 'function' ? await declared(ctx) : declared
+  return transferPolicyDefaultsFor(defaults, fields)
+}
+
+/**
+ * Each row's match outcome: the core's `matchRows`, then the resource's own
+ * `match` over it when it has one. `records` holds what `lookup` read and
+ * whatever the resource's matching added. An answer that is not one outcome
+ * per row is refused — a short list would shift every row's verdict.
+ */
+export async function matchTransferResourceRows(
+  resource: ResolvedTransferResource,
+  ctx: TransferResourceContext,
+  input: Omit<TransferMatchInput, 'outcomes'>,
+): Promise<{ outcomes: RowMatchOutcome[]; records: ReadonlyMap<string, Readonly<Record<string, unknown>>> }> {
+  const outcomes = matchRows(input.rows, input.keys, input.lookup)
+  const hook = transferRecordsHooks(resource).match
+  if (!hook) return { outcomes, records: input.records }
+  const answer = await hook(ctx, { ...input, outcomes })
+  if (!Array.isArray(answer?.outcomes) || answer.outcomes.length !== input.rows.length) {
+    throw new Error(`transfer resource "${resource.key}" matched ${answer?.outcomes?.length ?? 0} of ${input.rows.length} rows`)
+  }
+  if (!answer.records?.size) return { outcomes: answer.outcomes, records: input.records }
+  return { outcomes: answer.outcomes, records: new Map([...input.records, ...answer.records]) }
 }
 
 /** The resource's locked rules, or none. */

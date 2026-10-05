@@ -139,9 +139,14 @@ Decide what happens:
   - You also choose whether a blank cell leaves the value alone or clears
     it.
 
-By default, nothing is overwritten or cleared unless you choose it. Every
+By default, nothing is overwritten or cleared unless you choose it. A few
+kinds of records start from a different default, and the step says so and
+why. For example, redirects start from **Overwrite**, because a redirect file
+says where each path goes. You can still change every choice. Every
 row where the file and the record disagree is listed with both values, and
-you can change the decision for any row or field.
+you can change the decision for any row or field. Two values that the
+records store the same way are not listed as a conflict. For example, an
+event status of `Published` matches `published`.
 
 A plugin's own rules are shown locked, with the reason. For example, a
 contact's lifecycle stage only moves forward.

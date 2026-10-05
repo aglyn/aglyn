@@ -20,12 +20,16 @@ import {
   DEFAULT_TRANSFER_RECORD_POLICY,
   appendTransferList,
   applyFieldPolicy,
+  compareTransferValues,
   createTransferPolicy,
   isBlankTransferValue,
   resolveFieldPolicy,
   resolveRecordPolicy,
+  startingTransferPolicy,
+  transferPolicyDefaultsFor,
   transferPolicyProblems,
   transferValuesEqual,
+  withTransferPolicyDefaults,
 } from './policy'
 import type { TransferField } from './resource'
 
@@ -173,6 +177,85 @@ describe('applyFieldPolicy', () => {
       after: false,
       changed: false,
       rule: 'refused',
+    })
+  })
+})
+
+describe('a resource sets where the person starts (AGL-3548)', () => {
+  const score: TransferField = { id: 'score', label: 'Score', type: 'integer', derived: true }
+
+  it('keeps only the defaults that hold for these fields', () => {
+    expect(transferPolicyDefaultsFor(undefined, fields)).toEqual({})
+    expect(
+      transferPolicyDefaultsFor(
+        {
+          record: { onMatch: 'skip', onNew: 'sometimes' as never },
+          fieldDefault: { mode: 'overwrite', blank: 'nope' as never },
+          fields: {
+            name: { mode: 'append' },
+            tags: { mode: 'append', blank: 'clear' },
+            score: { mode: 'overwrite' },
+            gone: { mode: 'overwrite' },
+          },
+          note: '  Why.  ',
+        },
+        [...fields, score],
+      ),
+    ).toEqual({
+      record: { onMatch: 'skip' },
+      fieldDefault: { mode: 'overwrite' },
+      fields: { tags: { mode: 'append', blank: 'clear' } },
+      note: 'Why.',
+    })
+  })
+
+  it('starts the wizard on the resource defaults over the core ones', () => {
+    expect(startingTransferPolicy(undefined)).toEqual({
+      record: DEFAULT_TRANSFER_RECORD_POLICY,
+      fieldDefault: DEFAULT_TRANSFER_FIELD_POLICY,
+      fields: {},
+      rows: {},
+    })
+    expect(startingTransferPolicy({ fieldDefault: { mode: 'overwrite' }, fields: { name: { blank: 'clear' } } })).toEqual({
+      record: DEFAULT_TRANSFER_RECORD_POLICY,
+      fieldDefault: { mode: 'overwrite', blank: 'leave' },
+      fields: { name: { blank: 'clear' } },
+      rows: {},
+    })
+  })
+
+  it('lets every part the person chose win, and fills the rest from the resource', () => {
+    const defaults = { record: { onNew: 'skip' as const }, fieldDefault: { mode: 'overwrite' as const }, fields: { name: { mode: 'keepExisting' as const } } }
+    const none = createTransferPolicy(withTransferPolicyDefaults(defaults))
+    expect(none.record).toEqual({ ...DEFAULT_TRANSFER_RECORD_POLICY, onNew: 'skip' })
+    expect(none.fieldDefault).toEqual({ mode: 'overwrite', blank: 'leave' })
+    expect(none.fields).toEqual({ name: { mode: 'keepExisting' } })
+    const chosen = createTransferPolicy(
+      withTransferPolicyDefaults(defaults, { record: { ...DEFAULT_TRANSFER_RECORD_POLICY }, fieldDefault: { mode: 'fillBlanks', blank: 'leave' }, fields: {} }),
+    )
+    expect(chosen.record.onNew).toBe('create')
+    expect(chosen.fieldDefault.mode).toBe('fillBlanks')
+    // Field choices sent are the whole set: one the person took back stays taken back.
+    expect(chosen.fields).toEqual({})
+  })
+})
+
+describe('a resource may say two values are the same (AGL-3548)', () => {
+  const folded = (field: TransferField, a: unknown, b: unknown) =>
+    field.id === 'stage' && typeof a === 'string' && typeof b === 'string' ? a.toLowerCase() === b.toLowerCase() : undefined
+
+  it('asks the resource first and the core for what it leaves', () => {
+    expect(compareTransferValues(stage, 'Won', 'won', folded)).toBe(true)
+    expect(compareTransferValues(name, 'Won', 'won', folded)).toBe(false)
+    expect(compareTransferValues(stage, 'Won', 'won')).toBe(false)
+  })
+
+  it('makes a folded value no change under any mode', () => {
+    const equal = (a: unknown, b: unknown) => compareTransferValues(stage, a, b, folded)
+    expect(applyFieldPolicy({ mode: 'overwrite', blank: 'leave', refuseValues: false }, 'won', 'Won', equal)).toEqual({
+      after: 'Won',
+      changed: false,
+      rule: 'written',
     })
   })
 })

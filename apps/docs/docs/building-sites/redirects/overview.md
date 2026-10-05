@@ -83,14 +83,19 @@ Columns from Shopify (*Redirect from*, *Redirect to*), the WordPress Redirection
    can share a path, so a row without a kind finds the exact one.
 
 A row that finds no rule creates one. A deleted rule is never found. Two rows for the
-same path refuse the second.
+same path refuse the second. The **Matching** step shows the rule each row will update,
+found this way, so a path with both an exact and a prefix rule is not reported as
+ambiguous.
 
 ### Conflicts, the dry run and undo
 
-When a row finds a rule that already exists, you choose per column what the file does:
-fill only blank fields (the default — so an existing rule keeps its destination), overwrite,
-or keep what is there. Choose **Overwrite** for **To** when the file is meant to change
-where rules send visitors. You can also skip matched rows instead of updating them.
+When a row finds a rule that already exists, the import starts by **overwriting** it with
+the file's values: a redirect file says where each path goes, so re-importing one with a
+new destination points the rule there. A blank cell still leaves the rule's value alone.
+You can change this per column on the **Conflicts** step: choose **Fill blanks** to keep
+what the site has and only fill empty fields, or **Keep existing**. You can also skip
+matched rows instead of updating them. Values are compared the way the manager saves them,
+so `/Old-Page/` against `/old-page` is not listed as a conflict.
 
 Before anything is written, the **Review** step is a dry run, and it checks every row the
 way the manager checks a save:

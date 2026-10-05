@@ -208,6 +208,23 @@ describe('conflictsStepProblems', () => {
   })
 })
 
+describe('a fresh draft (AGL-3548)', () => {
+  it('starts on the core defaults, or on the resource’s when it has its own', () => {
+    expect(createTransferWizardDraft().policy.fieldDefault).toEqual({ mode: 'fillBlanks', blank: 'leave' })
+    const own = createTransferWizardDraft({
+      record: { onNew: 'skip' },
+      fieldDefault: { mode: 'overwrite' },
+      fields: { name: { blank: 'clear' } },
+    }).policy
+    expect(own).toEqual({
+      record: { onMatch: 'update', onNew: 'skip', onAmbiguous: 'ask' },
+      fieldDefault: { mode: 'overwrite', blank: 'leave' },
+      fields: { name: { blank: 'clear' } },
+      rows: {},
+    })
+  })
+})
+
 describe('the draft and the steps', () => {
   it('saves and loads a draft per job', () => {
     const storage = memoryTransferWizardStorage()

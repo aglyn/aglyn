@@ -24,6 +24,7 @@ import {
   EVENTS_ALIASES,
   EVENTS_CATALOG,
   EVENTS_MATCH_KEYS,
+  eventsValuesEqual,
 } from './transfer/events-transfer-catalog'
 import { EVENTS_TRANSFER_RESOURCE } from './transfer/events-transfer-key'
 
@@ -85,6 +86,8 @@ export function registerEventsCalendarConsoleServerDeclarations(): void {
       fields: () => EVENTS_CATALOG,
       matchKeys: EVENTS_MATCH_KEYS,
       aliases: EVENTS_ALIASES,
+      // A status in any case is the stored one, in the review as in the plan.
+      valuesEqual: eventsValuesEqual,
       count: async (ctx, options) =>
         (await eventsResource()).count(ctx, options),
       readPage: async (ctx, cursor, fieldIds, options) =>

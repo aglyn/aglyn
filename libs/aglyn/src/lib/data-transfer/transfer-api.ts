@@ -82,7 +82,13 @@ import type {
   TransferWarning,
   TransferWarningClass,
 } from './plan'
-import type { TransferFieldMode, TransferLockedRule, TransferPolicy, TransferPolicySource } from './policy'
+import type {
+  TransferFieldMode,
+  TransferLockedRule,
+  TransferPolicy,
+  TransferPolicyDefaults,
+  TransferPolicySource,
+} from './policy'
 import type { TransferField, TransferFormat, TransferResourceDescriptor } from './resource'
 import type { TransferCsvDelimiter, TransferSourceOptions } from './source'
 import type { PackageDependency, PackageItemDecision, TransferPackage } from './package'
@@ -455,6 +461,11 @@ export interface TransferResourceInfo {
   resourcePresets?: TransferResourcePreset[]
   /** The owning plugin's rules, shown locked with their reasons. */
   locked: TransferLockedRule[]
+  /**
+   * Where the resource starts the person on the Conflicts step, when it is
+   * not the core's fill blanks / leave (AGL-3548). The wizard opens on it.
+   */
+  defaultPolicy?: TransferPolicyDefaults
   /** Other products' header spellings, from the owning plugin. */
   dictionaries?: TransferAliasDictionary[]
   prefs: TransferPrefs

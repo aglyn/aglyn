@@ -186,7 +186,14 @@ it. `TransferLockedRule` is a plugin's rule on a field with a reason, a
 forced policy, or `refuseValues` for a field a file may never set.
 `resolveFieldPolicy` answers row R, field F in this order: locked rule, row
 override, field choice, type default (lists append), overall default.
-`applyFieldPolicy` computes one field's outcome.
+`applyFieldPolicy` computes one field's outcome, deciding "changed" with the
+`equal` it is handed. `TransferPolicyDefaults` is where a resource starts the
+person (`transferPolicyDefaultsFor` keeps what holds for a catalog,
+`startingTransferPolicy` is the wizard's opening policy,
+`withTransferPolicyDefaults` lays a request's choices over it), and
+`TransferValuesComparator` / `compareTransferValues` let a resource say two
+values are the same as it stores them — see
+[A resource's own defaults and matching](#a-resources-own-defaults-and-matching-agl-3548).
 
 ### `plan.ts` — the dry run
 
@@ -348,7 +355,8 @@ current values, optional `suggest(ctx, { by, values })` (records named like
 a lookup column's unresolved values) and `lookupTargets` (lookup targets
 the resource answers itself, such as the workspace's members, each with
 its own `lookup`, `suggest` and `matchKeys`), optional `plan`,
-`lockedRules` and `invariants`,
+`lockedRules` and `invariants`, optional `defaultPolicy`, `match` and
+`valuesEqual` (see [A resource's own defaults and matching](#a-resources-own-defaults-and-matching-agl-3548)),
 `apply(ctx, chunk, writer)` through the plugin's own write paths, and
 `revert(ctx, snapshot, decisions)`. Every hook's `ctx` names the
 organization, the site, the acting member and the job, and — from the job —
@@ -385,6 +393,49 @@ session that made the dry run, on its own ledger, and every write reads it
 from there. `ctx.headers` is the file's column names, mapped or not — what
 its purchase-tell screen reads. What only a plugin's rules can see is the
 `screening` warning class its `plan` adds.
+
+## A resource's own defaults and matching (AGL-3548)
+
+Three optional records hooks let a resource make the wizard show what its
+write will do, rather than what the core would do in its place:
+
+- **`defaultPolicy`** — where the Conflicts step starts. The core's start
+  (update, create, ask; fill blanks, leave on blank) never replaces a value
+  somebody has, which is wrong for a record the file is the definition of.
+  The fields route serves it as `TransferResourceInfo.defaultPolicy`, the
+  kit opens a new draft on it (`createTransferWizardDraft(defaults)`) and
+  says why on the step (its `note`), and the dry run lays a request's
+  choices over it (`withTransferPolicyDefaults`): each part of the record
+  policy and the field default is the person's where sent, the resource's
+  otherwise, and field choices sent at all are the person's whole set.
+- **`match`** — which record each row is about, when key-by-key matching is
+  not how the resource tells records apart. The engine runs the core's
+  `matchRows` and then this (`matchTransferResourceRows`) in analyze and
+  in plan, so the Matching step, the Conflicts step and the dry run show
+  one outcome, and `plan` gets it as `input.matches`. A records map it
+  answers is merged into what `lookup` read (labels, the conflicts' before).
+- **`valuesEqual`** — whether two values of a field are the same as the
+  resource stores them, or `undefined` for the core's `transferValuesEqual`.
+  `transferPlanConflicts` and `buildTransferPlan` (via
+  `planTransferResourceRows`) both use it, so a folded value is neither a
+  conflict nor a change.
+
+What each importable records resource starts from, reviewed per resource:
+
+| resource | starts from | why |
+| -- | -- | -- |
+| `redirects` | **overwrite**, leave on blank | A redirect file says where each path goes; a re-imported rule with a new destination is meant to point there. Also `match` (one rule per mode at a from-path, so `/blog` names the exact or the prefix rule by the row's mode) and `valuesEqual` (paths and destinations as the page stores them, a mode by its canonical name, status and priority as numbers). |
+| `events` | core (fill blanks) | An event is edited on its page; a stale file should not move its time or place unasked. `valuesEqual` folds the status's case, as `plan` does. |
+| `crm.contacts`, `crm.companies`, `crm.leads`, `crm.deals`, `crm.tasks` | core | Records people edit by hand; the CRM's locked rules already force what must move one way (stage, do-not-call, consent). |
+| `data.dataset` | core | Data people edit in the console. |
+| `email.list-members`, `email.suppressions` | core | Consent and suppression records; their locked rules keep the evidence and notes. |
+| `outreach.do-not-contact` | core | The list only grows; its note is locked to keep. |
+| `commerce.products`, `commerce.categories`, `commerce.discounts`, `commerce.coupons`, `commerce.gift-cards` | core | A catalog file from another store is a starting point, not the truth for prices, stock or balances already set here; product locks already force fill blanks where it matters. |
+
+Export-only resources (`forms.submissions`, `bookings`, `crm.activities`,
+`crm.pipelines`, `crm.fields`, and `commerce.orders`, now declared so, which
+the hub had offered an Import that every row of failed) take no file, and package resources decide
+per item, so neither has a field policy.
 
 ## The job engine
 

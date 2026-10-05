@@ -25,8 +25,10 @@ import {
 import { BUNDLE_ID } from './constants/bundle-common'
 import {
   REDIRECTS_ALIAS_DICTIONARIES,
+  REDIRECTS_DEFAULT_POLICY,
   REDIRECTS_MATCH_KEYS,
   REDIRECTS_TRANSFER_KEY,
+  redirectValuesEqual,
   redirectsTransferCatalog,
 } from './transfer/redirects-transfer-fields'
 
@@ -43,8 +45,8 @@ async function load(): Promise<TransferRecordsHooks> {
  * The `redirects` transfer resource: a site's redirect rules, imported and
  * exported through the data-transfer jobs, written through the same checks
  * as the redirects page and the create route (`transfer/redirects-transfer.ts`).
- * The catalog, the match keys and the alias dictionaries are answered from
- * here; every hook that reads or writes loads the Admin SDK with its first
+ * The catalog, the match keys, the alias dictionaries, the starting policy
+ * and the value comparator are answered from here; every hook that reads or writes loads the Admin SDK with its first
  * call, so boot pays for none of it.
  */
 export function registerRedirectsConsoleServerDeclarations(): void {
@@ -52,6 +54,15 @@ export function registerRedirectsConsoleServerDeclarations(): void {
     fields: () => redirectsTransferCatalog(),
     matchKeys: REDIRECTS_MATCH_KEYS,
     aliases: REDIRECTS_ALIAS_DICTIONARIES,
+    // A rule already on the site takes the file's values unless the person
+    // chooses otherwise; the review compares values as the page stores them.
+    defaultPolicy: REDIRECTS_DEFAULT_POLICY,
+    valuesEqual: redirectValuesEqual,
+    match: async (ctx, input) => {
+      const hooks = await load()
+      if (!hooks.match) throw new Error('The redirects resource has no matching.')
+      return hooks.match(ctx, input)
+    },
     count: async (ctx, options) => (await load()).count?.(ctx, options) ?? 0,
     readPage: async (ctx, cursor, fieldIds, options) => (await load()).readPage(ctx, cursor, fieldIds, options),
     lookup: async (ctx, requests) => (await load()).lookup(ctx, requests),

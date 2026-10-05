@@ -44,6 +44,25 @@
  *  3. the person's choice for field F;
  *  4. the type default (lists append);
  *  5. the person's default for every field.
+ *
+ * ## The resource sets where the person starts (AGL-3548)
+ *
+ * The core's starting point — fill blanks, leave on blank — never replaces
+ * a value somebody already has, which is right for a person's record and
+ * wrong for a record the file is the definition of: a redirect re-imported
+ * with a new destination is meant to point there. A resource declares its
+ * own starting point ({@link TransferPolicyDefaults}); the wizard opens the
+ * Conflicts step on it and the person may still change every part, and the
+ * dry run fills whatever a request leaves out from it
+ * ({@link withTransferPolicyDefaults}).
+ *
+ * ## The resource may say when two values are the same
+ *
+ * The core compares values as stored (lists as sets, caseless). A resource
+ * whose write folds a value — a status kept in lower case, a path kept
+ * without its trailing slash — passes a {@link TransferValuesComparator}, so
+ * `Published` against `published` is no conflict and no change, in the
+ * review and the dry run alike.
  *=========================================*/
 
 import { isTransferListType } from './resource'
@@ -120,6 +139,109 @@ export const DEFAULT_TRANSFER_RECORD_POLICY: TransferRecordPolicy = {
 export const DEFAULT_TRANSFER_FIELD_POLICY: TransferFieldPolicy = {
   mode: 'fillBlanks',
   blank: 'leave',
+}
+
+/**
+ * Where a resource starts the person (see the block header): its record
+ * policy, its default for every field and its choices for single fields,
+ * each part optional. The person's choices are made on top of it.
+ */
+export interface TransferPolicyDefaults {
+  record?: Partial<TransferRecordPolicy>
+  fieldDefault?: Partial<TransferFieldPolicy>
+  fields?: Readonly<Record<string, Partial<TransferFieldPolicy>>>
+  /** Why the resource starts here, in a sentence the Conflicts step shows. */
+  note?: string
+}
+
+const RECORD_CHOICES = {
+  onMatch: ['update', 'skip', 'duplicate'],
+  onNew: ['create', 'skip'],
+  onAmbiguous: ['skip', 'ask'],
+} as const
+const FIELD_MODES: readonly TransferFieldMode[] = ['overwrite', 'fillBlanks', 'keepExisting', 'append']
+const BLANK_MEANS: readonly TransferBlankMeans[] = ['leave', 'clear']
+
+function fieldChoice(raw: unknown, list: boolean): Partial<TransferFieldPolicy> {
+  const choice = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
+  const out: Partial<TransferFieldPolicy> = {}
+  const mode = choice['mode'] as TransferFieldMode
+  if (FIELD_MODES.includes(mode) && (mode !== 'append' || list)) out.mode = mode
+  const blank = choice['blank'] as TransferBlankMeans
+  if (BLANK_MEANS.includes(blank)) out.blank = blank
+  return out
+}
+
+/**
+ * A resource's defaults as far as they hold for these fields: a choice for a
+ * field the catalog lacks, or one that can never be written, is dropped, as
+ * is `append` on a field that is not a list and any value that is not a
+ * choice — so a context whose catalog differs (one dataset's fields) never
+ * makes a dry run refuse the resource's own defaults.
+ */
+export function transferPolicyDefaultsFor(
+  defaults: TransferPolicyDefaults | null | undefined,
+  fields: readonly TransferField[],
+): TransferPolicyDefaults {
+  if (!defaults) return {}
+  const out: TransferPolicyDefaults = {}
+  const record: Partial<TransferRecordPolicy> = {}
+  for (const [part, allowed] of Object.entries(RECORD_CHOICES) as Array<[keyof TransferRecordPolicy, readonly string[]]>) {
+    const value = defaults.record?.[part]
+    if (typeof value === 'string' && allowed.includes(value)) (record as Record<string, string>)[part] = value
+  }
+  if (Object.keys(record).length) out.record = record
+  const fieldDefault = fieldChoice(defaults.fieldDefault, false)
+  if (Object.keys(fieldDefault).length) out.fieldDefault = fieldDefault
+  const byId = new Map(fields.map((field) => [field.id, field]))
+  const chosen: Record<string, Partial<TransferFieldPolicy>> = {}
+  for (const [fieldId, raw] of Object.entries(defaults.fields ?? {})) {
+    const field = byId.get(fieldId)
+    if (!field || field.readOnly || field.derived || field.system) continue
+    const choice = fieldChoice(raw, isTransferListType(field.type))
+    if (Object.keys(choice).length) chosen[fieldId] = choice
+  }
+  if (Object.keys(chosen).length) out.fields = chosen
+  if (typeof defaults.note === 'string' && defaults.note.trim()) out.note = defaults.note.trim()
+  return out
+}
+
+/**
+ * The person's choices on top of a resource's defaults: each part of the
+ * record policy and of the field default is the person's where they said
+ * one and the resource's where they did not. Field choices sent at all are
+ * the person's whole set — the wizard starts them from the resource's, so a
+ * choice the person took back stays taken back — and the resource's when
+ * none are sent. What neither says, {@link createTransferPolicy} fills from
+ * the core's defaults.
+ */
+export function withTransferPolicyDefaults(
+  defaults: TransferPolicyDefaults | null | undefined,
+  chosen: Partial<TransferPolicy> = {},
+): Partial<TransferPolicy> {
+  if (!defaults) return chosen
+  return {
+    ...chosen,
+    record: { ...DEFAULT_TRANSFER_RECORD_POLICY, ...defaults.record, ...chosen.record },
+    fieldDefault: { ...DEFAULT_TRANSFER_FIELD_POLICY, ...defaults.fieldDefault, ...chosen.fieldDefault },
+    fields: chosen.fields ?? { ...(defaults.fields ?? {}) },
+  }
+}
+
+/**
+ * The policy a person starts from: the core's defaults with the resource's
+ * on top, and no row or field choice beyond the resource's own. The wizard
+ * opens on this.
+ */
+export function startingTransferPolicy(
+  defaults: TransferPolicyDefaults | null | undefined,
+): Pick<TransferPolicy, 'record' | 'fieldDefault' | 'fields' | 'rows'> {
+  return {
+    record: { ...DEFAULT_TRANSFER_RECORD_POLICY, ...defaults?.record },
+    fieldDefault: { ...DEFAULT_TRANSFER_FIELD_POLICY, ...defaults?.fieldDefault },
+    fields: { ...(defaults?.fields ?? {}) },
+    rows: {},
+  }
 }
 
 /** A policy with every part present, defaults filling what `partial` leaves out. */
@@ -278,6 +400,27 @@ export interface FieldPolicyOutcome {
   rule: 'written' | 'filled' | 'kept' | 'appended' | 'cleared' | 'leftBlank' | 'refused'
 }
 
+/**
+ * A resource's answer to "are these the same value" for one field (see the
+ * block header) — `true` or `false`, or `undefined` to leave it to
+ * {@link transferValuesEqual}.
+ */
+export type TransferValuesComparator = (field: TransferField, a: unknown, b: unknown) => boolean | undefined
+
+/** Two values of `field` compared by the resource's comparator, then the core's. */
+export function compareTransferValues(
+  field: TransferField,
+  a: unknown,
+  b: unknown,
+  comparator?: TransferValuesComparator,
+): boolean {
+  if (comparator) {
+    const said = comparator(field, a, b)
+    if (typeof said === 'boolean') return said
+  }
+  return transferValuesEqual(a, b)
+}
+
 /** Whether two field values are the same value; lists compare as sets, caseless. */
 export function transferValuesEqual(a: unknown, b: unknown): boolean {
   if (isBlankTransferValue(a) && isBlankTransferValue(b)) return true
@@ -301,16 +444,19 @@ export function transferValuesEqual(a: unknown, b: unknown): boolean {
 /**
  * One incoming value against the record's value under a resolved policy.
  * `incoming` absent means the column was not mapped: the field is not
- * touched. Blank means the cell was mapped and empty.
+ * touched. Blank means the cell was mapped and empty. `equal` decides
+ * whether the value the record ends with differs from the one it holds —
+ * the resource's comparator, when it has one.
  */
 export function applyFieldPolicy(
   resolved: Pick<ResolvedFieldPolicy, 'mode' | 'blank' | 'refuseValues'>,
   before: unknown,
   incoming: unknown,
+  equal: (a: unknown, b: unknown) => boolean = transferValuesEqual,
 ): FieldPolicyOutcome {
   const same = (after: unknown, rule: FieldPolicyOutcome['rule']): FieldPolicyOutcome => ({
     after,
-    changed: !transferValuesEqual(before, after),
+    changed: !equal(before, after),
     rule,
   })
   if (resolved.refuseValues) return { after: before, changed: false, rule: 'refused' }

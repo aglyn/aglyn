@@ -30,10 +30,11 @@ import { summarizeMatches, type MatchKeySpec, type RowMatchOutcome } from './mat
 import type { PlannedTransferRow, TransferPlanRow, TransferRowVerdict } from './plan'
 import {
   applyFieldPolicy,
+  compareTransferValues,
   isBlankTransferValue,
   resolveFieldPolicy,
-  transferValuesEqual,
   type TransferPolicy,
+  type TransferValuesComparator,
 } from './policy'
 import { isTransferFieldWritable, type TransferField } from './resource'
 import {
@@ -180,13 +181,17 @@ export interface TransferConflictsInput {
   /** Record id → what the record holds now. */
   existing: ReadonlyMap<string, Readonly<Record<string, unknown>>>
   policy: TransferPolicy
+  /** The resource's comparator, so the review and the dry run agree on what differs. */
+  valuesEqual?: TransferValuesComparator
 }
 
 /**
  * The matched rows whose non-blank file values differ from non-blank
  * values the record holds, field by field, with what the policy makes of
  * each now. A row the person pointed at a record (`policy.rows`) is
- * compared with that record.
+ * compared with that record. `matches` are the outcomes the dry run plans
+ * with — the resource's own, when it matches rows itself — and `valuesEqual`
+ * the resource's comparator, so a value the resource folds is no conflict.
  */
 export function transferPlanConflicts(input: TransferConflictsInput): TransferConflict[] {
   const conflicts: TransferConflict[] = []
@@ -201,14 +206,15 @@ export function transferPlanConflicts(input: TransferConflictsInput): TransferCo
       const field = input.fields.get(fieldId)
       if (!field || !isTransferFieldWritable(field)) return []
       const before = record[fieldId]
-      if (isBlankTransferValue(incoming) || isBlankTransferValue(before) || transferValuesEqual(before, incoming)) return []
+      const equal = (a: unknown, b: unknown) => compareTransferValues(field, a, b, input.valuesEqual)
+      if (isBlankTransferValue(incoming) || isBlankTransferValue(before) || equal(before, incoming)) return []
       const resolved = resolveFieldPolicy(input.policy, row.index, field)
       return [
         {
           fieldId,
           before,
           incoming,
-          after: applyFieldPolicy(resolved, before, incoming).after,
+          after: applyFieldPolicy(resolved, before, incoming, equal).after,
           mode: resolved.mode,
           source: resolved.source,
         },

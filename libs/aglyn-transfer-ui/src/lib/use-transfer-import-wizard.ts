@@ -146,8 +146,8 @@ export function useTransferImportWizard(
   const storage = options.storage ?? browserTransferWizardStorage
   const now = useCallback(() => (options.now ?? Date.now)(), [options.now])
   const [info, setInfo] = useState<TransferResourceInfo | null>(null)
-  const [draft, setDraftState] = useState<TransferWizardDraft>(
-    createTransferWizardDraft,
+  const [draft, setDraftState] = useState<TransferWizardDraft>(() =>
+    createTransferWizardDraft(),
   )
   const [job, setJob] = useState<TransferJob | null>(null)
   const [analysis, setAnalysis] = useState<TransferAnalysis | null>(null)
@@ -360,7 +360,11 @@ export function useTransferImportWizard(
         (!BEFORE_APPLY.has(step) && !extra.some((entry) => entry.id === step))
       )
         step = 'mapping'
-      const base = { ...(saved ?? createTransferWizardDraft()), jobId, step }
+      const base = {
+        ...(saved ?? createTransferWizardDraft(info.defaultPolicy)),
+        jobId,
+        step,
+      }
       draftRef.current = base
       setDraftState(base)
       if (step === 'apply') {
@@ -397,7 +401,7 @@ export function useTransferImportWizard(
       await guard(async () => {
         const created = await client.upload({ resource, ...file })
         const base: TransferWizardDraft = {
-          ...createTransferWizardDraft(),
+          ...createTransferWizardDraft(info?.defaultPolicy),
           jobId: created.id,
           fileName: file.fileName,
           settings: file.settings,
@@ -416,7 +420,7 @@ export function useTransferImportWizard(
         onJobChange?.(created.id)
       }, 'The file could not be uploaded.')
     },
-    [guard, client, resource, analyze, storage, onJobChange],
+    [guard, client, resource, analyze, storage, onJobChange, info],
   )
 
   const stepIndex = Math.max(
