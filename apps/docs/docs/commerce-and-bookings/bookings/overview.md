@@ -43,6 +43,21 @@ card on the Products hub; see [Commerce](../commerce/overview.md).
 2. Configure **availability** — the windows when slots are offered.
 3. Add the **booking widget** to a page as a canvas element.
 
+### Price varies, free estimate, or contact for price {#price-labels}
+
+A service that is quoted at the job doesn't need a price. In the service's
+dialog, **Show the price as** picks how the widget states it:
+
+- **The price** (the default): the widget shows the price, and a priced
+  service is paid through Stripe when it's booked.
+- **Price varies**, **Free estimate** or **Contact for price**: the widget
+  shows that label instead, and the service **books with no charge**, like an
+  estimate appointment. Any price typed in the dialog is neither shown nor
+  charged, and you quote the visitor afterwards.
+
+A labeled service needs no connected Stripe account, because nothing is
+charged.
+
 ### Asking for a phone number and an address {#phone-and-address}
 
 The booking widget always asks for a name and an email. A service can also ask

@@ -36,7 +36,7 @@ import {
   renderLoadedHostEmailWithTokens,
   type LoadedHostEmailWithTokens,
 } from '@aglyn/tenant-data-admin/server/host-email-tokens'
-import { type BookedInterval, BOOKING_MAX_DAYS_AHEAD, bookingContactAsks, bookingContactLines, readBookingContactFields, bookingTimeZone, computeOpenSlotPage, formatBookingWhen, type HostBookingService, isBookingReminderDue, isSlotOpen, REMINDER_WINDOW_END_HOURS, REMINDER_WINDOW_START_HOURS } from './model'
+import { type BookedInterval, BOOKING_MAX_DAYS_AHEAD, bookingChargeUsd, bookingContactAsks, bookingPriceDisplay, bookingContactLines, readBookingContactFields, bookingTimeZone, computeOpenSlotPage, formatBookingWhen, type HostBookingService, isBookingReminderDue, isSlotOpen, REMINDER_WINDOW_END_HOURS, REMINDER_WINDOW_START_HOURS } from './model'
 import { bookingTimeZoneFor } from './server/booking-time-zone'
 import {
   registerBillingWebhookHandler,
@@ -189,7 +189,10 @@ export const slotsHandler: PluginApiHandler = async (req, res) => {
             $id: doc.id,
             name: doc.get('name') ?? '',
             durationMinutes: Number(doc.get('durationMinutes') ?? 30),
-            priceUsd: Number(doc.get('priceUsd') ?? 0),
+            // What booking it charges, never a price a label stands in for
+            // (AGL-3475): a labeled service shows its label and charges 0.
+            priceUsd: bookingChargeUsd(doc.data()),
+            priceDisplay: bookingPriceDisplay(doc.get('priceDisplay')),
             description: doc.get('description') ?? '',
             // What the widget asks for beyond a name and an email (AGL-3493),
             // as the booking route will hold it: the widget renders and
@@ -285,7 +288,8 @@ export const slotsHandler: PluginApiHandler = async (req, res) => {
       service: {
         name: service.name,
         durationMinutes: service.durationMinutes,
-        priceUsd: service.priceUsd ?? 0,
+        priceUsd: bookingChargeUsd(service),
+        priceDisplay: bookingPriceDisplay(service.priceDisplay),
         timezone: service.timezone ?? 'UTC',
       },
       slots,
@@ -410,7 +414,9 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
     // booking lands as `pendingPayment` with a 15-minute expiry (expired
     // holds release the slot in the collision filters), and the visitor
     // goes to Stripe Checkout; the webhook confirms + emails on payment.
-    const priceUsd = Number(service.priceUsd ?? 0)
+    // A service that states its price as a label books with no charge
+    // (AGL-3475), whatever price it stores.
+    const priceUsd = bookingChargeUsd(service)
     const paid = priceUsd > 0
     if (paid && !process.env.STRIPE_SECRET_KEY) {
       return res.status(501).json({

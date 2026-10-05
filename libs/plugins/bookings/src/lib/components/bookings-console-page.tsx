@@ -29,6 +29,13 @@ import {
   type BookingFieldAsk,
   bookingContactAsks,
 } from '../model/booking-contact-fields'
+import {
+  BOOKING_PRICE_DISPLAYS,
+  BOOKING_PRICE_LABELS,
+  type BookingPriceDisplay,
+  bookingPriceDisplay,
+  bookingPriceText,
+} from '../model/booking-price'
 import { AppLink, CardDisplay, HelpTip, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import QuotaReadoutComponent from '@aglyn/shared-ui-jsx/components/quota-readout.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -110,6 +117,14 @@ interface ServiceDraft {
   /** What the widget asks the booker for (AGL-3493). */
   askPhone: BookingFieldAsk
   askAddress: BookingFieldAsk
+  /** How the price is stated (AGL-3475); a label books with no charge. */
+  priceDisplay: BookingPriceDisplay
+}
+
+/** How each way of stating the price reads in the service dialog's picker. */
+const PRICE_DISPLAY_LABELS: Record<BookingPriceDisplay, string> = {
+  fixed: 'The price',
+  ...BOOKING_PRICE_LABELS,
 }
 
 /** How each answer reads in the service dialog's two pickers. */
@@ -277,6 +292,7 @@ export function BookingsConsolePage(props: ConsolePluginPageProps) {
       // Name and email only, until the service says otherwise.
       askPhone: 'off',
       askAddress: 'off',
+      priceDisplay: 'fixed',
     })
   }, [entitled, org, services.length, enqueueSnackbar])
 
@@ -308,6 +324,7 @@ export function BookingsConsolePage(props: ConsolePluginPageProps) {
       // has to land `'off'` over the stored answer.
       askPhone: draft.askPhone,
       askAddress: draft.askAddress,
+      priceDisplay: draft.priceDisplay,
     }
     try {
       if (draft.id) {
@@ -514,10 +531,7 @@ export function BookingsConsolePage(props: ConsolePluginPageProps) {
                     {service.name}
                   </Typography>
                   <Typography variant="caption" color="text.secondary" noWrap>
-                    {`${service.durationMinutes} min` +
-                      (Number(service.priceUsd) > 0
-                        ? ` · $${service.priceUsd}`
-                        : ' · free') +
+                    {`${service.durationMinutes} min · ${bookingPriceText(service).replace(/^Free$/, 'free')}` +
                       ` · ${service.timezone ?? 'UTC'}`}
                   </Typography>
                 </Stack>
@@ -541,6 +555,7 @@ export function BookingsConsolePage(props: ConsolePluginPageProps) {
                       crmFollowUpTask: service.crmFollowUpTask === true,
                       askPhone: bookingContactAsks(service).phone,
                       askAddress: bookingContactAsks(service).address,
+                      priceDisplay: bookingPriceDisplay(service.priceDisplay),
                     })
                   }
                 >
@@ -747,7 +762,11 @@ export function BookingsConsolePage(props: ConsolePluginPageProps) {
               // the same line `describeOrderTaxMode` holds. Who owes which
               // authority what attaches by operation of law and is counsel's
               // call (AGL-1904/AGL-1956).
-              helperText={`${PLATFORM_BRAND_NAME} charges this price as typed — no tax is added. Your Commerce tax settings are a goods sales rate and do not apply to bookings.`}
+              helperText={
+                draft && draft.priceDisplay !== 'fixed'
+                  ? `Not charged: this service shows “${BOOKING_PRICE_LABELS[draft.priceDisplay]}” and books with no charge.`
+                  : `${PLATFORM_BRAND_NAME} charges this price as typed — no tax is added. Your Commerce tax settings are a goods sales rate and do not apply to bookings.`
+              }
               value={draft?.priceUsd ?? ''}
               onChange={(event) =>
                 setDraft((prev) =>
@@ -761,6 +780,32 @@ export function BookingsConsolePage(props: ConsolePluginPageProps) {
               }
               size="small"
             />
+            {/*
+              A contractor who quotes at the job states the price as a label
+              instead (AGL-3475). Any label books with no charge, like an
+              estimate appointment, and the stored price is neither shown nor
+              charged.
+            */}
+            <TextField
+              select
+              label="Show the price as"
+              value={draft?.priceDisplay ?? 'fixed'}
+              onChange={(event) =>
+                setDraft((prev) =>
+                  prev
+                    ? { ...prev, priceDisplay: bookingPriceDisplay(event.target.value) }
+                    : prev,
+                )
+              }
+              size="small"
+              sx={{ minWidth: 180 }}
+            >
+              {BOOKING_PRICE_DISPLAYS.map((display) => (
+                <MenuItem key={display} value={display}>
+                  {PRICE_DISPLAY_LABELS[display]}
+                </MenuItem>
+              ))}
+            </TextField>
             <TextField
               label="Timezone"
               value={draft?.timezone ?? ''}

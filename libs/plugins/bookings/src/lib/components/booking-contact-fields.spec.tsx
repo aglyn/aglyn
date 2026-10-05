@@ -39,7 +39,9 @@ const ON_SITE = {
   $id: 'svc-estimate',
   name: 'Free on-site estimate',
   durationMinutes: 60,
+  // As the directory sends a labeled service (AGL-3475): no charge, and the label.
   priceUsd: 0,
+  priceDisplay: 'estimate',
   askPhone: 'required',
   askAddress: 'required',
 }
@@ -106,6 +108,14 @@ describe('a service that asks for a phone and an address', () => {
       phone: '+15125550107',
       address: '12 Oak St\nAustin, TX 78701',
     })
+  })
+})
+
+describe('a service that states its price as a label (AGL-3475)', () => {
+  it('shows the label where a price would be', async () => {
+    window.history.replaceState(null, '', `/contact?service=${ON_SITE.$id}`)
+    render(<Booking />)
+    expect(await screen.findByText('Free on-site estimate · 60 min · Free estimate')).toBeTruthy()
   })
 })
 

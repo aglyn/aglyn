@@ -54,6 +54,7 @@ import {
   readBookingContactFields,
   readBookingPhone,
 } from '../model/booking-contact-fields'
+import { bookingPriceDisplay, bookingPriceText } from '../model/booking-price'
 import { BOOKING_MAX_DAYS_AHEAD, BOOKING_SLOT_PAGE_DAYS } from '../model/bookings'
 import { generatePresetId } from '../utils/generate-preset-id'
 import { useBookingPurchaseEvent } from '../utils/use-booking-purchase-event'
@@ -72,6 +73,8 @@ interface ServiceOption {
   name: string
   durationMinutes: number
   priceUsd: number
+  /** How the service states its price (AGL-3475); a label books with no charge. */
+  priceDisplay?: string
   description?: string
   /** What the service asks for beyond a name and an email (AGL-3493). */
   askPhone?: string
@@ -535,7 +538,9 @@ const Booking = forwardRef<HTMLDivElement, BookingProps>((props, ref) => {
           {services.map((service) => (
             <MenuItem key={service.$id} value={service.$id}>
               {`${service.name} · ${service.durationMinutes} min` +
-                (service.priceUsd > 0 ? ` · $${service.priceUsd}` : '')}
+                (bookingPriceDisplay(service.priceDisplay) !== 'fixed' || service.priceUsd > 0
+                  ? ` · ${bookingPriceText(service)}`
+                  : '')}
             </MenuItem>
           ))}
         </TextField>

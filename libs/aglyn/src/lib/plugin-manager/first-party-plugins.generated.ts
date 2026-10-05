@@ -241,7 +241,8 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
         "crmFollowUpTask",
         "crmMeetingActivity",
         "askPhone",
-        "askAddress"
+        "askAddress",
+        "priceDisplay"
       ]
     },
     "siteExport": {
@@ -256,7 +257,8 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
         "crmFollowUpTask",
         "crmMeetingActivity",
         "askPhone",
-        "askAddress"
+        "askAddress",
+        "priceDisplay"
       ]
     }
   },
