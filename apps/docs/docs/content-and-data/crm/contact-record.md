@@ -23,7 +23,7 @@ a person, from
 See [What each plan includes](./overview.md#what-each-plan-includes).
 :::
 
-![A contact record in the CRM: the header with the person's email, stage, owner and lifetime orders beside Add to list, Call, Log a call, Send email and Book a meeting, and the Properties card below it](/img/contacts/crm-record.png)
+![A contact record in the CRM: the header with the person's email, stage, owner and lifetime orders beside Back to contacts, Add to list, Call, Log a call, Send email and Book a meeting, then the Sharing card naming the site that holds the contact beside Share with sites…, and the Properties card opening on its Contact information group: Email, Salutation, First name, Last name, Name, Job title, Department, Company, Lead source, Lifecycle stage, Owner and Tags](/img/contacts/crm-record.png)
 
 ## Adding a contact by hand
 
@@ -79,6 +79,9 @@ person's number, and **Log a call** — see
 [click to call](./activities.md#click-to-call). Under it, one card per aspect
 of the record:
 
+- **Sharing** — the site that holds the person and every other site the
+  record is shared with, and why, with **Share with sites…** in the card's
+  header — see [Share records across sites](./sharing.md#what-a-shared-record-looks-like).
 - **Properties** — the editable profile, grouped the way Salesforce groups a
   contact's details — see [The standard fields](#the-standard-fields) — then an
   **About** box for your team's notes, then under **More fields** one control per

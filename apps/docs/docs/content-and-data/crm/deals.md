@@ -26,7 +26,7 @@ flowchart LR
   N --> L[Closed Lost]
 ```
 
-![The Deals section of the CRM: the pipeline board with a column per open stage, the open deals, pipeline value and weighted value above them, and the Pipeline picker beside the Board and Table toggle](/img/contacts/crm-deals-board.png)
+![The Deals section of the CRM: Import, Export…, Pipelines and New deal in the card's header, the open deals, pipeline value and weighted value above the board, the Pipeline picker beside the Board and Table toggle, and the board's first columns, Prospecting, Qualification, Needs Analysis and Value Proposition, with the rest of the open stages to the right](/img/contacts/crm-deals-board.png)
 
 ## Pipelines
 
@@ -95,7 +95,8 @@ category reads as **Pipeline**.
 ## The board and the table
 
 The section opens as a **board** of the chosen pipeline: one column per open
-stage, with Won and Lost folded away at the end until you expand them. Each card shows the deal's title,
+stage, with Won and Lost folded away at the end until you expand them; a board wider than the window
+scrolls sideways. Each card shows the deal's title,
 amount, the contact and company it is with, its owner, and how many days it has
 sat in its current stage. **Drag a card** between columns to move it, or use the
 card's menu to move it, mark it won, or mark it lost from the keyboard.
