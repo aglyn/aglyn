@@ -287,6 +287,14 @@ const DECLARED_EGRESS_HOSTS: Record<string, EgressHost> = {
       'The customer-chosen domain name, the project it is attached to, and the verification records for it. Hosting itself carries every request to the Services, which is the wider basis for the row.',
   },
 
+  'aglyn-tenant-aglyn.vercel.app': {
+    disposition: 'not-a-subprocessor',
+    reason:
+      "Aglyn-owned: the platform's own tenant deployment on Vercel, by its project alias. The render monitor (`libs/tenant/data/admin/src/lib/server/render-monitor.ts`, AGL-3571) asks it to render one real published page per run, naming the site with `?tenantHost=` and passing the platform's automation-bypass secret, so a render that hangs is seen before visitors see it. It is the platform's own application on Vercel, already the hosting row above, not a new recipient.",
+    dataReceived:
+      "Nothing personal: a request for an already-published public page of a customer site, made by the platform itself — the site's host name, the page path, the probe header and the bypass secret. No visitor, member or customer record.",
+  },
+
   // MARK – Resend
 
   'api.resend.com': {
