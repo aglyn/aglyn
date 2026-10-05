@@ -25,7 +25,37 @@
 //
 // This script builds apps/tenant for production, starts the real
 // `next start` server against the local emulator stack, requests the
-// seeded routes, and asserts status + content.
+// seeded routes, and asserts status + content + TIME.
+//
+// Every route has a render budget (AGL-3566), SMOKE_ROUTE_BUDGET_MS, 15 s by
+// default, and the time each took is printed. A route that has not answered
+// in full by then fails, named. The beta.222 outage (AGL-3565) was a page
+// that never answered: the site layout awaited a theme-font fetch that never
+// settled, every uncached client page hit Vercel's 60 s limit, and this smoke
+// stayed green — its `demo` host loads no fonts, so the await returned at
+// once, and a 30 s timeout per route would have been the only bound anyway.
+//
+// So it now renders a site shaped like a client's too (`ridgeline`, seeded by
+// tools/scripts/lib/seed-client-site.mjs): theme fonts, favicon and app icon,
+// logo, shared layout, a reusable component, a dataset repeat, a form and a
+// booking widget. And it renders that site TWICE, on two servers:
+//
+//   1. live      — the font origin is the real Google. Proves the self-hosted
+//                  font path renders, and prints which way the fonts came
+//                  (inlined, or the linked fallback when Google was slow).
+//   2. font origin hung — the same build, a second `next start` with
+//                  tools/e2e/lib/hung-font-origin.mjs preloaded, so every
+//                  fetch to fonts.googleapis.com answers with a promise that
+//                  never settles. The page must still render within budget,
+//                  on the linked stylesheet. Rendered on a second copy of the
+//                  site (`ridgeline-stalled`) because pass 1 cached the first
+//                  copy's pages, and a cached page proves nothing.
+//
+// Pass 2 is the deterministic half: a hung third party is the incident, and
+// off Vercel the real Google answers in milliseconds, so pass 1 alone would
+// not have caught it. Run against the pre-hotfix `self-hosted-fonts.ts`
+// (91fb65f85d), pass 2 reds both client routes with "no complete response
+// within the render budget"; against the hotfix (AGL-3564) it is green.
 //
 // Prerequisites — the standard emulator stack (docs/E2E_LOCAL.md):
 //   1. cd cloud && npx -y firebase-tools@13 emulators:start \
@@ -40,13 +70,23 @@
 // production build takes a few minutes; the wait budget accounts for it.
 
 import { spawn } from 'node:child_process'
-import { readFileSync } from 'node:fs'
+import { readFileSync, rmSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
+
+import { CLIENT_SITE_FIXTURE } from '../scripts/lib/seed-client-site.mjs'
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const BASE = process.env.SMOKE_BASE_URL ?? 'http://localhost:4500'
 const BOOT_BUDGET_MS = Number(process.env.SMOKE_BOOT_BUDGET_MS ?? 120_000)
+/**
+ * How long one route may take to answer IN FULL — headers and body — before
+ * it fails (AGL-3566). Production's ceiling is the 60 s function limit, and a
+ * page anywhere near it is already broken for its visitor; 15 s leaves a cold
+ * first render on a 4-vCPU runner several times its measured cost, while a
+ * render that waits on a hung dependency cannot get under it.
+ */
+const ROUTE_BUDGET_MS = Number(process.env.SMOKE_ROUTE_BUDGET_MS ?? 15_000)
 
 if (
   !process.env.FIRESTORE_EMULATOR_HOST ||
@@ -61,19 +101,110 @@ if (
   process.exit(1)
 }
 
-// Routes exist in the seed-e2e + guide fixtures; assert a content marker
-// so a designed-but-empty 200 can't pass.
+// Routes exist in the seed-e2e + guide fixtures; assert content markers
+// so a designed-but-empty 200 can't pass. A marker is a string or a RegExp,
+// and every one in `markers` must be present.
 // `absent` is the scoped-sharing half (AGL-1047): a marker that must NOT
 // appear. A boundary is only proven by a render that leaves data out while
 // still succeeding, and only production mode proves it — the dev server
 // renders dynamically and would mask an ISR-only failure.
-const CHECKS = [
-  { path: '/survey', marker: 'Tell us how we did' },
-  { path: '/home', marker: 'Fresh sourdough' },
+// `host` picks the site through the tenant-host cookie the middleware reads
+// on `localhost:4500`; without it the request is the `demo` site.
+const C = CLIENT_SITE_FIXTURE
+/** What every page of the client site carries, whichever way its fonts came. */
+const clientChrome = [
+  // The shared layout rendered around the page.
+  C.markers.layoutFooter,
+  // The header's logo image, from the media library.
+  'seed-client-logo',
+  // Favicon and app icon, each size derived and versioned by its content
+  // hash — the projected read of their media documents ran (AGL-3484).
+  'v=seedfav01',
+  'v=seedapp01',
+]
+const clientPages = (host) => [
   {
-    path: '/scoped',
-    marker: 'Avery Quinn',
-    absent: 'INTERNAL-RATE-CARD-SECRET',
+    host,
+    path: '/',
+    markers: [
+      C.markers.hero,
+      C.markers.componentHeadline,
+      C.markers.projectRow,
+      ...clientChrome,
+    ],
+  },
+  {
+    host,
+    path: '/contact',
+    markers: [C.markers.formLabel, ...clientChrome],
+  },
+]
+/**
+ * What `lib/hung-font-origin.mjs` prints when it loads and when it holds a
+ * request. Spelled out here rather than imported: importing that module
+ * INSTALLS it, and this process must keep its own fetch.
+ */
+const HUNG_FONT_ORIGIN_INSTALLED = '[hung-font-origin] installed'
+const HUNG_FONT_ORIGIN_HELD = '[hung-font-origin] holding open forever'
+/** The theme's fonts reached the page inlined (AGL-3485). */
+const SELF_HOSTED_FONTS = 'aglyn-theme-fonts'
+/** ...or as the linked stylesheet a page falls back to. */
+const LINKED_FONTS = 'fonts.googleapis.com/css2?family=Montserrat'
+const fontsDelivery = (body) =>
+  body.includes(SELF_HOSTED_FONTS)
+    ? 'fonts inlined'
+    : body.includes(LINKED_FONTS)
+      ? 'fonts linked (fallback)'
+      : null
+
+const PHASES = [
+  {
+    name: 'live',
+    env: {},
+    checks: [
+      { path: '/survey', markers: ['Tell us how we did'] },
+      { path: '/home', markers: ['Fresh sourdough'] },
+      {
+        path: '/scoped',
+        markers: ['Avery Quinn'],
+        absent: 'INTERNAL-RATE-CARD-SECRET',
+      },
+      // Either delivery is a pass here: Google may be slow from a runner, and
+      // the fallback is the designed answer to that.
+      ...clientPages(C.hostId).map((check) => ({ ...check, fonts: 'either' })),
+    ],
+  },
+  {
+    name: 'font origin hung',
+    // Appended, so an operator's own NODE_OPTIONS survive.
+    env: {
+      NODE_OPTIONS: [
+        process.env.NODE_OPTIONS,
+        '--import',
+        pathToFileURL(join(repoRoot, 'tools/e2e/lib/hung-font-origin.mjs'))
+          .href,
+      ]
+        .filter(Boolean)
+        .join(' '),
+    },
+    // Next's data cache is a directory in the build, and pass 1 stored the
+    // stylesheet there for a day; left in place, pass 2 reads it and never
+    // asks the hung origin at all. Cleared, the pass starts where a cold
+    // region does — nothing stored, the origin the only answer.
+    beforeStart: () =>
+      rmSync(join(repoRoot, 'dist/apps/tenant/.next/cache/fetch-cache'), {
+        recursive: true,
+        force: true,
+      }),
+    // The page renders, in budget, on the linked stylesheet — a hung font
+    // origin costs speed, never the page and never the typeface.
+    checks: clientPages(C.stalledHostId).map((check) => ({
+      ...check,
+      fonts: 'linked',
+    })),
+    // Proof the fault was live, read back from the server: the preload
+    // loaded, and at least one stylesheet request was really held.
+    serverPrinted: [HUNG_FONT_ORIGIN_INSTALLED, HUNG_FONT_ORIGIN_HELD],
   },
 ]
 
@@ -187,93 +318,176 @@ if (process.env.SMOKE_SKIP_BUILD !== '1') {
   }
 }
 
-console.log('starting the tenant production server…')
-const server = spawn(
-  'npx',
-  ['next', 'start', 'dist/apps/tenant', '-p', '4500'],
-  {
-    cwd: repoRoot,
-    detached: true,
-    stdio: ['ignore', 'pipe', 'pipe'],
-    env: smokeEnv,
-  },
-)
-let serverOutput = ''
-server.stdout.on('data', (chunk) => {
-  serverOutput += String(chunk)
-})
-server.stderr.on('data', (chunk) => {
-  serverOutput += String(chunk)
-})
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
-const stopServer = () => {
+/** One `next start` of the built artifact, with `extraEnv` over the smoke's. */
+const startServer = (extraEnv) => {
+  const child = spawn(
+    'npx',
+    ['next', 'start', 'dist/apps/tenant', '-p', '4500'],
+    {
+      cwd: repoRoot,
+      detached: true,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: { ...smokeEnv, ...extraEnv },
+    },
+  )
+  const handle = { child, output: '' }
+  child.stdout.on('data', (chunk) => {
+    handle.output += String(chunk)
+  })
+  child.stderr.on('data', (chunk) => {
+    handle.output += String(chunk)
+  })
+  return handle
+}
+
+let current = null
+const killGroup = (child) => {
   try {
-    process.kill(-server.pid, 'SIGTERM')
+    process.kill(-child.pid, 'SIGTERM')
   } catch {
     /* already gone */
   }
 }
-process.on('exit', stopServer)
+process.on('exit', () => current && killGroup(current.child))
 process.on('SIGINT', () => process.exit(130))
 
-const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
-
-// Wait for the server to answer at all (build + boot).
-const deadline = Date.now() + BOOT_BUDGET_MS
-let booted = false
-while (Date.now() < deadline) {
-  if (server.exitCode !== null) break
-  try {
-    await fetch(`${BASE}/survey`, { signal: AbortSignal.timeout(5000) })
-    booted = true
-    break
-  } catch {
-    await wait(3000)
+/** Stops the running server and waits until it has let go of the port. */
+const stopAndWait = async () => {
+  if (!current) return
+  const { child } = current
+  current = null
+  if (child.exitCode === null && child.signalCode === null) {
+    const exited = new Promise((resolve) => child.once('exit', resolve))
+    killGroup(child)
+    await Promise.race([exited, wait(15_000)])
+  }
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    try {
+      await fetch(BASE, { signal: AbortSignal.timeout(1000) })
+      await wait(500)
+    } catch {
+      return
+    }
   }
 }
-if (!booted) {
-  console.error('FAIL  server never came up within the boot budget')
-  console.error(serverOutput.split('\n').slice(-25).join('\n'))
-  process.exit(1)
+
+/** Waits for the server to answer at all (boot), or reports why it did not. */
+const waitForBoot = async () => {
+  const deadline = Date.now() + BOOT_BUDGET_MS
+  while (Date.now() < deadline) {
+    if (current.child.exitCode !== null) break
+    try {
+      await fetch(`${BASE}/survey`, { signal: AbortSignal.timeout(5000) })
+      return true
+    } catch {
+      await wait(3000)
+    }
+  }
+  return false
+}
+
+const serverErrorLines = () =>
+  current.output
+    .split('\n')
+    .filter((line) => /error|digest|⨯/i.test(line))
+    .slice(-8)
+
+/**
+ * One route: status, markers, absent, emotion key, font delivery — and the
+ * time to the LAST byte, against the route budget (AGL-3566). The abort is
+ * the budget itself, so a render that never finishes fails at the budget with
+ * its name on it rather than hanging the job.
+ */
+const runCheck = async ({ path, host, markers, absent, fonts }) => {
+  const label = `${host ?? 'demo'} ${path}`
+  const started = performance.now()
+  const elapsed = () => Math.round(performance.now() - started)
+  let res
+  let body
+  try {
+    res = await fetch(`${BASE}${path}`, {
+      headers: host ? { cookie: `aglyn-tenant-host=${host}` } : {},
+      signal: AbortSignal.timeout(ROUTE_BUDGET_MS),
+    })
+    body = await res.text()
+  } catch (error) {
+    const timedOut =
+      error?.name === 'TimeoutError' || error?.cause?.name === 'TimeoutError'
+    console.log(
+      timedOut
+        ? `FAIL  ${label} — no complete response within the ` +
+            `${ROUTE_BUDGET_MS} ms render budget (SMOKE_ROUTE_BUDGET_MS). ` +
+            'A render waiting on something that never answers presents ' +
+            'exactly like this (AGL-3565).'
+        : `FAIL  ${label} — ${String(error?.message ?? error)} after ${elapsed()} ms`,
+    )
+    return false
+  }
+  const ms = elapsed()
+  const okStatus = res.status === 200
+  const missing = markers.filter((marker) =>
+    marker instanceof RegExp ? !marker.test(body) : !body.includes(marker),
+  )
+  // A leak is a failure even on a 200 with the right marker — the page
+  // renders correctly AND carries a row it must never have loaded.
+  const okAbsent = !absent || !body.includes(absent)
+  // Only meaningful on a 200 — an error page proves nothing about the key.
+  const emotionProblem = okStatus ? emotionCheck(body) : null
+  const delivery = fonts ? fontsDelivery(body) : null
+  const fontsProblem = !fonts
+    ? null
+    : !delivery
+      ? 'the theme fonts reached the page neither inlined nor linked'
+      : fonts === 'linked' && delivery !== 'fonts linked (fallback)'
+        ? `expected the linked fallback, got ${delivery}`
+        : null
+  const ok =
+    okStatus && !missing.length && okAbsent && !emotionProblem && !fontsProblem
+  console.log(
+    `${ok ? 'PASS' : 'FAIL'}  ${label} — HTTP ${res.status} in ${ms} ms` +
+      `${delivery ? `, ${delivery}` : ''}` +
+      `${missing.length ? ` (missing ${missing.map((m) => `"${m}"`).join(', ')})` : ''}` +
+      `${okAbsent ? '' : ` (LEAKED "${absent}")`}` +
+      `${emotionProblem ? ` (${emotionProblem})` : ''}` +
+      `${fontsProblem ? ` (${fontsProblem})` : ''}`,
+  )
+  if (!okStatus) {
+    // Surface the server-side error the way the outage presented.
+    const errorLines = serverErrorLines()
+    if (errorLines.length) console.error(errorLines.join('\n'))
+  }
+  return ok
 }
 
 let failures = 0
-for (const { path, marker, absent } of CHECKS) {
-  try {
-    const res = await fetch(`${BASE}${path}`, {
-      signal: AbortSignal.timeout(30_000),
-    })
-    const body = await res.text()
-    const okStatus = res.status === 200
-    const okMarker = body.includes(marker)
-    // A leak is a failure even on a 200 with the right marker — the page
-    // renders correctly AND carries a row it must never have loaded.
-    const okAbsent = !absent || !body.includes(absent)
-    // Only meaningful on a 200 — an error page proves nothing about the key.
-    const emotionProblem = okStatus ? emotionCheck(body) : null
-    const ok = okStatus && okMarker && okAbsent && !emotionProblem
-    if (!ok) failures += 1
-    console.log(
-      `${ok ? 'PASS' : 'FAIL'}  ${path} — HTTP ${res.status}` +
-        `${okMarker ? '' : ` (marker "${marker}" missing)`}` +
-        `${okAbsent ? '' : ` (LEAKED "${absent}")`}` +
-        `${emotionProblem ? ` (${emotionProblem})` : ''}`,
-    )
-    if (!okStatus) {
-      // Surface the server-side error the way the outage presented.
-      const errorLines = serverOutput
-        .split('\n')
-        .filter((line) => /error|digest|⨯/i.test(line))
-        .slice(-8)
-      if (errorLines.length) console.error(errorLines.join('\n'))
-    }
-  } catch (error) {
-    failures += 1
-    console.log(`FAIL  ${path} — ${String(error?.message ?? error)}`)
+for (const phase of PHASES) {
+  console.log(
+    `starting the tenant production server — ${phase.name} ` +
+      `(render budget ${ROUTE_BUDGET_MS} ms per route)…`,
+  )
+  phase.beforeStart?.()
+  current = startServer(phase.env)
+  if (!(await waitForBoot())) {
+    console.error(`FAIL  server never came up within the boot budget (${phase.name})`)
+    console.error(current.output.split('\n').slice(-25).join('\n'))
+    process.exit(1)
   }
+  for (const check of phase.checks) {
+    if (!(await runCheck(check))) failures += 1
+  }
+  for (const line of phase.serverPrinted ?? []) {
+    if (current.output.includes(line)) continue
+    failures += 1
+    console.log(
+      `FAIL  ${phase.name} — the server never printed "${line}", so this ` +
+        'pass did not run under the fault it exists to test',
+    )
+  }
+  await stopAndWait()
 }
 
-stopServer()
 console.log(
   failures
     ? `${failures} route(s) failed — do NOT deploy tenant changes`
