@@ -70,6 +70,15 @@ export const OWNER_NAME = 'E2E Owner'
 export const TEAMMATE_UID = process.env.E2E_TEAMMATE_UID ?? 'e2e-teammate'
 export const TEAMMATE_NAME = 'E2E Teammate'
 export const EMAIL = process.env.E2E_EMAIL ?? 'e2e@aglyn.test'
+/** `seed-e2e.mjs`'s `E2E_TEAMMATE_EMAIL`. */
+export const TEAMMATE_EMAIL = `${TEAMMATE_UID}@aglyn.test`
+/**
+ * The option an owner or assignee picker draws for each member: the name with
+ * the address beside it (`crmMemberPickerLabel`, AGL-3240). A row or a card
+ * still names the member alone.
+ */
+export const OWNER_OPTION = `${OWNER_NAME} (${EMAIL})`
+export const TEAMMATE_OPTION = `${TEAMMATE_NAME} (${TEAMMATE_EMAIL})`
 export const PASSWORD = process.env.E2E_PASSWORD ?? 'E2e-Password-1'
 export const TIMEOUT_MS = Number(process.env.E2E_TIMEOUT_MS ?? 45_000)
 export const ARTIFACTS = process.env.E2E_ARTIFACTS_DIR ?? join(repoRoot, 'tmp', 'e2e-artifacts')
@@ -387,11 +396,39 @@ export function cardNamed(page, header) {
  * substring match would resolve the card as well as its menu.
  */
 export async function rowAction(page, subject, item) {
-  await page
-    .getByRole('button', { name: `More actions for ${subject}`, exact: true })
-    .click({ timeout: TIMEOUT_MS })
+  const scrolled = await openRowActions(page, subject)
   const menu = page.locator('[role="menu"]').last()
   await menu.getByRole('menuitem', { name: item }).click({ timeout: TIMEOUT_MS })
+  if (scrolled) await scrollDataGrids(page, 'start')
+}
+
+/**
+ * Opens the `⋮` menu labeled for `subject`, and answers whether a data grid
+ * had to be scrolled to reach it.
+ *
+ * A data grid wider than its card virtualizes its columns, so the actions
+ * column at the far right is not in the page until the grid is scrolled to
+ * it, as a person scrolls to reach it. Scroll it back with
+ * `scrollDataGrids(page, 'start')` once the menu is done, or the name column
+ * a later step reads a row by has left the page instead.
+ */
+export async function openRowActions(page, subject) {
+  const trigger = page.getByRole('button', { name: `More actions for ${subject}`, exact: true })
+  try {
+    await trigger.click({ timeout: 5_000 })
+    return false
+  } catch {
+    await scrollDataGrids(page, 'end')
+    await trigger.click({ timeout: TIMEOUT_MS })
+    return true
+  }
+}
+
+/** Scrolls every data grid on the page to its first or its last column. */
+export async function scrollDataGrids(page, to) {
+  await page.locator('.MuiDataGrid-virtualScroller').evaluateAll((scrollers, end) => {
+    for (const scroller of scrollers) scroller.scrollLeft = end ? scroller.scrollWidth : 0
+  }, to === 'end')
 }
 
 /**

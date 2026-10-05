@@ -43,6 +43,7 @@ import {
   openConsole,
   ORG_ID,
   OWNER_NAME,
+  OWNER_OPTION,
   OWNER_UID,
   pickSelect,
   shot,
@@ -144,7 +145,7 @@ await step(tally, page, 'Set owner hands both to a teammate', async () => {
   await page.getByRole('button', { name: 'Set owner', exact: true }).click()
   const dialog = page.getByRole('dialog', { name: 'Set the owner' })
   // The roster arrives after the dialog opens; the option is what proves it did.
-  await pickSelect(page, 'Owner', OWNER_NAME, dialog)
+  await pickSelect(page, 'Owner', OWNER_OPTION, dialog)
   await dialog.getByRole('button', { name: 'Apply' }).click()
   await expectSnackbar(page, 'Owner set on 2 contacts')
   const owners = await waitFor(

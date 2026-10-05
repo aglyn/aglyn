@@ -299,11 +299,14 @@ await step(tally, page, "a lead's org-level address names its site", async () =>
   await page.getByRole('columnheader', { name: 'Site' }).waitFor({ timeout: TIMEOUT_MS })
   await rowOf(owen.name).waitFor({ state: 'visible', timeout: TIMEOUT_MS })
   await rowOf(owen.name).getByText(owen.name, { exact: true }).click()
-  await page.waitForURL((url) => url.pathname.endsWith(`/crm/leads/${HOST_ID}/${owen.id}`), {
+  // A lead is the organization's record (AGL-3275), so its org-level address
+  // is the lead's alone, and the record itself names the site holding it.
+  await page.waitForURL((url) => url.pathname === `/${ORG_SLUG}/crm/leads/${owen.id}`, {
     timeout: TIMEOUT_MS,
   })
   await page.getByRole('heading', { name: owen.name }).first().waitFor({ timeout: TIMEOUT_MS })
-  tally.pass("a lead's org-level address names its site", new URL(page.url()).pathname)
+  await page.getByText(`Held by ${SITE_NAME}`).first().waitFor({ timeout: TIMEOUT_MS })
+  tally.pass("a lead's org-level address names its site", `${new URL(page.url()).pathname} · held by ${SITE_NAME}`)
 })
 
 await step(tally, page, 'a deal moved from the org board lands on the document and in the org feed', async () => {
@@ -383,10 +386,10 @@ await step(tally, page, "the organization task reads from the site's hub too, as
   // against: the org token leads every site's read set, so an org task is a
   // shared record from a site's point of view.
   await page.goto(hostUrl('/crm/tasks'), { waitUntil: 'domcontentloaded', timeout: TIMEOUT_MS })
-  await page
-    .getByRole('group', { name: 'Task view' })
-    .getByRole('button', { name: 'Done' })
-    .click({ timeout: TIMEOUT_MS })
+  // Which tasks show is a filter on the list's query (AGL-3321): Filters → Value.
+  await page.getByRole('button', { name: 'Filters', exact: true }).click({ timeout: TIMEOUT_MS })
+  await pickSelect(page, 'Value', 'Done', page.locator('.MuiDataGrid-panel').last())
+  await page.keyboard.press('Escape')
   const listed = await rowOf(ORG_TASK_TITLE)
     .waitFor({ state: 'visible', timeout: TIMEOUT_MS })
     .then(() => true)

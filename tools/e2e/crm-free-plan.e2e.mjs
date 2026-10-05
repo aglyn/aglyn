@@ -136,7 +136,8 @@ const refusedForPlan = (answer) =>
  *=========================================*/
 
 const companiesPath = `orgs/${FREE.orgId}/companies`
-const leadsPath = `hosts/${FREE.hostId}/leads`
+// Leads are the organization's, beside its contacts and companies.
+const leadsPath = `orgs/${FREE.orgId}/leads`
 
 /** One Firestore REST call as the Free owner; answers the status and the error's name. */
 async function asOwner(method, path, body) {

@@ -158,9 +158,21 @@ const specs = [
     expects: ['Announcement bars & popups', 'Welcome bar', '120 views'],
   },
   {
+    // The table lists one kind at a time (AGL-3321) and opens on campaign
+    // containers; the seeded scheduled send is filed under none, so it is
+    // read under Single sends, where it carries its Scheduled chip.
     name: 'campaigns',
     path: `${HOST_BASE}/marketing/campaigns`,
-    expects: ['Scheduled'],
+    expects: ['Campaigns', 'Single sends'],
+    interact: async (page) => {
+      await page.click('button:has-text("Single sends")')
+      for (const text of ['Holiday preorder window', 'Scheduled']) {
+        await page.waitForSelector(`text=${text}`, {
+          timeout: TIMEOUT_MS,
+          state: 'attached',
+        })
+      }
+    },
   },
   {
     name: 'experiments',
@@ -197,19 +209,13 @@ const specs = [
     name: 'billing',
     path: `/${ORG_SLUG}/billing`,
     expects: ['Manage payment methods', 'Cancel subscription'],
-    // Annual toggle (AGL-532): flipping it swaps every plan card to the
-    // annual headline price — the seeded org's Business plan reads $139/mo
-    // monthly and $99/mo billed yearly on the locked price table.
+    // Annual toggle (AGL-532): flipping it swaps every plan card between the
+    // annual and the monthly headline price — the seeded org's Business plan
+    // reads $139/mo monthly and $99/mo billed yearly on the locked price
+    // table.
     interact: async (page) => {
-      await page.waitForSelector('text=$139', {
-        timeout: TIMEOUT_MS,
-        state: 'attached',
-      })
-      // The seeded org is billed monthly, so its own interval puts the
-      // toggle on Monthly whatever the page's default is (AGL-3155 made
-      // that default annual for an org with no subscription). The $139
-      // wait above is what proves it started there.
-      await page.click('text=Monthly billing (switch and save up to 35%)')
+      // The seeded subscription states no interval, so no live interval
+      // outranks the page's default and the grid opens on annual (AGL-3155).
       await page.waitForSelector('text=/month, billed yearly', {
         timeout: TIMEOUT_MS,
         state: 'attached',
@@ -218,14 +224,31 @@ const specs = [
         timeout: TIMEOUT_MS,
         state: 'attached',
       })
+      await page.click('text=Annual billing — save up to 35%')
+      await page.waitForSelector('text=Monthly billing (switch and save up to 35%)', {
+        timeout: TIMEOUT_MS,
+        state: 'attached',
+      })
+      // The current-plan card states both prices whatever the toggle says,
+      // so the monthly grid is proved by the annual headline leaving it.
+      await page.waitForSelector('text=/month, billed yearly', {
+        timeout: TIMEOUT_MS,
+        state: 'detached',
+      })
     },
   },
   {
-    // Notifications: the seeded billing.usage entry (wave v5 taxonomy)
-    // + per-category mute switches (AGL-267).
+    // Notifications: the seeded billing.usage entry (wave v5 taxonomy).
     name: 'notifications',
     path: '/manage/notifications',
-    expects: ["You're above 80%", 'Forms & bookings'],
+    expects: ["You're above 80%"],
+  },
+  {
+    // The per-category mute switches (AGL-267), a section of their own
+    // since AGL-3230.
+    name: 'notification-settings',
+    path: '/manage/notifications/settings',
+    expects: ['Billing', 'Forms & bookings'],
   },
   {
     // Plugins hub (AGL-423): the first-party switchboard card, with the
