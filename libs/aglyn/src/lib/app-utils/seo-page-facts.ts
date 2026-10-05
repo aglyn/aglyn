@@ -66,6 +66,11 @@ export interface SeoImage {
   nodeId: string
   src: string
   alt: string
+  /**
+   * The author marked it decorative (AGL-1305), so its empty description is
+   * the accessible answer rather than a gap.
+   */
+  decorative: boolean
   /** The nearest heading or text before it, which is what the image illustrates. */
   context: string
 }
@@ -160,6 +165,7 @@ export function seoPageFacts(
           nodeId: id,
           src,
           alt: collapse(String(props['alt'] ?? '')),
+          decorative: props['decorative'] === true,
           context: lastText.slice(0, IMAGE_CONTEXT_MAX_CHARS),
         })
       }
@@ -174,7 +180,7 @@ export function seoPageFacts(
     headings,
     h1s: headings.filter((heading) => heading.level === 1),
     images,
-    imagesMissingAlt: images.filter((image) => !image.alt),
+    imagesMissingAlt: images.filter((image) => !image.alt && !image.decorative),
     contentRootId,
   }
 }

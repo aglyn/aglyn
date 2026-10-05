@@ -58,9 +58,25 @@ describe('seoPageFacts', () => {
 
   it('reads images with the text before them, and which have no description', () => {
     expect(facts.images).toEqual([
-      { nodeId: 'photo', src: 'media:host-1/lamp', alt: '', context: 'Every lamp is finished by hand.' },
+      { nodeId: 'photo', src: 'media:host-1/lamp', alt: '', decorative: false, context: 'Every lamp is finished by hand.' },
     ])
     expect(facts.imagesMissingAlt.map((image) => image.nodeId)).toEqual(['photo'])
+  })
+
+  it('does not count an image the author marked decorative as missing a description', () => {
+    const decorative = seoPageFacts(
+      {
+        root: { componentId: 'div', nodes: ['hero', 'photo'] },
+        hero: { componentId: 'image', props: { src: 'media:host-1/backdrop', alt: '', decorative: true } },
+        photo: { componentId: 'image', props: { src: 'media:host-1/lamp', alt: '' } },
+      } as NodeMap,
+      { rootId: 'root' },
+    )
+    expect(decorative.images.map((image) => [image.nodeId, image.decorative])).toEqual([
+      ['hero', true],
+      ['photo', false],
+    ])
+    expect(decorative.imagesMissingAlt.map((image) => image.nodeId)).toEqual(['photo'])
   })
 
   it('carries the page’s Markdown as its text, capped', () => {
