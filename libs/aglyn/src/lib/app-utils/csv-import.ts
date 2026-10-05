@@ -216,27 +216,9 @@ export function parseImportTags(value: unknown, max: number): string[] {
   ].slice(0, max)
 }
 
-/**
- * A yes/no cell as a boolean, or `null` when it is neither.
- *
- * The affirmatives are the ones consent and checkbox columns actually
- * carry; the negatives are listed so that an explicit `no` is a `false`
- * rather than an unreadable value that gets reported as dropped.
- */
-export function parseImportFlag(value: unknown): boolean | null {
-  if (typeof value === 'boolean') return value
-  if (typeof value === 'number') return value === 1 ? true : value === 0 ? false : null
-  const text = String(value ?? '')
-    .trim()
-    .toLowerCase()
-  if (['yes', 'y', 'true', '1', 'on', 'subscribed', 'opted in', 'opted-in'].includes(text)) {
-    return true
-  }
-  if (['no', 'n', 'false', '0', 'off', 'unsubscribed', ''].includes(text)) {
-    return false
-  }
-  return null
-}
+// The yes/no reader moved to the import/export core with the other cell
+// parsers (AGL-3522); this name stays for every importer that reads it here.
+export { parseImportFlag } from '../data-transfer/derive'
 
 /** A cell as trimmed text capped at `max`, or `undefined` when blank. */
 export function importTextValue(value: unknown, max: number): string | undefined {
