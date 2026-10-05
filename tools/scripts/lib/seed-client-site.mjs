@@ -211,6 +211,19 @@ const MEDIA = {
   },
 }
 
+/**
+ * A seeded document's first version. Fixed, so a re-seed rewrites the same
+ * version instead of stacking a new one.
+ */
+function seedVersionId(documentId) {
+  return `${documentId}-v1`
+}
+
+/** A seeded project row, fixed by its place in `PROJECT_ROWS` for the same reason. */
+function seedProjectRecordId(index) {
+  return `seed-project-${index}`
+}
+
 const PROJECTS_DATASET_ID = 'seed-client-projects'
 const PROJECT_ROWS = [
   [F.markers.projectRow, 'Custom home', 'Boulder, CO'],
@@ -219,7 +232,7 @@ const PROJECT_ROWS = [
 ]
 
 const COMPONENT_ID = 'seed-client-estimate-cta'
-const COMPONENT_VERSION_ID = `${COMPONENT_ID}-v1`
+const COMPONENT_VERSION_ID = seedVersionId(COMPONENT_ID)
 const COMPONENT_ROOT_ID = 'estimateSection'
 const componentProps = [
   { name: 'headline', type: 'text', label: 'Headline', defaultValue: 'Ready to build?' },
@@ -488,7 +501,7 @@ export async function seedClientSite({
   const model = effectiveModel({ fields: projectFields })
   for (const [index, [name, kind, location]] of PROJECT_ROWS.entries()) {
     const values = { name, kind, location }
-    await put(projects.collection('records').doc(`seed-project-${index}`), {
+    await put(projects.collection('records').doc(seedProjectRecordId(index)), {
       values,
       ...datasetFilterFields(model, values),
       order: index,
@@ -506,7 +519,7 @@ async function seedClientHost({ firestore, put, now, hostId }) {
   const homeScreenId = 'seed-client-home'
   const contactScreenId = 'seed-client-contact'
   const layoutId = 'seed-client-layout'
-  const layoutVersionId = `${layoutId}-v1`
+  const layoutVersionId = seedVersionId(layoutId)
 
   await put(firestore.collection('hostIndex').doc(hostId), { orgId: F.orgId })
   await put(hostRef, {
@@ -586,7 +599,7 @@ async function seedClientHost({ firestore, put, now, hostId }) {
   ]
   for (const [screenId, displayName, slug, nodes] of screens) {
     const screenRef = hostRef.collection('screens').doc(screenId)
-    const versionId = `${screenId}-v1`
+    const versionId = seedVersionId(screenId)
     await put(screenRef, {
       displayName,
       ...displayNameSearchFields(displayName),
