@@ -325,8 +325,7 @@ export function MailboxCard(props: MailboxCardProps) {
         )
       } else if (revocation === 'unsupported') {
         enqueueSnackbar(
-          'Mailbox disconnected. To remove Aglyn’s access from the Microsoft account too, ' +
-            'remove the app at myapps.microsoft.com.',
+          'Mailbox disconnected. To end the access at Microsoft too, remove the app at myapps.microsoft.com.',
           { variant: 'success' },
         )
       } else if (revocation === 'kept-for-other-mailbox') {
