@@ -20,7 +20,7 @@ import {
   campaignPlacedOnHost,
   normalizeCampaignUtmLabel,
   type EmailCampaign,
-} from '@aglyn/shared-ui-email-campaigns/model/campaign-container'
+} from '../model/campaign-container'
 import { readContainerIds } from '@aglyn/aglyn/app-utils/container-membership'
 import { isDocumentId } from '@aglyn/tenant-data-admin/server/document-id'
 import { CAMPAIGN_KIND } from '../model/campaign-kind'

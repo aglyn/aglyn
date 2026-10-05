@@ -24,7 +24,7 @@ import type {
 import { resolveOrgIdForHost } from '@aglyn/tenant-data-admin/server/organizations'
 import type { Firestore } from 'firebase-admin/firestore'
 import firebaseAdmin from '@aglyn/tenant-data-admin/server/firebase-admin'
-import { CAMPAIGN_SEND_CONTAINER_FIELD } from '@aglyn/shared-ui-email-campaigns/model/campaign-container'
+import { CAMPAIGN_SEND_CONTAINER_FIELD } from '../model/campaign-container'
 import { CAMPAIGN_CONVERSION_KINDS, type CampaignConversionKind } from '../model/campaign-conversions'
 import {
   attributeCampaignConversion,
