@@ -82,28 +82,33 @@ Other members of your workspace cannot see the matches suggested for your file.
 ## What AI reads from a record {#what-is-sent}
 
 The CRM decides what AI may read, and it reads the same record you would see. For a summary or
-an email draft, AI is given:
+an email draft, AI is given **the whole record as the CRM shows it to you**:
 
-- the record's name, and for a contact their job title, company, lifecycle stage and tags;
-- how the person came in (for example a form, a booking or an order), a count of their orders and
-  the day of the last one, when they were added, and when they last opened or clicked an email;
-- for a company, its domain, industry and how many people it has; for a deal, its pipeline and
-  stages, stage, status, amount, expected close date, lost reason, the names of the person and
-  company it is with, up to 10 of its contacts by name with the role each plays and which is
-  Primary (a contact you cannot see is left out), and how many products it has; for a lead, its status, how it was captured
-  and how many times, when it was first and last seen, whether it is assigned or converted, and
-  why it was unqualified;
+- every standard field — for a person their name and its parts, salutation, job title,
+  department, company, every email address, every phone and fax number, birthdate, assistant,
+  who they report to, mailing and other address, lifecycle stage, lead source and **Do not
+  call**; for a company its domain, website, phone, fax, account fields, billing and shipping
+  address and parent company; for a deal its pipeline and stages, stage, amount, products,
+  type, lead source, campaign, next step, probability, forecast category, the person and
+  company it is with, and up to 10 of its contacts by name with the role each plays and which
+  is Primary (a contact you cannot see is left out); for a lead its contact details, address,
+  account fields, status and campaigns;
+- your picklists' labels as the record holds them, and your **custom fields**, each under its
+  label;
+- the person's **marketing consent** — opted in and since when, declined, or none recorded;
+- who **owns** the record and who each open task is assigned to, by name;
 - the record's notes (their first 600 characters);
-- its 12 newest timeline entries: the day, the kind of activity, an email's subject and delivery
-  state, and the first 280 characters of what was logged;
-- up to 8 open tasks and, for a contact or company, up to 5 deals.
+- its 12 newest timeline entries: the day, the kind of activity, an email's sender, recipient,
+  subject and delivery state, and the first 280 characters of what was logged;
+- up to 8 open tasks with their notes and, for a contact or company, up to 5 deals.
 
-AI is **never** given an email address, phone number or postal address field, anyone's
-marketing consent, a custom field's value, which team member owns a record or a task, or a
-record's id.
-When an email address or a phone number is typed into any text that is sent, such as a name, a
-note, a logged activity, or a task's or deal's title, it is replaced before the text is sent. A street address typed into a note is not recognized, so it is
-sent as typed.
+Text you wrote is sent as written. A record that holds a great deal at once has its longest
+texts — notes, timeline entries, task notes and custom values — shortened to fit, and no field
+is left out.
+
+AI is **never** given a password, a sign-in token, an account identifier or a record's
+internal id. A related record — the company someone works for, the person they report to, a
+campaign — is named by its name.
 
 ## Who can use it {#who-can-use-it}
 

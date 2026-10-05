@@ -72,7 +72,7 @@
 
 import { LEGAL_URLS } from './shared'
 
-export const LEGAL_DOCUMENT_VERSION = 'v9'
+export const LEGAL_DOCUMENT_VERSION = 'v10'
 
 export interface LegalDocumentManifestEntry {
   /** Stable key, and the snapshot's filename under `legal/{version}/`. */
@@ -611,6 +611,30 @@ export interface LegalDocumentManifestEntry {
  * reproduced its `v8` pin (25267 bytes / `069319…`) byte for byte before and
  * after publication, and keeps that pin.
  *
+ * v10 (2026-10-05, AGL-3520): AI assistance in the CRM reads the whole
+ * record.
+ *
+ *   - Privacy §2 says a CRM record is sent as the CRM shows it, with all of
+ *     its standard and custom fields — email addresses, phone numbers,
+ *     postal addresses, marketing consent, notes, its timeline and the names
+ *     of related people and records — and never a password, sign-in token,
+ *     account identifier or record identifier. It replaces the sentence that
+ *     said addresses and numbers were removed and no custom value was sent.
+ *   - The Subprocessors Anthropic data cell says the same, with a change-log
+ *     entry; it is not acceptance-pinned. The DPA already names CRM content
+ *     and contact details, so it is unchanged.
+ *
+ * Both documents and their `/legal` index cards move "Last updated" to
+ * October 5, 2026. The wording is recorded in
+ * `Platform Docs/Legal/Proposed/2026-10-05-crm-assist-whole-record/PROPOSAL.md`.
+ *
+ * Publication-first: the Google Doc masters were edited, the pages were
+ * published, the live page confirmed serving the new text, and only then was
+ * privacy captured: 25016 bytes (`5ae210…`), identical across two requests
+ * and a cache-busting query. The Terms did not change, so they were the
+ * control: the live terms page reproduced its `v9` pin (44131 bytes /
+ * `c48915…`) byte for byte before and after publication, and keeps that pin.
+ *
  * ## ONE snapshot in the tree, and why that is enough
  *
  * Only the CURRENT version is checked out. Superseded text is not deleted —
@@ -677,7 +701,7 @@ export const LEGAL_DOCUMENTS: LegalDocumentManifestEntry[] = [
     key: 'privacy',
     url: LEGAL_URLS.PRIVACY,
     sha256:
-      '069319b0e5a43b6d4e01f1d37114ffa4bbedf72d6bce827dacf3ee58b6f63086',
-    bytes: 25267,
+      '5ae210209452aae20eced261e8da88587153b4aba6aa893df39b7e42877e1cfb',
+    bytes: 25016,
   },
 ]
