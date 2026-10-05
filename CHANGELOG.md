@@ -15,6 +15,8 @@ content on the marketing site and is written separately.
 
 ### Added
 
+- **sites:** a new site is born with a full home page, header and footer, theme and SEO ([AGL-3497](https://linear.app/aglyn/issue/AGL-3497))
+- **notifications:** staff hear about every new site ([AGL-3491](https://linear.app/aglyn/issue/AGL-3491))
 - **seo:** every site icon size and the web app manifest derive from one upload ([AGL-3484](https://linear.app/aglyn/issue/AGL-3484))
 - **media:** every upload optimized, and old media converges lazily ([AGL-3486](https://linear.app/aglyn/issue/AGL-3486), [AGL-3504](https://linear.app/aglyn/issue/AGL-3504))
 - **bookings:** a service may ask the booker for a phone and the job address ([AGL-3493](https://linear.app/aglyn/issue/AGL-3493), [AGL-3500](https://linear.app/aglyn/issue/AGL-3500))
@@ -40,6 +42,8 @@ content on the marketing site and is written separately.
 ### Fixed
 
 - **tenant:** site search navigates with the client router instead of reloading ([AGL-3507](https://linear.app/aglyn/issue/AGL-3507))
+- **notifications:** a workspace made by creating a first site is welcomed and announced to staff ([AGL-3491](https://linear.app/aglyn/issue/AGL-3491))
+- **mui:** accordion questions use the site's font, not the browser's button face ([AGL-3497](https://linear.app/aglyn/issue/AGL-3497))
 - **seo:** check each page as it publishes, and name keywords past five ([AGL-3501](https://linear.app/aglyn/issue/AGL-3501))
 - **media:** published images size themselves from the composed tree, no re-save ([AGL-3485](https://linear.app/aglyn/issue/AGL-3485))
 - **commerce:** paid video and downloads served off the CDN count toward bandwidth ([AGL-3505](https://linear.app/aglyn/issue/AGL-3505))
