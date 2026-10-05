@@ -301,7 +301,7 @@ export const crmRecipeInstallHandler: PluginApiHandler = async (req, res) => {
     }
 
     const hostRef = writer.host.ref
-    let form: { id: string; name: string } | undefined
+    let form: { id: string; name: string; facts: { routesLeads: boolean } } | undefined
     if (recipe.picks?.kind === 'form') {
       if (!formId) {
         res.status(400).json({ error: 'Pick one of the site’s forms' })
@@ -321,6 +321,9 @@ export const crmRecipeInstallHandler: PluginApiHandler = async (req, res) => {
       form = {
         id: snapshot.id,
         name: String(snapshot.get('displayName') ?? '').trim() || snapshot.id,
+        // The fact the Forms plugin's list source shares (AGL-3458): a
+        // lead-routed form makes leads, so its recipe listens for one.
+        facts: { routesLeads: snapshot.get('routing')?.lead === true },
       }
     }
 

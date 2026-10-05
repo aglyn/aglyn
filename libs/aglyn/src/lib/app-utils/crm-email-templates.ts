@@ -281,10 +281,13 @@ export interface CrmMergeResult {
 
 /*
  * `{{ group.field }}`, spaces allowed inside the braces because a rep will
- * type them. A single brace pair or a bare word is left alone: a letter may
+ * type them, and an optional `|fallback` — `{{contact.firstName|there}}` —
+ * printed when the field has no value (AGL-3458), the campaign tags' own
+ * spelling. A single brace pair or a bare word is left alone: a letter may
  * legitimately contain braces.
  */
-const MERGE_FIELD_PATTERN = /\{\{\s*([A-Za-z][A-Za-z0-9]*\.[A-Za-z][A-Za-z0-9]*)\s*\}\}/g
+const MERGE_FIELD_PATTERN =
+  /\{\{\s*([A-Za-z][A-Za-z0-9]*\.[A-Za-z][A-Za-z0-9]*)\s*(?:\|([^}]*))?\}\}/g
 
 /** The merge fields a text names, unique, in order of first appearance. */
 export function crmMergeFieldsIn(text: string): string[] {
@@ -456,11 +459,14 @@ export function resolveCrmMergeFields(
   const source = String(text ?? '')
   const ctx = context ?? {}
   const unresolved = new Set<string>()
-  const rendered = source.replace(MERGE_FIELD_PATTERN, (_match, key: string) => {
-    const value = resolveCrmMergeField(key, ctx)
-    if (!value) unresolved.add(key)
-    return value
-  })
+  const rendered = source.replace(
+    MERGE_FIELD_PATTERN,
+    (_match, key: string, fallback: string | undefined) => {
+      const value = resolveCrmMergeField(key, ctx) || String(fallback ?? '').trim()
+      if (!value) unresolved.add(key)
+      return value
+    },
+  )
   return { text: rendered, unresolved: [...unresolved] }
 }
 

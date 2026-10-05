@@ -27,7 +27,11 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { CONTACT_TAG_MAX_LENGTH } from '@aglyn/aglyn/app-utils/crm-kinds'
-import { HOST_EVENT_PAYLOAD_KEYS, HOST_EVENT_TYPES } from '@aglyn/aglyn/app-utils/host-events'
+import {
+  HOST_EVENT_PAYLOAD_KEYS,
+  HOST_EVENT_TYPES,
+  hostEventRecipientActed,
+} from '@aglyn/aglyn/app-utils/host-events'
 import { declaredInteractionRecipes } from '@aglyn/aglyn/plugin-manager/interaction-recipes'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import {
@@ -106,12 +110,16 @@ describe('CRM_ACTION_RECIPES', () => {
 describe('Welcome a new lead', () => {
   const action = crmActionRecipe('welcomeNewLead')!.build()
 
-  it('starts on a form capture, rotates in an owner FIRST, then books the call, thanks them and tags them', () => {
+  it('starts on a new lead a form filed, rotates in an owner FIRST, then books the call, thanks them and tags them', () => {
+    // A lead-routed form makes a LEAD and no contact (AGL-3232), so the
+    // recipe named for it listens for one (AGL-3458) — keyed to forms by the
+    // `formId` the `lead` event carries only when a form filed the lead.
     expect(action.trigger).toEqual({
-      event: 'contactCreated',
-      conditions: [{ field: 'source', op: 'equals', value: 'form' }],
+      event: 'lead',
+      conditions: [{ field: 'formId', op: 'notEmpty' }],
       combinator: 'and',
     })
+    expect(HOST_EVENT_PAYLOAD_KEYS.lead).toContain('formId')
     expect(action.steps.map((step) => step.type)).toEqual([
       'assignContactOwner',
       'createCrmTask',
@@ -130,11 +138,22 @@ describe('Welcome a new lead', () => {
   })
 
   it('thanks them in words that promise nothing, to the address the event carries', () => {
-    const email = action.steps[2] as { type: string; subject: string; body: string }
+    const email = action.steps[2] as { type: 'sendEmail'; subject: string; body: string }
     expect(email.type).toBe('sendEmail')
     expect(email.subject.trim()).not.toBe('')
     expect(email.body.trim()).not.toBe('')
     expect('toField' in email).toBe(false)
+    // Everything that makes it a transactional reply, with no unsubscribe
+    // (AGL-3458): on the person's own act, before any wait, in no topic, to
+    // the address the event carries. The automation editor's own judgement of
+    // it is held in the workflows plugin's recipe spec, through a stand-in.
+    expect(hostEventRecipientActed(action.trigger.event)).toBe(true)
+    expect('topicId' in email).toBe(false)
+    expect(
+      action.steps.slice(0, 2).some((step) => step.type === 'wait' || step.type === 'waitForEvent'),
+    ).toBe(false)
+    // Greeting the person by name, with a fallback for one who gave none.
+    expect(email.body).toContain('{{firstName|there}}')
   })
 
   it('is the automation the AI evaluation explains, as this plugin builds it', () => {
@@ -215,6 +234,20 @@ describe('Tag by form', () => {
       combinator: 'and',
     })
     expect(action.steps).toEqual([{ type: 'addContactTag', tag: 'Contact us' }])
+  })
+
+  it('listens for a new LEAD when the picked form routes to leads (AGL-3458)', () => {
+    // Such a form makes a lead and no contact, so on `contactCreated` the
+    // recipe would never fire. The Forms plugin's list source shares the
+    // routing as the picked form's `routesLeads` fact.
+    const action = recipe.build({ picked: { ...FORM, facts: { routesLeads: true } } })
+    expect(action.trigger.event).toBe('lead')
+    expect(action.trigger.conditions).toEqual([
+      { field: 'formId', op: 'equals', value: 'form-contact' },
+    ])
+    expect(recipe.build({ picked: { ...FORM, facts: { routesLeads: false } } }).trigger.event).toBe(
+      'contactCreated',
+    )
   })
 
   it('cuts a long form name to the tag cap', () => {

@@ -36,6 +36,7 @@ import {
   crmTaskListFields,
   normalizeContactEmail,
   parseCrmMemberRef,
+  personKey,
   planLabelGrantingFeature,
   readContactFacet,
   visibleToHost,
@@ -63,7 +64,9 @@ import { FieldValue } from 'firebase-admin/firestore'
 import {
   OWNER_ASSIGNMENT_REFUSALS,
   reassignContactOwner,
+  reassignLeadOwner,
 } from './assign-contact-owner'
+import { createResourceUid } from '@aglyn/aglyn/app-utils/create-resource-uid'
 import type { InteractionStepGuard } from '@aglyn/aglyn/app-utils/site-interactions'
 import type { ContactLifecycleStage, CrmActivityKind, CrmTaskKind } from '@aglyn/aglyn/app-utils/crm-kinds'
 import type { CRM_STEP_TYPES } from '../constants/bundle-common'
@@ -166,6 +169,21 @@ interface ResolvedContact {
 }
 
 /**
+ * The person a CRM step acts on: a contact, or — when the workspace holds
+ * none for them — the LEAD the site filed (AGL-3458).
+ *
+ * A lead-routed form files a lead and no contact (AGL-3232), and announces it
+ * with the `lead` event. An automation welcoming that person — assign an
+ * owner, book a call, tag them — has only the lead to act on, so each step
+ * that has a lead's equivalent writes it there: the lead's own `ownerUid`,
+ * its own `tags`, a task or an activity filed under `leadId`. A stage is a
+ * contact's alone, and a step setting one on a lead says so.
+ */
+type ResolvedPerson =
+  | ({ kind: 'contact' } & ResolvedContact)
+  | ({ kind: 'lead' } & ResolvedContact)
+
+/**
  * The contact an event names, as this site may see it.
  *
  * Id first, because a CRM event carries the document the door just wrote and
@@ -188,6 +206,34 @@ async function resolveEventContact(
   }
   const hit = await findContactByEmail(contactsRef, named.email, { hostId })
   return hit ? { id: hit.id, ref: hit.ref, data: hit.data() ?? {} } : null
+}
+
+/**
+ * The lead an event names, as this site may see it: by `leadId` — the `lead`
+ * event carries it, and it is the person's key — else by the key of the
+ * `email`. A row this site cannot see is absent, exactly as a contact's is.
+ */
+async function resolveEventLead(
+  hostId: string,
+  named: { leadId?: unknown; email?: unknown },
+): Promise<ResolvedContact | null> {
+  const key = String(named.leadId ?? '').trim() || personKey(named.email) || ''
+  if (!key) return null
+  const { ref: leadsRef } = await orgDataQueryForHost(hostId, 'leads')
+  const doc = await leadsRef.doc(key).get()
+  if (!doc.exists || !visibleToHost(doc.get('visibleTo'), hostId)) return null
+  return { id: doc.id, ref: doc.ref, data: doc.data() ?? {} }
+}
+
+/** The contact the event names, else its lead — see {@link ResolvedPerson}. */
+async function resolveEventPerson(
+  hostId: string,
+  named: { contactId?: unknown; leadId?: unknown; email?: unknown },
+): Promise<ResolvedPerson | null> {
+  const contact = await resolveEventContact(hostId, named)
+  if (contact) return { kind: 'contact', ...contact }
+  const lead = await resolveEventLead(hostId, named)
+  return lead ? { kind: 'lead', ...lead } : null
 }
 
 /**
@@ -257,15 +303,17 @@ export async function runCrmAutomationStep(
   const step = request.step as unknown as CrmAutomationStep
   const actionId = request.run.id
   const { hostId } = env
-  const contact = await resolveEventContact(hostId, request.payload)
-  if (!contact) {
+  const person = await resolveEventPerson(hostId, request.payload)
+  if (!person) {
     const named = String(request.payload['contactId'] ?? request.payload['email'] ?? '').trim()
     return {
       error: named
-        ? `no contact this site can see for ${named}`
+        ? `no contact or lead this site can see for ${named}`
         : 'the event names no contact — no contactId or email in its payload',
     }
   }
+  if (person.kind === 'lead') return runLeadStep(env, actionId, step, person, nowMs)
+  const contact = person
   /*
    * THE HOLDER whose facet the write addresses — the site's consent group,
    * which is the site alone unless the org declared the site one of a set
@@ -484,13 +532,152 @@ export async function runCrmAutomationStep(
 }
 
 /**
+ * A CRM step on a LEAD (AGL-3458) — the person is not a contact yet, so each
+ * step writes the lead's equivalent of what it writes on a contact. See
+ * {@link ResolvedPerson}.
+ */
+async function runLeadStep(
+  env: CrmStepEnv,
+  actionId: string,
+  step: CrmAutomationStep,
+  lead: ResolvedContact,
+  nowMs: number,
+): Promise<ServerStepAnswer> {
+  const { hostId } = env
+  if (step.type === 'setContactStage') {
+    return {
+      error:
+        'the event names a lead, and a lead has no lifecycle stage until it is ' +
+        'converted to a contact',
+    }
+  }
+  if (step.type === 'addContactTag') {
+    const tag = String(step.tag ?? '')
+      .trim()
+      .slice(0, CONTACT_TAG_MAX_LENGTH)
+    if (!tag) return { error: 'the step has no tag' }
+    await lead.ref.update({
+      tags: FieldValue.arrayUnion(tag),
+      updatedAt: FieldValue.serverTimestamp(),
+    })
+    // A lead's tags are what the Leads list searches (AGL-3321).
+    await restampCrmListFieldsAt(lead.ref, 'leads')
+    return { detail: `${tag} (lead)` }
+  }
+  if (step.type === 'assignContactOwner') {
+    let assign: { memberUid: string } | { roundRobin: true }
+    let named = 'round robin'
+    if (step.roundRobin === true) {
+      assign = { roundRobin: true }
+    } else {
+      const owner = await resolveMemberUid(
+        env.orgId,
+        { uid: step.ownerUid, email: step.ownerEmail },
+        'owner',
+      )
+      if ('error' in owner) return { error: owner.error }
+      assign = { memberUid: owner.uid }
+      named = owner.detail
+    }
+    const verdict = await reassignLeadOwner({ hostId, leadId: lead.id, assign })
+    if (verdict.outcome === 'none') {
+      return { error: OWNER_ASSIGNMENT_REFUSALS[verdict.reason] }
+    }
+    if (verdict.outcome === 'unchanged') return { detail: `${named} (already, lead)` }
+    return {
+      detail:
+        step.roundRobin === true
+          ? `round robin → ${verdict.ownerUid} (lead)`
+          : `${named} (lead)`,
+    }
+  }
+  if (!env.orgId) return { error: 'this site has no organization' }
+  const orgRef = firebaseAdmin.app().firestore().collection('orgs').doc(env.orgId)
+  const group = await consentGroupForSite(hostId)
+  const visibleTo = crmScopeTokens((env.org ?? null) as Record<string, unknown> | null, group)
+  // Filed under the lead, as a sequence's call step files one (AGL-3233); a
+  // conversion stamps the contact beside it, and the task follows the person.
+  const links = { leadId: lead.id }
+  if (step.type === 'createCrmTask') {
+    const title = String(step.title ?? '')
+      .trim()
+      .slice(0, 200)
+    if (!title) return { error: 'the task has no title' }
+    const dueInDays = Math.max(0, Math.round(Number(step.dueInDays) || 0))
+    // The named assignee, else whoever owns the lead NOW — an owner step
+    // earlier in this same run wrote the lead after it was resolved, so it
+    // is read again — else nobody.
+    let assignee: string
+    if (step.assigneeUid?.trim() || step.assigneeEmail?.trim()) {
+      const named = await resolveMemberUid(
+        env.orgId,
+        { uid: step.assigneeUid, email: step.assigneeEmail },
+        'assignee',
+      )
+      if ('error' in named) return { error: named.error }
+      assignee = named.uid
+    } else {
+      const fresh = await lead.ref.get()
+      assignee = String((fresh.data() ?? lead.data)['ownerUid'] ?? '')
+    }
+    const dueAtMs = nowMs + dueInDays * DAY_MS
+    const task: CrmTask = {
+      title,
+      kind: step.kind,
+      priority: 'normal',
+      status: 'open',
+      dueAtMs,
+      remindAtMs: crmTaskReminderAfterEdit({ dueAtMs, previous: null }),
+      ...(assignee ? { assigneeUid: assignee } : {}),
+      createdByUid: '',
+      sourceActionId: actionId,
+      ...links,
+      hostId,
+      visibleTo,
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    }
+    await orgRef
+      .collection(CRM_COLLECTIONS.tasks)
+      .doc(createResourceUid())
+      .set({ ...task, ...crmTaskListFields(task) })
+    return { detail: `${title.slice(0, 60)} (lead)` }
+  }
+  if (step.type === 'logCrmActivity') {
+    const body = String(step.body ?? '')
+      .trim()
+      .slice(0, 2000)
+    if (!body) return { error: 'the activity has no body' }
+    if (!crmActivityLogHasRoom(await countCrmActivitiesForRecord(orgRef, links))) {
+      return { error: CRM_ACTIVITY_LOG_FULL_MESSAGE }
+    }
+    const activity: CrmActivity = {
+      kind: step.kind,
+      body,
+      atMs: nowMs,
+      byUid: '',
+      sourceActionId: actionId,
+      ...links,
+      hostId,
+      visibleTo,
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    }
+    await orgRef.collection(CRM_COLLECTIONS.activities).doc(createResourceUid()).set(activity)
+    return { detail: `${step.kind} (lead)` }
+  }
+  return { error: `unknown CRM step "${(step as { type: string }).type}"` }
+}
+
+/**
  * Whether — and where — an email a plugin is about to send lands on a
  * timeline: the CRM's answer to the record timeline's `prepareEmail`.
  *
  * An automation's `sendEmail` step is not a CRM step: it mails whatever
  * address the event carries, to a person who may be nobody the CRM knows. It
  * earns a row on exactly one condition, that the message is ADDRESSED TO THE
- * CONTACT the sender means — the person the request's link finds, at the
+ * PERSON the sender means — a contact, else the lead a lead-routed form filed
+ * (AGL-3458), whose row lands on the lead's timeline — the person the request's link finds, at the
  * address the row holds. A welcome sequence to a new contact is that; an
  * internal alert routed to a merchant's own address through `toField` is not,
  * and a row for it would put the merchant's inbox on a customer's history.
@@ -524,16 +711,19 @@ export async function prepareCrmRecordEmail(
     if (!checkEntitlement(org as Parameters<typeof checkEntitlement>[0], CRM_SUITE_FEATURE)) {
       return null
     }
-    const contact = await resolveEventContact(hostId, request.link)
-    if (!contact || normalizeContactEmail(contact.data['email']) !== address) {
+    const person = await resolveEventPerson(hostId, request.link)
+    if (!person || normalizeContactEmail(person.data['email']) !== address) {
       return null
     }
     const group = await consentGroupForSite(hostId)
-    const facet = readContactFacet(contact.data, group.groupId)
-    const link: CrmActivityLink = {
-      contactId: contact.id,
-      ...(facet.companyId ? { companyId: facet.companyId } : {}),
-    }
+    const facet = person.kind === 'contact' ? readContactFacet(person.data, group.groupId) : null
+    const link: CrmActivityLink =
+      person.kind === 'lead'
+        ? { leadId: person.id }
+        : {
+            contactId: person.id,
+            ...(facet?.companyId ? { companyId: facet.companyId } : {}),
+          }
     if (!crmActivityLogHasRoom(await countCrmActivitiesForRecord(orgRef, link))) {
       return null
     }

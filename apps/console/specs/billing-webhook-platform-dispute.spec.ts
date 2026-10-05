@@ -969,7 +969,7 @@ describe('fraud signals are filed for staff, and nothing is refunded (AGL-3356)'
     })
     expect(String(rows[0]['details'])).toContain('56.00 USD')
     expect(String(rows[0]['details'])).toContain('TEST MODE')
-    expect(String(rows[0]['details'])).toContain('Nothing has been refunded or canceled')
+    expect(String(rows[0]['details'])).toContain('This alert refunded and canceled nothing')
     expect(mockStaffNotifications).toHaveLength(1)
     expect(mockStaffNotifications[0]).toMatchObject({
       type: 'system.abuseReportUrgent',
@@ -1095,14 +1095,118 @@ describe('fraud signals are filed for staff, and nothing is refunded (AGL-3356)'
     expect(mockStaffNotifications).toHaveLength(0)
   })
 
-  it('a REDELIVERED warning counts again and alerts once', async () => {
+  it('a REDELIVERED warning adds nothing and alerts once', async () => {
     const post = loadWebhook()
     const warning = { id: 'issfr_2', charge: 'ch_own_1', fraud_type: 'misc' }
     await post(signed(event('radar.early_fraud_warning.created', warning, 'evt_a')))
     await post(signed(event('radar.early_fraud_warning.created', warning, 'evt_b')))
     const rows = abuseRows()
     expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ reportCount: 1 })
+    expect(rows[0]['paymentSignals']).toHaveLength(1)
     expect(mockStaffNotifications).toHaveLength(1)
+  })
+
+  /*
+   * ONE CHARGE, ONE ROW (AGL-3490). The 9/26 charge drew a dispute on 10/1
+   * and the issuer's early fraud warning on 10/2, after staff had closed the
+   * dispute's row — and the warning opened a second urgent row and notified
+   * everyone again.
+   */
+  const warningOn = (charge: string, id = 'issfr_9') =>
+    event('radar.early_fraud_warning.created', {
+      id,
+      charge,
+      fraud_type: 'unauthorized_use_of_card',
+    })
+  const disputeOn = (charge: string, id = 'dp_9') =>
+    event('charge.dispute.created', {
+      id,
+      charge,
+      payment_intent: 'pi_own_1',
+      amount: 5600,
+      currency: 'usd',
+      reason: 'fraudulent',
+      status: 'needs_response',
+    })
+  /** Staff closing the charge's one row, as the admin route writes it. */
+  const close = (status: string, resolution: string) => {
+    const [path] = [...docs.keys()].filter((key) => key.startsWith('abuseReports/'))
+    docs.set(path, { ...docs.get(path), status, resolution })
+  }
+
+  it('a warning and a dispute on one charge are ONE row, told once', async () => {
+    const post = loadWebhook()
+    await post(signed(warningOn('ch_own_1')))
+    await post(signed(disputeOn('ch_own_1')))
+    const rows = abuseRows()
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({
+      status: 'open',
+      reportCount: 2,
+      // The newest signal leads, so the row's Stripe link is the dispute's.
+      paymentSignal: { kind: 'dispute', stripeObjectId: 'dp_9', chargeId: 'ch_own_1' },
+      paymentSignals: [
+        expect.objectContaining({ kind: 'early-fraud-warning', stripeObjectId: 'issfr_9', arrivedAfter: null }),
+        expect.objectContaining({ kind: 'dispute', stripeObjectId: 'dp_9', arrivedAfter: null }),
+      ],
+    })
+    expect(String(rows[0]['details'])).toContain('Every signal on this charge')
+    expect(mockStaffNotifications).toHaveLength(1)
+    expect(mockRiskNotices).toHaveLength(1)
+  })
+
+  it('a late warning on a row staff ACTIONED stays closed and tells nobody', async () => {
+    const post = loadWebhook()
+    await post(signed(disputeOn('ch_own_1')))
+    close('actioned', 'Locked the workspace; accepted the chargeback.')
+    await post(signed(warningOn('ch_own_1')))
+    const rows = abuseRows()
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({
+      status: 'actioned',
+      resolution: 'Locked the workspace; accepted the chargeback.',
+      paymentSignals: [
+        expect.objectContaining({ kind: 'dispute', arrivedAfter: null }),
+        expect.objectContaining({ kind: 'early-fraud-warning', arrivedAfter: 'actioned' }),
+      ],
+    })
+    const details = String(rows[0]['details'])
+    expect(details).toContain('closed as actioned: “Locked the workspace; accepted the chargeback.”')
+    expect(details).not.toContain('refunding now can avoid one')
+    expect(mockStaffNotifications).toHaveLength(1)
+    expect(mockRiskNotices).toHaveLength(1)
+  })
+
+  it('a dispute on a row staff DISMISSED reopens it and tells them', async () => {
+    const post = loadWebhook()
+    await post(signed(warningOn('ch_own_1')))
+    close('dismissed', 'Owner confirmed the payment.')
+    await post(signed(disputeOn('ch_own_1')))
+    const rows = abuseRows()
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ status: 'open', reportCount: 2 })
+    expect(String(rows[0]['details'])).toContain('REOPENED. Staff had dismissed this row: “Owner confirmed the payment.”')
+    expect(mockStaffNotifications).toHaveLength(2)
+    expect(mockRiskNotices[1]).toMatchObject({
+      staffEvidence: expect.stringContaining('reopened a row staff had dismissed'),
+    })
+  })
+
+  it('a later WARNING on a dismissed row does not reopen it', async () => {
+    const post = loadWebhook()
+    await post(signed(event('review.opened', { id: 'prv_9', charge: 'ch_own_1', reason: 'rule' })))
+    close('dismissed', 'Review cleared.')
+    await post(signed(warningOn('ch_own_1')))
+    expect(abuseRows()[0]).toMatchObject({ status: 'dismissed', reportCount: 2 })
+    expect(mockStaffNotifications).toHaveLength(1)
+  })
+
+  it('signals on two different charges are two rows', async () => {
+    const post = loadWebhook()
+    await post(signed(warningOn('ch_own_1', 'issfr_a')))
+    await post(signed(warningOn('ch_other_2', 'issfr_b')))
+    expect(abuseRows()).toHaveLength(2)
   })
 })
 

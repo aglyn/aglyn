@@ -137,9 +137,11 @@ export async function findOrgAutomationsForEvent(
       .where('visibleTo', 'array-contains-any', scopeTokensForHost(hostId))
       .limit(MAX_TRIGGERED_ORG_AUTOMATIONS)
       .get()
-    const docs = snapshot.docs.filter((doc) =>
-      orgAutomationRunsOnHost(doc.data() as OrgAutomation, hostId),
-    )
+    // In document-id order (AGL-3458), so which runs first does not depend
+    // on how the query happened to answer.
+    const docs = snapshot.docs
+      .filter((doc) => orgAutomationRunsOnHost(doc.data() as OrgAutomation, hostId))
+      .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
     return docs.length ? { orgId, docs } : null
   } catch (error) {
     console.error('[org automations] lookup failed', hostId, event, error)
