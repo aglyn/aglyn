@@ -15,15 +15,17 @@
  * limitations under the License.
  */
 /**
- * `crm/lead-source-values` (AGL-3298): a rename or a delete of a lead
- * source value, which changes the org's list AND every lead and contact
- * holding the old label.
+ * `crm/picklist-values` (AGL-3298, AGL-3510): a rename or a delete of a
+ * picklist value, which changes the org's list AND every record the
+ * definition's targets name that holds the old label. `crm/lead-source-values`
+ * is the same route fixed to the lead source.
  *
  * What has to hold: the caller is the CRM writer the rules would admit;
- * the list is written before any record; a rename keeps the value's id and
- * moves every holder to the new label; a delete moves them to the named
- * ACTIVE replacement or clears them; each contact is rewritten in the
- * facet of the holder that holds the value, and no other.
+ * the picklist is a registered one; the list is written before any record;
+ * a rename keeps the value's id and moves every holder to the new label; a
+ * delete moves them to the named ACTIVE replacement or clears them, and is
+ * refused for a standard value; each contact is rewritten in the facet of
+ * the holder that holds the value, and no other.
  */
 
 const authorizeCrmWriter = jest.fn()
@@ -145,12 +147,15 @@ jest.mock('./org-caller', () => ({
   orgHostIds: (...args: unknown[]) => orgHostIds(...args),
 }))
 
-import { crmLeadSourceValuesHandler } from './lead-source-values'
+import { crmLeadSourceValuesHandler, crmPicklistValuesHandler } from './picklist-values'
 
 const ORG = 'org-1'
 const LIST = `orgs/${ORG}/crmPicklists/leadSource`
 
-async function call(body: Record<string, unknown>) {
+async function call(
+  body: Record<string, unknown>,
+  handler = crmLeadSourceValuesHandler,
+) {
   let status = 0
   let payload: Record<string, unknown> = {}
   const res = {
@@ -163,7 +168,7 @@ async function call(body: Record<string, unknown>) {
       payload = value
     },
   }
-  await crmLeadSourceValuesHandler(
+  await handler(
     { method: 'POST', body, headers: { authorization: 'Bearer t' } } as never,
     res as never,
   )
@@ -179,8 +184,9 @@ beforeEach(() => {
     [LIST]: {
       values: [
         { id: 'apollo', label: 'Outbound · Apollo', active: true },
-        { id: 'web', label: 'Website form', active: true },
+        { id: 'site', label: 'Website form', active: true },
         { id: 'test', label: 'Internal test', active: true },
+        { id: 'web', label: 'Web', active: true, group: 'inbound' },
       ],
       defaultValueId: 'test',
       visibleTo: ['org'],
@@ -197,7 +203,7 @@ beforeEach(() => {
   }
 })
 
-describe('crm/lead-source-values', () => {
+describe('crm/picklist-values', () => {
   it('refuses a caller the CRM writer check refuses, and writes nothing', async () => {
     authorizeCrmWriter.mockResolvedValueOnce({ ok: false, status: 403, body: { error: 'No' } })
     const out = await call({ orgId: ORG, action: 'rename', valueId: 'apollo', label: 'Apollo' })
@@ -208,11 +214,12 @@ describe('crm/lead-source-values', () => {
 
   it('renames the value in place, then moves every lead and the holding facet to the new label', async () => {
     const out = await call({ orgId: ORG, action: 'rename', valueId: 'apollo', label: 'Apollo' })
-    expect(out).toEqual({ status: 200, payload: { ok: true, leads: 2, contacts: 1 } })
+    expect(out).toEqual({ status: 200, payload: { ok: true, updated: { lead: 2, contact: 1 } } })
     expect((store[LIST]['values'] as { id: string; label: string }[])[0]).toEqual({
       id: 'apollo',
       label: 'Apollo',
       active: true,
+      group: null,
     })
     expect(writes[0]).toBe(LIST)
     expect(store[`orgs/${ORG}/leads/l1`]['leadSource']).toBe('Apollo')
@@ -233,27 +240,64 @@ describe('crm/lead-source-values', () => {
     const moved = await call({
       orgId: ORG,
       action: 'delete',
-      valueId: 'web',
+      valueId: 'site',
       replaceWith: 'outbound · apollo',
     })
-    expect(moved.payload).toEqual({ ok: true, leads: 1, contacts: 1 })
+    expect(moved.payload).toEqual({ ok: true, updated: { lead: 1, contact: 1 } })
     expect(store[`orgs/${ORG}/leads/l3`]['leadSource']).toBe('Outbound · Apollo')
     expect(read(store[`orgs/${ORG}/contacts/c1`], ['facets', 'site-b', 'leadSource'])).toBe(
       'Outbound · Apollo',
     )
     const cleared = await call({ orgId: ORG, action: 'delete', valueId: 'apollo', replaceWith: null })
     // Both of c1's holders held it by now, and each facet is its own write.
-    expect(cleared.payload).toEqual({ ok: true, leads: 3, contacts: 2 })
+    expect(cleared.payload).toEqual({ ok: true, updated: { lead: 3, contact: 2 } })
     expect(store[`orgs/${ORG}/leads/l1`]).not.toHaveProperty('leadSource')
-    expect((store[LIST]['values'] as { id: string }[]).map((value) => value.id)).toEqual(['test'])
+    expect(store[`orgs/${ORG}/leads/l1`]).toMatchObject({ leadSourceKey: null })
+    // The stored values left, then every standard value written down beside them.
+    const ids = (store[LIST]['values'] as { id: string }[]).map((value) => value.id)
+    expect(ids.slice(0, 2)).toEqual(['test', 'web'])
+    expect(ids).toContain('purchased-list')
+    expect(ids).not.toContain('apollo')
     expect(store[LIST]['defaultValueId']).toBe('test')
   })
 
-  it('writes the starter list down as the org’s own on a first move, stamped org-wide', async () => {
+  it('writes the standard values down as the org’s own on a first move, stamped org-wide', async () => {
     delete store[LIST]
     const out = await call({ hostId: 'site-a', action: 'rename', valueId: 'web', label: 'Website' })
     expect(out.status).toBe(200)
     expect(store[LIST]).toMatchObject({ hostId: 'site-a', visibleTo: ['org'] })
-    expect((store[LIST]['values'] as { label: string }[])[0].label).toBe('Website')
+    expect((store[LIST]['values'] as { label: string; group: string }[])[0]).toEqual({
+      id: 'web',
+      label: 'Website',
+      active: true,
+      group: 'inbound',
+    })
+  })
+
+  it('refuses to delete a standard value, and writes nothing', async () => {
+    const out = await call({ orgId: ORG, action: 'delete', valueId: 'web', replaceWith: null })
+    expect(out).toEqual({
+      status: 400,
+      payload: { error: '“Web” is a standard value and cannot be deleted. Deactivate it instead.' },
+    })
+    expect(writes).toEqual([])
+  })
+
+  it('takes the picklist by id on the shared route, and refuses one the registry does not hold', async () => {
+    const out = await call(
+      { orgId: ORG, picklistId: 'leadSource', action: 'rename', valueId: 'apollo', label: 'Apollo' },
+      crmPicklistValuesHandler,
+    )
+    expect(out.payload).toEqual({ ok: true, updated: { lead: 2, contact: 1 } })
+    const unknown = await call(
+      { orgId: ORG, picklistId: 'industry', action: 'rename', valueId: 'x', label: 'Y' },
+      crmPicklistValuesHandler,
+    )
+    expect(unknown.status).toBe(400)
+    const missing = await call(
+      { orgId: ORG, action: 'rename', valueId: 'apollo', label: 'Apollo' },
+      crmPicklistValuesHandler,
+    )
+    expect(missing.status).toBe(400)
   })
 })

@@ -135,27 +135,49 @@ The sender's **name** and **email** are recognized from the field name — see
 [who a submission is from](../forms/overview.md#who-a-submission-is-from) — and never
 need mapping.
 
-## Lead source values {#lead-source-values}
+## Picklist values {#picklist-values}
 
-**Lead source** is a standard lead field — Salesforce's Lead Source — and its choices are
-your organization's own. They are kept on the **Leads** tab, below the custom lead
-fields, under **Lead source values**. Every lead's page, the **New lead** drawer and every
-contact's page offer them as a select, and the leads list filters by them.
+Some standard fields are **picklists** — a fixed set of choices, the way Salesforce's
+standard fields are. Each picklist's values are kept on the tab of the record it belongs
+to, below that tab's custom fields. Today that is **Lead source** on the **Leads** tab,
+under **Lead source values**: every lead's page, the **New lead** drawer and every
+contact's page offer its values as a select, and the leads list filters by them.
+
+**Standard values come with every organization.** Each picklist ships Salesforce's
+standard set, marked **Standard** in the list. You can rename, reorder, regroup,
+deactivate or make a standard value the default, but you cannot delete one. **Your own
+values** sit beside them: add as many as you need, and delete them when you are done.
+
+Lead source's standard values, by group:
+
+| Group | Values |
+| --- | --- |
+| **Inbound** | Web, Phone inquiry, Email inquiry, Partner referral, Employee referral, External referral, Advertisement, Trade show, Webinar, Word of mouth |
+| **Outbound** | Purchased list |
+| *(no group)* | Other |
+
+**Groups** sort a picklist's values under headings. Lead source groups each value as
+**Inbound** — the lead came to you — or **Outbound** — you went to them. The **Group**
+column sets a value's group, standard or your own; the selects list values under their
+group's heading, with values in no group last.
 
 | Action | What it does |
 | --- | --- |
-| **Add value** | Adds a value at the end of the list. A value the list already holds, in any capitalization, is refused. |
+| **Add value** | Adds your own value at the end of the list, in the group you pick. A value the list already holds, in any capitalization, is refused. |
 | **Drag**, or the arrows | Reorders the list. The order is the order every select offers. |
 | **Sort A–Z** | Puts the whole list in alphabetical order. |
-| **Rename** | Renames the value, and every lead and contact holding it is updated to the new name in the same step, so a report grouped by lead source follows the rename. |
-| **Make default** | New leads start with this value — in the **New lead** drawer, over the API, and from a CSV row that names none. **Clear default** removes it. |
+| **Group** | Files the value under a group, or none. |
+| **Rename** | Renames the value, and every record holding it — for lead source, every lead and contact — is updated to the new name in the same step, so a report grouped by the field follows the rename. |
+| **Make default** | New records start with this value — in the **New lead** drawer, over the API, and from a CSV row that names none. **Clear default** removes it. |
 | **Deactivate** | Takes the value out of every select without touching the records that hold it. They show it as *(inactive)* and keep it until someone changes it. **Activate** brings it back. |
-| **Delete…** | Removes the value for good. You pick another active value to move its leads and contacts to, or clear it from them. To keep it on those records, deactivate it instead. |
+| **Delete…** | Offered only on your own values. Removes the value for good: you pick another active value to move its records to, or clear it from them. To keep it on those records, deactivate it instead. |
 
-An organization that has never edited the list starts from a short starter list; your
-first change makes it your own.
+An organization that has never edited a picklist reads its standard values; your first
+change makes the list your own. A lead or contact holding a value that is neither
+standard nor in your list shows it as *(not in the list)* — add the value to keep
+offering it.
 
-**The list is enforced.** A lead source typed into a [CSV import](./leads.md#import-from-csv)
+**Lead source is enforced.** A lead source typed into a [CSV import](./leads.md#import-from-csv)
 or sent over [`/v1/leads`](/api/resources/leads) must be one of the active values, matched
 without regard to case and stored as the list spells it. Anything else is refused, with
 the values the list allows named in the error — the import skips that row and says so,

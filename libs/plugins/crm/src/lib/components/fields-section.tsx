@@ -27,6 +27,8 @@ import {
   CRM_FIELD_OBJECT_LABELS,
   CRM_FIELD_OBJECTS,
   type CrmFieldObject,
+  type CrmPicklistId,
+  crmPicklistDefinitionsFor,
   isCrmFieldObject,
   newResourceScopeFields,
   ORG_SCOPE_TOKEN,
@@ -102,7 +104,7 @@ import {
 import { useCrmScope } from '../hooks/use-crm-scope'
 import { CRM_FIELD_LIST_QUERY, crmFieldListBase } from '../constants/field-list-query'
 import ContactFieldDrawer, { type ContactFieldDraft } from './contact-field-drawer'
-import { LeadSourceValuesCard } from './lead-source-values-card'
+import { PicklistValuesCard } from './picklist-values-card'
 import { recomputeAllCrmNextActivity } from '../model/next-activity-api'
 import { crmTaskCallScope } from '../model/task-routes'
 
@@ -898,13 +900,21 @@ export function ContactsFieldsSection(props: ContactsFieldsSectionProps) {
           </Typography>
         ) : null}
         {/*
-          Lead source (AGL-3298) — a standard lead field whose CHOICES are the
-          org's, Salesforce's Lead Source picklist — kept on the Leads tab
-          beside the custom lead fields.
+          The tab's standard picklists (AGL-3298, AGL-3510) — standard fields
+          whose CHOICES are the org's, Salesforce's picklist value sets — one
+          card each, beside the custom fields of the same record.
         */}
-        {object === 'lead' && scope ? (
-          <LeadSourceValuesCard hostId={hostId} orgId={orgId} createHostId={createHostId} />
-        ) : null}
+        {scope
+          ? crmPicklistDefinitionsFor(object).map((definition) => (
+              <PicklistValuesCard
+                key={definition.id}
+                picklistId={definition.id as CrmPicklistId}
+                hostId={hostId}
+                orgId={orgId}
+                createHostId={createHostId}
+              />
+            ))
+          : null}
       </Stack>
       <ContactFieldDrawer
         open={drawerOpen}

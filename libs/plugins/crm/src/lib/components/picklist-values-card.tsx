@@ -18,11 +18,13 @@
 
 import {
   CRM_COLLECTIONS,
-  CRM_LEAD_SOURCE_PICKLIST,
   CRM_LEAD_TEXT_MAX,
   type CrmPicklist,
+  type CrmPicklistDefinition,
+  type CrmPicklistId,
+  type CrmPicklistObject,
   type CrmPicklistValue,
-  crmPicklistActiveValues,
+  isStandardPicklistValueId,
   newResourceScopeFields,
   ORG_SCOPE_TOKEN,
 } from '@aglyn/aglyn'
@@ -68,20 +70,25 @@ import {
 } from '@mui/material'
 import { doc, serverTimestamp, setDoc } from 'firebase/firestore'
 import { useCallback, useState } from 'react'
-import { useLeadSourcePicklist } from '../hooks/use-lead-source-picklist'
+import { useCrmPicklist } from '../hooks/use-crm-picklist'
 import {
   addPicklistValue,
-  crmLeadSourceValuesRouteUrl,
-  type LeadSourceValuesRequest,
-  type LeadSourceValuesResponse,
+  crmPicklistValuesRouteUrl,
   movePicklistValue,
+  picklistReplacements,
+  type PicklistValuesAction,
+  type PicklistValuesRequest,
+  type PicklistValuesResponse,
   setPicklistDefault,
   setPicklistValueActive,
+  setPicklistValueGroup,
   sortPicklistValues,
-} from '../model/lead-source-values'
+} from '../model/picklist-values'
 import { crmTaskCallScope } from '../model/task-routes'
 
-export interface LeadSourceValuesCardProps {
+export interface PicklistValuesCardProps {
+  /** Which of the CRM's standard picklists this card manages. */
+  picklistId: CrmPicklistId
   /** The mounted site, or `null` at the organization level. */
   hostId: string | null
   /** The org whose list this is; `null` while it settles. */
@@ -90,36 +97,71 @@ export interface LeadSourceValuesCardProps {
   createHostId: string | null
 }
 
+/** Each object's noun, singular and plural, for the card's sentences. */
+const OBJECT_NOUNS: Record<CrmPicklistObject, [string, string]> = {
+  contact: ['contact', 'contacts'],
+  company: ['company', 'companies'],
+  deal: ['deal', 'deals'],
+  lead: ['lead', 'leads'],
+  task: ['task', 'tasks'],
+}
+
+/** "a", "a and b", "a, b and c". */
+function sentenceList(words: readonly string[]): string {
+  return words.length < 2
+    ? (words[0] ?? '')
+    : `${words.slice(0, -1).join(', ')} and ${words[words.length - 1]}`
+}
+
+/** The objects whose records hold the field's label, in the definition's order. */
+function targetObjects(definition: CrmPicklistDefinition): CrmPicklistObject[] {
+  return [...new Set(definition.targets.map((target) => target.object))]
+}
+
 /** The add and rename dialog's state: which value, if any, is being renamed. */
 type NameDialog = { mode: 'add' } | { mode: 'rename'; value: CrmPicklistValue } | null
 
 /**
- * THE LEAD SOURCE VALUES (AGL-3298) — Salesforce's Lead Source picklist,
- * managed where the org's lead fields are.
+ * ONE STANDARD PICKLIST'S VALUES (AGL-3298, AGL-3510) — Salesforce's
+ * picklist value set for a standard field, managed on the Fields tab of the
+ * object the field belongs to.
  *
- * Every move that touches only the LIST — add, reorder by drag or arrows,
- * sort A–Z, activate, deactivate, default — is one client write of the
- * whole document, guarded against a cached read like every seeded save on
- * the Fields page. The two that change RECORDS — rename, and delete with a
- * replacement — go to `crm/lead-source-values`, which rewrites the list and
- * every lead and contact holding the old label together; see that route.
+ * Standard values are marked, and cannot be deleted — every org has them —
+ * but rename, reorder, regroup, deactivate and default are theirs as much
+ * as an added value's. Every move that touches only the LIST — add,
+ * reorder by drag or arrows, sort A–Z, activate, deactivate, group,
+ * default — is one client write of the whole document, guarded against a
+ * cached read like every seeded save on the Fields page. The two that
+ * change RECORDS — rename, and delete with a replacement — go to
+ * `crm/picklist-values`, which rewrites the list and every record the
+ * definition's targets name together; see that route.
  *
- * An org that has never edited its list reads the starter set, and the
- * first move here writes it down as the org's own.
+ * An org that has never edited the list reads the standard values, and the
+ * first move here writes them down as the org's own.
  */
-export function LeadSourceValuesCard(props: LeadSourceValuesCardProps) {
-  const { hostId, orgId, createHostId } = props
+export function PicklistValuesCard(props: PicklistValuesCardProps) {
+  const { picklistId, hostId, orgId, createHostId } = props
   const firestore = useFirestore()
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
-  const { picklist, stored, ready, fromCache } = useLeadSourcePicklist(orgId)
+  const { definition, picklist, stored, ready, fromCache } = useCrmPicklist(picklistId, orgId)
   const [busy, setBusy] = useState(false)
   const [nameDialog, setNameDialog] = useState<NameDialog>(null)
   const [draftName, setDraftName] = useState('')
+  const [draftGroup, setDraftGroup] = useState('')
+  const [draftMeaning, setDraftMeaning] = useState('')
   const [nameError, setNameError] = useState('')
   const [deleting, setDeleting] = useState<CrmPicklistValue | null>(null)
   const [replaceWith, setReplaceWith] = useState('')
   const [dragFrom, setDragFrom] = useState<number | null>(null)
+
+  const groups = definition.groups ?? []
+  const meanings = definition.meanings ?? []
+  const [noun, nouns] = OBJECT_NOUNS[definition.object]
+  const holders = targetObjects(definition).map((object) => OBJECT_NOUNS[object])
+  const field = definition.label.toLowerCase()
+  const failed = `The ${definition.plural} could not be saved.`
+  const isStandard = (value: CrmPicklistValue) => isStandardPicklistValueId(definition, value.id)
 
   /** Write the whole list — the list-only moves above. */
   const save = useCallback(
@@ -127,9 +169,9 @@ export function LeadSourceValuesCard(props: LeadSourceValuesCardProps) {
       if (!orgId || busy) return
       setBusy(true)
       try {
-        const verdict = await writeGuardedBySeed({ subject: 'lead source list', fromCache }, () =>
+        const verdict = await writeGuardedBySeed({ subject: `${field} list`, fromCache }, () =>
           setDoc(
-            doc(firestore, 'orgs', orgId, CRM_COLLECTIONS.picklists, CRM_LEAD_SOURCE_PICKLIST),
+            doc(firestore, 'orgs', orgId, CRM_COLLECTIONS.picklists, picklistId),
             {
               values: next.values,
               defaultValueId: next.defaultValueId,
@@ -154,56 +196,59 @@ export function LeadSourceValuesCard(props: LeadSourceValuesCardProps) {
         enqueueSnackbar(done, { variant: 'success', persist: false })
       } catch (error) {
         console.error(error)
-        enqueueSnackbar('The lead sources could not be saved.', { variant: 'error', allowDuplicate: true })
+        enqueueSnackbar(failed, { variant: 'error', allowDuplicate: true })
       } finally {
         setBusy(false)
       }
     },
-    [orgId, busy, fromCache, firestore, stored, createHostId, enqueueSnackbar],
+    [orgId, busy, field, fromCache, firestore, picklistId, stored, createHostId, enqueueSnackbar, failed],
   )
 
   /** A rename or a delete — the moves that change records too. */
   const post = useCallback(
-    async (request: LeadSourceValuesRequest): Promise<LeadSourceValuesResponse | null> => {
+    async (request: PicklistValuesAction): Promise<PicklistValuesResponse | null> => {
       const scope = crmTaskCallScope(hostId, orgId)
       if (!scope || busy) return null
       setBusy(true)
       try {
-        const response = await authorizedFetch(user, crmLeadSourceValuesRouteUrl(), {
+        const response = await authorizedFetch(user, crmPicklistValuesRouteUrl(), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...request, ...scope }),
+          body: JSON.stringify({ ...request, picklistId, ...scope } satisfies PicklistValuesRequest),
         })
         const payload = (await response.json().catch(() => ({}))) as { error?: string }
         if (!response.ok) {
-          enqueueSnackbar(payload.error || 'The lead sources could not be saved.', {
-            variant: 'warning',
-            persist: false,
-          })
+          enqueueSnackbar(payload.error || failed, { variant: 'warning', persist: false })
           return null
         }
-        return payload as LeadSourceValuesResponse
+        return payload as PicklistValuesResponse
       } catch (error) {
         console.error(error)
-        enqueueSnackbar('The lead sources could not be saved.', { variant: 'error', allowDuplicate: true })
+        enqueueSnackbar(failed, { variant: 'error', allowDuplicate: true })
         return null
       } finally {
         setBusy(false)
       }
     },
-    [hostId, orgId, busy, user, enqueueSnackbar],
+    [hostId, orgId, busy, user, picklistId, enqueueSnackbar, failed],
   )
 
-  const moved = (result: LeadSourceValuesResponse) => {
-    const records = result.leads + result.contacts
-    return records
-      ? ` — ${result.leads.toLocaleString()} lead${result.leads === 1 ? '' : 's'} and ` +
-          `${result.contacts.toLocaleString()} contact${result.contacts === 1 ? '' : 's'} updated`
+  /** " — 2 leads and 1 contact updated", or nothing when no record held the value. */
+  const moved = (result: PicklistValuesResponse) => {
+    const counts = targetObjects(definition).map((object) => {
+      const count = result.updated?.[object] ?? 0
+      const [one, many] = OBJECT_NOUNS[object]
+      return { count, text: `${count.toLocaleString()} ${count === 1 ? one : many}` }
+    })
+    return counts.some((entry) => entry.count)
+      ? ` — ${sentenceList(counts.map((entry) => entry.text))} updated`
       : ''
   }
 
   const openAdd = () => {
     setDraftName('')
+    setDraftGroup('')
+    setDraftMeaning('')
     setNameError('')
     setNameDialog({ mode: 'add' })
   }
@@ -216,7 +261,10 @@ export function LeadSourceValuesCard(props: LeadSourceValuesCardProps) {
   const submitName = async () => {
     if (!nameDialog) return
     if (nameDialog.mode === 'add') {
-      const move = addPicklistValue(picklist, draftName)
+      const move = addPicklistValue(definition, picklist, draftName, {
+        group: draftGroup || null,
+        meaning: draftMeaning || null,
+      })
       if (move.ok === false) return void setNameError(move.error)
       setNameDialog(null)
       await save(move.picklist, `“${draftName.trim()}” added`)
@@ -252,7 +300,7 @@ export function LeadSourceValuesCard(props: LeadSourceValuesCardProps) {
 
   const rowActions = (value: CrmPicklistValue): RowActionsMenuItem[] => {
     const isDefault = picklist.defaultValueId === value.id
-    return [
+    const items: RowActionsMenuItem[] = [
       {
         key: 'rename',
         label: 'Rename',
@@ -269,7 +317,7 @@ export function LeadSourceValuesCard(props: LeadSourceValuesCardProps) {
         onClick: () =>
           void save(
             setPicklistDefault(picklist, isDefault ? null : value.id),
-            isDefault ? 'Default cleared' : `New leads start as “${value.label}”`,
+            isDefault ? 'Default cleared' : `New ${nouns} start as “${value.label}”`,
           ),
       },
       {
@@ -285,19 +333,25 @@ export function LeadSourceValuesCard(props: LeadSourceValuesCardProps) {
             value.active ? `“${value.label}” deactivated` : `“${value.label}” activated`,
           ),
       },
-      {
+    ]
+    // A standard value is every organization's: it is deactivated, never deleted.
+    if (!isStandard(value)) {
+      items.push({
         key: 'delete',
         label: 'Delete…',
         icon: <MdiIcon path={mdiDeleteOutline.path} size={0.8} />,
         destructive: true,
         disabled: busy,
         onClick: () => openDelete(value),
-      },
-    ]
+      })
+    }
+    return items
   }
 
-  const replacements = crmPicklistActiveValues(picklist).filter(
-    (value) => value.id !== deleting?.id,
+  const replacements = deleting ? picklistReplacements(definition, picklist, deleting.id) : []
+  const columns = groups.length ? 5 : 4
+  const heldBy = sentenceList(holders.map(([, many]) => many)).replace(/^./, (letter) =>
+    letter.toUpperCase(),
   )
 
   return (
@@ -308,11 +362,15 @@ export function LeadSourceValuesCard(props: LeadSourceValuesCardProps) {
         sx={{ justifyContent: 'space-between', alignItems: { sm: 'center' } }}
       >
         <Stack spacing={0.25}>
-          <Typography variant="subtitle1">{'Lead source values'}</Typography>
+          <Typography variant="subtitle1">{`${definition.label} values`}</Typography>
           <Typography variant="body2" color="text.secondary">
-            {'The choices in every lead’s Lead source select, in this order. ' +
-              'An import or an API write naming anything else is refused. ' +
-              'A deactivated value stays on the records that hold it.'}
+            {`The choices in every ${noun}’s ${definition.label} select, in this order. ` +
+              (definition.restricted
+                ? 'An import or an API write naming anything else is refused. '
+                : '') +
+              'A deactivated value stays on the records that hold it. ' +
+              'Standard values come with every organization and cannot be deleted; ' +
+              'add your own beside them.'}
           </Typography>
         </Stack>
         {orgId ? (
@@ -331,11 +389,12 @@ export function LeadSourceValuesCard(props: LeadSourceValuesCardProps) {
         ) : null}
       </Stack>
       {!ready ? null : (
-        <ScrollTable size="small" aria-label="Lead source values">
+        <ScrollTable size="small" aria-label={`${definition.label} values`}>
           <TableHead>
             <TableRow>
               <TableCell sx={{ width: 120 }}>{'Order'}</TableCell>
               <TableCell>{'Value'}</TableCell>
+              {groups.length ? <TableCell>{'Group'}</TableCell> : null}
               <TableCell>{'Status'}</TableCell>
               <TableCell align="right" />
             </TableRow>
@@ -343,9 +402,9 @@ export function LeadSourceValuesCard(props: LeadSourceValuesCardProps) {
           <TableBody>
             {picklist.values.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={4}>
+                <TableCell colSpan={columns}>
                   <Typography variant="body2" color="text.secondary">
-                    {'No values yet. Add one, and every lead can be given it.'}
+                    {`No values yet. Add one, and every ${noun} can be given it.`}
                   </Typography>
                 </TableCell>
               </TableRow>
@@ -404,8 +463,43 @@ export function LeadSourceValuesCard(props: LeadSourceValuesCardProps) {
                   </Stack>
                 </TableCell>
                 <TableCell>
-                  <Typography variant="body2">{value.label}</Typography>
+                  <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                    <Typography variant="body2">{value.label}</Typography>
+                    {isStandard(value) ? (
+                      <Chip size="small" variant="outlined" label="Standard" />
+                    ) : null}
+                  </Stack>
                 </TableCell>
+                {groups.length ? (
+                  <TableCell sx={{ minWidth: 150 }}>
+                    <TextField
+                      select
+                      size="small"
+                      variant="standard"
+                      value={value.group ?? ''}
+                      disabled={busy || !orgId}
+                      onChange={(event) => {
+                        const group = String(event.target.value) || null
+                        const name = groups.find((entry) => entry.id === group)?.label
+                        void save(
+                          setPicklistValueGroup(definition, picklist, value.id, group),
+                          name ? `“${value.label}” is ${name}` : `“${value.label}” has no group`,
+                        )
+                      }}
+                      fullWidth
+                      slotProps={{
+                        select: { displayEmpty: true, 'aria-label': `Group of ${value.label}` },
+                      }}
+                    >
+                      <MenuItem value="">{'None'}</MenuItem>
+                      {groups.map((group) => (
+                        <MenuItem key={group.id} value={group.id}>
+                          {group.label}
+                        </MenuItem>
+                      ))}
+                    </TextField>
+                  </TableCell>
+                ) : null}
                 <TableCell>
                   <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', alignItems: 'center' }}>
                     {value.active ? null : (
@@ -431,19 +525,21 @@ export function LeadSourceValuesCard(props: LeadSourceValuesCardProps) {
       )}
       {ready && !stored ? (
         <Typography variant="caption" color="text.secondary">
-          {'This is the starter list. Your first change here makes it your organization’s own.'}
+          {'These are the standard values. Your first change here makes the list your ' +
+            'organization’s own.'}
         </Typography>
       ) : null}
 
       <Dialog open={nameDialog !== null} onClose={() => setNameDialog(null)} fullWidth maxWidth="xs">
         <DialogTitle>
-          {nameDialog?.mode === 'rename' ? `Rename “${nameDialog.value.label}”` : 'Add a lead source'}
+          {nameDialog?.mode === 'rename' ? `Rename “${nameDialog.value.label}”` : `Add a ${field}`}
         </DialogTitle>
         <DialogContent>
           <Stack spacing={1.5} sx={{ pt: 1 }}>
             {nameDialog?.mode === 'rename' ? (
               <DialogContentText variant="body2">
-                {'Every lead and contact holding this value is updated to the new name.'}
+                {`Every ${sentenceList(holders.map(([one]) => one))} holding this value ` +
+                  'is updated to the new name.'}
               </DialogContentText>
             ) : null}
             <TextField
@@ -463,6 +559,43 @@ export function LeadSourceValuesCard(props: LeadSourceValuesCardProps) {
               autoFocus
               fullWidth
             />
+            {nameDialog?.mode === 'add' && groups.length ? (
+              <TextField
+                select
+                size="small"
+                label="Group"
+                value={draftGroup}
+                onChange={(event) => setDraftGroup(String(event.target.value))}
+                fullWidth
+                slotProps={{ select: { displayEmpty: true }, inputLabel: { shrink: true } }}
+              >
+                <MenuItem value="">{'None'}</MenuItem>
+                {groups.map((group) => (
+                  <MenuItem key={group.id} value={group.id}>
+                    {group.label}
+                  </MenuItem>
+                ))}
+              </TextField>
+            ) : null}
+            {nameDialog?.mode === 'add' && meanings.length ? (
+              <TextField
+                select
+                size="small"
+                label="Means"
+                value={draftMeaning}
+                onChange={(event) => {
+                  setDraftMeaning(String(event.target.value))
+                  setNameError('')
+                }}
+                fullWidth
+              >
+                {meanings.map((meaning) => (
+                  <MenuItem key={meaning} value={meaning}>
+                    {meaning}
+                  </MenuItem>
+                ))}
+              </TextField>
+            ) : null}
           </Stack>
         </DialogContent>
         <DialogActions>
@@ -482,7 +615,7 @@ export function LeadSourceValuesCard(props: LeadSourceValuesCardProps) {
         <DialogContent>
           <Stack spacing={1.5} sx={{ pt: 1 }}>
             <DialogContentText variant="body2">
-              {'The value leaves the list for good. Leads and contacts that hold it ' +
+              {`The value leaves the list for good. ${heldBy} that hold it ` +
                 'are moved to the value you pick here, or cleared. To keep it on ' +
                 'those records instead, deactivate it.'}
             </DialogContentText>
@@ -519,6 +652,6 @@ export function LeadSourceValuesCard(props: LeadSourceValuesCardProps) {
     </Stack>
   )
 }
-LeadSourceValuesCard.displayName = 'LeadSourceValuesCard'
+PicklistValuesCard.displayName = 'PicklistValuesCard'
 
-export default LeadSourceValuesCard
+export default PicklistValuesCard

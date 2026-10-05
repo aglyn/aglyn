@@ -42,12 +42,22 @@ let mockStored: Array<Record<string, unknown>> = []
 /** The last plan the table read with, or null when it read nothing. */
 let mockPlan: { filters: unknown[] } | null = null
 
-// The org's lead source list (AGL-3298), read as the starter set.
-jest.mock('../hooks/use-lead-source-picklist', () => {
-  const { effectiveCrmLeadSourcePicklist } = jest.requireActual('@aglyn/aglyn/app-utils/crm')
-  const picklist = effectiveCrmLeadSourcePicklist(null)
+/** The org's stored picklist document; `null` reads as the standard values alone. */
+let mockPicklistDoc: Record<string, unknown> | null = null
+
+// The org's picklists (AGL-3298, AGL-3510), each read from `mockPicklistDoc`.
+jest.mock('../hooks/use-crm-picklist', () => {
+  const { crmPicklistDefinition, effectiveCrmPicklist } = jest.requireActual(
+    '@aglyn/aglyn/app-utils/crm',
+  )
   return {
-    useLeadSourcePicklist: () => ({ picklist, stored: false, ready: true, fromCache: false }),
+    useCrmPicklist: (id: string) => ({
+      definition: crmPicklistDefinition(id),
+      picklist: effectiveCrmPicklist(id, mockPicklistDoc),
+      stored: mockPicklistDoc !== null,
+      ready: true,
+      fromCache: false,
+    }),
   }
 })
 
@@ -178,9 +188,14 @@ jest.mock('@aglyn/shared-ui-jsx/components/empty-state.component', () => {
   )
   return { __esModule: true, default: EmptyState, EmptyStateComponent: EmptyState }
 })
+// The row menus as the keys they would offer, so a case can read them without opening one.
 jest.mock('@aglyn/shared-ui-jsx/components/row-actions-menu.component', () => ({
   __esModule: true,
-  default: () => null,
+  default: (props: { label: string; items: Array<{ key: string }> }) => (
+    <span data-row-actions={props.label} hidden>
+      {props.items.map((item) => item.key).join(' ')}
+    </span>
+  ),
 }))
 
 const empty = { definitions: [], active: [], ready: true, fromCache: false }
@@ -257,37 +272,87 @@ describe('the Fields section tabs (AGL-2661)', () => {
 })
 
 /*
- * Lead source values (AGL-3298) — Salesforce's Lead Source picklist, kept
- * on the Leads tab. The list is the org's (here the starter set, which an
- * org reads until it writes its own), and a list-only move such as Add is
- * one write of the whole document, stamped org-wide the first time.
+ * Lead source values (AGL-3298, AGL-3510) — Salesforce's Lead Source
+ * picklist, kept on the Leads tab. The list is the org's (here the standard
+ * values, which an org reads until it writes its own), and a list-only move
+ * such as Add is one write of the whole document, stamped org-wide the
+ * first time. A standard value is marked, grouped, and cannot be deleted.
  */
-describe('the lead source values on the Leads tab (AGL-3298)', () => {
-  it('lists the values only on the Leads tab', () => {
+describe('the lead source values on the Leads tab (AGL-3298, AGL-3510)', () => {
+  it('lists the standard values only on the Leads tab, each marked Standard and grouped', () => {
     render(<ContactsFieldsSection hostId="host-1" org={{}} />)
     expect(screen.queryByRole('table', { name: 'Lead source values' })).toBeNull()
     fireEvent.click(screen.getByRole('tab', { name: 'Leads' }))
     const table = screen.getByRole('table', { name: 'Lead source values' })
-    for (const label of ['Web', 'Phone inquiry', 'Referral', 'Trade show', 'Other']) {
+    for (const label of ['Web', 'Phone inquiry', 'Webinar', 'Trade show', 'Purchased list', 'Other']) {
       expect(table.textContent).toContain(label)
     }
-    expect(screen.getByText(/This is the starter list/)).toBeTruthy()
+    expect(within(table).getAllByText('Standard')).toHaveLength(12)
+    expect(within(table).getByRole('columnheader', { name: 'Group' })).toBeTruthy()
+    expect(within(table).getByRole('combobox', { name: 'Group of Web' }).textContent).toBe('Inbound')
+    expect(within(table).getByRole('combobox', { name: 'Group of Purchased list' }).textContent).toBe(
+      'Outbound',
+    )
+    expect(screen.getByText(/These are the standard values/)).toBeTruthy()
   })
 
-  it('adds a value last, writing the whole list with the org-wide stamp', async () => {
+  it('offers no Delete on a standard value, and keeps Rename, Default and Deactivate', () => {
+    render(<ContactsFieldsSection hostId="host-1" org={{}} />)
+    fireEvent.click(screen.getByRole('tab', { name: 'Leads' }))
+    const actions = (label: string) =>
+      document.querySelector(`[data-row-actions="${label}"]`)?.textContent
+    expect(actions('Web')).toBe('rename default active')
+    expect(actions('Other')).toBe('rename default active')
+  })
+
+  it('offers Delete on a value the org added, beside the standard ones it stored', () => {
+    mockPicklistDoc = {
+      values: [
+        { id: 'web', label: 'Website', active: true, group: 'inbound' },
+        { id: 'referral', label: 'Referral', active: true },
+      ],
+      defaultValueId: null,
+    }
+    try {
+      render(<ContactsFieldsSection hostId="host-1" org={{}} />)
+      fireEvent.click(screen.getByRole('tab', { name: 'Leads' }))
+      const table = screen.getByRole('table', { name: 'Lead source values' })
+      const actions = (label: string) =>
+        document.querySelector(`[data-row-actions="${label}"]`)?.textContent
+      expect(actions('Referral')).toBe('rename default active delete')
+      expect(actions('Website')).toBe('rename default active')
+      // Twelve standard values, one of them relabeled, and the org's own.
+      expect(within(table).getAllByText('Standard')).toHaveLength(12)
+      expect(within(table).getByRole('combobox', { name: 'Group of Referral' }).textContent).toBe(
+        'None',
+      )
+      expect(screen.queryByText(/These are the standard values/)).toBeNull()
+    } finally {
+      mockPicklistDoc = null
+    }
+  })
+
+  it('adds a value last under the group picked, writing the whole list with the org-wide stamp', async () => {
     render(<ContactsFieldsSection hostId="host-1" org={{}} />)
     fireEvent.click(screen.getByRole('tab', { name: 'Leads' }))
     fireEvent.click(screen.getByRole('button', { name: 'Add value' }))
     fireEvent.change(screen.getByRole('textbox', { name: 'Value' }), {
-      target: { value: 'Webinar' },
+      target: { value: 'Podcast' },
     })
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Group' }))
+    fireEvent.click(screen.getByRole('option', { name: 'Inbound' }))
     fireEvent.click(screen.getByRole('button', { name: 'Add' }))
     await waitFor(() => expect(setDoc).toHaveBeenCalledTimes(1))
     const [ref, written, options] = (setDoc as jest.Mock).mock.calls[0]
     expect(ref.path).toBe('orgs/org-1/crmPicklists/leadSource')
     expect(options).toEqual({ merge: true })
-    expect(written.values.at(-1)).toEqual({ id: 'webinar', label: 'Webinar', active: true })
-    expect(written.values).toHaveLength(8)
+    expect(written.values.at(-1)).toEqual({
+      id: 'podcast',
+      label: 'Podcast',
+      active: true,
+      group: 'inbound',
+    })
+    expect(written.values).toHaveLength(13)
     expect(written).toMatchObject({ hostId: 'host-1', visibleTo: ['org'], defaultValueId: null })
   })
 

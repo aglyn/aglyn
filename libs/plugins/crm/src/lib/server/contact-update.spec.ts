@@ -633,7 +633,15 @@ describe('the write', () => {
 
     const refused = await post(onSite({ leadSource: 'Old list' }))
     expect(refused.payload.results).toEqual([
-      { contactId: 'ada', ok: false, error: 'Lead source must be one of: Website form.' },
+      {
+        contactId: 'ada',
+        ok: false,
+        // The org's own values, then every standard value it has not stored.
+        error:
+          'Lead source must be one of: Website form, Phone inquiry, Email inquiry, ' +
+          'Partner referral, Employee referral, External referral, Advertisement, ' +
+          'Trade show, Webinar, Word of mouth, Purchased list, Other.',
+      },
     ])
     expect(facetOf('ada').leadSource).toBe('Website form')
 

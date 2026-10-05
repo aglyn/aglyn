@@ -766,8 +766,9 @@ describe('POST /v1/leads', () => {
       leadSource: 'Old list',
     })
     expect(refused.status).toBe(400)
+    // The org's own values first, then every standard value it has not stored.
     expect(JSON.stringify(await json(refused))).toContain(
-      'Lead source must be one of: Outbound · Apollo, Website form.',
+      'Lead source must be one of: Outbound · Apollo, Website form, Phone inquiry, ',
     )
     expect(all(LEADS).filter((lead) => lead.email === 'kit@acme.com')).toEqual([])
     const matched = await json(

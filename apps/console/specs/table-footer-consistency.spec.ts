@@ -1028,11 +1028,12 @@ const NOT_A_LIST: Array<[string, string]> = [
       'the map is over a parsed prop, not over documents.',
   ],
   [
-    'libs/plugins/crm/src/lib/components/lead-source-values-card.tsx',
-    'The organization’s LEAD SOURCE picklist values (AGL-3298) — a settings ' +
-      'table, one row per value the merchant declared, bounded by ' +
-      '`CRM_PICKLIST_VALUES_MAX` (200) where the picklist is read and ' +
-      'written: the values live in one `crmPicklists/leadSource` document, ' +
+    'libs/plugins/crm/src/lib/components/picklist-values-card.tsx',
+    'The organization’s values for one standard CRM picklist (AGL-3298, ' +
+      'AGL-3510) — a settings table, one row per value, standard or the ' +
+      'merchant’s own, bounded by `CRM_PICKLIST_VALUES_MAX` (200) where the ' +
+      'picklist is read and written: the values live in one ' +
+      '`crmPicklists/{picklistId}` document, ' +
       'in the order the arrows on each row move. The bound is what a ' +
       'dropdown can carry, not how long the account has existed, so there ' +
       'is no second page for a footer to turn to.',

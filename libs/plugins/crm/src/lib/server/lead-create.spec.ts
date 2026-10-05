@@ -409,7 +409,12 @@ describe('the lead source', () => {
     const out = await call({ hostId: HOST, email: 'a@b.com', leadSource: 'Sales Navigator' })
     expect(out.status).toBe(400)
     expect(out.body).toEqual({
-      error: 'Lead source must be one of: Outbound · Apollo, Website form.',
+      // The org's own values, then every standard value it has not stored.
+      error:
+        'Lead source must be one of: Outbound · Apollo, Website form, ' +
+        'Phone inquiry, Email inquiry, Partner referral, Employee referral, ' +
+        'External referral, Advertisement, Trade show, Webinar, Word of mouth, ' +
+        'Purchased list, Other.',
       field: 'leadSource',
     })
     const inactive = await call({ hostId: HOST, email: 'a@b.com', leadSource: 'Old list' })

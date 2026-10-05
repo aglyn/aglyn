@@ -104,7 +104,7 @@ their company **as text** until it converts:
 | **Name** | The person's name. |
 | **Company** | The company's name, typed. Not a link — a thousand imported leads must not create a thousand companies. [Converting](#converting-a-lead) is what links or creates the company record, by this name or by the address's domain. |
 | **Job title**, **Phone**, **Website** | As on a business card. The phone is stored with its country code; the website as a full address. |
-| **Lead source** | Where the lead came from, picked from your organization's own [lead source values](./custom-fields.md#lead-source-values). A new lead starts from the list's default when it has one. Distinct from **Sources** below, which the site records. |
+| **Lead source** | Where the lead came from, picked from your organization's own [lead source values](./custom-fields.md#picklist-values). A new lead starts from the list's default when it has one. Distinct from **Sources** below, which the site records. |
 | **Tags** | Comma-separated, lower-cased. |
 | **Campaigns** | The site's [campaigns](../../marketing-and-automation/email-campaigns/overview.md#what-belongs-to-a-campaign) the lead is filed under, picked by name. Grouping, not consent: it decides which campaign pages list the lead, never whether anything mails them. Enrolling the lead in a sequence that is in a campaign files it there too. |
 | **Address** | Street, city, state, postal code and a two-letter country code. |
@@ -150,7 +150,7 @@ carries:
 | **Email** | The last verdict on the lead's address — see [Email state](#email-state) — or a dash when nothing is known. |
 | **Owner** | The team member working the lead, or *Unassigned*. A lead inherits its [contact's owner](#who-owns-a-lead) when one is assigned on capture. |
 | **Source** | Every surface that captured this person: Booking, the form they submitted, an import, New lead, or the API — and Sign-up on leads filed before sign-ups stopped making leads. |
-| **Lead source** | The lead's [lead source](./custom-fields.md#lead-source-values). |
+| **Lead source** | The lead's [lead source](./custom-fields.md#picklist-values). |
 | **Tags** | The lead's tags. |
 | **Campaign** | The campaigns the lead is filed under, by name. Under a site only — a campaign belongs to one site. |
 | **Last seen** | When the person last did something on your site. |
@@ -280,7 +280,7 @@ over no rows.
 | **Email** | Required, and the identity. A row whose address cannot be read is skipped as *No usable email address*; two rows with the same address skip the second as a duplicate. |
 | **Name** | The person's name, as the list and campaign merge tags read it. |
 | **Company name**, **Job title**, **Phone**, **Website** | The lead's own profile, as text. A phone is read with its country code (a bare ten-digit number as North American); a website as `acme.com` or a full address. A phone or website that cannot be read is dropped and reported, and the rest of the row is kept. |
-| **Lead source** | One of your organization's active [lead source values](./custom-fields.md#lead-source-values), in any capitalization. A row naming any other value is skipped whole as *Names a lead source that isn't one of this organization's active values*, and the drawer lists those values before you import. A lead the site already holds keeps a value the list has since deactivated. A new lead with the cell blank starts from the list's default. |
+| **Lead source** | One of your organization's active [lead source values](./custom-fields.md#picklist-values), in any capitalization. A row naming any other value is skipped whole as *Names a lead source that isn't one of this organization's active values*, and the drawer lists those values before you import. A lead the site already holds keeps a value the list has since deactivated. A new lead with the cell blank starts from the list's default. |
 | **Address line 1** … **Country (two-letter code)** | The address, six columns as the contacts import takes them. A country typed as a name rather than a code is dropped and reported. |
 | **Tags** | Comma or `\|` separated, lower-cased. |
 | **Campaigns** | Comma or `\|` separated, by **name**, matched to the site's own campaigns without regard to case and added to the campaigns the lead is already in. A row naming a campaign the site does not have is skipped whole as *Names a campaign this site does not have*, rather than filed under half of them. A column headed `Campaign` alone is read as the **Lead source**, which is what another tool's export means by it. |

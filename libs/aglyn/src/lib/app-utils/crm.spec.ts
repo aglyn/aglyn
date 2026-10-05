@@ -108,8 +108,17 @@ import {
   normalizeCrmMediaIds,
   readDealLineItems,
   CRM_LEAD_SOURCE_STARTER_LABELS,
+  CRM_PICKLIST_DEFINITIONS,
+  CRM_PICKLIST_IDS,
   type CrmPicklist,
   crmLeadSourceRefusal,
+  crmPicklistDefinition,
+  crmPicklistDefinitionsFor,
+  crmPicklistKey,
+  crmPicklistRefusal,
+  effectiveCrmPicklist,
+  isStandardCrmPicklistValue,
+  judgeCrmPicklistValue,
   crmPicklistDefaultLabel,
   crmPicklistOptions,
   crmPicklistRank,
@@ -1585,20 +1594,88 @@ describe('the lead source picklist', () => {
     })
   })
 
-  it('answers the starter list for an org that never wrote one, with stable slug ids', () => {
-    const starter = effectiveCrmLeadSourcePicklist(undefined)
-    expect(starter.values.map((value) => value.label)).toEqual([...CRM_LEAD_SOURCE_STARTER_LABELS])
-    expect(starter.values.map((value) => value.id)).toEqual([
+  it('answers the standard values for an org that never wrote a list, with stable slug ids', () => {
+    const standard = effectiveCrmLeadSourcePicklist(undefined)
+    expect(standard.values.map((value) => value.id)).toEqual([
       'web',
       'phone-inquiry',
-      'referral',
-      'partner',
-      'purchased-list',
+      'email-inquiry',
+      'partner-referral',
+      'employee-referral',
+      'external-referral',
+      'advertisement',
       'trade-show',
+      'webinar',
+      'word-of-mouth',
+      'purchased-list',
       'other',
     ])
-    expect(starter.defaultValueId).toBeNull()
+    expect(standard.values.every((value) => value.active)).toBe(true)
+    expect(standard.defaultValueId).toBeNull()
     expect(crmPicklistValueId('Web', ['web', 'web-2'])).toBe('web-3')
+  })
+
+  it('carries each standard value’s Inbound / Outbound group, and Other in neither', () => {
+    const standard = effectiveCrmLeadSourcePicklist(null)
+    const group = (id: string) => standard.values.find((value) => value.id === id)?.group
+    expect(group('web')).toBe('inbound')
+    expect(group('word-of-mouth')).toBe('inbound')
+    expect(group('purchased-list')).toBe('outbound')
+    expect(group('other')).toBeNull()
+  })
+
+  it('reads a list written from the earlier starter set as overrides, keeping Referral and Partner as the org’s own', () => {
+    const stored = {
+      values: [
+        ...CRM_LEAD_SOURCE_STARTER_LABELS.map((label, index) => ({
+          id: crmPicklistValueId(label, []),
+          label: index === 0 ? 'Website' : label,
+          active: label !== 'Partner',
+        })),
+      ],
+      defaultValueId: 'trade-show',
+    }
+    const list = effectiveCrmLeadSourcePicklist(stored)
+    // Stored order first, the standard values it lacks appended after it.
+    expect(list.values.slice(0, 7).map((value) => value.label)).toEqual([
+      'Website',
+      'Phone inquiry',
+      'Referral',
+      'Partner',
+      'Purchased list',
+      'Trade show',
+      'Other',
+    ])
+    expect(list.values.slice(7).map((value) => value.id)).toEqual([
+      'email-inquiry',
+      'partner-referral',
+      'employee-referral',
+      'external-referral',
+      'advertisement',
+      'webinar',
+      'word-of-mouth',
+    ])
+    expect(list.defaultValueId).toBe('trade-show')
+    expect(isStandardCrmPicklistValue('leadSource', 'web')).toBe(true)
+    expect(isStandardCrmPicklistValue('leadSource', 'referral')).toBe(false)
+    expect(list.values.find((value) => value.id === 'referral')?.group).toBeNull()
+    expect(list.values.find((value) => value.id === 'partner')?.active).toBe(false)
+  })
+
+  it('registers lead source alone, on the Leads tab, rewriting leads and contact facets', () => {
+    expect(CRM_PICKLIST_IDS).toEqual(['leadSource'])
+    expect(CRM_PICKLIST_DEFINITIONS).toHaveLength(1)
+    expect(crmPicklistDefinition('nope')).toBeNull()
+    expect(crmPicklistDefinitionsFor('lead').map((definition) => definition.id)).toEqual([
+      'leadSource',
+    ])
+    expect(crmPicklistDefinitionsFor('deal')).toEqual([])
+    expect(crmPicklistDefinition('leadSource')?.targets).toEqual([
+      { object: 'lead', field: 'leadSource', keyField: 'leadSourceKey' },
+      { object: 'contact', field: 'leadSource', facet: true },
+    ])
+    expect(crmPicklistKey('  Trade  SHOW ')).toBe(crmPicklistKey('trade show'))
+    expect(crmPicklistKey('')).toBeNull()
   })
 
   it('stores an active value as the list spells it, clears on blank, and refuses the rest naming what is allowed', () => {
@@ -1618,7 +1695,12 @@ describe('the lead source picklist', () => {
       ok: true,
       value: 'Sales Navigator',
     })
-    expect(crmLeadSourceRefusal({ values: [], defaultValueId: null })).toMatch(/no active lead sources/)
+    expect(crmLeadSourceRefusal({ values: [], defaultValueId: null })).toBe(
+      'This organization has no active lead sources. Add one under CRM › Fields › Leads.',
+    )
+    expect(crmPicklistRefusal('leadSource', list)).toBe(refusal.error)
+    expect(judgeCrmPicklistValue('leadSource', list, 'Sales Navigator')).toEqual(refusal)
+    expect(effectiveCrmPicklist('leadSource', null)).toEqual(effectiveCrmLeadSourcePicklist(null))
   })
 
   it('offers the active values, then the record’s own value marked, and ranks by the list order', () => {
