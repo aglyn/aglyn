@@ -23,6 +23,10 @@
  * snapshots) over records held in memory. The kit's specs and stories drive
  * the wizard and the export dialog through it; a surface can also use it to
  * show the wizard before its resource has a server half.
+ *
+ * It writes no stored record: its records live in a `Map`. A resource's real
+ * writes are its plugin's, where a dataset record's derived fields come from
+ * the data plugin's `datasetIntegrityFields` / `datasetIntegrityUpdate`.
  *=========================================*/
 
 import { escapeCsvCell } from '@aglyn/aglyn/app-utils/csv'

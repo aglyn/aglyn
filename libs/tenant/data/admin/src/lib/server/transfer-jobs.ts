@@ -35,6 +35,14 @@
  *     undo/{n}                                   a written chunk's undo entries
  *   Storage orgs/{orgId}/transfers/{jobId}/source   the file, inspected before it is stored
  *
+ * The engine never writes a resource's record itself. A row reaches its
+ * store only through the plugin's `apply` and `revert`, on the plugin's
+ * own write paths, so what a record write must derive is derived there:
+ * a dataset record's `datasetIntegrityFields` / `datasetIntegrityUpdate`
+ * (referenced ids and filter fields) by the data plugin, as on every other
+ * path that writes `records`. The `'records'` and `values` in this file are
+ * the transfer kind and planned rows in the job's own subcollections.
+ *
  * Every document is written with the Admin SDK only; the rules let members
  * holding `data.manage` read the job and nobody write anything.
  *

@@ -337,7 +337,16 @@ export interface TransferRecordsHooks {
   ): Promise<readonly TransferLockedRule[]> | readonly TransferLockedRule[]
   /** Rules each planned row must keep. */
   invariants?: readonly TransferInvariant[]
-  /** Writes one chunk's planned rows through the plugin's own write paths. */
+  /**
+   * Writes one chunk's planned rows through the plugin's own write paths.
+   * Nothing in this module or the job engine writes a record: `'records'`
+   * here is a transfer kind, and a row's `values` are planned values. So
+   * whatever a record write must derive is derived on the plugin's own path
+   * — for a dataset record, the data plugin's `datasetIntegrityFields` /
+   * `datasetIntegrityUpdate` (`referencedIds`, `filterKeys`,
+   * `filterValues`), which its `apply` and `revert` must call like every
+   * other writer of `records`.
+   */
   apply(
     ctx: TransferResourceContext,
     chunk: TransferChunk<PlannedTransferRow>,
