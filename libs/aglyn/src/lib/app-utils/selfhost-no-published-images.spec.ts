@@ -98,6 +98,10 @@ const NOT_A_CLAIM: Array<{ fragment: string; why: string }> = [
     fragment: 'already-published images get their intrinsic size',
     why: 'CHANGELOG restating a commit about MEDIA images — photographs on a site being measured, not container images. The changelog is generated from commit subjects, so this cannot be reworded in place.',
   },
+  {
+    fragment: 'published images size themselves from the composed tree',
+    why: 'CHANGELOG restating a commit about MEDIA images on a published page (AGL-3485), not container images; generated from the commit subject.',
+  },
 ]
 
 const SWEEP_EXTENSIONS = ['.md', '.mdx', '.yml', '.yaml']
