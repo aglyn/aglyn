@@ -81,6 +81,7 @@ content on the marketing site and is written separately.
 
 ### Fixed
 
+- **ci:** the promotion cadence check counts when production was quiet for days ([AGL-3563](https://linear.app/aglyn/issue/AGL-3563))
 - **crm:** an org owner can delete a lead a site holds ([AGL-3561](https://linear.app/aglyn/issue/AGL-3561))
 - **data:** every import and export asks its feature's plan and flag, like its own pages ([AGL-3548](https://linear.app/aglyn/issue/AGL-3548))
 - **plugins:** bookings, events and forms transfers lazy-load no library; lint green ([AGL-3557](https://linear.app/aglyn/issue/AGL-3557))
