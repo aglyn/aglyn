@@ -241,6 +241,9 @@ export type AglynNotificationType =
   // notifications they could never receive.
   | 'staff.userSignedUp'
   | 'staff.orgCreated'
+  // And somebody created a site (AGL-3491): the third growth event, the one
+  // that says an account started building. Same category, same reason.
+  | 'staff.siteCreated'
   // And when money moves (AGL-3267). The category was two signup types, so
   // the one thing a platform feed exists to report — revenue starting,
   // changing and stopping — was the one thing it did not.
@@ -336,6 +339,7 @@ export const NOTIFICATION_TYPE_LABELS: Record<AglynNotificationType, string> = {
   'system.operatorAlert': 'Operator alert',
   'staff.userSignedUp': 'New account',
   'staff.orgCreated': 'New workspace',
+  'staff.siteCreated': 'New site',
   'staff.subscriptionStarted': 'New subscription',
   'staff.subscriptionCanceled': 'Subscription canceled',
   'staff.planChanged': 'Plan changed',
@@ -442,6 +446,7 @@ export const NOTIFICATION_TYPE_LEVELS: Record<
   'system.operatorAlert': 'warning',
   'staff.userSignedUp': 'success',
   'staff.orgCreated': 'success',
+  'staff.siteCreated': 'success',
   'staff.subscriptionStarted': 'success',
   'staff.subscriptionCanceled': 'warning',
   'staff.planChanged': 'info',
