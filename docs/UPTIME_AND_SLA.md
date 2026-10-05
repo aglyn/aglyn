@@ -1610,6 +1610,40 @@ A check listed in this file but absent from the first command is a monitor that
 does not exist. A check present in all three but sitting at 0% is a monitor
 nobody is reading any more.
 
+### Why `Scheduled jobs` kept going red {#why-scheduled-jobs-kept-going-red}
+
+Read 2026-10-05 from the `scheduled-jobs` GCP policy's violation events, Cloud
+Scheduler and Cloud Run logs and the admin audit log (AGL-3580). Nine red windows
+in thirty days, and two causes account for eight of them. Neither was a job that
+had stopped working.
+
+| Window (UTC) | Length | Cause |
+| --- | --- | --- |
+| 09-07 07:48 | 5 h 20 min | `reap-unverified-orgs`' one daily run at 06:00 was refused; nothing retried it |
+| 09-17 05:54 | 12 min | functions deploy at 05:48 (new function), scheduler calls refused |
+| 09-20 04:40 | 14 min | functions deploy at 04:33, scheduler calls refused |
+| 09-24 19:10 | 14 min | beta.197 added `consent-group-changes` |
+| 09-28 13:09 | 11 min | a new job's function, deployed at 13:12 |
+| 09-28 23:37 | 17 min | beta.207 added `operator-alerts` |
+| 10-01 10:09 | 42 min | not attributable: no refusal, deploy or new job in the logs |
+| 10-02 01:15 | 8 min | beta.221 added `web-risk-recheck` and `security-holds` |
+| 10-05 18:39 | 14 min | beta.223 added `transfer-jobs` and `render-monitor` |
+
+1. **A new job was graded against fire times from before it existed.** The
+   never-reported grace was one watch window, opened 2026-08-20, so every
+   promotion that added a `SCHEDULED_JOBS` row went red within minutes of the
+   console going live. The route now keeps `jobFirstSeenAtMs` per job on the
+   `watch-window` document, and a job with no mark is judged from whichever
+   is later.
+2. **A deploy refuses the scheduler for about a minute, and nothing
+   retried.** Cloud Run answers "The request was not authenticated" while
+   `firebase deploy --only functions` replaces the services. Every-minute and
+   fifteen-minute jobs outlast that inside their grace. A daily job whose one
+   fire lands in it does not, and reads silent until the next day. The daily
+   factory (`consoleDailyCron`) now retries three times, a minute or more
+   apart. Only a call that never reached code is retried: the handler never
+   throws, so a route that refuses still ends the tick and still reads silent.
+
 ### Creating the missing `scheduled-jobs` check {#creating-the-missing-scheduled-jobs-check}
 
 **This is the one open item in AGL-1148's "wire an external monitor" step.**
