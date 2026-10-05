@@ -21,7 +21,7 @@ import { FieldValue } from 'firebase-admin/firestore'
 import { normalizeContactEmail } from '@aglyn/aglyn/app-utils/contacts'
 import { personKey } from '@aglyn/aglyn/app-utils/person-key'
 import {
-  missingRequiredPersonErasers,
+  missingRequiredPersonErasersAfterRepair,
   runPluginPersonErasure,
   type PluginPersonErasureReport,
 } from '@aglyn/aglyn/plugin-manager/plugin-person-erasure'
@@ -116,12 +116,12 @@ export async function erasePerson(options: ErasePersonOptions): Promise<ErasePer
   if (!email || !key) return { ok: false, skippedReason: 'invalid-email' }
   const db = options.firestore ?? defaultFirestore()
   /*
-   * A share the erasure promises that this process cannot run refuses the
-   * whole erasure BEFORE it writes anything: the request stays queued for a
-   * process whose boot registered it, rather than reporting a person erased
-   * who is still on file.
+   * A share the erasure promises that this process cannot run — even after
+   * its boot step has run once more — refuses the whole erasure BEFORE it
+   * writes anything: the request stays queued for a process whose boot
+   * registered it, rather than reporting a person erased who is still on file.
    */
-  const missing = missingRequiredPersonErasers()
+  const missing = await missingRequiredPersonErasersAfterRepair()
   if (missing.length) {
     throw new Error(
       `erasePerson refused: ${missing.join(', ')} declared a required person eraser ` +

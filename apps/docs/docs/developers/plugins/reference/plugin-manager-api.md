@@ -2214,7 +2214,13 @@ on the same terms as an account erasure's. A plan (`dryRun: true`) is handed
 to every eraser, which then touches no provider and writes nothing: it
 counts, and a figure it did not measure is `null`. An eraser that opens a
 credential only the console holds registers from `consoleServerDeclarations`,
-which the tenant runtime never loads.
+which the tenant runtime never loads. A required eraser that is not registered
+when the erasure starts gets one more boot step before the erasure refuses.
+
+The account, workspace and person eraser lists are each one per process, on
+`globalThis` (AGL-3464): the app registers from `instrumentation.ts`, which Next
+compiles apart from the route that runs the erasure, so a list kept in a module
+would be filled in one copy and read empty in the other.
 
 ## Person erasure — `plugin-person-erasure` (`/server`)
 
@@ -2255,13 +2261,14 @@ registerPluginPersonRecordsEraser(
 | `registerPluginPersonEraser(eraser, { pluginId? })` | One eraser per plugin; registering again replaces it in place. |
 | `registerPluginPersonRecordsEraser({ locate, erase }, { pluginId? })` | The record system's. One per process: the same plugin replaces its own, another is refused naming both. |
 | `runPluginPersonErasure({ orgId, email, key, dryRun, atMs })` | What the erasure calls after every site's door is closed: `locate`, every other eraser in registration order, then the records eraser's `erase`. Answers `{ contactIds, reports }`, each plugin's report by plugin id or `null` for an eraser that threw — logged, and isolated, unless the share is required. |
-| `missingRequiredPersonErasers()` | The required erasers not registered in this process; the erasure asks before it writes anything. |
+| `missingRequiredPersonErasers()` / `missingRequiredPersonErasersAfterRepair()` | The required erasers not registered in this process. The second runs the app's boot step once when any is missing, then asks again; the erasure asks it before it writes anything. |
 
 A share the erasure PROMISES the person — their contact record, their leads,
 their name on an order or a booking, their place on an audience list — is
 declared `"requiredPersonEraser": true` in `plugins.config.json`, compiled into
 `PLUGIN_REQUIRED_PERSON_ERASERS`. The erasure refuses to start while one is not
-registered, a records eraser that cannot `locate` stops it before anything is
+registered — after running the app's boot step once more, since a boot whose
+declarations failed looks the same — a records eraser that cannot `locate` stops it before anything is
 erased, and a required eraser that throws fails it after every other eraser
 ran; the request stays queued and the job retries it. A share that is a
 courtesy is isolated as before.

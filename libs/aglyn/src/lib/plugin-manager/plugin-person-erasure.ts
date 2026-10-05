@@ -84,6 +84,7 @@
 
 import { getRegisteringPluginId } from '../app-utils/registering-plugin'
 import { PLUGIN_REQUIRED_PERSON_ERASERS } from './first-party-plugins.generated'
+import { runPluginDeclarationsRepair } from './plugin-declarations-repair'
 
 export { PLUGIN_REQUIRED_PERSON_ERASERS }
 
@@ -137,8 +138,28 @@ interface Registration {
   eraser: PluginPersonEraser
 }
 
-const registrations: Registration[] = []
-let records: { pluginId: string; eraser: PluginPersonRecordsEraser } | null = null
+interface PersonErasers {
+  registrations: Registration[]
+  records: { pluginId: string; eraser: PluginPersonRecordsEraser } | null
+}
+
+/**
+ * One set of erasers per process, on `globalThis` (AGL-3464): the app registers its
+ * plugins' erasers from `instrumentation.ts`, which Next compiles apart from
+ * the route that runs the erasure, and a module-scoped list is filled in one
+ * copy and read empty in the other — the AGL-3412 shape.
+ * Here a required share registered in the other copy reads as missing, and
+ * every erasure refuses.
+ */
+const ERASERS_KEY = Symbol.for('@aglyn/aglyn:plugin-person-erasers')
+
+const globalScope = globalThis as typeof globalThis & {
+  [ERASERS_KEY]?: PersonErasers
+}
+
+const erasers: PersonErasers =
+  globalScope[ERASERS_KEY] ?? (globalScope[ERASERS_KEY] = { registrations: [], records: null })
+const registrations = erasers.registrations
 
 function ownerOf(options: { pluginId?: string } | undefined, what: string): string {
   const pluginId = (getRegisteringPluginId() ?? options?.pluginId ?? '').trim()
@@ -177,12 +198,12 @@ export function registerPluginPersonRecordsEraser(
   options?: { pluginId?: string },
 ): void {
   const pluginId = ownerOf(options, 'person records eraser')
-  if (records && records.pluginId !== pluginId) {
+  if (erasers.records && erasers.records.pluginId !== pluginId) {
     throw new Error(
-      `the person records eraser is "${records.pluginId}"'s; refused one from "${pluginId}"`,
+      `the person records eraser is "${erasers.records.pluginId}"'s; refused one from "${pluginId}"`,
     )
   }
-  records = { pluginId, eraser }
+  erasers.records = { pluginId, eraser }
 }
 
 /**
@@ -193,8 +214,25 @@ export function missingRequiredPersonErasers(
   required: readonly string[] = PLUGIN_REQUIRED_PERSON_ERASERS,
 ): string[] {
   const registered = new Set(registrations.map((entry) => entry.pluginId))
-  if (records) registered.add(records.pluginId)
+  if (erasers.records) registered.add(erasers.records.pluginId)
   return required.filter((pluginId) => !registered.has(pluginId))
+}
+
+/**
+ * {@link missingRequiredPersonErasers}, after running the app's boot step
+ * once when any is missing (AGL-3464): a boot whose declarations failed looks
+ * the same from here as one that never declared the eraser, and only the
+ * second is a reason to refuse. What the erasure asks before it writes
+ * anything.
+ */
+export async function missingRequiredPersonErasersAfterRepair(
+  required: readonly string[] = PLUGIN_REQUIRED_PERSON_ERASERS,
+): Promise<string[]> {
+  if (!missingRequiredPersonErasers(required).length) return []
+  await runPluginDeclarationsRepair().catch((error: unknown) => {
+    console.error('[plugins] the declarations repair failed before a person erasure', error)
+  })
+  return missingRequiredPersonErasers(required)
 }
 
 /** What one erasure's plugins did. */
@@ -212,15 +250,16 @@ export interface PluginPersonErasureOutcome {
  *
  * Throws in three cases, each about a share the erasure promises (`required`,
  * the compiled {@link PLUGIN_REQUIRED_PERSON_ERASERS} unless a spec passes its
- * own): before running anything, when a required eraser is not registered or
- * the records eraser cannot `locate`; and after running every eraser, when a
- * required one threw. Otherwise never.
+ * own): before running anything, when a required eraser is not registered
+ * even after the app's boot step has run once more, or the records eraser
+ * cannot `locate`; and after running every eraser, when a required one
+ * threw. Otherwise never.
  */
 export async function runPluginPersonErasure(
   target: PluginPersonErasureTarget,
   required: readonly string[] = PLUGIN_REQUIRED_PERSON_ERASERS,
 ): Promise<PluginPersonErasureOutcome> {
-  const missing = missingRequiredPersonErasers(required)
+  const missing = await missingRequiredPersonErasersAfterRepair(required)
   if (missing.length) {
     throw new Error(
       `[plugins] erasing a person in org ${target.orgId} refused: ${missing.join(', ')} ` +
@@ -234,6 +273,7 @@ export async function runPluginPersonErasure(
     dryRun: target.dryRun,
     atMs: target.atMs,
   }
+  const records = erasers.records
   const contactIds = records ? [...(await records.eraser.locate({ ...base }))] : []
   const reports: Record<string, PluginPersonErasureReport | null> = {}
   const failedRequired: string[] = []
@@ -264,7 +304,7 @@ export async function runPluginPersonErasure(
 
 /** The plugins with a person eraser, in the order they run: the records eraser last. */
 export function listPluginPersonErasers(): string[] {
-  const owner = records?.pluginId
+  const owner = erasers.records?.pluginId
   return [
     ...registrations.map((entry) => entry.pluginId).filter((pluginId) => pluginId !== owner),
     ...(owner ? [owner] : []),
@@ -274,7 +314,7 @@ export function listPluginPersonErasers(): string[] {
 /** Test seam: forget every eraser. */
 export function resetPluginPersonErasersForTests(): void {
   registrations.length = 0
-  records = null
+  erasers.records = null
 }
 
 /**
@@ -285,7 +325,7 @@ export function resetPluginPersonErasersForTests(): void {
  */
 export function standInRequiredPersonErasersForTests(): void {
   const registered = new Set(registrations.map((entry) => entry.pluginId))
-  if (records) registered.add(records.pluginId)
+  if (erasers.records) registered.add(erasers.records.pluginId)
   for (const pluginId of PLUGIN_REQUIRED_PERSON_ERASERS) {
     if (!registered.has(pluginId)) {
       registrations.push({ pluginId, eraser: async () => ({ standIn: true }) })
