@@ -59,7 +59,9 @@ import {
   type PluginRecordEmailStateRequest,
 } from '@aglyn/aglyn/plugin-manager/plugin-record-email-state'
 import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
+import { resetAfterResponseForTests } from './after-response'
 import {
+  capturedEmailCheckScheduledForTests,
   checkCapturedEmails,
   countUndeliverableEmails,
   findUndeliverableEmails,
@@ -110,6 +112,7 @@ beforeEach(() => {
   }
   resetMailDeliverabilityMemoryForTests()
   resetCapturedEmailChecksForTests()
+  resetAfterResponseForTests()
   resetPluginServicesForTests()
   registerPluginRecordEmailStateWriter(
     {
@@ -231,20 +234,53 @@ describe('checkCapturedEmails — "Would bounce" on the record', () => {
 })
 
 describe('scheduleCapturedEmailCheck — after the response, once', () => {
-  it('queues every capture of one invocation behind a single after()', () => {
+  it('queues every capture of one invocation behind a single after()', async () => {
     scheduleCapturedEmailCheck({ orgId: 'org-1', email: 'a@parked.example' })
+    // A capture arriving while after() is still being loaded joins the same flush.
     scheduleCapturedEmailCheck({ orgId: 'org-1', email: 'b@parked.example' })
+    await capturedEmailCheckScheduledForTests()
+    scheduleCapturedEmailCheck({ orgId: 'org-1', email: 'c@parked.example' })
     scheduleCapturedEmailCheck({ orgId: 'org-1', email: 'not an address' })
+    await capturedEmailCheckScheduledForTests()
     expect(mockAfter).toHaveLength(1)
-    expect(queuedCapturedEmailsForTests().map((item) => item.email)).toEqual(['a@parked.example', 'b@parked.example'])
+    expect(queuedCapturedEmailsForTests().map((item) => item.email)).toEqual([
+      'a@parked.example',
+      'b@parked.example',
+      'c@parked.example',
+    ])
     expect(stamps).toEqual([])
   })
 
-  it('checks nothing outside a request — the backfill covers those writes', () => {
+  it('runs the check once the response has gone', async () => {
+    scheduleCapturedEmailCheck({ orgId: 'org-1', email: 'a@parked.example' })
+    scheduleCapturedEmailCheck({ orgId: 'org-1', email: 'sam@lifespire.example' })
+    await capturedEmailCheckScheduledForTests()
+    expect(queuedCapturedEmailsForTests()).toHaveLength(2)
+    // The flush reads the platform store, which this file's firebase-admin
+    // refuses: the check was reached, and its failure is logged, not thrown.
+    await mockAfter[0]()
+    expect(queuedCapturedEmailsForTests()).toHaveLength(0)
+    expect(console.error).toHaveBeenCalledWith('[deliverability] captured addresses could not be checked', expect.any(Error))
+    // The next capture asks for a flush of its own.
+    scheduleCapturedEmailCheck({ orgId: 'org-1', email: 'b@parked.example' })
+    await capturedEmailCheckScheduledForTests()
+    expect(mockAfter).toHaveLength(2)
+  })
+
+  it('checks nothing outside a request — the backfill covers those writes — and says so once', async () => {
     mockInRequest = false
     scheduleCapturedEmailCheck({ orgId: 'org-1', email: 'a@parked.example' })
+    scheduleCapturedEmailCheck({ orgId: 'org-1', email: 'b@parked.example' })
+    await capturedEmailCheckScheduledForTests()
     expect(mockAfter).toHaveLength(0)
     expect(queuedCapturedEmailsForTests()).toHaveLength(0)
+    scheduleCapturedEmailCheck({ orgId: 'org-1', email: 'c@parked.example' })
+    await capturedEmailCheckScheduledForTests()
+    expect(queuedCapturedEmailsForTests()).toHaveLength(0)
+    const refusals = (console.error as jest.Mock).mock.calls.filter(([message]) =>
+      String(message).startsWith('[deliverability] after() refused'),
+    )
+    expect(refusals).toHaveLength(1)
   })
 })
 

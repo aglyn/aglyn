@@ -61,6 +61,7 @@ import {
   SITE_ICON_VERSION_PARAM,
 } from '@aglyn/aglyn/app-utils/site-icon-set'
 import type { NextApiRequest, NextApiResponse } from 'next'
+import { scheduleAfterResponse } from './after-response'
 import { analyticsDayExpiresAt } from './analytics-retention'
 import { firebaseAdmin } from './firebase-admin'
 import { recordMediaServe } from './media-serve-count'
@@ -858,56 +859,6 @@ export function mediaCdnDisplayCopy(
     return null
   }
   return { contentType }
-}
-
-type AfterResponse = (task: () => Promise<void>) => void
-
-let afterResponseLoad: Promise<AfterResponse | null> | null = null
-
-/**
- * Next's `after()`, loaded when first asked for rather than imported, for the
- * reason `capture-email-check.ts` gives. Through `import()` and not
- * `require()`: this package is an ES module, where a bare `require` is not
- * defined, and a lazy regeneration that silently never ran left every asset
- * in production at encoder generation 1 (AGL-3486).
- */
-function loadAfterResponse(): Promise<AfterResponse | null> {
-  afterResponseLoad ??= import('next/server').then(
-    (loaded) =>
-      typeof (loaded as { after?: unknown }).after === 'function'
-        ? (loaded as { after: AfterResponse }).after
-        : null,
-    (error: unknown) => {
-      console.error('[media-cdn] next/server could not be loaded', error)
-      return null
-    },
-  )
-  return afterResponseLoad
-}
-
-/**
- * Runs `task` once the response has been sent, through Next's `after()`.
- * False where there is no request to run after — a script — and the task is
- * then not run at all. Every false is logged: the work it drops is invisible
- * otherwise.
- */
-async function scheduleAfterResponse(task: () => Promise<void>): Promise<boolean> {
-  const after = await loadAfterResponse()
-  if (!after) {
-    console.error('[media-cdn] after() is unavailable; the task was not scheduled')
-    return false
-  }
-  try {
-    after(() =>
-      task().catch((error) => {
-        console.error('[media-cdn] after-response task failed', error)
-      }),
-    )
-    return true
-  } catch (error) {
-    console.error('[media-cdn] after() refused the task', error)
-    return false
-  }
 }
 
 /**
@@ -1883,7 +1834,7 @@ export async function serveMediaCdn(
         if (outcome === 'failed') {
           console.error('[media-cdn] delivery copies could not be regenerated', scopeSegment, mediaId)
         }
-      })
+      }, '[media-cdn]')
     }
     if (!hashed) {
       setCacheControl(stableCacheControlFor(docServedType))

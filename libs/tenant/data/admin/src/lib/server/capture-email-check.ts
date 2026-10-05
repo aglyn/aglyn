@@ -38,9 +38,11 @@
  *
  * `after()` rather than a bare promise (AGL-2327): a serverless invocation
  * is frozen the moment its response is sent, and work scheduled any other
- * way does not run. Outside a request — a script, a spec — there is nothing
- * to defer to, and nothing is checked; the backfill covers what those
- * write.
+ * way does not run. `after-response.ts` loads it, and says why through
+ * `import()`: the `require()` this module once used compiled to a
+ * ReferenceError under Turbopack, and the check never ran in production.
+ * Outside a request — a script, a spec — there is nothing to defer to, and
+ * nothing is checked; the backfill covers what those write.
  *
  * ## The check's own verdict, and only that, is taken back
  *
@@ -68,6 +70,7 @@ import {
   mailGatewayStanding,
   normalizeDeliverabilityEmail,
 } from '@aglyn/shared-util-email'
+import { scheduleAfterResponse } from './after-response'
 import {
   isGatewayHeldVerdict,
   isNoMailServerVerdict,
@@ -224,23 +227,8 @@ export async function checkCapturedEmails(
 
 const queued: CapturedEmail[] = []
 let flushScheduled = false
-
-type AfterResponse = (task: () => Promise<void>) => void
-
-/**
- * Next's `after()`, required when first asked for rather than imported:
- * `next/server` evaluates web `Request` classes at load, which a jsdom spec
- * reaching one of the writers cannot, and this module rides every writer's
- * import. `null` where it cannot be loaded.
- */
-function afterResponse(): AfterResponse | null {
-  try {
-    const loaded = require('next/server') as { after?: AfterResponse }
-    return typeof loaded?.after === 'function' ? loaded.after : null
-  } catch {
-    return null
-  }
-}
+/** The flush being handed to `after()`, until it has been; the spec awaits it. */
+let scheduling: Promise<void> | null = null
 
 /** Runs whatever is queued. Exported for the spec; production reaches it through `after()`. */
 export async function flushCapturedEmailChecks(deps: MailDeliverabilityDeps = {}): Promise<CapturedEmailCheckReport> {
@@ -261,15 +249,19 @@ export function scheduleCapturedEmailCheck(item: CapturedEmail): void {
     if (queued.length >= QUEUE_MAX) return
     queued.push({ ...item })
     if (flushScheduled) return
-    try {
-      const after = afterResponse()
-      if (!after) throw new Error('no request to run after')
-      after(() => flushCapturedEmailChecks().then(() => undefined))
-      flushScheduled = true
-    } catch {
-      // No request to run after: a script or a spec. Nothing is checked.
+    // Set before `after()` is loaded, so every capture until then joins
+    // this flush rather than asking for its own.
+    flushScheduled = true
+    scheduling = scheduleAfterResponse(
+      () => flushCapturedEmailChecks().then(() => undefined),
+      '[deliverability]',
+    ).then((scheduled) => {
+      if (scheduled) return
+      // No request to run after: a script or a spec. Nothing is checked,
+      // and what was queued meanwhile goes with it.
       queued.length = 0
-    }
+      flushScheduled = false
+    })
   } catch (error) {
     console.error('[deliverability] a captured address could not be queued', error)
   }
@@ -279,6 +271,12 @@ export function scheduleCapturedEmailCheck(item: CapturedEmail): void {
 export function resetCapturedEmailChecksForTests(): void {
   queued.length = 0
   flushScheduled = false
+  scheduling = null
+}
+
+/** Settles once the last capture's flush was handed to `after()`, or dropped. For the spec. */
+export async function capturedEmailCheckScheduledForTests(): Promise<void> {
+  await scheduling
 }
 
 /** What is queued, for the spec. */
