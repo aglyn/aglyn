@@ -66,7 +66,7 @@ fields, each read by its own type.
 | Record | Where its fields show |
 | --- | --- |
 | **Contacts** | **More fields** in the **Properties** card on a contact's page, optional columns and filters on the contacts list, the CSV import, a form field's [destination](#save-a-form-field), and `custom` on `/v1/contacts`. |
-| **Companies** | **More fields** on a company's page and controls on its **Edit** form, optional columns on the companies list, the [companies CSV import](./companies.md#import-from-csv), and `custom` on `/v1/companies`. |
+| **Companies** | **More fields** on a company's page and controls on its **Edit** form, optional columns on the companies list, the [companies import and export](./companies.md#import), and `custom` on `/v1/companies`. |
 | **Deals** | **More fields** in the **Properties** card on a deal's page and controls on its **Edit** form, optional columns on the deals table, and `custom` on `/v1/deals`. |
 | **Leads** | **More fields** in the **Details** card on a lead's page and in the **New lead** drawer, optional columns on the leads list, and `custom` on `/v1/leads`. |
 
@@ -234,8 +234,8 @@ Salesforce's standard **Mr.**, **Ms.**, **Mrs.**, **Dr.** and **Prof.**, in no g
 beside any your organization adds. Every contact's page and the **New contact** drawer
 offer it as a select, and it is enforced the way lead source is: a salutation sent over
 [`/v1/contacts`](/api/resources/contacts) that the list does not hold is refused, naming
-the values allowed, and one in a [contacts CSV import](./import.md) is dropped from its row
-and reported. A rename renames it on every contact that holds it. Leads use the same
+the values allowed, and one in a [contacts import](./import.md) is yours to map onto the list,
+add to it or leave blank. A rename renames it on every contact that holds it. Leads use the same
 list: a lead's salutation is offered, enforced and renamed the same way, and travels to the
 contact when the lead converts.
 
@@ -300,7 +300,7 @@ records those tasks name are still written, but nothing stale is cleared, since
 - [Companies](./companies.md), [deals](./deals.md) and [leads](./leads.md) — the other
   records that carry them
 - [Leads](./leads.md#what-a-lead-holds) — where the lead source values are picked
-- [Import contacts from CSV](./import.md) — every custom field is an import target
+- [Import contacts and companies](./import.md) — every custom field is an import target, and an export column
 - [Forms & lead capture](../forms/overview.md)
 - [REST API — contacts](/api/resources/contacts), [companies](/api/resources/companies),
   [deals](/api/resources/deals), [leads](/api/resources/leads)

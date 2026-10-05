@@ -60,17 +60,13 @@ import { crmShareChipLabel } from '../model/crm-sharing'
 import { useCrmScope } from '../hooks/use-crm-scope'
 import { contactsListSeed } from '../model/contacts-list-seed'
 import { crmRoutes } from '../model/crm-routes'
-import {
-  type ContactCsvOptions,
-  contactsCsv,
-  downloadTextFile,
-} from '../model/contacts-csv'
+import { CRM_CONTACTS_RESOURCE } from '../transfer/fields'
 import { useCrmRecordsQuota } from '../hooks/use-crm-records-quota'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import EmptyStateComponent from '@aglyn/shared-ui-jsx/components/empty-state.component'
 import ContactsBulkBar from './contacts-bulk-bar'
 import { CrmListActions } from './crm-list-toolbar'
-import { ContactImportButton } from './contact-import-drawer'
+import { CrmExportButton, CrmImportButton } from './crm-transfer-buttons'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   useFirestore,
@@ -826,19 +822,15 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
     [crmApi, enqueueSnackbar, router, routes],
   )
 
-  /*
-   * The file is `contactsCsv()`'s — every CRM column, the owner by address,
-   * one column per custom field — and the same options reach the bulk bar,
-   * so the table's export and the selection's are one file over two row
-   * sets (AGL-2621).
-   */
-  const csvOptions: ContactCsvOptions = useMemo(
-    () => ({ ownerEmail: members.memberEmail, customFields: customFields.active }),
-    [members.memberEmail, customFields.active],
+  // The list's filter, when one narrows it, for the export to read the same
+  // records the list does (AGL-3527).
+  const exportFilter = useMemo(
+    () =>
+      paged.plan.served.length || paged.plan.searched
+        ? { label: 'what the list shows', plan: paged.plan }
+        : null,
+    [paged.plan],
   )
-  const handleExport = useCallback(() => {
-    downloadTextFile('contacts.csv', 'text/csv', contactsCsv(contacts, csvOptions))
-  }, [contacts, csvOptions])
 
   return (
     <>
@@ -857,17 +849,11 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
             action: (
               <CrmListActions>
                 {suiteIncluded ? (
-                  <ContactImportButton hostId={hostId} org={org} />
+                  <CrmImportButton resource={CRM_CONTACTS_RESOURCE} noun="contacts" hostId={hostId} mappingZone="contacts" />
                 ) : (
-                  <CrmSuiteLockedButton>{'Import CSV'}</CrmSuiteLockedButton>
+                  <CrmSuiteLockedButton>{'Import'}</CrmSuiteLockedButton>
                 )}
-                <Button
-                  size="small"
-                  onClick={handleExport}
-                  disabled={!contacts.length}
-                >
-                  {'Export CSV'}
-                </Button>
+                <CrmExportButton resource={CRM_CONTACTS_RESOURCE} hostId={hostId} filter={exportFilter} />
                 {/* A button that opens a drawer — never a create form above the
                     list. Disabled until the org has resolved, because the route
                     resolves the org from the site and a click before that has
@@ -1030,7 +1016,7 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
                       <CrmSuiteLockedButton variant="contained" color="primary">
                         {'New contact'}
                       </CrmSuiteLockedButton>
-                      <CrmSuiteLockedButton>{'Import CSV'}</CrmSuiteLockedButton>
+                      <CrmSuiteLockedButton>{'Import'}</CrmSuiteLockedButton>
                     </Stack>
                   ) : (
                     <Stack direction="row" spacing={1}>
@@ -1046,14 +1032,14 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
                       >
                         {'New contact'}
                       </Button>
-                      <ContactImportButton hostId={hostId} org={org} />
+                      <CrmImportButton resource={CRM_CONTACTS_RESOURCE} noun="contacts" hostId={hostId} mappingZone="contacts" />
                     </Stack>
                   )
                 }
               />
             ) : (
               <>
-                <ContactsBulkBar hostId={hostId} org={org} scope={dataScope} consentGroup={consentGroup} rows={contacts} selected={selectedIds} onSelectedChange={setSelectedIds} csv={csvOptions} suiteLocked={!suiteIncluded} />
+                <ContactsBulkBar hostId={hostId} org={org} scope={dataScope} consentGroup={consentGroup} rows={contacts} selected={selectedIds} onSelectedChange={setSelectedIds} suiteLocked={!suiteIncluded} />
                 <CrmColumnOrderProvider value={grid.columnOrder}>
                   <ListTable
                     rows={contacts}

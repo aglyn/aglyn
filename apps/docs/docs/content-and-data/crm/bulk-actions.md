@@ -11,8 +11,8 @@ checkbox in the header for the whole page — and a bar appears above the table
 saying how many are selected, with one action for all of them. The rows on
 offer are the ones the open [view](./views.md) shows, so narrowing to "my leads
 in Texas" first and ticking the header checkbox acts on exactly those. Each
-section's bar offers what that record can do; every bar has **Export CSV**,
-**Export all…** and **Clear**.
+section's bar offers what that record can do; every bar can export the
+selection and **Clear** it.
 
 :::info Plan availability
 Bulk actions are part of the **CRM**, included from **Starter**. On Free every CRM
@@ -60,7 +60,7 @@ workspace's, enforced on the server rather than in the browser.
 | **Set stage** | Pick a lifecycle stage — subscriber, lead, marketing qualified, sales qualified, opportunity, customer, evangelist or other. Each contact is moved through the server, one at a time, so every move fires [Contact changed stage](./automations.md#the-events) exactly as a move on the contact's page does; a contact already at that stage fires nothing. A contact the move is refused for is named. |
 | **Set company** | Pick a [company](./companies.md) — the same picker a contact's record has, with a **Create** row for a name nobody has filed yet. Every selected contact is linked to it, and its name is written to their records. Leave the picker empty to unlink the selection. A contact already at that company is left alone. |
 | **Add to list** | Put the selected contacts on an [email audience](../../marketing-and-automation/email-campaigns/overview.md#email-lists). This runs the same check the audience's own page runs — see below. |
-| **Export CSV** | Download the selected rows as `contacts-selected.csv` — the same file the table's own **Export CSV** writes over the whole page. See [the contacts file](#the-contacts-file). |
+| **Export…** | Open the [export dialog](./export.md) on the selected contacts: choose every field you want, custom fields included, and the format. See [the contacts file](#the-contacts-file). |
 | **Remove from this site** | After a confirmation, the selected contacts leave this site's CRM. A person another site in your workspace also captured keeps that site's record; a person only this site held is deleted. A person who turned down your marketing email stays turned down after either one; see [Deleting and erasing](./contact-record.md#deleting-and-erasing). This is not a privacy erasure: the person's form submissions, orders, bookings and membership records are separate and are deleted from their own pages. A person who asks to be forgotten is erased one at a time from their record page — see [Deleting and erasing](./contact-record.md#deleting-and-erasing). |
 | **Clear** | Deselect everything. |
 
@@ -70,23 +70,15 @@ sharing a workspace with yours never sees yours change.
 
 ### The contacts file
 
-**Export CSV** — on the table for the page on screen, on the bar for the
-selection — writes every CRM column: email, salutation, first and last name,
-name, phone, mobile, home and other phone, fax, do not call, job title,
-department, company, owner, lifecycle stage, the mailing address and the other
-address as six columns each, birthdate, assistant and assistant phone, tags,
-sources, the last interaction, the last time the person
-[engaged](./contact-record.md#last-engaged) with a campaign, notes, and one
-column per [custom field](./custom-fields.md), headed by the field's label.
-**Reports to** is not written: it names another record, which a file cannot
-carry from one workspace to another. The owner is written as their **email address**,
-because that is what the import resolves an owner by.
-
-The header row is the [import's](./import.md) own vocabulary, so an export
-**re-imports without a hand mapping** — every column is proposed to its field
-from the header alone, except **Sources**, **Last interaction** and **Last
-engaged**, which the platform records and a file cannot set. **Download template** in the Import
-drawer hands you exactly this header over no rows.
+**Export…** — in the section's header for the list's current filter or every
+contact, on the bar for the selection — opens the [export dialog](./export.md).
+Every field is offered: the person, their phones, work, the mailing and other
+address as six columns each, the CRM's own fields, what the platform records
+(where a person was captured, the last interaction, the last time they
+[engaged](./contact-record.md#last-engaged) with a campaign) and one column
+per [custom field](./custom-fields.md). The company is written by name, the
+person they report to and the owner by email address, so a **Re-importable**
+file [imports](./import.md) back into the contacts it came from.
 
 ## Companies
 
@@ -94,7 +86,7 @@ drawer hands you exactly this header over no rows.
 | --- | --- |
 | **Add tag** / **Remove tag** | As on contacts: lowercased, up to 20 per company, a company at the cap skipped and named. A company's tags show in the list and on its page, and its form has a **Tags** field. |
 | **Set owner** | Pick a team member, or **Nobody** to clear the owner. |
-| **Export CSV** | Download the selected companies as `companies-selected.csv` — see [Export CSV](./companies.md#export-csv), whose header is the [companies import's](./companies.md#import-from-csv) own. |
+| **Export…** | Open the [export dialog](./export.md) on the selected companies — see [Export](./companies.md#export). |
 | **Delete** | After a confirmation, each selected company is [unlinked from its contacts and deleted](./companies.md#deleting-a-company), one after another, and each deletion is logged in the site's activity feed. A company with more than 500 linked contacts is unlinked from 500, kept, and named — delete again to continue. |
 
 ## Deals
@@ -197,6 +189,6 @@ you see are for the whole selection. A person's own page in the CRM has the same
 
 - [CRM overview](./overview.md)
 - [The contact record](./contact-record.md) — the same tags, owner and stage, one person at a time
-- [Import contacts from CSV](./import.md) and [import companies](./companies.md#import-from-csv) — the files an export re-imports as
+- [Import contacts and companies](./import.md) and [Export](./export.md) — the files an export re-imports as
 - [Companies](./companies.md), [Deals pipeline](./deals.md), [Tasks & follow-ups](./tasks.md), [Leads](./leads.md) — each section's records
 - [Email audiences](../../marketing-and-automation/email-campaigns/overview.md#email-lists) — including audiences built from a rule, which can target a contact's owner, lifecycle stage, company and custom fields.

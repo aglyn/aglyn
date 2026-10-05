@@ -1030,6 +1030,29 @@
           "id": "tagByForm"
         }
       ],
+      "transferResources": [
+        {
+          "$comment": "AGL-3527. Workspace records; opened under a site, a transfer reads that site's view and an import files new people under it.",
+          "key": "crm.contacts",
+          "label": "Contacts",
+          "singularLabel": "Contact",
+          "scope": "org",
+          "kinds": ["records"],
+          "formats": ["csv", "json", "ndjson"],
+          "limits": { "maxRows": 50000 },
+          "description": "Every contact field, custom fields included, with the company, the manager and the owner by name."
+        },
+        {
+          "key": "crm.companies",
+          "label": "Companies",
+          "singularLabel": "Company",
+          "scope": "org",
+          "kinds": ["records"],
+          "formats": ["csv", "json", "ndjson"],
+          "limits": { "maxRows": 50000 },
+          "description": "Every company field, custom fields included, with the parent company and the owner by name."
+        }
+      ],
       "contributes": {
         "console": {
           "shell": true,
@@ -1043,7 +1066,8 @@
             "consoleSearch",
             "formContactFields",
             "hostDashboard",
-            "orgDashboard"
+            "orgDashboard",
+            "transferResources"
           ]
         }
       }

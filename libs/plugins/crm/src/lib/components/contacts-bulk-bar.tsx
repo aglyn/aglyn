@@ -89,12 +89,7 @@ import {
   type ContactBulkSelection,
   type ContactBulkSkip,
 } from '../model/contacts-bulk-writes'
-import {
-  type ContactCsvOptions,
-  type ContactCsvRow,
-  contactsCsv,
-  downloadTextFile,
-} from '../model/contacts-csv'
+import type { ContactCsvRow } from '../model/contacts-csv'
 import {
   type CrmBulkOutcome,
   runCrmBulkBatch,
@@ -113,7 +108,8 @@ import {
   CrmBulkValueDialog,
   countNoun,
 } from './crm-bulk-bar-frame'
-import CrmExportAllButton from './crm-export-all-button'
+import { CrmExportButton } from './crm-transfer-buttons'
+import { CRM_CONTACTS_RESOURCE } from '../transfer/fields'
 import { CrmBulkShareButton } from './record-sharing-card'
 import { CrmSuiteLockedButton } from './crm-suite-lock'
 
@@ -135,12 +131,6 @@ export interface ContactsBulkBarProps {
   rows: readonly (ContactBulkRow & ContactCsvRow)[]
   selected: readonly string[]
   onSelectedChange: (ids: string[]) => void
-  /**
-   * How the export names an owner and which custom fields it carries — the
-   * table's own options, so the selection's file and the table's are one
-   * format (AGL-2621).
-   */
-  csv?: ContactCsvOptions
   /**
    * The org's plan lacks the CRM (AGL-2788), which the shell mounts no CRM
    * page for (AGL-2851). The owner, the stage and the company stand locked;
@@ -208,7 +198,6 @@ function ContactsBulkBarBody(props: ContactsBulkBarProps) {
     rows,
     selected,
     onSelectedChange,
-    csv,
     suiteLocked = false,
   } = props
   const { data: user } = useUser()
@@ -342,14 +331,6 @@ function ContactsBulkBarBody(props: ContactsBulkBarProps) {
     user,
     apply,
   ])
-
-  const handleExport = useCallback(() => {
-    downloadTextFile(
-      'contacts-selected.csv',
-      'text/csv',
-      contactsCsv(selectedRows, csv),
-    )
-  }, [selectedRows, csv])
 
   const handleDetach = useCallback(async () => {
     if (!scope || !selectedRows.length || !consentGroup) return
@@ -539,17 +520,11 @@ function ContactsBulkBarBody(props: ContactsBulkBarProps) {
         orgId={scope?.[1] ?? null}
         disabled={busy}
       />
-      <Button size="small" disabled={busy} onClick={handleExport}>
-        {'Export CSV'}
-      </Button>
-      {/*
-        The selection's file is the rows on screen; this one is the whole
-        collection, streamed by the server (AGL-2662).
-      */}
-      <CrmExportAllButton
-        resource="contacts"
-        orgId={scope?.[1] ?? null}
+      {/* The selection through the export dialog: every field, chosen (AGL-3527). */}
+      <CrmExportButton
+        resource={CRM_CONTACTS_RESOURCE}
         hostId={hostId}
+        selection={selectedRows.map((row) => row.$id)}
         disabled={busy}
       />
       {/*

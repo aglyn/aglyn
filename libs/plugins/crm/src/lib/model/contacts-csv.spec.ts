@@ -15,7 +15,9 @@
  * limitations under the License.
  */
 
-import { CONTACT_IMPORT_FIELDS, guessContactImportMapping } from './crm-import'
+import { buildTransferFieldCatalog, isTransferFieldWritable, matchHeaders } from '@aglyn/aglyn/data-transfer'
+import { CONTACT_ALIASES } from '../transfer/aliases'
+import { CONTACT_TRANSFER_FIELDS, crmCustomTransferFields } from '../transfer/fields'
 import {
   CONTACT_CSV_COLUMNS,
   contactCsvHeader,
@@ -122,26 +124,26 @@ describe('the contacts CSV', () => {
   })
 
   /**
-   * The round trip: every column the import has a field for is proposed
-   * back to that field from the header alone, and the template is that
-   * header over no rows.
+   * The round trip (AGL-3527): a file this export wrote before the field
+   * picker existed maps back onto the transfer catalog from its header
+   * alone, custom fields included, and the template is that header.
    */
-  it('re-imports under its own header, custom fields included', () => {
+  it('re-imports under its own header into the transfer catalog, custom fields included', () => {
     const fields = [{ key: 'plan', label: 'Plan' }]
     const header = contactCsvHeader(fields)
-    const mapping = guessContactImportMapping(header, fields)
+    const catalog = buildTransferFieldCatalog({
+      standard: CONTACT_TRANSFER_FIELDS,
+      custom: crmCustomTransferFields([{ ...fields[0], type: 'text', order: 0 }], 'contact'),
+    })
+    const { mapping } = matchHeaders(header, catalog.fields, { dictionaries: CONTACT_ALIASES })
     const mapped = new Set(Object.values(mapping))
-    for (const field of CONTACT_IMPORT_FIELDS) {
-      // Consent is a statement the import asks for, never a column an
-      // export writes back.
-      if (field === 'marketingConsent') continue
-      expect(mapped.has(field)).toBe(true)
+    for (const field of CONTACT_TRANSFER_FIELDS.filter(isTransferFieldWritable)) {
+      // Consent is never taken from a file, and the export writes notes
+      // only as the reader's own words.
+      if (field.id === 'marketingConsent' || field.id === 'leadSource' || field.id === 'reportsTo') continue
+      expect([field.id, mapped.has(field.id)]).toEqual([field.id, true])
     }
     expect(mapped.has('custom:plan')).toBe(true)
-    expect(mapping[header.indexOf('Sources')]).toBeUndefined()
-    expect(mapping[header.indexOf('Last interaction')]).toBeUndefined()
-    expect(mapping[header.indexOf('Last engaged')]).toBeUndefined()
-    expect(mapping[header.indexOf('Notes')]).toBeUndefined()
     expect(contactImportTemplateCsv(fields)).toBe(header.join(','))
   })
 })

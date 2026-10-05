@@ -65,12 +65,11 @@ import { formatMoney } from '../model/deal-board-model'
 import { useContactFieldDefinitions } from '../hooks/use-contact-field-definitions'
 import { useCrmScope } from '../hooks/use-crm-scope'
 import { useOrgMemberOptions } from '../hooks/use-org-member-options'
-import { type CompanyCsvOptions, companiesCsv } from '../model/companies-csv'
-import { downloadTextFile } from '../model/contacts-csv'
+import { CRM_COMPANIES_RESOURCE } from '../transfer/fields'
 import { crmRoutes } from '../model/crm-routes'
 import CompaniesBulkBar from './companies-bulk-bar'
 import CompanyEditDrawer from './company-edit-drawer'
-import { CompanyImportButton } from './company-import-drawer'
+import { CrmExportButton, CrmImportButton } from './crm-transfer-buttons'
 import { customFieldColumns } from './contact-custom-columns'
 
 export interface CompaniesSectionProps {
@@ -159,9 +158,9 @@ function textCell(value: unknown) {
  * ## Selection, the bar and the file (AGL-2621)
  *
  * The rows are selectable, and a selection raises `CompaniesBulkBar` over
- * the table. Export CSV writes the loaded page through `companiesCsv()` —
- * the same file the bar writes over the selection, headed as the import
- * reads it — and Import CSV opens the companies drawer beside it.
+ * the table. Import and Export open the console's import wizard and
+ * export dialog on `crm.companies` (AGL-3527): the export over the
+ * selection, the list's own query, or every company.
  */
 export function CompaniesSection(props: CompaniesSectionProps) {
   const { hostId, org, basePath } = props
@@ -213,18 +212,12 @@ export function CompaniesSection(props: CompaniesSectionProps) {
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   // A filter, a search or a page is a different set of rows.
   useEffect(() => setSelectedIds([]), [plan, page])
-  /*
-   * The owner is written by ADDRESS, because the companies import resolves
-   * an owner by email; the same options reach the bar, so the page's file
-   * and the selection's are one format.
-   */
-  const csvOptions: CompanyCsvOptions = useMemo(
-    () => ({ ownerEmail: members.emailFor }),
-    [members.emailFor],
+  // The list's filter, when one narrows it, for the export to read the same
+  // records the list does (AGL-3527).
+  const exportFilter = useMemo(
+    () => (plan.served.length || plan.searched ? { label: 'what the list shows', plan } : null),
+    [plan],
   )
-  const handleExport = useCallback(() => {
-    downloadTextFile('companies.csv', 'text/csv', companiesCsv(companies, csvOptions))
-  }, [companies, csvOptions])
   const openCompany = useCallback(
     (id: string) => router.push(routes.company(id)),
     [router, routes],
@@ -545,10 +538,8 @@ export function CompaniesSection(props: CompaniesSectionProps) {
         // The record actions, top right and never clipped (AGL-3311).
         action: (
           <CrmListActions>
-            <CompanyImportButton hostId={hostId} org={org} />
-            <Button size="small" onClick={handleExport} disabled={!companies.length}>
-              {'Export CSV'}
-            </Button>
+            <CrmImportButton resource={CRM_COMPANIES_RESOURCE} noun="companies" hostId={hostId} mappingZone="companies" />
+            <CrmExportButton resource={CRM_COMPANIES_RESOURCE} hostId={hostId} filter={exportFilter} />
             {newCompanyButton}
           </CrmListActions>
         ),
@@ -580,7 +571,6 @@ export function CompaniesSection(props: CompaniesSectionProps) {
           selected={selectedIds}
           onSelectedChange={setSelectedIds}
           members={members}
-          csv={csvOptions}
         />
         <CrmColumnOrderProvider value={grid.columnOrder}>
           <ListTable

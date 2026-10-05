@@ -87,6 +87,55 @@ export const COMPANY_DELETE_SCOPED_REFUSAL =
   'could not be read to unlink them. Ask an organization administrator to delete it.'
 
 /**
+ * Deletes a company the way the route does: its linked contacts let go of
+ * it ({@link COMPANY_DETACH_LIMIT} a call), the companies under it stand on
+ * their own, and the document goes once nothing points at it. Shared with
+ * an import's undo (AGL-3527), which removes the companies it created.
+ */
+export async function deleteCrmCompany(
+  firestore: FirebaseFirestore.Firestore,
+  orgRef: FirebaseFirestore.DocumentReference,
+  companyId: string,
+): Promise<{ deleted: boolean; detached: number; moreRemain: boolean }> {
+  const companyRef = orgRef.collection(CRM_COLLECTIONS.companies).doc(companyId)
+  // One past the bound, so "more remain" is a fact from the probe row
+  // rather than a guess from a full page.
+  const probe = await orgRef
+    .collection('contacts')
+    .where(CONTACT_COMPANY_IDS_FIELD, 'array-contains', companyId)
+    .limit(COMPANY_DETACH_LIMIT + 1)
+    .get()
+  const linked = probe.docs.slice(0, COMPANY_DETACH_LIMIT)
+  const moreRemain = probe.docs.length > COMPANY_DETACH_LIMIT
+  if (linked.length) {
+    const batch = firestore.batch()
+    for (const snapshot of linked) {
+      batch.update(
+        snapshot.ref,
+        companyDetachFields(snapshot.data() as Record<string, unknown>, companyId),
+      )
+    }
+    await batch.commit()
+    // The company is what the Contacts list filters by (AGL-3321).
+    await restampCrmListFields(
+      firestore,
+      orgRef.id,
+      'contacts',
+      linked.map((snapshot) => snapshot.id),
+    )
+  }
+  // The companies under this one stand on their own once it is gone (AGL-3514).
+  const children = await detachChildCompanies(
+    firestore,
+    orgRef.collection(CRM_COLLECTIONS.companies),
+    companyId,
+  )
+  const remaining = moreRemain || children.moreRemain
+  if (!remaining) await companyRef.delete()
+  return { deleted: !remaining, detached: linked.length, moreRemain: remaining }
+}
+
+/**
  * A contact's update when a company it names is deleted: the id out of the
  * mirror, and out of every holder's facet that named it. Another holder's
  * link to a different company is not read or written.
@@ -139,47 +188,9 @@ export const crmCompanyDeleteHandler: PluginApiHandler = async (req, res) => {
       return
     }
 
-    // One past the bound, so "more remain" is a fact from the probe row
-    // rather than a guess from a full page.
-    const probe = await orgRef
-      .collection('contacts')
-      .where(CONTACT_COMPANY_IDS_FIELD, 'array-contains', companyId)
-      .limit(COMPANY_DETACH_LIMIT + 1)
-      .get()
-    const linked = probe.docs.slice(0, COMPANY_DETACH_LIMIT)
-    const moreRemain = probe.docs.length > COMPANY_DETACH_LIMIT
-    if (linked.length) {
-      const batch = firestore.batch()
-      for (const snapshot of linked) {
-        batch.update(
-          snapshot.ref,
-          companyDetachFields(snapshot.data() as Record<string, unknown>, companyId),
-        )
-      }
-      await batch.commit()
-      // The company is what the Contacts list filters by (AGL-3321).
-      await restampCrmListFields(
-        firestore,
-        writer.orgId,
-        'contacts',
-        linked.map((snapshot) => snapshot.id),
-      )
-    }
-    // The companies under this one stand on their own once it is gone (AGL-3514).
-    const children = await detachChildCompanies(
-      firestore,
-      orgRef.collection(CRM_COLLECTIONS.companies),
-      companyId,
-    )
-    const remaining = moreRemain || children.moreRemain
-    if (!remaining) await companyRef.delete()
+    const removal = await deleteCrmCompany(firestore, orgRef, companyId)
 
-    const answer: CompanyDeleteResponse = {
-      ok: true,
-      deleted: !remaining,
-      detached: linked.length,
-      moreRemain: remaining,
-    }
+    const answer: CompanyDeleteResponse = { ok: true, ...removal }
     res.status(200).json(answer)
   } catch (error) {
     console.error('[crm] company-delete failed', companyId, error)

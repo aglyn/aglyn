@@ -397,7 +397,7 @@ Attachments are readable and writable through the
 - [Companies](./companies.md) and [the contact record](./contact-record.md) — the two records a deal is with
 - [Tasks & follow-ups](./tasks.md) and [Activities & the timeline](./activities.md) — what is owed on a deal and what has happened on it
 - [Bulk actions](./bulk-actions.md#deals) — stage, owner, loss, export and delete over a selection
-- [Import contacts from CSV](./import.md) — the same three steps the deals import walks
+- [Import contacts and companies](./import.md)
 - [Reports](./reports.md) — the open pipeline, its weighted forecast, and won against lost
 - [Automations for the CRM](./automations.md) — the three deal events, and what a won deal does on its own
 - [Workflows & actions](../../marketing-and-automation/workflows-and-actions/overview.md)

@@ -118,5 +118,5 @@ has switched AI off, none of it appears on that site's pages.
 - [The contact record](../content-and-data/crm/contact-record.md)
 - [Deals](../content-and-data/crm/deals.md)
 - [Leads](../content-and-data/crm/leads.md)
-- [Import contacts from CSV](../content-and-data/crm/import.md)
+- [Import contacts and companies](../content-and-data/crm/import.md)
 - [How Aglyn AI builds](./how-aglyn-ai-builds.md)

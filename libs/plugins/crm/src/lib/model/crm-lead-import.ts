@@ -103,7 +103,21 @@ import {
   mergeImportResults,
   parseImportFlag,
 } from '@aglyn/aglyn/app-utils/csv-import'
-import { parseImportRevenueCents } from './crm-company-import'
+
+/**
+ * A revenue cell in major units as minor units, or `null` when it is not
+ * an amount — a deal amount's reading without its ceiling, because a
+ * company's revenue is not a slip at ten billion.
+ */
+function parseImportRevenueCents(value: string): number | null {
+  const text = value
+    .trim()
+    .replace(/[,\s]/g, '')
+    .replace(/^[^\d.-]+/, '')
+  if (!/^\d+(\.\d+)?$/.test(text)) return null
+  const cents = Math.round(Number(text) * 100)
+  return Number.isSafeInteger(cents) ? cents : null
+}
 
 /** The shared ceilings, under this collection's names. */
 export const LEAD_IMPORT_MAX_ROWS = CSV_IMPORT_MAX_ROWS

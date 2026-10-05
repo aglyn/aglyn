@@ -22,8 +22,8 @@
  * What must hold on the section the shell mounts — the same component at the
  * organization level and under a site:
  *
- *  1. On Free, **New contact** and **Import CSV** stand locked — present and
- *     disabled — in the toolbar and in the empty state, while **Export CSV**,
+ *  1. On Free, **New contact** and **Import** stand locked — present and
+ *     disabled — in the toolbar and in the empty state, while **Export…**,
  *     the workspace's own data, does not.
  *  2. On Free the list carries the shell's own notice: the plan that includes
  *     the suite, and a link to the plans.
@@ -33,8 +33,15 @@
 
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
+import {
+  TransferLauncherContext,
+  type TransferLauncher,
+} from '@aglyn/aglyn/app-utils/transfer-launcher-context'
 import CrmConsolePage from './crm-console-page'
 import { CRM_CONSOLE_SECTIONS } from './crm-console-sections'
+
+/** The console shell's launcher, which the list's Import and Export open (AGL-3527). */
+const launcher: TransferLauncher = { openImport: jest.fn(), openExport: jest.fn(), close: jest.fn() }
 
 const FREE = { $id: 'org-1', plan: 'free' }
 const STARTER = { $id: 'org-1', plan: 'starter' }
@@ -150,21 +157,23 @@ const BASE_PATH = '/acme/hosts/shop/crm'
 
 const mount = (org: Record<string, unknown>) =>
   render(
-    <CrmConsolePage
-      hostId="host-1"
-      entitled
-      org={org as never}
-      releaseFlag={{ released: true, ready: true }}
-      basePath={BASE_PATH}
-      sections={CRM_CONSOLE_SECTIONS.map((section) => ({
-        id: section.id,
-        label: section.label,
-        href: `${BASE_PATH}/${section.id}`,
-        visible: true,
-      }))}
-      section="contacts"
-      segments={['contacts']}
-    />,
+    <TransferLauncherContext.Provider value={launcher}>
+      <CrmConsolePage
+        hostId="host-1"
+        entitled
+        org={org as never}
+        releaseFlag={{ released: true, ready: true }}
+        basePath={BASE_PATH}
+        sections={CRM_CONSOLE_SECTIONS.map((section) => ({
+          id: section.id,
+          label: section.label,
+          href: `${BASE_PATH}/${section.id}`,
+          visible: true,
+        }))}
+        section="contacts"
+        segments={['contacts']}
+      />
+    </TransferLauncherContext.Provider>,
   )
 
 /** One of the list's record actions, which sit in the card header (AGL-3334). */
@@ -179,8 +188,8 @@ describe('the Contacts list on Free', () => {
   it('locks adding a contact and importing a file, and keeps the export', () => {
     mount(FREE)
     expect(button('New contact').disabled).toBe(true)
-    expect(button('Import CSV').disabled).toBe(true)
-    expect(button('Export CSV').disabled).toBe(false)
+    expect(button('Import').disabled).toBe(true)
+    expect(button('Export…').disabled).toBe(false)
   })
 
   it("carries the shell's notice: the plan that includes the suite, and the way to it", () => {
@@ -206,12 +215,12 @@ describe('the Contacts list on Free', () => {
     mockContacts = []
     mount(FREE)
     const creates = screen.getAllByRole('button', { name: 'New contact' })
-    const imports = screen.getAllByRole('button', { name: 'Import CSV' })
+    const imports = screen.getAllByRole('button', { name: 'Import' })
     // The header's and the empty state's.
     expect(creates).toHaveLength(2)
     expect(imports).toHaveLength(2)
     expect(button('New contact').disabled).toBe(true)
-    expect(button('Import CSV').disabled).toBe(true)
+    expect(button('Import').disabled).toBe(true)
     for (const locked of [...creates, ...imports]) {
       expect((locked as HTMLButtonElement).disabled).toBe(true)
     }
@@ -227,7 +236,7 @@ describe('the Contacts list card (AGL-3334)', () => {
   it('holds its record actions in its header and ends at its list, the feed a card of its own', () => {
     mount(STARTER)
     const body = screen.getByTestId('card-body')
-    for (const name of ['Import CSV', 'Export CSV', 'New contact']) {
+    for (const name of ['Import', 'Export…', 'New contact']) {
       expect(button(name)).toBeTruthy()
       expect(within(body).queryByRole('button', { name })).toBeNull()
     }
@@ -240,7 +249,7 @@ describe('the Contacts list on Starter', () => {
   it('opens every act and draws no notice', () => {
     mount(STARTER)
     expect(button('New contact').disabled).toBe(false)
-    expect(button('Import CSV').disabled).toBe(false)
+    expect(button('Import').disabled).toBe(false)
     expect(screen.queryByText(/part of the CRM/)).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'View: All contacts' }))
     expect(

@@ -32,18 +32,6 @@
       "reason": "To fix: a CRM segment, deal, activity, pipeline or saved view created in the console; its id is routed by the console and the public API and referenced by other records."
     },
     {
-      "site": "libs/plugins/crm/src/lib/server/companies-import.ts: companies.add(…)",
-      "class": "RESOURCE",
-      "issue": "AGL-3083",
-      "reason": "To fix: a company, deal or task an import or the task route creates; routed at /v1/companies/{companyId}, /v1/deals/{dealId}, /v1/tasks/{taskId} and in the console."
-    },
-    {
-      "site": "libs/plugins/crm/src/lib/server/contacts-import.ts: collection.doc()",
-      "class": "RESOURCE",
-      "issue": "AGL-3083",
-      "reason": "To fix: a company, deal or task an import or the task route creates; routed at /v1/companies/{companyId}, /v1/deals/{dealId}, /v1/tasks/{taskId} and in the console."
-    },
-    {
       "site": "libs/plugins/crm/src/lib/server/deals-import.ts: deals.add(…)",
       "class": "RESOURCE",
       "issue": "AGL-3083",

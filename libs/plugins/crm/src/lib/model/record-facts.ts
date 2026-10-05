@@ -50,14 +50,8 @@ import {
   type CrmPipeline,
   type CrmTask,
 } from '@aglyn/aglyn/server'
-import {
-  COMPANY_IMPORT_FIELD_LABELS,
-  COMPANY_IMPORT_FIELDS,
-} from './crm-company-import'
-import {
-  CONTACT_IMPORT_FIELD_LABELS,
-  CONTACT_IMPORT_FIELDS,
-} from './crm-import'
+import type { TransferField, TransferFieldType } from '@aglyn/aglyn/data-transfer'
+import { COMPANY_TRANSFER_FIELDS, CONTACT_TRANSFER_FIELDS } from '../transfer/fields'
 import { DEAL_IMPORT_FIELD_LABELS, DEAL_IMPORT_FIELDS } from './crm-deal-import'
 import { LEAD_IMPORT_FIELD_LABELS, LEAD_IMPORT_FIELDS } from './crm-lead-import'
 
@@ -943,42 +937,46 @@ export function leadFacts(input: LeadFactsInput): CrmLeadFacts {
   }
 }
 
+/** A column's kind, as the matcher is told it, for each transfer field type. */
+const TRANSFER_TYPES: Partial<Record<TransferFieldType, CrmImportFieldType>> = {
+  email: 'email',
+  phone: 'phone',
+  url: 'url',
+  number: 'number',
+  integer: 'number',
+  currency: 'number',
+  percent: 'number',
+  date: 'date',
+  datetime: 'date',
+  boolean: 'yes-no',
+}
+
+/** The fields a transfer catalog lets a file write, as the import facts list them. */
+function transferImportFields(fields: readonly TransferField[]): {
+  keys: readonly string[]
+  labels: Record<string, string>
+  required: string
+  types: Record<string, CrmImportFieldType>
+} {
+  const writable = fields.filter((field) => !field.readOnly && !field.derived && !field.system)
+  return {
+    keys: writable.map((field) => field.id),
+    labels: Object.fromEntries(writable.map((field) => [field.id, field.label])),
+    required: writable.find((field) => field.required)?.id ?? '',
+    types: Object.fromEntries(
+      writable.flatMap((field) => (TRANSFER_TYPES[field.type] ? [[field.id, TRANSFER_TYPES[field.type] as CrmImportFieldType]] : [])),
+    ),
+  }
+}
+
 /** The standard fields of each import, with the type a column must hold for each. */
 const STANDARD_IMPORT_FIELDS: Record<
   CrmImportFactsCollection,
   { keys: readonly string[]; labels: Record<string, string>; required: string; types: Record<string, CrmImportFieldType> }
 > = {
-  contacts: {
-    keys: CONTACT_IMPORT_FIELDS,
-    labels: CONTACT_IMPORT_FIELD_LABELS,
-    required: 'email',
-    types: {
-      email: 'email',
-      phone: 'phone',
-      mobilePhone: 'phone',
-      homePhone: 'phone',
-      otherPhone: 'phone',
-      fax: 'phone',
-      assistantPhone: 'phone',
-      birthdate: 'date',
-      doNotCall: 'yes-no',
-      ownerEmail: 'email',
-      marketingConsent: 'yes-no',
-    },
-  },
-  companies: {
-    keys: COMPANY_IMPORT_FIELDS,
-    labels: COMPANY_IMPORT_FIELD_LABELS,
-    required: 'name',
-    types: {
-      phone: 'phone',
-      fax: 'phone',
-      ownerEmail: 'email',
-      website: 'url',
-      numberOfEmployees: 'number',
-      annualRevenue: 'number',
-    },
-  },
+  // The transfer catalogs' own ids (AGL-3527): what the import wizard maps to.
+  contacts: transferImportFields(CONTACT_TRANSFER_FIELDS),
+  companies: transferImportFields(COMPANY_TRANSFER_FIELDS),
   deals: {
     keys: DEAL_IMPORT_FIELDS,
     labels: DEAL_IMPORT_FIELD_LABELS,

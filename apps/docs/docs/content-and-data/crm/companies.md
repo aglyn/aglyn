@@ -191,51 +191,29 @@ workspace has turned on **Create companies from work email domains** in
 which case the company is created from the domain and the contact linked to
 it.
 
-## Import from CSV
+## Import
 
-**Import CSV**, in the card's header, takes a spreadsheet of companies — an export
-from another CRM, an account list — and files each one. A company already in
-your list is **updated** rather than added twice: a row is matched to an
-existing company by its **domain** first, and by its **name** when the row has
-no domain or no company carries it. Importing needs the same **Manage data**
-permission as creating a company.
+**Import**, in the card's header, takes a file of companies — a Salesforce
+accounts export, a HubSpot or Apollo list, a spreadsheet — through the
+[import wizard](./import.md). A company already in your list is **updated**
+rather than added twice: a row is matched by its **Aglyn ID**, then its
+**domain**, then its **name**, among the companies this site sees. Every
+field is offered, your company [custom fields](./custom-fields.md) included;
+a **parent company** is found by domain or name, and one the CRM lacks can be
+created; a list value your organization lacks is yours to map, add or leave
+blank. See [what each company field reads](./import.md#what-each-company-field-reads).
 
-The three steps are the ones the [contacts import](./import.md) walks:
-choose the file (up to 5,000 rows), match its columns — Aglyn proposes a match
-from the header names and shows the first row's value beside each — check the
-ten-row preview, then import in batches of 200 with a progress bar and a
-result that says how many were **added**, **updated** and **skipped**, with
-the skipped rows downloadable as a CSV that says why. **Download template**
-hands you the export's own header over no rows, so a sheet filled in against
-it maps itself.
+A new company counts against your plan's [records band](../../workspace-and-billing/billing-and-plans/overview.md#crm-records).
+An import can be undone for seven days.
 
-| Field | What is read |
-| --- | --- |
-| **Company name** | Required. A row without one is skipped. |
-| **Domain** | The bare hostname (`acme.com`); a URL or `www.` is stripped. What a row is matched on first. A cell that is not a hostname is dropped and reported. |
-| **Website**, **phone**, **fax**, **notes** | As on the company form; a phone or fax number that cannot be read is dropped and reported. |
-| **Type**, **Industry**, **Rating**, **Ownership**, **Account source** | A value of your organization's list, in any case. A value the list does not hold is dropped and reported — unless the company being updated already holds it. A new company with no value starts on the list's default. |
-| **Account number**, **Account site**, **Ticker symbol**, **SIC code** | As typed, cut to 40, 80, 20 and 20 characters. |
-| **Employees** | A whole number; `1,200` reads as 1200. Anything else is dropped and reported. |
-| **Annual revenue**, **Currency** | The revenue in the currency's main unit (`1250000.00`, a symbol and separators allowed), and a three-letter currency code. |
-| **Owner** | The email address of a member of your organization. An address that matches nobody leaves the company without an owner, and the result names those addresses. |
-| **Billing address line 1, line 2, city, state, postal code, country** | The billing address. Country must be a two-letter code. Headers from before the address was named billing — *Address line 1*, *City* — and Salesforce's — *Billing Street*, *Billing City* — map here too. |
-| **Shipping address line 1, line 2, city, state, postal code, country** | The shipping address, read the same way. |
-| **Tags** | Separated by `,` or `\|`, lowercased. Added to any tags the company already has. |
-| **Custom fields** | Every field defined on the **Companies** tab of [Fields](./custom-fields.md) is offered as a target, and a header that matches a field's label or key is proposed for it — ahead of a standard alias, so a company field called *Region* wins over the address's region. A value that does not fit the field's type is dropped and reported. On an update, only the fields the file carries are written. |
+## Export
 
-A new company counts against your plan's [records band](../../workspace-and-billing/billing-and-plans/overview.md#crm-records);
-on a plan whose band is a hard limit, rows past it are skipped as
-**CRM records limit reached** — updates to existing companies still go through.
-
-## Export CSV
-
-**Export CSV**, in the card's header, downloads the companies on screen as
-`companies.csv`; the [bulk bar's](./bulk-actions.md#companies) **Export CSV**
-downloads the selected rows as `companies-selected.csv`. Both write the same
-file: every column above plus the **contacts** count, with the owner written as
-their email address, under the header the import reads — so an export
-re-imports without a hand mapping, and the count maps to nothing.
+**Export…**, in the card's header, and the [bulk bar's](./bulk-actions.md#companies)
+**Export…** open the [export dialog](./export.md): choose the fields — every
+standard and custom field, the parent company and the owner by name, the
+contacts count — and the records: the selection, the list's current filter,
+or every company. The default, **Re-importable**, is a file that imports back
+into the companies it came from.
 
 ## Deleting a company
 

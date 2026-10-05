@@ -15,10 +15,9 @@
  * limitations under the License.
  */
 
-import {
-  COMPANY_IMPORT_FIELDS,
-  guessCompanyImportMapping,
-} from './crm-company-import'
+import { buildTransferFieldCatalog, isTransferFieldWritable, matchHeaders } from '@aglyn/aglyn/data-transfer'
+import { COMPANY_ALIASES } from '../transfer/aliases'
+import { COMPANY_TRANSFER_FIELDS } from '../transfer/fields'
 import {
   COMPANY_CSV_COLUMNS,
   companiesCsv,
@@ -108,20 +107,20 @@ describe('the companies CSV', () => {
   })
 
   /**
-   * The round trip: every field the import has is proposed back from the
-   * header alone, the contacts count maps to nothing, and the template is
-   * that header over no rows.
+   * The round trip (AGL-3527): a file this export wrote before the field
+   * picker existed maps back onto the transfer catalog from its header
+   * alone — the parent company it never carried aside — and the template
+   * is that header over no rows.
    */
-  it('re-imports under its own header', () => {
+  it('re-imports under its own header into the transfer catalog', () => {
     const header = [...COMPANY_CSV_COLUMNS]
-    const mapping = guessCompanyImportMapping(header)
+    const catalog = buildTransferFieldCatalog({ standard: COMPANY_TRANSFER_FIELDS })
+    const { mapping } = matchHeaders(header, catalog.fields, { dictionaries: COMPANY_ALIASES })
     const mapped = new Set(Object.values(mapping))
-    for (const field of COMPANY_IMPORT_FIELDS) {
-      expect(mapped.has(field)).toBe(true)
+    for (const field of COMPANY_TRANSFER_FIELDS.filter(isTransferFieldWritable)) {
+      if (field.id === 'parentCompany') continue
+      expect([field.id, mapped.has(field.id)]).toEqual([field.id, true])
     }
-    const contactsAt = header.indexOf('Contacts')
-    expect(contactsAt).toBeGreaterThanOrEqual(0)
-    expect(mapping[contactsAt]).toBeUndefined()
     expect(companyImportTemplateCsv()).toBe(header.join(','))
   })
 })

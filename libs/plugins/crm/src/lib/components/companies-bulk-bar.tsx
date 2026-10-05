@@ -50,15 +50,10 @@ import {
   planCompanyRemoveTag,
   planCompanySetOwner,
 } from '../model/companies-bulk-writes'
-import {
-  type CompanyCsvOptions,
-  type CompanyCsvRow,
-  companiesCsv,
-} from '../model/companies-csv'
+import type { CompanyCsvRow } from '../model/companies-csv'
 import { COMPANY_DETACH_LIMIT } from '../model/companies'
 import { deleteCompanyThroughRoute } from '../model/company-delete'
 import { normalizeBulkTag } from '../model/contacts-bulk-writes'
-import { downloadTextFile } from '../model/contacts-csv'
 import {
   type CrmBulkPlan,
   crmBulkWriters,
@@ -71,7 +66,8 @@ import {
   CrmBulkValueDialog,
   countNoun,
 } from './crm-bulk-bar-frame'
-import CrmExportAllButton from './crm-export-all-button'
+import { CrmExportButton } from './crm-transfer-buttons'
+import { CRM_COMPANIES_RESOURCE } from '../transfer/fields'
 import { useCrmApi } from './use-crm-api'
 import { useCrmSharingFollowUp } from '../hooks/use-crm-sharing'
 
@@ -89,8 +85,6 @@ export interface CompaniesBulkBarProps {
   onSelectedChange: (ids: string[]) => void
   /** The section's roster — already read for the Owner column. */
   members: OrgMemberOptions
-  /** How the export names an owner — the table's own options. */
-  csv?: CompanyCsvOptions
 }
 
 const NOUN: CrmBulkNoun = { singular: 'company', plural: 'companies' }
@@ -126,7 +120,7 @@ export function CompaniesBulkBar(props: CompaniesBulkBarProps) {
 CompaniesBulkBar.displayName = 'CompaniesBulkBar'
 
 function CompaniesBulkBarBody(props: CompaniesBulkBarProps) {
-  const { hostId, scope, rows, selected, onSelectedChange, members, csv } = props
+  const { hostId, scope, rows, selected, onSelectedChange, members } = props
   const firestore = useFirestore()
   const { confirm } = useConfirmationContext()
   const logActivity = useHostActivityLogger(hostId ?? undefined)
@@ -190,9 +184,6 @@ function CompaniesBulkBarBody(props: CompaniesBulkBarProps) {
     await runPlan(action, plan)
   }, [pending, scope, value, selectedRows, runPlan])
 
-  const handleExport = useCallback(() => {
-    downloadTextFile('companies-selected.csv', 'text/csv', companiesCsv(selectedRows, csv))
-  }, [selectedRows, csv])
 
   const handleDelete = useCallback(async () => {
     if (!scope || !selectedRows.length) return
@@ -308,17 +299,11 @@ function CompaniesBulkBarBody(props: CompaniesBulkBarProps) {
       <Button size="small" disabled={busy || !scope} onClick={() => openAction('owner')}>
         {'Set owner'}
       </Button>
-      <Button size="small" disabled={busy} onClick={handleExport}>
-        {'Export CSV'}
-      </Button>
-      {/*
-        The selection's file is the rows on screen; this one is the whole
-        collection, streamed by the server (AGL-2662).
-      */}
-      <CrmExportAllButton
-        resource="companies"
-        orgId={scope?.[1] ?? null}
+      {/* The selection through the export dialog: every field, chosen (AGL-3527). */}
+      <CrmExportButton
+        resource={CRM_COMPANIES_RESOURCE}
         hostId={hostId}
+        selection={selectedRows.map((row) => row.$id)}
         disabled={busy}
       />
       <Button

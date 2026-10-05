@@ -21,6 +21,7 @@ import { lazy } from 'react'
 import { CRM_CONSOLE_SECTIONS } from './components/crm-console-sections'
 import { CrmGlanceCard } from './components/crm-glance-card'
 import { BUNDLE_ID } from './constants/bundle-common'
+import { registerCrmTransferResourceUis } from './transfer/ui'
 import { withCrmOrgMount } from './hooks/use-crm-org-mount'
 import { registerCrmRecordCounts } from './model/crm-record-counts'
 import { registerCrmRecordRoutes } from './model/crm-record-routes'
@@ -61,6 +62,8 @@ const CrmTasksDueCard = lazy(
  */
 export function registerCrmConsole(): void {
   registerCrmRecordRoutes()
+  // How the import wizard and the export dialog name the CRM's records (AGL-3527).
+  registerCrmTransferResourceUis(BUNDLE_ID)
   // The CRM's records as another plugin's picker lists them (AGL-3080).
   registerCrmRecordLists()
   // The leads a site captured and the organization's contacts, counted for

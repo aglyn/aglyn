@@ -28,6 +28,7 @@ import {
 } from '@aglyn/aglyn/plugin-manager/plugin-membership-detach'
 import { registerPluginPersonRecordsEraser } from '@aglyn/aglyn/plugin-manager/plugin-person-erasure'
 import { BUNDLE_ID } from './constants/bundle-common'
+import { registerCrmTransferResources } from './transfer/register'
 
 /**
  * The plan feature every CRM resource of `/v1` needs, and the sentence its
@@ -77,6 +78,9 @@ const CRM_API_V1_RESOURCES: ReadonlyArray<readonly [string, ApiV1ResourceHandler
  * records band and collection sizes join `GET /v1/usage`. The API is the
  * console's alone, so the tenant runtime does not register them.
  *
+ * It registers the server half of the CRM's import and export resources
+ * (`transfer/register.ts`).
+ *
  * It also clears a removed container off the CRM's records: a campaign is
  * deleted from the console, and its owner asks every plugin's membership
  * detacher first (`server/container-detach.ts`).
@@ -115,6 +119,9 @@ export function registerCrmConsoleServerDeclarations(): void {
     async (ctx) => (await import('./server/api-v1/usage')).crmUsageFigures(ctx),
     { pluginId: BUNDLE_ID },
   )
+  // What the CRM imports and exports (AGL-3527): each resource's module
+  // loads with the first transfer that asks for it.
+  registerCrmTransferResources(BUNDLE_ID)
   // A removed container — a deleted campaign — comes off every lead and every
   // contact facet naming it, before its owner removes it (AGL-3080).
   if (!listPluginMembershipDetachers().includes(BUNDLE_ID)) {

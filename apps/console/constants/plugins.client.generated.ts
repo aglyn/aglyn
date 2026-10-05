@@ -59,7 +59,7 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     id: 'crm',
     apiPrefixes: ["crm"],
     register: {"console":"registerCrmConsole"},
-    contributes: {"console":{"shell":true,"routes":["/crm"],"orgRoutes":["/crm"],"slots":["consoleSearch","formContactFields","hostDashboard","orgDashboard"]}},
+    contributes: {"console":{"shell":true,"routes":["/crm"],"orgRoutes":["/crm"],"slots":["consoleSearch","formContactFields","hostDashboard","orgDashboard","transferResources"]}},
     load: () => import('@aglyn/plugins-crm'),
   },
   {

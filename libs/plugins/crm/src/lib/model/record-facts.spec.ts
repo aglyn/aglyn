@@ -637,7 +637,7 @@ describe('the pieces', () => {
     ])
     expect(contacts.fields.find((field) => field.key === 'email')).toEqual({
       key: 'email',
-      label: 'Email (required)',
+      label: 'Email',
       type: 'email',
       required: true,
     })

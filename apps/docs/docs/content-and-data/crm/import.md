@@ -1,105 +1,165 @@
 ---
 sidebar_position: 3
-title: Import contacts from CSV
-description: Bring a spreadsheet of people into the CRM — map its columns, preview the result, and import in batches with a report of what was added, updated and skipped.
+title: Import contacts and companies
+description: Bring people or companies into the CRM from a file — other CRMs' exports map themselves — see every match and conflict in a dry run, choose how each is handled, and undo for seven days.
 ---
 
-# Import contacts from CSV
+# Import contacts and companies
 
-**Import CSV**, on the Contacts section of the CRM, takes a spreadsheet of people —
-an export from another CRM, a sign-up sheet, a customer list — and adds each
-person to your contacts. Someone already in your contacts is **updated** rather
-than added twice: the file's phone, title, tags and other details are merged onto
-the record you already have.
+**Import**, in the header of the Contacts and Companies sections, takes a file
+of people or companies — an export from another CRM, a sign-up sheet, a
+customer list — and brings it in through the import wizard. Nothing is written
+until a dry run has shown you exactly what will happen to every row, and you
+have said how each conflict, guess and warning is handled.
 
-The address is `…/hosts/{site}/crm/contacts`. Importing needs the same
-**Manage data** permission as editing a contact.
+Importing needs the same **Manage data** permission as editing a contact.
 
 :::info Plan availability
-Importing is part of the **CRM**, included from **Starter**. On Free the Contacts and
-Leads sections are shown locked with the rest of the CRM, and there is no **Import CSV**.
-See [What each plan includes](./overview.md#what-each-plan-includes).
+Importing is part of the **CRM**, included from **Starter**. On Free the CRM's
+sections are shown locked, and there is no **Import**. Exporting the people a
+workspace holds stays open on every plan — see [Export](./export.md).
 :::
 
-## Three steps
+## The site an import files under
 
-1. **Choose the file.** A CSV with a header row. Up to **5,000 rows** per file —
-   split a larger one and import the pieces. Nothing is sent until you press
-   Import. **Download template** beside it hands you the export's own header
-   over no rows — every field below, plus one column per custom field — so a
-   sheet filled in against it maps itself.
-2. **Match the columns.** Each column in the file is matched to a contact field.
-   Aglyn proposes a match from the header names (`Email`, `Phone`, `Company`,
-   `Tags` and their usual variants) and shows the first row's value beside each
-   one so you can correct it. Choose **Do not import** for a column you do not
-   want. The **email** column is required; every other column is optional.
-   A **preview** of the first ten rows shows exactly what each mapping produces.
-3. **Import.** Rows are sent in batches of 200 with a progress bar. When it
-   finishes, the result says how many people were **added**, how many existing
-   contacts were **updated**, and how many rows were **skipped** — with a
-   **Download skipped rows** button that gives you those rows back as a CSV, with
-   a last column saying why, so you can fix them and import that file again.
-   When some of the imported addresses are on a domain with no mail server, the
-   result says how many: those records read **Would bounce** (see
-   [the lead's email state](./leads.md#email-state)), and campaigns and
-   sequences skip them.
+Every CRM record names the site that met it: who may see it, and — for a
+person — which site's profile of them the file fills in. Under a site, that is
+the site. At the organization level, **Import** asks which site first (an
+organization with one site is never asked), and remembers your pick for the
+session like every other create.
 
-Closing the drawer during an import stops it after the batch in progress. Rows
-already imported stay imported; run the same file again to finish, and the rows
-from the first run are reported as updated.
+## The steps
 
-## What each column can hold
+1. **Upload.** A CSV (comma, semicolon, tab or pipe separated), a JSON array or
+   NDJSON file, with a header row — or paste the rows. Up to **50,000 rows**
+   per file. The wizard guesses the separator, the encoding and whether the
+   first line is a header, and you can change each.
+2. **Columns.** Each column is matched to a field, with how sure the match is
+   and why: the field's own name, a spelling Salesforce, HubSpot, Apollo or
+   Pipedrive writes (the badge says which), a close spelling, or what the
+   values look like. Remap any column or leave it out. **Match columns with
+   AI** proposes a mapping from the headers and the kind of values in each
+   column — never a cell of the file.
+3. **Values.** What reading the file did, field by field: dates read
+   day-first or month-first (you choose when a date reads either way), phone
+   numbers put in international format, a blank country code. A value your
+   organization's lists do not hold — a salutation, a lead source, an industry —
+   is listed with a choice: use one of your values, **add** it to the list,
+   leave the field blank, or refuse those rows. A company, manager or owner
+   the file names that the CRM does not hold is listed the same way, with the
+   records it may mean: create it (companies only), use one of the suggestions,
+   leave it blank, or refuse those rows.
+4. **Matching.** Which existing record each row is about — by **Aglyn ID**
+   first, then by **email** for a contact, by **domain** then **name** for a
+   company — and which rows are new, matched, ambiguous or repeated in the
+   file.
+5. **Conflicts.** For each field: **overwrite** what the record holds, **fill
+   blanks** only (the default), or **keep existing**; tags are added to; and
+   whether a blank cell clears the field. Every row where the file and the
+   record disagree is listed, with a per-row override. A field the CRM never
+   lets a file change is shown locked, with why.
+6. **Review.** The dry run: how many rows will create, update, change
+   nothing, skip or fail, a before → after table, and every kind of warning,
+   each with its own **I understand** before **Import** is enabled.
+7. **Import.** Rows are written in chunks with a progress bar. Pause and
+   resume at any time; close the tab and the import carries on.
+8. **Results.** What happened to every row, a result file (your columns plus
+   the outcome, the reason and the record), and **Undo**.
+
+## What a file may not do
+
+Some rules hold whatever a file says. They are shown locked on the
+**Conflicts** step and counted on **Review**:
+
+| Field | The rule |
+| --- | --- |
+| **Email** (contacts) | An existing contact's email is who they are. A matched row never changes it; change it on the contact's page. |
+| **Marketing consent** (contacts) | Never taken from a file. A person gives consent on a form, or a team member records how it was given on the contact's page. The column is exported as it stands. |
+| **Lifecycle stage** (contacts) | Moves forward only. A later stage in the file advances the contact and tells automations, as moving it by hand does; an earlier one is held back. |
+| **Do not call** (contacts) | A file can turn it on, never off. |
+| **Full name** (contacts) | Built from the first and last names once either is set. |
+| **Parent company** (companies) | Never the company itself or one beneath it. Such a row fails, named in the results. |
+
+## What each contact field reads
 
 | Field | What is read |
 | --- | --- |
-| **Email** | Required. Trimmed and lowercased; a row whose email is not a valid address is skipped. |
-| **Salutation** | One of your organization's [salutations](./custom-fields.md#picklist-values), matched without regard to case and stored as the list spells it. One the list does not hold is dropped and reported. |
-| **First name**, **Last name** | The person's given and family names. When either is in the file, the display name is made of them, and a **Name** column is not needed. |
-| **Name** | The display name, for a file that keeps it as one column. |
-| **Phone**, **Mobile phone**, **Home phone**, **Other phone**, **Fax**, **Assistant phone** | Stored in international format (`+15125550123`). A ten-digit number is read as US/Canada; anything else needs its country code. A number that cannot be read is dropped and reported. Importing a phone number never sends anything to it. A column headed *Mobile* or *Cell* is the mobile phone. |
-| **Do not call** | `yes`, `true` or `1` marks the person [do not call](./contact-record.md#do-not-call). A file never takes the mark off. |
-| **Job title**, **Department**, **Assistant** | Free text. |
-| **Birthdate** | A past date, as `1984-07-21` or `7/21/1984`. Anything else is dropped and reported. |
-| **Company name** | Matched to an existing company of yours by name, or a new company is created — the result counts the new ones. |
-| **Mailing address line 1, line 2, city, state or region, postal code, country** | The mailing address. Country must be a two-letter code (`US`, `GB`); a spelled-out country name is dropped and reported. Plain *Address*, *City*, *State* and *Zip* headers, and a Salesforce export's *Mailing Street*, *Mailing City* … *Mailing Country*, are matched here. |
-| **Other address line 1, line 2, city, state or region, postal code, country** | The other address, read the same way. A Salesforce export's *Other Street* … *Other Country* are matched here. |
-| **Tags** | Separated by `,` or `\|`, lowercased. Added to any tags the contact already has. |
-| **Owner** | The email address of a member of your organization. An address that matches nobody on the team leaves the contact without an owner, and the result names those addresses. |
-| **Lifecycle stage** | One of `subscriber`, `lead`, `marketing-qualified`, `sales-qualified`, `opportunity`, `customer`, `evangelist`, `other` — by id or by label. |
-| **Marketing consent** | `yes`, `true` or `1` records a marketing opt-in for this site, dated today. Anything else records nothing. This is your statement that the person agreed; it is not a substitute for their own opt-in. |
-| **Custom fields** | Every **contact** field you have defined under [Fields](./custom-fields.md) is offered as a target. A value that does not fit the field's type — a word in a number field, a choice a dropdown does not offer — is dropped and reported. The [companies import](./companies.md#import-from-csv) offers the company fields the same way. |
+| **Email** | Required for a new person. Lowercased; a name around it (`Ana <ana@acme.com>`) and `mailto:` are removed. |
+| **Salutation**, **Lead source** | One of your organization's [values](./custom-fields.md#picklist-values), by label; one it lacks is yours to map, add or leave blank. |
+| **First name**, **Last name**, **Full name** | When either name part is set, the full name is made of them. |
+| **Phone**, **Mobile phone**, **Home phone**, **Other phone**, **Fax**, **Assistant phone** | Stored in international format (`+15125550123`). A number that cannot be read is listed on the Values step and left out of the row. |
+| **Do not call** | `yes`, `true`, `1`, `x` and their opposites. |
+| **Job title**, **Department**, **Assistant** | Text. |
+| **Birthdate** | A past date, in any common format. |
+| **Company** | A company by its **domain** or **name**. One the CRM lacks can be created by the import. |
+| **Reports to** | Another contact, by email. |
+| **Owner** | A member of your workspace, by email or by name — a Salesforce report's *Contact Owner* full name resolves. |
+| **Mailing** and **Other** street, street line 2, city, state or region, postal code, country | The two addresses. Country is a two-letter code (`US`, `GB`). |
+| **Lifecycle stage** | One of Subscriber, Lead, Marketing qualified, Sales qualified, Opportunity, Customer, Evangelist, Other — by label or id. |
+| **Tags** | Split on `,` `;` `|` and line breaks, lowercased, added to the contact's own. |
+| **Notes** | Text. |
+| **Custom fields** | Every contact field you defined under [Fields](./custom-fields.md); a dropdown's values are matched like a list. |
 
-A value that cannot be read never stops the row: the person is imported without
-it, and the result names the values it could not keep, by field.
+What only the platform records — where a person was captured, the last
+interaction, the last engagement, when the record was made — is exported but
+never imported.
 
-## What is skipped, and why
+## What each company field reads
 
-| Reason | Meaning |
+| Field | What is read |
 | --- | --- |
-| **Not a valid email address** | The email cell is empty or not an address. |
-| **Appears earlier in the file** | The same address is on an earlier row; the first row wins. |
-| **Contact limit reached** | Your plan's records band is full, on a plan whose band is a hard limit — see [CRM records](../../workspace-and-billing/billing-and-plans/overview.md#crm-records). |
-| **Could not be saved** | Something went wrong writing the record. Try that row again. |
-| **Not reached in time** | The batch ran out of time before it got to the row, so nothing was written for it. Import the skipped rows again; a row that did land is updated, never added twice. |
+| **Company name** | Required for a new company. |
+| **Domain**, **Website** | `acme.com`; a website without `https://` gains it. |
+| **Phone**, **Fax** | International format. |
+| **Parent company** | Another company by domain or name; one the CRM lacks can be created. |
+| **Type**, **Industry**, **Rating**, **Ownership**, **Account source** | Your organization's values, by label. |
+| **Account number**, **Account site**, **Ticker symbol**, **SIC code** | Text. |
+| **Employees** | A whole number. |
+| **Annual revenue** | An amount with its currency (`$1,250,000`, `1250000 EUR`); one with none is US dollars. |
+| **Billing** and **Shipping** street … country | The two addresses. |
+| **Owner** | A member of your workspace, by email or name. |
+| **Tags**, **Notes**, **Custom fields** | As for contacts. |
 
-A file the CRM itself exported — from the table's **Export CSV** or the
-[bulk bar's](./bulk-actions.md#the-contacts-file) — re-imports without a hand
-mapping: its header is this vocabulary, its owner column carries email
-addresses, and its **Sources** and **Last interaction** columns are proposed
-as **Do not import**, because the platform records those and a file cannot
-set them.
+## Where new records go
 
-Every imported person shows **Import** as a source on their contact and
-"Imported from CSV" at the top of their activity. Contacts are shared across
-your organization the same way captured ones are: a person imported on one
-site is visible to that site (and any sites declared to be one sender with
-it), not to every site in the account.
+A new person is captured through the same door a form submission uses: they
+appear with **Import** as a source and "Imported from a file" at the top of
+their activity, they count toward your
+[CRM records](../../workspace-and-billing/billing-and-plans/overview.md#crm-records),
+a person your workspace erased at their request is refused, and automations
+that start when a contact is created run. A contact with no company column is
+linked to the company at their email's domain, and one with no owner is
+assigned by your [assignment rules](./settings.md), exactly as a capture is.
+
+A matched person is changed the way their page changes them, so a company
+link moves the company's contact count and the list's filters follow.
+
+## Undo
+
+For **seven days** after an import, **Undo** on its results puts back every
+value it changed and removes what it created: a person only the importing
+site held is deleted (keeping any refusal they made); one another site holds
+too stays theirs. A record edited since the import is listed with what it
+holds now and what undo would restore, and you choose for each.
+
+## Files from other products
+
+| Product | What maps itself |
+| --- | --- |
+| **Salesforce** | Contacts and accounts exports and reports: *First Name*, *Mailing Street* … *Mailing Country*, *Account Name*, *Contact Owner*, *Lead Source*, *Reports To*, *Billing Street*, *Parent Account*, *Annual Revenue* and the rest. |
+| **HubSpot** | Contacts and companies exports: *Associated Company*, *Contact owner*, *Lifecycle Stage*, *Street Address*, *State/Region*, *Company Domain Name* … |
+| **Apollo** | People and accounts exports: *Title*, *Company*, *Work Direct Phone*, *# Employees*, *Company City* … |
+| **Pipedrive** | People and organizations exports: *Person - Email - Work*, *Person - Organization*, *Organization - Name* … |
+| **Aglyn** | A file the CRM exported, from the [export dialog](./export.md) or before it. |
+
+Columns that mean the opposite of a field — Salesforce's *Email Opt Out*,
+HubSpot's *Unsubscribed* — are left unmapped rather than read as consent.
 
 ## Related
 
-- [CRM overview](./overview.md)
+- [Export](./export.md) — the file an import reads back
 - [The contact record](./contact-record.md) — the fields an imported row lands in
-- [Bulk actions](./bulk-actions.md) — tag, assign or stage the people you just imported, all at once
-- [Import companies from CSV](./companies.md#import-from-csv) — the same three steps for the organizations behind them
-- [Import deals from CSV](./deals.md#import-from-csv) and [import tasks from CSV](./tasks.md#import-from-csv) — the same three steps, the pipeline, the stage and the assignee resolved by name
-- [Import a list into an email audience](../../marketing-and-automation/email-campaigns/overview.md#import-a-list) — for adding people to a mailing list rather than to the CRM
+- [Companies](./companies.md)
+- [Bulk actions](./bulk-actions.md) — act on the people you just imported, all at once
+- [Import deals from CSV](./deals.md#import-from-csv) and [import tasks from CSV](./tasks.md#import-from-csv)
+- [Import a list into an email audience](../../marketing-and-automation/email-campaigns/overview.md#import-a-list) — for a mailing list rather than the CRM

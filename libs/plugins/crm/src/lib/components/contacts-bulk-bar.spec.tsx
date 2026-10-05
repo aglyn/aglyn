@@ -31,6 +31,18 @@ import type { ReactNode } from 'react'
 import { soloConsentGroup } from '@aglyn/aglyn'
 import { CrmOrgMountProvider } from '../hooks/use-crm-org-mount'
 import { ContactsBulkBar } from './contacts-bulk-bar'
+import {
+  TransferLauncherContext,
+  type TransferLauncher,
+} from '@aglyn/aglyn/app-utils/transfer-launcher-context'
+
+/** The console's launcher, recording what the bar opened (AGL-3527). */
+const launcher: TransferLauncher & { exports: unknown[] } = {
+  exports: [],
+  openImport: jest.fn(),
+  openExport: (launch) => void launcher.exports.push(launch),
+  close: jest.fn(),
+}
 
 /** Every client-direct write the store received, in order. */
 let ops: Array<{ via: 'batch' | 'single'; kind: string; path: string; data?: any }>
@@ -201,14 +213,16 @@ const rows = [
 
 function Harness(props: { initial: string[]; children?: ReactNode }) {
   return (
-    <ContactsBulkBar
-      hostId="host-1"
-      scope={['orgs', 'org-1']}
-      consentGroup={GROUP}
-      rows={rows}
-      selected={props.initial}
-      onSelectedChange={onSelectedChange}
-    />
+    <TransferLauncherContext.Provider value={launcher}>
+      <ContactsBulkBar
+        hostId="host-1"
+        scope={['orgs', 'org-1']}
+        consentGroup={GROUP}
+        rows={rows}
+        selected={props.initial}
+        onSelectedChange={onSelectedChange}
+      />
+    </TransferLauncherContext.Provider>
   )
 }
 const onSelectedChange = jest.fn()
@@ -278,7 +292,7 @@ describe('the bar and its selection', () => {
       'Set stage',
       'Set company',
       'Add to list',
-      'Export CSV',
+      'Export…',
       'Remove from this site',
     ]) {
       expect(screen.getByRole('button', { name: label })).toBeTruthy()
@@ -294,21 +308,23 @@ describe('the bar and its selection', () => {
 describe('on a plan without the CRM suite', () => {
   it('locks the owner, the stage and the company, and keeps the rest', () => {
     render(
-      <ContactsBulkBar
-        hostId="host-1"
-        scope={['orgs', 'org-1']}
-        consentGroup={GROUP}
-        rows={rows}
-        selected={['c1', 'c2']}
-        onSelectedChange={onSelectedChange}
-        suiteLocked
-      />,
+      <TransferLauncherContext.Provider value={launcher}>
+        <ContactsBulkBar
+          hostId="host-1"
+          scope={['orgs', 'org-1']}
+          consentGroup={GROUP}
+          rows={rows}
+          selected={['c1', 'c2']}
+          onSelectedChange={onSelectedChange}
+          suiteLocked
+        />
+      </TransferLauncherContext.Provider>,
     )
     for (const locked of ['Set owner', 'Set stage', 'Set company']) {
       const control = screen.getByRole('button', { name: locked }) as HTMLButtonElement
       expect([locked, control.disabled]).toEqual([locked, true])
     }
-    for (const open of ['Add tag', 'Remove tag', 'Export CSV', 'Remove from this site']) {
+    for (const open of ['Add tag', 'Remove tag', 'Export…', 'Remove from this site']) {
       const control = screen.getByRole('button', { name: open }) as HTMLButtonElement
       expect([open, control.disabled]).toEqual([open, false])
     }
@@ -519,5 +535,17 @@ describe('beneath the organization hub', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
     await waitFor(() => expect(notices).toContain('Stage set on 2 contacts'))
     expect(posted.filter((call) => call.route === 'org-activity')).toEqual([])
+  })
+})
+
+/** The selection's file is the export dialog's (AGL-3527): every field, chosen there. */
+describe('the file', () => {
+  it('opens the export dialog on the selected contacts, under the site', () => {
+    launcher.exports.length = 0
+    render(<Harness initial={['c1', 'c3']} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Export…' }))
+    expect(launcher.exports).toEqual([
+      { resource: 'crm.contacts', scope: 'org', hostId: 'host-1', selection: ['c1', 'c3'] },
+    ])
   })
 })

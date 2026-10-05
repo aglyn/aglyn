@@ -381,7 +381,8 @@ const refused = (contactId: string, error: string): ContactUpdateOutcome => ({
   error,
 })
 
-interface ContactWrite {
+/** One contact's planned write, and the company counts it moves. */
+export interface ContactWrite {
   contactId: string
   ref: FirebaseFirestore.DocumentReference
   update: Record<string, unknown>
@@ -393,7 +394,7 @@ interface ContactWrite {
  * `update` is `null` when the document already says everything asked — a tag
  * the row already carries, a link already made.
  */
-function contactPatch(
+export function contactPatch(
   contact: Record<string, unknown>,
   groupId: string,
   fields: ContactUpdateFields,
@@ -550,7 +551,7 @@ async function commitContactWrites(
 }
 
 /** Each company's contacts count moved once, by the sum of what the written links moved. */
-async function settleCompanyCounts(
+export async function settleCompanyCounts(
   companies: FirebaseFirestore.CollectionReference,
   writes: readonly ContactWrite[],
 ): Promise<void> {

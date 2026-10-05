@@ -1062,6 +1062,44 @@ export const PLUGIN_TRANSFER_RESOURCES_DECLARED: readonly ResolvedTransferResour
     "description": "Every gift card's code, balance and status. Exported only."
   },
   {
+    "pluginId": "crm",
+    "key": "crm.contacts",
+    "label": "Contacts",
+    "singularLabel": "Contact",
+    "scope": "org",
+    "kinds": [
+      "records"
+    ],
+    "formats": [
+      "csv",
+      "json",
+      "ndjson"
+    ],
+    "limits": {
+      "maxRows": 50000
+    },
+    "description": "Every contact field, custom fields included, with the company, the manager and the owner by name."
+  },
+  {
+    "pluginId": "crm",
+    "key": "crm.companies",
+    "label": "Companies",
+    "singularLabel": "Company",
+    "scope": "org",
+    "kinds": [
+      "records"
+    ],
+    "formats": [
+      "csv",
+      "json",
+      "ndjson"
+    ],
+    "limits": {
+      "maxRows": 50000
+    },
+    "description": "Every company field, custom fields included, with the parent company and the owner by name."
+  },
+  {
     "pluginId": "data",
     "key": "data.dataset",
     "label": "Dataset records",

@@ -38,8 +38,9 @@
  * can only be emitted by a server path that performed the write, so a record
  * page that moved the stage client-direct would move the person and tell no
  * automation; the task routes (AGL-2599) carry an assignee's notification and
- * the `taskCompleted` event; `crm/contacts-import` (AGL-2602) pushes one chunk
- * of a file through the same capture door every other server door uses.
+ * the `taskCompleted` event. Contacts and companies are imported through
+ * the transfer framework (AGL-3527, `transfer/`), whose writes go through
+ * the same capture door every other server door uses.
  * `crm/deal-stage` (AGL-2598) is the one writer of a deal's stage, won and lost,
  * because a stage change is what automations listen for (`server-deal-stage.ts`).
  * `crm/contacts-create` (AGL-2596) is a person typed into the console by a
@@ -100,8 +101,6 @@ import { crmLeadSourceValuesHandler, crmPicklistValuesHandler } from './server/p
 import { registerCrmRecordEmailStateWriter } from './server/record-email-state'
 import { registerCrmRecordTimelineWriter } from './server/record-timeline'
 import { crmTaskCompleteHandler, crmTaskSaveHandler } from './server/task-routes'
-import { crmCompaniesImportHandler } from './server/companies-import'
-import { crmContactsImportHandler } from './server/contacts-import'
 import { crmDealsImportHandler } from './server/deals-import'
 import { crmLeadsImportHandler } from './server/leads-import'
 import { crmTasksImportHandler } from './server/tasks-import'
@@ -674,12 +673,6 @@ export function registerCrmConsoleApi(): void {
   // own address stays registered for a request that names no picklist.
   registerPluginApiRoute(CRM_PICKLIST_VALUES_ROUTE, crmPicklistValuesHandler)
   registerPluginApiRoute(CRM_LEAD_SOURCE_VALUES_ROUTE, crmLeadSourceValuesHandler)
-  // One chunk of a contact file (AGL-2602), judged and written through the
-  // same door every capture uses.
-  registerPluginApiRoute('crm/contacts-import', crmContactsImportHandler)
-  // One chunk of a companies file (AGL-2621), matched by domain then name
-  // and written with the stamp every CRM creator writes.
-  registerPluginApiRoute('crm/companies-import', crmCompaniesImportHandler)
   // One chunk of a deals file and one of a tasks file (AGL-2662): the
   // pipeline, the stage and the assignee resolved by name, a row refused
   // when the org has no such name.

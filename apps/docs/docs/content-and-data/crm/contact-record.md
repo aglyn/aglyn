@@ -434,7 +434,7 @@ Attachments are readable and writable through the
 ## Related
 
 - [CRM overview](./overview.md)
-- [Import contacts from CSV](./import.md) and [Bulk actions](./bulk-actions.md) — many records at once
+- [Import contacts and companies](./import.md), [Export](./export.md) and [Bulk actions](./bulk-actions.md) — many records at once
 - [Companies](./companies.md) — the account a person works for
 - [Activities & the timeline](./activities.md) — the history on the record page
 - [Email campaigns](../../marketing-and-automation/email-campaigns/overview.md)
