@@ -28,6 +28,7 @@
  * replaced one keeps whether it was on.
  *=========================================*/
 
+import { DECLARED_SUBSCRIPTION_TOPICS } from '@aglyn/aglyn/app-utils/subscription-topics'
 import { existingPackageItemsOf, type ExistingPackageItem, type TransferReferenceKind, type TransferRowResult } from '@aglyn/aglyn/data-transfer'
 import { isPluginEnabled } from '@aglyn/aglyn/plugin-manager/enabled-plugins'
 import type {
@@ -168,7 +169,10 @@ export function createOrgAutomationsPackage(deps: OrgAutomationsPackageDeps = de
         answers.push({ kind: ORG_AUTOMATION_REFERENCE_KINDS.list, label: 'Email list', targets: await named('lists', 'name') })
       }
       if (kinds.includes(ORG_AUTOMATION_REFERENCE_KINDS.topic)) {
-        answers.push({ kind: ORG_AUTOMATION_REFERENCE_KINDS.topic, label: 'Subscription topic', targets: await named('emailTopics', 'name') })
+        // Asked only when the email plugin, which owns the topic catalog and answers `email.topics`
+        // (AGL-3550), is not running here — and without it the catalog is the built-ins the plugins declare.
+        const targets = DECLARED_SUBSCRIPTION_TOPICS.map((topic) => ({ id: topic.id, name: topic.name }))
+        answers.push({ kind: ORG_AUTOMATION_REFERENCE_KINDS.topic, label: 'Subscription topic', targets })
       }
       if (kinds.includes(ORG_AUTOMATION_REFERENCE_KINDS.member)) {
         answers.push({ kind: ORG_AUTOMATION_REFERENCE_KINDS.member, label: 'Member', targets: await named('members', 'email') })

@@ -1197,6 +1197,23 @@ export const PLUGIN_TRANSFER_RESOURCES_DECLARED: readonly ResolvedTransferResour
     "description": "The addresses a site's marketing email skips, and why."
   },
   {
+    "pluginId": "email",
+    "key": "email.topics",
+    "label": "Email topics",
+    "singularLabel": "Email topic",
+    "scope": "org",
+    "kinds": [
+      "package"
+    ],
+    "formats": [
+      "json"
+    ],
+    "limits": {
+      "maxRows": 200
+    },
+    "description": "Each topic's name, what recipients are told they get, and whether it is retired. Never who chose it."
+  },
+  {
     "pluginId": "marketing",
     "key": "marketing.campaigns",
     "label": "Campaigns",

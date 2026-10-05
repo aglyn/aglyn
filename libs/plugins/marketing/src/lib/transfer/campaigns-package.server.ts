@@ -33,6 +33,7 @@
  *=========================================*/
 
 import { SCREEN_KIND_EMAIL } from '@aglyn/aglyn/app-utils/screen-route'
+import { DECLARED_SUBSCRIPTION_TOPICS } from '@aglyn/aglyn/app-utils/subscription-topics'
 import {
   existingPackageItemsOf,
   type ExistingPackageItem,
@@ -163,7 +164,17 @@ export function createCampaignsPackage(deps: CampaignsPackageDeps = defaultDeps(
         answers.push({ kind: CAMPAIGN_REFERENCE_KINDS.list, label: 'Email list', targets: await named('lists') })
       }
       if (kinds.includes(CAMPAIGN_REFERENCE_KINDS.topic)) {
-        answers.push({ kind: CAMPAIGN_REFERENCE_KINDS.topic, label: 'Subscription topic', targets: await named('emailTopics') })
+        /*
+         * Asked only when the email plugin — which owns the topic catalog and
+         * answers `email.topics` as package items (AGL-3550) — is not running
+         * here. Without it nobody can author a topic, so the catalog is the
+         * built-ins the plugins declare.
+         */
+        answers.push({
+          kind: CAMPAIGN_REFERENCE_KINDS.topic,
+          label: 'Subscription topic',
+          targets: DECLARED_SUBSCRIPTION_TOPICS.map((topic) => ({ id: topic.id, name: topic.name })),
+        })
       }
       if (kinds.includes(CAMPAIGN_REFERENCE_KINDS.design)) {
         const hosts = await firestore.collection('hosts').where('orgId', '==', ctx.orgId).get()

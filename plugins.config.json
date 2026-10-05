@@ -1391,6 +1391,23 @@
             "maxRows": 50000
           },
           "description": "The addresses a site's marketing email skips, and why."
+        },
+        {
+          "$comment": "The organization's email topics as workspace package items (AGL-3550): a topic's name, description, retired flag and confirmation setting, written through the topic page's own document shape. Never an opt-out or a confirmation — those are a person's, per site.",
+          "key": "email.topics",
+          "label": "Email topics",
+          "singularLabel": "Email topic",
+          "scope": "org",
+          "kinds": [
+            "package"
+          ],
+          "formats": [
+            "json"
+          ],
+          "limits": {
+            "maxRows": 200
+          },
+          "description": "Each topic's name, what recipients are told they get, and whether it is retired. Never who chose it."
         }
       ],
       "catalog": {

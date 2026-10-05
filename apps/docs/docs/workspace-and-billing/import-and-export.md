@@ -23,7 +23,7 @@ by plugin. A plugin your workspace doesn't run isn't listed.
   from CSV, JSON or NDJSON files, one row per record, and export to the same
   formats.
 - **Packages** are things you build rather than collect: sequences,
-  campaigns, org automations and email templates. A package is one JSON
+  campaigns, org automations, email templates and email topics. A package is one JSON
   file. It can hold several kinds of item together, so a sequence and the
   email templates it uses travel as a set.
 - **Site packages** hold a site's pages, emails, forms, theme and content.
@@ -158,13 +158,15 @@ plus three columns: what happened to each row, why, and the record it wrote.
 1. Click **Export package**, or **Export** beside one kind of package item.
 2. Pick the items. Leave **Include what they need** on to add what the
    picked items use. For example, a sequence's email templates are added
-   when the template is in your workspace.
+   when the template is in your workspace, and so is the topic a campaign
+   or an automation sends under.
 3. Download the file.
 
 A package carries how things are built, never what they did. It carries a
 sequence's steps and settings but not who was enrolled. It carries a
 campaign's copy but not its sends or results, and an automation's trigger
-and steps but not its run history.
+and steps but not its run history. It carries what an email topic is
+called and what it promises, but not who chose it or who left it.
 
 ## Import a package
 
@@ -178,7 +180,8 @@ and steps but not its run history.
    - **Replace yours** writes the package's version over yours. Undo puts
      yours back.
    - **Keep both** adds a copy with "(copy)" after its name, and points the
-     package's other items at the copy.
+     package's other items at the copy. For example, a campaign in the
+     package sends under the copied topic, not yours.
    - **Skip** leaves it out. Anything in the package that uses it uses yours
      instead.
 
@@ -187,7 +190,8 @@ and steps but not its run history.
    send from.
 3. **Things this workspace doesn't have.** Items can name things that
    neither the package nor your workspace has, such as a mailbox, a site, an
-   email list or an email design. Choose what each one becomes:
+   email list, an email topic or an email design. A campaign whose topic you
+   leave out sends under your default topic. Choose what each one becomes:
    - **Use one you have:** pick the replacement.
    - **Leave it out:** remove the reference from every item that names it.
    - **Skip what needs it:** skip every item that names it.
@@ -202,6 +206,10 @@ and steps but not its run history.
    - Every imported campaign email is a draft, with no audience and no send
      time.
    - A personal email template becomes yours.
+   - Importing an email topic never signs anybody up, asks anybody to
+     confirm or sends any email. Nobody's choices change: a topic you
+     replace keeps its ID, so everyone who left it stays left, and every
+     unsubscribe link already sent still works.
 5. **Before importing.** Acknowledge each warning (replacing, leaving
    references out, or items that fail), then click **Import**.
 
@@ -222,6 +230,10 @@ Every import can be undone for seven days, from its results or from
 Some things can't be undone because of what happened since. A sequence that
 has started sending stays, and so does a campaign with an email that has
 been scheduled or sent. These are counted as kept.
+
+An email topic the import added is retired rather than deleted, because an
+email sent under it since carries it in its unsubscribe link. A retired
+topic leaves the composer and the preference page.
 
 ## History
 

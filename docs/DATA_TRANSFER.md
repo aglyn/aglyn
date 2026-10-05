@@ -17,6 +17,7 @@ this document is the architecture.
 | Console client and the core launcher plugins open the kit through | `apps/console/utils/transfer-http-client.ts`; `libs/aglyn/src/lib/app-utils/transfer-launcher-context.ts`; the shell's `transfer-launcher-provider.component.tsx` | AGL-3539 |
 | Site packages: a site's items as one file, planned and undone | core `data-transfer/site-package.ts`; routes `apps/console/app/api/hosts/{export,import}` | AGL-3533 |
 | Workspace packages: sequences, campaigns, automations, email templates as one file | core `data-transfer/package-plan.ts`; engine `libs/tenant/data/admin/src/lib/server/transfer-packages.ts`; route `apps/console/app/api/transfer/package` | AGL-3535 |
+| Email topics as package items | `libs/plugins/email/src/lib/transfer/topics-package*.ts` | AGL-3550 |
 | The Import & export hub: every resource, workspace packages, the history | `settings/(sections)/data`; `components/settings/org-data-transfer-card` and `org-transfer-history-card`; route `apps/console/app/api/transfer/jobs` | AGL-3535 |
 | Each resource | the owning plugin's `src/lib/transfer/` — datasets: `libs/plugins/data/src/lib/transfer/` (AGL-3530) | AGL-3527–3535 |
 
@@ -480,11 +481,21 @@ retainUntil ↑)`, collection group.
 
 A workspace package (AGL-3535) is an `aglyn-package` v2 file of the
 workspace's own items: sequences (`outreach.sequences`), campaigns
-(`marketing.campaigns`), org automations (`workflows.org-automations`) and
-CRM email templates (`crm.email-templates`). Each item's kind is the key of
-the `package` transfer resource that owns it, so one file carries several
-plugins' items and the references between them (a sequence step's template,
-an automation's campaign).
+(`marketing.campaigns`), org automations (`workflows.org-automations`),
+CRM email templates (`crm.email-templates`) and email topics
+(`email.topics`, AGL-3550). Each item's kind is the key of the `package`
+transfer resource that owns it, so one file carries several plugins' items
+and the references between them (a sequence step's template, an
+automation's campaign, a campaign's topic).
+
+Email topics are read as the catalog every reader sees
+(`mergeSubscriptionTopics`), so a built-in nobody changed is an item too and
+a campaign or automation naming one always resolves. A campaign's `topicId`
+and an automation step's `topicId` are `email.topics` dependencies, so a
+kept-both topic is what the campaign or step in the same package points at,
+and a topic neither carries nor holds is asked about like any other
+reference. Email lists name no topic and are not package items, so they
+are only ever mapped, left out or skipped.
 
 It runs as a job of the row engine — `orgs/{orgId}/transferJobs/{jobId}`,
 `kind: 'package'`, `resource: 'package'` — and so shares its lease (one
@@ -503,7 +514,11 @@ save would refuse, and keeps its own rules: an imported sequence is a draft
 (`saveOutreachSequence`); an org automation lands switched off
 (`createOrgAutomationRecord`); every campaign email is a draft with no
 audience or send time (the campaign draft writer's fields); a personal
-template becomes the importer's own.
+template becomes the importer's own; a topic is written as the topic page
+writes it (`emailTopicDocument`, the document `writeEmailTopic` stores) and
+nothing else — no opt-out, no confirmation, nothing under a site — and undo
+retires a topic the import added rather than deleting it, because an
+unsubscribe link sent under it must go on naming it.
 
 ## The hub
 

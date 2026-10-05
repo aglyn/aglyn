@@ -79,8 +79,8 @@ const ListConsentStep = lazy(() =>
 )
 
 /**
- * The client half of what this plugin imports and exports (AGL-3529): how
- * the wizard names each resource, and the list import's two steps of its
+ * The client half of what this plugin imports and exports (AGL-3529,
+ * AGL-3550): how the wizard and the hub name each resource, and the list import's two steps of its
  * own — whether people the workspace already holds may change, and the
  * statement of permission under what the dry run found. The server half
  * registers from the console declarations.
@@ -111,6 +111,12 @@ export function registerEmailTransferResourceUis(): void {
   registerPluginTransferResourceUi(
     SUPPRESSIONS_RESOURCE,
     { label: 'suppressions', icon: { path: mdiEmailOffOutline.path } },
+    { pluginId: BUNDLE_ID },
+  )
+  // How the Import & export hub names topics in a workspace package (AGL-3550).
+  registerPluginTransferResourceUi(
+    'email.topics',
+    { label: 'Email topics' },
     { pluginId: BUNDLE_ID },
   )
 }

@@ -1088,6 +1088,12 @@ You cannot delete a topic, only **retire** it. A retired topic disappears from
 the composer and from the preference page, and campaigns already sent under it
 keep working — their unsubscribe links still name it. Restore it at any time.
 
+To copy your topics to another workspace, export them in a package from
+**Settings ▸ Import & export**. With **Include what they need** on, a campaign or
+automation brings the topic it sends under with it. Importing a topic never signs anyone up and
+never changes what anyone chose: who left a topic stays with each site, and is
+never in a package. See [Import and export](../../workspace-and-billing/import-and-export.md#import-a-package).
+
 ### The preference page {#preference-page}
 
 The link at the bottom of every campaign opens a page where the recipient sees

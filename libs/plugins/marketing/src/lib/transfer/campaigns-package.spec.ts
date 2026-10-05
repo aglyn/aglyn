@@ -76,4 +76,12 @@ describe('a campaign as a package item (AGL-3535)', () => {
     expect(moved.listIds).toEqual([])
     expect(draftableCampaignEmails(moved)).toEqual([])
   })
+
+  it('points at the topic kept beside the workspace’s own, and at none when the topic is left out (AGL-3550)', () => {
+    const content = campaignPackageContent(CONTAINER, [EMAIL])
+    const topicKey = `${CAMPAIGN_REFERENCE_KINDS.topic}/marketing`
+    expect(remapCampaignIds(content, new Map([[topicKey, 'copied-topic']])).topicId).toBe('copied-topic')
+    expect(remapCampaignIds(content, new Map([[topicKey, '']])).topicId).toBeNull()
+    expect(remapCampaignIds(content, new Map()).topicId).toBe('marketing')
+  })
 })

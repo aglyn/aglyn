@@ -33,6 +33,12 @@
  * dropped topic leaves it with none; an email whose site or design is
  * dropped is left out.
  *
+ * The topic is a package item of the email plugin's (AGL-3550), so a
+ * package that carries the campaign can carry its topic too, and a topic
+ * kept beside the workspace's own is the one the campaign is pointed at.
+ * Email lists are not package items and name no topic, so a list is only
+ * ever mapped, left out or skipped.
+ *
  * Pure: the server half (`campaigns-package.server.ts`) reads and writes.
  *=========================================*/
 
