@@ -159,6 +159,16 @@ unused field, which counts the 23 unions reported, and the one with a variant
 per step type, which counts the 8,757 bytes that compiled to too large a
 grammar.
 
+A description costs no grammar — `aiToolSchemaCompiledBytes` drops it — so a
+field grows the schema only by its structure and its enums. AGL-3538 gave the
+create-task step a `priority` (`low`, `normal`, `high`) and the log-activity
+step a `direction` (`outbound`, `inbound`, `internal`, or empty for a kind that
+takes none), which with the schema as it was came to 3,964 bytes. They fit by compiling the host
+events' enum once: the trigger's `event` keeps it, and a `waitForEvent` step's
+`event` is a string described as one of the trigger events, which the reader
+holds to the list and refuses by naming every event. The draft is 3,769 bytes,
+38 under the proven 3,807, and `tool-schema-limits.spec.ts` pins both.
+
 ## Credits, per step
 
 `runAiJobStep` is the one place a step is claimed, metered, run and recorded,

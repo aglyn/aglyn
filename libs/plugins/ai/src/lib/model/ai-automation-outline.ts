@@ -152,11 +152,12 @@ function stepLine(
       case 'assignContactOwner':
         return step.roundRobin ? 'by round robin' : 'a named teammate'
       case 'createCrmTask':
-        return `${quoted(step.title)}, a ${step.kind}, due in ${step.dueInDays} ${step.dueInDays === 1 ? 'day' : 'days'}${
+        return `${quoted(step.title)}, a ${step.priority && step.priority !== 'normal' ? `${step.priority}-priority ` : ''}${step.kind}, due in ${step.dueInDays} ${step.dueInDays === 1 ? 'day' : 'days'}${
           step.assigneeUid || step.assigneeEmail ? ', for a named teammate' : ''
         }`
       case 'logCrmActivity':
-        return `a ${step.kind}: ${quoted(step.body)}`
+        // Every direction starts with a vowel: an outbound, inbound or internal call.
+        return `${step.direction ? `an ${step.direction}` : 'a'} ${step.kind}: ${quoted(step.body)}`
       case 'customEvent':
         return quoted(step.eventName)
       default:

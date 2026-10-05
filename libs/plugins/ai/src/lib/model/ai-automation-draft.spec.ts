@@ -52,8 +52,10 @@ const NULL_STEP: Omit<AiAutomationAnswerStep, 'type'> = {
   tag: null,
   owner: null,
   taskKind: null,
+  priority: null,
   dueInDays: null,
   activityKind: null,
+  direction: null,
 }
 
 const step = (
@@ -145,6 +147,9 @@ describe('aiAutomationDraft', () => {
       step('assignContactOwner', { owner: 'sam@example.test' }),
       step('createCrmTask', { title: 'Call them', taskKind: 'call', dueInDays: 2 }),
       step('logCrmActivity', { activityKind: 'note', body: 'Signed up for the newsletter' }),
+      // A task's priority and a call's direction (AGL-3538).
+      step('createCrmTask', { title: 'Call them today', taskKind: 'call', priority: 'high', dueInDays: 0 }),
+      step('logCrmActivity', { activityKind: 'call', direction: 'inbound', body: 'They called about the quote' }),
     ]
     const first = aiAutomationDraft(answer({ steps }), RECORDS)
     const second = aiAutomationDraft(answer({ trigger: { event: 'lead', conditions: [], combinator: 'and' }, steps: more }), RECORDS)
@@ -169,6 +174,8 @@ describe('aiAutomationDraft', () => {
       { type: 'assignContactOwner', ownerEmail: 'sam@example.test' },
       { type: 'createCrmTask', title: 'Call them', kind: 'call', dueInDays: 2 },
       { type: 'logCrmActivity', kind: 'note', body: 'Signed up for the newsletter' },
+      { type: 'createCrmTask', title: 'Call them today', kind: 'call', priority: 'high', dueInDays: 0 },
+      { type: 'logCrmActivity', kind: 'call', body: 'They called about the quote', direction: 'inbound' },
     ])
     const covered = new Set([...first.action.steps, ...second.action.steps].map((one) => one.type))
     expect([...covered].sort()).toEqual([...AI_AUTOMATION_STEP_TYPES].sort())
