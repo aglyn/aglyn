@@ -65,7 +65,8 @@ import {
  * cut to its cap, an end not after the start replaced by start + one hour,
  * the cover description dropped without a cover. The editor's other check
  * is the shell's: the page only opens for a workspace holding the Event
- * Calendar add-on, so the import refuses every row for one that does not.
+ * Calendar add-on, and the transfer routes refuse every step for one that
+ * does not (the declaration's `featureFlag`, AGL-3548).
  *
  * A host resource: events live under `hosts/{hostId}/events` and carry no
  * `visibleTo`. The transfer routes gate the site (`data.manage` on it), so
@@ -83,8 +84,13 @@ export interface EventsTransferDeps {
   deleteField(): unknown
   /** A stored timestamp for `ms` (`Timestamp.fromMillis`). */
   timestamp(ms: number): unknown
-  /** Whether the workspace holds the Event Calendar add-on. */
-  entitled(orgId: string): Promise<boolean>
+  /**
+   * Throws the transfer's plan refusal for a workspace without the Event
+   * Calendar add-on (AGL-3548). The transfer gate refuses every step for it
+   * already (`featureFlag: "eventCalendar"`); `apply` asks again for the
+   * sweep that resumes an import without the gate.
+   */
+  requireEntitled(orgId: string): Promise<void>
   now?(): number
   /** A new event id; `createResourceUid`, like the editor. */
   createId?(): string
@@ -98,9 +104,6 @@ const SCAN_PAGE_ROWS = 500
 const GET_ALL_SLICE = 300
 /** Time an event write needs; `apply` stops at a row boundary below it. */
 const APPLY_ROW_RESERVE_MS = 1_500
-
-const NOT_ENTITLED =
-  'This workspace does not have the Event Calendar add-on, so no event can be imported.'
 
 type Data = Record<string, unknown>
 type Values = Record<string, unknown>
@@ -335,13 +338,6 @@ export function createEventsTransferResource(
       (row) => row.verdict === 'create' || row.verdict === 'update',
     )
     if (!writes.length) return []
-    if (!(await deps.entitled(ctx.orgId))) {
-      return writes.map((row) => ({
-        row: row.index,
-        detail: NOT_ENTITLED,
-        refuse: true,
-      }))
-    }
     const found: TransferResourceFinding[] = []
     for (const row of writes) {
       const before = (row.recordId ? existing.get(row.recordId) : null) ?? {}
@@ -521,7 +517,7 @@ export function createEventsTransferResource(
 
     async apply(ctx, chunk, writer) {
       const hostId = requireHost(ctx)
-      if (!(await deps.entitled(ctx.orgId))) throw new Error(NOT_ENTITLED)
+      await deps.requireEntitled(ctx.orgId)
       const events = eventsOf(hostId)
       const results: TransferRowResult[] = []
       const undo: TransferUndoEntry[] = []

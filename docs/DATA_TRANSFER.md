@@ -453,20 +453,54 @@ member, or a collaborator who reaches the named site (datasets); a
 `readPermission` admits its holders and `data.manage`; a resource that
 declares neither keeps `data.manage`. The export route passes a
 collaborator's `scopeTokens`, and each resource's `readPage` and `count`
-read only what they reach. Last, the workspace's plan (AGL-3555): a
+read only what they reach. Then the resource's plugin must run for the
+request (AGL-3548), the plugin dispatcher's own two questions: switched on
+for the named site (the workspace's set minus the site's) or, with no site,
+for the workspace, and released to the workspace (`release_*`, staff
+preview a dark plugin) — a 404 `notFound` otherwise. An export a resource
+keeps open on every plan (`featureFlagExempt: ["export"]`, the people files)
+is not asked: taking out the people a workspace holds is owed whether or not
+the plugin is on, the dispatcher's `portability` rule. Workspace packages
+leave out a plugin that is off or unreleased the same way. Last, the
+workspace's plan (AGL-3555): a
 resource that declares a `featureFlag` is refused on a plan without that
 feature — the route's resource is the body's, or the job's — for every
 intent its `featureFlagExempt` does not list, with 403 `{ error, reason:
 'plan_required', code: <feature> }` (the plugin's own `planGate` answer, else
 `transferPlanRequired`), staff included. A lookup column into such a
 resource asks the same question as an import, and a workspace package
-leaves out a package resource its plan does not carry. The CRM declares
-`crm` on every resource and exempts only the contacts and leads exports. The
+leaves out a package resource its plan does not carry. Every resource
+declares the plan feature its plugin's own pages are gated by — see
+[Who may move what, by plan](#who-may-move-what-by-plan). The
 console's launcher answers the same rules synchronously as
 `can('import' | 'export', target)`, so a list offers only what the route
 will do. Plan, apply and undo write an `adminAudit` row
 (`data.transfer.plan`, `data.transfer.apply` when a job starts or resumes,
 `data.transfer.undo`).
+
+### Who may move what, by plan
+
+Each resource declares the plan feature its plugin's console surfaces and
+routes are gated by (AGL-3548), so a transfer refuses exactly what the
+plugin's own pages refuse. A feature no plan carries (an add-on) is refused
+as the add-on it is, never as an upgrade (`transferPlanRequired`).
+
+| resource | `featureFlag` (the plugin's own gate) | exempt | refusal | checked again inside the hooks |
+| -- | -- | -- | -- | -- |
+| `crm.contacts`, `crm.leads` | `crm` (CRM suite, from Starter) | export | `planGate`: `suite-gate.ts` | `requireCrmSuite` where a hook reads or writes |
+| `crm.companies`, `crm.deals`, `crm.tasks`, `crm.activities`, `crm.pipelines`, `crm.fields`, `crm.email-templates` | `crm` | — | `planGate`: `suite-gate.ts` | as above |
+| `data.dataset` | `dataStore` (Data page, from Starter) | — | core | the `release_data_store` flag, for the sweep |
+| `bookings` | `bookings` (Bookings page, from Starter) | — | core | — (export only) |
+| `events` | `eventCalendar` (the Event Calendar add-on) | — | core, as an add-on | `apply`, for the sweep (`requireEntitled`) |
+| `redirects` | `redirects` (Redirects page, from Starter) | — | core | `plan` and `apply` refuse rows (`readSite`) |
+| `commerce.gift-cards` | `giftCards` (gift cards, from Business) | export | `planGate`: the issue route's sentence (`gift-cards-plan.ts`) | `plan`, `apply` and undo (`issuerOf`), in the same body |
+| `outreach.sequences`, `outreach.do-not-contact` | `outreach` (the Sequences add-on) | — | `planGate`: `outreachEntitlementRefusal` | each hook's access check, for the sweep |
+| `workflows.org-automations` | `actions` (org automations, from Pro) | — | core | `problems` and `writeItems` (`importerRefusal`) |
+| `forms.submissions`, `commerce.products`, `commerce.categories`, `commerce.orders`, `commerce.discounts`, `commerce.coupons`, `email.list-members`, `email.suppressions`, `email.topics`, `marketing.campaigns` | — (their pages are on every plan) | — | — | products cap new products at the plan's quota |
+
+Every one of them also asks that its plugin runs (above). The checks kept
+inside hooks are defense in depth for the one caller that never passes the
+gate: the sweep that resumes an `applying` job.
 
 ### What is stored where
 
@@ -625,7 +659,9 @@ unsubscribe link sent under it must go on naming it.
 
 `Settings → Import & export` (`/[orgSlug]/settings/data`, shown to whoever
 holds `data.manage`) lists every resource the workspace's plugins declare —
-the workspace's and, for the site picked, that site's — grouped by plugin.
+the workspace's and, for the site picked, that site's — grouped by plugin,
+leaving out a plugin switched off there or whose release flag is off for
+the workspace (AGL-3548), as the routes refuse it.
 Records open the wizard and the export dialog through the shell's launcher;
 packages open the workspace package export and import; each site links to
 its Backup & restore. The history (`/api/transfer/jobs`) lists every import

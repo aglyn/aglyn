@@ -173,24 +173,29 @@ export function registerCommerceTransferResources(): void {
   )
 
   // Imported by ISSUING each card (AGL-3551): the plan decides each card and
-  // the total, and a row it refuses is failed here with the reason.
+  // the total, and a row it refuses is failed here with the reason. Only on
+  // a plan with gift cards (`featureFlag: "giftCards"`, imports only,
+  // AGL-3548), refused in the issue route's words.
   registerPluginTransferResource(
     COMMERCE_GIFT_CARDS_TRANSFER,
-    deferred(
-      async () => (await giftCardsServer()).giftCardsTransfer,
-      {
-        fields: catalog({ standard: GIFT_CARD_TRANSFER_FIELDS }),
-        matchKeys: GIFT_CARD_MATCH_KEYS,
-        invariants: [
-          {
-            id: 'gift-card-issuable',
-            label: 'A gift card the store can issue',
-            check: (row) => (row as GiftCardPlannedRow).giftCard?.problem ?? null,
-          },
-        ],
-      },
-      ['count', 'plan'],
-    ),
+    {
+      ...deferred(
+        async () => (await giftCardsServer()).giftCardsTransfer,
+        {
+          fields: catalog({ standard: GIFT_CARD_TRANSFER_FIELDS }),
+          matchKeys: GIFT_CARD_MATCH_KEYS,
+          invariants: [
+            {
+              id: 'gift-card-issuable',
+              label: 'A gift card the store can issue',
+              check: (row) => (row as GiftCardPlannedRow).giftCard?.problem ?? null,
+            },
+          ],
+        },
+        ['count', 'plan'],
+      ),
+      planGate: async (subject) => (await import('./gift-cards-plan')).giftCardsPlanRefusal(subject.org),
+    },
     { pluginId: BUNDLE_ID },
   )
 }

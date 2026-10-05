@@ -91,7 +91,17 @@ flickering away.
   list in `"featureFlagExempt"`, and the routes refuse with 403
   `plan_required`. Register `planGate` with the server half so the refusal
   is in your plugin's own words. The CRM declares `"featureFlag": "crm"` on
-  every resource and exempts only the contacts and leads exports.
+  every resource and exempts only the contacts and leads exports. Declare
+  the same flag your console extension (or the section that holds the
+  surface) is gated by, so a transfer refuses exactly what your pages
+  refuse. Without a `planGate`, a feature no plan carries is refused as the
+  add-on it is.
+- **Your plugin must run** where the records are: switched on for the
+  workspace, or for the site a site resource names, and released to the
+  workspace. Otherwise every route answers 404, as your own routes do
+  behind the plugin dispatcher — except an export your resource keeps open
+  on every plan (`"featureFlagExempt": ["export"]`), which a workspace is
+  owed whether or not your plugin is on.
 
 The routes stay the enforcement: `can` only keeps you from offering a
 button they would refuse.

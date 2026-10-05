@@ -25,10 +25,12 @@ import {
   type TransferErrorCode,
   type TransferErrorResponse,
 } from '@aglyn/aglyn/data-transfer'
+import { resolveEnabledPlugins, resolveHostEnabledPlugins } from '@aglyn/aglyn/plugin-manager/enabled-plugins'
 import { declaredTransferResource, transferPlanRefusal } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
 import {
   consumeRateLimit,
   emailUnverifiedResponse,
+  filterEnabledPluginsByReleaseFlags,
   firebaseAdmin,
   getHostDocAdmin,
   getOrgDoc,
@@ -70,7 +72,11 @@ import { FieldValue } from 'firebase-admin/firestore'
  *     named site), a `readPermission` admits its holders, and otherwise
  *     `data.manage` stays the key. The route and the resource's `readPage`
  *     then read only what the member's scope sees. Staff pass.
- *  5. the workspace's plan (AGL-3555), for a resource that declares a
+ *  5. the resource's plugin runs for the request (AGL-3548): switched on
+ *     for the named site, or for the workspace without one, and released to
+ *     the workspace — the plugin dispatcher's 404 otherwise. An export the
+ *     resource keeps open on every plan (the people files) is not asked;
+ *  6. the workspace's plan (AGL-3555), for a resource that declares a
  *     `featureFlag`: the route's resource — the body's, or the job's — is
  *     refused on a plan without the feature, for every intent the resource
  *     does not exempt, with the owning plugin's own 403 (`planGate`, else
@@ -202,6 +208,57 @@ async function accessRefusal(
 }
 
 /**
+ * The refusal for a resource whose plugin does not run for the request, or
+ * `null` when it does — the plugin dispatcher's own two questions
+ * (`app/api/[...pluginApi]/route.ts`): is the plugin switched on for the
+ * named site (the workspace's set minus the site's, AGL-1014) or, with no
+ * site, for the workspace; and is it released to the workspace (AGL-422),
+ * a staff token previewing a dark plugin. Answered like the dispatcher, as a
+ * 404: a plugin that is off has no records to move.
+ *
+ * An export the resource keeps open on every plan (`featureFlagExempt:
+ * ["export"]`, the people files) is not asked: taking out the people a
+ * workspace holds is owed whether or not the plugin is on now — the
+ * dispatcher's `portability` rule (AGL-3080). A key no plugin declares is
+ * the engine's to refuse.
+ */
+async function pluginOffRefusal(subject: {
+  resource: string
+  orgId: string
+  hostId: string | null
+  org: Record<string, unknown> | null
+  host: Record<string, unknown> | null
+  route: TransferApiRoute
+  authorization: string
+}): Promise<Response | null> {
+  const declared = declaredTransferResource(parseTransferResourceKey(subject.resource).key)
+  if (!declared?.pluginId) return null
+  const intent = transferRouteIntent(subject.route)
+  if (intent === 'export' && declared.featureFlagExempt?.includes('export')) return null
+  const enabled = subject.hostId
+    ? resolveHostEnabledPlugins(
+        subject.org as { enabledPlugins?: string[] },
+        subject.host as { disabledPlugins?: string[]; enabledPlugins?: string[] },
+      )
+    : resolveEnabledPlugins(subject.org as { enabledPlugins?: string[] })
+  const released =
+    enabled.includes(declared.pluginId) &&
+    (
+      await filterEnabledPluginsByReleaseFlags([declared.pluginId], {
+        orgId: subject.orgId,
+        authorization: subject.authorization,
+      })
+    ).includes(declared.pluginId)
+  if (released) return null
+  return transferRefusal(
+    404,
+    'notFound',
+    `${declared.label} can't be ${intent === 'export' ? 'exported' : 'imported'}: ` +
+      `the plugin that holds them is off for this ${subject.hostId ? 'site' : 'workspace'}.`,
+  )
+}
+
+/**
  * The caller, admitted — or the response that refuses them. See the block
  * header for what is checked and in which order.
  */
@@ -261,6 +318,21 @@ export async function transferGate(
     if (!staff) {
       const refusal = await accessRefusal(route, orgId, hostId, membership?.member ?? null, body)
       if (refusal) return refusal
+    }
+    // The plugin runs here, as the plugin dispatcher asks it of every route
+    // the plugin serves (AGL-3548): switched on for the site or workspace,
+    // and released to the workspace (staff preview a dark plugin).
+    if (resource) {
+      const off = await pluginOffRefusal({
+        resource,
+        orgId,
+        hostId,
+        org: org as Record<string, unknown>,
+        host: host as Record<string, unknown> | null,
+        route,
+        authorization,
+      })
+      if (off) return off
     }
     // The workspace's plan, once the caller is admitted — staff too: the
     // plan is a fact about the workspace, not about who asks (AGL-3555).

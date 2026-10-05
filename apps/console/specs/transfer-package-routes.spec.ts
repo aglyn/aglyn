@@ -30,6 +30,8 @@
 export {}
 
 let mockOrg: Record<string, unknown> | null = null
+/** The plugins whose release flag is off for the workspace. */
+let mockUnreleased = new Set<string>()
 const mockIntents: string[] = []
 const mockVerifyIdToken = jest.fn()
 const mockAudit = jest.fn()
@@ -61,6 +63,7 @@ jest.mock('@aglyn/aglyn/plugin-manager/plugin-transfer-resources', () => ({
       { pluginId: 'outreach', key: 'outreach.sequences', label: 'Sequences', scope: 'org', kinds: ['package'], formats: ['json'] },
       { pluginId: 'crm', key: 'crm.contacts', label: 'Contacts', scope: 'org', kinds: ['records'], formats: ['csv'] },
       { pluginId: 'crm', key: 'crm.email-templates', label: 'Email templates', scope: 'org', kinds: ['package'], formats: ['json'] },
+      { pluginId: 'workflows', key: 'workflows.org-automations', label: 'Org automations', scope: 'org', kinds: ['package'], formats: ['json'] },
     ].filter((one) => subject.org.enabledPlugins?.includes(one.pluginId)),
   listDeclaredTransferResources: () => [{ pluginId: 'crm', key: 'crm.contacts', label: 'Contacts' }],
   // The real plan question, over the real declarations (AGL-3555).
@@ -105,6 +108,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     }),
   },
   consumeRateLimit: async () => ({ allowed: true, resetMs: Date.now() + 30_000 }),
+  filterEnabledPluginsByReleaseFlags: async (pluginIds: string[]) => pluginIds.filter((id) => !mockUnreleased.has(id)),
   emailUnverifiedResponse: () => Response.json({ error: 'Verify your email' }, { status: 403 }),
   getHostDocAdmin: async () => null,
   getOrgDoc: async () => mockOrg,
@@ -163,8 +167,10 @@ const JOB = { id: 'job-1', resource: 'package', kind: 'package', fileName: 'p.js
 const PLAN = { items: [], references: [], unknownKinds: [], summary: { create: 1 }, blocking: [], acknowledgementsRequired: [] }
 
 beforeEach(() => {
-  mockOrg = { $id: 'org-1', name: 'Acme', plan: 'starter', enabledPlugins: ['outreach', 'crm'] }
+  // Sequences is an add-on no plan carries: granted to this workspace.
+  mockOrg = { $id: 'org-1', name: 'Acme', plan: 'starter', enabledPlugins: ['outreach', 'crm'], entitlements: { features: { outreach: true } } }
   mockIntents.length = 0
+  mockUnreleased = new Set()
   mockSiteImports = []
   mockVerifyIdToken.mockReset().mockResolvedValue({ uid: 'uid-1', email: 'a@b.test', email_verified: true })
   mockAudit.mockReset().mockResolvedValue(undefined)
@@ -183,13 +189,40 @@ describe('the package route', () => {
   })
 
   it('leaves the CRM’s email templates out of a Free workspace’s packages, both ways (AGL-3555)', async () => {
-    mockOrg = { $id: 'org-1', plan: 'free', enabledPlugins: ['outreach', 'crm'] }
+    mockOrg = { $id: 'org-1', plan: 'free', enabledPlugins: ['outreach', 'crm'], entitlements: { features: { outreach: true } } }
     mockPackages.listTransferPackageItems.mockResolvedValue([])
     mockPackages.planTransferPackageImport.mockResolvedValue({ job: JOB, plan: PLAN, resources: {}, created: true })
     await packageRoute(request('package', { orgId: 'org-1', action: 'list' }))
     await packageRoute(request('package', { orgId: 'org-1', action: 'plan', package: { manifest: {} }, fileName: 'p.json' }))
     expect(mockPackages.listTransferPackageItems.mock.calls[0][1]).toMatchObject({ allowed: ['outreach.sequences'] })
     expect(mockPackages.planTransferPackageImport.mock.calls[0][1]).toMatchObject({ allowed: ['outreach.sequences'] })
+  })
+
+  it('leaves sequences out of a workspace without the Sequences add-on, both ways (AGL-3548)', async () => {
+    mockOrg = { $id: 'org-1', plan: 'scale', enabledPlugins: ['outreach', 'crm'] }
+    mockPackages.listTransferPackageItems.mockResolvedValue([])
+    mockPackages.planTransferPackageImport.mockResolvedValue({ job: JOB, plan: PLAN, resources: {}, created: true })
+    await packageRoute(request('package', { orgId: 'org-1', action: 'list' }))
+    await packageRoute(request('package', { orgId: 'org-1', action: 'plan', package: { manifest: {} }, fileName: 'p.json' }))
+    expect(mockPackages.listTransferPackageItems.mock.calls[0][1]).toMatchObject({ allowed: ['crm.email-templates'] })
+    expect(mockPackages.planTransferPackageImport.mock.calls[0][1]).toMatchObject({ allowed: ['crm.email-templates'] })
+  })
+
+  it('carries org automations only on a plan with them, as their own section does (AGL-3548)', async () => {
+    mockPackages.listTransferPackageItems.mockResolvedValue([])
+    mockOrg = { $id: 'org-1', plan: 'starter', enabledPlugins: ['workflows'] }
+    await packageRoute(request('package', { orgId: 'org-1', action: 'list' }))
+    expect(mockPackages.listTransferPackageItems.mock.calls[0][1].allowed).not.toContain('workflows.org-automations')
+    mockOrg = { $id: 'org-1', plan: 'pro', enabledPlugins: ['workflows'] }
+    await packageRoute(request('package', { orgId: 'org-1', action: 'list' }))
+    expect(mockPackages.listTransferPackageItems.mock.calls[1][1].allowed).toContain('workflows.org-automations')
+  })
+
+  it('leaves out a plugin whose release flag is off for the workspace (AGL-3548)', async () => {
+    mockPackages.listTransferPackageItems.mockResolvedValue([])
+    mockUnreleased = new Set(['outreach'])
+    await packageRoute(request('package', { orgId: 'org-1', action: 'list' }))
+    expect(mockPackages.listTransferPackageItems.mock.calls[0][1]).toMatchObject({ allowed: ['crm.email-templates'] })
   })
 
   it('exports under a read intent and audits counts, never content', async () => {

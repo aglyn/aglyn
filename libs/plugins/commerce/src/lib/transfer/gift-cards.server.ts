@@ -15,7 +15,6 @@
  * limitations under the License.
  */
 
-import * as Aglyn from '@aglyn/aglyn/server'
 import {
   planTransferUndo,
   type BuildTransferPlanInput,
@@ -35,7 +34,8 @@ import type {
   TransferRevertResult,
 } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
 import { firebaseAdmin, getOrgForHost, logHostActivity, resolveOrgMembership } from '@aglyn/tenant-data-admin'
-import { TransferEngineError } from '@aglyn/tenant-data-admin/server/transfer-jobs'
+import { TransferEngineError, TransferPlanRefusedError } from '@aglyn/tenant-data-admin/server/transfer-jobs'
+import { giftCardsPlanRefusal } from './gift-cards-plan'
 import { giftCardCodeOf, giftCardRedeemed } from '../model/commerce-gift-cards'
 import {
   GIFT_CARD_ACTIVITY_TYPE,
@@ -117,9 +117,10 @@ async function issuerOf(ctx: TransferResourceContext): Promise<GiftCardIssuer> {
     throw new TransferEngineError('forbidden', 403, GIFT_CARD_IMPORT_ACCESS)
   }
   const owner = await getOrgForHost(hostId).catch(() => null)
-  if (!Aglyn.checkEntitlement(owner?.org as never, 'giftCards')) {
-    throw new TransferEngineError('forbidden', 402, 'Gift cards are not included on this plan.')
-  }
+  // The transfer gate asked already (the resource's `planGate`); asked again
+  // here, in the same words, for the sweep that resumes an import.
+  const refusal = giftCardsPlanRefusal(owner?.org)
+  if (refusal) throw new TransferPlanRefusedError(refusal)
   const email = (membership?.member as { email?: string } | undefined)?.email ?? null
   return { hostId, uid, email, ownerOrg: owner?.org }
 }

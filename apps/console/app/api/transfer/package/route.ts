@@ -52,6 +52,7 @@ import {
   type TransferUndoDecision,
 } from '@aglyn/aglyn/data-transfer'
 import { listTransferResourcesFor, transferPlanRefusal } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
+import { filterEnabledPluginsByReleaseFlags } from '@aglyn/tenant-data-admin'
 import {
   applyTransferPackage,
   applyTransferPackageUndo,
@@ -87,12 +88,22 @@ async function handler(request: Request): Promise<Response> {
   const { body } = caller
   const action = String(body['action'] ?? '')
   const jobId = String(body['jobId'] ?? '')
-  // The workspace's own plugins decide what it can move, and its plan: a
-  // resource its plan does not carry is not in its packages (AGL-3555).
+  // The workspace's own plugins decide what it can move — switched on and
+  // released to it (AGL-3548), as the plugin dispatcher asks — and its
+  // plan: a resource its plan does not carry is not in its packages (AGL-3555).
   const intent = READ_ACTIONS.has(action) ? 'export' : 'import'
+  const packages = listTransferResourcesFor({ scope: 'org', org: caller.org as { enabledPlugins?: string[] } }).filter(
+    (one) => one.kinds.includes('package'),
+  )
+  const released = new Set(
+    await filterEnabledPluginsByReleaseFlags([...new Set(packages.map((one) => one.pluginId))], {
+      orgId: caller.orgId,
+      authorization: request.headers.get('authorization'),
+    }),
+  )
   const allowed: string[] = []
-  for (const one of listTransferResourcesFor({ scope: 'org', org: caller.org as { enabledPlugins?: string[] } })) {
-    if (!one.kinds.includes('package')) continue
+  for (const one of packages) {
+    if (!released.has(one.pluginId)) continue
     const refused = await transferPlanRefusal({ resource: one.key, orgId: caller.orgId, hostId: null, org: caller.org }, intent)
     if (!refused) allowed.push(one.key)
   }

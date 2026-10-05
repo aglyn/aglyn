@@ -340,8 +340,9 @@
       ],
       "transferResources": [
         {
-          "$comment": "AGL-3532. Export only: the one write path that creates a booking (`bookings/book`) emails the customer and may charge them, and the reminder job would email any booking it found. Export only: A booking is made on the booking page, which holds the slot, takes any payment and sends the confirmation and the reminder; one written from a file would skip all of that, so bookings are exported and never imported.",
+          "$comment": "AGL-3532. Export only: the one write path that creates a booking (`bookings/book`) emails the customer and may charge them, and the reminder job would email any booking it found. Export only: A booking is made on the booking page, which holds the slot, takes any payment and sends the confirmation and the reminder; one written from a file would skip all of that, so bookings are exported and never imported. AGL-3548: the Bookings page's plan feature (`bookings`) gates both directions, as the page does.",
           "key": "bookings",
+          "featureFlag": "bookings",
           "label": "Bookings",
           "singularLabel": "Booking",
           "scope": "host",
@@ -779,8 +780,10 @@
           "description": "Percent-off coupon codes, matched by code. New ones start switched off."
         },
         {
-          "$comment": "Imported by ISSUING each card through the plugin's issue path (AGL-3551), never by writing a balance: owners and admins only, the dry run lists every card and asks for the total typed back, and undo voids only cards nobody has spent from. A card's ID is its code.",
+          "$comment": "Imported by ISSUING each card through the plugin's issue path (AGL-3551), never by writing a balance: owners and admins only, the dry run lists every card and asks for the total typed back, and undo voids only cards nobody has spent from. A card's ID is its code. AGL-3548: issuing cards needs the plan's gift cards (`giftCards`), as the Gift cards card's issue route does; the cards a workspace already holds stay readable, and exportable, on every plan.",
           "key": "commerce.gift-cards",
+          "featureFlag": "giftCards",
+          "featureFlagExempt": ["export"],
           "label": "Gift cards",
           "singularLabel": "Gift card",
           "scope": "host",
@@ -1216,7 +1219,9 @@
       },
       "transferResources": [
         {
+          "$comment": "AGL-3548: Sequences' entitlement (`outreach`) gates both directions, as every Sequences route does.",
           "key": "outreach.sequences",
+          "featureFlag": "outreach",
           "label": "Sequences",
           "singularLabel": "Sequence",
           "scope": "org",
@@ -1232,8 +1237,9 @@
           "description": "Each sequence's steps and settings, imported as a draft. Never who was enrolled or what was sent."
         },
         {
-          "$comment": "AGL-3532. Add-only: a row never changes or removes an entry, because the list is a promise not to email someone.",
+          "$comment": "AGL-3532. Add-only: a row never changes or removes an entry, because the list is a promise not to email someone. AGL-3548: Sequences' entitlement (`outreach`) gates both directions, as every Sequences route does.",
           "key": "outreach.do-not-contact",
+          "featureFlag": "outreach",
           "label": "Do-not-contact list",
           "singularLabel": "Do-not-contact entry",
           "scope": "org",
@@ -1422,8 +1428,9 @@
       ],
       "transferResources": [
         {
-          "$comment": "A dataset's records (AGL-3530), one dataset at a time: reached as data.dataset:<datasetId>, so a job, a person's remembered export fields and the one running import each belong to one dataset. The server half registers from consoleServerDeclarations, the client half from the console registrar. readableByMembers (AGL-3546): every member may read a dataset they can see, so every such member may export it; the resource checks the dataset's visibility itself.",
+          "$comment": "A dataset's records (AGL-3530), one dataset at a time: reached as data.dataset:<datasetId>, so a job, a person's remembered export fields and the one running import each belong to one dataset. The server half registers from consoleServerDeclarations, the client half from the console registrar. readableByMembers (AGL-3546): every member may read a dataset they can see, so every such member may export it; the resource checks the dataset's visibility itself. AGL-3548: the Data page's plan feature (`dataStore`) gates both directions, as the page and the datasets API do.",
           "key": "data.dataset",
+          "featureFlag": "dataStore",
           "label": "Dataset records",
           "singularLabel": "Dataset record",
           "description": "The records of one dataset, with every field it defines.",
@@ -1648,8 +1655,9 @@
       ],
       "transferResources": [
         {
-          "$comment": "AGL-3532.",
+          "$comment": "AGL-3532. AGL-3548: the Event Calendar add-on (`eventCalendar`) gates both directions, as the Events page does.",
           "key": "events",
+          "featureFlag": "eventCalendar",
           "label": "Events",
           "singularLabel": "Event",
           "scope": "host",
@@ -2053,8 +2061,9 @@
       ],
       "transferResources": [
         {
-          "$comment": "AGL-3532. Written through the same allow-list, quota, publish role and approval stamp the redirects page and the create route use; the approver of an off-site destination is the person importing, never a column of the file.",
+          "$comment": "AGL-3532. Written through the same allow-list, quota, publish role and approval stamp the redirects page and the create route use; the approver of an off-site destination is the person importing, never a column of the file. AGL-3548: the Redirects page's plan feature (`redirects`) gates both directions, as the page does; rules without it are not served either.",
           "key": "redirects",
+          "featureFlag": "redirects",
           "label": "Redirects",
           "singularLabel": "Redirect",
           "scope": "host",
@@ -2101,7 +2110,9 @@
       },
       "transferResources": [
         {
+          "$comment": "AGL-3548: org automations' plan feature (`actions`) gates both directions, as their section and their create route do.",
           "key": "workflows.org-automations",
+          "featureFlag": "actions",
           "label": "Org automations",
           "singularLabel": "Org automation",
           "scope": "org",

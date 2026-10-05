@@ -216,7 +216,9 @@ const resource: EventsTransferResource = createEventsTransferResource({
   firestore: firestore as unknown as FirebaseFirestore.Firestore,
   deleteField: () => DELETE,
   timestamp: (ms) => ({ toMillis: () => ms }),
-  entitled: async () => access.entitled,
+  requireEntitled: async () => {
+    if (!access.entitled) throw new Error("Importing events isn't included in any plan — it's a paid add-on.")
+  },
   now: () => clock.now,
   createId: () => `new-${(nextId += 1)}`,
 })
@@ -603,16 +605,12 @@ describe('the dry run', () => {
     })
   })
 
-  it('refuses every row for a workspace without the Event Calendar add-on', async () => {
+  it('leaves the add-on to the transfer gate: the dry run reads no plan (AGL-3548)', async () => {
     access.entitled = false
     const plan = await planFor([
       { title: 'Open day', startsAt: '2026-11-01T10:00:00Z' },
     ])
-    expect(plan.rows[0]).toMatchObject({
-      verdict: 'fail',
-      reason: 'resourceRule',
-    })
-    expect(plan.warnings[0]?.samples[0]?.detail).toMatch(/add-on/)
+    expect(plan.rows[0]).toMatchObject({ verdict: 'create' })
   })
 })
 

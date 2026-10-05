@@ -45,6 +45,8 @@ const mockLockdownIntents: string[] = []
 let mockReadOnlyLock = false
 let mockHostPermission = true
 let mockRateAllowed = true
+/** The plugins whose release flag is off for the workspace. */
+let mockUnreleased = new Set<string>()
 let mockMember: Record<string, unknown> = { role: 'editor' }
 const mockExport = jest.fn()
 const mockVerifyIdToken = jest.fn()
@@ -92,6 +94,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     }),
   },
   consumeRateLimit: async () => ({ allowed: mockRateAllowed, resetMs: Date.now() + 30_000 }),
+  filterEnabledPluginsByReleaseFlags: async (pluginIds: string[]) => pluginIds.filter((id) => !mockUnreleased.has(id)),
   emailUnverifiedResponse: () => Response.json({ error: 'Verify your email' }, { status: 403 }),
   getHostDocAdmin: async (hostId: string) => mockHosts[hostId] ?? null,
   getOrgDoc: async () => mockOrg,
@@ -162,9 +165,10 @@ jest.mock('@aglyn/aglyn/plugin-manager/plugin-transfer-resources', () => {
     (key: string) => unknown
   >
   const fixtures: Record<string, unknown> = {
-    bottles: { key: 'bottles', scope: 'org', pluginId: 'cellar', readableByMembers: true },
-    ledgers: { key: 'ledgers', scope: 'org', pluginId: 'books', readPermission: 'books.read' },
-    kegs: { key: 'kegs', scope: 'org', pluginId: 'cellar' },
+    // Held by real plugins, which every workspace runs unless it switches one off.
+    bottles: { key: 'bottles', label: 'Bottles', scope: 'org', pluginId: 'data', readableByMembers: true },
+    ledgers: { key: 'ledgers', label: 'Ledgers', scope: 'org', pluginId: 'forms', readPermission: 'books.read' },
+    kegs: { key: 'kegs', label: 'Kegs', scope: 'org', pluginId: 'data' },
   }
   return {
     ...actual,
@@ -215,6 +219,7 @@ beforeEach(() => {
   mockReadOnlyLock = false
   mockHostPermission = true
   mockRateAllowed = true
+  mockUnreleased = new Set()
   mockMember = { role: 'editor' }
   mockExport.mockReset().mockImplementation(async () => ({
     stream: new Blob(['Name\r\nAda\r\n']).stream(),
@@ -618,5 +623,144 @@ describe('the CRM’s plan (AGL-3555)', () => {
     expect((await upload(request('upload', { orgId: 'org-1', resource, hostId: 'host-a', fileName: 'x.csv', content: 'a\n1' }))).status).toBe(200)
     mockJobs['job-crm'] = { resource, hostId: 'host-a' }
     expect((await apply(request('apply', { orgId: 'org-1', jobId: 'job-crm' }))).status).toBe(200)
+  })
+})
+
+/*
+ * THE PLUGIN RUNS HERE (AGL-3548): a resource moves only where its plugin
+ * runs — switched on for the named site (the workspace's set minus the
+ * site's), or for the workspace without one, and released to it — the
+ * plugin dispatcher's 404 otherwise, asked after the member. The people
+ * files' export, kept open on every plan, is owed whatever the switch.
+ */
+describe('the plugin runs here (AGL-3548)', () => {
+  const exportBody = (resource: string, extra: Record<string, unknown> = {}) => ({
+    orgId: 'org-1',
+    resource,
+    fieldIds: ['id'],
+    scope: { kind: 'all' },
+    format: 'csv',
+    ...extra,
+  })
+
+  it('refuses a resource whose plugin the workspace switched off, at every step', async () => {
+    mockOrg = { $id: 'org-1', enabledPlugins: ['forms'] }
+    const refused = await exportRoute(request('export', exportBody('bottles')))
+    expect(refused.status).toBe(404)
+    expect(await refused.json()).toEqual({ code: 'notFound', error: expect.stringMatching(/^Bottles can't be exported/) })
+    expect(mockExport).not.toHaveBeenCalled()
+    mockJobs['job-1'] = { resource: 'bottles' }
+    expect((await apply(request('apply', { orgId: 'org-1', jobId: 'job-1' }))).status).toBe(404)
+    expect(mockEngine.applyTransferJob).not.toHaveBeenCalled()
+  })
+
+  it('refuses a site’s records when the site switched the plugin off, and not on another site', async () => {
+    mockHosts['host-a'] = { orgId: 'org-1', disabledPlugins: ['data'] }
+    mockHosts['host-b'] = { orgId: 'org-1' }
+    mockJobs['job-a'] = { resource: 'bottles', hostId: 'host-a' }
+    mockJobs['job-b'] = { resource: 'bottles', hostId: 'host-b' }
+    const off = await upload(request('upload', { orgId: 'org-1', resource: 'bottles', hostId: 'host-a', fileName: 'x.csv', content: 'a\n1' }))
+    expect(off.status).toBe(404)
+    expect((await off.json()).error).toMatch(/off for this site/)
+    expect((await status(request('status', { orgId: 'org-1', jobId: 'job-a' }))).status).toBe(404)
+    expect((await status(request('status', { orgId: 'org-1', jobId: 'job-b' }))).status).not.toBe(404)
+  })
+
+  it('refuses a plugin whose release flag is off for the workspace', async () => {
+    mockUnreleased = new Set(['data'])
+    expect((await fields(request('fields', { orgId: 'org-1', resource: 'bottles' }))).status).toBe(404)
+    mockUnreleased = new Set()
+    mockEngine.readTransferResourceInfo.mockResolvedValue({ resource: { key: 'bottles', label: 'Bottles' } })
+    expect((await fields(request('fields', { orgId: 'org-1', resource: 'bottles' }))).status).toBe(200)
+  })
+
+  it('still exports the people files of a workspace that switched the CRM off', async () => {
+    mockOrg = { $id: 'org-1', plan: 'free', enabledPlugins: ['forms'] }
+    mockUnreleased = new Set(['crm'])
+    mockMember = { role: 'admin' }
+    expect((await exportRoute(request('export', exportBody('crm.contacts')))).status).toBe(200)
+    mockOrg = { $id: 'org-1', plan: 'starter', enabledPlugins: ['forms'] }
+    const imported = await upload(request('upload', { orgId: 'org-1', resource: 'crm.contacts', hostId: 'host-a', fileName: 'x.csv', content: 'a\n1' }))
+    expect(imported.status).toBe(404)
+  })
+
+  it('asks after the member, so a caller without access learns nothing of the switch', async () => {
+    mockOrg = { $id: 'org-1', enabledPlugins: ['forms'] }
+    mockOrgPermissions.clear()
+    const refused = await upload(request('upload', { orgId: 'org-1', resource: 'bottles', fileName: 'x.csv', content: 'a\n1' }))
+    expect(refused.status).toBe(403)
+  })
+})
+
+/*
+ * EVERY PLUGIN'S PLAN (AGL-3548): each resource declares the plan feature
+ * its plugin's own pages are gated by, and the transfer routes refuse what
+ * those pages refuse — 403 `plan_required`, the feature as `code` — on a
+ * workspace without it, and move it on one with it. The declarations are
+ * the real ones (`plugins.config.json`); a resource whose plugin registers
+ * no `planGate` answers in the core's words, which these assert.
+ */
+describe('every plugin’s plan (AGL-3548)', () => {
+  const FREE = { $id: 'org-1', plan: 'free' }
+  const STARTER = { $id: 'org-1', plan: 'starter' }
+  const BUSINESS = { $id: 'org-1', plan: 'business' }
+  const ADDONS = { $id: 'org-1', plan: 'free', entitlements: { features: { eventCalendar: true, outreach: true } } }
+  const cases: Array<{ resource: string; hostId?: string; feature: string; off: Record<string, unknown>; on: Record<string, unknown>; imports: boolean; exportOpen?: boolean }> = [
+    { resource: 'bookings', hostId: 'host-a', feature: 'bookings', off: FREE, on: STARTER, imports: false },
+    { resource: 'data.dataset:ds-1', feature: 'dataStore', off: FREE, on: STARTER, imports: true },
+    { resource: 'events', hostId: 'host-a', feature: 'eventCalendar', off: BUSINESS, on: ADDONS, imports: true },
+    { resource: 'redirects', hostId: 'host-a', feature: 'redirects', off: FREE, on: STARTER, imports: true },
+    { resource: 'outreach.do-not-contact', feature: 'outreach', off: BUSINESS, on: ADDONS, imports: true },
+    { resource: 'commerce.gift-cards', hostId: 'host-a', feature: 'giftCards', off: STARTER, on: BUSINESS, imports: true, exportOpen: true },
+  ]
+  const exportBody = (resource: string, hostId?: string) => ({
+    orgId: 'org-1',
+    resource,
+    ...(hostId ? { hostId } : {}),
+    fieldIds: ['id'],
+    scope: { kind: 'all' },
+    format: 'csv',
+  })
+  const uploadBody = (resource: string, hostId?: string) => ({
+    orgId: 'org-1',
+    resource,
+    ...(hostId ? { hostId } : {}),
+    fileName: 'x.csv',
+    content: 'a\n1',
+  })
+  const planRequired = async (response: Response, feature: string) => {
+    expect(response.status).toBe(403)
+    expect(await response.json()).toMatchObject({ reason: 'plan_required', code: feature })
+  }
+
+  beforeEach(() => {
+    mockMember = { role: 'admin' }
+    mockEngine.readTransferResourceInfo.mockResolvedValue({ resource: { key: 'x', label: 'X' } })
+    mockEngine.uploadTransferSource.mockResolvedValue({ job: JOB, preview: {} })
+  })
+
+  it.each(cases)('refuses $resource without $feature, and moves it with', async ({ resource, hostId, feature, off, on, imports, exportOpen }) => {
+    mockOrg = off
+    if (exportOpen) expect((await exportRoute(request('export', exportBody(resource, hostId)))).status).toBe(200)
+    else await planRequired(await exportRoute(request('export', exportBody(resource, hostId))), feature)
+    if (imports) {
+      await planRequired(await upload(request('upload', uploadBody(resource, hostId))), feature)
+      mockJobs['job-plan'] = { resource, ...(hostId ? { hostId } : {}) }
+      for (const route of [analyze, plan, apply, undo]) {
+        await planRequired(await route(request('step', { orgId: 'org-1', jobId: 'job-plan' })), feature)
+      }
+      expect(mockEngine.uploadTransferSource).not.toHaveBeenCalled()
+      expect(mockEngine.applyTransferJob).not.toHaveBeenCalled()
+    }
+
+    mockOrg = on
+    expect((await exportRoute(request('export', exportBody(resource, hostId)))).status).toBe(200)
+    if (imports) expect((await upload(request('upload', uploadBody(resource, hostId)))).status).toBe(200)
+  })
+
+  it('names the Event Calendar as the add-on it is, never as an upgrade', async () => {
+    mockOrg = BUSINESS
+    const refused = await exportRoute(request('export', exportBody('events', 'host-a')))
+    expect((await refused.json()).error).toBe("Exporting events isn't included in any plan — it's a paid add-on. Manage your plan and add-ons from Billing.")
   })
 })

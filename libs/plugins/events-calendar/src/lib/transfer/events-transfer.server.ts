@@ -16,7 +16,9 @@
  */
 
 import { checkEntitlement } from '@aglyn/aglyn/server'
+import { transferPlanRequired } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin/server/firebase-admin'
+import { TransferPlanRefusedError } from '@aglyn/tenant-data-admin/server/transfer-jobs'
 import {
   createEventsTransferResource,
   type EventsTransferResource,
@@ -37,13 +39,12 @@ export function adminEventsTransferResource(): EventsTransferResource {
     deleteField: () => firebaseAdmin.firestore.FieldValue.delete(),
     timestamp: (ms) => firebaseAdmin.firestore.Timestamp.fromMillis(ms),
     // The add-on the Events page is gated on, read the way the public
-    // listing reads it: from the workspace's own document.
-    entitled: async (orgId) => {
+    // listing reads it: from the workspace's own document, and refused in
+    // the transfer gate's own words (AGL-3548).
+    requireEntitled: async (orgId) => {
       const org = await firestore.collection('orgs').doc(orgId).get()
-      return checkEntitlement(
-        org.exists ? (org.data() as never) : null,
-        'eventCalendar',
-      )
+      if (checkEntitlement(org.exists ? (org.data() as never) : null, 'eventCalendar')) return
+      throw new TransferPlanRefusedError(transferPlanRequired('eventCalendar', 'Events', 'import'))
     },
   })
 }

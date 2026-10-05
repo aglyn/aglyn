@@ -973,6 +973,7 @@ export const PLUGIN_TRANSFER_RESOURCES_DECLARED: readonly ResolvedTransferResour
   {
     "pluginId": "bookings",
     "key": "bookings",
+    "featureFlag": "bookings",
     "label": "Bookings",
     "singularLabel": "Booking",
     "scope": "host",
@@ -1083,6 +1084,10 @@ export const PLUGIN_TRANSFER_RESOURCES_DECLARED: readonly ResolvedTransferResour
   {
     "pluginId": "commerce",
     "key": "commerce.gift-cards",
+    "featureFlag": "giftCards",
+    "featureFlagExempt": [
+      "export"
+    ],
     "label": "Gift cards",
     "singularLabel": "Gift card",
     "scope": "host",
@@ -1280,6 +1285,7 @@ export const PLUGIN_TRANSFER_RESOURCES_DECLARED: readonly ResolvedTransferResour
   {
     "pluginId": "outreach",
     "key": "outreach.sequences",
+    "featureFlag": "outreach",
     "label": "Sequences",
     "singularLabel": "Sequence",
     "scope": "org",
@@ -1297,6 +1303,7 @@ export const PLUGIN_TRANSFER_RESOURCES_DECLARED: readonly ResolvedTransferResour
   {
     "pluginId": "outreach",
     "key": "outreach.do-not-contact",
+    "featureFlag": "outreach",
     "label": "Do-not-contact list",
     "singularLabel": "Do-not-contact entry",
     "scope": "org",
@@ -1313,6 +1320,7 @@ export const PLUGIN_TRANSFER_RESOURCES_DECLARED: readonly ResolvedTransferResour
   {
     "pluginId": "data",
     "key": "data.dataset",
+    "featureFlag": "dataStore",
     "label": "Dataset records",
     "singularLabel": "Dataset record",
     "description": "The records of one dataset, with every field it defines.",
@@ -1390,6 +1398,7 @@ export const PLUGIN_TRANSFER_RESOURCES_DECLARED: readonly ResolvedTransferResour
   {
     "pluginId": "events-calendar",
     "key": "events",
+    "featureFlag": "eventCalendar",
     "label": "Events",
     "singularLabel": "Event",
     "scope": "host",
@@ -1426,6 +1435,7 @@ export const PLUGIN_TRANSFER_RESOURCES_DECLARED: readonly ResolvedTransferResour
   {
     "pluginId": "redirects",
     "key": "redirects",
+    "featureFlag": "redirects",
     "label": "Redirects",
     "singularLabel": "Redirect",
     "scope": "host",
@@ -1445,6 +1455,7 @@ export const PLUGIN_TRANSFER_RESOURCES_DECLARED: readonly ResolvedTransferResour
   {
     "pluginId": "workflows",
     "key": "workflows.org-automations",
+    "featureFlag": "actions",
     "label": "Org automations",
     "singularLabel": "Org automation",
     "scope": "org",

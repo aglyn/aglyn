@@ -59,6 +59,7 @@ import { useConsoleSlotPlugins } from '../../hooks/use-console-plugins'
 import useCurrentOrg from '../../hooks/use-current-org'
 import { useOrgHosts } from '../../hooks/use-org-hosts'
 import { useOrgSlug } from '../../hooks/use-org-scope'
+import { useReleaseFlags } from '../../hooks/use-release-flags'
 import { resolveExtensionEntitlement } from '../../utils/extension-entitlement'
 import { createTransferHubClient } from '../../utils/transfer-hub-client'
 import { HubDialog } from '../transfer-hub/hub-dialog.component'
@@ -172,22 +173,37 @@ export function OrgDataTransferCard(props: { onImported?(): void }) {
     () => (orgId ? createTransferHubClient({ orgId, fetch: (input, init) => authorizedFetch(user, input, init) }) : null),
     [orgId, user],
   )
+  // A plugin whose release flag is off for the workspace offers nothing to
+  // move — the transfer routes answer it 404 (AGL-3548) — as the shell
+  // hides its every other surface; staff preview keeps it. Until Remote
+  // Config settles, each flag reads its registered default, as the nav does.
+  const releaseFlags = useReleaseFlags()
+  const unreleased = Object.entries(releaseFlags.flags)
+    .filter(([, verdict]) => verdict?.released === false)
+    .map(([key]) => key)
+    .join(',')
+  const flagged = useMemo(() => {
+    const off = new Set(unreleased ? unreleased.split(',') : [])
+    return { isFlagOn: (flagKey: string) => !off.has(flagKey), staffBypass: releaseFlags.isStaff }
+  }, [unreleased, releaseFlags.isStaff])
   // Until the workspace document is confirmed, its enabled plugins are unknown: nothing is offered.
+  const settled = ready
   const orgResources = useMemo(
-    () => (ready && org ? listTransferResourcesFor({ scope: 'org', org: org as { enabledPlugins?: string[] } }) : []),
-    [org, ready],
+    () => (settled && org ? listTransferResourcesFor({ scope: 'org', org: org as { enabledPlugins?: string[] }, ...flagged }) : []),
+    [org, settled, flagged],
   )
   const site = hosts.find((host) => host.$id === hostId) ?? hosts[0]
   const siteResources = useMemo(
     () =>
-      ready && org && site
+      settled && org && site
         ? listTransferResourcesFor({
             scope: 'host',
             org: org as { enabledPlugins?: string[] },
             host: site as { disabledPlugins?: string[]; enabledPlugins?: string[] },
+            ...flagged,
           })
         : [],
-    [org, ready, site],
+    [org, settled, site, flagged],
   )
 
   /** Whether the workspace's plan lets it `intent` the resource; `false` until the plan has answered. */

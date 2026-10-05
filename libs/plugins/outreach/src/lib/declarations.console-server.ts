@@ -192,6 +192,7 @@ function lazyDoNotContactTransfer(): PluginTransferResource {
   }
   return {
     matchKeys: OUTREACH_DNC_MATCH_KEYS,
+    planGate: outreachTransferPlanGate,
     fields: async (ctx) => (await load()).fields(ctx),
     count: async (ctx, options) => (await load()).count(ctx, options),
     readPage: async (ctx, cursor, fieldIds, options) => (await load()).readPage(ctx, cursor, fieldIds, options),
@@ -202,6 +203,13 @@ function lazyDoNotContactTransfer(): PluginTransferResource {
     revert: async (ctx, snapshot, decisions) => (await load()).revert(ctx, snapshot, decisions),
   }
 }
+
+/**
+ * Sequences' entitlement, asked by the transfer gate for both resources and
+ * every intent (AGL-3548); the answer's module loads with the first ask.
+ */
+const outreachTransferPlanGate: NonNullable<PluginTransferResource['planGate']> = async (subject, intent) =>
+  (await import('./transfer/plan-gate')).outreachTransferPlanGate(subject, intent)
 
 /** The sequences package's server half (AGL-3535), loaded when an import or export first asks. */
 const sequencesPackage = async () => (await import('./transfer/sequences-package.server')).createOutreachSequencesPackage()
@@ -224,6 +232,7 @@ function registerOutreachTransferResources(): void {
       problems: async (ctx, write) => (await sequencesPackage()).problems(ctx, write as never),
       referenceTargets: async (ctx, kinds) => (await sequencesPackage()).referenceTargets(ctx, kinds),
       rules: OUTREACH_SEQUENCE_PACKAGE_RULES,
+      planGate: outreachTransferPlanGate,
     },
     { pluginId: OUTREACH_PLUGIN_ID },
   )

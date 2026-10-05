@@ -41,6 +41,13 @@ Import and Export, and contacts and leads can't be imported. Exporting your
 contacts and leads works on every plan, here and in
 **Settings → Privacy**.
 
+The same goes for every other kind of data: it moves on the plans that
+include its page. Datasets, bookings and redirects are included from
+Starter, org automations from Pro, and importing gift cards from Business
+(the gift cards you already have can be exported on any plan). Events need
+the Event Calendar add-on and sequences the Sequences add-on. Data from a
+plugin that is switched off for the workspace or the site isn't listed.
+
 ## Export records
 
 1. Click **Export** beside the records.

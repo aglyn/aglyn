@@ -275,10 +275,10 @@ describe('the transfer launcher', () => {
     expect(access).toEqual({ import: false, export: false })
   })
 
-  it('offers no CRM button on Free but the people files’ export, every one on Starter (AGL-3555)', () => {
+  it('offers no CRM or dataset button on Free but the people files’ export, every one on Starter (AGL-3555, AGL-3548)', () => {
     const answers = () => {
       const out: Record<string, { import: boolean; export: boolean }> = {}
-      for (const resource of ['crm.contacts', 'crm.leads', 'crm.companies', 'crm.deals', 'crm.tasks', 'crm.activities', 'crm.pipelines', 'crm.fields', 'data.dataset:ds-1']) {
+      for (const resource of ['crm.contacts', 'crm.leads', 'crm.companies', 'crm.deals', 'crm.tasks', 'crm.activities', 'crm.pipelines', 'crm.fields', 'data.dataset:ds-1', 'email.suppressions']) {
         const target = { resource, scope: 'org' as const }
         out[resource] = { import: Boolean(launcher?.can('import', target)), export: Boolean(launcher?.can('export', target)) }
       }
@@ -299,7 +299,10 @@ describe('the transfer launcher', () => {
       'crm.activities': { import: false, export: false },
       'crm.pipelines': { import: false, export: false },
       'crm.fields': { import: false, export: false },
-      'data.dataset:ds-1': { import: true, export: true },
+      // The Data page's `dataStore`, from Starter (AGL-3548).
+      'data.dataset:ds-1': { import: false, export: false },
+      // Suppressions declare no plan feature: every plan moves them.
+      'email.suppressions': { import: true, export: true },
     })
 
     mockBilling = { org: { plan: 'starter' }, ready: true }
@@ -322,7 +325,8 @@ describe('the transfer launcher', () => {
     )
     expect(answers()['crm.companies']).toEqual({ import: false, export: false })
     expect(answers()['crm.contacts']).toEqual({ import: false, export: true })
-    expect(answers()['data.dataset:ds-1']).toEqual({ import: true, export: true })
+    expect(answers()['data.dataset:ds-1']).toEqual({ import: false, export: false })
+    expect(answers()['email.suppressions']).toEqual({ import: true, export: true })
   })
 
   it('keeps one launcher while the answers stand, so a list is not re-rendered for nothing', () => {

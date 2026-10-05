@@ -698,7 +698,9 @@ function inSentence(label: string): string {
 /**
  * The refusal a resource with no `planGate` gets: its plan feature as
  * `code`, and a sentence naming the plan that includes it, from the same
- * ladder the console's upgrade notices walk.
+ * ladder the console's upgrade notices walk. A feature no plan carries — an
+ * add-on, the Event Calendar — is never offered as an upgrade: it is named
+ * as the add-on it is, the shell's own `blockedExtensionNotice` wording.
  */
 export function transferPlanRequired(
   feature: string,
@@ -706,13 +708,13 @@ export function transferPlanRequired(
   intent: TransferAccessIntent,
 ): TransferPlanRefusal {
   const plan = planLabelGrantingFeature(feature as keyof OrgFeatureFlags)
+  const act = `${intent === 'export' ? 'Exporting' : 'Importing'} ${inSentence(label)}`
   return {
     status: 403,
     body: {
-      error:
-        `${intent === 'export' ? 'Exporting' : 'Importing'} ${inSentence(label)} is not included in your ` +
-        'current plan. Manage your plan and add-ons from Billing.' +
-        (plan ? ` Included from ${plan}.` : ''),
+      error: plan
+        ? `${act} is not included in your current plan. Manage your plan and add-ons from Billing. Included from ${plan}.`
+        : `${act} isn't included in any plan — it's a paid add-on. Manage your plan and add-ons from Billing.`,
       reason: TRANSFER_PLAN_REQUIRED,
       code: feature,
     },

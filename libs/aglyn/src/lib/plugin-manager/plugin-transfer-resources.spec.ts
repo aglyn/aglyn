@@ -413,6 +413,14 @@ describe('a resource moved only on a plan that carries it', () => {
     expect(transferPlanRequired('crm', 'CRM records', 'import').body.error).toMatch(/^Importing CRM records is not included/)
   })
 
+  it('names an add-on no plan carries as an add-on, never as an upgrade (AGL-3548)', () => {
+    expect(transferPlanRequired('eventCalendar', 'Events', 'import').body).toEqual({
+      error: "Importing events isn't included in any plan — it's a paid add-on. Manage your plan and add-ons from Billing.",
+      reason: 'plan_required',
+      code: 'eventCalendar',
+    })
+  })
+
   it('answers the plugin’s own refusal when it registers one, and only for an intent that asks', async () => {
     const asked: string[] = []
     const refusal = { status: 403 as const, body: { error: 'Labels are the cellar’s.', reason: 'plan_required' as const, code: 'crm' } }
