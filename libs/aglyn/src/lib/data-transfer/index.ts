@@ -17,8 +17,9 @@
 
 // The import/export core (AGL-3522): pure and domain-neutral, with no Node
 // builtin and no React, so the browser wizard and the server job engine run
-// the same code. Reached as `@aglyn/aglyn/data-transfer` without the rest of
-// the barrel, and re-exported by both `@aglyn/aglyn` and `@aglyn/aglyn/server`.
+// the same code. Reached only as `@aglyn/aglyn/data-transfer`: neither
+// `@aglyn/aglyn` nor `@aglyn/aglyn/server` re-exports it, so the shells that
+// open those barrels never load it.
 export * from './resource'
 export * from './similarity'
 export * from './field-catalog'

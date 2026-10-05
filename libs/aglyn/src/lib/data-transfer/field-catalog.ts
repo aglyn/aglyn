@@ -38,6 +38,7 @@
  *=========================================*/
 
 import { customImportTarget } from '../app-utils/csv-import'
+import { PLATFORM_BRAND_NAME } from '../app-utils/platform-brand'
 import { TRANSFER_ID_FIELD, isTransferFieldWritable } from './resource'
 import type { TransferField, TransferFieldType } from './resource'
 
@@ -103,8 +104,8 @@ export interface TransferCatalogInput {
   groups?: readonly TransferFieldGroup[]
 }
 
-/** The Aglyn id field every catalog carries. */
-export function transferIdField(label = 'Aglyn ID'): TransferField {
+/** The Aglyn id field every catalog carries, labeled with the configured brand. */
+export function transferIdField(label = `${PLATFORM_BRAND_NAME} ID`): TransferField {
   return {
     id: TRANSFER_ID_FIELD,
     label,
@@ -113,7 +114,7 @@ export function transferIdField(label = 'Aglyn ID'): TransferField {
     system: true,
     readOnly: true,
     matchKey: true,
-    aliases: ['aglyn id', 'record id', 'id'],
+    aliases: [...new Set([`${PLATFORM_BRAND_NAME.toLowerCase()} id`, 'aglyn id', 'record id', 'id'])],
   }
 }
 

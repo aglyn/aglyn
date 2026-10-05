@@ -94,7 +94,7 @@ describe('readPackageManifest', () => {
     expect(read).toEqual({
       ok: false,
       problems: [
-        'The file is not an Aglyn package.',
+        'The file\'s format is "aglyn-site-export", not "aglyn-package".',
         'The package is version 1; this reads version 2.',
         'Item 1 has a dependency without a kind and id.',
         'Item 2 repeats page/p1.',

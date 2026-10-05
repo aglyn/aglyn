@@ -31,7 +31,6 @@ export * from './lib/plugin-manager'
 export * from './lib/canvas-manager'
 export * from './lib/app-utils/server'
 export * from './lib/foundation'
-export * from './lib/data-transfer'
 // The Web↔(req,res) API adapter (AGL-407) imports `node:stream`, so it is
 // exposed ONLY through this `/server` entry — never re-exported by the full
 // `@aglyn/aglyn` barrel (which client code bundles).

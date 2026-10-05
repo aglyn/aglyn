@@ -136,7 +136,9 @@ export function readPackageManifest(raw: unknown): PackageManifestRead {
   const problems: string[] = []
   if (!raw || typeof raw !== 'object') return { ok: false, problems: ['The file is not a package.'] }
   const source = raw as Record<string, unknown>
-  if (source['format'] !== TRANSFER_PACKAGE_FORMAT) problems.push('The file is not an Aglyn package.')
+  if (source['format'] !== TRANSFER_PACKAGE_FORMAT) {
+    problems.push(`The file's format is ${JSON.stringify(source['format'] ?? null)}, not "${TRANSFER_PACKAGE_FORMAT}".`)
+  }
   if (source['version'] !== TRANSFER_PACKAGE_VERSION) {
     problems.push(`The package is version ${String(source['version'])}; this reads version ${TRANSFER_PACKAGE_VERSION}.`)
   }

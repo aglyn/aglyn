@@ -28,9 +28,11 @@ rules, and the core does the rest the same way for every resource.
 import { matchHeaders, buildTransferPlan } from '@aglyn/aglyn/data-transfer'
 ```
 
-`@aglyn/aglyn/data-transfer` is the module alone. It has no Node builtin and
-no React, so the browser wizard and the server job run the same code; it is
-also re-exported by `@aglyn/aglyn` and `@aglyn/aglyn/server`. Content hashing
+`@aglyn/aglyn/data-transfer` is the module, and its only door: it is not
+re-exported by `@aglyn/aglyn` or `@aglyn/aglyn/server`, so a screen that never
+imports or exports pays nothing for it (`check:aglyn-barrel`). It has no Node
+builtin and no React, so the browser wizard and the server job run the same
+code. Content hashing
 uses WebCrypto (`globalThis.crypto.subtle`), which both provide.
 
 ## The modules
