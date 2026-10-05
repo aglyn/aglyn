@@ -379,14 +379,22 @@ A picture from your media library is delivered in several widths, and each visit
 browser downloads the one that fits the space the image takes on their screen — a
 phone gets a small file, a wide desktop a larger one. You do not set anything for this.
 
-**How Aglyn knows how big the image shows.** While you build, the Besigner measures how
-wide each image renders at the screen size you are looking at, and saving or publishing
-the page stores that with the image. Check the page on another device in the preview
-switcher (**XS - Mobile**, **MD**, **LG**…) before you save and that size is measured
-too. Where nothing was measured yet, the layout fills in: an image in a **Grid** cell set
-to `xs:12 md:4` is a third of the page from tablet width up, and an image in a grid with
-three equal columns is a third. Only when nothing at all is known does the browser
-assume the image is as wide as the screen.
+**How Aglyn knows how big the image shows.** Every published page works it out from
+where the image sits, with nothing for you to do and nothing to re-save:
+
+- a size you gave the image itself — a pixel **Width**, or a pixel **Height** with the
+  width left on auto (a logo set 56px tall is as wide as its picture is at that height),
+  including different sizes per screen size;
+- the layout around it — a **Grid** cell set to `xs:12 md:4` is a third of the page from
+  tablet width up, an image in a grid of three equal columns is a third, the gaps
+  between them come off, and a **Container** stops the slot growing past its max width.
+
+On top of that, the Besigner measures how wide each image renders at the screen size you
+are looking at, and saving or publishing the page stores it with the image — which
+covers layouts the rules above cannot read. Check the page on another device in the
+preview switcher (**XS - Mobile**, **MD**, **LG**…) before you save and that size is
+measured too. Only when nothing at all is known does the browser assume the image is as
+wide as the screen.
 
 The **first image of the page itself** — not the logo in your header — is treated as the
 page's main picture: it starts loading with the page at high priority, unless it is

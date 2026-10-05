@@ -818,10 +818,14 @@ describe('the versioned URL (AGL-3485)', () => {
     expect(resolveMediaSrc('media:site1/photo@old')).toBe(
       `${MEDIA_CDN_ROUTE}/site1/photo`,
     )
-    // A url that is not a reference is never touched.
+    // A url that is not ours is never touched.
     expect(resolveMediaSrc('https://example.com/a.png', { version: 'h4sh' })).toBe(
       'https://example.com/a.png',
     )
+    // A legacy stored CDN path is the same asset on the same route.
+    expect(
+      resolveMediaSrc(`${MEDIA_CDN_ROUTE}/site1/photo`, { version: 'h4sh' }),
+    ).toBe(`${MEDIA_CDN_ROUTE}/site1/photo?v=${token}`)
   })
 
   it('merges each variant width into the versioned query', () => {

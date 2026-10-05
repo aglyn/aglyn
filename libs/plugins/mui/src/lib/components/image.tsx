@@ -419,8 +419,9 @@ const Image = forwardRef<HTMLElement, ImageProps>((props, ref) => {
   })
   /**
    * How wide the image will render, for `sizes` (AGL-3485): the author's own
-   * value, a pixel width, a pixel height at a known shape, or per breakpoint
-   * what the Besigner measured and what the layout states. See
+   * value, else per breakpoint a pixel width or height the element states (in
+   * its attributes or its `sx`, responsive values included), what the
+   * Besigner measured, and what the layout around it states. See
    * `utils/image-sizes.ts` for the order and for why none of it disturbs
    * layout the way `sizes="auto"` did (AGL-2486).
    *
@@ -431,6 +432,7 @@ const Image = forwardRef<HTMLElement, ImageProps>((props, ref) => {
     sizes: authoredSizes,
     width,
     height,
+    sx: nodeSxProp,
     intrinsicWidth,
     intrinsicHeight,
     renderedWidths,

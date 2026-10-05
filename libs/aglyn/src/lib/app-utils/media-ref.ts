@@ -506,7 +506,14 @@ export function resolveMediaSrc(
   options?: ResolveMediaSrcOptions,
 ): string | undefined {
   if (!value) return undefined
-  if (!isMediaRef(value)) return value
+  if (!isMediaRef(value)) {
+    // A legacy stored CDN path names the same asset on the same route, so it
+    // takes the version as a reference does (AGL-3485).
+    const token = isMediaCdnPath(value)
+      ? mediaCdnVersionToken(options?.version)
+      : undefined
+    return token ? `${value}?${MEDIA_CDN_VERSION_PARAM}=${token}` : value
+  }
   const ref = parseMediaRef(value)
   if (!ref) return undefined
   const scope = hostQualifiedScope(ref.scope, options?.hostId)

@@ -520,3 +520,25 @@ describe('a placed image names its asset version (AGL-3485)', () => {
     ).toMatchObject({ contentHash: 'h4sh' })
   })
 })
+
+describe('a placement made before references existed (AGL-3485)', () => {
+  it('reads the asset a legacy CDN path names, and lays its pair on', () => {
+    const legacy = { src: '/api/media/cdn/site1/photo', alt: 'old' }
+    expect(mediaAssetRefs(page(legacy))).toEqual([
+      { scope: 'site1', mediaId: 'photo' },
+    ])
+    expect(
+      shipped(legacy, answered({ ...REPLACED, contentHash: 'h4sh' })),
+    ).toMatchObject({
+      intrinsicWidth: 480,
+      intrinsicHeight: 480,
+      mediaVersion: 'h4sh',
+    })
+  })
+
+  it('reads nothing off a hotlink that only contains our route', () => {
+    expect(
+      mediaAssetRefs(page({ src: 'https://example.com/x/api/media/cdn/site1/photo' })),
+    ).toEqual([])
+  })
+})

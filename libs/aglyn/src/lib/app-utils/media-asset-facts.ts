@@ -89,8 +89,10 @@ import { mediaCdnScopeRefusal, parseMediaCdnScope } from './media-cdn-scope'
 import { intrinsicMediaSize, videoMediaProps } from './media-metadata'
 import {
   hostQualifiedScope,
+  isMediaCdnPath,
   mediaCdnVersionToken,
   type MediaRef,
+  mediaRefFromCdnPath,
   parseMediaRef,
 } from './media-ref'
 import { VIDEO_COMPONENT_ID } from './video-object'
@@ -266,7 +268,21 @@ function placedAsset(
   // The precedence every other reader of the composed map uses: a node inside
   // a repeated collection carries its bound values in the resolved copy.
   const props = node?.resolvedProps ?? node?.props
-  return parseMediaRef(props?.['src'])
+  return placedRef(props?.['src'])
+}
+
+/**
+ * The library asset a stored `src` names: a `media:` reference, or the
+ * site-relative CDN path the first media picker wrote before references
+ * existed (AGL-1215). Both name one asset by its id, and the path's are among
+ * the oldest placements on the platform — the ones that most need their file's
+ * shape read back, since nothing copied it onto the node when they were made.
+ * Only the strict root-relative path: a hotlink on another host that happens
+ * to contain our route names nothing of ours.
+ */
+function placedRef(src: unknown): MediaRef | null {
+  if (isMediaCdnPath(src)) return parseMediaRef(mediaRefFromCdnPath(src))
+  return parseMediaRef(src)
 }
 
 /** A compose-time token the tenant has not substituted — never a document. */
