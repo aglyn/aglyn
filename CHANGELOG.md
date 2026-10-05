@@ -9,6 +9,19 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.223 — 2026-10-05
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/03858b42b...v1.0.0-beta.223)
+
+### Fixed
+
+- **tenant:** a page never waits on a theme font stylesheet past its deadline ([AGL-3564](https://linear.app/aglyn/issue/AGL-3564))
+
+### Changed
+
+- **plugins:** the record system moves a delivered message's timeline entry ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **crm:** a record's next activity and a task's reminder are the CRM's model ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+
 ## v1.0.0-beta.222 — 2026-10-05
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.221...v1.0.0-beta.222)
