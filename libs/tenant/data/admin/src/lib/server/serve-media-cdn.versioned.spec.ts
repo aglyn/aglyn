@@ -34,6 +34,7 @@ import { MEDIA_VARIANT_ENCODER_VERSION } from '@aglyn/aglyn/server'
 import {
   MEDIA_CDN_STABLE_CACHE_CONTROL,
   MEDIA_CDN_VERSIONED_CACHE_CONTROL,
+  mediaCdnVariantFor,
   mediaCdnVersionIsCurrent,
   serveMediaCdn,
 } from './serve-media-cdn'
@@ -176,6 +177,13 @@ describe('AGL-3485 · a versioned image URL is kept for a year', () => {
     expect(res.headers['cache-control']).toBe(MEDIA_CDN_STABLE_CACHE_CONTROL)
   })
 
+  it('does not pin a larger variant standing in for a width the asset lacks', async () => {
+    // 480 is answered by the 640 variant until a regeneration makes a 480;
+    // a year-long pin would keep the stand-in after the real width exists.
+    const res = await serve(['org:acme', 'm1'], { v: CURRENT, w: '480' })
+    expect(res.headers['cache-control']).toBe(MEDIA_CDN_STABLE_CACHE_CONTROL)
+  })
+
   it('does not pin variants another encoder generation made', async () => {
     // The page names the encoder the code runs; the document says its
     // variants were made by a different one. Pinning them would hide the
@@ -256,5 +264,26 @@ describe('mediaCdnVersionIsCurrent', () => {
     expect(
       mediaCdnVersionIsCurrent({ ...base, otherRepresentation: true }),
     ).toBe(false)
+  })
+})
+
+describe('mediaCdnVariantFor (AGL-3486)', () => {
+  it('answers the width itself when the asset has it', () => {
+    expect(mediaCdnVariantFor([320, 640, 1280], 640)).toBe(640)
+  })
+
+  it('answers the smallest larger width when it does not', () => {
+    expect(mediaCdnVariantFor([320, 640, 1280, 1920], 768)).toBe(1280)
+    expect(mediaCdnVariantFor([1920, 320, 1280, 640], 384)).toBe(640)
+  })
+
+  it('answers nothing when every variant is narrower, or nothing was asked', () => {
+    expect(mediaCdnVariantFor([320, 640], 1280)).toBeNull()
+    expect(mediaCdnVariantFor([], 640)).toBeNull()
+    expect(mediaCdnVariantFor([320, 640], 0)).toBeNull()
+  })
+
+  it('ignores entries that are not whole widths', () => {
+    expect(mediaCdnVariantFor(['1280', 960.5, null, 1600], 768)).toBe(1600)
   })
 })

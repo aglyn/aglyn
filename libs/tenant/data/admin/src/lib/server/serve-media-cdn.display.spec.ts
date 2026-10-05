@@ -147,6 +147,7 @@ beforeEach(() => {
     [BASE]: { contentType: 'image/jpeg', size: 6_000_000 },
     [`${BASE}__display`]: { contentType: 'image/jpeg', size: 600_000 },
     [`${BASE}__w640.webp`]: { contentType: 'image/webp', size: 40_000 },
+    [`${BASE}__w1280.webp`]: { contentType: 'image/webp', size: 110_000 },
   }
   mockState.streamed = []
   mockState.scheduled = []
@@ -162,8 +163,17 @@ describe('the display copy answers inline requests (AGL-3486)', () => {
     )
   })
 
-  it('serves a width the asset has no variant for from the display copy, not the 6 MB original', async () => {
-    await serve({ w: '960' })
+  it('serves a width the asset has no variant for from the next larger variant, not the 6 MB original', async () => {
+    const res = await serve({ w: '960' })
+    expect(mockState.streamed).toEqual([`${BASE}__w1280.webp`])
+    expect(res.headers['content-type']).toBe('image/webp')
+    expect(res.headers['etag']).toBe(
+      `"0123456789abcdef-w1280-e${MEDIA_VARIANT_ENCODER_VERSION}"`,
+    )
+  })
+
+  it('serves a width above every variant from the display copy', async () => {
+    await serve({ w: '3000' })
     expect(mockState.streamed).toEqual([`${BASE}__display`])
   })
 
@@ -223,6 +233,19 @@ describe('a stale asset is regenerated after the response (AGL-3486)', () => {
     expect(regenerateMediaDeliveryCopies).toHaveBeenCalledWith(
       expect.objectContaining({ basePath: BASE }),
     )
+  })
+
+  it('answers a width generation 1 never made (768) from its 1280 variant while it regenerates', async () => {
+    mockState.doc = {
+      ...CURRENT,
+      variants: [320, 640, 1280, 1920],
+      variantEncoderVersion: undefined,
+      display: undefined,
+    }
+    const res = await serve({ w: '768' })
+    expect(mockState.streamed).toEqual([`${BASE}__w1280.webp`])
+    expect(res.headers['etag']).toBe('"0123456789abcdef-w1280"')
+    expect(mockState.scheduled).toHaveLength(1)
   })
 
   it('schedules nothing for an asset already at the current generation', async () => {
