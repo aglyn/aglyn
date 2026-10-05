@@ -1227,6 +1227,12 @@ service cloud.firestore {
       function canWriteOrgDatasets() {
         return canWriteOrgData() && memberResolves('data.manage');
       }
+      // The org-wide members `/api/transfer/*` admits (AGL-3524).
+      function canReadTransferJobs() {
+        return isOrgWideMember() && isVerified() &&
+          ((orgMember().role in ['owner', 'admin', 'editor'] && memberResolves('data.manage')) ||
+           memberStamps('data.manage'));
+      }
       /**
        * Write access to the org-wide records a site collaborator cannot read
        * (AGL-1026). Without this, an org role of `editor` scoped to one site
@@ -2086,6 +2092,14 @@ service cloud.firestore {
         allow read: if isStaff() || canManageOrg() ||
           (isOrgWideMember() && memberStamps('org.settings') &&
            memberStamps('data.manage'));
+        allow write: if false;
+      }
+
+      // An import's job (AGL-3524): written by the job engine behind
+      // `/api/transfer/*` alone, read by the members it admits. Its chunks,
+      // ledger, results and undo match no rule: the routes serve them.
+      match /transferJobs/{jobId} {
+        allow read: if isStaff() || canReadTransferJobs();
         allow write: if false;
       }
 

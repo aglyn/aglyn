@@ -621,7 +621,9 @@ registerPluginTransferResource(
 | `matchKeys` | `MatchKeySpec[]`, in priority order — the keys a row finds its record by. At least one. |
 | `aliases` | Optional `TransferAliasDictionary[]`: other products' header spellings for these fields. |
 | `readPage(ctx, cursor, fieldIds, { pageSize, ids, filter })` | One export page, `{ rows, next }`, each row keyed by field id and holding only `fieldIds`. `cursor` is `null` for the first page and `next` `null` after the last. |
-| `lookup(ctx, requests)` | The records holding each requested key value: `{ lookup: MatchLookup, records }`, with each found record's current values for the plan's before → after. |
+| `lookup(ctx, requests)` | The records holding each requested key value: `{ lookup: MatchLookup, records }`, with each found record's current values for the plan's before → after. Undo also asks it for records by id (`TRANSFER_ID_FIELD` with the `aglynId` normalizer) to read what each holds now, so it answers that key whether or not `matchKeys` names it. |
+| `picklists(ctx, picklistIds)` | Optional; the organization's list for each picklist the catalog names (`TransferField.picklistId`), as `{ [picklistId]: { spec, set } }`. Without it a picklist column is imported as typed. |
+| `addPicklistValues(ctx, picklistId, values)` | Optional; adds the values the person chose to add before the import's first write. Called again with the same values on a retry, so an id the list already holds is left as it is. |
 | `plan(ctx, input)` | Optional; the core's `buildTransferPlan` otherwise (`planTransferResourceRows`). |
 | `lockedRules(ctx)` | Optional `TransferLockedRule[]`, shown locked in the wizard with their reasons. |
 | `invariants` | Optional rules a planned row must keep, each `{ id, label, check(row, before) }` answering why the row breaks it or `null`; `transferInvariantFailures` checks every writing row. |

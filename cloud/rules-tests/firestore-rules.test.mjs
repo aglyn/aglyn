@@ -6468,6 +6468,65 @@ describe('a consent group change is the executor’s to write (AGL-3320)', () =>
 })
 
 /**
+ * An import's job (AGL-3524): `orgs/{orgId}/transferJobs/{jobId}`. The
+ * Admin-SDK job engine behind `/api/transfer/*` writes it and everything
+ * under it; the wizard's progress panel reads the job, so the members those
+ * routes admit — `data.manage`, org-wide — may read it and nobody may write.
+ * Its chunks, ledger, results and undo entries are served by the routes.
+ */
+describe('an import job is the engine’s to write (AGL-3524)', () => {
+  const JOB = { id: 'job-1', resource: 'bottles', status: 'applying', orgId: ORG }
+  const job = (db) => doc(db, 'orgs', ORG, 'transferJobs', 'job-1')
+  const ledger = (db) => doc(db, 'orgs', ORG, 'transferJobs', 'job-1', 'ledger', 'job-1:0')
+  const WIDE_EDITOR = 'uid-transfer-editor'
+  const REVOKED = 'uid-transfer-revoked'
+  const STAMPED = 'uid-transfer-stamped'
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      await setDoc(job(db), JOB)
+      await setDoc(ledger(db), { row: 0, chunk: 0 })
+      await setDoc(doc(db, 'orgs', ORG, 'members', WIDE_EDITOR), { role: 'editor', allHosts: true })
+      await setDoc(doc(db, 'orgs', ORG, 'members', REVOKED), {
+        role: 'editor', allHosts: true, roleId: 'no-data', resolvedPermissions: { 'data.manage': false },
+      })
+      await setDoc(doc(db, 'orgs', ORG, 'members', STAMPED), {
+        role: 'viewer', allHosts: true, roleId: 'importer', resolvedPermissions: { 'data.manage': true },
+      })
+    })
+  })
+
+  it('lets the members the routes admit read the job', async () => {
+    await mustAllow('the owner reading the job', getDoc(job(authed(OWNER))))
+    await mustAllow('an org-wide editor reading the job', getDoc(job(authed(WIDE_EDITOR))))
+    await mustAllow('a custom role stamped with data.manage reading the job', getDoc(job(authed(STAMPED))))
+    await mustAllow('staff reading the job', getDoc(job(authed(STAFF, { staff: true }))))
+  })
+
+  it('refuses everyone else a read', async () => {
+    await mustDeny('an editor whose data.manage is revoked', getDoc(job(authed(REVOKED))))
+    await mustDeny('an org-wide viewer', getDoc(job(authed(VIEWER))))
+    await mustDeny('a site collaborator', getDoc(job(authed(EDITOR))))
+    await mustDeny('an outsider', getDoc(job(authed(OUTSIDER))))
+    // What is under the job is served by the routes; no client reads it.
+    await mustDeny('the owner reading the ledger', getDoc(ledger(authed(OWNER))))
+    await mustDeny('staff reading the ledger', getDoc(ledger(authed(STAFF, { staff: true }))))
+  })
+
+  it('lets nobody write the job or anything under it', async () => {
+    await mustDeny('the owner creating a job', setDoc(doc(authed(OWNER), 'orgs', ORG, 'transferJobs', 'job-2'), JOB))
+    await mustDeny('the owner moving its status', updateDoc(job(authed(OWNER)), { status: 'applied' }))
+    await mustDeny('the owner deleting it', deleteDoc(job(authed(OWNER))))
+    await mustDeny('the owner writing a ledger entry', setDoc(doc(authed(OWNER), 'orgs', ORG, 'transferJobs', 'job-1', 'ledger', 'job-1:1'), { row: 1 }))
+    await mustDeny(
+      'staff finishing it by hand',
+      updateDoc(job(authed(STAFF, { staff: true, staffRole: 'super' })), { status: 'applied' }),
+    )
+  })
+})
+
+/**
  * The AGL-1501 lockdown surface (AGL-1507), live in ruleset 0370ace4.
  *
  * `lockdowns/{id}` holds the platform and per-user panic records. Reads are

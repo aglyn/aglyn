@@ -16,6 +16,7 @@
  */
 
 import type { ComponentType } from 'react'
+import type { PicklistSpec, PicklistValue, PicklistValueSet } from '../app-utils/picklists'
 import { getRegisteringPluginId } from '../app-utils/registering-plugin'
 import {
   buildTransferFieldCatalog,
@@ -205,6 +206,12 @@ export interface TransferReadPage {
   next: string | null
 }
 
+/** One picklist as the organization holds it: the platform's spec and the effective values. */
+export interface TransferPicklistList {
+  spec: PicklistSpec
+  set: PicklistValueSet
+}
+
 /** What a lookup found: the match map, and each found record's current values. */
 export interface TransferLookupResult {
   lookup: MatchLookup
@@ -276,11 +283,35 @@ export interface TransferRecordsHooks {
     fieldIds: readonly string[],
     options?: TransferReadOptions,
   ): Promise<TransferReadPage>
-  /** The records holding each requested key value. */
+  /**
+   * The records holding each requested key value. Undo also asks it for
+   * records by id — `TRANSFER_ID_FIELD` with the `aglynId` normalizer — to
+   * read what each record holds now, so it answers that key whether or not
+   * `matchKeys` names it.
+   */
   lookup(
     ctx: TransferResourceContext,
     requests: readonly MatchLookupRequest[],
   ): Promise<TransferLookupResult>
+  /**
+   * The organization's effective list for each picklist the catalog names
+   * (`TransferField.picklistId`), by picklist id. Without it a picklist
+   * column is imported as typed, and the values step has nothing to match.
+   */
+  picklists?(
+    ctx: TransferResourceContext,
+    picklistIds: readonly string[],
+  ): Promise<Readonly<Record<string, TransferPicklistList>>>
+  /**
+   * Adds the values the person chose to add to a picklist, before the
+   * import's first write. Called again with the same values if that write
+   * is retried, so an id the list already holds is left as it is.
+   */
+  addPicklistValues?(
+    ctx: TransferResourceContext,
+    picklistId: string,
+    values: readonly PicklistValue[],
+  ): Promise<void>
   /** The plan, when the core's `buildTransferPlan` is not enough. */
   plan?(
     ctx: TransferResourceContext,

@@ -174,6 +174,14 @@ const CANNOT_STORE_VIDEO: Record<string, { why: string; proof: string }> = {
       '(AGL-3331). It stores no new file.',
     proof: 'sanitizeEmbeddedPatch(current.format, body?.patch)',
   },
+  'libs/tenant/data/admin/src/lib/server/transfer-jobs.ts': {
+    why:
+      'an import file (AGL-3524): it is inspected and stored only as text — ' +
+      'CSV, JSON or NDJSON, the formats a resource declares — and read back ' +
+      'as rows; a file that does not read as rows is refused, and nothing is ' +
+      'ever served from it.',
+    proof: 'contentType: transferContentType(format)',
+  },
 }
 
 const GATE_CALLS = ['videoUploadPausedRefusal(', 'videoUploadsOpenForOrg(']

@@ -11,7 +11,7 @@ this document is the architecture.
 | -- | -- | -- |
 | Core: types and pure functions | `libs/aglyn/src/lib/data-transfer/` | AGL-3522 |
 | Extension point: a plugin declares what it can move | `libs/aglyn/src/lib/plugin-manager/plugin-transfer-resources.ts` | AGL-3523 |
-| Job engine: upload, analyze, plan, apply, status, undo | `apps/console/app/api/transfer/*`, the admin library | AGL-3524 |
+| Job engine: upload, analyze, plan, apply, status, undo | `libs/tenant/data/admin/src/lib/server/transfer-jobs.ts`; routes `apps/console/app/api/transfer/*`; the API's types in the core's `transfer-api.ts` | AGL-3524 |
 | Field-selectable export route | `apps/console/app/api/transfer/export` | AGL-3525 |
 | UI kit: export dialog, import wizard | `libs/aglyn-transfer-ui` | AGL-3526 |
 | Each resource | the owning plugin's `src/lib/transfer/` | AGL-3527–3535 |
@@ -191,6 +191,24 @@ says `new`, `identical`, `differs` or `missingDependency`;
 `proposePackageDecision`, `packageDecisionsFor` and `keepBothSlug` back the
 replace / keep both / skip / merge choice.
 
+### `source.ts` — the uploaded file as rows
+
+`readTransferSource(text, format)` reads a file into `{ headers, rows }` the
+same way in the browser and on the server: CSV per RFC 4180 with the
+delimiter detected from the header line (comma, semicolon or tab), a
+byte-order mark dropped and blank lines skipped; JSON as an array of
+objects (or `{ rows: [...] }`) and NDJSON one object per line, the header
+being every key in first-seen order and nested values kept. A file it cannot
+read answers a `TransferSourceProblem`. `transferFormatFromFileName`,
+`sniffTransferFormat` and `transferContentType` name the format.
+
+### `transfer-api.ts` — the job engine's API
+
+The route paths (`TRANSFER_API_ROUTES`), the limits (3 MB a part, 24 MB a
+file, 50,000 rows unless the resource says otherwise), the stored job
+(`TransferJobRecord`), and every request and response the routes speak — see
+[The job engine](#the-job-engine).
+
 ## How the rest plugs in
 
 **AGL-3523, the extension point** (`plugin-manager/plugin-transfer-resources.ts`).
@@ -215,14 +233,7 @@ throws `TransferResourceUnavailableError` for one declared and never
 registered; `listTransferResourcesFor` lists what a workspace or site can move
 under its plugin enablement and release flags.
 
-**AGL-3524, the job engine.** Analyze runs `matchHeaders` and
-`collectPicklistValues`; plan runs `deriveTransferRow`, the picklist
-resolution, `matchRows` and `buildTransferPlan` chunk by chunk and stores
-`PlannedTransferRow`s per `TransferChunk`; apply refuses until
-`canApplyTransferPlan` holds, then writes chunk by chunk under the ledger,
-storing `TransferChunkResult`s and `TransferUndoSnapshot`s; undo runs
-`planTransferUndo` per entry and returns conflicts to the person. Job state
-moves only through `transitionTransferJob`.
+**AGL-3524, the job engine.** See [The job engine](#the-job-engine) below.
 
 **AGL-3526, the UI kit.** The wizard steps render the core's outputs: the
 mapping step `HeaderMatchProposal` (confidence, reason, source,
@@ -231,3 +242,72 @@ and `PicklistMatchResult`; the matching step `summarizeMatches`; the
 conflicts step `TransferPolicy` with locked rows; the dry-run step
 `TransferPlan` (summary, diff table, warnings with acknowledgement); the
 export dialog `TransferFieldCatalog` and the presets.
+
+## The job engine
+
+`@aglyn/tenant-data-admin/server/transfer-jobs` runs an import as a durable
+job; the six console routes are wiring over it, behind one gate
+(`apps/console/utils/server/transfer-gate.ts`): `POST`, a verified Bearer ID
+token, a per-member rate limit per route (`rate-limit-store`), the
+workspace's lockdown verdict (`status` asks with a read intent), and
+`data.manage` — on the job's site for a site's records, on the workspace
+otherwise. Plan, apply and undo write an `adminAudit` row
+(`data.transfer.plan`, `data.transfer.apply` when a job starts or resumes,
+`data.transfer.undo`).
+
+### What is stored where
+
+| path | what |
+| -- | -- |
+| `orgs/{orgId}/transferJobs/{jobId}` | the job, a `TransferJobRecord` (the core's `TransferJob` plus the upload state, the choices the plan was built from, warnings, the cursor, result counts, the lease and the undo state) |
+| `…/chunks/{n}` | the dry run, 200 planned rows a chunk, as JSON (split into `pieces/{k}` past 900,000 characters) |
+| `…/ledger/{jobId}:{row}` | one row's write, created the moment it lands; cleared once its chunk commits |
+| `…/results/{n}` | a written chunk's `TransferRowResult`s |
+| `…/undo/{n}` | a written chunk's `TransferUndoEntry`s, as JSON |
+| Storage `orgs/{orgId}/transfers/{jobId}/source` | the file, after `inspectUploadBytes` (each part under `parts/{n}` until the last lands) |
+
+Every document is written by the Admin SDK only. The rules let an org-wide
+member read the job document (the wizard's progress panel listens to it)
+when their role writes data and `data.manage` is not revoked, or when a
+custom role stamps it; nobody writes. The subcollections match no rule, so
+no client reads them — the routes serve the plan, the results and undo. Storage under `orgs/{orgId}/transfers/` is closed to clients. The
+indexes are `transferJobs (resource ↑, createdAt ↓)` for a workspace's
+list and the collection-group `(status ↑, updatedAt ↑)` the sweep asks.
+
+### The routes
+
+The request and response types are the core's (`transfer-api.ts`), so the
+UI kit's client and the routes cannot disagree. Every refusal is a
+`TransferErrorResponse` (`{ error, code, details? }`).
+
+| route | does | request → response |
+| -- | -- | -- |
+| `upload` | stores a file whole, or one part of at most 3 MB (`part`, `parts`, then `jobId`); inspects each part and the whole; refuses a format the resource does not take (415), more than 24 MB or the resource's `maxBytes` (413), more rows than its `maxRows` (default 50,000; 413). Makes the job, `draft`. | `TransferUploadRequest` → `TransferUploadResponse` |
+| `analyze` | header proposal (`matchHeaders` with the resource's aliases), 20 sample rows, the catalog, match keys, locked rules, and each mapped picklist column's values against the workspace's list (`picklists` hook) with a proposed choice per unmatched value. `mapping` re-reads the values under the person's mapping. → `analyzed`. | `TransferAnalyzeRequest` → `TransferAnalyzeResponse` |
+| `plan` | refuses a mapping `mappingProblems` blocks and any unmatched picklist value without a choice (`choicesNeeded`, by field); reads every row, resolves picklists into row notes, looks matches up in slices of 500 values, runs `matchRows` over the whole file (so an in-file duplicate is caught across chunks) and the resource's plan, fails the rows an invariant refuses, and stores the chunks. Writes no record. → `planned`. `action: 'rows'` pages the stored plan, by verdict. | `TransferPlanRequest` → `TransferPlanResponse`; `TransferPlanRowsRequest` → `TransferPlanRowsResponse` |
+| `apply` | the first call needs `canApplyTransferPlan` (`acknowledgementsMissing` lists the rest); refuses while another job of the same resource is `applying` or another driver holds this one's lease (`busy`). Adds the chosen picklist values (`addPicklistValues`), then writes chunks for 45 seconds and answers the progress; called until `done`. A plugin `apply` that throws fails the job naming the chunk; calling again resumes it. | `TransferApplyRequest` → `TransferApplyResponse` |
+| `status` | the job, `TransferProgress`, and whether undo is open; `download: 'results'` answers the result file (the file's own columns, then `Outcome`, `Reason`, `Record ID`) as CSV with `X-Aglyn-Export-Rows`. | `TransferStatusRequest` → `TransferStatusResponse` or `text/csv` |
+| `undo` | for seven days after `applied`. `action: 'plan'` reads every touched record through `lookup` by id and runs `planTransferUndo`: counts of restore, delete, conflict and nothing, and the conflicts (what the record holds now, what undo would restore), paged; writes nothing. `action: 'apply'` reverts chunk by chunk through `revert`, each record with the person's `decisions[recordId]` or `otherwise`; called until `done`, then `undone`. | `TransferUndoPlanRequest` → `TransferUndoPlanResponse`; `TransferUndoApplyRequest` → `TransferUndoApplyResponse` |
+
+### Applying never writes a row twice
+
+The plugin's `apply` gets a `TransferApplyWriter` backed by the ledger:
+`alreadyApplied(row)` answers from the chunk's ledger entries and
+`markApplied(result, undo)` creates the row's entry (`transferLedgerKey`)
+the moment its write lands. A chunk is complete when every planned write
+has an entry; then its results, its undo entries and the job's cursor and
+counts commit in one batch, and only then are its ledger entries deleted. A
+row the plugin answered for without marking is marked by the engine. The
+engine's own deletes and chunk writes run eight at a time.
+
+One driver at a time: each `apply` or undo request takes a lease on the job
+for its budget plus 30 seconds and releases it when it answers.
+
+### The sweep
+
+`/api/admin/transfer-jobs` (cron secret; on the fifteen-minute
+`consoleFastCrons` tick; `transfer-jobs` in `SCHEDULED_JOBS`) resumes every
+`applying` job untouched for two minutes — a tab that closed between
+requests, or a request that died and whose lease has lapsed — through the
+same engine. A GET lists them and resumes nothing.
+
