@@ -181,8 +181,9 @@ content on the marketing site and is written separately.
 - **build:** record what took aglyn.com/press under 500 KiB ([AGL-3438](https://linear.app/aglyn/issue/AGL-3438))
 
 <details>
-<summary>Also in this release: 12 test, 8 chore, 2 build</summary>
+<summary>Also in this release: 13 test, 8 chore, 2 build</summary>
 
+- **aglyn:** the self-host claims sweep reads beta.222's media line as media ([AGL-2089](https://linear.app/aglyn/issue/AGL-2089), [AGL-3485](https://linear.app/aglyn/issue/AGL-3485))
 - **e2e:** the contacts bulk-bar spec exports the selection through the dialog ([AGL-3559](https://linear.app/aglyn/issue/AGL-3559), [AGL-3527](https://linear.app/aglyn/issue/AGL-3527))
 - **e2e:** the CRM specs open Closed Won and fill a task's Subject ([AGL-3558](https://linear.app/aglyn/issue/AGL-3558), [AGL-3516](https://linear.app/aglyn/issue/AGL-3516), [AGL-3517](https://linear.app/aglyn/issue/AGL-3517))
 - **e2e:** console and CRM suites read today's sections, filters, pickers and grids ([AGL-3560](https://linear.app/aglyn/issue/AGL-3560))
