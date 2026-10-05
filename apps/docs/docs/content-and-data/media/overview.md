@@ -436,11 +436,14 @@ Image optimization is automatic, with nothing to set:
   time each one is viewed after the change.
 
 Video, audio and documents are sent fresh on every request, so they count toward your
-organization's [bandwidth allowance](../../workspace-and-billing/billing-and-plans/bandwidth.md#how-usage-is-counted)
+organization's [bandwidth
+allowance](../../workspace-and-billing/billing-and-plans/bandwidth.md#how-usage-is-counted)
 by the bytes they send — a play, a seek or a download, from your site or from anywhere
-else the link is used. Video, audio and file downloads count 1.6× toward bandwidth,
-because serving them costs more than serving pages. Images do not count separately: they
-are part of what a page weighs, which the allowance already counts.
+else the link is used. Video, audio, file downloads and other media served from our
+servers count 1.6× toward bandwidth, because serving them costs more than serving pages.
+Public images do not count separately: they are part of what a page weighs, which the
+allowance already counts. A private image, which only a signed link opens, counts like a
+file. Your own team previewing it in the console does not.
 
 ### URLs are stable
 

@@ -54,6 +54,7 @@ import {
   engageMediaBandwidthCap,
   invalidateMediaBandwidthCapState,
 } from './media-bandwidth-cap'
+import { mintMediaSignature } from './media-signing'
 import { invalidateMediaCdnLockCache, serveMediaCdn } from './serve-media-cdn'
 
 const FILM = Buffer.from('FILM-BYTES')
@@ -448,6 +449,71 @@ describe('a serve is counted before the request is done', () => {
       expect.any(Error),
     )
     error.mockRestore()
+  })
+})
+
+/**
+ * A PRIVATE IMAGE IS A FILE, NOT PAGE WEIGHT.
+ *
+ * Public images stay out of the count because a page's weight already holds
+ * them and the edge serves most of them. A private image can be placed on no
+ * page and is `no-store`, so every request reaches origin: it counts like any
+ * other file. The workspace previewing its own library in the console does
+ * not, and its link says so inside the signature.
+ */
+describe('a private image counts toward the band; the team’s own preview does not', () => {
+  const original = process.env['TOKEN_SIGNING_SECRET']
+  beforeAll(() => {
+    process.env['TOKEN_SIGNING_SECRET'] = 'test-secret'
+  })
+  afterAll(() => {
+    if (original === undefined) delete process.env['TOKEN_SIGNING_SECRET']
+    else process.env['TOKEN_SIGNING_SECRET'] = original
+  })
+  beforeEach(() => {
+    mockStore['hosts/site-1/media/private-picture'] = {
+      fileName: 'receipt.png',
+      contentType: 'image/png',
+      contentHash: '1111222233334444',
+      storagePath: 'hosts/site-1/media/private-picture',
+      variants: [],
+      private: true,
+    }
+  })
+  const signedPicture = (audience?: 'team') => {
+    const signature = mintMediaSignature('site-1', 'private-picture', Date.now(), undefined, audience)
+    return serve(['site-1', 'private-picture'], {
+      query: {
+        exp: String(signature.exp),
+        sig: signature.sig,
+        ...(signature.aud ? { aud: signature.aud } : {}),
+      },
+    })
+  }
+
+  it('counts every byte a buyer’s signed link sends', async () => {
+    const res = await signedPicture()
+    expect(res.statusCode).toBe(200)
+    expect(siteDay()?.[MEDIA_BANDWIDTH_DAY_FIELD]).toBe(PICTURE.length)
+    expect(meteredBytesOf('hosts/site-1')).toBe(PICTURE.length)
+  })
+
+  it('counts nothing toward the band for the team’s preview, and still records the delivery', async () => {
+    const res = await signedPicture('team')
+    expect(res.statusCode).toBe(200)
+    expect(siteDay()?.[MEDIA_BANDWIDTH_DAY_FIELD]).toBeUndefined()
+    expect(siteDay()?.media?.['private-picture']).toEqual({ serves: 1, bytes: PICTURE.length })
+  })
+
+  it('stops with the band on Free — and the team can still see its own file', async () => {
+    mockStore['orgs/org-1'] = freeOrg({ bandwidthCap: { month: MONTH, engagedAt: 1 } })
+    expect((await signedPicture()).statusCode).toBe(503)
+    expect((await signedPicture('team')).statusCode).toBe(200)
+  })
+
+  it('NEGATIVE: a public image is still page weight', async () => {
+    await picture()
+    expect(siteDay()?.[MEDIA_BANDWIDTH_DAY_FIELD]).toBeUndefined()
   })
 })
 

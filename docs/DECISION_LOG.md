@@ -92,6 +92,12 @@ introduce a price or an entitlement the account owner has not chosen.
 
 ---
 
+## 2026-10-05 — Private images served through the media CDN count toward bandwidth (AGL-3518)
+
+- **Decided by:** the account owner, 2026-10-05, asked in session whether private images (signed, `no-store`, served by the media CDN on every request) should count: anything served through the CDN that is not page weight counts, the `/pricing` copy moving first but staying general rather than naming images. The team's own console preview is excluded.
+- **Scope:** pricing
+- **Evidence:** `countsTowardBand` in `libs/tenant/data/admin/src/lib/server/serve-media-cdn.ts`; `MediaSignatureAudience` in `media-signing.ts`; `apps/console/app/api/media/sign/route.ts`; `serve-media-cdn.bandwidth.spec.ts`; `ORIGIN_MEDIA_BANDWIDTH_SENTENCE`; `/pricing` screen `v0clP6xQl-` version `1rNY19KoQ7`; AGL-3518.
+
 ## 2026-10-02 — Video, audio and file downloads count 1.6× toward bandwidth (AGL-3474)
 
 - **Decided by:** the account owner, 2026-10-02, approving the proposal on AGL-3474 that origin-served media count at a weight against both the bandwidth band and its overage, so it earns cost + 30% after Stripe's fee — serving and storing included. The weight is derived in code, not chosen.

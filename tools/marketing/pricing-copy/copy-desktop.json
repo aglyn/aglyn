@@ -1504,7 +1504,7 @@
               "cells": [
                 "Metered infrastructure — passed through at cost + 30%, after card fees",
                 "Usage of storage, bandwidth, and form submissions is metered monthly at our actual provider cost (Firebase + Vercel) plus a flat 30% after card fees — no hidden markup, itemized on every invoice.",
-                "Video, audio and file downloads count 1.6× toward bandwidth, because serving them costs more than serving pages."
+                "Video, audio, file downloads and other media served from our servers count 1.6× toward bandwidth, because serving them costs more than serving pages."
               ]
             },
             {

@@ -23,6 +23,7 @@ import {
   GATED_VIDEO_SESSION_TTL_MS,
   MEDIA_SIGNATURE_MAX_TTL_MS,
   MEDIA_SIGNATURE_TTL_MS,
+  mediaSignatureQuery,
   mintMediaSignature,
   PAID_DOWNLOAD_LINK_TTL_MS,
   signMediaAccess,
@@ -62,6 +63,33 @@ describe('private media signatures (AGL-1051)', () => {
         NOW + MEDIA_SIGNATURE_TTL_MS - 1,
       ),
     ).toBe(true)
+  })
+
+  describe('a team preview (AGL-3474)', () => {
+    it('round-trips, and says so on the URL', () => {
+      const signature = mintMediaSignature(SCOPE, MEDIA, NOW, undefined, 'team')
+      expect(signature.aud).toBe('team')
+      expect(mediaSignatureQuery(signature)).toMatch(/&aud=team$/)
+      expect(verifyMediaAccess(SCOPE, MEDIA, signature, NOW)).toBe(true)
+    })
+
+    it('⛔ a visitor’s link cannot claim to be the team’s', () => {
+      // The audience is inside the payload: adding `aud=team` to a buyer's
+      // link is a different message, so the signature no longer matches.
+      const visitor = mintMediaSignature(SCOPE, MEDIA, NOW)
+      expect(verifyMediaAccess(SCOPE, MEDIA, { ...visitor, aud: 'team' }, NOW)).toBe(false)
+    })
+
+    it('⛔ a team link stripped of its audience is refused, not served as a visitor’s', () => {
+      const team = mintMediaSignature(SCOPE, MEDIA, NOW, undefined, 'team')
+      expect(verifyMediaAccess(SCOPE, MEDIA, { exp: team.exp, sig: team.sig }, NOW)).toBe(false)
+    })
+
+    it('NEGATIVE: a visitor’s link carries no audience', () => {
+      const visitor = mintMediaSignature(SCOPE, MEDIA, NOW)
+      expect(visitor.aud).toBeUndefined()
+      expect(mediaSignatureQuery(visitor)).not.toContain('aud=')
+    })
   })
 
   it('does not carry across scopes', () => {
