@@ -3,8 +3,9 @@
 Status: the core (AGL-3522), the extension point (AGL-3523), the job
 engine (AGL-3524), the UI kit (AGL-3526), the console client with the
 core launcher (AGL-3539), the field-selectable export (AGL-3525), site
-packages (AGL-3533), the jobs' cleanup (AGL-3540), datasets (AGL-3530)
-and email lists and suppressions (AGL-3529) are built; everything
+packages (AGL-3533), the jobs' cleanup (AGL-3540), datasets (AGL-3530),
+email lists and suppressions (AGL-3529), and workspace packages with the
+Import & Export hub (AGL-3535) are built; everything
 else in the build plan below
 is open. Linear project P-AGL-140.
 The architecture of the core, and how the rest plugs into it, is in
@@ -73,7 +74,7 @@ matches · **Dry** = dry-run preview · **Undo**
 | Whole-site backup | JSON (`aglyn-package` v2; v1 still imports) | Since AGL-3533: the everything preset of a site package. Items with content hashes and dependencies, selective export with dependencies, a plan (new, identical, differs, missing dependency) before any write, per-item decisions (replace as a new version, keep both, skip, merge), missing-dependency choices, plan caps on what is added, a 7-day undo. Carries email templates, forms, redirects, events, experiments and overlays, and the theme and its library too | The item-by-item wizard and a rendered diff (AGL-3534). Not carried: products |
 | Templates and marketplace installs | Internal copy | Copies into the site library | Collision prompts, file import |
 | One page, component or layout as a file | — | None | Everything |
-| Outreach sequences and enrollments, campaigns, automations | — | None | Everything |
+| Outreach sequences and enrollments, campaigns, automations | JSON (workspace package) | Since AGL-3535: sequences, campaigns, org automations and CRM email templates as one package from Settings → Import & export, with the site packages' collision choices, missing-reference prompts and a 7-day undo. Imports never start sending | Enrollments and send history (by design) |
 | Forms, bookings, events | — | None (kept out of the site backup as personal data) | Submissions and bookings export; definitions in packages |
 | Redirects | — | None | CSV both ways, matched on the from-path |
 | "Download my data" | JSON (+ CSVs) | Per user and per workspace, with a coverage block | Stays separate: a legal obligation, never plan-gated, and its coverage has to match what erasure removes |
@@ -192,7 +193,7 @@ matches · **Dry** = dry-run preview · **Undo**
 | AGL-3532 | Form submissions, bookings, redirects, events, do-not-contact domains | AGL-3524–3526 |
 | AGL-3533 | Site package v2: selective export, dependency graph, content hashes; the backup becomes a preset (built) | AGL-3522, AGL-3523 |
 | AGL-3534 | Package import wizard | AGL-3526, AGL-3533 |
-| AGL-3535 | Organization packages and the Import & Export hub | AGL-3524, AGL-3526, AGL-3533 |
+| AGL-3535 | Organization packages and the Import & Export hub (built) | AGL-3524, AGL-3526, AGL-3533 |
 
 Order: 3522 → 3523 → (3524 ∥ 3526) → 3525 → 3533 → 3529–3532 in any order →
 3527 → 3528 → 3534 → 3535.

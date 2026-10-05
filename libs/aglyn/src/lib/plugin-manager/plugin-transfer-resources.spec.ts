@@ -90,6 +90,7 @@ const PACKAGE: PluginTransferResource = {
   remapIds: (item) => item,
   readItems: async () => [],
   writeItems: async () => ({ results: [], undo: [] }),
+  revertItems: async () => ({ done: [], refused: [] }),
 }
 
 const BOTTLES: ResolvedTransferResourceDeclaration = {
@@ -218,6 +219,9 @@ describe('registering the server half', () => {
     expect(() => registerPluginTransferResource('shelves', RECORDS, { pluginId: 'cellar' })).toThrow(
       /registers no "items"/,
     )
+    expect(() =>
+      registerPluginTransferResource('shelves', { ...PACKAGE, revertItems: undefined }, { pluginId: 'cellar' }),
+    ).toThrow(/registers no "revertItems"/)
   })
 
   it('is refused for a records resource with no match key', () => {

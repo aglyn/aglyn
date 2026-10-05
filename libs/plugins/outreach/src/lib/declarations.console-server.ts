@@ -35,7 +35,15 @@ import {
   listPluginUserErasers,
   registerPluginUserEraser,
 } from '@aglyn/aglyn/plugin-manager/plugin-user-erasure'
+import { registerPluginTransferResource } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
 import { OUTREACH_PLUGIN_ID } from './constants/bundle-common'
+import {
+  OUTREACH_SEQUENCE_PACKAGE_RULES,
+  OUTREACH_SEQUENCES_TRANSFER_KEY,
+  outreachSequenceDependencies,
+  remapOutreachSequenceIds,
+  type OutreachSequencePackageContent,
+} from './transfer/sequences-package'
 import { OUTREACH_SEND_JOB_ID, OUTREACH_SYNC_JOB_ID } from './constants/runtime-jobs'
 
 /**
@@ -60,6 +68,7 @@ import { OUTREACH_SEND_JOB_ID, OUTREACH_SYNC_JOB_ID } from './constants/runtime-
  * erasure or a tick first asks for it, so the boot cost is the registration.
  */
 export function registerOutreachConsoleServerDeclarations(): void {
+  registerOutreachTransferResources()
   // Idempotent against the REGISTRY, so a reset (a spec) registers again.
   if (!listPluginOrgErasers().includes(OUTREACH_PLUGIN_ID)) {
     registerPluginOrgEraser(
@@ -148,6 +157,32 @@ export function registerOutreachConsoleServerDeclarations(): void {
         const [{ runOutreachSyncJob }, platform] = await Promise.all([import('./runtime/sync-job'), runtime()])
         return runOutreachSyncJob(platform.platformOutreachRuntimeDeps(), context)
       },
+    },
+    { pluginId: OUTREACH_PLUGIN_ID },
+  )
+}
+
+/** The sequences package's server half (AGL-3535), loaded when an import or export first asks. */
+const sequencesPackage = async () => (await import('./transfer/sequences-package.server')).createOutreachSequencesPackage()
+
+/**
+ * Sequences in a workspace package (AGL-3535): what a sequence names and
+ * how a reference moves are answered here; reading and writing load the
+ * server half on first use.
+ */
+function registerOutreachTransferResources(): void {
+  registerPluginTransferResource(
+    OUTREACH_SEQUENCES_TRANSFER_KEY,
+    {
+      items: async (ctx) => (await sequencesPackage()).items(ctx),
+      dependencies: (item) => outreachSequenceDependencies(item as OutreachSequencePackageContent),
+      remapIds: (item, idMap) => remapOutreachSequenceIds(item as OutreachSequencePackageContent, idMap),
+      readItems: async (ctx, ids) => (await sequencesPackage()).readItems(ctx, ids),
+      writeItems: async (ctx, items, writer) => (await sequencesPackage()).writeItems(ctx, items as never, writer),
+      revertItems: async (ctx, steps) => (await sequencesPackage()).revertItems(ctx, steps as never),
+      problems: async (ctx, write) => (await sequencesPackage()).problems(ctx, write as never),
+      referenceTargets: async (ctx, kinds) => (await sequencesPackage()).referenceTargets(ctx, kinds),
+      rules: OUTREACH_SEQUENCE_PACKAGE_RULES,
     },
     { pluginId: OUTREACH_PLUGIN_ID },
   )

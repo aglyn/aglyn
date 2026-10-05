@@ -1054,6 +1054,22 @@
           "formats": ["csv", "json", "ndjson"],
           "limits": { "maxRows": 50000 },
           "description": "Every company field, custom fields included, with the parent company and the owner by name."
+        },
+        {
+          "key": "crm.email-templates",
+          "label": "Email templates",
+          "singularLabel": "Email template",
+          "scope": "org",
+          "kinds": [
+            "package"
+          ],
+          "formats": [
+            "json"
+          ],
+          "limits": {
+            "maxRows": 200
+          },
+          "description": "Shared email templates and snippets, and your own personal ones."
         }
       ],
       "contributes": {
@@ -1084,6 +1100,24 @@
         "consoleServerDeclarations": "registerOutreachConsoleServerDeclarations",
         "subprocessors": "outreachSubprocessors"
       },
+      "transferResources": [
+        {
+          "key": "outreach.sequences",
+          "label": "Sequences",
+          "singularLabel": "Sequence",
+          "scope": "org",
+          "kinds": [
+            "package"
+          ],
+          "formats": [
+            "json"
+          ],
+          "limits": {
+            "maxRows": 500
+          },
+          "description": "Each sequence's steps and settings, imported as a draft. Never who was enrolled or what was sent."
+        }
+      ],
       "apiPrefixes": [
         "outreach"
       ],
@@ -1128,6 +1162,9 @@
       ],
       "contributes": {
         "console": {
+          "slots": [
+            "transferResources"
+          ],
           "shell": true,
           "orgRoutes": [
             "/outreach"
@@ -1604,6 +1641,24 @@
         "serverDeclarations": "registerMarketingServerDeclarations",
         "tenantEmails": "marketingTenantEmails"
       },
+      "transferResources": [
+        {
+          "key": "marketing.campaigns",
+          "label": "Campaigns",
+          "singularLabel": "Campaign",
+          "scope": "org",
+          "kinds": [
+            "package"
+          ],
+          "formats": [
+            "json"
+          ],
+          "limits": {
+            "maxRows": 500
+          },
+          "description": "Each campaign's name, dates, lists and its emails' copy, imported as drafts. Never what was sent or its results."
+        }
+      ],
       "modules": {
         "site": "site"
       },
@@ -1768,7 +1823,8 @@
             "emailTemplateReport",
             "hostDashboard",
             "inboxCampaigns",
-            "inboxRecordAttribution"
+            "inboxRecordAttribution",
+            "transferResources"
           ]
         }
       }
@@ -1846,6 +1902,24 @@
         "planEntitlements": "workflowsPlanEntitlements",
         "usageAxes": "workflowsUsageAxes"
       },
+      "transferResources": [
+        {
+          "key": "workflows.org-automations",
+          "label": "Org automations",
+          "singularLabel": "Org automation",
+          "scope": "org",
+          "kinds": [
+            "package"
+          ],
+          "formats": [
+            "json"
+          ],
+          "limits": {
+            "maxRows": 100
+          },
+          "description": "The organization's automations — trigger, steps and sites — imported switched off."
+        }
+      ],
       "consoleRedirects": [
         {
           "$comment": "Workflows became Automation: the section holds a Workflows tab, so the parent could not keep the name. Next carries the query string across, so the tab deep links (`?tab=actions`, `?tab=webhooks`) survive; their ids never changed. `automation-section.spec.ts` holds the retired address.",
@@ -2035,7 +2109,8 @@
             "adminOrgDetail",
             "consoleSearch",
             "hostActivity",
-            "staffSite"
+            "staffSite",
+            "transferResources"
           ]
         }
       }

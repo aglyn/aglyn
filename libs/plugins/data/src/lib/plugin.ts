@@ -67,7 +67,8 @@ export function registerDataConsole(): void {
   // (AGL-3530); the Data card names the dataset when it opens them.
   registerPluginTransferResourceUi(
     DATASET_TRANSFER_RESOURCE,
-    { label: 'Dataset records', icon: { path: mdiDatabaseOutline.path } },
+    // The Import & export hub lists each dataset from the `dataset` record list (AGL-3535).
+    { label: 'Dataset records', icon: { path: mdiDatabaseOutline.path }, instancesFrom: 'dataset' },
     { pluginId: BUNDLE_ID },
   )
   Aglyn.registerConsoleExtension({

@@ -66,7 +66,7 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     id: 'outreach',
     apiPrefixes: ["outreach"],
     register: {"console":"registerOutreachConsole"},
-    contributes: {"console":{"shell":true,"orgRoutes":["/outreach"]}},
+    contributes: {"console":{"slots":["transferResources"],"shell":true,"orgRoutes":["/outreach"]}},
     load: () => import('@aglyn/plugins-outreach'),
   },
   {
@@ -112,7 +112,7 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     id: 'marketing',
     apiPrefixes: ["campaigns","experiments"],
     register: {"console":"registerMarketingConsole","staff":"registerMarketingConsole","site":"registerMarketingPlugin"},
-    contributes: {"console":{"shell":true,"routes":["/marketing"],"orgRoutes":["/marketing"],"slots":["adminOrgDetail","besignerInteractions","crmRecordAttribution","emailMessages","emailTemplateRecipients","emailTemplateReport","hostDashboard","inboxCampaigns","inboxRecordAttribution"]}},
+    contributes: {"console":{"shell":true,"routes":["/marketing"],"orgRoutes":["/marketing"],"slots":["adminOrgDetail","besignerInteractions","crmRecordAttribution","emailMessages","emailTemplateRecipients","emailTemplateReport","hostDashboard","inboxCampaigns","inboxRecordAttribution","transferResources"]}},
     load: () => import('@aglyn/plugins-marketing'),
     loads: {
       site: () => import('@aglyn/plugins-marketing/site'),
@@ -128,7 +128,7 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     id: 'workflows',
     apiPrefixes: ["hooks","automations"],
     register: {"console":"registerWorkflowsConsole","staff":"registerWorkflowsConsole"},
-    contributes: {"console":{"shell":true,"routes":["/automation"],"orgRoutes":["/automation"],"slots":["adminOrgDetail","consoleSearch","hostActivity","staffSite"]}},
+    contributes: {"console":{"shell":true,"routes":["/automation"],"orgRoutes":["/automation"],"slots":["adminOrgDetail","consoleSearch","hostActivity","staffSite","transferResources"]}},
     load: () => import('@aglyn/plugins-workflows'),
   },
   {

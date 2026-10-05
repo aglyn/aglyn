@@ -129,6 +129,9 @@ import {
   matchLookupKey,
   isBlankTransferValue,
   TRANSFER_UNDO_WINDOW_MS,
+  TRANSFER_JOBS_PAGE_MAX,
+  parseTransferResourceKey,
+  type TransferJobSummary,
   type MatchKeySpec,
   type MatchLookupRequest,
   type PicklistResolution,
@@ -274,23 +277,23 @@ export function transferPartPath(orgId: string, jobId: string, part: number): st
   return `orgs/${orgId}/transfers/${jobId}/parts/${part}`
 }
 
-const clock = (deps: TransferEngineDeps) => (deps.now ?? Date.now)()
+export const clock = (deps: Pick<TransferEngineDeps, 'now'>) => (deps.now ?? Date.now)()
 
 /** A value as Firestore can store it: no `undefined`, no class instances. */
-function stored<T>(value: T): T {
+export function stored<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T
 }
 
-function emptyResults(): TransferResultSummary {
+export function emptyResults(): TransferResultSummary {
   return { created: 0, updated: 0, unchanged: 0, skipped: 0, failed: 0, total: 0 }
 }
 
-function emptyUndoCounts(): TransferUndoCounts {
+export function emptyUndoCounts(): TransferUndoCounts {
   return { restore: 0, delete: 0, conflict: 0, nothing: 0 }
 }
 
 /** `fn` over `items`, at most `limit` at once. */
-async function eachLimited<T>(items: readonly T[], limit: number, fn: (item: T) => Promise<void>): Promise<void> {
+export async function eachLimited<T>(items: readonly T[], limit: number, fn: (item: T) => Promise<void>): Promise<void> {
   let next = 0
   const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
     while (next < items.length) {
@@ -302,7 +305,7 @@ async function eachLimited<T>(items: readonly T[], limit: number, fn: (item: T) 
   await Promise.all(workers)
 }
 
-function isAlreadyExists(error: unknown): boolean {
+export function isAlreadyExists(error: unknown): boolean {
   const failure = error as { code?: unknown; message?: unknown } | null
   return failure?.code === 6 || /ALREADY_EXISTS/i.test(String(failure?.message ?? ''))
 }
@@ -317,7 +320,7 @@ function isAlreadyExists(error: unknown): boolean {
  * Firestore refuses — and past {@link JSON_PIECE_CHARS} the text goes into
  * `pieces/{k}` documents, so a chunk of long notes is never refused for size.
  */
-async function writeJsonDoc(
+export async function writeJsonDoc(
   ref: FirebaseFirestore.DocumentReference,
   fields: Record<string, unknown>,
   value: unknown,
@@ -340,7 +343,7 @@ async function writeJsonDoc(
 }
 
 /** The value {@link writeJsonDoc} wrote, or `null` when the document is absent. */
-async function readJsonDoc<T>(ref: FirebaseFirestore.DocumentReference): Promise<T | null> {
+export async function readJsonDoc<T>(ref: FirebaseFirestore.DocumentReference): Promise<T | null> {
   const snapshot = await ref.get()
   if (!snapshot.exists) return null
   const data = snapshot.data() as { json?: string; pieces?: number }
@@ -355,7 +358,7 @@ async function readJsonDoc<T>(ref: FirebaseFirestore.DocumentReference): Promise
 }
 
 /** Deletes every document of a collection (and a JSON document's pieces), eight at a time. */
-async function clearCollection(collection: FirebaseFirestore.CollectionReference): Promise<void> {
+export async function clearCollection(collection: FirebaseFirestore.CollectionReference): Promise<void> {
   const snapshot = await collection.get()
   await eachLimited(snapshot.docs, TRANSFER_WRITE_CONCURRENCY, async (doc) => {
     const pieces = await doc.ref.collection('pieces').get()
@@ -368,7 +371,7 @@ async function clearCollection(collection: FirebaseFirestore.CollectionReference
  * JOBS
  *=========================================*/
 
-async function readJob(deps: TransferEngineDeps, orgId: string, jobId: string): Promise<TransferJobRecord> {
+export async function readJob(deps: TransferEngineDeps, orgId: string, jobId: string): Promise<TransferJobRecord> {
   if (!jobId || jobId.includes('/')) throw new TransferEngineError('invalid', 400, 'Name the import.')
   const snapshot = await transferJobsCollection(deps.firestore, orgId).doc(jobId).get()
   if (!snapshot.exists) throw new TransferEngineError('notFound', 404, 'No such import.')
@@ -398,7 +401,7 @@ function storedJob(job: TransferJobRecord): TransferJobRecord {
   return stored({ ...rest, ...(transferJobRetention(job) ?? {}) })
 }
 
-async function saveJob(deps: TransferEngineDeps, job: TransferJobRecord): Promise<void> {
+export async function saveJob(deps: TransferEngineDeps, job: TransferJobRecord): Promise<void> {
   await transferJobsCollection(deps.firestore, job.orgId).doc(job.id).set(storedJob(job))
 }
 
@@ -450,7 +453,7 @@ export function transferHostIdFor(resource: ResolvedTransferResource, hostId: st
   return site
 }
 
-function contextFor(job: TransferJobRecord, actorUid: string | null): TransferResourceContext {
+export function contextFor(job: TransferJobRecord, actorUid: string | null): TransferResourceContext {
   return {
     resource: job.resource,
     orgId: job.orgId,
@@ -462,7 +465,7 @@ function contextFor(job: TransferJobRecord, actorUid: string | null): TransferRe
   }
 }
 
-function moveJob(
+export function moveJob(
   job: TransferJobRecord,
   to: TransferJobRecord['status'],
   now: number,
@@ -1556,7 +1559,7 @@ function plannedResult(row: PlannedTransferRow): TransferRowResult {
   }
 }
 
-function addResults(total: TransferResultSummary, more: TransferResultSummary): TransferResultSummary {
+export function addResults(total: TransferResultSummary, more: TransferResultSummary): TransferResultSummary {
   return {
     created: total.created + more.created,
     updated: total.updated + more.updated,
@@ -1567,13 +1570,13 @@ function addResults(total: TransferResultSummary, more: TransferResultSummary): 
   }
 }
 
-interface LedgerEntry {
+export interface LedgerEntry {
   result: TransferRowResult
   undo: TransferUndoEntry | null
 }
 
 /** Takes the job for `driver`, or refuses: another driver holds it, or another import of the resource is running. */
-async function takeLease(
+export async function takeLease(
   deps: TransferEngineDeps,
   job: TransferJobRecord,
   driver: string,
@@ -1835,6 +1838,10 @@ export async function transferResultFile(
 ): Promise<{ csv: string; rows: number; fileName: string }> {
   const job = await readJob(deps, input.orgId, input.jobId)
   if (job.applyStartedAt === undefined) throw new TransferEngineError('state', 409, 'Nothing has been written yet.')
+  if (job.kind === 'package') {
+    const { transferPackageResultFile } = await import('./transfer-packages')
+    return transferPackageResultFile(deps, job)
+  }
   if (job.trimmedAt !== undefined) {
     throw new TransferEngineError(
       'state',
@@ -1854,6 +1861,66 @@ export async function transferResultFile(
   })
   const base = (job.fileName ?? 'import').replace(/\.[a-z0-9]+$/i, '')
   return { csv: `${lines.join('\r\n')}\r\n`, rows: table.rows.length, fileName: `${base}-results.csv` }
+}
+
+/*==========================================
+ * THE HISTORY — the workspace's imports, for the hub (AGL-3535)
+ *=========================================*/
+
+/**
+ * The workspace's imports, newest first, a page at a time, as the hub's
+ * history lists them. Clients cannot read the jobs' subcollections, and
+ * the hub needs more than the job document says — whether undo is still
+ * open, whether the result file can still be made — so the route answers
+ * this. `labels` names each resource; `emailsOf` says who each member is.
+ */
+export async function listTransferJobs(
+  deps: TransferEngineDeps,
+  input: {
+    orgId: string
+    limit?: number
+    after?: number | null
+    labels?: Readonly<Record<string, string>>
+    emailsOf?: (uids: readonly string[]) => Promise<ReadonlyMap<string, string>>
+  },
+): Promise<{ jobs: TransferJobSummary[]; next: number | null }> {
+  const limit = Math.min(TRANSFER_JOBS_PAGE_MAX, Math.max(1, Math.floor(Number(input.limit ?? 20)) || 20))
+  let query = transferJobsCollection(deps.firestore, input.orgId).orderBy('createdAt', 'desc')
+  if (typeof input.after === 'number' && Number.isFinite(input.after)) query = query.where('createdAt', '<', input.after)
+  const snapshot = await query.limit(limit + 1).get()
+  const page = snapshot.docs.slice(0, limit).map((doc) => ({ ...(doc.data() as TransferJobRecord), id: doc.id }))
+  const uids = [...new Set(page.map((job) => job.createdBy).filter(Boolean))]
+  const emails = input.emailsOf && uids.length ? await input.emailsOf(uids).catch(() => new Map<string, string>()) : new Map<string, string>()
+  const now = clock(deps)
+  const jobs = page.map((job): TransferJobSummary => ({
+    id: job.id,
+    resource: job.resource,
+    // One instance's job (`data.dataset:<id>`) is named by its resource.
+    label:
+      input.labels?.[job.resource] ??
+      input.labels?.[parseTransferResourceKey(job.resource).key] ??
+      (job.kind === 'package' ? 'Package' : job.resource),
+    kind: job.kind,
+    status: job.status,
+    hostId: job.hostId ?? null,
+    fileName: job.fileName ?? null,
+    createdAt: job.createdAt,
+    updatedAt: job.updatedAt,
+    createdBy: job.createdBy,
+    createdByEmail: emails.get(job.createdBy) ?? null,
+    rowCount: job.rowCount ?? 0,
+    results: job.results ?? null,
+    appliedAt: job.appliedAt ?? null,
+    undo: {
+      available: transferUndoAvailable(job, now) && job.undo?.status !== 'done',
+      expiresAt: transferUndoExpiresAt(job),
+      status: job.undo?.status ?? null,
+    },
+    resultFile: job.applyStartedAt !== undefined && job.trimmedAt === undefined,
+    error: job.error?.message ?? null,
+  }))
+  const last = page[page.length - 1]
+  return { jobs, next: snapshot.docs.length > limit && last ? last.createdAt : null }
 }
 
 /*==========================================
@@ -2140,13 +2207,18 @@ export async function sweepAbandonedTransferJobs(
       continue
     }
     try {
-      const applied = await applyTransferJob(deps, {
+      const resume = {
         orgId,
         jobId: doc.id,
         actorUid: job.createdBy,
         deadlineMs: input.deadlineMs,
         driver: `sweep:${doc.id}`,
-      })
+      }
+      // A workspace package is resumed by its own engine, under the same lease and ledger.
+      const applied =
+        job.kind === 'package'
+          ? await (await import('./transfer-packages')).applyTransferPackage(deps, resume)
+          : await applyTransferJob(deps, resume)
       outcome.resumed.push({ orgId, jobId: doc.id, status: applied.job.status, done: applied.done })
     } catch (error) {
       outcome.skipped.push({ orgId, jobId: doc.id, reason: error instanceof Error ? error.message : String(error) })
@@ -2167,7 +2239,7 @@ export async function sweepAbandonedTransferJobs(
       continue
     }
     try {
-      const undone = await applyTransferJobUndo(deps, {
+      const finish = {
         orgId,
         jobId: doc.id,
         actorUid: job.undo.startedBy,
@@ -2175,7 +2247,11 @@ export async function sweepAbandonedTransferJobs(
         otherwise: job.undo.otherwise,
         deadlineMs: input.deadlineMs,
         driver: `sweep-undo:${doc.id}`,
-      })
+      }
+      const undone =
+        job.kind === 'package'
+          ? await (await import('./transfer-packages')).applyTransferPackageUndo(deps, finish)
+          : await applyTransferJobUndo(deps, finish)
       outcome.undone.push({ orgId, jobId: doc.id, done: undone.done })
     } catch (error) {
       outcome.skipped.push({ orgId, jobId: doc.id, reason: error instanceof Error ? error.message : String(error) })

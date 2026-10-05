@@ -34,6 +34,7 @@ import type {
   PackageItemDecision,
   PackageManifestItem,
 } from '../data-transfer/package'
+import type { TransferReferenceKind } from '../data-transfer/package-plan'
 import {
   buildTransferPlan,
   type BuildTransferPlanInput,
@@ -465,53 +466,111 @@ export interface TransferPackageItemWrite<T = unknown> {
   row: number
   item: PackageManifestItem
   decision: PackageItemDecision
-  /** The id it is written under: its own, or a new one when kept beside an existing item. */
+  /** The id it is written under: its own, the matched item's for a replace, a new one when kept beside an existing item. */
   targetId: string
+  /** A kept-both copy's new name and slug, which the write must use in place of the content's. */
+  rename?: { name?: string; slug?: string }
   /** The content, references already rewritten by `remapIds`. */
   content: T
 }
 
-/** The hooks a `package` resource answers with. */
+/** One step of undoing a package import, decided by the engine. */
+export type TransferPackageRevertStep<T = unknown> =
+  /** The import created it and it is untouched since: delete it. */
+  | { action: 'delete'; id: string }
+  /** The import replaced it: put back what it held. */
+  | { action: 'restore'; id: string; content: T }
+
+/** What a package revert did: the ids it reverted, and the ones its own rules refused, with why. */
+export interface TransferPackageRevertResult {
+  done: string[]
+  refused: Array<{ id: string; reason: string }>
+}
+
+/** A plugin's rule an import cannot change, shown with its reason (an imported sequence is a draft). */
+export interface TransferPackageRule {
+  id: string
+  label: string
+  reason: string
+}
+
+/**
+ * The hooks a `package` resource answers with (AGL-3535). An item's kind is
+ * the resource key, so a package that carries several resources' items is
+ * read, written and undone by each owner.
+ *
+ * Matching compares content hashes: `items` hashes the same content
+ * `readItems` exports (`existingPackageItemsOf`), so an item exported and
+ * imported unchanged is `identical`. The engine plans, takes the undo
+ * snapshot (each replaced item's content through `readItems`, before the
+ * write), keeps the ledger and decides undo; the plugin reads, writes and
+ * reverts through its own paths.
+ */
 export interface TransferPackageHooks<T = unknown> {
-  /** What the site or workspace holds now, for matching incoming items. */
+  /** What the workspace holds now, for matching incoming items: kind, id, name or slug, and the content hash. */
   items(ctx: TransferResourceContext): Promise<ExistingPackageItem[]>
-  /** The items one item refers to. */
+  /** What one item names — other package items, and things of other kinds (`site`, a mailbox) the item needs. */
   dependencies(item: T): PackageDependency[]
   /**
    * The item with its references rewritten: `idMap` maps an item key
-   * (`<kind>/<id>`, `packageItemKey`) to the id it now has.
+   * (`<kind>/<id>`, `packageItemKey`) to the id it now has, `''` for a
+   * reference the person dropped (`remapPackageReference`).
    */
   remapIds(item: T, idMap: ReadonlyMap<string, string>): T
-  /** The content of these items, for an export. */
+  /** The content of these items, for an export and for the undo snapshot. */
   readItems(
     ctx: TransferResourceContext,
     ids: readonly string[],
   ): Promise<Array<TransferPackageItemContent<T>>>
-  /** Writes the decided items through the plugin's own write paths. */
+  /**
+   * Writes the decided items through the plugin's own write paths, marking
+   * each with `writer.markApplied` the moment it lands, with the
+   * `targetId` as its `recordId`. Undo entries are the engine's: answer
+   * `undo: []`.
+   */
   writeItems(
     ctx: TransferResourceContext,
     items: ReadonlyArray<TransferPackageItemWrite<T>>,
     writer: TransferApplyWriter,
   ): Promise<TransferApplyResult>
-  /** Reverses a package import's writes, on the same terms as a records `revert`. */
-  revert?(
+  /** Carries out the undo steps the engine decided, through the plugin's own paths. */
+  revertItems(
     ctx: TransferResourceContext,
-    snapshot: TransferUndoSnapshot,
-    decisions?: TransferRevertDecisions,
-  ): Promise<TransferRevertResult>
+    steps: ReadonlyArray<TransferPackageRevertStep<T>>,
+  ): Promise<TransferPackageRevertResult>
+  /**
+   * What the plugin's own write would refuse about this item, each a
+   * sentence — checked at the dry run, so a refusal is shown before Apply
+   * rather than discovered by it.
+   */
+  problems?(
+    ctx: TransferResourceContext,
+    write: TransferPackageItemWrite<T>,
+  ): Promise<readonly string[]> | readonly string[]
+  /**
+   * What the workspace holds of the kinds the items name that no package
+   * resource owns (a mailbox, an email list), so a reference to one is
+   * known to resolve and one that does not can be mapped. `site` is the
+   * engine's own.
+   */
+  referenceTargets?(
+    ctx: TransferResourceContext,
+    kinds: readonly string[],
+  ): Promise<TransferReferenceKind[]>
+  /** The rules an import of this resource cannot change, shown with their reasons. */
+  rules?: readonly TransferPackageRule[]
 }
 
 /**
  * A resource's server half. A `records` kind answers every required
  * {@link TransferRecordsHooks} member; a `package` kind every required
  * {@link TransferPackageHooks} member — checked against the declaration at
- * registration. `revert` is shared: a resource of both kinds registers one.
+ * registration.
  */
-export type PluginTransferResource = Partial<TransferRecordsHooks> &
-  Partial<Omit<TransferPackageHooks, 'revert'>>
+export type PluginTransferResource = Partial<TransferRecordsHooks> & Partial<TransferPackageHooks>
 
 const RECORDS_HOOKS = ['fields', 'matchKeys', 'readPage', 'lookup', 'apply', 'revert'] as const
-const PACKAGE_HOOKS = ['items', 'dependencies', 'remapIds', 'readItems', 'writeItems'] as const
+const PACKAGE_HOOKS = ['items', 'dependencies', 'remapIds', 'readItems', 'writeItems', 'revertItems'] as const
 
 /** What is missing from `impl` for the kinds a resource declares, as sentences. */
 export function pluginTransferResourceProblems(
@@ -856,6 +915,14 @@ export interface PluginTransferResourceUi {
   label: string
   icon?: MdiIconProps
   extraSteps?: readonly TransferWizardStep[]
+  /**
+   * For a resource declared with `instances`: the record list kind
+   * (`registerPluginRecordListSource`) its instances are listed from, so the
+   * Import & export hub can offer each one (`dataset` for a dataset's
+   * records). Without it the hub cannot name an instance and leaves the
+   * resource to the plugin's own surface.
+   */
+  instancesFrom?: string
 }
 
 interface RegisteredUi {

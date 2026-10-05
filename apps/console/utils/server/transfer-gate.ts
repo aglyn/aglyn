@@ -47,9 +47,10 @@ import { FieldValue } from 'firebase-admin/firestore'
  *  1. `POST`, a JSON body naming `orgId`, and a Bearer ID token that
  *     verifies, from a verified address (or an impersonation session);
  *  2. the per-member rate limit for the route;
- *  3. the workspace exists, and the lockdown verdict (`status`, `fields`
- *     and `export` ask with a read intent, so a read-only lock still shows a
- *     job's progress and still lets the workspace take its data out);
+ *  3. the workspace exists, and the lockdown verdict (`status`, `fields`,
+ *     `export`, `jobs` and the package route's `list` and `export` ask with
+ *     a read intent, so a read-only lock still shows a job's progress and
+ *     still lets the workspace take its data out);
  *  4. `data.manage` — on the job's site for a site's records (a collaborator
  *     holding it there qualifies), on the workspace otherwise. Staff pass.
  *
@@ -68,10 +69,12 @@ const RATE_LIMITS: Readonly<Record<TransferApiRoute, number>> = {
   status: 240,
   undo: 60,
   export: 20,
+  package: 60,
+  jobs: 120,
 }
 
 /** The routes that only read, which a read-only lock still answers. */
-const READ_ROUTES: ReadonlySet<TransferApiRoute> = new Set<TransferApiRoute>(['status', 'fields', 'export'])
+const READ_ROUTES: ReadonlySet<TransferApiRoute> = new Set<TransferApiRoute>(['status', 'fields', 'export', 'jobs'])
 
 /** A refusal in the shape every transfer route answers. */
 export function transferRefusal(
@@ -95,6 +98,8 @@ export interface TransferCaller {
   staff: boolean
   /** The caller's membership of the workspace; `null` for staff who hold none. */
   member: CallerMember | null
+  /** The workspace document, as the gate read it. */
+  org: Record<string, unknown>
   body: Record<string, unknown>
   /** When the request arrived, for its time budget. */
   startedAt: number
@@ -139,6 +144,10 @@ async function requestHostId(
 export async function transferGate(
   request: Request,
   route: TransferApiRoute,
+  options: {
+    /** Whether this request only reads, by its body — the package route's `list` and `export`. */
+    readsOnly?: (body: Record<string, unknown>) => boolean
+  } = {},
 ): Promise<TransferCaller | Response> {
   const startedAt = Date.now()
   const { method, body: rawBody, headers: rawHeaders } = await pluginRequestFromWeb(request)
@@ -179,7 +188,7 @@ export async function transferGate(
       uid: decoded.uid,
       org: org ?? undefined,
       host: host ?? undefined,
-      intent: READ_ROUTES.has(route) ? 'read' : 'write',
+      intent: READ_ROUTES.has(route) || options.readsOnly?.(body) ? 'read' : 'write',
     })
     if (locked) return locked
     if (!org) return transferRefusal(404, 'notFound', 'No such workspace')
@@ -198,6 +207,7 @@ export async function transferGate(
       email: decoded.email ?? null,
       staff,
       member: membership?.member ?? null,
+      org: org as Record<string, unknown>,
       body,
       startedAt,
       driver: `request:${randomUUID()}`,

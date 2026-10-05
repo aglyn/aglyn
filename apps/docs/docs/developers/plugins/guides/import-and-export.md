@@ -237,6 +237,51 @@ workspace, because the export reads past the rules. Register `count` too
 if you can: the file then carries its row count and the download is
 checked whole however large it is.
 
+## Move things a person builds as a package
+
+Records are rows. What a person *builds* — a sequence, a campaign, an
+automation, an email template — moves as a workspace package instead: one
+JSON file that can carry several resources' items, imported from
+**Settings → Import & export**. Declare the resource with
+`"kinds": ["package"]` and `"formats": ["json"]`, and register the package
+hooks (see the
+[plugin manager API](../reference/plugin-manager-api.md)). An item's kind
+is your resource key.
+
+```ts
+registerPluginTransferResource('acme.playbooks', {
+  items: async (ctx) => existingPackageItemsOf('acme.playbooks', await readAll(ctx)),
+  readItems: async (ctx, ids) => readAll(ctx, ids),
+  dependencies: (item) => [{ kind: 'site', id: item.hostId }, { kind: 'crm.email-templates', id: item.templateId }],
+  remapIds: (item, idMap) => ({
+    ...item,
+    hostId: remapPackageReference(idMap, 'site', item.hostId),
+    templateId: remapPackageReference(idMap, 'crm.email-templates', item.templateId),
+  }),
+  problems: async (ctx, write) => validate(write.content),
+  writeItems: async (ctx, items, writer) => writeThroughYourOwnSave(ctx, items, writer),
+  revertItems: async (ctx, steps) => deleteOrRestoreThroughYourOwnPaths(ctx, steps),
+  rules: [{ id: 'draft', label: 'Imports arrive as drafts', reason: 'Nothing runs until someone turns it on.' }],
+}, { pluginId: 'acme' })
+```
+
+- **Hash what you export.** `items` hashes the same content `readItems`
+  answers, through `existingPackageItemsOf`. Leave out what an import
+  never writes — status, counters, who and when — or every round trip
+  reads as changed.
+- **Name every reference.** Another package item is resolved by its
+  resource. A `site` is resolved by the engine. For any other kind (a
+  mailbox, a list), answer `referenceTargets` with what the workspace holds,
+  so the person can map a missing one. A reference the person drops reaches
+  `remapIds` as `''`, and `remapPackageReference` turns it into `null`.
+- **Write through your own save**, under the `targetId` you are handed: the
+  package's id for a new item, yours for a replace, a fresh one for a
+  kept-both copy (which also carries `rename`). Mark every item with
+  `writer.markApplied`, a failed one too. The engine keeps the ledger and
+  takes the undo snapshot before the first write.
+- **Never start anything.** An imported item that could act on its own —
+  send, run, publish — lands off, and you say so in `rules`.
+
 ## Try it without a server
 
 The console's own specs drive the wizard with `createMemoryTransferClient`,

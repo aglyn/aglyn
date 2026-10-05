@@ -1100,6 +1100,40 @@ export const PLUGIN_TRANSFER_RESOURCES_DECLARED: readonly ResolvedTransferResour
     "description": "Every company field, custom fields included, with the parent company and the owner by name."
   },
   {
+    "pluginId": "crm",
+    "key": "crm.email-templates",
+    "label": "Email templates",
+    "singularLabel": "Email template",
+    "scope": "org",
+    "kinds": [
+      "package"
+    ],
+    "formats": [
+      "json"
+    ],
+    "limits": {
+      "maxRows": 200
+    },
+    "description": "Shared email templates and snippets, and your own personal ones."
+  },
+  {
+    "pluginId": "outreach",
+    "key": "outreach.sequences",
+    "label": "Sequences",
+    "singularLabel": "Sequence",
+    "scope": "org",
+    "kinds": [
+      "package"
+    ],
+    "formats": [
+      "json"
+    ],
+    "limits": {
+      "maxRows": 500
+    },
+    "description": "Each sequence's steps and settings, imported as a draft. Never who was enrolled or what was sent."
+  },
+  {
     "pluginId": "data",
     "key": "data.dataset",
     "label": "Dataset records",
@@ -1157,6 +1191,40 @@ export const PLUGIN_TRANSFER_RESOURCES_DECLARED: readonly ResolvedTransferResour
       "maxRows": 50000
     },
     "description": "The addresses a site's marketing email skips, and why."
+  },
+  {
+    "pluginId": "marketing",
+    "key": "marketing.campaigns",
+    "label": "Campaigns",
+    "singularLabel": "Campaign",
+    "scope": "org",
+    "kinds": [
+      "package"
+    ],
+    "formats": [
+      "json"
+    ],
+    "limits": {
+      "maxRows": 500
+    },
+    "description": "Each campaign's name, dates, lists and its emails' copy, imported as drafts. Never what was sent or its results."
+  },
+  {
+    "pluginId": "workflows",
+    "key": "workflows.org-automations",
+    "label": "Org automations",
+    "singularLabel": "Org automation",
+    "scope": "org",
+    "kinds": [
+      "package"
+    ],
+    "formats": [
+      "json"
+    ],
+    "limits": {
+      "maxRows": 100
+    },
+    "description": "The organization's automations — trigger, steps and sites — imported switched off."
   }
 ]
 

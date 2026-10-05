@@ -27,8 +27,20 @@ import {
   registerPluginMembershipDetacher,
 } from '@aglyn/aglyn/plugin-manager/plugin-membership-detach'
 import { registerPluginPersonRecordsEraser } from '@aglyn/aglyn/plugin-manager/plugin-person-erasure'
+import { registerPluginTransferResource } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { registerCrmTransferResources } from './transfer/register'
+import {
+  CRM_EMAIL_TEMPLATE_PACKAGE_RULES,
+  CRM_EMAIL_TEMPLATES_TRANSFER_KEY,
+  crmEmailTemplateDependencies,
+  remapCrmEmailTemplateIds,
+  type CrmEmailTemplatePackageContent,
+} from './transfer/email-templates-package'
+
+/** The email templates package's server half (AGL-3535), loaded when an import or export first asks. */
+const templatesPackage = async () =>
+  (await import('./transfer/email-templates-package.server')).createCrmEmailTemplatesPackage()
 
 /**
  * The plan feature every CRM resource of `/v1` needs, and the sentence its
@@ -92,6 +104,21 @@ const CRM_API_V1_RESOURCES: ReadonlyArray<readonly [string, ApiV1ResourceHandler
  * hot reload, a spec) is harmless.
  */
 export function registerCrmConsoleServerDeclarations(): void {
+  // Email templates in a workspace package (AGL-3535).
+  registerPluginTransferResource(
+    CRM_EMAIL_TEMPLATES_TRANSFER_KEY,
+    {
+      items: async (ctx) => (await templatesPackage()).items(ctx),
+      dependencies: (item) => crmEmailTemplateDependencies(item as CrmEmailTemplatePackageContent),
+      remapIds: (item, idMap) => remapCrmEmailTemplateIds(item as CrmEmailTemplatePackageContent, idMap),
+      readItems: async (ctx, ids) => (await templatesPackage()).readItems(ctx, ids),
+      writeItems: async (ctx, items, writer) => (await templatesPackage()).writeItems(ctx, items as never, writer),
+      revertItems: async (ctx, steps) => (await templatesPackage()).revertItems(ctx, steps as never),
+      problems: async (ctx, write) => (await templatesPackage()).problems(ctx, write as never),
+      rules: CRM_EMAIL_TEMPLATE_PACKAGE_RULES,
+    },
+    { pluginId: BUNDLE_ID },
+  )
   // The record system's share of a person erasure (AGL-2623, AGL-3080): it
   // names the person's contacts before anybody erases, and erases them, their
   // satellites and their lead after everybody else. Required, and loaded with

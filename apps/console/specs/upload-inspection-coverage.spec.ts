@@ -58,6 +58,9 @@ const COVERED_INGRESSES = [
   //    beside the workspace's other objects and read back by the job engine.
   //    Each part and then the whole file are inspected before either is stored.
   'libs/tenant/data/admin/src/lib/server/transfer-jobs.ts',
+  // 8. A workspace package (AGL-3535) — a JSON file a member imports, stored
+  //    as the package job's source and read back at apply.
+  'libs/tenant/data/admin/src/lib/server/transfer-packages.ts',
 ]
 
 /**

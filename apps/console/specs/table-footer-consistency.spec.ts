@@ -963,6 +963,30 @@ function tablesWithoutFooters(): string[] {
  */
 const NOT_A_LIST: Array<[string, string]> = [
   [
+    'apps/console/components/transfer-hub/org-package-import.component.tsx',
+    'The dry run of ONE package file (AGL-3535): a row per item the file ' +
+      'carries, each with the choice it needs, beside the references and ' +
+      'warnings that have to be answered before Import. Bounded by the file ' +
+      '(`TRANSFER_PACKAGE_MAX_ITEMS`), and a reader must see every item they ' +
+      'are deciding before they acknowledge the whole — a pager would hide ' +
+      'the choices Import waits on.',
+  ],
+  [
+    'apps/console/components/transfer-hub/org-package-undo.component.tsx',
+    'The items ONE package import wrote that were edited since (AGL-3535), ' +
+      'each with a keep-or-undo choice. Bounded by what that import wrote, ' +
+      'and every row is a decision Undo carries out together; a pager would ' +
+      'put some of them out of sight of the button.',
+  ],
+  [
+    'apps/console/components/settings/org-data-transfer-card.component.tsx',
+    'Launch points, not a list (AGL-3535): the resources the workspace’s ' +
+      'plugins declare — a closed set from `plugins.config.json` — and, for a ' +
+      'resource moved one instance at a time, the instances to open the ' +
+      'wizard on, read through the owner’s record list at a fixed window. ' +
+      'Like a picker’s options, a person opening one knows which they want.',
+  ],
+  [
     'apps/console/components/notification-scope-table.component.tsx',
     'The per-WORKSPACE and per-SITE notification settings (AGL-3267) — a row ' +
       'per `NotificationCategory` for the scope on screen, each opening onto ' +
@@ -1939,7 +1963,11 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     //
     // 68 since the email list import moved onto the transfer wizard
     // (AGL-3529): its drawer, and the two bounded readouts it drew, are gone.
-    expect(NOT_A_LIST).toHaveLength(68)
+    //
+    // 71 since the Import & export hub (AGL-3535), and these ARE new tables:
+    // one package file's dry run and the edited items of one import's undo,
+    // each bounded by that one file, and the hub's launch points.
+    expect(NOT_A_LIST).toHaveLength(71)
   })
 })
 

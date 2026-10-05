@@ -16,6 +16,8 @@ this document is the architecture.
 | UI kit: export dialog, import wizard | `libs/aglyn-transfer-ui` | AGL-3526 |
 | Console client and the core launcher plugins open the kit through | `apps/console/utils/transfer-http-client.ts`; `libs/aglyn/src/lib/app-utils/transfer-launcher-context.ts`; the shell's `transfer-launcher-provider.component.tsx` | AGL-3539 |
 | Site packages: a site's items as one file, planned and undone | core `data-transfer/site-package.ts`; routes `apps/console/app/api/hosts/{export,import}` | AGL-3533 |
+| Workspace packages: sequences, campaigns, automations, email templates as one file | core `data-transfer/package-plan.ts`; engine `libs/tenant/data/admin/src/lib/server/transfer-packages.ts`; route `apps/console/app/api/transfer/package` | AGL-3535 |
+| The Import & export hub: every resource, workspace packages, the history | `settings/(sections)/data`; `components/settings/org-data-transfer-card` and `org-transfer-history-card`; route `apps/console/app/api/transfer/jobs` | AGL-3535 |
 | Each resource | the owning plugin's `src/lib/transfer/` — datasets: `libs/plugins/data/src/lib/transfer/` (AGL-3530) | AGL-3527–3535 |
 
 The core knows nothing of any plugin. It holds no vendor's header names, no
@@ -220,6 +222,30 @@ says `new`, `identical`, `differs` or `missingDependency`;
 `proposePackageDecision`, `packageDecisionsFor` and `keepBothSlug` back the
 replace / keep both / skip / merge choice.
 
+### `package-plan.ts` — what importing a workspace package would do
+
+`planTransferPackage({ manifest, ownedKinds, existing, references, decisions,
+dependencyChoices, problems, newId })` is the whole dry run of a workspace
+package, pure. Items of a kind no enabled package resource owns are set aside
+(`unknownKinds`). Every other item is matched (`matchPackageItems`) and
+proposed a decision; one that differs waits (`needsChoice`) — replacing is
+never assumed. Each item that will write is given its id first — its own,
+the matched item's for a replace, `newId()` for keep both (with
+`keepBothSlug` and `keepBothName`, "(copy)") — and a skipped matched item
+points at the workspace's, so `idMap` rewrites every reference up front.
+A dependency neither the package (as written) nor the workspace (`existing`
+for owned kinds, `references` for the rest — `site` is
+`TRANSFER_SITE_KIND`) satisfies becomes a `TransferPackageReference` with
+its choices: `import` (the package's skipped copy), `mapTo` a target,
+`dropReference` (`''` in `idMap`; `remapPackageReference` makes it `null`)
+or `skipItem` (skipping every item that needs it, transitively). An item
+the plugin objects to (`problems`) fails. The verdicts are `create`,
+`replace`, `keepBoth`, `skip`, `fail`; `blocking` lists what still needs a
+choice; `acknowledgementsRequired` is `replace`, `dropReference`, `failed`
+as they occur; `canApplyTransferPackage` gates Apply.
+`existingPackageItemsOf` hashes what a resource holds the way an export
+hashes it.
+
 ### `source.ts` — the uploaded file as rows
 
 `readTransferSource(text, format, options?)` reads a file into
@@ -294,7 +320,7 @@ its own `lookup`, `suggest` and `matchKeys`), optional `plan`,
 organization, the site, the acting member and the job, and — from the job —
 the plugin steps' `extras` (in `plan`, those sent with this dry run;
 afterwards, those the plan was made with) and the file's `headers`. A package kind registers `items`,
-`dependencies`, `remapIds`, `readItems` and `writeItems`. Registration runs
+`dependencies`, `remapIds`, `readItems`, `writeItems` and `revertItems` (and optionally `problems`, `referenceTargets` and `rules`). Registration runs
 `transferResourceProblems` and refuses a kind whose hooks are missing. From
 its console registrar it registers the client half with
 `registerPluginTransferResourceUi(key, { label, icon, extraSteps })`.
@@ -376,6 +402,8 @@ site's captures — after the gate has checked `data.manage` on that site
 | `plan` | refuses a mapping `mappingProblems` blocks, and any unmatched picklist value or unresolved lookup value without a usable choice (`choicesNeeded`, by field); reads every row, resolves picklists and lookups into row notes, looks matches up in slices of 500 values, runs `matchRows` over the whole file (so an in-file duplicate is caught across chunks) and the resource's plan, fails the rows an invariant refuses, and stores the chunks. Writes no record. → `planned`. Answers the summary, the warnings, 50 rows of each verdict (`sample`), the first 500 `conflicts` (and `conflictCount`), the `ambiguous` rows and `recordLabels`; keeps `dateOrders` and the plugin steps' `extras` on the job. `action: 'rows'` pages the stored plan, by verdict. | `TransferPlanRequest` → `TransferPlanResponse`; `TransferPlanRowsRequest` → `TransferPlanRowsResponse` |
 | `apply` | the first call needs `canApplyTransferPlan` (`acknowledgementsMissing` lists the rest); refuses while another job of the same resource is `applying` or another driver holds this one's lease (`busy`). Adds the chosen picklist values (`addPicklistValues`), then writes chunks for 45 seconds and answers the progress and the `results` of the chunks it wrote; called until `done`. A plugin `apply` that throws fails the job naming the chunk; calling again resumes it. | `TransferApplyRequest` → `TransferApplyResponse` |
 | `status` | the job, `TransferProgress`, and whether undo is open; `include: 'results'` adds every written row's result; `download: 'results'` answers the result file (the file's own columns, then `Outcome`, `Reason`, `Record ID`) as CSV with `X-Aglyn-Export-Rows`. | `TransferStatusRequest` → `TransferStatusResponse` or `text/csv` |
+| `package` | workspace packages (AGL-3535): `list`, `export` (both read; export audited as `data.transfer.export`, counts only), `plan`, `apply`, `undoPlan`, `undo` — see [Workspace packages](#workspace-packages). Only the package resources of plugins the workspace runs (`listTransferResourcesFor`). | `TransferPackage*Request` → `TransferPackage*Response` |
+| `jobs` | the workspace's imports, newest first, a page at a time (`createdAt` cursor), each a `TransferJobSummary`: its label, status, counts, who (`createdByEmail`, from Auth), when, whether its result file and undo are open. With `sitePackages` on the first page, each site's latest `hosts/{hostId}/packageImports` too. Read. | `TransferJobsRequest` → `TransferJobsResponse` |
 | `undo` | for seven days after `applied`. `action: 'plan'` reads every touched record through `lookup` by id and runs `planTransferUndo`: counts of restore, delete, conflict and nothing, and the conflicts (what the record holds now, what undo would restore), paged; writes nothing. `action: 'apply'` reverts chunk by chunk through `revert`, each record with the person's `decisions[recordId]` or `otherwise`; called until `done`, then `undone`. | `TransferUndoPlanRequest` → `TransferUndoPlanResponse`; `TransferUndoApplyRequest` → `TransferUndoApplyResponse` |
 
 ### Lookup columns (AGL-3541)
@@ -436,6 +464,48 @@ sweep reads each due job again before acting on it, and handles at most 50
 of each kind per run. A GET lists what it would do and does nothing. The
 indexes are `(undo.status ↑, updatedAt ↑)` and `(retention ↑,
 retainUntil ↑)`, collection group.
+
+## Workspace packages
+
+A workspace package (AGL-3535) is an `aglyn-package` v2 file of the
+workspace's own items: sequences (`outreach.sequences`), campaigns
+(`marketing.campaigns`), org automations (`workflows.org-automations`) and
+CRM email templates (`crm.email-templates`). Each item's kind is the key of
+the `package` transfer resource that owns it, so one file carries several
+plugins' items and the references between them (a sequence step's template,
+an automation's campaign).
+
+It runs as a job of the row engine — `orgs/{orgId}/transferJobs/{jobId}`,
+`kind: 'package'`, `resource: 'package'` — and so shares its lease (one
+package import per workspace at a time), its ledger, its audit rows, the
+history, the sweep's resume and its cleanup. It does not share the row
+routes: there is no column to map, and a package is planned whole.
+
+| step | what `transfer-packages.ts` does |
+| -- | -- |
+| plan | Reads the file (each item's content must match its hash), stores it as the job's source, reads what the workspace holds of every owned kind the items carry or name (`items`), the sites (`site`) and every other kind they name (`referenceTargets`), plans (`planTransferPackage`), asks each written item's plugin what it would refuse (`problems`, on the item as it would be written), plans again with the objections and stores the plan in `chunks/0`. Writes no item. Re-planning takes the person's `decisions` and `dependencyChoices` by job id. |
+| apply | Refuses while anything blocks (`choicesNeeded`) or a warning is unacknowledged. Takes the undo snapshot BEFORE the first write (`undo/0`: each replaced item's content through `readItems`, each entry `created` or `updated`), then hands each owner its run of items in dependency order (`writeItems`, references rewritten by `remapIds`), through the ledger; then reads each written item's hash (`items`) into the snapshot, so undo can tell the import's own content from a later edit. |
+| undo | For seven days. An item the import created and nobody touched is deleted; one it replaced and nobody touched is put back; one edited since (its hash is neither the written nor the previous one) is a conflict, reverted only when the person says so; one gone or already back needs nothing. The plugin carries the steps out (`revertItems`) and may refuse one its own rules forbid — a sequence that has started sending stays. |
+
+Each plugin writes through its own save, so an import can store nothing that
+save would refuse, and keeps its own rules: an imported sequence is a draft
+(`saveOutreachSequence`); an org automation lands switched off
+(`createOrgAutomationRecord`); every campaign email is a draft with no
+audience or send time (the campaign draft writer's fields); a personal
+template becomes the importer's own.
+
+## The hub
+
+`Settings → Import & export` (`/[orgSlug]/settings/data`, shown to whoever
+holds `data.manage`) lists every resource the workspace's plugins declare —
+the workspace's and, for the site picked, that site's — grouped by plugin.
+Records open the wizard and the export dialog through the shell's launcher;
+packages open the workspace package export and import; each site links to
+its Backup & restore. The history (`/api/transfer/jobs`) lists every import
+— rows, workspace packages, each site's package imports — with its result
+file and Undo while the window is open. It loads the `transferResources`
+slot's registrars, so every resource's client half is registered before the
+hub names it.
 
 ## The UI kit
 

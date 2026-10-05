@@ -38,6 +38,9 @@
  *             person's decisions, called again until `done`
  *   export  → the chosen fields of the chosen records, streamed as CSV,
  *             JSON or NDJSON with the row count in a header
+ *   package → a workspace package (AGL-3535): `list` and `export` its
+ *             items, `plan` an import, `apply` it, `undoPlan` and `undo`
+ *   jobs    → the workspace's imports, newest first, for the hub's history
  *
  * Every refusal is a {@link TransferErrorResponse} with an HTTP status and a
  * {@link TransferErrorCode} a client can branch on. The job itself is also
@@ -79,6 +82,14 @@ import type {
 import type { TransferFieldMode, TransferLockedRule, TransferPolicy, TransferPolicySource } from './policy'
 import type { TransferField, TransferFormat, TransferResourceDescriptor } from './resource'
 import type { TransferCsvDelimiter, TransferSourceOptions } from './source'
+import type { PackageDependency, PackageItemDecision, TransferPackage } from './package'
+import type {
+  TransferPackageDependencyChoice,
+  TransferPackagePlanItem,
+  TransferPackageReference,
+  TransferPackageSummary,
+  TransferPackageWarningClass,
+} from './package-plan'
 
 /** Where each route is served. */
 export const TRANSFER_API_ROUTES = {
@@ -90,6 +101,8 @@ export const TRANSFER_API_ROUTES = {
   status: '/api/transfer/status',
   undo: '/api/transfer/undo',
   export: '/api/transfer/export',
+  package: '/api/transfer/package',
+  jobs: '/api/transfer/jobs',
 } as const
 
 export type TransferApiRoute = keyof typeof TRANSFER_API_ROUTES
@@ -224,6 +237,24 @@ export interface TransferJobRecord extends TransferJob {
   retainUntil?: number
   /** When the sweep cleared the dry run, undo snapshots and file of an applied job. */
   trimmedAt?: number
+  /** A workspace package import's plan, as the job keeps it (`kind: 'package'`). */
+  package?: TransferPackageJobState
+}
+
+/** What a workspace package import keeps on its job between requests. */
+export interface TransferPackageJobState {
+  /** Where the package came from, as its manifest says. */
+  source?: string
+  /** The resources its items belong to. */
+  resources: string[]
+  summary: TransferPackageSummary
+  blocking: string[]
+  acknowledgementsRequired: TransferPackageWarningClass[]
+  acknowledged?: TransferPackageWarningClass[]
+  unknownKinds: string[]
+  /** The person's choices the stored plan was built from. */
+  decisions: Record<string, PackageItemDecision>
+  dependencyChoices: Record<string, TransferPackageDependencyChoice>
 }
 
 /*------------------------------------------
@@ -719,6 +750,242 @@ export interface TransferUndoApplyResponse {
 export interface TransferExportRequest extends TransferOrgRequest, TransferExportChoice {
   /** The site, for a host-scoped resource. */
   hostId?: string | null
+}
+
+/*------------------------------------------
+ * Workspace packages (AGL-3535): `POST /api/transfer/package`
+ *-----------------------------------------*/
+
+/** One item a workspace holds, for the export picker. */
+export interface TransferPackageListItem {
+  /** `<kind>/<id>`. */
+  key: string
+  kind: string
+  id: string
+  name?: string
+  /** What it names, so "include what they need" can be shown before the file is made. */
+  deps: PackageDependency[]
+}
+
+/** One package resource the workspace can move, and what it holds. */
+export interface TransferPackageResourceList {
+  key: string
+  label: string
+  pluginId: string
+  description?: string
+  items: TransferPackageListItem[]
+  /** The resource's rules, shown with their reasons (an imported sequence is a draft). */
+  rules: TransferPackageRuleView[]
+}
+
+/** A plugin's rule an import cannot change, with why. */
+export interface TransferPackageRuleView {
+  id: string
+  label: string
+  reason: string
+}
+
+/** `action: 'list'`: the package resources the workspace can move, and their items. */
+export interface TransferPackageListRequest extends TransferOrgRequest {
+  action: 'list'
+  /** Only these resources; every one when absent. */
+  resources?: string[]
+}
+
+export interface TransferPackageListResponse {
+  ok: true
+  resources: TransferPackageResourceList[]
+}
+
+/**
+ * `action: 'export'`: the package file. `items` names item keys; absent,
+ * every item of `resources` (or of every resource). `dependencies` adds
+ * what the chosen items name that the workspace holds as package items.
+ */
+export interface TransferPackageExportRequest extends TransferOrgRequest {
+  action: 'export'
+  items?: string[]
+  resources?: string[]
+  dependencies?: boolean
+}
+
+export interface TransferPackageExportResponse {
+  ok: true
+  fileName: string
+  package: TransferPackage
+}
+
+/**
+ * `action: 'plan'`: what importing a package would do, writing nothing.
+ * The first call carries `package` and makes the job; later calls name
+ * `jobId` and carry the person's choices, and re-plan against the
+ * workspace as it is then.
+ */
+export interface TransferPackagePlanRequest extends TransferOrgRequest {
+  action: 'plan'
+  jobId?: string
+  /** The file's parsed JSON, on the first call. */
+  package?: unknown
+  fileName?: string
+  decisions?: Record<string, PackageItemDecision>
+  dependencyChoices?: Record<string, TransferPackageDependencyChoice>
+}
+
+export interface TransferPackagePlanResponse {
+  ok: true
+  job: TransferJobRecord
+  items: TransferPackagePlanItem[]
+  references: TransferPackageReference[]
+  unknownKinds: string[]
+  summary: TransferPackageSummary
+  blocking: string[]
+  acknowledgementsRequired: TransferPackageWarningClass[]
+  /** Each resource's label and rules, by resource key. */
+  resources: Record<string, { label: string; rules: TransferPackageRuleView[] }>
+}
+
+/** `action: 'apply'`: write the planned items. Called again until `done`. */
+export interface TransferPackageApplyRequest extends TransferOrgRequest {
+  action: 'apply'
+  jobId: string
+  acknowledged?: TransferPackageWarningClass[]
+}
+
+export interface TransferPackageApplyResponse {
+  ok: true
+  job: TransferJobRecord
+  done: boolean
+  results: TransferRowResult[]
+}
+
+/** What undo needs to reverse one package item. */
+export interface TransferPackageUndoEntry {
+  row: number
+  key: string
+  resource: string
+  /** The id it was written under. */
+  id: string
+  name?: string
+  action: 'created' | 'updated'
+  /** A replaced item's content before the import. */
+  previous?: unknown
+  previousHash?: string
+  /** The item's content hash once written, to tell a later edit from the import's own. */
+  writtenHash?: string
+}
+
+/** An item edited since the import: undo asks before it overwrites or deletes it. */
+export interface TransferPackageUndoConflict {
+  row: number
+  key: string
+  resource: string
+  id: string
+  name?: string
+  action: 'created' | 'updated'
+}
+
+/** `action: 'undoPlan'`: what undo would do. Writes nothing. */
+export interface TransferPackageUndoPlanRequest extends TransferOrgRequest {
+  action: 'undoPlan'
+  jobId: string
+}
+
+export interface TransferPackageUndoPlanResponse {
+  ok: true
+  job: TransferJobRecord
+  counts: TransferUndoCounts
+  conflicts: TransferPackageUndoConflict[]
+  expiresAt: number | null
+}
+
+/** `action: 'undo'`: carry undo out, each edited item as decided (`otherwise` for the rest). */
+export interface TransferPackageUndoRequest extends TransferOrgRequest {
+  action: 'undo'
+  jobId: string
+  /** By item id. */
+  decisions?: Record<string, TransferUndoDecision>
+  otherwise: TransferUndoDecision
+}
+
+export interface TransferPackageUndoResponse {
+  ok: true
+  job: TransferJobRecord
+  undo: TransferUndoState
+  done: boolean
+}
+
+/*------------------------------------------
+ * The workspace's imports (AGL-3535): `POST /api/transfer/jobs`
+ *-----------------------------------------*/
+
+/** The most jobs one page of the history holds. */
+export const TRANSFER_JOBS_PAGE_MAX = 50
+
+/** `jobs`: the workspace's imports, newest first. */
+export interface TransferJobsRequest extends TransferOrgRequest {
+  limit?: number
+  /** The `next` of the page before. */
+  after?: number | null
+  /** Also each site's package imports (`hosts/{hostId}/packageImports`), on the first page. */
+  sitePackages?: boolean
+}
+
+/** The most package imports listed per site. */
+export const TRANSFER_SITE_PACKAGE_IMPORTS_PER_SITE = 10
+
+/** One site package import (AGL-3533), as the hub's history lists it. */
+export interface TransferSitePackageImportSummary {
+  hostId: string
+  hostName: string | null
+  importId: string
+  status: 'applying' | 'applied' | 'refused' | 'failed' | 'undone'
+  actorEmail: string | null
+  source: string | null
+  startedAt: number
+  appliedAt: number | null
+  undoneAt: number | null
+  /** Items by decision. */
+  counts: Record<string, number>
+  items: number
+  undo: { available: boolean; expiresAt: number | null }
+  error: string | null
+}
+
+/** One import as the hub's history lists it. */
+export interface TransferJobSummary {
+  id: string
+  resource: string
+  /** The resource's label, or "Package". */
+  label: string
+  kind: TransferJob['kind']
+  status: TransferJobStatus
+  hostId: string | null
+  fileName: string | null
+  createdAt: number
+  updatedAt: number
+  createdBy: string
+  /** The member's address, when the workspace still has them. */
+  createdByEmail: string | null
+  rowCount: number
+  results: TransferResultSummary | null
+  appliedAt: number | null
+  undo: {
+    available: boolean
+    expiresAt: number | null
+    status: TransferUndoState['status'] | null
+  }
+  /** The per-row result file can be downloaded (`status` with `download: 'results'`). */
+  resultFile: boolean
+  error: string | null
+}
+
+export interface TransferJobsResponse {
+  ok: true
+  jobs: TransferJobSummary[]
+  /** With `sitePackages`: each site's latest package imports, newest first. */
+  sitePackageImports?: TransferSitePackageImportSummary[]
+  /** The `createdAt` to ask the next page `after`, or `null` after the last. */
+  next: number | null
 }
 
 /** Why a request was refused. */

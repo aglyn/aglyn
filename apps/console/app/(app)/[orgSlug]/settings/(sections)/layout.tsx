@@ -50,7 +50,7 @@ export default function SettingsSectionsLayout({
 }) {
   const orgSlug = useOrgSlug()
   const { currentOrg } = useOrgScope()
-  const { loaded: permissionsLoaded } = useOrgPermissions()
+  const { loaded: permissionsLoaded, can } = useOrgPermissions()
   const canManage = canManageOrg(currentOrg?.role)
   const isOwner = currentOrg?.role === 'owner'
   const section = (route: Route, label: string, visible?: boolean) => ({
@@ -82,6 +82,9 @@ export default function SettingsSectionsLayout({
     // Everything held, flagged or locked on the workspace, and the way to
     // request a review (AGL-3368). Owners and admins: it is who is told.
     section(Route.ORG_SETTINGS_HOLDS, 'Holds & reviews', canManage),
+    // Import & export (AGL-3535): the transfer routes ask `data.manage`,
+    // so the section is offered to whoever holds it.
+    section(Route.ORG_SETTINGS_DATA, 'Import & export', can('data.manage')),
     section(Route.ORG_SETTINGS_OWNERSHIP, 'Ownership', isOwner),
     section(Route.ORG_SETTINGS_DELETE, 'Delete', isOwner),
   ]

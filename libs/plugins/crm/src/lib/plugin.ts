@@ -28,6 +28,7 @@ import { registerCrmRecordRoutes } from './model/crm-record-routes'
 import { registerCrmRecordLists } from './model/crm-record-lists'
 import { CRM_SEARCH_SOURCES } from './model/crm-search-sources'
 import { registerPluginZone } from '@aglyn/aglyn/plugin-manager/plugin-zones'
+import { registerPluginTransferResourceUi } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
 import { CRM_RECORD_ATTRIBUTION_ZONE } from './components/crm-attribution-zone'
 import { CRM_RECORD_BOOKING_ZONE } from './components/crm-booking-zone'
 
@@ -61,6 +62,8 @@ const CrmTasksDueCard = lazy(
  * address is a URL, not a stored id, and the nav item keeps redirecting it.
  */
 export function registerCrmConsole(): void {
+  // How the Import & export hub names email templates in a workspace package (AGL-3535).
+  registerPluginTransferResourceUi('crm.email-templates', { label: 'Email templates' }, { pluginId: BUNDLE_ID })
   registerCrmRecordRoutes()
   // How the import wizard and the export dialog name the CRM's records (AGL-3527).
   registerCrmTransferResourceUis(BUNDLE_ID)

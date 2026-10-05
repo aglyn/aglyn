@@ -202,6 +202,7 @@ export const DOCS_HELP_EXCERPTS = {
   themeAssist: 'Describe a change to your site\'s theme and get a proposal for the theme editor\'s own controls, previewed before and after, that you save in the editor.',
   themeBuilder: 'Set your site\'s colors, fonts, and light/dark schemes with a live preview.',
   themeStyles: 'Style from your site\'s theme instead of typing pixels, so a brand change moves every page at once.',
+  transferHub: 'Move records and packages in and out of your workspace — choose the fields you export, match columns and existing records on import, decide every conflict, review a dry run, and undo an import for seven days.',
   troubleshooting: 'Fix the common reasons a custom domain won\'t verify or attach.',
   uptimeAndStatus: 'The live status page, what it does and does not show, and why there is no committed uptime percentage yet.',
   versionsAndPublishing: 'Every page, layout and reusable component keeps named versions — publish one, roll back to an older one, or schedule one to go live.',
