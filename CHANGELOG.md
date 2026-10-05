@@ -15,6 +15,7 @@ content on the marketing site and is written separately.
 
 ### Fixed
 
+- **ci:** the production canary grades a candidate deployment by its own URL, on real image pages, before Promote ([AGL-3571](https://linear.app/aglyn/issue/AGL-3571))
 - **mui:** an image's layout walk stops at a root that is its own parent ([AGL-3565](https://linear.app/aglyn/issue/AGL-3565), [AGL-3485](https://linear.app/aglyn/issue/AGL-3485))
 
 ## v1.0.0-beta.223 — 2026-10-05
