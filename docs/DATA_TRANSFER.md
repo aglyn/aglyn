@@ -191,16 +191,27 @@ replace / keep both / skip / merge choice.
 
 ## How the rest plugs in
 
-**AGL-3523, the extension point.** A plugin declares
-`transferResources: [TransferResourceDescriptor]` in `plugins.config.json`
-and registers, from `serverDeclarations`, `fields(ctx)` returning
-`TransferCatalogInput` (its alias dictionaries beside it), `matchKeys`
-(`MatchKeySpec[]`), `lookup(requests: MatchLookupRequest[])` returning a
-`MatchLookup`, `readPage(cursor, fieldIds)` for export, `locked` rules,
-`apply(rows: PlannedTransferRow[], writer)` through the plugin's own write
-paths, and `revert(entries: TransferUndoEntry[])`; packages add `items()`,
-`dependencies(item)` and `remapIds()`. The core's descriptor and field
-checks run at registration.
+**AGL-3523, the extension point** (`plugin-manager/plugin-transfer-resources.ts`).
+A plugin declares `transferResources: [TransferResourceDescriptor]` in
+`plugins.config.json`, which the generator checks and compiles into
+`PLUGIN_TRANSFER_RESOURCES_DECLARED`, and lists `transferResources`
+(`TRANSFER_RESOURCES_LOAD_POINT`) among its `console.slots`. From
+`serverDeclarations` or `consoleServerDeclarations` it registers the server
+half with `registerPluginTransferResource(key, impl)`: `fields(ctx)` returning
+`TransferCatalogInput`, `matchKeys` (`MatchKeySpec[]`), `aliases`
+(`TransferAliasDictionary[]`), `readPage(ctx, cursor, fieldIds, options)`,
+`lookup(ctx, requests)` returning the `MatchLookup` and the found records'
+current values, optional `plan`, `lockedRules` and `invariants`,
+`apply(ctx, chunk, writer)` through the plugin's own write paths, and
+`revert(ctx, snapshot, decisions)`; a package kind registers `items`,
+`dependencies`, `remapIds`, `readItems` and `writeItems`. Registration runs
+`transferResourceProblems` and refuses a kind whose hooks are missing. From
+its console registrar it registers the client half with
+`registerPluginTransferResourceUi(key, { label, icon, extraSteps })`.
+`resolveTransferResource(key)` joins a declaration to its server half and
+throws `TransferResourceUnavailableError` for one declared and never
+registered; `listTransferResourcesFor` lists what a workspace or site can move
+under its plugin enablement and release flags.
 
 **AGL-3524, the job engine.** Analyze runs `matchHeaders` and
 `collectPicklistValues`; plan runs `deriveTransferRow`, the picklist

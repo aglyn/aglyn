@@ -559,6 +559,108 @@ One owner per key, never one the platform's bundle or a host collection's
 `serverDeclarations` entry — the generator refuses anything else. The data
 plugin's `datasets` is the first.
 
+## Import and export — `plugin-transfer-resources`
+
+Everything a person imports or exports is a transfer RESOURCE: rows in a file
+(`records`) or a set of items carried as a package (`package`). The matching,
+cell reading, conflict policy and dry run are the core's
+(`@aglyn/aglyn/data-transfer`, see `docs/DATA_TRANSFER.md`); the plugin that
+owns the records declares the resource and answers for it. Declare it in
+`plugins.config.json`, in the core's `TransferResourceDescriptor` shape:
+
+```json
+"transferResources": [
+  {
+    "key": "bottles",
+    "label": "Bottles",
+    "singularLabel": "Bottle",
+    "scope": "org",
+    "kinds": ["records"],
+    "formats": ["csv", "json", "ndjson"],
+    "limits": { "maxRows": 5000 }
+  }
+]
+```
+
+| Field | Semantics |
+| --- | --- |
+| `key` | Lowercase words joined by `-` or `.`, at most 64 characters; one owner per key. The URL and storage name. |
+| `label` / `singularLabel` / `description` | What the hub and the wizard call it. |
+| `scope` | `org` (the workspace's records) or `host` (one site's). |
+| `kinds` | `records`, `package`, or both. |
+| `formats` | `csv`, `json`, `ndjson`. |
+| `limits` | `maxRows` (and optional `maxBytes`) one file may carry. |
+
+The plugin also lists `transferResources` among its `contributes.console.slots`
+(`TRANSFER_RESOURCES_LOAD_POINT`), so the wizard loads its console registrar,
+and names a `serverDeclarations` or `consoleServerDeclarations` entry — the
+generator refuses the declaration otherwise. It registers two halves.
+
+**The server half**, from its declarations entry:
+
+```ts
+registerPluginTransferResource(
+  'bottles',
+  {
+    fields: async (ctx) => (await import('./transfer/bottles')).bottleFields(ctx),
+    matchKeys: [{ fieldId: 'id', normalizer: 'aglynId' }, { fieldId: 'sku', normalizer: 'caseless' }],
+    readPage: async (ctx, cursor, fieldIds, options) =>
+      (await import('./transfer/bottles')).readBottles(ctx, cursor, fieldIds, options),
+    lookup: async (ctx, requests) => (await import('./transfer/bottles')).lookupBottles(ctx, requests),
+    apply: async (ctx, chunk, writer) => (await import('./transfer/bottles')).applyBottles(ctx, chunk, writer),
+    revert: async (ctx, snapshot, decisions) =>
+      (await import('./transfer/bottles')).revertBottles(ctx, snapshot, decisions),
+  },
+  { pluginId: 'acme-cellar' },
+)
+```
+
+| Hook | Semantics |
+| --- | --- |
+| `fields(ctx)` | The field catalog as `TransferCatalogInput` — standard, the organization's custom fields, derived and system fields, and groups. `transferResourceCatalog` builds it with the core and refuses one `transferFieldProblems` rejects. |
+| `matchKeys` | `MatchKeySpec[]`, in priority order — the keys a row finds its record by. At least one. |
+| `aliases` | Optional `TransferAliasDictionary[]`: other products' header spellings for these fields. |
+| `readPage(ctx, cursor, fieldIds, { pageSize, ids, filter })` | One export page, `{ rows, next }`, each row keyed by field id and holding only `fieldIds`. `cursor` is `null` for the first page and `next` `null` after the last. |
+| `lookup(ctx, requests)` | The records holding each requested key value: `{ lookup: MatchLookup, records }`, with each found record's current values for the plan's before → after. |
+| `plan(ctx, input)` | Optional; the core's `buildTransferPlan` otherwise (`planTransferResourceRows`). |
+| `lockedRules(ctx)` | Optional `TransferLockedRule[]`, shown locked in the wizard with their reasons. |
+| `invariants` | Optional rules a planned row must keep, each `{ id, label, check(row, before) }` answering why the row breaks it or `null`; `transferInvariantFailures` checks every writing row. |
+| `apply(ctx, chunk, writer)` | Writes one chunk of planned rows through the plugin's OWN write paths, so plan bands, consent rules and activity entries hold. Skips a row `writer.alreadyApplied(row)` answers for, calls `writer.markApplied(result, undo)` the moment each write lands, and stops at a row boundary when `writer.timeLeftMs()` runs short. Answers `{ results, undo }`. |
+| `revert(ctx, snapshot, decisions)` | Reverses a chunk's writes, deciding each entry with the core's `planTransferUndo`; a conflict is carried out only when `decisions[recordId]` is `revert`. Answers `{ done, conflicts }`. |
+| `items(ctx)`, `dependencies(item)`, `remapIds(item, idMap)`, `readItems(ctx, ids)`, `writeItems(ctx, items, writer)` | A `package` kind's hooks: what is held now, an item's references, the item with references rewritten (`idMap` keyed `<kind>/<id>`), the content to export, and the decided items written through the plugin's paths. |
+
+Registration is refused with no owner, for a key nobody declared or another
+plugin declared, for a declaration the core's `transferResourceProblems`
+rejects, and naming every hook a declared kind lacks.
+
+**The client half**, from its console registrar:
+
+```ts
+registerPluginTransferResourceUi('bottles', {
+  label: 'Bottles',
+  icon: { path: mdiBottleWine },
+  extraSteps: [{ id: 'vintages', label: 'Vintages', after: 'values', component: VintagesStep }],
+})
+```
+
+An extra step follows one of the core's steps (`upload`, `mapping`, `values`,
+`matching`, `conflicts`, `dryRun`, `apply`) and is handed
+`{ resource, orgId, hostId, jobId, setComplete }`; `transferWizardSteps(key)`
+answers the full order.
+
+| Reader | Semantics |
+| --- | --- |
+| `listDeclaredTransferResources()` / `declaredTransferResource(key)` | The compiled declarations. |
+| `listTransferResourcesFor({ scope, org, host?, isFlagOn?, staffBypass? })` | The resources of one scope whose plugin runs for the workspace (`org`) or the site (`host`), and whose release flag is on when a verdict is passed. |
+| `resolveTransferResource(key)` / `resolveTransferResources()` | A declaration joined to its server half. A resource declared and not registered runs the app's declarations step once; still missing, it throws `TransferResourceUnavailableError` (`reason: 'unregistered'`), and a key nobody declares throws it with `reason: 'undeclared'`. |
+| `transferRecordsHooks(resource)` / `transferPackageHooks(resource)` | The hooks of a declared kind, typed; throws for a kind the resource does not declare. |
+| `pluginTransferResourceUi(key)` / `listPluginTransferResourceUis()` | The client halves. |
+
+`apps/console/specs/plugin-contributions-declared.spec.ts` holds both halves
+to the declaration: every console registrar runs and the client halves must
+be exactly the declared resources, and the server declarations run and every
+declared resource must resolve.
+
 ## Sitemap sections — `plugin-sitemap-sections`
 
 A site's `/sitemap.xml` is an index over one child per section. The pages,

@@ -1,8 +1,9 @@
 # Import and export everywhere
 
-Status: the core is built (AGL-3522); everything else in the build plan below is
-open. Linear project P-AGL-140. The architecture of the core, and how the rest
-plugs into it, is in [`docs/DATA_TRANSFER.md`](../DATA_TRANSFER.md).
+Status: the core (AGL-3522) and the extension point (AGL-3523) are built;
+everything else in the build plan below is open. Linear project P-AGL-140.
+The architecture of the core, and how the rest plugs into it, is in
+[`docs/DATA_TRANSFER.md`](../DATA_TRANSFER.md).
 
 ## The decision
 

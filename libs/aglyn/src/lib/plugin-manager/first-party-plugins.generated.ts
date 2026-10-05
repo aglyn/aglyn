@@ -12,6 +12,7 @@ import type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from '
 import type { ResolvedPluginSitemapSection } from './plugin-sitemap-sections'
 import type { ResolvedPluginSitemapReaderDeclaration } from './plugin-sitemap-readers'
 import type { ResolvedPluginSiteBundleSectionDeclaration } from './plugin-site-bundle'
+import type { ResolvedTransferResourceDeclaration } from './plugin-transfer-resources'
 import type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'
 import type { ResolvedPluginEntityPicker } from './plugin-entity-pickers'
 import type { ResolvedPluginRecordPage } from './plugin-record-pages'
@@ -766,6 +767,12 @@ export const PLUGIN_SITE_BUNDLE_SECTIONS_DECLARED: readonly ResolvedPluginSiteBu
     "limit": 50
   }
 ]
+
+/**
+ * Every resource a first-party plugin can import or export, declared by that
+ * plugin (AGL-3523), in the order the transfer hub lists them.
+ */
+export const PLUGIN_TRANSFER_RESOURCES_DECLARED: readonly ResolvedTransferResourceDeclaration[] = []
 
 /**
  * Every org collection a first-party plugin owns whose documents the media

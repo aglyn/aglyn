@@ -1894,6 +1894,87 @@ function siteBundleSectionRows() {
 }
 
 /**
+ * What each plugin can import and export (AGL-3523): its transfer resources,
+ * each a `TransferResourceDescriptor` from core `data-transfer/resource.ts`.
+ * Compiled, and read with the registered halves (core
+ * `plugin-transfer-resources.ts`): a resource declared and never registered
+ * fails the job that asks for it rather than reading as nothing to move.
+ *
+ * Checked here, in the shape core's `transferResourceProblems` checks again
+ * at registration: a resource key no other plugin uses, a label, a scope, at
+ * least one known kind and format, and positive whole limits. And the two
+ * places the halves are registered from: a `serverDeclarations` or
+ * `consoleServerDeclarations` entry for the server half, and a console
+ * registrar that loads at the `transferResources` slot for the client half.
+ */
+const TRANSFER_RESOURCE_KEY = /^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$/
+const TRANSFER_SCOPES = ['org', 'host']
+const TRANSFER_KINDS = ['records', 'package']
+const TRANSFER_FORMATS = ['csv', 'json', 'ndjson']
+const TRANSFER_RESOURCE_FIELDS = ['key', 'label', 'singularLabel', 'scope', 'kinds', 'formats', 'limits', 'description']
+const TRANSFER_RESOURCES_LOAD_POINT = 'transferResources'
+
+function transferResourceRows() {
+  const rows = []
+  const owners = new Map()
+  for (const plugin of config.plugins) {
+    const declared = plugin.transferResources
+    if (declared === undefined) continue
+    const where = `plugins.config.json: "${plugin.id}" transferResources`
+    if (!Array.isArray(declared) || !declared.length) {
+      throw new Error(`${where} is present and declares nothing — drop it, or name the resource`)
+    }
+    if (!plugin.register?.serverDeclarations && !plugin.register?.consoleServerDeclarations) {
+      throw new Error(
+        `${where}: a resource's server half is registered from a "serverDeclarations" (or "consoleServerDeclarations") entry, ` +
+          'and this plugin names neither — a declared resource nothing registers fails every job',
+      )
+    }
+    if (!plugin.register?.console || !(plugin.contributes?.console?.slots ?? []).includes(TRANSFER_RESOURCES_LOAD_POINT)) {
+      throw new Error(
+        `${where}: a resource's client half is registered from the plugin's console registrar, ` +
+          `which loads where the wizard is drawn only when "${TRANSFER_RESOURCES_LOAD_POINT}" is among its contributes.console.slots`,
+      )
+    }
+    for (const entry of declared) {
+      const { $comment: _note, ...resource } = entry ?? {}
+      const { key, label, singularLabel, scope, kinds, formats, limits, description } = resource
+      const what = `${where} "${key ?? ''}"`
+      const unknown = Object.keys(resource).filter((field) => !TRANSFER_RESOURCE_FIELDS.includes(field))
+      if (unknown.length) throw new Error(`${what}: ${unknown.join(', ')} is not a resource field`)
+      if (typeof key !== 'string' || key.length > 64 || !TRANSFER_RESOURCE_KEY.test(key)) {
+        throw new Error(`${where}: a resource's "key" is lowercase words joined by - or . (at most 64 characters)`)
+      }
+      const held = owners.get(key)
+      if (held) throw new Error(`${what} is already declared by "${held}" — one key has one owner`)
+      owners.set(key, plugin.id)
+      if (typeof label !== 'string' || !label.trim()) throw new Error(`${what}: "label" is required`)
+      for (const [name, value] of [['singularLabel', singularLabel], ['description', description]]) {
+        if (value !== undefined && (typeof value !== 'string' || !value.trim())) {
+          throw new Error(`${what}: "${name}" is a sentence when present`)
+        }
+      }
+      if (!TRANSFER_SCOPES.includes(scope)) throw new Error(`${what}: "scope" is ${TRANSFER_SCOPES.join(' or ')}`)
+      for (const [name, list, known] of [['kinds', kinds, TRANSFER_KINDS], ['formats', formats, TRANSFER_FORMATS]]) {
+        if (!Array.isArray(list) || !list.length || new Set(list).size !== list.length || list.some((one) => !known.includes(one))) {
+          throw new Error(`${what}: "${name}" lists one or more of ${known.join(', ')}, each once`)
+        }
+      }
+      if (limits !== undefined) {
+        const { maxRows, maxBytes, ...extra } = limits ?? {}
+        if (Object.keys(extra).length) throw new Error(`${what}: limits.${Object.keys(extra).join(', limits.')} is not a limit`)
+        if (!Number.isInteger(maxRows) || maxRows < 1) throw new Error(`${what}: "limits.maxRows" is a positive whole number`)
+        if (maxBytes !== undefined && (!Number.isInteger(maxBytes) || maxBytes < 1)) {
+          throw new Error(`${what}: "limits.maxBytes" is a positive whole number when present`)
+        }
+      }
+      rows.push({ pluginId: plugin.id, ...resource })
+    }
+  }
+  return rows
+}
+
+/**
  * The child sitemaps each plugin's documents fill (AGL-3080).
  *
  * Compiled because the reader is the tenant's `/sitemap.xml`: a section a
@@ -3046,7 +3127,7 @@ function catalogContent(videoEmbedRows, planEntitlements, usageAxes) {
  * the types and the resolvers in \`enabled-plugins.ts\`; it holds no row.
  */
 
-import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'\nimport type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'\nimport type { ResolvedPluginSitemapSection } from './plugin-sitemap-sections'\nimport type { ResolvedPluginSitemapReaderDeclaration } from './plugin-sitemap-readers'\nimport type { ResolvedPluginSiteBundleSectionDeclaration } from './plugin-site-bundle'\nimport type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'\nimport type { ResolvedPluginEntityPicker } from './plugin-entity-pickers'\nimport type { ResolvedPluginRecordPage } from './plugin-record-pages'\nimport type { ResolvedVisitorDoor } from './plugin-visitor-doors'\nimport type { ResolvedPluginCostAxis, ResolvedPluginSpendLine, ResolvedPluginUsageBand, ResolvedPluginUsageMeter } from './plugin-usage-axes'\nimport type { ResolvedPluginPlanFeature, ResolvedPluginPlanQuota } from './plugin-plan-entitlements'\nimport type { FunctionBindings } from './plugin-contributions'\nimport type { PluginDistribution } from './plugin-distribution'\nimport type { RepeatSourceDeclaration } from './repeat-rows'\nimport type { PluginTemplateSource } from './plugin-template-sources'\nimport type { FormRecordTargetDeclaration } from './submission-record-target'\nimport type { ArtifactTypeDeclaration } from './plugin-artifact-types'\nimport type { ResolvedBesignerDocument } from './besigner-documents'\nimport type { PluginOrgKeyedCollection } from './plugin-org-erasure'\nimport type { ResolvedVideoEmbedProvider } from './video-embed-provider'\nimport type { AnalyticsProviderDeclaration } from '../app-utils/analytics-provider'\nimport type { InteractionStepDeclaration } from '../app-utils/site-interactions'\nimport type { ServerStepDeclaration } from './plugin-server-steps'\nimport type { InteractionRecipeDeclaration } from './interaction-recipes'\nimport type { NotificationCategoryDeclaration, NotificationDigestDeclaration } from '../app-utils/notifications'
+import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'\nimport type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'\nimport type { ResolvedPluginSitemapSection } from './plugin-sitemap-sections'\nimport type { ResolvedPluginSitemapReaderDeclaration } from './plugin-sitemap-readers'\nimport type { ResolvedPluginSiteBundleSectionDeclaration } from './plugin-site-bundle'\nimport type { ResolvedTransferResourceDeclaration } from './plugin-transfer-resources'\nimport type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'\nimport type { ResolvedPluginEntityPicker } from './plugin-entity-pickers'\nimport type { ResolvedPluginRecordPage } from './plugin-record-pages'\nimport type { ResolvedVisitorDoor } from './plugin-visitor-doors'\nimport type { ResolvedPluginCostAxis, ResolvedPluginSpendLine, ResolvedPluginUsageBand, ResolvedPluginUsageMeter } from './plugin-usage-axes'\nimport type { ResolvedPluginPlanFeature, ResolvedPluginPlanQuota } from './plugin-plan-entitlements'\nimport type { FunctionBindings } from './plugin-contributions'\nimport type { PluginDistribution } from './plugin-distribution'\nimport type { RepeatSourceDeclaration } from './repeat-rows'\nimport type { PluginTemplateSource } from './plugin-template-sources'\nimport type { FormRecordTargetDeclaration } from './submission-record-target'\nimport type { ArtifactTypeDeclaration } from './plugin-artifact-types'\nimport type { ResolvedBesignerDocument } from './besigner-documents'\nimport type { PluginOrgKeyedCollection } from './plugin-org-erasure'\nimport type { ResolvedVideoEmbedProvider } from './video-embed-provider'\nimport type { AnalyticsProviderDeclaration } from '../app-utils/analytics-provider'\nimport type { InteractionStepDeclaration } from '../app-utils/site-interactions'\nimport type { ServerStepDeclaration } from './plugin-server-steps'\nimport type { InteractionRecipeDeclaration } from './interaction-recipes'\nimport type { NotificationCategoryDeclaration, NotificationDigestDeclaration } from '../app-utils/notifications'
 
 export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
 ${rows.map((row) => `  ${indent(JSON.stringify(row.plugin, null, 2))},`).join('\n')}
@@ -3091,6 +3172,12 @@ export const PLUGIN_SITEMAP_READERS_DECLARED: readonly ResolvedPluginSitemapRead
  * declared by that plugin (AGL-3080), in the order the bundle carries them.
  */
 export const PLUGIN_SITE_BUNDLE_SECTIONS_DECLARED: readonly ResolvedPluginSiteBundleSectionDeclaration[] = ${JSON.stringify(siteBundleSectionRows(), null, 2)}
+
+/**
+ * Every resource a first-party plugin can import or export, declared by that
+ * plugin (AGL-3523), in the order the transfer hub lists them.
+ */
+export const PLUGIN_TRANSFER_RESOURCES_DECLARED: readonly ResolvedTransferResourceDeclaration[] = ${JSON.stringify(transferResourceRows(), null, 2)}
 
 /**
  * Every org collection a first-party plugin owns whose documents the media
