@@ -538,6 +538,12 @@ which addresses answer what — your collections that have published entries and
 entry counts, search, the sitemap, the API description, and a contact route when you
 publish one.
 
+It also lists your pages in the order your site is built: the home page, then the
+top-level pages as your screens list arranges them, then the pages under each of those.
+A page you have hidden from search — unlisted, password-protected, members-only — is
+never listed, so the guide agrees with your `robots` meta about which pages exist. A very
+large site lists its first two hundred in that order and leaves the rest to the sitemap.
+
 You can lead it with your own words. **Setup → SEO → AI agents** has two boxes:
 
 - **When to use this site** — the questions you are the best source for. Be specific;
