@@ -147,7 +147,8 @@ them — the leads list by a value's group too — and [Reports](./reports.md#le
 counts leads by them.
 
 **Standard values come with every organization.** Each picklist ships Salesforce's
-standard set, marked **Standard** in the list. You can rename, reorder, regroup,
+standard set — and, for Lead source, a value for each of Aglyn's own doors and outreach —
+marked **Standard** in the list. You can rename, reorder, regroup,
 deactivate or make a standard value the default, but you cannot delete one. **Your own
 values** sit beside them: add as many as you need, and delete them when you are done.
 
@@ -155,8 +156,8 @@ Lead source's standard values, by group:
 
 | Group | Values |
 | --- | --- |
-| **Inbound** | Web, Phone inquiry, Email inquiry, Partner referral, Employee referral, External referral, Advertisement, Trade show, Webinar, Word of mouth |
-| **Outbound** | Purchased list |
+| **Inbound** | Web, Phone inquiry, Email inquiry, Partner referral, Employee referral, External referral, Advertisement, Trade show, Webinar, Word of mouth, and Aglyn's own: Website form, Booking, Newsletter sign-up, Site member sign-up, Online purchase, Account sign-up |
+| **Outbound** | Purchased list, and Aglyn's own: Sequence, Email campaign |
 | *(no group)* | Other |
 
 The **Companies** tab keeps **Type**, **Industry**, **Rating** and **Ownership**, each

@@ -37,9 +37,9 @@ must name a meaning the backfill cannot know.
 | --- | --- |
 | A stored value whose id is a standard id (`web`, `trade-show`, `purchased-list`, `other`, …) | **Kept** as the standard value, overridden — its label, order, group and active flag as stored. No record changes: they already hold its label. |
 | An org-added lead source with no group whose label starts **Outbound** | Filed under **Outbound**. |
-| An org-added lead source with no group whose label names a **website form** | Filed under **Inbound**. |
+| A stored value that is not standard but carries a standard value's label — "Website form", written down by hand before AGL-3519 made it built in | **Merged into the built-in value**: the entry takes the standard id (`website-form`), and the standard group when it has none, so it reads as that value overridden. Records hold the label, which does not change, so none is rewritten. A default that named it follows. |
 | Any other org-added value | Left as it is. A group an admin set is never moved. |
-| A label records hold that the list does not answer to — in any capitalization or spacing — standard values included | **Added** as the organization's own value, active, at the end of the list. A lead source is filed under a direction by the two rules above, else no group. |
+| A label records hold that the list does not answer to — in any capitalization or spacing — standard values included | **Added** as the organization's own value, active, at the end of the list. A lead source starting **Outbound** is filed under Outbound, else no group. |
 | An organization that never stored a list, whose records hold such a label | Written the list it reads today — every standard value in order — with the added values after, as the Fields page writes one on an organization's first edit. An organization whose records hold only standard labels is written nothing. |
 | A list already at 200 values | The label is reported as not added. |
 
@@ -52,14 +52,18 @@ The plan the test pins for the Aglyn organization's lead sources:
 
 ```
 leadSource:
+    Website form → the built-in value (website-form)
     Outbound · Apollo → added, outbound
     Outbound · Instantly → added, outbound
     Outbound · self-published address → added, outbound
-    Website form → added, inbound
     Internal test → added, no group
 ```
 
-(A value already stored with no group reads `→ outbound` — regrouped — rather
+"Website form" is one of Aglyn's own built-in values since AGL-3519; a stored
+entry already under the id `website-form` is that value overridden and plans
+nothing, and one under another id is merged into it as above. A vendor Aglyn
+does not run — Apollo, Instantly — stays the org's own value. (An org-added
+value already stored with no group reads `→ outbound` — regrouped — rather
 than `→ added, outbound`.)
 
 ## Running it

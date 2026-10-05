@@ -31,12 +31,20 @@
 // would read "(not in the list)" in every select. The backfill writes each of
 // them down as the org's own value, and never rewrites a record.
 //
+// ## A stored value that IS a built-in one
+//
+// A value an org added before the platform shipped it — "Website form",
+// written down by hand before AGL-3519 made it built in — is merged into
+// the built-in value: the stored entry takes the standard id (and the
+// standard group, when it has none), so it reads as that value overridden
+// rather than as a second value the engine adopts on every read. Records
+// hold the label, which does not change, so none is rewritten.
+//
 // ## Lead source groups
 //
 // An org-added lead source is filed under a direction by its label: one
-// starting "Outbound" is Outbound, one naming a website form is Inbound, and
-// anything else is left in no group for an admin to place. A group an admin
-// already set is never moved.
+// starting "Outbound" is Outbound, and anything else is left in no group for
+// an admin to place. A group an admin already set is never moved.
 //
 // ## The registry is read from the source
 //
@@ -234,10 +242,7 @@ export function effectiveLabelKeys(definition, stored) {
 
 /** The direction an org-added lead source is filed under by its label, or `null`. */
 export function leadSourceGroupFor(label) {
-  const text = normalizeLabel(label)
-  if (/^outbound\b/i.test(text)) return 'outbound'
-  if (/website form/i.test(text)) return 'inbound'
-  return null
+  return /^outbound\b/i.test(normalizeLabel(label)) ? 'outbound' : null
 }
 
 /**
@@ -246,10 +251,11 @@ export function leadSourceGroupFor(label) {
  * `groupFor` — a lead source's — the group an org-added value is filed
  * under by its label, or nothing for a list without groups.
  *
- * Answers `{ write, values, defaultValueId, kept, regrouped, added, skipped }`:
+ * Answers `{ write, values, defaultValueId, kept, merged, regrouped, added, skipped }`:
  * `write` false when the list needs nothing. `values` is the list to store —
- * the stored values as they are, regrouped where `groupFor` places an
- * ungrouped org-added one, then every held label the list does not answer
+ * the stored values as they are, one carrying a standard value's label
+ * merged into it, regrouped where `groupFor` places an ungrouped org-added
+ * one, then every held label the list does not answer
  * to, as an org-added value. An org that stored no list is written the
  * effective list it reads today — every standard value in order — with the
  * added values after, as the Fields page writes one on its first edit.
@@ -269,9 +275,28 @@ export function planPicklist({ definition, raw, held, groupFor = () => null }) {
       }))
   const kept = []
   const regrouped = []
+  const merged = []
+  let defaultValueId =
+    raw && typeof raw === 'object' && values.some((value) => value.id === raw.defaultValueId)
+      ? raw.defaultValueId
+      : null
+  // A stored value carrying a standard value's label, under another id, is
+  // that standard value: it takes the id (see the header).
+  for (const value of values) {
+    if (standardIds.has(value.id)) continue
+    const standard = definition.standardValues.find(
+      (entry) => labelKey(entry.label) === labelKey(value.label),
+    )
+    if (!standard || values.some((entry) => entry.id === standard.id)) continue
+    if (defaultValueId === value.id) defaultValueId = standard.id
+    merged.push({ label: value.label, from: value.id, to: standard.id })
+    value.id = standard.id
+    if (hasGroups && !value.group && standard.group) value.group = standard.group
+    if (definition.meanings.length) value.meaning = standard.meaning ?? null
+  }
   for (const value of values) {
     if (standardIds.has(value.id)) {
-      if (stored) kept.push(value.label)
+      if (stored && !merged.some((entry) => entry.to === value.id)) kept.push(value.label)
       continue
     }
     if (!hasGroups || value.group) continue
@@ -306,16 +331,13 @@ export function planPicklist({ definition, raw, held, groupFor = () => null }) {
     values.push(value)
     added.push({ label, group: value.group ?? null })
   }
-  const defaultValueId =
-    raw && typeof raw === 'object' && values.some((value) => value.id === raw.defaultValueId)
-      ? raw.defaultValueId
-      : null
   return {
-    write: regrouped.length > 0 || added.length > 0,
+    write: merged.length > 0 || regrouped.length > 0 || added.length > 0,
     created: !stored,
     values,
     defaultValueId,
     kept,
+    merged,
     regrouped,
     added,
     skipped,
@@ -345,6 +367,7 @@ export function heldLabels(records, field, { facet = false } = {}) {
 /** How one plan reads in the per-org report. */
 export function describePlan(id, plan) {
   const lines = []
+  for (const value of plan.merged) lines.push(`${value.label} → the built-in value (${value.to})`)
   for (const value of plan.regrouped) lines.push(`${value.label} → ${value.group}`)
   for (const value of plan.added) {
     lines.push(`${value.label} → added${value.group ? `, ${value.group}` : ', no group'}`)

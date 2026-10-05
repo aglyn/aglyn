@@ -1720,7 +1720,16 @@ describe('the lead source picklist', () => {
       'trade-show',
       'webinar',
       'word-of-mouth',
+      // Aglyn's own doors and outreach (AGL-3519).
+      'website-form',
+      'booking',
+      'newsletter-sign-up',
+      'site-member-sign-up',
+      'online-purchase',
+      'account-sign-up',
       'purchased-list',
+      'sequence',
+      'email-campaign',
       'other',
     ])
     expect(standard.values.every((value) => value.active)).toBe(true)
@@ -1767,6 +1776,14 @@ describe('the lead source picklist', () => {
       'advertisement',
       'webinar',
       'word-of-mouth',
+      'website-form',
+      'booking',
+      'newsletter-sign-up',
+      'site-member-sign-up',
+      'online-purchase',
+      'account-sign-up',
+      'sequence',
+      'email-campaign',
     ])
     expect(list.defaultValueId).toBe('trade-show')
     expect(isStandardCrmPicklistValue('leadSource', 'web')).toBe(true)
@@ -2107,5 +2124,37 @@ describe('an activity’s direction (AGL-3517)', () => {
     expect(crmActivityKindTitle('call', 'internal')).toBe('Internal call')
     expect(crmActivityKindTitle('call')).toBe('Call')
     expect(crmActivityKindTitle('meeting', 'inbound')).toBe('Meeting')
+  })
+})
+
+describe('a door’s built-in lead source (AGL-3519)', () => {
+  const crm = jest.requireActual('./crm') as typeof import('./crm')
+
+  it('names a built-in, grouped value for every first-party door and outreach', () => {
+    const standard = crm.crmPicklistDefinition('leadSource')?.standardValues ?? []
+    for (const [origin, id] of Object.entries(crm.CRM_LEAD_SOURCE_ORIGINS)) {
+      const value = standard.find((entry) => entry.id === id)
+      expect([origin, value?.group]).toEqual([
+        origin,
+        origin === 'sequence' || origin === 'emailCampaign' ? 'outbound' : 'inbound',
+      ])
+    }
+    // A way a record was added is not where a person came from.
+    for (const word of ['api', 'import', 'manual', 'toString']) {
+      expect(crm.crmLeadSourceForOrigin(crm.effectiveCrmLeadSourcePicklist(null), word)).toBeNull()
+    }
+  })
+
+  it('stamps the org’s spelling, and nothing for a value the org deactivated', () => {
+    const list = crm.effectiveCrmLeadSourcePicklist({
+      values: [
+        { id: 'website-form', label: 'Web form', active: true, group: 'inbound' },
+        { id: 'booking', label: 'Booking', active: false, group: 'inbound' },
+      ],
+      defaultValueId: null,
+    })
+    expect(crm.crmLeadSourceForOrigin(list, 'form')).toBe('Web form')
+    expect(crm.crmLeadSourceForOrigin(list, 'booking')).toBeNull()
+    expect(crm.crmLeadSourceForOrigin(list, 'sequence')).toBe('Sequence')
   })
 })

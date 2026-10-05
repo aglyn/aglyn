@@ -646,7 +646,7 @@ describe('the write', () => {
         error:
           'Lead source must be one of: Website form, Phone inquiry, Email inquiry, ' +
           'Partner referral, Employee referral, External referral, Advertisement, ' +
-          'Trade show, Webinar, Word of mouth, Purchased list, Other.',
+          'Trade show, Webinar, Word of mouth, Booking, Newsletter sign-up, Site member sign-up, Online purchase, Account sign-up, Purchased list, Sequence, Email campaign, Other.',
       },
     ])
     expect(facetOf('ada').leadSource).toBe('Website form')

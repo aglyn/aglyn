@@ -53,7 +53,15 @@ describe('the registry, read from crm.ts (AGL-3511)', () => {
         ['trade-show', 'Trade show', 'inbound'],
         ['webinar', 'Webinar', 'inbound'],
         ['word-of-mouth', 'Word of mouth', 'inbound'],
+        ['website-form', 'Website form', 'inbound'],
+        ['booking', 'Booking', 'inbound'],
+        ['newsletter-sign-up', 'Newsletter sign-up', 'inbound'],
+        ['site-member-sign-up', 'Site member sign-up', 'inbound'],
+        ['online-purchase', 'Online purchase', 'inbound'],
+        ['account-sign-up', 'Account sign-up', 'inbound'],
         ['purchased-list', 'Purchased list', 'outbound'],
+        ['sequence', 'Sequence', 'outbound'],
+        ['email-campaign', 'Email campaign', 'outbound'],
         ['other', 'Other', null],
       ],
     )
@@ -101,10 +109,11 @@ const X = {
 })
 
 describe('a lead source’s direction by its label', () => {
-  it('files Outbound labels as outbound and a website form as inbound', () => {
+  it('files Outbound labels as outbound, and nothing else', () => {
     assert.equal(leadSourceGroupFor('Outbound · Apollo'), 'outbound')
     assert.equal(leadSourceGroupFor('outbound - cold email'), 'outbound')
-    assert.equal(leadSourceGroupFor('Website form'), 'inbound')
+    // A website form is a built-in value (AGL-3519), grouped by the definition.
+    assert.equal(leadSourceGroupFor('Website form'), null)
     assert.equal(leadSourceGroupFor('Internal test'), null)
     assert.equal(leadSourceGroupFor('Outboundish'), null)
   })
@@ -159,8 +168,9 @@ describe('the plan for one list', () => {
     const plan = planPicklist({ definition: LEAD_SOURCE, raw: undefined, held: ['Referral', 'Web'], groupFor: leadSourceGroupFor })
     assert.equal(plan.created, true)
     assert.equal(plan.write, true)
-    assert.deepEqual(plan.values.slice(0, 12).map((value) => value.id), LEAD_SOURCE.standardValues.map((value) => value.id))
-    assert.deepEqual(plan.values[12], { id: 'referral', label: 'Referral', active: true, group: null })
+    const standard = LEAD_SOURCE.standardValues.length
+    assert.deepEqual(plan.values.slice(0, standard).map((value) => value.id), LEAD_SOURCE.standardValues.map((value) => value.id))
+    assert.deepEqual(plan.values[standard], { id: 'referral', label: 'Referral', active: true, group: null })
     assert.equal(plan.defaultValueId, null)
   })
 
@@ -177,7 +187,14 @@ describe('the plan for one list', () => {
   })
 
   it('plans the Aglyn org as the issue expects', () => {
-    const raw = { values: [{ id: 'web', label: 'Web', active: true }], defaultValueId: null }
+    // "Website form" written down by hand before it was built in, under its own id.
+    const raw = {
+      values: [
+        { id: 'web', label: 'Web', active: true },
+        { id: 'site', label: 'Website form', active: true },
+      ],
+      defaultValueId: 'site',
+    }
     const leads = [
       { data: { leadSource: 'Outbound · Apollo' } },
       { data: { leadSource: 'Outbound · Instantly' } },
@@ -191,12 +208,22 @@ describe('the plan for one list', () => {
     const plan = planPicklist({ definition: LEAD_SOURCE, raw, held, groupFor: leadSourceGroupFor })
     assert.deepEqual(describePlan('leadSource', plan), [
       'leadSource:',
+      '    Website form → the built-in value (website-form)',
       '    Outbound · Apollo → added, outbound',
       '    Outbound · Instantly → added, outbound',
       '    Outbound · self-published address → added, outbound',
-      '    Website form → added, inbound',
       '    Internal test → added, no group',
     ])
+    // The built-in value, overridden: its id, its group, and still the default.
+    assert.deepEqual(plan.values[1], { id: 'website-form', label: 'Website form', active: true, group: 'inbound' })
+    assert.equal(plan.defaultValueId, 'website-form')
+  })
+
+  it('leaves a stored value already under the built-in id as the override it is', () => {
+    const raw = { values: [{ id: 'website-form', label: 'Web form', active: true, group: 'inbound' }], defaultValueId: null }
+    const plan = planPicklist({ definition: LEAD_SOURCE, raw, held: ['Web form'], groupFor: leadSourceGroupFor })
+    assert.equal(plan.write, false)
+    assert.deepEqual(plan.kept, ['Web form'])
   })
 
   it('backfills an Industry list from company free text, no group and no meaning', () => {

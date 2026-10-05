@@ -289,7 +289,8 @@ describe('the lead source values on the Leads tab (AGL-3298, AGL-3510)', () => {
     for (const label of ['Web', 'Phone inquiry', 'Webinar', 'Trade show', 'Purchased list', 'Other']) {
       expect(table.textContent).toContain(label)
     }
-    expect(within(table).getAllByText('Standard')).toHaveLength(12)
+    // Salesforce's twelve and Aglyn's eight (AGL-3519).
+    expect(within(table).getAllByText('Standard')).toHaveLength(20)
     expect(within(table).getByRole('columnheader', { name: 'Group' })).toBeTruthy()
     expect(within(table).getByRole('combobox', { name: 'Group of Web' }).textContent).toBe('Inbound')
     expect(within(table).getByRole('combobox', { name: 'Group of Purchased list' }).textContent).toBe(
@@ -324,8 +325,9 @@ describe('the lead source values on the Leads tab (AGL-3298, AGL-3510)', () => {
         document.querySelector(`[data-row-actions="${label}"]`)?.textContent
       expect(actions('Referral')).toBe('rename default active delete')
       expect(actions('Website')).toBe('rename default active')
-      // Twelve standard values, one of them relabeled, and the org's own.
-      expect(within(table).getAllByText('Standard')).toHaveLength(12)
+      // Twenty standard values, one of them relabeled, and the org's own.
+      // Salesforce's twelve and Aglyn's eight (AGL-3519).
+    expect(within(table).getAllByText('Standard')).toHaveLength(20)
       expect(within(table).getByRole('combobox', { name: 'Group of Referral' }).textContent).toBe(
         'None',
       )
@@ -357,7 +359,7 @@ describe('the lead source values on the Leads tab (AGL-3298, AGL-3510)', () => {
       active: true,
       group: 'inbound',
     })
-    expect(written.values).toHaveLength(13)
+    expect(written.values).toHaveLength(21)
     expect(written).toMatchObject({ hostId: 'host-1', visibleTo: ['org'], defaultValueId: null })
   })
 

@@ -64,8 +64,14 @@ describe('a lead source’s direction', () => {
       'Outbound · Apollo',
       'Webinar',
       'Purchased list',
+      'Sequence',
+      'Email campaign',
     ])
-    expect(leadSourceLabelsOfDirection(STANDARD_LEAD_SOURCES, 'outbound')).toEqual(['Purchased list'])
+    expect(leadSourceLabelsOfDirection(STANDARD_LEAD_SOURCES, 'outbound')).toEqual([
+      'Purchased list',
+      'Sequence',
+      'Email campaign',
+    ])
   })
 })
 
@@ -79,15 +85,17 @@ describe('the Leads filter by direction', () => {
     ).toEqual({
       field: 'leadSourceKey',
       op: 'isAnyOf',
-      value: ['Outbound · Apollo', 'Webinar', 'Purchased list'].map(crmLeadSourceKey).join(','),
+      value: ['Outbound · Apollo', 'Webinar', 'Purchased list', 'Sequence', 'Email campaign']
+        .map(crmLeadSourceKey)
+        .join(','),
     })
   })
 
   it('reads the standard values before the org’s list has been read', () => {
     expect(leadQueryClause({ field: 'leadSourceDirection', op: 'equals', value: 'outbound' })).toEqual({
       field: 'leadSourceKey',
-      op: 'equals',
-      value: crmLeadSourceKey('Purchased list'),
+      op: 'isAnyOf',
+      value: ['Purchased list', 'Sequence', 'Email campaign'].map(crmLeadSourceKey).join(','),
     })
   })
 

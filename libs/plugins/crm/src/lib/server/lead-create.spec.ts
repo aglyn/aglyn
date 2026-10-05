@@ -414,7 +414,8 @@ describe('the lead source', () => {
         'Lead source must be one of: Outbound · Apollo, Website form, ' +
         'Phone inquiry, Email inquiry, Partner referral, Employee referral, ' +
         'External referral, Advertisement, Trade show, Webinar, Word of mouth, ' +
-        'Purchased list, Other.',
+        'Booking, Newsletter sign-up, Site member sign-up, Online purchase, ' +
+        'Account sign-up, Purchased list, Sequence, Email campaign, Other.',
       field: 'leadSource',
     })
     const inactive = await call({ hostId: HOST, email: 'a@b.com', leadSource: 'Old list' })

@@ -3275,9 +3275,13 @@ export interface CrmPicklistDefinition extends PicklistSpec {
 }
 
 /**
- * Lead Source, with Salesforce's standard values. Each carries the group a
- * report splits pipeline by: Inbound for a lead who came to the org,
- * Outbound for one the org went to, and Other in neither.
+ * Lead Source, with Salesforce's standard values and Aglyn's own (AGL-3519).
+ * Each carries the group a report splits pipeline by: Inbound for a lead
+ * who came to the org, Outbound for one the org went to, and Other in
+ * neither. Aglyn's are the doors and the outreach the platform runs itself
+ * — a website form, a booking, a sequence — stamped on a record the door
+ * met first ({@link CRM_LEAD_SOURCE_ORIGINS}); a vendor the platform does
+ * not run (a data provider, a sending tool) is an org's own value.
  */
 const LEAD_SOURCE_DEFINITION = {
   id: 'leadSource',
@@ -3300,7 +3304,17 @@ const LEAD_SOURCE_DEFINITION = {
     { id: 'trade-show', label: 'Trade show', group: 'inbound' },
     { id: 'webinar', label: 'Webinar', group: 'inbound' },
     { id: 'word-of-mouth', label: 'Word of mouth', group: 'inbound' },
+    // Aglyn's own doors (AGL-3519), each stamped by the door that met the person.
+    { id: 'website-form', label: 'Website form', group: 'inbound' },
+    { id: 'booking', label: 'Booking', group: 'inbound' },
+    { id: 'newsletter-sign-up', label: 'Newsletter sign-up', group: 'inbound' },
+    { id: 'site-member-sign-up', label: 'Site member sign-up', group: 'inbound' },
+    { id: 'online-purchase', label: 'Online purchase', group: 'inbound' },
+    { id: 'account-sign-up', label: 'Account sign-up', group: 'inbound' },
     { id: 'purchased-list', label: 'Purchased list', group: 'outbound' },
+    // Aglyn's own outreach (AGL-3519).
+    { id: 'sequence', label: 'Sequence', group: 'outbound' },
+    { id: 'email-campaign', label: 'Email campaign', group: 'outbound' },
     { id: 'other', label: 'Other' },
   ],
   targets: [
@@ -3618,6 +3632,23 @@ export const CRM_SALUTATION_PICKLIST: CrmPicklistId = 'salutation'
 /** A deal's Type value set's document id (AGL-3516). */
 export const CRM_OPPORTUNITY_TYPE_PICKLIST: CrmPicklistId = 'opportunityType'
 
+/**
+ * The built-in Lead source value each first-party door stamps (AGL-3519), by
+ * the door's word for how it met a person — a capture's source, or the
+ * outreach that reached them. `api`, `import` and `manual` are ways a record
+ * was ADDED, not where a person came from, and stamp nothing.
+ */
+export const CRM_LEAD_SOURCE_ORIGINS: Readonly<Record<string, string>> = {
+  form: 'website-form',
+  booking: 'booking',
+  newsletter: 'newsletter-sign-up',
+  member: 'site-member-sign-up',
+  order: 'online-purchase',
+  account: 'account-sign-up',
+  sequence: 'sequence',
+  emailCampaign: 'email-campaign',
+}
+
 export function isCrmPicklistId(value: unknown): value is CrmPicklistId {
   return typeof value === 'string' && (CRM_PICKLIST_IDS as readonly string[]).includes(value)
 }
@@ -3692,6 +3723,18 @@ export function effectiveCrmPicklist(id: CrmPicklistId, raw: unknown): CrmPickli
 /** The org's lead source list as every reader should take it. */
 export function effectiveCrmLeadSourcePicklist(raw: unknown): CrmPicklist {
   return effectiveCrmPicklist(CRM_LEAD_SOURCE_PICKLIST, raw)
+}
+
+/**
+ * The label a door stamps for `origin` (AGL-3519): its built-in value as the
+ * org spells it, while that value is ACTIVE — an org that deactivated it has
+ * said not to file people under it — else `null`, as for a word with none.
+ */
+export function crmLeadSourceForOrigin(picklist: CrmPicklist, origin: unknown): string | null {
+  const id = typeof origin === 'string' ? CRM_LEAD_SOURCE_ORIGINS[origin] : undefined
+  if (!id || !Object.hasOwn(CRM_LEAD_SOURCE_ORIGINS, origin as string)) return null
+  const value = picklist.values.find((entry) => entry.id === id)
+  return value?.active ? value.label : null
 }
 
 /** Whether a value is one of a picklist's standard values — computed from its id, never stored. */

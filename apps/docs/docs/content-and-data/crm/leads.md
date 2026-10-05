@@ -104,11 +104,35 @@ their company **as text** until it converts:
 | **Name** | The person's name. |
 | **Company** | The company's name, typed. Not a link — a thousand imported leads must not create a thousand companies. [Converting](#converting-a-lead) is what links or creates the company record, by this name or by the address's domain. |
 | **Job title**, **Phone**, **Website** | As on a business card. The phone is stored with its country code; the website as a full address. |
-| **Lead source** | Where the lead came from, picked from your organization's own [lead source values](./custom-fields.md#picklist-values) — Salesforce's standard set and any you add — listed under **Inbound**, **Outbound** and values in no group. A new lead starts from the list's default when it has one. Distinct from **Sources** below, which the site records. |
+| **Lead source** | Where the lead came from, picked from your organization's own [lead source values](./custom-fields.md#picklist-values) — Salesforce's standard set, Aglyn's own doors and outreach, and any you add — listed under **Inbound**, **Outbound** and values in no group. A new lead starts from the list's default when it has one, and a lead your site captures is given its door's value — see [Lead source, filled in for you](#lead-source-filled-in). Distinct from **Sources** below, which the site records. |
 | **Tags** | Comma-separated, lower-cased. |
 | **Campaigns** | The site's [campaigns](../../marketing-and-automation/email-campaigns/overview.md#what-belongs-to-a-campaign) the lead is filed under, picked by name. Grouping, not consent: it decides which campaign pages list the lead, never whether anything mails them. Enrolling the lead in a sequence that is in a campaign files it there too. |
 | **Address** | Street, city, state, postal code and a two-letter country code. |
 | **Status**, **Owner**, **Notes** | The working state — see [The Leads list](#the-leads-list). |
+
+### Lead source, filled in for you {#lead-source-filled-in}
+
+Aglyn's own doors and outreach each have a built-in lead source, and fill it in on a
+person they meet first:
+
+| Where the person came from | Lead source |
+| --- | --- |
+| A form on your site | **Website form** |
+| A booking | **Booking** |
+| A newsletter sign-up | **Newsletter sign-up** |
+| A site member sign-up | **Site member sign-up** |
+| An online purchase | **Online purchase** |
+| A sign-up for an account on Aglyn itself (Aglyn's own workspace) | **Account sign-up** |
+| Enrolled in a [sequence](./sequences.md) | **Sequence** |
+| An email campaign | **Email campaign** — offered for you to pick; no campaign creates leads by itself today |
+
+The value lands on the lead, and on your site's own record of a contact, only when it has
+no lead source yet: whatever a person already has is never replaced, and a lead source
+someone cleared stays clear when the person comes back. Rename a built-in value and the
+doors fill in your name for it; deactivate one and that door fills in nothing. A lead
+added by hand, over the API or from a CSV is not filled in — those are ways of adding a
+lead, not places it came from. Vendors Aglyn does not run, like a data provider or a
+sending tool, are values you add yourself.
 
 Every one of them is editable on the [lead's page](#a-leads-page), comes in through
 [Import CSV](#import-from-csv), and is handed to the contact when the lead converts.

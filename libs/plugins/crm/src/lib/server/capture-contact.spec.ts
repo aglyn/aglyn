@@ -167,6 +167,17 @@ jest.mock('./capture-host-contact', () => ({
     return { contactId: id, created: true }
   },
 }))
+// Where the person came from (AGL-3519), recorded after the filing.
+const origins: Array<Record<string, unknown>> = []
+jest.mock('./record-origin', () => ({
+  __esModule: true,
+  crmRecordOriginWriter: {
+    stamp: async (input: Record<string, unknown>) => {
+      origins.push(input)
+      return { records: 1 }
+    },
+  },
+}))
 jest.mock('./convert-open-lead', () => ({
   __esModule: true,
   convertOpenLeadOntoContact: async (input: Record<string, unknown>) => {
@@ -265,6 +276,7 @@ beforeEach(() => {
   contactCaptures.length = 0
   events.length = 0
   conversions.length = 0
+  origins.length = 0
   mockConsentGroups = null
 })
 
@@ -292,6 +304,10 @@ describe('a lead surface', () => {
     )
     expect(contactCaptures).toEqual([])
     expect(childPaths(CONTACTS)).toEqual([])
+    // Its origin, as the door's word, on the record the capture started (AGL-3519).
+    expect(origins).toEqual([
+      { hostId: HOST, email: EMAIL, origin: 'form', firstTouchOnly: true },
+    ])
     // A NEW lead announces itself, by the id it was filed under.
     expect(events).toEqual([
       {
@@ -482,6 +498,11 @@ describe('a relationship', () => {
 })
 
 describe('what every surface refuses', () => {
+  it('records no origin for a capture it refused', async () => {
+    await captureContactForCrm(request({ identity: { email: 'not an address' } }))
+    expect(origins).toEqual([])
+  })
+
   it('answers an unreadable address as invalid-email, and writes nothing', async () => {
     for (const surface of ['lead', 'touch', 'relationship'] as const) {
       const verdict = await captureContactForCrm(

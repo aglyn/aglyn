@@ -184,7 +184,7 @@ beforeEach(() => {
     [LIST]: {
       values: [
         { id: 'apollo', label: 'Outbound · Apollo', active: true },
-        { id: 'site', label: 'Website form', active: true },
+        { id: 'site', label: 'Partner portal', active: true },
         { id: 'test', label: 'Internal test', active: true },
         { id: 'web', label: 'Web', active: true, group: 'inbound' },
       ],
@@ -193,13 +193,13 @@ beforeEach(() => {
     },
     [`orgs/${ORG}/leads/l1`]: { leadSource: 'Outbound · Apollo' },
     [`orgs/${ORG}/leads/l2`]: { leadSource: 'Outbound · Apollo' },
-    [`orgs/${ORG}/leads/l3`]: { leadSource: 'Website form' },
+    [`orgs/${ORG}/leads/l3`]: { leadSource: 'Partner portal' },
     // A deal carries the lead source of the lead it was converted from (AGL-3516).
     [`orgs/${ORG}/deals/d1`]: { leadSource: 'Outbound · Apollo', leadSourceKey: 'outbound · apollo' },
     [`orgs/${ORG}/contacts/c1`]: {
       facets: {
         'site-a': { leadSource: 'Outbound · Apollo' },
-        'site-b': { leadSource: 'Website form' },
+        'site-b': { leadSource: 'Partner portal' },
       },
     },
   }
@@ -225,23 +225,23 @@ describe('crm/picklist-values', () => {
     })
     expect(writes[0]).toBe(LIST)
     expect(store[`orgs/${ORG}/leads/l1`]['leadSource']).toBe('Apollo')
-    expect(store[`orgs/${ORG}/leads/l3`]['leadSource']).toBe('Website form')
+    expect(store[`orgs/${ORG}/leads/l3`]['leadSource']).toBe('Partner portal')
     // The deal's label and the key its list filters by move together.
     expect(store[`orgs/${ORG}/deals/d1`]).toMatchObject({ leadSource: 'Apollo', leadSourceKey: 'apollo' })
     expect(read(store[`orgs/${ORG}/contacts/c1`], ['facets', 'site-a', 'leadSource'])).toBe('Apollo')
     expect(read(store[`orgs/${ORG}/contacts/c1`], ['facets', 'site-b', 'leadSource'])).toBe(
-      'Website form',
+      'Partner portal',
     )
     // The Contacts list's lead source filter key moves with the label (AGL-3511).
     expect(store[`orgs/${ORG}/contacts/c1`]['facetKeys']).toEqual(
-      expect.arrayContaining(['site-a:leadSource=apollo', '*:leadSource=apollo', 'site-b:leadSource=website form']),
+      expect.arrayContaining(['site-a:leadSource=apollo', '*:leadSource=apollo', 'site-b:leadSource=partner portal']),
     )
     expect(store[`orgs/${ORG}/contacts/c1`]['facetKeys']).not.toContain('site-a:leadSource=outbound · apollo')
   })
 
   it('refuses a rename onto another value, naming it', async () => {
-    const out = await call({ orgId: ORG, action: 'rename', valueId: 'apollo', label: 'website form' })
-    expect(out).toEqual({ status: 400, payload: { error: '“Website form” is already in the list.' } })
+    const out = await call({ orgId: ORG, action: 'rename', valueId: 'apollo', label: 'partner portal' })
+    expect(out).toEqual({ status: 400, payload: { error: '“Partner portal” is already in the list.' } })
     expect(writes).toEqual([])
   })
 
