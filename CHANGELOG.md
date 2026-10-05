@@ -25,8 +25,8 @@ content on the marketing site and is written separately.
 - **tenant:** markdown render keeps accordion questions above their answers ([AGL-3575](https://linear.app/aglyn/issue/AGL-3575))
 - **media:** a missing width serves the next variant up; regeneration loads after() ([AGL-3486](https://linear.app/aglyn/issue/AGL-3486))
 - **outreach:** the Microsoft disconnect notice names no product ([AGL-3489](https://linear.app/aglyn/issue/AGL-3489))
-- **crm:** the Lead source direction filter works for every org ([AGL-3577](https://linear.app/aglyn/issue/AGL-3577))
 - **tenant:** llms.txt lists indexable pages in site order, each paragraph once ([AGL-3576](https://linear.app/aglyn/issue/AGL-3576))
+- **crm:** the Lead source direction filter works for every org ([AGL-3577](https://linear.app/aglyn/issue/AGL-3577))
 
 <details>
 <summary>Also in this release: 1 test</summary>
