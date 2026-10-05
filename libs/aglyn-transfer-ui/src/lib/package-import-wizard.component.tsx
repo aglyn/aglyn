@@ -63,7 +63,11 @@ import {
 import { type ChangeEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { PackageImportUndo } from './package-import-undo.component'
-import { PackageItemDiff, type PackagePreviewHref } from './package-item-diff.component'
+import {
+  PackageItemDiff,
+  type PackageItemRenderers,
+  type PackagePreviewHref,
+} from './package-item-diff.component'
 import type {
   SitePackageApplyAnswer,
   SitePackageCatalog,
@@ -116,6 +120,11 @@ export interface PackageImportWizardProps {
   client: SitePackageClient
   /** A URL rendering one side of one item, or `null`; omitted, no rendered diff. */
   previewHref?: PackagePreviewHref
+  /**
+   * A component per kind that draws one side of an item in place; a kind it
+   * names is drawn by it instead of through `previewHref`.
+   */
+  renderers?: PackageItemRenderers
   /** A file already read: the wizard plans it and opens on Items. */
   initialFile?: { name: string; content: unknown }
   /** Told the import's id once it is applied, so the surface can offer undo later. */
@@ -150,7 +159,7 @@ const MATCHED_BY_WORDS: Record<NonNullable<SitePackagePlanItem['matchedBy']>, st
 }
 
 export function PackageImportWizard(props: PackageImportWizardProps) {
-  const { client, previewHref, initialFile, onImported, onUndone, onDone } = props
+  const { client, previewHref, renderers, initialFile, onImported, onUndone, onDone } = props
   const [step, setStep] = useState<PackageImportStep>('upload')
   const [file, setFile] = useState<{ name: string; content: unknown } | null>(null)
   const [answer, setAnswer] = useState<SitePackagePlanAnswer | null>(null)
@@ -422,6 +431,7 @@ export function PackageImportWizard(props: PackageImportWizardProps) {
                       comparison={comparison}
                       decision={decision}
                       {...(previewHref ? { previewHref } : {})}
+                      {...(renderers ? { renderers } : {})}
                       mergeChoices={mergeChoices[item.key] ?? {}}
                       onMergeChoice={(key, choice) =>
                         setMergeChoices((current) => ({

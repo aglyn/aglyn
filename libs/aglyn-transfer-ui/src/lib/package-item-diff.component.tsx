@@ -18,20 +18,34 @@
 'use client'
 
 /**
- * One package item against this site's copy (AGL-3534): rendered side by
- * side, when the surface can render the kind, and as a before → after list
- * of every value that differs. A merged item lists its keys instead, each
+ * One package item against this site's copy (AGL-3534, AGL-3545): rendered
+ * side by side, when the surface can render the kind, its records as a table
+ * when it carries records, and below either as a before → after list of
+ * every other value that differs. A merged item lists its keys instead, each
  * with whose value it keeps.
  *
- * The kit does not know where a design renders. The surface hands it
- * `previewHref`, which answers a URL for one side of one item — the
- * console's is its document preview route, fed the design as a snapshot —
- * or `null` for a kind with nothing to render.
+ * The kit does not know how a kind renders. The surface hands it two ways:
+ *
+ * - `renderers`, a component per kind that draws one side in place — the
+ *   console's are the widgets plugins register for the kinds they own (a
+ *   form through the form's own preview, a site email through the email
+ *   preview), so the kit never imports a plugin;
+ * - `previewHref`, which answers a URL for one side of one item — the
+ *   console's is its document preview route, fed the design as a snapshot —
+ *   or `null` for a kind with nothing to render.
+ *
+ * A kind with a renderer is drawn by it; any other asks `previewHref`.
+ *
+ * Records are found by shape, not by kind: the one list of documents with
+ * their own `$id` (see `packageRecordField`). They are diffed record by
+ * record in {@link PackageRecordDiffTable} and left out of the value list,
+ * which would otherwise compare the whole list as one value.
  */
 
 import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import {
   Box,
+  CircularProgress,
   Stack,
   TableBody,
   TableCell,
@@ -39,7 +53,7 @@ import {
   TableRow,
   Typography,
 } from '@mui/material'
-import { useMemo } from 'react'
+import { type ComponentType, type ReactNode, Suspense, useMemo } from 'react'
 
 import type {
   PackageItemDecision,
@@ -47,11 +61,13 @@ import type {
   SitePackageMergeChoice,
   SitePackagePlanItem,
 } from './site-package-client'
+import { PackageRecordDiffTable } from './package-record-diff.component'
 import {
   PACKAGE_DECISION_WORDS,
   packageItemTitle,
   packageJsonDiff,
   packageMergeKeys,
+  packageRecordField,
 } from './site-package-import-state'
 import { TransferChoiceSelect } from './transfer-choice-select.component'
 import { TransferDiffTable } from './transfer-diff-table.component'
@@ -70,23 +86,70 @@ export interface PackagePreviewInput {
 
 export type PackagePreviewHref = (input: PackagePreviewInput) => string | null
 
+/**
+ * What a renderer is handed: one side of one item, and what to call it. The
+ * item's key is `itemKey`, since React keeps a `key` prop for itself.
+ */
+export interface PackageItemRenderProps extends Omit<PackagePreviewInput, 'key'> {
+  itemKey: string
+  /** The item's title, for the frame a renderer draws. */
+  title: string
+}
+
+/** Draws one side of an item of the kind it is registered for. */
+export type PackageItemRenderer = ComponentType<PackageItemRenderProps>
+
+/** A renderer per kind; a kind it does not name falls back to `previewHref`. */
+export type PackageItemRenderers = Readonly<Record<string, PackageItemRenderer>>
+
 export interface PackageItemDiffProps {
   item: SitePackagePlanItem
   comparison: SitePackageComparison
   decision: PackageItemDecision | null
   previewHref?: PackagePreviewHref
+  renderers?: PackageItemRenderers
   mergeChoices?: Readonly<Record<string, SitePackageMergeChoice>>
   onMergeChoice?(key: string, choice: SitePackageMergeChoice): void
 }
 
 const PREVIEW_HEIGHT = 360
 
-function PreviewPane(props: { title: string; heading: string; href: string | null; empty: string }) {
+function EmptyPane(props: { text: string }) {
   return (
-    <Box sx={{ flex: 1, minWidth: 0 }}>
+    <Box
+      sx={{
+        height: PREVIEW_HEIGHT,
+        border: 1,
+        borderStyle: 'dashed',
+        borderColor: 'divider',
+        borderRadius: 1,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        px: 2,
+      }}
+    >
+      <Typography variant="body2" color="text.secondary">
+        {props.text}
+      </Typography>
+    </Box>
+  )
+}
+
+function Pane(props: { heading: string; label: string; children: ReactNode }) {
+  return (
+    <Box component="section" aria-label={props.label} sx={{ flex: 1, minWidth: 0 }}>
       <Typography variant="subtitle2" gutterBottom>
         {props.heading}
       </Typography>
+      {props.children}
+    </Box>
+  )
+}
+
+function FramePane(props: { title: string; heading: string; href: string | null; empty: string }) {
+  return (
+    <Pane heading={props.heading} label={props.title}>
       {props.href ? (
         <Box
           component="iframe"
@@ -102,42 +165,62 @@ function PreviewPane(props: { title: string; heading: string; href: string | nul
           }}
         />
       ) : (
-        <Box
-          sx={{
-            height: PREVIEW_HEIGHT,
-            border: 1,
-            borderStyle: 'dashed',
-            borderColor: 'divider',
-            borderRadius: 1,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            px: 2,
-          }}
-        >
-          <Typography variant="body2" color="text.secondary">
-            {props.empty}
-          </Typography>
-        </Box>
+        <EmptyPane text={props.empty} />
       )}
-    </Box>
+    </Pane>
   )
 }
+
+function RenderedPane(props: {
+  heading: string
+  label: string
+  Renderer: PackageItemRenderer
+  input: PackageItemRenderProps | null
+  empty: string
+}) {
+  const { Renderer, input } = props
+  return (
+    <Pane heading={props.heading} label={props.label}>
+      {input ? (
+        // A plugin's renderer is usually loaded on first use.
+        <Suspense fallback={<CircularProgress size={24} aria-label={`Loading ${props.label}`} />}>
+          <Renderer {...input} />
+        </Suspense>
+      ) : (
+        <EmptyPane text={props.empty} />
+      )}
+    </Pane>
+  )
+}
+
+const isDoc = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+
+/** The content without its records, which the record table shows instead. */
+function withoutRecords(content: unknown, field: string | null): unknown {
+  if (!field || !isDoc(content)) return content
+  const { [field]: _records, ...rest } = content
+  return rest
+}
+
+const recordsIn = (content: unknown, field: string): unknown => (isDoc(content) ? content[field] : undefined)
 
 export function PackageItemDiff({
   item,
   comparison,
   decision,
   previewHref,
+  renderers,
   mergeChoices = {},
   onMergeChoice,
 }: PackageItemDiffProps) {
   const title = packageItemTitle(item)
+  const Renderer = renderers?.[item.kind]
   // A side's URL is answered once per comparison. The console's answer
   // writes the design it renders as it answers, which is idempotent, so a
   // second call (a strict-mode render) writes the same snapshot again.
   const hrefs = useMemo(() => {
-    if (!previewHref) return { site: null, file: null }
+    if (!previewHref || Renderer) return { site: null, file: null }
     const existing = comparison.existing
     return {
       site: existing
@@ -151,33 +234,81 @@ export function PackageItemDiff({
         content: comparison.incoming,
       }),
     }
-  }, [previewHref, comparison, item.key, item.kind, item.id])
+  }, [previewHref, Renderer, comparison, item.key, item.kind, item.id])
+  const inputs = useMemo(() => {
+    if (!Renderer) return null
+    const existing = comparison.existing
+    return {
+      site: existing
+        ? { side: 'site' as const, itemKey: item.key, kind: item.kind, id: existing.id, content: existing.content, title }
+        : null,
+      file: {
+        side: 'file' as const,
+        itemKey: item.key,
+        kind: item.kind,
+        id: existing?.id ?? item.id,
+        content: comparison.incoming,
+        title,
+      },
+    }
+  }, [Renderer, comparison, item.key, item.kind, item.id, title])
 
   const before = useMemo(() => comparison.existing?.content ?? {}, [comparison])
-  const diff = useMemo(() => packageJsonDiff(before, comparison.incoming), [before, comparison.incoming])
+  const recordField = useMemo(
+    () => packageRecordField(before, comparison.incoming),
+    [before, comparison.incoming],
+  )
+  const diff = useMemo(
+    () => packageJsonDiff(withoutRecords(before, recordField), withoutRecords(comparison.incoming, recordField)),
+    [before, comparison.incoming, recordField],
+  )
   const mergeKeys = useMemo(
     () => (decision === 'merge' ? packageMergeKeys(before, comparison.incoming) : []),
     [decision, before, comparison.incoming],
   )
-  const rendered = Boolean(hrefs.site || hrefs.file)
+  const framed = Boolean(hrefs.site || hrefs.file)
 
   return (
     <Stack spacing={2}>
-      {rendered ? (
+      {Renderer && inputs ? (
         <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
-          <PreviewPane
+          <RenderedPane
+            heading="On this site"
+            label={`${title} on this site`}
+            Renderer={Renderer}
+            input={inputs.site}
+            empty="This site has no copy of it."
+          />
+          <RenderedPane
+            heading="In the file"
+            label={`${title} in the file`}
+            Renderer={Renderer}
+            input={inputs.file}
+            empty="Nothing to render."
+          />
+        </Stack>
+      ) : framed ? (
+        <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
+          <FramePane
             heading="On this site"
             title={`${title} on this site`}
             href={hrefs.site}
             empty="This site has no copy of it."
           />
-          <PreviewPane
+          <FramePane
             heading="In the file"
             title={`${title} in the file`}
             href={hrefs.file}
             empty="Nothing to render."
           />
         </Stack>
+      ) : null}
+      {recordField ? (
+        <PackageRecordDiffTable
+          label={`Records of ${title}`}
+          site={recordsIn(before, recordField)}
+          file={recordsIn(comparison.incoming, recordField)}
+        />
       ) : null}
       {decision === 'merge' ? (
         <Stack spacing={1}>
@@ -247,7 +378,9 @@ export function PackageItemDiff({
                 status: decision ?? 'undecided',
                 statusLabel: decision ? PACKAGE_DECISION_WORDS[decision].label : 'Not chosen',
                 changes: diff.changes,
-                note: 'The file’s copy matches this site’s.',
+                note: recordField
+                  ? 'Every value but the records matches this site’s.'
+                  : 'The file’s copy matches this site’s.',
               },
             ]}
           />

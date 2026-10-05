@@ -31,6 +31,7 @@ import {
 } from './components/email-zones'
 import { EMAILS_CONSOLE_SECTIONS } from './components/emails-console-sections'
 import { BUNDLE_ID } from './constants/bundle-common'
+import { SITE_EMAIL_PACKAGE_KIND } from './constants/site-package'
 import { registerEmailRecordRoutes } from './model/email-record-routes'
 import {
   LIST_CONSENT_STEP_ID,
@@ -60,6 +61,9 @@ const CampaignDesignCreateWidget = lazy(
 )
 const EmailDesignPreview = lazy(
   () => import('./components/email-design-preview'),
+)
+const SitePackageEmailPreview = lazy(
+  () => import('./components/site-package-email-preview'),
 )
 
 /* The list import's own wizard steps, loaded when the wizard reaches one. */
@@ -237,6 +241,15 @@ export function registerEmailConsole(): void {
         widgetId: 'email-campaign-design-preview',
         title: 'Preview',
         Component: EmailDesignPreview,
+      },
+      {
+        // A site email in a site package import, each side drawn by the
+        // preview that renders through the send path's code (AGL-3545).
+        slot: Aglyn.CONSOLE_WIDGET_SLOTS.sitePackageItemPreview,
+        widgetId: 'email-site-package-preview',
+        title: 'Email preview',
+        itemKinds: [SITE_EMAIL_PACKAGE_KIND],
+        Component: SitePackageEmailPreview,
       },
     ],
     navItems: [

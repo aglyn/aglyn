@@ -16,8 +16,15 @@
  */
 
 /*==========================================
- * A PACKAGE ITEM, RENDERED (AGL-3534) — where the package import wizard's
- * side-by-side diff points its frames.
+ * A PACKAGE ITEM, RENDERED (AGL-3534, AGL-3545) — what the package import
+ * wizard's side-by-side diff draws each side with.
+ *
+ * Two sources, and the kit takes both. A kind a plugin owns the preview of
+ * (a form, a site email) is drawn by the widget that plugin registers in
+ * the `sitePackageItemPreview` zone for that kind — {@link
+ * sitePackageRenderers} turns the zone's widgets into the kit's renderers,
+ * so the console names no plugin and imports none. Every other kind with a
+ * design is drawn by the console's own preview route, below.
  *
  * The console's document preview route renders a snapshot from
  * `localStorage` before anything stored (AGL-1203, AGL-3204), so each side
@@ -31,7 +38,14 @@
 
 import type { NodesMap } from '@aglyn/aglyn'
 import { decodeStoredNodes, definitionToCanvasTree } from '@aglyn/aglyn'
-import type { PackagePreviewInput } from '@aglyn/aglyn-transfer-ui'
+import type { ConsoleSitePackageItemPreviewZoneProps } from '@aglyn/aglyn/plugin-manager/feature-plugins'
+import type {
+  PackageItemRenderer,
+  PackageItemRenderers,
+  PackageItemRenderProps,
+  PackagePreviewInput,
+} from '@aglyn/aglyn-transfer-ui'
+import { type ComponentType, createElement } from 'react'
 import { buildRoute, Route } from '../constants/route-links'
 import { type PreviewKind, writePreviewState } from '../constants/preview-state'
 
@@ -84,4 +98,42 @@ export function sitePackagePreviewHref(site: { orgSlug: string; host: string; ho
     }
     return buildRoute(Route.SCREEN_PREVIEW, { orgSlug, host, screenId: input.id, versionId })
   }
+}
+
+/** A widget of the `sitePackageItemPreview` zone, as the slot gates hand it over. */
+export interface SitePackagePreviewWidget {
+  widgetId: string
+  itemKinds?: readonly string[]
+  Component: ComponentType<ConsoleSitePackageItemPreviewZoneProps>
+}
+
+/**
+ * The kit's renderers for one site: each kind a widget names, drawn by that
+ * widget with the zone's props. The first widget to name a kind draws it, in
+ * the order the slot lists them.
+ */
+export function sitePackageRenderers(
+  widgets: readonly SitePackagePreviewWidget[],
+  hostId: string,
+): PackageItemRenderers {
+  const renderers: Record<string, PackageItemRenderer> = {}
+  for (const widget of widgets) {
+    for (const kind of widget.itemKinds ?? []) {
+      if (renderers[kind]) continue
+      const Widget = widget.Component
+      const Render = (props: PackageItemRenderProps) =>
+        createElement(Widget, {
+          hostId,
+          side: props.side,
+          itemKey: props.itemKey,
+          kind: props.kind,
+          itemId: props.id,
+          content: props.content,
+          title: props.title,
+        })
+      Render.displayName = `SitePackagePreview(${widget.widgetId})`
+      renderers[kind] = Render
+    }
+  }
+  return renderers
 }

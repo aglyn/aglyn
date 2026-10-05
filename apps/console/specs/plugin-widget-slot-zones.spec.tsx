@@ -392,9 +392,11 @@ const NEW_ZONES = Object.keys(MOUNTS)
 
 /**
  * Every zone mounted anywhere in the console: a literal `slot="…"`, a
- * `slot={CONSOLE_WIDGET_SLOTS.…}`, or the column helper reading a zone — on a
- * console page, or on a plugin's own surface drawing the renderer the shell
- * hands it (AGL-3043).
+ * `slot={CONSOLE_WIDGET_SLOTS.…}`, the column helper reading a zone, or a
+ * surface drawing a zone's gated widgets itself through
+ * `useSlotWidgets([CONSOLE_WIDGET_SLOTS.…])` (the package import's
+ * per-kind renderers, AGL-3545) — on a console page, or on a plugin's own
+ * surface drawing the renderer the shell hands it (AGL-3043).
  */
 function mountedZones(): Set<string> {
   const out = execFileSync(
@@ -405,7 +407,7 @@ function mountedZones(): Set<string> {
       '-h',
       '-o',
       '-E',
-      String.raw`(slot="[A-Za-z]+"|slot=\{CONSOLE_WIDGET_SLOTS\.[A-Za-z]+\}|usePluginListColumns\('[A-Za-z]+'\))`,
+      String.raw`(slot="[A-Za-z]+"|slot=\{CONSOLE_WIDGET_SLOTS\.[A-Za-z]+\}|usePluginListColumns\('[A-Za-z]+'\)|useSlotWidgets\(\[CONSOLE_WIDGET_SLOTS\.[A-Za-z]+\]\))`,
       '--',
       'apps/console',
       'libs/plugins',

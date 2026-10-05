@@ -19,14 +19,20 @@
  * AGL-3534: the console's half of the package import wizard — the client
  * that speaks the site package routes, the side-by-side frames' snapshots,
  * and the backup card that opens the wizard, the export picker and undo
- * from its header.
+ * from its header. AGL-3545: the kinds a plugin previews are drawn by the
+ * widgets it registers in the `sitePackageItemPreview` zone.
  */
 
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import SiteBackupCard from '../components/site-backup-card.component'
 import { readPreviewState } from '../constants/preview-state'
 import { createSitePackageHttpClient, SitePackageRequestError } from '../utils/site-package-http-client'
-import { packagePreviewTree, sitePackagePreviewHref } from '../utils/site-package-preview'
+import {
+  packagePreviewTree,
+  sitePackagePreviewHref,
+  sitePackageRenderers,
+  type SitePackagePreviewWidget,
+} from '../utils/site-package-preview'
 
 const mockEnqueueSnackbar = jest.fn()
 let mockOrg: { org: Record<string, unknown> | undefined; ready: boolean } = { org: { plan: 'pro' }, ready: true }
@@ -66,6 +72,10 @@ jest.mock('@aglyn/shared-ui-jsx', () => {
     ),
   }
 })
+const mockSlotWidgets = jest.fn((_slots: readonly string[]) => ({ widgets: [] as unknown[], ready: true }))
+jest.mock('../components/plugin-widget-slot.component', () => ({
+  useSlotWidgets: (slots: readonly string[]) => mockSlotWidgets(slots),
+}))
 jest.mock('../utils/site-package-http-client', () => ({
   ...jest.requireActual('../utils/site-package-http-client'),
   createSitePackageHttpClient: () => mockClient,
@@ -166,6 +176,40 @@ describe('the side-by-side frames', () => {
       text: { props: { children: 'Hi' } },
     })
     expect(href({ side: 'file', key: 'settings/settings', kind: 'settings', id: 'settings', content: {} })).toBeNull()
+  })
+})
+
+describe('the kinds a plugin previews (AGL-3545)', () => {
+  function Widget(props: Record<string, unknown>) {
+    return <pre aria-label={`${String(props['side'])} ${String(props['kind'])}`}>{JSON.stringify(props)}</pre>
+  }
+  const widgets: SitePackagePreviewWidget[] = [
+    { widgetId: 'forms-preview', itemKinds: ['form'], Component: Widget as never },
+    { widgetId: 'other-forms-preview', itemKinds: ['form', 'emailTemplate'], Component: (() => null) as never },
+    { widgetId: 'no-kinds', Component: (() => null) as never },
+  ]
+
+  it('draws each kind a widget names with the first widget to name it, handing it the zone`s props', () => {
+    const renderers = sitePackageRenderers(widgets, 'host-1')
+    expect(Object.keys(renderers).sort()).toEqual(['emailTemplate', 'form'])
+    const Form = renderers['form']!
+    render(<Form side="file" itemKey="form/contact" kind="form" id="contact" content={{ nodes: {} }} title="Contact" />)
+    expect(JSON.parse(screen.getByLabelText('file form').textContent ?? '{}')).toEqual({
+      hostId: 'host-1',
+      side: 'file',
+      itemKey: 'form/contact',
+      kind: 'form',
+      itemId: 'contact',
+      content: { nodes: {} },
+      title: 'Contact',
+    })
+  })
+
+  it('opens the import with the zone`s widgets, and only when the import opens', () => {
+    render(<SiteBackupCard hostId="host-1" />)
+    expect(mockSlotWidgets).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Import package' }))
+    expect(mockSlotWidgets).toHaveBeenCalledWith(['sitePackageItemPreview'])
   })
 })
 

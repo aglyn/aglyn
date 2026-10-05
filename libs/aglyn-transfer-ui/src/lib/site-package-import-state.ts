@@ -365,6 +365,115 @@ export function packageMergeKeys(site: unknown, file: unknown): PackageMergeKey[
 }
 
 /*==========================================
+ * RECORDS
+ *=========================================*/
+
+/** One record of an item's list: a document with its own `$id`. */
+export type PackageRecord = Record<string, unknown> & { $id: string }
+
+const isRecord = (value: unknown): value is PackageRecord =>
+  isPlain(value) && typeof value['$id'] === 'string' && value['$id'] !== ''
+
+/**
+ * The key of an item that holds its records — a dataset's `records`, a
+ * collection's `entries` — found by shape rather than by kind, so the kit
+ * names no kind a plugin declares: the one list, on either side, whose
+ * every element is a document with its own `$id`. The other side holds a
+ * list there too, or nothing. `null` when no key qualifies, or when more
+ * than one does and neither can be read as the item's records.
+ */
+export function packageRecordField(...contents: readonly unknown[]): string | null {
+  const docs = contents.filter(isPlain)
+  const found = new Set<string>()
+  for (const doc of docs) {
+    for (const [key, value] of Object.entries(doc)) {
+      if (Array.isArray(value) && value.length > 0 && value.every(isRecord)) found.add(key)
+    }
+  }
+  const fields = [...found].filter((key) =>
+    docs.every((doc) => {
+      const value = doc[key]
+      return value === undefined || value === null || (Array.isArray(value) && value.every(isRecord))
+    }),
+  )
+  return fields.length === 1 ? (fields[0] as string) : null
+}
+
+export type PackageRecordStatus = 'added' | 'removed' | 'changed'
+
+/** One record that differs between the site and the file. */
+export interface PackageRecordRow {
+  id: string
+  status: PackageRecordStatus
+  /** The site's copy; `null` for a record only the file holds. */
+  site: PackageRecord | null
+  /** The file's copy; `null` for a record only the site holds. */
+  file: PackageRecord | null
+  /** The fields whose values differ, for a changed record. */
+  changed: readonly string[]
+}
+
+export interface PackageRecordDiff {
+  /** The file's added and changed records in its order, then the site's removed ones. */
+  rows: PackageRecordRow[]
+  /** Every field the rows hold, `$id` aside, in the order they first appear. */
+  fields: string[]
+  counts: Record<PackageRecordStatus | 'same', number>
+}
+
+const recordsOf = (value: unknown): PackageRecord[] =>
+  Array.isArray(value) ? value.filter(isRecord) : []
+
+/**
+ * Two lists of records, matched by `$id`: what the file adds, what it no
+ * longer holds, and, for a record on both sides, each field whose value
+ * differs. A record the import would leave as it is counts as `same` and
+ * has no row.
+ */
+export function packageRecordDiff(site: unknown, file: unknown): PackageRecordDiff {
+  const theirs = new Map(recordsOf(site).map((record) => [record.$id, record]))
+  const ours = recordsOf(file)
+  const seen = new Set<string>()
+  const rows: PackageRecordRow[] = []
+  const counts = { added: 0, removed: 0, changed: 0, same: 0 }
+  for (const record of ours) {
+    if (seen.has(record.$id)) continue
+    seen.add(record.$id)
+    const existing = theirs.get(record.$id)
+    if (!existing) {
+      counts.added += 1
+      rows.push({ id: record.$id, status: 'added', site: null, file: record, changed: [] })
+      continue
+    }
+    const keys = [...new Set([...Object.keys(existing), ...Object.keys(record)])].filter((key) => key !== '$id')
+    const changed = keys.filter((key) => !same(existing[key], record[key]))
+    if (!changed.length) {
+      counts.same += 1
+      continue
+    }
+    counts.changed += 1
+    rows.push({ id: record.$id, status: 'changed', site: existing, file: record, changed })
+  }
+  for (const [id, record] of theirs) {
+    if (seen.has(id)) continue
+    counts.removed += 1
+    rows.push({ id, status: 'removed', site: record, file: null, changed: [] })
+  }
+  const fields: string[] = []
+  const listed = new Set<string>(['$id'])
+  for (const row of rows) {
+    for (const record of [row.file, row.site]) {
+      for (const key of Object.keys(record ?? {})) {
+        if (listed.has(key)) continue
+        listed.add(key)
+        fields.push(key)
+      }
+    }
+  }
+  return { rows, fields, counts }
+}
+
+/*==========================================
  * REVIEW
  *=========================================*/
 

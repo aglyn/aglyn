@@ -88,9 +88,16 @@ export {
 export {
   PackageItemDiff,
   type PackageItemDiffProps,
+  type PackageItemRenderProps,
+  type PackageItemRenderer,
+  type PackageItemRenderers,
   type PackagePreviewHref,
   type PackagePreviewInput,
 } from './lib/package-item-diff.component'
+export {
+  PackageRecordDiffTable,
+  type PackageRecordDiffTableProps,
+} from './lib/package-record-diff.component'
 export {
   PackageImportUndo,
   type PackageImportUndoProps,

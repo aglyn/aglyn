@@ -22,7 +22,7 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     id: 'forms',
     apiPrefixes: ["forms"],
     register: {"site":"registerFormsPlugin","console":"registerFormsConsole"},
-    contributes: {"console":{"shell":true,"routes":["/forms"]}},
+    contributes: {"console":{"shell":true,"routes":["/forms"],"slots":["sitePackageItemPreview"]}},
     load: () => import('@aglyn/plugins-forms'),
     loads: {
       site: () => import('@aglyn/plugins-forms/site'),
@@ -79,7 +79,7 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     id: 'email',
     apiPrefixes: ["email"],
     register: {"site":"registerEmailPlugin","console":"registerEmailConsole"},
-    contributes: {"console":{"shell":true,"routes":["/emails"],"orgRoutes":["/emails"],"slots":["campaignDesignCreate","campaignDesignPreview","campaignSenderEditor","campaignTopicOptions","campaignTopicSelect","transferResources"]}},
+    contributes: {"console":{"shell":true,"routes":["/emails"],"orgRoutes":["/emails"],"slots":["campaignDesignCreate","campaignDesignPreview","campaignSenderEditor","campaignTopicOptions","campaignTopicSelect","sitePackageItemPreview","transferResources"]}},
     load: () => import('@aglyn/plugins-email'),
     loads: {
       site: () => import('@aglyn/plugins-email/site'),

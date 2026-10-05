@@ -25,6 +25,7 @@ import {
   HOST_FORMS_ZONE,
 } from './components/form-zones'
 import { BUNDLE_ID } from './constants/bundle-common'
+import { FORM_PACKAGE_KIND } from './constants/site-package'
 import { registerFormSubmissionCounts } from './model/form-submission-counts'
 import { registerFormSubmissionList } from './model/form-submission-list'
 import { registerFormRecordList } from './model/forms-record-lists'
@@ -32,6 +33,9 @@ import { registerFormsRecordRoutes } from './model/forms-record-routes'
 
 /** Code-split: the Forms console surface only loads when opened. */
 const FormsConsolePage = lazy(() => import('./components/forms-console-page'))
+const SitePackageFormPreview = lazy(
+  () => import('./components/site-package-form-preview.component'),
+)
 
 /**
  * Console half: the Forms catalog and one form's own surface, served by the
@@ -82,6 +86,17 @@ export function registerFormsConsole(): void {
   Aglyn.registerConsoleExtension({
     pluginId: BUNDLE_ID,
     displayName: 'Forms',
+    widgets: [
+      {
+        // A form in a site package import, each side drawn by the preview
+        // the form's own page shows (AGL-3545).
+        slot: Aglyn.CONSOLE_WIDGET_SLOTS.sitePackageItemPreview,
+        widgetId: 'forms-site-package-preview',
+        title: 'Form preview',
+        itemKinds: [FORM_PACKAGE_KIND],
+        Component: SitePackageFormPreview,
+      },
+    ],
     navItems: [
       {
         label: 'Forms',

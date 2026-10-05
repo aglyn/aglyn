@@ -17,6 +17,7 @@
 
 'use client'
 
+import { CONSOLE_WIDGET_SLOTS } from '@aglyn/aglyn'
 import {
   PackageExportDialog,
   PackageImportUndo,
@@ -40,12 +41,13 @@ import {
   useTheme,
 } from '@mui/material'
 import { useParams } from 'next/navigation'
-import { type ReactNode, useCallback, useMemo, useState } from 'react'
+import { type ComponentProps, type ReactNode, useCallback, useMemo, useState } from 'react'
 import { docsHelp } from '../constants/docs-links'
 import { hasEntitlement } from '../constants/entitlements'
 import useCurrentOrg from '../hooks/use-current-org'
 import { createSitePackageHttpClient } from '../utils/site-package-http-client'
-import { sitePackagePreviewHref } from '../utils/site-package-preview'
+import { sitePackagePreviewHref, sitePackageRenderers } from '../utils/site-package-preview'
+import { useSlotWidgets } from './plugin-widget-slot.component'
 
 /** Which of the card's dialogs is open. */
 type Open = 'import' | 'export' | 'undo' | null
@@ -71,12 +73,34 @@ function CardDialog(props: { title: string; id: string; onClose(): void; childre
 }
 
 /**
- * Site backup and packages (AGL-163, AGL-3533, AGL-3534): download
+ * The import wizard, with each kind a plugin previews drawn by that plugin.
+ * Its own component so the zone's plugins load when the import opens, not
+ * whenever the card is on screen.
+ */
+function SitePackageImport(
+  props: Omit<ComponentProps<typeof PackageImportWizard>, 'renderers'> & { hostId: string },
+) {
+  const { hostId, ...wizard } = props
+  const { widgets } = useSlotWidgets([CONSOLE_WIDGET_SLOTS.sitePackageItemPreview])
+  // The slot hands a new list each render; what it says is the widgets and
+  // the kinds each draws.
+  const key = widgets.map((widget) => `${widget.widgetId}:${(widget.itemKinds ?? []).join(',')}`).join('|')
+  const renderers = useMemo(
+    () => sitePackageRenderers(widgets, hostId),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [key, hostId],
+  )
+  return <PackageImportWizard {...wizard} renderers={renderers} />
+}
+
+/**
+ * Site backup and packages (AGL-163, AGL-3533, AGL-3534, AGL-3545): download
  * everything designable as one site package, export the items you pick with
  * what they need, and import a package through the kit's package wizard —
- * each item shown against this site's copy, rendered side by side and value
- * by value, with a choice for every changed item and every missing
- * dependency. The last import can be undone from here for as long as the
+ * each item shown against this site's copy, rendered side by side (a form
+ * or a site email by the plugin that previews it, a dataset's or a
+ * collection's records as a table) and value by value, with a choice for
+ * every changed item and every missing dependency. The last import can be undone from here for as long as the
  * card is open; the route keeps it undoable for seven days. Pro+
  * (`siteExport` flag).
  */
@@ -198,7 +222,8 @@ export function SiteBackupCard(props: { hostId: string }) {
       </Typography>
       {open === 'import' && (
         <CardDialog title="Import a site package" id="site-package-import-title" onClose={close}>
-          <PackageImportWizard
+          <SitePackageImport
+            hostId={hostId}
             client={client}
             {...(previewHref ? { previewHref } : {})}
             onImported={(answer) => setLastImportId(answer.importId)}

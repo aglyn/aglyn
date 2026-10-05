@@ -118,11 +118,25 @@ the wizard asks what to do about each one:
 Each item the site already holds that the import changes, or that differs, is
 listed. Select one to compare it with the site's copy:
 
-- Pages, emails, layouts and components are **rendered side by side**: the
-  site's copy on the left and the file's on the right. Both are drawn without
-  the layout around a page, so what differs is the item itself.
-- Every value that differs is listed with **On this site** and **In the file**
-  beside each other.
+- Pages, email designs, layouts and components are **rendered side by
+  side**: the site's copy on the left and the file's on the right. Both are
+  drawn without the layout around a page, so what differs is the item itself.
+- **Forms** are rendered side by side the way the form's own page previews
+  them: each field a submission arrives under, which ones are required, and
+  which one is the marketing opt-in. A renamed or removed field is the
+  difference between the two.
+- **Site emails** are rendered side by side the way an inbox receives them,
+  each under its subject line, with your site's shared blocks drawn in. Merge
+  tags such as `{{contact.firstName}}` are left as they are. A copy with no
+  design of its own says the site sends its built-in email.
+- **Datasets** and **collections** list their records as a table: each record
+  the file adds (**New**), each one the site holds that the file does not
+  (**Not in the file**), and each one that differs (**Changed**), one column
+  per field. In a changed record, each value that differs is highlighted, with
+  the site's value struck through beneath it. Records that match are counted
+  above the table, not listed, and a long list is split into pages.
+- Below either, every other value that differs is listed with **On this
+  site** and **In the file** beside each other.
 - For a **merged** item, each key that differs is listed with both values.
   Choose whether it keeps **this site's** value or takes **the file's**. A key
   the site has not set takes the file's value unless you say otherwise.

@@ -151,6 +151,9 @@ export const WIDGET_ZONE_LAYOUTS: Readonly<
   recordEmail: 'bare',
   importMapping: 'bare',
   orgSites: 'stack',
+  // One pane of a package import's side-by-side diff, which lays the two
+  // panes out itself.
+  sitePackageItemPreview: 'bare',
 }
 
 /** The layout a zone renders its widgets in. */
@@ -209,6 +212,8 @@ export interface EntitledSlotWidget {
   title: string
   /** Present when the widget is a table column rather than a card (AGL-2940). */
   column?: ConsoleWidgetColumn
+  /** The kinds of item it draws, for a zone keyed by kind (AGL-3545). */
+  itemKinds?: readonly string[]
   Component: ComponentType<any>
 }
 
@@ -320,6 +325,7 @@ export function useSlotWidgets(slots: readonly string[]): {
           widgetId: widget.widgetId,
           title: widget.title ?? extension.displayName ?? widget.widgetId,
           column: widget.column,
+          ...(widget.itemKinds ? { itemKinds: widget.itemKinds } : {}),
           Component: widget.Component,
         },
       }),

@@ -223,6 +223,9 @@
           "shell": true,
           "routes": [
             "/forms"
+          ],
+          "slots": [
+            "sitePackageItemPreview"
           ]
         }
       }
@@ -1398,6 +1401,7 @@
             "campaignSenderEditor",
             "campaignTopicOptions",
             "campaignTopicSelect",
+            "sitePackageItemPreview",
             "transferResources"
           ]
         }

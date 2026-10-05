@@ -18,7 +18,8 @@
 /**
  * The package import's decisions (AGL-3534), without a screen: where a
  * decision comes from, which dependencies are asked about, what a diff and
- * a merge show, and what is acknowledged before the import.
+ * a merge show, which records a data item adds, drops and changes, and
+ * what is acknowledged before the import.
  */
 
 import { SITE_PACKAGE_PLAN } from '../fixtures/site-package'
@@ -33,6 +34,8 @@ import {
   packageDependencyProblems,
   packageJsonDiff,
   packageMergeKeys,
+  packageRecordDiff,
+  packageRecordField,
 } from './site-package-import-state'
 
 const item = (key: string) => SITE_PACKAGE_PLAN.items.find((one) => one.key === key)!
@@ -135,5 +138,46 @@ describe('review', () => {
     expect(
       packageDecided({ 'page/home': 'replace' }, [], {}, { 'page/home': { a: 'site' }, 'settings/settings': {} }),
     ).toEqual({ decisions: { 'page/home': 'replace' }, dependencyChoices: {}, mergeChoices: {} })
+  })
+})
+
+describe('records (AGL-3545)', () => {
+  it('finds the list of records by shape, on either side, and nothing else', () => {
+    expect(packageRecordField({ records: [{ $id: 'r1' }] }, { records: [] })).toBe('records')
+    expect(packageRecordField({}, { entries: [{ $id: 'e1', title: 'Hi' }] })).toBe('entries')
+    // A list of documents without their own ids is not records.
+    expect(packageRecordField({ fields: [{ fieldName: 'email' }] })).toBeNull()
+    // Nor is one whose other side holds something else there.
+    expect(packageRecordField({ records: [{ $id: 'r1' }] }, { records: 'none' })).toBeNull()
+    // Two lists of records: neither can be read as the item's.
+    expect(packageRecordField({ a: [{ $id: '1' }], b: [{ $id: '2' }] })).toBeNull()
+    expect(packageRecordField(null, 'text')).toBeNull()
+  })
+
+  it('matches records by id: added and changed in the file`s order, then removed, with the fields that differ', () => {
+    const diff = packageRecordDiff(
+      [
+        { $id: 'a', name: 'A', n: 1 },
+        { $id: 'b', name: 'B' },
+        { $id: 'c', name: 'C' },
+      ],
+      [
+        { $id: 'd', name: 'D', extra: true },
+        { $id: 'a', name: 'A', n: 2 },
+        { $id: 'c', name: 'C' },
+      ],
+    )
+    expect(diff.rows.map((row) => [row.id, row.status, row.changed])).toEqual([
+      ['d', 'added', []],
+      ['a', 'changed', ['n']],
+      ['b', 'removed', []],
+    ])
+    expect(diff.counts).toEqual({ added: 1, removed: 1, changed: 1, same: 1 })
+    expect(diff.fields).toEqual(['name', 'extra', 'n'])
+  })
+
+  it('reads anything but a list as no records', () => {
+    expect(packageRecordDiff(undefined, [{ $id: 'x' }]).counts).toEqual({ added: 1, removed: 0, changed: 0, same: 0 })
+    expect(packageRecordDiff({}, null).rows).toEqual([])
   })
 })
