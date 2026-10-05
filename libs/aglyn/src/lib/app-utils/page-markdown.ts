@@ -302,6 +302,29 @@ function walk(
       push(href ? `[${label}](${href})` : label)
       return
     }
+    case 'muiAccordionSummary': {
+      /*
+        An accordion's question (AGL-3575). The summary carries its text in
+        its own props, not in a child node, so the default recursion below
+        emitted NOTHING for it — every FAQ on every site reached an agent as
+        a run of orphaned answers. It is a heading because that is what the
+        HTML publishes: MUI renders the summary inside its `h3` heading slot,
+        and the Markdown has to agree with the page or the two describe
+        different documents. A linked header (AGL-1232) keeps its link, as
+        the page does.
+      */
+      const text = labelOf(props, context)
+      if (!text) {
+        recurse()
+        return
+      }
+      const href =
+        typeof props['screenId'] === 'string' && props['screenId']
+          ? screenLinkHref(props, context)
+          : ''
+      push(href ? `### [${text}](${href})` : `### ${text}`)
+      return
+    }
     case 'muiList': {
       /*
         The items are gathered into ONE block so they join as a list. Walking
