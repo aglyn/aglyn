@@ -80,16 +80,16 @@ export function transferResultsCsv(rows: readonly TransferRowResult[]): string {
     ['Row', 'Result', 'Record ID', 'Why'].join(','),
     ...rows.map((row) =>
       [
-        String(rowNumber(row.row)),
-        OUTCOME_WORDS[row.outcome],
-        row.recordId ?? '',
-        row.message ??
-          (row.reason && row.reason in REASON_WORDS
-            ? REASON_WORDS[row.reason as keyof typeof REASON_WORDS]
-            : (row.reason ?? '')),
-      ]
-        .map(escapeCsvCell)
-        .join(','),
+        escapeCsvCell(String(rowNumber(row.row)), { numeric: true }),
+        ...[
+          OUTCOME_WORDS[row.outcome],
+          row.recordId ?? '',
+          row.message ??
+            (row.reason && row.reason in REASON_WORDS
+              ? REASON_WORDS[row.reason as keyof typeof REASON_WORDS]
+              : (row.reason ?? '')),
+        ].map((cell) => escapeCsvCell(cell)),
+      ].join(','),
     ),
   ]
   return `${lines.join('\r\n')}\r\n`

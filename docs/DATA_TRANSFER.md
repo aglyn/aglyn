@@ -271,7 +271,9 @@ hashes it.
 RFC 4180 with the delimiter detected from the header line (comma, semicolon
 or tab) unless `options.delimiter` names one (a pipe too), `options.headerRow:
 false` reading the first line as a row under "Column 1", "Column 2"…, a
-byte-order mark dropped and blank lines skipped; JSON as an array of
+byte-order mark dropped and blank lines skipped, and a cell an export
+guarded against running as a spreadsheet formula (`'=…`) read back without
+its one `'` (`restoreCsvFormulaCell`); JSON as an array of
 objects (or `{ rows: [...] }`) and NDJSON one object per line, the header
 being every key in first-seen order and nested values kept. A file it cannot
 read answers a `TransferSourceProblem`. `transferFormatFromFileName`,
@@ -292,13 +294,27 @@ match keys), `TransferResourceInfo` and `TransferPrefs`, the review shapes
 ### `export-file.ts` — the export file
 
 `transferExportCsvHeader` (each field's label, so the file maps straight
-back in), `transferExportCsvLine` and `transferExportCellText` (a list as
+back in), `transferExportCsvLine` (given each field's type) and
+`transferExportCsvCell`, and `transferExportCellText` (a list as
 its items joined by `; `, an object as JSON, a blank as an empty cell),
 `transferExportRecord` (JSON and NDJSON rows keyed by field id),
 `transferExportFileName` (`<resource>-<day>.<ext>`),
 `countTransferExportRows` (what a download holds, per format, for the
 shortfall check) and `normalizeTransferPrefs` (a stored or sent
 `TransferPrefs`, dropping whatever is not its shape).
+
+**Formula cells (AGL-3548).** Every CSV the platform writes — exports,
+result files, CRM sections and reports, the AI usage file, the staff audit
+and tax working papers — goes through `escapeCsvCell` in
+`app-utils/csv.ts`, which writes a cell opening with `=`, `+`, `-`, `@`, a
+tab or a carriage return (after any `'`s) with one more leading `'`, so a
+spreadsheet shows it as text. A genuine number is let through when the
+writer says the cell is numeric (`{ numeric: true }`): a number value, or a
+`number`, `integer`, `currency` or `percent` field whose text reads as a
+plain number, so `-5` stays `-5`. JSON and NDJSON are written as they are.
+Both CSV readers (`parseTransferCsv`, `parseCsv`) take exactly one `'` off a
+cell that opens with `'` and then one of those characters, so an export
+imported again is unchanged.
 
 ### `review.ts` — what the wizard shows about a whole file
 

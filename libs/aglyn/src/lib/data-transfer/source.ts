@@ -25,7 +25,9 @@
  *  - CSV: RFC 4180 (quoted cells, doubled quotes, CRLF or LF), a leading
  *    byte-order mark dropped, and the delimiter detected from the header
  *    line — comma, semicolon or tab, whichever splits it most outside
- *    quotes. A wholly blank line is not a row.
+ *    quotes. A wholly blank line is not a row. A cell an export guarded
+ *    against running as a formula (a `'` before `=`, `+`, `-`, `@`, a tab
+ *    or a carriage return) loses that one `'`.
  *  - JSON: an array of objects (or `{ "rows": [...] }`). The header is
  *    every key in first-seen order; a cell keeps its JSON value, so a nested
  *    object reaches a `json` field intact.
@@ -35,6 +37,7 @@
  * index is the row every plan, ledger entry and result names.
  *=========================================*/
 
+import { restoreCsvFormulaCell } from '../app-utils/csv'
 import type { TransferFormat } from './resource'
 
 /** A delimiter a CSV may use. A pipe is read when the person names it; detection never guesses it. */
@@ -136,7 +139,11 @@ export function detectCsvDelimiter(text: string): TransferCsvDelimiter {
   return best
 }
 
-/** CSV text into rows of cells (header included), wholly blank lines dropped. */
+/**
+ * CSV text into rows of cells (header included), wholly blank lines dropped.
+ * A cell an export guarded against running as a spreadsheet formula (`'=…`)
+ * reads back as it was (`=…`), so an export imported again is unchanged.
+ */
 export function parseTransferCsv(text: string, delimiter: TransferCsvDelimiter = ','): string[][] {
   const source = stripBom(String(text ?? ''))
   const rows: string[][] = []
@@ -144,7 +151,7 @@ export function parseTransferCsv(text: string, delimiter: TransferCsvDelimiter =
   let cell = ''
   let quoted = false
   const endRow = () => {
-    row.push(cell)
+    row.push(restoreCsvFormulaCell(cell))
     if (row.some((entry) => entry.trim() !== '')) rows.push(row)
     row = []
     cell = ''
@@ -166,7 +173,7 @@ export function parseTransferCsv(text: string, delimiter: TransferCsvDelimiter =
     }
     if (char === '"' && cell === '') quoted = true
     else if (char === delimiter) {
-      row.push(cell)
+      row.push(restoreCsvFormulaCell(cell))
       cell = ''
     } else if (char === '\n') endRow()
     else if (char === '\r') {

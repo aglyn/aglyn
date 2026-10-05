@@ -24,13 +24,16 @@
  *
  *  - CSV: the header is each field's label, so the file maps straight back
  *    in on import; a list is written as its items joined by `; ` (the list
- *    reader splits on it), an object as JSON, a blank as an empty cell.
+ *    reader splits on it), an object as JSON, a blank as an empty cell. A
+ *    cell that a spreadsheet would run as a formula gets a leading `'`
+ *    (AGL-3548) — a number in a number field excepted — and the import's
+ *    reader takes it back off.
  *  - JSON: one array of objects keyed by field id; NDJSON: one object per
  *    line. Values are written as they are.
  *=========================================*/
 
 import { countCsvDataRows, escapeCsvCell } from '../app-utils/csv'
-import type { TransferFormat } from './resource'
+import type { TransferFieldType, TransferFormat } from './resource'
 import type { TransferExportPrefs, TransferExportScopeKind, TransferPrefs } from './transfer-api'
 
 /** A value as one CSV cell's text. */
@@ -57,9 +60,26 @@ export function transferExportCsvHeader(fieldIds: readonly string[], labelOf: (f
   return fieldIds.map((fieldId) => escapeCsvCell(labelOf(fieldId) || fieldId)).join(',')
 }
 
-/** One row as a CSV line. */
-export function transferExportCsvLine(row: Readonly<Record<string, unknown>>, fieldIds: readonly string[]): string {
-  return fieldIds.map((fieldId) => escapeCsvCell(transferExportCellText(row[fieldId]))).join(',')
+/** Field types whose value is a number, written unguarded when it reads as one. */
+const NUMERIC_FIELD_TYPES: ReadonlySet<TransferFieldType> = new Set(['number', 'integer', 'currency', 'percent'])
+
+/**
+ * One value as a CSV cell: its text, guarded against running as a formula
+ * unless it is a genuine number — a number value, or a number-typed field
+ * whose text reads as one — so `-5` stays `-5` and `-5 off` becomes `'-5 off`.
+ */
+export function transferExportCsvCell(value: unknown, type?: TransferFieldType): string {
+  const numeric = typeof value === 'number' || (type !== undefined && NUMERIC_FIELD_TYPES.has(type))
+  return escapeCsvCell(transferExportCellText(value), { numeric })
+}
+
+/** One row as a CSV line; `typeOf` names each field's type so numbers stay numbers. */
+export function transferExportCsvLine(
+  row: Readonly<Record<string, unknown>>,
+  fieldIds: readonly string[],
+  typeOf?: (fieldId: string) => TransferFieldType | undefined,
+): string {
+  return fieldIds.map((fieldId) => transferExportCsvCell(row[fieldId], typeOf?.(fieldId))).join(',')
 }
 
 const EXTENSIONS: Readonly<Record<TransferFormat, string>> = { csv: 'csv', json: 'json', ndjson: 'ndjson' }

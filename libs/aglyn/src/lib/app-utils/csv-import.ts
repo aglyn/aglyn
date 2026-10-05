@@ -42,6 +42,8 @@
  * console request's budget, not about what the rows hold.
  */
 
+import { escapeCsvCell } from './csv'
+
 /**
  * The most rows one uploaded file may carry.
  *
@@ -235,10 +237,13 @@ export interface ImportDroppedValue {
   value: string
 }
 
-/** A CSV cell, quoted only when it has to be. */
+/**
+ * A CSV cell through {@link escapeCsvCell}: guarded against running as a
+ * spreadsheet formula, quoted only when it has to be. A number value is
+ * written as the number it is (`-5`, not `'-5`).
+ */
 export function csvCell(value: unknown): string {
-  const text = String(value ?? '')
-  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text
+  return escapeCsvCell(String(value ?? ''), { numeric: typeof value === 'number' || typeof value === 'bigint' })
 }
 
 /**
@@ -249,9 +254,10 @@ export function csvCell(value: unknown): string {
  * table's export.
  * Quoting is decided in {@link csvCell} and nowhere else — a cell holding a
  * comma, a quote or a line break is wrapped in quotes with its quotes
- * doubled, no other cell is touched, and a `null` or `undefined` cell is
- * empty rather than the word — so that a report's file and a contacts file
- * open the same way in a spreadsheet.
+ * doubled, a text cell a spreadsheet would run as a formula gets a leading
+ * `'`, and a `null` or `undefined` cell is empty rather than the word — so
+ * that a report's file and a contacts file open the same way in a
+ * spreadsheet.
  */
 export function csvDocument(
   header: readonly unknown[],

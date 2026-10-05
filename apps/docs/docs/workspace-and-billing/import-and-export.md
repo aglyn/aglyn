@@ -52,6 +52,14 @@ what is listed for it.
 4. Choose the format: CSV, JSON or NDJSON. For CSV you can add a byte-order
    mark so spreadsheet apps read accented characters correctly.
 
+In a CSV, a cell that starts with `=`, `+`, `-`, `@`, a tab or a carriage
+return is written with a leading `'` (an apostrophe), so a spreadsheet app
+shows it as text instead of running it as a formula. This matters most for
+text visitors typed, such as form answers. Numbers in number, currency and
+percent fields are written as they are, so `-5` stays a number. Importing the
+file again takes the apostrophe back off. JSON and NDJSON files keep every
+value exactly as stored.
+
 The download says how many rows it should hold. If fewer arrive, it is
 treated as incomplete and you're told.
 

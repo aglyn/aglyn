@@ -95,6 +95,7 @@ import {
   type TransferUndoState,
 } from '@aglyn/aglyn/data-transfer'
 import { createResourceUid } from '@aglyn/aglyn/app-utils/create-resource-uid'
+import { escapeCsvCell } from '@aglyn/aglyn/app-utils/csv'
 import { inspectUploadBytes } from '@aglyn/aglyn/app-utils/upload-inspection'
 import {
   resolveTransferResource,
@@ -788,7 +789,7 @@ export async function transferPackageResultFile(
   for (const doc of (await jobRef.collection('results').get()).docs) {
     for (const result of (doc.data() as { results?: TransferRowResult[] }).results ?? []) results.set(result.row, result)
   }
-  const cell = (value: string) => (/[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value)
+  const cell = (value: string) => escapeCsvCell(value)
   const lines = [['Kind', 'Name', 'ID', 'Decision', ...TRANSFER_RESULT_COLUMNS].map(cell).join(',')]
   for (const item of plan.items) {
     const result = results.get(item.row)

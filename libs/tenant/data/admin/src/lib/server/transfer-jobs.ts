@@ -180,6 +180,7 @@ import {
   type PicklistValue,
 } from '@aglyn/aglyn/app-utils/picklists'
 import { createResourceUid } from '@aglyn/aglyn/app-utils/create-resource-uid'
+import { escapeCsvCell } from '@aglyn/aglyn/app-utils/csv'
 import { inspectUploadBytes } from '@aglyn/aglyn/app-utils/upload-inspection'
 import {
   planTransferResourceRows,
@@ -1833,9 +1834,6 @@ async function readResults(
   return results
 }
 
-function csvCell(value: string): string {
-  return /[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value
-}
 
 /**
  * The result file: every row of the file as it was sent, then what happened
@@ -1860,13 +1858,22 @@ export async function transferResultFile(
   }
   const table = await loadTable(deps, job)
   const results = await readResults(transferJobsCollection(deps.firestore, job.orgId).doc(job.id))
-  const lines = [[...table.headers, ...TRANSFER_RESULT_COLUMNS].map(csvCell).join(',')]
+  // Every cell through the one escaper, so a formula the file carried is not
+  // armed again in the copy handed back (a number from a JSON file stays one).
+  const lines = [[...table.headers, ...TRANSFER_RESULT_COLUMNS].map((cell) => escapeCsvCell(cell)).join(',')]
   table.rows.forEach((cells, row) => {
     const result = results.get(row)
     const tail = result
       ? [result.outcome, result.message ?? (result.reason ? String(result.reason) : ''), result.recordId ?? '']
       : ['pending', '', '']
-    lines.push([...table.headers.map((_header, column) => transferCellText(cells[column])), ...tail].map(csvCell).join(','))
+    lines.push(
+      [
+        ...table.headers.map((_header, column) =>
+          escapeCsvCell(transferCellText(cells[column]), { numeric: typeof cells[column] === 'number' }),
+        ),
+        ...tail.map((cell) => escapeCsvCell(cell)),
+      ].join(','),
+    )
   })
   const base = (job.fileName ?? 'import').replace(/\.[a-z0-9]+$/i, '')
   return { csv: `${lines.join('\r\n')}\r\n`, rows: table.rows.length, fileName: `${base}-results.csv` }

@@ -750,6 +750,7 @@ export function createMemoryTransferClient(
                 : typeof value === 'object'
                   ? JSON.stringify(value)
                   : String(value),
+            { numeric: typeof value === 'number' },
           )
         const headers = transferExportHeaders(
           request.fieldIds,

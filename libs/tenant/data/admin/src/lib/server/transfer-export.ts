@@ -195,11 +195,12 @@ export async function streamTransferExport(
   // A preset's column names (another product's layout) stand in for labels.
   const headers = transferExportHeaders(fieldIds, input.headers)
   const label = (fieldId: string) => headers[fieldId] ?? catalog.byId.get(fieldId)?.label ?? fieldId
+  const typeOf = (fieldId: string) => catalog.byId.get(fieldId)?.type
   let written = 0
   const write = (batch: ReadonlyArray<Readonly<Record<string, unknown>>>): string => {
     let text = ''
     for (const row of batch) {
-      if (format === 'csv') text += `\r\n${transferExportCsvLine(row, fieldIds)}`
+      if (format === 'csv') text += `\r\n${transferExportCsvLine(row, fieldIds, typeOf)}`
       else {
         const json = JSON.stringify(transferExportRecord(row, fieldIds))
         text += format === 'ndjson' ? `${json}\n` : `${written ? ',' : ''}\n${json}`
