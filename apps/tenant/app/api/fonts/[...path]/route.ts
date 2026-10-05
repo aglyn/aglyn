@@ -17,6 +17,7 @@
 
 import { serveSelfHostedFont } from '@aglyn/tenant-runtime/self-hosted-fonts'
 
+// lockdown-423: exempt — public Google Fonts files passed through by path; resolves no host, reads and writes no org data
 /**
  * A theme font file from the site's own origin (AGL-3485). The page inlines
  * its theme's `@font-face` rules with every `src` here, so nothing on a
