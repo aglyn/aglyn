@@ -255,7 +255,13 @@ function timelineLines(value: unknown): string[] {
   return [
     'Timeline, newest first:',
     ...entries.map((entry) => {
-      const detail = [text(entry['direction']), text(entry['delivery']), text(entry['outcome'])].filter(Boolean)
+      const detail = [
+        text(entry['direction']),
+        entry['from'] ? `from ${text(entry['from'])}` : '',
+        entry['to'] ? `to ${text(entry['to'])}` : '',
+        text(entry['delivery']),
+        text(entry['outcome']),
+      ].filter(Boolean)
       const subject = text(entry['subject'])
       return (
         `- ${text(entry['on'])} ${text(entry['kind'])}` +
@@ -278,9 +284,11 @@ function taskLines(value: unknown): string[] {
         `- ${text(task['title'])} (${[
           text(task['kind']),
           `${text(task['priority']) || 'normal'} priority`,
+          ...(task['status'] ? [text(task['status'])] : []),
           task['due'] ? `due ${text(task['due'])}` : 'no due date',
           ...(task['overdue'] === true ? ['overdue'] : []),
-        ].join(', ')})`,
+          ...(task['assignee'] ? [`assigned to ${text(task['assignee'])}`] : []),
+        ].join(', ')})` + (task['notes'] ? `: ${text(task['notes'])}` : ''),
     ),
   ]
 }
@@ -304,10 +312,24 @@ function dealLines(value: unknown): string[] {
   ]
 }
 
+/** The record's custom field values under their labels (AGL-3520). */
+function customLines(value: unknown): string[] {
+  const fields = list(value).filter((field) => text(field['label']) && text(field['value']))
+  return fields.length
+    ? ['Custom fields:', ...fields.map((field) => `- ${text(field['label'])}: ${text(field['value'])}`)]
+    : []
+}
+
+const yesNo = (label: string, value: unknown): string[] => (value === true ? [label] : [])
+
 /**
- * The facts as lines of text. Only the fields named here are written, whatever
- * else a reader reports, so what reaches a prompt is decided in two places
- * that both have to agree: the CRM's builders and this list.
+ * The facts as lines of text: the WHOLE record the CRM reports (AGL-3520) —
+ * every standard field, its contact details and addresses, its picklist
+ * labels, its custom fields under their labels, its consent, notes,
+ * timeline, open tasks and deals. A field the record does not hold writes
+ * no line. The CRM's builders decide what a record is; nothing here drops a
+ * field they report, and no reader reports a token, an account identifier
+ * or a record id beyond a stage's.
  */
 export function aiCrmFactsLines(kind: AiCrmRecordKind, facts: Facts): string[] {
   if (kind === 'contact') {
@@ -315,17 +337,35 @@ export function aiCrmFactsLines(kind: AiCrmRecordKind, facts: Facts): string[] {
     return [
       ...line('Contact', facts['name']),
       ...line('Salutation', facts['salutation']),
+      ...line('First name', facts['firstName']),
+      ...line('Last name', facts['lastName']),
+      ...line('Email', words(facts['emails']).join(', ')),
+      ...line('Phone', facts['phone']),
+      ...line('Mobile phone', facts['mobilePhone']),
+      ...line('Home phone', facts['homePhone']),
+      ...line('Other phone', facts['otherPhone']),
+      ...line('Fax', facts['fax']),
+      // A request the person made, which a drafted next step must respect (AGL-3515).
+      ...yesNo('Do not call: they asked not to be phoned', facts['doNotCall']),
       ...line('Job title', facts['jobTitle']),
       ...line('Department', facts['department']),
-      // A request the person made, which a drafted next step must respect (AGL-3515).
-      ...(facts['doNotCall'] === true ? ['Do not call: they asked not to be phoned'] : []),
       ...line('Company', facts['company']),
+      ...line('Reports to', facts['reportsTo']),
+      ...line('Assistant', facts['assistant']),
+      ...line('Assistant phone', facts['assistantPhone']),
+      ...line('Birthdate', facts['birthdate']),
+      ...line('Mailing address', facts['mailingAddress']),
+      ...line('Other address', facts['otherAddress']),
       ...line('Lifecycle stage', facts['lifecycleStage']),
+      ...line('Lead source', facts['leadSource']),
+      ...line('Owner', facts['owner']),
+      ...line('Marketing email consent', facts['marketingConsent']),
       ...line('Tags', words(facts['tags']).join(', ')),
       ...line('Came in through', words(facts['sources']).join(', ')),
       ...(orders ? [`Orders: ${orders}${facts['lastPurchase'] ? `, the last on ${text(facts['lastPurchase'])}` : ''}`] : []),
       ...line('In the CRM since', facts['since']),
       ...line('Last opened or clicked an email', facts['lastEmailEngagement']),
+      ...customLines(facts['custom']),
       ...line('Notes', facts['notes']),
       ...timelineLines(facts['timeline']),
       ...taskLines(facts['openTasks']),
@@ -336,13 +376,29 @@ export function aiCrmFactsLines(kind: AiCrmRecordKind, facts: Facts): string[] {
     return [
       ...line('Company', facts['name']),
       ...line('Domain', facts['domain']),
+      ...line('Website', facts['website']),
+      ...line('Phone', facts['phone']),
+      ...line('Fax', facts['fax']),
+      // Salesforce's Account fields (AGL-3514).
+      ...line('Type', facts['type']),
       ...line('Industry', facts['industry']),
-      // The company's own headcount (AGL-3514). Its other account fields
-      // stay out of the prompt until the subprocessor disclosure names them.
+      ...line('Rating', facts['rating']),
+      ...line('Ownership', facts['ownership']),
+      ...line('Account source', facts['accountSource']),
       ...line('Employees', facts['employees'] ?? ''),
+      ...line('Annual revenue', facts['annualRevenue']),
+      ...line('Account number', facts['accountNumber']),
+      ...line('Account site', facts['site']),
+      ...line('Ticker symbol', facts['tickerSymbol']),
+      ...line('SIC code', facts['sicCode']),
+      ...line('Billing address', facts['billingAddress']),
+      ...line('Shipping address', facts['shippingAddress']),
+      ...line('Parent company', facts['parentCompany']),
+      ...line('Owner', facts['owner']),
       ...line('Tags', words(facts['tags']).join(', ')),
       ...line('People in the CRM', facts['people']),
       ...line('In the CRM since', facts['since']),
+      ...customLines(facts['custom']),
       ...line('Notes', facts['notes']),
       ...timelineLines(facts['timeline']),
       ...taskLines(facts['openTasks']),
@@ -351,6 +407,7 @@ export function aiCrmFactsLines(kind: AiCrmRecordKind, facts: Facts): string[] {
   }
   if (kind === 'deal') {
     const stages = list(facts['stages'])
+    const products = list(facts['products'])
     const withWhom = [text(facts['contact']), text(facts['company'])].filter(Boolean).join(' at ')
     return [
       ...line('Deal', facts['title']),
@@ -365,12 +422,24 @@ export function aiCrmFactsLines(kind: AiCrmRecordKind, facts: Facts): string[] {
       ...line('Forecast category', facts['forecastCategory']),
       ...line('Type', facts['type']),
       ...line('Lead source', facts['leadSource']),
+      ...line('Campaign', facts['campaign']),
       ...line('Next step', facts['nextStep']),
       ...line('Expected to close', facts['expectedClose']),
       ...line('Lost reason', facts['lostReason']),
       ...line('With', withWhom),
-      ...line('Products on the deal', Number(facts['products']) || ''),
+      ...line('Owner', facts['owner']),
+      ...(products.length
+        ? [
+            'Products:',
+            ...products.map(
+              (product) =>
+                `- ${text(product['name'])} × ${Number(product['quantity']) || 0}` +
+                (product['unitAmount'] ? ` at ${text(product['unitAmount'])}` : ''),
+            ),
+          ]
+        : []),
       ...line('In the CRM since', facts['since']),
+      ...customLines(facts['custom']),
       ...line('Notes', facts['notes']),
       ...timelineLines(facts['timeline']),
       ...taskLines(facts['openTasks']),
@@ -378,7 +447,28 @@ export function aiCrmFactsLines(kind: AiCrmRecordKind, facts: Facts): string[] {
   }
   return [
     ...line('Lead', facts['name']),
+    ...line('Salutation', facts['salutation']),
+    ...line('First name', facts['firstName']),
+    ...line('Last name', facts['lastName']),
+    ...line('Email', facts['email']),
+    ...line('Phone', facts['phone']),
+    ...line('Mobile phone', facts['mobilePhone']),
+    ...line('Fax', facts['fax']),
+    ...yesNo('Do not call: they asked not to be phoned', facts['doNotCall']),
+    ...line('Company', facts['company']),
+    ...line('Job title', facts['jobTitle']),
+    ...line('Website', facts['website']),
+    ...line('Address', facts['address']),
+    ...line('Industry', facts['industry']),
+    ...line('Rating', facts['rating']),
+    ...line('Employees', facts['employees'] ?? ''),
+    ...line('Annual revenue', facts['annualRevenue']),
+    ...line('Lead source', facts['leadSource']),
     ...line('Status', facts['status']),
+    ...line('Owner', facts['owner']),
+    ...line('Campaigns', words(facts['campaigns']).join(', ')),
+    ...line('Marketing email consent', facts['marketingConsent']),
+    ...line('Tags', words(facts['tags']).join(', ')),
     ...line('Captured through', words(facts['sources']).join(', ')),
     ...line('Captures', Number(facts['captures']) || ''),
     ...line('First seen', facts['firstSeen']),
@@ -386,14 +476,58 @@ export function aiCrmFactsLines(kind: AiCrmRecordKind, facts: Facts): string[] {
     `Assigned to a teammate: ${facts['assigned'] === true ? 'yes' : 'no'}`,
     `Converted to a contact: ${facts['converted'] === true ? 'yes' : 'no'}`,
     ...line('Unqualified reason', facts['unqualifiedReason']),
+    ...customLines(facts['custom']),
     ...line('Notes', facts['notes']),
     ...timelineLines(facts['timeline']),
+    ...(list(facts['openTasks']).length ? taskLines(facts['openTasks']) : []),
   ]
+}
+
+/**
+ * The most characters a record's facts take in a request (AGL-3520) —
+ * about six thousand tokens at the three characters a token the routing
+ * ceilings are measured with. The CRM's own cuts keep a record well under
+ * it; a record that holds everything at once is fitted by
+ * {@link aiCrmFitFacts}, which shortens its long texts and drops no field.
+ */
+export const AI_CRM_FACTS_MAX_CHARS = 18_000
+
+/** The cuts {@link aiCrmFitFacts} tries in turn: notes, then each timeline text, then each custom value and task note. */
+const FIT_STEPS = [
+  { notes: 300, text: 160, custom: 160 },
+  { notes: 160, text: 80, custom: 80 },
+  { notes: 80, text: 40, custom: 40 },
+] as const
+
+const cut = (value: unknown, max: number): unknown =>
+  typeof value === 'string' && value.length > max ? `${value.slice(0, max - 1).trimEnd()}…` : value
+
+/**
+ * The facts, fitted to {@link AI_CRM_FACTS_MAX_CHARS} as lines: unchanged
+ * when they fit, otherwise with the long texts — the notes, each timeline
+ * entry's text, each task's notes and each custom value — cut shorter step
+ * by step. Every field stays; only how much of a long text is sent changes.
+ */
+export function aiCrmFitFacts(kind: AiCrmRecordKind, facts: Facts): Facts {
+  const size = (candidate: Facts) => aiCrmFactsLines(kind, candidate).join('\n').length
+  if (size(facts) <= AI_CRM_FACTS_MAX_CHARS) return facts
+  let fitted: Facts = facts
+  for (const step of FIT_STEPS) {
+    fitted = {
+      ...facts,
+      notes: cut(facts['notes'], step.notes),
+      timeline: list(facts['timeline']).map((entry) => ({ ...entry, text: cut(entry['text'], step.text) })),
+      openTasks: list(facts['openTasks']).map((task) => ({ ...task, notes: cut(task['notes'], step.text) })),
+      custom: list(facts['custom']).map((field) => ({ ...field, value: cut(field['value'], step.custom) })),
+    }
+    if (size(fitted) <= AI_CRM_FACTS_MAX_CHARS) return fitted
+  }
+  return fitted
 }
 
 /** The user turn for a record. */
 export function aiCrmRecordPrompt(kind: AiCrmRecordKind, facts: Facts): string {
-  return [`Record: ${kind}`, ...aiCrmFactsLines(kind, facts)].join('\n')
+  return [`Record: ${kind}`, ...aiCrmFactsLines(kind, aiCrmFitFacts(kind, facts))].join('\n')
 }
 
 /** The user turn for an email draft. */
@@ -404,7 +538,7 @@ export function aiCrmEmailPrompt(input: { kind: AiCrmRecordKind; facts: Facts; r
     `The team member asks: ${input.request.replace(/\s+/g, ' ').trim().slice(0, AI_CRM_EMAIL_REQUEST_MAX_CHARS)}`,
     '',
     'Facts:',
-    ...aiCrmFactsLines(input.kind, input.facts),
+    ...aiCrmFactsLines(input.kind, aiCrmFitFacts(input.kind, input.facts)),
   ].join('\n')
 }
 

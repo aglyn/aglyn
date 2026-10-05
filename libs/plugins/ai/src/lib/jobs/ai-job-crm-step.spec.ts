@@ -75,7 +75,9 @@ import {
   AI_CRM_MAPPING_INSTRUCTIONS,
   AI_JOB_CRM_STEP_BUDGET,
   aiCrmAdmissionRefusal,
+  AI_CRM_FACTS_MAX_CHARS,
   aiCrmFactsLines,
+  aiCrmFitFacts,
   aiCrmRecordInstructions,
   aiReusableCrmRecord,
   createAiJobCrmStep,
@@ -424,18 +426,111 @@ describe('a record (AGL-2917)', () => {
   })
 })
 
-describe('a company’s lines (AGL-3514)', () => {
-  it('writes the headcount the disclosure names, and none of the other account fields', () => {
+describe('the whole record (AGL-3520)', () => {
+  it('writes every account field a company holds, its addresses and custom fields', () => {
     const lines = aiCrmFactsLines('company', {
       name: 'Acme',
+      website: 'https://acme.com/',
+      phone: '+15125550100',
       industry: 'Retail',
       employees: 250,
       type: 'Customer',
       rating: 'Hot',
-      annualRevenue: '$1,250,000.00',
+      annualRevenue: 'USD 1250000.00',
+      billingAddress: '1 Main St, Austin, TX 78701, US',
+      parentCompany: 'Acme Holdings',
+      owner: 'Sam Rep',
+      custom: [{ label: 'Tier', value: 'Gold' }],
     })
-    expect(lines).toEqual(expect.arrayContaining(['Industry: Retail', 'Employees: 250']))
-    expect(lines.join('\n')).not.toMatch(/Customer|Hot|1,250,000/)
+    expect(lines).toEqual(
+      expect.arrayContaining([
+        'Industry: Retail',
+        'Employees: 250',
+        'Type: Customer',
+        'Rating: Hot',
+        'Annual revenue: USD 1250000.00',
+        'Phone: +15125550100',
+        'Billing address: 1 Main St, Austin, TX 78701, US',
+        'Parent company: Acme Holdings',
+        'Owner: Sam Rep',
+        'Custom fields:',
+        '- Tier: Gold',
+      ]),
+    )
+  })
+
+  it("writes a contact's addresses, phones, consent and the people around them", () => {
+    const lines = aiCrmFactsLines('contact', {
+      name: 'Dana Marsh',
+      emails: ['dana@acme.com', 'dana@home.example'],
+      phone: '+15125550107',
+      mobilePhone: '+15125550108',
+      birthdate: '1984-07-21',
+      reportsTo: 'Lee Boss',
+      mailingAddress: '1 Main St, Austin',
+      marketingConsent: 'opted in on 2026-08-01',
+      doNotCall: true,
+    })
+    expect(lines).toEqual(
+      expect.arrayContaining([
+        'Email: dana@acme.com, dana@home.example',
+        'Phone: +15125550107',
+        'Mobile phone: +15125550108',
+        'Birthdate: 1984-07-21',
+        'Reports to: Lee Boss',
+        'Mailing address: 1 Main St, Austin',
+        'Marketing email consent: opted in on 2026-08-01',
+        'Do not call: they asked not to be phoned',
+      ]),
+    )
+  })
+
+  it("writes a lead's contact details and its open tasks", () => {
+    const lines = aiCrmFactsLines('lead', {
+      name: 'Dana Marsh',
+      email: 'dana@acme.com',
+      phone: '+15125550107',
+      address: 'Austin, TX, US',
+      campaigns: ['Spring push'],
+      openTasks: [{ title: 'Call Dana', kind: 'Call', priority: 'high', due: null, overdue: false, assignee: 'Sam Rep' }],
+    })
+    expect(lines).toEqual(
+      expect.arrayContaining([
+        'Email: dana@acme.com',
+        'Phone: +15125550107',
+        'Address: Austin, TX, US',
+        'Campaigns: Spring push',
+        'Open tasks:',
+        '- Call Dana (Call, high priority, no due date, assigned to Sam Rep)',
+      ]),
+    )
+  })
+
+  /*
+   * A record that holds everything at once is fitted by shortening its long
+   * texts, never by dropping a field.
+   */
+  it('fits an oversized record by cutting its long texts, keeping every field', () => {
+    const long = 'word '.repeat(2_000)
+    const facts = {
+      name: 'Dana Marsh',
+      email: 'dana@acme.com',
+      phone: '+15125550107',
+      notes: long,
+      custom: Array.from({ length: 40 }, (_, index) => ({ label: `Field ${index}`, value: long.slice(0, 280) })),
+      timeline: Array.from({ length: 12 }, () => ({ on: '2026-09-01', kind: 'Note', text: long.slice(0, 280) })),
+      openTasks: Array.from({ length: 8 }, (_, index) => ({ title: `Task ${index}`, kind: 'Call', priority: 'normal', due: null, notes: long.slice(0, 280) })),
+    }
+    expect(aiCrmFactsLines('lead', facts).join('\n').length).toBeGreaterThan(AI_CRM_FACTS_MAX_CHARS)
+    const fitted = aiCrmFitFacts('lead', facts)
+    const lines = aiCrmFactsLines('lead', fitted)
+    expect(lines.join('\n').length).toBeLessThanOrEqual(AI_CRM_FACTS_MAX_CHARS)
+    // Every field is still written, every custom field and every timeline entry.
+    expect(lines).toEqual(expect.arrayContaining(['Email: dana@acme.com', 'Phone: +15125550107']))
+    expect(lines.filter((entry) => entry.startsWith('- Field '))).toHaveLength(40)
+    expect(lines.filter((entry) => entry.startsWith('- 2026-09-01 Note'))).toHaveLength(12)
+    // A record that fits is sent unchanged.
+    expect(aiCrmFitFacts('lead', { name: 'Dana', notes: 'Short.' })).toEqual({ name: 'Dana', notes: 'Short.' })
   })
 })
 

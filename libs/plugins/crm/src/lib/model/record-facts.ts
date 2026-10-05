@@ -14,8 +14,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 import {
+  CONTACT_ALTERNATE_EMAILS_FIELD,
   CONTACT_LIFECYCLE_STAGE_LABELS,
   CONTACT_SOURCE_LABELS,
   CRM_ACTIVITY_KIND_LABELS,
@@ -36,6 +36,8 @@ import {
   isContactLifecycleStage,
   isCrmEmailDeliveryState,
   readContactFacet,
+  readMarketingBasis,
+  type AglynPostalAddress,
   type ConsentGroup,
   type ContactFieldDefinition,
   type ContactInteraction,
@@ -64,28 +66,35 @@ import { LEAD_IMPORT_FIELD_LABELS, LEAD_IMPORT_FIELDS } from './crm-lead-import'
  * The facts a reader on the core's record-facts seam reports: one contact,
  * company, deal or lead as a person on the team sees it, and the fields a
  * spreadsheet import may fill. The server half reads the documents and
- * applies who may see them (`server/record-facts.ts`); this half decides
- * which of their fields leave the CRM at all, so the list below is the whole
- * of what a caller — an assistant summarizing a record, an automation
- * deciding on one — can pass on.
+ * applies who may see them (`server/record-facts.ts`); this half shapes
+ * them, so the list below is the whole of what a caller — an assistant
+ * summarizing a record, an automation deciding on one — can pass on.
  *
- * ## What never leaves
+ * ## The whole record (AGL-3520)
  *
- * No email address, phone number or postal address of anyone; no birthdate;
- * no assistant and no reports-to; no marketing consent; no custom field VALUE; no team member's name or id; no document
- * id of any record; no file; no order or payment detail beyond a count. A
- * logged email carries its subject and a cut of its body, never the address
- * it went to or came from. An import catalog carries field keys, labels and
- * types, never a row of the file.
+ * A record is reported as the CRM shows it: every standard field —
+ * Salesforce's included — with its email addresses, phone numbers, postal
+ * addresses, birthdate, assistant and reports-to; the labels of its
+ * picklists as the record holds them; its custom field values under their
+ * labels; its marketing consent; its notes, newest timeline entries and
+ * open tasks and deals. Text a person wrote is reported as written.
  *
- * Every text a person wrote into a record — a name, a job title, a tag, notes,
- * a logged activity, a capture's summary, a task's or a deal's title, a
- * reason — is reported as written, except that an email address or a phone
- * number inside it is replaced by a placeholder first ({@link crmFactProse}):
- * an import that put an address in the name column leaves no address behind.
- * What the workspace configured — pipeline, stage and field names — and a
- * company's domain are reported as they are. A postal address typed into a
- * note is not recognized and leaves as typed.
+ * ## What still never leaves
+ *
+ * No authentication token, no account identifier and no internal record
+ * id. A related record — the company a person works for, the contact a deal
+ * is with, the person someone reports to, a parent company, a campaign — is
+ * named by its name; a team member by their display name. The one id a
+ * caller is handed is a pipeline stage's, which a stage proposal must name.
+ * An import catalog carries field keys, labels and types, never a row of
+ * the file.
+ *
+ * ## Bounded
+ *
+ * Every list and every long text is cut — notes to
+ * {@link CRM_FACTS_NOTES_MAX}, a timeline entry to {@link CRM_FACTS_TEXT_MAX},
+ * at most {@link CRM_FACTS_CUSTOM_FIELDS_MAX} custom fields — so a record
+ * holding everything still fits the request a caller builds from it.
  *
  * ## Stable bytes
  *
@@ -124,14 +133,18 @@ export const CRM_FACTS_TASKS_MAX = 8
 export const CRM_FACTS_DEALS_MAX = 5
 /** Tags reported for a record. */
 export const CRM_FACTS_TAGS_MAX = 10
-/** How much of a logged activity's text, or a platform capture's summary, is reported. */
+/** How much of a logged activity's text, a capture's summary, a task's notes or a custom value is reported. */
 export const CRM_FACTS_TEXT_MAX = 280
 /** How much of a record's notes is reported. */
 export const CRM_FACTS_NOTES_MAX = 600
 /** How long a name, a title or a subject may run. */
 export const CRM_FACTS_LABEL_MAX = 120
-/** Custom fields an import catalog reports. */
+/** Custom fields an import catalog, or a record, reports. */
 export const CRM_FACTS_CUSTOM_FIELDS_MAX = 40
+/** Products a deal's facts list. */
+export const CRM_FACTS_PRODUCTS_MAX = 20
+/** Email addresses and campaigns a record's facts list. */
+export const CRM_FACTS_LIST_MAX = 10
 
 /** One thing that happened, as a record's timeline reports it. */
 export interface CrmTimelineFact {
@@ -141,6 +154,9 @@ export interface CrmTimelineFact {
   kind: string
   /** `outbound` or `inbound` for an email; also `internal` for a call (AGL-3517); absent otherwise. */
   direction?: string
+  /** Who an email came from and went to, as the activity recorded them (AGL-3520). */
+  from?: string
+  to?: string
   subject?: string
   text?: string
   outcome?: string
@@ -160,6 +176,10 @@ export interface CrmTaskFact {
   /** The UTC day it is due, or `null` for a task with no due date. */
   due: string | null
   overdue: boolean
+  /** Who it is assigned to, by name (AGL-3520). */
+  assignee?: string
+  /** What the task says beyond its title (AGL-3520). */
+  notes?: string
 }
 
 /** One deal, as a contact's or a company's facts report it. */
@@ -171,21 +191,50 @@ export interface CrmDealFact {
   expectedClose: string | null
 }
 
+/** One custom field's value, under the label the org gave the field (AGL-3520). */
+export interface CrmCustomFact {
+  label: string
+  value: string
+}
+
+/** One product on a deal (AGL-3520). */
+export interface CrmProductFact {
+  name: string
+  quantity: number
+  unitAmount: string | null
+}
+
 export interface CrmContactFacts {
   record: 'contact'
   name: string
-  /**
-   * How to address the person, and where they sit (AGL-3515). Their
-   * birthdate, their phones, their other address, their assistant and
-   * their manager never leave — see "What never leaves".
-   */
   salutation: string
+  firstName: string
+  lastName: string
+  /** Every address the person is reached at: the canonical one first (AGL-3520). */
+  emails: string[]
+  phone: string
+  mobilePhone: string
+  homePhone: string
+  otherPhone: string
+  fax: string
   jobTitle: string
   department: string
+  /** A `YYYY-MM-DD` day, or `''`. */
+  birthdate: string
+  assistant: string
+  assistantPhone: string
+  /** The name of the contact the person reports to (AGL-3515). */
+  reportsTo: string
+  mailingAddress: string
+  otherAddress: string
   /** They asked not to be phoned — a fact an assistant drafting a next step must respect. */
   doNotCall: boolean
   company: string
   lifecycleStage: string
+  leadSource: string
+  owner: string
+  /** Whether the person agreed to marketing email from this site, and since when. */
+  marketingConsent: string
   tags: string[]
   /** The captures that met the person: Form, Booking, Customer. */
   sources: string[]
@@ -193,6 +242,7 @@ export interface CrmContactFacts {
   lastPurchase: string | null
   since: string | null
   lastEmailEngagement: string | null
+  custom: CrmCustomFact[]
   notes: string
   timeline: CrmTimelineFact[]
   openTasks: CrmTaskFact[]
@@ -203,17 +253,30 @@ export interface CrmCompanyFacts {
   record: 'company'
   name: string
   domain: string
+  website: string
+  phone: string
+  fax: string
   industry: string
-  /** Salesforce's Account fields (AGL-3514), read-only: what the account is, not how to reach it. */
+  /** Salesforce's Account fields (AGL-3514). */
   type: string
   rating: string
   ownership: string
   accountSource: string
   employees: number | null
   annualRevenue: string | null
+  accountNumber: string
+  site: string
+  tickerSymbol: string
+  sicCode: string
+  billingAddress: string
+  shippingAddress: string
+  /** The name of the company this one sits under. */
+  parentCompany: string
+  owner: string
   tags: string[]
   people: number
   since: string | null
+  custom: CrmCustomFact[]
   notes: string
   timeline: CrmTimelineFact[]
   openTasks: CrmTaskFact[]
@@ -253,11 +316,15 @@ export interface CrmDealFacts {
   probability: number | null
   /** The forecast category's label. */
   forecastCategory: string
+  /** The campaign the deal is credited to, by name (AGL-3520). */
+  campaign: string
   /** The name of the person the deal is with, as the deal copied it. */
   contact: string
   company: string
-  products: number
+  owner: string
+  products: CrmProductFact[]
   since: string | null
+  custom: CrmCustomFact[]
   notes: string
   timeline: CrmTimelineFact[]
   openTasks: CrmTaskFact[]
@@ -268,10 +335,17 @@ export interface CrmLeadFacts {
   name: string
   /*
    * The lead's own profile and Salesforce's standard lead fields
-   * (AGL-3231, AGL-3513), read-only: who the person is and what the
-   * account is, not how to reach them.
+   * (AGL-3231, AGL-3513), with how to reach the person (AGL-3520).
    */
   salutation: string
+  firstName: string
+  lastName: string
+  email: string
+  phone: string
+  mobilePhone: string
+  fax: string
+  website: string
+  address: string
   company: string
   jobTitle: string
   leadSource: string
@@ -282,6 +356,11 @@ export interface CrmLeadFacts {
   /** They asked not to be phoned — a fact an assistant drafting a next step must respect. */
   doNotCall: boolean
   status: string
+  owner: string
+  /** The campaigns the lead is filed under, by name. */
+  campaigns: string[]
+  marketingConsent: string
+  tags: string[]
   /** Where the lead was captured: Form, Booking, Sign-up, Import. */
   sources: string[]
   captures: number
@@ -290,8 +369,10 @@ export interface CrmLeadFacts {
   assigned: boolean
   converted: boolean
   unqualifiedReason: string
+  custom: CrmCustomFact[]
   notes: string
   timeline: CrmTimelineFact[]
+  openTasks: CrmTaskFact[]
 }
 
 export type CrmRecordFacts = CrmContactFacts | CrmCompanyFacts | CrmDealFacts | CrmLeadFacts
@@ -312,6 +393,19 @@ export interface CrmImportFacts {
   record: 'import'
   collection: CrmImportFactsCollection
   fields: CrmImportFieldFact[]
+}
+
+/**
+ * What the server half resolves for a builder, because a fact names a
+ * related record or a person and the builder reads no document: a team
+ * member's display name, the record's custom field definitions, and the
+ * names of the records it points at.
+ */
+export interface CrmFactsNames {
+  /** A team member's display name for a uid; `''` when the roster has none. */
+  member?: (uid: string) => string
+  /** The org's custom field definitions, every object's; each builder takes its own. */
+  customFields?: ReadonlyArray<Partial<ContactFieldDefinition>>
 }
 
 const DAY_MS = 86_400_000
@@ -348,42 +442,83 @@ export function crmFactMoney(cents: unknown, currency: unknown): string | null {
   return `${code} ${(cents / 100).toFixed(2)}`
 }
 
-/** An email address written inside free text. */
-const EMAIL_IN_PROSE = /[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g
-/** A run of digits and the separators a phone number is written with. */
-const DIGIT_RUN_IN_PROSE = /\+?\(?\d[\d\s().-]{7,}\d/g
-/** Calendar days, which a run of digits may be and a phone number is not. */
-const DAYS_ONLY = /^\d{4}-\d{2}-\d{2}(?:\s+\d{4}-\d{2}-\d{2})*$/
+/** A postal address on one line, its parts in the order an envelope writes them; `''` for none. */
+export function crmFactAddress(address: Partial<AglynPostalAddress> | null | undefined): string {
+  if (!address || typeof address !== 'object') return ''
+  const part = (value: unknown) => crmFactText(value, CRM_FACTS_LABEL_MAX)
+  const cityLine = [part(address.city), [part(address.state), part(address.postalCode)].filter(Boolean).join(' ')]
+    .filter(Boolean)
+    .join(', ')
+  return [part(address.line1), part(address.line2), cityLine, part(address.country)].filter(Boolean).join(', ')
+}
 
-export const CRM_FACTS_EMAIL_PLACEHOLDER = '[email address]'
-export const CRM_FACTS_PHONE_PLACEHOLDER = '[phone number]'
+/** A marketing basis as a sentence's worth: opted in (and since when), declined, or nothing recorded. */
+export function crmFactConsent(record: Record<string, unknown>, group: ConsentGroup | null | undefined): string {
+  if (!group) return ''
+  const consent = readMarketingBasis(record, group)
+  if (consent.basis === 'granted') {
+    const since = crmFactDay(consent.basisAtMs)
+    return since ? `opted in on ${since}` : 'opted in'
+  }
+  return consent.basis === 'declined' ? 'declined' : 'none recorded'
+}
+
+/** A custom value as text: a day for a date, yes or no for a checkbox. */
+function customValueText(value: unknown, type: unknown): string {
+  if (value === null || value === undefined || value === '') return ''
+  if (typeof value === 'boolean') return value ? 'yes' : 'no'
+  if (type === 'date') return crmFactDay(typeof value === 'string' ? Date.parse(value) : value) ?? crmFactText(String(value), CRM_FACTS_TEXT_MAX)
+  if (typeof value === 'number') return Number.isFinite(value) ? String(value) : ''
+  return crmFactText(String(value), CRM_FACTS_TEXT_MAX)
+}
 
 /**
- * Free text the team wrote, as {@link crmFactText} reports it, with every
- * email address, and every run of ten digits or more that is not a list of
- * days, replaced by a placeholder. The fields that hold an address or a number
- * are never reported, and this keeps one typed into a note from leaving
- * either. Replaced before the cut, so a cut never halves an address into
- * something unrecognized.
+ * A record's custom values under their fields' labels, in the fields'
+ * order — the active fields of `object` first, then a value whose field was
+ * retired or never defined, under its key.
  */
-export function crmFactProse(value: unknown, max: number): string {
-  if (typeof value !== 'string') return ''
-  const scrubbed = value
-    .replace(EMAIL_IN_PROSE, CRM_FACTS_EMAIL_PLACEHOLDER)
-    .replace(DIGIT_RUN_IN_PROSE, (run) =>
-      DAYS_ONLY.test(run.trim()) || run.replace(/\D/g, '').length < 10 ? run : CRM_FACTS_PHONE_PLACEHOLDER,
+export function crmCustomFacts(
+  custom: unknown,
+  object: CrmFieldObject,
+  definitions: ReadonlyArray<Partial<ContactFieldDefinition>> = [],
+): CrmCustomFact[] {
+  if (!custom || typeof custom !== 'object' || Array.isArray(custom)) return []
+  const values = custom as Record<string, unknown>
+  const own = definitions
+    .filter((field) => field.key && fieldDefinitionObject(field as ContactFieldDefinition) === object)
+    .sort(
+      (a, b) =>
+        Number(Boolean(a.retiredAt)) - Number(Boolean(b.retiredAt)) ||
+        Number(a.order ?? 0) - Number(b.order ?? 0) ||
+        String(a.key).localeCompare(String(b.key)),
     )
-  return crmFactText(scrubbed, max)
+  const facts: CrmCustomFact[] = []
+  const seen = new Set<string>()
+  for (const field of own) {
+    const key = String(field.key)
+    seen.add(key)
+    const value = customValueText(values[key], field.type)
+    if (value) facts.push({ label: crmFactText(field.label, CRM_FACTS_LABEL_MAX) || key, value })
+  }
+  for (const key of Object.keys(values).sort()) {
+    if (seen.has(key)) continue
+    const value = customValueText(values[key], undefined)
+    if (value) facts.push({ label: key, value })
+  }
+  return facts.slice(0, CRM_FACTS_CUSTOM_FIELDS_MAX)
 }
 
 function tagsOf(value: unknown): string[] {
   return Array.isArray(value)
     ? value
-        .map((tag) => crmFactProse(tag, 40))
+        .map((tag) => crmFactText(tag, 40))
         .filter(Boolean)
         .slice(0, CRM_FACTS_TAGS_MAX)
     : []
 }
+
+const memberName = (names: CrmFactsNames | undefined, uid: unknown): string =>
+  typeof uid === 'string' && uid ? crmFactText(names?.member?.(uid) ?? '', CRM_FACTS_LABEL_MAX) : ''
 
 /** A logged activity as a timeline entry. */
 export function crmActivityFact(activity: Partial<CrmActivity>): CrmTimelineFact | null {
@@ -393,11 +528,15 @@ export function crmActivityFact(activity: Partial<CrmActivity>): CrmTimelineFact
   const fact: CrmTimelineFact = { on, kind: CRM_ACTIVITY_KIND_LABELS[kind] }
   const direction = crmActivityDirection(kind, activity.direction)
   if (direction) fact.direction = direction
-  const subject = crmFactProse(activity.subject ?? activity.threadSubject, CRM_FACTS_LABEL_MAX)
+  const from = crmFactText(activity.from, CRM_FACTS_LABEL_MAX)
+  if (from) fact.from = from
+  const to = crmFactText(activity.to, CRM_FACTS_LABEL_MAX)
+  if (to) fact.to = to
+  const subject = crmFactText(activity.subject ?? activity.threadSubject, CRM_FACTS_LABEL_MAX)
   if (subject) fact.subject = subject
-  const text = crmFactProse(activity.body, CRM_FACTS_TEXT_MAX)
+  const text = crmFactText(activity.body, CRM_FACTS_TEXT_MAX)
   if (text) fact.text = text
-  const outcome = crmFactProse(activity.outcome, CRM_FACTS_LABEL_MAX)
+  const outcome = crmFactText(activity.outcome, CRM_FACTS_LABEL_MAX)
   if (outcome) fact.outcome = outcome
   if (kind === 'email' && isCrmEmailDeliveryState(activity.deliveryState)) {
     fact.delivery = CRM_EMAIL_DELIVERY_STATE_LABELS[activity.deliveryState]
@@ -411,7 +550,7 @@ export function crmInteractionFact(interaction: Partial<ContactInteraction>): Cr
   if (!on) return null
   const kind =
     interaction.type && CONTACT_SOURCE_LABELS[interaction.type] ? CONTACT_SOURCE_LABELS[interaction.type] : 'Capture'
-  const text = crmFactProse(interaction.summary, CRM_FACTS_TEXT_MAX)
+  const text = crmFactText(interaction.summary, CRM_FACTS_TEXT_MAX)
   return text ? { on, kind, text } : { on, kind }
 }
 
@@ -432,32 +571,42 @@ export function crmTimelineFacts(
 }
 
 /** The open tasks among `tasks`, soonest due first, undated last. */
-export function crmOpenTaskFacts(tasks: ReadonlyArray<Partial<CrmTask>>, nowMs: number): CrmTaskFact[] {
+export function crmOpenTaskFacts(
+  tasks: ReadonlyArray<Partial<CrmTask>>,
+  nowMs: number,
+  names?: CrmFactsNames,
+): CrmTaskFact[] {
   return tasks
     .filter((task) => task.status !== 'done' && crmFactText(task.title, CRM_FACTS_LABEL_MAX))
     .map((task, index) => ({ task, index, due: crmFactMillis(task.dueAtMs) }))
     .sort((a, b) => (a.due ?? Number.POSITIVE_INFINITY) - (b.due ?? Number.POSITIVE_INFINITY) || a.index - b.index)
     .slice(0, CRM_FACTS_TASKS_MAX)
-    .map(({ task, due }) => ({
-      title: crmFactProse(task.title, CRM_FACTS_LABEL_MAX),
-      kind:
-        crmFactProse(task.typeLabel, CRM_FACTS_LABEL_MAX) ||
-        (task.kind && CRM_TASK_KIND_LABELS[task.kind] ? CRM_TASK_KIND_LABELS[task.kind] : 'To-do'),
-      priority: task.priority === 'high' || task.priority === 'low' ? task.priority : 'normal',
-      ...(crmFactProse(task.statusLabel, CRM_FACTS_LABEL_MAX)
-        ? { status: crmFactProse(task.statusLabel, CRM_FACTS_LABEL_MAX) }
-        : {}),
-      due: due === null ? null : crmFactDay(due),
-      // Overdue by the UTC day: a task due today is not overdue until tomorrow.
-      overdue: due !== null && Math.floor(due / DAY_MS) < Math.floor(nowMs / DAY_MS),
-    }))
+    .map(({ task, due }) => {
+      const assignee = memberName(names, task.assigneeUid)
+      const notes = crmFactText(task.notes, CRM_FACTS_TEXT_MAX)
+      return {
+        title: crmFactText(task.title, CRM_FACTS_LABEL_MAX),
+        kind:
+          crmFactText(task.typeLabel, CRM_FACTS_LABEL_MAX) ||
+          (task.kind && CRM_TASK_KIND_LABELS[task.kind] ? CRM_TASK_KIND_LABELS[task.kind] : 'To-do'),
+        priority: task.priority === 'high' || task.priority === 'low' ? task.priority : 'normal',
+        ...(crmFactText(task.statusLabel, CRM_FACTS_LABEL_MAX)
+          ? { status: crmFactText(task.statusLabel, CRM_FACTS_LABEL_MAX) }
+          : {}),
+        due: due === null ? null : crmFactDay(due),
+        // Overdue by the UTC day: a task due today is not overdue until tomorrow.
+        overdue: due !== null && Math.floor(due / DAY_MS) < Math.floor(nowMs / DAY_MS),
+        ...(assignee ? { assignee } : {}),
+        ...(notes ? { notes } : {}),
+      }
+    })
 }
 
 /** One deal, with its stage named by the pipeline it is in. */
 export function crmDealFact(deal: Partial<CrmDeal>, pipeline: CrmPipeline | null | undefined): CrmDealFact {
   const stage = dealStageById(pipeline ?? undefined, String(deal.stageId ?? ''))
   return {
-    title: crmFactProse(deal.title, CRM_FACTS_LABEL_MAX),
+    title: crmFactText(deal.title, CRM_FACTS_LABEL_MAX),
     stage: crmFactText(stage?.name, CRM_FACTS_LABEL_MAX),
     status: deal.status === 'won' || deal.status === 'lost' ? deal.status : 'open',
     amount: crmFactMoney(deal.amountCents, deal.currency),
@@ -482,6 +631,8 @@ export function crmDealFacts(
     .map(({ deal }) => crmDealFact(deal, pipelines.get(String(deal.pipelineId ?? ''))))
 }
 
+const label = (value: unknown) => crmFactText(value, CRM_FACTS_LABEL_MAX)
+
 export interface ContactFactsInput {
   row: Record<string, unknown>
   /** The holder whose facet the person is read through. */
@@ -491,39 +642,64 @@ export interface ContactFactsInput {
   deals: ReadonlyArray<Partial<CrmDeal>>
   pipelines: ReadonlyMap<string, CrmPipeline>
   nowMs: number
+  names?: CrmFactsNames
+  /** The name of the contact the holder's reports-to names, when the reader could see it. */
+  reportsToName?: string
 }
 
 export function contactFacts(input: ContactFactsInput): CrmContactFacts {
-  const { row, group } = input
+  const { row, group, names } = input
   const facet = readContactFacet(row, group.groupId)
   const sources = Object.entries(facet.sources ?? {})
     .filter(([, on]) => on === true)
     .map(([source]) => CONTACT_SOURCE_LABELS[source as keyof typeof CONTACT_SOURCE_LABELS] ?? '')
     .filter(Boolean)
   const interactions = interactionsForGroup(facet.interactions, group.hostIds)
+  const alternates = Array.isArray(row[CONTACT_ALTERNATE_EMAILS_FIELD])
+    ? (row[CONTACT_ALTERNATE_EMAILS_FIELD] as unknown[])
+    : []
+  const emails = [...new Set([row['email'], ...alternates].map(label).filter(Boolean))].slice(0, CRM_FACTS_LIST_MAX)
   return {
     record: 'contact',
-    name: crmFactProse(contactDisplayName(row, group.groupId), CRM_FACTS_LABEL_MAX),
-    salutation: crmFactProse(facet.salutation, CRM_FACTS_LABEL_MAX),
-    jobTitle: crmFactProse(facet.jobTitle, CRM_FACTS_LABEL_MAX),
-    department: crmFactProse(facet.department, CRM_FACTS_LABEL_MAX),
+    name: label(contactDisplayName(row, group.groupId)),
+    salutation: label(facet.salutation),
+    firstName: label(facet.firstName),
+    lastName: label(facet.lastName),
+    emails,
+    phone: label(facet.phone ?? row['phone']),
+    mobilePhone: label(facet.mobilePhone),
+    homePhone: label(facet.homePhone),
+    otherPhone: label(facet.otherPhone),
+    fax: label(facet.fax),
+    jobTitle: label(facet.jobTitle),
+    department: label(facet.department),
+    birthdate: label(facet.birthdate),
+    assistant: label(facet.assistantName),
+    assistantPhone: label(facet.assistantPhone),
+    reportsTo: label(input.reportsToName),
+    mailingAddress: crmFactAddress(facet.address),
+    otherAddress: crmFactAddress(facet.otherAddress),
     doNotCall: facet.doNotCall === true,
-    company: crmFactProse(facet.companyName, CRM_FACTS_LABEL_MAX),
+    company: label(facet.companyName),
     lifecycleStage: isContactLifecycleStage(facet.lifecycleStage)
       ? CONTACT_LIFECYCLE_STAGE_LABELS[facet.lifecycleStage]
       : '',
+    leadSource: label(facet.leadSource),
+    owner: memberName(names, facet.ownerUid),
+    marketingConsent: crmFactConsent(row, group),
     tags: tagsOf(facet.tags),
     sources: [...new Set(sources)].sort(),
     orders: typeof facet.ordersCount === 'number' && facet.ordersCount > 0 ? Math.floor(facet.ordersCount) : 0,
     lastPurchase: crmFactDay(facet.lastPurchaseAtMs),
     since: crmFactDay(row['createdAt']),
     lastEmailEngagement: crmFactDay(facet.lastEmailEngagementAtMs),
-    notes: crmFactProse(facet.notes, CRM_FACTS_NOTES_MAX),
+    custom: crmCustomFacts(facet.custom, 'contact', names?.customFields),
+    notes: crmFactText(facet.notes, CRM_FACTS_NOTES_MAX),
     timeline: crmTimelineFacts([
       ...input.activities.map((activity) => ({ atMs: activity.atMs, fact: crmActivityFact(activity) })),
       ...interactions.map((interaction) => ({ atMs: interaction.atMs, fact: crmInteractionFact(interaction) })),
     ]),
-    openTasks: crmOpenTaskFacts(input.tasks, input.nowMs),
+    openTasks: crmOpenTaskFacts(input.tasks, input.nowMs, names),
     deals: crmDealFacts(input.deals, input.pipelines),
   }
 }
@@ -535,35 +711,50 @@ export interface CompanyFactsInput {
   deals: ReadonlyArray<Partial<CrmDeal>>
   pipelines: ReadonlyMap<string, CrmPipeline>
   nowMs: number
+  names?: CrmFactsNames
+  /** The parent company's name, when the reader could see it. */
+  parentCompanyName?: string
 }
 
 export function companyFacts(input: CompanyFactsInput): CrmCompanyFacts {
-  const { company } = input
+  const { company, names } = input
   return {
     record: 'company',
-    name: crmFactProse(company.name, CRM_FACTS_LABEL_MAX),
-    domain: crmFactText(company.domain, CRM_FACTS_LABEL_MAX),
-    industry: crmFactProse(company.industry, CRM_FACTS_LABEL_MAX),
-    type: crmFactProse(company.type, CRM_FACTS_LABEL_MAX),
-    rating: crmFactProse(company.rating, CRM_FACTS_LABEL_MAX),
-    ownership: crmFactProse(company.ownership, CRM_FACTS_LABEL_MAX),
-    accountSource: crmFactProse(company.accountSource, CRM_FACTS_LABEL_MAX),
+    name: label(company.name),
+    domain: label(company.domain),
+    website: label(company.website),
+    phone: label(company.phone),
+    fax: label(company.fax),
+    industry: label(company.industry),
+    type: label(company.type),
+    rating: label(company.rating),
+    ownership: label(company.ownership),
+    accountSource: label(company.accountSource),
     employees:
       typeof company.numberOfEmployees === 'number' && company.numberOfEmployees >= 0
         ? Math.floor(company.numberOfEmployees)
         : null,
     annualRevenue: crmFactMoney(company.annualRevenueCents, company.currency),
+    accountNumber: label(company.accountNumber),
+    site: label(company.site),
+    tickerSymbol: label(company.tickerSymbol),
+    sicCode: label(company.sicCode),
+    billingAddress: crmFactAddress(company.address),
+    shippingAddress: crmFactAddress(company.shippingAddress),
+    parentCompany: label(input.parentCompanyName),
+    owner: memberName(names, company.ownerUid),
     tags: tagsOf(company.tags),
     people:
       typeof company.contactsCount === 'number' && company.contactsCount > 0
         ? Math.floor(company.contactsCount)
         : 0,
     since: crmFactDay(company.createdAt),
-    notes: crmFactProse(company.notes, CRM_FACTS_NOTES_MAX),
+    custom: crmCustomFacts(company.custom, 'company', names?.customFields),
+    notes: crmFactText(company.notes, CRM_FACTS_NOTES_MAX),
     timeline: crmTimelineFacts(
       input.activities.map((activity) => ({ atMs: activity.atMs, fact: crmActivityFact(activity) })),
     ),
-    openTasks: crmOpenTaskFacts(input.tasks, input.nowMs),
+    openTasks: crmOpenTaskFacts(input.tasks, input.nowMs, names),
     deals: crmDealFacts(input.deals, input.pipelines),
   }
 }
@@ -574,10 +765,13 @@ export interface DealFactsInput {
   activities: ReadonlyArray<Partial<CrmActivity>>
   tasks: ReadonlyArray<Partial<CrmTask>>
   nowMs: number
+  names?: CrmFactsNames
+  /** The name of the campaign the deal is credited to, when the reader could see it. */
+  campaignName?: string
 }
 
 export function dealFacts(input: DealFactsInput): CrmDealFacts {
-  const { deal, pipeline } = input
+  const { deal, pipeline, names } = input
   const summary = crmDealFact(deal, pipeline)
   const stages = [...(pipeline?.stages ?? [])]
     .sort((a, b) => Number(a.order ?? 0) - Number(b.order ?? 0))
@@ -589,6 +783,13 @@ export function dealFacts(input: DealFactsInput): CrmDealFacts {
       forecastCategory: CRM_FORECAST_CATEGORY_LABELS[dealStageForecastCategory(stage)],
     }))
   const stage = dealStageById(pipeline ?? undefined, String(deal.stageId ?? ''))
+  const products = (Array.isArray(deal.lineItems) ? deal.lineItems : [])
+    .slice(0, CRM_FACTS_PRODUCTS_MAX)
+    .map((item) => ({
+      name: label(item?.name),
+      quantity: Number(item?.quantity) || 0,
+      unitAmount: crmFactMoney(item?.unitAmountCents, item?.currency ?? deal.currency),
+    }))
   return {
     record: 'deal',
     title: summary.title,
@@ -600,21 +801,24 @@ export function dealFacts(input: DealFactsInput): CrmDealFacts {
     amount: summary.amount,
     expectedClose: summary.expectedClose,
     inStageSince: crmFactDay(deal.stageChangedAtMs),
-    lostReason: crmFactProse(deal.lostReason, CRM_FACTS_LABEL_MAX),
-    type: crmFactText(deal.type, CRM_FACTS_LABEL_MAX),
-    leadSource: crmFactText(deal.leadSource, CRM_FACTS_LABEL_MAX),
-    nextStep: crmFactProse(deal.nextStep, DEAL_NEXT_STEP_MAX),
+    lostReason: label(deal.lostReason),
+    type: label(deal.type),
+    leadSource: label(deal.leadSource),
+    nextStep: crmFactText(deal.nextStep, DEAL_NEXT_STEP_MAX),
     probability: dealProbability(deal, stage),
     forecastCategory: CRM_FORECAST_CATEGORY_LABELS[dealForecastCategory(deal, stage)],
-    contact: crmFactProse(deal.contactName, CRM_FACTS_LABEL_MAX),
-    company: crmFactProse(deal.companyName, CRM_FACTS_LABEL_MAX),
-    products: Array.isArray(deal.lineItems) ? deal.lineItems.length : 0,
+    campaign: label(input.campaignName),
+    contact: label(deal.contactName),
+    company: label(deal.companyName),
+    owner: memberName(names, deal.ownerUid),
+    products,
     since: crmFactDay(deal.createdAt),
-    notes: crmFactProse(deal.notes, CRM_FACTS_NOTES_MAX),
+    custom: crmCustomFacts(deal.custom, 'deal', names?.customFields),
+    notes: crmFactText(deal.notes, CRM_FACTS_NOTES_MAX),
     timeline: crmTimelineFacts(
       input.activities.map((activity) => ({ atMs: activity.atMs, fact: crmActivityFact(activity) })),
     ),
-    openTasks: crmOpenTaskFacts(input.tasks, input.nowMs),
+    openTasks: crmOpenTaskFacts(input.tasks, input.nowMs, names),
   }
 }
 
@@ -630,12 +834,20 @@ function leadSourceFact(source: string): string {
 export interface LeadFactsInput {
   lead: Record<string, unknown>
   activities: ReadonlyArray<Partial<CrmActivity>>
+  /** The tasks filed against the lead (AGL-3520); none when the reader read none. */
+  tasks?: ReadonlyArray<Partial<CrmTask>>
+  nowMs?: number
   /** The org's Lead status list, whose label the status fact reads (AGL-3512); the standard ones without it. */
   leadStatuses?: CrmPicklist
+  /** The site's consent group, which the lead's marketing consent is read under. */
+  group?: ConsentGroup | null
+  names?: CrmFactsNames
+  /** The names of the campaigns the lead is filed under, as the reader resolved them. */
+  campaignNames?: readonly string[]
 }
 
 export function leadFacts(input: LeadFactsInput): CrmLeadFacts {
-  const { lead, leadStatuses } = input
+  const { lead, leadStatuses, names } = input
   const rawSources = Array.isArray(lead['sources'])
     ? lead['sources']
     : typeof lead['source'] === 'string'
@@ -644,13 +856,21 @@ export function leadFacts(input: LeadFactsInput): CrmLeadFacts {
   const captures = Number(lead['submissionCount'])
   return {
     record: 'lead',
-    name: crmFactProse(lead['name'], CRM_FACTS_LABEL_MAX),
-    salutation: crmFactProse(lead['salutation'], CRM_FACTS_LABEL_MAX),
-    company: crmFactProse(lead['company'], CRM_FACTS_LABEL_MAX),
-    jobTitle: crmFactProse(lead['jobTitle'], CRM_FACTS_LABEL_MAX),
-    leadSource: crmFactText(lead['leadSource'], CRM_FACTS_LABEL_MAX),
-    industry: crmFactText(lead['industry'], CRM_FACTS_LABEL_MAX),
-    rating: crmFactText(lead['rating'], CRM_FACTS_LABEL_MAX),
+    name: label(lead['name']),
+    salutation: label(lead['salutation']),
+    firstName: label(lead['firstName']),
+    lastName: label(lead['lastName']),
+    email: label(lead['email']),
+    phone: label(lead['phone']),
+    mobilePhone: label(lead['mobilePhone']),
+    fax: label(lead['fax']),
+    website: label(lead['website']),
+    address: crmFactAddress(lead['address'] as Partial<AglynPostalAddress> | null),
+    company: label(lead['company']),
+    jobTitle: label(lead['jobTitle']),
+    leadSource: label(lead['leadSource']),
+    industry: label(lead['industry']),
+    rating: label(lead['rating']),
     employees:
       typeof lead['numberOfEmployees'] === 'number' && lead['numberOfEmployees'] >= 0
         ? Math.floor(lead['numberOfEmployees'])
@@ -658,17 +878,23 @@ export function leadFacts(input: LeadFactsInput): CrmLeadFacts {
     annualRevenue: crmFactMoney(lead['annualRevenueCents'], lead['currency']),
     doNotCall: lead['doNotCall'] === true,
     status: crmLeadStatusLabel(lead as { status?: never; statusLabel?: string }, leadStatuses),
+    owner: memberName(names, lead['ownerUid']),
+    campaigns: (input.campaignNames ?? []).map(label).filter(Boolean).slice(0, CRM_FACTS_LIST_MAX),
+    marketingConsent: crmFactConsent(lead, input.group),
+    tags: tagsOf(lead['tags']),
     sources: [...new Set(rawSources.map((source) => leadSourceFact(String(source))))].sort(),
     captures: Number.isFinite(captures) && captures > 0 ? Math.floor(captures) : 0,
     firstSeen: crmFactDay(lead['firstSeenAtMs']),
     lastSeen: crmFactDay(lead['lastSeenAtMs']),
     assigned: typeof lead['ownerUid'] === 'string' && lead['ownerUid'] !== '',
     converted: typeof lead['convertedContactId'] === 'string' && lead['convertedContactId'] !== '',
-    unqualifiedReason: crmFactProse(lead['unqualifiedReason'], CRM_FACTS_LABEL_MAX),
-    notes: crmFactProse(lead['notes'], CRM_FACTS_NOTES_MAX),
+    unqualifiedReason: label(lead['unqualifiedReason']),
+    custom: crmCustomFacts(lead['custom'], 'lead', names?.customFields),
+    notes: crmFactText(lead['notes'], CRM_FACTS_NOTES_MAX),
     timeline: crmTimelineFacts(
       input.activities.map((activity) => ({ atMs: activity.atMs, fact: crmActivityFact(activity) })),
     ),
+    openTasks: crmOpenTaskFacts(input.tasks ?? [], input.nowMs ?? Date.now(), names),
   }
 }
 

@@ -2800,14 +2800,21 @@ from the job, and the step writes no CRM record.
   holds `data.manage`; the plan carries the CRM; and the record, with every
   activity, task and deal hanging off it, is visible to the site. It reports
   the facts its builders list (`libs/plugins/crm/src/lib/model/record-facts.ts`),
-  which never include an email address, a phone number, a postal address,
-  consent, a custom field value, a team member or a record id. Text a person
-  wrote into the record (a name, a job title, a tag, notes, a logged activity,
-  a capture's summary, a task's or a deal's title, a reason) goes as written,
-  except that an email address or a phone number inside it is replaced by a
-  placeholder first (`crmFactProse`); a postal address typed into a note is
-  not recognized. The step writes into a prompt only the facts it names,
-  whatever else a reader reports.
+  which since AGL-3520 are the WHOLE record as the CRM shows it: every standard
+  field, every email address, phone number and postal address, birthdate,
+  assistant, the reports-to contact, parent company and campaign by name, the
+  owner and task assignees by display name, the marketing consent, picklist
+  labels, and the custom field values under their labels (definitions read
+  once per record), with notes, newest timeline entries, open tasks and deals.
+  Text a person wrote goes as written. Still never reported: an authentication
+  token, an account identifier (a uid) or a record id other than a pipeline
+  stage's, which a stage proposal must name. The step writes every fact a
+  reader reports (`aiCrmFactsLines`), and fits an oversized record to
+  `AI_CRM_FACTS_MAX_CHARS` by cutting its long texts, never a field
+  (`aiCrmFitFacts`). The disclosure is open-ended to match: the catalog's
+  Anthropic row says the opened record is sent "with all of its standard and
+  custom fields, including contact details, notes, timeline and related
+  records".
 - **Why a seam, and not a contract in either plugin.** The package map forbids
   the AI plugin to import the CRM and the CRM to import the AI plugin, and keeps
   CRM shapes out of the core. `plugin-resource-drafts` is the seam a plugin

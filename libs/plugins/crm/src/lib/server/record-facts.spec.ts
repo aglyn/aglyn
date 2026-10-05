@@ -92,6 +92,20 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   memberHasOrgPermission: async (_orgId: string, member: Data, permission: string) =>
     permission === 'data.manage' && ['owner', 'admin', 'editor'].includes(String(member['role'])),
   consentGroupForSite: async (hostId: string, org: Data) => mockConsentGroupForHost(org, hostId),
+  // The roster the facts name a team member from (AGL-3520).
+  listOrgMembers: async (orgId: string) =>
+    [...mockMembers.entries()]
+      .filter(([key]) => key.startsWith(`${orgId}:`))
+      .map(([key, member]) => ({ $id: key.slice(orgId.length + 1), ...member })),
+}))
+
+// The campaigns a deal or a lead names, by name (AGL-3520).
+jest.mock('@aglyn/tenant-data-admin/server/org-containers', () => ({
+  readOrgContainers: async (_firestore: unknown, _kind: string, orgId: string, ids: string[]) =>
+    ids.map((id) => {
+      const data = mockDocs.get(`orgs/${orgId}/emailCampaigns/${id}`)
+      return { id, name: String(data?.['name'] ?? ''), live: Boolean(data) }
+    }),
 }))
 
 import { consentGroupForHost as mockConsentGroupForHost } from '@aglyn/aglyn/server'
@@ -126,8 +140,26 @@ function seed() {
   mockDocs.set('orgs/org-1/contacts/contact-1', {
     email: 'jane@example.com',
     visibleTo: ['host:host-1'],
-    facets: { 'host-1': { name: 'Jane Doe', jobTitle: 'Facilities manager', sources: { form: true }, interactions: [] } },
+    facets: {
+      'host-1': {
+        name: 'Jane Doe',
+        jobTitle: 'Facilities manager',
+        sources: { form: true },
+        interactions: [],
+        // The whole record (AGL-3520): an owner, a manager and a custom value.
+        ownerUid: 'owner',
+        reportsToContactId: 'contact-3',
+        custom: { tier: 'Gold' },
+      },
+    },
   })
+  mockDocs.set('orgs/org-1/contacts/contact-3', {
+    email: 'boss@example.com',
+    visibleTo: ['host:host-1'],
+    facets: { 'host-1': { name: 'Lee Boss', sources: {}, interactions: [] } },
+  })
+  mockDocs.set('orgs/org-1/contactFields/f-tier', { key: 'tier', label: 'Tier', type: 'text', order: 0, visibleTo: ['org'] })
+  mockMembers.set('org-1:owner', { role: 'owner', displayName: 'Sam Owner' })
   mockDocs.set('orgs/org-1/contacts/contact-2', {
     email: 'kim@example.com',
     visibleTo: ['host:host-2'],
@@ -224,7 +256,17 @@ describe('the CRM’s readers on the record-facts seam (AGL-2917)', () => {
       },
     })
     expect(JSON.stringify(result)).not.toContain('Host two only.')
-    expect(JSON.stringify(result)).not.toContain('jane@example.com')
+    // The whole record (AGL-3520): the address, the owner and the manager by
+    // name, a custom value under its label — and never a uid or a record id.
+    expect(result).toMatchObject({
+      facts: {
+        emails: ['jane@example.com'],
+        owner: 'Sam Owner',
+        reportsTo: 'Lee Boss',
+        custom: [{ label: 'Tier', value: 'Gold' }],
+      },
+    })
+    expect(JSON.stringify(result)).not.toMatch(/contact-3|:"owner"|f-tier/)
   })
 
   it('reads every row at the organization level, for an org-wide member only', async () => {

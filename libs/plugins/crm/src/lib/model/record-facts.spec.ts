@@ -21,8 +21,9 @@ import {
   companyFacts,
   contactFacts,
   crmActivityFact,
+  crmCustomFacts,
+  crmFactAddress,
   crmFactMoney,
-  crmFactProse,
   crmOpenTaskFacts,
   dealFacts,
   importFacts,
@@ -30,11 +31,12 @@ import {
 } from './record-facts'
 
 /**
- * What leaves the CRM when another plugin reads a record (AGL-2917). Every
- * fixture below carries the fields that must NEVER be reported — addresses,
- * phone numbers, consent, custom values, owners, ids — and the assertions
- * are on the whole facts object, so a field added to a builder shows up here
- * as a failure rather than as a quiet new data flow.
+ * What leaves the CRM when another plugin reads a record (AGL-2917): the
+ * WHOLE record since AGL-3520 — contact details, addresses, consent, custom
+ * values under their labels, the people and records it names by name — and
+ * still never an id. Every fixture carries ids, and the assertions are on the
+ * whole facts object, so a field added to a builder shows up here as a
+ * failure rather than as a quiet new data flow.
  */
 
 const NOW = Date.parse('2026-09-16T15:00:00.000Z')
@@ -60,30 +62,20 @@ const PIPELINE: CrmPipeline = {
   hostId: 'host-1',
 }
 
-const SECRET_WORDS = [
-  'jane@example.com',
-  'jane.alt@example.com',
-  '+15125550100',
-  'Congress Ave',
-  'owner-uid',
-  'assignee-uid',
-  'contact-7',
-  'company-3',
-  'secret custom value',
-  'sam@acme.test',
-  'Sam Teammate',
-  // A company's fax, shipping address and account number (AGL-3514).
-  '+15125550199',
-  'Dock Rd',
-  'ACCT-SECRET-1',
-  // Salesforce's standard contact fields that never leave (AGL-3515).
-  '1984-07-21',
-  '+15125550111',
-  '+15125550122',
-  'Oak Lane',
-  'Pat Assistant',
-  'manager-contact-9',
-]
+/** What never leaves: a uid or a record id, from any field that holds one. */
+const SECRET_WORDS = ['owner-uid', 'assignee-uid', 'contact-7', 'company-3', 'manager-contact-9', 'parent-co-1', 'p-1', 'lead-1', 'spring']
+
+/** The team and the org's custom fields, as the server half resolves them. */
+const NAMES = {
+  member: (uid: string) => ({ 'owner-uid': 'Sam Rep', 'assignee-uid': 'Alex Helper' })[uid] ?? '',
+  customFields: [
+    { key: 'budget', label: 'Budget', type: 'number' as const, order: 1, object: 'contact' as const },
+    { key: 'renewal', label: 'Renewal', type: 'date' as const, order: 0, object: 'contact' as const },
+    { key: 'terms', label: 'Payment terms', type: 'text' as const, order: 0, object: 'company' as const },
+    { key: 'po', label: 'PO number', type: 'text' as const, order: 0, object: 'deal' as const },
+    { key: 'territory', label: 'Territory', type: 'select' as const, order: 0, object: 'lead' as const },
+  ],
+}
 
 function expectNoSecrets(facts: unknown) {
   const text = JSON.stringify(facts)
@@ -113,7 +105,7 @@ describe('a contact’s facts', () => {
         lastPurchaseAtMs: day('2026-08-20'),
         lastEmailEngagementAtMs: day('2026-09-10'),
         notes: 'Prefers calls after 3pm.',
-        custom: { budget: 'secret custom value' },
+        custom: { budget: 25000, renewal: '2027-01-15', legacy: 'kept' },
         salutation: 'Ms.',
         firstName: 'Jane',
         lastName: 'Doe',
@@ -161,28 +153,55 @@ describe('a contact’s facts', () => {
       ],
       pipelines: new Map([['p-1', PIPELINE]]),
       nowMs: NOW,
+      names: NAMES,
+      reportsToName: 'Lee Manager',
     })
     expect(facts).toEqual({
       record: 'contact',
       name: 'Jane Doe',
       salutation: 'Ms.',
+      firstName: 'Jane',
+      lastName: 'Doe',
+      emails: ['jane@example.com', 'jane.alt@example.com'],
+      phone: '+15125550100',
+      mobilePhone: '+15125550111',
+      homePhone: '',
+      otherPhone: '',
+      fax: '+15125550122',
       jobTitle: 'Facilities manager',
       department: 'Facilities',
+      birthdate: '1984-07-21',
+      assistant: 'Pat Assistant',
+      assistantPhone: '',
+      reportsTo: 'Lee Manager',
+      mailingAddress: '100 Congress Ave, Austin',
+      otherAddress: '9 Oak Lane, Austin',
       doNotCall: true,
       company: 'Acme Roofing Supply',
       lifecycleStage: 'Opportunity',
+      leadSource: '',
+      owner: 'Sam Rep',
+      // The fixture's consent is in a shape no reader takes: nothing recorded.
+      marketingConsent: 'none recorded',
       tags: ['commercial', 'repeat'],
       sources: ['Booking', 'Form'],
       orders: 2,
       lastPurchase: '2026-08-20',
       since: '2026-03-02',
       lastEmailEngagement: '2026-09-10',
+      // Under each field's label, in the fields' order; a value with no field under its key.
+      custom: [
+        { label: 'Renewal', value: '2027-01-15' },
+        { label: 'Budget', value: '25000' },
+        { label: 'legacy', value: 'kept' },
+      ],
       notes: 'Prefers calls after 3pm.',
       timeline: [
         {
           on: '2026-09-12',
           kind: 'Email',
           direction: 'outbound',
+          to: 'jane@example.com',
           subject: 'Your inspection report',
           text: 'Attached is the report from Friday.',
           delivery: 'Opened',
@@ -191,13 +210,17 @@ describe('a contact’s facts', () => {
         // The booking on this site; the form on another site stays with that site.
         { on: '2026-09-05', kind: 'Booking', text: 'Booked "Roof inspection"' },
       ],
-      openTasks: [{ title: 'Send the warehouse quote', kind: 'Email', priority: 'high', due: '2026-09-15', overdue: true }],
+      openTasks: [
+        { title: 'Send the warehouse quote', kind: 'Email', priority: 'high', due: '2026-09-15', overdue: true, assignee: 'Alex Helper' },
+      ],
       deals: [
         { title: 'Warehouse re-roof', stage: 'Proposal sent', status: 'open', amount: 'USD 18450.00', expectedClose: '2026-10-01' },
       ],
     })
     expectNoSecrets(facts)
     expect(JSON.stringify(facts)).not.toContain('Quote request')
+    // The team member who logged an email is not a fact of the record.
+    expect(JSON.stringify(facts)).not.toContain('Sam Teammate')
   })
 
   it('reports the same bytes for the same records, and keeps a tie in the order the rows arrived', () => {
@@ -231,7 +254,7 @@ describe('a contact’s facts', () => {
 })
 
 describe('a company’s, a deal’s and a lead’s facts', () => {
-  it('reports a company without its phone, fax, addresses, account number, owner or custom values', () => {
+  it('reports a company whole: its phones, addresses, account fields, parent, owner and custom values (AGL-3520)', () => {
     const facts = companyFacts({
       company: {
         name: 'Acme Roofing Supply',
@@ -254,7 +277,8 @@ describe('a company’s, a deal’s and a lead’s facts', () => {
         tags: ['supplier'],
         contactsCount: 4,
         notes: 'Net 30.',
-        custom: { terms: 'secret custom value' },
+        custom: { terms: 'Net 30' },
+        parentCompanyId: 'parent-co-1',
         createdAt: new Date(day('2025-11-20')),
         visibleTo: ['org'],
         hostId: 'host-1',
@@ -264,11 +288,16 @@ describe('a company’s, a deal’s and a lead’s facts', () => {
       deals: [],
       pipelines: new Map(),
       nowMs: NOW,
+      names: NAMES,
+      parentCompanyName: 'Acme Holdings',
     })
     expect(facts).toEqual({
       record: 'company',
       name: 'Acme Roofing Supply',
       domain: 'acme.test',
+      website: 'https://acme.test',
+      phone: '+15125550100',
+      fax: '+15125550199',
       industry: 'Construction',
       type: 'Customer',
       rating: 'Hot',
@@ -276,9 +305,18 @@ describe('a company’s, a deal’s and a lead’s facts', () => {
       accountSource: 'Trade show',
       employees: 120,
       annualRevenue: crmFactMoney(1_250_000_00, 'usd'),
+      accountNumber: 'ACCT-SECRET-1',
+      site: '',
+      tickerSymbol: '',
+      sicCode: '',
+      billingAddress: '100 Congress Ave',
+      shippingAddress: '1 Dock Rd',
+      parentCompany: 'Acme Holdings',
+      owner: 'Sam Rep',
       tags: ['supplier'],
       people: 4,
       since: '2025-11-20',
+      custom: [{ label: 'Payment terms', value: 'Net 30' }],
       notes: 'Net 30.',
       timeline: [{ on: '2026-09-02', kind: 'Meeting', text: 'Annual review', outcome: 'Renewed' }],
       openTasks: [],
@@ -303,7 +341,7 @@ describe('a company’s, a deal’s and a lead’s facts', () => {
         companyName: 'Acme Roofing Supply',
         ownerUid: 'owner-uid',
         lineItems: [{ name: 'Membrane', quantity: 1, unitAmountCents: 990_000, currency: 'eur' }],
-        custom: { po: 'secret custom value' },
+        custom: { po: 'PO-7781' },
         createdAt: new Date(day('2026-08-01')),
         visibleTo: ['org'],
         hostId: 'host-1',
@@ -312,6 +350,7 @@ describe('a company’s, a deal’s and a lead’s facts', () => {
       activities: [],
       tasks: [{ title: 'Site visit', kind: 'meeting', priority: 'normal', status: 'open', dueAtMs: null }],
       nowMs: NOW,
+      names: NAMES,
     })
     expect(facts).toEqual({
       record: 'deal',
@@ -337,10 +376,13 @@ describe('a company’s, a deal’s and a lead’s facts', () => {
       nextStep: '',
       probability: 10,
       forecastCategory: 'Pipeline',
+      campaign: '',
       contact: 'Jane Doe',
       company: 'Acme Roofing Supply',
-      products: 1,
+      owner: 'Sam Rep',
+      products: [{ name: 'Membrane', quantity: 1, unitAmount: 'EUR 9900.00' }],
       since: '2026-08-01',
+      custom: [{ label: 'PO number', value: 'PO-7781' }],
       notes: '',
       timeline: [],
       openTasks: [{ title: 'Site visit', kind: 'Meeting', priority: 'normal', due: null, overdue: false }],
@@ -368,19 +410,21 @@ describe('a company’s, a deal’s and a lead’s facts', () => {
       activities: [],
       tasks: [],
       nowMs: NOW,
+      campaignName: 'Spring push',
     })
     expect(facts).toMatchObject({
+      campaign: 'Spring push',
       type: 'New Business',
       leadSource: 'Trade show',
       nextStep: 'Send the revised quote',
       probability: 65,
       forecastCategory: 'Commit',
     })
-    // A campaign id tells the model nothing; it is not a fact.
-    expect(JSON.stringify(facts)).not.toContain('spring')
+    // The campaign is named by its name, never by its id.
+    expect(JSON.stringify(facts)).not.toContain('"spring"')
   })
 
-  it('reports a lead’s standing, and never its address, consent or owner', () => {
+  it('reports a lead whole: how to reach them, its account fields, owner, campaigns and custom values (AGL-3520)', () => {
     const facts = leadFacts({
       lead: {
         email: 'jane@example.com',
@@ -391,7 +435,7 @@ describe('a company’s, a deal’s and a lead’s facts', () => {
         firstSeenAtMs: day('2026-08-01'),
         lastSeenAtMs: day('2026-09-14'),
         ownerUid: 'owner-uid',
-        marketingConsent: { 'host-1': true },
+        marketingConsentByHost: { 'host-1': { marketingConsent: true, marketingConsentAtMs: day('2026-08-01') } },
         notes: 'Asked about gutters too.',
         // The profile and Salesforce's standard lead fields (AGL-3513).
         salutation: 'Ms.',
@@ -409,13 +453,30 @@ describe('a company’s, a deal’s and a lead’s facts', () => {
         phone: '+15125550107',
         mobilePhone: '+15125550108',
         fax: '+15125550109',
+        website: 'https://acme.test/',
+        address: { line1: '1 Main St', city: 'Austin', state: 'TX', postalCode: '78701', country: 'US' },
+        tags: ['roofing'],
+        custom: { territory: 'West' },
       },
       activities: [{ kind: 'call', atMs: day('2026-09-15'), body: 'Left a voicemail.', leadId: 'lead-1' }],
+      tasks: [{ title: 'Call back', kind: 'call', priority: 'normal', status: 'open', dueAtMs: day('2026-09-17'), leadId: 'lead-1' }],
+      nowMs: NOW,
+      group: GROUP,
+      names: NAMES,
+      campaignNames: ['Spring push'],
     })
     expect(facts).toEqual({
       record: 'lead',
       name: 'Jane Doe',
       salutation: 'Ms.',
+      firstName: 'Jane',
+      lastName: 'Doe',
+      email: 'jane@example.com',
+      phone: '+15125550107',
+      mobilePhone: '+15125550108',
+      fax: '+15125550109',
+      website: 'https://acme.test/',
+      address: '1 Main St, Austin, TX 78701, US',
       company: 'Acme',
       jobTitle: 'Facilities lead',
       leadSource: 'Webinar',
@@ -425,6 +486,10 @@ describe('a company’s, a deal’s and a lead’s facts', () => {
       annualRevenue: 'USD 1250000.00',
       doNotCall: true,
       status: 'Working',
+      owner: 'Sam Rep',
+      campaigns: ['Spring push'],
+      marketingConsent: 'opted in on 2026-08-01',
+      tags: ['roofing'],
       sources: ['Booking', 'Form'],
       captures: 3,
       firstSeen: '2026-08-01',
@@ -432,18 +497,20 @@ describe('a company’s, a deal’s and a lead’s facts', () => {
       assigned: true,
       converted: false,
       unqualifiedReason: '',
+      custom: [{ label: 'Territory', value: 'West' }],
       notes: 'Asked about gutters too.',
       timeline: [{ on: '2026-09-15', kind: 'Call', text: 'Left a voicemail.' }],
+      openTasks: [{ title: 'Call back', kind: 'Call', priority: 'normal', due: '2026-09-17', overdue: false }],
     })
     expectNoSecrets(facts)
   })
 })
 
 describe('the pieces', () => {
-  it('reads an email’s delivery and never its addresses', () => {
+  it('reads an email’s delivery and who it was from and to (AGL-3520)', () => {
     expect(
       crmActivityFact({ kind: 'email', atMs: day('2026-09-01'), direction: 'inbound', from: 'sam@acme.test', threadSubject: 'Re: quote', body: 'Looks good' }),
-    ).toEqual({ on: '2026-09-01', kind: 'Email', direction: 'inbound', subject: 'Re: quote', text: 'Looks good' })
+    ).toEqual({ on: '2026-09-01', kind: 'Email', direction: 'inbound', from: 'sam@acme.test', subject: 'Re: quote', text: 'Looks good' })
     expect(crmActivityFact({ kind: 'note', atMs: Number.NaN, body: 'no time' })).toBeNull()
   })
 
@@ -468,26 +535,36 @@ describe('the pieces', () => {
     ).toEqual([{ title: 'Walk the site', kind: 'Site visit', priority: 'high', status: 'In Progress', due: null, overdue: false }])
   })
 
-  it('replaces an address or a number typed into free text, and leaves days, amounts and short numbers', () => {
-    expect(crmFactProse('Call Jane on (512) 555-0100 or +44 20 7946 0958, or write jane@example.com.', 280)).toBe(
-      'Call Jane on [phone number] or [phone number], or write [email address].',
-    )
-    expect(crmFactProse('Met 2026-09-09 2026-09-12; quoted USD 18450.00 for 3 bays, order 55512.', 280)).toBe(
-      'Met 2026-09-09 2026-09-12; quoted USD 18450.00 for 3 bays, order 55512.',
-    )
-    // Replaced before the cut, so a cut cannot leave half an address behind.
-    expect(crmFactProse('Reach her at jane.alt@example.com', 24)).toBe('Reach her at [email add…')
+  it('reports text a person wrote as written, addresses and numbers included (AGL-3520)', () => {
     expect(crmActivityFact({ kind: 'call', atMs: day('2026-09-02'), body: 'Asked us to text 512.555.0199 instead' })).toEqual({
       on: '2026-09-02',
       kind: 'Call',
-      text: 'Asked us to text [phone number] instead',
+      text: 'Asked us to text 512.555.0199 instead',
     })
-    expect(crmOpenTaskFacts([{ title: 'Text 512 555 0100 the gate code', kind: 'todo', status: 'open' }], NOW)[0].title).toBe(
-      'Text [phone number] the gate code',
+    expect(leadFacts({ lead: { name: 'jane@example.com', status: 'new' }, activities: [] }).name).toBe('jane@example.com')
+  })
+
+  it('writes an address on one line and a custom value by its type', () => {
+    expect(crmFactAddress({ line1: '1 Main St', line2: 'Suite 4', city: 'Austin', state: 'TX', postalCode: '78701', country: 'US' })).toBe(
+      '1 Main St, Suite 4, Austin, TX 78701, US',
     )
-    // A lead captured with an address where its name belongs.
-    expect(leadFacts({ lead: { name: 'jane@example.com', status: 'new' }, activities: [] }).name).toBe('[email address]')
-    expect(crmFactProse(42, 280)).toBe('')
+    expect(crmFactAddress(null)).toBe('')
+    expect(
+      crmCustomFacts(
+        { vip: true, since: Date.parse('2026-01-02T00:00:00.000Z'), empty: '', retired: 'old' },
+        'contact',
+        [
+          { key: 'vip', label: 'VIP', type: 'checkbox', order: 0 },
+          { key: 'since', label: 'Customer since', type: 'date', order: 1 },
+          { key: 'retired', label: 'Old field', type: 'text', order: 0, retiredAt: 5 },
+          { key: 'region', label: 'Region', type: 'text', order: 0, object: 'company' },
+        ],
+      ),
+    ).toEqual([
+      { label: 'VIP', value: 'yes' },
+      { label: 'Customer since', value: '2026-01-02' },
+      { label: 'Old field', value: 'old' },
+    ])
   })
 
   it('orders open tasks by due day, undated last, and marks the ones past their day', () => {
