@@ -130,8 +130,9 @@ await step(tally, page, 'Mark won closes the deal and the Won column shows it', 
   await rowAction(page, F.dealTitle, 'Mark won')
   await expectSnackbar(page, 'Deal won')
   const stored = await waitFor(() => dealDoc(F.dealId), (d) => d.status === 'won')
-  // The closed columns fold away; opening Won reads its rows.
-  await page.getByRole('button', { name: 'Won', exact: true }).first().click()
+  // The closed columns fold away; opening Closed Won, Salesforce's name for
+  // the won stage (AGL-3516), reads its rows.
+  await page.getByRole('button', { name: 'Closed Won', exact: true }).first().click()
   await card(F.dealTitle).waitFor({ timeout: TIMEOUT_MS })
   tally.check(
     'Mark won closes the deal and the Won column shows it',

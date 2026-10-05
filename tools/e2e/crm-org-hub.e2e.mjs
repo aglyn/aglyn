@@ -346,14 +346,16 @@ await step(tally, page, 'a task filed with the organization has no site and the 
   await page.goto(orgUrl('/crm/tasks'), { waitUntil: 'domcontentloaded', timeout: TIMEOUT_MS })
   await page.getByRole('button', { name: 'New task' }).first().click({ timeout: TIMEOUT_MS })
   const drawer = page.getByRole('dialog').last()
-  await drawer.getByRole('textbox', { name: /^Title/ }).waitFor({ timeout: TIMEOUT_MS })
+  // A task's title is its Subject: Salesforce's combobox, typed into or
+  // picked from the org's subject picklist (AGL-3517).
+  await drawer.getByRole('combobox', { name: /^Subject/ }).waitFor({ timeout: TIMEOUT_MS })
   // The picker asks even with one site: the site, or the organization.
   const sitePicker = drawer.getByRole('combobox', { name: /^Site/ })
   await sitePicker.waitFor({ timeout: TIMEOUT_MS })
   await pickSelect(page, 'Site', 'This organization (no site)', drawer)
   await drawer.getByText(/A task of the organization itself/).waitFor({ timeout: TIMEOUT_MS })
   await shot(page, 'crm-org-hub-new-org-task')
-  await drawer.getByRole('textbox', { name: /^Title/ }).fill(ORG_TASK_TITLE)
+  await drawer.getByRole('combobox', { name: /^Subject/ }).fill(ORG_TASK_TITLE)
   await drawer.getByRole('button', { name: 'Create task' }).click()
   await expectSnackbar(page, 'Task created')
   const stored = await waitFor(orgTaskDoc, (found) => Boolean(found))
