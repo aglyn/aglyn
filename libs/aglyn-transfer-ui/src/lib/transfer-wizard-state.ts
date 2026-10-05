@@ -250,7 +250,7 @@ export function proposeMissingPicklistChoices(
   }
   for (const review of analysis.picklists ?? []) {
     const choices = { ...(next[review.fieldId] ?? {}) }
-    for (const value of review.result.unmatched) {
+    for (const value of review.unmatched) {
       if (!choices[value.key])
         choices[value.key] = proposePicklistChoice(review.spec, value)
     }
@@ -273,7 +273,7 @@ export function valuesStepProblems(
     for (const problem of picklistChoiceProblems(
       review.spec,
       review.set,
-      review.result.unmatched,
+      review.unmatched,
       draft.picklistChoices[review.fieldId] ?? {},
     )) {
       problems.push(`${fieldLabel(review.fieldId)}: ${problem}`)

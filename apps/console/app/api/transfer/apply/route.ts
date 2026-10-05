@@ -60,7 +60,13 @@ async function handler(request: Request): Promise<Response> {
         resumed: result.resumed,
       })
     }
-    const answer: TransferApplyResponse = { ok: true, job: result.job, progress: result.progress, done: result.done }
+    const answer: TransferApplyResponse = {
+      ok: true,
+      job: result.job,
+      progress: result.progress,
+      done: result.done,
+      results: result.results,
+    }
     return Response.json(answer, { status: 200 })
   } catch (error) {
     return transferErrorResponse(error, 'apply')

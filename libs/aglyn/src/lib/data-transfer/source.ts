@@ -37,10 +37,19 @@
 
 import type { TransferFormat } from './resource'
 
-/** A delimiter a CSV may use. */
-export type TransferCsvDelimiter = ',' | ';' | '\t'
+/** A delimiter a CSV may use. A pipe is read when the person names it; detection never guesses it. */
+export type TransferCsvDelimiter = ',' | ';' | '\t' | '|'
 
+/** The delimiters detection chooses among. */
 export const TRANSFER_CSV_DELIMITERS: readonly TransferCsvDelimiter[] = [',', ';', '\t']
+
+/** How the person confirmed a CSV is read, over what detection would guess. */
+export interface TransferSourceOptions {
+  /** The cell separator; detected from the header line when absent. */
+  delimiter?: TransferCsvDelimiter
+  /** `false` when the first line is a row, not names: the columns are then "Column 1", "Column 2"… Default `true`. */
+  headerRow?: boolean
+}
 
 /** A file read into a header and rows. */
 export interface TransferSourceTable {
@@ -195,8 +204,17 @@ function tableFromObjects(format: TransferFormat, objects: readonly unknown[]): 
   return { ok: true, table: { format, headers, rows } }
 }
 
-/** A file's text read as `format` (see the block header). */
-export function readTransferSource(text: string, format: TransferFormat): TransferSourceRead {
+/**
+ * A file's text read as `format` (see the block header). For a CSV,
+ * `options` carries what the person confirmed in the upload step — the
+ * delimiter, and whether the first line names the columns — so the server
+ * reads the file exactly as the browser previewed it.
+ */
+export function readTransferSource(
+  text: string,
+  format: TransferFormat,
+  options: TransferSourceOptions = {},
+): TransferSourceRead {
   const source = stripBom(String(text ?? ''))
   if (!source.trim()) return { ok: false, problem: { code: 'empty', message: 'The file is empty.' } }
 
@@ -238,7 +256,16 @@ export function readTransferSource(text: string, format: TransferFormat): Transf
     return tableFromObjects('ndjson', objects)
   }
 
-  const delimiter = detectCsvDelimiter(source)
+  const delimiter = options.delimiter ?? detectCsvDelimiter(source)
+  if (options.headerRow === false) {
+    const lines = parseTransferCsv(source, delimiter)
+    const width = lines.reduce((most, line) => Math.max(most, line.length), 0)
+    const headers = Array.from({ length: width }, (_unused, index) => `Column ${index + 1}`)
+    const rows = lines.map((cells) =>
+      cells.length >= width ? cells : [...cells, ...new Array<string>(width - cells.length).fill('')],
+    )
+    return { ok: true, table: { format: 'csv', delimiter, headers, rows } }
+  }
   const [header, ...body] = parseTransferCsv(source, delimiter)
   if (!header || !header.some((cell) => cell.trim())) {
     return { ok: false, problem: { code: 'noHeader', message: 'The file has no header row.', line: 1 } }

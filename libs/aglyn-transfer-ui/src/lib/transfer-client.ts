@@ -23,87 +23,65 @@
  * job engine's routes (`api/transfer/*`), the specs and stories use
  * {@link createMemoryTransferClient}, which runs the same core in memory.
  *
- * The shapes are the core's (`@aglyn/aglyn/data-transfer`) wherever the core
- * has one — a `HeaderMatchResult`, a `TransferPlan`, a `TransferJob` — and
- * the rest are what a wizard step needs that no core function returns by
- * itself: a whole file's derivations counted, a picklist column against the
- * organization's list, the conflicts a policy would decide.
+ * Every shape that crosses the wire is the core's
+ * (`@aglyn/aglyn/data-transfer`, `transfer-api.ts` and `review.ts`) and is
+ * re-exported here, so the kit, the console's client and the job engine
+ * cannot disagree. What is defined here is the client's own side of it:
+ * requests without the organization (the client is bound to one), the file
+ * as the browser read it, and the views a step renders, each composed of
+ * the core's shapes.
  *=========================================*/
 
 import type {
-  DerivationKind,
-  DeriveProblemCode,
-  HeaderMatchResult,
-  MatchKeySpec,
-  MatchedVia,
-  PicklistMatchResult,
-  PicklistValueChoice,
-  RowMatchOutcome,
-  TransferAliasDictionary,
+  TransferAmbiguity,
+  TransferApplyRequest,
+  TransferConflict,
+  TransferCsvDelimiter,
+  TransferDerivationSummary,
   TransferField,
-  TransferFieldGroup,
-  TransferFieldMode,
   TransferFormat,
   TransferJob,
-  TransferLockedRule,
+  TransferLookupReview,
+  TransferMatchReview,
+  TransferPicklistAnalysis,
   TransferPlan,
   TransferPolicy,
-  TransferPolicySource,
-  TransferPresetHints,
-  TransferResourceDescriptor,
+  TransferPrefs,
+  TransferReadChoices,
+  TransferResourceInfo,
   TransferResultSummary,
   TransferRowResult,
-  TransferSavedPreset,
-  TransferUndoStep,
-  TransferWarningClass,
+  TransferUndoConflict,
+  TransferUndoCounts,
+  TransferUndoDecision,
+  HeaderMatchResult,
 } from '@aglyn/aglyn/data-transfer'
-import type {
-  PicklistSpec,
-  PicklistValueSet,
-} from '@aglyn/aglyn/app-utils/picklists'
 
-/*------------------------------------------
- * Fields and preferences
- *-----------------------------------------*/
+export type {
+  TransferAmbiguity,
+  TransferConflict,
+  TransferConflictField,
+  TransferDateOrder,
+  TransferDerivationCount,
+  TransferDerivationSummary,
+  TransferExportPrefs,
+  TransferExportScopeKind,
+  TransferLookupChoice,
+  TransferLookupReview,
+  TransferMatchReview,
+  TransferMatchRowView,
+  TransferPicklistAnalysis,
+  TransferPrefs,
+  TransferProblemCount,
+  TransferReadChoices,
+  TransferResourceInfo,
+  TransferUndoConflict,
+  TransferUndoCounts,
+  TransferUndoDecision,
+} from '@aglyn/aglyn/data-transfer'
 
-/** The export choice a person made last, remembered per person and resource. */
-export interface TransferExportPrefs {
-  /** A built-in preset id, a saved preset's id, or `null` for a hand-picked list. */
-  presetId: string | null
-  fieldIds: string[]
-  format: TransferFormat
-  /** A CSV starts with a byte-order mark, for spreadsheets. */
-  bom: boolean
-  scope: TransferExportScopeKind
-}
-
-/** What is remembered for one person and resource. */
-export interface TransferPrefs {
-  export?: TransferExportPrefs
-  /** Presets the person saved, in the order they saved them. */
-  presets: TransferSavedPreset[]
-}
-
-/** What a resource offers to import and export, as the person may see it. */
-export interface TransferResourceInfo {
-  resource: TransferResourceDescriptor
-  /** Every field in catalog order: standard, derived, custom, then system. */
-  fields: TransferField[]
-  /** The groups the fields are listed under, in order. */
-  groups: TransferFieldGroup[]
-  /** The keys a row may be matched on, in the default priority. */
-  matchKeys: MatchKeySpec[]
-  /** The match keys used when the person has not chosen (a prefix of `matchKeys` by default). */
-  defaultMatchKeys?: string[]
-  presetHints?: TransferPresetHints
-  /** The owning plugin's rules, shown locked with their reasons. */
-  locked: TransferLockedRule[]
-  /** Other products' header spellings, from the owning plugin. */
-  dictionaries?: TransferAliasDictionary[]
-  prefs: TransferPrefs
-  /** Whether the person may create a custom field from the mapping step. */
-  canCreateCustomField?: boolean
-}
+/** A route's request as the client sends it: the client names the organization itself. */
+export type TransferClientRequest<T> = Omit<T, 'orgId'>
 
 /*------------------------------------------
  * Upload and analysis
@@ -123,9 +101,10 @@ export interface TransferFileSettings {
 export type TransferEncoding =
   'utf-8' | 'utf-16le' | 'utf-16be' | 'windows-1252'
 
-export type TransferDelimiter = ',' | ';' | '\t' | '|'
+export type TransferDelimiter = TransferCsvDelimiter
 
-export interface TransferUploadRequest {
+/** A file as the browser read it, to store as a new job. */
+export interface TransferFileUpload {
   resource: string
   fileName: string
   /** The file decoded with `settings.encoding`. */
@@ -135,99 +114,9 @@ export interface TransferUploadRequest {
   settings: TransferFileSettings
 }
 
-/** The person's date-order choice for a field whose dates read either way. */
-export type TransferDateOrder = 'mdy' | 'dmy'
-
-/** What to do with one lookup value that names no record. */
-export type TransferLookupChoice =
-  | { action: 'create' }
-  | { action: 'mapTo'; recordId: string }
-  | { action: 'leaveBlank' }
-  | { action: 'refuseRow' }
-
-/** Everything the person has decided that changes how rows are read. */
-export interface TransferReadChoices {
-  /** Column → field id; a column left out is ignored. */
-  mapping: Record<number, string>
-  /** Field id → the order its ambiguous dates are read in. */
-  dateOrders?: Record<string, TransferDateOrder>
-  /** Field id → incoming value key → choice. */
-  picklistChoices?: Record<string, Record<string, PicklistValueChoice>>
-  /** Field id → incoming value key → choice. */
-  lookupChoices?: Record<string, Record<string, TransferLookupChoice>>
-  /** Match key field ids, in priority order. */
-  matchKeys?: string[]
-}
-
-export interface TransferAnalyzeRequest extends Partial<TransferReadChoices> {
+/** Read the job's file; with choices, under them. */
+export interface TransferAnalysisRequest extends Partial<TransferReadChoices> {
   jobId: string
-}
-
-/** One kind of thing a parser did to a field's cells, counted over the file. */
-export interface TransferDerivationCount {
-  kind: DerivationKind
-  /** The rule in a sentence, from the first occurrence. */
-  note: string
-  count: number
-  flagged: boolean
-  samples: { row: number; from: string; to: string }[]
-}
-
-/** One kind of cell a field could not read, counted over the file. */
-export interface TransferProblemCount {
-  code: DeriveProblemCode
-  message: string
-  count: number
-  samples: { row: number; raw: string }[]
-}
-
-/** What reading one field's cells did, over the whole file. */
-export interface TransferDerivationSummary {
-  fieldId: string
-  /** Cells that held a value. */
-  filled: number
-  /** Cells read as they were. */
-  unchanged: number
-  derivations: TransferDerivationCount[]
-  problems: TransferProblemCount[]
-  /** Cells whose day and month could be either way round; the person picks the order. */
-  ambiguousDates: number
-}
-
-/** A picklist column against the organization's list. */
-export interface TransferPicklistReview {
-  fieldId: string
-  spec: PicklistSpec
-  set: PicklistValueSet
-  result: PicklistMatchResult
-}
-
-/** A lookup column's values that name no record. */
-export interface TransferLookupReview {
-  fieldId: string
-  unresolved: {
-    value: string
-    key: string
-    count: number
-    rows: number[]
-    suggestions: { recordId: string; label: string }[]
-  }[]
-}
-
-/** One row's match, for the matching step's lists. */
-export interface TransferMatchRowView {
-  row: number
-  outcome: RowMatchOutcome
-  /** A name for the row, from its own cells. */
-  label?: string
-}
-
-/** Rows against existing records under the chosen keys. */
-export interface TransferMatchReview {
-  keys: MatchKeySpec[]
-  summary: Record<RowMatchOutcome['kind'], number>
-  /** Some rows of each outcome, for the lists; `rows` may be a sample of a large file. */
-  rows: TransferMatchRowView[]
 }
 
 /** How the file reads, and what the server proposes. */
@@ -241,9 +130,9 @@ export interface TransferAnalysis {
   proposal: HeaderMatchResult
   /** Present once a mapping was sent. */
   derivations?: TransferDerivationSummary[]
-  picklists?: TransferPicklistReview[]
+  picklists?: TransferPicklistAnalysis[]
   lookups?: TransferLookupReview[]
-  /** Present once match keys were sent. */
+  /** Present once a mapping was sent. */
   matches?: TransferMatchReview
   /** Record id → a name for it. */
   recordLabels?: Record<string, string>
@@ -253,42 +142,27 @@ export interface TransferAnalysis {
  * Plan (the dry run) and conflicts
  *-----------------------------------------*/
 
-export interface TransferPlanRequest extends TransferReadChoices {
+export interface TransferDryRunRequest extends TransferReadChoices {
   jobId: string
   policy: TransferPolicy
   /** What a plugin's extra wizard steps collected (a consent attestation). */
   extras?: Record<string, unknown>
 }
 
-/** One field a matched record and the file disagree on. */
-export interface TransferConflictField {
-  fieldId: string
-  before: unknown
-  incoming: unknown
-  /** What the policy makes of it now. */
-  after: unknown
-  mode: TransferFieldMode
-  source: TransferPolicySource
-}
-
-/** A matched row whose file values differ from values the record already has. */
-export interface TransferConflict {
-  row: number
-  recordId: string
-  fields: TransferConflictField[]
-}
-
-/** A row more than one record matched. */
-export interface TransferAmbiguity {
-  row: number
-  via: MatchedVia
-  recordIds: string[]
-}
-
-export interface TransferPlanResponse {
+/** The dry run as the review steps show it. */
+export interface TransferDryRun {
   job: TransferJob
+  /**
+   * The summary, warnings and acknowledgements cover every row; `rows` is
+   * every planned row, or — when `rowsComplete` is false — some rows of each
+   * verdict.
+   */
   plan: TransferPlan
+  /** `false` when `plan.rows` holds a sample of a larger file. */
+  rowsComplete?: boolean
   conflicts: TransferConflict[]
+  /** Every conflict, counted, when `conflicts` lists only the first of them. */
+  conflictCount?: number
   ambiguous: TransferAmbiguity[]
   recordLabels?: Record<string, string>
 }
@@ -297,16 +171,10 @@ export interface TransferPlanResponse {
  * Apply, results and undo
  *-----------------------------------------*/
 
-export interface TransferApplyRequest {
-  jobId: string
-  /** The warning classes the person acknowledged; the server refuses without every one. */
-  acknowledged: TransferWarningClass[]
-}
-
-/** One chunk applied. The browser calls again until `done`. */
+/** One call's chunks applied. The browser calls again until `done`. */
 export interface TransferApplyStep {
   job: TransferJob
-  /** This chunk's results. */
+  /** The results of the chunks this call wrote. */
   results: TransferRowResult[]
   rowsDone: number
   rowCount: number
@@ -319,46 +187,41 @@ export interface TransferResults {
   rows: TransferRowResult[]
 }
 
-/** A record edited since the import, which undo would otherwise overwrite. */
-export interface TransferUndoConflict {
-  recordId: string
-  label?: string
-  step: Extract<TransferUndoStep, { action: 'conflict' }>
-  /** The values the record holds now, for the fields in question. */
-  current: Record<string, unknown>
-}
-
-/** For each conflicted record: keep what it holds now, or restore it anyway. */
-export type TransferUndoResolution = 'keep' | 'restore'
-
-export interface TransferUndoRequest {
-  jobId: string
-  /** `preview` says what undo would do; `apply` does it. */
-  mode: 'preview' | 'apply'
-  /** Record id → choice, for every conflict the preview listed. */
-  resolutions?: Record<string, TransferUndoResolution>
-}
+/**
+ * `preview` says what undo would do; `apply` does it, with the person's
+ * decision for each record edited since (`keep` it as it is now, or
+ * `revert` it anyway) and `otherwise` for one edited after the preview.
+ */
+export type TransferUndoRequest =
+  | { jobId: string; mode: 'preview' }
+  | {
+      jobId: string
+      mode: 'apply'
+      decisions: Record<string, TransferUndoDecision>
+      otherwise?: TransferUndoDecision
+    }
 
 export interface TransferUndoResponse {
   job: TransferJob
-  restore: number
-  delete: number
-  nothing: number
+  /** What undo would do (preview) or did (apply), counted. */
+  counts: TransferUndoCounts
+  /** The records edited since the import, each needing a decision. */
   conflicts: TransferUndoConflict[]
+  /** Undo has finished (apply only). */
+  done: boolean
 }
 
 /*------------------------------------------
  * Export
  *-----------------------------------------*/
 
-export type TransferExportScopeKind = 'selection' | 'filter' | 'all'
-
 export type TransferExportScope =
   | { kind: 'selection'; ids: string[] }
   | { kind: 'filter'; filter: unknown }
   | { kind: 'all' }
 
-export interface TransferExportRequest {
+/** The fields, records and format the person chose. */
+export interface TransferExportChoice {
   resource: string
   fieldIds: string[]
   scope: TransferExportScope
@@ -383,21 +246,23 @@ export interface TransferCustomFieldRequest {
 }
 
 /**
- * The server, as the kit sees it. The job engine (AGL-3524) implements it
- * over `api/transfer/*`; {@link createMemoryTransferClient} implements it
- * in memory.
+ * The server, as the kit sees it. The console implements it over
+ * `api/transfer/*`; {@link createMemoryTransferClient} implements it in
+ * memory.
  */
 export interface TransferClient {
   /** The resource's fields, match keys, locked rules and the person's preferences. */
   fields(request: { resource: string }): Promise<TransferResourceInfo>
   /** Stores the file as a new draft job. */
-  upload(request: TransferUploadRequest): Promise<TransferJob>
+  upload(request: TransferFileUpload): Promise<TransferJob>
   /** Reads the job's file: header proposals, then — given choices — values and matches. */
-  analyze(request: TransferAnalyzeRequest): Promise<TransferAnalysis>
+  analyze(request: TransferAnalysisRequest): Promise<TransferAnalysis>
   /** The dry run: every row planned under the choices, nothing written. */
-  plan(request: TransferPlanRequest): Promise<TransferPlanResponse>
-  /** Writes the next chunk of a planned job. */
-  apply(request: TransferApplyRequest): Promise<TransferApplyStep>
+  plan(request: TransferDryRunRequest): Promise<TransferDryRun>
+  /** Writes the next chunks of a planned job. */
+  apply(
+    request: TransferClientRequest<TransferApplyRequest>,
+  ): Promise<TransferApplyStep>
   /** The job as stored. */
   status(request: { jobId: string }): Promise<TransferJob>
   /** Every row's result. */
@@ -405,7 +270,7 @@ export interface TransferClient {
   /** Previews or runs the undo of an applied job. */
   undo(request: TransferUndoRequest): Promise<TransferUndoResponse>
   /** Writes the chosen fields of the chosen records to a file. */
-  export(request: TransferExportRequest): Promise<TransferExportResponse>
+  export(request: TransferExportChoice): Promise<TransferExportResponse>
   /** Remembers the person's choices for a resource. */
   savePrefs(request: {
     resource: string

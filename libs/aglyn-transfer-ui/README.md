@@ -42,7 +42,9 @@ Components:
 The server:
 
 - `TransferClient` is everything the kit asks of the server. The kit never
-  fetches; the surface hands it a client.
+  fetches; the surface hands it a client. Every shape that crosses the wire
+  is the core's (`transfer-api.ts`) and is re-exported here; the console's
+  client implements it over the job engine's routes.
 - `createMemoryTransferClient` runs the core in memory, for specs, stories
   and resources with no server half yet.
 
@@ -86,7 +88,9 @@ imports `@aglyn/aglyn`, because it renders the core's import/export shapes,
 and `@aglyn/shared-ui-jsx` for its scrolling tables. It knows no plugin and
 no resource; each plugin brings its fields, match keys and locked rules
 through its server half, and the AI mapping proposal arrives through the
-`importMapping` zone the console renders.
+`importMapping` zone the console renders. A plugin never imports this
+package: it opens the wizard and the dialog through `useTransferLauncher()`
+in `@aglyn/aglyn`, which the console shell answers with this kit.
 
 ## License
 

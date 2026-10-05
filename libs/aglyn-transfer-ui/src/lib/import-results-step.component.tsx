@@ -53,7 +53,7 @@ import {
 import { useState } from 'react'
 
 import type {
-  TransferUndoResolution,
+  TransferUndoDecision,
   TransferUndoResponse,
 } from './transfer-client'
 import { downloadTransferFile } from './transfer-export-dialog.component'
@@ -110,7 +110,7 @@ export function ImportResultsStep({
   const { results, job } = wizard
   const [preview, setPreview] = useState<TransferUndoResponse | null>(null)
   const [resolutions, setResolutions] = useState<
-    Record<string, TransferUndoResolution>
+    Record<string, TransferUndoDecision>
   >({})
   const [undoError, setUndoError] = useState<string | null>(null)
   const [undoing, setUndoing] = useState(false)
@@ -136,7 +136,21 @@ export function ImportResultsStep({
     setUndoing(true)
     setUndoError(null)
     try {
-      await wizard.client.undo({ jobId: job.id, mode: 'apply', resolutions })
+      // Undo runs chunk by chunk; each call carries on where the last stopped.
+      let step = await wizard.client.undo({
+        jobId: job.id,
+        mode: 'apply',
+        decisions: resolutions,
+        otherwise: 'keep',
+      })
+      while (!step.done) {
+        step = await wizard.client.undo({
+          jobId: job.id,
+          mode: 'apply',
+          decisions: resolutions,
+          otherwise: 'keep',
+        })
+      }
       setPreview(null)
       await wizard.refreshResults()
     } catch (reason) {
@@ -241,11 +255,11 @@ export function ImportResultsStep({
             <Stack spacing={2}>
               {undoError ? <Alert severity="error">{undoError}</Alert> : null}
               <Typography variant="body2">
-                {countOf(preview.restore, 'record')} put back as{' '}
-                {preview.restore === 1 ? 'it was' : 'they were'} ·{' '}
-                {countOf(preview.delete, 'created record')} removed
-                {preview.nothing
-                  ? ` · ${countOf(preview.nothing, 'record')} already back or gone`
+                {countOf(preview.counts.restore, 'record')} put back as{' '}
+                {preview.counts.restore === 1 ? 'it was' : 'they were'} ·{' '}
+                {countOf(preview.counts.delete, 'created record')} removed
+                {preview.counts.nothing
+                  ? ` · ${countOf(preview.counts.nothing, 'record')} already back or gone`
                   : ''}
                 .
               </Typography>
@@ -267,7 +281,7 @@ export function ImportResultsStep({
                   <Typography variant="subtitle2">
                     {conflict.label ?? conflict.recordId}
                   </Typography>
-                  {conflict.step.fields.map((fieldId) => (
+                  {conflict.fields.map((fieldId) => (
                     <Typography
                       key={fieldId}
                       variant="body2"
@@ -275,8 +289,9 @@ export function ImportResultsStep({
                     >
                       {wizard.fieldLabel(fieldId)}: now “
                       {displayTransferValue(conflict.current[fieldId])}”
-                      {fieldId in conflict.step.values
-                        ? `, undo puts back “${displayTransferValue(conflict.step.values[fieldId])}”`
+                      {conflict.action === 'updated' &&
+                      fieldId in conflict.restore
+                        ? `, undo puts back “${displayTransferValue(conflict.restore[fieldId])}”`
                         : ', undo removes the record'}
                     </Typography>
                   ))}
@@ -288,7 +303,7 @@ export function ImportResultsStep({
                       setResolutions((current) => ({
                         ...current,
                         [conflict.recordId]: event.target
-                          .value as TransferUndoResolution,
+                          .value as TransferUndoDecision,
                       }))
                     }
                   >
@@ -298,7 +313,7 @@ export function ImportResultsStep({
                       label="Keep it as it is now"
                     />
                     <FormControlLabel
-                      value="restore"
+                      value="revert"
                       control={<Radio />}
                       label="Undo it anyway"
                     />

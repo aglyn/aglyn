@@ -47,8 +47,9 @@ import { FieldValue } from 'firebase-admin/firestore'
  *  1. `POST`, a JSON body naming `orgId`, and a Bearer ID token that
  *     verifies, from a verified address (or an impersonation session);
  *  2. the per-member rate limit for the route;
- *  3. the workspace exists, and the lockdown verdict (`status` asks with a
- *     read intent, so a read-only lock still shows a job's progress);
+ *  3. the workspace exists, and the lockdown verdict (`status` and `fields`
+ *     ask with a read intent, so a read-only lock still shows a job's
+ *     progress);
  *  4. `data.manage` — on the job's site for a site's records (a collaborator
  *     holding it there qualifies), on the workspace otherwise. Staff pass.
  *
@@ -59,6 +60,7 @@ import { FieldValue } from 'firebase-admin/firestore'
 
 /** Requests per member per minute, per route. Apply and status are driven in a loop by the wizard. */
 const RATE_LIMITS: Readonly<Record<TransferApiRoute, number>> = {
+  fields: 60,
   upload: 60,
   analyze: 30,
   plan: 60,
@@ -168,7 +170,7 @@ export async function transferGate(
       uid: decoded.uid,
       org: org ?? undefined,
       host: host ?? undefined,
-      intent: route === 'status' ? 'read' : 'write',
+      intent: route === 'status' || route === 'fields' ? 'read' : 'write',
     })
     if (locked) return locked
     if (!org) return transferRefusal(404, 'notFound', 'No such workspace')

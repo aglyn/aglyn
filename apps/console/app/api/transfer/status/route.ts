@@ -49,7 +49,11 @@ async function handler(request: Request): Promise<Response> {
         },
       })
     }
-    const status = await readTransferJobStatus(caller.deps, { orgId: caller.orgId, jobId })
+    const status = await readTransferJobStatus(caller.deps, {
+      orgId: caller.orgId,
+      jobId,
+      ...(body['include'] === 'results' ? { include: 'results' as const } : {}),
+    })
     const answer: TransferStatusResponse = { ok: true, ...status }
     return Response.json(answer, { status: 200 })
   } catch (error) {

@@ -27,7 +27,7 @@
 
 // lockdown-423: via apps/console/utils/server/transfer-gate.ts
 
-import type { TransferFormat, TransferUploadResponse } from '@aglyn/aglyn/data-transfer'
+import type { TransferCsvDelimiter, TransferFormat, TransferUploadResponse } from '@aglyn/aglyn/data-transfer'
 import { uploadTransferSource } from '@aglyn/tenant-data-admin/server/transfer-jobs'
 import { transferErrorResponse, transferGate } from '../../../../utils/server/transfer-gate'
 
@@ -50,6 +50,8 @@ async function handler(request: Request): Promise<Response> {
       part: optionalNumber(body['part']),
       parts: optionalNumber(body['parts']),
       jobId: typeof body['jobId'] === 'string' && body['jobId'] ? body['jobId'] : undefined,
+      delimiter: typeof body['delimiter'] === 'string' ? (body['delimiter'] as TransferCsvDelimiter) : undefined,
+      headerRow: typeof body['headerRow'] === 'boolean' ? body['headerRow'] : undefined,
     })
     const answer: TransferUploadResponse = { ok: true, ...result }
     return Response.json(answer, { status: 200 })

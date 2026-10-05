@@ -256,6 +256,10 @@ export function ImportConflictsStep({
   const ambiguous = planResponse?.ambiguous ?? []
   const labels = planResponse?.recordLabels ?? {}
   const locked = info?.locked ?? []
+  const conflictCount = Math.max(
+    planResponse?.conflictCount ?? 0,
+    conflicts.length,
+  )
 
   const update = (
     change: (current: TransferWizardPolicy) => TransferWizardPolicy,
@@ -511,10 +515,12 @@ export function ImportConflictsStep({
 
       <Card variant="outlined">
         <CardHeader
-          title={`Rows that disagree with their record (${conflicts.length})`}
+          title={`Rows that disagree with their record (${conflictCount.toLocaleString()})`}
           subheader={
             conflicts.length
-              ? 'Before → after for each field, as set above; change any row or field here.'
+              ? conflictCount > conflicts.length
+                ? `The first ${conflicts.length.toLocaleString()} are listed; every one follows the field rules above unless you change it here.`
+                : 'Before → after for each field, as set above; change any row or field here.'
               : 'No matched row has a value that differs from its record.'
           }
         />

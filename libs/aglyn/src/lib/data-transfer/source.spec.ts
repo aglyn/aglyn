@@ -48,6 +48,14 @@ describe('reading an uploaded file', () => {
     expect(parseTransferCsv('a;b\n1;2', ';')).toEqual([['a', 'b'], ['1', '2']])
   })
 
+  it('reads a CSV as the person confirmed it: a named delimiter, and no header row', () => {
+    const piped = readTransferSource('a|b\n1|2', 'csv', { delimiter: '|' })
+    expect(piped.ok && piped.table).toEqual({ format: 'csv', delimiter: '|', headers: ['a', 'b'], rows: [['1', '2']] })
+    const headless = readTransferSource('Ada,ada@x.test\nBo', 'csv', { headerRow: false })
+    expect(headless.ok && headless.table.headers).toEqual(['Column 1', 'Column 2'])
+    expect(headless.ok && headless.table.rows).toEqual([['Ada', 'ada@x.test'], ['Bo', '']])
+  })
+
   it('pads a short line and names a blank header', () => {
     const read = readTransferSource('Name,,Email\nAda', 'csv')
     expect(read.ok && read.table.headers).toEqual(['Name', 'Column 2', 'Email'])

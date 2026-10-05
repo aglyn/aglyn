@@ -40,7 +40,7 @@ import {
   registerTransferWizardStep,
   transferWizardStepsFor,
 } from './transfer-wizard-steps'
-import type { TransferPicklistReview } from './transfer-client'
+import type { TransferPicklistAnalysis } from './transfer-client'
 
 const FIELDS: TransferField[] = [
   { id: 'name', label: 'Name', type: 'text', required: true },
@@ -59,25 +59,25 @@ const FIELDS: TransferField[] = [
 const label = (id: string) =>
   FIELDS.find((field) => field.id === id)?.label ?? id
 
-const REVIEW: TransferPicklistReview = {
+const REVIEW: TransferPicklistAnalysis = {
   fieldId: 'kind',
   spec: { restricted: true, standardValues: [], meanings: ['open', 'closed'] },
   set: {
     values: [{ id: 'open', label: 'Open', active: true, meaning: 'open' }],
     defaultValueId: null,
   },
-  result: {
-    matched: [],
-    unmatched: [
-      {
-        value: 'Pending',
-        key: 'pending',
-        count: 2,
-        rows: [0, 1],
-        suggestions: [],
-      },
-    ],
-  },
+  picklistId: 'kind',
+  matched: [],
+  unmatched: [
+    {
+      value: 'Pending',
+      key: 'pending',
+      count: 2,
+      rows: [0, 1],
+      suggestions: [],
+    },
+  ],
+  proposals: {},
 }
 
 describe('mappingStepGate', () => {

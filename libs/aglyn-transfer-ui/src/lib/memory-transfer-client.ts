@@ -35,26 +35,28 @@ import {
   collectPicklistValues,
   createTransferPolicy,
   customTransferField,
-  deriveDate,
   deriveTransferCell,
   isBlankTransferValue,
-  isTransferFieldWritable,
   mapTransferRow,
   matchHeaders,
   matchPicklistValues,
   matchRows,
   planTransferUndo,
-  resolveFieldPolicy,
+  proposePicklistChoice,
   resolvePicklistCell,
   resolvePicklistChoices,
   resolveMultiPicklistCell,
-  summarizeMatches,
+  summarizeTransferDerivations,
   summarizeTransferResults,
   textSimilarity,
+  transferAmbiguities,
   transferChunkRanges,
+  transferDateOrderOptions,
+  transferMatchReview,
+  transferMatchedRecordIds,
+  transferPlanConflicts,
+  transferRowLabel,
   transitionTransferJob,
-  applyFieldPolicy,
-  transferValuesEqual,
 } from '@aglyn/aglyn/data-transfer'
 import type {
   FieldDerivation,
@@ -62,7 +64,6 @@ import type {
   MatchKeySpec,
   PicklistResolution,
   PlannedTransferRow,
-  RowMatchOutcome,
   TransferAliasDictionary,
   TransferCatalogInput,
   TransferField,
@@ -75,6 +76,8 @@ import type {
   TransferResourceDescriptor,
   TransferRowNote,
   TransferRowResult,
+  TransferUndoConflict,
+  TransferUndoCounts,
   TransferUndoEntry,
 } from '@aglyn/aglyn/data-transfer'
 import { picklistLabelKey } from '@aglyn/aglyn/app-utils/picklists'
@@ -85,18 +88,15 @@ import type {
 
 import type {
   TransferAnalysis,
-  TransferAnalyzeRequest,
+  TransferAnalysisRequest,
   TransferClient,
-  TransferConflict,
-  TransferDerivationSummary,
-  TransferExportRequest,
+  TransferDryRunRequest,
+  TransferExportChoice,
   TransferFileSettings,
   TransferLookupReview,
-  TransferPicklistReview,
-  TransferPlanRequest,
+  TransferPicklistAnalysis,
   TransferPrefs,
   TransferReadChoices,
-  TransferUndoConflict,
 } from './transfer-client'
 import { parseTransferText } from './transfer-file'
 
@@ -180,10 +180,7 @@ export function createMemoryTransferClient(
   const fieldsById = () => catalog().byId
   const label = (record: MemoryTransferRecord): string => {
     if (options.recordLabel) return options.recordLabel(record)
-    const text = Object.values(record.values).find(
-      (value) => typeof value === 'string' && value.trim(),
-    )
-    return typeof text === 'string' ? text : record.id
+    return transferRowLabel(record.values) ?? record.id
   }
   const recordLabels = (ids: Iterable<string>): Record<string, string> => {
     const labels: Record<string, string> = {}
@@ -227,7 +224,8 @@ export function createMemoryTransferClient(
     const byId = fieldsById()
     const file = parsed(entry)
     const resolutions = new Map<string, PicklistResolution>()
-    const reviews: TransferPicklistReview[] = []
+    const reviews: TransferPicklistAnalysis[] = []
+    const dateOptions = transferDateOrderOptions(choices.dateOrders)
     const lookups: TransferLookupReview[] = []
     const mapped = Object.values(choices.mapping)
       .map((fieldId) => byId.get(fieldId))
@@ -242,11 +240,10 @@ export function createMemoryTransferClient(
         for (const [fieldId, cell] of Object.entries(raw)) {
           const field = byId.get(fieldId)
           if (!field) continue
-          const order = choices.dateOrders?.[fieldId]
           const result = deriveTransferCell(
             field,
             cell,
-            order ? { date: { order }, dateTime: { order } } : {},
+            dateOptions[fieldId] ?? {},
           )
           if (!result.ok) {
             problems.push({
@@ -273,9 +270,17 @@ export function createMemoryTransferClient(
       const result = matchPicklistValues(list.set, incoming)
       reviews.push({
         fieldId: field.id,
+        picklistId: field.picklistId as string,
         spec: list.spec,
         set: list.set,
-        result,
+        matched: result.matched,
+        unmatched: result.unmatched,
+        proposals: Object.fromEntries(
+          result.unmatched.map((value) => [
+            value.key,
+            proposePicklistChoice(list.spec, value),
+          ]),
+        ),
       })
       const resolution = resolvePicklistChoices(
         list.spec,
@@ -406,82 +411,14 @@ export function createMemoryTransferClient(
   const summarizeDerivations = (
     rows: ReturnType<typeof readRows>['rows'],
     mapping: Record<number, string>,
-  ): TransferDerivationSummary[] => {
+  ) => {
     const byId = fieldsById()
-    return [...new Set(Object.values(mapping))]
-      .map((fieldId) => byId.get(fieldId))
-      .filter((field): field is TransferField => Boolean(field))
-      .map((field) => {
-        const summary: TransferDerivationSummary = {
-          fieldId: field.id,
-          filled: 0,
-          unchanged: 0,
-          derivations: [],
-          problems: [],
-          ambiguousDates: 0,
-        }
-        for (const row of rows) {
-          const raw = row.cells[field.id]
-          if (isBlankTransferValue(raw)) continue
-          summary.filled += 1
-          const own = (row.derivations ?? []).filter(
-            (entry) => entry.fieldId === field.id,
-          )
-          const problems = (row.problems ?? []).filter(
-            (entry) => entry.fieldId === field.id,
-          )
-          if (!own.length && !problems.length) summary.unchanged += 1
-          for (const entry of own) {
-            const tally = summary.derivations.find(
-              (count) => count.kind === entry.kind,
-            )
-            if (tally) {
-              tally.count += 1
-              tally.flagged ||= entry.flagged
-              if (tally.samples.length < SAMPLES)
-                tally.samples.push({
-                  row: row.index,
-                  from: entry.from,
-                  to: entry.to,
-                })
-            } else {
-              summary.derivations.push({
-                kind: entry.kind,
-                note: entry.note,
-                count: 1,
-                flagged: entry.flagged,
-                samples: [{ row: row.index, from: entry.from, to: entry.to }],
-              })
-            }
-          }
-          for (const entry of problems) {
-            const tally = summary.problems.find(
-              (count) => count.code === entry.code,
-            )
-            if (tally) {
-              tally.count += 1
-              if (tally.samples.length < SAMPLES)
-                tally.samples.push({ row: row.index, raw: entry.raw })
-            } else {
-              summary.problems.push({
-                code: entry.code,
-                message: entry.message,
-                count: 1,
-                samples: [{ row: row.index, raw: entry.raw }],
-              })
-            }
-          }
-          if (
-            (field.type === 'date' || field.type === 'datetime') &&
-            deriveDate(raw).derivations.some(
-              (entry) => entry.kind === 'ambiguousDate',
-            )
-          ) {
-            summary.ambiguousDates += 1
-          }
-        }
-        return summary
-      })
+    return summarizeTransferDerivations(
+      [...new Set(Object.values(mapping))]
+        .map((fieldId) => byId.get(fieldId))
+        .filter((field): field is TransferField => Boolean(field)),
+      rows,
+    )
   }
 
   const matchesFor = (
@@ -550,7 +487,7 @@ export function createMemoryTransferClient(
       return clone(job)
     },
 
-    async analyze(request: TransferAnalyzeRequest) {
+    async analyze(request: TransferAnalysisRequest) {
       const entry = state(request.jobId)
       const file = parsed(entry)
       const built = catalog()
@@ -575,22 +512,12 @@ export function createMemoryTransferClient(
         analysis.lookups = read.lookups
         const keys = keySpecs(request.matchKeys)
         const outcomes = matchesFor(read.rows, keys)
-        const ids = new Set<string>()
-        for (const outcome of outcomes) {
-          if (outcome.kind === 'matched') ids.add(outcome.recordId)
-          if (outcome.kind === 'ambiguous')
-            outcome.recordIds.forEach((id) => ids.add(id))
-        }
-        analysis.matches = {
+        analysis.matches = transferMatchReview(
           keys,
-          summary: summarizeMatches(outcomes),
-          rows: outcomes.map((outcome, index) => ({
-            row: index,
-            outcome,
-            label: rowLabel(read.rows[index]?.values),
-          })),
-        }
-        analysis.recordLabels = recordLabels(ids)
+          outcomes,
+          read.rows.map((row) => row.values),
+        )
+        analysis.recordLabels = recordLabels(transferMatchedRecordIds(outcomes))
         move(entry, 'analyzed', {
           mapping: request.mapping,
           matchKeys: keys.map((key) => key.fieldId),
@@ -602,7 +529,7 @@ export function createMemoryTransferClient(
       return clone(analysis)
     },
 
-    async plan(request: TransferPlanRequest) {
+    async plan(request: TransferDryRunRequest) {
       const entry = state(request.jobId)
       const read = readRows(entry, request)
       const keys = keySpecs(request.matchKeys)
@@ -622,45 +549,17 @@ export function createMemoryTransferClient(
         existing,
         policy,
       })
-      const conflicts: TransferConflict[] = []
-      const ids = new Set<string>()
-      outcomes.forEach((outcome: RowMatchOutcome, index) => {
-        const row = read.rows[index]!
-        const chosen = policy.rows[index]?.recordId
-        const recordId =
-          chosen ?? (outcome.kind === 'matched' ? outcome.recordId : null)
-        if (outcome.kind === 'ambiguous')
-          outcome.recordIds.forEach((id) => ids.add(id))
-        if (!recordId) return
-        ids.add(recordId)
-        const record = records.get(recordId)
-        if (!record) return
-        const fields = Object.entries(row.values).flatMap(
-          ([fieldId, incoming]) => {
-            const field = built.byId.get(fieldId)
-            if (!field || !isTransferFieldWritable(field)) return []
-            const before = record.values[fieldId]
-            if (
-              isBlankTransferValue(incoming) ||
-              isBlankTransferValue(before) ||
-              transferValuesEqual(before, incoming)
-            )
-              return []
-            const resolved = resolveFieldPolicy(policy, index, field)
-            return [
-              {
-                fieldId,
-                before,
-                incoming,
-                after: applyFieldPolicy(resolved, before, incoming).after,
-                mode: resolved.mode,
-                source: resolved.source,
-              },
-            ]
-          },
-        )
-        if (fields.length) conflicts.push({ row: index, recordId, fields })
+      const conflicts = transferPlanConflicts({
+        fields: built.byId,
+        rows: read.rows,
+        matches: outcomes,
+        existing,
+        policy,
       })
+      const ambiguous = transferAmbiguities(outcomes)
+      const ids = new Set<string>(conflicts.map((conflict) => conflict.recordId))
+      for (const row of plan.rows) if (row.recordId) ids.add(row.recordId)
+      for (const row of ambiguous) row.recordIds.forEach((id) => ids.add(id))
       entry.plan = plan
       entry.choices = { ...request }
       if (entry.job.status === 'draft') move(entry, 'analyzed')
@@ -674,12 +573,10 @@ export function createMemoryTransferClient(
       return clone({
         job: entry.job,
         plan,
+        rowsComplete: true,
         conflicts,
-        ambiguous: outcomes.flatMap((outcome, index) =>
-          outcome.kind === 'ambiguous'
-            ? [{ row: index, via: outcome.via, recordIds: outcome.recordIds }]
-            : [],
-        ),
+        conflictCount: conflicts.length,
+        ambiguous,
         recordLabels: recordLabels(ids),
       })
     },
@@ -753,46 +650,50 @@ export function createMemoryTransferClient(
 
     async undo(request) {
       const entry = state(request.jobId)
-      let restore = 0
-      let remove = 0
-      let nothing = 0
+      const counts: TransferUndoCounts = {
+        restore: 0,
+        delete: 0,
+        conflict: 0,
+        nothing: 0,
+      }
       const conflicts: TransferUndoConflict[] = []
+      const apply = request.mode === 'apply'
+      const decide = (recordId: string) =>
+        request.mode === 'apply'
+          ? (request.decisions[recordId] ?? request.otherwise)
+          : undefined
       for (const undo of entry.undo) {
         const record = records.get(undo.recordId)
         const step = planTransferUndo(undo, record?.values ?? null)
         if (step.action === 'conflict') {
+          counts.conflict += 1
           const current: Record<string, unknown> = {}
           for (const fieldId of step.fields)
             current[fieldId] = record?.values[fieldId] ?? null
           conflicts.push({
+            row: undo.row,
             recordId: undo.recordId,
             ...(record ? { label: label(record) } : {}),
-            step,
+            action: undo.action,
+            fields: step.fields,
             current,
+            restore: step.values,
           })
-          if (
-            request.mode === 'apply' &&
-            request.resolutions?.[undo.recordId] === 'restore'
-          ) {
+          if (apply && decide(undo.recordId) === 'revert') {
             if (undo.action === 'created') records.delete(undo.recordId)
             else if (record) Object.assign(record.values, step.values)
           }
           continue
         }
-        if (step.action === 'nothing') nothing += 1
-        if (step.action === 'restore') {
-          restore += 1
-          if (request.mode === 'apply' && record)
-            Object.assign(record.values, step.values)
-        }
-        if (step.action === 'delete') {
-          remove += 1
-          if (request.mode === 'apply') records.delete(undo.recordId)
-        }
+        counts[step.action] += 1
+        if (!apply) continue
+        if (step.action === 'restore' && record)
+          Object.assign(record.values, step.values)
+        if (step.action === 'delete') records.delete(undo.recordId)
       }
-      if (request.mode === 'apply') {
+      if (apply) {
         const unresolved = conflicts.filter(
-          (conflict) => !request.resolutions?.[conflict.recordId],
+          (conflict) => !decide(conflict.recordId),
         )
         if (unresolved.length)
           throw new Error(
@@ -800,16 +701,10 @@ export function createMemoryTransferClient(
           )
         move(entry, 'undone')
       }
-      return clone({
-        job: entry.job,
-        restore,
-        delete: remove,
-        nothing,
-        conflicts,
-      })
+      return clone({ job: entry.job, counts, conflicts, done: apply })
     },
 
-    async export(request: TransferExportRequest) {
+    async export(request: TransferExportChoice) {
       const byId = fieldsById()
       const all = [...records.values()]
       const chosen =
@@ -901,16 +796,6 @@ export function createMemoryTransferClient(
           },
         }
       : {}),
-  }
-
-  function rowLabel(
-    values: Readonly<Record<string, unknown>> | undefined,
-  ): string | undefined {
-    if (!values) return undefined
-    const text = Object.values(values).find(
-      (value) => typeof value === 'string' && value.trim(),
-    )
-    return typeof text === 'string' ? text : undefined
   }
 
   function applyRow(

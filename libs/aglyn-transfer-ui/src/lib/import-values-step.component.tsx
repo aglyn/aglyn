@@ -67,7 +67,7 @@ import type {
   TransferDerivationSummary,
   TransferLookupChoice,
   TransferLookupReview,
-  TransferPicklistReview,
+  TransferPicklistAnalysis,
 } from './transfer-client'
 import { TransferChoiceSelect } from './transfer-choice-select.component'
 import { valuesStepProblems } from './transfer-wizard-state'
@@ -223,12 +223,12 @@ function PicklistCard({
   review,
   wizard,
 }: {
-  review: TransferPicklistReview
+  review: TransferPicklistAnalysis
   wizard: TransferImportWizardController
 }) {
   const label = wizard.fieldLabel(review.fieldId)
   const choices = wizard.draft.picklistChoices[review.fieldId] ?? {}
-  const inactive = review.result.matched.filter((entry) => entry.inactive)
+  const inactive = review.matched.filter((entry) => entry.inactive)
   const setChoice = (key: string, choice: PicklistValueChoice) =>
     wizard.setDraft((d) => ({
       ...d,
@@ -244,7 +244,7 @@ function PicklistCard({
     <Card variant="outlined">
       <CardHeader
         title={label}
-        subheader={`${countOf(review.result.matched.length, 'value')} the list holds · ${countOf(review.result.unmatched.length, 'value')} it does not`}
+        subheader={`${countOf(review.matched.length, 'value')} the list holds · ${countOf(review.unmatched.length, 'value')} it does not`}
       />
       <CardContent>
         {inactive.length ? (
@@ -254,7 +254,7 @@ function PicklistCard({
             rows keep {inactive.length === 1 ? 'it' : 'them'}.
           </Alert>
         ) : null}
-        {review.result.unmatched.length ? (
+        {review.unmatched.length ? (
           <ScrollTable
             size="small"
             aria-label={`${label} values the list does not hold`}
@@ -267,7 +267,7 @@ function PicklistCard({
               </TableRow>
             </TableHead>
             <TableBody>
-              {review.result.unmatched.map((value) => (
+              {review.unmatched.map((value) => (
                 <PicklistValueRow
                   key={value.key}
                   fieldLabel={label}

@@ -63,6 +63,7 @@ import {
   planTransferJobUndo,
   readTransferJobStatus,
   readTransferPlanRows,
+  readTransferResourceInfo,
   sweepAbandonedTransferJobs,
   transferResultFile,
   uploadTransferSource,
@@ -615,7 +616,15 @@ describe('undo', () => {
     const plan = await planTransferJobUndo(deps, { orgId: ORG, jobId: job.id, actorUid: ME })
     expect(plan.counts).toEqual({ restore: 1, delete: 1, conflict: 1, nothing: 0 })
     expect(plan.conflicts).toEqual([
-      { row: 2, recordId: 'b2', action: 'created', fields: ['name'], current: { name: 'Edited later' }, restore: {} },
+      {
+        row: 2,
+        recordId: 'b2',
+        label: 'Edited later',
+        action: 'created',
+        fields: ['name'],
+        current: { name: 'Edited later' },
+        restore: {},
+      },
     ])
     expect(bottles.size).toBe(3)
 
@@ -635,6 +644,90 @@ describe('undo', () => {
     clock.now += TRANSFER_UNDO_WINDOW_MS + 1
     const refused = await refusal(planTransferJobUndo(deps, { orgId: ORG, jobId: job.id, actorUid: ME }))
     expect(refused.code).toBe('undoExpired')
+  })
+})
+
+describe('what the wizard reads (AGL-3539)', () => {
+  it('lists the resource’s fields, groups, keys and locked rules', async () => {
+    const info = await readTransferResourceInfo(deps, { orgId: ORG, actorUid: ME, resource: 'bottles' })
+    expect(info.resource).toMatchObject({ key: 'bottles', label: 'Bottles', scope: 'org' })
+    expect(info.fields.map((field) => field.id)).toEqual(expect.arrayContaining(['name', 'email', 'color', 'tags', 'id']))
+    expect(info.defaultMatchKeys).toEqual(['id', 'email'])
+    expect(info.presetHints).toEqual({ matchKeyFieldIds: ['id', 'email'] })
+    expect(info.canCreateCustomField).toBe(false)
+  })
+
+  it('reads a CSV with the delimiter and header row the person confirmed', async () => {
+    const job = await uploadTransferSource(deps, {
+      orgId: ORG,
+      actorUid: ME,
+      resource: 'bottles',
+      fileName: 'bottles.csv',
+      content: 'Red one|red@cellar.test\nWhite one|white@cellar.test',
+      delimiter: '|',
+      headerRow: false,
+    })
+    expect(job.job.read).toEqual({ delimiter: '|', headerRow: false })
+    expect(job.job.headers).toEqual(['Column 1', 'Column 2'])
+    expect(job.job.rowCount).toBe(2)
+    const analysis = await analyzeTransferJob(deps, { orgId: ORG, jobId: job.job.id, actorUid: ME })
+    expect(analysis.samples[0]).toEqual(['Red one', 'red@cellar.test'])
+  })
+
+  it('reads the file under a mapping: each field’s derivations and the rows against existing records', async () => {
+    bottles.set('b-old', { id: 'b-old', values: { name: 'Old', email: 'bottle1@cellar.test' } })
+    const job = await uploaded('Name,Email,Color\nA,  BOTTLE0@cellar.test ,Red\nB,bottle1@cellar.test,Red')
+    const analysis = await analyzeTransferJob(deps, {
+      orgId: ORG,
+      jobId: job.id,
+      actorUid: ME,
+      mapping: { 0: 'name', 1: 'email', 2: 'color' },
+      matchKeys: ['email'],
+    })
+    const email = analysis.derivations?.find((summary) => summary.fieldId === 'email')
+    expect(email).toMatchObject({ filled: 2 })
+    expect(email?.derivations.length).toBeGreaterThan(0)
+    expect(analysis.matches?.summary).toEqual({ new: 1, matched: 1, ambiguous: 0, duplicateInFile: 0 })
+    expect(analysis.matches?.keys.map((key) => key.fieldId)).toEqual(['email'])
+    expect(analysis.matches?.rows.find((row) => row.row === 1)).toMatchObject({ outcome: { kind: 'matched', recordId: 'b-old' }, label: 'B' })
+    expect(analysis.recordLabels).toEqual({ 'b-old': 'Old' })
+    // Without a mapping, the answer is the proposal alone.
+    const bare = await analyzeTransferJob(deps, { orgId: ORG, jobId: job.id, actorUid: ME })
+    expect(bare.derivations).toBeUndefined()
+    expect(bare.matches).toBeUndefined()
+  })
+
+  it('answers the dry run with each verdict’s rows, the conflicts and the record names', async () => {
+    bottles.set('b-old', { id: 'b-old', values: { name: 'Old', email: 'bottle0@cellar.test' } })
+    const job = await uploaded(csv(3))
+    const analysis = await analyzeTransferJob(deps, { orgId: ORG, jobId: job.id, actorUid: ME })
+    const result = await planTransferJob(deps, {
+      orgId: ORG,
+      jobId: job.id,
+      actorUid: ME,
+      choices: { mapping: analysis.match.mapping, extras: { consent: true } },
+    })
+    expect(result.sample.map((row) => row.verdict)).toEqual(['update', 'create', 'create'])
+    expect(result.conflicts).toEqual([
+      {
+        row: 0,
+        recordId: 'b-old',
+        fields: [expect.objectContaining({ fieldId: 'name', before: 'Old', incoming: 'Bottle 0', after: 'Old', mode: 'fillBlanks' })],
+      },
+    ])
+    expect(result.conflictCount).toBe(1)
+    expect(result.ambiguous).toEqual([])
+    expect(result.recordLabels).toEqual({ 'b-old': 'Old' })
+    expect(result.job.extras).toEqual({ consent: true })
+  })
+
+  it('answers each apply call with the results it wrote, and status with every row’s result', async () => {
+    const job = await planned(csv(3))
+    const applied = await applyAll(job.id)
+    expect(applied.results.map((result) => result.outcome)).toEqual(['created', 'created', 'created'])
+    const status = await readTransferJobStatus(deps, { orgId: ORG, jobId: job.id, include: 'results' })
+    expect(status.rows?.map((result) => result.row)).toEqual([0, 1, 2])
+    expect((await readTransferJobStatus(deps, { orgId: ORG, jobId: job.id })).rows).toBeUndefined()
   })
 })
 

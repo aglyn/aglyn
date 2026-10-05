@@ -1059,18 +1059,21 @@ export interface DerivedRow {
 /**
  * A mapped row read as its fields. `cells` is field id → raw cell (from
  * {@link mapTransferRow} or a JSON object); a field the catalog does not
- * know is ignored.
+ * know is ignored. `fieldOptions` overrides `options` for one field — the
+ * date order a person chose for that column, say.
  */
 export function deriveTransferRow(
   fields: ReadonlyMap<string, TransferField>,
   cells: Readonly<Record<string, unknown>>,
   options: DeriveOptions = {},
+  fieldOptions: Readonly<Record<string, DeriveOptions>> = {},
 ): DerivedRow {
   const row: DerivedRow = { values: {}, derivations: [], problems: [] }
   for (const [fieldId, raw] of Object.entries(cells)) {
     const field = fields.get(fieldId)
     if (!field) continue
-    const result = deriveTransferCell(field, raw, options)
+    const own = fieldOptions[fieldId]
+    const result = deriveTransferCell(field, raw, own ? { ...options, ...own } : options)
     if (!result.ok) {
       row.problems.push({ fieldId, raw: cellText(raw), ...(result.problem as DeriveProblem) })
       continue

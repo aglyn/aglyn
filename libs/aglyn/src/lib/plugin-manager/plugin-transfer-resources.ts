@@ -681,6 +681,10 @@ export interface TransferWizardStepProps {
   hostId: string | null
   /** The job, once the upload has made one. */
   jobId: string | null
+  /** The step's answer so far: what it last passed to `setValue`. */
+  value: unknown
+  /** Keeps the step's answer, sent with the dry run under the step's `id` in `extras` for the server half to check. */
+  setValue(value: unknown): void
   /** Whether the step is done; the wizard holds Next until it is. */
   setComplete(complete: boolean): void
 }

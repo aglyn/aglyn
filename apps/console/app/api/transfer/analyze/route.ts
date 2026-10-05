@@ -28,7 +28,7 @@
 
 // lockdown-423: via apps/console/utils/server/transfer-gate.ts
 
-import type { TransferAnalyzeResponse } from '@aglyn/aglyn/data-transfer'
+import type { TransferAnalyzeResponse, TransferDateOrder } from '@aglyn/aglyn/data-transfer'
 import { analyzeTransferJob } from '@aglyn/tenant-data-admin/server/transfer-jobs'
 import { transferErrorResponse, transferGate } from '../../../../utils/server/transfer-gate'
 
@@ -45,6 +45,10 @@ async function handler(request: Request): Promise<Response> {
       jobId: String(body['jobId'] ?? ''),
       actorUid: caller.uid,
       mapping,
+      ...(Array.isArray(body['matchKeys']) ? { matchKeys: (body['matchKeys'] as unknown[]).map(String) } : {}),
+      ...(body['dateOrders'] && typeof body['dateOrders'] === 'object'
+        ? { dateOrders: body['dateOrders'] as Record<string, TransferDateOrder> }
+        : {}),
     })
     const answer: TransferAnalyzeResponse = { ok: true, ...result }
     return Response.json(answer, { status: 200 })

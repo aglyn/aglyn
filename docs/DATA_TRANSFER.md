@@ -14,6 +14,7 @@ this document is the architecture.
 | Job engine: upload, analyze, plan, apply, status, undo | `libs/tenant/data/admin/src/lib/server/transfer-jobs.ts`; routes `apps/console/app/api/transfer/*`; the API's types in the core's `transfer-api.ts` | AGL-3524 |
 | Field-selectable export route | `apps/console/app/api/transfer/export` | AGL-3525 |
 | UI kit: export dialog, import wizard | `libs/aglyn-transfer-ui` | AGL-3526 |
+| Console client and the core launcher plugins open the kit through | `apps/console/utils/transfer-http-client.ts`; `libs/aglyn/src/lib/app-utils/transfer-launcher-context.ts`; the shell's `transfer-launcher-provider.component.tsx` | AGL-3539 |
 | Each resource | the owning plugin's `src/lib/transfer/` | AGL-3527–3535 |
 
 The core knows nothing of any plugin. It holds no vendor's header names, no
@@ -193,9 +194,11 @@ replace / keep both / skip / merge choice.
 
 ### `source.ts` — the uploaded file as rows
 
-`readTransferSource(text, format)` reads a file into `{ headers, rows }` the
-same way in the browser and on the server: CSV per RFC 4180 with the
-delimiter detected from the header line (comma, semicolon or tab), a
+`readTransferSource(text, format, options?)` reads a file into
+`{ headers, rows }` the same way in the browser and on the server: CSV per
+RFC 4180 with the delimiter detected from the header line (comma, semicolon
+or tab) unless `options.delimiter` names one (a pipe too), `options.headerRow:
+false` reading the first line as a row under "Column 1", "Column 2"…, a
 byte-order mark dropped and blank lines skipped; JSON as an array of
 objects (or `{ rows: [...] }`) and NDJSON one object per line, the header
 being every key in first-seen order and nested values kept. A file it cannot
@@ -207,7 +210,24 @@ read answers a `TransferSourceProblem`. `transferFormatFromFileName`,
 The route paths (`TRANSFER_API_ROUTES`), the limits (3 MB a part, 24 MB a
 file, 50,000 rows unless the resource says otherwise), the stored job
 (`TransferJobRecord`), and every request and response the routes speak — see
-[The job engine](#the-job-engine).
+[The job engine](#the-job-engine). It is the one definition of every shape
+that crosses the wire, the kit's included: the person's
+`TransferReadChoices` (mapping, date orders, picklist and lookup choices,
+match keys), `TransferResourceInfo` and `TransferPrefs`, the review shapes
+(`TransferDerivationSummary`, `TransferMatchReview`, `TransferConflict`,
+`TransferAmbiguity`, `TransferLookupReview`) and the undo conflict.
+
+### `review.ts` — what the wizard shows about a whole file
+
+`summarizeTransferDerivations` counts each mapped field's derivations and
+problems with a few examples and the dates that read either way;
+`transferMatchReview` counts every match outcome and lists at most 100 rows
+of each; `transferPlanConflicts` names, per matched row, each field whose
+non-blank file value differs from a non-blank record value, with what the
+policy makes of it; `transferAmbiguities`, `transferPlanSample` (50 rows of
+each verdict), `transferDateOrderOptions` (a person's date order per field,
+as `deriveTransferRow`'s per-field options) and `transferRowLabel`. The job
+engine and the kit's in-memory client both answer from them.
 
 ## How the rest plugs in
 
@@ -237,13 +257,16 @@ under its plugin enablement and release flags.
 
 **AGL-3526, the UI kit.** Built; see [The UI kit](#the-ui-kit) below.
 
+**AGL-3539, the console client and the launcher.** See
+[Opening the kit](#opening-the-kit) below.
+
 ## The job engine
 
 `@aglyn/tenant-data-admin/server/transfer-jobs` runs an import as a durable
-job; the six console routes are wiring over it, behind one gate
+job; the seven console routes are wiring over it, behind one gate
 (`apps/console/utils/server/transfer-gate.ts`): `POST`, a verified Bearer ID
 token, a per-member rate limit per route (`rate-limit-store`), the
-workspace's lockdown verdict (`status` asks with a read intent), and
+workspace's lockdown verdict (`status` and `fields` ask with a read intent), and
 `data.manage` — on the job's site for a site's records, on the workspace
 otherwise. Plan, apply and undo write an `adminAudit` row
 (`data.transfer.plan`, `data.transfer.apply` when a job starts or resumes,
@@ -276,11 +299,12 @@ UI kit's client and the routes cannot disagree. Every refusal is a
 
 | route | does | request → response |
 | -- | -- | -- |
-| `upload` | stores a file whole, or one part of at most 3 MB (`part`, `parts`, then `jobId`); inspects each part and the whole; refuses a format the resource does not take (415), more than 24 MB or the resource's `maxBytes` (413), more rows than its `maxRows` (default 50,000; 413). Makes the job, `draft`. | `TransferUploadRequest` → `TransferUploadResponse` |
-| `analyze` | header proposal (`matchHeaders` with the resource's aliases), 20 sample rows, the catalog, match keys, locked rules, and each mapped picklist column's values against the workspace's list (`picklists` hook) with a proposed choice per unmatched value. `mapping` re-reads the values under the person's mapping. → `analyzed`. | `TransferAnalyzeRequest` → `TransferAnalyzeResponse` |
-| `plan` | refuses a mapping `mappingProblems` blocks and any unmatched picklist value without a choice (`choicesNeeded`, by field); reads every row, resolves picklists into row notes, looks matches up in slices of 500 values, runs `matchRows` over the whole file (so an in-file duplicate is caught across chunks) and the resource's plan, fails the rows an invariant refuses, and stores the chunks. Writes no record. → `planned`. `action: 'rows'` pages the stored plan, by verdict. | `TransferPlanRequest` → `TransferPlanResponse`; `TransferPlanRowsRequest` → `TransferPlanRowsResponse` |
-| `apply` | the first call needs `canApplyTransferPlan` (`acknowledgementsMissing` lists the rest); refuses while another job of the same resource is `applying` or another driver holds this one's lease (`busy`). Adds the chosen picklist values (`addPicklistValues`), then writes chunks for 45 seconds and answers the progress; called until `done`. A plugin `apply` that throws fails the job naming the chunk; calling again resumes it. | `TransferApplyRequest` → `TransferApplyResponse` |
-| `status` | the job, `TransferProgress`, and whether undo is open; `download: 'results'` answers the result file (the file's own columns, then `Outcome`, `Reason`, `Record ID`) as CSV with `X-Aglyn-Export-Rows`. | `TransferStatusRequest` → `TransferStatusResponse` or `text/csv` |
+| `fields` | what a resource offers: its descriptor, every field and group, its match keys (each a default, in order, and the presets' match-key hint), its locked rules and aliases, and the person's `TransferPrefs`. | `TransferFieldsRequest` → `TransferFieldsResponse` |
+| `upload` | stores a file whole, or one part of at most 3 MB (`part`, `parts`, then `jobId`), with the CSV `delimiter` and `headerRow` the person confirmed on the first part (kept as the job's `read`); inspects each part and the whole; refuses a format the resource does not take (415), more than 24 MB or the resource's `maxBytes` (413), more rows than its `maxRows` (default 50,000; 413). Makes the job, `draft`. | `TransferUploadRequest` → `TransferUploadResponse` |
+| `analyze` | header proposal (`matchHeaders` with the resource's aliases), 20 sample rows, the catalog, match keys, locked rules, and each mapped picklist column's values against the workspace's list (`picklists` hook) with a proposed choice per unmatched value. `mapping` re-reads the values under the person's mapping and adds every mapped field's `derivations` over the whole file, the rows `matches` against existing records under `matchKeys` (each key, by default) and `recordLabels`; `dateOrders` reads a field's dates in the order the person chose. → `analyzed`. | `TransferAnalyzeRequest` → `TransferAnalyzeResponse` |
+| `plan` | refuses a mapping `mappingProblems` blocks and any unmatched picklist value without a choice (`choicesNeeded`, by field); reads every row, resolves picklists into row notes, looks matches up in slices of 500 values, runs `matchRows` over the whole file (so an in-file duplicate is caught across chunks) and the resource's plan, fails the rows an invariant refuses, and stores the chunks. Writes no record. → `planned`. Answers the summary, the warnings, 50 rows of each verdict (`sample`), the first 500 `conflicts` (and `conflictCount`), the `ambiguous` rows and `recordLabels`; keeps `dateOrders` and the plugin steps' `extras` on the job. `action: 'rows'` pages the stored plan, by verdict. | `TransferPlanRequest` → `TransferPlanResponse`; `TransferPlanRowsRequest` → `TransferPlanRowsResponse` |
+| `apply` | the first call needs `canApplyTransferPlan` (`acknowledgementsMissing` lists the rest); refuses while another job of the same resource is `applying` or another driver holds this one's lease (`busy`). Adds the chosen picklist values (`addPicklistValues`), then writes chunks for 45 seconds and answers the progress and the `results` of the chunks it wrote; called until `done`. A plugin `apply` that throws fails the job naming the chunk; calling again resumes it. | `TransferApplyRequest` → `TransferApplyResponse` |
+| `status` | the job, `TransferProgress`, and whether undo is open; `include: 'results'` adds every written row's result; `download: 'results'` answers the result file (the file's own columns, then `Outcome`, `Reason`, `Record ID`) as CSV with `X-Aglyn-Export-Rows`. | `TransferStatusRequest` → `TransferStatusResponse` or `text/csv` |
 | `undo` | for seven days after `applied`. `action: 'plan'` reads every touched record through `lookup` by id and runs `planTransferUndo`: counts of restore, delete, conflict and nothing, and the conflicts (what the record holds now, what undo would restore), paged; writes nothing. `action: 'apply'` reverts chunk by chunk through `revert`, each record with the person's `decisions[recordId]` or `otherwise`; called until `done`, then `undone`. | `TransferUndoPlanRequest` → `TransferUndoPlanResponse`; `TransferUndoApplyRequest` → `TransferUndoApplyResponse` |
 
 ### Applying never writes a row twice
@@ -314,21 +338,25 @@ a `TransferClient`. It imports the core only from
 
 ### The client every server implements
 
-`transfer-client.ts` is the contract AGL-3524 implements over
-`api/transfer/*`, and `createMemoryTransferClient` implements in memory
-(the specs and stories run on it):
+`transfer-client.ts` is the kit's port: the console's HTTP client
+implements it over `api/transfer/*` and `createMemoryTransferClient` in
+memory (the specs and stories run on it). Every shape that crosses the wire
+is the core's and is re-exported from here; what the kit defines itself is
+the client's side — requests without the organization (a client is bound to
+one), the file as the browser read it, and the views a step renders,
+composed of the core's shapes.
 
 | method | takes | returns |
 | -- | -- | -- |
 | `fields` | `{ resource }` | `TransferResourceInfo`: the descriptor, every field in catalog order, the groups, the match keys (and default keys), preset hints, locked rules, alias dictionaries, the person's `TransferPrefs`, whether a custom field may be created |
-| `upload` | `TransferUploadRequest`: resource, file name, decoded text, bytes, the confirmed `TransferFileSettings` (format, encoding, delimiter, header row) | the new `draft` `TransferJob` |
-| `analyze` | `{ jobId }`, optionally the `TransferReadChoices` (mapping, date orders, picklist and lookup choices, match keys) | `TransferAnalysis`: headers, sample rows, `HeaderMatchResult`; with a mapping, per-field `TransferDerivationSummary`, `TransferPicklistReview`s, `TransferLookupReview`s; with keys, a `TransferMatchReview` and record labels |
-| `plan` | the read choices, the `TransferPolicy`, plugin step `extras` | `TransferPlanResponse`: the `TransferPlan`, the `TransferConflict`s (matched rows whose non-blank file values differ from non-blank record values, with the after under the policy), the `TransferAmbiguity`s, record labels |
-| `apply` | `{ jobId, acknowledged }` | one chunk: `TransferApplyStep` (`results`, `rowsDone`, `rowCount`, `done`); refuses while `canApplyTransferPlan` does not hold |
+| `upload` | `TransferFileUpload`: resource, file name, decoded text, bytes, the confirmed `TransferFileSettings` (format, encoding, delimiter, header row) | the new `draft` `TransferJob` |
+| `analyze` | `TransferAnalysisRequest`: `{ jobId }`, optionally the `TransferReadChoices` | `TransferAnalysis`: headers, sample rows, `HeaderMatchResult`, the `TransferPicklistAnalysis`es; with a mapping, per-field `TransferDerivationSummary`, `TransferLookupReview`s, a `TransferMatchReview` and record labels |
+| `plan` | `TransferDryRunRequest`: the read choices, the `TransferPolicy`, plugin step `extras` | `TransferDryRun`: the `TransferPlan` (its rows every row, or 50 of each verdict when `rowsComplete` is false), the `TransferConflict`s and `conflictCount`, the `TransferAmbiguity`s, record labels |
+| `apply` | `{ jobId, acknowledged }` | `TransferApplyStep` (`results` of the chunks written, `rowsDone`, `rowCount`, `done`); refuses while `canApplyTransferPlan` does not hold |
 | `status` | `{ jobId }` | the `TransferJob` |
 | `results` | `{ jobId }` | every `TransferRowResult` and the summary |
-| `undo` | `{ jobId, mode: 'preview' \| 'apply', resolutions? }` | counts to restore, delete or leave, and each `TransferUndoConflict` (a record edited since, with its current values); `apply` refuses until every conflict has `keep` or `restore` |
-| `export` | `TransferExportRequest`: field ids in order, scope (`selection` ids, `filter` value, `all`), format, byte-order mark | `{ fileName, rowCount, body: Blob }` |
+| `undo` | `{ jobId, mode: 'preview' }` or `{ jobId, mode: 'apply', decisions, otherwise? }` | `counts` (restore, delete, conflict, nothing), every `TransferUndoConflict` (a record edited since: what it holds now, what undo would put back), and `done`; a decision is `keep` or `revert`, and `otherwise` (default `keep`) covers a record edited after the preview. The results step calls `apply` until `done`. |
+| `export` | `TransferExportChoice`: field ids in order, scope (`selection` ids, `filter` value, `all`), format, byte-order mark | `{ fileName, rowCount, body: Blob }` |
 | `savePrefs` | `{ resource, prefs }` (last export choice, saved presets) | the stored `TransferPrefs` |
 | `createCustomField?` | `{ resource, label, type }` | the new `TransferField` (`custom:<key>`) |
 
@@ -381,3 +409,38 @@ a `TransferClient`. It imports the core only from
 
 The plugin guide is
 [`apps/docs/docs/developers/plugins/guides/import-and-export.md`](../apps/docs/docs/developers/plugins/guides/import-and-export.md).
+
+## Opening the kit
+
+The kit is private and console-only; a published plugin never depends on
+it. A plugin opens the wizard and the dialog through the core launcher
+instead (`app-utils/transfer-launcher-context.ts`, in the `@aglyn/aglyn`
+barrel and at `@aglyn/aglyn/app-utils/transfer-launcher-context`):
+
+```tsx
+const transfer = useTransferLauncher()
+// null outside the console shell: hide Import and Export.
+transfer?.openImport({ resource: 'crm.contacts', scope: 'host', hostId, mappingZone: 'contacts', onFinished })
+transfer?.openExport({ resource: 'crm.contacts', scope: 'host', hostId, selection, filter: { label, value } })
+```
+
+The console shell mounts `TransferLauncherProvider` inside the org scope.
+It binds to the workspace the URL names (off a workspace nothing opens),
+and loads the surface — the kit and the HTTP client — as a separate chunk
+the first time something opens. The wizard opens in a dialog (full screen
+on a phone) titled with the resource's label from
+`registerPluginTransferResourceUi`, whose `extraSteps` it shows when they
+come before the review: each step's component is handed
+`{ resource, orgId, hostId, jobId, value, setValue, setComplete }`, its
+answer rides in the draft's `extras` to the dry run, and Next waits for
+`setComplete(true)`.
+
+`createHttpTransferClient({ orgId, hostId, getIdToken })`
+(`apps/console/utils/transfer-http-client.ts`) is the kit's client over the
+routes. It uploads in parts whose JSON-encoded size stays under 3 MB,
+never splitting a character, with the delimiter and header row on the first
+part; drops the locked rules from a plan request (the route applies the
+resource's own); throws a job that failed while applying, so the wizard
+stops and offers Resume; pages every undo conflict into the preview; and
+throws every refusal as a `TransferRequestError` with the route's `code`.
+

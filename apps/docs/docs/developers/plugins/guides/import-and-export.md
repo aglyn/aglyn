@@ -27,57 +27,80 @@ break — and the kit does the rest the same way for every resource.
   pauses and resumes; an applied import can be undone for seven days, and a
   record edited since is asked about rather than overwritten.
 
-## Render it
+## Open it
 
-The kit never fetches. Give it a `TransferClient`; the console provides one
-for the job engine's routes.
+Your plugin never renders the screens itself: the console does, and hands
+your plugin a launcher. Ask for it with `useTransferLauncher()` from
+`@aglyn/aglyn` and open the wizard or the dialog on the resource you
+declared in `transferResources`:
 
 ```tsx
-import { TransferExportDialog, TransferImportWizard } from '@aglyn/aglyn-transfer-ui'
+import { useTransferLauncher } from '@aglyn/aglyn'
 
-<TransferImportWizard
-  client={client}
-  resource="my-plugin.items"
-  jobId={jobIdFromTheAddress}
-  onJobChange={putTheJobIdInTheAddress}
-  importMappingZone={{ collection: 'items', hostId, orgId }}
-/>
-
-<TransferExportDialog
-  open={open}
-  onClose={close}
-  client={client}
-  resource="my-plugin.items"
-  selection={selectedIds}
-  filter={{ label: 'Status is open', value: currentFilter }}
-/>
+function ItemsHeaderActions({ hostId, selectedIds, currentFilter }) {
+  const transfer = useTransferLauncher()
+  // Outside the console there is no launcher: show no Import or Export.
+  if (!transfer) return null
+  return (
+    <>
+      <Button
+        onClick={() =>
+          transfer.openImport({ resource: 'my-plugin.items', scope: 'host', hostId, mappingZone: 'items' })
+        }
+      >
+        Import
+      </Button>
+      <Button
+        onClick={() =>
+          transfer.openExport({
+            resource: 'my-plugin.items',
+            scope: 'host',
+            hostId,
+            selection: selectedIds,
+            filter: { label: 'Status is open', value: currentFilter },
+          })
+        }
+      >
+        Export
+      </Button>
+    </>
+  )
+}
 ```
 
-- `jobId` and `onJobChange` let a reload resume the import where the person
-  left it; the draft of every choice is saved per job.
-- `importMappingZone` draws the `importMapping` zone under the Columns step,
-  so an assistant plugin can propose a mapping from the headers and the
-  shape of each column. It never sees a cell.
+- `jobId` on `openImport` resumes an import where the person left it; the
+  draft of every choice is saved per job.
+- `mappingZone` draws the `importMapping` zone under the Columns step, so an
+  assistant plugin can propose a mapping from the headers and the shape of
+  each column. It never sees a cell.
+- `onFinished` is called when the person leaves the wizard from its results.
 
 ## Add a step of your own
 
-A step goes after any step before Review. Its answer is kept under its id
-and sent to the server with the plan, where your server half checks it.
+A step goes after any step before Review. Register it with your resource's
+client half, from your console registrar. Its component is handed the job
+and its answer; what it passes to `setValue` is sent to the server with the
+dry run under the step's id in `extras`, where your server half checks it,
+and Next waits for `setComplete(true)`.
 
 ```tsx
-import { registerTransferWizardStep } from '@aglyn/aglyn-transfer-ui'
-
-registerTransferWizardStep('my-plugin.items', {
-  id: 'consent',
-  label: 'Consent',
-  after: 'conflicts',
-  render: ({ value, setValue }) => <ConsentCheckbox checked={value === true} onChange={setValue} />,
-  problems: ({ value }) => (value === true ? [] : ['Confirm these people agreed to hear from you.']),
+registerPluginTransferResourceUi('my-plugin.items', {
+  label: 'Items',
+  extraSteps: [{ id: 'consent', label: 'Consent', after: 'conflicts', component: ConsentStep }],
 })
-```
 
-Pass the same object in the wizard's `extraSteps` prop when your plugin
-renders the wizard itself.
+function ConsentStep({ value, setValue, setComplete }: TransferWizardStepProps) {
+  return (
+    <Checkbox
+      checked={value === true}
+      onChange={(event) => {
+        setValue(event.target.checked)
+        setComplete(event.target.checked)
+      }}
+    />
+  )
+}
+```
 
 ## Lock a rule
 
@@ -89,6 +112,6 @@ back.
 
 ## Try it without a server
 
-`createMemoryTransferClient` runs the whole job in memory over records you
-give it, so a story or a spec can walk every step before your server half
-exists.
+The console's own specs drive the wizard with `createMemoryTransferClient`,
+which runs the whole job in memory over the records it is given, so every
+step can be walked before a resource's server half exists.

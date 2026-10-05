@@ -647,8 +647,12 @@ registerPluginTransferResourceUi('bottles', {
 
 An extra step follows one of the core's steps (`upload`, `mapping`, `values`,
 `matching`, `conflicts`, `dryRun`, `apply`) and is handed
-`{ resource, orgId, hostId, jobId, setComplete }`; `transferWizardSteps(key)`
-answers the full order.
+`{ resource, orgId, hostId, jobId, value, setValue, setComplete }`; what it
+passes to `setValue` reaches the server half with the dry run, under the
+step's `id` in `extras`, and the wizard holds Next until `setComplete(true)`.
+The console's wizard shows the steps that come before the review (after
+`upload` through `conflicts`), since an answer must reach the dry run.
+`transferWizardSteps(key)` answers the full order.
 
 | Reader | Semantics |
 | --- | --- |

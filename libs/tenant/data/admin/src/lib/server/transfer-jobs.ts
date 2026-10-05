@@ -65,6 +65,7 @@
 import {
   TRANSFER_DEFAULT_MAX_ROWS,
   TRANSFER_ID_FIELD,
+  TRANSFER_PLAN_CONFLICTS_MAX,
   TRANSFER_PLAN_PAGE_MAX,
   TRANSFER_RESULT_COLUMNS,
   TRANSFER_UNDO_PAGE_MAX,
@@ -94,13 +95,21 @@ import {
   resolvePicklistChoices,
   sniffTransferFormat,
   summarizeMatches,
+  summarizeTransferDerivations,
   summarizeTransferResults,
+  transferAmbiguities,
   transferCellText,
   transferChunkRanges,
   transferContentType,
+  transferDateOrderOptions,
   transferFormatFromFileName,
   transferLedgerKey,
+  transferMatchReview,
+  transferMatchedRecordIds,
+  transferPlanConflicts,
+  transferPlanSample,
   transferPolicyProblems,
+  transferRowLabel,
   transferUndoAvailable,
   transferUndoExpiresAt,
   transitionTransferJob,
@@ -109,8 +118,11 @@ import {
   type PicklistResolution,
   type PicklistValueChoice,
   type PlannedTransferRow,
+  type RowMatchOutcome,
   type TransferAnalyzeResponse,
   type TransferChunkRange,
+  type TransferCsvDelimiter,
+  type TransferDateOrder,
   type TransferErrorCode,
   type TransferField,
   type TransferFormat,
@@ -122,10 +134,12 @@ import {
   type TransferPlanRow,
   type TransferPlanRowsPage,
   type TransferProgress,
+  type TransferResourceInfo,
   type TransferResultSummary,
   type TransferRowNote,
   type TransferRowResult,
   type TransferRowVerdict,
+  type TransferSourceOptions,
   type TransferSourceTable,
   type TransferUndoConflict,
   type TransferUndoCounts,
@@ -368,6 +382,15 @@ async function resolveResource(deps: TransferEngineDeps, key: string): Promise<R
   }
 }
 
+/** The site a resource's records belong to: required for a `host` resource, `null` for an `org` one. */
+function hostIdFor(resource: ResolvedTransferResource, hostId: string | null | undefined): string | null {
+  const site = resource.scope === 'host' && typeof hostId === 'string' && hostId.trim() ? hostId.trim() : null
+  if (resource.scope === 'host' && !site) {
+    throw new TransferEngineError('invalid', 400, `${resource.label} belong to a site; name the site.`)
+  }
+  return site
+}
+
 function contextFor(job: TransferJobRecord, actorUid: string | null): TransferResourceContext {
   return { resource: job.resource, orgId: job.orgId, hostId: job.hostId ?? null, actorUid, jobId: job.id }
 }
@@ -398,6 +421,52 @@ export function transferJobProgress(job: TransferJobRecord): TransferProgress {
 }
 
 /*==========================================
+ * FIELDS — what a resource offers
+ *=========================================*/
+
+/**
+ * What a resource offers the wizard and the export dialog: its descriptor,
+ * every field and group, its match keys (each a default, in order), the
+ * presets' hints, its locked rules and aliases. `prefs` is the person's own
+ * and is filled by the caller; a custom field cannot be created from here.
+ */
+export async function readTransferResourceInfo(
+  deps: TransferEngineDeps,
+  input: { orgId: string; actorUid: string; resource: string; hostId?: string | null },
+): Promise<Omit<TransferResourceInfo, 'prefs'>> {
+  const resource = await resolveResource(deps, String(input.resource ?? '').trim())
+  const ctx: TransferResourceContext = {
+    resource: resource.key,
+    orgId: input.orgId,
+    hostId: hostIdFor(resource, input.hostId),
+    actorUid: input.actorUid,
+  }
+  const hooks = transferRecordsHooks(resource)
+  const catalog = await transferResourceCatalog(resource, ctx)
+  const matchKeys = [...hooks.matchKeys]
+  return {
+    resource: {
+      key: resource.key,
+      label: resource.label,
+      ...(resource.singularLabel ? { singularLabel: resource.singularLabel } : {}),
+      scope: resource.scope,
+      kinds: [...resource.kinds],
+      formats: [...resource.formats],
+      ...(resource.limits ? { limits: resource.limits } : {}),
+      ...(resource.description ? { description: resource.description } : {}),
+    },
+    fields: catalog.fields,
+    groups: catalog.groups,
+    matchKeys,
+    defaultMatchKeys: matchKeys.map((key) => key.fieldId),
+    presetHints: { matchKeyFieldIds: matchKeys.map((key) => key.fieldId) },
+    locked: [...(await transferResourceLockedRules(resource, ctx))],
+    ...(hooks.aliases?.length ? { dictionaries: [...hooks.aliases] } : {}),
+    canCreateCustomField: false,
+  }
+}
+
+/*==========================================
  * UPLOAD
  *=========================================*/
 
@@ -412,6 +481,21 @@ export interface TransferUploadInput {
   part?: number
   parts?: number
   jobId?: string
+  delimiter?: TransferCsvDelimiter
+  headerRow?: boolean
+}
+
+const CSV_DELIMITERS: readonly TransferCsvDelimiter[] = [',', ';', '\t', '|']
+
+/** How the person said the CSV reads, or nothing for detection to decide. */
+function readOptionsOf(input: Pick<TransferUploadInput, 'delimiter' | 'headerRow'>): TransferSourceOptions | undefined {
+  const options: TransferSourceOptions = {}
+  if (input.delimiter !== undefined) {
+    if (!CSV_DELIMITERS.includes(input.delimiter)) throw new TransferEngineError('invalid', 400, 'That separator is not one a CSV can use.')
+    options.delimiter = input.delimiter
+  }
+  if (input.headerRow === false) options.headerRow = false
+  return Object.keys(options).length ? options : undefined
 }
 
 /**
@@ -439,11 +523,7 @@ export async function uploadTransferSource(
   input: TransferUploadInput,
 ): Promise<{ job: TransferJobRecord; complete: boolean }> {
   const resource = await resolveResource(deps, String(input.resource ?? '').trim())
-  const hostId =
-    resource.scope === 'host' && typeof input.hostId === 'string' && input.hostId.trim() ? input.hostId.trim() : null
-  if (resource.scope === 'host' && !hostId) {
-    throw new TransferEngineError('invalid', 400, `${resource.label} belong to a site; name the site.`)
-  }
+  const hostId = hostIdFor(resource, input.hostId)
   const fileName = String(input.fileName ?? '').trim().slice(0, 240) || 'import'
   const content = typeof input.content === 'string' ? input.content : ''
   const format = input.format ?? transferFormatFromFileName(fileName) ?? sniffTransferFormat(content)
@@ -495,6 +575,7 @@ export async function uploadTransferSource(
       createdAt: now,
       updatedAt: now,
       fileName,
+      ...(format === 'csv' && readOptionsOf(input) ? { read: readOptionsOf(input) } : {}),
       upload: { parts, received: [], bytes: 0, complete: false },
     }
   }
@@ -542,7 +623,7 @@ export async function uploadTransferSource(
     inspectTransferBytes(whole, format, fileName)
   }
 
-  const read = readTransferSource(textOf(whole), format)
+  const read = readTransferSource(textOf(whole), format, job.read ?? {})
   if ('problem' in read) {
     await saveJob(deps, moveJob(job, 'failed', now, { error: { code: read.problem.code, message: read.problem.message } }))
     throw new TransferEngineError('invalid', 422, read.problem.message, read.problem)
@@ -585,7 +666,7 @@ async function loadTable(deps: TransferEngineDeps, job: TransferJobRecord): Prom
     throw new TransferEngineError('state', 409, 'The file has not finished uploading.')
   }
   const [bytes] = await deps.bucket.file(job.sourcePath).download()
-  const read = readTransferSource(textOf(bytes), job.format)
+  const read = readTransferSource(textOf(bytes), job.format, job.read ?? {})
   if ('problem' in read) throw new TransferEngineError('invalid', 422, read.problem.message, read.problem)
   return read.table
 }
@@ -655,15 +736,40 @@ function analyzePicklistColumns(
   return analyses
 }
 
+/** Record id → a name for it, for the records `ids` names that `records` holds. */
+function recordLabelsFor(
+  records: ReadonlyMap<string, Readonly<Record<string, unknown>>>,
+  ids: Iterable<string>,
+): Record<string, string> {
+  const labels: Record<string, string> = {}
+  for (const id of ids) {
+    const label = transferRowLabel(records.get(id))
+    if (label) labels[id] = label
+  }
+  return labels
+}
+
+export interface AnalyzeTransferInput {
+  orgId: string
+  jobId: string
+  actorUid: string
+  mapping?: Record<number, string | null>
+  /** Match key field ids, in priority order; every key the resource has when absent. */
+  matchKeys?: string[]
+  dateOrders?: Record<string, TransferDateOrder>
+}
+
 /**
  * Reads the file and proposes a mapping: every column against the
  * resource's catalog and aliases, with the first rows as samples, and each
  * mapped picklist column's values against the organization's list. With
- * `mapping`, the values are read under that mapping instead of the proposal.
+ * `mapping`, the values are read under that mapping instead of the proposal,
+ * and the answer adds what reading every mapped field did over the whole
+ * file and how the rows match existing records under `matchKeys`.
  */
 export async function analyzeTransferJob(
   deps: TransferEngineDeps,
-  input: { orgId: string; jobId: string; actorUid: string; mapping?: Record<number, string | null> },
+  input: AnalyzeTransferInput,
 ): Promise<Omit<TransferAnalyzeResponse, 'ok'>> {
   const job = await readJob(deps, input.orgId, input.jobId)
   assertBeforeWrites(job, 'analyzed')
@@ -682,6 +788,29 @@ export async function analyzeTransferJob(
   const lists = await picklistLists(hooks, ctx, catalog.fields)
   const picklists = analyzePicklistColumns(table, mapping, byId, lists)
   const lockedRules = [...(await transferResourceLockedRules(resource, ctx))]
+
+  let review: Pick<TransferAnalyzeResponse, 'derivations' | 'matches' | 'recordLabels'> = {}
+  if (input.mapping) {
+    const fieldOptions = transferDateOrderOptions(input.dateOrders)
+    const read = table.rows.map((cells, index) => {
+      const mapped = mapTransferRow(cells, mapping)
+      return { index, cells: mapped, ...deriveTransferRow(byId, mapped, {}, fieldOptions) }
+    })
+    const mappedFields = [...new Set(Object.values(mapping))]
+      .map((fieldId) => byId.get(fieldId))
+      .filter((field): field is TransferField => Boolean(field))
+    const keys = chosenMatchKeys(hooks.matchKeys, input.matchKeys)
+    const values = read.map((row) => row.values)
+    const found = keys.length
+      ? await lookupAll(hooks, ctx, matchLookupRequests(values, keys))
+      : { lookup: new Map<string, string[]>(), records: new Map<string, Readonly<Record<string, unknown>>>() }
+    const outcomes: RowMatchOutcome[] = matchRows(values, keys, found.lookup)
+    review = {
+      derivations: summarizeTransferDerivations(mappedFields, read),
+      matches: transferMatchReview(keys, outcomes, values),
+      recordLabels: recordLabelsFor(found.records, transferMatchedRecordIds(outcomes)),
+    }
+  }
 
   const now = clock(deps)
   const next = moveJob(job, 'analyzed', now, {
@@ -702,6 +831,7 @@ export async function analyzeTransferJob(
     matchKeys: [...hooks.matchKeys],
     lockedRules,
     picklists,
+    ...review,
   }
 }
 
@@ -727,7 +857,12 @@ function readPlanRows(
   choices: TransferPlanChoices,
 ): TransferPlanRow[] {
   return table.rows.map((cells, index): TransferPlanRow => {
-    const derived = deriveTransferRow(byId, mapTransferRow(cells, mapping), choices.derive ?? {})
+    const derived = deriveTransferRow(
+      byId,
+      mapTransferRow(cells, mapping),
+      choices.derive ?? {},
+      transferDateOrderOptions(choices.dateOrders),
+    )
     const notes: TransferRowNote[] = []
     for (const column of columns) {
       const fieldId = column.field.id
@@ -916,12 +1051,22 @@ export async function planTransferJob(
 
   const now = clock(deps)
   const matchSummary = summarizeMatches(matches)
+  const allConflicts = transferPlanConflicts({ fields: byId, rows, matches, existing: found.records, policy })
+  const conflicts = allConflicts.slice(0, TRANSFER_PLAN_CONFLICTS_MAX)
+  const ambiguous = transferAmbiguities(matches)
+  const sample = transferPlanSample(plan.rows)
+  const labelled = new Set<string>()
+  for (const row of sample) if (row.recordId) labelled.add(row.recordId)
+  for (const conflict of conflicts) labelled.add(conflict.recordId)
+  for (const row of ambiguous) for (const id of row.recordIds) labelled.add(id)
   const next = moveJob(job, 'planned', now, {
     mapping,
     matchKeys: keys.map((key) => key.fieldId),
     policy,
     picklistChoices: choices.picklistChoices ?? {},
     ...(choices.derive ? { derive: choices.derive } : {}),
+    ...(choices.dateOrders ? { dateOrders: choices.dateOrders } : {}),
+    ...(choices.extras ? { extras: choices.extras } : {}),
     picklistAdditions: additions,
     summary: plan.summary,
     warnings: plan.warnings,
@@ -946,6 +1091,11 @@ export async function planTransferJob(
     invariantFailureCount: failures.length,
     picklistAdditions: additions,
     rows: { rows: first, offset: 0, next: plan.rows.length > first.length ? first.length : null },
+    sample,
+    conflicts,
+    conflictCount: allConflicts.length,
+    ambiguous,
+    recordLabels: recordLabelsFor(found.records, labelled),
   }
 }
 
@@ -1017,6 +1167,8 @@ export interface ApplyTransferOutcome {
   started: boolean
   /** That move was a resume after a failure. */
   resumed: boolean
+  /** The results of the chunks this call wrote. */
+  results: TransferRowResult[]
 }
 
 /** A row the plan does not write, as its result. */
@@ -1091,7 +1243,9 @@ export async function applyTransferJob(
   input: ApplyTransferInput,
 ): Promise<ApplyTransferOutcome> {
   let job = await readJob(deps, input.orgId, input.jobId)
-  if (job.status === 'applied') return { job, progress: transferJobProgress(job), done: true, started: false, resumed: false }
+  if (job.status === 'applied') {
+    return { job, progress: transferJobProgress(job), done: true, started: false, resumed: false, results: [] }
+  }
   if (job.status !== 'planned' && job.status !== 'applying' && job.status !== 'failed') {
     throw new TransferEngineError('state', 409, `This import is ${job.status}; plan it before applying.`)
   }
@@ -1128,6 +1282,7 @@ export async function applyTransferJob(
 
   const jobRef = transferJobsCollection(deps.firestore, job.orgId).doc(job.id)
   const timeLeft = () => input.deadlineMs - clock(deps)
+  const written: TransferRowResult[] = []
   try {
     if (!job.picklistsAdded) {
       for (const [picklistId, values] of Object.entries(job.picklistAdditions ?? {})) {
@@ -1140,7 +1295,8 @@ export async function applyTransferJob(
     while ((job.cursor?.chunk ?? 0) < chunkCount && timeLeft() > TRANSFER_MIN_CHUNK_BUDGET_MS) {
       const next = await applyChunk(deps, job, jobRef, hooks, ctx, timeLeft)
       if (!next) break
-      job = next
+      job = next.job
+      written.push(...next.results)
     }
   } catch (error) {
     const chunk = job.cursor?.chunk ?? 0
@@ -1150,7 +1306,7 @@ export async function applyTransferJob(
       lease: null,
     })
     await saveJob(deps, job)
-    return { job, progress: transferJobProgress(job), done: false, started, resumed }
+    return { job, progress: transferJobProgress(job), done: false, started, resumed, results: written }
   }
 
   const done = (job.cursor?.chunk ?? 0) >= (job.chunkCount ?? 0)
@@ -1158,13 +1314,14 @@ export async function applyTransferJob(
     ? moveJob(job, 'applied', clock(deps), { lease: null })
     : { ...job, lease: null, updatedAt: clock(deps) }
   await saveJob(deps, job)
-  return { job, progress: transferJobProgress(job), done, started, resumed }
+  return { job, progress: transferJobProgress(job), done, started, resumed, results: written }
 }
 
 /**
  * One chunk, through the plugin's `apply` and the ledger. Answers the job
- * with the cursor moved past the chunk, or `null` when the chunk is not
- * complete yet (the budget ran short and the plugin stopped at a row).
+ * with the cursor moved past the chunk and the chunk's results, or `null`
+ * when the chunk is not complete yet (the budget ran short and the plugin
+ * stopped at a row).
  */
 async function applyChunk(
   deps: TransferEngineDeps,
@@ -1173,7 +1330,7 @@ async function applyChunk(
   hooks: TransferRecordsHooks,
   ctx: TransferResourceContext,
   timeLeft: () => number,
-): Promise<TransferJobRecord | null> {
+): Promise<{ job: TransferJobRecord; results: TransferRowResult[] } | null> {
   const index = job.cursor?.chunk ?? 0
   const chunk = await readChunkRows(jobRef, index)
   if (!chunk) throw new Error(`the dry run has no chunk ${index + 1}`)
@@ -1245,7 +1402,7 @@ async function applyChunk(
   await eachLimited(entries, TRANSFER_WRITE_CONCURRENCY, async (doc) => {
     await doc.ref.delete()
   })
-  return next
+  return { job: next, results }
 }
 
 /*==========================================
@@ -1255,10 +1412,22 @@ async function applyChunk(
 /** The job, its progress, and whether undo is open. */
 export async function readTransferJobStatus(
   deps: TransferEngineDeps,
-  input: { orgId: string; jobId: string },
-): Promise<{ job: TransferJobRecord; progress: TransferProgress; undo: { available: boolean; expiresAt: number | null; state: TransferUndoState | null } }> {
+  input: { orgId: string; jobId: string; include?: 'results' },
+): Promise<{
+  job: TransferJobRecord
+  progress: TransferProgress
+  undo: { available: boolean; expiresAt: number | null; state: TransferUndoState | null }
+  rows?: TransferRowResult[]
+}> {
   const job = await readJob(deps, input.orgId, input.jobId)
+  const rows =
+    input.include === 'results'
+      ? [...(await readResults(transferJobsCollection(deps.firestore, job.orgId).doc(job.id))).values()].sort(
+          (a, b) => a.row - b.row,
+        )
+      : undefined
   return {
+    ...(rows ? { rows } : {}),
     job,
     progress: transferJobProgress(job),
     undo: {
@@ -1365,9 +1534,11 @@ export async function planTransferJobUndo(
     const step = planTransferUndo(entry, current)
     if (step.action === 'conflict') {
       counts.conflict += 1
+      const label = transferRowLabel(current)
       conflicts.push({
         row: entry.row,
         recordId: entry.recordId,
+        ...(label ? { label } : {}),
         action: entry.action,
         fields: step.fields,
         current: Object.fromEntries(step.fields.map((fieldId) => [fieldId, current?.[fieldId] ?? null])),

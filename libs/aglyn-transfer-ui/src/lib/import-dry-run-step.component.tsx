@@ -127,7 +127,14 @@ export function ImportDryRunStep({
         </CardContent>
       </Card>
       <Card variant="outlined">
-        <CardHeader title="Row by row" />
+        <CardHeader
+          title="Row by row"
+          subheader={
+            wizard.planResponse?.rowsComplete === false
+              ? `Some rows of each outcome are shown; the counts and warnings cover all ${countOf(plan.summary.total, 'row')}, and the result file lists every one.`
+              : undefined
+          }
+        />
         <CardContent>
           <TransferDiffTable
             label="Planned changes"

@@ -77,7 +77,7 @@ describe('createMemoryTransferClient', () => {
     const { client, job } = await uploaded()
     const analysis = await client.analyze({ jobId: job.id, mapping: MAPPING })
     expect(
-      analysis.picklists?.[0]?.result.unmatched.map((value) => value.value),
+      analysis.picklists?.[0]?.unmatched.map((value) => value.value),
     ).toEqual(['Prospect'])
     expect(analysis.lookups?.[0]?.unresolved).toEqual([
       expect.objectContaining({
@@ -192,14 +192,15 @@ describe('createMemoryTransferClient', () => {
     expect(preview.conflicts.map((conflict) => conflict.recordId)).toEqual([
       'rec-2',
     ])
-    await expect(client.undo({ jobId: job.id, mode: 'apply' })).rejects.toThrow(
-      /edited since/,
-    )
+    await expect(
+      client.undo({ jobId: job.id, mode: 'apply', decisions: {} }),
+    ).rejects.toThrow(/edited since/)
     const undone = await client.undo({
       jobId: job.id,
       mode: 'apply',
-      resolutions: { 'rec-2': 'keep' },
+      decisions: { 'rec-2': 'keep' },
     })
+    expect(undone.done).toBe(true)
     expect(undone.job.status).toBe('undone')
     expect(client.records.get('rec-1')?.values['phone']).toBe('+1 555 0100')
     expect(client.records.get('rec-2')?.values['team']).toBe('team-9')

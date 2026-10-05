@@ -62,6 +62,10 @@ async function handler(request: Request): Promise<Response> {
         ? { picklistChoices: body['picklistChoices'] as TransferPlanChoices['picklistChoices'] }
         : {}),
       ...(body['derive'] && typeof body['derive'] === 'object' ? { derive: body['derive'] as TransferPlanChoices['derive'] } : {}),
+      ...(body['dateOrders'] && typeof body['dateOrders'] === 'object'
+        ? { dateOrders: body['dateOrders'] as TransferPlanChoices['dateOrders'] }
+        : {}),
+      ...(body['extras'] && typeof body['extras'] === 'object' ? { extras: body['extras'] as TransferPlanChoices['extras'] } : {}),
     }
     const result = await planTransferJob(caller.deps, { orgId: caller.orgId, jobId, actorUid: caller.uid, choices })
     await auditTransfer(caller, 'data.transfer.plan', jobId, {

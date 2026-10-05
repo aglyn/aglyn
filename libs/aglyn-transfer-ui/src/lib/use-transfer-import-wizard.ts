@@ -41,7 +41,7 @@ import type {
   TransferAnalysis,
   TransferClient,
   TransferFileSettings,
-  TransferPlanResponse,
+  TransferDryRun,
   TransferResourceInfo,
   TransferResults,
 } from './transfer-client'
@@ -97,7 +97,7 @@ export interface TransferImportWizardController {
   stepIndex: number
   job: TransferJob | null
   analysis: TransferAnalysis | null
-  planResponse: TransferPlanResponse | null
+  planResponse: TransferDryRun | null
   results: TransferResults | null
   apply: TransferApplyState
   busy: boolean
@@ -151,7 +151,7 @@ export function useTransferImportWizard(
   )
   const [job, setJob] = useState<TransferJob | null>(null)
   const [analysis, setAnalysis] = useState<TransferAnalysis | null>(null)
-  const [planResponse, setPlanResponse] = useState<TransferPlanResponse | null>(
+  const [planResponse, setPlanResponse] = useState<TransferDryRun | null>(
     null,
   )
   const [results, setResults] = useState<TransferResults | null>(null)
@@ -167,7 +167,7 @@ export function useTransferImportWizard(
   const draftRef = useRef(draft)
   const running = useRef(false)
   const requestSeq = useRef(0)
-  const planRef = useRef<TransferPlanResponse | null>(null)
+  const planRef = useRef<TransferDryRun | null>(null)
 
   const extra = useMemo(
     () => [...(options.extraSteps ?? []), ...transferWizardStepsFor(resource)],
