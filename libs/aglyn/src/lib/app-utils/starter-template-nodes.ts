@@ -16,6 +16,7 @@
  */
 
 import { CANVAS_ROOT_ELEMENT_ID } from '../foundation/constants/canvas'
+import type { NodeInteraction } from './node-interactions'
 
 /**
  * What a starter site is, and the kit its pages are built with (AGL-687,
@@ -87,6 +88,12 @@ export type StarterNodeSpec = {
    * the panel could show but no click could change or clear.
    */
   sx?: Record<string, unknown>
+  /**
+   * What the element does when a visitor acts on it, stored on the node as
+   * the interactions editor stores it (AGL-2867) — a button that scrolls to
+   * a section of its own page, for one.
+   */
+  interactions?: NodeInteraction[]
   children?: StarterNodeSpec[]
 }
 
@@ -107,6 +114,7 @@ export function buildStarterNodes(children: StarterNodeSpec[]): Record<string, a
       parentId,
       props: spec.props ?? {},
       ...(spec.sx ? { sx: spec.sx } : {}),
+      ...(spec.interactions?.length ? { interactions: spec.interactions } : {}),
       nodes: (spec.children ?? []).map((child) => child.id),
     }
     for (const child of spec.children ?? []) walk(child, spec.id)
