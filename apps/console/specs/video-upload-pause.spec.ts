@@ -182,6 +182,15 @@ const CANNOT_STORE_VIDEO: Record<string, { why: string; proof: string }> = {
       'ever served from it.',
     proof: 'contentType: transferContentType(format)',
   },
+  'libs/tenant/data/admin/src/lib/server/transfer-packages.ts': {
+    why:
+      'a workspace package (AGL-3535): the bytes inspected and stored are ' +
+      'the package re-serialized as JSON after it parsed and every item ' +
+      'matched its content hash. Its items are settings documents ' +
+      '(sequences, campaigns, templates) that carry no file, and nothing is ' +
+      'ever served from it.',
+    proof: "const bytes = Buffer.from(JSON.stringify(pkg), 'utf8')",
+  },
 }
 
 const GATE_CALLS = ['videoUploadPausedRefusal(', 'videoUploadsOpenForOrg(']

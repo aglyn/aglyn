@@ -189,7 +189,7 @@ export const DOCS_HELP_EXCERPTS = {
   siteSearch: 'Let visitors search your site\'s pages, blog entries, and dataset records with a built-in search page.',
   sso: 'How to set up SAML SSO yourself, how domain verification works, what enforcement does, and the consequences of SSO accounts living in their own identity pool.',
   staffConsole: 'Aglyn-staff tools for managing organizations, entitlements, users, and audits.',
-  storeImportAndExport: 'Bring products in from a file or from Shopify, update them by handle or SKU, move gift cards over by issuing each one, and export products, orders, discounts, coupons, gift cards and categories with the fields you choose.',
+  storeImportAndExport: 'Bring products in from a file or from Shopify, update them by handle or SKU, move gift cards by issuing each one, and export products, orders, discounts, coupons, gift cards and categories with the fields you choose.',
   supportAndCommunity: 'Open a support ticket with the Aglyn team, and ask other builders in the community forum.',
   supportQueue: 'Triage customer support tickets from the staff console — filter, reply as Aglyn, and close or reopen.',
   supportTiers: 'The first-response commitment attached to each plan, why Enterprise is quoted in clock hours, and where ticket support starts.',
