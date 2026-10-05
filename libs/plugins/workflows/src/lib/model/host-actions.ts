@@ -25,6 +25,7 @@ import {
   isCrmActivityKind,
   isCrmTaskKind,
 } from '@aglyn/aglyn/app-utils/crm-kinds'
+import type { CrmActivityDirection, CrmTaskPriority } from '@aglyn/aglyn/app-utils/crm'
 import { HOST_EVENT_TYPES } from '@aglyn/aglyn/app-utils/host-events'
 import {
   CLIENT_ACTION_STEP_TYPES,
@@ -40,6 +41,14 @@ import {
   validateInteraction,
 } from '@aglyn/aglyn/app-utils/site-interactions'
 
+/** A task's priorities, by meaning (AGL-3517) — the `taskPriority` picklist's meanings. */
+const TASK_PRIORITIES: readonly (CrmTaskPriority | undefined)[] = ['low', 'normal', 'high']
+
+/** The directions a logged call or email takes (AGL-3517) — `CRM_ACTIVITY_DIRECTIONS`. */
+const ACTIVITY_DIRECTIONS: Partial<Record<CrmActivityKind, readonly (CrmActivityDirection | undefined)[]>> = {
+  call: ['outbound', 'inbound', 'internal'],
+  email: ['outbound', 'inbound'],
+}
 /**
  * THE AUTOMATION VOCABULARY (AGL-148): HubSpot-style event → action
  * automation on top of the AGL-128 event triggers. An action listens for a
@@ -175,7 +184,10 @@ type ServerActionStep = (
   | {
       type: 'createCrmTask'
       title: string
+      /** The task's Type, by meaning; the run stores the org's label for it (AGL-3517). */
       kind: CrmTaskKind
+      /** Its Priority, by meaning — `normal` when absent. */
+      priority?: CrmTaskPriority
       /** Days from the run to the due date; `0` is due today. */
       dueInDays: number
       /**
@@ -186,7 +198,13 @@ type ServerActionStep = (
       assigneeUid?: string
       assigneeEmail?: string
     }
-  | { type: 'logCrmActivity'; kind: CrmActivityKind; body: string }
+  | {
+      type: 'logCrmActivity'
+      kind: CrmActivityKind
+      body: string
+      /** Which way a call or an email went (AGL-3517); no other kind takes one. */
+      direction?: CrmActivityDirection
+    }
 ) & {
   /** See {@link InteractionStepGuard}. Absent means the step always runs. */
   when?: InteractionStepGuard | null
@@ -439,7 +457,10 @@ export function hostActionStepProblem(candidate: InteractionStepBase, label: str
   }
   if (step.type === 'createCrmTask') {
     if (!step.title?.trim()) return `${label}: give the task a title`
-    if (!isCrmTaskKind(step.kind)) return `${label}: pick the kind of task`
+    if (!isCrmTaskKind(step.kind)) return `${label}: pick the type of task`
+    if (step.priority !== undefined && !TASK_PRIORITIES.includes(step.priority)) {
+      return `${label}: pick the task’s priority`
+    }
     if (
       !Number.isInteger(step.dueInDays) ||
       step.dueInDays < 0 ||
@@ -457,6 +478,14 @@ export function hostActionStepProblem(candidate: InteractionStepBase, label: str
   if (step.type === 'logCrmActivity') {
     if (!isCrmActivityKind(step.kind)) {
       return `${label}: pick the kind of activity`
+    }
+    if (step.direction !== undefined) {
+      const directions = ACTIVITY_DIRECTIONS[step.kind] ?? []
+      if (!directions.includes(step.direction)) {
+        return directions.length
+          ? `${label}: pick which way the ${step.kind} went`
+          : `${label}: only a call or an email takes a direction`
+      }
     }
     if (!step.body?.trim()) return `${label}: write what happened`
   }

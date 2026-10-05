@@ -302,6 +302,10 @@ describe('crm/task-save', () => {
       // Nothing said about a reminder: the due time is one (AGL-2659).
       remindAtMs: 1757062800000,
       status: 'open',
+      // The org's labels for the meanings, its standard values here (AGL-3517).
+      typeLabel: 'Call',
+      priorityLabel: 'Normal',
+      statusLabel: 'Not Started',
       completedAtMs: null,
       // An undeclared site is a group of one: this site's token alone.
       visibleTo: ['host:site-1'],
@@ -588,6 +592,66 @@ describe('a task’s reminder (AGL-2659)', () => {
   })
 })
 
+describe('a task’s Status, Priority and Type picklists (AGL-3517)', () => {
+  const LISTS = `orgs/${ORG_ID}/crmPicklists`
+  const save = (over: Record<string, unknown>, taskId?: string) =>
+    call(crmTaskSaveHandler, {
+      body: { hostId: HOST_ID, ...(taskId ? { taskId } : {}), task: task(over) },
+    })
+
+  it('labels a new task with the org’s own name for each meaning', async () => {
+    store[`${LISTS}/taskPriority`] = {
+      values: [{ id: 'normal', label: 'Medium', active: true }],
+      defaultValueId: null,
+    }
+    expect((await save({})).status).toBe(200)
+    expect(stored()[0]).toMatchObject({ priority: 'normal', priorityLabel: 'Medium' })
+  })
+
+  it('stores the meaning a named label carries, and refuses one the list does not hold', async () => {
+    expect((await save({ kind: 'call', typeLabel: 'meeting', priorityLabel: 'High' })).status).toBe(200)
+    expect(stored()[0]).toMatchObject({
+      kind: 'meeting',
+      typeLabel: 'Meeting',
+      priority: 'high',
+      priorityLabel: 'High',
+    })
+    const refused = await save({ typeLabel: 'Fax' })
+    expect(refused.status).toBe(400)
+    expect(refused.body.error).toBe('Type must be one of: Call, Email, Meeting, To-do.')
+    expect(stored()).toHaveLength(1)
+  })
+
+  it('relabels an open task with an open status, and refuses one that would complete it', async () => {
+    expect((await save({ statusLabel: 'In Progress' })).status).toBe(200)
+    const [{ id }] = stored()
+    expect(stored()[0]).toMatchObject({ status: 'open', statusLabel: 'In Progress' })
+    const refused = await save({ statusLabel: 'Completed' }, id)
+    expect(refused.status).toBe(400)
+    expect(refused.body.error).toBe('“Completed” completes a task. Tick the task done instead.')
+    expect(stored()[0]).toMatchObject({ status: 'open', statusLabel: 'In Progress' })
+  })
+
+  it('keeps a label the org has since deactivated on a save that names it again', async () => {
+    store[`${LISTS}/taskStatus`] = {
+      values: [{ id: 'deferred', label: 'Deferred', active: false }],
+      defaultValueId: null,
+    }
+    store[`${TASKS}/t-9`] = {
+      title: 'Later',
+      kind: 'todo',
+      priority: 'normal',
+      status: 'open',
+      statusLabel: 'Deferred',
+      visibleTo: ['host:site-1'],
+      hostId: HOST_ID,
+      createdByUid: WRITER,
+    }
+    expect((await save({ title: 'Later, renamed', statusLabel: 'Deferred' }, 't-9')).status).toBe(200)
+    expect(store[`${TASKS}/t-9`]).toMatchObject({ title: 'Later, renamed', statusLabel: 'Deferred' })
+  })
+})
+
 describe('crm/task-complete', () => {
   const open = () => {
     store[`${TASKS}/t-1`] = {
@@ -633,6 +697,8 @@ describe('crm/task-complete', () => {
     const row = store[`${TASKS}/t-1`]
     expect(row).toMatchObject({
       status: 'done',
+      // The first active done value's label (AGL-3517).
+      statusLabel: 'Completed',
       completedAtMs: body.completedAtMs,
       completedByUid: WRITER,
       updatedAt: SERVER_TIMESTAMP,

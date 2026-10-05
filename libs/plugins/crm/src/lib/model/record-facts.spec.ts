@@ -422,6 +422,27 @@ describe('the pieces', () => {
     expect(crmActivityFact({ kind: 'note', atMs: Number.NaN, body: 'no time' })).toBeNull()
   })
 
+  it('reads a call’s direction, and a task’s own Type and Status labels (AGL-3517)', () => {
+    expect(crmActivityFact({ kind: 'call', atMs: day('2026-09-03'), direction: 'internal', body: 'Synced with Sam' })).toEqual({
+      on: '2026-09-03',
+      kind: 'Call',
+      direction: 'internal',
+      text: 'Synced with Sam',
+    })
+    // A direction the kind does not take is not reported.
+    expect(crmActivityFact({ kind: 'note', atMs: day('2026-09-03'), direction: 'inbound', body: 'x' })).toEqual({
+      on: '2026-09-03',
+      kind: 'Note',
+      text: 'x',
+    })
+    expect(
+      crmOpenTaskFacts(
+        [{ title: 'Walk the site', kind: 'meeting', typeLabel: 'Site visit', priority: 'high', status: 'open', statusLabel: 'In Progress' }],
+        NOW,
+      ),
+    ).toEqual([{ title: 'Walk the site', kind: 'Site visit', priority: 'high', status: 'In Progress', due: null, overdue: false }])
+  })
+
   it('replaces an address or a number typed into free text, and leaves days, amounts and short numbers', () => {
     expect(crmFactProse('Call Jane on (512) 555-0100 or +44 20 7946 0958, or write jane@example.com.', 280)).toBe(
       'Call Jane on [phone number] or [phone number], or write [email address].',

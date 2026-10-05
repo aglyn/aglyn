@@ -55,6 +55,8 @@ jest.mock('@aglyn/aglyn/server', () => ({
 }))
 
 let taskSeq = 0
+/** The org's stored task picklists, by document id (AGL-3517). */
+let picklistDocs: Record<string, Record<string, unknown>> = {}
 const firestoreHandle = {
   collection: (name: string) => ({
     doc: (id: string) => {
@@ -69,6 +71,13 @@ const firestoreHandle = {
       if (name === 'orgs') {
         return {
           collection: (sub: string) => {
+            if (sub === 'crmPicklists') {
+              return {
+                doc: (listId: string) => ({
+                  get: async () => ({ data: () => picklistDocs[listId] }),
+                }),
+              }
+            }
             if (sub !== 'crmTasks') throw new Error(`unexpected collection ${sub}`)
             return {
               doc: () => {
@@ -163,6 +172,7 @@ beforeEach(() => {
   manageData = true
   members = []
   written = []
+  picklistDocs = {}
   commits = 0
   org = { plan: 'starter' }
   taskSeq = 0
@@ -208,8 +218,11 @@ describe('what a row becomes', () => {
     expect(written[0]).toMatchObject({
       title: 'Call Maya',
       kind: 'call',
+      typeLabel: 'Call',
       priority: 'high',
+      priorityLabel: 'High',
       status: 'open',
+      statusLabel: 'Not Started',
       dueAtMs: Date.UTC(2026, 8, 30, 12),
       completedAtMs: null,
       assigneeUid: 'ada-uid',
@@ -223,6 +236,18 @@ describe('what a row becomes', () => {
     expect(written[1]).toMatchObject({ kind: 'todo', priority: 'normal', dueAtMs: null, notes: '' })
     expect('assigneeUid' in written[1]).toBe(false)
     expect('contactId' in written[1]).toBe(false)
+  })
+
+  it('reads a cell against the org’s own lists (AGL-3517)', async () => {
+    picklistDocs = {
+      taskStatus: {
+        values: [{ id: 'on-hold', label: 'On hold', active: true, meaning: 'open' }],
+        defaultValueId: null,
+      },
+    }
+    const out = await importRows([{ title: 'Paused', status: 'On hold' }])
+    expect(out.body.created).toBe(1)
+    expect(written[0]).toMatchObject({ status: 'open', statusLabel: 'On hold', completedAtMs: null })
   })
 
   it('stamps a done row as completed by the importer', async () => {

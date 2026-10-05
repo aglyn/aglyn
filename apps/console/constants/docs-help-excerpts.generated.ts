@@ -190,7 +190,7 @@ export const DOCS_HELP_EXCERPTS = {
   supportQueue: 'Triage customer support tickets from the staff console — filter, reply as Aglyn, and close or reopen.',
   supportTiers: 'The first-response commitment attached to each plan, why Enterprise is quoted in clock hours, and where ticket support starts.',
   supportTriage: 'How Aglyn staff triage an incoming support ticket — priority, the billing answers, and every escalation route out of the queue.',
-  tasks: 'Calls, emails, meetings and to-dos with a due date, an assignee and a link to the record they are for — overdue and today read off the clock, a snooze, a reminder at its own time, and a morning digest.',
+  tasks: 'Calls, emails, meetings and to-dos with a status, a due date, an assignee and a link to the record they are for — overdue and today read off the clock, a snooze, a reminder at its own time, and a morning digest.',
   team: 'Invite teammates with custom roles, and offer members-only areas to your site\'s visitors.',
   templatesLibrary: 'Save pages, components and layouts as reusable templates — and the safe landing place for anything you install from the marketplace.',
   termReference: 'Every term Aglyn uses, in one place — brief definitions with links to the full documentation for each.',

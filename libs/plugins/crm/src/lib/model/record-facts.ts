@@ -24,6 +24,7 @@ import {
   contactDisplayName,
   crmLeadStatusLabel,
   CRM_FORECAST_CATEGORY_LABELS,
+  crmActivityDirection,
   customImportTarget,
   DEAL_NEXT_STEP_MAX,
   dealForecastCategory,
@@ -138,7 +139,7 @@ export interface CrmTimelineFact {
   on: string
   /** What happened: a logged kind (Call, Email) or the capture it came through (Form, Booking). */
   kind: string
-  /** `outbound` or `inbound` for an email; absent otherwise. */
+  /** `outbound` or `inbound` for an email; also `internal` for a call (AGL-3517); absent otherwise. */
   direction?: string
   subject?: string
   text?: string
@@ -150,8 +151,12 @@ export interface CrmTimelineFact {
 /** One task still to do. */
 export interface CrmTaskFact {
   title: string
+  /** The org's Type label when the task holds one, else its kind's name (AGL-3517). */
   kind: string
+  /** The meaning — `high`, `normal` or `low` — whatever the org calls it. */
   priority: string
+  /** The org's Status label ("In Progress"), when the task holds one (AGL-3517). */
+  status?: string
   /** The UTC day it is due, or `null` for a task with no due date. */
   due: string | null
   overdue: boolean
@@ -371,9 +376,8 @@ export function crmActivityFact(activity: Partial<CrmActivity>): CrmTimelineFact
   if (!on) return null
   const kind = activity.kind && CRM_ACTIVITY_KIND_LABELS[activity.kind] ? activity.kind : 'other'
   const fact: CrmTimelineFact = { on, kind: CRM_ACTIVITY_KIND_LABELS[kind] }
-  if (kind === 'email' && (activity.direction === 'outbound' || activity.direction === 'inbound')) {
-    fact.direction = activity.direction
-  }
+  const direction = crmActivityDirection(kind, activity.direction)
+  if (direction) fact.direction = direction
   const subject = crmFactProse(activity.subject ?? activity.threadSubject, CRM_FACTS_LABEL_MAX)
   if (subject) fact.subject = subject
   const text = crmFactProse(activity.body, CRM_FACTS_TEXT_MAX)
@@ -421,8 +425,13 @@ export function crmOpenTaskFacts(tasks: ReadonlyArray<Partial<CrmTask>>, nowMs: 
     .slice(0, CRM_FACTS_TASKS_MAX)
     .map(({ task, due }) => ({
       title: crmFactProse(task.title, CRM_FACTS_LABEL_MAX),
-      kind: task.kind && CRM_TASK_KIND_LABELS[task.kind] ? CRM_TASK_KIND_LABELS[task.kind] : 'To-do',
+      kind:
+        crmFactProse(task.typeLabel, CRM_FACTS_LABEL_MAX) ||
+        (task.kind && CRM_TASK_KIND_LABELS[task.kind] ? CRM_TASK_KIND_LABELS[task.kind] : 'To-do'),
       priority: task.priority === 'high' || task.priority === 'low' ? task.priority : 'normal',
+      ...(crmFactProse(task.statusLabel, CRM_FACTS_LABEL_MAX)
+        ? { status: crmFactProse(task.statusLabel, CRM_FACTS_LABEL_MAX) }
+        : {}),
       due: due === null ? null : crmFactDay(due),
       // Overdue by the UTC day: a task due today is not overdue until tomorrow.
       overdue: due !== null && Math.floor(due / DAY_MS) < Math.floor(nowMs / DAY_MS),

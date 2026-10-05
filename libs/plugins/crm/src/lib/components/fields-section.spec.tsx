@@ -431,6 +431,35 @@ describe('the lead status values on the Leads tab (AGL-3512)', () => {
 })
 
 /*
+ * THE TASKS TAB (AGL-3517). A task has standard picklists and no custom
+ * fields: the tab reads no definitions, offers no New field, and draws
+ * Status, Priority, Type and Subject — the semantic three with what each
+ * value means, Subject as suggestions no task holds.
+ */
+describe('the Tasks tab (AGL-3517)', () => {
+  it('draws the task picklists alone, each semantic one with what its values mean', () => {
+    render(<ContactsFieldsSection hostId="host-1" org={{}} />)
+    fireEvent.click(screen.getByRole('tab', { name: 'Tasks' }))
+    expect(definitionsFor).toHaveBeenLastCalledWith(null, 'contact')
+    expect(screen.queryByRole('button', { name: 'New field' })).toBeNull()
+    expect(screen.queryByText(/No custom/)).toBeNull()
+    for (const name of ['Status values', 'Priority values', 'Type values', 'Subject values']) {
+      expect(screen.getByRole('table', { name })).toBeTruthy()
+    }
+    const status = screen.getByRole('table', { name: 'Status values' })
+    expect(within(status).getByRole('columnheader', { name: 'Means' })).toBeTruthy()
+    const means = within(status)
+      .getAllByRole('row')
+      .slice(1)
+      .map((row) => within(row).getAllByRole('cell')[2]?.textContent)
+    expect(means).toEqual(['Open', 'Open', 'Open', 'Open', 'Completed'])
+    const subject = screen.getByRole('table', { name: 'Subject values' })
+    expect(within(subject).queryByRole('columnheader', { name: 'Means' })).toBeNull()
+    expect(screen.getByText(/changes no task/)).toBeTruthy()
+  })
+})
+
+/*
  * THE LIST TABLE (AGL-3335). Order is data — where a field appears on every
  * record and form — so it stays editable, and only while the table shows it.
  */

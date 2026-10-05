@@ -376,7 +376,8 @@ describe('the file', () => {
     expect(downloads).toHaveLength(1)
     expect(downloads[0].name).toBe('tasks-selected.csv')
     const [header, line] = downloads[0].body.split('\n')
-    expect(header.startsWith('Title,Kind,Priority')).toBe(true)
-    expect(line).toBe('Call Ada,Call,Normal,Open,,,Ada,,,,')
+    // Salesforce's column names, and the status by its label (AGL-3517).
+    expect(header.startsWith('Subject,Type,Priority,Status')).toBe(true)
+    expect(line).toBe('Call Ada,Call,Normal,Not Started,,,Ada,,,,')
   })
 })

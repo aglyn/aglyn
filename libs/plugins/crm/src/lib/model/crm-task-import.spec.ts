@@ -25,6 +25,7 @@
  * export's own header maps itself, its link columns left alone.
  */
 
+import { effectiveCrmTaskPicklists } from '@aglyn/aglyn/app-utils/crm'
 import {
   TASK_IMPORT_FIELD_LABELS,
   TASK_IMPORT_FIELDS,
@@ -88,6 +89,49 @@ describe('guessTaskImportMapping', () => {
   })
 })
 
+describe('the org’s task picklists (AGL-3517)', () => {
+  it('reads a label of the org’s lists as its meaning, and keeps the label', () => {
+    const picklists = effectiveCrmTaskPicklists({
+      priority: { values: [{ id: 'normal', label: 'Medium', active: true }], defaultValueId: null },
+      type: {
+        values: [{ id: 'site-visit', label: 'Site visit', active: true, meaning: 'meeting' }],
+        defaultValueId: null,
+      },
+    })
+    const verdict = normalizeTaskImportRow(
+      { title: 'Walk the site', kind: 'Site visit', priority: 'medium', status: 'In Progress' },
+      picklists,
+    )
+    expect(verdict.ok && verdict.row).toMatchObject({
+      kind: 'meeting',
+      typeLabel: 'Site visit',
+      priority: 'normal',
+      priorityLabel: 'Medium',
+      status: 'open',
+      statusLabel: 'In Progress',
+      dropped: [],
+    })
+  })
+
+  it('labels a row with no cells the way a new task starts', () => {
+    const verdict = normalizeTaskImportRow({ title: 'Bare' })
+    expect(verdict.ok && verdict.row).toMatchObject({
+      typeLabel: 'To-do',
+      priorityLabel: 'Normal',
+      statusLabel: 'Not Started',
+    })
+  })
+
+  it('reads the export’s own header, Subject and Type first', () => {
+    expect(guessTaskImportMapping(['Subject', 'Type', 'Priority', 'Status'])).toEqual({
+      0: 'title',
+      1: 'kind',
+      2: 'priority',
+      3: 'status',
+    })
+  })
+})
+
 describe('the cell readers', () => {
   it('reads a kind by id or by label', () => {
     expect(parseImportTaskKind('call')).toBe('call')
@@ -140,6 +184,10 @@ describe('normalizeTaskImportRow', () => {
         kind: 'call',
         priority: 'high',
         status: 'done',
+        // The standard values' labels, beside the meanings (AGL-3517).
+        typeLabel: 'Call',
+        priorityLabel: 'High',
+        statusLabel: 'Completed',
         dueAtMs: Date.UTC(2026, 8, 30, 9),
         assigneeEmail: 'ada@example.com',
         notes: 'About the renewal',

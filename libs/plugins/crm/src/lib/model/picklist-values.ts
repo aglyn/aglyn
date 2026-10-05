@@ -210,9 +210,19 @@ export function deletePicklistValue(
   }
 }
 
-/** How a meaning reads on screen: the definition's own label for it, else the id. */
+/**
+ * How a meaning reads on screen: the definition's own label for it (lead
+ * status's "Nurturing"), else the label of the one standard value that
+ * carries it (a task's "Completed", "To-do"), else the meaning capitalized
+ * ("Open").
+ */
 export function picklistMeaningLabel(definition: CrmPicklistDefinition, meaning: string): string {
-  return definition.meaningLabels?.[meaning] ?? meaning
+  const own = definition.meaningLabels?.[meaning]
+  if (own) return own
+  const holders = definition.standardValues.filter((value) => value.meaning === meaning)
+  return holders.length === 1 && holders[0]
+    ? holders[0].label
+    : meaning.charAt(0).toUpperCase() + meaning.slice(1)
 }
 
 /** The meanings an org-added value may take: every one but those the platform reserves. */

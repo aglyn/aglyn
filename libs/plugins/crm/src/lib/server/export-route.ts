@@ -20,7 +20,9 @@ import {
   consentGroupForHost,
   CRM_COLLECTIONS,
   CRM_LEAD_STATUS_PICKLIST,
+  CRM_TASK_PICKLIST_IDS,
   csvCell,
+  effectiveCrmTaskPicklists,
   hostScopeToken,
   isOrgWideMember,
   MAX_SCOPE_HOSTS,
@@ -337,6 +339,18 @@ export async function crmExportRoute(request: Request): Promise<Response> {
     }
     if (resource === 'tasks') {
       options.recordName = (kind, id) => recordNames.get(`${kind}:${id}`)
+      // The org's Status, Priority and Type lists, which name a task that
+      // holds no label of its own (AGL-3517). A handful of documents.
+      const lists = new Map(
+        (await orgRef.collection(CRM_COLLECTIONS.picklists).get()).docs.map(
+          (entry) => [entry.id, entry.data()] as const,
+        ),
+      )
+      options.taskPicklists = effectiveCrmTaskPicklists({
+        status: lists.get(CRM_TASK_PICKLIST_IDS.status),
+        priority: lists.get(CRM_TASK_PICKLIST_IDS.priority),
+        type: lists.get(CRM_TASK_PICKLIST_IDS.type),
+      })
     }
 
     /*

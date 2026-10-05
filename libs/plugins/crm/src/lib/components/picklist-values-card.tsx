@@ -163,6 +163,8 @@ export function PicklistValuesCard(props: PicklistValuesCardProps) {
   const addableMeanings = picklistAddableMeanings(definition)
   const [noun, nouns] = OBJECT_NOUNS[definition.object]
   const holders = targetObjects(definition).map((object) => OBJECT_NOUNS[object])
+  // A list of suggestions only — a task's subjects (AGL-3517) — that no record holds.
+  const suggestions = holders.length === 0
   const field = definition.label.toLowerCase()
   const failed = `The ${definition.plural} could not be saved.`
   const isStandard = (value: CrmPicklistValue) => isStandardPicklistValueId(definition, value.id)
@@ -368,11 +370,15 @@ export function PicklistValuesCard(props: PicklistValuesCardProps) {
         <Stack spacing={0.25}>
           <Typography variant="subtitle1">{`${definition.label} values`}</Typography>
           <Typography variant="body2" color="text.secondary">
-            {`The choices in every ${noun}’s ${definition.label} select, in this order. ` +
-              (definition.restricted
-                ? 'An import or an API write naming anything else is refused. '
-                : '') +
-              'A deactivated value stays on the records that hold it. ' +
+            {(suggestions
+              ? `The suggestions every ${noun}’s ${definition.label} offers, in this order. ` +
+                'Any text may still be typed, and renaming or deleting a suggestion ' +
+                `changes no ${noun}. `
+              : `The choices in every ${noun}’s ${definition.label} select, in this order. ` +
+                (definition.restricted
+                  ? 'An import or an API write naming anything else is refused. '
+                  : '') +
+                'A deactivated value stays on the records that hold it. ') +
               'Standard values come with every organization and cannot be deleted; ' +
               'add your own beside them.'}
           </Typography>
@@ -506,7 +512,8 @@ export function PicklistValuesCard(props: PicklistValuesCardProps) {
                   </TableCell>
                 ) : null}
                 {meanings.length ? (
-                  // Fixed for a standard value, and chosen when an added one is made.
+                  // What the value means to the CRM: fixed for a standard value, and
+                  // chosen when an added one is made.
                   <TableCell>
                     <Typography variant="body2" color={value.meaning ? 'text.primary' : 'text.secondary'}>
                       {value.meaning ? picklistMeaningLabel(definition, value.meaning) : '—'}
@@ -549,7 +556,7 @@ export function PicklistValuesCard(props: PicklistValuesCardProps) {
         </DialogTitle>
         <DialogContent>
           <Stack spacing={1.5} sx={{ pt: 1 }}>
-            {nameDialog?.mode === 'rename' ? (
+            {nameDialog?.mode === 'rename' && !suggestions ? (
               <DialogContentText variant="body2">
                 {`Every ${sentenceList(holders.map(([one]) => one))} holding this value ` +
                   'is updated to the new name.'}
@@ -628,29 +635,33 @@ export function PicklistValuesCard(props: PicklistValuesCardProps) {
         <DialogContent>
           <Stack spacing={1.5} sx={{ pt: 1 }}>
             <DialogContentText variant="body2">
-              {`The value leaves the list for good. ${heldBy} that hold it ` +
-                (meanings.length
-                  ? 'are moved to the value you pick here, which means the same. '
-                  : 'are moved to the value you pick here, or cleared. ') +
-                'To keep it on those records instead, deactivate it.'}
+              {suggestions
+                ? `The suggestion leaves the list for good. No ${noun} changes.`
+                : `The value leaves the list for good. ${heldBy} that hold it ` +
+                  (meanings.length
+                    ? 'are moved to the value you pick here, which means the same. '
+                    : 'are moved to the value you pick here, or cleared. ') +
+                  'To keep it on those records instead, deactivate it.'}
             </DialogContentText>
-            <TextField
-              select
-              size="small"
-              label="Replace it on existing records with"
-              value={replaceWith}
-              onChange={(event) => setReplaceWith(String(event.target.value))}
-              fullWidth
-              slotProps={{ select: { displayEmpty: true }, inputLabel: { shrink: true } }}
-            >
-              {/* A value with a meaning moves its records to another of that meaning, never off. */}
-              {meanings.length ? null : <MenuItem value="">{'None — clear it'}</MenuItem>}
-              {replacements.map((value) => (
-                <MenuItem key={value.id} value={value.label}>
-                  {value.label}
-                </MenuItem>
-              ))}
-            </TextField>
+            {suggestions ? null : (
+              <TextField
+                select
+                size="small"
+                label="Replace it on existing records with"
+                value={replaceWith}
+                onChange={(event) => setReplaceWith(String(event.target.value))}
+                fullWidth
+                slotProps={{ select: { displayEmpty: true }, inputLabel: { shrink: true } }}
+              >
+                {/* A value with a meaning moves its records to another of that meaning, never off. */}
+                {meanings.length ? null : <MenuItem value="">{'None — clear it'}</MenuItem>}
+                {replacements.map((value) => (
+                  <MenuItem key={value.id} value={value.label}>
+                    {value.label}
+                  </MenuItem>
+                ))}
+              </TextField>
+            )}
           </Stack>
         </DialogContent>
         <DialogActions>

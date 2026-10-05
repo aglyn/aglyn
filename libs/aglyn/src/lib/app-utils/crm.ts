@@ -56,6 +56,7 @@ import {
   CONTACT_LIFECYCLE_STAGES,
   type ContactLifecycleStage,
   type CrmActivityKind,
+  CRM_TASK_KINDS,
   type CrmTaskKind,
   isContactLifecycleStage,
 } from './crm-kinds'
@@ -754,6 +755,15 @@ export interface CrmTask extends Omit<CrmScoped, 'hostId'> {
   kind: CrmTaskKind
   priority: CrmTaskPriority
   status: CrmTaskStatus
+  /**
+   * The org's labels for `status`, `priority` and `kind` (AGL-3517) — a
+   * value of the `taskStatus`, `taskPriority` and `taskType` picklists,
+   * whose meaning is the field beside it. Absent or `null` shows the first
+   * active value of that meaning; see `crmTaskPicklistLabels`.
+   */
+  statusLabel?: string | null
+  priorityLabel?: string | null
+  typeLabel?: string | null
   dueAtMs?: number | null
   completedAtMs?: number | null
   /**
@@ -969,6 +979,45 @@ export function crmEmailDeliveryTags(input: {
 export type CrmEmailDirection = 'outbound' | 'inbound'
 
 /**
+ * Which way a call went (AGL-3517) — Salesforce's Call Type: `inbound` for
+ * one the contact placed, `outbound` for one the team placed, `internal`
+ * for one between teammates about the record.
+ */
+export type CrmCallDirection = CrmEmailDirection | 'internal'
+
+/** An activity's direction: a call's three, of which an email takes the first two. */
+export type CrmActivityDirection = CrmCallDirection
+
+/** The directions each kind takes, in the order a select lists them; none for the rest. */
+export const CRM_ACTIVITY_DIRECTIONS: Readonly<Partial<Record<CrmActivityKind, readonly CrmActivityDirection[]>>> = {
+  call: ['outbound', 'inbound', 'internal'],
+  email: ['outbound', 'inbound'],
+}
+
+export const CRM_ACTIVITY_DIRECTION_LABELS: Record<CrmActivityDirection, string> = {
+  outbound: 'Outbound',
+  inbound: 'Inbound',
+  internal: 'Internal',
+}
+
+/** `value` when `kind` takes it as a direction, else `null`. */
+export function crmActivityDirection(
+  kind: unknown,
+  value: unknown,
+): CrmActivityDirection | null {
+  const allowed = CRM_ACTIVITY_DIRECTIONS[kind as CrmActivityKind] ?? []
+  const text = String(value ?? '').trim().toLowerCase()
+  return (allowed as readonly string[]).includes(text) ? (text as CrmActivityDirection) : null
+}
+
+/** "Inbound call", "Outbound email", "Internal call" — or the kind alone with no direction. */
+export function crmActivityKindTitle(kind: CrmActivityKind, direction?: unknown): string {
+  const known = crmActivityDirection(kind, direction)
+  const noun = CRM_ACTIVITY_KIND_LABELS[kind] ?? String(kind)
+  return known ? `${CRM_ACTIVITY_DIRECTION_LABELS[known]} ${noun.toLowerCase()}` : noun
+}
+
+/**
  * `orgs/{orgId}/crmActivities/{activityId}` — one thing that happened.
  *
  * Distinct from a contact's `interactions`: those are what the PLATFORM
@@ -1027,10 +1076,12 @@ export interface CrmActivity extends CrmScoped {
   /** The address the message left for. */
   to?: string
   /**
-   * `outbound` for a message the platform sent or a teammate copied to the
-   * capture address; `inbound` for one a correspondent wrote (AGL-2657).
+   * On an email: `outbound` for a message the platform sent or a teammate
+   * copied to the capture address; `inbound` for one a correspondent wrote
+   * (AGL-2657). On a call: inbound, outbound or internal (AGL-3517). See
+   * {@link CRM_ACTIVITY_DIRECTIONS}.
    */
-  direction?: CrmEmailDirection
+  direction?: CrmActivityDirection
   /** See {@link CrmEmailDeliveryState}; advanced by the delivery webhook. */
   deliveryState?: CrmEmailDeliveryState
   /** When the delivery state last moved, epoch ms. */
@@ -3174,6 +3225,22 @@ export function normalizeCrmLeadProfile(
 export type CrmPicklistObject = CrmFieldObject | 'task'
 
 /**
+ * The Fields tabs, in order: every object with custom fields, then Tasks,
+ * which has standard picklists and no custom fields (AGL-3517).
+ */
+export const CRM_PICKLIST_OBJECTS: readonly CrmPicklistObject[] = [...CRM_FIELD_OBJECTS, 'task']
+
+/** How each object reads on the Fields tabs and in a refusal. */
+export const CRM_PICKLIST_OBJECT_LABELS: Record<CrmPicklistObject, string> = {
+  ...CRM_FIELD_OBJECT_LABELS,
+  task: 'Tasks',
+}
+
+export function isCrmPicklistObject(value: unknown): value is CrmPicklistObject {
+  return typeof value === 'string' && (CRM_PICKLIST_OBJECTS as readonly string[]).includes(value)
+}
+
+/**
  * One place records hold a picklist's label. `field` is the record's own
  * field; `keyField`, when set, is the query key written beside it
  * ({@link crmPicklistKey}); `facet` means the label lives in each holder's
@@ -3195,7 +3262,7 @@ export interface CrmPicklistDefinition extends PicklistSpec {
   /** The values in a sentence: "no active lead sources". */
   plural: string
   /** The Fields tab its values are managed on. */
-  object: CrmFieldObject
+  object: CrmPicklistObject
   /** Every place records hold its label — what a rename and a delete rewrite. */
   targets: readonly CrmPicklistTarget[]
   /** How each of `meanings` reads on screen — the Fields page's Means column (AGL-3512). */
@@ -3435,6 +3502,87 @@ const OPPORTUNITY_TYPE_DEFINITION = {
   targets: [{ object: 'deal', field: 'type', keyField: 'typeKey' }],
 } as const satisfies CrmPicklistDefinition
 
+/*
+ * TASKS (AGL-3517) — Salesforce's Task Status, Priority, Type and Subject.
+ *
+ * Status, Priority and Type are SEMANTIC: each value means one of the
+ * task's existing `status`, `priority` or `kind` values, which stay on the
+ * document untouched for every query, reminder, due state, digest and
+ * automation. The value's LABEL sits beside it in `statusLabel`,
+ * `priorityLabel` or `typeLabel`; a task with no label shows the first
+ * active value of its meaning (see `crmTaskPicklistLabel`). Subject is an
+ * unrestricted combobox over the title: its values are suggestions, the
+ * title stays free text, and no record holds a subject "value", so a
+ * rename or a delete rewrites nothing.
+ */
+const TASK_STATUS_DEFINITION = {
+  id: 'taskStatus',
+  label: 'Status',
+  plural: 'task statuses',
+  object: 'task',
+  restricted: true,
+  meanings: ['open', 'done'],
+  standardValues: [
+    { id: 'not-started', label: 'Not Started', meaning: 'open' },
+    { id: 'in-progress', label: 'In Progress', meaning: 'open' },
+    { id: 'waiting', label: 'Waiting on someone else', meaning: 'open' },
+    { id: 'deferred', label: 'Deferred', meaning: 'open' },
+    { id: 'completed', label: 'Completed', meaning: 'done' },
+  ],
+  defaultValueId: 'not-started',
+  targets: [{ object: 'task', field: 'statusLabel' }],
+} as const satisfies CrmPicklistDefinition
+
+const TASK_PRIORITY_DEFINITION = {
+  id: 'taskPriority',
+  label: 'Priority',
+  plural: 'task priorities',
+  object: 'task',
+  restricted: true,
+  meanings: ['low', 'normal', 'high'],
+  standardValues: [
+    { id: 'high', label: 'High', meaning: 'high' },
+    { id: 'normal', label: 'Normal', meaning: 'normal' },
+    { id: 'low', label: 'Low', meaning: 'low' },
+  ],
+  defaultValueId: 'normal',
+  targets: [{ object: 'task', field: 'priorityLabel' }],
+} as const satisfies CrmPicklistDefinition
+
+const TASK_TYPE_DEFINITION = {
+  id: 'taskType',
+  label: 'Type',
+  plural: 'task types',
+  object: 'task',
+  restricted: true,
+  meanings: CRM_TASK_KINDS,
+  standardValues: [
+    { id: 'call', label: 'Call', meaning: 'call' },
+    { id: 'email', label: 'Email', meaning: 'email' },
+    { id: 'meeting', label: 'Meeting', meaning: 'meeting' },
+    // Salesforce's "Other": a task that is none of the three conversations.
+    { id: 'todo', label: 'To-do', meaning: 'todo' },
+  ],
+  defaultValueId: 'todo',
+  targets: [{ object: 'task', field: 'typeLabel' }],
+} as const satisfies CrmPicklistDefinition
+
+const TASK_SUBJECT_DEFINITION = {
+  id: 'taskSubject',
+  label: 'Subject',
+  plural: 'task subjects',
+  object: 'task',
+  restricted: false,
+  standardValues: [
+    { id: 'call', label: 'Call' },
+    { id: 'send-letter', label: 'Send Letter' },
+    { id: 'send-quote', label: 'Send Quote' },
+    { id: 'other', label: 'Other' },
+  ],
+  // Suggestions for a free-text title: nothing holds them, nothing moves.
+  targets: [],
+} as const satisfies CrmPicklistDefinition
+
 /** Every standard picklist field the CRM keeps, one document each. */
 export const CRM_PICKLIST_DEFINITIONS = [
   LEAD_SOURCE_DEFINITION,
@@ -3448,6 +3596,11 @@ export const CRM_PICKLIST_DEFINITIONS = [
   SALUTATION_DEFINITION,
   // Deals (AGL-3516).
   OPPORTUNITY_TYPE_DEFINITION,
+  // Tasks (AGL-3517).
+  TASK_STATUS_DEFINITION,
+  TASK_PRIORITY_DEFINITION,
+  TASK_TYPE_DEFINITION,
+  TASK_SUBJECT_DEFINITION,
 ] as const satisfies readonly CrmPicklistDefinition[]
 
 export type CrmPicklistId = (typeof CRM_PICKLIST_DEFINITIONS)[number]['id']
@@ -3475,7 +3628,7 @@ export function crmPicklistDefinition(id: unknown): CrmPicklistDefinition | null
 }
 
 /** The definitions whose values are managed on one Fields tab, in registry order. */
-export function crmPicklistDefinitionsFor(object: CrmFieldObject): CrmPicklistDefinition[] {
+export function crmPicklistDefinitionsFor(object: CrmPicklistObject): CrmPicklistDefinition[] {
   return CRM_PICKLIST_DEFINITIONS.filter((definition) => definition.object === object)
 }
 
@@ -3565,7 +3718,7 @@ export function crmPicklistRefusal(id: CrmPicklistId, picklist: CrmPicklist): st
     field: definition.label,
     empty:
       `This organization has no active ${definition.plural}. Add one under ` +
-      `CRM › Fields › ${CRM_FIELD_OBJECT_LABELS[definition.object]}.`,
+      `CRM › Fields › ${CRM_PICKLIST_OBJECT_LABELS[definition.object]}.`,
   })
 }
 
@@ -3751,6 +3904,157 @@ export function crmLeadStatusOptions(
     }
   }
   return options
+}
+
+/*==========================================
+ * SEMANTIC PICKLISTS ON A TASK (AGL-3517).
+ *
+ * Status, Priority and Type keep the task's own `status`, `priority` and
+ * `kind` as the MEANING every query, reminder and automation reads, and
+ * store the org's label beside it. These helpers are the two directions:
+ * what a task shows for its meaning and label, and what a write stores for
+ * a label or a meaning a person, a file or an API caller named.
+ *=========================================*/
+
+/** The label a value of `meaning` reads as: the first active one, else the first at all. */
+export function crmPicklistMeaningLabel(picklist: CrmPicklist, meaning: unknown): string | null {
+  if (typeof meaning !== 'string' || !meaning) return null
+  const held = picklist.values.filter((value) => value.meaning === meaning)
+  return (held.find((value) => value.active) ?? held[0])?.label ?? null
+}
+
+/**
+ * What a record shows for a semantic field: its own label when it holds
+ * one, else the first active value of its meaning, else the meaning itself.
+ */
+export function crmPicklistShownLabel(
+  picklist: CrmPicklist,
+  meaning: unknown,
+  label: unknown,
+): string {
+  const own = normalizeCrmPicklistLabel(label)
+  if (own) return own
+  return crmPicklistMeaningLabel(picklist, meaning) ?? String(meaning ?? '')
+}
+
+/**
+ * The label a NEW record of `meaning` starts with: the list's default when
+ * it means that, else the first active value that does.
+ */
+export function crmPicklistLabelForNew(picklist: CrmPicklist, meaning: unknown): string | null {
+  const fallback = crmPicklistDefaultLabel(picklist)
+  const value = fallback ? crmPicklistValueByLabel(picklist, fallback) : null
+  return value && value.meaning === meaning ? value.label : crmPicklistMeaningLabel(picklist, meaning)
+}
+
+/** What a semantic write stores: the meaning and the label beside it. */
+export type CrmSemanticPicklistWrite =
+  | { ok: true; meaning: string; label: string | null }
+  | { ok: false; error: string }
+
+/**
+ * A label OR a meaning, as a write names it, resolved against picklist `id`:
+ *
+ *  - an active value's label (any case or spacing) stores that value's
+ *    label and its meaning;
+ *  - the record's `current` label is kept, with its value's meaning, even
+ *    when the value has since been deactivated;
+ *  - one of the definition's meanings (`high`, `done`, `call`) stores that
+ *    meaning with the first active value's label — or the record's current
+ *    label when that already means it;
+ *  - anything else is refused naming the values the list allows.
+ *
+ * `null` answers a blank input: the caller keeps its own default.
+ */
+export function resolveCrmSemanticPicklistWrite(
+  id: CrmPicklistId,
+  picklist: CrmPicklist,
+  input: unknown,
+  current?: unknown,
+): CrmSemanticPicklistWrite | null {
+  const text = normalizeCrmPicklistLabel(input)
+  if (!text) return null
+  const definition = definitionOf(id)
+  const meanings = (definition.meanings ?? []) as readonly string[]
+  const held = normalizeCrmPicklistLabel(current)
+  const byLabel = crmPicklistValueByLabel(picklist, text)
+  const keeps = held && held.toLowerCase() === text.toLowerCase()
+  if (byLabel?.meaning && (byLabel.active || keeps)) {
+    return { ok: true, meaning: byLabel.meaning, label: keeps ? held : byLabel.label }
+  }
+  const meaning = meanings.find((entry) => entry === text.toLowerCase())
+  if (meaning) {
+    const heldValue = held ? crmPicklistValueByLabel(picklist, held) : null
+    return {
+      ok: true,
+      meaning,
+      label: heldValue?.meaning === meaning ? held : crmPicklistMeaningLabel(picklist, meaning),
+    }
+  }
+  return { ok: false, error: crmPicklistRefusal(id, picklist) }
+}
+
+/** A task's three semantic picklists, as every task surface reads them. */
+export interface CrmTaskPicklists {
+  status: CrmPicklist
+  priority: CrmPicklist
+  type: CrmPicklist
+}
+
+/** The picklist id behind each of a task's semantic fields. */
+export const CRM_TASK_PICKLIST_IDS = {
+  status: 'taskStatus',
+  priority: 'taskPriority',
+  type: 'taskType',
+} as const satisfies Record<keyof CrmTaskPicklists, CrmPicklistId>
+
+/** The org's three task lists from their stored documents — standard values alone for none. */
+export function effectiveCrmTaskPicklists(
+  raw: Partial<Record<keyof CrmTaskPicklists, unknown>> = {},
+): CrmTaskPicklists {
+  return {
+    status: effectiveCrmPicklist(CRM_TASK_PICKLIST_IDS.status, raw.status),
+    priority: effectiveCrmPicklist(CRM_TASK_PICKLIST_IDS.priority, raw.priority),
+    type: effectiveCrmPicklist(CRM_TASK_PICKLIST_IDS.type, raw.type),
+  }
+}
+
+/** What a task shows for its status, priority and type — see `crmPicklistShownLabel`. */
+export function crmTaskPicklistLabels(
+  task: Partial<Pick<CrmTask, 'status' | 'statusLabel' | 'priority' | 'priorityLabel' | 'kind' | 'typeLabel'>>,
+  picklists: CrmTaskPicklists,
+): { status: string; priority: string; type: string } {
+  return {
+    status: crmPicklistShownLabel(picklists.status, task.status ?? 'open', task.statusLabel),
+    priority: crmPicklistShownLabel(picklists.priority, task.priority ?? 'normal', task.priorityLabel),
+    type: crmPicklistShownLabel(picklists.type, task.kind ?? 'todo', task.typeLabel),
+  }
+}
+
+/**
+ * The status a tick or an untick writes: done with the first active done
+ * value's label ("Completed"), or open with the label a new task starts
+ * with ("Not Started").
+ */
+export function crmTaskStatusWrite(
+  picklist: CrmPicklist,
+  done: boolean,
+): { status: CrmTaskStatus; statusLabel: string | null } {
+  return done
+    ? { status: 'done', statusLabel: crmPicklistMeaningLabel(picklist, 'done') }
+    : { status: 'open', statusLabel: crmPicklistLabelForNew(picklist, 'open') }
+}
+
+/** The labels a new task of these meanings starts with. */
+export function crmTaskLabelsForNew(
+  picklists: CrmTaskPicklists,
+  meanings: Pick<CrmTask, 'kind' | 'priority'> & { status?: CrmTaskStatus },
+): { statusLabel: string | null; priorityLabel: string | null; typeLabel: string | null } {
+  return {
+    statusLabel: crmPicklistLabelForNew(picklists.status, meanings.status ?? 'open'),
+    priorityLabel: crmPicklistLabelForNew(picklists.priority, meanings.priority),
+    typeLabel: crmPicklistLabelForNew(picklists.type, meanings.kind),
+  }
 }
 
 /** The name a lead is listed under: the name it carries, else its address. */

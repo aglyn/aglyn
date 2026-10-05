@@ -1198,7 +1198,90 @@ describe('/v1/tasks', () => {
   })
 })
 
+describe('/v1/tasks picklists (AGL-3517)', () => {
+  it('takes a label or a meaning for kind, priority and status, storing both and answering the label', async () => {
+    mockDocs.set(`${ORG}/crmPicklists/taskStatus`, {
+      values: [{ id: 'on-hold', label: 'On hold', active: true, meaning: 'open' }],
+      defaultValueId: null,
+    })
+    const task = await json(
+      await call('POST', 'tasks', {
+        title: 'Walk the site',
+        kind: 'Meeting',
+        priority: 'high',
+        status: 'on hold',
+        consentSiteId: 'host-1',
+      }),
+    )
+    expect(task).toMatchObject({
+      kind: 'meeting',
+      typeLabel: 'Meeting',
+      priority: 'high',
+      priorityLabel: 'High',
+      status: 'open',
+      statusLabel: 'On hold',
+    })
+    expect(mockDocs.get(`${TASKS}/${task.id}`)).toMatchObject({ statusLabel: 'On hold', typeLabel: 'Meeting' })
+
+    // A label of the other meaning moves the status, and completion with it.
+    const done = await json(await call('PATCH', `tasks/${task.id}`, { status: 'Completed' }))
+    expect(done).toMatchObject({ status: 'done', statusLabel: 'Completed' })
+    expect(done.completedAt).not.toBeNull()
+
+    const bad = await call('POST', 'tasks', { title: 'X', status: 'Paused', consentSiteId: 'host-1' })
+    expect(bad.status).toBe(400)
+    expect((await json(bad)).error.fields.status).toBe(
+      'Status must be one of: On hold, Not Started, In Progress, Waiting on someone else, Deferred, Completed.',
+    )
+  })
+
+  it('answers a task written before the picklists with the first label of each meaning', async () => {
+    mockDocs.set(`${TASKS}/legacy`, {
+      title: 'Old',
+      kind: 'call',
+      priority: 'low',
+      status: 'done',
+      visibleTo: tokensFor('host-1'),
+      hostId: 'host-1',
+    })
+    expect(await json(await call('GET', 'tasks/legacy'))).toMatchObject({
+      typeLabel: 'Call',
+      priorityLabel: 'Low',
+      statusLabel: 'Completed',
+    })
+  })
+})
+
 describe('/v1/activities', () => {
+  it('records which way a call or an email went, and refuses one the kind does not take (AGL-3517)', async () => {
+    const call1 = await json(
+      await call('POST', 'activities', {
+        kind: 'call',
+        body: 'Team sync about the account',
+        contactId: 'c-1',
+        direction: 'internal',
+        consentSiteId: 'host-1',
+      }),
+    )
+    expect(call1).toMatchObject({ kind: 'call', direction: 'internal' })
+    expect(mockDocs.get(`${ACTIVITIES}/${call1.id}`)!.direction).toBe('internal')
+    const email = await call('POST', 'activities', {
+      kind: 'email',
+      body: 'Forwarded',
+      contactId: 'c-1',
+      direction: 'internal',
+      consentSiteId: 'host-1',
+    })
+    expect((await json(email)).error.fields).toEqual({ direction: 'Must be one of: outbound, inbound' })
+    const note = await call('POST', 'activities', {
+      body: 'A note',
+      contactId: 'c-1',
+      direction: 'inbound',
+      consentSiteId: 'host-1',
+    })
+    expect((await json(note)).error.fields).toEqual({ direction: 'Only a call or an email takes a direction' })
+  })
+
   it('refuses the record’s 5,001st activity and lands its 5,000th (AGL-2611)', async () => {
     // The per-record ceiling, counted on the contact the activity names.
     for (let index = 0; index < CRM_ACTIVITIES_PER_RECORD_CEILING - 1; index += 1) {

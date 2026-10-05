@@ -16,7 +16,12 @@
  */
 'use client'
 
-import { CRM_COLLECTIONS, pluginDocsHelp } from '@aglyn/aglyn'
+import {
+  CRM_COLLECTIONS,
+  crmTaskPicklistLabels,
+  crmTaskStatusWrite,
+  pluginDocsHelp,
+} from '@aglyn/aglyn'
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
 import EmptyStateComponent from '@aglyn/shared-ui-jsx/components/empty-state.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -32,6 +37,7 @@ import {
   useNowMs,
 } from '../hooks/use-crm-tasks'
 import { useOrgMemberDirectory } from '../hooks/use-org-member-directory'
+import { useCrmTaskPicklists } from '../hooks/use-crm-task-picklists'
 import { crmRoutes } from '../model/crm-routes'
 import { refreshCrmNextActivity } from '../model/next-activity-api'
 import { completeCrmTask } from '../model/task-api'
@@ -86,6 +92,7 @@ export function RecordTasksCard(props: RecordTasksCardProps) {
     record,
   })
   const directory = useOrgMemberDirectory(orgId)
+  const picklists = useCrmTaskPicklists(orgId)
   const open = useMemo(() => tasks.filter((task) => task.status !== 'done'), [tasks])
   const doneCount = tasks.length - open.length
 
@@ -104,7 +111,8 @@ export function RecordTasksCard(props: RecordTasksCardProps) {
           await updateDoc(
             doc(firestore, scope[0], scope[1], CRM_COLLECTIONS.tasks, task.$id),
             {
-              status: 'open',
+              // Open again, with the label a new task starts with (AGL-3517).
+              ...crmTaskStatusWrite(picklists.status, false),
               completedAtMs: null,
               completedByUid: deleteField(),
               updatedAt: serverTimestamp(),
@@ -129,7 +137,7 @@ export function RecordTasksCard(props: RecordTasksCardProps) {
         setBusyId(null)
       }
     },
-    [scope, busyId, firestore, user, hostId, orgId, enqueueSnackbar],
+    [scope, busyId, firestore, user, hostId, orgId, enqueueSnackbar, picklists.status],
   )
 
   return (
@@ -201,61 +209,64 @@ export function RecordTasksCard(props: RecordTasksCardProps) {
           />
         ) : (
           <Stack spacing={1}>
-            {open.map((task) => (
-              <Stack
-                key={task.$id}
-                direction="row"
-                spacing={1}
-                sx={{ alignItems: 'center', minWidth: 0 }}
-              >
-                <Checkbox
-                  size="small"
-                  checked={false}
-                  disabled={busyId === task.$id}
-                  onClick={() => void toggleDone(task)}
-                  slotProps={{
-                    input: { 'aria-label': `Complete "${task.title}"` },
-                  }}
-                />
+            {open.map((task) => {
+              const labels = crmTaskPicklistLabels(task, picklists)
+              return (
                 <Stack
-                  sx={{ minWidth: 0, flex: 1, cursor: 'pointer' }}
-                  onClick={() => setDrawer({ open: true, task })}
+                  key={task.$id}
+                  direction="row"
+                  spacing={1}
+                  sx={{ alignItems: 'center', minWidth: 0 }}
                 >
-                  <Stack direction="row" spacing={1} sx={{ alignItems: 'center', minWidth: 0 }}>
-                    <TaskKindCell kind={task.kind} iconOnly />
-                    <Typography variant="body2" noWrap sx={{ minWidth: 0 }}>
-                      {task.title}
-                    </Typography>
-                    {task.priority === 'high' ? (
-                      <TaskPriorityChip priority={task.priority} />
-                    ) : null}
-                  </Stack>
-                  <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-                    <TaskDueText task={task} nowMs={nowMs} variant="caption" />
-                    {task.assigneeUid ? (
-                      <Typography variant="caption" color="text.secondary" noWrap>
-                        {`· ${directory.nameOf(task.assigneeUid)}`}
+                  <Checkbox
+                    size="small"
+                    checked={false}
+                    disabled={busyId === task.$id}
+                    onClick={() => void toggleDone(task)}
+                    slotProps={{
+                      input: { 'aria-label': `Complete "${task.title}"` },
+                    }}
+                  />
+                  <Stack
+                    sx={{ minWidth: 0, flex: 1, cursor: 'pointer' }}
+                    onClick={() => setDrawer({ open: true, task })}
+                  >
+                    <Stack direction="row" spacing={1} sx={{ alignItems: 'center', minWidth: 0 }}>
+                      <TaskKindCell kind={task.kind} label={labels.type} iconOnly />
+                      <Typography variant="body2" noWrap sx={{ minWidth: 0 }}>
+                        {task.title}
                       </Typography>
-                    ) : null}
-                    {scope ? (
-                      <TaskSnoozeMenu
-                        dueAtMs={task.dueAtMs}
-                        remindAtMs={task.remindAtMs}
-                        target={{
-                          write: {
-                            scope,
-                            taskId: task.$id,
-                            call: crmTaskCallScope(hostId, orgId),
-                            links: task,
-                          },
-                        }}
-                        disabled={busyId === task.$id}
-                      />
-                    ) : null}
+                      {task.priority === 'high' ? (
+                        <TaskPriorityChip priority={task.priority} label={labels.priority} />
+                      ) : null}
+                    </Stack>
+                    <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                      <TaskDueText task={task} nowMs={nowMs} variant="caption" />
+                      {task.assigneeUid ? (
+                        <Typography variant="caption" color="text.secondary" noWrap>
+                          {`· ${directory.nameOf(task.assigneeUid)}`}
+                        </Typography>
+                      ) : null}
+                      {scope ? (
+                        <TaskSnoozeMenu
+                          dueAtMs={task.dueAtMs}
+                          remindAtMs={task.remindAtMs}
+                          target={{
+                            write: {
+                              scope,
+                              taskId: task.$id,
+                              call: crmTaskCallScope(hostId, orgId),
+                              links: task,
+                            },
+                          }}
+                          disabled={busyId === task.$id}
+                        />
+                      ) : null}
+                    </Stack>
                   </Stack>
                 </Stack>
-              </Stack>
-            ))}
+              )
+            })}
           </Stack>
         )}
       </CardDisplay>

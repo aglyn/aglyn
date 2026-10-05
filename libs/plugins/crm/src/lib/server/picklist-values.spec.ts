@@ -312,3 +312,49 @@ describe('crm/picklist-values', () => {
     expect(missing.status).toBe(400)
   })
 })
+
+/*
+ * A TASK'S PICKLISTS (AGL-3517). Status, Priority and Type keep their
+ * meaning field and move the label beside it: a rename rewrites the tasks
+ * that hold the old label, and a task that holds none — it shows the first
+ * value of its meaning — is not touched. Subject's values are suggestions
+ * no task holds, so renaming one rewrites nothing.
+ */
+describe('crm/picklist-values on a task’s lists (AGL-3517)', () => {
+  const TASKS = `orgs/${ORG}/crmTasks`
+  const route = (body: Record<string, unknown>) => call({ orgId: ORG, ...body }, crmPicklistValuesHandler)
+
+  beforeEach(() => {
+    store[`${TASKS}/t1`] = { title: 'Call', status: 'open', statusLabel: 'In Progress' }
+    store[`${TASKS}/t2`] = { title: 'Send Quote', status: 'open' }
+    store[`${TASKS}/t3`] = { title: 'Later', status: 'open', statusLabel: 'On hold' }
+  })
+
+  it('renames a status on the tasks that hold it, leaving a label-less task to follow its meaning', async () => {
+    const out = await route({ picklistId: 'taskStatus', action: 'rename', valueId: 'in-progress', label: 'Working' })
+    expect(out.payload).toEqual({ ok: true, updated: { task: 1 } })
+    expect(store[`${TASKS}/t1`]).toMatchObject({ status: 'open', statusLabel: 'Working' })
+    expect(store[`${TASKS}/t2`]).not.toHaveProperty('statusLabel')
+  })
+
+  it('moves a deleted status only onto one of the same meaning', async () => {
+    store[`orgs/${ORG}/crmPicklists/taskStatus`] = {
+      values: [{ id: 'on-hold', label: 'On hold', active: true, meaning: 'open' }],
+      defaultValueId: null,
+    }
+    const refused = await route({ picklistId: 'taskStatus', action: 'delete', valueId: 'on-hold', replaceWith: 'Completed' })
+    expect(refused.status).toBe(400)
+    expect(store[`${TASKS}/t3`]).toMatchObject({ statusLabel: 'On hold' })
+    const moved = await route({ picklistId: 'taskStatus', action: 'delete', valueId: 'on-hold', replaceWith: 'deferred' })
+    expect(moved.payload).toEqual({ ok: true, updated: { task: 1 } })
+    expect(store[`${TASKS}/t3`]).toMatchObject({ status: 'open', statusLabel: 'Deferred' })
+  })
+
+  it('renames a subject suggestion without touching a single title', async () => {
+    const out = await route({ picklistId: 'taskSubject', action: 'rename', valueId: 'send-quote', label: 'Send a quote' })
+    expect(out.payload).toEqual({ ok: true, updated: {} })
+    expect(store[`${TASKS}/t2`]).toMatchObject({ title: 'Send Quote' })
+    const values = store[`orgs/${ORG}/crmPicklists/taskSubject`]['values'] as { label: string }[]
+    expect(values.map((value) => value.label)).toContain('Send a quote')
+  })
+})

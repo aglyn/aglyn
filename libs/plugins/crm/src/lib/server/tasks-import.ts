@@ -59,6 +59,7 @@ import {
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
 import { ownerDirectory, readImportRows, resolveImportContext } from './import-context'
+import { readCrmTaskPicklists } from './read-picklist'
 
 /**
  * `POST crm/tasks-import` — `{ hostId, rows }` → a {@link TaskImportChunkResult}.
@@ -83,8 +84,10 @@ export const crmTasksImportHandler: PluginApiHandler = async (req, res) => {
     const skipped: TaskImportSkippedRow[] = []
     const dropped: Record<string, number> = {}
     const normalized: { index: number; row: TaskImportRow }[] = []
+    // A Type, Priority or Status cell is read against the org's lists (AGL-3517).
+    const picklists = await readCrmTaskPicklists(firebaseAdmin.app().firestore(), context.orgId)
     read.rows.forEach((raw, index) => {
-      const verdict = normalizeTaskImportRow(raw)
+      const verdict = normalizeTaskImportRow(raw, picklists)
       if (verdict.ok === false) {
         skipped.push({ index, title: verdict.input, reason: verdict.reason })
         return
@@ -123,8 +126,11 @@ export const crmTasksImportHandler: PluginApiHandler = async (req, res) => {
         ...crmTaskListFields({ title: row.title, visibleTo: context.scopeTokens }),
         title: row.title,
         kind: row.kind,
+        typeLabel: row.typeLabel,
         priority: row.priority,
+        priorityLabel: row.priorityLabel,
         status: row.status,
+        statusLabel: row.statusLabel,
         dueAtMs: row.dueAtMs,
         notes: row.notes ?? '',
         completedAtMs: row.status === 'done' ? nowMs : null,

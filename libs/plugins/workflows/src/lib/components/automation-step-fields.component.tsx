@@ -36,13 +36,17 @@ import {
   CONTACT_LIFECYCLE_STAGES,
   CONTACT_TAG_MAX_LENGTH,
   type ContactLifecycleStage,
+  CRM_ACTIVITY_DIRECTION_LABELS,
+  CRM_ACTIVITY_DIRECTIONS,
   CRM_ACTIVITY_KIND_LABELS,
   CRM_ACTIVITY_KINDS,
   CRM_TASK_KIND_LABELS,
   CRM_TASK_KINDS,
   CRM_TASK_MAX_DUE_DAYS,
+  type CrmActivityDirection,
   type CrmActivityKind,
   type CrmTaskKind,
+  type CrmTaskPriority,
   HOST_EVENT_TYPES,
   hostEventLabel,
   isInteractionAttributeAllowed,
@@ -58,6 +62,13 @@ import {
 import type { ReactNode } from 'react'
 import type { HostActionStep, HostActionStepType } from '../model/host-actions'
 import { draftPlaceholderIn } from '@aglyn/aglyn/app-utils/draft-placeholders'
+
+/** A task's priorities, by meaning, as the create-task step offers them (AGL-3517). */
+const TASK_PRIORITY_OPTIONS: ReadonlyArray<{ value: CrmTaskPriority; label: string }> = [
+  { value: 'high', label: 'High' },
+  { value: 'normal', label: 'Normal' },
+  { value: 'low', label: 'Low' },
+]
 
 /**
  * The durations a wait may be set to, from the picker.
@@ -1176,9 +1187,13 @@ export function AutomationStepFields({
                 size="small"
                 sx={{ flex: 1 }}
               />
+              {/*
+                Type and Priority by MEANING (AGL-3517): the run stores the
+                organization's own label for each, from its CRM picklists.
+              */}
               <TextField
                 select
-                label="Kind"
+                label="Type"
                 value={(step as any).kind ?? ''}
                 onChange={(event) =>
                   patch((previous) => ({
@@ -1196,6 +1211,29 @@ export function AutomationStepFields({
                 {CRM_TASK_KINDS.map((kind) => (
                   <MenuItem key={kind} value={kind}>
                     {CRM_TASK_KIND_LABELS[kind]}
+                  </MenuItem>
+                ))}
+              </TextField>
+              <TextField
+                select
+                label="Priority"
+                value={(step as any).priority ?? 'normal'}
+                onChange={(event) =>
+                  patch((previous) => ({
+                    ...previous,
+                    steps: previous.steps.map((s, index2) =>
+                      index2 === index && s.type === 'createCrmTask'
+                        ? { ...s, priority: event.target.value as CrmTaskPriority }
+                        : s,
+                    ),
+                  }))
+                }
+                size="small"
+                sx={{ minWidth: 110 }}
+              >
+                {TASK_PRIORITY_OPTIONS.map((option) => (
+                  <MenuItem key={option.value} value={option.value}>
+                    {option.label}
                   </MenuItem>
                 ))}
               </TextField>
@@ -1254,14 +1292,16 @@ export function AutomationStepFields({
                 onChange={(event) =>
                   patch((previous) => ({
                     ...previous,
-                    steps: previous.steps.map((s, index2) =>
-                      index2 === index && s.type === 'logCrmActivity'
-                        ? {
-                            ...s,
-                            kind: event.target.value as CrmActivityKind,
-                          }
-                        : s,
-                    ),
+                    steps: previous.steps.map((s, index2) => {
+                      if (index2 !== index || s.type !== 'logCrmActivity') return s
+                      const kind = event.target.value as CrmActivityKind
+                      // A direction the new kind does not take goes with the old one.
+                      const { direction, ...rest } = s
+                      return direction &&
+                        (CRM_ACTIVITY_DIRECTIONS[kind] ?? []).includes(direction)
+                        ? { ...rest, kind, direction }
+                        : { ...rest, kind }
+                    }),
                   }))
                 }
                 size="small"
@@ -1273,6 +1313,38 @@ export function AutomationStepFields({
                   </MenuItem>
                 ))}
               </TextField>
+              {/* Which way a call or an email went (AGL-3517). */}
+              {CRM_ACTIVITY_DIRECTIONS[(step as any).kind as CrmActivityKind]?.length ? (
+                <TextField
+                  select
+                  label="Direction"
+                  value={(step as any).direction ?? ''}
+                  onChange={(event) =>
+                    patch((previous) => ({
+                      ...previous,
+                      steps: previous.steps.map((s, index2) => {
+                        if (index2 !== index || s.type !== 'logCrmActivity') return s
+                        const { direction: _direction, ...rest } = s
+                        return event.target.value
+                          ? { ...rest, direction: event.target.value as CrmActivityDirection }
+                          : rest
+                      }),
+                    }))
+                  }
+                  size="small"
+                  sx={{ minWidth: 120 }}
+                  slotProps={{ select: { displayEmpty: true }, inputLabel: { shrink: true } }}
+                >
+                  <MenuItem value="">{'Not said'}</MenuItem>
+                  {(CRM_ACTIVITY_DIRECTIONS[(step as any).kind as CrmActivityKind] ?? []).map(
+                    (direction) => (
+                      <MenuItem key={direction} value={direction}>
+                        {CRM_ACTIVITY_DIRECTION_LABELS[direction]}
+                      </MenuItem>
+                    ),
+                  )}
+                </TextField>
+              ) : null}
               <TextField
                 label="What happened"
                 {...placeholderState(

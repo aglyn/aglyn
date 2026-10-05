@@ -41,20 +41,30 @@
  *
  * ## A bad cell is dropped and named; a bad row is skipped and named
  *
- * A kind or a priority the CRM does not have falls back to the drawer's
- * own defaults (`todo`, `normal`) and is REPORTED under
- * {@link TaskImportRow.dropped}; a due date that is not a date is dropped
- * the same way; a status other than open or done reads as open.
+ * A type, a priority or a status is read against the org's picklists
+ * (AGL-3517) — a value's label ("In Progress", "High", "Meeting") or its
+ * meaning (`done`, `high`, `meeting`) — and stores both. One the lists do
+ * not hold falls back to the older spellings (`urgent`, `yes`, `to do`),
+ * and failing those to the drawer's own defaults (`todo`, `normal`, open),
+ * REPORTED under {@link TaskImportRow.dropped}; a due date that is not a
+ * date is dropped the same way.
  */
 
 import { normalizeContactEmail } from '@aglyn/aglyn/app-utils/contacts'
 import { parseImportDate } from './crm-deal-import'
 import {
   CRM_TASK_KIND_LABELS,
+  CRM_TASK_PICKLIST_IDS,
+  type CrmPicklist,
+  type CrmPicklistId,
+  crmPicklistLabelForNew,
   type CrmTaskKind,
+  type CrmTaskPicklists,
   type CrmTaskPriority,
   type CrmTaskStatus,
+  effectiveCrmTaskPicklists,
   isCrmTaskKind,
+  resolveCrmSemanticPicklistWrite,
 } from '@aglyn/aglyn/app-utils/crm'
 import {
   CSV_IMPORT_CHUNK_SIZE,
@@ -97,10 +107,10 @@ export type TaskImportField = (typeof TASK_IMPORT_FIELDS)[number]
 
 /** How each field reads in the mapping menu. Typed so a field cannot ship unlabeled. */
 export const TASK_IMPORT_FIELD_LABELS: Record<TaskImportField, string> = {
-  title: 'Title (required)',
-  kind: 'Kind (call, email, meeting, to-do)',
-  priority: 'Priority (low, normal, high)',
-  status: 'Status (open or done)',
+  title: 'Subject (required)',
+  kind: 'Type (a value of the Type list)',
+  priority: 'Priority (a value of the Priority list)',
+  status: 'Status (a value of the Status list)',
   due: 'Due (date or timestamp)',
   assigneeEmail: 'Assignee (team member email)',
   notes: 'Notes',
@@ -116,8 +126,8 @@ export const TASK_IMPORT_FIELD_LABELS: Record<TaskImportField, string> = {
  * stamped by the import when the status says done.
  */
 const FIELD_ALIASES: Record<TaskImportField, readonly string[]> = {
-  title: ['title', 'task', 'task title', 'task name', 'name', 'subject', 'summary'],
-  kind: ['kind', 'type', 'task type', 'activity type'],
+  title: ['subject', 'title', 'task', 'task title', 'task name', 'name', 'summary'],
+  kind: ['type', 'kind', 'task type', 'activity type'],
   priority: ['priority', 'importance', 'urgency'],
   status: ['status', 'state', 'done', 'completed'],
   due: ['due', 'due date', 'due at', 'deadline', 'due on'],
@@ -169,6 +179,10 @@ export interface TaskImportRow {
   kind: CrmTaskKind
   priority: CrmTaskPriority
   status: CrmTaskStatus
+  /** The org's labels for the three, beside the meanings (AGL-3517). */
+  typeLabel: string | null
+  priorityLabel: string | null
+  statusLabel: string | null
   /** Epoch ms, or `null` for no due date — the shape the document stores. */
   dueAtMs: number | null
   /** Normalized, for the server to resolve against the org's members. */
@@ -224,11 +238,33 @@ export function parseImportTaskStatus(value: unknown): CrmTaskStatus | null {
 }
 
 /**
+ * One semantic cell against its picklist: a label or a meaning the list
+ * knows, else the older spelling `parse` reads, with the label a new task
+ * of that meaning starts with — or `null` for a cell neither reads.
+ */
+function readSemanticCell<T extends string>(
+  id: CrmPicklistId,
+  picklist: CrmPicklist,
+  text: string,
+  parse: (value: string) => T | null,
+): { meaning: T; label: string | null } | null {
+  const resolved = resolveCrmSemanticPicklistWrite(id, picklist, text)
+  if (resolved?.ok) return { meaning: resolved.meaning as T, label: resolved.label }
+  const meaning = parse(text)
+  return meaning ? { meaning, label: crmPicklistLabelForNew(picklist, meaning) } : null
+}
+
+/**
  * One raw row as the values that will be written, or the reason it cannot
  * be. Refused here only for a missing title; the assignee is refused by
- * the server, which alone can look them up.
+ * the server, which alone can look them up. `picklists` are the org's task
+ * lists — the server passes them; the drawer's preview reads the standard
+ * values.
  */
-export function normalizeTaskImportRow(raw: TaskImportRawRow): TaskImportRowVerdict {
+export function normalizeTaskImportRow(
+  raw: TaskImportRawRow,
+  picklists: CrmTaskPicklists = effectiveCrmTaskPicklists(),
+): TaskImportRowVerdict {
   const title = importTextValue(raw.title, TASK_IMPORT_TITLE_MAX)?.replace(/\s+/g, ' ')
   if (!title) {
     return { ok: false, reason: 'missing-title', input: '' }
@@ -242,29 +278,48 @@ export function normalizeTaskImportRow(raw: TaskImportRawRow): TaskImportRowVerd
     kind: 'todo',
     priority: 'normal',
     status: 'open',
+    typeLabel: crmPicklistLabelForNew(picklists.type, 'todo'),
+    priorityLabel: crmPicklistLabelForNew(picklists.priority, 'normal'),
+    statusLabel: crmPicklistLabelForNew(picklists.status, 'open'),
     dueAtMs: null,
     dropped,
   }
 
-  const kindText = importTextValue(raw.kind, 32)
+  const kindText = importTextValue(raw.kind, 120)
   if (kindText) {
-    const kind = parseImportTaskKind(kindText)
-    if (kind) row.kind = kind
-    else drop('kind', kindText)
+    const kind = readSemanticCell(CRM_TASK_PICKLIST_IDS.type, picklists.type, kindText, parseImportTaskKind)
+    if (kind) {
+      row.kind = kind.meaning
+      row.typeLabel = kind.label
+    } else drop('kind', kindText)
   }
 
-  const priorityText = importTextValue(raw.priority, 32)
+  const priorityText = importTextValue(raw.priority, 120)
   if (priorityText) {
-    const priority = parseImportTaskPriority(priorityText)
-    if (priority) row.priority = priority
-    else drop('priority', priorityText)
+    const priority = readSemanticCell(
+      CRM_TASK_PICKLIST_IDS.priority,
+      picklists.priority,
+      priorityText,
+      parseImportTaskPriority,
+    )
+    if (priority) {
+      row.priority = priority.meaning
+      row.priorityLabel = priority.label
+    } else drop('priority', priorityText)
   }
 
-  const statusText = importTextValue(raw.status, 32)
+  const statusText = importTextValue(raw.status, 120)
   if (statusText) {
-    const status = parseImportTaskStatus(statusText)
-    if (status) row.status = status
-    else drop('status', statusText)
+    const status = readSemanticCell(
+      CRM_TASK_PICKLIST_IDS.status,
+      picklists.status,
+      statusText,
+      parseImportTaskStatus,
+    )
+    if (status) {
+      row.status = status.meaning
+      row.statusLabel = status.label
+    } else drop('status', statusText)
   }
 
   const dueText = importTextValue(raw.due, 64)

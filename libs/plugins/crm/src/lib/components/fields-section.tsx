@@ -24,12 +24,13 @@ import {
   createResourceUid,
   CRM_COLLECTIONS,
   crmFieldListFields,
-  CRM_FIELD_OBJECT_LABELS,
-  CRM_FIELD_OBJECTS,
   type CrmFieldObject,
+  CRM_PICKLIST_OBJECT_LABELS,
+  CRM_PICKLIST_OBJECTS,
   type CrmPicklistId,
+  type CrmPicklistObject,
   crmPicklistDefinitionsFor,
-  isCrmFieldObject,
+  isCrmPicklistObject,
   newResourceScopeFields,
   ORG_SCOPE_TOKEN,
   pluginDocsHelp,
@@ -128,6 +129,16 @@ const OBJECT_INTRO: Record<CrmFieldObject, string> = {
     'New lead drawer, and as columns on the leads list. They stay on the ' +
     'lead when it converts — a contact’s fields are its own.',
 }
+
+/**
+ * The Tasks tab's intro (AGL-3517): a task has standard picklists and no
+ * custom fields, so the tab is its picklist cards alone.
+ */
+const TASKS_INTRO =
+  'A task’s standard picklists — its Status, Priority and Type, and the ' +
+  'subjects its title suggests. Status, Priority and Type each mean one of ' +
+  'the CRM’s own values, which reminders, due dates and automations read; ' +
+  'the labels are your organization’s. Tasks have no custom fields.'
 
 /** The noun each tab's empty state and captions use. */
 const OBJECT_NOUN: Record<CrmFieldObject, string> = {
@@ -501,8 +512,14 @@ export function ContactsFieldsSection(props: ContactsFieldsSectionProps) {
    * refuses a key only against the keys THIS object already uses — a
    * company and a contact may both define `region`.
    */
-  const [object, setObject] = useState<CrmFieldObject>('contact')
-  const { definitions, ready, fromCache } = useContactFieldDefinitions(orgId, object)
+  const [tab, setTab] = useState<CrmPicklistObject>('contact')
+  // The Tasks tab has no custom fields (AGL-3517): no read, no New field.
+  const tasksTab = tab === 'task'
+  const object: CrmFieldObject = tab === 'task' ? 'contact' : tab
+  const { definitions, ready, fromCache } = useContactFieldDefinitions(
+    tasksTab ? null : orgId,
+    object,
+  )
   const noun = OBJECT_NOUN[object]
 
   /*
@@ -838,30 +855,32 @@ export function ContactsFieldsSection(props: ContactsFieldsSectionProps) {
             <Button size="small" onClick={() => void recomputeNextActivity()} disabled={recomputing}>
               {recomputing ? 'Recomputing…' : 'Recompute next activity'}
             </Button>
-            <Button variant="contained" onClick={openCreate}>
-              {'New field'}
-            </Button>
+            {tasksTab ? null : (
+              <Button variant="contained" onClick={openCreate}>
+                {'New field'}
+              </Button>
+            )}
           </Stack>
         ) : null,
       }}
     >
       <Stack spacing={2}>
         <Tabs
-          value={object}
+          value={tab}
           onChange={(_event, next) => {
-            if (isCrmFieldObject(next)) setObject(next)
+            if (isCrmPicklistObject(next)) setTab(next)
           }}
           aria-label="Fields by record"
         >
-          {CRM_FIELD_OBJECTS.map((entry) => (
-            <Tab key={entry} value={entry} label={CRM_FIELD_OBJECT_LABELS[entry]} />
+          {CRM_PICKLIST_OBJECTS.map((entry) => (
+            <Tab key={entry} value={entry} label={CRM_PICKLIST_OBJECT_LABELS[entry]} />
           ))}
         </Tabs>
         <Typography variant="body2" color="text.secondary">
-          {`${OBJECT_INTRO[object]} Fields are shared across every site in this ` +
+          {`${tasksTab ? TASKS_INTRO : OBJECT_INTRO[object]} Fields are shared across every site in this ` +
             'organization, like the records themselves.'}
         </Typography>
-        {scopeReady && !scope ? (
+        {tasksTab ? null : scopeReady && !scope ? (
           <Typography variant="body2" color="text.secondary">
             {`This site has no organization, so it has no ${noun} fields.`}
           </Typography>
@@ -892,7 +911,7 @@ export function ContactsFieldsSection(props: ContactsFieldsSectionProps) {
             rowActions={rowActions}
           />
         )}
-        {definitions.length ? (
+        {definitions.length && !tasksTab ? (
           <Typography variant="caption" color="text.secondary">
             {`How many ${noun}s carry a value under each field is not ` +
               `counted — that would read every ${noun} in the organization ` +
@@ -905,7 +924,7 @@ export function ContactsFieldsSection(props: ContactsFieldsSectionProps) {
           card each, beside the custom fields of the same record.
         */}
         {scope
-          ? crmPicklistDefinitionsFor(object).map((definition) => (
+          ? crmPicklistDefinitionsFor(tab).map((definition) => (
               <PicklistValuesCard
                 key={definition.id}
                 picklistId={definition.id as CrmPicklistId}

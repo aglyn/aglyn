@@ -59,7 +59,6 @@ import {
 import {
   CONTACT_LIFECYCLE_STAGE_LABELS,
   CRM_FORECAST_CATEGORY_LABELS,
-  CRM_TASK_KIND_LABELS,
   type ContactCustomValue,
   type ContactFieldDefinition,
   type ContactLifecycleStage,
@@ -72,6 +71,12 @@ import {
   isCrmForecastCategory,
 } from '@aglyn/aglyn/app-utils/crm'
 import { csvDocument } from '@aglyn/aglyn/app-utils/csv-import'
+// The task section's picklist labels (AGL-3517).
+import {
+  type CrmTaskPicklists,
+  crmTaskPicklistLabels,
+  effectiveCrmTaskPicklists,
+} from '@aglyn/aglyn/app-utils/crm'
 
 /*==========================================
  * CELLS EVERY FILE SHARES
@@ -556,8 +561,11 @@ export type TaskCsvRow = Partial<
     CrmTask,
     | 'title'
     | 'kind'
+    | 'typeLabel'
     | 'priority'
+    | 'priorityLabel'
     | 'status'
+    | 'statusLabel'
     | 'dueAtMs'
     | 'completedAtMs'
     | 'assigneeUid'
@@ -573,11 +581,17 @@ export interface TaskCsvOptions {
   assigneeEmail?: (uid: string) => string
   /** What a linked record is called; absent, the id is written. */
   recordName?: (kind: 'contact' | 'company' | 'deal', id: string) => string | undefined
+  /**
+   * The org's Status, Priority and Type lists (AGL-3517), which name a task
+   * that holds no label of its own; absent, the standard values do.
+   */
+  taskPicklists?: CrmTaskPicklists
 }
 
+/** Salesforce's names for the columns: a task's title is its Subject, its kind its Type. */
 export const TASK_CSV_COLUMNS = [
-  'Title',
-  'Kind',
+  'Subject',
+  'Type',
   'Priority',
   'Status',
   'Due',
@@ -589,17 +603,6 @@ export const TASK_CSV_COLUMNS = [
   'Notes',
 ] as const
 
-const TASK_PRIORITY_LABELS: Record<string, string> = {
-  low: 'Low',
-  normal: 'Normal',
-  high: 'High',
-}
-
-const TASK_STATUS_LABELS: Record<string, string> = {
-  open: 'Open',
-  done: 'Done',
-}
-
 /** One task's cells, in the header's order. */
 export function taskCsvCells(
   task: TaskCsvRow,
@@ -608,11 +611,13 @@ export function taskCsvCells(
   const { assigneeEmail, recordName } = options
   const link = (kind: 'contact' | 'company' | 'deal', id: string | undefined) =>
     named(id, (value) => recordName?.(kind, value))
+  // The task's own labels, else its meanings' — what the list shows (AGL-3517).
+  const labels = crmTaskPicklistLabels(task, options.taskPicklists ?? effectiveCrmTaskPicklists())
   return [
     task.title ?? '',
-    task.kind ? (CRM_TASK_KIND_LABELS[task.kind] ?? task.kind) : '',
-    task.priority ? (TASK_PRIORITY_LABELS[task.priority] ?? task.priority) : '',
-    task.status ? (TASK_STATUS_LABELS[task.status] ?? task.status) : '',
+    task.kind || task.typeLabel ? labels.type : '',
+    task.priority || task.priorityLabel ? labels.priority : '',
+    task.status || task.statusLabel ? labels.status : '',
     csvInstant(task.dueAtMs),
     task.assigneeUid ? (assigneeEmail?.(task.assigneeUid) ?? task.assigneeUid) : '',
     link('contact', task.contactId),

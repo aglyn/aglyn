@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { effectiveCrmTaskPicklists } from '@aglyn/aglyn'
 import { TASK_CSV_COLUMNS, tasksCsv } from './tasks-csv'
 
 /**
@@ -58,8 +59,25 @@ describe('the tasks CSV', () => {
     )
     expect(csv.split('\n')).toEqual([
       TASK_CSV_COLUMNS.join(','),
-      '"Call Ada, re: renewal",Call,High,Open,2026-09-06T14:00:00.000Z,ada@example.com,Ada Lovelace,,d-1,,Before noon',
-      'Send deck,To-do,Normal,Done,,,,Acme,,2026-09-01T00:00:00.000Z,',
+      '"Call Ada, re: renewal",Call,High,Not Started,2026-09-06T14:00:00.000Z,ada@example.com,Ada Lovelace,,d-1,,Before noon',
+      'Send deck,To-do,Normal,Completed,,,,Acme,,2026-09-01T00:00:00.000Z,',
     ])
+  })
+
+  it('writes a task’s own labels, else the org’s names for its meanings (AGL-3517)', () => {
+    const csv = tasksCsv(
+      [
+        { title: 'A', kind: 'meeting', typeLabel: 'Site visit', priority: 'normal', status: 'open', statusLabel: 'In Progress' },
+        { title: 'B', kind: 'todo', priority: 'normal', status: 'open' },
+      ],
+      {
+        taskPicklists: effectiveCrmTaskPicklists({
+          priority: { values: [{ id: 'normal', label: 'Medium', active: true }], defaultValueId: null },
+        }),
+      },
+    )
+    const [, first, second] = csv.split('\n')
+    expect(first?.startsWith('A,Site visit,Medium,In Progress,')).toBe(true)
+    expect(second?.startsWith('B,To-do,Medium,Not Started,')).toBe(true)
   })
 })

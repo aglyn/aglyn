@@ -216,6 +216,21 @@ offer it as a select, and it is enforced the way lead source is: a salutation se
 the values allowed, and one in a [contacts CSV import](./import.md) is dropped from its row
 and reported. A rename renames it on every contact that holds it.
 
+### The Tasks tab {#task-picklists}
+
+A task has no custom fields, so the **Tasks** tab is its picklists alone: **Status**,
+**Priority**, **Type** and **Subject**, each with Salesforce's standard values (see
+[Status, priority, type and subject](./tasks.md#task-picklists)). Status, Priority and
+Type are **semantic**: each value **means** one of the CRM's own states — a status is
+open or done, a type is a call, an email, a meeting or a to-do — shown in the **Means**
+column. A value you add names its meaning; a standard value's is fixed; and a value
+deleted with a replacement moves its tasks only to a value of the same meaning. Renaming
+a value renames it on every task that holds it, and changes nothing a reminder, a view,
+the digest or an automation reads, because those read the meaning.
+
+**Subject** is suggestions under a task's free-text subject: renaming or deleting one
+changes no task.
+
 ## Over the API {#over-the-api}
 
 The [`/v1/contacts`](/api/resources/contacts), [`/v1/companies`](/api/resources/companies),

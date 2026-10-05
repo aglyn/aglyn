@@ -19,6 +19,9 @@
 import {
   type ConsolePluginPageProps,
   CRM_COLLECTIONS,
+  crmPicklistShownLabel,
+  crmTaskPicklistLabels,
+  crmTaskStatusWrite,
   type CrmViewFilterClause,
   findOrgMember,
   pluginDocsHelp,
@@ -46,6 +49,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useCrmRecordNames } from '../hooks/use-crm-record-names'
 import { type CrmTaskRow, useCrmTaskList, useNowMs } from '../hooks/use-crm-tasks'
 import { useOrgMemberDirectory } from '../hooks/use-org-member-directory'
+import { useCrmTaskPicklists } from '../hooks/use-crm-task-picklists'
 import { downloadTextFile } from '../model/contacts-csv'
 import { crmRoutes } from '../model/crm-routes'
 import { refreshCrmNextActivity } from '../model/next-activity-api'
@@ -53,10 +57,8 @@ import { completeCrmTask } from '../model/task-api'
 import { crmTaskCallScope } from '../model/task-routes'
 import { type TaskCsvOptions, tasksCsv } from '../model/tasks-csv'
 import {
-  CRM_TASK_KIND_LABELS,
   CRM_TASK_KINDS,
   CRM_TASK_PRIORITIES,
-  CRM_TASK_PRIORITY_LABELS,
   CRM_TASK_VIEWS,
   type CrmTaskView,
   TASK_LIST_QUERY_FIELDS,
@@ -96,7 +98,7 @@ const TASK_FILTER_FIELDS: readonly ListFilterField[] = [
 ]
 const TASK_FILTER_HEADERS: Readonly<Record<string, string>> = {
   view: 'Show',
-  kind: 'Kind',
+  kind: 'Type',
   priority: 'Priority',
   assigneeUid: 'Assignee',
 }
@@ -215,20 +217,28 @@ export function TasksSection(props: ConsolePluginPageProps) {
   })
   const { tasks, status, fromCache, scope, orgId, readTokens } = list
   const directory = useOrgMemberDirectory(orgId)
+  const picklists = useCrmTaskPicklists(orgId)
+  /*
+   * Type and Priority filter on the MEANING the query holds (AGL-3517), so
+   * each option is a meaning, named by the org's label for it.
+   */
   const filterOptions = useMemo(
     () => ({
       view: CRM_TASK_VIEWS.map((option) => ({ value: option.id, label: option.label })),
-      kind: CRM_TASK_KINDS.map((kind) => ({ value: kind, label: CRM_TASK_KIND_LABELS[kind] })),
+      kind: CRM_TASK_KINDS.map((kind) => ({
+        value: kind,
+        label: crmPicklistShownLabel(picklists.type, kind, null),
+      })),
       priority: CRM_TASK_PRIORITIES.map((priority) => ({
         value: priority,
-        label: CRM_TASK_PRIORITY_LABELS[priority],
+        label: crmPicklistShownLabel(picklists.priority, priority, null),
       })),
       assigneeUid: directory.members.map((member) => ({
         value: member.uid,
         label: member.label,
       })),
     }),
-    [directory.members],
+    [directory.members, picklists.type, picklists.priority],
   )
   // What the query could not hold, said above the list rather than matched in memory.
   const refused = useMemo(
@@ -269,8 +279,9 @@ export function TasksSection(props: ConsolePluginPageProps) {
         return member?.email || member?.label || uid
       },
       recordName: nameOf,
+      taskPicklists: picklists,
     }),
-    [directory.members, nameOf],
+    [directory.members, nameOf, picklists],
   )
   const handleExport = useCallback(() => {
     downloadTextFile('tasks.csv', 'text/csv', tasksCsv(tasks, csvOptions))
@@ -314,7 +325,8 @@ export function TasksSection(props: ConsolePluginPageProps) {
           await updateDoc(
             doc(firestore, scope[0], scope[1], CRM_COLLECTIONS.tasks, task.$id),
             {
-              status: 'open',
+              // Open again, with the label a new task starts with (AGL-3517).
+              ...crmTaskStatusWrite(picklists.status, false),
               completedAtMs: null,
               completedByUid: deleteField(),
               updatedAt: serverTimestamp(),
@@ -341,7 +353,7 @@ export function TasksSection(props: ConsolePluginPageProps) {
         setBusyId(null)
       }
     },
-    [scope, busyId, firestore, user, hostId, orgId, enqueueSnackbar],
+    [scope, busyId, firestore, user, hostId, orgId, enqueueSnackbar, picklists.status],
   )
 
   const columns: GridColDef[] = useMemo(
@@ -400,10 +412,12 @@ export function TasksSection(props: ConsolePluginPageProps) {
       },
       {
         field: 'kind',
-        headerName: 'Kind',
+        headerName: 'Type',
         width: 120,
         sortable: false,
-        renderCell: ({ row }: { row: CrmTaskRow }) => <TaskKindCell kind={row.kind} />,
+        renderCell: ({ row }: { row: CrmTaskRow }) => (
+          <TaskKindCell kind={row.kind} label={crmTaskPicklistLabels(row, picklists).type} />
+        ),
       },
       {
         field: 'priority',
@@ -411,7 +425,28 @@ export function TasksSection(props: ConsolePluginPageProps) {
         width: 110,
         sortable: false,
         renderCell: ({ row }: { row: CrmTaskRow }) => (
-          <TaskPriorityChip priority={row.priority} />
+          <TaskPriorityChip
+            priority={row.priority}
+            label={crmTaskPicklistLabels(row, picklists).priority}
+          />
+        ),
+      },
+      {
+        // The org's status label (AGL-3517); the checkbox is the open/done half.
+        field: 'statusLabel',
+        headerName: 'Status',
+        width: 150,
+        sortable: false,
+        valueGetter: (_value: unknown, row: CrmTaskRow) =>
+          crmTaskPicklistLabels(row, picklists).status,
+        renderCell: ({ row }: { row: CrmTaskRow }) => (
+          <Typography
+            variant="body2"
+            color={row.status === 'done' ? 'text.secondary' : undefined}
+            noWrap
+          >
+            {crmTaskPicklistLabels(row, picklists).status}
+          </Typography>
         ),
       },
       {
@@ -465,7 +500,7 @@ export function TasksSection(props: ConsolePluginPageProps) {
         ),
       },
     ],
-    [busyId, toggleDone, nowMs, directory, routes, nameOf, scope],
+    [busyId, toggleDone, nowMs, directory, routes, nameOf, scope, picklists],
   )
   /* The column and sort models are the view's (AGL-2617). */
   const filterColumns = useMemo(
@@ -551,6 +586,7 @@ export function TasksSection(props: ConsolePluginPageProps) {
               {layout === 'calendar' ? (
                 <TasksCalendar
                   tasks={tasks}
+                  picklists={picklists}
                   truncated={list.hasMore}
                   onOpen={(task) => setDrawer({ open: true, task })}
                 />

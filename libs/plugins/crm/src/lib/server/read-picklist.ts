@@ -17,10 +17,13 @@
 
 import {
   CRM_COLLECTIONS,
+  CRM_TASK_PICKLIST_IDS,
   type CrmPicklist,
   type CrmPicklistId,
+  type CrmTaskPicklists,
   crmPicklistDefaultLabel,
   effectiveCrmPicklist,
+  effectiveCrmTaskPicklists,
   judgeCrmPicklistValue,
 } from '@aglyn/aglyn/server'
 
@@ -37,6 +40,24 @@ export async function readCrmPicklist(
     .doc(id)
     .get()
   return effectiveCrmPicklist(id, snapshot.data())
+}
+
+/** An org's Status, Priority and Type lists for tasks (AGL-3517), the three read together. */
+export async function readCrmTaskPicklists(
+  firestore: FirebaseFirestore.Firestore,
+  orgId: string,
+): Promise<CrmTaskPicklists> {
+  const lists = firestore.collection('orgs').doc(orgId).collection(CRM_COLLECTIONS.picklists)
+  const [status, priority, type] = await Promise.all([
+    lists.doc(CRM_TASK_PICKLIST_IDS.status).get(),
+    lists.doc(CRM_TASK_PICKLIST_IDS.priority).get(),
+    lists.doc(CRM_TASK_PICKLIST_IDS.type).get(),
+  ])
+  return effectiveCrmTaskPicklists({
+    status: status?.data(),
+    priority: priority?.data(),
+    type: type?.data(),
+  })
 }
 
 /**

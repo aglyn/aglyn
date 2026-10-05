@@ -136,6 +136,20 @@ import {
   normalizeCrmPicklist,
   openLeadsFromCounts,
 } from './crm'
+// The task picklists and a call's direction (AGL-3517).
+import {
+  CRM_PICKLIST_OBJECT_LABELS,
+  crmActivityDirection,
+  crmActivityKindTitle,
+  crmPicklistLabelForNew,
+  crmPicklistMeaningLabel,
+  crmPicklistShownLabel,
+  crmTaskLabelsForNew,
+  crmTaskPicklistLabels,
+  crmTaskStatusWrite,
+  effectiveCrmTaskPicklists,
+  resolveCrmSemanticPicklistWrite,
+} from './crm'
 
 describe('CRM collections', () => {
   it('names nine org subcollections, five of them prefixed', () => {
@@ -1964,5 +1978,134 @@ describe('the salutation picklist', () => {
       error: 'Salutation must be one of: Mr., Ms., Mrs., Dr., Prof..',
     })
     expect(judgeCrmPicklistValue('salutation', list, 'Sir', 'Sir')).toEqual({ ok: true, value: 'Sir' })
+  })
+})
+
+/**
+ * TASKS USE SALESFORCE'S STATUS, PRIORITY, TYPE AND SUBJECT (AGL-3517).
+ * Semantic picklists keep the meaning fields every query reads and store
+ * the org's label beside them; Subject is suggestions under a free title.
+ */
+describe('the task picklists', () => {
+  const standard = effectiveCrmTaskPicklists()
+
+  it('registers Status, Priority, Type and Subject on the Tasks tab with Salesforce’s values', () => {
+    expect(crmPicklistDefinitionsFor('task').map((definition) => definition.id)).toEqual([
+      'taskStatus',
+      'taskPriority',
+      'taskType',
+      'taskSubject',
+    ])
+    expect(CRM_PICKLIST_OBJECT_LABELS.task).toBe('Tasks')
+    expect(standard.status.values.map((value) => [value.label, value.meaning])).toEqual([
+      ['Not Started', 'open'],
+      ['In Progress', 'open'],
+      ['Waiting on someone else', 'open'],
+      ['Deferred', 'open'],
+      ['Completed', 'done'],
+    ])
+    expect(standard.status.defaultValueId).toBe('not-started')
+    expect(standard.priority.values.map((value) => value.label)).toEqual(['High', 'Normal', 'Low'])
+    expect(standard.type.values.map((value) => [value.label, value.meaning])).toEqual([
+      ['Call', 'call'],
+      ['Email', 'email'],
+      ['Meeting', 'meeting'],
+      ['To-do', 'todo'],
+    ])
+    const subject = crmPicklistDefinition('taskSubject')
+    expect(subject?.restricted).toBe(false)
+    // Suggestions only: a rename or a delete rewrites no task's title.
+    expect(subject?.targets).toEqual([])
+    expect(effectiveCrmPicklist('taskSubject', undefined).values.map((value) => value.label)).toEqual([
+      'Call',
+      'Send Letter',
+      'Send Quote',
+      'Other',
+    ])
+    expect(crmPicklistDefinition('taskStatus')?.targets).toEqual([
+      { object: 'task', field: 'statusLabel' },
+    ])
+  })
+
+  it('shows a task’s own label, else the first active value of its meaning', () => {
+    const status = effectiveCrmPicklist('taskStatus', {
+      values: [{ id: 'not-started', label: 'Not Started', active: false }],
+      defaultValueId: null,
+    })
+    expect(crmPicklistMeaningLabel(status, 'open')).toBe('In Progress')
+    expect(crmPicklistShownLabel(status, 'open', '  Deferred ')).toBe('Deferred')
+    expect(crmPicklistShownLabel(status, 'done', null)).toBe('Completed')
+    expect(crmTaskPicklistLabels({ kind: 'call', priority: 'high', status: 'open' }, standard)).toEqual({
+      type: 'Call',
+      priority: 'High',
+      status: 'Not Started',
+    })
+  })
+
+  it('starts a new task on the default when it means the same, else the first of the meaning', () => {
+    expect(crmPicklistLabelForNew(standard.status, 'open')).toBe('Not Started')
+    expect(crmPicklistLabelForNew(standard.status, 'done')).toBe('Completed')
+    expect(crmPicklistLabelForNew(standard.priority, 'high')).toBe('High')
+    expect(crmTaskLabelsForNew(standard, { kind: 'meeting', priority: 'low' })).toEqual({
+      statusLabel: 'Not Started',
+      priorityLabel: 'Low',
+      typeLabel: 'Meeting',
+    })
+  })
+
+  it('ticks done to the first active done value and unticks to a new task’s status', () => {
+    expect(crmTaskStatusWrite(standard.status, true)).toEqual({ status: 'done', statusLabel: 'Completed' })
+    expect(crmTaskStatusWrite(standard.status, false)).toEqual({ status: 'open', statusLabel: 'Not Started' })
+  })
+
+  it('resolves a write naming a label or a meaning, keeps the held label, and refuses the rest', () => {
+    const status = effectiveCrmPicklist('taskStatus', {
+      values: [{ id: 'deferred', label: 'Deferred', active: false }],
+      defaultValueId: null,
+    })
+    expect(resolveCrmSemanticPicklistWrite('taskStatus', status, 'in progress')).toEqual({
+      ok: true,
+      meaning: 'open',
+      label: 'In Progress',
+    })
+    expect(resolveCrmSemanticPicklistWrite('taskStatus', status, 'DONE')).toEqual({
+      ok: true,
+      meaning: 'done',
+      label: 'Completed',
+    })
+    // A meaning keeps the record's own label when that already means it.
+    expect(resolveCrmSemanticPicklistWrite('taskStatus', status, 'open', 'In Progress')).toEqual({
+      ok: true,
+      meaning: 'open',
+      label: 'In Progress',
+    })
+    // An inactive value is kept on the record that holds it, and on no other.
+    expect(resolveCrmSemanticPicklistWrite('taskStatus', status, 'deferred', 'Deferred')).toEqual({
+      ok: true,
+      meaning: 'open',
+      label: 'Deferred',
+    })
+    expect(resolveCrmSemanticPicklistWrite('taskStatus', status, 'Deferred')).toEqual({
+      ok: false,
+      error: 'Status must be one of: Not Started, In Progress, Waiting on someone else, Completed.',
+    })
+    expect(resolveCrmSemanticPicklistWrite('taskStatus', status, '  ')).toBeNull()
+  })
+})
+
+describe('an activity’s direction (AGL-3517)', () => {
+  it('takes inbound, outbound or internal on a call, inbound or outbound on an email, and none elsewhere', () => {
+    expect(crmActivityDirection('call', 'Internal')).toBe('internal')
+    expect(crmActivityDirection('email', 'inbound')).toBe('inbound')
+    expect(crmActivityDirection('email', 'internal')).toBeNull()
+    expect(crmActivityDirection('note', 'outbound')).toBeNull()
+  })
+
+  it('names a call or an email by its direction', () => {
+    expect(crmActivityKindTitle('call', 'inbound')).toBe('Inbound call')
+    expect(crmActivityKindTitle('email', 'outbound')).toBe('Outbound email')
+    expect(crmActivityKindTitle('call', 'internal')).toBe('Internal call')
+    expect(crmActivityKindTitle('call')).toBe('Call')
+    expect(crmActivityKindTitle('meeting', 'inbound')).toBe('Meeting')
   })
 })
