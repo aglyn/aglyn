@@ -65,8 +65,8 @@ import { LEAD_IMPORT_FIELD_LABELS, LEAD_IMPORT_FIELDS } from './crm-lead-import'
  *
  * ## What never leaves
  *
- * No email address, phone number or postal address of anyone; no marketing
- * consent; no custom field VALUE; no team member's name or id; no document
+ * No email address, phone number or postal address of anyone; no birthdate;
+ * no assistant and no reports-to; no marketing consent; no custom field VALUE; no team member's name or id; no document
  * id of any record; no file; no order or payment detail beyond a count. A
  * logged email carries its subject and a cut of its body, never the address
  * it went to or came from. An import catalog carries field keys, labels and
@@ -164,7 +164,16 @@ export interface CrmDealFact {
 export interface CrmContactFacts {
   record: 'contact'
   name: string
+  /**
+   * How to address the person, and where they sit (AGL-3515). Their
+   * birthdate, their phones, their other address, their assistant and
+   * their manager never leave — see "What never leaves".
+   */
+  salutation: string
   jobTitle: string
+  department: string
+  /** They asked not to be phoned — a fact an assistant drafting a next step must respect. */
+  doNotCall: boolean
   company: string
   lifecycleStage: string
   tags: string[]
@@ -452,7 +461,10 @@ export function contactFacts(input: ContactFactsInput): CrmContactFacts {
   return {
     record: 'contact',
     name: crmFactProse(contactDisplayName(row, group.groupId), CRM_FACTS_LABEL_MAX),
+    salutation: crmFactProse(facet.salutation, CRM_FACTS_LABEL_MAX),
     jobTitle: crmFactProse(facet.jobTitle, CRM_FACTS_LABEL_MAX),
+    department: crmFactProse(facet.department, CRM_FACTS_LABEL_MAX),
+    doNotCall: facet.doNotCall === true,
     company: crmFactProse(facet.companyName, CRM_FACTS_LABEL_MAX),
     lifecycleStage: isContactLifecycleStage(facet.lifecycleStage)
       ? CONTACT_LIFECYCLE_STAGE_LABELS[facet.lifecycleStage]
@@ -606,7 +618,19 @@ const STANDARD_IMPORT_FIELDS: Record<
     keys: CONTACT_IMPORT_FIELDS,
     labels: CONTACT_IMPORT_FIELD_LABELS,
     required: 'email',
-    types: { email: 'email', phone: 'phone', ownerEmail: 'email', marketingConsent: 'yes-no' },
+    types: {
+      email: 'email',
+      phone: 'phone',
+      mobilePhone: 'phone',
+      homePhone: 'phone',
+      otherPhone: 'phone',
+      fax: 'phone',
+      assistantPhone: 'phone',
+      birthdate: 'date',
+      doNotCall: 'yes-no',
+      ownerEmail: 'email',
+      marketingConsent: 'yes-no',
+    },
   },
   companies: {
     keys: COMPANY_IMPORT_FIELDS,

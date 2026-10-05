@@ -27,8 +27,9 @@
  * ## The order is the crash-safety argument
  *
  *  1. Every deal, task and activity naming the merged contact is repointed
- *     at the survivor, and every lead converted into it. Batched, bounded,
- *     idempotent: a re-run finds nothing left to move.
+ *     at the survivor, and every lead converted into it — and every contact
+ *     that reports to it (AGL-3515), in each holder's facet. Batched,
+ *     bounded, idempotent: a re-run finds nothing left to move.
  *  2. Then, in ONE transaction: the survivor takes the plan, every address
  *     it now answers to is indexed at it, and the merged document is
  *     deleted — with both records re-read inside the transaction, so two
@@ -52,10 +53,12 @@
 
 import {
   CONTACT_EMAIL_INDEX_COLLECTION,
+  CONTACT_FACETS_FIELD,
   contactEmails,
 } from '@aglyn/aglyn/app-utils/contacts'
 import type { HostActivityActor } from '@aglyn/aglyn/app-utils/activity-presenter'
 import { planContactMerge } from '../model/contact-merge'
+import { repointContactReportsTo } from './contact-reports-to'
 import { CRM_COLLECTIONS } from '@aglyn/aglyn/app-utils/crm'
 import { personKey } from '@aglyn/aglyn/app-utils/person-key'
 import { FieldValue } from 'firebase-admin/firestore'
@@ -181,6 +184,14 @@ async function repointLeads(
   return moved
 }
 
+/** The groups holding a facet on a contact document. */
+function facetHolders(data: Record<string, unknown>): string[] {
+  const facets = data[CONTACT_FACETS_FIELD]
+  return facets && typeof facets === 'object' && !Array.isArray(facets)
+    ? Object.keys(facets)
+    : []
+}
+
 export async function mergeContacts(
   options: MergeContactsOptions,
 ): Promise<MergeContactsResult> {
@@ -219,6 +230,20 @@ export async function mergeContacts(
     mergedId,
     survivorId,
   )
+  /*
+   * Whoever reported to the merged record reports to the survivor now. A
+   * holder can point only at a contact it holds, so the holders of either
+   * record are every facet a pointer can sit in; the survivor's own pointer
+   * at the merged record is cleared rather than turned on itself.
+   */
+  await repointContactReportsTo(
+    firestore,
+    contactsRef,
+    [...facetHolders(mergedData), ...facetHolders(survivorData)],
+    mergedId,
+    survivorId,
+    'contact merge',
+  )
 
   /*==========================================
    * 2. THE SWAP — one transaction over both documents and the index.
@@ -234,6 +259,7 @@ export async function mergeContacts(
     const plan = planContactMerge(
       (survivor.data() ?? {}) as Record<string, unknown>,
       (merged.data() ?? {}) as Record<string, unknown>,
+      { survivorId, mergedId },
     )
     transaction.set(
       survivorRef,

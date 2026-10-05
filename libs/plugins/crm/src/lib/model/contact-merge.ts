@@ -41,7 +41,16 @@
  *    that is otherwise lossless.
  *  - A recorded REFUSAL of marketing mail on either record stands on the
  *    survivor. The merge asserts the two are one person, and that person
- *    said no.
+ *    said no. So does a do-not-call (AGL-3515), for the same reason.
+ *  - The name is ONE value made of three fields (AGL-3515): a holder's
+ *    `name`, `firstName` and `lastName` come across together, from the
+ *    survivor when it names the person at all and from the merged record
+ *    only when it does not — so a survivor called "Bob" never gains a first
+ *    name of "Robert" that its name does not show.
+ *  - A reports-to that would point at the survivor itself — the survivor's
+ *    pointing at the merged record, or the merged record's at the survivor —
+ *    is cleared (`null`) rather than kept as a person reporting to
+ *    themselves.
  *
  * Applied per holder: each group's facet on the merged record is folded
  * into the same group's facet on the survivor, and a group only the merged
@@ -100,6 +109,14 @@ const LATEST_FIELDS = [
 ] as const
 /** Facet instants where the earlier one is the truth. */
 const EARLIEST_FIELDS = ['firstPurchaseAtMs'] as const
+/** The facet fields that together name the person, merged as one (AGL-3515). */
+const NAME_FIELDS = ['name', 'firstName', 'lastName'] as const
+
+/** The two records' ids, when the caller knows them — what a self-pointer is judged by. */
+export interface ContactMergeIds {
+  survivorId: string
+  mergedId: string
+}
 
 export interface ContactMergePlan {
   /**
@@ -217,7 +234,21 @@ function mergeCustom(survivor: unknown, merged: unknown): Record<string, unknown
 export function mergeContactFacet(
   survivor: Doc | undefined,
   merged: Doc | undefined,
+  ids?: ContactMergeIds,
 ): Doc {
+  const out = foldContactFacet(survivor, merged)
+  /*
+   * Nobody reports to themselves — see the rule above. Written as `null`
+   * rather than left out, because the plan is a merge-`set`, which keeps a
+   * stored key it is not given.
+   */
+  if (ids && [ids.survivorId, ids.mergedId].includes(text(out['reportsToContactId']))) {
+    out['reportsToContactId'] = null
+  }
+  return out
+}
+
+function foldContactFacet(survivor: Doc | undefined, merged: Doc | undefined): Doc {
   if (!merged) return { ...(survivor ?? {}) }
   if (!survivor) return { ...merged }
   const out: Doc = { ...merged }
@@ -225,6 +256,14 @@ export function mergeContactFacet(
   for (const [key, value] of Object.entries(survivor)) {
     out[key] = fill(value, merged[key])
   }
+  // The name's three fields, from one record — see the rule above.
+  const named = NAME_FIELDS.some((key) => !isEmpty(survivor[key]))
+  for (const key of NAME_FIELDS) {
+    const value = named ? survivor[key] : merged[key]
+    if (isEmpty(value)) delete out[key]
+    else out[key] = value
+  }
+  if (survivor['doNotCall'] === true || merged['doNotCall'] === true) out['doNotCall'] = true
   const a = survivor as unknown as ContactFacet
   const b = merged as unknown as ContactFacet
   out['sources'] = { ...(b.sources ?? {}), ...(a.sources ?? {}) }
@@ -301,7 +340,11 @@ function refusalOver(refusal: Doc, grant: Doc): Doc {
  * Both are the stored documents as read. The survivor's `email` is the
  * identity that stands; the merged record's becomes an alternate.
  */
-export function planContactMerge(survivor: Doc, merged: Doc): ContactMergePlan {
+export function planContactMerge(
+  survivor: Doc,
+  merged: Doc,
+  ids?: ContactMergeIds,
+): ContactMergePlan {
   const survivorEmail = normalizeContactEmail(survivor['email']) ?? ''
   const mergedEmails = contactEmails(merged)
   const alternates = [
@@ -377,7 +420,14 @@ export function planContactMerge(survivor: Doc, merged: Doc): ContactMergePlan {
   const mergedFacets = facetsOf(merged)
   const facets: Record<string, Doc> = {}
   for (const [groupId, facet] of Object.entries(mergedFacets)) {
-    facets[groupId] = mergeContactFacet(survivorFacets[groupId], facet)
+    facets[groupId] = mergeContactFacet(survivorFacets[groupId], facet, ids)
+  }
+  // A survivor facet the merged record did not hold may still point at it.
+  if (ids) {
+    for (const [groupId, facet] of Object.entries(survivorFacets)) {
+      if (groupId in facets || facet['reportsToContactId'] !== ids.mergedId) continue
+      facets[groupId] = mergeContactFacet(facet, undefined, ids)
+    }
   }
   if (Object.keys(facets).length) out[CONTACT_FACETS_FIELD] = facets
 
@@ -462,6 +512,7 @@ export function contactMergePreview(
       : ''
   const owner = (value: unknown) => (text(value) ? memberName(text(value)) : '')
   const list = (value: unknown) => strings(value).join(', ')
+  const flag = (value: unknown) => (value === true ? 'Yes' : '')
   const money = (facet: ContactFacet) =>
     facet.ordersCount
       ? `${facet.ordersCount} · $${((facet.ltvCents ?? 0) / 100).toFixed(2)}`
@@ -495,8 +546,21 @@ export function contactMergePreview(
       contactEmails(merged).join(', '),
       plan.emails.join(', '),
     ),
+    row('salutation', 'Salutation', text(a.salutation), text(b.salutation), text(c.salutation)),
     row('phone', 'Phone', text(a.phone), text(b.phone), text(c.phone)),
+    row(
+      'mobilePhone',
+      'Mobile phone',
+      text(a.mobilePhone),
+      text(b.mobilePhone),
+      text(c.mobilePhone),
+    ),
+    row('homePhone', 'Home phone', text(a.homePhone), text(b.homePhone), text(c.homePhone)),
+    row('otherPhone', 'Other phone', text(a.otherPhone), text(b.otherPhone), text(c.otherPhone)),
+    row('fax', 'Fax', text(a.fax), text(b.fax), text(c.fax)),
+    row('doNotCall', 'Do not call', flag(a.doNotCall), flag(b.doNotCall), flag(c.doNotCall)),
     row('jobTitle', 'Job title', text(a.jobTitle), text(b.jobTitle), text(c.jobTitle)),
+    row('department', 'Department', text(a.department), text(b.department), text(c.department)),
     row(
       'company',
       'Company',
@@ -516,10 +580,32 @@ export function contactMergePreview(
     row('notes', 'Notes', text(a.notes), text(b.notes), text(c.notes)),
     row(
       'address',
-      'Address',
+      'Mailing address',
       addressLine(a.address),
       addressLine(b.address),
       addressLine(c.address),
+    ),
+    row(
+      'otherAddress',
+      'Other address',
+      addressLine(a.otherAddress),
+      addressLine(b.otherAddress),
+      addressLine(c.otherAddress),
+    ),
+    row('birthdate', 'Birthdate', text(a.birthdate), text(b.birthdate), text(c.birthdate)),
+    row(
+      'assistant',
+      'Assistant',
+      text(a.assistantName),
+      text(b.assistantName),
+      text(c.assistantName),
+    ),
+    row(
+      'assistantPhone',
+      'Assistant phone',
+      text(a.assistantPhone),
+      text(b.assistantPhone),
+      text(c.assistantPhone),
     ),
     row('orders', 'Orders', money(a), money(b), money(c)),
     row(

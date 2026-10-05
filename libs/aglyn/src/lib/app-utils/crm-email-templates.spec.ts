@@ -95,6 +95,29 @@ describe('renderCrmMergeFields', () => {
     ).toBe('Ada / Advisor')
   })
 
+  it("prefers the holder's own first and last names to a split of the display name (AGL-3515)", () => {
+    const contact = {
+      name: 'Mary Ann van der Berg',
+      facets: {
+        'site-1': { name: 'Mary Ann van der Berg', firstName: 'Mary Ann', lastName: 'van der Berg' },
+        'site-2': { name: 'Mary Ann van der Berg' },
+      },
+    }
+    expect(
+      renderCrmMergeFields('{{contact.firstName}}|{{contact.lastName}}', {
+        contact,
+        contactGroupId: 'site-1',
+      }),
+    ).toBe('Mary Ann|van der Berg')
+    // A holder that keeps only the name still gets the split.
+    expect(
+      renderCrmMergeFields('{{contact.firstName}}|{{contact.lastName}}', {
+        contact,
+        contactGroupId: 'site-2',
+      }),
+    ).toBe('Mary|Ann van der Berg')
+  })
+
   it('renders a missing record, an unknown field and a malformed context as nothing, without throwing', () => {
     expect(renderCrmMergeFields('Hi {{contact.firstName}},', {})).toBe('Hi ,')
     expect(renderCrmMergeFields('{{deal.amount}}|{{lead.name}}', { deal: null, lead: undefined })).toBe('|')

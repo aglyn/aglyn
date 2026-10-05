@@ -74,7 +74,7 @@ export const DOCS_HELP_EXCERPTS = {
   consoleAndSite: 'Task-ordered recipes for nav/pages/widgets/providers and canvas components/site runtimes.',
   consoleSearch: 'What the console search palette can find, how it matches what you type, and the two things it deliberately does not search.',
   consoleTour: 'Where things live in the Aglyn console app bar and navigation.',
-  contactRecord: 'Add a contact by hand, keep a profile on them — phone, company, title, address, owner and lifecycle stage — open their own page in the CRM, and merge two records that turn out to be one person.',
+  contactRecord: 'Add a contact by hand, keep a profile on them — Salesforce\'s standard contact fields, from salutation and phones to assistant and reports-to — open their own page in the CRM, and merge two records that are one person.',
   content: 'Start from templates, drop in pre-built sections and blocks, and publish a blog with collections.',
   cookieConsent: 'Ask visitors before analytics runs — or track immediately where the law allows, with an always-available opt-out. Google Analytics and Tag Manager tags never load for a visitor whose recorded state does not grant them.',
   copyAssist: 'An AI copywriter for the words already on your site: rewrite a headline, a paragraph, a button label or a blog entry in your own voice, as an unsaved change one undo takes back.',

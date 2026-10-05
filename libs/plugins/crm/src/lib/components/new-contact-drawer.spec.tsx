@@ -45,11 +45,27 @@ jest.mock('./company-picker', () => ({
   useCreateCompany: () => async () => null,
 }))
 
+// The org's salutations (AGL-3515), read as the standard values.
+jest.mock('../hooks/use-crm-picklist', () => {
+  const { effectiveCrmPicklist } = jest.requireActual('@aglyn/aglyn/app-utils/crm')
+  return {
+    useCrmPicklist: (id: string) => ({
+      picklist: effectiveCrmPicklist(id, null),
+      stored: false,
+      ready: true,
+      fromCache: false,
+    }),
+  }
+})
+
 const GROUPED = {
   consentGroups: { nw: { name: 'Northwind', hostIds: ['site-a', 'site-b'] } },
 }
 
-function submitWith(org: Record<string, unknown>): NewContactValues {
+function submitWith(
+  org: Record<string, unknown>,
+  fill: () => void = () => undefined,
+): NewContactValues {
   const onSubmit = jest.fn()
   render(
     <NewContactDrawer
@@ -66,6 +82,7 @@ function submitWith(org: Record<string, unknown>): NewContactValues {
     target: { value: 'ann@example.com' },
   })
   fireEvent.click(screen.getByLabelText('This person opted in to marketing email'))
+  fill()
   fireEvent.click(screen.getByRole('button', { name: 'Add contact' }))
   expect(onSubmit).toHaveBeenCalledTimes(1)
   return onSubmit.mock.calls[0][0] as NewContactValues
@@ -86,5 +103,33 @@ describe('the consent box on a grouped site', () => {
     const values = submitWith({})
     expect(values.marketingConsent).toBe(true)
     expect(values.disclosedConsentGroup).toBeNull()
+  })
+})
+
+/**
+ * Salesforce's standard contact fields (AGL-3515): the name is the first
+ * and last names' while either is typed, and the rest leave as typed.
+ */
+describe("the drawer's standard contact fields", () => {
+  it('composes the name from the parts and hands over the mobile, the department and do not call', () => {
+    const values = submitWith({}, () => {
+      fireEvent.change(screen.getByLabelText('First name'), { target: { value: ' Ann ' } })
+      fireEvent.change(screen.getByLabelText('Last name'), { target: { value: 'Lee' } })
+      fireEvent.change(screen.getByLabelText('Mobile phone'), {
+        target: { value: '(512) 555-0101' },
+      })
+      fireEvent.change(screen.getByLabelText('Department'), { target: { value: 'Ops' } })
+      fireEvent.click(screen.getByLabelText('Do not call'))
+    })
+    expect((screen.getByLabelText('Name') as HTMLInputElement).value).toBe('Ann Lee')
+    expect(values).toMatchObject({
+      name: 'Ann Lee',
+      firstName: 'Ann',
+      lastName: 'Lee',
+      mobilePhone: '+15125550101',
+      department: 'Ops',
+      doNotCall: true,
+      salutation: '',
+    })
   })
 })

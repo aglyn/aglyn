@@ -26,7 +26,9 @@ import type {
 import { companyContactsCountFields } from '@aglyn/tenant-data-admin/server/contact-company-link'
 import { deleteWhereEquals, updateWhereEquals } from '@aglyn/tenant-data-admin/server/paged-sweeps'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin/server/firebase-admin'
+import { CONTACT_FACETS_FIELD } from '@aglyn/aglyn/app-utils/contacts'
 import { FieldValue } from 'firebase-admin/firestore'
+import { repointContactReportsTo } from './contact-reports-to'
 
 /**
  * THE CRM'S SHARE OF A PERSON ERASURE (AGL-2623, AGL-3080): the records
@@ -38,10 +40,13 @@ import { FieldValue } from 'firebase-admin/firestore'
  *
  *  1. each contact and its satellites — each linked company's contact count
  *     moved down once, deals unlinked (a deal is the team's own pipeline
- *     record and stays), tasks and activities deleted — then the contact
+ *     record and stays), tasks and activities deleted, every other contact's
+ *     reports-to that named the person cleared (AGL-3515) — then the contact
  *     document itself, WHOLE. Not the CRM's delete, which is a detach that
  *     leaves the row for the other holders: every site's facet, every consent
- *     entry and every attribution goes with it;
+ *     entry and every attribution goes with it, and with the facets every
+ *     profile field — the birthdate, the phones, the other address, the
+ *     assistant — that Salesforce's standard fields put there;
  *  2. the person's lead: the organization's row (AGL-3275), and every legacy
  *     per-site row still standing on a site of this workspace — and no other
  *     workspace's;
@@ -135,6 +140,17 @@ export function createCrmPersonEraser(deps: CrmPersonEraserDeps): PluginPersonRe
         orgRef.collection(CRM_COLLECTIONS.activities),
         'contactId',
         contactId,
+        LABEL,
+      )
+      // A pointer at an erased person is a trace of them: cleared in every
+      // holder's facet that could hold one — the holders of this contact.
+      const facets: unknown = contact.get(CONTACT_FACETS_FIELD)
+      await repointContactReportsTo(
+        db,
+        orgRef.collection('contacts'),
+        facets && typeof facets === 'object' ? Object.keys(facets) : [],
+        contactId,
+        null,
         LABEL,
       )
       try {

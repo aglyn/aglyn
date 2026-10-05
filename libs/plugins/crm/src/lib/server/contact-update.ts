@@ -73,6 +73,10 @@
 
 import {
   type AglynPostalAddress,
+  composeContactName,
+  CONTACT_BIRTHDATE_REFUSAL,
+  CONTACT_EXTRA_PHONE_FIELDS,
+  CONTACT_PHONE_FIELD_LABELS,
   consentGroupForHost,
   CONTACT_FIELDS_MAX_PER_ORG,
   type ContactCompanyLinkPlan,
@@ -84,11 +88,14 @@ import {
   CRM_COLLECTIONS,
   CRM_LEAD_SOURCE_PICKLIST,
   CRM_MEDIA_IDS_FIELD,
+  CRM_SALUTATION_PICKLIST,
   crmReadTokens,
   effectiveCrmLeadSourcePicklist,
   isOrgWideMember,
   judgeCrmLeadSource,
+  judgeCrmPicklistValue,
   normalizeAddress,
+  normalizeContactBirthdate,
   normalizeCrmMediaIds,
   normalizeCrmPicklistLabel,
   normalizePhone,
@@ -126,14 +133,35 @@ import { readCrmRouteScope } from './org-caller'
 import { crmSuiteRefusal } from './suite-gate'
 import { authorizeCrmWriter, canReach, type Writer } from './task-routes'
 import { contactPrimaryGroup } from '../model/contact-holder'
+import {
+  cachedContactReader,
+  CONTACT_REPORTS_TO_LOOP_REFUSAL,
+  CONTACT_REPORTS_TO_SELF_REFUSAL,
+  contactReportsToLoops,
+} from './contact-reports-to'
+import { readCrmPicklist } from './read-picklist'
 
 /** What the suite gate names for each field a request can carry. */
 const SUITE_ACTS: Record<keyof ContactUpdateFields, string> = {
   name: "Editing a contact's profile",
+  salutation: "Editing a contact's profile",
+  firstName: "Editing a contact's profile",
+  lastName: "Editing a contact's profile",
   phone: "Editing a contact's profile",
+  mobilePhone: "Editing a contact's profile",
+  homePhone: "Editing a contact's profile",
+  otherPhone: "Editing a contact's profile",
+  fax: "Editing a contact's profile",
   jobTitle: "Editing a contact's profile",
+  department: "Editing a contact's profile",
+  birthdate: "Editing a contact's profile",
+  assistantName: "Editing a contact's profile",
+  assistantPhone: "Editing a contact's profile",
+  reportsToContactId: "Editing a contact's profile",
   leadSource: "Editing a contact's profile",
   address: "Editing a contact's profile",
+  otherAddress: "Editing a contact's profile",
+  doNotCall: "Editing a contact's profile",
   notes: "Editing a contact's notes",
   tags: 'Tagging a contact',
   addTag: 'Tagging a contact',
@@ -145,6 +173,10 @@ const SUITE_ACTS: Record<keyof ContactUpdateFields, string> = {
   custom: "Editing a contact's custom fields",
   mediaIds: 'Attaching files to a contact',
 }
+
+/** The sentence a `name` that contradicts the holder's first and last names is refused with. */
+export const CONTACT_COMPOSED_NAME_REFUSAL =
+  "This person's name is made of their first and last name — change those instead."
 
 /** A contact read at the organization level that no site has captured. */
 const NO_HOLDER_REFUSAL = 'No site holds this contact yet, so it has no profile to edit.'
@@ -179,19 +211,55 @@ export function readContactUpdateFields(
   }
   const fields: ContactUpdateFields = {}
   if ('name' in raw) fields.name = typed(raw['name'], 120)
-  if ('phone' in raw) {
-    const text = typed(raw['phone'], 40)
+  for (const key of ['phone', ...CONTACT_EXTRA_PHONE_FIELDS] as const) {
+    if (!(key in raw)) continue
+    const text = typed(raw[key], 40)
     const phone = text ? normalizePhone(text) : ''
-    if (phone === null) return { ok: false, error: CONTACT_PHONE_REFUSAL }
-    fields.phone = phone
+    if (phone === null) {
+      return {
+        ok: false,
+        error:
+          key === 'phone'
+            ? CONTACT_PHONE_REFUSAL
+            : `${CONTACT_PHONE_FIELD_LABELS[key]}: ${CONTACT_PHONE_REFUSAL}`,
+      }
+    }
+    fields[key] = phone
   }
   if ('jobTitle' in raw) fields.jobTitle = typed(raw['jobTitle'], 120)
+  // Held to the label's shape here and judged against the org's list by the
+  // handler, like the lead source (AGL-3515).
+  if ('salutation' in raw) fields.salutation = normalizeCrmPicklistLabel(raw['salutation'])
+  if ('firstName' in raw) fields.firstName = composeContactName(raw['firstName'], '')
+  if ('lastName' in raw) fields.lastName = composeContactName('', raw['lastName'])
+  if ('department' in raw) fields.department = typed(raw['department'], 120)
+  if ('assistantName' in raw) fields.assistantName = typed(raw['assistantName'], 120)
+  if ('birthdate' in raw) {
+    const birthdate = normalizeContactBirthdate(raw['birthdate'])
+    if (birthdate === null) return { ok: false, error: CONTACT_BIRTHDATE_REFUSAL }
+    fields.birthdate = birthdate
+  }
+  if ('reportsToContactId' in raw) {
+    const reportsTo =
+      raw['reportsToContactId'] === null ? '' : typed(raw['reportsToContactId'], 200)
+    if (reportsTo.includes('/')) {
+      return { ok: false, error: 'The contact this person reports to could not be read.' }
+    }
+    fields.reportsToContactId = reportsTo || null
+  }
+  if ('doNotCall' in raw) {
+    if (typeof raw['doNotCall'] !== 'boolean') {
+      return { ok: false, error: 'Do not call must be true or false.' }
+    }
+    fields.doNotCall = raw['doNotCall']
+  }
   // Held to the label's shape here; judged against the org's list by the
   // handler, which alone can read it (AGL-3298).
   if ('leadSource' in raw) fields.leadSource = normalizeCrmPicklistLabel(raw['leadSource'])
-  if ('address' in raw) {
-    const address = raw['address']
-    fields.address =
+  for (const key of ['address', 'otherAddress'] as const) {
+    if (!(key in raw)) continue
+    const address = raw[key]
+    fields[key] =
       address && typeof address === 'object' && !Array.isArray(address)
         ? normalizeAddress(address as AglynPostalAddress)
         : null
@@ -241,6 +309,46 @@ export function readContactUpdateFields(
   }
   if (!Object.keys(fields).length) return { ok: false, error: 'Name the fields to save.' }
   return { ok: true, fields }
+}
+
+/**
+ * Salesforce's standard contact fields (AGL-3515) a create may carry beside
+ * the identity — every one `upsertHostContact` writes into the capturing
+ * facet. The reports-to is not one: it names another record, which only
+ * this route checks the holder can see.
+ */
+export const CONTACT_CREATE_PROFILE_FIELDS = [
+  'salutation',
+  'firstName',
+  'lastName',
+  'department',
+  'mobilePhone',
+  'homePhone',
+  'otherPhone',
+  'fax',
+  'birthdate',
+  'assistantName',
+  'assistantPhone',
+  'otherAddress',
+  'doNotCall',
+] as const satisfies ReadonlyArray<keyof ContactUpdateFields>
+
+/**
+ * Those fields of a create's body, read by the same rules an update reads
+ * them with — or the sentence refusing one. A body naming none of them
+ * reads as no fields.
+ */
+export function readContactCreateProfile(
+  body: Record<string, unknown>,
+): { ok: true; fields: ContactUpdateFields } | { ok: false; error: string } {
+  const given = Object.fromEntries(
+    CONTACT_CREATE_PROFILE_FIELDS.filter((key) => body[key] !== undefined).map((key) => [
+      key,
+      body[key],
+    ]),
+  )
+  if (!Object.keys(given).length) return { ok: true, fields: {} }
+  return readContactUpdateFields(given)
 }
 
 /** The ids a body names, deduplicated — or `null` when any is unreadable or there are too many. */
@@ -299,22 +407,61 @@ function contactPatch(
   const text = (value: string) => value || FieldValue.delete()
   const update: Record<string, unknown> = {}
   let counts: ContactCompanyLinkPlan['counts'] = []
+  const stored = readContactFacet(contact, groupId)
 
-  if (fields.name !== undefined) update[path('name')] = text(fields.name)
+  /*
+   * THE NAME FOLLOWS THE FIRST AND LAST NAMES (AGL-3515). While the holder
+   * keeps either, the facet's `name` is their composition, written whenever
+   * either moves; a `name` sent beside them must agree, because a save that
+   * stored one and showed the other would read as a save that kept both.
+   * Both cleared leaves the name as it stands, unless one was sent.
+   */
+  const namesSent = fields.firstName !== undefined || fields.lastName !== undefined
+  const composed = composeContactName(
+    fields.firstName ?? stored.firstName,
+    fields.lastName ?? stored.lastName,
+  )
+  if (composed && fields.name !== undefined && fields.name !== composed) {
+    return { refused: CONTACT_COMPOSED_NAME_REFUSAL }
+  }
+  if (fields.firstName !== undefined) update[path('firstName')] = text(fields.firstName)
+  if (fields.lastName !== undefined) update[path('lastName')] = text(fields.lastName)
+  if (namesSent && composed) update[path('name')] = composed
+  else if (fields.name !== undefined && !composed) update[path('name')] = text(fields.name)
+
+  if (fields.salutation !== undefined) update[path('salutation')] = text(fields.salutation)
   if (fields.phone !== undefined) {
     update[path('phone')] = text(fields.phone)
     // The search echo — see `HostContact.phone`.
     update['phone'] = text(fields.phone)
   }
+  for (const key of CONTACT_EXTRA_PHONE_FIELDS) {
+    if (fields[key] !== undefined) update[path(key)] = text(fields[key] ?? '')
+  }
   if (fields.jobTitle !== undefined) update[path('jobTitle')] = text(fields.jobTitle)
+  if (fields.department !== undefined) update[path('department')] = text(fields.department)
+  if (fields.birthdate !== undefined) update[path('birthdate')] = text(fields.birthdate)
+  if (fields.assistantName !== undefined) {
+    update[path('assistantName')] = text(fields.assistantName)
+  }
+  if (fields.reportsToContactId !== undefined) {
+    update[path('reportsToContactId')] = text(fields.reportsToContactId ?? '')
+  }
+  if (fields.doNotCall !== undefined) {
+    // Stored only as `true` — see `ContactFacet.doNotCall`.
+    update[path('doNotCall')] = fields.doNotCall ? true : FieldValue.delete()
+  }
   if (fields.leadSource !== undefined) update[path('leadSource')] = text(fields.leadSource)
   if (fields.address !== undefined) {
     update[path('address')] = fields.address ?? FieldValue.delete()
   }
+  if (fields.otherAddress !== undefined) {
+    update[path('otherAddress')] = fields.otherAddress ?? FieldValue.delete()
+  }
   if (fields.notes !== undefined) update[path('notes')] = fields.notes
   if (fields.tags !== undefined) update[path('tags')] = fields.tags
 
-  const held = (readContactFacet(contact, groupId).tags ?? []).map((tag) =>
+  const held = (stored.tags ?? []).map((tag) =>
     String(tag).toLowerCase(),
   )
   if (fields.addTag && !held.includes(fields.addTag)) {
@@ -507,6 +654,11 @@ export const crmContactUpdateHandler: PluginApiHandler = async (req, res) => {
         )
       : null
 
+    // The org's salutations (AGL-3515), judged per contact like the lead source.
+    const salutations = fields.salutation
+      ? await readCrmPicklist(firestore, writer.orgId, CRM_SALUTATION_PICKLIST)
+      : null
+
     if (fields.ownerUid) {
       const owner = await resolveOrgMembership(fields.ownerUid, writer.orgId).catch(() => null)
       if (!owner?.member) {
@@ -536,9 +688,32 @@ export const crmContactUpdateHandler: PluginApiHandler = async (req, res) => {
     }
 
     const contacts = orgRef.collection('contacts')
+    const readContact = cachedContactReader(contacts)
+
+    // The manager a reports-to names has to be a contact the caller and the
+    // site can see, for the company link's reason (AGL-3515).
+    if (fields.reportsToContactId) {
+      const manager = await contacts.doc(fields.reportsToContactId).get()
+      const tokens = manager.exists ? (manager.get('visibleTo') as string[] | undefined) : undefined
+      const visible =
+        manager.exists &&
+        canReach(writer, tokens) &&
+        (!siteTokens || visibleToTokens(tokens, siteTokens))
+      if (!visible) {
+        res.status(404).json({ error: 'Unknown contact to report to' })
+        return
+      }
+    }
+
     const snapshots = await firestore.getAll(...contactIds.map((id) => contacts.doc(id)))
     const outcomes = new Map<string, ContactUpdateOutcome>()
     const writes: ContactWrite[] = []
+    const rows: Array<{
+      contactId: string
+      snapshot: FirebaseFirestore.DocumentSnapshot
+      data: Record<string, unknown>
+      groupId: string
+    }> = []
     snapshots.forEach((snapshot, index) => {
       const contactId = contactIds[index]
       if (!snapshot.exists) {
@@ -560,29 +735,56 @@ export const crmContactUpdateHandler: PluginApiHandler = async (req, res) => {
         outcomes.set(contactId, refused(contactId, NO_HOLDER_REFUSAL))
         return
       }
+      rows.push({ contactId, snapshot, data, groupId: group.groupId })
+    })
+
+    for (const { contactId, snapshot, data, groupId } of rows) {
+      if (fields.reportsToContactId) {
+        if (fields.reportsToContactId === contactId) {
+          outcomes.set(contactId, refused(contactId, CONTACT_REPORTS_TO_SELF_REFUSAL))
+          continue
+        }
+        if (await contactReportsToLoops(readContact, contactId, fields.reportsToContactId, groupId)) {
+          outcomes.set(contactId, refused(contactId, CONTACT_REPORTS_TO_LOOP_REFUSAL))
+          continue
+        }
+      }
       let rowFields = fields
+      if (salutations && fields.salutation) {
+        const judged = judgeCrmPicklistValue(
+          CRM_SALUTATION_PICKLIST,
+          salutations,
+          fields.salutation,
+          readContactFacet(data, groupId).salutation,
+        )
+        if (judged.ok === false) {
+          outcomes.set(contactId, refused(contactId, judged.error))
+          continue
+        }
+        rowFields = { ...rowFields, salutation: judged.value ?? '' }
+      }
       if (leadSources && fields.leadSource) {
         const judged = judgeCrmLeadSource(
           leadSources,
           fields.leadSource,
-          readContactFacet(data, group.groupId).leadSource,
+          readContactFacet(data, groupId).leadSource,
         )
         if (judged.ok === false) {
           outcomes.set(contactId, refused(contactId, judged.error))
-          return
+          continue
         }
-        rowFields = { ...fields, leadSource: judged.value ?? '' }
+        rowFields = { ...rowFields, leadSource: judged.value ?? '' }
       }
-      const patch = contactPatch(data, group.groupId, rowFields, custom, linkedCompanyName)
+      const patch = contactPatch(data, groupId, rowFields, custom, linkedCompanyName)
       if ('refused' in patch) {
         outcomes.set(contactId, refused(contactId, patch.refused))
-        return
+        continue
       }
       outcomes.set(contactId, { contactId, ok: true })
       if (patch.update) {
         writes.push({ contactId, ref: snapshot.ref, update: patch.update, counts: patch.counts })
       }
-    })
+    }
 
     const failed = await commitContactWrites(firestore, writes)
     for (const contactId of failed) {

@@ -437,6 +437,12 @@ describe('the plan', () => {
     ['a company label', { companyName: 'Acme' }, 'Filing a contact under a company'],
     ['a custom value', { custom: { tier: 'platinum' } }, "Editing a contact's custom fields"],
     ['a file', { mediaIds: ['media-1'] }, 'Attaching files to a contact'],
+    // Salesforce's standard contact fields (AGL-3515) are the profile too.
+    ['a first name', { firstName: 'Ada' }, "Editing a contact's profile"],
+    ['a mobile phone', { mobilePhone: '(512) 555-0101' }, "Editing a contact's profile"],
+    ['a birthdate', { birthdate: '1815-12-10' }, "Editing a contact's profile"],
+    ['a reports-to', { reportsToContactId: 'bea' }, "Editing a contact's profile"],
+    ['do not call', { doNotCall: true }, "Editing a contact's profile"],
   ])('refuses a Free workspace %s before any contact is read', async (_label, set, act) => {
     org = { plan: 'free' }
     const before = JSON.parse(JSON.stringify(contact('ada')))
@@ -731,5 +737,140 @@ describe('a refused batch', () => {
     ])
     expect(facetOf('ada').notes).toBe('Both')
     expect(facetOf('bea').notes).toBeUndefined()
+  })
+})
+
+/**
+ * Salesforce's standard contact fields (AGL-3515): each written into the
+ * holder's facet by the profile route's rules, the name made of the parts,
+ * the salutation held to the org's list, and the reports-to held to a
+ * contact the site sees that does not loop back.
+ */
+describe("Salesforce's standard fields", () => {
+  it('writes every field into this holder facet, normalized, and leaves the other holder alone', async () => {
+    const { payload } = await post(
+      onSite({
+        department: ' Research ',
+        mobilePhone: '(512) 555-0101',
+        homePhone: '512 555 0102',
+        otherPhone: '+44 20 7946 0958',
+        fax: '512-555-0109',
+        assistantName: 'Mary',
+        assistantPhone: '512 555 0103',
+        birthdate: '1815-12-10',
+        otherAddress: { line1: '2 Side St', city: 'Dallas', country: 'us' },
+        doNotCall: true,
+      }),
+    )
+    expect(payload.results).toEqual([{ contactId: 'ada', ok: true }])
+    expect(facetOf('ada')).toMatchObject({
+      department: 'Research',
+      mobilePhone: '+15125550101',
+      homePhone: '+15125550102',
+      otherPhone: '+442079460958',
+      fax: '+15125550109',
+      assistantName: 'Mary',
+      assistantPhone: '+15125550103',
+      birthdate: '1815-12-10',
+      otherAddress: { line1: '2 Side St', city: 'Dallas', country: 'US' },
+      doNotCall: true,
+    })
+    expect(facetOf('ada', OTHER_HOST)).not.toHaveProperty('mobilePhone')
+    // Only the main phone is the search echo.
+    expect(contact('ada').phone).toBe('+15125550100')
+
+    await post(onSite({ doNotCall: false, birthdate: '', otherAddress: null, fax: '' }))
+    expect(facetOf('ada')).not.toHaveProperty('doNotCall')
+    expect(facetOf('ada')).not.toHaveProperty('birthdate')
+    expect(facetOf('ada')).not.toHaveProperty('otherAddress')
+    expect(facetOf('ada')).not.toHaveProperty('fax')
+  })
+
+  it.each([
+    ['a birthdate in the future', { birthdate: '2999-01-01' }, /Birthdate must be a past date/],
+    ['a birthdate in another spelling', { birthdate: '12/10/1815' }, /Birthdate must be a past date/],
+    ['a mobile it cannot read', { mobilePhone: 'ext 12' }, /^Mobile phone: /],
+    ['a do-not-call that is not a flag', { doNotCall: 'yes' }, /true or false/],
+  ])('refuses %s before any contact is read', async (_label, set, error) => {
+    const { status, payload } = await post(onSite(set))
+    expect(status).toBe(400)
+    expect(payload.error).toMatch(error)
+    expect(readContacts).not.toHaveBeenCalled()
+  })
+
+  it('composes the name from the first and last names, and refuses a name that contradicts them', async () => {
+    await post(onSite({ firstName: ' Ada ', lastName: 'Lovelace' }))
+    expect(facetOf('ada')).toMatchObject({
+      firstName: 'Ada',
+      lastName: 'Lovelace',
+      name: 'Ada Lovelace',
+    })
+    // One part moves; the name follows from the part the facet keeps.
+    await post(onSite({ lastName: 'King' }))
+    expect(facetOf('ada').name).toBe('Ada King')
+
+    const { payload } = await post(onSite({ name: 'Countess' }))
+    expect(payload.results).toEqual([
+      {
+        contactId: 'ada',
+        ok: false,
+        error: "This person's name is made of their first and last name — change those instead.",
+      },
+    ])
+    expect(facetOf('ada').name).toBe('Ada King')
+
+    // Both parts cleared: the name stands, and is the holder's to edit again.
+    await post(onSite({ firstName: '', lastName: '' }))
+    expect(facetOf('ada')).not.toHaveProperty('firstName')
+    expect(facetOf('ada').name).toBe('Ada King')
+    await post(onSite({ name: 'Countess' }))
+    expect(facetOf('ada').name).toBe('Countess')
+  })
+
+  it("holds a salutation to the org's list, as the list spells it", async () => {
+    const set = await post(onSite({ salutation: ' dr. ' }))
+    expect(set.payload.results).toEqual([{ contactId: 'ada', ok: true }])
+    expect(facetOf('ada').salutation).toBe('Dr.')
+    const refused = await post(onSite({ salutation: 'Sir' }))
+    expect(refused.payload.results).toEqual([
+      {
+        contactId: 'ada',
+        ok: false,
+        error: 'Salutation must be one of: Mr., Ms., Mrs., Dr., Prof..',
+      },
+    ])
+    await post(onSite({ salutation: '' }))
+    expect(facetOf('ada')).not.toHaveProperty('salutation')
+  })
+
+  it('points the reports-to at a contact the site sees, and clears it with null', async () => {
+    const { payload } = await post(onSite({ reportsToContactId: 'bea' }))
+    expect(payload.results).toEqual([{ contactId: 'ada', ok: true }])
+    expect(facetOf('ada').reportsToContactId).toBe('bea')
+    await post(onSite({ reportsToContactId: null }))
+    expect(facetOf('ada')).not.toHaveProperty('reportsToContactId')
+  })
+
+  it('refuses a contact the site cannot see, the contact itself, and a loop', async () => {
+    const hidden = await post(onSite({ reportsToContactId: 'theirs' }))
+    expect(hidden.status).toBe(404)
+
+    const self = await post(onSite({ reportsToContactId: 'ada' }))
+    expect(self.payload.results).toEqual([
+      { contactId: 'ada', ok: false, error: 'A contact cannot report to themselves.' },
+    ])
+
+    // Bea reports to Ada, so Ada reporting to Bea would be a loop.
+    facetOf('bea').reportsToContactId = 'ada'
+    const loop = await post(onSite({ reportsToContactId: 'bea' }))
+    expect(loop.payload.results).toEqual([
+      {
+        contactId: 'ada',
+        ok: false,
+        error:
+          'That would make a loop: the person picked already reports, through others, to this contact.',
+      },
+    ])
+    expect(facetOf('ada')).not.toHaveProperty('reportsToContactId')
   })
 })

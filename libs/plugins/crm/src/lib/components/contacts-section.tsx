@@ -772,6 +772,13 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
         const { response, payload } = await crmApi('contacts-create', {
           email: values.email,
           ...(values.name ? { name: values.name } : {}),
+          // Salesforce's standard fields (AGL-3515), each only when given.
+          ...(values.salutation ? { salutation: values.salutation } : {}),
+          ...(values.firstName ? { firstName: values.firstName } : {}),
+          ...(values.lastName ? { lastName: values.lastName } : {}),
+          ...(values.mobilePhone ? { mobilePhone: values.mobilePhone } : {}),
+          ...(values.department ? { department: values.department } : {}),
+          ...(values.doNotCall ? { doNotCall: true } : {}),
           ...(values.phone ? { phone: values.phone } : {}),
           ...(values.jobTitle ? { jobTitle: values.jobTitle } : {}),
           ...(values.companyName ? { companyName: values.companyName } : {}),

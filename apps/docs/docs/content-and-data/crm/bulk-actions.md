@@ -71,11 +71,15 @@ sharing a workspace with yours never sees yours change.
 ### The contacts file
 
 **Export CSV** — on the table for the page on screen, on the bar for the
-selection — writes every CRM column: email, name, phone, job title, company,
-owner, lifecycle stage, the address as six columns, tags, sources, the last
-interaction, the last time the person [engaged](./contact-record.md#last-engaged)
-with a campaign, notes, and one column per [custom field](./custom-fields.md),
-headed by the field's label. The owner is written as their **email address**,
+selection — writes every CRM column: email, salutation, first and last name,
+name, phone, mobile, home and other phone, fax, do not call, job title,
+department, company, owner, lifecycle stage, the mailing address and the other
+address as six columns each, birthdate, assistant and assistant phone, tags,
+sources, the last interaction, the last time the person
+[engaged](./contact-record.md#last-engaged) with a campaign, notes, and one
+column per [custom field](./custom-fields.md), headed by the field's label.
+**Reports to** is not written: it names another record, which a file cannot
+carry from one workspace to another. The owner is written as their **email address**,
 because that is what the import resolves an owner by.
 
 The header row is the [import's](./import.md) own vocabulary, so an export

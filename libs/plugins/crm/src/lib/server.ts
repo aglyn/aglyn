@@ -56,10 +56,13 @@
 import {
   CONTACT_ERASED_MESSAGE,
   contactFacetPath,
+  composeContactName,
   CRM_COLLECTIONS,
+  CRM_SALUTATION_PICKLIST,
   crmReadTokens,
   isContactLifecycleStage,
   isOrgWideMember,
+  judgeCrmPicklistValue,
   normalizeAddress,
   normalizeContactEmail,
   normalizePhone,
@@ -119,7 +122,8 @@ import { crmCompanyDeleteHandler } from './server/company-delete'
 import { crmSharingHandler } from './server/crm-sharing'
 import { CRM_SHARING_ROUTE } from './model/crm-sharing'
 import { CONTACT_PHONE_REFUSAL, normalizeTags, typed } from './server/contact-profile'
-import { crmContactUpdateHandler } from './server/contact-update'
+import { crmContactUpdateHandler, readContactCreateProfile } from './server/contact-update'
+import { readCrmPicklist } from './server/read-picklist'
 import { crmContactRemoveHandler } from './server/contact-remove'
 import {
   CRM_EMAIL_TEMPLATE_DUPLICATE_ROUTE,
@@ -333,7 +337,11 @@ export const CONTACT_BAND_FULL_MESSAGE =
  *
  * Body: `{ hostId, email, name?, phone?, jobTitle?, companyName?,
  * companyId?, address?, ownerUid?, lifecycleStage?, tags?,
- * marketingConsent?, disclosedConsentGroup? }`. Answers
+ * marketingConsent?, disclosedConsentGroup? }`, plus any of Salesforce's
+ * standard contact fields `crm/contact-update` reads but the reports-to
+ * (`CONTACT_CREATE_PROFILE_FIELDS`, AGL-3515) — read by the same rules, the
+ * salutation judged against the org's list, and the holder's name composed
+ * from a first and last name when either is given. Answers
  * `{ contactId, created }`: `created` is
  * false when the address already belonged to somebody, in which case what
  * was typed MERGES into the existing row — the dedupe the shared address
@@ -409,6 +417,12 @@ export const crmContactsCreateHandler: PluginApiHandler = async (req, res) => {
     res.status(400).json({ error: 'Unknown lifecycle stage.' })
     return
   }
+  const profile = readContactCreateProfile(body)
+  if (profile.ok === false) {
+    res.status(400).json({ error: profile.error })
+    return
+  }
+  const extras = profile.fields
   const name = typed(body['name'], 120)
   const jobTitle = typed(body['jobTitle'], 120)
   let companyName = typed(body['companyName'], 120)
@@ -467,6 +481,25 @@ export const crmContactsCreateHandler: PluginApiHandler = async (req, res) => {
       return
     }
 
+    // The salutation, judged against the org's list (AGL-3515).
+    let salutation = ''
+    if (extras.salutation) {
+      const judged = judgeCrmPicklistValue(
+        CRM_SALUTATION_PICKLIST,
+        await readCrmPicklist(
+          firebaseAdmin.app().firestore(),
+          resolved.orgId,
+          CRM_SALUTATION_PICKLIST,
+        ),
+        extras.salutation,
+      )
+      if (judged.ok === false) {
+        res.status(400).json({ error: judged.error })
+        return
+      }
+      salutation = judged.value ?? ''
+    }
+
     if (companyId) {
       const group = await consentGroupForSite(
         hostId,
@@ -511,6 +544,16 @@ export const crmContactsCreateHandler: PluginApiHandler = async (req, res) => {
       facet: {
         ...(phone ? { phone } : {}),
         ...(jobTitle ? { jobTitle } : {}),
+        // Salesforce's standard fields (AGL-3515); the capture composes the
+        // holder's name from the first and last names.
+        ...Object.fromEntries(
+          Object.entries({ ...extras, salutation }).filter(
+            ([key, value]) =>
+              key !== 'doNotCall' && key !== 'otherAddress' && typeof value === 'string' && value,
+          ),
+        ),
+        ...(extras.otherAddress ? { otherAddress: extras.otherAddress } : {}),
+        ...(extras.doNotCall ? { doNotCall: true } : {}),
         ...(companyId ? { companyId } : {}),
         ...(address ? { address } : {}),
         ...(ownerUid ? { ownerUid } : {}),
@@ -579,7 +622,11 @@ export const crmContactsCreateHandler: PluginApiHandler = async (req, res) => {
       hostId,
       { uid: decoded.uid, email: decoded.email ?? null },
       result.created ? 'Added contact' : 'Updated contact',
-      { type: 'contact', id: result.contactId, name: name || email },
+      {
+        type: 'contact',
+        id: result.contactId,
+        name: name || composeContactName(extras.firstName, extras.lastName) || email,
+      },
     )
 
     res

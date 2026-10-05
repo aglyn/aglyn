@@ -1803,3 +1803,37 @@ describe('the lead status picklist (AGL-3512)', () => {
     ])
   })
 })
+
+/**
+ * Salutation (AGL-3515): Salesforce's standard values, restricted, on the
+ * Contacts tab, kept in each holder's facet — the target a rename rewrites.
+ */
+describe('the salutation picklist', () => {
+  it('ships Mr., Ms., Mrs., Dr. and Prof. on the Contacts tab, kept in each holder facet', () => {
+    expect(CRM_PICKLIST_IDS).toContain('salutation')
+    expect(crmPicklistDefinitionsFor('contact').map((definition) => definition.id)).toContain(
+      'salutation',
+    )
+    expect(crmPicklistDefinition('salutation')?.targets).toEqual([
+      { object: 'contact', field: 'salutation', facet: true },
+    ])
+    expect(effectiveCrmPicklist('salutation', null).values.map((value) => value.label)).toEqual([
+      'Mr.',
+      'Ms.',
+      'Mrs.',
+      'Dr.',
+      'Prof.',
+    ])
+    expect(isStandardCrmPicklistValue('salutation', 'dr')).toBe(true)
+  })
+
+  it('stores the list spelling, keeps a held value, and refuses the rest naming what is allowed', () => {
+    const list = effectiveCrmPicklist('salutation', null)
+    expect(judgeCrmPicklistValue('salutation', list, ' dr. ')).toEqual({ ok: true, value: 'Dr.' })
+    expect(judgeCrmPicklistValue('salutation', list, 'Sir')).toEqual({
+      ok: false,
+      error: 'Salutation must be one of: Mr., Ms., Mrs., Dr., Prof..',
+    })
+    expect(judgeCrmPicklistValue('salutation', list, 'Sir', 'Sir')).toEqual({ ok: true, value: 'Sir' })
+  })
+})

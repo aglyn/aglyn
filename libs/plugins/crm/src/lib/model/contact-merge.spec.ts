@@ -315,6 +315,100 @@ describe('mergeContactFacet', () => {
   })
 })
 
+/**
+ * Salesforce's standard contact fields (AGL-3515): the generic fill for the
+ * rest, the name's three fields as one, do-not-call standing from either
+ * record, and nobody left reporting to themselves.
+ */
+describe("mergeContactFacet — Salesforce's standard fields", () => {
+  it('keeps the survivor values and fills its blanks from the merged record', () => {
+    const facet = mergeContactFacet(
+      { sources: {}, interactions: [], mobilePhone: '+15125550101', department: 'Ops' },
+      {
+        sources: {},
+        interactions: [],
+        mobilePhone: '+15125550199',
+        fax: '+15125550109',
+        birthdate: '1990-01-01',
+        otherAddress: { line1: '2 Side St' },
+      },
+    )
+    expect(facet).toMatchObject({
+      mobilePhone: '+15125550101',
+      department: 'Ops',
+      fax: '+15125550109',
+      birthdate: '1990-01-01',
+      otherAddress: { line1: '2 Side St' },
+    })
+  })
+
+  it("moves the name's three fields together, from the record that names the person", () => {
+    // The survivor names them, so the merged record's parts do not come across.
+    expect(
+      mergeContactFacet(
+        { sources: {}, interactions: [], name: 'Bob' },
+        { sources: {}, interactions: [], name: 'Robert Smith', firstName: 'Robert', lastName: 'Smith' },
+      ),
+    ).toMatchObject({ name: 'Bob' })
+    expect(
+      mergeContactFacet(
+        { sources: {}, interactions: [], name: 'Bob' },
+        { sources: {}, interactions: [], firstName: 'Robert', lastName: 'Smith' },
+      ),
+    ).not.toHaveProperty('firstName')
+    // The survivor names nobody, so all three come from the merged record.
+    expect(
+      mergeContactFacet(
+        { sources: {}, interactions: [] },
+        { sources: {}, interactions: [], name: 'Robert Smith', firstName: 'Robert', lastName: 'Smith' },
+      ),
+    ).toMatchObject({ name: 'Robert Smith', firstName: 'Robert', lastName: 'Smith' })
+  })
+
+  it('keeps do not call from either record', () => {
+    expect(
+      mergeContactFacet({ sources: {}, interactions: [] }, { sources: {}, interactions: [], doNotCall: true })
+        .doNotCall,
+    ).toBe(true)
+    expect(
+      mergeContactFacet({ sources: {}, interactions: [], doNotCall: true }, { sources: {}, interactions: [] })
+        .doNotCall,
+    ).toBe(true)
+  })
+
+  it('drops a reports-to that would point the survivor at itself', () => {
+    const ids = { survivorId: 's', mergedId: 'm' }
+    expect(
+      mergeContactFacet(
+        { sources: {}, interactions: [], reportsToContactId: 'm' },
+        { sources: {}, interactions: [] },
+        ids,
+      ).reportsToContactId,
+    ).toBeNull()
+    expect(
+      mergeContactFacet(
+        { sources: {}, interactions: [] },
+        { sources: {}, interactions: [], reportsToContactId: 's' },
+        ids,
+      ).reportsToContactId,
+    ).toBeNull()
+    expect(
+      mergeContactFacet(
+        { sources: {}, interactions: [] },
+        { sources: {}, interactions: [], reportsToContactId: 'boss' },
+        ids,
+      ).reportsToContactId,
+    ).toBe('boss')
+    // A survivor facet the merged record never held still loses its pointer at it.
+    const plan = planContactMerge(
+      { email: 's@example.com', facets: { a: { sources: {}, interactions: [], reportsToContactId: 'm' } } },
+      { email: 'm@example.com', facets: {} },
+      ids,
+    )
+    expect((plan.survivor['facets'] as any)['a'].reportsToContactId).toBeNull()
+  })
+})
+
 describe('mergeInteractions', () => {
   it('caps the union the way every capture caps a timeline', () => {
     const many = (start: number) =>

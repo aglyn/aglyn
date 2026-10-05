@@ -127,6 +127,10 @@ const firestoreHandle = {
           }
         }
         if (name === 'orgs' && sub === 'companies') return companiesHandle
+        // The org's salutations (AGL-3515): none stored, so the standard values.
+        if (name === 'orgs' && sub === 'crmPicklists') {
+          return { doc: () => ({ get: async () => ({ data: () => undefined }) }) }
+        }
         throw new Error(`unexpected collection ${name}/${id}/${sub}`)
       },
     }),
@@ -469,6 +473,43 @@ describe('what the door is handed', () => {
     ])
     expect(out.body.dropped).toEqual({ phone: 2, lifecycleStage: 1 })
     expect(doorCall('a@x.co').facet).toEqual({})
+  })
+})
+
+/**
+ * Salesforce's standard contact fields (AGL-3515): handed to the door in
+ * the facet, the salutation held to the org's list — an unlisted one
+ * dropped and counted like any cell the field cannot take.
+ */
+describe("Salesforce's standard fields", () => {
+  it('hands the door every field, the name made of the parts, the salutation as the list spells it', async () => {
+    const out = await importRows([
+      {
+        email: 'ada@x.co',
+        salutation: 'dr.',
+        firstName: 'Ada',
+        lastName: 'Lovelace',
+        mobilePhone: '512 555 0101',
+        department: 'Research',
+        birthdate: '1815-12-10',
+        doNotCall: 'yes',
+        otherAddressLine1: '2 Side St',
+      },
+      { email: 'bea@x.co', salutation: 'Sir' },
+    ])
+    expect(doorCall('ada@x.co').name).toBe('Ada Lovelace')
+    expect(doorCall('ada@x.co').facet).toEqual({
+      salutation: 'Dr.',
+      firstName: 'Ada',
+      lastName: 'Lovelace',
+      department: 'Research',
+      mobilePhone: '+15125550101',
+      birthdate: '1815-12-10',
+      otherAddress: { line1: '2 Side St' },
+      doNotCall: true,
+    })
+    expect(doorCall('bea@x.co').facet).toEqual({})
+    expect(out.body.dropped).toEqual({ salutation: 1 })
   })
 })
 

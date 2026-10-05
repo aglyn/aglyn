@@ -45,13 +45,22 @@ function childPaths(path: string): string[] {
   return [...docs.keys()].filter((key) => key.startsWith(prefix) && !key.slice(prefix.length).includes('/'))
 }
 
+/** The value at a dotted path — what a query on a facet field reads. */
+const valueAt = (doc: Record<string, any> | undefined, path: string) =>
+  path.split('.').reduce<any>((node, key) => (node == null ? undefined : node[key]), doc)
+
 function applyPatch(existing: Record<string, any>, patch: Record<string, any>) {
-  const next = { ...existing }
-  for (const [field, value] of Object.entries(patch)) {
-    if (value && typeof value === 'object' && '__delete' in value) delete next[field]
+  const next = JSON.parse(JSON.stringify(existing))
+  for (const [path, value] of Object.entries(patch)) {
+    // A dotted key is a path into the document, as `update()` reads one.
+    const keys = path.split('.')
+    let node = next
+    for (const key of keys.slice(0, -1)) node = node[key] ??= {}
+    const field = keys[keys.length - 1]
+    if (value && typeof value === 'object' && '__delete' in value) delete node[field]
     else if (value && typeof value === 'object' && '__increment' in value) {
-      next[field] = Number(next[field] ?? 0) + Number(value.__increment)
-    } else next[field] = value
+      node[field] = Number(node[field] ?? 0) + Number(value.__increment)
+    } else node[field] = value
   }
   return next
 }
@@ -89,7 +98,7 @@ function collectionRef(path: string): any {
     get: async () => {
       const hits = childPaths(path)
         .map(snapshot)
-        .filter((snap) => filters.every(([field, value]) => snap.data()?.[field] === value))
+        .filter((snap) => filters.every(([field, value]) => valueAt(snap.data(), field) === value))
         .slice(0, max ?? Number.POSITIVE_INFINITY)
       return { empty: hits.length === 0, size: hits.length, docs: hits }
     },
@@ -130,9 +139,26 @@ function seed() {
     email: EMAIL,
     companyIds: ['co1', 'co2'],
     visibleTo: ['host:h1', 'host:h2'],
-    facets: { h1: { notes: 'private' }, h2: { notes: 'also private' } },
+    facets: {
+      h1: {
+        notes: 'private',
+        // Salesforce's standard fields (AGL-3515) — personal data, gone with the row.
+        birthdate: '1984-07-21',
+        mobilePhone: '+15125550101',
+        otherAddress: { line1: '2 Side St' },
+      },
+      h2: { notes: 'also private' },
+    },
   })
-  docs.set(`orgs/${ORG}/contacts/c9`, { email: 'someone@else.com', companyIds: ['co1'] })
+  docs.set(`orgs/${ORG}/contacts/c9`, {
+    email: 'someone@else.com',
+    companyIds: ['co1'],
+    // Somebody who reports to the person being erased, in each site's facet.
+    facets: {
+      h1: { reportsToContactId: 'c1', jobTitle: 'Analyst' },
+      h2: { reportsToContactId: 'c1' },
+    },
+  })
   docs.set(`orgs/${ORG}/companies/co1`, { name: 'Acme', contactsCount: 2 })
   docs.set(`orgs/${ORG}/companies/co2`, { name: 'Globex', contactsCount: 1 })
   docs.set(`orgs/${ORG}/deals/d1`, { title: 'Renewal', contactId: 'c1', amountCents: 5000 })
@@ -173,6 +199,14 @@ describe('erase', () => {
     expect(docs.has(`orgs/${ORG}/contacts/c1`)).toBe(false)
     expect(docs.has(`orgs/${ORG}/contacts/c9`)).toBe(true)
     expect(report).toMatchObject({ contacts: 1 })
+  })
+
+  it('clears every other contact’s reports-to that named the person, in each holder’s facet (AGL-3515)', async () => {
+    await erase()
+    const other = docs.get(`orgs/${ORG}/contacts/c9`)
+    expect(other?.facets.h1).toEqual({ jobTitle: 'Analyst' })
+    expect(other?.facets.h2).toEqual({})
+    expect(JSON.stringify([...docs.values()])).not.toContain('1984-07-21')
   })
 
   it('erases only the contacts it was handed', async () => {

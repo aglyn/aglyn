@@ -19,11 +19,18 @@
 import * as Aglyn from '@aglyn/aglyn'
 import {
   type AglynOrgBilling,
+  composeContactName,
+  CONTACT_BIRTHDATE_REFUSAL,
+  CONTACT_EXTRA_PHONE_FIELDS,
   CONTACT_LIFECYCLE_STAGE_LABELS,
   CONTACT_LIFECYCLE_STAGES,
+  CONTACT_NAME_PART_MAX,
+  CONTACT_PHONE_FIELD_LABELS,
   type ConsentGroup,
   type ContactLifecycleStage,
+  CRM_SALUTATION_PICKLIST,
   crmTelHref,
+  normalizeContactBirthdate,
   normalizePhone,
 } from '@aglyn/aglyn'
 import { mdiPhoneOutline } from '@aglyn/shared-data-mdi'
@@ -32,6 +39,9 @@ import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useUser, writeGuardedBySeed } from '@aglyn/tenant-feature-instance'
 import {
   Button,
+  Checkbox,
+  FormControlLabel,
+  FormHelperText,
   Grid,
   IconButton,
   InputAdornment,
@@ -45,6 +55,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useContactFieldDefinitions } from '../hooks/use-contact-field-definitions'
 import { useContactUpdate } from '../hooks/use-contact-update'
 import { useCrmActivityLogger } from '../hooks/use-crm-activity-logger'
+import { useCrmPicklist } from '../hooks/use-crm-picklist'
 import { useLeadSourcePicklist } from '../hooks/use-lead-source-picklist'
 import { type ContactRecord, parseContactTags } from '../model/contact-record'
 import type { ContactUpdateFields } from '../model/contact-update'
@@ -65,7 +76,9 @@ import {
   ContactAddressFields,
   type AddressDraft,
 } from './contact-address-fields'
+import { ContactReportsToField } from './contact-reports-to-field'
 import { CrmCustomFieldControl } from './crm-custom-field-control'
+import { CrmPicklistSelect } from './picklist-select'
 import { crmSuiteLockedReason } from './crm-suite-lock'
 import { LeadSourceSelect } from './lead-source-select'
 import type { OrgMembers } from './use-org-members'
@@ -160,6 +173,17 @@ export interface ContactPropertiesCardProps {
  * and the helper says what a blank falls back to, so nobody clears the
  * field expecting the record to go nameless.
  *
+ * ## Salesforce's sections (AGL-3515)
+ *
+ * The fields are grouped the way Salesforce's contact Details groups them —
+ * Contact information, Phones, Addresses, Additional information — and every
+ * one is still one draft and one Save. While the holder keeps a first or
+ * last name the Name field shows their composition and is read-only; the
+ * save sends the parts, and the route composes the name from them. The
+ * salutation and the reports-to are sent only when they change, for the
+ * lead source's reason: the route judges a sent one. Do not call is a hint
+ * on every phone's call link, never a block.
+ *
  * ## Company is a record, with its name kept beside it
  *
  * The Company field is the picker (AGL-2613): the link is `companyId` in
@@ -172,6 +196,45 @@ export interface ContactPropertiesCardProps {
  * from before the picker — keeps it as the label, and the picker offers it
  * as the company to link or create.
  */
+/** The phone fields the card edits, in the order the Phones section lists them. */
+const PHONE_FIELDS = ['phone', ...CONTACT_EXTRA_PHONE_FIELDS] as const
+type PhoneField = (typeof PHONE_FIELDS)[number]
+type PhoneDrafts = Record<PhoneField, string>
+
+const phoneDraftsFrom = (record: ContactRecord): PhoneDrafts =>
+  Object.fromEntries(
+    PHONE_FIELDS.map((field) => [field, String(record[field] ?? '')]),
+  ) as PhoneDrafts
+
+/** The phones as the route stores them, or the fields that cannot be read as numbers. */
+function readPhones(
+  drafts: PhoneDrafts,
+): { ok: true; phones: PhoneDrafts } | { ok: false; errors: Partial<PhoneDrafts> } {
+  const phones = {} as PhoneDrafts
+  const errors: Partial<PhoneDrafts> = {}
+  for (const field of PHONE_FIELDS) {
+    const typed = drafts[field].trim()
+    const normalized = typed ? normalizePhone(typed) : ''
+    if (normalized === null) errors[field] = PHONE_HELP_ERROR
+    else phones[field] = normalized
+  }
+  return Object.keys(errors).length ? { ok: false, errors } : { ok: true, phones }
+}
+
+const PHONE_HELP = 'With the country code, like +1 512 555 0107'
+const PHONE_HELP_ERROR = 'Enter it with its country code, like +1 512 555 0107.'
+
+/** A section heading inside the card — Salesforce's Details groups its fields the same way. */
+function SectionHeading(props: { children: string }) {
+  return (
+    <Grid size={{ xs: 12 }}>
+      <Typography variant="subtitle2" color="text.secondary">
+        {props.children}
+      </Typography>
+    </Grid>
+  )
+}
+
 export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
   const {
     hostId,
@@ -200,8 +263,17 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
   const createCompany = useCreateCompany({ hostId, org })
 
   const [nameOverride, setNameOverride] = useState(record.nameOverride)
-  const [phone, setPhone] = useState(record.phone)
+  const [salutation, setSalutation] = useState(record.salutation ?? '')
+  const salutations = useCrmPicklist(CRM_SALUTATION_PICKLIST, orgId)
+  const [firstName, setFirstName] = useState(record.firstName ?? '')
+  const [lastName, setLastName] = useState(record.lastName ?? '')
+  const [phones, setPhones] = useState<PhoneDrafts>(() => phoneDraftsFrom(record))
+  const [doNotCall, setDoNotCall] = useState(record.doNotCall === true)
   const [jobTitle, setJobTitle] = useState(record.jobTitle)
+  const [department, setDepartment] = useState(record.department ?? '')
+  const [birthdate, setBirthdate] = useState(record.birthdate ?? '')
+  const [assistantName, setAssistantName] = useState(record.assistantName ?? '')
+  const [reportsTo, setReportsTo] = useState(record.reportsToContactId ?? '')
   // Salesforce's Lead Source (AGL-3298), carried from the lead on conversion.
   const [leadSource, setLeadSource] = useState(record.leadSource)
   const leadSources = useLeadSourcePicklist(orgId)
@@ -218,7 +290,11 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
   const [address, setAddress] = useState<AddressDraft>(
     addressDraftFrom(record.address),
   )
-  const [phoneError, setPhoneError] = useState('')
+  const [otherAddress, setOtherAddress] = useState<AddressDraft>(
+    addressDraftFrom(record.otherAddress),
+  )
+  const [phoneErrors, setPhoneErrors] = useState<Partial<PhoneDrafts>>({})
+  const [birthdateError, setBirthdateError] = useState('')
   const [saving, setSaving] = useState(false)
   /** The custom values the reader touched; every other key reads from the record. */
   const [custom, setCustom] = useState<CrmCustomDraft>({})
@@ -234,6 +310,12 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
   )
   const clearingRequired =
     crmCustomDraftMissingRequired(customFields, storedCustom, custom, 'edit').length > 0
+  /*
+   * The name the first and last names make (AGL-3515). While there is one,
+   * it IS the name — the Name field shows it, read-only, and the save sends
+   * the parts rather than a name the route would have to reconcile.
+   */
+  const composedName = composeContactName(firstName, lastName)
 
   /** One field's edit: the value, and the card now has something to save. */
   const change = useCallback(<T,>(set: (value: T) => void, value: T) => {
@@ -244,8 +326,16 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
   /** Every draft back to what the record holds — the seed, and Discard. */
   const reseed = () => {
     setNameOverride(record.nameOverride)
-    setPhone(record.phone)
+    setSalutation(record.salutation ?? '')
+    setFirstName(record.firstName ?? '')
+    setLastName(record.lastName ?? '')
+    setPhones(phoneDraftsFrom(record))
+    setDoNotCall(record.doNotCall === true)
     setJobTitle(record.jobTitle)
+    setDepartment(record.department ?? '')
+    setBirthdate(record.birthdate ?? '')
+    setAssistantName(record.assistantName ?? '')
+    setReportsTo(record.reportsToContactId ?? '')
     setLeadSource(record.leadSource)
     setCompanyName(record.companyName)
     setCompanyId(record.companyId || null)
@@ -254,7 +344,9 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
     setTags(record.tags.join(', '))
     setNotes(record.notes)
     setAddress(addressDraftFrom(record.address))
-    setPhoneError('')
+    setOtherAddress(addressDraftFrom(record.otherAddress))
+    setPhoneErrors({})
+    setBirthdateError('')
     setCustom({})
     setEdited(false)
   }
@@ -273,24 +365,37 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
 
   const handleSave = useCallback(async () => {
     if (clearingRequired) return
-    const trimmedPhone = phone.trim()
-    const normalizedPhone = trimmedPhone ? normalizePhone(trimmedPhone) : ''
-    if (trimmedPhone && !normalizedPhone) {
-      setPhoneError('Enter it with its country code, like +1 512 555 0107.')
-      return
-    }
-    setPhoneError('')
+    const readPhonesResult = readPhones(phones)
+    const storedBirthdate = normalizeContactBirthdate(birthdate)
+    setPhoneErrors('errors' in readPhonesResult ? readPhonesResult.errors : {})
+    setBirthdateError(storedBirthdate === null ? CONTACT_BIRTHDATE_REFUSAL : '')
+    if ('errors' in readPhonesResult || storedBirthdate === null) return
     // A stage that differs from the record's is the stage route's to write —
     // see the note above.
     const stageChanged = !suiteLocked && lifecycleStage !== record.lifecycleStage
     const set: ContactUpdateFields = {
-      name: nameOverride.trim().slice(0, 120),
-      phone: normalizedPhone ?? '',
+      // The name is the parts' while there are parts — see the note above.
+      ...(composedName ? {} : { name: nameOverride.trim().slice(0, 120) }),
+      firstName: firstName.trim(),
+      lastName: lastName.trim(),
+      ...readPhonesResult.phones,
+      // Sent only when it moves: the route stores the flag as a fact about
+      // the person, and an untouched card should not re-assert it.
+      ...(doNotCall !== (record.doNotCall === true) ? { doNotCall } : {}),
       jobTitle: jobTitle.trim().slice(0, 120),
+      department: department.trim().slice(0, 120),
+      birthdate: storedBirthdate,
+      assistantName: assistantName.trim().slice(0, 120),
       // Sent only when changed: the route judges a sent value against the
-      // org's list, and an untouched one needs no judging.
+      // org's list, and an untouched one needs no judging. The reports-to
+      // likewise, because the route checks a sent one for a loop.
       ...(leadSource !== record.leadSource ? { leadSource } : {}),
+      ...(salutation !== (record.salutation ?? '') ? { salutation } : {}),
+      ...(reportsTo !== (record.reportsToContactId ?? '')
+        ? { reportsToContactId: reportsTo || null }
+        : {}),
       address,
+      otherAddress,
       tags: parseContactTags(tags),
       notes: notes.slice(0, 2000),
       // The owner and the company, sent only on a plan that carries the CRM.
@@ -352,26 +457,39 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
     }
   }, [
     address,
+    assistantName,
+    birthdate,
     clearingRequired,
     companyId,
     companyName,
+    composedName,
     contactUpdate,
     customChanges,
+    department,
+    doNotCall,
     enqueueSnackbar,
+    firstName,
     siteHostId,
     jobTitle,
+    lastName,
     leadSource,
     lifecycleStage,
     logActivity,
     nameOverride,
     notes,
+    otherAddress,
     ownerUid,
-    phone,
+    phones,
     record.$id,
+    record.doNotCall,
     record.email,
     record.leadSource,
     record.lifecycleStage,
     record.name,
+    record.reportsToContactId,
+    record.salutation,
+    reportsTo,
+    salutation,
     seed.fromCache,
     seed.status,
     suiteLocked,
@@ -387,8 +505,54 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
    */
   const ownerKnown = members.options.some((option) => option.uid === ownerUid)
 
-  /** The number in the box as something a dialer takes, or nothing (AGL-2661). */
-  const telHref = crmTelHref(phone)
+  /** One phone field, with click-to-call off what is IN the box (AGL-2661). */
+  const phoneField = (field: PhoneField) => {
+    const value = phones[field]
+    const telHref = crmTelHref(value)
+    const callLabel = doNotCall
+      ? `Call ${value.trim()} — marked do not call`
+      : `Call ${value.trim()}`
+    return (
+      <Grid key={field} size={{ xs: 12, sm: 6 }}>
+        <TextField
+          size="small"
+          label={CONTACT_PHONE_FIELD_LABELS[field]}
+          value={value}
+          onChange={(event) => change(setPhones, { ...phones, [field]: event.target.value })}
+          error={Boolean(phoneErrors[field])}
+          helperText={phoneErrors[field] || (field === 'phone' ? PHONE_HELP : undefined)}
+          fullWidth
+          slotProps={{
+            input: {
+              /*
+               * The number on screen is the one a reader means to ring, and
+               * `crmTelHref` withholds the link from anything half-typed. A
+               * do-not-call person keeps the link — the rep decides — with
+               * the request said in the tooltip and the icon's color.
+               */
+              endAdornment:
+                telHref && field !== 'fax' ? (
+                  <InputAdornment position="end">
+                    <Tooltip title={callLabel}>
+                      <IconButton
+                        component="a"
+                        href={telHref}
+                        size="small"
+                        edge="end"
+                        color={doNotCall ? 'warning' : 'default'}
+                        aria-label={callLabel}
+                      >
+                        <MdiIcon path={mdiPhoneOutline.path} size={0.8} />
+                      </IconButton>
+                    </Tooltip>
+                  </InputAdornment>
+                ) : null,
+            },
+          }}
+        />
+      </Grid>
+    )
+  }
 
   return (
     <CardDisplay
@@ -418,6 +582,7 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
       }}
     >
       <Grid container spacing={2}>
+        <SectionHeading>{'Contact information'}</SectionHeading>
         <Grid size={{ xs: 12, sm: 6 }}>
           <TextField
             size="small"
@@ -429,54 +594,52 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
           />
         </Grid>
         <Grid size={{ xs: 12, sm: 6 }}>
+          <CrmPicklistSelect
+            picklistId={CRM_SALUTATION_PICKLIST}
+            picklist={salutations.picklist}
+            value={salutation}
+            stored={record.salutation ?? ''}
+            onChange={(value) => change(setSalutation, value)}
+          />
+        </Grid>
+        <Grid size={{ xs: 12, sm: 6 }}>
           <TextField
             size="small"
-            label="Name"
-            value={nameOverride}
-            onChange={(event) => change(setNameOverride, event.target.value)}
-            slotProps={{ htmlInput: { maxLength: 120 } }}
-            helperText={
-              record.canonicalName
-                ? `Your own name for this person. Blank shows the name they gave: ${record.canonicalName}.`
-                : 'Your own name for this person.'
-            }
+            label="First name"
+            value={firstName}
+            onChange={(event) => change(setFirstName, event.target.value)}
+            slotProps={{ htmlInput: { maxLength: CONTACT_NAME_PART_MAX } }}
             fullWidth
           />
         </Grid>
         <Grid size={{ xs: 12, sm: 6 }}>
           <TextField
             size="small"
-            label="Phone"
-            value={phone}
-            onChange={(event) => change(setPhone, event.target.value)}
-            error={Boolean(phoneError)}
-            helperText={phoneError || 'With the country code, like +1 512 555 0107'}
+            label="Last name"
+            value={lastName}
+            onChange={(event) => change(setLastName, event.target.value)}
+            slotProps={{ htmlInput: { maxLength: CONTACT_NAME_PART_MAX } }}
             fullWidth
+          />
+        </Grid>
+        <Grid size={{ xs: 12, sm: 6 }}>
+          <TextField
+            size="small"
+            label="Name"
+            value={composedName || nameOverride}
+            onChange={(event) => change(setNameOverride, event.target.value)}
             slotProps={{
-              input: {
-                /*
-                 * Click-to-call (AGL-2661), off what is IN the box rather
-                 * than off the saved value: the number on screen is the one
-                 * a reader means to ring, and `crmTelHref` withholds the
-                 * link from anything half-typed.
-                 */
-                endAdornment: telHref ? (
-                  <InputAdornment position="end">
-                    <Tooltip title={`Call ${phone.trim()}`}>
-                      <IconButton
-                        component="a"
-                        href={telHref}
-                        size="small"
-                        edge="end"
-                        aria-label={`Call ${phone.trim()}`}
-                      >
-                        <MdiIcon path={mdiPhoneOutline.path} size={0.8} />
-                      </IconButton>
-                    </Tooltip>
-                  </InputAdornment>
-                ) : null,
-              },
+              htmlInput: { maxLength: 120 },
+              input: { readOnly: Boolean(composedName) },
             }}
+            helperText={
+              composedName
+                ? 'Made of the first and last name.'
+                : record.canonicalName
+                  ? `Your own name for this person. Blank shows the name they gave: ${record.canonicalName}.`
+                  : 'Your own name for this person.'
+            }
+            fullWidth
           />
         </Grid>
         <Grid size={{ xs: 12, sm: 6 }}>
@@ -490,11 +653,13 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
           />
         </Grid>
         <Grid size={{ xs: 12, sm: 6 }}>
-          <LeadSourceSelect
-            picklist={leadSources.picklist}
-            value={leadSource}
-            stored={record.leadSource}
-            onChange={(value) => change(setLeadSource, value)}
+          <TextField
+            size="small"
+            label="Department"
+            value={department}
+            onChange={(event) => change(setDepartment, event.target.value)}
+            slotProps={{ htmlInput: { maxLength: 120 } }}
+            fullWidth
           />
         </Grid>
         <Grid size={{ xs: 12, sm: 6 }}>
@@ -515,6 +680,14 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
             fallbackName={companyName}
             disabled={saving || suiteLocked}
             helperText={suiteLocked ? crmSuiteLockedReason() : undefined}
+          />
+        </Grid>
+        <Grid size={{ xs: 12, sm: 6 }}>
+          <LeadSourceSelect
+            picklist={leadSources.picklist}
+            value={leadSource}
+            stored={record.leadSource}
+            onChange={(value) => change(setLeadSource, value)}
           />
         </Grid>
         <Grid size={{ xs: 12, sm: 6 }}>
@@ -577,15 +750,80 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
             fullWidth
           />
         </Grid>
+
+        <SectionHeading>{'Phones'}</SectionHeading>
+        {PHONE_FIELDS.filter((field) => field !== 'assistantPhone').map(phoneField)}
+        <Grid size={{ xs: 12, sm: 6 }}>
+          <FormControlLabel
+            control={
+              <Checkbox
+                checked={doNotCall}
+                onChange={(event) => change(setDoNotCall, event.target.checked)}
+              />
+            }
+            label="Do not call"
+          />
+          <FormHelperText>
+            {'They asked not to be phoned. Every number still dials; the Call button says so.'}
+          </FormHelperText>
+        </Grid>
+
+        <SectionHeading>{'Addresses'}</SectionHeading>
         <Grid size={{ xs: 12 }}>
           <Stack spacing={1}>
-            <Typography variant="subtitle2">{'Address'}</Typography>
+            <Typography variant="subtitle2">{'Mailing address'}</Typography>
             <ContactAddressFields
               value={address}
               onChange={(value) => change(setAddress, value)}
             />
           </Stack>
         </Grid>
+        <Grid size={{ xs: 12 }}>
+          <Stack spacing={1}>
+            <Typography variant="subtitle2">{'Other address'}</Typography>
+            <ContactAddressFields
+              value={otherAddress}
+              onChange={(value) => change(setOtherAddress, value)}
+            />
+          </Stack>
+        </Grid>
+
+        <SectionHeading>{'Additional information'}</SectionHeading>
+        <Grid size={{ xs: 12, sm: 6 }}>
+          <TextField
+            size="small"
+            type="date"
+            label="Birthdate"
+            value={birthdate}
+            onChange={(event) => change(setBirthdate, event.target.value)}
+            error={Boolean(birthdateError)}
+            helperText={birthdateError || undefined}
+            slotProps={{ inputLabel: { shrink: true } }}
+            fullWidth
+          />
+        </Grid>
+        <Grid size={{ xs: 12, sm: 6 }}>
+          <ContactReportsToField
+            hostId={hostId}
+            org={org}
+            contactId={record.$id}
+            groupId={consentGroup.groupId}
+            value={reportsTo}
+            onChange={(value) => change(setReportsTo, value)}
+            disabled={saving}
+          />
+        </Grid>
+        <Grid size={{ xs: 12, sm: 6 }}>
+          <TextField
+            size="small"
+            label="Assistant"
+            value={assistantName}
+            onChange={(event) => change(setAssistantName, event.target.value)}
+            slotProps={{ htmlInput: { maxLength: 120 } }}
+            fullWidth
+          />
+        </Grid>
+        {phoneField('assistantPhone')}
         <Grid size={{ xs: 12 }}>
           <TextField
             size="small"

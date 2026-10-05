@@ -1,7 +1,7 @@
 ---
 sidebar_position: 2
 title: The contact record
-description: Add a contact by hand, keep a profile on them — phone, company, title, address, owner and lifecycle stage — open their own page in the CRM, and merge two records that turn out to be one person.
+description: Add a contact by hand, keep a profile on them — Salesforce's standard contact fields, from salutation and phones to assistant and reports-to — open their own page in the CRM, and merge two records that are one person.
 ---
 
 # The contact record
@@ -33,15 +33,21 @@ list — the list itself stays exactly where it was.
 | Field | Notes |
 | --- | --- |
 | **Email** | Required. It is the one thing every site shares about a person and what makes two captures one record. |
-| **Name** | Optional. Your own name for the person; the record also keeps the name they gave on a form. |
-| **Phone** | Entered with its country code, like `+1 512 555 0107`. Stored in E.164 so the same number typed two ways is one number. |
-| **Job title** | Free text. |
+| **Salutation** | Optional. One of your organization's salutations — **Mr.**, **Ms.**, **Mrs.**, **Dr.** and **Prof.** to start with; add your own under [CRM → Fields → Contacts](./custom-fields.md). |
+| **First name**, **Last name** | Optional. While either is filled in, the **Name** is made of them and cannot be typed separately. |
+| **Name** | Optional. Your own name for the person when you keep it as one field; the record also keeps the name they gave on a form. |
+| **Phone**, **Mobile phone** | Entered with the country code, like `+1 512 555 0107`. Stored in E.164 so the same number typed two ways is one number. |
+| **Do not call** | Tick it when the person asked not to be phoned. It is a warning, not a block — see [Do not call](#do-not-call). |
+| **Job title**, **Department** | Free text. |
 | **Company** | A picker over the [companies](./companies.md) your site may see. Type to search by name or domain; a name nobody has filed yet gets a **Create** row that makes the company and selects it. Once the email is typed, a company whose domain matches it is suggested beneath the field — offered, never applied. Leave it empty for no company. |
 | **Lifecycle stage** | Where the person sits in your funnel; see [Lifecycle stages](#lifecycle-stages). |
 | **Owner** | The team member responsible for the relationship, picked from your workspace roster. |
 | **Tags** | Comma-separated. Tags are lower-cased and deduplicated, so `VIP` and `vip` are one tag. |
-| **Address** | Street, city, state or region, postal code and a two-letter country code. |
+| **Mailing address** | Street, city, state or region, postal code and a two-letter country code. |
 | **Opted in to marketing email** | Tick it only if the person actually agreed. Adding a contact is never itself consent, and the checkbox says so. |
+
+The rest of the profile — the other phones, the birthdate, the assistant, the
+manager and the other address — is filled in on the record page.
 
 If the email already belongs to a contact, nothing is duplicated: what you
 typed **merges** into the existing record and the page tells you so. On a plan
@@ -73,10 +79,9 @@ person's number, and **Log a call** — see
 [click to call](./activities.md#click-to-call). Under it, one card per aspect
 of the record:
 
-- **Properties** — the editable profile: name, phone (with a dial button
-  beside it, see [click to call](./activities.md#click-to-call)), job title, company,
-  lifecycle stage, owner, tags, address and an **About** box for your
-  team's notes, then under **More fields** one control per
+- **Properties** — the editable profile, grouped the way Salesforce groups a
+  contact's details — see [The standard fields](#the-standard-fields) — then an
+  **About** box for your team's notes, then under **More fields** one control per
   [custom field](./custom-fields.md) your organization has defined. One
   **Save**, in the card's header, writes everything at once, and **Discard
   changes** beside it puts back what you had not saved. The email is shown
@@ -113,6 +118,45 @@ of the record:
 - **Likely duplicates** — other records that may be the same person, found
   when you ask; see [Merging two records](#merging-two-records).
 
+### The standard fields {#the-standard-fields}
+
+The **Properties** card carries Salesforce's standard contact fields, in four
+groups:
+
+| Group | Fields |
+| --- | --- |
+| **Contact information** | Email (read-only), **Salutation**, **First name**, **Last name**, **Name**, **Job title**, **Department**, **Company**, **Lead source**, **Lifecycle stage**, **Owner**, **Tags**. |
+| **Phones** | **Phone**, **Mobile phone**, **Home phone**, **Other phone**, **Fax** and **Do not call**. Every number is entered with its country code and stored in E.164; each one but the fax has a dial button beside it. |
+| **Addresses** | **Mailing address** — the address a letter goes to, and the one the CSV file's *Mailing* columns and the API's `address` carry — and **Other address**. |
+| **Additional information** | **Birthdate** (a past date), **Reports to** (another contact, picked from your contacts), **Assistant** and **Assistant phone**. |
+
+**The name.** While a first or last name is filled in, the **Name** is made of
+them — *First Last* — and is read-only; clear both to type the name as one
+field again. A record that only ever had a name keeps it as it is: nothing
+splits a stored name into parts after the fact. Email
+[merge fields](./email-templates.md) `{{contact.firstName}}` and
+`{{contact.lastName}}` use the first and last names when the record has them,
+and otherwise split the name at its first space.
+
+**Salutation** is a [picklist](./custom-fields.md): Salesforce's standard
+values, which your organization can relabel, reorder or deactivate, beside
+values of its own, all managed on the **Contacts** tab of CRM → Fields.
+
+**Reports to** names the person's manager among your contacts. A contact
+cannot report to themselves, and a pick that would make a loop — the manager
+already reports, through others, to this person — is refused with that
+reason. When the manager's record is merged into another, the person reports
+to the record that was kept; when the manager is erased, the field is
+cleared.
+
+#### Do not call {#do-not-call}
+
+**Do not call** records that the person asked not to be phoned. It never
+blocks a call — a call they asked for, or one they are returning, is still a
+call — but every way of dialing says so first: the **Call** button in the
+page header reads **Call (do not call)** and its tooltip gives the reason, and
+the dial buttons beside each number turn amber with the same warning.
+
 The overflow menu (⋮) on the page carries **Merge into…** — see
 [Merging two records](#merging-two-records) — and two ways of removing a
 person, which are not the same act — see
@@ -148,7 +192,7 @@ type the person's email address back before it files anything:
 
 | | |
 | --- | --- |
-| **Removed across the workspace** | The contact record on every site — profile, notes, tags, timeline and custom fields; every lead for the address on every site; the tasks and logged activities filed against the person; the person on any email audience list; the campaign delivery log for the address, with its opens and clicks. |
+| **Removed across the workspace** | The contact record on every site — profile (birthdate, phones and addresses included), notes, tags, timeline and custom fields; any other contact's **Reports to** that named the person; every lead for the address on every site; the tasks and logged activities filed against the person; the person on any email audience list; the campaign delivery log for the address, with its opens and clicks. |
 | **Kept, with the person taken off** | Orders and bookings stay as financial and appointment records with the name, email, phone and addresses removed. Deals stay on the pipeline, unlinked from the person. Companies stay, with their contact count reduced. |
 | **Not reached — finish these by hand** | Form submissions, which keep the address inside the answers under whatever the form called the field — delete them from the Inbox. A site member account, which is the person's own login — close it from the site's Members page. |
 
@@ -173,8 +217,8 @@ again.
 
 A contact document is shared by every site in your workspace — one human who
 touched two of your sites is one row. Almost nothing *on* it is shared: the
-notes, tags, timeline, phone, title, company, address, owner and stage are one
-sender's knowledge of the person and are never shown to another sender's
+notes, tags, timeline, phones, title, department, company, addresses, birthdate,
+assistant, manager, owner and stage are one sender's knowledge of the person and are never shown to another sender's
 console. A sender is one site, or, where your organization has declared several
 sites [one sender](../../marketing-and-automation/email-campaigns/overview.md#consent-groups),
 the whole group, which keeps one record for everyone its sites have met. The
@@ -223,12 +267,15 @@ the same for every field:
 
 | What | After the merge |
 | --- | --- |
-| Name, phone, job title, company, stage, owner, address, custom fields | The kept record's value where it has one; an empty field fills from the other record. Nothing the kept record holds is overwritten. |
+| Phones, salutation, job title, department, company, stage, owner, addresses, birthdate, assistant, reports to, custom fields | The kept record's value where it has one; an empty field fills from the other record. Nothing the kept record holds is overwritten. |
+| Name, first name and last name | Taken together, as one value: from the kept record when it names the person at all, and from the other record only when it does not. |
+| Do not call | Stands if either record has it. |
 | Tags, campaign filings | Combined. |
 | Timeline | Combined and ordered, newest first. The other record's calls, notes and logged activities move across too. |
 | Notes | The other record's notes are added below the kept record's. |
 | Orders and lifetime value | Added together — two records of one person's purchases are one person's purchases. |
 | Deals, tasks, activities, and a converted [lead](./leads.md) | Repointed at the kept record. |
+| Contacts that report to the other record | Report to the kept record. |
 | Companies | The kept record is filed under every company either record named. |
 | Marketing email | A site's opt-in on either record stands on the kept one. A recorded **opt-out** on either record stands too: the merge says these are one person, and that person said no. |
 | Email address | The kept record's address stays the identity. The other record's address is recorded as an **alternate**, shown after the address in the page header as *also …*. |

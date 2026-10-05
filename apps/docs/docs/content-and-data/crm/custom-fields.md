@@ -201,6 +201,14 @@ has since deactivated keeps it on every save.
 
 When a lead converts, its lead source is handed to the contact.
 
+**Salutation** is the **Contacts** tab's picklist, under **Salutation values**:
+Salesforce's standard **Mr.**, **Ms.**, **Mrs.**, **Dr.** and **Prof.**, in no group,
+beside any your organization adds. Every contact's page and the **New contact** drawer
+offer it as a select, and it is enforced the way lead source is: a salutation sent over
+[`/v1/contacts`](/api/resources/contacts) that the list does not hold is refused, naming
+the values allowed, and one in a [contacts CSV import](./import.md) is dropped from its row
+and reported. A rename renames it on every contact that holds it.
+
 ## Over the API {#over-the-api}
 
 The [`/v1/contacts`](/api/resources/contacts), [`/v1/companies`](/api/resources/companies),

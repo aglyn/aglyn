@@ -76,6 +76,13 @@ const SECRET_WORDS = [
   '+15125550199',
   'Dock Rd',
   'ACCT-SECRET-1',
+  // Salesforce's standard contact fields that never leave (AGL-3515).
+  '1984-07-21',
+  '+15125550111',
+  '+15125550122',
+  'Oak Lane',
+  'Pat Assistant',
+  'manager-contact-9',
 ]
 
 function expectNoSecrets(facts: unknown) {
@@ -107,6 +114,17 @@ describe('a contact’s facts', () => {
         lastEmailEngagementAtMs: day('2026-09-10'),
         notes: 'Prefers calls after 3pm.',
         custom: { budget: 'secret custom value' },
+        salutation: 'Ms.',
+        firstName: 'Jane',
+        lastName: 'Doe',
+        department: 'Facilities',
+        mobilePhone: '+15125550111',
+        fax: '+15125550122',
+        birthdate: '1984-07-21',
+        assistantName: 'Pat Assistant',
+        reportsToContactId: 'manager-contact-9',
+        otherAddress: { line1: '9 Oak Lane', city: 'Austin' },
+        doNotCall: true,
         interactions: [
           { type: 'booking', atMs: day('2026-09-05'), summary: 'Booked "Roof inspection"', hostId: 'host-1' },
           { type: 'form', atMs: day('2026-08-01'), summary: 'Submitted Quote request', hostId: 'host-2' },
@@ -147,7 +165,10 @@ describe('a contact’s facts', () => {
     expect(facts).toEqual({
       record: 'contact',
       name: 'Jane Doe',
+      salutation: 'Ms.',
       jobTitle: 'Facilities manager',
+      department: 'Facilities',
+      doNotCall: true,
       company: 'Acme Roofing Supply',
       lifecycleStage: 'Opportunity',
       tags: ['commercial', 'repeat'],

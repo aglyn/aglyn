@@ -87,7 +87,9 @@
 import {
   type ContactFieldDefinition,
   CRM_COLLECTIONS,
+  CRM_SALUTATION_PICKLIST,
   crmNewRecordListFields,
+  judgeCrmPicklistValue,
   nameSearchFields,
   type PluginApiHandler,
   visibleToTokens,
@@ -107,6 +109,7 @@ import {
   prepareContactCaptureBatch,
 } from '@aglyn/tenant-data-admin'
 import { captureHostContact } from './capture-host-contact'
+import { readCrmPicklist } from './read-picklist'
 // The leaf, so a spec that stands a partial barrel in still reaches it.
 import {
   countUndeliverableEmails,
@@ -320,6 +323,18 @@ export const crmContactsImportHandler: PluginApiHandler = async (req, res) => {
      * Across requests the door's own dedupe answers, and reports a merge.
      */
     const seen = new Set<string>()
+    /*
+     * The org's salutations (AGL-3515), read once and only for a file that
+     * carries one. A salutation the list does not hold is dropped and
+     * named, like any other cell the field cannot take.
+     */
+    const salutations = read.rows.some((raw) => String(raw.salutation ?? '').trim())
+      ? await readCrmPicklist(
+          firebaseAdmin.app().firestore(),
+          context.orgId,
+          CRM_SALUTATION_PICKLIST,
+        )
+      : null
     read.rows.forEach((raw, index) => {
       const verdict = normalizeContactImportRow(raw, fields)
       if (verdict.ok === false) {
@@ -331,6 +346,19 @@ export const crmContactsImportHandler: PluginApiHandler = async (req, res) => {
         return
       }
       seen.add(verdict.row.email)
+      if (verdict.row.salutation && salutations) {
+        const judged = judgeCrmPicklistValue(
+          CRM_SALUTATION_PICKLIST,
+          salutations,
+          verdict.row.salutation,
+        )
+        if (judged.ok === false || !judged.value) {
+          verdict.row.dropped.push({ field: 'salutation', value: verdict.row.salutation })
+          delete verdict.row.salutation
+        } else {
+          verdict.row.salutation = judged.value
+        }
+      }
       for (const entry of verdict.row.dropped) {
         dropped[entry.field] = (dropped[entry.field] ?? 0) + 1
       }
@@ -382,6 +410,21 @@ export const crmContactsImportHandler: PluginApiHandler = async (req, res) => {
         facet: {
           ...(row.phone ? { phone: row.phone } : {}),
           ...(row.jobTitle ? { jobTitle: row.jobTitle } : {}),
+          // Salesforce's standard fields (AGL-3515) — the capture composes
+          // the holder's name from the first and last names.
+          ...(row.salutation ? { salutation: row.salutation } : {}),
+          ...(row.firstName ? { firstName: row.firstName } : {}),
+          ...(row.lastName ? { lastName: row.lastName } : {}),
+          ...(row.department ? { department: row.department } : {}),
+          ...(row.mobilePhone ? { mobilePhone: row.mobilePhone } : {}),
+          ...(row.homePhone ? { homePhone: row.homePhone } : {}),
+          ...(row.otherPhone ? { otherPhone: row.otherPhone } : {}),
+          ...(row.fax ? { fax: row.fax } : {}),
+          ...(row.birthdate ? { birthdate: row.birthdate } : {}),
+          ...(row.assistantName ? { assistantName: row.assistantName } : {}),
+          ...(row.assistantPhone ? { assistantPhone: row.assistantPhone } : {}),
+          ...(row.otherAddress ? { otherAddress: row.otherAddress } : {}),
+          ...(row.doNotCall ? { doNotCall: true } : {}),
           // The link AND the name: the merge fields read the facet's
           // `companyName`, and a link written alone renders as nothing.
           ...(company ? { companyId: company.id, companyName: company.name } : {}),

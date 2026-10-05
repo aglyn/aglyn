@@ -103,7 +103,8 @@ describe('guessContactImportMapping', () => {
     expect(mapping).toEqual({
       0: 'email',
       1: 'name',
-      2: 'phone',
+      // A mobile number is the mobile phone, Salesforce's own field (AGL-3515).
+      2: 'mobilePhone',
       3: 'companyName',
       4: 'addressPostalCode',
       5: 'addressCountry',
@@ -384,6 +385,114 @@ describe('contactImportSkippedCsv', () => {
       'Email,Name,Skipped because',
       'bad,"Smith, Jo",Not a valid email address',
       'a@b.co,,Contact limit reached',
+    ])
+  })
+})
+
+/**
+ * Salesforce's standard contact fields (AGL-3515): a Salesforce export's
+ * headers map without a hand mapping, and each cell is stored the way the
+ * profile route would store it — or dropped and named.
+ */
+describe("a Salesforce export's standard contact columns", () => {
+  it('maps the Mailing and Other address columns, the phones and the names', () => {
+    const header = [
+      'Email',
+      'Salutation',
+      'First Name',
+      'Last Name',
+      'Mobile Phone',
+      'Home Phone',
+      'Other Phone',
+      'Fax',
+      'Do Not Call',
+      'Department',
+      'Birthdate',
+      'Assistant',
+      'Asst. Phone',
+      'Mailing Street',
+      'Mailing City',
+      'Mailing State/Province',
+      'Mailing Zip/Postal Code',
+      'Mailing Country',
+      'Other Street',
+      'Other City',
+      'Other State/Province',
+      'Other Zip/Postal Code',
+      'Other Country',
+    ]
+    expect(Object.values(guessContactImportMapping(header))).toEqual([
+      'email',
+      'salutation',
+      'firstName',
+      'lastName',
+      'mobilePhone',
+      'homePhone',
+      'otherPhone',
+      'fax',
+      'doNotCall',
+      'department',
+      'birthdate',
+      'assistantName',
+      'assistantPhone',
+      'addressLine1',
+      'addressCity',
+      'addressState',
+      'addressPostalCode',
+      'addressCountry',
+      'otherAddressLine1',
+      'otherAddressCity',
+      'otherAddressState',
+      'otherAddressPostalCode',
+      'otherAddressCountry',
+    ])
+  })
+
+  it('composes the name from the parts and normalizes every value', () => {
+    const verdict = normalizeContactImportRow({
+      email: 'ada@example.com',
+      name: 'Countess',
+      salutation: ' Dr. ',
+      firstName: ' Ada ',
+      lastName: 'Lovelace',
+      mobilePhone: '(512) 555-0101',
+      fax: '512 555 0109',
+      doNotCall: 'Yes',
+      department: 'Research',
+      birthdate: '12/10/1815',
+      assistantName: 'Mary',
+      otherAddressLine1: '2 Side St',
+      otherAddressCountry: 'us',
+    })
+    expect(verdict.ok).toBe(true)
+    if (!verdict.ok) return
+    expect(verdict.row).toMatchObject({
+      name: 'Ada Lovelace',
+      salutation: 'Dr.',
+      firstName: 'Ada',
+      lastName: 'Lovelace',
+      mobilePhone: '+15125550101',
+      fax: '+15125550109',
+      doNotCall: true,
+      department: 'Research',
+      birthdate: '1815-12-10',
+      assistantName: 'Mary',
+      otherAddress: { line1: '2 Side St', country: 'US' },
+      dropped: [],
+    })
+  })
+
+  it('drops and names a phone, a birthdate and a do-not-call it cannot read', () => {
+    const verdict = normalizeContactImportRow({
+      email: 'ada@example.com',
+      homePhone: 'ext 12',
+      birthdate: '2999-01-01',
+      doNotCall: 'perhaps',
+    })
+    expect(verdict.ok && verdict.row.dropped).toEqual([
+      { field: 'homePhone', value: 'ext 12' },
+      { field: 'birthdate', value: '2999-01-01' },
+      { field: 'doNotCall', value: 'perhaps' },
     ])
   })
 })

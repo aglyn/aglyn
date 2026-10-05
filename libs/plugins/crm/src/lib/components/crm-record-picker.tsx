@@ -22,7 +22,7 @@ import {
 } from '@aglyn/tenant-feature-instance'
 import { Autocomplete, TextField } from '@mui/material'
 import { collection, limit, orderBy, query } from 'firebase/firestore'
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import {
   CRM_RECORD_COLLECTIONS,
   type CrmRecordKind,
@@ -62,6 +62,21 @@ export interface CrmRecordPickerProps {
   value: string | null
   onChange: (id: string | null) => void
   disabled?: boolean
+  /** The field's label; the record kind's name by default. */
+  label?: string
+  /** A record the picker never offers — the record being edited, say. */
+  excludeId?: string
+  /**
+   * The current value's name, when the caller already resolved it — shown
+   * instead of the id while the window does not hold the record.
+   */
+  valueLabel?: string
+  /**
+   * Open the listener only once the menu is first opened, for a picker that
+   * sits on a page most readers never change it on.
+   */
+  lazy?: boolean
+  helperText?: string
 }
 
 /**
@@ -77,10 +92,12 @@ export interface CrmRecordPickerProps {
  */
 export function CrmRecordPicker(props: CrmRecordPickerProps) {
   const { kind, scope, readTokens, groupId, org, value, onChange, disabled } = props
+  const { label, excludeId, valueLabel, lazy = false, helperText } = props
   const firestore = useFirestore()
+  const [opened, setOpened] = useState(!lazy)
   const { data, status } = useFirestoreCollection<Record<string, unknown> & { $id: string }>(
     () =>
-      scope
+      scope && opened
         ? query(
             collection(firestore, scope[0], scope[1], CRM_RECORD_COLLECTIONS[kind]),
             ...crmVisibleToClause(readTokens),
@@ -88,12 +105,13 @@ export function CrmRecordPicker(props: CrmRecordPickerProps) {
             limit(CRM_RECORD_PICKER_LIMIT),
           )
         : null,
-    [firestore, scope, readTokens, kind],
+    [firestore, scope, readTokens, kind, opened],
     { idField: '$id' },
   )
   const options = useMemo(
     () =>
       (data ?? [])
+        .filter((row) => row.$id !== excludeId)
         .map((row) => ({
           id: row.$id,
           label:
@@ -104,7 +122,7 @@ export function CrmRecordPicker(props: CrmRecordPickerProps) {
             ) || row.$id,
         }))
         .sort((a, b) => a.label.localeCompare(b.label)),
-    [data, kind, groupId, org],
+    [data, kind, groupId, org, excludeId],
   )
   /*
    * The linked record may sit outside the window — an old contact a record
@@ -113,27 +131,30 @@ export function CrmRecordPicker(props: CrmRecordPickerProps) {
    */
   const selected = useMemo(() => {
     if (!value) return null
-    return options.find((option) => option.id === value) ?? { id: value, label: value }
-  }, [options, value])
+    return (
+      options.find((option) => option.id === value) ?? { id: value, label: valueLabel || value }
+    )
+  }, [options, value, valueLabel])
 
   return (
     <Autocomplete
       options={options}
       value={selected}
       onChange={(_event, next) => onChange(next?.id ?? null)}
+      onOpen={() => setOpened(true)}
       getOptionLabel={(option) => option.label}
       isOptionEqualToValue={(option, current) => option.id === current.id}
-      loading={status === 'loading'}
+      loading={opened && status === 'loading'}
       disabled={disabled}
       size="small"
       renderInput={(params) => (
         <TextField
           {...params}
-          label={PICKER_LABELS[kind]}
+          label={label ?? PICKER_LABELS[kind]}
           helperText={
             options.length >= CRM_RECORD_PICKER_LIMIT
               ? `The ${CRM_RECORD_PICKER_LIMIT} most recently updated — type to narrow.`
-              : undefined
+              : helperText
           }
         />
       )}

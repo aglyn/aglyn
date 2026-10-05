@@ -3213,6 +3213,31 @@ const OWNERSHIP_DEFINITION = {
   targets: [{ object: 'company', field: 'ownership' }],
 } as const satisfies CrmPicklistDefinition
 
+/*------------------------------------------
+ * CONTACT picklists (AGL-3515).
+ *-----------------------------------------*/
+
+/**
+ * Salutation, with Salesforce's standard values. Shared by every object
+ * that addresses a person: defined here with the contact target, where the
+ * label lives in each holder's facet like the rest of the profile.
+ */
+const SALUTATION_DEFINITION = {
+  id: 'salutation',
+  label: 'Salutation',
+  plural: 'salutations',
+  object: 'contact',
+  restricted: true,
+  standardValues: [
+    { id: 'mr', label: 'Mr.' },
+    { id: 'ms', label: 'Ms.' },
+    { id: 'mrs', label: 'Mrs.' },
+    { id: 'dr', label: 'Dr.' },
+    { id: 'prof', label: 'Prof.' },
+  ],
+  targets: [{ object: 'contact', field: 'salutation', facet: true }],
+} as const satisfies CrmPicklistDefinition
+
 /** Every standard picklist field the CRM keeps, one document each. */
 export const CRM_PICKLIST_DEFINITIONS = [
   LEAD_SOURCE_DEFINITION,
@@ -3222,6 +3247,8 @@ export const CRM_PICKLIST_DEFINITIONS = [
   INDUSTRY_DEFINITION,
   RATING_DEFINITION,
   OWNERSHIP_DEFINITION,
+  // Contacts (AGL-3515).
+  SALUTATION_DEFINITION,
 ] as const satisfies readonly CrmPicklistDefinition[]
 
 export type CrmPicklistId = (typeof CRM_PICKLIST_DEFINITIONS)[number]['id']
@@ -3233,6 +3260,9 @@ export const CRM_PICKLIST_IDS: readonly CrmPicklistId[] = CRM_PICKLIST_DEFINITIO
 
 /** The lead source value set's document id. */
 export const CRM_LEAD_SOURCE_PICKLIST: CrmPicklistId = 'leadSource'
+
+/** The salutation value set's document id (AGL-3515). */
+export const CRM_SALUTATION_PICKLIST: CrmPicklistId = 'salutation'
 
 export function isCrmPicklistId(value: unknown): value is CrmPicklistId {
   return typeof value === 'string' && (CRM_PICKLIST_IDS as readonly string[]).includes(value)

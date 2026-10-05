@@ -53,11 +53,16 @@ from the first run are reported as updated.
 | Field | What is read |
 | --- | --- |
 | **Email** | Required. Trimmed and lowercased; a row whose email is not a valid address is skipped. |
-| **Name** | The display name. |
-| **Phone** | Stored in international format (`+15125550123`). A ten-digit number is read as US/Canada; anything else needs its country code. A number that cannot be read is dropped and reported. Importing a phone number never sends anything to it. |
-| **Job title** | Free text. |
+| **Salutation** | One of your organization's [salutations](./custom-fields.md#picklist-values), matched without regard to case and stored as the list spells it. One the list does not hold is dropped and reported. |
+| **First name**, **Last name** | The person's given and family names. When either is in the file, the display name is made of them, and a **Name** column is not needed. |
+| **Name** | The display name, for a file that keeps it as one column. |
+| **Phone**, **Mobile phone**, **Home phone**, **Other phone**, **Fax**, **Assistant phone** | Stored in international format (`+15125550123`). A ten-digit number is read as US/Canada; anything else needs its country code. A number that cannot be read is dropped and reported. Importing a phone number never sends anything to it. A column headed *Mobile* or *Cell* is the mobile phone. |
+| **Do not call** | `yes`, `true` or `1` marks the person [do not call](./contact-record.md#do-not-call). A file never takes the mark off. |
+| **Job title**, **Department**, **Assistant** | Free text. |
+| **Birthdate** | A past date, as `1984-07-21` or `7/21/1984`. Anything else is dropped and reported. |
 | **Company name** | Matched to an existing company of yours by name, or a new company is created — the result counts the new ones. |
-| **Address line 1, line 2, city, state or region, postal code, country** | The postal address. Country must be a two-letter code (`US`, `GB`); a spelled-out country name is dropped and reported. |
+| **Mailing address line 1, line 2, city, state or region, postal code, country** | The mailing address. Country must be a two-letter code (`US`, `GB`); a spelled-out country name is dropped and reported. Plain *Address*, *City*, *State* and *Zip* headers, and a Salesforce export's *Mailing Street*, *Mailing City* … *Mailing Country*, are matched here. |
+| **Other address line 1, line 2, city, state or region, postal code, country** | The other address, read the same way. A Salesforce export's *Other Street* … *Other Country* are matched here. |
 | **Tags** | Separated by `,` or `\|`, lowercased. Added to any tags the contact already has. |
 | **Owner** | The email address of a member of your organization. An address that matches nobody on the team leaves the contact without an owner, and the result names those addresses. |
 | **Lifecycle stage** | One of `subscriber`, `lead`, `marketing-qualified`, `sales-qualified`, `opportunity`, `customer`, `evangelist`, `other` — by id or by label. |

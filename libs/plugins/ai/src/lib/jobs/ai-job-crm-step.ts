@@ -314,7 +314,11 @@ export function aiCrmFactsLines(kind: AiCrmRecordKind, facts: Facts): string[] {
     const orders = Number(facts['orders']) || 0
     return [
       ...line('Contact', facts['name']),
+      ...line('Salutation', facts['salutation']),
       ...line('Job title', facts['jobTitle']),
+      ...line('Department', facts['department']),
+      // A request the person made, which a drafted next step must respect (AGL-3515).
+      ...(facts['doNotCall'] === true ? ['Do not call: they asked not to be phoned'] : []),
       ...line('Company', facts['company']),
       ...line('Lifecycle stage', facts['lifecycleStage']),
       ...line('Tags', words(facts['tags']).join(', ')),

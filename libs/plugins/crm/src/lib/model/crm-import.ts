@@ -69,7 +69,12 @@
 
 import type { AglynPostalAddress } from '@aglyn/aglyn/foundation/definitions/contact.types'
 import { normalizeAddress, normalizePhone } from '@aglyn/aglyn/foundation/definitions/contact.types'
-import { normalizeContactEmail } from '@aglyn/aglyn/app-utils/contacts'
+import {
+  composeContactName,
+  CONTACT_EXTRA_PHONE_FIELDS,
+  normalizeContactBirthdate,
+  normalizeContactEmail,
+} from '@aglyn/aglyn/app-utils/contacts'
 import {
   CSV_IMPORT_CHUNK_SIZE,
   CSV_IMPORT_MAX_BODY_BYTES,
@@ -136,9 +141,18 @@ const CUSTOM_TEXT_MAX = 1_000
  */
 export const CONTACT_IMPORT_FIELDS = [
   'email',
+  'salutation',
+  'firstName',
+  'lastName',
   'name',
   'phone',
+  'mobilePhone',
+  'homePhone',
+  'otherPhone',
+  'fax',
+  'doNotCall',
   'jobTitle',
+  'department',
   'companyName',
   'addressLine1',
   'addressLine2',
@@ -146,6 +160,15 @@ export const CONTACT_IMPORT_FIELDS = [
   'addressState',
   'addressPostalCode',
   'addressCountry',
+  'otherAddressLine1',
+  'otherAddressLine2',
+  'otherAddressCity',
+  'otherAddressState',
+  'otherAddressPostalCode',
+  'otherAddressCountry',
+  'birthdate',
+  'assistantName',
+  'assistantPhone',
   'tags',
   'ownerEmail',
   'lifecycleStage',
@@ -157,16 +180,34 @@ export type ContactImportField = (typeof CONTACT_IMPORT_FIELDS)[number]
 /** How each field reads in the mapping menu. Typed so a field cannot ship unlabeled. */
 export const CONTACT_IMPORT_FIELD_LABELS: Record<ContactImportField, string> = {
   email: 'Email (required)',
+  salutation: 'Salutation',
+  firstName: 'First name',
+  lastName: 'Last name',
   name: 'Name',
   phone: 'Phone',
+  mobilePhone: 'Mobile phone',
+  homePhone: 'Home phone',
+  otherPhone: 'Other phone',
+  fax: 'Fax',
+  doNotCall: 'Do not call (yes/no)',
   jobTitle: 'Job title',
+  department: 'Department',
   companyName: 'Company name',
-  addressLine1: 'Address line 1',
-  addressLine2: 'Address line 2',
-  addressCity: 'City',
-  addressState: 'State or region',
-  addressPostalCode: 'Postal code',
-  addressCountry: 'Country (two-letter code)',
+  addressLine1: 'Mailing address line 1',
+  addressLine2: 'Mailing address line 2',
+  addressCity: 'Mailing city',
+  addressState: 'Mailing state or region',
+  addressPostalCode: 'Mailing postal code',
+  addressCountry: 'Mailing country (two-letter code)',
+  otherAddressLine1: 'Other address line 1',
+  otherAddressLine2: 'Other address line 2',
+  otherAddressCity: 'Other city',
+  otherAddressState: 'Other state or region',
+  otherAddressPostalCode: 'Other postal code',
+  otherAddressCountry: 'Other country (two-letter code)',
+  birthdate: 'Birthdate (YYYY-MM-DD)',
+  assistantName: 'Assistant',
+  assistantPhone: 'Assistant phone',
   tags: 'Tags (comma or | separated)',
   ownerEmail: 'Owner (team member email)',
   lifecycleStage: 'Lifecycle stage',
@@ -176,11 +217,12 @@ export const CONTACT_IMPORT_FIELD_LABELS: Record<ContactImportField, string> = {
 /**
  * Header aliases per field, matched after `importHeaderKey` normalization.
  *
- * The vocabulary of the exports people actually arrive with — HubSpot's
- * "First Name"/"Last Name" pair is deliberately NOT here, because two columns
- * cannot map to one field and a guess that took only the first name would
- * store half a name and look right in the preview. An operator with a split
- * name maps one of the two by hand, and the preview shows what they chose.
+ * The vocabulary of the exports people actually arrive with — HubSpot's and
+ * Salesforce's. A "First Name"/"Last Name" pair maps to the two fields of
+ * the same names (AGL-3515), and the holder's name is composed from them,
+ * so a split name is never stored as half of itself. Salesforce's "Mailing
+ * …" columns are the mailing address and its "Other …" columns the other
+ * address.
  */
 const FIELD_ALIASES: Record<ContactImportField, readonly string[]> = {
   email: [
@@ -192,24 +234,69 @@ const FIELD_ALIASES: Record<ContactImportField, readonly string[]> = {
     'primary email',
     'work email',
   ],
+  salutation: ['salutation', 'title prefix', 'prefix', 'honorific'],
+  firstName: ['first name', 'firstname', 'given name', 'forename'],
+  lastName: ['last name', 'lastname', 'surname', 'family name'],
   name: ['name', 'full name', 'contact name', 'display name', 'person'],
-  phone: [
-    'phone',
-    'phone number',
-    'telephone',
-    'mobile',
-    'mobile phone',
-    'cell',
-    'work phone',
-  ],
+  phone: ['phone', 'phone number', 'telephone', 'work phone', 'business phone'],
+  mobilePhone: ['mobile', 'mobile phone', 'mobile phone number', 'cell', 'cell phone'],
+  homePhone: ['home phone', 'home phone number', 'home telephone'],
+  otherPhone: ['other phone', 'other phone number', 'alternate phone'],
+  fax: ['fax', 'fax number', 'business fax'],
+  doNotCall: ['do not call', 'dnc', 'no calls'],
   jobTitle: ['job title', 'title', 'position', 'role'],
+  department: ['department', 'dept'],
   companyName: ['company', 'company name', 'organization', 'organisation', 'account'],
-  addressLine1: ['address', 'address line 1', 'street', 'street address', 'address 1'],
-  addressLine2: ['address line 2', 'address 2', 'street 2', 'apartment', 'suite'],
-  addressCity: ['city', 'town', 'locality'],
-  addressState: ['state', 'region', 'province', 'county', 'state/region'],
-  addressPostalCode: ['postal code', 'postcode', 'zip', 'zip code', 'post code'],
-  addressCountry: ['country', 'country code', 'country/region'],
+  addressLine1: [
+    'address',
+    'address line 1',
+    'street',
+    'street address',
+    'address 1',
+    'mailing address line 1',
+    'mailing street',
+    'mailing address',
+  ],
+  addressLine2: [
+    'address line 2',
+    'address 2',
+    'street 2',
+    'apartment',
+    'suite',
+    'mailing address line 2',
+    'mailing street 2',
+  ],
+  addressCity: ['city', 'town', 'locality', 'mailing city'],
+  addressState: [
+    'state',
+    'region',
+    'province',
+    'county',
+    'state/region',
+    'mailing state',
+    'mailing state/province',
+    'mailing state or region',
+  ],
+  addressPostalCode: [
+    'postal code',
+    'postcode',
+    'zip',
+    'zip code',
+    'post code',
+    'mailing postal code',
+    'mailing zip/postal code',
+    'mailing zip',
+  ],
+  addressCountry: ['country', 'country code', 'country/region', 'mailing country'],
+  otherAddressLine1: ['other address line 1', 'other street', 'other address'],
+  otherAddressLine2: ['other address line 2', 'other street 2'],
+  otherAddressCity: ['other city'],
+  otherAddressState: ['other state', 'other state/province', 'other state or region'],
+  otherAddressPostalCode: ['other postal code', 'other zip/postal code', 'other zip'],
+  otherAddressCountry: ['other country'],
+  birthdate: ['birthdate', 'birthday', 'date of birth', 'dob', 'birth date'],
+  assistantName: ['assistant', 'assistant name', "assistant's name"],
+  assistantPhone: ['assistant phone', 'asst. phone', 'asst phone'],
   tags: ['tags', 'tag', 'labels', 'groups', 'segments'],
   ownerEmail: ['owner', 'owner email', 'contact owner', 'assigned to', 'account owner'],
   lifecycleStage: ['lifecycle stage', 'stage', 'lifecycle', 'status', 'lead status'],
@@ -259,8 +346,26 @@ export function guessContactImportMapping(
  */
 export interface ContactImportRawRow {
   email?: unknown
+  salutation?: unknown
+  firstName?: unknown
+  lastName?: unknown
   name?: unknown
   phone?: unknown
+  mobilePhone?: unknown
+  homePhone?: unknown
+  otherPhone?: unknown
+  fax?: unknown
+  doNotCall?: unknown
+  department?: unknown
+  birthdate?: unknown
+  assistantName?: unknown
+  assistantPhone?: unknown
+  otherAddressLine1?: unknown
+  otherAddressLine2?: unknown
+  otherAddressCity?: unknown
+  otherAddressState?: unknown
+  otherAddressPostalCode?: unknown
+  otherAddressCountry?: unknown
   jobTitle?: unknown
   companyName?: unknown
   addressLine1?: unknown
@@ -316,12 +421,31 @@ export type ContactImportDroppedValue = ImportDroppedValue
 /** One row, ready to be written. */
 export interface ContactImportRow {
   email: string
+  /** As typed, or composed from {@link firstName} and {@link lastName} when either was given. */
   name?: string
+  /** The label as the file spelled it; the server judges it against the org's list. */
+  salutation?: string
+  firstName?: string
+  lastName?: string
   /** E.164. */
   phone?: string
+  /** E.164, each (AGL-3515). */
+  mobilePhone?: string
+  homePhone?: string
+  otherPhone?: string
+  fax?: string
+  assistantPhone?: string
+  /** Only ever `true` — a file says a person asked not to be called, never the reverse. */
+  doNotCall?: true
+  department?: string
+  /** `YYYY-MM-DD`. */
+  birthdate?: string
+  assistantName?: string
   jobTitle?: string
   companyName?: string
+  /** The mailing address. */
   address?: AglynPostalAddress
+  otherAddress?: AglynPostalAddress
   /** Lowercased, deduplicated, capped at {@link CONTACT_IMPORT_TAGS_MAX}. */
   tags: string[]
   /** Normalized, for the server to resolve against the org's members. */
@@ -357,6 +481,18 @@ export function parseContactImportTags(value: unknown): string[] {
  */
 export function parseContactImportFlag(value: unknown): boolean | null {
   return parseImportFlag(value)
+}
+
+/**
+ * A birthdate cell as `YYYY-MM-DD`, or `null` when it is not a past date
+ * (AGL-3515). The stored spelling, and the `M/D/YYYY` a US spreadsheet
+ * writes a date in — Salesforce's report export among them.
+ */
+export function parseContactImportBirthdate(value: unknown, nowMs = Date.now()): string | null {
+  const text = String(value ?? '').trim()
+  const us = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(text)
+  const iso = us ? `${us[3]}-${us[1].padStart(2, '0')}-${us[2].padStart(2, '0')}` : text
+  return normalizeContactBirthdate(iso, nowMs) || null
 }
 
 /**
@@ -451,8 +587,38 @@ export function normalizeContactImportRow(
     dropped,
   }
 
-  const name = importTextValue(raw.name, NAME_MAX)
+  const firstName = composeContactName(importTextValue(raw.firstName, NAME_MAX), '')
+  if (firstName) row.firstName = firstName
+  const lastName = composeContactName('', importTextValue(raw.lastName, NAME_MAX))
+  if (lastName) row.lastName = lastName
+  // The parts make the name when the file has them (AGL-3515).
+  const name = composeContactName(firstName, lastName) || importTextValue(raw.name, NAME_MAX)
   if (name) row.name = name
+  const salutation = importTextValue(raw.salutation, NAME_MAX)
+  if (salutation) row.salutation = salutation
+  const department = importTextValue(raw.department, NAME_MAX)
+  if (department) row.department = department
+  const assistantName = importTextValue(raw.assistantName, NAME_MAX)
+  if (assistantName) row.assistantName = assistantName
+  for (const key of CONTACT_EXTRA_PHONE_FIELDS) {
+    const text = importTextValue(raw[key], 64)
+    if (!text) continue
+    const phone = normalizePhone(text)
+    if (phone) row[key] = phone
+    else drop(key, text)
+  }
+  const birthdateText = importTextValue(raw.birthdate, 64)
+  if (birthdateText) {
+    const birthdate = parseContactImportBirthdate(birthdateText)
+    if (birthdate) row.birthdate = birthdate
+    else drop('birthdate', birthdateText)
+  }
+  const doNotCallText = raw.doNotCall
+  if (doNotCallText !== undefined && doNotCallText !== null && String(doNotCallText).trim()) {
+    const flag = parseContactImportFlag(doNotCallText)
+    if (flag === null) drop('doNotCall', doNotCallText)
+    else if (flag) row.doNotCall = true
+  }
   const jobTitle = importTextValue(raw.jobTitle, NAME_MAX)
   if (jobTitle) row.jobTitle = jobTitle
   const companyName = importTextValue(raw.companyName, NAME_MAX)
@@ -478,6 +644,17 @@ export function normalizeContactImportRow(
   // typed name is not a code — so it is the one part the report has to name.
   const countryText = importTextValue(raw.addressCountry, 64)
   if (countryText && !address?.country) drop('addressCountry', countryText)
+  const otherAddress = normalizeAddress({
+    line1: importTextValue(raw.otherAddressLine1, 200),
+    line2: importTextValue(raw.otherAddressLine2, 200),
+    city: importTextValue(raw.otherAddressCity, 120),
+    state: importTextValue(raw.otherAddressState, 120),
+    postalCode: importTextValue(raw.otherAddressPostalCode, 32),
+    country: importTextValue(raw.otherAddressCountry, 8),
+  })
+  if (otherAddress) row.otherAddress = otherAddress
+  const otherCountryText = importTextValue(raw.otherAddressCountry, 64)
+  if (otherCountryText && !otherAddress?.country) drop('otherAddressCountry', otherCountryText)
 
   const ownerText = importTextValue(raw.ownerEmail, 320)
   if (ownerText) {

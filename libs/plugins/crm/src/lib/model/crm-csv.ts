@@ -129,7 +129,22 @@ export interface ContactCsvRow {
   companyName?: string
   ownerUid?: string
   lifecycleStage?: ContactLifecycleStage | ''
+  /** The mailing address. */
   address?: AglynPostalAddress | null
+  /* Salesforce's standard contact fields (AGL-3515). */
+  salutation?: string
+  firstName?: string
+  lastName?: string
+  mobilePhone?: string
+  homePhone?: string
+  otherPhone?: string
+  fax?: string
+  doNotCall?: boolean
+  department?: string
+  otherAddress?: AglynPostalAddress | null
+  birthdate?: string
+  assistantName?: string
+  assistantPhone?: string
   tags?: string[]
   sources?: Record<string, unknown>
   interactions?: Array<{ atMs: number }>
@@ -156,18 +171,36 @@ export interface ContactCsvOptions {
  */
 export const CONTACT_CSV_COLUMNS = [
   'Email',
+  'Salutation',
+  'First name',
+  'Last name',
   'Name',
   'Phone',
+  'Mobile phone',
+  'Home phone',
+  'Other phone',
+  'Fax',
+  'Do not call',
   'Job title',
+  'Department',
   'Company',
   'Owner',
   'Lifecycle stage',
-  'Address line 1',
-  'Address line 2',
-  'City',
-  'State',
-  'Postal code',
-  'Country',
+  'Mailing address line 1',
+  'Mailing address line 2',
+  'Mailing city',
+  'Mailing state',
+  'Mailing postal code',
+  'Mailing country',
+  'Other address line 1',
+  'Other address line 2',
+  'Other city',
+  'Other state',
+  'Other postal code',
+  'Other country',
+  'Birthdate',
+  'Assistant',
+  'Assistant phone',
   'Tags',
   'Sources',
   'Last interaction',
@@ -195,22 +228,38 @@ export function contactCsvCells(
   options: ContactCsvOptions = {},
 ): unknown[] {
   const { ownerEmail, customFields = [] } = options
+  const addressCells = (address: AglynPostalAddress | null | undefined) => [
+    address?.line1 ?? '',
+    address?.line2 ?? '',
+    address?.city ?? '',
+    address?.state ?? '',
+    address?.postalCode ?? '',
+    address?.country ?? '',
+  ]
   return [
     contact.email ?? '',
+    contact.salutation ?? '',
+    contact.firstName ?? '',
+    contact.lastName ?? '',
     contact.name ?? '',
     contact.phone ?? '',
+    contact.mobilePhone ?? '',
+    contact.homePhone ?? '',
+    contact.otherPhone ?? '',
+    contact.fax ?? '',
+    contact.doNotCall ? 'yes' : '',
     contact.jobTitle ?? '',
+    contact.department ?? '',
     contact.companyName ?? '',
     contact.ownerUid ? (ownerEmail?.(contact.ownerUid) ?? contact.ownerUid) : '',
     contact.lifecycleStage
       ? CONTACT_LIFECYCLE_STAGE_LABELS[contact.lifecycleStage]
       : '',
-    contact.address?.line1 ?? '',
-    contact.address?.line2 ?? '',
-    contact.address?.city ?? '',
-    contact.address?.state ?? '',
-    contact.address?.postalCode ?? '',
-    contact.address?.country ?? '',
+    ...addressCells(contact.address),
+    ...addressCells(contact.otherAddress),
+    contact.birthdate ?? '',
+    contact.assistantName ?? '',
+    contact.assistantPhone ?? '',
     (contact.tags ?? []).join('|'),
     Object.keys(contact.sources ?? {}).join('|'),
     contact.interactions?.[0]
@@ -814,6 +863,19 @@ export function contactCsvRowFromDoc(
       ? facet.lifecycleStage
       : '',
     address: facet.address ?? null,
+    salutation: facet.salutation ?? '',
+    firstName: facet.firstName ?? '',
+    lastName: facet.lastName ?? '',
+    mobilePhone: facet.mobilePhone ?? '',
+    homePhone: facet.homePhone ?? '',
+    otherPhone: facet.otherPhone ?? '',
+    fax: facet.fax ?? '',
+    doNotCall: facet.doNotCall === true,
+    department: facet.department ?? '',
+    otherAddress: facet.otherAddress ?? null,
+    birthdate: facet.birthdate ?? '',
+    assistantName: facet.assistantName ?? '',
+    assistantPhone: facet.assistantPhone ?? '',
     tags: facet.tags ?? [],
     sources: facet.sources,
     interactions: interactionsForGroup(facet.interactions, holder.hostIds),
