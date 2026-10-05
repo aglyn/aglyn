@@ -45,6 +45,12 @@ export interface HostBookingService {
   /** Optional price; 0/absent means free. */
   priceUsd?: number
   /**
+   * How the price is stated (AGL-3475): `fixed` (absent) charges `priceUsd`;
+   * `varies`, `estimate` and `contact` show their label and book with no
+   * charge. Read through `bookingPriceDisplay` / `bookingChargeUsd`.
+   */
+  priceDisplay?: 'fixed' | 'varies' | 'estimate' | 'contact'
+  /**
    * Weekly availability: `windows[weekday]` (0 = Sunday … 6 = Saturday)
    * lists open intervals in minutes since midnight, host-local.
    */

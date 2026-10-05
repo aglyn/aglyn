@@ -681,6 +681,9 @@ const SEEDS: Array<{
       // absent `off` for the same reason.
       askPhone: 'required',
       askAddress: 'optional',
+      // How the price is stated (AGL-3475), seeded away from the absent
+      // `fixed`: a restore that dropped it would start charging the price.
+      priceDisplay: 'estimate',
     },
   },
   {
