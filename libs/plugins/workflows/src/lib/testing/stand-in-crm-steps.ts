@@ -67,7 +67,7 @@ export function standInCrmSteps(double: CrmStepsDouble): () => void {
       const contact = await double.contact(request)
       if (!contact) {
         const named = String(request.payload['contactId'] ?? request.payload['email'] ?? '')
-        return { error: `no contact this site can see for ${named}` }
+        return { error: `no contact or lead this site can see for ${named}` }
       }
       const facet = (field: string) => `facets.${double.groupId}.${field}`
       if (step.type === 'setContactStage') {

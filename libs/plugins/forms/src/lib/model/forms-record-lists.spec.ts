@@ -59,8 +59,18 @@ describe('the form list source', () => {
         { $id: 'form-old', displayName: 'Old campaign', archivedAt: 1 },
       ]),
     ).toEqual([
-      { id: 'form-contact', name: 'Contact us', facts: {} },
-      { id: 'form-untitled', name: 'form-untitled', facts: {} },
+      { id: 'form-contact', name: 'Contact us', facts: { routesLeads: false } },
+      { id: 'form-untitled', name: 'form-untitled', facts: { routesLeads: false } },
     ])
+  })
+
+  it('shares whether a form files leads, for a recipe keyed on what it makes (AGL-3458)', () => {
+    registerFormRecordList()
+    expect(
+      pluginRecordsFromRows('form', [
+        { $id: 'form-leads', displayName: 'Get a quote', routing: { lead: true } },
+        { $id: 'form-contacts', displayName: 'Contact us', routing: { lead: false } },
+      ]).map((record) => record.facts),
+    ).toEqual([{ routesLeads: true }, { routesLeads: false }])
   })
 })

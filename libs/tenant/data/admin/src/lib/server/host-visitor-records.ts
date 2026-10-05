@@ -28,8 +28,10 @@
 import {
   CAPTURED_BY_HOST_FIELD,
   checkVisitorRecordCeiling,
+  containerMembershipField,
   LEADS_MAX_PER_HOST,
   marketingConsentFieldsForGroup,
+  normalizeContainerIds,
   personKey,
   readMarketingBasis,
   utcMonthKey,
@@ -376,6 +378,19 @@ export interface HostLeadInput {
    */
   disclosedConsentGroup?: string | null
   /**
+   * The campaigns the capture SURFACE is filed under (AGL-3458) — a form's
+   * `campaignIds`, read by the door off the verified form document. Never the
+   * campaign touch, which is where the visitor came from: this is which
+   * campaigns the merchant put the form in, and it is true of everybody who
+   * fills that form in.
+   *
+   * Unioned into the lead's own `campaignIds` — the field the enroll route
+   * and the bulk bar write — so a campaign the lead joined by hand or by a
+   * sequence is kept, and the Leads list's Campaign filter
+   * (`scopedCampaignIds`) is restamped from the union in the same write.
+   */
+  campaignIds?: readonly string[]
+  /**
    * A phone the capture learned (AGL-3493), E.164 as the door normalized
    * it. Written only when the lead holds none: a number a rep typed on the
    * lead, or an earlier capture brought, is not replaced by this one.
@@ -621,6 +636,22 @@ export async function addHostLeadOutcome(options: {
           : {}
       const storedScope = Array.isArray(stored['visibleTo']) ? (stored['visibleTo'] as unknown[]) : []
       /*
+       * THE CAMPAIGNS, unioned (AGL-3458). Computed from what the transaction
+       * read rather than written as an `arrayUnion`, so the Campaign filter's
+       * scoped keys below are derived from the same list the write stores,
+       * and the union is held to the membership cap every reader applies.
+       * Written only when the capture names one, so a door with no campaign
+       * never rewrites the field a person or a sequence filled.
+       */
+      // The field a lead holds its campaigns in, at the top of its document.
+      const campaignsField = lead.campaignIds?.length ? containerMembershipField('campaign') : null
+      const campaigns = campaignsField
+        ? normalizeContainerIds([
+            ...normalizeContainerIds(stored[campaignsField]),
+            ...(lead.campaignIds ?? []),
+          ])
+        : null
+      /*
        * A lead that keeps a first or last name keeps the name they make
        * (AGL-3513): a capture's typed name does not replace it.
        */
@@ -631,6 +662,7 @@ export async function addHostLeadOutcome(options: {
         email: lead.email,
         ...(name ? { name } : {}),
         visibleTo: [...new Set([...storedScope, ...scope])],
+        ...(campaignsField && campaigns ? { [campaignsField]: campaigns } : {}),
       })
       tx.set(
         leadRef,
@@ -640,6 +672,7 @@ export async function addHostLeadOutcome(options: {
           ...(composedName ? { name: composedName } : {}),
           ...phoneFill,
           ...listFields,
+          ...(campaignsField && campaigns ? { [campaignsField]: campaigns } : {}),
           /*
            * WIDENED BY THE CAPTURE, NEVER BY THE LOOKUP (AGL-3275).
            *

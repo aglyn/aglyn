@@ -35,14 +35,14 @@ export const STAND_IN_RECIPES: readonly InteractionRecipe[] = [
     id: 'welcomeNewLead',
     title: 'Welcome a new lead',
     description:
-      'When a form makes a new contact: rotate in an owner, book a call for ' +
+      'When a form makes a new lead: rotate in an owner, book a call for ' +
       'tomorrow, send a thank-you, and tag them website.',
     build: () => ({
       recipe: 'welcomeNewLead',
       name: 'Welcome a new lead',
       trigger: {
-        event: 'contactCreated',
-        conditions: [{ field: 'source', op: 'equals', value: 'form' }],
+        event: 'lead',
+        conditions: [{ field: 'formId', op: 'notEmpty' }],
         combinator: 'and',
       },
       steps: [
@@ -51,7 +51,9 @@ export const STAND_IN_RECIPES: readonly InteractionRecipe[] = [
         {
           type: 'sendEmail',
           subject: 'Thanks for getting in touch',
-          body: 'Thanks for reaching out. We have your message and will reply to this email address.',
+          body:
+            'Hi {{firstName|there}},\n\nThanks for reaching out. We have your ' +
+            'message and will reply to this email address.',
         },
         { type: 'addContactTag', tag: 'website' },
       ],
@@ -104,12 +106,13 @@ export const STAND_IN_RECIPES: readonly InteractionRecipe[] = [
   {
     id: 'tagByForm',
     title: 'Tag by form',
-    description: 'When a form you pick makes a new contact: tag them with the form’s name.',
+    description:
+      'When a form you pick makes a new lead or contact: tag them with the form’s name.',
     picks: {
       kind: 'form',
       label: 'Form',
       plural: 'forms',
-      prompt: 'Pick the form whose new contacts get the tag.',
+      prompt: 'Pick the form whose new leads or contacts get the tag.',
       none: 'This site has no forms yet. Add one in the besigner, then come back.',
     },
     build: (input) => {
@@ -118,7 +121,8 @@ export const STAND_IN_RECIPES: readonly InteractionRecipe[] = [
         recipe: 'tagByForm',
         name: form ? `Tag ${form.name.trim()} submissions` : 'Tag by form',
         trigger: {
-          event: 'contactCreated',
+          // A lead-routed form makes a lead and no contact (AGL-3458).
+          event: form?.facts?.['routesLeads'] === true ? 'lead' : 'contactCreated',
           conditions: [{ field: 'formId', op: 'equals', value: form?.id ?? '' }],
           combinator: 'and',
         },
@@ -137,8 +141,9 @@ export function standInRecipes(): void {
 /**
  * The `form` list source the Forms plugin publishes (AGL-3080), stood in: a
  * site's forms by document id, an archived one left out, a form named by its
- * display name or its id. What the Forms plugin itself answers is held in its
- * own spec.
+ * display name or its id, and whether it files leads shared as its
+ * `routesLeads` fact. What the Forms plugin itself answers is held in its own
+ * spec.
  */
 export function standInFormList(): void {
   registerPluginRecordListSource(
@@ -154,7 +159,12 @@ export function standInFormList(): void {
       },
       record(id, data) {
         if (data['archivedAt'] != null) return null
-        return { id, name: String(data['displayName'] ?? '').trim() || id, facts: {} }
+        const routing = data['routing'] as { lead?: unknown } | null | undefined
+        return {
+          id,
+          name: String(data['displayName'] ?? '').trim() || id,
+          facts: { routesLeads: routing?.lead === true },
+        }
       },
     },
     { pluginId: 'forms' },

@@ -43,11 +43,29 @@ import type { HostActionTrigger, HostActionTriggerCondition } from '../model/hos
  * edited by the same rows.
  */
 
+/**
+ * "Form is …" (AGL-3458): a row that picks ONE FORM by id. Stored as the
+ * plain clause `formId equals <id>` — the evaluator has no form operator and
+ * needs none — and read back into this row, so a condition on which form it
+ * was is chosen from the site's forms rather than typed, and survives the
+ * form being renamed where `formName equals …` silently stops matching.
+ */
+export const FORM_IS_OP = 'formIs'
+
+/** The payload key a "Form is" row compares. */
+export const FORM_ID_FIELD = 'formId'
+
 /** One editable condition row; a lone row with an empty op means "always run". */
 export interface ConditionRowDraft {
-  op: '' | TriggerConditionOp
+  op: '' | TriggerConditionOp | typeof FORM_IS_OP
   field: string
   value: string
+}
+
+/** A form a "Form is" row can pick. */
+export interface ConditionFormOption {
+  id: string
+  name: string
 }
 
 export const EMPTY_CONDITION_ROW: ConditionRowDraft = {
@@ -68,11 +86,14 @@ export function conditionRowsFromTrigger(
     | undefined,
 ): ConditionRowDraft[] {
   const rows = normalizeTriggerConditions(trigger).map(
-    (condition): ConditionRowDraft => ({
-      op: condition.op ?? '',
-      field: condition.field ?? '',
-      value: condition.value ?? '',
-    }),
+    (condition): ConditionRowDraft =>
+      condition.field?.trim() === FORM_ID_FIELD && condition.op === 'equals'
+        ? { op: FORM_IS_OP, field: FORM_ID_FIELD, value: condition.value ?? '' }
+        : {
+            op: condition.op ?? '',
+            field: condition.field ?? '',
+            value: condition.value ?? '',
+          },
   )
   return rows.length ? rows : [EMPTY_CONDITION_ROW]
 }
@@ -89,11 +110,15 @@ export function conditionsFromRows(
   return {
     conditions: rows
       .filter((row) => row.op)
-      .map((row) => ({
-        field: row.field.trim(),
-        op: row.op as TriggerConditionOp,
-        ...(row.op !== 'notEmpty' ? { value: row.value.trim() } : {}),
-      })),
+      .map((row) =>
+        row.op === FORM_IS_OP
+          ? { field: FORM_ID_FIELD, op: 'equals' as const, value: row.value.trim() }
+          : {
+              field: row.field.trim(),
+              op: row.op as TriggerConditionOp,
+              ...(row.op !== 'notEmpty' ? { value: row.value.trim() } : {}),
+            },
+      ),
     combinator,
   }
 }
@@ -106,6 +131,12 @@ export interface TriggerConditionRowsProps {
     update: (previous: ConditionRowDraft[]) => ConditionRowDraft[],
   ) => void
   onCombinatorChange: (combinator: TriggerCombinator) => void
+  /**
+   * The site's forms, for a "Form is" row — given only where the trigger's
+   * event carries the form's id. Absent, the row is offered only to show a
+   * stored one, and its form is typed by id.
+   */
+  formOptions?: readonly ConditionFormOption[]
 }
 
 /** The condition rows, "Add condition", and the AND/OR choice once there are two. */
@@ -114,7 +145,9 @@ export function TriggerConditionRows({
   combinator,
   onRowsChange,
   onCombinatorChange,
+  formOptions,
 }: TriggerConditionRowsProps) {
+  const offerForms = Boolean(formOptions) || rows.some((row) => row.op === FORM_IS_OP)
   return (
     <>
       {rows.map((row, index) => (
@@ -135,14 +168,15 @@ export function TriggerConditionRows({
             value={row.op}
             onChange={(event) =>
               onRowsChange((previous) =>
-                previous.map((previousRow, index2) =>
-                  index2 === index
-                    ? {
-                        ...previousRow,
-                        op: event.target.value as ConditionRowDraft['op'],
-                      }
-                    : previousRow,
-                ),
+                previous.map((previousRow, index2) => {
+                  if (index2 !== index) return previousRow
+                  const op = event.target.value as ConditionRowDraft['op']
+                  // Into and out of "Form is", the field is the form's id or
+                  // nothing — never a leftover the author did not type.
+                  if (op === FORM_IS_OP) return { op, field: FORM_ID_FIELD, value: '' }
+                  if (previousRow.op === FORM_IS_OP) return { op, field: '', value: '' }
+                  return { ...previousRow, op }
+                }),
               )
             }
             size="small"
@@ -156,8 +190,53 @@ export function TriggerConditionRows({
             <MenuItem value="notEmpty">{'A field is not empty'}</MenuItem>
             <MenuItem value="equals">{'A field equals…'}</MenuItem>
             <MenuItem value="contains">{'A field contains…'}</MenuItem>
+            {offerForms ? <MenuItem value={FORM_IS_OP}>{'Form is…'}</MenuItem> : null}
           </TextField>
-          {row.op ? (
+          {row.op === FORM_IS_OP ? (
+            formOptions ? (
+              <TextField
+                select
+                label="Form"
+                value={row.value}
+                error={!row.value}
+                helperText={row.value ? undefined : 'Pick the form'}
+                onChange={(event) =>
+                  onRowsChange((previous) =>
+                    previous.map((previousRow, index2) =>
+                      index2 === index ? { ...previousRow, value: event.target.value } : previousRow,
+                    ),
+                  )
+                }
+                size="small"
+                sx={{ flex: 1 }}
+              >
+                {/* A stored id that is no longer among the site's live forms
+                    stays visible, so a save does not silently drop it. */}
+                {row.value && !formOptions.some((form) => form.id === row.value) ? (
+                  <MenuItem value={row.value}>{`A form that is gone (${row.value})`}</MenuItem>
+                ) : null}
+                {formOptions.map((form) => (
+                  <MenuItem key={form.id} value={form.id}>
+                    {form.name}
+                  </MenuItem>
+                ))}
+              </TextField>
+            ) : (
+              <TextField
+                label="Form id"
+                value={row.value}
+                onChange={(event) =>
+                  onRowsChange((previous) =>
+                    previous.map((previousRow, index2) =>
+                      index2 === index ? { ...previousRow, value: event.target.value } : previousRow,
+                    ),
+                  )
+                }
+                size="small"
+                sx={{ flex: 1 }}
+              />
+            )
+          ) : row.op ? (
             <TextField
               label="Field"
               placeholder="subscribe"

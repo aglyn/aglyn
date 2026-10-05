@@ -57,6 +57,14 @@ export interface HostEventDeclaration {
    * can enumerate ("every submitted field by name").
    */
   payloadKeys?: readonly string[]
+  /**
+   * Whether the event IS the recipient's own action (AGL-3458): a visitor
+   * submitted a form, booked, signed up. An email an automation sends at once
+   * to that visitor answers what they just did, so it can go out as a
+   * transactional reply — no unsubscribe header, no unsubscribe link — where
+   * a message on any other event is mail the business chose to send.
+   */
+  recipientActed?: boolean
 }
 
 /** The events the platform raises itself, with no plugin loaded. */
@@ -91,6 +99,16 @@ export const HOST_EVENT_PAYLOAD_KEYS: Partial<Record<HostEventType, readonly str
       event.payloadKeys,
     ]),
   )
+
+/**
+ * Whether an event is the recipient's own action — see
+ * {@link HostEventDeclaration.recipientActed}. A custom event, and every
+ * event no plugin declares that way, is not.
+ */
+export function hostEventRecipientActed(event: string | undefined | null): boolean {
+  const key = String(event ?? '').trim()
+  return HOST_EVENTS.some((declared) => declared.type === key && declared.recipientActed === true)
+}
 
 /**
  * `formSubmission` → `Form submitted`; a custom event keeps its own name,

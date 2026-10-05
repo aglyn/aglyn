@@ -24,11 +24,14 @@ import {
   ELEMENT_SCOPED_SITE_EVENTS,
   HOST_EVENT_TYPES,
   hostEventLabel,
+  HOST_EVENT_PAYLOAD_KEYS,
   hostEventPayloadHint,
+  type HostEventType,
   isSiteEventType,
   pluginDocsHelp,
   SITE_EVENT_TYPES,
   type TriggerCombinator,
+  triggerFilterProblem,
 } from '@aglyn/aglyn'
 import { useConsoleWidgetSlot } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
 import {
@@ -106,6 +109,7 @@ import {
   HOST_ACTION_STEP_LABELS,
   type HostAction,
   type HostActionStepType,
+  stepRunsAfterWait,
   validateHostAction,
 } from '../model/host-actions'
 import {
@@ -436,8 +440,38 @@ export function HostActionsCard(props: {
     EDITOR_OPTION_CEILING,
   )
   // What the owner leaves out (an archived form collects nothing, so a recipe
-  // keyed on it would never fire) is not offered.
+  // keyed on it would never fire) is not offered. The facts the owner shares
+  // ride along to the recipe, which may shape its draft by them (AGL-3458).
   const pickOptions = pluginRecordsFromRows(pickedKind ?? '', pickRows)
+    .map((record) => ({ id: record.id, name: record.name, facts: record.facts }))
+    .sort((a, b) => a.name.localeCompare(b.name))
+
+  /*
+   * The site's forms for the trigger's "Form is" condition (AGL-3458), for an
+   * event that carries the form's id — through the same list source the
+   * recipe picker reads, latched like it: read once the editor is open on
+   * such an event, and never before.
+   */
+  const eventCarriesFormId = Boolean(
+    draft && HOST_EVENT_PAYLOAD_KEYS[draft.trigger.event as HostEventType]?.includes('formId'),
+  )
+  const [formConditionOpened, setFormConditionOpened] = useState(false)
+  if (eventCarriesFormId && !formConditionOpened) setFormConditionOpened(true)
+  const { data: formConditionRead } = useFirestoreCollection<any>(
+    () =>
+      formConditionOpened
+        ? pluginRecordListQuery('form', firestore, {
+            hostId,
+            limit: EDITOR_OPTION_CEILING + 1,
+          })
+        : null,
+    [firestore, hostId, formConditionOpened],
+    { idField: '$id' },
+  )
+  const formOptions = pluginRecordsFromRows(
+    'form',
+    ceilingedWindow<any>(formConditionRead, EDITOR_OPTION_CEILING).rows,
+  )
     .map((record) => ({ id: record.id, name: record.name }))
     .sort((a, b) => a.name.localeCompare(b.name))
 
@@ -945,11 +979,19 @@ export function HostActionsCard(props: {
             ) : (
               <TextField
                 label="Filter (optional)"
-                placeholder={'path == "/pricing"'}
-                // What the expression — and the conditions below — can name
-                // for this event; nothing for an event whose payload is not
+                placeholder="subscribe"
+                // A comparison belongs in the conditions below: the filter's
+                // evaluator is arithmetic, and `path == "/pricing"` throws on
+                // every event, so it is refused here (AGL-3458). Otherwise,
+                // what the expression — and the conditions — can name for
+                // this event; nothing for an event whose payload is not
                 // written down, rather than a guess.
-                helperText={hostEventPayloadHint(draft?.trigger.event) ?? undefined}
+                error={Boolean(triggerFilterProblem(draft?.trigger.filter))}
+                helperText={
+                  triggerFilterProblem(draft?.trigger.filter) ??
+                  hostEventPayloadHint(draft?.trigger.event) ??
+                  undefined
+                }
                 value={draft?.trigger.filter ?? ''}
                 onChange={(event) =>
                   patch((previous) => ({
@@ -983,6 +1025,8 @@ export function HostActionsCard(props: {
                 conditionCombinator: combinator,
               }))
             }
+            // "Form is …", picked by id, where the event names the form (AGL-3458).
+            {...(eventCarriesFormId ? { formOptions } : {})}
           />
           {isSiteEventType(draft?.trigger.event ?? '') ? (
             // Site-event config (AGL-256): what/where the trigger watches.
@@ -1133,6 +1177,10 @@ export function HostActionsCard(props: {
                   steps: update(previous.steps),
                 }))
               }
+              replyContext={{
+                event: draft?.trigger.event,
+                afterWait: stepRunsAfterWait(draft?.steps, index),
+              }}
             />
           ))}
           <Button

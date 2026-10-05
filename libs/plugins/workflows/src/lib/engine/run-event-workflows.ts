@@ -24,6 +24,7 @@ import {
   resolveOrgEntitlements,
 } from '@aglyn/aglyn/server'
 import { activitySearchTokens } from '@aglyn/aglyn/app-utils/activity-search'
+import { triggerFilterProblem } from '@aglyn/aglyn/app-utils/site-interactions'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import type { HostEventPayload } from '@aglyn/tenant-runtime/host-event-listeners'
 import { FieldValue } from 'firebase-admin/firestore'
@@ -45,6 +46,7 @@ import {
   automationRunEnv,
   executeWorkflow,
   FLOW_CLAIM_RETRY_MS,
+  SKIP_LOG_EXCLUDED_EVENTS,
   stopFlowEnrollment,
   type WorkflowContext,
   type WorkflowExecution,
@@ -54,10 +56,16 @@ import {
   workflowHasActionSteps,
 } from './workflow-steps'
 import { runTriggeredByFields } from './run-trigger-actor'
+import { triggeredDocsForEvent } from './triggered-docs'
 import { FLOW_TIMED_OUT_FIELD, type HostActionAlert } from '../model/host-actions'
 
-/** Bounded fan-out per event: at most this many triggered workflows run. */
-const MAX_TRIGGERED_WORKFLOWS = 10
+/**
+ * Every live workflow on the event runs, in document-id order, up to this
+ * many (AGL-3458) — the hundred the workflow map below already reads, so a
+ * workflow the map can see is one its event can start. See
+ * `triggered-docs.ts` for why the dispatch pages rather than truncates.
+ */
+const MAX_TRIGGERED_WORKFLOWS = 100
 
 /**
  * One workflow run's row in the site's activity feed, which is the run
@@ -165,12 +173,11 @@ export async function runEventWorkflows(
   try {
     const firestore = firebaseAdmin.app().firestore()
     const hostRef = firestore.collection('hosts').doc(hostId)
-    const triggered = await hostRef
-      .collection('workflows')
-      .where('trigger.event', '==', event)
-      .limit(MAX_TRIGGERED_WORKFLOWS)
-      .get()
-    const workflows = triggered.docs.filter((doc) => !doc.get('deletedAt'))
+    const workflows = await triggeredDocsForEvent(hostRef.collection('workflows'), event, {
+      keep: (doc) => !doc.get('deletedAt'),
+      max: MAX_TRIGGERED_WORKFLOWS,
+      maxReads: MAX_TRIGGERED_WORKFLOWS * 4,
+    })
     if (!workflows.length) return alerts
     // Full workflow map for nested function→workflow calls (AGL-129).
     const allWorkflowDocs = await hostRef
@@ -243,11 +250,31 @@ export async function runEventWorkflows(
       const workflow = doc.data() as AutomationWorkflow
       const filter = workflow.trigger?.filter?.trim()
       if (filter) {
+        /*
+         * A filter no event can ever satisfy — a comparison the evaluator
+         * does not have, text it cannot read — answers "why didn't it run?"
+         * in the run history, on every event it would have run on, rather
+         * than leaving the workflow silent. The editor refuses to save one;
+         * this is the one stored before it did, or written around it.
+         */
+        const unrunnable = triggerFilterProblem(filter, { remedy: 'action' })
+        if (unrunnable) {
+          if (!SKIP_LOG_EXCLUDED_EVENTS.has(event)) {
+            await recordWorkflowRun(hostRef, {
+              action: `Workflow skipped on ${event}`,
+              result: 'skipped',
+              trigger: event,
+              ...runSummaryFields(unrunnable.slice(0, 300)),
+              target: { type: 'workflow', id: doc.id, name: workflow.name ?? '' },
+            })
+          }
+          continue
+        }
         try {
           const scope: HostEventPayload = { event, ...payload }
           if (!evaluateExpression(filter, scope)) continue
         } catch {
-          continue // A broken filter never fires.
+          continue // A field the filter names is not on this event.
         }
       }
       const startedAt = Date.now()

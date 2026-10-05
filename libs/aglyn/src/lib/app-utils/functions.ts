@@ -415,6 +415,75 @@ export function expressionIdentifiers(text: string): string[] {
   return names
 }
 
+/**
+ * Why an expression can never be evaluated, or `null` when it parses
+ * (AGL-3458) — the evaluator's own grammar, walked without a scope.
+ *
+ * Only what the TEXT decides: an unknown character, an unbalanced
+ * parenthesis, a function that is not a built-in, trailing input. A name
+ * the scope may or may not hold is the scope's question and is not asked
+ * here, so `subscribe` parses whatever the event turns out to carry.
+ */
+export function expressionSyntaxError(text: string): string | null {
+  let tokens: Token[]
+  try {
+    tokens = tokenize(String(text ?? ''))
+  } catch (error) {
+    return error instanceof Error ? error.message : 'Unreadable expression'
+  }
+  let position = 0
+  const peek = () => tokens[position]
+  const next = () => tokens[position++]
+  // The same three levels as `evaluateExpression`, building nothing.
+  function factor(): void {
+    const token = next()
+    if (!token) throw new Error('Unexpected end of expression')
+    if (token.kind === 'number' || token.kind === 'string' || token.kind === 'boolean') return
+    if (token.kind === 'ident') {
+      if (peek()?.kind !== 'lparen') return
+      if (!isBuiltin(token.value)) throw new Error(`Unknown function "${token.value}"`)
+      next()
+      if (peek()?.kind !== 'rparen') {
+        expression()
+        while (peek()?.kind === 'comma') {
+          next()
+          expression()
+        }
+      }
+      if (next()?.kind !== 'rparen') throw new Error('Missing closing parenthesis')
+      return
+    }
+    if (token.kind === 'lparen') {
+      expression()
+      if (next()?.kind !== 'rparen') throw new Error('Missing closing parenthesis')
+      return
+    }
+    if (token.kind === 'op' && token.value === '-') return factor()
+    throw new Error('Unexpected token')
+  }
+  function term(): void {
+    factor()
+    while (peek()?.kind === 'op' && ['*', '/'].includes((peek() as any).value)) {
+      next()
+      factor()
+    }
+  }
+  function expression(): void {
+    term()
+    while (peek()?.kind === 'op' && ['+', '-'].includes((peek() as any).value)) {
+      next()
+      term()
+    }
+  }
+  try {
+    expression()
+    if (position < tokens.length) throw new Error('Unexpected trailing input')
+    return null
+  } catch (error) {
+    return error instanceof Error ? error.message : 'Unreadable expression'
+  }
+}
+
 /** Evaluates an expression against the scope. Throws on any invalid input. */
 export function evaluateExpression(
   text: string,

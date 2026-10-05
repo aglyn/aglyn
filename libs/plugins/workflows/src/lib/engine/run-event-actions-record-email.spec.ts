@@ -138,6 +138,10 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     refusal: null,
   }),
   flowEmailRefusal: async () => null,
+  // A reply to the person's own act is transactional (AGL-3458): it asks
+  // only the suppression lists, which hold nobody here.
+  filterSendableForHost: async (_hostId: string, emails: string[]) => emails,
+  hostDisplayName: (_host: unknown, hostId: string) => hostId,
   enrollListMember: async () => undefined,
 }))
 

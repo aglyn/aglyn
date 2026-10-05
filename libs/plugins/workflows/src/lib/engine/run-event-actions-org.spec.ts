@@ -142,6 +142,7 @@ function mockQuery(path: string, filters: MockFilter[], cap?: number): any {
   return {
     where: (field: string, op: string, value: any) =>
       mockQuery(path, [...filters, [field, op, value]], cap),
+    orderBy: () => mockQuery(path, filters, cap),
     limit: (n: number) => mockQuery(path, filters, n),
     get: async () => {
       mockQueried.push(path)
@@ -222,6 +223,11 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   resolveOrgIdForHost: (hostId: string) => mockResolveOrgIdForHost(hostId),
   hostSendingIdentity: (hostId: string) => mockHostSendingIdentity(hostId),
   meterHostEmail: (hostId: string) => mockMeterHostEmail(hostId),
+  // A transactional reply's suppression check (AGL-3458): every address is
+  // sendable here; `run-event-actions-flow.spec.ts` holds the refusal.
+  filterSendableForHost: async (_hostId: string, emails: string[]) => emails,
+  hostDisplayName: (host: Record<string, unknown> | undefined, hostId: string) =>
+    String(host?.['displayName'] ?? '') || hostId,
   flowEmailRefusal: async () => null,
   dataStorageRefusal: async () => null,
   enrollListMember: async () => ({ enrolled: true, created: true }),
@@ -273,6 +279,16 @@ const actionRuns = (hostId: string) =>
 const workspaceActionRuns = () =>
   Number(mockDocs.get(`orgs/${ORG_ID}/counters/actionRuns`)?.[monthKey] ?? 0)
 
+/**
+ * The same welcome, switched to a MAILING by its author (AGL-3458): the cases
+ * about what a marketing send names — its site, its consent group — need one,
+ * since an immediate reply to a form submission is otherwise a transactional
+ * reply and carries no marketing context at all.
+ */
+const AS_A_MAILING = {
+  steps: [{ type: 'sendEmail', subject: 'Welcome', body: 'Thanks for writing', transactional: false }],
+}
+
 /** An org automation as the save route stores one. */
 function seedOrgAutomation(
   id: string,
@@ -312,7 +328,7 @@ describe('an org automation runs on the sites it is placed on', () => {
   })
 
   it('runs AS the event’s site: its sender, its meter, its feed', async () => {
-    seedOrgAutomation('org-auto-1')
+    seedOrgAutomation('org-auto-1', AS_A_MAILING)
 
     await runEventActions(SITE, 'formSubmission', { email: 'a@b.co' })
 
@@ -339,7 +355,7 @@ describe('an org automation runs on the sites it is placed on', () => {
       plan: 'pro',
       consentGroups: { acme: { name: 'Acme', hostIds: [SITE, SIBLING] } },
     }
-    seedOrgAutomation('org-auto-1')
+    seedOrgAutomation('org-auto-1', AS_A_MAILING)
 
     await runEventActions(SITE, 'formSubmission', { email: 'a@b.co' })
 
@@ -347,7 +363,7 @@ describe('an org automation runs on the sites it is placed on', () => {
   })
 
   it('CONTROL: mails as the site alone in an org that declared no group', async () => {
-    seedOrgAutomation('org-auto-1')
+    seedOrgAutomation('org-auto-1', AS_A_MAILING)
 
     await runEventActions(SITE, 'formSubmission', { email: 'a@b.co' })
 

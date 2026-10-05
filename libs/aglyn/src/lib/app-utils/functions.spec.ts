@@ -21,6 +21,7 @@ import {
   evaluateExpression,
   evaluateHostFunction,
   expressionIdentifiers,
+  expressionSyntaxError,
   formatFunctionParameterOptions,
   functionReferencedNames,
   parseFunctionParameterOptions,
@@ -414,3 +415,30 @@ describe('the operation bound (AGL-3202)', () => {
   })
 })
 
+describe('expressionSyntaxError (AGL-3458)', () => {
+  it('answers null for anything the evaluator can parse, whatever the scope holds', () => {
+    for (const text of ['a', 'a + 1', '-(b * 2)', 'round(a, 2)', 'max(a, min(b, c))', '"x"', 'plan.annual']) {
+      expect(expressionSyntaxError(text)).toBeNull()
+    }
+  })
+
+  it('names what the evaluator would throw on, before any event does', () => {
+    expect(expressionSyntaxError('a == "b"')).toBe('Unexpected character "="')
+    expect(expressionSyntaxError('(a')).toBe('Missing closing parenthesis')
+    expect(expressionSyntaxError('nope(a)')).toBe('Unknown function "nope"')
+    expect(expressionSyntaxError('a b')).toBe('Unexpected trailing input')
+    expect(expressionSyntaxError('')).toBe('Unexpected end of expression')
+  })
+
+  it('agrees with the evaluator: what it accepts evaluates, what it refuses throws', () => {
+    const scope = { a: 1, b: 2, c: 3 }
+    for (const text of ['a + b', 'max(a, b)', '-(c)']) {
+      expect(expressionSyntaxError(text)).toBeNull()
+      expect(() => evaluateExpression(text, scope)).not.toThrow()
+    }
+    for (const text of ['a == b', '(a', 'a b']) {
+      expect(expressionSyntaxError(text)).not.toBeNull()
+      expect(() => evaluateExpression(text, scope)).toThrow()
+    }
+  })
+})
