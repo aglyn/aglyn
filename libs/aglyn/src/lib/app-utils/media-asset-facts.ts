@@ -87,7 +87,12 @@
 import { CANVAS_ROOT_ELEMENT_ID } from '../foundation/constants/canvas'
 import { mediaCdnScopeRefusal, parseMediaCdnScope } from './media-cdn-scope'
 import { intrinsicMediaSize, videoMediaProps } from './media-metadata'
-import { hostQualifiedScope, type MediaRef, parseMediaRef } from './media-ref'
+import {
+  hostQualifiedScope,
+  mediaCdnVersionToken,
+  type MediaRef,
+  parseMediaRef,
+} from './media-ref'
 import { VIDEO_COMPONENT_ID } from './video-object'
 
 /** The Image element's persisted component id (`image.tsx`), never renamed. */
@@ -135,6 +140,12 @@ export interface MediaAssetFacts {
   video?: unknown
   /** The document's generated `poster` record, when it has one. */
   poster?: unknown
+  /**
+   * The document's `contentHash`, which a replace changes with the bytes. An
+   * image placement carries it as `mediaVersion`, and the URL it renders is
+   * then the versioned one the CDN lets every cache keep (AGL-3485).
+   */
+  contentHash?: unknown
 }
 
 /**
@@ -149,6 +160,7 @@ export const MEDIA_ASSET_FACT_FIELDS = [
   'height',
   'video',
   'poster',
+  'contentHash',
   'deletedAt',
   'private',
   'visibleTo',
@@ -237,6 +249,7 @@ export function mediaAssetFactsFromDocument(
     height: document.height,
     video: document.video,
     poster: document.poster,
+    contentHash: document.contentHash,
   }
 }
 
@@ -461,20 +474,41 @@ function withImageFacts(
     assetWidth: facts.width,
     assetHeight: facts.height,
   })
-  if (live.intrinsicWidth === undefined || live.intrinsicHeight === undefined) {
-    return props
-  }
-  if (
-    props['intrinsicWidth'] === live.intrinsicWidth &&
-    props['intrinsicHeight'] === live.intrinsicHeight
-  ) {
-    return props
-  }
+  const version = mediaVersionOf(facts)
+  const pair =
+    live.intrinsicWidth !== undefined && live.intrinsicHeight !== undefined
+  const pairChanged =
+    pair &&
+    (props['intrinsicWidth'] !== live.intrinsicWidth ||
+      props['intrinsicHeight'] !== live.intrinsicHeight)
+  const versionChanged =
+    version !== undefined && props[IMAGE_MEDIA_VERSION_PROP] !== version
+  if (!pairChanged && !versionChanged) return props
   return {
     ...props,
-    intrinsicWidth: live.intrinsicWidth,
-    intrinsicHeight: live.intrinsicHeight,
+    ...(pairChanged
+      ? {
+          intrinsicWidth: live.intrinsicWidth,
+          intrinsicHeight: live.intrinsicHeight,
+        }
+      : {}),
+    ...(versionChanged ? { [IMAGE_MEDIA_VERSION_PROP]: version } : {}),
   }
+}
+
+/**
+ * The prop an Image placement carries its asset's current content hash in
+ * (AGL-3485). Laid on at composition like the pixel pair and never an author
+ * control: it describes the file, and `image.tsx` hands it to
+ * `resolveMediaSrc` so the page names the versioned URL.
+ */
+export const IMAGE_MEDIA_VERSION_PROP = 'mediaVersion'
+
+/** The document's content hash, when it is one a URL can carry. */
+function mediaVersionOf(facts: MediaAssetFacts): string | undefined {
+  return mediaCdnVersionToken(facts.contentHash) === undefined
+    ? undefined
+    : (facts.contentHash as string)
 }
 
 /**
@@ -492,6 +526,8 @@ export const BODY_IMAGE_SIZES_PROP = 'intrinsicSizes'
 export interface BodyImageSize {
   width: number
   height: number
+  /** The asset's content hash, for the versioned URL (AGL-3485). */
+  version?: string
 }
 
 /**
@@ -531,9 +567,11 @@ function withBodyImageFacts(
       continue
     }
     if (!sizes) sizes = {}
+    const version = mediaVersionOf(found)
     sizes[target] = {
       width: live.intrinsicWidth,
       height: live.intrinsicHeight,
+      ...(version ? { version } : {}),
     }
   }
   if (!sizes) return props

@@ -30,13 +30,18 @@ import {
   MEDIA_CDN_RENDITION_AUTO,
   MEDIA_CDN_RENDITION_PARAM,
   MEDIA_CDN_ROUTE,
+  MEDIA_CDN_VERSION_PARAM,
   MEDIA_POSTER_OBJECT_SUFFIX,
+  MEDIA_VARIANT_ENCODER_VERSION,
+  MEDIA_VARIANT_ENCODER_VERSION_FIELD,
+  type MediaCdnVersion,
   isSecurityClassLockdownReason,
   mediaPosterObjectPath,
   mediaRenditionObjectPath,
   type MediaVideoRendition,
   normalizeHostLockdown,
   normalizeOrgLockdown,
+  parseMediaCdnVersionToken,
   parseMediaRenditions,
 } from '@aglyn/aglyn/server'
 // By path, and out of every barrel: see the module note in `media-cdn-scope`.
@@ -186,6 +191,81 @@ export const MEDIA_CDN_STABLE_CACHE_CONTROL =
  */
 export const MEDIA_CDN_STABLE_EDGE_BYPASS_CACHE_CONTROL =
   'private, max-age=60'
+
+/**
+ * The VERSIONED stable URL's policy (AGL-3485): `?v={contentHash}.{encoder}`
+ * on the stable path, answered while the token names the asset's current
+ * bytes and current variants.
+ *
+ * The browser keeps it for a year, `immutable`, which is the whole point: the
+ * 60-second window above made every repeat view of every published image a
+ * conditional request, and Lighthouse reports that policy against each one.
+ * It is safe for the reason the content-hashed form never was in a page
+ * (AGL-2798): the page names this URL only while the token is current, the
+ * composition reads the token off the media document on every render, and a
+ * replace or a regeneration therefore moves the page to a new URL instead of
+ * leaving it on a pinned copy of the old bytes.
+ *
+ * The EDGE keeps the stable URL's hour and its revalidation, deliberately not
+ * a year: the edge is the copy a takedown or a lockdown has to outrun for
+ * every new visitor (`media-takedown-reach.ts`), and an hour is the bound the
+ * product states for it. Other visitors still get the edge's copy within that
+ * hour, which is what `s-maxage` is for. Images only — every other type keeps
+ * the stable policy, for the AGL-1515 reasons above.
+ */
+export const MEDIA_CDN_VERSIONED_CACHE_CONTROL =
+  'public, max-age=31536000, s-maxage=3600, stale-while-revalidate=86400, immutable'
+
+/**
+ * Whether a versioned request may be answered with
+ * {@link MEDIA_CDN_VERSIONED_CACHE_CONTROL} (AGL-3485).
+ *
+ * Only when everything the token promises is true of what is being served:
+ *
+ * - the token's content hash is the document's CURRENT one. A stale token is
+ *   served the current bytes under the stable URL's short policy — a stale
+ *   page shows the new picture, and nothing pins it;
+ * - the representation is the original or a `?w=` variant. A poster or a
+ *   rendition keeps its own policy;
+ * - for a `?w=` request, the variant itself is what is served. A width the
+ *   asset has no variant for falls back to another representation, and a
+ *   fallback is not something to keep for a year: the variant may be
+ *   generated later;
+ * - and the asset's delivery copies were made by the encoder generation the
+ *   token names, which is the one this code runs. The media document records
+ *   which generation made them (`MEDIA_VARIANT_ENCODER_VERSION_FIELD`, absent
+ *   meaning the first). A page rendered after the encoder moved on names the
+ *   new generation before the asset has been regenerated; answering that
+ *   request with the old encode for a year would hide the regeneration behind
+ *   the very URL that was minted to reach it. Asked of every request, not
+ *   only `?w=`, because the encoder makes what the bare URL serves too.
+ */
+export function mediaCdnVersionIsCurrent(options: {
+  token: MediaCdnVersion | null
+  currentHash: string
+  /** A `?w=` was asked for. */
+  widthRequested: boolean
+  /** The `?w=` variant itself is what will be served. */
+  variantServed: boolean
+  /** A poster or a rendition was selected instead of the image. */
+  otherRepresentation: boolean
+  /** The document's {@link MEDIA_VARIANT_ENCODER_VERSION_FIELD}. */
+  documentEncoderVersion: unknown
+}): boolean {
+  const { token, currentHash } = options
+  if (!token || !currentHash || token.contentHash !== currentHash) return false
+  if (options.otherRepresentation) return false
+  if (options.widthRequested && !options.variantServed) return false
+  const recorded = options.documentEncoderVersion
+  const generation =
+    typeof recorded === 'number' && Number.isInteger(recorded) && recorded > 0
+      ? recorded
+      : 1
+  return (
+    token.encoderVersion === MEDIA_VARIANT_ENCODER_VERSION &&
+    generation === token.encoderVersion
+  )
+}
 
 /** The immutable content-hashed URL's policy for edge-cacheable (image) types. */
 export const MEDIA_CDN_IMMUTABLE_CACHE_CONTROL =
@@ -412,7 +492,8 @@ export function lockdownStopsMediaDelivery(
  * **Staleness bound, stated rather than hidden:** a warm origin refuses
  * within ≤15s of the org-doc write (the platform panic number). What the
  * origin cannot reach: browsers hold the stable URL up to 60s
- * (`max-age=60`); Vercel's edge holds image responses up to `s-maxage=3600`
+ * (`max-age=60`), and a versioned image URL a published page names for a
+ * year in a browser that already fetched it (AGL-3485); Vercel's edge holds image responses up to `s-maxage=3600`
  * (+ one stale serve while revalidating) — so an already-edge-cached image
  * URL can serve up to ~1h into a lock; non-image types are `private`
  * (AGL-1515) and never edge-held. The immutable content-hashed form is
@@ -1394,9 +1475,28 @@ export async function serveMediaCdn(
     // type (a variant serve is always `image/webp`) because the 304 exit
     // below runs before the Storage metadata read; re-derived from the
     // authoritative served type once metadata is in hand.
+    //
+    // A VERSIONED request (AGL-3485) whose token is current is the one image
+    // response a browser may keep for a year; see
+    // `MEDIA_CDN_VERSIONED_CACHE_CONTROL`. The hashed path form keeps its own
+    // policy below, so a `?v=` on it is inert.
+    const versionCurrent =
+      !hashed &&
+      mediaCdnVersionIsCurrent({
+        token: parseMediaCdnVersionToken(req.query[MEDIA_CDN_VERSION_PARAM]),
+        currentHash,
+        widthRequested: Boolean(width),
+        variantServed: useVariant,
+        otherRepresentation: usePoster || Boolean(rendition),
+        documentEncoderVersion: snapshot.get(
+          MEDIA_VARIANT_ENCODER_VERSION_FIELD,
+        ),
+      })
     const stableCacheControlFor = (type: unknown) =>
       mediaCdnEdgeCacheable(type)
-        ? MEDIA_CDN_STABLE_CACHE_CONTROL
+        ? versionCurrent
+          ? MEDIA_CDN_VERSIONED_CACHE_CONTROL
+          : MEDIA_CDN_STABLE_CACHE_CONTROL
         : MEDIA_CDN_STABLE_EDGE_BYPASS_CACHE_CONTROL
     // A poster is `image/webp` and therefore edge-cacheable through the rule
     // that already exists — which is the whole delivery argument for it

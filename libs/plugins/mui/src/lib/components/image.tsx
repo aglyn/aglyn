@@ -19,10 +19,12 @@ import * as Aglyn from '@aglyn/aglyn'
 import { mdiImage } from '@aglyn/shared-data-mdi'
 import { AppLink } from '@aglyn/shared-ui-jsx'
 import Box from '@mui/material/Box'
-import type { SxProps } from '@mui/material/styles'
-import { forwardRef, type ReactNode } from 'react'
+import { type SxProps, type Theme, useTheme } from '@mui/material/styles'
+import useForkRef from '@mui/utils/useForkRef'
+import { forwardRef, type ReactNode, useEffect, useState } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { generatePresetId } from '../utils/generate-preset-id'
+import { imageSizes, layoutBandWidths } from '../utils/image-sizes'
 
 // Component ids are persisted in screen documents; never rename.
 export const ID: Aglyn.ComponentId = 'image'
@@ -58,10 +60,10 @@ export const ID: Aglyn.ComponentId = 'image'
  * screen image. In the besigner canvas nothing is layout-composed, so the
  * screen's first image is the only lead, exactly as before.
  *
- * Neither lead gets `fetchpriority="high"`, and the reasoning is at the
- * `fetchPriority` prop below. Short version: "first image of its origin" is
- * still not "the LCP element", and a ranking claim needs evidence this
- * function does not have.
+ * Only the SCREEN's lead can get `fetchpriority="high"` and a preload, and
+ * only when nothing says it renders small (AGL-3485); the reasoning is at the
+ * `fetchPriority` prop below. The layout's lead is the header logo on any
+ * site that has one, which is why "first image" alone was never evidence.
  *
  * Resolved from the tree rather than a render-order counter on purpose: the
  * renderer walks the tree in document order on the server AND on hydrate, but
@@ -108,6 +110,73 @@ export function leadImageNodeIds(
   return [layoutLead, screenLead].filter((id): id is string => Boolean(id))
 }
 
+/**
+ * The breakpoint band the theme says is in effect. Asked of the THEME, not of
+ * the window: the Besigner canvas pins its theme's breakpoint helpers to the
+ * previewed device (`createDevicePinnedTheme`), so on a pinned device this is
+ * the device's band, and in Fluid Responsive it is the window's — which is
+ * the band the canvas's own layout is answering to either way.
+ */
+function themeBand(theme: Theme): Aglyn.RenderedWidthBand {
+  if (typeof window === 'undefined' || !window.matchMedia) return 'xs'
+  for (const band of [...Aglyn.RENDERED_WIDTH_BANDS].reverse()) {
+    if (band === 'xs') break
+    const query = theme.breakpoints.up(band).replace(/^@media\s*/, '')
+    if (window.matchMedia(query).matches) return band
+  }
+  return 'xs'
+}
+
+/**
+ * The width of the page an element is laid out in. On the canvas that is the
+ * shadow host the page renders into — narrower than the window, and the width
+ * a share of "the viewport" has to be taken of.
+ */
+function pageWidthOf(element: HTMLElement): number {
+  const root = element.getRootNode()
+  const host =
+    typeof ShadowRoot !== 'undefined' && root instanceof ShadowRoot
+      ? (root.host as HTMLElement)
+      : document.documentElement
+  return host.clientWidth
+}
+
+/**
+ * Records how wide this image renders on the Besigner canvas, per band, for
+ * the save to write onto the node (AGL-3485, `rendered-widths.ts`). Inert
+ * everywhere but the canvas. A `ResizeObserver` on the image and on the page
+ * re-records as the author changes the layout, resizes the window or switches
+ * device — a device switch also rebuilds the pinned theme, which re-runs this.
+ */
+function useRenderedWidthRecorder(
+  nodeId: string,
+  enabled: boolean,
+): (element: HTMLElement | null) => void {
+  const theme = useTheme()
+  const [element, setElement] = useState<HTMLElement | null>(null)
+  useEffect(() => {
+    if (!enabled || !element || !nodeId) return undefined
+    if (typeof ResizeObserver === 'undefined') return undefined
+    const measure = () => {
+      const percent = Aglyn.renderedWidthPercent(
+        element.getBoundingClientRect().width,
+        pageWidthOf(element),
+      )
+      if (percent !== undefined) {
+        Aglyn.recordRenderedWidth(nodeId, themeBand(theme), percent)
+      }
+    }
+    const observer = new ResizeObserver(measure)
+    observer.observe(element)
+    const root = element.getRootNode()
+    if (typeof ShadowRoot !== 'undefined' && root instanceof ShadowRoot) {
+      observer.observe(root.host)
+    }
+    return () => observer.disconnect()
+  }, [enabled, element, nodeId, theme])
+  return setElement
+}
+
 export interface ImageProps {
   /**
    * Where the image comes from (AGL-72). Either a **media reference** —
@@ -133,6 +202,25 @@ export interface ImageProps {
   width?: string
   /** CSS height (e.g. "240px"); defaults to auto. */
   height?: string
+  /**
+   * The author's own `sizes` attribute, used exactly as typed (AGL-3485).
+   * Empty — the normal case — lets the element work it out: see
+   * `utils/image-sizes.ts`.
+   */
+  sizes?: string
+  /**
+   * How wide the image rendered on the Besigner canvas, per breakpoint band,
+   * as a share of the page: written by the editor's save, never by an author
+   * (AGL-3485, `rendered-widths.ts`).
+   */
+  renderedWidths?: Aglyn.RenderedWidths
+  /**
+   * The asset's current content hash, laid on by the composition from its
+   * media document like the pixel pair below (AGL-3485). It makes the URL the
+   * VERSIONED one, which every cache may keep for a year; a replace changes
+   * it, and so the URL.
+   */
+  mediaVersion?: string
   /**
    * The asset's own pixel dimensions, copied off the media document when the
    * image was picked (AGL-2486), and read from the asset again when the page
@@ -197,6 +285,9 @@ const Image = forwardRef<HTMLElement, ImageProps>((props, ref) => {
     objectFit,
     width,
     height,
+    sizes: authoredSizes,
+    renderedWidths,
+    mediaVersion,
     intrinsicWidth,
     intrinsicHeight,
     radius,
@@ -238,12 +329,18 @@ const Image = forwardRef<HTMLElement, ImageProps>((props, ref) => {
    * same leaf spelled two ways (the markdown block resolves the same way).
    */
   const nodeId = Aglyn.useNodeId()
-  const isLeadImage =
-    Boolean(nodeId) &&
-    leadImageNodeIds(Aglyn.canvas.rootNode).some((leadId) =>
-      Aglyn.leafIdsMatch(leadId, nodeId),
-    )
+  const leadIds = nodeId ? leadImageNodeIds(Aglyn.canvas.rootNode) : []
+  const isLeadImage = leadIds.some((leadId) =>
+    Aglyn.leafIdsMatch(leadId, nodeId),
+  )
+  const screenLeadId = leadIds.find((id) => !Aglyn.isLayoutComposedNodeId(id))
+  const isScreenLead =
+    screenLeadId !== undefined && Aglyn.leafIdsMatch(screenLeadId, nodeId)
   const eager = loading === 'eager' || (loading == null && isLeadImage)
+  // The canvas measures; nothing else does (AGL-3485).
+  const { editorInert } = Aglyn.useScreenLink(undefined)
+  const recordRef = useRenderedWidthRecorder(nodeId, Boolean(editorInert))
+  const imageRef = useForkRef(ref, recordRef)
   /**
    * Resolve the stored value to a URL (AGL-1215). A media reference becomes
    * a CDN URL here rather than in the document, so the route shape stays an
@@ -256,7 +353,12 @@ const Image = forwardRef<HTMLElement, ImageProps>((props, ref) => {
    * layout or reusable component resolve on each site that uses it.
    */
   const { hostId } = Aglyn.useSite()
-  const src = Aglyn.resolveMediaSrc(storedSrc, { hostId })
+  // With the asset's version when the composition read one (AGL-3485): the
+  // versioned URL is the one every cache may keep, and a replace moves it.
+  const src = Aglyn.resolveMediaSrc(storedSrc, {
+    hostId,
+    version: mediaVersion,
+  })
   const wrapLink = (element: JSX.Element) =>
     linkHref && !suppressNavigation ? (
       <AppLink
@@ -275,7 +377,7 @@ const Image = forwardRef<HTMLElement, ImageProps>((props, ref) => {
     if (!suppressNavigation) return <Box ref={ref} {...rest} sx={nodeSx} />
     return (
       <Box
-        ref={ref}
+        ref={imageRef}
         {...rest}
         sx={[
           {
@@ -301,12 +403,38 @@ const Image = forwardRef<HTMLElement, ImageProps>((props, ref) => {
   // CDN URLs (AGL-175) carry WebP variants selected by `?w=`; widths
   // without a variant fall back to the original server-side, so a static
   // srcSet is safe for any CDN-form URL. Asked of the RESOLVED url, so a
-  // reference and a legacy stored path both keep their WebP variants.
-  const isCdnUrl = Aglyn.isMediaCdnUrl(src)
-  /** A CSS width that is a plain pixel value, and therefore a real `sizes`. */
-  const pinnedWidth = /^\d+(?:\.\d+)?px$/.test(String(width ?? '').trim())
-    ? String(width).trim()
-    : undefined
+  // reference and a legacy stored path both keep their WebP variants. Any
+  // other url has no candidates, and so no `sizes` either.
+  const srcSet = Aglyn.mediaCdnSrcSet(src)
+  /**
+   * How wide the image will render, for `sizes` (AGL-3485): the author's own
+   * value, a pixel width, a pixel height at a known shape, or per breakpoint
+   * what the Besigner measured and what the layout states. See
+   * `utils/image-sizes.ts` for the order and for why none of it disturbs
+   * layout the way `sizes="auto"` did (AGL-2486).
+   *
+   * The layout is read off the canvas tree this image is rendered from, which
+   * the tenant fills on the server too, so the published HTML carries it.
+   */
+  const resolvedSizes = imageSizes({
+    sizes: authoredSizes,
+    width,
+    height,
+    intrinsicWidth,
+    intrinsicHeight,
+    renderedWidths,
+    layoutWidths: nodeId
+      ? layoutBandWidths(Aglyn.canvas.getNode(nodeId) as never)
+      : undefined,
+  })
+  /**
+   * The page's hero: the SCREEN's lead image, loading eagerly, that nothing
+   * says renders small. It gets `fetchpriority="high"`, which its preload
+   * carries too (AGL-3485) — see `fetchPriority`. Only on a published page:
+   * an editing surface has no first paint to win.
+   */
+  const hero =
+    isScreenLead && eager && !resolvedSizes.small && !suppressNavigation
   /**
    * The intrinsic attribute pair, or nothing.
    *
@@ -323,9 +451,10 @@ const Image = forwardRef<HTMLElement, ImageProps>((props, ref) => {
     usable(intrinsicWidth) && usable(intrinsicHeight)
       ? { width: intrinsicWidth, height: intrinsicHeight }
       : undefined
+  const sizes = srcSet ? resolvedSizes.sizes : undefined
   return wrapLink(
     <Box
-      ref={ref}
+      ref={imageRef}
       component="img"
       src={src}
       // EVERY CANDIDATE IS A `?w=` URL, and the bare one is gone (2026-08-26).
@@ -338,7 +467,7 @@ const Image = forwardRef<HTMLElement, ImageProps>((props, ref) => {
       // can ask for the same list (AGL-3149). Building it here is the reason
       // they had none: a candidate list inside a component is a candidate list
       // no other component can have.
-      srcSet={Aglyn.mediaCdnSrcSet(src)}
+      srcSet={srcSet}
       // `sizes` is NOT only a delivery hint, and treating it as one broke every
       // fluid image (AGL-2486). With `w` descriptors the browser derives the
       // image's density-corrected INTRINSIC size from `sizes`, so `sizes` is
@@ -357,15 +486,15 @@ const Image = forwardRef<HTMLElement, ImageProps>((props, ref) => {
       // original in a 158px slot — rendered those images tiny and centred in
       // their box, on the canvas, in _preview and on published sites alike.
       //
-      // A delivery win may not be paid for in layout, so this is back to
-      // `100vw`: it overfetches, but it is the value every published document
-      // was authored against. A pinned pixel width is still the better answer
-      // where the author gave one, because it is a definite length and cannot
-      // be circular. Getting image delivery right for fluid images needs the
-      // media pipeline (a WebP variant at source width) or real intrinsic
-      // `width`/`height` attributes from media metadata — neither of which
-      // perturbs layout the way `sizes` does.
-      sizes={isCdnUrl ? (pinnedWidth ?? '100vw') : undefined}
+      // A delivery win may not be paid for in layout, which is why every
+      // answer `imageSizes` gives is a real width of the slot (AGL-3485): the
+      // author's own value, a definite pixel length, a span of a parent of
+      // definite width, or the width the Besigner MEASURED this image at —
+      // a fixed point, since an image whose intrinsic width is its measured
+      // width lays out at its measured width. `100vw`, the value every
+      // published document was authored against, is now only the last resort
+      // for a band nothing describes.
+      sizes={sizes}
       // Unset alt keeps rendering `alt=""` exactly as it always has —
       // existing documents must not change output (AGL-1305). Decorative
       // ON forces `alt=""` over any alt text and suppresses the tooltip,
@@ -379,41 +508,32 @@ const Image = forwardRef<HTMLElement, ImageProps>((props, ref) => {
       // other half is not: deprioritising an image that is provably not being
       // looked at cannot starve whatever the LCP turns out to be.
       //
-      // The lead image gets NO `fetchpriority` — the browser's `auto` — where
-      // it used to get `high`. `high` is not a statement about this image, it
-      // is a claim that this image outranks everything else in flight,
-      // including the stylesheet and the webfont that a TEXT LCP is waiting
-      // on. We are not in a position to make that claim: the only evidence
-      // behind it was "first `<img>` in document order", and document order's
-      // first image is the HEADER LOGO on any site whose header has one.
+      // `high` is a claim that this image outranks everything else in flight,
+      // including the stylesheet and the webfont a TEXT LCP is waiting on, and
+      // it went wrong once (AGL-2486): spent on "the first `<img>` in document
+      // order", which is the HEADER LOGO on any site whose header has one.
+      // Measured on aglyn.com at 375x812, the logo carrying it was 145x44 =
+      // 6,380 px² against an `<h1>` of 38,893 px² that Lighthouse named as the
+      // LCP — the hint made the real LCP arrive later.
       //
-      // Measured on aglyn.com at a 375x812 viewport, which is what sent this
-      // back: the element carrying `fetchpriority="high"` was the logo at
-      // 145x44 = 6,380 px², while the `<h1>` under it was 343x113 =
-      // 38,893 px² — six times the area, and the element Lighthouse named as
-      // the LCP. So the hint was being spent to make a text LCP arrive later.
+      // So it goes only to the page's HERO (AGL-3485), on two pieces of
+      // evidence that did not exist then:
       //
-      // `auto` is not a retreat to the old behaviour. The old bug was that
-      // everything was `lazy`, so the lead image was not discovered until
-      // after layout; it still gets `loading="eager"` above, which is the
-      // discovery fix and the part that actually earned the win. What goes is
-      // only the RANKING claim, back to Chrome's own in-viewport heuristic —
-      // which decides after layout, with the viewport and the geometry this
-      // function provably does not have.
+      // - it is the SCREEN's lead image. The layout's lead — the logo — never
+      //   qualifies, because composition says which origin each node has;
+      // - nothing says it renders small. A pixel width of 240 or less, or under
+      //   40% of the page in every band the Besigner measured or the layout
+      //   states, marks a logo or an icon, and those keep the browser's `auto`.
       //
-      // Deliberately not replaced with a size heuristic: nothing here knows
-      // the rendered size. `width`/`height` are optional author CSS strings,
-      // routinely `100%`, and a logo constrained by its container measures
-      // small while declaring nothing. A guess that fails the same way is not
-      // an improvement on a guess.
+      // The preload is React's own: a server render emits
+      // `<link rel="preload" as="image">` in the head for every image that is
+      // not lazy, carrying its `srcset`, its `sizes` and this `fetchpriority`
+      // — so the hero's request starts with the head, for the same bytes the
+      // `<img>` will ask for, and nothing here restates it.
       //
-      // An author who genuinely has an image LCP should be able to SAY so —
-      // but not through this control. The `loading` field is labelled
-      // "Loading" and described in terms of lazy versus eager; an author
-      // picking Eager for the top image is not asserting a priority ranking,
-      // and reading one out of that choice is how the logo got `high` in the
-      // first place. A real priority affordance needs its own control and its
-      // own words. After September 1.
+      // Every other lead image — the layout's, or a small one — keeps
+      // `loading="eager"` (the discovery fix that earned AGL-2486's win) and
+      // the browser's own in-viewport ranking.
       // Decoding off the main thread for the deferred ones — they have no
       // paint deadline, and decoding them synchronously is main-thread time
       // spent on pixels nobody is looking at yet. The eager image keeps the
@@ -427,7 +547,10 @@ const Image = forwardRef<HTMLElement, ImageProps>((props, ref) => {
       // is documented at its definition; the reasoning for each member is
       // the two paragraphs above and the two below.
       {...(eager
-        ? { loading: 'eager' as const }
+        ? {
+            loading: 'eager' as const,
+            ...(hero ? { fetchPriority: 'high' as const } : {}),
+          }
         : Aglyn.DEFERRED_IMAGE_ATTRIBUTES)}
       // Ahead of `{...rest}` so an author who has typed a literal width or
       // height attribute onto the node still wins, and ahead of `sx` because
@@ -544,6 +667,20 @@ export const schema: Aglyn.ComponentSchema<ImageProps> = {
       description: 'Height of the image. Leave empty for auto.',
       component: Aglyn.FieldComponentType.CSS_DIMENSION,
       label: 'Height',
+    },
+    {
+      // AGL-3485. Empty is the answer for nearly everyone: the image works
+      // out how big it renders from where it sits on the page, measured as
+      // the page is built. This is the override for someone who knows the
+      // HTML attribute and wants to say it themselves.
+      name: 'sizes',
+      description:
+        'Leave empty — Aglyn works out how big the image shows on every ' +
+        'screen size from where you place it, and downloads a file that ' +
+        'size. Advanced: an HTML sizes value used exactly as typed, e.g. ' +
+        '(min-width: 900px) 33vw, 100vw.',
+      component: Aglyn.FieldComponentType.TEXT_FIELD,
+      label: 'Sizes',
     },
     {
       name: 'loading',

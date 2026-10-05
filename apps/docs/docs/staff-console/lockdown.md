@@ -782,7 +782,7 @@ apart. In full:
 | The raw Storage download link | yes, **immediately** | the object's token is rotated; **permanent**, see below |
 | A browser holding the ordinary URL | yes | 60 s (`max-age=60`) |
 | The CDN edge, for an **image** | yes | ~1 h (`s-maxage=3600`) plus one stale serve. Video, PDFs and other types are `private` since AGL-1515 and are never edge-held |
-| A browser holding the content-hashed permanent URL | **no** | that form promises never to change, so nothing can expire it early, and there is no per-file purge |
+| A browser holding an image as a published page names it (the versioned `?v=` URL, AGL-3485), or the content-hashed permanent URL | **no** | both forms promise never to change, so nothing can expire them early, and there is no per-file purge. The edge still drops the versioned form within the hour above |
 | Anything already downloaded | **no** | a browser cache, a corporate proxy, a downstream CDN, a scraper, an archive snapshot |
 
 **A takedown stops new delivery. It is not a recall.** Say that to a

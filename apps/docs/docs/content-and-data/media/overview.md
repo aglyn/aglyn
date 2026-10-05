@@ -686,6 +686,20 @@ the drawer's [delivery line](#delivery-line) to see which widths a given file ha
 parameters are read after every access check, so neither widens what is served, and both
 are part of the cache key, so they cannot bleed into each other.
 
+### How long a media URL is cached {#media-cache}
+
+The ordinary URL — the one **Copy URL** gives you — is revalidated: a browser keeps it for
+60 seconds and the CDN edge for an hour, so a **Replace** reaches every copy of it
+within that time.
+
+A published page asks for its images by a **versioned** URL instead, the same address
+with `?v=` and a version that changes whenever the file is replaced (or its smaller
+widths are regenerated). While the version is the current one, the response may be kept
+for a year by the visitor's browser, so a returning visitor loads the page's images
+from their own disk. The page names the new version the next time it is built after a
+replace; an old version still in someone's copy of the page is answered with the
+current file under the ordinary 60-second rule, never with a year of the old one.
+
 ### Tag limits {#tag-limits}
 
 Tags are stored lower-cased and de-duplicated. A tag longer than **40 characters** is

@@ -295,6 +295,7 @@ export * from './sanitize-svg'
 export * from './media-folders'
 export * from './media-metadata'
 export * from './media-ref'
+export * from './rendered-widths'
 // After `media-ref`, whose reference grammar it reads stored URLs with.
 export * from './paid-media-source'
 export * from './author-css'

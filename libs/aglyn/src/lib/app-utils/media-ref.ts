@@ -153,6 +153,82 @@ export const MEDIA_CDN_VARIANT_WIDTHS = [320, 640, 1280, 1920] as const
 export const MEDIA_CDN_POSTER_WIDTH = 1280
 
 /**
+ * The generation of the WebP encoder that produced an asset's `?w=` variants.
+ *
+ * Owned by the variant pipeline: a change to the encoder (its quality, its
+ * ladder) bumps this, and the regeneration of existing variants records the
+ * generation it wrote on the media document under
+ * {@link MEDIA_VARIANT_ENCODER_VERSION_FIELD}. It is half of the versioned
+ * URL a page names (see {@link mediaCdnVersionToken}), so regenerated variants
+ * are fetched under a new URL instead of hiding behind a year-long copy of
+ * the old encode.
+ */
+export const MEDIA_VARIANT_ENCODER_VERSION = 1
+
+/**
+ * The media document field that records which encoder generation its current
+ * `?w=` variants were made by. Absent means the first generation: every
+ * variant made before the field existed.
+ */
+export const MEDIA_VARIANT_ENCODER_VERSION_FIELD = 'variantEncoderVersion'
+
+/**
+ * The query parameter that makes a CDN URL a VERSIONED one (AGL-3485).
+ *
+ * A page that knows the bytes it is naming asks for them as
+ * `/api/media/cdn/{scope}/{mediaId}?v={contentHash}.{encoder}`, and the CDN
+ * answers that request with a year-long `immutable` policy while the token
+ * still names the current bytes and the current variants. A replace changes
+ * the content hash, a variant regeneration changes the encoder generation,
+ * and either one changes the URL the next composition of the page renders.
+ *
+ * It is a parameter on the stable path rather than the content-hashed third
+ * segment, for the reason the module note gives about that segment: the
+ * request still reaches the same handler, and a token that no longer names
+ * the current bytes is served the CURRENT bytes under the stable URL's short
+ * policy rather than anything pinned. A stale page therefore shows the new
+ * picture, never a year of the old one; only a request whose token matches
+ * the document is ever told to keep its copy.
+ */
+export const MEDIA_CDN_VERSION_PARAM = 'v'
+
+/** What a versioned URL's token says about the bytes it names. */
+export interface MediaCdnVersion {
+  contentHash: string
+  encoderVersion: number
+}
+
+/**
+ * The `?v=` token for an asset whose current content hash is `contentHash`,
+ * or `undefined` when there is no usable hash to name: an asset with no
+ * recorded hash renders the unversioned URL, exactly as before.
+ */
+export function mediaCdnVersionToken(
+  contentHash: unknown,
+): string | undefined {
+  if (typeof contentHash !== 'string' || !SEGMENT.test(contentHash)) {
+    return undefined
+  }
+  return `${contentHash}.${MEDIA_VARIANT_ENCODER_VERSION}`
+}
+
+/** Reads a `?v=` token apart; null for anything that is not one. */
+export function parseMediaCdnVersionToken(
+  value: unknown,
+): MediaCdnVersion | null {
+  const raw = Array.isArray(value) ? value[0] : value
+  if (typeof raw !== 'string') return null
+  const dot = raw.lastIndexOf('.')
+  if (dot <= 0) return null
+  const contentHash = raw.slice(0, dot)
+  const encoder = raw.slice(dot + 1)
+  if (!SEGMENT.test(contentHash) || !/^[1-9]\d{0,5}$/.test(encoder)) {
+    return null
+  }
+  return { contentHash, encoderVersion: Number(encoder) }
+}
+
+/**
  * Scheme of a stored media reference. Chosen so `startsWith` is a decision:
  * no URL, path, or `{{binding}}` an author can type begins with it, and it
  * is not a registered URL scheme, so a browser handed one by mistake fails
@@ -326,6 +402,14 @@ export interface ResolveMediaSrcOptions {
    * scope (see {@link mediaNodeSrc}).
    */
   hostId?: string | null
+  /**
+   * The asset's current content hash, when the caller has read it off the
+   * media document (AGL-3485) — the composition's asset facts lay it on an
+   * Image node as `mediaVersion`. A reference then resolves to the VERSIONED
+   * URL ({@link MEDIA_CDN_VERSION_PARAM}), which the CDN lets every cache keep
+   * for a year. Absent, or not a hash, resolves the stable URL as before.
+   */
+  version?: string | null
 }
 
 /**
@@ -358,7 +442,12 @@ export function resolveMediaSrc(
   // The stable URL, pinned or not (AGL-2798). The content-hashed form is held
   // for a year by the edge and by every browser that fetched it, where no
   // replace can reach — see the module note.
-  return `${MEDIA_CDN_ROUTE}/${scope}/${ref.mediaId}`
+  const stable = `${MEDIA_CDN_ROUTE}/${scope}/${ref.mediaId}`
+  // The version comes from the asset's document at composition, never from
+  // the reference's pin: a pin records which bytes an author placed, and the
+  // page must name the bytes the asset holds NOW.
+  const token = mediaCdnVersionToken(options?.version)
+  return token ? `${stable}?${MEDIA_CDN_VERSION_PARAM}=${token}` : stable
 }
 
 /**
@@ -597,8 +686,11 @@ export function mediaBodyImageAttributes(options: {
   /** The target as the body wrote it: a `media:` reference or a plain url. */
   src: unknown
   hostId?: string
-  /** The asset's pixel pair, when the composition could read one. */
-  size?: { width: number; height: number } | undefined
+  /**
+   * The asset's pixel pair, when the composition could read one, and its
+   * current content hash, which makes the URL a versioned one (AGL-3485).
+   */
+  size?: { width: number; height: number; version?: string } | undefined
 }): {
   src: string | undefined
   srcSet?: string
@@ -608,7 +700,7 @@ export function mediaBodyImageAttributes(options: {
 } {
   const src = resolveMediaSrc(
     typeof options.src === 'string' ? options.src : undefined,
-    { hostId: options.hostId },
+    { hostId: options.hostId, version: options.size?.version },
   )
   const { size } = options
   if (!size) return { src }

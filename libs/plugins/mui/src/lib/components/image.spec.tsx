@@ -350,7 +350,7 @@ describe('Image loading priority (AGL-2486)', () => {
     ])
   })
 
-  it('loads the first image eagerly, and claims NO priority ranking for it', () => {
+  it('loads the screen hero eagerly at high priority (AGL-3485)', () => {
     fillCanvas([
       { $id: 'hero', props: { src: 'https://example.com/hero.png' } },
       { $id: 'below', props: { src: 'https://example.com/below.png' } },
@@ -361,10 +361,11 @@ describe('Image loading priority (AGL-2486)', () => {
     )
     const img = container.querySelector('img')!
     expect(img.getAttribute('loading')).toBe('eager')
-    // The discovery fix stays; the RANKING claim goes (AGL-2486). `high`
-    // asserts this image outranks the stylesheet and webfont a text LCP is
-    // waiting on, and "first in document order" is not evidence for that.
-    expect(img.getAttribute('fetchpriority')).toBeNull()
+    // The screen's own lead, and nothing says it is small: the hero. The
+    // header logo that made "first in document order" bad evidence is the
+    // LAYOUT's lead, and a small screen lead is caught by its size — both
+    // pinned below.
+    expect(img.getAttribute('fetchpriority')).toBe('high')
     // The eager image keeps the browser default so it can decode in time to
     // paint; forcing async here would be the same mistake in a new place.
     expect(img.getAttribute('decoding')).toBeNull()
@@ -467,8 +468,11 @@ describe('Image loading priority (AGL-2486)', () => {
     )
     const heroImg = hero.container.querySelector('img')!
     expect(heroImg.getAttribute('loading')).toBe('eager')
-    // Still no ranking claim — see the fetchPriority reasoning.
-    expect(heroImg.getAttribute('fetchpriority')).toBeNull()
+    // The hero ranks; the logo in front of it does not (AGL-3485).
+    expect(heroImg.getAttribute('fetchpriority')).toBe('high')
+    expect(
+      logo.container.querySelector('img')!.getAttribute('fetchpriority'),
+    ).toBeNull()
     // A layout image that is not the layout's FIRST stays deferred: the
     // mega-menu illustration is not on screen until the menu opens.
     const menu = renderAsNode(
@@ -632,5 +636,350 @@ describe('Image composed from a replaced asset (AGL-2833)', () => {
     ).container.querySelector('img') as HTMLImageElement
     expect(element.getAttribute('width')).toBe('480')
     expect(element.getAttribute('height')).toBe('480')
+  })
+})
+
+/**
+ * Sizes from where the image sits (AGL-3485).
+ *
+ * Every image said `sizes="100vw"`, so a 68px logo downloaded the 1920px
+ * variant. The answer is now, in order: the author's Sizes attribute, a pixel
+ * width, a pixel height at a known shape, and per breakpoint band what the
+ * Besigner measured, else what the layout states, else 100vw.
+ */
+describe('Image sizes from layout and measurement (AGL-3485)', () => {
+  const CDN = '/api/media/cdn/org123/asset456'
+  afterEach(() => {
+    Aglyn.canvas.clearNodes()
+    Aglyn.clearRecordedRenderedWidths()
+  })
+
+  /** A tree with real parents, so the image can read the layout around it. */
+  const fillTree = (
+    nodes: Array<{
+      $id: string
+      parentId?: string
+      componentId?: string
+      props?: any
+      sx?: any
+    }>,
+  ) => {
+    const children = (parentId: string) =>
+      nodes
+        .filter((node) => (node.parentId ?? Aglyn.NODE_ROOT_ID) === parentId)
+        .map((node) => node.$id)
+    Aglyn.canvas.setNodes({
+      [Aglyn.NODE_ROOT_ID]: {
+        $id: Aglyn.NODE_ROOT_ID,
+        type: Aglyn.NodeType.NODE,
+        componentId: 'box',
+        nodes: children(Aglyn.NODE_ROOT_ID),
+      },
+      ...Object.fromEntries(
+        nodes.map((node) => [
+          node.$id,
+          {
+            $id: node.$id,
+            type: Aglyn.NodeType.NODE,
+            parentId: node.parentId ?? Aglyn.NODE_ROOT_ID,
+            componentId: node.componentId ?? 'image',
+            props: node.props ?? {},
+            ...(node.sx ? { sx: node.sx } : {}),
+            nodes: children(node.$id),
+          },
+        ]),
+      ),
+    } as any)
+  }
+
+  const sizesOf = (nodeId: string, element: React.ReactElement) =>
+    renderAsNode(nodeId, element)
+      .container.querySelector('img')!
+      .getAttribute('sizes')
+
+  it("honors the author's Sizes attribute verbatim", () => {
+    const { container } = render(
+      <Image src={CDN} alt="a" sizes="(min-width: 700px) 50vw, 90vw" />,
+    )
+    expect(container.querySelector('img')!.getAttribute('sizes')).toBe(
+      '(min-width: 700px) 50vw, 90vw',
+    )
+  })
+
+  it('offers Sizes in the Attributes panel as a plain text field', () => {
+    const field = schema.attributes?.find(
+      (attribute) => attribute.name === 'sizes',
+    )
+    expect(field?.component).toBe(Aglyn.FieldComponentType.TEXT_FIELD)
+    expect(field?.label).toBe('Sizes')
+  })
+
+  it('reads a Grid cell span: xs:12 md:4 is a third from md up', () => {
+    fillTree([
+      { $id: 'row', componentId: 'muiGrid', props: { container: true } },
+      {
+        $id: 'cell',
+        parentId: 'row',
+        componentId: 'muiGrid',
+        props: { size: 'xs:12 md:4' },
+      },
+      { $id: 'card', parentId: 'cell', props: { src: CDN } },
+    ])
+    expect(sizesOf('card', <Image src={CDN} alt="card" />)).toBe(
+      '(min-width: 900px) 33.3vw, 100vw',
+    )
+  })
+
+  it("takes the row's own column count, and multiplies nested cells", () => {
+    fillTree([
+      {
+        $id: 'row',
+        componentId: 'muiGrid',
+        props: { container: true, columns: 6 },
+      },
+      {
+        $id: 'cell',
+        parentId: 'row',
+        componentId: 'muiGrid',
+        props: { size: '3', container: true },
+      },
+      {
+        $id: 'inner',
+        parentId: 'cell',
+        componentId: 'muiGrid',
+        props: { size: 'xs:12 sm:6' },
+      },
+      { $id: 'pic', parentId: 'inner', props: { src: CDN } },
+    ])
+    expect(sizesOf('pic', <Image src={CDN} alt="pic" />)).toBe(
+      '(min-width: 600px) 25vw, 50vw',
+    )
+  })
+
+  it('reads a repeat(n, 1fr) grid per breakpoint', () => {
+    fillTree([
+      {
+        $id: 'grid',
+        componentId: 'box',
+        sx: {
+          display: 'grid',
+          gridTemplateColumns: {
+            xs: 'repeat(1, 1fr)',
+            sm: 'repeat(2, 1fr)',
+            md: 'repeat(3, 1fr)',
+          },
+        },
+      },
+      { $id: 'tile', parentId: 'grid', props: { src: CDN } },
+    ])
+    expect(sizesOf('tile', <Image src={CDN} alt="tile" />)).toBe(
+      '(min-width: 900px) 33.3vw, (min-width: 600px) 50vw, 100vw',
+    )
+  })
+
+  it('knows nothing of an auto cell, and falls back to 100vw there', () => {
+    fillTree([
+      { $id: 'row', componentId: 'muiGrid', props: { container: true } },
+      {
+        $id: 'cell',
+        parentId: 'row',
+        componentId: 'muiGrid',
+        props: { size: 'auto' },
+      },
+      { $id: 'logo', parentId: 'cell', props: { src: CDN } },
+    ])
+    expect(sizesOf('logo', <Image src={CDN} alt="logo" />)).toBe('100vw')
+  })
+
+  it('prefers what the Besigner measured over what the layout states', () => {
+    fillTree([
+      { $id: 'row', componentId: 'muiGrid', props: { container: true } },
+      {
+        $id: 'cell',
+        parentId: 'row',
+        componentId: 'muiGrid',
+        props: { size: 'xs:12 md:4' },
+      },
+      { $id: 'card', parentId: 'cell', props: { src: CDN } },
+    ])
+    expect(
+      sizesOf(
+        'card',
+        <Image src={CDN} alt="card" renderedWidths={{ lg: 28.4 }} />,
+      ),
+    ).toBe('(min-width: 1200px) 28.4vw, (min-width: 900px) 33.3vw, 100vw')
+  })
+
+  it('lets a layout value that CHANGES above a measured band speak', () => {
+    fillTree([
+      { $id: 'row', componentId: 'muiGrid', props: { container: true } },
+      {
+        $id: 'cell',
+        parentId: 'row',
+        componentId: 'muiGrid',
+        props: { size: 'xs:12 md:6 xl:3' },
+      },
+      { $id: 'card', parentId: 'cell', props: { src: CDN } },
+    ])
+    expect(
+      sizesOf(
+        'card',
+        <Image src={CDN} alt="card" renderedWidths={{ md: 48 }} />,
+      ),
+    ).toBe('(min-width: 1536px) 25vw, (min-width: 900px) 48vw, 100vw')
+  })
+
+  it('turns a pixel height into a pixel width when the shape is known', () => {
+    const { container } = render(
+      <Image
+        src={CDN}
+        alt="logo"
+        width="auto"
+        height="56px"
+        intrinsicWidth={340}
+        intrinsicHeight={280}
+      />,
+    )
+    expect(container.querySelector('img')!.getAttribute('sizes')).toBe('68px')
+  })
+
+  it('never puts the measurement or the version on the <img>', () => {
+    const { container } = render(
+      <Image
+        src="media:site1/photo"
+        alt="a"
+        renderedWidths={{ md: 50 }}
+        mediaVersion="abc123"
+      />,
+    )
+    const img = container.querySelector('img')!
+    expect(img.getAttribute('renderedWidths')).toBeNull()
+    expect(img.getAttribute('renderedwidths')).toBeNull()
+    expect(img.getAttribute('mediaversion')).toBeNull()
+  })
+})
+
+describe('Image versioned URL (AGL-3485)', () => {
+  it('names the versioned URL when the composition read a content hash', () => {
+    const nodes = applyMediaAssetFacts(
+      { photo: { componentId: 'image', props: { src: 'media:site1/photo' } } },
+      new Map([['site1/photo', { contentHash: 'h4sh' }]]),
+    )
+    const img = render(
+      <Image {...(nodes.photo.props as ImageProps)} alt="a" />,
+    ).container.querySelector('img')!
+    const token = `h4sh.${Aglyn.MEDIA_VARIANT_ENCODER_VERSION}`
+    expect(img.getAttribute('src')).toBe(
+      `/api/media/cdn/site1/photo?v=${token}`,
+    )
+    expect(img.getAttribute('srcset')).toContain(
+      `/api/media/cdn/site1/photo?v=${token}&w=320 320w`,
+    )
+  })
+
+  it('keeps the stable URL when nothing named a version', () => {
+    const img = render(
+      <Image src="media:site1/photo" alt="a" />,
+    ).container.querySelector('img')!
+    expect(img.getAttribute('src')).toBe('/api/media/cdn/site1/photo')
+  })
+})
+
+describe('Image hero priority and preload (AGL-3485)', () => {
+  const CDN = '/api/media/cdn/org123/asset456'
+  afterEach(() => Aglyn.canvas.clearNodes())
+
+  const serverRender = (nodeId: string, element: React.ReactElement) =>
+    renderToString(
+      <Aglyn.NodeIdentityContext.Provider value={nodeId}>
+        {element}
+      </Aglyn.NodeIdentityContext.Provider>,
+    )
+
+  /** The image preload React's server render emits ahead of the `<img>`. */
+  const preloadOf = (html: string) =>
+    /<link[^>]*rel="preload"[^>]*>/i.exec(html)?.[0] ?? ''
+
+  it("ranks the hero, and its preload carries the rank, candidates and sizes", () => {
+    fillCanvas([{ $id: 'hero', props: { src: CDN } }])
+    const html = serverRender('hero', <Image src={CDN} alt="hero" />)
+    expect(html).toMatch(/<img[^>]*fetchpriority="high"/i)
+    const link = preloadOf(html)
+    expect(link).toMatch(/as="image"/i)
+    expect(link).toMatch(/fetchpriority="high"/i)
+    expect(link).toMatch(new RegExp(`imagesrcset="${CDN}\\?w=320 320w`, 'i'))
+    expect(link).toMatch(/imagesizes="100vw"/i)
+  })
+
+  it('gives a small screen lead — a logo — no rank', () => {
+    fillCanvas([{ $id: 'logo', props: { src: CDN } }])
+    const html = serverRender(
+      'logo',
+      <Image src={CDN} alt="logo" renderedWidths={{ xs: 30, lg: 5 }} />,
+    )
+    expect(html).not.toMatch(/fetchpriority/i)
+    expect(html).toContain('loading="eager"')
+    // Its preload names its real slot, not the whole viewport.
+    expect(preloadOf(html)).toMatch(/imagesizes="\(min-width: 1200px\) 5vw, 30vw"/i)
+  })
+
+  it('ranks nothing on an editing surface', () => {
+    fillCanvas([{ $id: 'hero', props: { src: CDN } }])
+    const html = serverRender('hero', editing(<Image src={CDN} alt="hero" />))
+    expect(html).not.toMatch(/fetchpriority/i)
+  })
+})
+
+describe('Image records its rendered width on the canvas (AGL-3485)', () => {
+  const CDN = '/api/media/cdn/org123/asset456'
+  const observers: Array<() => void> = []
+  const original = (globalThis as any).ResizeObserver
+  beforeEach(() => {
+    ;(globalThis as any).ResizeObserver = class {
+      constructor(private callback: () => void) {
+        observers.push(() => this.callback())
+      }
+      observe() {}
+      disconnect() {}
+    }
+  })
+  afterEach(() => {
+    ;(globalThis as any).ResizeObserver = original
+    observers.length = 0
+    Aglyn.clearRecordedRenderedWidths()
+  })
+
+  const onCanvas = (element: JSX.Element) => (
+    <Aglyn.ScreenLinkContext.Provider
+      value={{ suppressNavigation: true, editorInert: true }}
+    >
+      <Aglyn.NodeIdentityContext.Provider value="card">
+        {element}
+      </Aglyn.NodeIdentityContext.Provider>
+    </Aglyn.ScreenLinkContext.Provider>
+  )
+
+  it('records its share of the page as it lays out', () => {
+    const { container } = render(onCanvas(<Image src={CDN} alt="card" />))
+    const img = container.querySelector('img')!
+    img.getBoundingClientRect = () => ({ width: 320 }) as DOMRect
+    Object.defineProperty(document.documentElement, 'clientWidth', {
+      configurable: true,
+      value: 1280,
+    })
+    observers.forEach((notify) => notify())
+    // jsdom has no matchMedia, so the band is the narrowest.
+    expect(Aglyn.recordedRenderedWidths('card')).toEqual({ xs: 25 })
+  })
+
+  it('records nothing off the canvas', () => {
+    const { container } = render(
+      <Aglyn.NodeIdentityContext.Provider value="card">
+        <Image src={CDN} alt="card" />
+      </Aglyn.NodeIdentityContext.Provider>,
+    )
+    expect(container.querySelector('img')).toBeTruthy()
+    expect(observers).toHaveLength(0)
+    expect(Aglyn.recordedRenderedWidths('card')).toEqual({})
   })
 })

@@ -31,6 +31,9 @@ import {
   mediaRenditionSrc,
   mediaVariantSrc,
   MEDIA_CDN_ROUTE,
+  MEDIA_VARIANT_ENCODER_VERSION,
+  mediaCdnVersionToken,
+  parseMediaCdnVersionToken,
   parseMediaRef,
   resolveMediaSrc,
   siteRelativeMediaSrc,
@@ -727,5 +730,62 @@ describe('a body image asks for the size it renders (AGL-3149)', () => {
       expect(mediaBodyImageAttributes({ src: undefined }).src).toBeUndefined()
       expect(mediaBodyImageAttributes({ src: 42 }).src).toBeUndefined()
     })
+  })
+})
+
+describe('the versioned URL (AGL-3485)', () => {
+  const token = `h4sh.${MEDIA_VARIANT_ENCODER_VERSION}`
+
+  it('names the content hash and the encoder generation', () => {
+    expect(mediaCdnVersionToken('h4sh')).toBe(token)
+    expect(parseMediaCdnVersionToken(token)).toEqual({
+      contentHash: 'h4sh',
+      encoderVersion: MEDIA_VARIANT_ENCODER_VERSION,
+    })
+  })
+
+  it('refuses a token it could not have minted', () => {
+    expect(mediaCdnVersionToken('')).toBeUndefined()
+    expect(mediaCdnVersionToken('a/b')).toBeUndefined()
+    expect(mediaCdnVersionToken(42)).toBeUndefined()
+    expect(parseMediaCdnVersionToken('h4sh')).toBeNull()
+    expect(parseMediaCdnVersionToken('h4sh.0')).toBeNull()
+    expect(parseMediaCdnVersionToken('a/b.1')).toBeNull()
+    expect(parseMediaCdnVersionToken(['h4sh.1'])).toEqual({
+      contentHash: 'h4sh',
+      encoderVersion: 1,
+    })
+  })
+
+  it('resolves a reference to the versioned URL only when handed a version', () => {
+    expect(resolveMediaSrc('media:site1/photo', { version: 'h4sh' })).toBe(
+      `${MEDIA_CDN_ROUTE}/site1/photo?v=${token}`,
+    )
+    expect(resolveMediaSrc('media:site1/photo')).toBe(
+      `${MEDIA_CDN_ROUTE}/site1/photo`,
+    )
+    // A pin is not a version: it records which bytes were placed.
+    expect(resolveMediaSrc('media:site1/photo@old')).toBe(
+      `${MEDIA_CDN_ROUTE}/site1/photo`,
+    )
+    // A url that is not a reference is never touched.
+    expect(resolveMediaSrc('https://example.com/a.png', { version: 'h4sh' })).toBe(
+      'https://example.com/a.png',
+    )
+  })
+
+  it('merges each variant width into the versioned query', () => {
+    expect(
+      mediaVariantSrc('media:site1/photo', { width: 640, version: 'h4sh' }),
+    ).toBe(`${MEDIA_CDN_ROUTE}/site1/photo?v=${token}&w=640`)
+  })
+
+  it('versions a body image the composition read a hash for', () => {
+    expect(
+      mediaBodyImageAttributes({
+        src: 'media:site1/photo',
+        size: { width: 800, height: 600, version: 'h4sh' },
+      }).src,
+    ).toBe(`${MEDIA_CDN_ROUTE}/site1/photo?v=${token}`)
   })
 })
