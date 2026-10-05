@@ -41,32 +41,53 @@ function ItemsHeaderActions({ hostId, selectedIds, currentFilter }) {
   const transfer = useTransferLauncher()
   // Outside the console there is no launcher: show no Import or Export.
   if (!transfer) return null
+  const target = { resource: 'my-plugin.items', scope: 'host', hostId } as const
   return (
     <>
-      <Button
-        onClick={() =>
-          transfer.openImport({ resource: 'my-plugin.items', scope: 'host', hostId, mappingZone: 'items' })
-        }
-      >
-        Import
-      </Button>
-      <Button
-        onClick={() =>
-          transfer.openExport({
-            resource: 'my-plugin.items',
-            scope: 'host',
-            hostId,
-            selection: selectedIds,
-            filter: { label: 'Status is open', value: currentFilter },
-          })
-        }
-      >
-        Export
-      </Button>
+      {transfer.can('import', target) ? (
+        <Button onClick={() => transfer.openImport({ ...target, mappingZone: 'items' })}>Import</Button>
+      ) : null}
+      {transfer.can('export', target) ? (
+        <Button
+          onClick={() =>
+            transfer.openExport({
+              ...target,
+              selection: selectedIds,
+              filter: { label: 'Status is open', value: currentFilter },
+            })
+          }
+        >
+          Export
+        </Button>
+      ) : null}
     </>
   )
 }
 ```
+
+### Show only what the person may do
+
+`transfer.can('import' | 'export', { resource, scope, hostId? })` answers
+what the transfer routes would: synchronously, from the permissions the
+console already holds, with no request per button. It reads `false` until
+those permissions have loaded, so a button appears once rather than
+flickering away.
+
+- **Import** needs the **Manage data** permission — on the named site for a
+  site's records, on the workspace otherwise.
+- **Export** asks what your resource declares beside its key in
+  `transferResources`:
+  - `"readableByMembers": true` — every member may read these records (the
+    rules let them), so any member may export what they can see, and a site
+    collaborator only on a site they reach. Your `readPage` and `count` keep
+    a scoped reader to their own records through `scopeTokens`.
+  - `"readPermission": "<key>"` — whoever holds that permission (a key your
+    plugin declared, say) may export, beside **Manage data**.
+  - Neither — **Manage data**, the same as importing. This is the default
+    because a resource's records may be ones only managers read.
+
+The routes stay the enforcement: `can` only keeps you from offering a
+button they would refuse.
 
 - `jobId` on `openImport` resumes an import where the person left it; the
   draft of every choice is saved per job.

@@ -42,6 +42,7 @@ const launcher: TransferLauncher & { exports: unknown[] } = {
   openImport: jest.fn(),
   openExport: (launch) => void launcher.exports.push(launch),
   close: jest.fn(),
+  can: () => true,
 }
 
 /** Every client-direct write the store received, in order. */

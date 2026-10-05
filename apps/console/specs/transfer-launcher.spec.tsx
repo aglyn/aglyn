@@ -24,9 +24,12 @@
  * the provider opens the surface for the workspace the URL names (and
  * nothing off a workspace), and the surface renders the kit component the
  * launch asked for, with the resource, site, selection and filter it named.
+ * The launcher's `can` (AGL-3546) answers by the transfer gate's own rule,
+ * so a plugin offers Import only to a member who may import and Export to
+ * any member who may read.
  */
 
-import { useTransferLauncher, type TransferLauncher } from '@aglyn/aglyn'
+import { useTransferLauncher, type TransferAccessTarget, type TransferLauncher } from '@aglyn/aglyn'
 import { act, fireEvent, render, screen } from '@testing-library/react'
 
 const mockKit: Array<{ component: string; props: Record<string, unknown> }> = []
@@ -50,7 +53,27 @@ jest.mock('next/dynamic', () => ({
   default: () => jest.requireActual('../components/transfer-launcher-surface.component').default,
 }))
 
-let mockOrg: { $id: string } | null = { $id: 'org-1' }
+let mockOrg: { $id: string; role?: string; orgWide?: boolean } | null = { $id: 'org-1' }
+const mockFirestore = {}
+let mockGranted = new Set<string>(['data.manage'])
+let mockPermissionsLoaded = true
+let mockMemberDoc: Record<string, unknown> | null = null
+
+jest.mock('../hooks/use-org-permissions', () => ({
+  __esModule: true,
+  default: () => ({
+    loaded: mockPermissionsLoaded,
+    orgId: 'org-1',
+    granted: Object.fromEntries([...mockGranted].map((key) => [key, true])),
+    permissions: {},
+    can: (permission: string) => mockGranted.has(permission),
+  }),
+}))
+
+jest.mock('../utils/firestore-one-shot-retry', () => ({
+  __esModule: true,
+  default: async () => ({ data: () => mockMemberDoc }),
+}))
 jest.mock('../hooks/use-url-names-org', () => ({
   __esModule: true,
   useUrlNamedOrg: () => mockOrg,
@@ -59,7 +82,7 @@ jest.mock('../hooks/use-url-names-org', () => ({
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   __esModule: true,
   useUser: () => ({ data: { uid: 'uid-1', getIdToken: async () => 'token-1' } }),
-  useFirestore: () => ({}),
+  useFirestore: () => mockFirestore,
 }))
 
 jest.mock('@aglyn/aglyn/plugin-manager/plugin-transfer-resources', () => {
@@ -94,16 +117,27 @@ jest.mock('@aglyn/aglyn/plugin-manager/plugin-transfer-resources', () => {
 import TransferLauncherProvider from '../components/transfer-launcher-provider.component'
 
 let launcher: TransferLauncher | null = null
+let accessTarget: TransferAccessTarget = { resource: 'data.dataset:ds-1', scope: 'org' }
+/** What the launcher answered for `accessTarget` on the last render. */
+let access: { import: boolean; export: boolean } | null = null
 
 function PluginList() {
   launcher = useTransferLauncher()
+  access = launcher
+    ? { import: launcher.can('import', accessTarget), export: launcher.can('export', accessTarget) }
+    : null
   return null
 }
 
 beforeEach(() => {
   mockKit.length = 0
   mockOrg = { $id: 'org-1' }
+  mockGranted = new Set(['data.manage'])
+  mockPermissionsLoaded = true
+  mockMemberDoc = null
   launcher = null
+  access = null
+  accessTarget = { resource: 'data.dataset:ds-1', scope: 'org' }
 })
 
 describe('the transfer launcher', () => {
@@ -171,6 +205,84 @@ describe('the transfer launcher', () => {
     fireEvent.click(view.getByRole('button', { name: 'Agree for job-1' }))
     expect(setValue).toHaveBeenCalledWith({ agreed: true })
     expect(steps()[0]?.problems({})).toEqual([])
+  })
+
+  it('says a member with Manage data may import and export, and a read-only member may only export', () => {
+    const view = render(
+      <TransferLauncherProvider>
+        <PluginList />
+      </TransferLauncherProvider>,
+    )
+    expect(access).toEqual({ import: true, export: true })
+    mockGranted = new Set()
+    view.rerender(
+      <TransferLauncherProvider>
+        <PluginList />
+      </TransferLauncherProvider>,
+    )
+    expect(access).toEqual({ import: false, export: true })
+  })
+
+  it('answers false for both until the permissions answer, and off a workspace', () => {
+    mockPermissionsLoaded = false
+    const view = render(
+      <TransferLauncherProvider>
+        <PluginList />
+      </TransferLauncherProvider>,
+    )
+    expect(access).toEqual({ import: false, export: false })
+    mockPermissionsLoaded = true
+    mockOrg = null
+    view.rerender(
+      <TransferLauncherProvider>
+        <PluginList />
+      </TransferLauncherProvider>,
+    )
+    expect(access).toEqual({ import: false, export: false })
+  })
+
+  it('decides a collaborator on the site named: export where they reach, never import', async () => {
+    mockOrg = { $id: 'org-1', role: 'editor', orgWide: false }
+    mockGranted = new Set()
+    mockMemberDoc = { role: 'editor', allHosts: false, hostAccess: { 'host-a': 'editor' } }
+    accessTarget = { resource: 'data.dataset:ds-1', scope: 'org', hostId: 'host-a' }
+    const view = render(
+      <TransferLauncherProvider>
+        <PluginList />
+      </TransferLauncherProvider>,
+    )
+    // Held while their member document is read.
+    expect(access).toEqual({ import: false, export: false })
+    await act(async () => {})
+    expect(access).toEqual({ import: false, export: true })
+
+    accessTarget = { resource: 'data.dataset:ds-1', scope: 'org', hostId: 'host-z' }
+    view.rerender(
+      <TransferLauncherProvider>
+        <PluginList />
+      </TransferLauncherProvider>,
+    )
+    expect(access).toEqual({ import: false, export: false })
+  })
+
+  it('keeps one launcher while the answers stand, so a list is not re-rendered for nothing', () => {
+    const seen: TransferLauncher[] = []
+    function Watcher() {
+      const current = useTransferLauncher()
+      if (current) seen.push(current)
+      return null
+    }
+    const view = render(
+      <TransferLauncherProvider>
+        <Watcher />
+      </TransferLauncherProvider>,
+    )
+    view.rerender(
+      <TransferLauncherProvider>
+        <Watcher />
+      </TransferLauncherProvider>,
+    )
+    expect(new Set(seen).size).toBe(1)
   })
 
   it('opens nothing off a workspace, where there is nothing to import into', () => {

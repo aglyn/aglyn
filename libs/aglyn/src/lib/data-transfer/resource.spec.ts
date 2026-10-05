@@ -72,6 +72,18 @@ describe('transfer resources', () => {
     expect(problems.join(' ')).toMatch(/byte limit/)
   })
 
+  it('refuses an empty read permission, and two answers to who may export (AGL-3546)', () => {
+    expect(transferResourceProblems({ ...people, readPermission: 'crm.view' })).toEqual([])
+    expect(transferResourceProblems({ ...people, readPermission: ' ' })).toEqual(['people names an empty read permission.'])
+    expect(transferResourceProblems({ ...people, readableByMembers: true })).toEqual([])
+    expect(transferResourceProblems({ ...people, readableByMembers: 'yes' as never })).toEqual([
+      'people says "readableByMembers" with something other than true or false.',
+    ])
+    expect(transferResourceProblems({ ...people, readableByMembers: true, readPermission: 'crm.view' })).toEqual([
+      'people is readable by every member and names a read permission; say one.',
+    ])
+  })
+
   it('refuses an instances flag that is not a boolean', () => {
     expect(transferResourceProblems({ ...people, instances: true })).toEqual([])
     expect(transferResourceProblems({ ...people, instances: 'yes' as never })).toEqual([

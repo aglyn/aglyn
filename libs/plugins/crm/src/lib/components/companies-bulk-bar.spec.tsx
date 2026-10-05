@@ -133,6 +133,7 @@ const launcher: TransferLauncher & { exports: unknown[] } = {
   openImport: jest.fn(),
   openExport: (launch) => void launcher.exports.push(launch),
   close: jest.fn(),
+  can: () => true,
 }
 
 const SCOPE = ['orgs', 'org-1'] as const

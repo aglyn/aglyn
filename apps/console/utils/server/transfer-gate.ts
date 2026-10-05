@@ -16,8 +16,16 @@
  */
 
 import { randomUUID } from 'node:crypto'
-import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
-import type { TransferApiRoute, TransferErrorCode, TransferErrorResponse } from '@aglyn/aglyn/data-transfer'
+import { hostScopeToken, isOrgWideMember, memberCanSee, pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import {
+  parseTransferResourceKey,
+  transferAccessPermissions,
+  transferRouteIntent,
+  type TransferApiRoute,
+  type TransferErrorCode,
+  type TransferErrorResponse,
+} from '@aglyn/aglyn/data-transfer'
+import { declaredTransferResource } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
 import {
   consumeRateLimit,
   emailUnverifiedResponse,
@@ -51,8 +59,16 @@ import { FieldValue } from 'firebase-admin/firestore'
  *     `export`, `jobs` and the package route's `list` and `export` ask with
  *     a read intent, so a read-only lock still shows a job's progress and
  *     still lets the workspace take its data out);
- *  4. `data.manage` — on the job's site for a site's records (a collaborator
- *     holding it there qualifies), on the workspace otherwise. Staff pass.
+ *  4. the member's access for the route's intent (`data-transfer/access.ts`,
+ *     AGL-3546) — on the job's site for a site's records (a collaborator
+ *     holding it there qualifies), on the workspace otherwise. Importing
+ *     (upload, analyze, plan, apply, status, undo), the job list and
+ *     packages need `data.manage`. Exporting (`export`, and `fields`, which
+ *     the export dialog opens with) asks what the resource declares:
+ *     `readableByMembers` admits any member (a collaborator who reaches the
+ *     named site), a `readPermission` admits its holders, and otherwise
+ *     `data.manage` stays the key. The route and the resource's `readPage`
+ *     then read only what the member's scope sees. Staff pass.
  *
  * The route then hands the body to the engine
  * (`@aglyn/tenant-data-admin/server/transfer-jobs`) and maps what it throws
@@ -138,6 +154,44 @@ async function requestHostId(
 }
 
 /**
+ * The refusal for a member without the route's access, or `null` when they
+ * have it. An export needs no permission unless its resource declares one,
+ * but always a membership, and a collaborator must reach the named site.
+ */
+async function accessRefusal(
+  route: TransferApiRoute,
+  orgId: string,
+  hostId: string | null,
+  member: CallerMember | null,
+  body: Record<string, unknown>,
+): Promise<Response | null> {
+  const intent = transferRouteIntent(route)
+  const needed =
+    intent === 'export'
+      ? transferAccessPermissions('export', declaredTransferResource(parseTransferResourceKey(String(body['resource'] ?? '')).key))
+      : transferAccessPermissions('import', null)
+  if (!member) {
+    return transferRefusal(403, 'forbidden', intent === 'export' ? 'Exporting needs a membership of this workspace' : 'Importing needs the “Manage data” permission')
+  }
+  if (hostId && !isOrgWideMember(member) && !memberCanSee(member, [hostScopeToken(hostId)])) {
+    return transferRefusal(404, 'notFound', 'No such site')
+  }
+  for (const permission of needed) {
+    const holds = hostId
+      ? await memberHasPermissionOnHost(orgId, hostId, member, permission)
+      : await memberHasOrgPermission(orgId, member, permission)
+    if (holds) return null
+  }
+  if (!needed.length) return null
+  const verb = intent === 'export' ? 'Exporting' : 'Importing'
+  return transferRefusal(
+    403,
+    'forbidden',
+    needed.length === 1 ? `${verb} needs the “Manage data” permission` : `${verb} these records needs a permission your role does not include`,
+  )
+}
+
+/**
  * The caller, admitted — or the response that refuses them. See the block
  * header for what is checked and in which order.
  */
@@ -195,10 +249,8 @@ export async function transferGate(
 
     const membership = await resolveOrgMembership(decoded.uid, orgId)
     if (!staff) {
-      const allowed = hostId
-        ? await memberHasPermissionOnHost(orgId, hostId, membership?.member, 'data.manage')
-        : await memberHasOrgPermission(orgId, membership?.member, 'data.manage')
-      if (!allowed) return transferRefusal(403, 'forbidden', 'Importing needs the “Manage data” permission')
+      const refusal = await accessRefusal(route, orgId, hostId, membership?.member ?? null, body)
+      if (refusal) return refusal
     }
 
     return {

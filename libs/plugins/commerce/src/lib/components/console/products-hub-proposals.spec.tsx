@@ -171,6 +171,7 @@ const launcher: TransferLauncher = {
   openImport: (launch) => void opened.push(launch),
   openExport: jest.fn(),
   close: jest.fn(),
+  can: () => true,
 }
 
 const mount = () =>

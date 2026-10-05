@@ -21,8 +21,10 @@
  * `/api/transfer/*` (AGL-3524) — the gate every route shares, and the
  * wiring. The gate is pinned in the order it decides: the method, the
  * workspace, the credential, the verified address, the rate limit, the site,
- * the lockdown, the workspace's existence, `data.manage` (on the job's site
- * for a site's records). Past it a route only hands the body to the engine,
+ * the lockdown, the workspace's existence, then the member's access for the
+ * route's intent (AGL-3546): `data.manage` to import (on the job's site for
+ * a site's records); to export, what the resource declares — any member,
+ * a `readPermission`, or `data.manage` by default. Past it a route only hands the body to the engine,
  * so what is asserted is that the engine's refusals come back with their
  * status, code and details, that Apply is audited only when a job starts,
  * and that the result file is CSV with its row count.
@@ -34,7 +36,11 @@ let mockOrg: Record<string, unknown> | null = null
 let mockHosts: Record<string, Record<string, unknown>> = {}
 let mockJobs: Record<string, Record<string, unknown>> = {}
 let mockLockdownResponse: Response | null = null
-let mockOrgPermission = true
+/** The workspace permissions the caller holds. */
+let mockOrgPermissions = new Set<string>(['data.manage'])
+/** The intent the lockdown verdict was asked with, and a read-only lock that refuses only writes. */
+const mockLockdownIntents: string[] = []
+let mockReadOnlyLock = false
 let mockHostPermission = true
 let mockRateAllowed = true
 let mockMember: Record<string, unknown> = { role: 'editor' }
@@ -47,6 +53,7 @@ const mockEngine = {
   applyTransferJob: jest.fn(),
   readTransferJobStatus: jest.fn(),
   transferResultFile: jest.fn(),
+  readTransferResourceInfo: jest.fn(),
 }
 
 jest.mock('@aglyn/aglyn/server', () => ({
@@ -85,8 +92,13 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   getHostDocAdmin: async (hostId: string) => mockHosts[hostId] ?? null,
   getOrgDoc: async () => mockOrg,
   isImpersonationSession: () => false,
-  lockdownRefusal: async () => mockLockdownResponse,
-  memberHasOrgPermission: async () => mockOrgPermission,
+  lockdownRefusal: async ({ intent }: { intent: string }) => {
+    mockLockdownIntents.push(intent)
+    if (mockReadOnlyLock && intent === 'write') return Response.json({ error: 'read-only' }, { status: 423 })
+    return mockLockdownResponse
+  },
+  memberHasOrgPermission: async (_orgId: string, member: unknown, permission: string) =>
+    Boolean(member) && mockOrgPermissions.has(permission),
   memberHasPermissionOnHost: async (...args: unknown[]) => {
     mockHostPermissionCall(...args)
     return mockHostPermission
@@ -124,12 +136,27 @@ jest.mock('@aglyn/tenant-data-admin/server/transfer-jobs', () => {
     applyTransferJob: (...args: unknown[]) => mockEngine.applyTransferJob(...args),
     readTransferJobStatus: (...args: unknown[]) => mockEngine.readTransferJobStatus(...args),
     transferResultFile: (...args: unknown[]) => mockEngine.transferResultFile(...args),
+    readTransferResourceInfo: (...args: unknown[]) => mockEngine.readTransferResourceInfo(...args),
   }
 })
+
+// Every member reads bottles (as every member reads a dataset); ledgers
+// declare the permission they read with; kegs declare nothing, so they
+// export for Manage data alone.
+jest.mock('@aglyn/aglyn/plugin-manager/plugin-transfer-resources', () => ({
+  __esModule: true,
+  declaredTransferResource: (key: string) =>
+    ({
+      bottles: { key: 'bottles', scope: 'org', pluginId: 'cellar', readableByMembers: true },
+      ledgers: { key: 'ledgers', scope: 'org', pluginId: 'books', readPermission: 'books.read' },
+      kegs: { key: 'kegs', scope: 'org', pluginId: 'cellar' },
+    })[key] ?? null,
+}))
 
 jest.mock('@aglyn/tenant-data-admin/server/transfer-export', () => ({
   __esModule: true,
   streamTransferExport: (...args: unknown[]) => mockExport(...args),
+  readTransferPrefs: async () => null,
 }))
 
 jest.mock('firebase-admin/firestore', () => ({
@@ -141,6 +168,7 @@ import { TransferEngineError } from '@aglyn/tenant-data-admin/server/transfer-jo
 import { hostScopeToken } from '@aglyn/aglyn/app-utils/scope-tokens'
 import { POST as apply } from '../app/api/transfer/apply/route'
 import { POST as exportRoute } from '../app/api/transfer/export/route'
+import { POST as fields } from '../app/api/transfer/fields/route'
 import { POST as status } from '../app/api/transfer/status/route'
 import { POST as upload } from '../app/api/transfer/upload/route'
 
@@ -159,7 +187,9 @@ beforeEach(() => {
   mockHosts = { 'host-a': { orgId: 'org-1' }, 'host-z': { orgId: 'org-2' } }
   mockJobs = { 'job-1': {}, 'job-site': { hostId: 'host-a' } }
   mockLockdownResponse = null
-  mockOrgPermission = true
+  mockOrgPermissions = new Set(['data.manage'])
+  mockLockdownIntents.length = 0
+  mockReadOnlyLock = false
   mockHostPermission = true
   mockRateAllowed = true
   mockMember = { role: 'editor' }
@@ -210,7 +240,7 @@ describe('the transfer gate', () => {
   })
 
   it('needs data.manage on the workspace, or on the job’s site for a site’s records', async () => {
-    mockOrgPermission = false
+    mockOrgPermissions.clear()
     const refused = await apply(request('apply', { orgId: 'org-1', jobId: 'job-1' }))
     expect(refused.status).toBe(403)
     expect((await refused.json()).code).toBe('forbidden')
@@ -327,9 +357,105 @@ describe('the export (AGL-3525)', () => {
     expect(mockExport).toHaveBeenCalledTimes(1)
   })
 
-  it('needs data.manage, as the CRM export does', async () => {
-    mockOrgPermission = false
-    expect((await exportRoute(request('export', BODY))).status).toBe(403)
+})
+
+describe('who may export, and who may import (AGL-3546)', () => {
+  const EXPORT = { orgId: 'org-1', resource: 'bottles', fieldIds: ['name'], scope: { kind: 'all' }, format: 'csv' }
+  const FIELDS = { orgId: 'org-1', resource: 'bottles' }
+  const INFO = { resource: { key: 'bottles', label: 'Bottles' }, catalog: { fields: [], groups: [] } }
+
+  beforeEach(() => {
+    mockEngine.readTransferResourceInfo.mockResolvedValue(INFO)
+  })
+
+  it('lets a member with Manage data export and import', async () => {
+    expect((await exportRoute(request('export', EXPORT))).status).toBe(200)
+    expect((await fields(request('fields', FIELDS))).status).toBe(200)
+    expect((await apply(request('apply', { orgId: 'org-1', jobId: 'job-1' }))).status).toBe(200)
+  })
+
+  it('lets a read-only member export and open the export dialog, and refuses them every import step', async () => {
+    mockMember = { role: 'viewer' }
+    mockOrgPermissions.clear()
+    const exported = await exportRoute(request('export', EXPORT))
+    expect(exported.status).toBe(200)
+    // An org-wide reader is read whole; their scope is the workspace.
+    expect(mockExport.mock.calls[0]?.[1]).not.toHaveProperty('scopeTokens')
+    const opened = await fields(request('fields', FIELDS))
+    expect(opened.status).toBe(200)
+    expect(await opened.json()).toMatchObject({ ok: true, resource: { key: 'bottles' } })
+
+    const applied = await apply(request('apply', { orgId: 'org-1', jobId: 'job-1' }))
+    expect(applied.status).toBe(403)
+    expect(await applied.json()).toEqual({ error: 'Importing needs the “Manage data” permission', code: 'forbidden' })
+    expect((await status(request('status', { orgId: 'org-1', jobId: 'job-1' }))).status).toBe(403)
+    const uploaded = await upload(request('upload', { orgId: 'org-1', resource: 'bottles', fileName: 'x.csv', content: 'a\n1' }))
+    expect(uploaded.status).toBe(403)
+    expect(mockEngine.uploadTransferSource).not.toHaveBeenCalled()
+    expect(mockEngine.applyTransferJob).not.toHaveBeenCalled()
+  })
+
+  it('reads a scoped collaborator through their tokens, refuses a site they do not reach, and refuses their import', async () => {
+    mockMember = { role: 'editor', allHosts: false, hostAccess: { 'host-a': 'viewer' }, scopeTokens: [hostScopeToken('host-a')] }
+    mockOrgPermissions.clear()
+    mockHostPermission = false
+    expect((await exportRoute(request('export', EXPORT))).status).toBe(200)
+    expect(mockExport.mock.calls[0]?.[1]).toMatchObject({ scopeTokens: [hostScopeToken('host-a')] })
+    expect((await exportRoute(request('export', { ...EXPORT, hostId: 'host-a' }))).status).toBe(200)
+    expect((await fields(request('fields', { ...FIELDS, hostId: 'host-a' }))).status).toBe(200)
+
+    mockHosts['host-b'] = { orgId: 'org-1' }
+    expect((await exportRoute(request('export', { ...EXPORT, hostId: 'host-b' }))).status).toBe(404)
+    expect((await fields(request('fields', { ...FIELDS, hostId: 'host-b' }))).status).toBe(404)
+    expect(mockExport).toHaveBeenCalledTimes(2)
+
+    expect((await apply(request('apply', { orgId: 'org-1', jobId: 'job-site' }))).status).toBe(403)
+    expect(mockEngine.applyTransferJob).not.toHaveBeenCalled()
+  })
+
+  it('still exports under a read-only lock, which refuses the import', async () => {
+    mockReadOnlyLock = true
+    expect((await exportRoute(request('export', EXPORT))).status).toBe(200)
+    expect((await fields(request('fields', FIELDS))).status).toBe(200)
+    expect((await apply(request('apply', { orgId: 'org-1', jobId: 'job-1' }))).status).toBe(423)
+    expect(mockLockdownIntents).toEqual(['read', 'read', 'write'])
+  })
+
+  it('asks for the permission a resource declares it reads with, which Manage data also grants', async () => {
+    const LEDGERS = { ...EXPORT, resource: 'ledgers' }
+    mockMember = { role: 'viewer' }
+    mockOrgPermissions.clear()
+    const refused = await exportRoute(request('export', LEDGERS))
+    expect(refused.status).toBe(403)
+    expect((await refused.json()).code).toBe('forbidden')
+    expect((await fields(request('fields', { ...FIELDS, resource: 'ledgers' }))).status).toBe(403)
+    // An instance key is decided by its resource's declaration.
+    expect((await exportRoute(request('export', { ...LEDGERS, resource: 'ledgers:2026' }))).status).toBe(403)
+    expect(mockExport).not.toHaveBeenCalled()
+
+    mockOrgPermissions = new Set(['books.read'])
+    expect((await exportRoute(request('export', LEDGERS))).status).toBe(200)
+    mockOrgPermissions = new Set(['data.manage'])
+    expect((await exportRoute(request('export', LEDGERS))).status).toBe(200)
+  })
+
+  it('keeps Manage data the key for a resource that says nothing about who reads it', async () => {
+    const KEGS = { ...EXPORT, resource: 'kegs' }
+    mockMember = { role: 'viewer' }
+    mockOrgPermissions.clear()
+    const refused = await exportRoute(request('export', KEGS))
+    expect(refused.status).toBe(403)
+    expect(await refused.json()).toEqual({ error: 'Exporting needs the “Manage data” permission', code: 'forbidden' })
+    expect((await fields(request('fields', { ...FIELDS, resource: 'kegs' }))).status).toBe(403)
+    expect(mockExport).not.toHaveBeenCalled()
+    mockOrgPermissions = new Set(['data.manage'])
+    expect((await exportRoute(request('export', KEGS))).status).toBe(200)
+  })
+
+  it('refuses a caller who is not a member of the workspace', async () => {
+    mockMember = null as never
+    expect((await exportRoute(request('export', EXPORT))).status).toBe(403)
+    expect((await fields(request('fields', FIELDS))).status).toBe(403)
     expect(mockExport).not.toHaveBeenCalled()
   })
 })

@@ -41,7 +41,7 @@ import CrmConsolePage from './crm-console-page'
 import { CRM_CONSOLE_SECTIONS } from './crm-console-sections'
 
 /** The console shell's launcher, which the list's Import and Export open (AGL-3527). */
-const launcher: TransferLauncher = { openImport: jest.fn(), openExport: jest.fn(), close: jest.fn() }
+const launcher: TransferLauncher = { openImport: jest.fn(), openExport: jest.fn(), close: jest.fn(), can: () => true }
 
 const FREE = { $id: 'org-1', plan: 'free' }
 const STARTER = { $id: 'org-1', plan: 'starter' }

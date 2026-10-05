@@ -296,7 +296,7 @@ describe('the orders list asks its query, not its page (AGL-3321)', () => {
     // match (`records.server.spec.ts`).
     const openExport = jest.fn()
     render(
-      <TransferLauncherContext.Provider value={{ openImport: jest.fn(), openExport, close: jest.fn() }}>
+      <TransferLauncherContext.Provider value={{ openImport: jest.fn(), openExport, close: jest.fn(), can: () => true }}>
         <HostOrdersCard hostId="host-1" />
       </TransferLauncherContext.Provider>,
     )

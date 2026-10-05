@@ -319,7 +319,7 @@ describe('products hub, plan not yet known', () => {
 
   it('disables Import for the same reason', () => {
     // Import opens the console's wizard, so it is drawn only under the shell's launcher.
-    const launcher = { openImport: jest.fn(), openExport: jest.fn(), close: jest.fn() }
+    const launcher = { openImport: jest.fn(), openExport: jest.fn(), close: jest.fn(), can: () => true }
     render(
       <TransferLauncherContext.Provider value={launcher}>
         <ProductsHubCard hostId="host-1" />

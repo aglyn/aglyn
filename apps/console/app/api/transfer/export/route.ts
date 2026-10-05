@@ -24,8 +24,10 @@
  * `readPage`. The row count rides in `X-Aglyn-Export-Rows` whenever it could
  * be counted before the first byte, for the client's shortfall check.
  *
- * Behind the transfer gate (`data.manage`, on the site for a site's
- * records), and scoped the way the CRM's export is: an org-wide member
+ * Behind the transfer gate with a READ intent (AGL-3546): who may export is
+ * what the resource declares (`readableByMembers`, a `readPermission`, or
+ * `data.manage` by default). Scoped the way the CRM's export is: an
+ * org-wide member
  * reads everything, a collaborator scoped to some sites must reach the site
  * and is read through their own scope tokens — the Admin SDK passes the
  * rules, so the tokens ARE the enforcement. Audited as

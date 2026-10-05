@@ -1084,9 +1084,16 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
    * matched and written on the server, through the same record writes as
    * every other create and update, and the export streams the fields the
    * person picks. Outside the console shell there is no launcher, and no
-   * Import or Export to offer.
+   * Import or Export to offer. Inside it, Import is offered to a member who
+   * may import (Manage data) and Export to any member who can see the
+   * dataset (AGL-3546) — the transfer routes' own rule.
    */
   const transfer = useTransferLauncher()
+  const transferTarget = selected?.$id
+    ? { resource: datasetTransferResourceKey(selected.$id), scope: 'org' as const }
+    : null
+  const canImport = Boolean(transfer && transferTarget && transfer.can('import', transferTarget))
+  const canExport = Boolean(transfer && transferTarget && transfer.can('export', transferTarget))
   const handleImport = useCallback(() => {
     if (!transfer || !selected?.$id) return
     const dataset = { id: selected.$id, name: String(selected.displayName ?? '') }
@@ -1236,7 +1243,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
             <Button size="small" onClick={() => setSchemaOpen(true)}>
               {'Schema'}
             </Button>
-            {transfer ? (
+            {canImport ? (
               <Button size="small" onClick={handleImport}>
                 {'Import'}
               </Button>
@@ -1244,7 +1251,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
             {/* The real dataset size, not the loaded window (AGL-2335) —
                 the export is a server stream, so a dataset whose first page
                 has not landed yet is still exportable. */}
-            {transfer && (recordCount || records.length) ? (
+            {canExport && (recordCount || records.length) ? (
               <Button size="small" onClick={handleExport}>
                 {'Export'}
               </Button>

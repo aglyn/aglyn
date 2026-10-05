@@ -624,6 +624,8 @@ owns the records declares the resource and answers for it. Declare it in
 | `formats` | `csv`, `json`, `ndjson`. |
 | `limits` | `maxRows` (and optional `maxBytes`) one file may carry. |
 | `instances` | `true` for a resource moved one instance at a time — one dataset's records, not every dataset's. Every key that reaches it names the instance as `<key>:<instance>` (`transferResourceInstanceKey`, `data.dataset:<datasetId>`), so a job, the person's remembered choices and the one running import are each kept per instance; the hooks read which one with `transferResourceInstanceOf(ctx)`. |
+| `readableByMembers` | `true` when every member may read the records, so any member may export what their scope lets them see (a collaborator only on a site they reach) and open the export dialog. A dataset's records are declared this way. |
+| `readPermission` | The permission that admits a member to export the records, beside **Manage data** (`data.manage`), which always admits. A resource that declares neither this nor `readableByMembers` exports for Manage data alone; importing needs Manage data either way. The launcher's `can('import' \| 'export', target)` answers the same rule for a list's buttons. |
 
 The plugin also lists `transferResources` among its `contributes.console.slots`
 (`TRANSFER_RESOURCES_LOAD_POINT`), so the wizard loads its console registrar,

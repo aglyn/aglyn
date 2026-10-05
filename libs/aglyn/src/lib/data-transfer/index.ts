@@ -21,6 +21,7 @@
 // `@aglyn/aglyn` nor `@aglyn/aglyn/server` re-exports it, so the shells that
 // open those barrels never load it.
 export * from './resource'
+export * from './access'
 export * from './similarity'
 export * from './field-catalog'
 export * from './derive'

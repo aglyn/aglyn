@@ -20,10 +20,17 @@
  * wizard and export dialog on the selected dataset, through the core
  * launcher: no file is read, matched or written in the browser any more.
  * Outside the console shell there is no launcher, and no Import or Export.
+ * Inside it, each is offered by the launcher's `can` (AGL-3546): Import to
+ * a member who may import, Export to one who may read.
  */
 
 import { fireEvent, render, screen } from '@testing-library/react'
-import { TransferLauncherContext, type TransferLauncher } from '@aglyn/aglyn'
+import {
+  TransferLauncherContext,
+  type TransferAccessTarget,
+  type TransferAction,
+  type TransferLauncher,
+} from '@aglyn/aglyn'
 import type { ReactNode } from 'react'
 import { HostDatasetsCard } from './host-datasets-card.component'
 
@@ -86,10 +93,11 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
 
 const ORG = { $id: 'org-1', plan: 'scale' } as any
 
-const launcher = (): jest.Mocked<TransferLauncher> => ({
+const launcher = (allowed: readonly TransferAction[] = ['import', 'export']): jest.Mocked<TransferLauncher> => ({
   openImport: jest.fn(),
   openExport: jest.fn(),
   close: jest.fn(),
+  can: jest.fn((action: TransferAction, _target: TransferAccessTarget) => allowed.includes(action)),
 })
 
 /**
@@ -138,5 +146,20 @@ describe('the Data card opens the transfer framework on the selected dataset', (
     expect(textButton('CSV')).toBeNull()
     expect(textButton('JSON')).toBeNull()
     expect(screen.queryByText('Import records')).toBeNull()
+  })
+
+  it('offers a member who can read the dataset Export alone, and asks about the dataset in view', () => {
+    const transfer = launcher(['export'])
+    mount(transfer)
+    expect(textButton('Import')).toBeNull()
+    expect(textButton('Export')).not.toBeNull()
+    expect(transfer.can).toHaveBeenCalledWith('import', { resource: 'data.dataset:ds-1', scope: 'org' })
+    expect(transfer.can).toHaveBeenCalledWith('export', { resource: 'data.dataset:ds-1', scope: 'org' })
+  })
+
+  it('offers neither while the answer is out, or to a member who may do neither', () => {
+    mount(launcher([]))
+    expect(textButton('Import')).toBeNull()
+    expect(textButton('Export')).toBeNull()
   })
 })

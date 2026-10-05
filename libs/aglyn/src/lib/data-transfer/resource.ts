@@ -84,6 +84,20 @@ export interface TransferResourceDescriptor {
    * `resource` ({@link transferResourceInstanceOf}).
    */
   instances?: boolean
+  /**
+   * Any member may EXPORT the records (and open the export dialog), as far
+   * as their scope lets them see them — a collaborator only on a site they
+   * reach — because the rules let every member read them (a dataset's
+   * records). See `data-transfer/access.ts`.
+   */
+  readableByMembers?: boolean
+  /**
+   * The permission that admits a member to EXPORT the records, beside
+   * `data.manage`, which always does. A resource that declares neither this
+   * nor `readableByMembers` exports for `data.manage` alone. Importing needs
+   * `data.manage` either way.
+   */
+  readPermission?: string
 }
 
 /** What a field means, which decides how a cell is read and written. */
@@ -238,6 +252,15 @@ export function transferResourceProblems(descriptor: TransferResourceDescriptor)
   }
   if (descriptor.instances !== undefined && typeof descriptor.instances !== 'boolean') {
     problems.push(`${descriptor.key} says "instances" with something other than true or false.`)
+  }
+  if (descriptor.readPermission !== undefined && !String(descriptor.readPermission).trim()) {
+    problems.push(`${descriptor.key} names an empty read permission.`)
+  }
+  if (descriptor.readableByMembers !== undefined && typeof descriptor.readableByMembers !== 'boolean') {
+    problems.push(`${descriptor.key} says "readableByMembers" with something other than true or false.`)
+  }
+  if (descriptor.readableByMembers === true && descriptor.readPermission !== undefined) {
+    problems.push(`${descriptor.key} is readable by every member and names a read permission; say one.`)
   }
   return problems
 }

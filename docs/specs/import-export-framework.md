@@ -166,7 +166,8 @@ matches · **Dry** = dry-run preview · **Undo**
 ### Cross-cutting
 
 - **Permissions:** `data.manage` for import and undo; read access for export,
-  scoped by what the member can see; packages need site-edit rights and the
+  scoped by what the member can see (a resource declares `readableByMembers`
+  or a `readPermission`, and keeps `data.manage` otherwise; AGL-3546); packages need site-edit rights and the
   site-export entitlement.
 - **Limits:** plan bands enforced where records are written and reported per
   row; per-plan file limits; one running job per resource per organization;

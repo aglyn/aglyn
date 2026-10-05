@@ -1292,7 +1292,7 @@
       ],
       "transferResources": [
         {
-          "$comment": "A dataset's records (AGL-3530), one dataset at a time: reached as data.dataset:<datasetId>, so a job, a person's remembered export fields and the one running import each belong to one dataset. The server half registers from consoleServerDeclarations, the client half from the console registrar.",
+          "$comment": "A dataset's records (AGL-3530), one dataset at a time: reached as data.dataset:<datasetId>, so a job, a person's remembered export fields and the one running import each belong to one dataset. The server half registers from consoleServerDeclarations, the client half from the console registrar. readableByMembers (AGL-3546): every member may read a dataset they can see, so every such member may export it; the resource checks the dataset's visibility itself.",
           "key": "data.dataset",
           "label": "Dataset records",
           "singularLabel": "Dataset record",
@@ -1301,7 +1301,8 @@
           "kinds": ["records"],
           "formats": ["csv", "json", "ndjson"],
           "limits": { "maxRows": 50000 },
-          "instances": true
+          "instances": true,
+          "readableByMembers": true
         }
       ],
       "contributes": {

@@ -356,8 +356,19 @@ job; the eight console routes are wiring over it, behind one gate
 (`apps/console/utils/server/transfer-gate.ts`): `POST`, a verified Bearer ID
 token, a per-member rate limit per route (`rate-limit-store`), the
 workspace's lockdown verdict (`status`, `fields` and `export` ask with a read intent, so a read-only lock still lets a workspace take its data out), and
-`data.manage` — on the job's site for a site's records, on the workspace
-otherwise. Plan, apply and undo write an `adminAudit` row
+the member's access for the route's intent (`data-transfer/access.ts`,
+AGL-3546) — on the job's site for a site's records, on the workspace
+otherwise. Importing (upload, analyze, plan, apply, status, undo) needs
+`data.manage`. Exporting (`export`, and `fields`, which the export dialog
+opens with) asks what the resource declares: `readableByMembers` admits any
+member, or a collaborator who reaches the named site (datasets); a
+`readPermission` admits its holders and `data.manage`; a resource that
+declares neither keeps `data.manage`. The export route passes a
+collaborator's `scopeTokens`, and each resource's `readPage` and `count`
+read only what they reach. The
+console's launcher answers the same rule synchronously as
+`can('import' | 'export', target)`, so a list offers only what the route
+will do. Plan, apply and undo write an `adminAudit` row
 (`data.transfer.plan`, `data.transfer.apply` when a job starts or resumes,
 `data.transfer.undo`).
 

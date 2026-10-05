@@ -30,6 +30,11 @@ import { createContext, useContext } from 'react'
  * something else — the context holds `null`, and a plugin hides its Import
  * and Export actions: with no shell there is no workspace to move data into.
  *
+ * Inside it, `can('import' | 'export', target)` says which of the two this
+ * person may use (AGL-3546): a plugin shows Import only when `can('import')`
+ * and Export only when `can('export')`. The transfer routes stay the
+ * enforcement; `can` answers what they would.
+ *
  * Only types and a context: it names no resource, imports nothing from the
  * transfer core, and so costs the barrel nothing past React.
  *
@@ -81,11 +86,33 @@ export interface TransferExportLaunch {
   filter?: { label: string; value: unknown }
 }
 
+/** What a person may do with a resource's records. */
+export type TransferAction = 'import' | 'export'
+
+/** The resource a list asks {@link TransferLauncher.can} about. */
+export interface TransferAccessTarget {
+  /** The resource key, naming the instance for one declared with `instances`. */
+  resource: string
+  scope: TransferLaunchScope
+  /** The site, for a `host` resource or a workspace resource read through one site. */
+  hostId?: string | null
+}
+
 /** What the shell offers: open the wizard or the dialog, or close whichever is open. */
 export interface TransferLauncher {
   openImport(launch: TransferImportLaunch): void
   openExport(launch: TransferExportLaunch): void
   close(): void
+  /**
+   * Whether the person may `action` the target's records (AGL-3546) — the
+   * answer the transfer routes give, from the permissions the shell already
+   * holds: synchronous, with no request per button, and `false` until those
+   * permissions have answered. Importing needs "Manage data" (on the named
+   * site, for a site's records); exporting needs only access to the
+   * records — membership, and reaching the named site — unless the resource
+   * declares a `readPermission`. The routes stay the enforcement.
+   */
+  can(action: TransferAction, target: TransferAccessTarget): boolean
 }
 
 export const TransferLauncherContext = createContext<TransferLauncher | null>(null)
@@ -95,3 +122,4 @@ TransferLauncherContext.displayName = 'TransferLauncherContext'
 export function useTransferLauncher(): TransferLauncher | null {
   return useContext(TransferLauncherContext)
 }
+
