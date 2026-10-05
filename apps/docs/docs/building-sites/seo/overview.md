@@ -150,6 +150,12 @@ search result or a crawler would find wrong. The check is part of every plan and
 add-on. It changes nothing on your site: fix what it finds in each page's **SEO** card or
 in the designer, publish, and run it again.
 
+Each page is checked as it is published: the headings, text, images and links of the
+[reusable components](../besigner/reusable-components.md) it places count as the page's own, with the values
+that placement gives them, and so do the rows a [repeated](../besigner/repeat.md) element shows. A finding about
+something a component draws points at the component on the page; fix it in the component
+or in the values the page gives it.
+
 A very large site is checked on its first 150 pages, and the card says how many it left
 out. For each page it checks:
 
@@ -179,9 +185,13 @@ The optional **Target keywords by page** box takes one line per page:
 /lamps: brass desk lamps, dimmable
 ```
 
+Each page is checked for at most five keywords. Two lines for the same page count as
+one list, and the card names any keyword past the first five that it did not check.
+
 The check reports where each page already says its keywords, and names a keyword a page
-never says. Use a keyword only where the page is about it. A line for an address the
-check did not cover is reported, not silently dropped.
+never says. Text a component on the page shows counts. Use a keyword only where the page
+is about it. A line for an address the check did not cover is reported, not silently
+dropped.
 
 ### Check one page
 

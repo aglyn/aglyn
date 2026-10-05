@@ -75,16 +75,21 @@ export function aiSeoAudit(
 }
 
 /**
- * The content fixes that need no model: every main heading after the first
- * editable one becomes an `h2`, so the page keeps one.
+ * The content fixes that need no model: the page keeps its FIRST main
+ * heading, and every editable one after it becomes an `h2`. When the first is
+ * one no fix can change — a component's, a repeat's, rich text — it is the
+ * one kept, so every editable main heading is demoted; keeping an editable one
+ * beside it would leave the page with two.
  */
 export function aiSeoHeadingDemotions(facts: SeoPageFacts): AiSeoContentFix[] {
-  const editable = facts.h1s.filter((heading) => heading.editable && heading.nodeId)
-  if (facts.h1s.length < 2 || !editable.length) return []
-  const keep = editable[0].nodeId
-  return editable
-    .filter((heading) => heading.nodeId !== keep)
-    .map((heading) => ({ kind: 'h1-demote', nodeId: heading.nodeId as string }))
+  if (facts.h1s.length < 2) return []
+  const [first, ...rest] = facts.h1s
+  const keep = first.editable ? first.nodeId : null
+  const demoted = new Set<string>()
+  for (const heading of rest) {
+    if (heading.editable && heading.nodeId && heading.nodeId !== keep) demoted.add(heading.nodeId)
+  }
+  return [...demoted].map((nodeId) => ({ kind: 'h1-demote', nodeId }))
 }
 
 /** The queue's batches, in order. */
