@@ -255,9 +255,32 @@ export function RecordTemplateSection(props: ConsoleBesignerPagePropertiesZonePr
       enqueueSnackbar('Record pages removed', { variant: 'success' })
     } catch (error) {
       enqueueSnackbar((error as Error).message, { variant: 'error' })
-    } finally {
       setBusy(false)
+      return
     }
+    // The page is left a template, which nobody can visit. Making it a page
+    // again is offered once, here, and checked against the plan's pages by
+    // the platform's convert route, whose refusal names the count.
+    const restore = await confirm({
+      title: 'Make this a normal page again?',
+      description:
+        'It counts toward your plan’s pages and, if it was published, answers at its ' +
+        'own address again right away. Placeholders like {{item.name}} show as plain ' +
+        'text until you edit them out.',
+      confirmationText: 'Make it a page',
+      cancellationText: 'Keep it hidden',
+    })
+      .then(() => true)
+      .catch(() => false)
+    if (restore) {
+      try {
+        await post('/api/hosts/screens', { action: 'convert', hostId, id: screenId, kind: 'page' })
+        enqueueSnackbar('This is a normal page again', { variant: 'success' })
+      } catch (error) {
+        enqueueSnackbar((error as Error).message, { variant: 'error' })
+      }
+    }
+    setBusy(false)
   }, [confirm, current?.base, post, hostId, screenId, enqueueSnackbar])
 
   if (planReady && !checkEntitlement(org as never, 'dataStore')) {

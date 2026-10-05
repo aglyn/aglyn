@@ -135,8 +135,11 @@ that field.
 - If the dataset stops being shared with the site, or is deleted, its record
   pages stop answering. They 404 rather than show data the site may no longer
   see.
-- **Stop serving** in **Record pages** takes every record page down. The page
-  stays a template, so it doesn't answer at its own address either.
+- **Stop serving** in **Record pages** takes every record page down. You're
+  then offered to make the page a normal page again. It counts toward your
+  plan's pages if you do, and any `{{item.field}}` tokens show as plain text
+  until you edit them out. **Keep it hidden** leaves it a template, so it
+  doesn't answer at its own address either.
 - A site that switches the Data plugin off serves no record pages.
 
 ## Locations, team members, portfolio
