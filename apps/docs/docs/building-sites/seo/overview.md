@@ -462,6 +462,7 @@ context about your content.
 | An author page | `ProfilePage` wrapping the author as a `Person` or `Organization` |
 | A product page | `Product` with its `Offer`, availability and — where you have reviews — an `AggregateRating` |
 | Any page more than one level deep | `BreadcrumbList` naming the trail to it |
+| A page with a FAQ section — a Section whose accessible label names it (`FAQ`, `Frequently asked questions`) — holding two or more question-and-answer pairs, as two-line items or accordions | `FAQPage` listing each question with its answer, the block AI search quotes and FAQ rich results read |
 
 Your **social links**, from Setup → Details → **Business details**, are published as
 the entity's `sameAs` — the property that tells a search engine your site, your
