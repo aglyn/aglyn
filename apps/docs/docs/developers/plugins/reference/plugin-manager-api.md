@@ -623,6 +623,7 @@ owns the records declares the resource and answers for it. Declare it in
 | `kinds` | `records`, `package`, or both. |
 | `formats` | `csv`, `json`, `ndjson`. |
 | `limits` | `maxRows` (and optional `maxBytes`) one file may carry. |
+| `instances` | `true` for a resource moved one instance at a time — one dataset's records, not every dataset's. Every key that reaches it names the instance as `<key>:<instance>` (`transferResourceInstanceKey`, `data.dataset:<datasetId>`), so a job, the person's remembered choices and the one running import are each kept per instance; the hooks read which one with `transferResourceInstanceOf(ctx)`. |
 
 The plugin also lists `transferResources` among its `contributes.console.slots`
 (`TRANSFER_RESOURCES_LOAD_POINT`), so the wizard loads its console registrar,
@@ -651,7 +652,7 @@ registerPluginTransferResource(
 | Hook | Semantics |
 | --- | --- |
 | `fields(ctx)` | The field catalog as `TransferCatalogInput` — standard, the organization's custom fields, derived and system fields, and groups. `transferResourceCatalog` builds it with the core and refuses one `transferFieldProblems` rejects. |
-| `matchKeys` | `MatchKeySpec[]`, in priority order — the keys a row finds its record by. At least one. |
+| `matchKeys` | `MatchKeySpec[]`, in priority order — the keys a row finds its record by, every one a default. Or `matchKeys(ctx)` answering `{ keys, defaults? }` when the keys depend on the context (an instance's own fields): `defaults` are the keys a person starts with, and the ones the Re-importable preset leads with. At least one; read through `transferResourceMatchKeys(resource, ctx)`. |
 | `aliases` | Optional `TransferAliasDictionary[]`: other products' header spellings for these fields. |
 | `readPage(ctx, cursor, fieldIds, { pageSize, ids, filter, scopeTokens })` | One export page, `{ rows, next }`, each row keyed by field id and holding only `fieldIds`. `cursor` is `null` for the first page and `next` `null` after the last. `ids` is the person's selection, `filter` the list's current filter in the plugin's own terms, and `scopeTokens` — present for a collaborator scoped to some sites — the `visibleTo` tokens a row must hold one of; the route reads through the Admin SDK, so honoring them is the enforcement. |
 | `count?(ctx, { ids, filter, scopeTokens })` | Optional: how many records that export reads, before its first page, so the file carries `X-Aglyn-Export-Rows` and the download is checked whole. Without it the route reads ahead up to 5,000 rows to count, and a larger file goes without a count. |
@@ -692,9 +693,9 @@ The console's wizard shows the steps that come before the review (after
 | --- | --- |
 | `listDeclaredTransferResources()` / `declaredTransferResource(key)` | The compiled declarations. |
 | `listTransferResourcesFor({ scope, org, host?, isFlagOn?, staffBypass? })` | The resources of one scope whose plugin runs for the workspace (`org`) or the site (`host`), and whose release flag is on when a verdict is passed. |
-| `resolveTransferResource(key)` / `resolveTransferResources()` | A declaration joined to its server half. A resource declared and not registered runs the app's declarations step once; still missing, it throws `TransferResourceUnavailableError` (`reason: 'unregistered'`), and a key nobody declares throws it with `reason: 'undeclared'`. |
+| `resolveTransferResource(key)` / `resolveTransferResources()` | A declaration joined to its server half. A resource declared and not registered runs the app's declarations step once; still missing, it throws `TransferResourceUnavailableError` (`reason: 'unregistered'`), and a key nobody declares throws it with `reason: 'undeclared'` — as does a key naming an instance of a resource without `instances`, or none of one with them. For an instance key the answer's `key` is the whole key and `instance` the instance. |
 | `transferRecordsHooks(resource)` / `transferPackageHooks(resource)` | The hooks of a declared kind, typed; throws for a kind the resource does not declare. |
-| `pluginTransferResourceUi(key)` / `listPluginTransferResourceUis()` | The client halves. |
+| `pluginTransferResourceUi(key)` / `listPluginTransferResourceUis()` | The client halves; an instance key finds its resource's. |
 
 `apps/console/specs/plugin-contributions-declared.spec.ts` holds both halves
 to the declaration: every console registrar runs and the client halves must

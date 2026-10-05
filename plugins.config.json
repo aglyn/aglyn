@@ -1161,6 +1161,20 @@
           "page": "the Data page"
         }
       ],
+      "transferResources": [
+        {
+          "$comment": "A dataset's records (AGL-3530), one dataset at a time: reached as data.dataset:<datasetId>, so a job, a person's remembered export fields and the one running import each belong to one dataset. The server half registers from consoleServerDeclarations, the client half from the console registrar.",
+          "key": "data.dataset",
+          "label": "Dataset records",
+          "singularLabel": "Dataset record",
+          "description": "The records of one dataset, with every field it defines.",
+          "scope": "org",
+          "kinds": ["records"],
+          "formats": ["csv", "json", "ndjson"],
+          "limits": { "maxRows": 50000 },
+          "instances": true
+        }
+      ],
       "contributes": {
         "console": {
           "shell": true,
@@ -1171,7 +1185,8 @@
             "besignerPageProperties",
             "entityPickers",
             "hostScreenRow",
-            "orgData"
+            "orgData",
+            "transferResources"
           ]
         }
       }

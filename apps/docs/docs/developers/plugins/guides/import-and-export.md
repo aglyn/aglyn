@@ -74,6 +74,24 @@ function ItemsHeaderActions({ hostId, selectedIds, currentFilter }) {
   assistant plugin can propose a mapping from the headers and the shape of
   each column. It never sees a cell.
 - `onFinished` is called when the person leaves the wizard from its results.
+- `title` names what is being moved ("Import into Products") where the
+  resource's label alone would not.
+
+### One instance at a time
+
+A resource whose records come in separate sets — a dataset's records, one
+dataset at a time — is declared once with `instances: true` and opened on
+the key that names the set, `<key>:<instance>`:
+
+```tsx
+transfer.openImport({ resource: `data.dataset:${datasetId}`, scope: 'org', title: `Import into ${name}` })
+```
+
+The job, the person's remembered export fields and the one-running-import
+rule are then each kept per set. Your server half reads which set from
+`transferResourceInstanceOf(ctx)` and answers its fields and match keys for
+it: `matchKeys(ctx)` may return `{ keys, defaults }`, the keys that set
+offers and the ones a person starts with.
 
 ## Add a step of your own
 

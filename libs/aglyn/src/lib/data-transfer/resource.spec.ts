@@ -21,7 +21,10 @@ import {
   isTransferFieldWritable,
   isTransferListType,
   isTransferResourceKey,
+  parseTransferResourceKey,
   transferFieldProblems,
+  transferResourceInstanceKey,
+  transferResourceInstanceOf,
   transferResourceProblems,
 } from './resource'
 import type { TransferField, TransferResourceDescriptor } from './resource'
@@ -68,6 +71,30 @@ describe('transfer resources', () => {
     expect(problems.join(' ')).toMatch(/row limit/)
     expect(problems.join(' ')).toMatch(/byte limit/)
   })
+
+  it('refuses an instances flag that is not a boolean', () => {
+    expect(transferResourceProblems({ ...people, instances: true })).toEqual([])
+    expect(transferResourceProblems({ ...people, instances: 'yes' as never })).toEqual([
+      'people says "instances" with something other than true or false.',
+    ])
+  })
+})
+
+describe('instance keys', () => {
+  it('names one instance of a resource after a colon', () => {
+    expect(transferResourceInstanceKey('data.dataset', 'abc_123-X')).toBe('data.dataset:abc_123-X')
+    expect(() => transferResourceInstanceKey('data.dataset', 'a/b')).toThrow(/cannot name an instance/)
+    expect(() => transferResourceInstanceKey('data.dataset', '')).toThrow(/cannot name an instance/)
+  })
+
+  it('reads a key back as the declared resource and its instance', () => {
+    expect(parseTransferResourceKey('data.dataset:abc')).toEqual({ key: 'data.dataset', instance: 'abc' })
+    expect(parseTransferResourceKey(' people ')).toEqual({ key: 'people', instance: null })
+    // A suffix no instance could be stays in the key, which then names nothing.
+    expect(parseTransferResourceKey('data.dataset:a b')).toEqual({ key: 'data.dataset:a b', instance: null })
+    expect(transferResourceInstanceOf({ resource: 'data.dataset:abc' })).toBe('abc')
+    expect(transferResourceInstanceOf({ resource: 'people' })).toBeNull()
+  })
 })
 
 describe('transfer fields', () => {
@@ -87,9 +114,10 @@ describe('transfer fields', () => {
     expect(isTransferFieldImportable(field({ derived: true }))).toBe(false)
   })
 
-  it('treats only tags and multi-picklists as lists', () => {
+  it('treats only tags, multi-picklists and free lists as lists', () => {
     expect(isTransferListType('tags')).toBe(true)
     expect(isTransferListType('multiPicklist')).toBe(true)
+    expect(isTransferListType('list')).toBe(true)
     expect(isTransferListType('picklist')).toBe(false)
     expect(isTransferListType('text')).toBe(false)
   })

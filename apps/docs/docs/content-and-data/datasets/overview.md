@@ -16,7 +16,7 @@ page (next to Media in the organization tabs), or from any site's Data page; bot
 the same data. Dataset limits, storage, and add-ons are billed at the organization
 level.
 
-![The Data page in the Aglyn console: an organization-shared dataset's records table under the grid's Columns, Filters, Export and Search controls, below the Add record, Schema, Import, CSV and JSON actions](/img/datasets/data-page.png)
+![The Data page in the Aglyn console: an organization-shared dataset's records table under the grid's Columns, Filters, Export and Search controls, below the Add record, Schema, Import and Export actions](/img/datasets/data-page.png)
 
 ```mermaid
 flowchart LR

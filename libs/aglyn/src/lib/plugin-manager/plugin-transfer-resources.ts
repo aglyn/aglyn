@@ -47,6 +47,7 @@ import type {
   TransferUndoStep,
 } from '../data-transfer/job'
 import {
+  parseTransferResourceKey,
   transferFieldProblems,
   transferResourceProblems,
   type TransferKind,
@@ -86,6 +87,13 @@ import { runPluginDeclarationsRepair } from './plugin-declarations-repair'
  *   steps of its own. The registrar loads at
  *   {@link TRANSFER_RESOURCES_LOAD_POINT}, which the plugin declares among its
  *   `console.slots`.
+ *
+ * A resource declared with `instances` (one dataset's records, not every
+ * dataset's) is reached by a key naming the instance, `<key>:<instance>`:
+ * {@link resolveTransferResource} answers the declaration under that whole
+ * key, so the job, the person's remembered choices and the one running
+ * import are each kept per instance, and the hooks read which instance from
+ * `ctx.resource` (`transferResourceInstanceOf`).
  *
  * A resource on the hub that fails at Apply is worse than one that is not on
  * the hub at all, so a declared resource with no server half is never read
@@ -308,12 +316,27 @@ export interface TransferRevertResult {
   conflicts: TransferUndoStep[]
 }
 
+/**
+ * The match keys one context offers — a dataset's own fields, say — and the
+ * ones a person starts with (every key, in order, when absent).
+ */
+export interface TransferMatchKeyOffer {
+  keys: readonly MatchKeySpec[]
+  defaults?: readonly string[]
+}
+
 /** The hooks a `records` resource answers with. */
 export interface TransferRecordsHooks {
   /** The field catalog: standard, custom, derived and system fields, and their groups. */
   fields(ctx: TransferResourceContext): Promise<TransferCatalogInput> | TransferCatalogInput
-  /** The keys a row finds its record by, in priority order. */
-  matchKeys: readonly MatchKeySpec[]
+  /**
+   * The keys a row finds its record by, in priority order — fixed, or read
+   * for the context when they depend on it (an instance's own fields), with
+   * the ones a person starts with. Read through {@link transferResourceMatchKeys}.
+   */
+  matchKeys:
+    | readonly MatchKeySpec[]
+    | ((ctx: TransferResourceContext) => Promise<TransferMatchKeyOffer> | TransferMatchKeyOffer)
   /** Other products' header spellings for these fields. */
   aliases?: readonly TransferAliasDictionary[]
   /**
@@ -490,7 +513,7 @@ export function pluginTransferResourceProblems(
   }
   need('records', RECORDS_HOOKS)
   need('package', PACKAGE_HOOKS)
-  if (impl.matchKeys && !impl.matchKeys.length && declared.kinds.includes('records')) {
+  if (Array.isArray(impl.matchKeys) && !impl.matchKeys.length && declared.kinds.includes('records')) {
     problems.push(`${declared.key} names no match key, so no row could find its record.`)
   }
   return problems
@@ -569,9 +592,14 @@ export function registerPluginTransferResource(
   resources.set(name, { pluginId: declared.pluginId, impl })
 }
 
-/** A declared resource with the server half its plugin registered. */
+/**
+ * A declared resource with the server half its plugin registered. For a
+ * resource declared with `instances`, `key` is the whole key asked for
+ * (`data.dataset:abc123`) and `instance` the instance it names.
+ */
 export type ResolvedTransferResource = ResolvedTransferResourceDeclaration & {
   impl: PluginTransferResource
+  instance?: string | null
 }
 
 /** Why a resource could not be resolved: nobody declared the key, or nobody registered it. */
@@ -605,21 +633,30 @@ async function ensureRegistered(
 /**
  * The resource with this key and its server half. Throws
  * {@link TransferResourceUnavailableError}: `undeclared` for a key no plugin
- * declares (a route answers 404), and `unregistered` for one declared and
- * still missing after the app's declarations step ran once (a route answers
- * 500 — a boot that dropped a registration, never "nothing to move").
+ * declares — and for a key that names an instance of a resource declared
+ * without `instances`, or none of one declared with them — (a route answers
+ * 404), and `unregistered` for one declared and still missing after the
+ * app's declarations step ran once (a route answers 500 — a boot that
+ * dropped a registration, never "nothing to move").
  */
 export async function resolveTransferResource(key: string): Promise<ResolvedTransferResource> {
-  const declared = declaredTransferResource(key)
-  if (!declared) {
+  const asked = String(key ?? '').trim()
+  const { key: base, instance } = parseTransferResourceKey(asked)
+  const declared = declaredTransferResource(base)
+  if (!declared || Boolean(declared.instances) !== (instance !== null)) {
     throw new TransferResourceUnavailableError(
-      key.trim(),
+      asked,
       'undeclared',
-      `no plugin declares a transfer resource "${key.trim()}"`,
+      declared
+        ? declared.instances
+          ? `transfer resource "${declared.key}" is moved one instance at a time; name it as "${declared.key}:<instance>"`
+          : `transfer resource "${declared.key}" has no instances; "${asked}" names one`
+        : `no plugin declares a transfer resource "${asked}"`,
     )
   }
   await ensureRegistered([declared])
-  return { ...declared, impl: (resources.get(declared.key) as Registered).impl }
+  const impl = (resources.get(declared.key) as Registered).impl
+  return instance === null ? { ...declared, impl } : { ...declared, key: asked, instance, impl }
 }
 
 /**
@@ -664,6 +701,25 @@ export async function transferResourceCatalog(
     throw new Error(`transfer resource "${resource.key}" has a bad field catalog: ${problems.join(' ')}`)
   }
   return catalog
+}
+
+/**
+ * The match keys a resource offers in this context and the ones a person
+ * starts with: its fixed list (every key a default), or what its
+ * `matchKeys(ctx)` answers. Throws for a context that offers no key, which no
+ * row could be matched by.
+ */
+export async function transferResourceMatchKeys(
+  resource: ResolvedTransferResource,
+  ctx: TransferResourceContext,
+): Promise<{ keys: MatchKeySpec[]; defaults: string[] }> {
+  const declared = transferRecordsHooks(resource).matchKeys
+  const offer: TransferMatchKeyOffer = typeof declared === 'function' ? await declared(ctx) : { keys: declared }
+  const keys = [...offer.keys]
+  if (!keys.length) throw new Error(`transfer resource "${resource.key}" offers no match key, so no row could find its record`)
+  const known = new Set(keys.map((key) => key.fieldId))
+  const defaults = (offer.defaults ?? keys.map((key) => key.fieldId)).filter((fieldId) => known.has(fieldId))
+  return { keys, defaults }
 }
 
 /** The plan for one chunk: the resource's own `plan`, or the core's `buildTransferPlan`. */
@@ -807,9 +863,9 @@ export function registerPluginTransferResourceUi(
   uis.set(name, { pluginId: declared.pluginId, ui })
 }
 
-/** The client half registered for a resource, or `null`. */
+/** The client half registered for a resource — or for the resource a key names an instance of — or `null`. */
 export function pluginTransferResourceUi(key: string): (PluginTransferResourceUi & { pluginId: string }) | null {
-  const entry = uis.get(key.trim())
+  const entry = uis.get(parseTransferResourceKey(key).key)
   return entry ? { ...entry.ui, pluginId: entry.pluginId } : null
 }
 

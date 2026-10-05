@@ -462,6 +462,11 @@ describe('deriveTransferCell and rows', () => {
 
   it('dispatches by field type', () => {
     expect(deriveTransferCell(byId.get('tags') as TransferField, 'A|B').value).toEqual(['a', 'b'])
+    // A free list keeps each item as typed, where tags are lower-cased.
+    expect(deriveTransferCell({ id: 'kinds', label: 'Kinds', type: 'list' }, 'Residential; Commercial').value).toEqual([
+      'Residential',
+      'Commercial',
+    ])
     expect(deriveTransferCell(byId.get('stage') as TransferField, '  Won ').value).toBe('Won')
     expect(deriveTransferCell(byId.get('note') as TransferField, 'abcdefg').value).toBe('abcde')
   })

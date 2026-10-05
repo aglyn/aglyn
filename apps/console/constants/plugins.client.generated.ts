@@ -72,7 +72,7 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
   {
     id: 'data',
     register: {"console":"registerDataConsole"},
-    contributes: {"console":{"shell":true,"routes":["/data"],"slots":["besignerPageProperties","entityPickers","hostScreenRow","orgData"]}},
+    contributes: {"console":{"shell":true,"routes":["/data"],"slots":["besignerPageProperties","entityPickers","hostScreenRow","orgData","transferResources"]}},
     load: () => import('@aglyn/plugins-data'),
   },
   {

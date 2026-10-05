@@ -44,9 +44,15 @@ export type TransferLaunchScope = 'org' | 'host'
 
 /** Opens the import wizard on one resource. */
 export interface TransferImportLaunch {
-  /** The resource key the plugin declared in `transferResources`. */
+  /**
+   * The resource key the plugin declared in `transferResources` — for one
+   * declared with `instances`, the key naming the instance
+   * (`data.dataset:<datasetId>`).
+   */
   resource: string
   scope: TransferLaunchScope
+  /** The wizard's title, naming the instance ("Import into Products"); "Import <resource label>" when absent. */
+  title?: string
   /** The site, for a `host` resource. */
   hostId?: string | null
   /** Resume this import instead of starting a new one. */
@@ -62,9 +68,11 @@ export interface TransferImportLaunch {
 
 /** Opens the export dialog on one resource. */
 export interface TransferExportLaunch {
-  /** The resource key the plugin declared in `transferResources`. */
+  /** The resource key the plugin declared in `transferResources`, naming the instance for one declared with `instances`. */
   resource: string
   scope: TransferLaunchScope
+  /** The dialog's title, naming the instance ("Export Products"); "Export <resource label>" when absent. */
+  title?: string
   /** The site, for a `host` resource. */
   hostId?: string | null
   /** The record ids the person selected in the list, when there is a selection. */

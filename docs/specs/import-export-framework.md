@@ -3,7 +3,8 @@
 Status: the core (AGL-3522), the extension point (AGL-3523), the job
 engine (AGL-3524), the UI kit (AGL-3526), the console client with the
 core launcher (AGL-3539), the field-selectable export (AGL-3525), site
-packages (AGL-3533) and the jobs' cleanup (AGL-3540) are built; everything
+packages (AGL-3533), the jobs' cleanup (AGL-3540) and datasets (AGL-3530) are
+built; everything
 else in the build plan below
 is open. Linear project P-AGL-140.
 The architecture of the core, and how the rest plugs into it, is in
@@ -62,7 +63,7 @@ matches · **Dry** = dry-run preview · **Undo**
 | CRM reports | CSV | Exports the table as shown | FS (minor) |
 | Email list members (import) | CSV or pasted | The most mature: preview → start (consent attestation) → run with a cursor → status; staged and resumable; flags role accounts and purchased-list columns; 50k cap; in-file dedupe; people already on the list unchanged | Map beyond email and opt-in, contact field updates, Undo |
 | Email list members (export), suppressions, topics | — | None | Everything |
-| Datasets | CSV/JSON both ways | Paste or upload; auto-maps by field id or name with no remap; optional key field updates existing records (overwrite only, written from the browser) | Map, FS, Conflict, server job, per-row errors, Undo |
+| Datasets | CSV/JSON/NDJSON both ways | Since AGL-3530: `data.dataset:<datasetId>` on the framework. FS over every field with the record's ID and times; Map (by name, then the old id headers); options fields as picklists (add to the options); references by ID or name, an unresolved one refusing its row; Match on the ID, the page address and any text or number field; Conflict choices; Dry run held to the model and the record cap; server job; Undo that keeps references whole | — |
 | Products | CSV (a common storefront format) | Requires Handle and Title; a colliding slug gets a suffix (always creates); written from the browser | Match by handle or SKU, updates, Map, FS, server job |
 | Orders (export) | CSV | What the list query matches, up to 5,000 | FS, streaming past 5,000 |
 | Discounts, coupons, gift cards, categories, suppliers, locations, subscriptions, site members, inventory | — | None | Everything |
@@ -183,7 +184,7 @@ matches · **Dry** = dry-run preview · **Undo**
 | AGL-3527 | CRM contacts and companies on the framework | AGL-3524–3526 and the CRM field work |
 | AGL-3528 | CRM leads, deals, tasks, activities and pipelines | AGL-3527 |
 | AGL-3529 | Email lists and suppressions | AGL-3524, AGL-3526 |
-| AGL-3530 | Datasets | AGL-3524–3526 |
+| AGL-3530 | Datasets (built) | AGL-3524–3526 |
 | AGL-3531 | Commerce | AGL-3524–3526 |
 | AGL-3532 | Form submissions, bookings, redirects, events, do-not-contact domains | AGL-3524–3526 |
 | AGL-3533 | Site package v2: selective export, dependency graph, content hashes; the backup becomes a preset (built) | AGL-3522, AGL-3523 |

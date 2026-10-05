@@ -692,6 +692,23 @@ describe('what the wizard reads (AGL-3539)', () => {
     expect(workspace.hostId).toBeUndefined()
   })
 
+  it('starts from the keys a resource reads for the context, and plans with them when none are sent', async () => {
+    registerPluginTransferResource(
+      'bottles',
+      { ...RESOURCE, matchKeys: async () => ({ keys: MATCH_KEYS, defaults: ['email'] }) },
+      { pluginId: 'cellar' },
+    )
+    const info = await readTransferResourceInfo(deps, { orgId: ORG, actorUid: ME, resource: 'bottles' })
+    expect(info.matchKeys).toEqual(MATCH_KEYS)
+    expect(info.defaultMatchKeys).toEqual(['email'])
+    expect(info.presetHints).toEqual({ matchKeyFieldIds: ['email'] })
+    bottles.set('b-old', { id: 'b-old', values: { name: 'Old', email: 'bottle1@cellar.test' } })
+    const job = await uploaded('Name,Email\nB,bottle1@cellar.test')
+    const analysis = await analyzeTransferJob(deps, { orgId: ORG, jobId: job.id, actorUid: ME, mapping: { 0: 'name', 1: 'email' } })
+    expect(analysis.matchKeys).toEqual(MATCH_KEYS)
+    expect(analysis.matches?.keys.map((key) => key.fieldId)).toEqual(['email'])
+  })
+
   it('reads a CSV with the delimiter and header row the person confirmed', async () => {
     const job = await uploadTransferSource(deps, {
       orgId: ORG,

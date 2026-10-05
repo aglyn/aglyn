@@ -184,6 +184,7 @@ import {
   transferRecordsHooks,
   transferResourceCatalog,
   transferResourceLockedRules,
+  transferResourceMatchKeys,
   TransferResourceUnavailableError,
   type ResolvedTransferResource,
   type TransferApplyWriter,
@@ -484,7 +485,8 @@ export function transferJobProgress(job: TransferJobRecord): TransferProgress {
 
 /**
  * What a resource offers the wizard and the export dialog: its descriptor,
- * every field and group, its match keys (each a default, in order), the
+ * every field and group, its match keys (and the ones a person starts with,
+ * which the Re-importable preset leads with), the
  * presets' hints, its locked rules and aliases. `prefs` is the person's own
  * and is filled by the caller; a custom field cannot be created from here.
  */
@@ -501,7 +503,8 @@ export async function readTransferResourceInfo(
   }
   const hooks = transferRecordsHooks(resource)
   const catalog = await transferResourceCatalog(resource, ctx)
-  const matchKeys = [...hooks.matchKeys]
+  const offer = await transferResourceMatchKeys(resource, ctx)
+  const matchKeys = offer.keys
   return {
     resource: {
       key: resource.key,
@@ -516,8 +519,8 @@ export async function readTransferResourceInfo(
     fields: catalog.fields,
     groups: catalog.groups,
     matchKeys,
-    defaultMatchKeys: matchKeys.map((key) => key.fieldId),
-    presetHints: { matchKeyFieldIds: matchKeys.map((key) => key.fieldId) },
+    defaultMatchKeys: offer.defaults,
+    presetHints: { matchKeyFieldIds: offer.defaults },
     locked: [...(await transferResourceLockedRules(resource, ctx))],
     ...(hooks.aliases?.length ? { dictionaries: [...hooks.aliases] } : {}),
     canCreateCustomField: false,
@@ -812,7 +815,7 @@ export interface AnalyzeTransferInput {
   jobId: string
   actorUid: string
   mapping?: Record<number, string | null>
-  /** Match key field ids, in priority order; every key the resource has when absent. */
+  /** Match key field ids, in priority order; the resource's defaults when absent. */
   matchKeys?: string[]
   dateOrders?: Record<string, TransferDateOrder>
 }
@@ -846,6 +849,7 @@ export async function analyzeTransferJob(
   const lists = await picklistLists(hooks, ctx, catalog.fields)
   const picklists = analyzePicklistColumns(table, mapping, byId, lists)
   const lockedRules = [...(await transferResourceLockedRules(resource, ctx))]
+  const offer = await transferResourceMatchKeys(resource, ctx)
 
   let review: Pick<TransferAnalyzeResponse, 'derivations' | 'lookups' | 'matches' | 'recordLabels'> = {}
   if (input.mapping) {
@@ -857,7 +861,7 @@ export async function analyzeTransferJob(
     const mappedFields = [...new Set(Object.values(mapping))]
       .map((fieldId) => byId.get(fieldId))
       .filter((field): field is TransferField => Boolean(field))
-    const keys = chosenMatchKeys(hooks.matchKeys, input.matchKeys)
+    const keys = chosenMatchKeys(offer.keys, input.matchKeys ?? offer.defaults)
     const values = read.map((row) => row.values)
     const found = keys.length
       ? await lookupAll(hooks, ctx, matchLookupRequests(values, keys))
@@ -888,7 +892,7 @@ export async function analyzeTransferJob(
     catalog,
     match,
     mappingProblems: mappingProblems(mapping, catalog.fields),
-    matchKeys: [...hooks.matchKeys],
+    matchKeys: offer.keys,
     lockedRules,
     picklists,
     ...review,
@@ -929,7 +933,11 @@ async function lookupTargetFor(
   const own = hooks.lookupTargets?.[key]
   if (own) return { hooks: own, ctx }
   const target = await resolveResource(deps, key)
-  return { hooks: transferRecordsHooks(target), ctx: { ...ctx, resource: target.key } }
+  const targetCtx = { ...ctx, resource: target.key }
+  // The target's keys as they stand for it — read for the context when
+  // they depend on it (one dataset's own fields).
+  const { keys } = await transferResourceMatchKeys(target, targetCtx)
+  return { hooks: { ...transferRecordsHooks(target), matchKeys: keys }, ctx: targetCtx }
 }
 
 /** One distinct value of a lookup column, as the file spelled it, and where. */
@@ -1237,8 +1245,7 @@ function readPlanRows(
 }
 
 /** The match keys the person chose, in their order, from the resource's own. */
-function chosenMatchKeys(keys: readonly MatchKeySpec[], chosen: readonly string[] | undefined): MatchKeySpec[] {
-  if (!chosen) return [...keys]
+function chosenMatchKeys(keys: readonly MatchKeySpec[], chosen: readonly string[]): MatchKeySpec[] {
   return chosen.map((fieldId) => {
     const key = keys.find((entry) => entry.fieldId === fieldId)
     if (!key) throw new TransferEngineError('invalid', 400, `"${fieldId}" is not a key records can be matched by.`)
@@ -1302,7 +1309,8 @@ export async function planTransferJob(
   const policy = createTransferPolicy({ ...(choices.policy ?? {}), locked: lockedRules })
   const policyProblems = transferPolicyProblems(policy, catalog.fields)
   if (policyProblems.length) throw new TransferEngineError('invalid', 422, policyProblems[0] as string, policyProblems)
-  const keys = chosenMatchKeys(hooks.matchKeys, choices.matchKeys)
+  const offer = await transferResourceMatchKeys(resource, ctx)
+  const keys = chosenMatchKeys(offer.keys, choices.matchKeys ?? offer.defaults)
 
   // Picklists: every unmatched value needs the person's choice.
   const lists = await picklistLists(hooks, ctx, catalog.fields)

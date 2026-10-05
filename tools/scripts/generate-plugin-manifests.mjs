@@ -2027,7 +2027,8 @@ function siteBundleSectionRows() {
  *
  * Checked here, in the shape core's `transferResourceProblems` checks again
  * at registration: a resource key no other plugin uses, a label, a scope, at
- * least one known kind and format, and positive whole limits. And the two
+ * least one known kind and format, positive whole limits, and `instances:
+ * true` for a resource moved one instance at a time (one dataset's records). And the two
  * places the halves are registered from: a `serverDeclarations` or
  * `consoleServerDeclarations` entry for the server half, and a console
  * registrar that loads at the `transferResources` slot for the client half.
@@ -2036,7 +2037,7 @@ const TRANSFER_RESOURCE_KEY = /^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$/
 const TRANSFER_SCOPES = ['org', 'host']
 const TRANSFER_KINDS = ['records', 'package']
 const TRANSFER_FORMATS = ['csv', 'json', 'ndjson']
-const TRANSFER_RESOURCE_FIELDS = ['key', 'label', 'singularLabel', 'scope', 'kinds', 'formats', 'limits', 'description']
+const TRANSFER_RESOURCE_FIELDS = ['key', 'label', 'singularLabel', 'scope', 'kinds', 'formats', 'limits', 'description', 'instances']
 const TRANSFER_RESOURCES_LOAD_POINT = 'transferResources'
 
 function transferResourceRows() {
@@ -2063,7 +2064,7 @@ function transferResourceRows() {
     }
     for (const entry of declared) {
       const { $comment: _note, ...resource } = entry ?? {}
-      const { key, label, singularLabel, scope, kinds, formats, limits, description } = resource
+      const { key, label, singularLabel, scope, kinds, formats, limits, description, instances } = resource
       const what = `${where} "${key ?? ''}"`
       const unknown = Object.keys(resource).filter((field) => !TRANSFER_RESOURCE_FIELDS.includes(field))
       if (unknown.length) throw new Error(`${what}: ${unknown.join(', ')} is not a resource field`)
@@ -2080,6 +2081,9 @@ function transferResourceRows() {
         }
       }
       if (!TRANSFER_SCOPES.includes(scope)) throw new Error(`${what}: "scope" is ${TRANSFER_SCOPES.join(' or ')}`)
+      if (instances !== undefined && instances !== true) {
+        throw new Error(`${what}: "instances" is true when the resource is moved one instance at a time, and absent otherwise`)
+      }
       for (const [name, list, known] of [['kinds', kinds, TRANSFER_KINDS], ['formats', formats, TRANSFER_FORMATS]]) {
         if (!Array.isArray(list) || !list.length || new Set(list).size !== list.length || list.some((one) => !known.includes(one))) {
           throw new Error(`${what}: "${name}" lists one or more of ${known.join(', ')}, each once`)

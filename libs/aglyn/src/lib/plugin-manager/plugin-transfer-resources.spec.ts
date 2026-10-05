@@ -56,6 +56,7 @@ import {
   transferPackageHooks,
   transferRecordsHooks,
   transferResourceCatalog,
+  transferResourceMatchKeys,
   TransferResourceUnavailableError,
   transferWizardSteps,
   type PluginTransferResource,
@@ -272,6 +273,75 @@ describe('resolving a resource', () => {
     expect(() => transferPackageHooks(bottles)).toThrow(/does not move a package/)
     expect(typeof transferPackageHooks(shelves).writeItems).toBe('function')
     expect(() => transferRecordsHooks(shelves)).toThrow(/does not move records/)
+  })
+})
+
+describe('a resource moved one instance at a time', () => {
+  const CASKS: ResolvedTransferResourceDeclaration = {
+    pluginId: 'cellar',
+    key: 'casks',
+    label: 'Cask contents',
+    scope: 'org',
+    kinds: ['records'],
+    formats: ['csv'],
+    instances: true,
+  }
+
+  beforeEach(() => {
+    mockDeclared = [BOTTLES, CASKS]
+    registerPluginTransferResource('bottles', RECORDS, { pluginId: 'cellar' })
+    registerPluginTransferResource('casks', RECORDS, { pluginId: 'cellar' })
+  })
+
+  it('resolves under the whole key, naming the instance', async () => {
+    const cask = await resolveTransferResource('casks:c-42')
+    expect(cask).toMatchObject({ key: 'casks:c-42', instance: 'c-42', label: 'Cask contents', impl: RECORDS })
+    // Nothing about a resource without instances moves.
+    expect(await resolveTransferResource('bottles')).not.toHaveProperty('instance')
+  })
+
+  it('refuses a key that names no instance of it, and an instance of one that has none', async () => {
+    await expect(resolveTransferResource('casks')).rejects.toMatchObject({ reason: 'undeclared' })
+    await expect(resolveTransferResource('casks')).rejects.toThrow(/one instance at a time/)
+    await expect(resolveTransferResource('bottles:b1')).rejects.toMatchObject({ reason: 'undeclared' })
+    await expect(resolveTransferResource('bottles:b1')).rejects.toThrow(/has no instances/)
+  })
+
+  it('finds the client half under the declared key', () => {
+    registerPluginTransferResourceUi('casks', { label: 'Cask contents' }, { pluginId: 'cellar' })
+    expect(pluginTransferResourceUi('casks:c-42')).toMatchObject({ label: 'Cask contents', pluginId: 'cellar' })
+  })
+})
+
+describe('match keys read for the context', () => {
+  it('offers a fixed list, every key a default', async () => {
+    registerPluginTransferResource('bottles', RECORDS, { pluginId: 'cellar' })
+    expect(await transferResourceMatchKeys(await resolveTransferResource('bottles'), CTX)).toEqual({
+      keys: [{ fieldId: 'email', normalizer: 'email' }],
+      defaults: ['email'],
+    })
+  })
+
+  it('asks the resource, keeping only defaults it offers', async () => {
+    const matchKeys = jest.fn(async (ctx: TransferResourceContext) => ({
+      keys: [
+        { fieldId: 'id', normalizer: 'aglynId' as const },
+        { fieldId: `${ctx.orgId}-sku`, normalizer: 'trim' as const },
+      ],
+      defaults: ['id', 'gone'],
+    }))
+    registerPluginTransferResource('bottles', { ...RECORDS, matchKeys }, { pluginId: 'cellar' })
+    const offer = await transferResourceMatchKeys(await resolveTransferResource('bottles'), CTX)
+    expect(matchKeys).toHaveBeenCalledWith(CTX)
+    expect(offer.keys.map((key) => key.fieldId)).toEqual(['id', 'o1-sku'])
+    expect(offer.defaults).toEqual(['id'])
+  })
+
+  it('refuses a context that offers no key', async () => {
+    registerPluginTransferResource('bottles', { ...RECORDS, matchKeys: () => ({ keys: [] }) }, { pluginId: 'cellar' })
+    await expect(transferResourceMatchKeys(await resolveTransferResource('bottles'), CTX)).rejects.toThrow(
+      /offers no match key/,
+    )
   })
 })
 

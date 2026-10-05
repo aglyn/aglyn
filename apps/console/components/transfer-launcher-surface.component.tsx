@@ -127,6 +127,7 @@ export function TransferLauncherSurface({ state, orgId, getIdToken, onClose }: T
         onClose={onClose}
         client={client}
         resource={launch.resource}
+        {...(launch.title ? { title: launch.title } : {})}
         {...(launch.selection?.length ? { selection: launch.selection } : {})}
         {...(launch.filter ? { filter: launch.filter } : {})}
       />
@@ -146,7 +147,7 @@ export function TransferLauncherSurface({ state, orgId, getIdToken, onClose }: T
       <DialogTitle id="transfer-import-title">
         <Stack direction="row" spacing={1} sx={{ alignItems: 'center', justifyContent: 'space-between' }}>
           <Typography variant="h6" component="span">
-            {ui?.label ? `Import ${ui.label}` : 'Import'}
+            {launch.title ?? (ui?.label ? `Import ${ui.label}` : 'Import')}
           </Typography>
           <IconButton aria-label="Close" onClick={onClose} edge="end">
             <MdiIcon path={ICON_VARIANT_CLOSE.path} />

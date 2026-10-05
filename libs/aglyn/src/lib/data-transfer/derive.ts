@@ -1022,6 +1022,8 @@ export function deriveTransferCell(field: TransferField, raw: unknown, options: 
       return splitTransferList(raw, options.list)
     case 'tags':
       return splitTransferList(raw, { ...options.list, lowercase: true })
+    case 'list':
+      return splitTransferList(raw, options.list)
     case 'address':
       return parseAddressLine(raw)
     case 'json':

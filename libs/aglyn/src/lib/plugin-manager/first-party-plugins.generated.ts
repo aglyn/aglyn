@@ -952,7 +952,28 @@ export const PLUGIN_SITE_BUNDLE_SECTIONS_DECLARED: readonly ResolvedPluginSiteBu
  * Every resource a first-party plugin can import or export, declared by that
  * plugin (AGL-3523), in the order the transfer hub lists them.
  */
-export const PLUGIN_TRANSFER_RESOURCES_DECLARED: readonly ResolvedTransferResourceDeclaration[] = []
+export const PLUGIN_TRANSFER_RESOURCES_DECLARED: readonly ResolvedTransferResourceDeclaration[] = [
+  {
+    "pluginId": "data",
+    "key": "data.dataset",
+    "label": "Dataset records",
+    "singularLabel": "Dataset record",
+    "description": "The records of one dataset, with every field it defines.",
+    "scope": "org",
+    "kinds": [
+      "records"
+    ],
+    "formats": [
+      "csv",
+      "json",
+      "ndjson"
+    ],
+    "limits": {
+      "maxRows": 50000
+    },
+    "instances": true
+  }
+]
 
 /**
  * Every org collection a first-party plugin owns whose documents the media

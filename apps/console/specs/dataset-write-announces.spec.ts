@@ -98,6 +98,16 @@ describe('a dataset record write announces to the live pages', () => {
     expect(announceAt).toBeLessThan(swallowAt)
   })
 
+  it('an import and its undo announce on the server, once per chunk', () => {
+    // A dataset import runs on the transfer framework (AGL-3530): the
+    // plugin's `apply` and `revert` hooks write the records, so they tell the
+    // pages — once for each chunk they wrote, not once per row.
+    const transfer = source('libs/plugins/data/src/lib/transfer/dataset-transfer.server.ts')
+    expect(transfer).toContain("import { announceDatasetRecords } from '../server/announce-dataset-records'")
+    expect(transfer.match(/await announceDatasetRecords\(\{ firestore: deps\.firestore, orgId: ctx\.orgId, datasetId: dataset\.id \}\)/g))
+      .toHaveLength(2)
+  })
+
   it('the automation dataset steps announce — append, and both legs of update', () => {
     // The steps are the data plugin's, run for the engine through the
     // platform's server-step seam (AGL-3080).
@@ -117,7 +127,7 @@ describe('a dataset record write announces to the live pages', () => {
     expect(engine).toContain('await pluginServerStepExecutor(step.type)')
   })
 
-  it('the browser leg announces its client-direct edits, deletes and updating imports', () => {
+  it('the browser leg announces its client-direct edits and deletes', () => {
     // Record edits and deletes never reach a server route — AGL-473 moved
     // only creates there, for quota — so a server-only fix would have left
     // the two most ordinary console actions refreshing nothing.
@@ -125,10 +135,10 @@ describe('a dataset record write announces to the live pages', () => {
       'libs/plugins/data/src/lib/components/host-datasets-card.component.tsx',
     )
     expect(card).toContain("action: 'announce-records'")
-    // Three: a record edit, a delete — which loops over every dataset its
-    // reference fixups rewrote as well — and an import that only updated
-    // existing rows and so never reached the server leg.
-    expect(card.match(/await announceRecords\(/g)).toHaveLength(3)
+    // Two: a record edit, and a delete — which loops over every dataset its
+    // reference fixups rewrote as well. Imports run on the server since
+    // AGL-3530 and announce there, below.
+    expect(card.match(/await announceRecords\(/g)).toHaveLength(2)
     expect(card).toContain('alsoChanged.add(other.$id)')
     // The route's own leg, gated by the same membership and visibility the
     // create is — a drop grants nothing the rules withhold, but which

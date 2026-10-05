@@ -16,7 +16,7 @@ this document is the architecture.
 | UI kit: export dialog, import wizard | `libs/aglyn-transfer-ui` | AGL-3526 |
 | Console client and the core launcher plugins open the kit through | `apps/console/utils/transfer-http-client.ts`; `libs/aglyn/src/lib/app-utils/transfer-launcher-context.ts`; the shell's `transfer-launcher-provider.component.tsx` | AGL-3539 |
 | Site packages: a site's items as one file, planned and undone | core `data-transfer/site-package.ts`; routes `apps/console/app/api/hosts/{export,import}` | AGL-3533 |
-| Each resource | the owning plugin's `src/lib/transfer/` | AGL-3527–3535 |
+| Each resource | the owning plugin's `src/lib/transfer/` — datasets: `libs/plugins/data/src/lib/transfer/` (AGL-3530) | AGL-3527–3535 |
 
 The core knows nothing of any plugin. It holds no vendor's header names, no
 plugin's collection, and no plugin's vocabulary; `check:plugin-domain-in-core`
@@ -43,13 +43,18 @@ uses WebCrypto (`globalThis.crypto.subtle`), which both provide.
 
 `TransferResourceDescriptor` is a plugin's declaration: `key`, `label`,
 `scope` (`org` or `host`), `kinds` (`records`, `package`), `formats` (`csv`,
-`json`, `ndjson`) and `limits`. `transferResourceProblems` checks one at
-registration so a malformed declaration fails at startup.
+`json`, `ndjson`), `limits`, and `instances` for a resource moved one
+instance at a time (one dataset's records): every key reaching it names the
+instance as `<key>:<instance>` (`transferResourceInstanceKey`,
+`parseTransferResourceKey`, `transferResourceInstanceOf(ctx)`), so a job, a
+person's remembered choices and the one running import are each kept per
+instance. `transferResourceProblems` checks one at registration so a
+malformed declaration fails at startup.
 
 `TransferField` is one field: `id`, `label`, `group`, a `type` (`text`,
 `longText`, `email`, `phone`, `url`, `number`, `integer`, `currency`,
 `percent`, `boolean`, `date`, `datetime`, `picklist`, `multiPicklist`,
-`tags`, `address`, `lookup`, `json`) and flags — `required`, `readOnly`,
+`tags`, `list`, `address`, `lookup`, `json`) and flags — `required`, `readOnly`,
 `derived`, `system`, `custom`, `matchKey` — plus `aliases`, `picklistId`,
 `lookup` and `maxLength`. The type decides how a cell is read, how a header
 is guessed and which policies apply. Read-only, derived and system fields
@@ -107,7 +112,8 @@ be wrong; it has to be acknowledged.
   (`https://` added to a bare domain), full-name splitting (with the rule
   used: `lastCommaFirst`, `lastWord`, `surnameParticle`, `singleWord`),
   one-line addresses into the platform's postal address (always flagged),
-  and lists split on `,` `;` `|` and line breaks.
+  and lists split on `,` `;` `|` and line breaks — `tags` lower-cased, a
+  `list` of free items kept as typed.
 
 `deriveTransferRow(fieldsById, mappedCells)` reads a whole row into
 `values` (a mapped blank cell is `null`, so "blank clears" can act on it),
@@ -263,7 +269,9 @@ A plugin declares `transferResources: [TransferResourceDescriptor]` in
 (`TRANSFER_RESOURCES_LOAD_POINT`) among its `console.slots`. From
 `serverDeclarations` or `consoleServerDeclarations` it registers the server
 half with `registerPluginTransferResource(key, impl)`: `fields(ctx)` returning
-`TransferCatalogInput`, `matchKeys` (`MatchKeySpec[]`), `aliases`
+`TransferCatalogInput`, `matchKeys` (`MatchKeySpec[]`, or `matchKeys(ctx)`
+answering `{ keys, defaults }` when an instance's own fields are its keys —
+read through `transferResourceMatchKeys`), `aliases`
 (`TransferAliasDictionary[]`), `readPage(ctx, cursor, fieldIds, options)`,
 `lookup(ctx, requests)` returning the `MatchLookup` and the found records'
 current values, optional `suggest(ctx, { by, values })` (records named like
@@ -277,9 +285,9 @@ its own `lookup`, `suggest` and `matchKeys`), optional `plan`,
 `transferResourceProblems` and refuses a kind whose hooks are missing. From
 its console registrar it registers the client half with
 `registerPluginTransferResourceUi(key, { label, icon, extraSteps })`.
-`resolveTransferResource(key)` joins a declaration to its server half and
-throws `TransferResourceUnavailableError` for one declared and never
-registered; `listTransferResourcesFor` lists what a workspace or site can move
+`resolveTransferResource(key)` joins a declaration to its server half — for
+an instance key, under the whole key with its `instance` — and throws
+`TransferResourceUnavailableError` for one declared and never registered; `listTransferResourcesFor` lists what a workspace or site can move
 under its plugin enablement and release flags.
 
 **AGL-3524, the job engine.** See [The job engine](#the-job-engine) below.

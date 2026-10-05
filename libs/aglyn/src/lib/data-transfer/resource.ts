@@ -75,6 +75,15 @@ export interface TransferResourceDescriptor {
   limits?: TransferLimits
   /** One sentence on what moves, shown on the hub. */
   description?: string
+  /**
+   * The resource is moved one instance at a time — one dataset's records, not
+   * every dataset's — so every key that reaches it names the instance as
+   * `<key>:<instance>` ({@link transferResourceInstanceKey}). A job, a
+   * person's remembered choices and the one-running-import rule are then kept
+   * per instance, and the plugin's hooks read which one from the context's
+   * `resource` ({@link transferResourceInstanceOf}).
+   */
+  instances?: boolean
 }
 
 /** What a field means, which decides how a cell is read and written. */
@@ -97,6 +106,7 @@ export type TransferFieldType =
   | 'address'
   | 'lookup'
   | 'json'
+  | 'list'
 
 export const TRANSFER_FIELD_TYPES: readonly TransferFieldType[] = [
   'text',
@@ -117,10 +127,15 @@ export const TRANSFER_FIELD_TYPES: readonly TransferFieldType[] = [
   'address',
   'lookup',
   'json',
+  'list',
 ]
 
-/** The types whose value is a list, and so the only ones a file can append to. */
-export const TRANSFER_LIST_FIELD_TYPES: readonly TransferFieldType[] = ['multiPicklist', 'tags']
+/**
+ * The types whose value is a list, and so the only ones a file can append to:
+ * picklist values, tags (kept lower-case), and a `list` of free text items
+ * kept as typed.
+ */
+export const TRANSFER_LIST_FIELD_TYPES: readonly TransferFieldType[] = ['multiPicklist', 'tags', 'list']
 
 /**
  * What a lookup field points at: another resource, found by one of its
@@ -221,7 +236,51 @@ export function transferResourceProblems(descriptor: TransferResourceDescriptor)
   if (limits?.maxBytes !== undefined && !(Number.isInteger(limits.maxBytes) && limits.maxBytes > 0)) {
     problems.push(`${descriptor.key} has a byte limit that is not a positive whole number.`)
   }
+  if (descriptor.instances !== undefined && typeof descriptor.instances !== 'boolean') {
+    problems.push(`${descriptor.key} says "instances" with something other than true or false.`)
+  }
   return problems
+}
+
+/** What separates a resource's key from the instance it names: `data.dataset:<datasetId>`. */
+export const TRANSFER_INSTANCE_SEPARATOR = ':'
+
+const INSTANCE_ID = /^[A-Za-z0-9_-]{1,128}$/
+
+/** Whether `instance` can be named in a key: letters, digits, `_` and `-`, at most 128. */
+export function isTransferResourceInstance(instance: unknown): instance is string {
+  return typeof instance === 'string' && INSTANCE_ID.test(instance)
+}
+
+/**
+ * The key that names one instance of a resource declared with `instances`:
+ * `data.dataset` and `abc123` make `data.dataset:abc123`. Throws for an
+ * instance a key cannot carry, so a malformed id never becomes a job's key.
+ */
+export function transferResourceInstanceKey(key: string, instance: string): string {
+  if (!isTransferResourceInstance(instance)) {
+    throw new Error(`"${String(instance)}" cannot name an instance of ${key}.`)
+  }
+  return `${key}${TRANSFER_INSTANCE_SEPARATOR}${instance}`
+}
+
+/**
+ * A key read as the declared resource and the instance it names, if any:
+ * `data.dataset:abc123` is `{ key: 'data.dataset', instance: 'abc123' }`, and
+ * `people` is `{ key: 'people', instance: null }`. A suffix that is not a
+ * well-formed instance is left in `key`, which then names no declaration.
+ */
+export function parseTransferResourceKey(key: string): { key: string; instance: string | null } {
+  const text = String(key ?? '').trim()
+  const at = text.indexOf(TRANSFER_INSTANCE_SEPARATOR)
+  if (at < 0) return { key: text, instance: null }
+  const instance = text.slice(at + 1)
+  return isTransferResourceInstance(instance) ? { key: text.slice(0, at), instance } : { key: text, instance: null }
+}
+
+/** The instance a hook's context names (`ctx.resource`), or `null` for a resource without instances. */
+export function transferResourceInstanceOf(context: { resource: string }): string | null {
+  return parseTransferResourceKey(context.resource).instance
 }
 
 /** What is wrong with a field list, as sentences; empty when nothing is. */
