@@ -33,10 +33,12 @@ import { isStandardPicklistValueId } from '@aglyn/aglyn/app-utils/picklists'
  *
  * The Fields page applies the ones that touch only the list — add, reorder,
  * sort, activate, deactivate, group, default — as one client write of the
- * whole document. The two that change what RECORDS hold — a rename and a
- * delete with its replacement — go to `crm/picklist-values`, which rewrites
- * the list and every record the definition's targets name in one request;
- * this module is where both sides agree what each move does.
+ * whole document. The ones that change what RECORDS hold — a rename and a
+ * delete with its replacement, and, on a list whose records keep the
+ * value's group ({@link picklistKeepsGroups}: a lead's lead source
+ * direction, AGL-3577), a regroup and an add — go to `crm/picklist-values`,
+ * which rewrites the list and every record the definition's targets name in
+ * one request; this module is where both sides agree what each move does.
  *
  * Each move that depends on the field takes its definition: a standard
  * value cannot be deleted, an added value's id is minted clear of every
@@ -64,6 +66,19 @@ export type PicklistValuesAction =
       /** An active value's label the records move to, or `null` to clear them. */
       replaceWith: string | null
     }
+  /** File a value under a group, or none with `null` — a list that {@link picklistKeepsGroups}. */
+  | { action: 'group'; valueId: string; group: string | null }
+  /** Add a value — on a list that {@link picklistKeepsGroups}, where records may already hold it. */
+  | { action: 'add'; label: string; group?: string | null; meaning?: string | null }
+
+/**
+ * Whether records keep a value's GROUP beside its label (AGL-3577) — a
+ * lead's `leadSourceDirection` — so a regroup or an add changes records and
+ * goes to the route rather than being one client write of the list.
+ */
+export function picklistKeepsGroups(definition: CrmPicklistDefinition): boolean {
+  return definition.targets.some((target) => Boolean(target.groupField))
+}
 
 /** What the route is asked. `hostId` or `orgId` names the org, as every CRM route's scope does. */
 export type PicklistValuesRequest = {

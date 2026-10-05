@@ -19,6 +19,7 @@ import {
   CRM_SCOPED_SEARCH_TOKENS_FIELD,
   CRM_SEARCH_TOKENS_FIELD,
   type CrmListCollection,
+  type CrmListFieldsContext,
   crmListFields,
 } from '@aglyn/aglyn'
 import { scopedSearch } from '@aglyn/aglyn/app-utils/name-search'
@@ -181,13 +182,15 @@ export function crmSelectField(column: string, path: string = column): ListFilte
  * sentinel in the patch reads as the field removed — through
  * `crmListFields`, narrowed to `fields`. A client never writes a field the
  * rules keep for the server (a lead's `emailStatus`), which is why the
- * caller names the ones it may.
+ * caller names the ones it may. A lead's direction is read off the org's
+ * lead source list, which the caller passes in `context` once it has it.
  */
 export function crmClientListFields(
   collection: CrmListCollection,
   record: Readonly<Record<string, unknown>>,
   patch: Readonly<Record<string, unknown>>,
   fields: readonly string[],
+  context: CrmListFieldsContext = {},
 ): Record<string, unknown> {
   const merged: Record<string, unknown> = { ...record }
   for (const [key, value] of Object.entries(patch)) {
@@ -195,7 +198,7 @@ export function crmClientListFields(
     if (key.includes('.')) continue
     merged[key] = value === null || isSentinel(value) ? undefined : value
   }
-  const computed = crmListFields(collection, merged)
+  const computed = crmListFields(collection, merged, context)
   return Object.fromEntries(fields.filter((field) => field in computed).map((field) => [field, computed[field]]))
 }
 

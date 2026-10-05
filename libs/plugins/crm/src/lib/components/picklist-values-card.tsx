@@ -76,6 +76,7 @@ import {
   crmPicklistValuesRouteUrl,
   movePicklistValue,
   picklistAddableMeanings,
+  picklistKeepsGroups,
   picklistMeaningLabel,
   picklistReplacements,
   type PicklistValuesAction,
@@ -133,10 +134,11 @@ type NameDialog = { mode: 'add' } | { mode: 'rename'; value: CrmPicklistValue } 
  * as an added value's. Every move that touches only the LIST — add,
  * reorder by drag or arrows, sort A–Z, activate, deactivate, group,
  * default — is one client write of the whole document, guarded against a
- * cached read like every seeded save on the Fields page. The two that
- * change RECORDS — rename, and delete with a replacement — go to
- * `crm/picklist-values`, which rewrites the list and every record the
- * definition's targets name together; see that route.
+ * cached read like every seeded save on the Fields page. The ones that
+ * change RECORDS — rename, and delete with a replacement, and on a list
+ * whose records keep the value's group (Lead source's direction, AGL-3577)
+ * group and add — go to `crm/picklist-values`, which rewrites the list and
+ * every record the definition's targets name together; see that route.
  *
  * An org that has never edited the list reads the standard values, and the
  * first move here writes them down as the org's own.
@@ -158,6 +160,8 @@ export function PicklistValuesCard(props: PicklistValuesCardProps) {
   const [dragFrom, setDragFrom] = useState<number | null>(null)
 
   const groups = definition.groups ?? []
+  // Whether records keep a value's group, so a regroup and an add change them too.
+  const keepsGroups = picklistKeepsGroups(definition)
   const meanings = definition.meanings ?? []
   // An added value may not take a meaning only the platform sets (AGL-3512).
   const addableMeanings = picklistAddableMeanings(definition)
@@ -272,6 +276,22 @@ export function PicklistValuesCard(props: PicklistValuesCardProps) {
         meaning: draftMeaning || null,
       })
       if (move.ok === false) return void setNameError(move.error)
+      if (keepsGroups) {
+        // Records may already hold the label, and keep its group (AGL-3577).
+        const result = await post({
+          action: 'add',
+          label: draftName,
+          group: draftGroup || null,
+          meaning: draftMeaning || null,
+        })
+        if (!result) return
+        setNameDialog(null)
+        enqueueSnackbar(`“${draftName.trim()}” added${moved(result)}`, {
+          variant: 'success',
+          persist: false,
+        })
+        return
+      }
       setNameDialog(null)
       await save(move.picklist, `“${draftName.trim()}” added`)
       return
@@ -492,10 +512,17 @@ export function PicklistValuesCard(props: PicklistValuesCardProps) {
                       onChange={(event) => {
                         const group = String(event.target.value) || null
                         const name = groups.find((entry) => entry.id === group)?.label
-                        void save(
-                          setPicklistValueGroup(definition, picklist, value.id, group),
-                          name ? `“${value.label}” is ${name}` : `“${value.label}” has no group`,
-                        )
+                        const done = name ? `“${value.label}” is ${name}` : `“${value.label}” has no group`
+                        if (!keepsGroups) {
+                          void save(setPicklistValueGroup(definition, picklist, value.id, group), done)
+                          return
+                        }
+                        // Its records keep the group too (AGL-3577): the route moves both.
+                        void post({ action: 'group', valueId: value.id, group }).then((result) => {
+                          if (result) {
+                            enqueueSnackbar(`${done}${moved(result)}`, { variant: 'success', persist: false })
+                          }
+                        })
                       }}
                       fullWidth
                       slotProps={{

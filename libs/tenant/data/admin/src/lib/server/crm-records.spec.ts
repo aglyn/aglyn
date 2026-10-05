@@ -48,6 +48,8 @@ import {
   crmRecordsQuotaForOrg,
   releaseCrmEmailSend,
   reserveCrmEmailSend,
+  restampCrmListFieldsAt,
+  restampCrmListFieldsOf,
 } from './crm-records'
 
 /*
@@ -528,5 +530,88 @@ describe('the one-to-one email counter', () => {
         error.mockRestore()
       }
     })
+  })
+})
+
+/*
+ * A LEAD'S DIRECTION ON A RESTAMP (AGL-3577). Every server writer of a lead
+ * restamps it here, so this is where its `leadSourceDirection` is read off
+ * the org's Lead source list — once per org for a batch — and never
+ * guessed when that list cannot be read.
+ */
+describe('restampCrmListFieldsAt — a lead’s lead source direction (AGL-3577)', () => {
+  const REGROUPED = { values: [{ id: 'web', label: 'Web', active: true, group: 'outbound' }] }
+
+  function org(list: () => Promise<Record<string, unknown> | undefined>) {
+    let listReads = 0
+    const updates: Array<Record<string, unknown>> = []
+    const leads = new Map<string, Record<string, unknown>>()
+    const orgDoc = {
+      path: 'orgs/org-1',
+      collection: (name: string) => ({
+        doc: (id: string) => ({
+          get: async () => {
+            listReads += 1
+            expect(`${name}/${id}`).toBe('crmPicklists/leadSource')
+            const data = await list()
+            return { data: () => data }
+          },
+        }),
+      }),
+    }
+    const lead = (id: string, data: Record<string, unknown>): any => {
+      leads.set(id, { ...data })
+      const ref: any = {
+        path: `orgs/org-1/leads/${id}`,
+        parent: { parent: orgDoc },
+        firestore: {
+          runTransaction: async (body: (tx: any) => Promise<unknown>) =>
+            body({
+              get: async () => ({ exists: true, data: () => leads.get(id) }),
+              update: (_ref: unknown, patch: Record<string, unknown>) => {
+                updates.push(patch)
+                leads.set(id, { ...leads.get(id), ...patch })
+              },
+            }),
+        },
+      }
+      return ref
+    }
+    return { lead, updates, leads, reads: () => listReads }
+  }
+
+  it('stamps the group the org’s list gives the lead’s value', async () => {
+    const world = org(async () => REGROUPED)
+    await restampCrmListFieldsAt(world.lead('l1', { leadSource: 'web' }), 'leads')
+    expect(world.updates[0]).toMatchObject({ leadSourceKey: 'web', leadSourceDirection: 'outbound' })
+  })
+
+  it('reads the standard groups for an org that never stored its list', async () => {
+    const world = org(async () => undefined)
+    await restampCrmListFieldsAt(world.lead('l1', { leadSource: 'Sequence' }), 'leads')
+    expect(world.updates[0]).toMatchObject({ leadSourceDirection: 'outbound' })
+  })
+
+  it('leaves a held value’s direction as stored when the list cannot be read', async () => {
+    const world = org(async () => {
+      throw new Error('unavailable')
+    })
+    const error = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    await restampCrmListFieldsAt(world.lead('l1', { leadSource: 'Web', leadSourceDirection: 'inbound' }), 'leads')
+    expect(world.leads.get('l1')?.['leadSourceDirection']).toBe('inbound')
+    expect(world.updates.every((patch) => !('leadSourceDirection' in patch))).toBe(true)
+    error.mockRestore()
+  })
+
+  it('reads the list once for a batch of one org’s leads', async () => {
+    const world = org(async () => REGROUPED)
+    const result = await restampCrmListFieldsOf(
+      [world.lead('l1', { leadSource: 'Web' }), world.lead('l2', { leadSource: 'Other' })],
+      'leads',
+    )
+    expect(result.restamped).toBe(2)
+    expect(world.reads()).toBe(1)
+    expect(world.leads.get('l1')?.['leadSourceDirection']).toBe('outbound')
+    expect(world.leads.get('l2')?.['leadSourceDirection']).toBeNull()
   })
 })
