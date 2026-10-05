@@ -46,6 +46,10 @@ card on the Products hub; see [Commerce](../commerce/overview.md).
 ## Taking bookings
 
 - Visitors pick a slot through the booking widget; the **booking API** records it.
+  The widget shows two weeks of open days at a time, with every open time of the
+  day the visitor picks, grouped into morning, afternoon and evening. **Later dates**
+  pages on through your whole booking horizon (60 days unless you change it in the
+  plugin's settings).
 - For paid services, Stripe collects payment and a **slot hold** prevents double-booking
   during checkout.
 - **Reminder emails** go out automatically ahead of the appointment — see below.

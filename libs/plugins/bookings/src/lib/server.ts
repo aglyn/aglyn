@@ -36,7 +36,7 @@ import {
   renderLoadedHostEmailWithTokens,
   type LoadedHostEmailWithTokens,
 } from '@aglyn/tenant-data-admin/server/host-email-tokens'
-import { type BookedInterval, BOOKING_MAX_DAYS_AHEAD, bookingTimeZone, computeOpenSlots, formatBookingWhen, type HostBookingService, isBookingReminderDue, isSlotOpen, REMINDER_WINDOW_END_HOURS, REMINDER_WINDOW_START_HOURS } from './model'
+import { type BookedInterval, BOOKING_MAX_DAYS_AHEAD, bookingTimeZone, computeOpenSlotPage, formatBookingWhen, type HostBookingService, isBookingReminderDue, isSlotOpen, REMINDER_WINDOW_END_HOURS, REMINDER_WINDOW_START_HOURS } from './model'
 import { bookingTimeZoneFor } from './server/booking-time-zone'
 import {
   registerBillingWebhookHandler,
@@ -202,7 +202,7 @@ export const slotsHandler: PluginApiHandler = async (req, res) => {
     if (!service || (serviceSnapshot.get('deletedAt') as unknown)) {
       return res.status(404).json({ error: 'Unknown service' })
     }
-    const fromMs = Date.now()
+    const nowMs = Date.now()
     // Booking horizon (AGL-428): configurable via the plugin settings
     // framework; defaults to BOOKING_MAX_DAYS_AHEAD through the schema.
     //
@@ -217,9 +217,19 @@ export const slotsHandler: PluginApiHandler = async (req, res) => {
       { hostId },
     )
     const maxDaysAhead = Number(config.maxDaysAhead ?? BOOKING_MAX_DAYS_AHEAD)
-    const toMs = fromMs + maxDaysAhead * 24 * 60 * 60_000
+    // Measured from NOW whichever page is asked for: the horizon is how far
+    // ahead a visitor may book, not how far past the page they are on.
+    const toMs = nowMs + maxDaysAhead * 24 * 60 * 60_000
+    // The page asked for (AGL-3492): `from` is the `nextFromMs` the previous
+    // page answered with. Clamped to now, so a stale or hand-written value
+    // can never list a time that has passed, and a value past the horizon
+    // lists nothing rather than reaching beyond it.
+    const askedFromMs = Number(req.query['from'] ?? 0)
+    const fromMs = Number.isFinite(askedFromMs)
+      ? Math.min(Math.max(askedFromMs, nowMs), toMs)
+      : nowMs
     // Bounded at BOTH ends, to the window the slots are actually computed
-    // over. `computeOpenSlots` below is handed `fromMs`/`toMs` and ignores
+    // over. `computeOpenSlotPage` below is handed `fromMs`/`toMs` and ignores
     // anything outside them, so a booking past the horizon was read, billed
     // and discarded — and worse, it competed for the 500 with the bookings
     // that do matter, so a service booked far ahead could push the near-term
@@ -231,7 +241,14 @@ export const slotsHandler: PluginApiHandler = async (req, res) => {
       .collection('bookings')
       .where('serviceId', '==', serviceId)
       .where('startsAtMs', '>=', fromMs - 24 * 60 * 60_000)
-      .where('startsAtMs', '<=', toMs)
+      // One page never walks further than BOOKING_MAX_DAYS_AHEAD past its
+      // start, so a horizon set further out than that is read a page's
+      // worth at a time, not all at once.
+      .where(
+        'startsAtMs',
+        '<=',
+        Math.min(toMs, fromMs + BOOKING_MAX_DAYS_AHEAD * 24 * 60 * 60_000),
+      )
       .limit(500)
       .get()
     const booked: BookedInterval[] = bookedSnapshot.docs
@@ -248,7 +265,17 @@ export const slotsHandler: PluginApiHandler = async (req, res) => {
         startsAtMs: Number(doc.get('startsAtMs') ?? 0),
         endsAtMs: Number(doc.get('endsAtMs') ?? 0),
       }))
-    const slots = computeOpenSlots(service, fromMs, toMs, booked, 120)
+    // Bounded in DAYS, not slots (AGL-3492): a page is the widget's day
+    // strip, whole, with every open time each of those days has. The flat
+    // cap of 120 it replaces ran out three and a half weekdays in at
+    // 15-minute steps, so the widget showed a calendar that ended on
+    // Thursday at lunch and a horizon that was never reachable.
+    const { slots, nextFromMs } = computeOpenSlotPage(
+      service,
+      fromMs,
+      toMs,
+      booked,
+    )
     return res.status(200).json({
       service: {
         name: service.name,
@@ -257,6 +284,10 @@ export const slotsHandler: PluginApiHandler = async (req, res) => {
         timezone: service.timezone ?? 'UTC',
       },
       slots,
+      // Where the next page starts; `null` once this one reached the horizon.
+      nextFromMs,
+      // The configured horizon, so the widget's empty state names it.
+      horizonDays: maxDaysAhead,
     })
   } catch (error) {
     console.error(error)
