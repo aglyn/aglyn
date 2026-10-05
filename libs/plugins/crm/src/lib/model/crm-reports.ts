@@ -44,14 +44,18 @@ import {
   type CrmDealStage,
   type CrmLeadFields,
   type CrmLeadStatus,
+  type CrmPicklist,
   type CrmPipeline,
   type CrmTask,
   crmLeadStatus,
+  crmPicklistRank,
+  crmPicklistValueByLabel,
   dealStageById,
   isCrmActivityKind,
   isPipelineArchived,
   weightedDealAmountCents,
 } from '@aglyn/aglyn/app-utils/crm'
+import { type LeadSourceDirection, leadSourceDirectionOf } from './lead-source-direction'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 const WEEK_MS = 7 * DAY_MS
@@ -962,4 +966,106 @@ export function wonLostByOwner(
     .sort(
       (a, b) => b.closed - a.closed || b.won - a.won || a.uid.localeCompare(b.uid),
     )
+}
+
+/*==========================================
+ * LEADS BY LEAD SOURCE (AGL-3511)
+ *=========================================*/
+
+/** A lead as the lead source tally reads it. */
+type LeadSourceLead = Pick<CrmLeadFields, 'status' | 'leadSource'>
+
+/** The key a lead with no lead source is tallied under. */
+export const LEAD_SOURCE_NONE_KEY = ''
+
+export interface LeadSourceRow {
+  /** The label as the org's list spells it, as the lead holds it when unlisted, `''` for none. */
+  label: string
+  /** The value's group in the org's list; `null` for none, an ungrouped value or an unlisted one. */
+  direction: LeadSourceDirection | null
+  /** Whether the org's list holds the value at all. */
+  listed: boolean
+  leads: number
+  /** Of those, the ones qualified — converted to a contact. */
+  qualified: number
+  /** `qualified / leads`, 0–1. */
+  rate: number
+}
+
+export interface LeadSourceDirectionRow {
+  /** `null` is Unspecified: no lead source, or one in no group. */
+  direction: LeadSourceDirection | null
+  leads: number
+  qualified: number
+  rate: number
+}
+
+export interface LeadSourceBreakdown {
+  /** One row per value any lead holds, in the order the org keeps its list; unlisted after, none last. */
+  rows: LeadSourceRow[]
+  /** Inbound, Outbound and Unspecified, each present even at zero. */
+  directions: LeadSourceDirectionRow[]
+  total: number
+  qualified: number
+}
+
+/**
+ * The period's leads by their lead source, and by the direction each
+ * source's group gives it.
+ *
+ * Grouped through the org's EFFECTIVE list as it stands now: two spellings
+ * of one value are one row, a value is listed under the group it is in
+ * today, and a label the list no longer holds stays a row of its own rather
+ * than being folded into another. Qualified is the conversion the Lead
+ * funnel counts — a lead the conversion closed as a contact.
+ */
+export function leadsByLeadSource(
+  leads: readonly LeadSourceLead[],
+  picklist: CrmPicklist,
+): LeadSourceBreakdown {
+  const rows = new Map<string, LeadSourceRow>()
+  const directions = new Map<LeadSourceDirection | null, LeadSourceDirectionRow>(
+    (['inbound', 'outbound', null] as const).map((direction) => [
+      direction,
+      { direction, leads: 0, qualified: 0, rate: 0 },
+    ]),
+  )
+  let qualified = 0
+  for (const lead of leads) {
+    const isQualified = crmLeadStatus(lead) === 'qualified'
+    if (isQualified) qualified += 1
+    const held = String(lead.leadSource ?? '').replace(/\s+/g, ' ').trim()
+    const value = held ? crmPicklistValueByLabel(picklist, held) : null
+    const label = value?.label ?? held
+    const key = label.toLowerCase()
+    const direction = held ? leadSourceDirectionOf(picklist, held) : null
+    const row = rows.get(key) ?? {
+      label,
+      direction,
+      listed: Boolean(value),
+      leads: 0,
+      qualified: 0,
+      rate: 0,
+    }
+    row.leads += 1
+    if (isQualified) row.qualified += 1
+    rows.set(key, row)
+    const tally = directions.get(direction) as LeadSourceDirectionRow
+    tally.leads += 1
+    if (isQualified) tally.qualified += 1
+  }
+  const rate = <T extends { leads: number; qualified: number }>(row: T): T => ({
+    ...row,
+    rate: row.leads > 0 ? row.qualified / row.leads : 0,
+  })
+  const rank = (row: LeadSourceRow) =>
+    row.label === LEAD_SOURCE_NONE_KEY ? Number.MAX_SAFE_INTEGER : crmPicklistRank(picklist, row.label)
+  return {
+    rows: [...rows.values()]
+      .map(rate)
+      .sort((a, b) => rank(a) - rank(b) || a.label.localeCompare(b.label)),
+    directions: [...directions.values()].map(rate),
+    total: leads.length,
+    qualified,
+  }
 }

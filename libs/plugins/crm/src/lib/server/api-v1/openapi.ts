@@ -51,6 +51,7 @@ export const CRM_API_V1_DESCRIPTIONS: Readonly<Record<string, ApiV1ResourceDescr
     writable: [
       'email', 'name', 'tags', 'notes', 'marketingConsent', 'consentSiteId', 'consentGroupId', 'custom',
       'phone', 'jobTitle', 'companyId', 'address', 'ownerUid', 'lifecycleStage', 'mediaIds',
+      'leadSource',
     ],
     writeOnly: {
       consentSiteId: stringField('The site this write is made on behalf of: where the person opted in, and whose profile the profile fields land on.'),
@@ -75,6 +76,7 @@ export const CRM_API_V1_DESCRIPTIONS: Readonly<Record<string, ApiV1ResourceDescr
       address: postalAddressField(),
       ownerUid: nullableField(stringField('Owning user. Checked on the page, not the query.')),
       lifecycleStage: nullableField(stringField('CRM lifecycle stage.')),
+      leadSource: nullableField(stringField('Lead source: one of the organization’s Lead source values (CRM › Fields › Leads), stored on the named site’s profile. A value the list does not hold is a `400` naming the values it allows.')),
       companyIds: stringListField('Every company this contact belongs to.'),
       alternateEmails: stringListField('Other addresses that resolve to this contact.'),
       ...RECORD_STAMPS,

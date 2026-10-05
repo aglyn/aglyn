@@ -228,6 +228,11 @@ describe('crm/picklist-values', () => {
     expect(read(store[`orgs/${ORG}/contacts/c1`], ['facets', 'site-b', 'leadSource'])).toBe(
       'Website form',
     )
+    // The Contacts list's lead source filter key moves with the label (AGL-3511).
+    expect(store[`orgs/${ORG}/contacts/c1`]['facetKeys']).toEqual(
+      expect.arrayContaining(['site-a:leadSource=apollo', '*:leadSource=apollo', 'site-b:leadSource=website form']),
+    )
+    expect(store[`orgs/${ORG}/contacts/c1`]['facetKeys']).not.toContain('site-a:leadSource=outbound · apollo')
   })
 
   it('refuses a rename onto another value, naming it', async () => {

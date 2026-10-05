@@ -163,7 +163,7 @@ export const DOCS_HELP_EXCERPTS = {
   relations: 'Link records together with reference fields, including many-to-many.',
   repeat: 'Make any element render once per record — a list, a grid, a gallery — see the real copies on the canvas, and bound them with a filter, a sort and a limit.',
   reportAnIssue: 'File a bug, an idea, or a question from any page in the console — on every plan, including Free.',
-  reports: 'New contacts, where they came from and which sources convert, the lead funnel, the open pipeline and its forecast, won and lost, who logged what, and the task load — counted on the server, every table exportable as CSV.',
+  reports: 'New contacts, their sources and which convert, the lead funnel and lead sources, the open pipeline and its forecast, won and lost, who logged what, and the task load — counted on the server, all exportable as CSV.',
   responsiveStyling: 'Style per breakpoint from the artboard preview, use the box stylers, custom classes, and the CSS builder.',
   revenue: 'What Aglyn earned — contracted plan value and settled Stripe cash side by side, the gap between them broken into named causes, and every deduction between gross and net.',
   runAnAgencyWorkspace: 'Set up one Aglyn workspace to build and hand off many client sites — templates, collaborator seats, per-site access, domains, backups and billing.',

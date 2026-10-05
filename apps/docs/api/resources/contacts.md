@@ -34,6 +34,7 @@ row.
   "address": { "line1": "1 Main St", "city": "Austin", "state": "TX", "postalCode": "78701", "country": "US" },
   "ownerUid": "u_9f1c",
   "lifecycleStage": "customer",
+  "leadSource": "Trade show",
   "companyIds": ["c_1a2b"],
   "alternateEmails": ["robin.w@example.org"],
   "created": "2026-07-20T18:23:23.941Z",
@@ -58,6 +59,7 @@ row.
 | `address` | object \| null | `line1`, `line2`, `city`, `state`, `postalCode`, `country` (two-letter ISO code). Blank parts dropped; an empty address is stored as `null`. Writable. |
 | `ownerUid` | string \| null | The team member responsible for the relationship. Must be a member of your organization. Writable. |
 | `lifecycleStage` | string \| null | `subscriber`, `lead`, `marketing-qualified`, `sales-qualified`, `opportunity`, `customer`, `evangelist` or `other`. Writable. |
+| `leadSource` | string \| null | Where this person came from, as this site records it — one of the organization's [lead source values](/content-and-data/crm/custom-fields#picklist-values), the same list a [lead](./leads.md)'s `leadSource` is restricted to. Writable — see [the CRM profile](#crm-profile): restricted to the list's **active** values, matched without regard to case and stored as the list spells it; any other value is refused with `400 validation_failed`, the allowed values named under `fields.leadSource`. The value the site's profile already holds is kept even after it is deactivated. |
 | `mediaIds` | string[] | Files from the organization's [media library](./media.md) attached to this person **by the named site**, by media id, at most 20. Part of [the CRM profile](#crm-profile), so a write needs `consentSiteId`; a read with no site named returns the first holder's list. An empty array clears them. Writable. |
 | `companyIds` | string[] | Every company any of your sites has filed this person under — the set of the per-site `companyId`s. What `?companyId=` queries. **Read-only.** |
 | `alternateEmails` | string[] | The other addresses this person answers to — each one the address of a record [merged](#merge) into this one. A capture on any of them lands here. **Read-only** — written by a merge. |
@@ -68,10 +70,10 @@ wrote. The interaction timeline shown in the console isn't exposed over the API.
 
 ### The CRM profile is per site {#crm-profile}
 
-`phone`, `jobTitle`, `companyId`, `address`, `ownerUid` and `lifecycleStage` are one
+`phone`, `jobTitle`, `companyId`, `address`, `ownerUid`, `lifecycleStage` and `leadSource` are one
 **site's** knowledge of a person, not the person's own facts. A contact is one record
 shared by every site that has captured them, and an agency's two brands that both know
-somebody must not read each other's notes on them — so the console stores these six
+somebody must not read each other's notes on them — so the console stores these
 per site (strictly, per [consent group](/marketing-and-automation/email-campaigns/overview#consent-groups)),
 and the API does the same.
 Two consequences:
@@ -215,7 +217,7 @@ Returns a contact object, or `404 not_found` (`"No such contact"`).
 | `tags` | string[] | no | Blanks dropped; each tag truncated to 60 characters, at most 50 kept. |
 | `notes` | string | no | Truncated to 2,000 characters. |
 | `marketingConsent` | boolean | no | `true` also stamps the consent timestamp, and requires `consentSiteId`. |
-| `phone`, `jobTitle`, `companyId`, `address`, `ownerUid`, `lifecycleStage` | see [the object](#the-contact-object) | no | The [CRM profile](#crm-profile). Each requires `consentSiteId`, and lands on that site's profile of the person. |
+| `phone`, `jobTitle`, `companyId`, `address`, `ownerUid`, `lifecycleStage`, `leadSource` | see [the object](#the-contact-object) | no | The [CRM profile](#crm-profile). Each requires `consentSiteId`, and lands on that site's profile of the person. |
 | `consentSiteId` | string | with `marketingConsent: true` or any profile field | The site this write is made on behalf of: the site the person opted in to, and the site whose profile the fields land on. Required for an opt-in and for a profile field; rejected alongside `marketingConsent: false` unless a profile field needs it. A site your organization does not own is a `400`. |
 | `consentGroupId` | string | no | With `marketingConsent: true`, the id of the [consent group](/marketing-and-automation/email-campaigns/overview#consent-groups) `consentSiteId` belongs to — see [opting in for a whole group](#consent-group-opt-in). Without it the opt-in is recorded for `consentSiteId` alone. |
 
@@ -431,7 +433,7 @@ A retry after a lost response finds no source contact and answers `404`; send an
 | Status | `type` | When |
 | --- | --- | --- |
 | `400` | `bad_request` | `code: "validation_failed"` — on a write, a missing or unusable `email`, a non-boolean `marketingConsent`, a `marketingConsent: true` with no
-`consentSiteId` (or one naming a site the organization does not own), a profile field with no `consentSiteId`, a `phone` that does not normalize, a `lifecycleStage` outside the list, a `companyId` that does not exist, an `ownerUid` who is not a member, or an attempt
+`consentSiteId` (or one naming a site the organization does not own), a profile field with no `consentSiteId`, a `phone` that does not normalize, a `lifecycleStage` outside the list, a `leadSource` that is not one of the organization's active lead source values, a `companyId` that does not exist, an `ownerUid` who is not a member, or an attempt
 to write `email`/`sources`/`alternateEmails`. On a merge, a missing `sourceContactId`, one naming the contact in the path, or any other key. On the list, an `?email=` that isn't a usable address, a `?lifecycleStage=` outside the list, or a `?consentSiteId=` naming a site the organization does not own. `fields` names each offending key. |
 | `403` | `plan_required` | `code: "contact_quota"` — the CRM records band (contacts, companies and deals together) is full on a plan that doesn't meter the overage. |
 | `403` | `insufficient_scope` | Key lacks `contacts:read` / `contacts:write`. Checked before the method, so a write attempt with a read-only key returns `403`, not `405`. |

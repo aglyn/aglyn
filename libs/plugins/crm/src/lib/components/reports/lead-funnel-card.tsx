@@ -106,7 +106,7 @@ const LEAD_FUNNEL_HELP = Aglyn.pluginDocsHelp('crmReports', {
  * — the descending one for the window, the ascending one for the counts,
  * which name no order (AGL-3443).
  */
-function leadsBetween(
+export function leadsBetween(
   firestore: Firestore,
   orgId: string,
   visibleTo: readonly string[] | null,

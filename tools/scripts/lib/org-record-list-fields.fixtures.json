@@ -351,7 +351,8 @@
               "bad key!": "x"
             },
             "ordersCount": 3,
-            "ltvCents": 4500
+            "ltvCents": 4500,
+            "leadSource": "  Outbound ·  Apollo "
           },
           "group-b": {
             "ownerUid": "uid-2",
@@ -590,6 +591,8 @@
           "*:custom.seats=12",
           "*:custom.trial",
           "*:custom.trial=false",
+          "*:leadSource",
+          "*:leadSource=outbound · apollo",
           "*:owner=uid-2",
           "group-a:owner",
           "group-a:owner=uid-1",
@@ -610,6 +613,8 @@
           "group-a:custom.seats=12",
           "group-a:custom.trial",
           "group-a:custom.trial=false",
+          "group-a:leadSource",
+          "group-a:leadSource=outbound · apollo",
           "group-b:owner",
           "group-b:owner=uid-2"
         ],
@@ -1224,7 +1229,8 @@
               "bad key!": "x"
             },
             "ordersCount": 3,
-            "ltvCents": 4500
+            "ltvCents": 4500,
+            "leadSource": "  Outbound ·  Apollo "
           },
           "group-b": {
             "ownerUid": "uid-2",
@@ -1463,6 +1469,8 @@
           "*:custom.seats=12",
           "*:custom.trial",
           "*:custom.trial=false",
+          "*:leadSource",
+          "*:leadSource=outbound · apollo",
           "*:owner=uid-2",
           "group-a:owner",
           "group-a:owner=uid-1",
@@ -1483,6 +1491,8 @@
           "group-a:custom.seats=12",
           "group-a:custom.trial",
           "group-a:custom.trial=false",
+          "group-a:leadSource",
+          "group-a:leadSource=outbound · apollo",
           "group-b:owner",
           "group-b:owner=uid-2"
         ],

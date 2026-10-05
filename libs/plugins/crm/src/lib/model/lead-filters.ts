@@ -24,13 +24,18 @@ import {
   CRM_LEAD_STATUSES,
   type EmailStateStatus,
   type CrmLeadStatus,
+  type CrmPicklist,
   crmLeadSourceKey,
 } from '@aglyn/aglyn'
 import type { CrmViewFilterClause } from '@aglyn/aglyn'
 import { SCOPED_SEARCH_JOIN } from '@aglyn/aglyn/app-utils/name-search'
 import type { ListFilterField, ListFilterRequest } from '@aglyn/shared-ui-jsx/const/list-filter'
 import { type ListGridFilterCodec, listSelectCodec } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
-import type { ListQueryDeclaration, ListQuerySort } from '@aglyn/shared-ui-jsx/const/list-query-plan'
+import {
+  LIST_QUERY_DISJUNCTIONS,
+  type ListQueryDeclaration,
+  type ListQuerySort,
+} from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import {
   CRM_LIST_SEARCH,
   type CrmClauseAsked,
@@ -38,6 +43,13 @@ import {
   crmClauseValues,
   crmSelectField,
 } from './crm-list-query'
+import {
+  isLeadSourceDirection,
+  LEAD_SOURCE_DIRECTION_LABELS,
+  LEAD_SOURCE_DIRECTIONS,
+  leadSourceLabelsOfDirection,
+  STANDARD_LEAD_SOURCES,
+} from './lead-source-direction'
 
 /**
  * What the Leads section's `Show` control offers (AGL-2608): the two
@@ -110,6 +122,8 @@ export const LEAD_SOURCE_FILTER_NONE = '\u0000none'
  *   emailState   `equals <filter>`
  *   campaignIds  `contains <campaign id>`
  *   leadSource   `equals <label>`, or `isEmpty` for the leads holding none
+ *   leadSourceDirection   `equals inbound|outbound` (AGL-3511): every lead
+ *                whose lead source is a value of that group
  *
  * Every one is asked of the Leads query (AGL-3321) through the field a
  * writer stores for it — see {@link leadQueryClause}.
@@ -121,6 +135,12 @@ export const LEAD_LIST_FILTER_FIELDS: readonly ListFilterField[] = [
   { column: 'emailState', kind: 'exact', path: 'emailState', operators: ['equals', 'isAnyOf'] },
   { column: 'ownerUid', kind: 'exact', path: 'ownerUid', operators: ['equals', 'isAnyOf'] },
   { column: 'leadSource', kind: 'exact', path: 'leadSource', operators: ['equals', 'isAnyOf'] },
+  {
+    column: 'leadSourceDirection',
+    kind: 'exact',
+    path: 'leadSourceDirection',
+    operators: ['equals', 'isAnyOf'],
+  },
   { column: 'campaignIds', kind: 'exact', path: 'campaignIds', operators: ['equals'] },
 ]
 
@@ -130,6 +150,7 @@ export const LEAD_LIST_FILTER_HEADERS: Readonly<Record<string, string>> = {
   emailState: 'Email',
   ownerUid: 'Owner',
   leadSource: 'Lead source',
+  leadSourceDirection: 'Lead source direction',
   campaignIds: 'Campaign',
 }
 
@@ -145,6 +166,12 @@ export const LEAD_STATUS_FILTER_OPTIONS = LEAD_FILTERS.filter(
 export const LEAD_EMAIL_FILTER_OPTIONS = LEAD_EMAIL_FILTERS.filter(
   (option) => option !== 'any',
 ).map((option) => ({ value: option, label: LEAD_EMAIL_FILTER_LABELS[option] }))
+
+/** The choices for Lead source direction: each group of the Lead source picklist. */
+export const LEAD_SOURCE_DIRECTION_FILTER_OPTIONS = LEAD_SOURCE_DIRECTIONS.map((direction) => ({
+  value: direction,
+  label: LEAD_SOURCE_DIRECTION_LABELS[direction],
+}))
 
 const STATUS_OPEN: CrmViewFilterClause = { field: 'status', op: 'equals', value: 'open' }
 const STATUS_ALL: CrmViewFilterClause = { field: 'status', op: 'equals', value: 'all' }
@@ -224,6 +251,12 @@ export const LEAD_FILTER_CODECS: Readonly<Record<string, ListGridFilterCodec>> =
  *                emailed" is every verdict but `ok`
  *   leadSource   `leadSourceKey`, the label as the picklist compares it, or
  *                `null` for none
+ *   leadSourceDirection   `leadSourceKey in [...]` over the key of every
+ *                value the org's list files under that group, read when
+ *                the clause is asked — a direction is never stored on a
+ *                lead, so regrouping a value moves its leads with it. One
+ *                `in` holds thirty keys, and a group holding more is
+ *                refused by name rather than half asked
  *   ownerUid     as stored
  *   campaignIds  `array-contains` on the lead's own campaigns; under a site,
  *                `scopedCampaignIds` — the campaign behind each of the
@@ -306,6 +339,11 @@ export interface LeadQueryReader {
   scopeTokens: readonly string[] | null
   /** Whether the reader may run a query without the scope clause (`useCrmFoldsScope`). */
   foldsScope: boolean
+  /**
+   * The org's Lead source list, which a direction is expanded through;
+   * the standard values alone while it has not been read.
+   */
+  leadSources?: CrmPicklist
 }
 
 const ORG_READER: LeadQueryReader = { scopeTokens: null, foldsScope: true }
@@ -349,6 +387,25 @@ export function leadQueryClause(
       }
       const keys = values.map((value) => crmLeadSourceKey(value)).filter((key): key is string => Boolean(key))
       return crmAnyOf('leadSourceKey', keys)
+    }
+    case 'leadSourceDirection': {
+      const picklist = reader.leadSources ?? STANDARD_LEAD_SOURCES
+      const keys: string[] = []
+      for (const value of values) {
+        if (!isLeadSourceDirection(value)) return { refused: `${value} is not a lead source direction` }
+        for (const label of leadSourceLabelsOfDirection(picklist, value)) {
+          const key = crmLeadSourceKey(label)
+          if (key) keys.push(key)
+        }
+      }
+      const unique = [...new Set(keys)]
+      if (!unique.length) return { refused: 'no lead source is in that direction yet' }
+      if (unique.length > LIST_QUERY_DISJUNCTIONS) {
+        return {
+          refused: `more than ${LIST_QUERY_DISJUNCTIONS} lead sources are in that direction — filter by Lead source instead`,
+        }
+      }
+      return crmAnyOf('leadSourceKey', unique)
     }
     case 'ownerUid':
       return crmAnyOf('ownerUid', values)

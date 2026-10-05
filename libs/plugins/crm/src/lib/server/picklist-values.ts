@@ -19,11 +19,13 @@ import {
   consentGroupForHost,
   CONTACT_FACETS_FIELD,
   CRM_COLLECTIONS,
+  CRM_CONTACT_FACET_KEYS_FIELD,
   CRM_LEAD_SOURCE_PICKLIST,
   type CrmPicklist,
   type CrmPicklistDefinition,
   type CrmPicklistId,
   type CrmPicklistObject,
+  crmContactFacetKeys,
   crmPicklistDefinition,
   crmPicklistKey,
   effectiveCrmPicklist,
@@ -73,7 +75,9 @@ async function replaceEverywhere(
   query: FirebaseFirestore.Query,
   field: string | FirebaseFirestore.FieldPath,
   to: string | null,
-  beside: Record<string, unknown> = {},
+  beside:
+    | Record<string, unknown>
+    | ((snapshot: FirebaseFirestore.QueryDocumentSnapshot) => Record<string, unknown>) = {},
 ): Promise<number> {
   let written = 0
   for (;;) {
@@ -81,19 +85,35 @@ async function replaceEverywhere(
     if (page.empty) return written
     const batch = firestore.batch()
     for (const snapshot of page.docs) {
+      const alongside = typeof beside === 'function' ? beside(snapshot) : beside
       batch.update(
         snapshot.ref,
         field,
         to ?? FieldValue.delete(),
         'updatedAt',
         FieldValue.serverTimestamp(),
-        ...Object.entries(beside).flat(),
+        ...Object.entries(alongside).flat(),
       )
     }
     await batch.commit()
     written += page.size
     if (page.size < BATCH_SIZE) return written
   }
+}
+
+/** A contact as it reads once one holder's facet field holds `to` (or nothing, for `null`). */
+function withFacetValue(
+  data: Record<string, unknown>,
+  groupId: string,
+  field: string,
+  to: string | null,
+): Record<string, unknown> {
+  const facets = { ...((data[CONTACT_FACETS_FIELD] as Record<string, unknown> | undefined) ?? {}) }
+  const facet = { ...((facets[groupId] as Record<string, unknown> | undefined) ?? {}) }
+  if (to === null) delete facet[field]
+  else facet[field] = to
+  facets[groupId] = facet
+  return { ...data, [CONTACT_FACETS_FIELD]: facets }
 }
 
 /**
@@ -245,7 +265,19 @@ function picklistValuesHandler(fixed?: CrmPicklistId): PluginApiHandler {
             const path = new FieldPath(CONTACT_FACETS_FIELD, groupId, target.field)
             updated[target.object] =
               (updated[target.object] ?? 0) +
-              (await replaceEverywhere(firestore, records.where(path, '==', moved.from), path, moved.to))
+              (await replaceEverywhere(
+                firestore,
+                records.where(path, '==', moved.from),
+                path,
+                moved.to,
+                // A facet value a contact list filters by is keyed in
+                // `facetKeys` (AGL-3511), restamped from the record as moved.
+                (snapshot) => ({
+                  [CRM_CONTACT_FACET_KEYS_FIELD]: crmContactFacetKeys(
+                    withFacetValue(snapshot.data(), groupId, target.field, moved.to),
+                  ),
+                }),
+              ))
           }
           continue
         }

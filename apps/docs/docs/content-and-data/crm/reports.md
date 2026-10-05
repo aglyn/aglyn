@@ -1,7 +1,7 @@
 ---
 sidebar_position: 11
 title: Reports
-description: New contacts, where they came from and which sources convert, the lead funnel, the open pipeline and its forecast, won and lost, who logged what, and the task load — counted on the server, every table exportable as CSV.
+description: New contacts, their sources and which convert, the lead funnel and lead sources, the open pipeline and its forecast, won and lost, who logged what, and the task load — counted on the server, all exportable as CSV.
 ---
 
 # Reports
@@ -113,6 +113,29 @@ at; at the [organization level](./overview.md#at-the-organization-level) it
 reads every site — at most 200 leads per site — and totals them, naming the
 per-site window when any site held more.
 
+## Lead sources
+
+Of the [leads](./leads.md) first seen in the period, how many came from each
+[lead source](./custom-fields.md#picklist-values), and how many of each were
+qualified — converted to a contact.
+
+- **Inbound**, **Outbound** and **Unspecified** — the period's leads by the
+  direction their lead source is grouped under, each with its share of the
+  period's leads. *Unspecified* is a lead with no lead source, or one in no
+  group.
+- **By direction** — the same three, with the leads qualified and the
+  conversion rate of each.
+- **By lead source** — one row per lead source a lead holds, in the order your
+  lead source values are kept, with its direction, its leads, the qualified
+  ones and the conversion rate. A value your list no longer holds is listed as
+  *(not in the list)*; leads with none are listed last as *No lead source*.
+
+Values and directions are read through your organization's lead source values
+as they stand now: move a value to another group, or rename it, and the report
+follows on its next read. The card reads the same window as the
+[Lead funnel](#lead-funnel) — the period's 200 most recently captured leads —
+and says so when the period held more.
+
 ## Pipeline
 
 - **Open deals** and their **pipeline value** — the face value of every open
@@ -216,7 +239,7 @@ count.
 ## Exporting a table
 
 Every card with a table — activity by teammate, conversion by source, the
-lead funnel, open tasks by assignee and the top open deals — has an
+lead funnel, lead sources, open tasks by assignee and the top open deals — has an
 **Export CSV** button in the card's header. The file holds exactly the rows on
 screen, in the same order with the same names and counts, so you can check
 it against the page; it is written in your browser from what the card has

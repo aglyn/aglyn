@@ -372,6 +372,51 @@ describe('PATCH /v1/contacts/{id} with a CRM profile', () => {
 })
 
 /**
+ * AGL-3511 — a contact's lead source over `/v1`: a facet field like the
+ * rest of the profile, judged against the org's Lead source list exactly
+ * as a lead's is.
+ */
+describe('a contact’s lead source', () => {
+  it('stores an active value as the list spells it, on the named site’s facet', async () => {
+    const response = await call('POST', 'contacts', {
+      email: 'robin@example.com',
+      consentSiteId: 'host-1',
+      leadSource: '  trade   SHOW ',
+    })
+    expect(response.status).toBe(201)
+    const view = await json(response)
+    expect(view.leadSource).toBe('Trade show')
+    const stored = mockDocs.get(`${CONTACTS}/${view.id}`)!
+    expect((stored.facets as any)['grp-a'].leadSource).toBe('Trade show')
+    expect(stored).not.toHaveProperty('leadSource')
+  })
+
+  it('refuses a value the list does not hold, naming what it allows, and keeps the holder’s own', async () => {
+    const refused = await call('POST', 'contacts', {
+      email: 'robin@example.com',
+      consentSiteId: 'host-1',
+      leadSource: 'Carrier pigeon',
+    })
+    expect(refused.status).toBe(400)
+    expect((await json(refused)).error.fields.leadSource).toMatch(/^Lead source must be one of: Web, /)
+    // A value the holder already keeps is never refused on a re-save.
+    mockDocs.set(`${CONTACTS}/c-1`, {
+      email: 'robin@example.com',
+      facets: { 'grp-a': { sources: {}, interactions: [], leadSource: 'Carrier pigeon' } },
+    })
+    const kept = await call('PATCH', 'contacts/c-1', { consentSiteId: 'host-1', leadSource: 'carrier pigeon' })
+    expect(kept.status).toBe(200)
+    expect((mockDocs.get(`${CONTACTS}/c-1`)!.facets as any)['grp-a'].leadSource).toBe('Carrier pigeon')
+    // …but another holder's value is not this holder's to keep.
+    const other = await call('PATCH', 'contacts/c-1', { consentSiteId: 'host-2', leadSource: 'Carrier pigeon' })
+    expect(other.status).toBe(400)
+    // A null clears it.
+    await call('PATCH', 'contacts/c-1', { consentSiteId: 'host-1', leadSource: null })
+    expect((mockDocs.get(`${CONTACTS}/c-1`)!.facets as any)['grp-a']).not.toHaveProperty('leadSource')
+  })
+})
+
+/**
  * AGL-2662 — a record's files are a facet field like every other. An agency
  * running two client brands has one contact document between them, and a
  * contract one client filed is not the other client's to read; a `mediaIds`

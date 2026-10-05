@@ -1085,6 +1085,12 @@ jobs:
       # record is kept.
       - run: npm run test:org-lead-backfill
 
+      # AGL-3511. The CRM picklists backfill's decisions — that a stored
+      # standard id stays an override, which held labels become the org's own
+      # values, which direction an org-added lead source is filed under, and
+      # that the registry it reads out of crm.ts still says what it assumes.
+      - run: npm run test:crm-picklists-backfill
+
       # AGL-3273. The org-campaign move's decisions — that ids never change,
       # which scope a moved container is stamped with, that the org copy wins
       # a merge while sequence counters add, that a send mid-flight is

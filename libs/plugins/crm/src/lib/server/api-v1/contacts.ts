@@ -32,6 +32,7 @@ import {
   type ContactLifecycleStage,
   createResourceUid,
   CRM_COLLECTIONS,
+  CRM_LEAD_SOURCE_PICKLIST,
   CRM_MEDIA_IDS_MAX,
   isContactLifecycleStage,
   MARKETING_CONSENT_BY_HOST_FIELD,
@@ -87,9 +88,11 @@ import {
   memberError,
   readChoice,
   readOptionalText,
+  readOrgLeadSourcePicklist,
   readRefId,
   updatePayload,
 } from './crm-shared'
+import { resolveCrmPicklistWrite } from '../read-picklist'
 
 /**
  * `/v1/contacts` (AGL-618, AGL-2276, AGL-2606): the organization's people —
@@ -143,6 +146,8 @@ const CONTACT_CRM_FIELDS = [
   'address',
   'ownerUid',
   'lifecycleStage',
+  // The holder's Lead source, one of the org's picklist values (AGL-3511).
+  'leadSource',
   // Files are a facet field like the rest (AGL-2662): an agency running two
   // client brands has one contact document between them, and a contract one
   // client filed is not the other client's to read.
@@ -170,6 +175,7 @@ function contactCrmProfile(
     address: null,
     ownerUid: null,
     lifecycleStage: null,
+    leadSource: null,
     // An empty ARRAY rather than null, so a client can index it without a
     // guard — the same shape `custom` publishes for the same reason.
     mediaIds: [],
@@ -335,6 +341,8 @@ type ContactCrmInput = {
   address?: AglynPostalAddress | null
   ownerUid?: string | null
   lifecycleStage?: ContactLifecycleStage | null
+  /** A value of the org's Lead source picklist, judged by the writer (AGL-3511). */
+  leadSource?: string | null
   /** Org-library files attached by this holder (AGL-2662), by media id. */
   mediaIds?: string[]
 }
@@ -490,6 +498,9 @@ function readContactInput(
   }
   const ownerUid = readOptionalText(body, 'ownerUid', CONTACT_NAME_MAX, errors)
   if (ownerUid !== undefined) crm.ownerUid = ownerUid
+  // Shape only here; the org's list judges the value in `contactCrmRefErrors`.
+  const leadSource = readOptionalText(body, 'leadSource', CRM_LABEL_MAX, errors)
+  if (leadSource !== undefined) crm.leadSource = leadSource
   if (body.mediaIds !== undefined) {
     if (!Array.isArray(body.mediaIds)) {
       errors.mediaIds = 'Must be an array of media ids'
@@ -579,12 +590,39 @@ function readContactInput(
 async function contactCrmRefErrors(
   ctx: ApiV1Context,
   crm: ContactCrmInput,
+  currentLeadSource?: unknown,
 ): Promise<Record<string, string>> {
-  const [owner, refs] = await Promise.all([
+  const [owner, refs, leadSource] = await Promise.all([
     memberError(ctx, 'ownerUid', crm.ownerUid),
     crmRefErrors(ctx, { companyId: crm.companyId ?? undefined }),
+    contactLeadSourceErrors(ctx, crm, currentLeadSource),
   ])
-  return { ...owner, ...refs }
+  return { ...owner, ...refs, ...leadSource }
+}
+
+/**
+ * The lead source a contact write stores (AGL-3511), judged against the
+ * org's Lead source list exactly as a lead's is: an active value stores the
+ * list's spelling, the holder's current value is always kept, and anything
+ * else is refused naming what the list allows. Rewrites `crm.leadSource` to
+ * the label the list spells. A contact takes no default — the list's default
+ * is for a new LEAD.
+ */
+async function contactLeadSourceErrors(
+  ctx: ApiV1Context,
+  crm: ContactCrmInput,
+  current: unknown,
+): Promise<Record<string, string>> {
+  if (typeof crm.leadSource !== 'string') return {}
+  const resolved = resolveCrmPicklistWrite(
+    CRM_LEAD_SOURCE_PICKLIST,
+    await readOrgLeadSourcePicklist(ctx),
+    crm.leadSource,
+    { current, created: false },
+  )
+  if (resolved.ok === false) return { leadSource: resolved.error }
+  crm.leadSource = resolved.write ?? null
+  return {}
 }
 
 /**
@@ -976,7 +1014,14 @@ async function updateContact(
       headers: ctx.headers,
     })
   }
-  const crmErrors = await contactCrmRefErrors(ctx, crm)
+  // The holder's current lead source is kept even when the list no longer offers it.
+  const currentLeadSource = consentSiteId
+    ? readContactFacet(
+        snap.data() ?? {},
+        consentGroupForHost(ctx.org as Record<string, unknown>, consentSiteId).groupId,
+      ).leadSource
+    : undefined
+  const crmErrors = await contactCrmRefErrors(ctx, crm, currentLeadSource)
   if (Object.keys(crmErrors).length) {
     return ApiErrors.badRequest({
       message: 'Contact failed validation',

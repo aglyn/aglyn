@@ -141,7 +141,9 @@ Some standard fields are **picklists** — a fixed set of choices, the way Sales
 standard fields are. Each picklist's values are kept on the tab of the record it belongs
 to, below that tab's custom fields. Today that is **Lead source** on the **Leads** tab,
 under **Lead source values**: every lead's page, the **New lead** drawer and every
-contact's page offer its values as a select, and the leads list filters by them.
+contact's page offer its values as a select, the leads and contacts lists filter by
+them — the leads list by a value's group too — and [Reports](./reports.md#lead-sources)
+counts leads by them.
 
 **Standard values come with every organization.** Each picklist ships Salesforce's
 standard set, marked **Standard** in the list. You can rename, reorder, regroup,

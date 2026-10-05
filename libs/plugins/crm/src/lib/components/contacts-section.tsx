@@ -36,6 +36,7 @@ import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import ListQueryNotices from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
 import {
+  CONTACT_LEAD_SOURCE_COLUMN,
   CONTACT_LIST_DECLARATION,
   CONTACT_LIST_FILTER_FIELDS,
   CONTACT_LIST_FILTER_HEADERS,
@@ -109,6 +110,7 @@ import NewContactDrawer, { type NewContactValues } from './new-contact-drawer'
 import { useCrmApi } from './use-crm-api'
 import { useOrgMembers } from './use-org-members'
 import { useContactFieldDefinitions } from '../hooks/use-contact-field-definitions'
+import { useLeadSourcePicklist } from '../hooks/use-lead-source-picklist'
 import { customFieldColumns } from './contact-custom-columns'
 import { useCrmSavedView } from '../hooks/use-crm-saved-view'
 import { useCrmViewGrid } from '../hooks/use-crm-view-grid'
@@ -231,6 +233,8 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
   const mount = useCrmOrgMount()
   // The org's custom fields, for the optional columns below (AGL-2601).
   const customFields = useContactFieldDefinitions(dataScope?.[1] ?? null)
+  // The org's lead source values, the Lead source filter's choices (AGL-3511).
+  const leadSourceList = useLeadSourcePicklist(orgId)
   /*==========================================
    * THE CONTROLLER THIS PAGE IS SHOWING.
    *
@@ -599,6 +603,11 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
         value: company.id,
         label: company.name,
       })),
+      // Every value the org keeps, inactive ones marked, as the Leads list offers them.
+      [CONTACT_LEAD_SOURCE_COLUMN]: leadSourceList.picklist.values.map((value) => ({
+        value: value.label,
+        label: value.active ? value.label : `${value.label} (inactive)`,
+      })),
       // The verdict on the address (AGL-3245): "Email is bounced".
       emailState: Aglyn.EMAIL_STATE_STATUSES.map((status) => ({
         value: status,
@@ -613,7 +622,7 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
           ]),
       ),
     }),
-    [uid, members.options, companies.options, customFields.active],
+    [uid, members.options, companies.options, customFields.active, leadSourceList.picklist],
   )
 
   // What the query could not hold, named by the clause the reader set.

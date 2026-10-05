@@ -42,6 +42,7 @@ import {
 import { useCallback, useState } from 'react'
 import { useCrmCampaigns } from '../hooks/use-crm-campaigns'
 import { useCrmSharingRules, useCrmSharingSites } from '../hooks/use-crm-sharing'
+import { useLeadSourcePicklist } from '../hooks/use-lead-source-picklist'
 import type { CrmOrgDoc } from '../hooks/use-crm-scope'
 import { useOrgMemberDirectory } from '../hooks/use-org-member-directory'
 import {
@@ -93,6 +94,8 @@ export function SharingRulesCard(props: SharingRulesCardProps) {
   const sites = useCrmSharingSites({ hostId: null, orgId, enabled: canManage })
   const roster = useOrgMemberDirectory(orgId)
   const campaigns = useCrmCampaigns({ hostId: null, orgId }, { enabled: canManage })
+  // The values the Lead source criterion picks from, under their groups (AGL-3511).
+  const leadSources = useLeadSourcePicklist(canManage ? orgId : null)
   const [editing, setEditing] = useState<CrmSharingRule | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -257,6 +260,7 @@ export function SharingRulesCard(props: SharingRulesCardProps) {
         sites={sites.sites}
         members={roster.members}
         campaigns={campaigns.options}
+        leadSourceList={leadSources.picklist}
         busy={busy}
         onSubmit={save}
       />

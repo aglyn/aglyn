@@ -82,6 +82,7 @@ import {
   LEAD_LIST_DECLARATION,
   LEAD_LIST_FILTER_FIELDS,
   LEAD_LIST_FILTER_HEADERS,
+  LEAD_SOURCE_DIRECTION_FILTER_OPTIONS,
   LEAD_SOURCE_FILTER_NONE,
   LEAD_STATUS_FILTER_OPTIONS,
   leadClausesForGrid,
@@ -210,7 +211,7 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
   const gridFilter = useListGridFilter({
     clauses,
     onChange: setClauses,
-    selectFields: ['status', 'emailState', 'ownerUid'],
+    selectFields: ['status', 'emailState', 'ownerUid', 'leadSourceDirection'],
     codecs: LEAD_FILTER_CODECS,
   })
   const campaigns = useCrmCampaigns({ hostId, orgId }, { enabled: true })
@@ -253,6 +254,8 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
       })),
       campaignIds: [...campaignOptions, ...stale('campaignIds', campaignOptions)],
       leadSource: [...sourceOptions, ...stale('leadSource', sourceOptions)],
+      // The picklist's groups (AGL-3511): Inbound and Outbound.
+      leadSourceDirection: LEAD_SOURCE_DIRECTION_FILTER_OPTIONS,
     }
   }, [clauses, campaigns.options, leadSourceList.picklist, roster.options])
   /*
@@ -264,9 +267,14 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
   const asked = useMemo(
     () =>
       crmAskClauses(clauses, (clause) =>
-        leadQueryClause(clause, { scopeTokens, foldsScope }),
+        leadQueryClause(clause, {
+          scopeTokens,
+          foldsScope,
+          // A direction is expanded through the org's own groups (AGL-3511).
+          leadSources: leadSourceList.picklist,
+        }),
       ),
-    [clauses, scopeTokens, foldsScope],
+    [clauses, scopeTokens, foldsScope, leadSourceList.picklist],
   )
   const searchKey = gridFilter.searchWords.join(' ')
   const paged = useCrmListQuery<Record<string, unknown> & CrmLeadFields & { $id: string }>({

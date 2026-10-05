@@ -104,7 +104,7 @@ their company **as text** until it converts:
 | **Name** | The person's name. |
 | **Company** | The company's name, typed. Not a link — a thousand imported leads must not create a thousand companies. [Converting](#converting-a-lead) is what links or creates the company record, by this name or by the address's domain. |
 | **Job title**, **Phone**, **Website** | As on a business card. The phone is stored with its country code; the website as a full address. |
-| **Lead source** | Where the lead came from, picked from your organization's own [lead source values](./custom-fields.md#picklist-values). A new lead starts from the list's default when it has one. Distinct from **Sources** below, which the site records. |
+| **Lead source** | Where the lead came from, picked from your organization's own [lead source values](./custom-fields.md#picklist-values) — Salesforce's standard set and any you add — listed under **Inbound**, **Outbound** and values in no group. A new lead starts from the list's default when it has one. Distinct from **Sources** below, which the site records. |
 | **Tags** | Comma-separated, lower-cased. |
 | **Campaigns** | The site's [campaigns](../../marketing-and-automation/email-campaigns/overview.md#what-belongs-to-a-campaign) the lead is filed under, picked by name. Grouping, not consent: it decides which campaign pages list the lead, never whether anything mails them. Enrolling the lead in a sequence that is in a campaign files it there too. |
 | **Address** | Street, city, state, postal code and a two-letter country code. |
@@ -185,8 +185,8 @@ The table's own toolbar filters the list: **Filters** opens the filter
 panel, and **Search** finds a lead by a word of its name, its email address —
 and each part of the address, so the domain alone finds it — its company,
 its title or its tags.
-**Status**, **Email**, **Owner**, **Lead source** and **Campaign** are
-picked from a list in the panel, and from each column's menu. **Status**
+**Status**, **Email**, **Owner**, **Lead source**, **Lead source direction**
+and **Campaign** are picked from a list in the panel, and from each column's menu. **Status**
 starts on **Open (new, nurturing or working)**, every lead that still needs working;
 pick one status instead, or remove the filter to see every lead. A lead
 nobody has touched yet has no status of its own and reads as **New**, so the
@@ -194,9 +194,13 @@ leads your site collected before the CRM existed are already in the Open
 view. **Email** narrows by the address's verdict — **Cannot be emailed** for
 every verdict but OK, one verdict on its own, or **Nothing known**. **Campaign** narrows to the leads filed under one of the campaigns,
 by name, and **Lead source** to one of your lead source values — inactive
-ones included, marked — or to **No lead source**. **Owner** keeps one
-teammate's leads. **Status**, **Email**, **Owner** and **Lead source** each
-take one choice (**is**) or several (**is any of**); **Campaign** takes one.
+ones included, marked — or to **No lead source**. **Lead source direction**
+keeps the leads whose lead source is in the **Inbound** or the **Outbound**
+group, as the [lead source values](./custom-fields.md#picklist-values) group
+them when you filter: move a value to another group and its leads move with
+it. **Owner** keeps one teammate's leads. **Status**, **Email**, **Owner**,
+**Lead source** and **Lead source direction** each take one choice (**is**) or
+several (**is any of**); **Campaign** takes one.
 
 The panel edits one filter at a time, and filters on different columns add
 up: filter **Lead source**, then **Status**, and the list keeps both. Every
@@ -223,7 +227,8 @@ email address, and a notice says so; the Campaign filter is not applied for
 them. **No lead source** cannot be picked beside a lead source value, and a
 filter whose choices, multiplied by the other filters' choices, come to more
 than 30 is not applied either (**Cannot be emailed** counts as every verdict
-it covers); the notice names both.
+it covers, and a **Lead source direction** as every lead source value in its
+group); the notice names both.
 
 ### Working a lead from the row
 

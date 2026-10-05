@@ -1444,6 +1444,14 @@ const NOT_A_LIST: Array<[string, string]> = [
       'table.',
   ],
   [
+    'libs/plugins/crm/src/lib/components/reports/lead-source-card.tsx',
+    'An AGGREGATE table in a report (AGL-3511): the period’s leads by ' +
+      'lead source and by direction, one row per value found in the Lead ' +
+      'funnel’s own read, capped at `LEAD_CEILING` that the card ' +
+      'discloses. The rows are counts by value, not documents; the leads ' +
+      'are the Leads section’s paged table.',
+  ],
+  [
     'libs/plugins/crm/src/lib/components/contact-duplicates-card.tsx',
     'A record’s LIKELY DUPLICATES (AGL-2625): the contacts sharing the ' +
       'record’s name, read under `CONTACT_DUPLICATES_LIMIT` on a button ' +
@@ -1933,7 +1941,11 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     // (AGL-3463): the detector no longer reads a list in the editor, whose
     // only mapped rows were picker options and node definitions, so its row
     // retires.
-    expect(NOT_A_LIST).toHaveLength(68)
+    //
+    // 69 since Reports counts leads by lead source (AGL-3511), and this one
+    // IS a new table: an aggregate by value over the Lead funnel's own
+    // capped window, like the other report cards above it.
+    expect(NOT_A_LIST).toHaveLength(69)
   })
 })
 

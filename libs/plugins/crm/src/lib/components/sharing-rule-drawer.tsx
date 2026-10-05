@@ -20,8 +20,13 @@ import {
   CONTACT_LIFECYCLE_STAGE_LABELS,
   CONTACT_LIFECYCLE_STAGES,
   CRM_LEAD_STATUS_LABELS,
+  CRM_LEAD_SOURCE_PICKLIST,
   CRM_LEAD_STATUSES,
+  type CrmPicklist,
   crmMemberPickerLabel,
+  crmPicklistDefinition,
+  crmPicklistOptions,
+  groupPicklistOptions,
 } from '@aglyn/aglyn'
 import { hostIdsFromScope, ORG_SCOPE_TOKEN } from '@aglyn/aglyn/app-utils/scope-tokens'
 import {
@@ -33,6 +38,7 @@ import {
   FormGroup,
   FormHelperText,
   FormLabel,
+  ListSubheader,
   MenuItem,
   Radio,
   RadioGroup,
@@ -41,7 +47,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { useEffect, useState } from 'react'
+import { type ReactNode, useEffect, useMemo, useState } from 'react'
 import type { OrgMemberOption } from '../hooks/use-org-member-directory'
 import {
   CRM_SHARING_CRITERIA_FOR,
@@ -53,6 +59,11 @@ import {
   type CrmSharingRule,
   type CrmSharingSite,
 } from '../model/crm-sharing'
+import {
+  LEAD_SOURCE_DIRECTION_LABELS,
+  LEAD_SOURCE_DIRECTIONS,
+  STANDARD_LEAD_SOURCES,
+} from '../model/lead-source-direction'
 
 /** What the drawer hands back: the rule as `crm/sharing` `rule-save` reads it. */
 export interface SharingRuleDraft {
@@ -74,6 +85,8 @@ export interface SharingRuleDrawerProps {
   sites: readonly CrmSharingSite[]
   members: readonly OrgMemberOption[]
   campaigns: readonly { value: string; label: string }[]
+  /** The org's Lead source list, which the Lead source criterion picks from. */
+  leadSourceList?: CrmPicklist
   busy: boolean
   onSubmit: (draft: SharingRuleDraft) => void
 }
@@ -88,11 +101,13 @@ const splitList = (text: string) =>
  */
 export function SharingRuleDrawer(props: SharingRuleDrawerProps) {
   const { open, onClose, rule, sites, members, campaigns, busy, onSubmit } = props
+  const leadSourceList = props.leadSourceList ?? STANDARD_LEAD_SOURCES
   const [name, setName] = useState('')
   const [object, setObject] = useState<CrmSharingObject>('leads')
   const [enabled, setEnabled] = useState(true)
   const [sourceHostIds, setSourceHostIds] = useState<string[]>([])
-  const [leadSources, setLeadSources] = useState('')
+  const [leadSources, setLeadSources] = useState<string[]>([])
+  const [leadSourceGroups, setLeadSourceGroups] = useState<string[]>([])
   const [tags, setTags] = useState('')
   const [stages, setStages] = useState<string[]>([])
   const [ownerUids, setOwnerUids] = useState<string[]>([])
@@ -107,7 +122,8 @@ export function SharingRuleDrawer(props: SharingRuleDrawerProps) {
     setObject(rule?.object ?? 'leads')
     setEnabled(rule?.enabled ?? true)
     setSourceHostIds(rule?.sourceHostIds ?? [])
-    setLeadSources((rule?.criteria.leadSources ?? []).join(', '))
+    setLeadSources(rule?.criteria.leadSources ?? [])
+    setLeadSourceGroups(rule?.criteria.leadSourceGroups ?? [])
     setTags((rule?.criteria.tags ?? []).join(', '))
     setStages(rule?.criteria.stages ?? [])
     setOwnerUids(rule?.criteria.ownerUids ?? [])
@@ -129,12 +145,39 @@ export function SharingRuleDrawer(props: SharingRuleDrawerProps) {
         : []
   const canSubmit =
     !busy && name.trim().length > 0 && (allSites || targets.length > 0)
+  /*
+   * The org's lead source values under their groups (AGL-3511), and every
+   * value the rule already names that the list no longer offers, so an
+   * edit shows what the rule matches until somebody changes it.
+   */
+  const leadSourceItems = useMemo<ReactNode[]>(() => {
+    const options = crmPicklistOptions(leadSourceList)
+    for (const label of leadSources) {
+      if (!options.some((option) => option.label.toLowerCase() === label.toLowerCase())) {
+        options.push({ label, inactive: false, unlisted: true })
+      }
+    }
+    const groups = crmPicklistDefinition(CRM_LEAD_SOURCE_PICKLIST)?.groups ?? []
+    return groupPicklistOptions(options, groups).flatMap((section) => [
+      <ListSubheader key={`group:${section.group?.id ?? ''}`}>
+        {section.group?.label ?? 'No group'}
+      </ListSubheader>,
+      ...section.options.map((option) => (
+        <MenuItem key={option.label} value={option.label}>
+          {option.unlisted ? `${option.label} (not in the list)` : option.label}
+        </MenuItem>
+      )),
+    ])
+  }, [leadSourceList, leadSources])
 
   const submit = () => {
     if (!canSubmit) return
     const criteria: CrmSharingCriteria = {}
-    if (offers.includes('leadSources') && splitList(leadSources).length) {
-      criteria.leadSources = splitList(leadSources)
+    if (offers.includes('leadSources') && leadSources.length) {
+      criteria.leadSources = leadSources.slice(0, 20)
+    }
+    if (offers.includes('leadSourceGroups') && leadSourceGroups.length) {
+      criteria.leadSourceGroups = leadSourceGroups
     }
     if (offers.includes('tags') && splitList(tags).length) {
       criteria.tags = splitList(tags).map((tag) => tag.toLowerCase())
@@ -222,13 +265,63 @@ export function SharingRuleDrawer(props: SharingRuleDrawerProps) {
         </TextField>
         {offers.includes('leadSources') ? (
           <TextField
+            select
             size="small"
             label="Lead source"
             value={leadSources}
-            onChange={(event) => setLeadSources(event.target.value)}
-            helperText="Any of these, separated by commas. Blank for any source."
+            onChange={(event) => {
+              const value = event.target.value as unknown
+              setLeadSources(Array.isArray(value) ? (value as string[]) : String(value).split(','))
+            }}
+            slotProps={{
+              select: {
+                multiple: true,
+                displayEmpty: true,
+                renderValue: (value) =>
+                  (value as string[]).length ? (value as string[]).join(', ') : 'Any',
+              },
+              inputLabel: { shrink: true },
+            }}
             fullWidth
-          />
+          >
+            {leadSourceItems}
+          </TextField>
+        ) : null}
+        {offers.includes('leadSourceGroups') ? (
+          <TextField
+            select
+            size="small"
+            label="Lead source direction"
+            value={leadSourceGroups}
+            onChange={(event) => {
+              const value = event.target.value as unknown
+              setLeadSourceGroups(Array.isArray(value) ? (value as string[]) : String(value).split(','))
+            }}
+            slotProps={{
+              select: {
+                multiple: true,
+                displayEmpty: true,
+                renderValue: (value) =>
+                  (value as string[]).length
+                    ? (value as string[])
+                        .map(
+                          (id) =>
+                            LEAD_SOURCE_DIRECTION_LABELS[id as keyof typeof LEAD_SOURCE_DIRECTION_LABELS] ?? id,
+                        )
+                        .join(', ')
+                    : 'Any',
+              },
+              inputLabel: { shrink: true },
+            }}
+            helperText="Matched through each lead source's group on the Fields page, as it stands when the rule runs."
+            fullWidth
+          >
+            {LEAD_SOURCE_DIRECTIONS.map((direction) => (
+              <MenuItem key={direction} value={direction}>
+                {LEAD_SOURCE_DIRECTION_LABELS[direction]}
+              </MenuItem>
+            ))}
+          </TextField>
         ) : null}
         {offers.includes('tags') ? (
           <TextField

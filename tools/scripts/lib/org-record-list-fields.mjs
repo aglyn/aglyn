@@ -163,6 +163,7 @@ function facetKeysOf(group, facet, into) {
       if (/^[A-Za-z0-9_-]{1,64}$/.test(key)) add(`custom.${key}`, value)
     }
   }
+  add('leadSource', facet.leadSource)
 }
 
 /** `crmContactFacetKeys`: every holder's keys, and any holder's under `*`. */

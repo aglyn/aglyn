@@ -3675,8 +3675,8 @@ export function crmTaskListFields(record: object): {
  *   `{groupId}:{field}`           this holder has one (for "is set")
  *   `*:{field}={value}`, `*:{field}`   any holder's, for the organization level
  *
- * `field` is `owner`, `stage`, `source`, `company`, `tag` or `custom.{key}`,
- * plus two presence-only fields: `orders` for a holder the person has bought
+ * `field` is `owner`, `stage`, `source`, `company`, `tag`, `custom.{key}` or
+ * `leadSource` (AGL-3511), plus two presence-only fields: `orders` for a holder the person has bought
  * from, and `ltv` for one they are worth something to — the per-holder
  * figures a range cannot reach, asked only whether there are any.
  * A text value is keyed lower-cased and single-spaced; a number or a flag
@@ -3700,6 +3700,8 @@ export type CrmFacetKeyField =
   | 'orders'
   | 'ltv'
   | `custom.${string}`
+  // A holder's lead source, by its label (AGL-3511).
+  | 'leadSource'
 
 /** A facet value as its key spells it, or `null` for a value a key cannot hold. */
 export function crmFacetKeyValue(value: unknown): string | null {
@@ -3748,6 +3750,8 @@ function facetKeysOf(group: string, facet: Record<string, unknown>, into: Set<st
       if (/^[A-Za-z0-9_-]{1,64}$/.test(key)) add(`custom.${key}`, value)
     }
   }
+  // Keyed as `crmPicklistKey` compares a label, so a rename's rewrite restamps it.
+  add('leadSource', facet['leadSource'])
 }
 
 /** Every facet key a contact carries — see the block above. */
