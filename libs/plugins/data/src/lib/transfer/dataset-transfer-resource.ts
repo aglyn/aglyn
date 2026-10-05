@@ -38,6 +38,8 @@ export const DATASET_TRANSFER_HOOKS: PluginTransferResource = {
   count: async (ctx, options) => ((await hooks()).count as NonNullable<TransferRecordsHooks['count']>)(ctx, options),
   readPage: async (ctx, cursor, fieldIds, options) => (await hooks()).readPage(ctx, cursor, fieldIds, options),
   lookup: async (ctx, requests) => (await hooks()).lookup(ctx, requests),
+  suggest: async (ctx, request) =>
+    ((await hooks()).suggest as NonNullable<TransferRecordsHooks['suggest']>)(ctx, request),
   picklists: async (ctx, picklistIds) =>
     ((await hooks()).picklists as NonNullable<TransferRecordsHooks['picklists']>)(ctx, picklistIds),
   addPicklistValues: async (ctx, picklistId, values) =>

@@ -29,6 +29,14 @@ const mockDeclared: ResolvedTransferResourceDeclaration[] = [
   },
   {
     pluginId: 'cellar',
+    key: 'cellars',
+    label: 'Cellars',
+    scope: 'org',
+    kinds: ['records'],
+    formats: ['csv'],
+  },
+  {
+    pluginId: 'cellar',
     key: 'racks',
     label: 'Racks',
     scope: 'org',
@@ -1184,6 +1192,84 @@ describe('lookup columns (AGL-3541)', () => {
     expect(transferLookupNewName(wines.get('w4')?.['rack'])).toBe('Cellar door')
     expect(wines.get('w5')).toEqual({ name: 'Sherry', rack: 'rack-north-1' })
     expect(wines.has('w6')).toBe(false)
+  })
+
+  it('resolves each item of a list that names records on its own, each with its own choice (AGL-3556)', async () => {
+    const cellars = new Map<string, Record<string, unknown>>()
+    registerPluginTransferResource(
+      'cellars',
+      {
+        fields: () => ({
+          standard: [
+            { id: 'name', label: 'Name', type: 'text', required: true },
+            { id: 'racks', label: 'Racks', type: 'list', lookup: { resource: 'racks', by: ['code', 'name'], creatable: true } },
+          ],
+        }),
+        matchKeys: [{ fieldId: 'id', normalizer: 'aglynId' }],
+        readPage: async () => ({ rows: [], next: null }),
+        lookup: lookupIn(cellars),
+        apply: async (_ctx, chunk, writer) => {
+          const results: TransferRowResult[] = []
+          for (const row of chunk.rows as PlannedTransferRow[]) {
+            const id = `c${row.index}`
+            cellars.set(id, Object.fromEntries(row.diff.map((change) => [change.fieldId, change.after])))
+            const result: TransferRowResult = { row: row.index, outcome: 'created', recordId: id }
+            await writer.markApplied(result)
+            results.push(result)
+          }
+          return { results, undo: [] }
+        },
+        revert: async () => ({ done: [], conflicts: [] }),
+      },
+      { pluginId: 'cellar' },
+    )
+    const content = [
+      'Name,Racks',
+      'Home,"n1; Sout wal; Cellar door"',
+      'Shop,"S1; n1; rack-south-1"',
+      'Barn,"Gone; sout wal"',
+      'Loft,Nowhere',
+    ].join('\n')
+    const mapping = { 0: 'name', 1: 'racks' }
+    const { job } = await uploadTransferSource(deps, { orgId: ORG, actorUid: ME, resource: 'cellars', fileName: 'cellars.csv', content })
+    const analysis = await analyzeTransferJob(deps, { orgId: ORG, jobId: job.id, actorUid: ME, mapping })
+    const racksReview = analysis.lookups?.find((review) => review.fieldId === 'racks')
+    // n1, S1 and the id resolve; each unresolved item is listed once, with the rows it is in.
+    expect(racksReview?.resolved).toBe(3)
+    expect(racksReview?.unresolved.map((entry) => [entry.value, entry.count, entry.rows])).toEqual([
+      ['Sout wal', 2, [0, 2]],
+      ['Cellar door', 1, [0]],
+      ['Gone', 1, [2]],
+      ['Nowhere', 1, [3]],
+    ])
+    expect(racksReview?.unresolved[0]?.suggestions.map((entry) => entry.label)).toContain('South wall')
+
+    const plan = await planTransferJob(deps, {
+      orgId: ORG,
+      jobId: job.id,
+      actorUid: ME,
+      choices: {
+        mapping,
+        lookupChoices: {
+          racks: {
+            'sout wal': { action: 'mapTo', recordId: 'rack-south-2' },
+            'cellar door': { action: 'create' },
+            gone: { action: 'leaveBlank' },
+            nowhere: { action: 'refuseRow' },
+          },
+        },
+      },
+    })
+    expect(plan.summary).toMatchObject({ create: 3, fail: 1 })
+    await applyAll(job.id, ['unresolvedLookup'] as never[])
+    const home = cellars.get('c0')?.['racks'] as string[]
+    expect(home.slice(0, 2)).toEqual(['rack-north-1', 'rack-south-2'])
+    expect(transferLookupNewName(home[2])).toBe('Cellar door')
+    // The same record named twice is written once.
+    expect(cellars.get('c1')).toEqual({ name: 'Shop', racks: ['rack-south-1', 'rack-north-1'] })
+    // An item left blank is dropped from the list, never the list cleared.
+    expect(cellars.get('c2')).toEqual({ name: 'Barn', racks: ['rack-south-2'] })
+    expect(cellars.has('c3')).toBe(false)
   })
 })
 

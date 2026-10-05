@@ -101,10 +101,18 @@ with a decimal comma, a list split into items — and the choices that need you:
 - **Values a field with fixed options does not hold:** map each to one of the options,
   **add it to the field's options**, leave it blank, or refuse the rows that carry it.
 - **References** are read by the referenced record's **ID** or by its **name** (the
-  field the reference displays). For a value that names no record, or more than one,
-  choose the record it means, leave it blank, or refuse the rows that carry it. In a
-  field that holds several references, a value that names no single record refuses its
-  row. Either way an import never leaves a reference pointing at nothing.
+  field the reference displays). A value that names no record, or more than one, is
+  listed with the records it may mean — the ones it named, then records named like it
+  — and you choose: **use** one of them, **create it** in the referenced dataset, leave
+  it blank, or refuse the rows that carry it. In a field that holds several references
+  each item is decided on its own, and an item left blank is dropped from the list.
+  Either way an import never leaves a reference pointing at nothing.
+
+  **Create it** is offered when a record of the referenced dataset needs nothing but
+  its name. The record is created once, however many rows name it, holding the name in
+  the field the reference displays, and counts toward that dataset's records on your
+  plan; a row whose record could not be created fails, saying why. A reference to a
+  dataset that is not shared with you is exported by ID but not imported.
 
 A list or multi-reference field accepts items separated by commas, semicolons, pipes or
 line breaks, or a JSON array (`["Residential", "Commercial"]`).
@@ -143,7 +151,7 @@ can filter. A row fails here, rather than halfway through, when:
 - a value breaks the dataset's rules — outside a field's options, past its length or
   bounds, not matching its pattern — and the row names the field;
 - a required field is blank on a new record;
-- a reference names no record;
+- a reference names no record and you chose to refuse its rows;
 - the dataset is full: new records past your plan's **records per dataset** (or any new
   record while your data storage is full) fail as past what your plan allows. Updates
   never count against the limit.
@@ -170,7 +178,8 @@ back the values it changed. A record someone edited since the import is shown wi
 it holds now and what undo would restore, and you choose for each one. Undo keeps
 [relations](relations.md) whole: a created record another record points at is left in
 place when the reference **restricts** deletes, and the reference is removed from the
-other record when it is set to **clear**.
+other record when it is set to **clear**. A record created in a referenced dataset
+because a reference named it is kept: other records may point at it by then.
 
 ## Tips
 

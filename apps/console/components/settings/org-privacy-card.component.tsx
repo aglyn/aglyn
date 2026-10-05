@@ -64,8 +64,8 @@ function ErasureList(props: { heading: string; lines: readonly string[] }) {
  * The CRM is included from Starter and a Free workspace has none of it
  * (AGL-2851), but every workspace must be able to hand over the people it
  * holds and remove one on request. Both used to live only inside the CRM — the
- * "Export all…" buttons on its lists and "Erase this person" on a record's
- * page — so this card is where they stand on every plan, beside the
+ * "Export…" buttons in its sections' headers and "Erase this person" on a
+ * record's page — so this card is where they stand on every plan, beside the
  * workspace's other settings.
  *
  * - The files are the CRM's `crm.contacts` and `crm.leads` transfer

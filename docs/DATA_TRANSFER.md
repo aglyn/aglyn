@@ -533,6 +533,12 @@ the record id, `transferLookupNewValue(text)` for a create, nothing for
 leave-blank (never a clear), and an `unresolvedLookup` note with what was
 decided (`refuse` fails the row). The choices are kept on the job.
 
+A `list` field with a `lookup` (`isTransferLookupField`) holds several
+records — a dataset's multi-reference (AGL-3556). Each item is resolved and
+decided on its own, counted once per row; the row carries the list of ids
+(each record once), an item left blank is dropped, a list whose every item
+was left blank is not written, and one refused item refuses the row.
+
 ### Applying never writes a row twice
 
 The plugin's `apply` gets a `TransferApplyWriter` backed by the ledger:

@@ -20,6 +20,7 @@ import {
   isTransferFieldImportable,
   isTransferFieldWritable,
   isTransferListType,
+  isTransferLookupField,
   isTransferResourceKey,
   parseTransferResourceKey,
   transferFieldProblems,
@@ -151,6 +152,24 @@ describe('transfer fields', () => {
       'Field "d" is a lookup that names no target field.',
       'Field "e" is required but can never be written.',
       'A field labeled "F" has no id.',
+    ])
+  })
+
+  it('lets a list name a target as a lookup does, and no other type (AGL-3556)', () => {
+    const target = { resource: 'data.dataset:people', by: ['id', 'name'] }
+    expect(isTransferLookupField(field({ type: 'lookup', lookup: target }))).toBe(true)
+    expect(isTransferLookupField(field({ type: 'list', lookup: target }))).toBe(true)
+    expect(isTransferLookupField(field({ type: 'list' }))).toBe(false)
+    expect(isTransferLookupField(field({ type: 'lookup', lookup: { ...target, by: [] } }))).toBe(false)
+    expect(
+      transferFieldProblems([
+        field({ id: 'a', type: 'list', lookup: target }),
+        field({ id: 'b', type: 'list', lookup: { ...target, by: [] } }),
+        field({ id: 'c', type: 'text', lookup: target }),
+      ]),
+    ).toEqual([
+      'Field "b" is a lookup that names no target field.',
+      'Field "c" names a lookup target, which only a lookup or list field may.',
     ])
   })
 })

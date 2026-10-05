@@ -96,6 +96,12 @@ const TIMEOUT_MS = Number(process.env.E2E_TIMEOUT_MS ?? 60_000)
  *
  * Run a subset with `--only=<out-substring>[,<out-substring>…]`.
  */
+/** Selects the seeded Team dataset in the Data page's Dataset dropdown. */
+const pickTeamDataset = [
+  { click: 'role=combobox[name="Dataset"]' },
+  { click: 'role=option[name="Team"]', waitFor: 'Avery Quinn', settleMs: 800 },
+]
+
 const shots = [
   {
     out: 'getting-started/console-dashboard.png',
@@ -121,10 +127,16 @@ const shots = [
       { rect: { x: 16, y: 300, width: 1408, height: 540 }, n: 5 },
     ],
   },
+  // The Data page opens on the first dataset by name, and the seeded
+  // scoped-sharing fixture ("Internal rates") sorts before Team — so the
+  // Data page shots pick Team, the dataset their pages describe.
   {
     out: 'datasets/data-page.png',
     path: `/${HOST_BASE}/data`,
-    waitFor: 'Avery Quinn',
+    waitFor: 'Add dataset',
+    // A click on blank card space takes the focus ring off the select and
+    // the pointer off the table's column header.
+    actions: [...pickTeamDataset, { clickXY: [1000, 560], settleMs: 600 }],
   },
   // The import wizard on the seeded Team dataset (AGL-3547), at Columns:
   // rows are pasted rather than a file chosen, so the shot needs no fixture
@@ -134,8 +146,9 @@ const shots = [
   {
     out: 'datasets/import-wizard-columns.png',
     path: `/${HOST_BASE}/data`,
-    waitFor: 'Avery Quinn',
+    waitFor: 'Add dataset',
     actions: [
+      ...pickTeamDataset,
       { click: 'button:text-is("Import")', waitFor: 'Or paste rows' },
       {
         fill: [
@@ -151,8 +164,8 @@ const shots = [
   {
     out: 'datasets/export-dialog.png',
     path: `/${HOST_BASE}/data`,
-    waitFor: 'Avery Quinn',
-    actions: [{ click: 'button:text-is("Export")', waitFor: 'Search fields', settleMs: 2000 }],
+    waitFor: 'Add dataset',
+    actions: [...pickTeamDataset, { click: 'button:text-is("Export")', waitFor: 'Search fields', settleMs: 2000 }],
   },
   {
     out: 'media/media-page.png',

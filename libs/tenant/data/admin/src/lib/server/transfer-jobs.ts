@@ -130,6 +130,7 @@ import {
   normalizeMatchValue,
   matchLookupKey,
   isBlankTransferValue,
+  isTransferLookupField,
   TRANSFER_UNDO_WINDOW_MS,
   TRANSFER_JOBS_PAGE_MAX,
   parseTransferResourceKey,
@@ -977,8 +978,16 @@ const LOOKUP_SUGGESTIONS_MAX = 5
 /** The most rows one unresolved value lists. */
 const LOOKUP_ROWS_MAX = 20
 
-function isLookupField(field: TransferField | undefined): field is TransferField & { lookup: NonNullable<TransferField['lookup']> } {
-  return Boolean(field && field.type === 'lookup' && field.lookup?.resource && field.lookup.by?.length)
+/**
+ * The names a lookup cell holds, trimmed, blanks dropped: one for a `lookup`
+ * field, each item of a `list` field that names a target. `null` for a cell
+ * that is neither text nor a list — a value no record could be named by.
+ */
+function lookupCellNames(raw: unknown): string[] | null {
+  if (isBlankTransferValue(raw)) return []
+  const items = Array.isArray(raw) ? raw : [raw]
+  if (items.some((item) => item !== null && item !== undefined && typeof item === 'object')) return null
+  return items.map((item) => String(item ?? '').trim()).filter(Boolean)
 }
 
 /** Who answers a lookup field's target, and the context it is asked in. */
@@ -1072,19 +1081,22 @@ async function resolveLookupColumns(
   const columns: LookupColumn[] = []
   for (const fieldId of new Set(Object.values(mapping))) {
     const field = byId.get(fieldId)
-    if (!isLookupField(field)) continue
+    if (!isTransferLookupField(field)) continue
     const values = new Map<string, LookupValue>()
     for (const row of rows) {
-      const raw = row.values[field.id]
-      if (isBlankTransferValue(raw) || typeof raw === 'object') continue
-      const text = String(raw).trim()
-      const key = transferLookupKey(text)
-      const seen = values.get(key)
-      if (seen) {
-        seen.count += 1
-        if (seen.rows.length < LOOKUP_ROWS_MAX) seen.rows.push(row.index)
-      } else {
-        values.set(key, { value: text, key, count: 1, rows: [row.index] })
+      // A value is counted once per row, however often a list repeats it.
+      const inRow = new Set<string>()
+      for (const text of lookupCellNames(row.values[field.id]) ?? []) {
+        const key = transferLookupKey(text)
+        if (inRow.has(key)) continue
+        inRow.add(key)
+        const seen = values.get(key)
+        if (seen) {
+          seen.count += 1
+          if (seen.rows.length < LOOKUP_ROWS_MAX) seen.rows.push(row.index)
+        } else {
+          values.set(key, { value: text, key, count: 1, rows: [row.index] })
+        }
       }
     }
     const target = await lookupTargetFor(deps, hooks, ctx, field.lookup.resource)
@@ -1210,7 +1222,9 @@ async function lookupChoiceProblems(
  * its record's id; an unresolved one its choice — the chosen record's id, a
  * record to create, nothing written, or the row refused — each noted on the
  * row as `unresolvedLookup`. A value left blank by choice is not written at
- * all: it must never read as "clear the field".
+ * all: it must never read as "clear the field". In a list, each item is
+ * decided on its own and an item left blank is dropped from the list; a
+ * list whose every item was left blank is not written.
  */
 function applyLookupChoices(
   rows: TransferPlanRow[],
@@ -1222,30 +1236,35 @@ function applyLookupChoices(
     const notes = [...(row.notes ?? [])]
     for (const column of columns) {
       const raw = values[column.field.id]
-      if (isBlankTransferValue(raw) || typeof raw === 'object') continue
-      const text = String(raw).trim()
-      const key = transferLookupKey(text)
-      const id = column.resolved.get(key)
-      if (id) {
-        values[column.field.id] = id
-        continue
+      const names = lookupCellNames(raw)
+      if (!names?.length) continue
+      const ids: string[] = []
+      let refused = false
+      for (const text of names) {
+        const key = transferLookupKey(text)
+        const id = column.resolved.get(key)
+        if (id) {
+          ids.push(id)
+          continue
+        }
+        const choice = choices?.[column.field.id]?.[key]
+        const note = { class: 'unresolvedLookup' as const, fieldId: column.field.id, value: text }
+        if (choice?.action === 'mapTo') {
+          ids.push(choice.recordId)
+          const label = lookupRecordLabel(column.records.get(choice.recordId), column.field.lookup.by)
+          notes.push({ ...note, detail: label ? `Uses “${label}”` : 'Uses a chosen record' })
+        } else if (choice?.action === 'create') {
+          ids.push(transferLookupNewValue(text))
+          notes.push({ ...note, detail: 'Creates it' })
+        } else if (choice?.action === 'refuseRow') {
+          refused = true
+          notes.push({ ...note, refuse: true, detail: 'Refuses the row' })
+        } else {
+          notes.push({ ...note, detail: 'Left blank' })
+        }
       }
-      const choice = choices?.[column.field.id]?.[key]
-      const note = { class: 'unresolvedLookup' as const, fieldId: column.field.id, value: text }
-      if (choice?.action === 'mapTo') {
-        values[column.field.id] = choice.recordId
-        const label = lookupRecordLabel(column.records.get(choice.recordId), column.field.lookup.by)
-        notes.push({ ...note, detail: label ? `Uses “${label}”` : 'Uses a chosen record' })
-      } else if (choice?.action === 'create') {
-        values[column.field.id] = transferLookupNewValue(text)
-        notes.push({ ...note, detail: 'Creates it' })
-      } else if (choice?.action === 'refuseRow') {
-        delete values[column.field.id]
-        notes.push({ ...note, refuse: true, detail: 'Refuses the row' })
-      } else {
-        delete values[column.field.id]
-        notes.push({ ...note, detail: 'Left blank' })
-      }
+      if (refused || !ids.length) delete values[column.field.id]
+      else values[column.field.id] = Array.isArray(raw) ? [...new Set(ids)] : ids[0]
     }
     if (notes.length) row.notes = notes
   }

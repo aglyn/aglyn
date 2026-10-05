@@ -21,12 +21,14 @@ import {
   buildTransferPlan,
   matchLookupKey,
   planTransferUndo,
+  rankTransferLookupSuggestions,
+  transferLookupKey,
+  transferLookupNewName,
   transferResourceInstanceOf,
   type MatchLookupRequest,
   type PlannedTransferRow,
+  type TransferLookupSuggestion,
   type TransferPlanLimits,
-  type TransferPlanRow,
-  type TransferRowNote,
   type TransferRowResult,
   type TransferUndoEntry,
   type TransferUndoStep,
@@ -36,6 +38,7 @@ import type {
   TransferApplyResult,
   TransferApplyWriter,
   TransferLookupResult,
+  TransferLookupSuggestRequest,
   TransferPicklistList,
   TransferReadOptions,
   TransferReadPage,
@@ -57,16 +60,19 @@ import { TransferEngineError } from '@aglyn/tenant-data-admin/server/transfer-jo
 import { FieldPath, FieldValue, Timestamp, type Firestore } from 'firebase-admin/firestore'
 import { datasetRecordFilter, planRecordQuery } from '../components/dataset-record-filter'
 import {
-  datasetFilterTextKey,
+  datasetFilterToken,
   datasetFilterValuePath,
+  datasetFilterWords,
   datasetIntegrityFields,
   datasetIntegrityUpdate,
   effectiveDatasetModel,
+  type DatasetFieldDefinition,
   type DatasetModel,
 } from '../model/dataset-models'
 import { datasetDisplayName, describeDatasetRecordErrors } from '../model/datasets'
 import { fillRecordAddresses } from '../record-pages/record-pages'
 import { announceDatasetRecords } from '../server/announce-dataset-records'
+import { datasetTransferResourceKey } from './dataset-transfer-key'
 import {
   datasetFieldIdOf,
   datasetFieldOfPicklist,
@@ -79,8 +85,10 @@ import {
   datasetTransferCatalog,
   datasetTransferFieldId,
   datasetWriteErrors,
+  isOptionsField,
   limitDatasetCreates,
   refuseInvalidDatasetRows,
+  type DatasetReferenceTarget,
 } from './dataset-transfer-model'
 
 /*==========================================
@@ -110,6 +118,17 @@ import {
  * A created record is named by {@link transferRecordId} — the job and the
  * row — so a chunk the engine retries after a write landed but before the
  * ledger heard of it finds the record already there and writes nothing.
+ *
+ * ## References are the engine's lookups (AGL-3556)
+ *
+ * A reference field is a lookup of its target dataset, so the engine resolves
+ * it through these same hooks asked as THAT dataset ({@link lookupDatasetRecords},
+ * {@link suggestDatasetRecords}). A value the person chose to create arrives
+ * as `transferLookupNewValue(name)`; {@link createNamedReferences} creates it
+ * in the target through the same create as a row's record — once per name
+ * however many rows name it, under an id derived from the job and the name,
+ * so a retried chunk finds the record it already created. Undo leaves such a
+ * record: other records may point at it by then.
  *
  * ## Undo keeps the references whole
  *
@@ -228,6 +247,34 @@ function datasetFor(deps: DatasetTransferDeps, ctx: TransferResourceContext): Pr
     pending.catch(() => loaded.delete(ctx))
   }
   return pending
+}
+
+/** The context a referenced dataset is asked in: the same job, actor and site, as that dataset. */
+function targetContext(ctx: TransferResourceContext, datasetId: string): TransferResourceContext {
+  return { ...ctx, resource: datasetTransferResourceKey(datasetId) }
+}
+
+/**
+ * Each dataset the model references, as the person may use it: whether they
+ * can read it (the same check as opening it), and its model when they can.
+ */
+async function datasetReferenceTargets(
+  deps: DatasetTransferDeps,
+  ctx: TransferResourceContext,
+  model: DatasetModel,
+): Promise<Record<string, DatasetReferenceTarget>> {
+  const out: Record<string, DatasetReferenceTarget> = {}
+  for (const field of Object.values(model.fields ?? {})) {
+    const targetId = field?.type === 'reference' ? field.reference?.datasetId : undefined
+    if (!targetId || out[targetId]) continue
+    try {
+      out[targetId] = { readable: true, model: (await datasetFor(deps, targetContext(ctx, targetId))).model }
+    } catch (error) {
+      if (!(error instanceof TransferEngineError && error.code === 'notFound')) throw error
+      out[targetId] = { readable: false }
+    }
+  }
+  return out
 }
 
 /** A record document as transfer values. */
@@ -398,6 +445,74 @@ export async function lookupDatasetRecords(
   return { lookup, records }
 }
 
+/** The most distinct word queries one suggestion request runs. */
+const SUGGEST_QUERIES_MAX = 200
+
+/** The records one word query reads. */
+const SUGGEST_READ = 20
+
+/** The words of a value its candidates are asked by. */
+const SUGGEST_WORDS = 2
+
+/** The leading characters a word is also asked by, so a later misspelling still finds it. */
+const SUGGEST_STEM = 3
+
+/**
+ * Records named LIKE each value a reference could not find, for the person
+ * to pick from: each plain text `by` field asked for records with a word that
+ * starts with one of the value's first words, or with its first few letters
+ * (the `filterKeys` prefix tokens the records table's `contains` reads), then
+ * ranked by how close the whole name is. Values past the query budget get none.
+ */
+export async function suggestDatasetRecords(
+  deps: DatasetTransferDeps,
+  ctx: TransferResourceContext,
+  request: TransferLookupSuggestRequest,
+): Promise<Record<string, TransferLookupSuggestion[]>> {
+  const dataset = await datasetFor(deps, ctx)
+  const fields = request.by
+    .map((transferId) => datasetFieldIdOf(transferId))
+    .filter((fieldId): fieldId is string => {
+      const field = fieldId ? dataset.model.fields?.[fieldId] : undefined
+      return field?.type === 'text' && !isOptionsField(field)
+    })
+  const asked = new Map<string, Promise<Array<{ recordId: string; label: string }>>>()
+  const ask = (fieldId: string, token: string) => {
+    const at = `${fieldId}\u0000${token}`
+    let pending = asked.get(at)
+    if (!pending) {
+      pending = dataset.records
+        .where('filterKeys', 'array-contains', token)
+        .limit(SUGGEST_READ)
+        .get()
+        .then((snapshot) =>
+          snapshot.docs.map((doc) => ({
+            recordId: doc.id,
+            label: String(((doc.get('values') ?? {}) as Record<string, unknown>)[fieldId] ?? '').trim(),
+          })),
+        )
+      asked.set(at, pending)
+    }
+    return pending
+  }
+  const answer: Record<string, TransferLookupSuggestion[]> = {}
+  for (const value of request.values) {
+    const candidates: TransferLookupSuggestion[] = []
+    for (const fieldId of fields) {
+      for (const word of datasetFilterWords(value).slice(0, SUGGEST_WORDS)) {
+        const stem = Array.from(word).slice(0, SUGGEST_STEM).join('')
+        for (const asWord of new Set([word, stem])) {
+          const token = datasetFilterToken(dataset.model, { field: fieldId, op: 'contains', value: asWord })
+          if (!token || (asked.size >= SUGGEST_QUERIES_MAX && !asked.has(`${fieldId}\u0000${token}`))) continue
+          candidates.push(...(await ask(fieldId, token)).filter((candidate) => candidate.label))
+        }
+      }
+    }
+    answer[value] = rankTransferLookupSuggestions(value, candidates, { limit: 5 })
+  }
+  return answer
+}
+
 /*------------------------------------------
  * Options fields as picklists
  *-----------------------------------------*/
@@ -453,84 +568,6 @@ export async function addDatasetOptions(
 /*------------------------------------------
  * The dry run
  *-----------------------------------------*/
-
-/**
- * Each reference cell as the id of the record it names: by its id, or by the
- * target dataset's display field. A value that names no record — or more
- * than one — refuses its row with an `unresolvedLookup` note, so no write
- * leaves a reference pointing at nothing.
- */
-async function resolveReferences(
-  deps: DatasetTransferDeps,
-  dataset: LoadedDataset,
-  rows: readonly TransferPlanRow[],
-): Promise<TransferPlanRow[]> {
-  const out = rows.map((row) => ({ ...row, values: { ...row.values }, notes: [...(row.notes ?? [])] }))
-  for (const fieldId of dataset.model.order ?? []) {
-    const field = dataset.model.fields?.[fieldId]
-    const targetId = field?.type === 'reference' ? field.reference?.datasetId : undefined
-    if (!field || !targetId) continue
-    const transferId = datasetTransferFieldId(fieldId)
-    const cells = (value: unknown): string[] =>
-      (Array.isArray(value) ? value : [value]).map((one) => (one == null ? '' : String(one).trim())).filter(Boolean)
-    const wanted = [...new Set(out.flatMap((row) => cells(row.values[transferId])))]
-    if (!wanted.length) continue
-
-    const target = dataset.orgRef.collection('datasets').doc(targetId)
-    const targetSnapshot = await target.get()
-    const targetData = (targetSnapshot.data() ?? {}) as Record<string, unknown>
-    const targetName = datasetDisplayName(targetData) || 'the referenced dataset'
-    const targetModel = effectiveDatasetModel(targetData as { model?: DatasetModel; fields?: string[] })
-    const resolved = new Map<string, string | null>()
-    if (targetSnapshot.exists) {
-      const docs = await getAll(deps.firestore, wanted.map((id) => target.collection('records').doc(id)))
-      for (const doc of docs) if (doc.exists) resolved.set(doc.id, doc.id)
-      const display = field.reference?.displayFieldId
-      const path = display && targetModel.fields?.[display]?.type === 'text' ? datasetFilterValuePath(display) : null
-      const byName = wanted.filter((value) => !resolved.has(value))
-      if (path && display && byName.length) {
-        const keys = new Map<string, string[]>()
-        for (const value of byName) {
-          const key = datasetFilterTextKey(value)
-          keys.set(key, [...(keys.get(key) ?? []), value])
-        }
-        const found = new Map<string, string[]>()
-        for (const slice of chunked([...keys.keys()], IN_MAX)) {
-          for (const doc of (await target.collection('records').where(path, 'in', slice).get()).docs) {
-            const name = String(((doc.get('values') ?? {}) as Record<string, unknown>)[display] ?? '').trim().toLowerCase()
-            found.set(name, [...(found.get(name) ?? []), doc.id])
-          }
-        }
-        for (const value of byName) {
-          const ids = found.get(value.toLowerCase()) ?? []
-          resolved.set(value, ids.length === 1 ? (ids[0] as string) : null)
-        }
-      }
-    }
-    for (const row of out) {
-      const raw = row.values[transferId]
-      const list = cells(raw)
-      if (!list.length) continue
-      const ids: string[] = []
-      for (const value of list) {
-        const id = resolved.get(value)
-        if (id) ids.push(id)
-        else {
-          const note: TransferRowNote = {
-            class: 'unresolvedLookup',
-            fieldId: transferId,
-            value,
-            refuse: true,
-            detail: `No single record of “${targetName}” has this ID or name`,
-          }
-          row.notes.push(note)
-        }
-      }
-      row.values[transferId] = Array.isArray(raw) ? ids : (ids[0] ?? null)
-    }
-  }
-  return out.map((row) => (row.notes.length ? row : { ...row, notes: undefined }))
-}
 
 /**
  * The records this import may create, from the plan's `recordsPerDataset`
@@ -627,47 +664,37 @@ async function applyUpdates(
   return landed
 }
 
+/** What became of one new record: written, already there (an earlier attempt's), or past the plan. */
+type NewRecordOutcome = 'created' | 'existed' | 'refused'
+
+/** Why a dataset's new records were not written at all. */
+interface NewRecordsRefused {
+  message: string
+}
+
 /**
- * Creates, as `/api/orgs/datasets` creates: validated, then counted, decided
- * and written in one transaction against `recordsPerDataset`. A row the
- * plan's room has run out for fails as past the plan; a record this job
- * already created (a retried chunk) is reported, not written again.
+ * New records written as `/api/orgs/datasets` creates them: the data storage
+ * band refusing first, then counted, decided and written in ONE transaction
+ * against `recordsPerDataset`, each with the integrity index of its values.
+ * A record already there is left as it is. `values` are validated already.
  */
-async function applyCreates(
+async function writeNewRecords(
   deps: DatasetTransferDeps,
-  ctx: TransferResourceContext,
   dataset: LoadedDataset,
-  rows: readonly PlannedTransferRow[],
-): Promise<Landed[]> {
-  if (!rows.length) return []
+  entries: ReadonlyArray<{ id: string; values: Record<string, unknown> }>,
+): Promise<{ outcomes: NewRecordOutcome[]; limitMessage: string } | NewRecordsRefused> {
   const { model, records } = dataset
-  const landed: Landed[] = []
-  const prepared: Array<{ row: PlannedTransferRow; id: string; values: Record<string, unknown> }> = []
-  for (const row of rows) {
-    const { values } = datasetStorageValues(
-      model,
-      Object.fromEntries(row.diff.map((change) => [change.fieldId, change.after])),
-    )
-    const coerced = fillRecordAddresses(model, values)
-    const errors = datasetWriteErrors(model, coerced)
-    if (Object.keys(errors).length) landed.push(failed(row, 'refusedValue', describeDatasetRecordErrors(errors)))
-    else prepared.push({ row, id: transferRecordId(ctx.jobId ?? ctx.resource, row.index), values: coerced })
-  }
-  if (!prepared.length) return landed
   const org = (await dataset.orgRef.get()).data() as never
   // Bytes, not rows (AGL-2163), before the write as on every other create.
   const storage = await dataStorageRefusal(org, dataset.orgRef)
-  if (storage) {
-    const message = `Dataset storage is full (${storage.includedMb} MB on this plan) — upgrade in Billing`
-    return [...landed, ...prepared.map((entry) => failed(entry.row, 'planLimit', message))]
-  }
+  if (storage) return { message: `Dataset storage is full (${storage.includedMb} MB on this plan) — upgrade in Billing` }
   const outcomes = await deps.firestore.runTransaction(async (tx) => {
-    const refs = prepared.map((entry) => records.doc(entry.id))
+    const refs = entries.map((entry) => records.doc(entry.id))
     const existing = await tx.getAll(...refs)
     const live = Number((await tx.get(records.count())).data().count ?? 0)
     let room = checkQuota(org, 'recordsPerDataset', live).remaining
     let order = live
-    return prepared.map((entry, at): 'created' | 'existed' | 'refused' => {
+    return entries.map((entry, at): NewRecordOutcome => {
       if ((existing[at] as FirebaseFirestore.DocumentSnapshot).exists) return 'existed'
       if (room <= 0) return 'refused'
       room -= 1
@@ -684,19 +711,179 @@ async function applyCreates(
     })
   })
   const limit = checkQuota(org, 'recordsPerDataset', 0).limit
+  return { outcomes, limitMessage: `Record limit reached (${limit}) — upgrade in Billing` }
+}
+
+/**
+ * Creates, through {@link writeNewRecords}: validated first, so a row the
+ * model refuses fails naming why. A row the plan's room has run out for
+ * fails as past the plan; a record this job already created (a retried
+ * chunk) is reported, not written again.
+ */
+async function applyCreates(
+  deps: DatasetTransferDeps,
+  ctx: TransferResourceContext,
+  dataset: LoadedDataset,
+  rows: readonly PlannedTransferRow[],
+): Promise<Landed[]> {
+  if (!rows.length) return []
+  const { model } = dataset
+  const landed: Landed[] = []
+  const prepared: Array<{ row: PlannedTransferRow; id: string; values: Record<string, unknown> }> = []
+  for (const row of rows) {
+    const { values } = datasetStorageValues(
+      model,
+      Object.fromEntries(row.diff.map((change) => [change.fieldId, change.after])),
+    )
+    const coerced = fillRecordAddresses(model, values)
+    const errors = datasetWriteErrors(model, coerced)
+    if (Object.keys(errors).length) landed.push(failed(row, 'refusedValue', describeDatasetRecordErrors(errors)))
+    else prepared.push({ row, id: transferRecordId(ctx.jobId ?? ctx.resource, row.index), values: coerced })
+  }
+  if (!prepared.length) return landed
+  const written = await writeNewRecords(deps, dataset, prepared)
+  if ('message' in written) return [...landed, ...prepared.map((entry) => failed(entry.row, 'planLimit', written.message))]
   prepared.forEach((entry, at) => {
-    if (outcomes[at] === 'refused') {
-      landed.push(failed(entry.row, 'planLimit', `Record limit reached (${limit}) — upgrade in Billing`))
+    if (written.outcomes[at] === 'refused') {
+      landed.push(failed(entry.row, 'planLimit', written.limitMessage))
       return
     }
-    const written = datasetRecordTransferValues(model, { values: entry.values })
-    delete written[TRANSFER_ID_FIELD]
+    const values = datasetRecordTransferValues(model, { values: entry.values })
+    delete values[TRANSFER_ID_FIELD]
     landed.push({
       result: { row: entry.row.index, outcome: 'created', recordId: entry.id },
-      undo: { row: entry.row.index, recordId: entry.id, action: 'created', written },
+      undo: { row: entry.row.index, recordId: entry.id, action: 'created', written: values },
     })
   })
   return landed
+}
+
+/*------------------------------------------
+ * References the person chose to create
+ *-----------------------------------------*/
+
+/**
+ * The id a record created for a reference's name is given: ten characters
+ * of the resource-id alphabet, from the job, the target, the field it is
+ * named in and the name as the engine keys it — so every row naming it, in
+ * any chunk, and a retried chunk all land on the one record.
+ */
+export function transferReferenceRecordId(jobId: string, datasetId: string, displayFieldId: string, name: string): string {
+  return transferRecordId(`${jobId}:${datasetId}:${displayFieldId}:${transferLookupKey(name)}`, 0)
+}
+
+/** The names a reference value asks to create, by the engine's marker. */
+function namesToCreate(value: unknown): string[] {
+  const names: string[] = []
+  for (const item of Array.isArray(value) ? value : [value]) {
+    const name = transferLookupNewName(item)
+    if (name) names.push(name)
+  }
+  return names
+}
+
+/** A reference field with a target and the field it names records by. */
+interface NamedReference {
+  transferId: string
+  targetId: string
+  displayFieldId: string
+}
+
+function namedReferences(model: DatasetModel): NamedReference[] {
+  const out: NamedReference[] = []
+  for (const fieldId of model.order ?? []) {
+    const field = model.fields?.[fieldId] as DatasetFieldDefinition | undefined
+    const targetId = field?.type === 'reference' ? field.reference?.datasetId : undefined
+    const displayFieldId = field?.reference?.displayFieldId
+    if (targetId && displayFieldId) out.push({ transferId: datasetTransferFieldId(fieldId), targetId, displayFieldId })
+  }
+  return out
+}
+
+/**
+ * The records the person chose to create from a reference's names, created
+ * in the referenced dataset before the rows that name them are written: each
+ * name once, holding the name in the field the reference displays, held to
+ * the target's model and its plan, through {@link writeNewRecords}. The rows
+ * come back naming the records' ids; a row naming one that could not be
+ * created fails, saying why.
+ */
+async function createNamedReferences(
+  deps: DatasetTransferDeps,
+  ctx: TransferResourceContext,
+  dataset: LoadedDataset,
+  rows: readonly PlannedTransferRow[],
+): Promise<{ rows: PlannedTransferRow[]; failed: Landed[] }> {
+  const references = namedReferences(dataset.model)
+  // Target and display field → name key → the name as the file spelled it.
+  const wanted = new Map<string, { reference: NamedReference; names: Map<string, string> }>()
+  for (const row of rows) {
+    for (const change of row.diff) {
+      const reference = references.find((one) => one.transferId === change.fieldId)
+      const names = reference ? namesToCreate(change.after) : []
+      if (!reference || !names.length) continue
+      const at = `${reference.targetId}\u0000${reference.displayFieldId}`
+      const group = wanted.get(at) ?? { reference, names: new Map<string, string>() }
+      for (const name of names) if (!group.names.has(transferLookupKey(name))) group.names.set(transferLookupKey(name), name)
+      wanted.set(at, group)
+    }
+  }
+  if (!wanted.size) return { rows: [...rows], failed: [] }
+
+  // Name key → the record's id, or why it could not be created; per target and display field.
+  const outcome = new Map<string, Map<string, { id: string } | { message: string }>>()
+  const jobId = ctx.jobId ?? ctx.resource
+  for (const [at, { reference, names }] of wanted) {
+    const decided = new Map<string, { id: string } | { message: string }>()
+    outcome.set(at, decided)
+    const target = await datasetFor(deps, targetContext(ctx, reference.targetId))
+    await ensureDeclaredCustomFieldTypes(target.model)
+    const entries: Array<{ key: string; id: string; values: Record<string, unknown> }> = []
+    for (const [key, name] of names) {
+      const values = fillRecordAddresses(target.model, datasetStorageValues(target.model, { [datasetTransferFieldId(reference.displayFieldId)]: name }).values)
+      const errors = datasetWriteErrors(target.model, values)
+      if (Object.keys(errors).length) {
+        decided.set(key, { message: `“${name}” could not be created in ${target.label}: ${describeDatasetRecordErrors(errors)}` })
+      } else {
+        entries.push({ key, id: transferReferenceRecordId(jobId, target.id, reference.displayFieldId, name), values })
+      }
+    }
+    if (!entries.length) continue
+    const written = await writeNewRecords(deps, target, entries)
+    entries.forEach((entry, index) => {
+      const name = names.get(entry.key) as string
+      if ('message' in written) decided.set(entry.key, { message: `“${name}” could not be created in ${target.label}: ${written.message}` })
+      else if (written.outcomes[index] === 'refused') {
+        decided.set(entry.key, { message: `“${name}” could not be created in ${target.label}: ${written.limitMessage}` })
+      } else decided.set(entry.key, { id: entry.id })
+    })
+    if (!('message' in written) && written.outcomes.includes('created')) {
+      await announceDatasetRecords({ firestore: deps.firestore, orgId: ctx.orgId, datasetId: target.id })
+    }
+  }
+
+  const out: PlannedTransferRow[] = []
+  const refused: Landed[] = []
+  for (const row of rows) {
+    const problems: string[] = []
+    const diff = row.diff.map((change) => {
+      const reference = references.find((one) => one.transferId === change.fieldId)
+      if (!reference || !namesToCreate(change.after).length) return change
+      const decided = outcome.get(`${reference.targetId}\u0000${reference.displayFieldId}`)
+      const idOf = (item: unknown): unknown => {
+        const name = transferLookupNewName(item)
+        if (!name) return item
+        const one = decided?.get(transferLookupKey(name))
+        if (one && 'id' in one) return one.id
+        problems.push(one && 'message' in one ? one.message : `“${name}” could not be created.`)
+        return item
+      }
+      return { ...change, after: Array.isArray(change.after) ? [...new Set(change.after.map(idOf))] : idOf(change.after) }
+    })
+    if (problems.length) refused.push(failed(row, 'refusedValue', [...new Set(problems)].join(' ')))
+    else out.push({ ...row, diff })
+  }
+  return { rows: out, failed: refused }
 }
 
 export async function applyDatasetChunk(
@@ -716,9 +903,12 @@ export async function applyDatasetChunk(
     if (done) results.push(done)
     else pending.push(row)
   }
+  // The records the rows' references name for creation, before the rows.
+  const named = await createNamedReferences(deps, ctx, dataset, pending)
   const landed = [
-    ...(await applyUpdates(deps, dataset, pending.filter((row) => row.verdict === 'update' && row.recordId))),
-    ...(await applyCreates(deps, ctx, dataset, pending.filter((row) => row.verdict === 'create'))),
+    ...named.failed,
+    ...(await applyUpdates(deps, dataset, named.rows.filter((row) => row.verdict === 'update' && row.recordId))),
+    ...(await applyCreates(deps, ctx, dataset, named.rows.filter((row) => row.verdict === 'create'))),
   ]
   for (const entry of landed) {
     await writer.markApplied(entry.result, entry.undo)
@@ -851,19 +1041,19 @@ export function datasetTransferHooks(deps: () => DatasetTransferDeps = productio
   return {
     fields: async (ctx) => {
       const dataset = await datasetFor(deps(), ctx)
-      return datasetTransferCatalog(dataset.model, dataset.label)
+      return datasetTransferCatalog(dataset.model, dataset.label, await datasetReferenceTargets(deps(), ctx, dataset.model))
     },
     matchKeys: async (ctx) => datasetMatchKeyOffer((await datasetFor(deps(), ctx)).model),
     count: (ctx, options) => countDatasetRecords(deps(), ctx, options),
     readPage: (ctx, cursor, fieldIds, options) => readDatasetPage(deps(), ctx, cursor, fieldIds, options),
     lookup: (ctx, requests) => lookupDatasetRecords(deps(), ctx, requests),
+    suggest: (ctx, request) => suggestDatasetRecords(deps(), ctx, request),
     picklists: (ctx, picklistIds) => datasetPicklists(deps(), ctx, picklistIds),
     addPicklistValues: (ctx, picklistId, values) => addDatasetOptions(deps(), ctx, picklistId, values),
     plan: async (ctx, input) => {
       const dataset = await datasetFor(deps(), ctx)
       await ensureDeclaredCustomFieldTypes(dataset.model)
-      const rows = await resolveReferences(deps(), dataset, input.rows)
-      const plan = refuseInvalidDatasetRows(dataset.model, buildTransferPlan({ ...input, rows }), input.existing)
+      const plan = refuseInvalidDatasetRows(dataset.model, buildTransferPlan(input), input.existing)
       return limitDatasetCreates(plan, (await createLimits(dataset)).maxCreates)
     },
     apply: (ctx, chunk, writer) => applyDatasetChunk(deps(), ctx, chunk, writer),

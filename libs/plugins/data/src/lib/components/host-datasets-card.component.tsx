@@ -85,7 +85,7 @@ import {
 } from './dataset-record-filter'
 import { coerceDocumentValues, datasetIntegrityUpdate, datasetValueToInput, effectiveDatasetModel, formatDatasetValue, modelFromFieldEntries, validateDocument } from '../model/dataset-models'
 import { fillRecordAddresses } from '../record-pages/record-pages'
-import { parseDatasetFieldEntries } from '../model/datasets'
+import { datasetDisplayName, parseDatasetFieldEntries } from '../model/datasets'
 import { datasetTransferResourceKey } from '../transfer/dataset-transfer-key'
 
 export interface HostDatasetsCardProps {
@@ -270,7 +270,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
   const datasets = useMemo(
     () =>
       [...(datasetDocs ?? [])].sort((a, b) =>
-        String(a.displayName ?? '').localeCompare(String(b.displayName ?? '')),
+        datasetDisplayName(a).localeCompare(datasetDisplayName(b)),
       ),
     [datasetDocs],
   )
@@ -607,7 +607,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
     // write that used to stand in for it is gone.
     if (!a || !b || !orgId) return
     const fieldFor = (target: any, fieldId: string) => ({
-      name: String(target.displayName ?? fieldId),
+      name: datasetDisplayName(target) || fieldId,
       type: 'reference' as const,
       required: true,
       reference: {
@@ -617,7 +617,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
       },
     })
     const payload = {
-      displayName: `${a.displayName} ↔ ${b.displayName}`,
+      displayName: `${datasetDisplayName(a)} ↔ ${datasetDisplayName(b)}`,
       fields: ['aRef', 'bRef'],
       model: {
         order: ['aRef', 'bRef'],
@@ -654,7 +654,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
     const confirmed = await confirm({
       title: 'Delete this collection?',
       description:
-        `"${selected.displayName}"` +
+        `"${datasetDisplayName(selected)}"` +
         // What is actually being destroyed, not what is loaded (AGL-1716):
         // a 40,000-row dataset used to warn about "its 500 documents".
         (recordCount
@@ -701,7 +701,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
     logActivity('Deleted dataset', {
       type: 'content',
       id: selected.$id,
-      name: selected.displayName,
+      name: datasetDisplayName(selected),
     })
   }, [
     selected,
@@ -929,7 +929,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
     logActivity(editor.id ? 'Updated record' : 'Added record', {
       type: 'content',
       id: selected.$id,
-      name: selected.displayName,
+      name: datasetDisplayName(selected),
     })
   }, [
     editor,
@@ -1004,7 +1004,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
           )
         } catch {
           return void enqueueSnackbar(
-            `Cannot delete: "${other.displayName}" could not be checked for ` +
+            `Cannot delete: "${datasetDisplayName(other)}" could not be checked for ` +
               'references, so removing this record could break it. Nothing ' +
               'was deleted.',
             { variant: 'error' },
@@ -1026,7 +1026,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
         if (restricted) {
           return void enqueueSnackbar(
             `Cannot delete: referenced by ${hits.length} document` +
-              `${hits.length === 1 ? '' : 's'} in "${other.displayName}"`,
+              `${hits.length === 1 ? '' : 's'} in "${datasetDisplayName(other)}"`,
             { variant: 'warning', persist: false },
           )
         }
@@ -1096,7 +1096,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
   const canExport = Boolean(transfer && transferTarget && transfer.can('export', transferTarget))
   const handleImport = useCallback(() => {
     if (!transfer || !selected?.$id) return
-    const dataset = { id: selected.$id, name: String(selected.displayName ?? '') }
+    const dataset = { id: selected.$id, name: datasetDisplayName(selected) }
     transfer.openImport({
       resource: datasetTransferResourceKey(dataset.id),
       scope: 'org',
@@ -1110,7 +1110,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
   }, [transfer, selected, logActivity])
   const handleExport = useCallback(() => {
     if (!transfer || !selected?.$id) return
-    const name = String(selected.displayName ?? '')
+    const name = datasetDisplayName(selected)
     transfer.openExport({
       resource: datasetTransferResourceKey(selected.$id),
       scope: 'org',
@@ -1229,7 +1229,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
             >
               {datasets.map((item) => (
                 <MenuItem key={item.$id} value={item.$id}>
-                  {item.displayName}
+                  {datasetDisplayName(item)}
                 </MenuItem>
               ))}
             </TextField>
@@ -1610,7 +1610,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
             >
               {datasets.map((item) => (
                 <MenuItem key={item.$id} value={item.$id}>
-                  {item.displayName}
+                  {datasetDisplayName(item)}
                 </MenuItem>
               ))}
             </TextField>

@@ -29,6 +29,7 @@ import { RECORD_PAGE_ADDRESS_FIELD_TYPE } from '../record-pages/record-pages'
 import { DATASET_TRANSFER_RESOURCE, datasetTransferResourceKey } from './dataset-transfer-key'
 import {
   DATASET_TRANSFER_CREATED_FIELD,
+  datasetAcceptsNamedRecord,
   datasetMatchKeyOffer,
   datasetMatchKeyQuery,
   datasetOptionsPicklist,
@@ -123,6 +124,24 @@ describe('the catalog', () => {
 
   it('names a reference’s target dataset and its display field as the lookup', () => {
     expect(field('owner')?.lookup).toEqual({ resource: 'data.dataset:people', by: ['id', 'name'] })
+  })
+
+  it('makes a multi-reference a list of the same lookup, so each item is resolved (AGL-3556)', () => {
+    expect(field('crew')).toMatchObject({ type: 'list', lookup: { resource: 'data.dataset:people', by: ['id'] } })
+  })
+
+  it('offers "create it" only where the target accepts a record holding just a name', () => {
+    const people: DatasetModel = { order: ['name', 'slug'], fields: { name: { name: 'Name', type: 'text' }, slug: { name: 'Address', type: 'text', customType: RECORD_PAGE_ADDRESS_FIELD_TYPE, slugFrom: 'name' } } }
+    const strict: DatasetModel = { order: ['name', 'email'], fields: { name: { name: 'Name', type: 'text' }, email: { name: 'Email', type: 'text', required: true } } }
+    expect(datasetAcceptsNamedRecord(people, 'name')).toBe(true)
+    expect(datasetAcceptsNamedRecord(strict, 'name')).toBe(false)
+    expect(datasetAcceptsNamedRecord(people, undefined)).toBe(false)
+    const lookupOf = (target: Parameters<typeof datasetTransferCatalog>[2][string]) =>
+      buildTransferFieldCatalog(datasetTransferCatalog(MODEL, 'Services', { people: target })).byId.get('owner')
+    expect(lookupOf({ readable: true, model: people })?.lookup?.creatable).toBe(true)
+    expect(lookupOf({ readable: true, model: strict })?.lookup?.creatable).toBeUndefined()
+    // A target the person cannot see: exported by ID, never imported.
+    expect(lookupOf({ readable: false })).toMatchObject({ readOnly: true, lookup: { resource: 'data.dataset:people' } })
   })
 
   it('never writes bytes or the record’s own times', () => {

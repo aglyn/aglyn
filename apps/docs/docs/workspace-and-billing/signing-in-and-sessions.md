@@ -349,8 +349,9 @@ Filing the same address again does no harm: a request already waiting is answere
 filed twice.
 
 On **Starter and above**, the CRM offers the same exports and the same erasure where
-you work: **Export all…** on its lists, and **Erase this person** in the menu of a
-contact's or a lead's page — see
+you work: **Export…** in the header of its Contacts and Leads sections, which opens the
+same [export dialog](../content-and-data/crm/export.md), and **Erase this person** in
+the menu of a contact's or a lead's page — see
 [Deleting and erasing](../content-and-data/crm/contact-record.md#deleting-and-erasing).
 
 To take everything the workspace holds rather than only its people, use

@@ -124,8 +124,10 @@ function chromeExecutable() {
 // ── Specs: the historical "empty page" canaries + a dashboard sanity ───────
 const specs = [
   { name: 'dashboard', path: HOST_BASE, expects: ['Demo Bakery'] },
-  // The dataset name sits in a collapsed select; assert on a record row.
-  { name: 'data', path: `${HOST_BASE}/data`, expects: ['Avery Quinn'] },
+  // The Dataset select names the dataset the page opens on — the first by
+  // name, which is the seeded scoped-sharing fixture, read through the
+  // emulator like every other dataset.
+  { name: 'data', path: `${HOST_BASE}/data`, expects: ['Internal rates'] },
   { name: 'media', path: `${HOST_BASE}/media`, expects: ['hero.jpg'] },
   { name: 'content', path: `${HOST_BASE}/content`, expects: ['Blog'] },
   {

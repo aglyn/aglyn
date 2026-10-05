@@ -63,6 +63,14 @@ import { datasetTransferResourceKey } from './dataset-transfer-key'
  *  - {@link refuseInvalidDatasetRows}: the dry run's rows held to the model's
  *    validation, so a row the write would refuse fails in the dry run instead.
  *
+ * A reference field is a LOOKUP of its target dataset (`data.dataset:<id>`,
+ * by the record's ID or the field the reference displays), a multi-reference
+ * a `list` of them (AGL-3556): the job engine resolves each value through the
+ * target's own hooks, offers records named like the ones it cannot find, and
+ * asks the person to use one, create it, leave it blank or refuse the row.
+ * Nothing here resolves a reference; a value the person chose to create
+ * reaches the writes as `transferLookupNewValue(name)`.
+ *
  * The two must be inverses on every value a record holds: an import of an
  * export changes nothing, and undo compares a record's values now with the
  * values the import wrote, in one form.
@@ -132,7 +140,9 @@ export function datasetTransferType(field: DatasetFieldDefinition): TransferFiel
     case 'sorted':
       return 'list'
     case 'reference':
-      return field.reference?.multiple ? 'list' : 'lookup'
+      // A reference with no target dataset names nothing a lookup could find.
+      if (field.reference?.multiple) return 'list'
+      return field.reference?.datasetId ? 'lookup' : 'text'
     case 'text':
       return isOptionsField(field) ? 'picklist' : 'text'
     default:
@@ -148,37 +158,74 @@ function isRequiredField(field: DatasetFieldDefinition): boolean {
   return Boolean(field.required || field.validation?.required)
 }
 
-/** One dataset field as the catalog lists it. */
-export function datasetTransferField(fieldId: string, field: DatasetFieldDefinition): TransferField {
+/**
+ * What the person may do with a reference's target dataset, as the server
+ * read it for them: a reference to a dataset they cannot see is exported by
+ * ID and never imported, since nothing in it could be looked up.
+ */
+export interface DatasetReferenceTarget {
+  readable: boolean
+  /** The target's model, when it is readable: whether the import may create a record in it by name. */
+  model?: DatasetModel
+}
+
+/**
+ * Whether the target's model accepts a record holding nothing but a name in
+ * `displayFieldId` (its page addresses filled in from it): the display field
+ * is plain text and no other field is required. Each name is still held to
+ * the model when the import creates it.
+ */
+export function datasetAcceptsNamedRecord(model: DatasetModel, displayFieldId: string | undefined): boolean {
+  const display = displayFieldId ? model.fields?.[displayFieldId] : undefined
+  if (!displayFieldId || display?.type !== 'text' || isOptionsField(display)) return false
+  const values = fillRecordAddresses(model, coerceDocumentValues(model, { [displayFieldId]: 'New record' }))
+  return Object.keys(datasetWriteErrors(model, values)).every((fieldId) => fieldId === displayFieldId)
+}
+
+/**
+ * One dataset field as the catalog lists it. `target` is what the server read
+ * of a reference's target dataset; without it a reference is a lookup that
+ * creates nothing.
+ */
+export function datasetTransferField(
+  fieldId: string,
+  field: DatasetFieldDefinition,
+  target?: DatasetReferenceTarget,
+): TransferField {
   const id = datasetTransferFieldId(fieldId)
   const label = String(field.name ?? '').trim() || humanizeDatasetFieldId(fieldId)
   const type = datasetTransferType(field)
-  const description =
-    field.type === 'reference'
+  const targetId = field.type === 'reference' ? field.reference?.datasetId : undefined
+  const hidden = Boolean(targetId && target && !target.readable)
+  const description = hidden
+    ? 'Records of a dataset that is not shared with you: exported by ID, never imported.'
+    : field.type === 'reference'
       ? `${field.reference?.multiple ? 'Records' : 'A record'} of another dataset, by its ID or its name.`
       : field.type === 'coordinates'
         ? 'Latitude and longitude, separated by a comma.'
         : String(field.description ?? '').trim()
-  const target = field.type === 'reference' ? field.reference?.datasetId : undefined
   return {
     id,
     label,
     group: DATASET_TRANSFER_FIELDS_GROUP,
     type,
     ...(isRequiredField(field) ? { required: true } : {}),
-    ...(isWritableDatasetField(field) ? {} : { readOnly: true }),
+    ...(isWritableDatasetField(field) && !hidden ? {} : { readOnly: true }),
     // An export from before AGL-3530 headed every column with the field's id,
     // so a file like that still maps itself.
     ...(label.toLowerCase() !== fieldId.toLowerCase() ? { aliases: [fieldId] } : {}),
     ...(type === 'picklist' ? { picklistId: datasetOptionsPicklistId(fieldId) } : {}),
-    ...(type === 'lookup' && target
+    ...(targetId
       ? {
           lookup: {
-            resource: datasetTransferResourceKey(target),
+            resource: datasetTransferResourceKey(targetId),
             by: [
               TRANSFER_ID_FIELD,
               ...(field.reference?.displayFieldId ? [datasetTransferFieldId(field.reference.displayFieldId)] : []),
             ],
+            ...(target?.readable && target.model && datasetAcceptsNamedRecord(target.model, field.reference?.displayFieldId)
+              ? { creatable: true }
+              : {}),
           },
         }
       : {}),
@@ -189,13 +236,21 @@ export function datasetTransferField(fieldId: string, field: DatasetFieldDefinit
 /**
  * The dataset's catalog: its fields in the dataset's order under one group
  * (named after the dataset when `label` is given), then the record's Aglyn ID (added by the core) and its created and updated
- * times.
+ * times. `targets` is what the server read of each referenced dataset, by id.
  */
-export function datasetTransferCatalog(model: DatasetModel, label = 'Fields'): TransferCatalogInput {
+export function datasetTransferCatalog(
+  model: DatasetModel,
+  label = 'Fields',
+  targets: Readonly<Record<string, DatasetReferenceTarget>> = {},
+): TransferCatalogInput {
   return {
     standard: (model.order ?? [])
       .filter((fieldId) => model.fields?.[fieldId])
-      .map((fieldId) => datasetTransferField(fieldId, model.fields[fieldId] as DatasetFieldDefinition)),
+      .map((fieldId) => {
+        const field = model.fields[fieldId] as DatasetFieldDefinition
+        const targetId = field.type === 'reference' ? field.reference?.datasetId : undefined
+        return datasetTransferField(fieldId, field, targetId ? targets[targetId] : undefined)
+      }),
     system: [
       { id: DATASET_TRANSFER_CREATED_FIELD, label: 'Created', type: 'datetime', readOnly: true },
       { id: DATASET_TRANSFER_UPDATED_FIELD, label: 'Updated', type: 'datetime', readOnly: true },
@@ -275,7 +330,6 @@ export function datasetRecordTransferValues(
   record: { id?: string; values?: Readonly<Record<string, unknown>> | null; createdAt?: unknown; updatedAt?: unknown },
 ): Record<string, unknown> {
   const out: Record<string, unknown> = {}
-  if (record.id) out[TRANSFER_ID_FIELD] = record.id
   const values = record.values ?? {}
   for (const fieldId of model.order ?? []) {
     const field = model.fields?.[fieldId]
@@ -283,6 +337,9 @@ export function datasetRecordTransferValues(
     const value = transferValueOf(field, values[fieldId])
     if (value !== undefined) out[datasetTransferFieldId(fieldId)] = value
   }
+  // After the fields: a record is named by the first text it holds (the
+  // wizard's matches and lookups), which is its first field, not its ID.
+  if (record.id) out[TRANSFER_ID_FIELD] = record.id
   const created = isoOf(record.createdAt)
   const updated = isoOf(record.updatedAt)
   if (created) out[DATASET_TRANSFER_CREATED_FIELD] = created

@@ -180,7 +180,9 @@ export const TRANSFER_LIST_FIELD_TYPES: readonly TransferFieldType[] = ['multiPi
 
 /**
  * What a lookup field points at: another resource, found by one of its
- * match keys (a company by domain, an owner by email).
+ * match keys (a company by domain, an owner by email). A `lookup` field
+ * holds one record; a `list` field that names a target holds several, each
+ * item resolved on its own (a dataset's multi-reference).
  */
 export interface TransferLookupTarget {
   /** The resource key of the target. */
@@ -229,6 +231,21 @@ export const TRANSFER_ID_FIELD = 'id'
 /** Whether values of `type` are lists. */
 export function isTransferListType(type: TransferFieldType): boolean {
   return TRANSFER_LIST_FIELD_TYPES.includes(type)
+}
+
+/**
+ * Whether `field` names records of a target — a `lookup` field, or a `list`
+ * field whose items do — so the job engine resolves its values to ids.
+ */
+export function isTransferLookupField(
+  field: TransferField | null | undefined,
+): field is TransferField & { lookup: TransferLookupTarget } {
+  return Boolean(
+    field &&
+      (field.type === 'lookup' || field.type === 'list') &&
+      field.lookup?.resource &&
+      field.lookup.by?.length,
+  )
 }
 
 /** Whether a file's cell may be WRITTEN to `field`. */
@@ -364,8 +381,11 @@ export function transferFieldProblems(fields: readonly TransferField[]): string[
     if ((field.type === 'picklist' || field.type === 'multiPicklist') && !field.picklistId) {
       problems.push(`Field "${id}" is a picklist with no picklistId.`)
     }
-    if (field.type === 'lookup' && !field.lookup?.by?.length) {
+    if ((field.type === 'lookup' || (field.type === 'list' && field.lookup)) && !field.lookup?.by?.length) {
       problems.push(`Field "${id}" is a lookup that names no target field.`)
+    }
+    if (field.lookup && field.type !== 'lookup' && field.type !== 'list') {
+      problems.push(`Field "${id}" names a lookup target, which only a lookup or list field may.`)
     }
     if (field.required && !isTransferFieldWritable(field)) {
       problems.push(`Field "${id}" is required but can never be written.`)

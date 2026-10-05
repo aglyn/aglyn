@@ -190,6 +190,11 @@ person chooses for each: create it (only when `creatable`), use one of
 them, leave the field blank (nothing is written; a blank chosen here never
 clears a value), or refuse the rows.
 
+A field of type `list` with the same `lookup` holds several records — a
+dataset's multi-reference is one. Each item is resolved and decided on its
+own; your `apply` receives the list of ids, with an item left blank dropped
+and a `transferLookupNewValue(name)` for each item to create.
+
 What your `apply` receives for the field is the record id, or — for a value
 the person chose to create — `transferLookupNewValue(name)`, which
 `transferLookupNewName` reads back. Create that record on your own write

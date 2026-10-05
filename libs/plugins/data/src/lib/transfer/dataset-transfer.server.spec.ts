@@ -30,6 +30,7 @@ import {
   TRANSFER_ID_FIELD,
   buildTransferFieldCatalog,
   createTransferPolicy,
+  transferLookupNewValue,
   type PlannedTransferRow,
   type TransferRowResult,
   type TransferUndoEntry,
@@ -213,6 +214,12 @@ const record = (values: Record<string, unknown>) => {
   return { values, ...datasetIntegrityFields(SERVICES, values) }
 }
 
+/** A People record with its filter fields, as the dataset's writers leave one. */
+const peopleRecord = (values: Record<string, unknown>) => {
+  const { datasetIntegrityFields } = jest.requireActual('../model/dataset-models')
+  return { values, ...datasetIntegrityFields({ order: ['name'], fields: { name: { name: 'Name', type: 'text' } } }, values) }
+}
+
 /** A plan whose dataset holds five records, so the cap is reachable. */
 const CAPPED = { plan: 'scale', entitlements: { recordsPerDataset: 5 } }
 
@@ -225,8 +232,8 @@ const seed = (org: Record<string, unknown> = { plan: 'scale' }) => {
     model: { order: ['name'], fields: { name: { name: 'Name', type: 'text' } } },
     visibleTo: ['org'],
   })
-  store.set(`${PEOPLE}/records/p1`, { values: { name: 'Ada' }, filterValues: { name: 'ada' } })
-  store.set(`${PEOPLE}/records/p2`, { values: { name: 'Bob' }, filterValues: { name: 'bob' } })
+  store.set(`${PEOPLE}/records/p1`, peopleRecord({ name: 'Ada' }))
+  store.set(`${PEOPLE}/records/p2`, peopleRecord({ name: 'Bob' }))
   store.set(`${DS}/records/r1`, record({ title: 'Roofing', slug: 'roofing', kind: 'Commercial', count: 1 }))
   store.set(`${DS}/records/r2`, record({ title: 'Siding', slug: 'siding', count: 2, owner: 'p1' }))
   store.set(`${DS}/records/r3`, record({ title: 'Gutters', slug: 'gutters', kind: 'Residential' }))
@@ -286,6 +293,31 @@ describe('what the dataset offers', () => {
     )
     const offer = await (hooks.matchKeys as (c: TransferResourceContext) => Promise<TransferMatchKeyOffer>)(ctx())
     expect(offer.defaults).toEqual(['id', 'slug'])
+  })
+
+  it('lists a reference as a lookup of its dataset, creatable when a record there needs only a name', async () => {
+    const owner = buildTransferFieldCatalog(await hooks.fields(ctx())).byId.get('owner')
+    expect(owner).toMatchObject({
+      type: 'lookup',
+      lookup: { resource: 'data.dataset:people', by: ['id', 'name'], creatable: true },
+    })
+    // A target that requires more than the name offers no "create it".
+    const people = store.get(PEOPLE) as Record<string, any>
+    store.set(PEOPLE, {
+      ...people,
+      model: { order: ['name', 'email'], fields: { ...people.model.fields, email: { name: 'Email', type: 'text', required: true } } },
+    })
+    const strict = buildTransferFieldCatalog(await hooks.fields(ctx())).byId.get('owner')
+    expect(strict?.lookup?.creatable).toBeUndefined()
+  })
+
+  it('never imports a reference to a dataset the member cannot see, and still exports it', async () => {
+    mockMember.value = { role: 'editor', allHosts: false, hostAccess: { h1: 'editor' } }
+    store.set(DS, { ...store.get(DS), visibleTo: ['host:h1'] })
+    store.set(PEOPLE, { ...store.get(PEOPLE), visibleTo: ['host:h9'] })
+    const owner = buildTransferFieldCatalog(await hooks.fields(ctx())).byId.get('owner')
+    expect(owner).toMatchObject({ readOnly: true, lookup: { resource: 'data.dataset:people' } })
+    expect(owner?.lookup?.creatable).toBeUndefined()
   })
 
   it('is no dataset at all to a member it is not shared with, or for a key naming none', async () => {
@@ -352,6 +384,19 @@ describe('a row finds its record', () => {
     expect(found.records.get('r1')).toMatchObject({ id: 'r1', title: 'Roofing', count: 1 })
   })
 
+  it('suggests records named like a value no reference found, by a word of the display field', async () => {
+    store.set(`${PEOPLE}/records/p3`, peopleRecord({ name: 'Adam Smith' }))
+    store.set(`${PEOPLE}/records/p4`, peopleRecord({ name: 'Zed' }))
+    const answer = await hooks.suggest?.(ctx({ resource: 'data.dataset:people' }), {
+      by: ['id', 'name'],
+      values: ['Adaa', 'Smith Adam', 'Quinn'],
+    })
+    // A misspelling past the first letters still finds the record.
+    expect(answer?.['Adaa']?.map((one) => one.label)).toEqual(expect.arrayContaining(['Ada']))
+    expect(answer?.['Smith Adam']?.[0]).toEqual({ recordId: 'p3', label: 'Adam Smith' })
+    expect(answer?.['Quinn']).toEqual([])
+  })
+
   it('answers as a reference’s target: the engine asks the referenced dataset by its display field', async () => {
     // A `lookup` field names `data.dataset:people` by `['id', 'name']`; the
     // job engine resolves a cell through that dataset's own lookup.
@@ -374,16 +419,15 @@ describe('the dry run', () => {
     })
   }
 
-  it('reads a reference by the record’s ID or its name, and fails a row naming no record', async () => {
+  it('plans a reference as the engine resolved it: a record’s id, or a name to create', async () => {
+    // The engine's lookup step (AGL-3541) has already turned each cell into
+    // an id or the person's "create it"; the dry run holds neither back.
     const result = await plan([
       { title: 'A', owner: 'p2' },
-      { title: 'B', owner: 'Ada' },
-      { title: 'C', owner: 'Nobody' },
+      { title: 'B', owner: transferLookupNewValue('Cy') },
     ])
-    expect(result.rows.map((row) => row.verdict)).toEqual(['create', 'create', 'fail'])
-    expect(result.rows[0].diff.find((entry) => entry.fieldId === 'owner')?.after).toBe('p2')
-    expect(result.rows[1].diff.find((entry) => entry.fieldId === 'owner')?.after).toBe('p1')
-    expect(result.warnings.map((warning) => warning.class)).toContain('unresolvedLookup')
+    expect(result.rows.map((row) => row.verdict)).toEqual(['create', 'create'])
+    expect(result.rows[1].diff.find((entry) => entry.fieldId === 'owner')?.after).toBe(transferLookupNewValue('Cy'))
   })
 
   it('fails what the plan has no room for, and what the model refuses', async () => {
@@ -423,6 +467,54 @@ describe('the writes', () => {
     expect(stored.order).toBe(3)
     expect(ledger.get(0)?.undo).toMatchObject({ action: 'created', recordId: id, written: { title: 'Kitchen Remodel', owner: 'p2' } })
     expect(mockAnnounce).toHaveBeenCalledTimes(1)
+  })
+
+  it('creates a record a reference names for creation in the referenced dataset, once, through its write path', async () => {
+    const rows = [
+      planned({ index: 0, verdict: 'create', diff: [change('title', 'Decks'), change('owner', transferLookupNewValue('Cy'))] }),
+      planned({ index: 1, verdict: 'update', recordId: 'r1', diff: [change('owner', transferLookupNewValue('cy '))] }),
+    ]
+    await hooks.apply(ctx(), { jobId: 'job-1', index: 0, start: 0, end: 2, rows }, writer)
+    // A later chunk naming it again finds the same record.
+    ledger.clear()
+    const later = planned({ index: 2, verdict: 'create', diff: [change('title', 'Fences'), change('owner', transferLookupNewValue('Cy'))] })
+    await hooks.apply(ctx(), { jobId: 'job-1', index: 1, start: 2, end: 3, rows: [later] }, writer)
+
+    const created = [...store.keys()].filter((path) => path.startsWith(`${PEOPLE}/records/`) && !/\/p\d$/.test(path))
+    expect(created).toHaveLength(1)
+    const cy = store.get(created[0] as string) as Record<string, any>
+    expect(cy.values).toEqual({ name: 'Cy' })
+    // Indexed as every create is, and counted in at the end of the dataset.
+    expect(cy.filterValues).toEqual({ name: 'cy' })
+    expect(cy.order).toBe(2)
+    const id = (created[0] as string).split('/').pop()
+    expect((store.get(`${DS}/records/${transferRecordId('job-1', 0)}`) as Record<string, any>).values.owner).toBe(id)
+    expect((store.get(`${DS}/records/r1`) as Record<string, any>).values.owner).toBe(id)
+    expect((store.get(`${DS}/records/r1`) as Record<string, any>).referencedIds).toEqual([id])
+    expect((store.get(`${DS}/records/${transferRecordId('job-1', 2)}`) as Record<string, any>).values.owner).toBe(id)
+    expect(mockAnnounce).toHaveBeenCalledWith(expect.objectContaining({ datasetId: 'people' }))
+  })
+
+  it('fails a row whose reference could not be created, saying why, and writes nothing for it', async () => {
+    const people = store.get(PEOPLE) as Record<string, any>
+    store.set(PEOPLE, {
+      ...people,
+      model: { order: ['name'], fields: { name: { name: 'Name', type: 'text', validation: { max: 5 } } } },
+    })
+    const result = await hooks.apply(
+      ctx(),
+      {
+        jobId: 'job-1',
+        index: 0,
+        start: 0,
+        end: 1,
+        rows: [planned({ index: 0, verdict: 'create', diff: [change('title', 'Decks'), change('owner', transferLookupNewValue('Bartholomew'))] })],
+      },
+      writer,
+    )
+    expect(result.results[0]).toMatchObject({ row: 0, outcome: 'failed', reason: 'refusedValue' })
+    expect(result.results[0]?.message).toContain('“Bartholomew” could not be created in People')
+    expect(store.has(`${DS}/records/${transferRecordId('job-1', 0)}`)).toBe(false)
   })
 
   it('never creates a row twice when a chunk is retried after its write landed', async () => {
