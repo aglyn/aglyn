@@ -29,15 +29,17 @@
 //    verdict settles (see `decideVerdict`).
 // 3. On `rollback`: pick the target, roll production back through the Vercel
 //    REST API, wait for it to serve, and re-run the canary against it.
-// 4. Record the verdict as a commit status (`--record`), post to Slack when
-//    it is not green, and exit non-zero for anything a human must read.
+// 4. Record the verdict as a commit status (`--record`), post to Slack and
+//    raise the console's `ops.productionCanaryRed` operator alert when it is
+//    not green, and exit non-zero for anything a human must read.
 //
 // `--dry-run` makes no Vercel or GitHub write: it prints the rollback it
 // WOULD make. Without a Vercel token it runs the canary alone and says so.
 //
 // Env: VERCEL_TOKEN (else the Vercel CLI's own auth file, for local runs),
 // AGLYN_PROBE_TOKEN (the bot-protection bypass), CANARY_TENANT_HOSTS,
-// CANARY_CONSOLE_HOST, SLACK_WEBHOOK_URL, GITHUB_TOKEN + GITHUB_REPOSITORY
+// CANARY_CONSOLE_HOST, SLACK_WEBHOOK_URL, CRON_SECRET (the console's
+// operator alert), GITHUB_TOKEN + GITHUB_REPOSITORY
 // (reading and writing the canary's commit statuses), GITHUB_STEP_SUMMARY.
 //
 // Exit: 0 green/recovered · 1 rollback/degraded/not-serving · 2 operational
@@ -337,9 +339,51 @@ async function notify(input) {
   }
 }
 
+/**
+ * The staff bell and the operator email, through the console's
+ * `ops.productionCanaryRed` alert. Identifiers only — the console writes
+ * every sentence. Never on a dry run (a person started it and is watching),
+ * never throws, and a console that is itself the broken deploy is why Slack
+ * goes first.
+ */
+async function raiseOperatorAlert({ verdict, deployment, rollback }) {
+  const secret = process.env.CRON_SECRET
+  if (DRY_RUN || verdict === 'green' || verdict === 'recovered') return
+  if (!secret || !deployment?.id || !RUN_URL) {
+    say('no CRON_SECRET, deployment or run URL — the operator alert is NOT being raised')
+    return
+  }
+  const after = rollback?.after
+  const body = {
+    project: project.name,
+    verdict,
+    deploymentId: deployment.id,
+    runUrl: RUN_URL,
+    ...(rollback?.action === 'rolled-back' ? { rolledBackTo: rollback.target?.uid ?? rollback.target?.id } : {}),
+    ...(after ? { after: after.startsWith('not serving') ? 'not serving' : after } : {}),
+  }
+  try {
+    const response = await fetch(
+      process.env.CANARY_ALERT_URL || `https://${consoleHost}/api/admin/operator-alerts/canary`,
+      {
+        method: 'POST',
+        headers: withProbeHeaders({ 'content-type': 'application/json', 'x-cron-secret': secret }),
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(15_000),
+      },
+    )
+    say(response.ok ? 'operator alert raised' : `the console refused the operator alert (HTTP ${response.status})`)
+  } catch (error) {
+    say(`could not reach the console for the operator alert: ${error?.message ?? error}`)
+  }
+}
+
 async function finish(input) {
   report(input)
-  if (input.verdict !== 'green') await notify(input)
+  if (input.verdict !== 'green') {
+    await notify(input)
+    await raiseOperatorAlert(input)
+  }
   process.exit(EXIT[input.verdict] ?? EXIT.error)
 }
 

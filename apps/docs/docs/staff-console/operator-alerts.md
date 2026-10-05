@@ -91,7 +91,7 @@ alerts.
 | Billing | Billing webhook failing its signature check; a delivery that moved nothing | Must |
 | Data protection | A person's erasure failed; a workspace's erasure failed; the database export failed | Must |
 | Legal | DMCA counter-notice; a DMCA takedown, impersonation or illegal-content report | Must |
-| Operations | A health check went degraded; a published site not rendering pages | Must |
+| Operations | A health check went degraded; a published site not rendering pages; the production canary found a deploy not rendering pages, rolled back or not | Must |
 | Operations | A health check recovered; a published site rendering again; a reaper stuck; a plugin job, consent group change, publish outbox or sending-domain provisioning failing; the bandwidth ceiling reached | Should |
 | Billing | Automatic billing lock; an invoice voided or uncollectible; a connected account's payout or transfer failed; a workspace's payment failed | Should |
 | Security | Staff access granted or a role raised; a plugin verifier regression | Should |

@@ -37,8 +37,8 @@ name: Production canary
 # only after three red rounds in a row — each failing on at least two hosts
 # with a SERVER failure, never a bot challenge or a canary-side network error
 # — rolls the project back to the previous good production deployment through
-# the Vercel REST API, re-runs the canary against it, posts to Slack `#ci` and
-# fails.
+# the Vercel REST API, re-runs the canary against it, posts to Slack `#ci`,
+# raises the console's `ops.productionCanaryRed` operator alert, and fails.
 #
 # After any rollback Vercel turns production auto-assign OFF, so the next
 # good deployment must be promoted by hand (docs/RELEASING.md step 0).
@@ -112,6 +112,8 @@ jobs:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           AGLYN_PROBE_TOKEN: ${{ secrets.AGLYN_PROBE_TOKEN }}
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          # Same value as the console's Vercel env var: raises the operator alert.
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
           GITHUB_TOKEN: ${{ github.token }}
           CANARY_TENANT_HOSTS: ${{ vars.CANARY_TENANT_HOSTS }}
           CANARY_CONSOLE_HOST: ${{ vars.CANARY_CONSOLE_HOST }}

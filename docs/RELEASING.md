@@ -805,8 +805,12 @@ red that recovers is reported, not acted on.
    already moved, in which case it touches nothing.
 3. Records `failure` on the bad commit, waits for the alias to serve the
    target, and re-runs the canary against it.
-4. Posts to Slack `#ci` (the `SLACK_WEBHOOK_URL` the uptime probe uses) and
-   fails the run with the whole report in the job summary.
+4. Posts to Slack `#ci` (the `SLACK_WEBHOOK_URL` the uptime probe uses),
+   raises the `ops.productionCanaryRed` operator alert (staff bell and
+   operator email) through `POST /api/admin/operator-alerts/canary` with
+   `CRON_SECRET`, and fails the run with the whole report in the job summary.
+   Slack goes first: when the console is the broken deploy, its alert route
+   may be down with it.
 
 Then **auto-assign is OFF**, and step 0 of the next promotion is owed.
 

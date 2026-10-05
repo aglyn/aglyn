@@ -411,6 +411,26 @@ export const CORE_OPERATOR_ALERTS: readonly OperatorAlertDefinition[] = [
     defaultEnabled: true,
   },
   {
+    // The post-deploy production canary (AGL-3567), raised from GitHub
+    // Actions through `/api/admin/operator-alerts/canary`. Red because a
+    // deploy that stops rendering pages is every published site down.
+    type: 'ops.productionCanaryRed',
+    label: 'Production canary failed after a deploy',
+    description:
+      'Right after a tenant or console production deploy, uncached pages stopped rendering. The canary rolls the deploy back by itself when the failure holds across sites; after any rollback the next release must be promoted by hand.',
+    tier: 'must',
+    category: 'ops',
+    title: '{{project}} production canary: {{outcome}}',
+    body: '{{detail}}',
+    link: '/admin/health',
+    delivery: 'immediate',
+    level: 'critical',
+    // The caller dedupes per deployment and verdict; this only stops a
+    // re-run of the same red run from telling it twice.
+    dedupeWindowMinutes: 30,
+    defaultEnabled: true,
+  },
+  {
     type: 'system.healthRecovered',
     label: 'Health check recovered',
     description: 'A degraded health check is healthy again.',
