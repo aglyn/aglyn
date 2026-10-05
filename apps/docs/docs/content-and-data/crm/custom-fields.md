@@ -199,7 +199,14 @@ the values the list allows named in the error — the import skips that row and 
 and warns before the file is sent. A lead or contact that already holds a value the list
 has since deactivated keeps it on every save.
 
-When a lead converts, its lead source is handed to the contact.
+When a lead converts, its lead source is handed to the contact, and to the deal the
+conversion opens.
+
+**Type** is the deals' picklist, on the **Deals** tab under **Type values**: Salesforce's
+standard *Existing Business* and *New Business*, enforced the same way on the deal drawer,
+a [deals import](./deals.md#import-from-csv) and [`/v1/deals`](/api/resources/deals). A
+deal's lead source is held to the Lead source list, and a rename or delete there moves
+the deals that hold the value too. See [Type and lead source](./deals.md#type-and-lead-source).
 
 **Salutation** is the **Contacts** tab's picklist, under **Salutation values**:
 Salesforce's standard **Mr.**, **Ms.**, **Mrs.**, **Dr.** and **Prof.**, in no group,

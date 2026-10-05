@@ -41,6 +41,10 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { FieldPath, FieldValue } from 'firebase-admin/firestore'
 import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
+import {
+  listOrgContainers,
+  type OrgContainerRecord,
+} from '@aglyn/tenant-data-admin/server/org-containers'
 import { invalidIdTokenResponse } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 import {
   contactCsvRowFromDoc,
@@ -74,6 +78,9 @@ const HOST_CEILING = 200
 
 /** The most linked records a tasks file resolves names for before writing ids. */
 const NAME_CACHE_CEILING = 2000
+
+/** How many of the org's campaigns a deals file names — the lead import's own ceiling. */
+const CAMPAIGN_NAME_CEILING = 200
 
 /** Header naming the row count the server undertook to send. */
 export const EXPORT_ROWS_HEADER = 'X-Aglyn-Export-Rows'
@@ -274,6 +281,16 @@ export async function crmExportRoute(request: Request): Promise<Response> {
       options.pipelineName = (id) => names.get(id)
       options.stageName = (pipelineId, stageId) =>
         stages.get(`${pipelineId}/${stageId}`)
+      // A deal's campaign by name (AGL-3516); the id where the campaigns
+      // cannot be read, the way every name in these files degrades.
+      const campaigns = await listOrgContainers(
+        orgRef.firestore,
+        'campaign',
+        orgId,
+        CAMPAIGN_NAME_CEILING,
+      ).catch((): OrgContainerRecord[] => [])
+      const campaignNames = new Map(campaigns.map((entry) => [entry.id, entry.name] as const))
+      options.campaignName = (id) => campaignNames.get(id) || undefined
     }
 
     /*

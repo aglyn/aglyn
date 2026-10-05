@@ -224,7 +224,18 @@ export const CRM_API_V1_DESCRIPTIONS: Readonly<Record<string, ApiV1ResourceDescr
         description: 'Ordered stages. A deal’s `stageId` names one of these.',
         items: {
           type: 'object',
-          properties: { id: { type: 'string' }, name: { type: 'string' }, order: { type: 'integer' } },
+          properties: {
+            id: { type: 'string' },
+            name: { type: 'string' },
+            order: { type: 'integer' },
+            probability: { type: 'integer', description: 'Chance of closing from this stage, 0–100.' },
+            kind: { type: 'string', enum: ['open', 'won', 'lost'] },
+            forecastCategory: {
+              type: 'string',
+              enum: ['omitted', 'pipeline', 'bestCase', 'commit', 'closed'],
+              description: 'The forecast category a deal takes on landing in this stage.',
+            },
+          },
           additionalProperties: true,
         },
       },
@@ -241,12 +252,15 @@ export const CRM_API_V1_DESCRIPTIONS: Readonly<Record<string, ApiV1ResourceDescr
     description: 'Opportunities moving through a pipeline.',
     schemaName: 'Deal',
     required: ['id', 'object', 'title', 'pipelineId', 'stageId'],
-    writable: ['title', 'pipelineId', 'stageId', 'status', 'amountCents', 'currency', 'lineItems', 'expectedCloseAt', 'ownerUid', 'contactId', 'companyId', 'lostReason', 'notes', 'custom', 'mediaIds', 'consentSiteId'],
+    writable: ['title', 'pipelineId', 'stageId', 'status', 'amountCents', 'currency', 'lineItems', 'expectedCloseAt', 'ownerUid', 'contactId', 'companyId', 'lostReason', 'notes', 'custom', 'mediaIds', 'consentSiteId', 'type', 'leadSource', 'nextStep', 'probability', 'forecastCategory', 'campaignId'],
     writeOnly: {
       mediaIds: stringListField('Media library files attached to this deal, by id, at most 20. An empty array clears them.'),
       consentSiteId: stringField('The site the deal is created on behalf of.'),
     },
-    writeNote: '`pipelineId` and `consentSiteId` are accepted on create only; a `PATCH` that names either is a `400`.',
+    writeNote:
+      '`pipelineId` and `consentSiteId` are accepted on create only; a `PATCH` that names either is a `400`. ' +
+      '`type` and `leadSource` must be active values of the organization’s lists (a deal keeps the value it holds). ' +
+      'A stage move sets `forecastCategory` from the new stage and clears `probability`, unless the same body sets them.',
     fields: {
       id: stringField('Deal id.'),
       object: objectKindField('deal'),
@@ -265,13 +279,19 @@ export const CRM_API_V1_DESCRIPTIONS: Readonly<Record<string, ApiV1ResourceDescr
       companyId: nullableField(stringField('Associated company.')),
       lostReason: nullableField(stringField('Why it was lost.')),
       notes: nullableField(stringField('Free-form notes.')),
+      type: nullableField(stringField('Type — one of the organization’s deal types (New Business, Existing Business, …).')),
+      leadSource: nullableField(stringField('Lead source — one of the organization’s lead sources.')),
+      nextStep: nullableField(stringField('What happens next. At most 255 characters.')),
+      probability: nullableField(integerField('This deal’s own chance of closing, 0–100; `null` uses its stage’s. A stage move clears it.')),
+      forecastCategory: nullableField(stringField('`omitted`, `pipeline`, `bestCase`, `commit` or `closed`. Every stage move sets it from the new stage.')),
+      campaignId: nullableField(stringField('The campaign the deal is attributed to.')),
       custom: openObjectField('Customer-defined fields.'),
       nextTaskAt: nullableField(isoField('When the next open task on this deal is due.')),
       siteId: nullableField(stringField('Site the record originated on.')),
       ...RECORD_STAMPS,
     },
     ops: [
-      { path: '/v1/deals', method: 'get', operationId: 'listDeals', summary: 'List deals', list: true, returns: 'Deal', entitlement: 'crm', filters: [UPDATED_AFTER_PARAM, queryParam('pipelineId', 'Pipeline.'), queryParam('stageId', 'Stage.'), queryParam('status', 'Deal status.'), queryParam('ownerUid', 'Owning user.')] },
+      { path: '/v1/deals', method: 'get', operationId: 'listDeals', summary: 'List deals', list: true, returns: 'Deal', entitlement: 'crm', filters: [UPDATED_AFTER_PARAM, queryParam('pipelineId', 'Pipeline.'), queryParam('stageId', 'Stage.'), queryParam('status', 'Deal status.'), queryParam('ownerUid', 'Owning user.'), queryParam('type', 'Type, exactly as stored.'), queryParam('leadSource', 'Lead source, exactly as stored.'), queryParam('forecastCategory', 'Forecast category.'), queryParam('campaignId', 'Campaign.')] },
       { path: '/v1/deals', method: 'post', operationId: 'createDeal', summary: 'Create a deal', accepts: 'DealWrite', returns: 'Deal', entitlement: 'crm', creates: true },
       { path: '/v1/deals/{dealId}', method: 'get', operationId: 'getDeal', summary: 'Retrieve a deal', returns: 'Deal', entitlement: 'crm', pathParams: [{ name: 'dealId', description: 'Deal id.' }] },
       { path: '/v1/deals/{dealId}', method: 'patch', operationId: 'updateDeal', summary: 'Update a deal', accepts: 'DealWrite', returns: 'Deal', entitlement: 'crm', pathParams: [{ name: 'dealId', description: 'Deal id.' }] },

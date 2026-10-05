@@ -33,7 +33,22 @@ describe('the deals vocabulary', () => {
     expect(DEAL_IMPORT_VOCABULARY.route).toBe(DEALS_IMPORT_URL)
     const mapping = DEAL_IMPORT_VOCABULARY.guessMapping(header(DEAL_IMPORT_VOCABULARY.templateCsv()))
     expect(Object.values(mapping).sort()).toEqual(
-      ['title', 'pipeline', 'stage', 'amount', 'currency', 'ownerEmail', 'expectedClose', 'notes'].sort(),
+      [
+        'title',
+        'pipeline',
+        'stage',
+        'amount',
+        'currency',
+        'ownerEmail',
+        'expectedClose',
+        'notes',
+        // Salesforce's Opportunity fields (AGL-3516).
+        'type',
+        'leadSource',
+        'nextStep',
+        'probability',
+        'forecastCategory',
+      ].sort(),
     )
   })
 })

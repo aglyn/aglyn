@@ -58,6 +58,7 @@ import {
 } from '@aglyn/aglyn/app-utils/contacts'
 import {
   CONTACT_LIFECYCLE_STAGE_LABELS,
+  CRM_FORECAST_CATEGORY_LABELS,
   CRM_TASK_KIND_LABELS,
   type ContactCustomValue,
   type ContactFieldDefinition,
@@ -68,6 +69,7 @@ import {
   type CrmTask,
   crmLeadStatusLabel,
   isContactLifecycleStage,
+  isCrmForecastCategory,
 } from '@aglyn/aglyn/app-utils/crm'
 import { csvDocument } from '@aglyn/aglyn/app-utils/csv-import'
 
@@ -451,6 +453,14 @@ export interface DealCsvRow {
   companyName?: string
   lostReason?: string
   notes?: string
+  /* Salesforce's Opportunity fields (AGL-3516). */
+  type?: string
+  leadSource?: string
+  nextStep?: string
+  /** The deal's own override; blank in the file when the stage's applies. */
+  probability?: number | null
+  forecastCategory?: string
+  campaignId?: string
 }
 
 export interface DealCsvOptions {
@@ -460,6 +470,8 @@ export interface DealCsvOptions {
   stageName?: (pipelineId: string, stageId: string) => string | undefined
   /** The owner's address for a stored uid; absent, the uid is written. */
   ownerEmail?: (uid: string) => string
+  /** The campaign's name for a stored id; absent, the id is written. */
+  campaignName?: (campaignId: string) => string | undefined
 }
 
 export const DEAL_CSV_COLUMNS = [
@@ -476,6 +488,14 @@ export const DEAL_CSV_COLUMNS = [
   'Closed',
   'Lost reason',
   'Notes',
+  // Salesforce's Opportunity fields (AGL-3516), after every column a file
+  // written before them carries.
+  'Type',
+  'Lead source',
+  'Next step',
+  'Probability',
+  'Forecast category',
+  'Campaign',
 ] as const
 
 /** One deal's cells, in the header's order. */
@@ -483,7 +503,7 @@ export function dealCsvCells(
   deal: DealCsvRow,
   options: DealCsvOptions = {},
 ): unknown[] {
-  const { pipelineName, stageName, ownerEmail } = options
+  const { pipelineName, stageName, ownerEmail, campaignName } = options
   const pipelineId = deal.pipelineId ?? ''
   const stageId = deal.stageId ?? ''
   return [
@@ -504,6 +524,14 @@ export function dealCsvCells(
     csvInstant(deal.closedAtMs),
     deal.lostReason ?? '',
     deal.notes ?? '',
+    deal.type ?? '',
+    deal.leadSource ?? '',
+    deal.nextStep ?? '',
+    typeof deal.probability === 'number' ? deal.probability : '',
+    isCrmForecastCategory(deal.forecastCategory)
+      ? CRM_FORECAST_CATEGORY_LABELS[deal.forecastCategory]
+      : '',
+    deal.campaignId ? (campaignName?.(deal.campaignId) ?? deal.campaignId) : '',
   ]
 }
 

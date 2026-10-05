@@ -45,9 +45,27 @@
  * that is not a code, a close date that is not a date, an owner address
  * that is not an address — each is left off the record and REPORTED under
  * {@link DealImportRow.dropped}, never silently discarded.
+ *
+ * ## Salesforce's Opportunity fields (AGL-3516)
+ *
+ * Type and Lead source are the org's picklists, judged by the server the
+ * way the lead import judges a lead source: a value the list does not hold
+ * refuses the row by name (`type-unknown`, `lead-source-unknown`), because
+ * a deal filed under half its labels is a deal nobody asked for. A row with
+ * no Type takes the list's default. The forecast category is a fixed set,
+ * read by key or label, and a probability is a whole percent; either
+ * unreadable is dropped and named like any other cell.
  */
 
 import { normalizeContactEmail } from '@aglyn/aglyn/app-utils/contacts'
+import {
+  CRM_LEAD_TEXT_MAX,
+  type CrmForecastCategory,
+  DEAL_NEXT_STEP_MAX,
+  normalizeCrmPicklistLabel,
+  readCrmForecastCategory,
+  readDealProbability,
+} from '@aglyn/aglyn/app-utils/crm'
 import {
   CSV_IMPORT_CHUNK_SIZE,
   CSV_IMPORT_MAX_BODY_BYTES,
@@ -86,6 +104,11 @@ export const DEAL_IMPORT_FIELDS = [
   'ownerEmail',
   'expectedClose',
   'notes',
+  'type',
+  'leadSource',
+  'nextStep',
+  'probability',
+  'forecastCategory',
 ] as const
 
 export type DealImportField = (typeof DEAL_IMPORT_FIELDS)[number]
@@ -100,6 +123,11 @@ export const DEAL_IMPORT_FIELD_LABELS: Record<DealImportField, string> = {
   ownerEmail: 'Owner (team member email)',
   expectedClose: 'Expected close (YYYY-MM-DD)',
   notes: 'Notes',
+  type: 'Type',
+  leadSource: 'Lead source',
+  nextStep: 'Next step',
+  probability: 'Probability (%)',
+  forecastCategory: 'Forecast category',
 }
 
 /**
@@ -107,9 +135,9 @@ export const DEAL_IMPORT_FIELD_LABELS: Record<DealImportField, string> = {
  *
  * First in each list is the header this CRM's own deals export writes, so
  * an export re-imports without a hand mapping; the export's Status,
- * Contact, Company, Closed and Lost reason columns are deliberately
- * absent, because the stage decides the status and a link is made on the
- * record, not from a file.
+ * Contact, Company, Closed, Lost reason and Campaign columns are
+ * deliberately absent, because the stage decides the status and a link is
+ * made on the record, not from a file.
  */
 const FIELD_ALIASES: Record<DealImportField, readonly string[]> = {
   title: ['title', 'deal', 'deal name', 'deal title', 'name', 'opportunity', 'opportunity name'],
@@ -120,6 +148,11 @@ const FIELD_ALIASES: Record<DealImportField, readonly string[]> = {
   ownerEmail: ['owner', 'owner email', 'deal owner', 'assigned to', 'rep'],
   expectedClose: ['expected close', 'close date', 'expected close date', 'closing date', 'expected closing'],
   notes: ['notes', 'note', 'description', 'comments'],
+  type: ['type', 'deal type', 'opportunity type'],
+  leadSource: ['lead source', 'source', 'deal source'],
+  nextStep: ['next step', 'next steps'],
+  probability: ['probability', 'probability (%)', 'win probability', 'odds'],
+  forecastCategory: ['forecast category', 'forecast'],
 }
 
 const FIELD_ALIAS_KEYS = importAliasKeys(DEAL_IMPORT_FIELDS, FIELD_ALIASES)
@@ -156,6 +189,8 @@ export type DealImportSkipReason =
   | 'missing-title'
   | 'unknown-pipeline'
   | 'unknown-stage'
+  | 'type-unknown'
+  | 'lead-source-unknown'
   | 'records-band'
   | 'write-failed'
 
@@ -164,6 +199,8 @@ export const DEAL_IMPORT_SKIP_LABELS: Record<DealImportSkipReason, string> = {
   'missing-title': 'No title',
   'unknown-pipeline': 'No pipeline by that name',
   'unknown-stage': 'No stage by that name in that pipeline',
+  'type-unknown': 'Type is not one of your deal types',
+  'lead-source-unknown': 'Lead source is not one of your lead sources',
   'records-band': 'CRM records limit reached',
   'write-failed': 'Could not be saved',
 }
@@ -183,6 +220,12 @@ export interface DealImportRow {
   /** Epoch ms at noon UTC of the typed calendar day, or the typed instant. */
   expectedCloseAtMs?: number
   notes?: string
+  /** As typed, trimmed; the server judges it against the org's list. */
+  type?: string
+  leadSource?: string
+  nextStep?: string
+  probability?: number
+  forecastCategory?: CrmForecastCategory
   dropped: ImportDroppedValue[]
 }
 
@@ -281,6 +324,27 @@ export function normalizeDealImportRow(raw: DealImportRawRow): DealImportRowVerd
 
   const notes = importTextValue(raw.notes, DEAL_IMPORT_NOTES_MAX)
   if (notes) row.notes = notes
+
+  const type = normalizeCrmPicklistLabel(importTextValue(raw.type, CRM_LEAD_TEXT_MAX) ?? '')
+  if (type) row.type = type
+  const leadSource = normalizeCrmPicklistLabel(importTextValue(raw.leadSource, CRM_LEAD_TEXT_MAX) ?? '')
+  if (leadSource) row.leadSource = leadSource
+  const nextStep = importTextValue(raw.nextStep, DEAL_NEXT_STEP_MAX)?.replace(/\s+/g, ' ')
+  if (nextStep) row.nextStep = nextStep
+
+  const probabilityText = importTextValue(raw.probability, 16)
+  if (probabilityText) {
+    const probability = readDealProbability(probabilityText)
+    if (typeof probability === 'number') row.probability = probability
+    else drop('probability', probabilityText)
+  }
+
+  const categoryText = importTextValue(raw.forecastCategory, 64)
+  if (categoryText) {
+    const category = readCrmForecastCategory(categoryText)
+    if (category) row.forecastCategory = category
+    else drop('forecastCategory', categoryText)
+  }
 
   return { ok: true, row }
 }

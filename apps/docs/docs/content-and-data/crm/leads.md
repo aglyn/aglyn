@@ -430,9 +430,12 @@ from the list in one click. The dialog asks three things:
    the address has one. A lead with no company text at a public mailbox
    such as Gmail proposes nothing.
 3. **Deal.** Tick **Open a deal** to open one in your default pipeline with a
-   title, an amount, a currency and a starting stage. A workspace with no
-   pipeline yet gets a **Sales** pipeline with the default stages created
-   along with the deal.
+   title, an amount, a currency, a starting stage and a
+   [type](./deals.md#type-and-lead-source) — your list's default until you
+   pick another. The deal carries the lead's **lead source**, as Salesforce's
+   conversion does, and takes its stage's forecast category. A workspace with
+   no pipeline yet gets a **Sales** pipeline with the
+   [default stages](./deals.md#pipelines) created along with the deal.
 
 Converting marks the lead **Qualified**, records what it became, and takes
 you to the new contact's page. What was filed on the lead follows it: the

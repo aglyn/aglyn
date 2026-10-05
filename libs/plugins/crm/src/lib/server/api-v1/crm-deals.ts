@@ -56,6 +56,18 @@
  * the client; the last sum stays until it is retyped. Changing the currency
  * of a deal with lines needs the lines resent in that currency, because
  * their sum is one number in one unit.
+ *
+ * ## Salesforce's Opportunity fields (AGL-3516)
+ *
+ * `type` and `leadSource` are judged against the org's `opportunityType`
+ * and `leadSource` picklists, as every door judges them: an active value
+ * is stored as the list spells it, a deal's own current value is kept, and
+ * anything else is a `400` naming the values allowed. A create with no
+ * `type` takes the list's default; `leadSource` is never defaulted.
+ * `forecastCategory` is one of a FIXED set. Every stage move stamps the new
+ * stage's `forecastCategory` and clears the `probability` override — a
+ * body that sets either beside the move wins. `campaignId` names one of the
+ * org's live campaigns.
  */
 import {
   CRM_COLLECTIONS,
@@ -65,8 +77,13 @@ import {
   type CrmDealStage,
   type CrmDealStatus,
   createResourceUid,
+  CRM_FORECAST_CATEGORIES,
+  type CrmPicklistId,
+  crmListFieldsTouched,
   crmNewRecordListFields,
+  DEAL_NEXT_STEP_MAX,
   dealStageById,
+  dealStageMoveFields,
   lineItemsTotalCents,
   normalizeCrmMediaIds,
   readDealLineItems,
@@ -79,7 +96,9 @@ import {
   readJsonBody,
   requireScope,
 } from '@aglyn/tenant-data-admin/server/api-v1-kit'
+import { readOrgContainers } from '@aglyn/tenant-data-admin/server/org-containers'
 import { floorContactLifecycleStage } from '../contact-lifecycle-floor'
+import { readCrmPicklist, resolveCrmPicklistWrite } from '../read-picklist'
 import { orderedStages, type ResolvedPipeline, resolvePipeline } from './crm-pipelines'
 import {
   type Clearable,
@@ -144,6 +163,13 @@ function dealView(doc: FirebaseFirestore.DocumentSnapshot) {
     companyId: data.companyId ?? null,
     lostReason: data.lostReason ?? null,
     notes: data.notes ?? null,
+    // Salesforce's Opportunity fields (AGL-3516).
+    type: data.type ?? null,
+    leadSource: data.leadSource ?? null,
+    nextStep: data.nextStep ?? null,
+    probability: typeof data.probability === 'number' ? data.probability : null,
+    forecastCategory: data.forecastCategory ?? null,
+    campaignId: data.campaignId ?? null,
     // The org's deal custom fields, keyed by field key (AGL-2661).
     custom: crmCustomView(data as FirebaseFirestore.DocumentData),
     // When the earliest open task against the deal is due — see
@@ -170,6 +196,12 @@ const DEAL_WRITABLE = new Set([
   'notes',
   'custom',
   'mediaIds',
+  'type',
+  'leadSource',
+  'nextStep',
+  'probability',
+  'forecastCategory',
+  'campaignId',
 ])
 
 interface DealInput {
@@ -193,6 +225,13 @@ interface DealInput {
   notes?: Clearable<string>
   /** Org-library files attached to the deal (AGL-2662), by media id. */
   mediaIds?: string[]
+  /** As sent; judged against the org's picklist by the writer, which pays the read. */
+  type?: Clearable<string>
+  leadSource?: Clearable<string>
+  nextStep?: Clearable<string>
+  probability?: Clearable<number>
+  forecastCategory?: (typeof CRM_FORECAST_CATEGORIES)[number]
+  campaignId?: Clearable<string>
 }
 
 /**
@@ -310,6 +349,31 @@ function readDealInput(
   const notes = readOptionalText(body, 'notes', CRM_TEXT_MAX, errors)
   if (notes !== undefined) values.notes = notes
 
+  for (const key of ['type', 'leadSource'] as const) {
+    const label = readOptionalText(body, key, CRM_TITLE_MAX, errors)
+    if (label !== undefined) values[key] = label
+  }
+  const nextStep = readOptionalText(body, 'nextStep', DEAL_NEXT_STEP_MAX, errors)
+  if (nextStep !== undefined) values.nextStep = nextStep
+  if (body.probability !== undefined) {
+    if (body.probability === null) {
+      values.probability = null
+    } else if (
+      typeof body.probability !== 'number' ||
+      !Number.isInteger(body.probability) ||
+      body.probability < 0 ||
+      body.probability > 100
+    ) {
+      errors.probability = 'Must be a whole number from 0 to 100, or null for the stage’s'
+    } else {
+      values.probability = body.probability
+    }
+  }
+  const forecastCategory = readChoice(body, 'forecastCategory', CRM_FORECAST_CATEGORIES, errors)
+  if (forecastCategory) values.forecastCategory = forecastCategory
+  const campaignId = readRefId(body, 'campaignId', errors)
+  if (campaignId !== undefined) values.campaignId = campaignId
+
   // `custom` is shape-checked here and judged against the org's
   // definitions by the writers, which is where the read is paid.
   if (body.custom !== undefined) {
@@ -403,29 +467,78 @@ async function floorWonDealContact(
   }
 }
 
-/** The fields a stage move writes, beside the stage itself. */
+/**
+ * The fields a stage move writes, beside the stage itself — and the new
+ * stage's forecast category with the probability override cleared
+ * (`dealStageMoveFields`, AGL-3516).
+ */
 function stageMove(stage: CrmDealStage, nowMs: number) {
   return {
     stageId: stage.id,
     status: stage.kind,
     stageChangedAtMs: nowMs,
     closedAtMs: stage.kind === 'open' ? null : nowMs,
+    ...dealStageMoveFields(stage),
   }
 }
 
-/** The membership and reference checks a deal write makes, merged. */
+/**
+ * The membership and reference checks a deal write makes, merged. A
+ * campaign is checked against the org's live campaigns, except the one the
+ * deal already names, which it keeps even once the campaign is retired.
+ */
 async function dealRefErrors(
   ctx: ApiV1Context,
   values: DealInput,
+  stored?: Partial<CrmDeal> | null,
 ): Promise<Record<string, string>> {
-  const [owner, refs] = await Promise.all([
+  const campaignId = values.campaignId ?? undefined
+  const [owner, refs, campaign] = await Promise.all([
     memberError(ctx, 'ownerUid', values.ownerUid),
     crmRefErrors(ctx, {
       contactId: values.contactId ?? undefined,
       companyId: values.companyId ?? undefined,
     }),
+    campaignId && campaignId !== stored?.campaignId
+      ? readOrgContainers(ctx.firestore, 'campaign', ctx.orgId, [campaignId]).then(
+          ([record]): Record<string, string> =>
+            record?.live ? {} : { campaignId: 'No such campaign in this organization' },
+        )
+      : Promise.resolve({}),
   ])
-  return { ...owner, ...refs }
+  return { ...owner, ...refs, ...campaign }
+}
+
+/**
+ * `type` and `leadSource` as the deal will store them, judged against the
+ * org's lists (AGL-3510's `resolveCrmPicklistWrite`): the values to write,
+ * or the refusals by field. Only a list the write touches is read — and the
+ * type list on every create, for its default.
+ */
+async function dealPicklistWrites(
+  ctx: ApiV1Context,
+  values: Pick<DealInput, 'type' | 'leadSource'>,
+  stored: Partial<CrmDeal> | null,
+): Promise<{ values: Partial<Record<'type' | 'leadSource', string | null>> } | { errors: Record<string, string> }> {
+  const created = stored === null
+  const fields: Array<{ key: 'type' | 'leadSource'; id: CrmPicklistId; defaulted: boolean }> = [
+    { key: 'type', id: 'opportunityType', defaulted: created },
+    { key: 'leadSource', id: 'leadSource', defaulted: false },
+  ]
+  const written: Partial<Record<'type' | 'leadSource', string | null>> = {}
+  const errors: Record<string, string> = {}
+  for (const { key, id, defaulted } of fields) {
+    if (values[key] === undefined && !defaulted) continue
+    const judged = resolveCrmPicklistWrite(
+      id,
+      await readCrmPicklist(ctx.firestore, ctx.orgId, id),
+      values[key],
+      { current: stored?.[key], created: defaulted },
+    )
+    if (judged.ok === false) errors[key] = judged.error
+    else if (judged.write !== undefined) written[key] = judged.write
+  }
+  return Object.keys(errors).length ? { errors } : { values: written }
 }
 
 /**
@@ -445,6 +558,9 @@ async function createDeal(request: Request, ctx: ApiV1Context): Promise<Response
   const custom = await readCrmCustomBody(ctx, body, 'deal')
   if (custom && 'errors' in custom) return crmValidationFailed(ctx, 'deal', custom.errors)
   const customValues = custom && 'values' in custom ? custom.values : {}
+  // And against the org's picklists (AGL-3516), above the claim too.
+  const picklists = await dealPicklistWrites(ctx, parsed.values, null)
+  if ('errors' in picklists) return crmValidationFailed(ctx, 'deal', picklists.errors)
 
   const collection = crmCollection(ctx, CRM_COLLECTIONS.deals)
   const claimed = await claimWrite(
@@ -457,7 +573,8 @@ async function createDeal(request: Request, ctx: ApiV1Context): Promise<Response
   const { claim } = claimed
 
   try {
-    const { title, pipelineId, stageId, status, lineItems, ...rest } = parsed.values
+    const { title, pipelineId, stageId, status, lineItems, probability, forecastCategory, ...rest } =
+      parsed.values
     const placedLines = placeLineItems({ lineItems, currency: rest.currency }, null)
     if ('errors' in placedLines) {
       await claim.release()
@@ -497,8 +614,12 @@ async function createDeal(request: Request, ctx: ApiV1Context): Promise<Response
       pipelineId: resolved.id,
       ...createPayload({
         ...rest,
+        ...picklists.values,
         ...placedLines.fields,
         ...stageMove(stage, stamp.createdAt.toMillis()),
+        // What the body set beside the stage wins over what the stage stamps.
+        ...(probability !== undefined ? { probability } : {}),
+        ...(forecastCategory ? { forecastCategory } : {}),
       }),
       ...(Object.keys(customValues).length
         ? { custom: createPayload(customValues) }
@@ -533,13 +654,15 @@ async function updateDeal(
   if (!snap.exists) {
     return ApiErrors.notFound({ message: 'No such deal', headers: ctx.headers })
   }
-  const refErrors = await dealRefErrors(ctx, parsed.values)
+  const stored = snap.data() as Partial<CrmDeal>
+  const refErrors = await dealRefErrors(ctx, parsed.values, stored)
   if (Object.keys(refErrors).length) return crmValidationFailed(ctx, 'deal', refErrors)
   const custom = await readCrmCustomBody(ctx, body, 'deal')
   if (custom && 'errors' in custom) return crmValidationFailed(ctx, 'deal', custom.errors)
+  const picklists = await dealPicklistWrites(ctx, parsed.values, stored)
+  if ('errors' in picklists) return crmValidationFailed(ctx, 'deal', picklists.errors)
 
-  const { title, stageId, status, lineItems, ...rest } = parsed.values
-  const stored = snap.data() as Partial<CrmDeal>
+  const { title, stageId, status, lineItems, probability, forecastCategory, ...rest } = parsed.values
   const storedLines = Array.isArray(stored.lineItems) && stored.lineItems.length > 0
   const keepsLines = storedLines && lineItems === undefined
   if (keepsLines && rest.amountCents !== undefined) {
@@ -556,7 +679,7 @@ async function updateDeal(
   if ('errors' in placedLines) return crmValidationFailed(ctx, 'deal', placedLines.errors)
   const update: Record<string, unknown> = {
     ...(title !== undefined ? { title, titleLower: title.toLowerCase() } : {}),
-    ...updatePayload({ ...rest, ...placedLines.fields }),
+    ...updatePayload({ ...rest, ...picklists.values, ...placedLines.fields }),
     ...(custom && 'values' in custom ? crmCustomUpdate(custom.values) : {}),
   }
   // The write's one instant: `updatedAt`, and the stage move if there is one,
@@ -582,10 +705,15 @@ async function updateDeal(
       won = placed.stage.kind === 'won' && current.status !== 'won'
     }
   }
+  // What the body set beside a stage move wins over what the stage stamps
+  // (AGL-3516); without a move, they are plain edits. `null` clears the
+  // override back to the stage's.
+  if (probability !== undefined) update['probability'] = probability
+  if (forecastCategory) update['forecastCategory'] = forecastCategory
   if (Object.keys(update).length > 0) {
     await ref.update({ ...update, updatedAt: now })
-    // What the console's Deals list searches (AGL-3321).
-    if ('title' in update) await restampCrmListFieldsAt(ref, 'deals')
+    // What the console's Deals list searches and filters by (AGL-3321, AGL-3516).
+    if (crmListFieldsTouched('deals', update)) await restampCrmListFieldsAt(ref, 'deals')
   }
   if (won) {
     await floorWonDealContact(ctx, {
@@ -649,6 +777,10 @@ async function listDeals(
     'pipelineId',
     'ownerUid',
     'status',
+    'type',
+    'leadSource',
+    'forecastCategory',
+    'campaignId',
   ])
   return listCrm(ctx, collection, url, filters, dealView)
 }

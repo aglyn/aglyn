@@ -43,6 +43,7 @@ import { crmShareChipFor } from '../model/crm-sharing'
 import { CrmSendEmailButton } from './crm-send-email-button'
 import { DealEditDrawer } from './deal-edit-drawer'
 import { DealProductsCard } from './deal-products-card'
+import { useCrmCampaigns } from '../hooks/use-crm-campaigns'
 import { DealPropertiesCard } from './deal-properties-card'
 import { DealStageCard } from './deal-stage-card'
 import RecordFilesCard from './record-files-card'
@@ -86,6 +87,11 @@ export function DealDetailPage(props: CrmDetailPageProps) {
   const [deleting, setDeleting] = useState(false)
   // The org's deal fields (AGL-2661), for the properties card's rows.
   const dealFields = useContactFieldDefinitions(scope.orgId, 'deal')
+  // The deal's campaign by name (AGL-3516), read only for a deal that names one.
+  const campaigns = useCrmCampaigns(
+    { hostId, orgId: scope.orgId },
+    { enabled: Boolean(deal?.campaignId) },
+  )
 
   const notFound = scope.ready && (!scope.orgId || (status !== 'loading' && !deal))
 
@@ -234,6 +240,12 @@ export function DealDetailPage(props: CrmDetailPageProps) {
                   ownerLabel={roster.nameOf(deal.ownerUid)}
                   routes={routes}
                   customFields={dealFields.active}
+                  campaignName={
+                    deal.campaignId
+                      ? (campaigns.options.find((option) => option.value === deal.campaignId)?.label ??
+                        deal.campaignId)
+                      : undefined
+                  }
                 />
               </Stack>
               <Stack sx={{ flex: 1, minWidth: 0 }}>

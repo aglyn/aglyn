@@ -724,8 +724,10 @@ describe('converting a lead', () => {
       title: 'Acme — first order',
       titleLower: 'acme — first order',
       pipelineId: pipelines[0].id,
-      stageId: 'qualified',
+      stageId: 'prospecting',
       status: 'open',
+      // The new stage's forecast category (AGL-3516).
+      forecastCategory: 'pipeline',
       amountCents: 12_500,
       currency: 'usd',
       ownerUid: CALLER,
@@ -834,14 +836,64 @@ describe('converting a lead', () => {
     const { body } = await call({
       hostId: HOST,
       leadId: 'lead-1',
-      deal: { title: 'Acme', stageId: 'proposal-sent' },
+      deal: { title: 'Acme', stageId: 'proposal-price-quote' },
     })
     expect(all(`orgs/${ORG}/pipelines`)).toHaveLength(1)
     const [deal] = all(`orgs/${ORG}/deals`)
     expect(deal.pipelineId).toBe('p-1')
-    expect(deal.stageId).toBe('proposal-sent')
+    expect(deal.stageId).toBe('proposal-price-quote')
     expect(deal.status).toBe('open')
+    expect(deal.forecastCategory).toBe('bestCase')
     expect(body.dealId).toBe(deal.id)
+  })
+
+  /*
+   * THE DEAL CARRIES THE LEAD'S LEAD SOURCE (AGL-3516), as Salesforce's
+   * conversion hands it to the opportunity, and the Type the converter
+   * picked — judged against the org's list before anything is written.
+   */
+  it("stamps the lead's lead source and the picked Type on the deal it opens", async () => {
+    docs.set(leadPath('lead-1'), { ...docs.get(leadPath('lead-1')), leadSource: 'Trade show' })
+    const { status } = await call({
+      hostId: HOST,
+      leadId: 'lead-1',
+      deal: { title: 'Acme', type: 'new business' },
+    })
+    expect(status).toBe(200)
+    const [deal] = all(`orgs/${ORG}/deals`)
+    expect(deal).toMatchObject({
+      leadSource: 'Trade show',
+      leadSourceKey: 'trade show',
+      type: 'New Business',
+      typeKey: 'new business',
+    })
+  })
+
+  it('refuses a Type the org does not have, writing nothing', async () => {
+    const { status, body } = await call({
+      hostId: HOST,
+      leadId: 'lead-1',
+      deal: { title: 'Acme', type: 'Upsell' },
+    })
+    expect(status).toBe(400)
+    expect(body).toEqual({
+      error: 'Type must be one of: Existing Business, New Business.',
+      field: 'deal.type',
+    })
+    expect(all(`orgs/${ORG}/contacts`)).toHaveLength(0)
+    expect(all(`orgs/${ORG}/deals`)).toHaveLength(0)
+  })
+
+  it("files a deal with no Type under the list's default, and none when the list has none", async () => {
+    docs.set(`orgs/${ORG}/crmPicklists/opportunityType`, {
+      values: [
+        { id: 'new-business', label: 'New Business', active: true },
+        { id: 'existing-business', label: 'Existing Business', active: true },
+      ],
+      defaultValueId: 'new-business',
+    })
+    await call({ hostId: HOST, leadId: 'lead-1', deal: { title: 'Acme' } })
+    expect(all(`orgs/${ORG}/deals`)[0]).toMatchObject({ type: 'New Business' })
   })
 
   it('answers the same contact on a second call and creates nothing more', async () => {
@@ -970,14 +1022,14 @@ describe('stageForNewDeal', () => {
   const stages = [...DEFAULT_DEAL_STAGES]
 
   it('takes the requested stage when the pipeline has it', () => {
-    expect(stageForNewDeal({ stages }, 'negotiation')?.id).toBe('negotiation')
+    expect(stageForNewDeal({ stages }, 'negotiation-review')?.id).toBe('negotiation-review')
   })
 
   it('falls back to the first open stage by order, whatever the array order', () => {
     expect(stageForNewDeal({ stages: [...stages].reverse() }, undefined)?.id).toBe(
-      'qualified',
+      'prospecting',
     )
-    expect(stageForNewDeal({ stages }, 'not-a-stage')?.id).toBe('qualified')
+    expect(stageForNewDeal({ stages }, 'not-a-stage')?.id).toBe('prospecting')
   })
 
   it('never defaults into a closed stage while an open one exists', () => {

@@ -33,6 +33,7 @@ import {
   parseAmountInput,
   removeStage,
   setStageProbability,
+  setStageForecastCategory,
   stageRemovalRefusal,
   stagesProblem,
 } from './deal-board-model'
@@ -43,9 +44,9 @@ describe('the board summary (AGL-2598)', () => {
   it('counts and sums only OPEN deals, per currency, weighted by stage', () => {
     const summary = boardSummary(
       [
-        { status: 'open', amountCents: 100_000, currency: 'usd', stageId: 'qualified' },
-        { status: 'open', amountCents: 50_000, currency: 'usd', stageId: 'negotiation' },
-        { status: 'open', amountCents: 20_000, currency: 'eur', stageId: 'proposal-sent' },
+        { status: 'open', amountCents: 100_000, currency: 'usd', stageId: 'prospecting' },
+        { status: 'open', amountCents: 50_000, currency: 'usd', stageId: 'id-decision-makers' },
+        { status: 'open', amountCents: 20_000, currency: 'eur', stageId: 'value-proposition' },
         // Closed deals are neither counted nor valued: the summary is what is
         // still in play.
         { status: 'won', amountCents: 900_000, currency: 'usd', stageId: 'won' },
@@ -55,8 +56,16 @@ describe('the board summary (AGL-2598)', () => {
     )
     expect(summary.openCount).toBe(3)
     expect(summary.valueByCurrency).toEqual({ usd: 150_000, eur: 20_000 })
-    // 10% of 1,000 + 60% of 500 = 100 + 300; 40% of 200 = 80.
-    expect(summary.weightedByCurrency).toEqual({ usd: 40_000, eur: 8_000 })
+    // 10% of 1,000 + 60% of 500 = 100 + 300; 50% of 200 = 100.
+    expect(summary.weightedByCurrency).toEqual({ usd: 40_000, eur: 10_000 })
+  })
+
+  it("weights an open deal by its own probability when it overrides the stage's (AGL-3516)", () => {
+    const summary = boardSummary(
+      [{ status: 'open', amountCents: 100_000, currency: 'usd', stageId: 'prospecting', probability: 80 }],
+      pipeline,
+    )
+    expect(summary.weightedByCurrency).toEqual({ usd: 80_000 })
   })
 
   it('values an open deal in a stage the pipeline lost at nothing', () => {
@@ -74,33 +83,46 @@ describe('editing stages', () => {
     const stages = addStage(pipeline.stages, 'Demo booked', 30)
     const ids = stages.map((stage) => stage.id)
     expect(ids).toEqual([
-      'qualified',
-      'contact-made',
-      'proposal-sent',
-      'negotiation',
+      'prospecting',
+      'qualification',
+      'needs-analysis',
+      'value-proposition',
+      'id-decision-makers',
+      'perception-analysis',
+      'proposal-price-quote',
+      'negotiation-review',
       'demo-booked',
       'won',
       'lost',
     ])
-    expect(stages.map((stage) => stage.order)).toEqual([0, 1, 2, 3, 4, 5, 6])
-    expect(stages[4]).toMatchObject({ name: 'Demo booked', probability: 30, kind: 'open' })
+    expect(stages.map((stage) => stage.order)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+    expect(stages[8]).toMatchObject({
+      name: 'Demo booked',
+      probability: 30,
+      kind: 'open',
+      forecastCategory: 'pipeline',
+    })
     // A second stage of the same name does not become the first.
     expect(newStageId('Demo booked', stages)).toBe('demo-booked-2')
   })
 
   it('reorders an open stage but never past a closing one', () => {
-    const down = moveStage(pipeline.stages, 'negotiation', 'down')
+    const down = moveStage(pipeline.stages, 'negotiation-review', 'down')
     expect(down.map((stage) => stage.id)).toEqual(pipeline.stages.map((stage) => stage.id))
-    const up = moveStage(pipeline.stages, 'negotiation', 'up')
+    const up = moveStage(pipeline.stages, 'negotiation-review', 'up')
     expect(up.map((stage) => stage.id)).toEqual([
-      'qualified',
-      'contact-made',
-      'negotiation',
-      'proposal-sent',
+      'prospecting',
+      'qualification',
+      'needs-analysis',
+      'value-proposition',
+      'id-decision-makers',
+      'perception-analysis',
+      'negotiation-review',
+      'proposal-price-quote',
       'won',
       'lost',
     ])
-    expect(up.map((stage) => stage.order)).toEqual([0, 1, 2, 3, 4, 5])
+    expect(up.map((stage) => stage.order)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
     // Won cannot be moved at all.
     expect(moveStage(pipeline.stages, 'won', 'up').map((stage) => stage.id)).toEqual(
       pipeline.stages.map((stage) => stage.id),
@@ -109,34 +131,50 @@ describe('editing stages', () => {
 
   it('sets an open stage probability and leaves the closing stages fixed', () => {
     const stages = setStageProbability(
-      setStageProbability(pipeline.stages, 'qualified', 175),
+      setStageProbability(pipeline.stages, 'prospecting', 175),
       'won',
       5,
     )
-    expect(stages.find((stage) => stage.id === 'qualified')?.probability).toBe(100)
+    expect(stages.find((stage) => stage.id === 'prospecting')?.probability).toBe(100)
     expect(stages.find((stage) => stage.id === 'won')?.probability).toBe(100)
   })
 
+  it('sets an open stage forecast category and leaves the closing stages fixed (AGL-3516)', () => {
+    const stages = setStageForecastCategory(
+      setStageForecastCategory(pipeline.stages, 'prospecting', 'commit'),
+      'won',
+      'pipeline',
+    )
+    expect(stages.find((stage) => stage.id === 'prospecting')?.forecastCategory).toBe('commit')
+    expect(stages.find((stage) => stage.id === 'won')?.forecastCategory).toBe('closed')
+    // A category outside the fixed set changes nothing.
+    expect(setStageForecastCategory(pipeline.stages, 'prospecting', 'upside')).toEqual(pipeline.stages)
+  })
+
   it('refuses to remove a stage with deals in it, a closing stage, or the last open one', () => {
-    expect(stageRemovalRefusal(pipeline.stages, 'proposal-sent', 3)).toMatch(/3 deals are/)
-    expect(stageRemovalRefusal(pipeline.stages, 'proposal-sent', 1)).toMatch(/1 deal is/)
+    expect(stageRemovalRefusal(pipeline.stages, 'proposal-price-quote', 3)).toMatch(/3 deals are/)
+    expect(stageRemovalRefusal(pipeline.stages, 'proposal-price-quote', 1)).toMatch(/1 deal is/)
     expect(stageRemovalRefusal(pipeline.stages, 'won', 0)).toMatch(/Won/)
     expect(stageRemovalRefusal(pipeline.stages, 'lost', 0)).toMatch(/Lost/)
-    expect(stageRemovalRefusal(pipeline.stages, 'proposal-sent', 0)).toBeNull()
-    const one = pipeline.stages.filter((stage) => stage.kind !== 'open' || stage.id === 'qualified')
-    expect(stageRemovalRefusal(one, 'qualified', 0)).toMatch(/at least one open/)
+    expect(stageRemovalRefusal(pipeline.stages, 'proposal-price-quote', 0)).toBeNull()
+    const one = pipeline.stages.filter((stage) => stage.kind !== 'open' || stage.id === 'prospecting')
+    expect(stageRemovalRefusal(one, 'prospecting', 0)).toMatch(/at least one open/)
   })
 
   it('removes a stage and renumbers the rest', () => {
-    const stages = removeStage(pipeline.stages, 'contact-made')
+    const stages = removeStage(pipeline.stages, 'qualification')
     expect(stages.map((stage) => stage.id)).toEqual([
-      'qualified',
-      'proposal-sent',
-      'negotiation',
+      'prospecting',
+      'needs-analysis',
+      'value-proposition',
+      'id-decision-makers',
+      'perception-analysis',
+      'proposal-price-quote',
+      'negotiation-review',
       'won',
       'lost',
     ])
-    expect(stages.map((stage) => stage.order)).toEqual([0, 1, 2, 3, 4])
+    expect(stages.map((stage) => stage.order)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8])
   })
 
   it('names what makes a set of stages unsaveable', () => {
@@ -144,7 +182,7 @@ describe('editing stages', () => {
     expect(stagesProblem([])).toMatch(/needs stages/)
     expect(stagesProblem(pipeline.stages.filter((stage) => stage.id !== 'won'))).toMatch(/one Won/)
     expect(
-      stagesProblem(pipeline.stages.map((stage) => (stage.id === 'qualified' ? { ...stage, name: ' ' } : stage))),
+      stagesProblem(pipeline.stages.map((stage) => (stage.id === 'prospecting' ? { ...stage, name: ' ' } : stage))),
     ).toMatch(/needs a name/)
     expect(stagesProblem([...pipeline.stages, { ...pipeline.stages[0] }])).toMatch(/share the id/)
   })

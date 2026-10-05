@@ -41,6 +41,14 @@
  * No `dealWon` event fires for an imported win: the deal was won before it
  * was filed here, and an automation on the event is for what happens next.
  *
+ * ## Type and Lead source are the org's lists (AGL-3516)
+ *
+ * Both picklists are read once per request, and each row's values judged
+ * against them the way every deal door judges them; a value a list does
+ * not hold refuses the row by name. A row with no Type takes the list's
+ * default; the lead source is never defaulted. The deal's forecast category
+ * is the row's, else its stage's.
+ *
  * ## The band is counted once per request
  *
  * A deal is a CRM record and meets the records band (AGL-2611), judged
@@ -52,6 +60,7 @@ import {
   checkCrmRecordsQuota,
   CRM_COLLECTIONS,
   type CrmDealStage,
+  dealStageForecastCategory,
   crmNewRecordListFields,
   type CrmPipeline,
   isPipelineArchived,
@@ -77,6 +86,7 @@ import {
   readImportRows,
   resolveImportContext,
 } from './import-context'
+import { readCrmPicklist, resolveCrmPicklistWrite } from './read-picklist'
 
 /** The default currency a deal carries when the file names none. */
 const DEFAULT_CURRENCY = 'usd'
@@ -169,13 +179,19 @@ export const crmDealsImportHandler: PluginApiHandler = async (req, res) => {
       normalized.push({ index, row: verdict.row })
     })
 
-    const orgRef = firebaseAdmin.app().firestore().collection('orgs').doc(context.orgId)
-    const [owners, pipelines] = await Promise.all([
+    const firestore = firebaseAdmin.app().firestore()
+    const orgRef = firestore.collection('orgs').doc(context.orgId)
+    const [owners, pipelines, types, leadSources] = await Promise.all([
       ownerDirectory(
         context.orgId,
         normalized.map((entry) => entry.row),
       ),
       normalized.length ? readPipelines(orgRef, context.readTokens) : Promise.resolve([]),
+      // Read whenever a row is written, for the Type's default.
+      normalized.length ? readCrmPicklist(firestore, context.orgId, 'opportunityType') : null,
+      normalized.some((entry) => entry.row.leadSource)
+        ? readCrmPicklist(firestore, context.orgId, 'leadSource')
+        : null,
     ])
     const ownersUnresolved = new Set<string>()
     const deals = orgRef.collection(CRM_COLLECTIONS.deals)
@@ -188,6 +204,21 @@ export const crmDealsImportHandler: PluginApiHandler = async (req, res) => {
       const placed = placeDealImportRow(pipelines, row)
       if (placed.ok === false) {
         skipped.push({ index, title: row.title, reason: placed.reason })
+        continue
+      }
+      const type = types
+        ? resolveCrmPicklistWrite('opportunityType', types, row.type, { created: true })
+        : ({ ok: true, write: undefined } as const)
+      if (type.ok === false) {
+        skipped.push({ index, title: row.title, reason: 'type-unknown' })
+        continue
+      }
+      const leadSource =
+        leadSources && row.leadSource
+          ? resolveCrmPicklistWrite('leadSource', leadSources, row.leadSource, { created: false })
+          : ({ ok: true, write: undefined } as const)
+      if (leadSource.ok === false) {
+        skipped.push({ index, title: row.title, reason: 'lead-source-unknown' })
         continue
       }
       let ownerUid: string | undefined
@@ -207,6 +238,13 @@ export const crmDealsImportHandler: PluginApiHandler = async (req, res) => {
       const nowMs = Date.now()
       const { stage } = placed
       const status = stage.kind === 'won' ? 'won' : stage.kind === 'lost' ? 'lost' : 'open'
+      const opportunity = {
+        ...(type.write ? { type: type.write } : {}),
+        ...(leadSource.write ? { leadSource: leadSource.write } : {}),
+        ...(row.nextStep ? { nextStep: row.nextStep } : {}),
+        ...(typeof row.probability === 'number' ? { probability: row.probability } : {}),
+        forecastCategory: row.forecastCategory ?? dealStageForecastCategory(stage),
+      }
       await deals.add({
         title: row.title,
         titleLower: nameSearchKey(row.title),
@@ -222,9 +260,10 @@ export const crmDealsImportHandler: PluginApiHandler = async (req, res) => {
           ? { expectedCloseAtMs: row.expectedCloseAtMs }
           : {}),
         ...(row.notes ? { notes: row.notes } : {}),
+        ...opportunity,
         ...stamp,
-        // What the Deals list searches and filters by (AGL-3321).
-        ...crmNewRecordListFields('deals', { title: row.title, ...stamp }),
+        // What the Deals list searches and filters by (AGL-3321, AGL-3516).
+        ...crmNewRecordListFields('deals', { title: row.title, ...opportunity, ...stamp }),
       })
       createdHere += 1
       created += 1

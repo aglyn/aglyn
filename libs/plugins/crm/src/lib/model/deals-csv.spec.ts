@@ -65,8 +65,26 @@ describe('the deals CSV', () => {
     )
     expect(csv.split('\n')).toEqual([
       DEAL_CSV_COLUMNS.join(','),
-      `"Acme, renewal",Sales,Negotiation,1250.00,USD,owner@example.com,${dateInputValue(closeMs)},Open,Ada,Acme,,,Q4`,
-      'Globex,other,lost,,,,,Lost,,,2026-01-02T00:00:00.000Z,Went with a competitor,',
+      `"Acme, renewal",Sales,Negotiation,1250.00,USD,owner@example.com,${dateInputValue(closeMs)},Open,Ada,Acme,,,Q4,,,,,,`,
+      'Globex,other,lost,,,,,Lost,,,2026-01-02T00:00:00.000Z,Went with a competitor,,,,,,,',
+    ])
+  })
+
+  it("writes the Opportunity fields, the campaign by name and a blank for the stage's odds (AGL-3516)", () => {
+    const row = {
+      title: 'Pilot',
+      type: 'New Business',
+      leadSource: 'Trade show',
+      nextStep: 'Send the quote',
+      forecastCategory: 'bestCase',
+      campaignId: 'spring',
+    }
+    const csv = dealsCsv([{ ...row, probability: 35 }, { ...row, probability: null, campaignId: 'gone' }], {
+      campaignName: (id) => (id === 'spring' ? 'Spring launch' : undefined),
+    })
+    expect(csv.split('\n').slice(1)).toEqual([
+      'Pilot,,,,,,,,,,,,,New Business,Trade show,Send the quote,35,Best Case,Spring launch',
+      'Pilot,,,,,,,,,,,,,New Business,Trade show,Send the quote,,Best Case,gone',
     ])
   })
 })

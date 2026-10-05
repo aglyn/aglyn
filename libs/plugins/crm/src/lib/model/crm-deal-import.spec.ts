@@ -26,6 +26,7 @@
  * header maps itself, its link columns left alone.
  */
 
+import { DEAL_CSV_COLUMNS } from './crm-csv'
 import {
   DEAL_IMPORT_FIELD_LABELS,
   DEAL_IMPORT_FIELDS,
@@ -47,8 +48,10 @@ describe('the deal vocabulary', () => {
       expect(DEAL_IMPORT_FIELD_LABELS[field]).toBeTruthy()
     }
     expect(Object.keys(DEAL_IMPORT_SKIP_LABELS).sort()).toEqual([
+      'lead-source-unknown',
       'missing-title',
       'records-band',
+      'type-unknown',
       'unknown-pipeline',
       'unknown-stage',
       'write-failed',
@@ -72,6 +75,12 @@ describe('guessDealImportMapping', () => {
       'Closed',
       'Lost reason',
       'Notes',
+      'Type',
+      'Lead source',
+      'Next step',
+      'Probability',
+      'Forecast category',
+      'Campaign',
     ])
     expect(mapping).toEqual({
       0: 'title',
@@ -82,7 +91,16 @@ describe('guessDealImportMapping', () => {
       5: 'ownerEmail',
       6: 'expectedClose',
       12: 'notes',
+      13: 'type',
+      14: 'leadSource',
+      15: 'nextStep',
+      16: 'probability',
+      17: 'forecastCategory',
     })
+  })
+
+  it('is the deals export header, column for column (AGL-3516)', () => {
+    expect(Object.keys(guessDealImportMapping([...DEAL_CSV_COLUMNS]))).toHaveLength(13)
   })
 
   it('reads another product’s headers, each field once', () => {

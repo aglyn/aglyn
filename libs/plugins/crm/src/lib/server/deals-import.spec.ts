@@ -40,6 +40,8 @@ let pipelines: Record<string, Record<string, unknown>> = {}
 let deals: Record<string, Record<string, unknown>> = {}
 let dealSeq = 0
 let pipelineReads = 0
+/** The org's stored picklists, by id (AGL-3516); absent reads the standard values. */
+let picklistDocs: Record<string, Record<string, unknown>> = {}
 
 const ORG_ID = 'org-1'
 const HOST_ID = 'site-1'
@@ -71,6 +73,9 @@ const orgHandle = {
           }
         },
       }
+    }
+    if (sub === 'crmPicklists') {
+      return { doc: (id: string) => ({ get: async () => ({ data: () => picklistDocs[id] }) }) }
     }
     if (sub === 'deals') {
       return {
@@ -197,6 +202,7 @@ beforeEach(() => {
   deals = {}
   dealSeq = 0
   pipelineReads = 0
+  picklistDocs = {}
 })
 
 describe('the request shape and the gates', () => {
@@ -307,6 +313,63 @@ describe('what a row becomes', () => {
     const out = await importRows([{ title: 'A', amount: 'lots', expectedClose: 'soon' }])
     expect(out.body.dropped).toEqual({ amount: 1, expectedClose: 1 })
     expect(out.body.created).toBe(1)
+  })
+})
+
+describe("Salesforce's Opportunity fields (AGL-3516)", () => {
+  it('stores Type and Lead source as the lists spell them, with the row’s or the stage’s forecast', async () => {
+    const out = await importRows([
+      {
+        title: 'A',
+        stage: 'Proposal sent',
+        type: 'new business',
+        leadSource: 'TRADE SHOW',
+        nextStep: ' Send the  quote ',
+        probability: '35%',
+        forecastCategory: 'best case',
+      },
+      { title: 'B' },
+    ])
+    expect(out.body.created).toBe(2)
+    expect(stored()[0]).toMatchObject({
+      type: 'New Business',
+      typeKey: 'new business',
+      leadSource: 'Trade show',
+      leadSourceKey: 'trade show',
+      nextStep: 'Send the quote',
+      probability: 35,
+      forecastCategory: 'bestCase',
+    })
+    // No category in the row: the stage's, read as its kind's on a stage without one.
+    expect(stored()[1]).toMatchObject({ forecastCategory: 'pipeline', typeKey: null, leadSourceKey: null })
+    expect('type' in stored()[1]).toBe(false)
+  })
+
+  it('refuses, by name, a Type or a Lead source the lists do not hold, and drops an unreadable cell', async () => {
+    const out = await importRows([
+      { title: 'A', type: 'Upsell' },
+      { title: 'B', leadSource: 'Carrier pigeon' },
+      { title: 'C', probability: '150', forecastCategory: 'Upside' },
+    ])
+    expect(out.body.skipped).toEqual([
+      { index: 0, title: 'A', reason: 'type-unknown' },
+      { index: 1, title: 'B', reason: 'lead-source-unknown' },
+    ])
+    expect(out.body.created).toBe(1)
+    expect(out.body.dropped).toEqual({ probability: 1, forecastCategory: 1 })
+  })
+
+  it('files a row with no Type under the list’s default, and never defaults the lead source', async () => {
+    picklistDocs['opportunityType'] = {
+      values: [
+        { id: 'new-business', label: 'New Business', active: true },
+        { id: 'existing-business', label: 'Existing Business', active: true },
+      ],
+      defaultValueId: 'existing-business',
+    }
+    await importRows([{ title: 'A' }])
+    expect(stored()[0]).toMatchObject({ type: 'Existing Business' })
+    expect('leadSource' in stored()[0]).toBe(false)
   })
 })
 

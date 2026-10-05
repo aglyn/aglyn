@@ -27,8 +27,17 @@
 import {
   contactDisplayName,
   type CrmDeal,
+  type CrmDealStage,
+  type CrmForecastCategory,
+  type CrmPicklist,
+  crmPicklistDefaultLabel,
+  DEAL_NEXT_STEP_MAX,
+  dealStageForecastCategory,
+  isCrmForecastCategory,
+  judgeCrmPicklistValue,
   nameSearchKey,
   nameSearchToken,
+  readDealProbability,
 } from '@aglyn/aglyn'
 import {
   amountInputValue,
@@ -57,6 +66,20 @@ export interface DealFormValues {
   companyId: string
   companyName: string
   notes: string
+  /*
+   * Salesforce's Opportunity fields (AGL-3516).
+   */
+  /** The `opportunityType` label, or empty. */
+  type: string
+  /** The `leadSource` label, or empty. */
+  leadSource: string
+  nextStep: string
+  /** The override as typed, `35`; empty means the stage's. */
+  probability: string
+  /** Empty means the stage's — what a save stamps when nobody picked one. */
+  forecastCategory: '' | CrmForecastCategory
+  /** One of the org's campaigns, or empty. */
+  campaignId: string
 }
 
 export const DEAL_TITLE_MAX = 120
@@ -88,6 +111,12 @@ export function emptyDealForm(
     companyId: '',
     companyName: '',
     notes: '',
+    type: '',
+    leadSource: '',
+    nextStep: '',
+    probability: '',
+    forecastCategory: '',
+    campaignId: '',
     ...defaults,
   }
 }
@@ -107,6 +136,12 @@ export function dealFormFromDoc(deal: DealDoc): DealFormValues {
     companyId: String(deal.companyId ?? ''),
     companyName: String(deal.companyName ?? ''),
     notes: String(deal.notes ?? ''),
+    type: String(deal.type ?? ''),
+    leadSource: String(deal.leadSource ?? ''),
+    nextStep: String(deal.nextStep ?? ''),
+    probability: typeof deal.probability === 'number' ? String(deal.probability) : '',
+    forecastCategory: isCrmForecastCategory(deal.forecastCategory) ? deal.forecastCategory : '',
+    campaignId: String(deal.campaignId ?? ''),
   }
 }
 
@@ -131,6 +166,9 @@ export function dealFormProblem(
   if (values.expectedClose.trim() && dateInputMs(values.expectedClose) === null) {
     return 'The expected close has to be a date.'
   }
+  if (readDealProbability(values.probability) === undefined) {
+    return 'The probability has to be a whole number from 0 to 100.'
+  }
   if (mode === 'create' && (!values.pipelineId || !values.stageId)) {
     return 'Pick the stage the deal starts in.'
   }
@@ -143,6 +181,50 @@ export interface DealWriteContext {
   hostId: string
   uid: string
   nowMs: number
+  /**
+   * The stage the deal is in, whose forecast category a form left on
+   * "from the stage" stamps (AGL-3516). Absent, the field is left unset and
+   * every reader derives it from the stage.
+   */
+  stage?: Pick<CrmDealStage, 'kind' | 'forecastCategory'> | null
+}
+
+/**
+ * The form's two picklist fields judged against the org's lists (AGL-3516),
+ * the way every server door judges them: an active value is stored as the
+ * list spells it, a blank clears, the deal's own current value is kept, and
+ * anything else is refused naming what the list allows. A NEW deal with no
+ * Type takes the list's default, as Salesforce's does; the lead source is
+ * never defaulted — it records where a deal came from.
+ */
+export function judgeDealFormPicklists(
+  values: DealFormValues,
+  lists: { type: CrmPicklist; leadSource: CrmPicklist },
+  options: { current?: Partial<Pick<CrmDeal, 'type' | 'leadSource'>> | null; created: boolean },
+): { ok: true; values: DealFormValues } | { ok: false; error: string } {
+  const typed = values.type.trim() || (options.created ? (crmPicklistDefaultLabel(lists.type) ?? '') : '')
+  const type = judgeCrmPicklistValue('opportunityType', lists.type, typed, options.current?.type)
+  if (type.ok === false) return type
+  const leadSource = judgeCrmPicklistValue(
+    'leadSource',
+    lists.leadSource,
+    values.leadSource,
+    options.current?.leadSource,
+  )
+  if (leadSource.ok === false) return leadSource
+  return {
+    ok: true,
+    values: { ...values, type: type.value ?? '', leadSource: leadSource.value ?? '' },
+  }
+}
+
+/** The forecast category a save stamps: the form's, else the stage's, else none. */
+function forecastCategoryFor(
+  values: Pick<DealFormValues, 'forecastCategory'>,
+  stage: DealWriteContext['stage'],
+): CrmForecastCategory | null {
+  if (isCrmForecastCategory(values.forecastCategory)) return values.forecastCategory
+  return stage ? dealStageForecastCategory(stage) : null
 }
 
 /**
@@ -173,6 +255,11 @@ function optionalFields(values: DealFormValues): {
   put('companyId', values.companyId.trim())
   put('companyName', values.companyId.trim() ? values.companyName.trim() : '')
   put('notes', values.notes.trim().slice(0, DEAL_NOTES_MAX))
+  put('type', values.type.trim())
+  put('leadSource', values.leadSource.trim())
+  put('nextStep', values.nextStep.trim().replace(/\s+/g, ' ').slice(0, DEAL_NEXT_STEP_MAX))
+  put('probability', readDealProbability(values.probability) ?? null)
+  put('campaignId', values.campaignId.trim())
   return { set, clear }
 }
 
@@ -186,6 +273,7 @@ export function dealDocumentFromForm(
 ): Record<string, unknown> {
   const title = values.title.trim().slice(0, DEAL_TITLE_MAX)
   const { set } = optionalFields(values)
+  const forecastCategory = forecastCategoryFor(values, context.stage)
   return {
     title,
     titleLower: nameSearchKey(title),
@@ -194,6 +282,7 @@ export function dealDocumentFromForm(
     status: 'open' satisfies CrmDeal['status'],
     currency: String(values.currency || DEFAULT_DEAL_CURRENCY).toLowerCase(),
     stageChangedAtMs: context.nowMs,
+    ...(forecastCategory ? { forecastCategory } : {}),
     ...set,
     visibleTo: context.visibleTo,
     hostId: context.hostId,
@@ -217,10 +306,15 @@ export function dealDocumentFromForm(
 export function dealPatchFromForm(
   values: DealFormValues,
   nowMs: number,
-  options: { amountDerived?: boolean } = {},
+  options: { amountDerived?: boolean; stage?: DealWriteContext['stage'] } = {},
 ): { set: Record<string, unknown>; clear: string[] } {
   const title = values.title.trim().slice(0, DEAL_TITLE_MAX)
   const { set, clear } = optionalFields(values)
+  // The category picked, else the stage's again; with neither, the field
+  // goes and every reader derives it from the stage.
+  const forecastCategory = forecastCategoryFor(values, options.stage)
+  if (forecastCategory) set['forecastCategory'] = forecastCategory
+  else clear.push('forecastCategory')
   if (options.amountDerived) {
     delete set['amountCents']
     return {

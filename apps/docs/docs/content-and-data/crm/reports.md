@@ -161,7 +161,8 @@ Every open deal, laid out by the month it is **expected to close** — one row
 per month for the next six, starting with the current month — and one column
 per [pipeline](./deals.md#pipelines), with a column for all of them together
 when there is more than one. Each cell shows the deals' face value, their
-**weighted** value (each at the odds of its stage) and how many there are.
+**weighted** value (each at its odds — the deal's own probability when it has
+one, otherwise its stage's) and how many there are.
 
 Three rows sit beside the months so the column adds up to the open pipeline:
 
@@ -178,6 +179,17 @@ months, and a deal dated the first of a month belongs to that month. Won and
 lost deals are never forecast. The card reads the same window of open deals
 the Pipeline card reads — the 1,000 most recently updated — and says so when
 the window was full.
+
+### By forecast category {#by-forecast-category}
+
+Below the months, the same open deals by their
+[forecast category](./deals.md#stages), the way a Salesforce forecast reads
+them: **Pipeline**, **Best Case** and **Commit**, each at face value and
+weighted, then **Closed** — the deals **won in the report's period**, at their
+full value — and the **Forecast** row adding them up. A deal's category is
+its own, set by its stage when it last moved and changeable on the deal;
+a deal from before categories existed reads its stage's. Deals the team put in
+**Omitted** are left out of the table and counted beneath it.
 
 ## Won and lost
 

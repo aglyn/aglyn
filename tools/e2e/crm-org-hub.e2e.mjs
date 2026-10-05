@@ -309,12 +309,12 @@ await step(tally, page, "a lead's org-level address names its site", async () =>
 await step(tally, page, 'a deal moved from the org board lands on the document and in the org feed', async () => {
   const startedAtMs = Date.now()
   await page.goto(orgUrl('/crm/deals'), { waitUntil: 'domcontentloaded', timeout: TIMEOUT_MS })
-  await rowAction(page, CRM_FIXTURE.dealTitle, 'Move to Negotiation')
-  await expectSnackbar(page, 'Moved to Negotiation')
+  await rowAction(page, CRM_FIXTURE.dealTitle, 'Move to Negotiation/Review')
+  await expectSnackbar(page, 'Moved to Negotiation/Review')
   const dealRef = orgRef.collection('deals').doc(CRM_FIXTURE.dealId)
   const stored = await waitFor(
     async () => (await dealRef.get()).data(),
-    (deal) => deal?.stageId === 'negotiation',
+    (deal) => deal?.stageId === 'negotiation-review',
   )
   // The org feed's line, written by the route's org variant with the Admin
   // SDK — the feed is closed to clients, so nothing else could have.
@@ -325,7 +325,7 @@ await step(tally, page, 'a deal moved from the org board lands on the document a
         .map((doc) => doc.data())
         .find(
           (entry) =>
-            entry.action === 'Moved deal to Negotiation' &&
+            entry.action === 'Moved deal to Negotiation/Review' &&
             (entry.createdAt?.toMillis?.() ?? 0) >= startedAtMs - 5_000,
         )
     },
@@ -333,7 +333,7 @@ await step(tally, page, 'a deal moved from the org board lands on the document a
   )
   tally.check(
     'a deal moved from the org board lands on the document and in the org feed',
-    stored?.stageId === 'negotiation' && stored?.status === 'open' && line?.target?.type === 'deal',
+    stored?.stageId === 'negotiation-review' && stored?.status === 'open' && line?.target?.type === 'deal',
     `${stored?.stageId} · ${stored?.status} · feed: ${line ? `${line.action} by ${line.actorId}` : 'no line'}`,
   )
   await shot(page, 'crm-org-hub-deal-moved')

@@ -222,6 +222,9 @@ export function crmListFields(collection, record) {
       return {
         ...searchFields(doc.visibleTo, [doc.title]),
         titleLower: nameSearchKey(typeof doc.title === 'string' ? doc.title : ''),
+        // The Deals list's Type and Lead source keys (AGL-3516).
+        typeKey: crmLeadSourceKey(doc.type),
+        leadSourceKey: crmLeadSourceKey(doc.leadSource),
       }
     case 'crmTasks':
       return searchFields(doc.visibleTo, [doc.title])

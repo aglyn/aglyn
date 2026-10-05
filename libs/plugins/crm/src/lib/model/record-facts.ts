@@ -23,8 +23,13 @@ import {
   CRM_TASK_KIND_LABELS,
   contactDisplayName,
   crmLeadStatusLabel,
+  CRM_FORECAST_CATEGORY_LABELS,
   customImportTarget,
+  DEAL_NEXT_STEP_MAX,
+  dealForecastCategory,
+  dealProbability,
   dealStageById,
+  dealStageForecastCategory,
   fieldDefinitionObject,
   interactionsForGroup,
   isContactLifecycleStage,
@@ -215,6 +220,10 @@ export interface CrmStageFact {
   id: string
   name: string
   kind: 'open' | 'won' | 'lost'
+  /** Chance of closing from the stage, 0–100 (AGL-3516). */
+  probability: number
+  /** The forecast category a deal takes in the stage, as its label. */
+  forecastCategory: string
 }
 
 export interface CrmDealFacts {
@@ -229,6 +238,16 @@ export interface CrmDealFacts {
   expectedClose: string | null
   inStageSince: string | null
   lostReason: string
+  /*
+   * Salesforce's Opportunity fields (AGL-3516).
+   */
+  type: string
+  leadSource: string
+  nextStep: string
+  /** The deal's own odds when it overrides the stage's, else the stage's; `null` for neither. */
+  probability: number | null
+  /** The forecast category's label. */
+  forecastCategory: string
   /** The name of the person the deal is with, as the deal copied it. */
   contact: string
   company: string
@@ -542,7 +561,10 @@ export function dealFacts(input: DealFactsInput): CrmDealFacts {
       id: String(stage.id),
       name: crmFactText(stage.name, CRM_FACTS_LABEL_MAX),
       kind: stage.kind === 'won' || stage.kind === 'lost' ? stage.kind : ('open' as const),
+      probability: Math.min(100, Math.max(0, Number(stage.probability) || 0)),
+      forecastCategory: CRM_FORECAST_CATEGORY_LABELS[dealStageForecastCategory(stage)],
     }))
+  const stage = dealStageById(pipeline ?? undefined, String(deal.stageId ?? ''))
   return {
     record: 'deal',
     title: summary.title,
@@ -555,6 +577,11 @@ export function dealFacts(input: DealFactsInput): CrmDealFacts {
     expectedClose: summary.expectedClose,
     inStageSince: crmFactDay(deal.stageChangedAtMs),
     lostReason: crmFactProse(deal.lostReason, CRM_FACTS_LABEL_MAX),
+    type: crmFactText(deal.type, CRM_FACTS_LABEL_MAX),
+    leadSource: crmFactText(deal.leadSource, CRM_FACTS_LABEL_MAX),
+    nextStep: crmFactProse(deal.nextStep, DEAL_NEXT_STEP_MAX),
+    probability: dealProbability(deal, stage),
+    forecastCategory: CRM_FORECAST_CATEGORY_LABELS[dealForecastCategory(deal, stage)],
     contact: crmFactProse(deal.contactName, CRM_FACTS_LABEL_MAX),
     company: crmFactProse(deal.companyName, CRM_FACTS_LABEL_MAX),
     products: Array.isArray(deal.lineItems) ? deal.lineItems.length : 0,

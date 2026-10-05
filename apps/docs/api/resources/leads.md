@@ -227,7 +227,7 @@ second deal.
 | Key | Notes |
 | --- | --- |
 | `company` | `{ "link": "co_…" }` to link an existing company, `{ "create": { "name": "Acme", "domain": "acme.com" } }` to create one (a company your key can see under that name, or at that domain, is reused rather than duplicated), or `null` for none. The lead's own `company` text is the name to send. |
-| `deal` | `{ "title": "…", "amountCents": 12500, "currency": "usd", "stageId": "qualified" }` — `title` required; `amountCents` a whole number; `currency` lowercase ISO 4217, `usd` when omitted; `stageId` a stage of the default pipeline, its first open stage when omitted. `null` for none. An organization with no pipeline yet gets a **Sales** pipeline with the default stages. |
+| `deal` | `{ "title": "…", "amountCents": 12500, "currency": "usd", "stageId": "prospecting", "type": "New Business" }` — `title` required; `amountCents` a whole number; `currency` lowercase ISO 4217, `usd` when omitted; `stageId` a stage of the default pipeline, its first open stage when omitted; `type` one of the organization's [deal types](deals.md), the list's default when omitted — a value outside the active list is a `400` naming `deal.type`. The deal takes the lead's `leadSource` and its stage's `forecastCategory`. `null` for none. An organization with no pipeline yet gets a **Sales** pipeline with the default stages. |
 | `ownerUid` / `ownerEmail` | Who owns the contact and the deal. Defaults to the lead's owner; failing that your organization's assignment rules and the site's default owner decide. A key cannot own a record, so a contact nobody names and no rule assigns stays unassigned — where a person converting from the console would have kept it. |
 | `siteId` | Instead of the query parameter. |
 

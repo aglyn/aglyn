@@ -830,7 +830,39 @@
           "org~q",
           "org~q3"
         ],
-        "titleLower": "acme renewal — q3"
+        "titleLower": "acme renewal — q3",
+        "typeKey": null,
+        "leadSourceKey": null
+      }
+    },
+    {
+      "collection": "deals",
+      "record": {
+        "title": "Pilot",
+        "visibleTo": [
+          "org"
+        ],
+        "type": "New Business",
+        "leadSource": "Trade  show"
+      },
+      "expected": {
+        "searchTokens": [
+          "p",
+          "pi",
+          "pil",
+          "pilo",
+          "pilot"
+        ],
+        "scopedSearchTokens": [
+          "org~p",
+          "org~pi",
+          "org~pil",
+          "org~pilo",
+          "org~pilot"
+        ],
+        "titleLower": "pilot",
+        "typeKey": "new business",
+        "leadSourceKey": "trade show"
       }
     },
     {
@@ -1718,7 +1750,9 @@
           "org~q3"
         ],
         "titleLower": "acme renewal — q3",
-        "nextTaskAtMs": null
+        "nextTaskAtMs": null,
+        "typeKey": null,
+        "leadSourceKey": null
       }
     },
     {

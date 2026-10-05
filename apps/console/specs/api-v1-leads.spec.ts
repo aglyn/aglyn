@@ -1008,6 +1008,10 @@ describe('POST /v1/leads/{id}/convert', () => {
       'deal.stageId': 'Must be a stage id',
       notes: 'Not writable on a conversion',
     })
+    const type = await convert('lead-a', { deal: { title: 'Acme', type: 'Upsell' } })
+    expect((await json(type)).error.fields).toEqual({
+      'deal.type': 'Type must be one of: Existing Business, New Business.',
+    })
     const domain = await convert('lead-a', { company: { create: { name: 'Acme', domain: 'acme' } } })
     expect((await json(domain)).error.fields).toEqual({
       'company.create.domain': 'Must be a domain, like acme.com',
@@ -1019,7 +1023,7 @@ describe('POST /v1/leads/{id}/convert', () => {
   it('converts through the console’s own function: contact, company, deal, then the lead', async () => {
     const response = await convert('lead-a', {
       company: { create: { name: '  Acme Coffee ', domain: 'https://www.Acme.com/about' } },
-      deal: { title: 'Acme — first order', amountCents: 12_500, currency: 'USD' },
+      deal: { title: 'Acme — first order', amountCents: 12_500, currency: 'USD', type: 'new business' },
     })
     expect(response.status).toBe(201)
     const receipt = await json(response)
@@ -1059,8 +1063,11 @@ describe('POST /v1/leads/{id}/convert', () => {
     expect(deal).toMatchObject({
       title: 'Acme — first order',
       pipelineId: pipeline.id,
-      stageId: 'qualified',
+      stageId: 'prospecting',
       status: 'open',
+      // The Type as the org's list spells it, and the stage's forecast (AGL-3516).
+      type: 'New Business',
+      forecastCategory: 'pipeline',
       amountCents: 12_500,
       currency: 'usd',
       contactId: contact.id,

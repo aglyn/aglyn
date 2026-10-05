@@ -194,6 +194,8 @@ beforeEach(() => {
     [`orgs/${ORG}/leads/l1`]: { leadSource: 'Outbound · Apollo' },
     [`orgs/${ORG}/leads/l2`]: { leadSource: 'Outbound · Apollo' },
     [`orgs/${ORG}/leads/l3`]: { leadSource: 'Website form' },
+    // A deal carries the lead source of the lead it was converted from (AGL-3516).
+    [`orgs/${ORG}/deals/d1`]: { leadSource: 'Outbound · Apollo', leadSourceKey: 'outbound · apollo' },
     [`orgs/${ORG}/contacts/c1`]: {
       facets: {
         'site-a': { leadSource: 'Outbound · Apollo' },
@@ -214,7 +216,7 @@ describe('crm/picklist-values', () => {
 
   it('renames the value in place, then moves every lead and the holding facet to the new label', async () => {
     const out = await call({ orgId: ORG, action: 'rename', valueId: 'apollo', label: 'Apollo' })
-    expect(out).toEqual({ status: 200, payload: { ok: true, updated: { lead: 2, contact: 1, company: 0 } } })
+    expect(out).toEqual({ status: 200, payload: { ok: true, updated: { lead: 2, contact: 1, company: 0, deal: 1 } } })
     expect((store[LIST]['values'] as { id: string; label: string }[])[0]).toEqual({
       id: 'apollo',
       label: 'Apollo',
@@ -224,6 +226,8 @@ describe('crm/picklist-values', () => {
     expect(writes[0]).toBe(LIST)
     expect(store[`orgs/${ORG}/leads/l1`]['leadSource']).toBe('Apollo')
     expect(store[`orgs/${ORG}/leads/l3`]['leadSource']).toBe('Website form')
+    // The deal's label and the key its list filters by move together.
+    expect(store[`orgs/${ORG}/deals/d1`]).toMatchObject({ leadSource: 'Apollo', leadSourceKey: 'apollo' })
     expect(read(store[`orgs/${ORG}/contacts/c1`], ['facets', 'site-a', 'leadSource'])).toBe('Apollo')
     expect(read(store[`orgs/${ORG}/contacts/c1`], ['facets', 'site-b', 'leadSource'])).toBe(
       'Website form',
@@ -248,15 +252,17 @@ describe('crm/picklist-values', () => {
       valueId: 'site',
       replaceWith: 'outbound · apollo',
     })
-    expect(moved.payload).toEqual({ ok: true, updated: { lead: 1, contact: 1, company: 0 } })
+    expect(moved.payload).toEqual({ ok: true, updated: { lead: 1, contact: 1, company: 0, deal: 0 } })
     expect(store[`orgs/${ORG}/leads/l3`]['leadSource']).toBe('Outbound · Apollo')
     expect(read(store[`orgs/${ORG}/contacts/c1`], ['facets', 'site-b', 'leadSource'])).toBe(
       'Outbound · Apollo',
     )
     const cleared = await call({ orgId: ORG, action: 'delete', valueId: 'apollo', replaceWith: null })
     // Both of c1's holders held it by now, and each facet is its own write.
-    expect(cleared.payload).toEqual({ ok: true, updated: { lead: 3, contact: 2, company: 0 } })
+    expect(cleared.payload).toEqual({ ok: true, updated: { lead: 3, contact: 2, company: 0, deal: 1 } })
     expect(store[`orgs/${ORG}/leads/l1`]).not.toHaveProperty('leadSource')
+    expect(store[`orgs/${ORG}/deals/d1`]).toMatchObject({ leadSourceKey: null })
+    expect(store[`orgs/${ORG}/deals/d1`]).not.toHaveProperty('leadSource')
     expect(store[`orgs/${ORG}/leads/l1`]).toMatchObject({ leadSourceKey: null })
     // The stored values left, then every standard value written down beside them.
     const ids = (store[LIST]['values'] as { id: string }[]).map((value) => value.id)
@@ -293,7 +299,7 @@ describe('crm/picklist-values', () => {
       { orgId: ORG, picklistId: 'leadSource', action: 'rename', valueId: 'apollo', label: 'Apollo' },
       crmPicklistValuesHandler,
     )
-    expect(out.payload).toEqual({ ok: true, updated: { lead: 2, contact: 1, company: 0 } })
+    expect(out.payload).toEqual({ ok: true, updated: { lead: 2, contact: 1, company: 0, deal: 1 } })
     const unknown = await call(
       { orgId: ORG, picklistId: 'nope', action: 'rename', valueId: 'x', label: 'Y' },
       crmPicklistValuesHandler,

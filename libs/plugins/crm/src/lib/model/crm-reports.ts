@@ -42,6 +42,7 @@ import {
   type CrmActivityKind,
   type CrmDeal,
   type CrmDealStage,
+  type CrmForecastCategory,
   type CrmLeadFields,
   type CrmLeadStatus,
   type CrmPicklist,
@@ -50,6 +51,7 @@ import {
   crmLeadStatus,
   crmPicklistRank,
   crmPicklistValueByLabel,
+  dealForecastCategory,
   dealStageById,
   isCrmActivityKind,
   isPipelineArchived,
@@ -292,7 +294,8 @@ export interface PipelineTotals {
   unplaced: { count: number; amountCents: number }
 }
 
-type PipelineDeal = Pick<CrmDeal, 'status' | 'stageId' | 'amountCents'>
+type PipelineDeal = Pick<CrmDeal, 'status' | 'stageId' | 'amountCents'> &
+  Partial<Pick<CrmDeal, 'probability'>>
 
 /**
  * What a pipeline holds, by stage.
@@ -419,7 +422,8 @@ export interface CloseMonthForecast {
 type ForecastDeal = Pick<
   CrmDeal,
   'status' | 'pipelineId' | 'stageId' | 'amountCents' | 'expectedCloseAtMs'
->
+> &
+  Partial<Pick<CrmDeal, 'probability' | 'forecastCategory'>>
 
 const emptyCell = (): ForecastCell => ({ count: 0, amountCents: 0, weightedCents: 0 })
 
@@ -515,6 +519,69 @@ export function forecastByCloseMonth(
   }
   totals.pipelines = [...byId.values()]
   return totals
+}
+
+/**
+ * The rows of the forecast by category (AGL-3516), in the order Salesforce's
+ * forecast reads them: what is still in play from least to most certain,
+ * then what has closed. Omitted is not a forecast row — a deal put there
+ * is one the team chose to leave out — and is reported beside it.
+ */
+export const FORECAST_CATEGORY_ROWS = ['pipeline', 'bestCase', 'commit', 'closed'] as const satisfies readonly CrmForecastCategory[]
+
+export interface CategoryForecast {
+  /** One cell per {@link FORECAST_CATEGORY_ROWS} entry, every one present. */
+  rows: Record<(typeof FORECAST_CATEGORY_ROWS)[number], ForecastCell>
+  /** Open deals left out of the forecast on purpose. */
+  omitted: ForecastCell
+  /** Every row added up — what the forecast forecasts. */
+  total: ForecastCell
+}
+
+/**
+ * The forecast by category (AGL-3516): the OPEN deals by the category each
+ * stands in — its own, else its stage's ({@link dealForecastCategory}) —
+ * weighted as everywhere else, and the WON deals the caller read as
+ * Closed, at full value because they have closed. An open deal somebody
+ * put in Closed joins that row at its weighted value — it is still open,
+ * so it is not counted as revenue. A lost deal is never a forecast.
+ */
+export function forecastByCategory(
+  openDeals: readonly ForecastDeal[],
+  wonDeals: ReadonlyArray<Pick<CrmDeal, 'status' | 'amountCents'>>,
+  pipelines: ReadonlyArray<Pick<CrmPipeline, 'stages'> & { $id: string }>,
+): CategoryForecast {
+  const forecast: CategoryForecast = {
+    rows: {
+      pipeline: emptyCell(),
+      bestCase: emptyCell(),
+      commit: emptyCell(),
+      closed: emptyCell(),
+    },
+    omitted: emptyCell(),
+    total: emptyCell(),
+  }
+  for (const deal of openDeals) {
+    if (deal.status !== 'open') continue
+    const pipeline = pipelines.find((entry) => entry.$id === deal.pipelineId)
+    const stage = dealStageById(pipeline, deal.stageId)
+    const amount = Math.max(0, Math.round(Number(deal.amountCents ?? 0) || 0))
+    const weighted = weightedDealAmountCents(deal, stage)
+    const category = dealForecastCategory(deal, stage)
+    if (category === 'omitted') {
+      addToCell(forecast.omitted, amount, weighted)
+      continue
+    }
+    addToCell(forecast.rows[category], amount, weighted)
+    addToCell(forecast.total, amount, weighted)
+  }
+  for (const deal of wonDeals) {
+    if (deal.status !== 'won') continue
+    const amount = Math.max(0, Math.round(Number(deal.amountCents ?? 0) || 0))
+    addToCell(forecast.rows.closed, amount, amount)
+    addToCell(forecast.total, amount, amount)
+  }
+  return forecast
 }
 
 /**

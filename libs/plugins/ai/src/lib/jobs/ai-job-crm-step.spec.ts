@@ -125,6 +125,11 @@ const DEAL_FACTS = {
   stage: 'Proposal sent',
   status: 'open',
   amount: 'USD 3200.00',
+  probability: 65,
+  forecastCategory: 'Best Case',
+  type: 'New Business',
+  leadSource: 'Web',
+  nextStep: 'Send the revised quote',
   timeline: [{ on: '2026-09-12', kind: 'Call', text: 'Asked for a discount.' }],
   openTasks: [],
 }
@@ -301,6 +306,16 @@ describe('a record (AGL-2917)', () => {
       )
     const outcome = await runStep({ inputs: { task: 'record', record: 'deal', recordId: 'deal-1' } })
     expect(sent()[0].messages[0].content).toContain('Stages in order: proposal-sent "Proposal sent" (open); negotiation "Negotiation" (open); won "Won" (won)')
+    // Salesforce's Opportunity fields reach the model as facts (AGL-3516).
+    for (const fact of [
+      'Probability: 65%',
+      'Forecast category: Best Case',
+      'Type: New Business',
+      'Lead source: Web',
+      'Next step: Send the revised quote',
+    ]) {
+      expect(sent()[0].messages[0].content).toContain(fact)
+    }
     expect(sent()[1].messages.at(-1)?.content).toContain('Winning or losing a deal is the team’s call')
     expect(outcome.outputs[0]).toMatchObject({ id: 'record:deal:deal-1', proposal: { kind: 'record', record: { kind: 'deal', id: 'deal-1' } } })
     expect(keptFor()).toMatchObject({

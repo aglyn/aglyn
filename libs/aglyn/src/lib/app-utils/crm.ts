@@ -415,6 +415,133 @@ export interface CrmDealStage {
    * between.
    */
   kind: 'open' | 'won' | 'lost'
+  /**
+   * The forecast category a deal takes on landing here (AGL-3516) — see
+   * {@link CrmForecastCategory}. Absent on a stage written before the field
+   * existed, which reads as its kind's: Closed for won, Omitted for lost,
+   * Pipeline for open ({@link dealStageForecastCategory}).
+   */
+  forecastCategory?: CrmForecastCategory
+}
+
+/*==========================================
+ * FORECAST CATEGORIES (AGL-3516).
+ *
+ * Salesforce's Opportunity forecast categories, a FIXED set — not a
+ * picklist an org edits, as in Salesforce, because a forecast rolls up by
+ * them and a renamed or added category would be one no forecast knows. A
+ * stage names the category a deal takes on landing in it; the deal stores
+ * its own copy, stamped at every stage move, which the deal page may then
+ * change for that deal alone.
+ *=========================================*/
+
+export const CRM_FORECAST_CATEGORIES = [
+  'omitted',
+  'pipeline',
+  'bestCase',
+  'commit',
+  'closed',
+] as const
+
+export type CrmForecastCategory = (typeof CRM_FORECAST_CATEGORIES)[number]
+
+export const CRM_FORECAST_CATEGORY_LABELS: Record<CrmForecastCategory, string> = {
+  omitted: 'Omitted',
+  pipeline: 'Pipeline',
+  bestCase: 'Best Case',
+  commit: 'Commit',
+  closed: 'Closed',
+}
+
+export function isCrmForecastCategory(value: unknown): value is CrmForecastCategory {
+  return typeof value === 'string' && (CRM_FORECAST_CATEGORIES as readonly string[]).includes(value)
+}
+
+/**
+ * A category as typed — the stored key or its label in any case and
+ * spacing ("Best Case", "best case", `bestCase`) — or `null`.
+ */
+export function readCrmForecastCategory(value: unknown): CrmForecastCategory | null {
+  if (isCrmForecastCategory(value)) return value
+  const key = String(value ?? '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .toLowerCase()
+  if (!key) return null
+  return (
+    CRM_FORECAST_CATEGORIES.find(
+      (category) =>
+        category.toLowerCase() === key ||
+        CRM_FORECAST_CATEGORY_LABELS[category].toLowerCase() === key,
+    ) ?? null
+  )
+}
+
+/** The category a stage stamps: its own, else its kind's. */
+export function dealStageForecastCategory(
+  stage: Pick<CrmDealStage, 'kind' | 'forecastCategory'>,
+): CrmForecastCategory {
+  if (isCrmForecastCategory(stage.forecastCategory)) return stage.forecastCategory
+  return stage.kind === 'won' ? 'closed' : stage.kind === 'lost' ? 'omitted' : 'pipeline'
+}
+
+/**
+ * A deal's forecast category as every reader takes it: the deal's own,
+ * else its stage's, else its status's — a deal written before the field
+ * existed forecasts where its stage puts it.
+ */
+export function dealForecastCategory(
+  deal: Partial<Pick<CrmDeal, 'forecastCategory' | 'status'>>,
+  stage: Pick<CrmDealStage, 'kind' | 'forecastCategory'> | null | undefined,
+): CrmForecastCategory {
+  if (isCrmForecastCategory(deal.forecastCategory)) return deal.forecastCategory
+  if (stage) return dealStageForecastCategory(stage)
+  return deal.status === 'won' ? 'closed' : deal.status === 'lost' ? 'omitted' : 'pipeline'
+}
+
+/** The longest Next step a deal keeps — Salesforce's own 255. */
+export const DEAL_NEXT_STEP_MAX = 255
+
+/**
+ * A probability override as stored: a whole number 0–100, or `null` for
+ * none (the stage's applies). Anything that is not a number in range is
+ * `undefined` — unreadable, for the writer to refuse.
+ */
+export function readDealProbability(value: unknown): number | null | undefined {
+  if (value === null || value === undefined) return null
+  if (typeof value === 'string' && !value.trim()) return null
+  const number = typeof value === 'number' ? value : Number(String(value).trim().replace(/%$/, ''))
+  if (!Number.isFinite(number) || !Number.isInteger(number) || number < 0 || number > 100) {
+    return undefined
+  }
+  return number
+}
+
+/**
+ * A deal's probability: its own override when it holds one, else its
+ * stage's, else `null` for a stage the pipeline no longer has.
+ */
+export function dealProbability(
+  deal: Partial<Pick<CrmDeal, 'probability'>>,
+  stage: Pick<CrmDealStage, 'probability'> | null | undefined,
+): number | null {
+  const own = readDealProbability(deal.probability)
+  if (typeof own === 'number') return own
+  if (!stage) return null
+  return Math.min(100, Math.max(0, Number(stage.probability) || 0))
+}
+
+/**
+ * What a stage move writes besides the stage, the status and the clocks:
+ * the new stage's forecast category, and the probability override CLEARED
+ * — Salesforce re-defaults a probability when the stage changes, so an
+ * override typed for the last stage does not follow the deal into the next.
+ * A write that sets either field itself, in the same request, wins.
+ */
+export function dealStageMoveFields(
+  stage: Pick<CrmDealStage, 'kind' | 'forecastCategory'>,
+): { forecastCategory: CrmForecastCategory; probability: null } {
+  return { forecastCategory: dealStageForecastCategory(stage), probability: null }
 }
 
 /** `orgs/{orgId}/pipelines/{pipelineId}`. */
@@ -440,19 +567,30 @@ export function isPipelineArchived(
 }
 
 /**
- * The stages a fresh pipeline starts with.
+ * The stages a fresh pipeline starts with: Salesforce's standard
+ * Opportunity stages, with its probabilities and forecast categories
+ * (AGL-3516). A pipeline seeded before them keeps the stages it was seeded
+ * with — nothing migrates a stored pipeline.
+ *
+ * The closing stages keep the ids `won` and `lost` every pipeline has had,
+ * so an automation filter naming them reads the same on old pipelines and
+ * new ones.
  *
  * Readonly on purpose: a pipeline document stores its own COPY (`[...]`), so
  * a merchant editing their stages must not be editing the module's default,
  * and a second pipeline seeded later must start from the original set.
  */
 export const DEFAULT_DEAL_STAGES: readonly CrmDealStage[] = [
-  { id: 'qualified', name: 'Qualified', order: 0, probability: 10, kind: 'open' },
-  { id: 'contact-made', name: 'Contact made', order: 1, probability: 20, kind: 'open' },
-  { id: 'proposal-sent', name: 'Proposal sent', order: 2, probability: 40, kind: 'open' },
-  { id: 'negotiation', name: 'Negotiation', order: 3, probability: 60, kind: 'open' },
-  { id: 'won', name: 'Won', order: 4, probability: 100, kind: 'won' },
-  { id: 'lost', name: 'Lost', order: 5, probability: 0, kind: 'lost' },
+  { id: 'prospecting', name: 'Prospecting', order: 0, probability: 10, kind: 'open', forecastCategory: 'pipeline' },
+  { id: 'qualification', name: 'Qualification', order: 1, probability: 10, kind: 'open', forecastCategory: 'pipeline' },
+  { id: 'needs-analysis', name: 'Needs Analysis', order: 2, probability: 20, kind: 'open', forecastCategory: 'pipeline' },
+  { id: 'value-proposition', name: 'Value Proposition', order: 3, probability: 50, kind: 'open', forecastCategory: 'pipeline' },
+  { id: 'id-decision-makers', name: 'Id. Decision Makers', order: 4, probability: 60, kind: 'open', forecastCategory: 'pipeline' },
+  { id: 'perception-analysis', name: 'Perception Analysis', order: 5, probability: 70, kind: 'open', forecastCategory: 'pipeline' },
+  { id: 'proposal-price-quote', name: 'Proposal/Price Quote', order: 6, probability: 75, kind: 'open', forecastCategory: 'bestCase' },
+  { id: 'negotiation-review', name: 'Negotiation/Review', order: 7, probability: 90, kind: 'open', forecastCategory: 'commit' },
+  { id: 'won', name: 'Closed Won', order: 8, probability: 100, kind: 'won', forecastCategory: 'closed' },
+  { id: 'lost', name: 'Closed Lost', order: 9, probability: 0, kind: 'lost', forecastCategory: 'omitted' },
 ]
 
 export type CrmDealStatus = 'open' | 'won' | 'lost'
@@ -532,6 +670,39 @@ export interface CrmDeal extends CrmScoped {
   lostReason?: string
   notes?: string
   createdByUid?: string
+  /*
+   * SALESFORCE'S OPPORTUNITY FIELDS (AGL-3516).
+   */
+  /**
+   * Salesforce's Type — the LABEL of one of the org's `opportunityType`
+   * values (New Business, Existing Business, …); `typeKey` beside it is
+   * what the Deals list filters by.
+   */
+  type?: string
+  /**
+   * Salesforce's Lead Source — the LABEL of one of the org's `leadSource`
+   * values, the picklist a lead's own lead source is; stamped from the
+   * lead a conversion opens the deal for. `leadSourceKey` beside it.
+   */
+  leadSource?: string
+  /** What happens next, at most {@link DEAL_NEXT_STEP_MAX} characters. */
+  nextStep?: string
+  /**
+   * This deal's own chance of closing, a whole number 0–100, overriding
+   * its stage's; `null` or absent means the stage's applies. Cleared by
+   * every stage move ({@link dealStageMoveFields}).
+   */
+  probability?: number | null
+  /**
+   * Where the deal is forecast — stamped from the stage at every stage move
+   * and changeable for this deal afterwards. See {@link dealForecastCategory}.
+   */
+  forecastCategory?: CrmForecastCategory
+  /**
+   * Salesforce's Primary Campaign Source: ONE of the org's campaigns (the
+   * Marketing plugin's containers, which a lead's `campaignIds` name).
+   */
+  campaignId?: string
   /**
    * Custom field values, keyed by the key of a definition whose `object`
    * is `deal` — see {@link fieldDefinitionObject} (AGL-2661).
@@ -1328,15 +1499,18 @@ export function dealStageById(
  * of itself. An open deal with no resolvable stage is worth nothing rather
  * than everything: the pipeline lost the stage, and a forecast that filled
  * the gap with 100% would be the most optimistic number available.
+ *
+ * An open deal's own probability override (AGL-3516) replaces its stage's
+ * — see {@link dealProbability}.
  */
 export function weightedDealAmountCents(
-  deal: Pick<CrmDeal, 'amountCents' | 'status'>,
+  deal: Pick<CrmDeal, 'amountCents' | 'status'> & Partial<Pick<CrmDeal, 'probability'>>,
   stage: Pick<CrmDealStage, 'probability'> | null | undefined,
 ): number {
   const amount = Math.max(0, Math.round(Number(deal.amountCents ?? 0) || 0))
   if (deal.status === 'won') return amount
   if (deal.status === 'lost' || !stage) return 0
-  const probability = Math.min(100, Math.max(0, Number(stage.probability) || 0))
+  const probability = dealProbability(deal, stage) ?? 0
   return Math.round((amount * probability) / 100)
 }
 
@@ -3069,6 +3243,8 @@ const LEAD_SOURCE_DEFINITION = {
     { object: 'contact', field: 'leadSource', facet: true },
     // A company's Account Source is a lead source value (AGL-3514).
     { object: 'company', field: 'accountSource', keyField: 'accountSourceKey' },
+    // A deal's, stamped by the conversion that opened it (AGL-3516).
+    { object: 'deal', field: 'leadSource', keyField: 'leadSourceKey' },
   ],
 } as const satisfies CrmPicklistDefinition
 
@@ -3238,6 +3414,27 @@ const SALUTATION_DEFINITION = {
   targets: [{ object: 'contact', field: 'salutation', facet: true }],
 } as const satisfies CrmPicklistDefinition
 
+/*------------------------------------------
+ * DEALS (AGL-3516).
+ *-----------------------------------------*/
+
+/**
+ * Salesforce's Opportunity Type. Plain: the deal stores the label, and
+ * `typeKey` beside it for the Deals list's filter.
+ */
+const OPPORTUNITY_TYPE_DEFINITION = {
+  id: 'opportunityType',
+  label: 'Type',
+  plural: 'deal types',
+  object: 'deal',
+  restricted: true,
+  standardValues: [
+    { id: 'existing-business', label: 'Existing Business' },
+    { id: 'new-business', label: 'New Business' },
+  ],
+  targets: [{ object: 'deal', field: 'type', keyField: 'typeKey' }],
+} as const satisfies CrmPicklistDefinition
+
 /** Every standard picklist field the CRM keeps, one document each. */
 export const CRM_PICKLIST_DEFINITIONS = [
   LEAD_SOURCE_DEFINITION,
@@ -3249,6 +3446,8 @@ export const CRM_PICKLIST_DEFINITIONS = [
   OWNERSHIP_DEFINITION,
   // Contacts (AGL-3515).
   SALUTATION_DEFINITION,
+  // Deals (AGL-3516).
+  OPPORTUNITY_TYPE_DEFINITION,
 ] as const satisfies readonly CrmPicklistDefinition[]
 
 export type CrmPicklistId = (typeof CRM_PICKLIST_DEFINITIONS)[number]['id']
@@ -3263,6 +3462,8 @@ export const CRM_LEAD_SOURCE_PICKLIST: CrmPicklistId = 'leadSource'
 
 /** The salutation value set's document id (AGL-3515). */
 export const CRM_SALUTATION_PICKLIST: CrmPicklistId = 'salutation'
+/** A deal's Type value set's document id (AGL-3516). */
+export const CRM_OPPORTUNITY_TYPE_PICKLIST: CrmPicklistId = 'opportunityType'
 
 export function isCrmPicklistId(value: unknown): value is CrmPicklistId {
   return typeof value === 'string' && (CRM_PICKLIST_IDS as readonly string[]).includes(value)
@@ -4243,17 +4444,23 @@ export function crmCompanyListFields(record: object): {
 /**
  * What a deal's search box reads: its title (AGL-3315) — as word prefixes,
  * and as `titleLower`, the whole title's key, which a reader whose access
- * is some sites searches by its start.
+ * is some sites searches by its start. And the keys the Deals list filters
+ * its Type and Lead source by (AGL-3516): each label as the picklist
+ * compares it, `null` for none.
  */
 export function crmDealListFields(record: object): {
   searchTokens: string[]
   scopedSearchTokens: string[]
   titleLower: string
+  typeKey: string | null
+  leadSourceKey: string | null
 } {
   const deal = record as Record<string, unknown>
   return {
     ...crmSearchFields(deal['visibleTo'], [deal['title']]),
     titleLower: SEARCH_KEY(typeof deal['title'] === 'string' ? deal['title'] : ''),
+    typeKey: crmPicklistKey(deal['type']),
+    leadSourceKey: crmPicklistKey(deal['leadSource']),
   }
 }
 
@@ -4428,7 +4635,7 @@ export const CRM_LIST_FIELD_INPUTS: Readonly<Record<CrmListCollection, readonly 
   leads: ['visibleTo', ...CRM_LEAD_SEARCH_SOURCES, 'status', 'leadSource', 'emailState', 'campaignIds'],
   contacts: ['visibleTo', ...CRM_CONTACT_SEARCH_SOURCES, 'phone', CONTACT_FACETS_FIELD, 'emailState'],
   companies: ['visibleTo', ...CRM_COMPANY_SEARCH_SOURCES, 'type', 'industry', 'rating', 'accountSource'],
-  deals: ['visibleTo', 'title'],
+  deals: ['visibleTo', 'title', 'type', 'leadSource'],
   crmTasks: ['visibleTo', 'title'],
 }
 

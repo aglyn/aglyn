@@ -22,7 +22,7 @@ values, groups, meanings and targets), so the script backfills:
 
 | Picklist | When | Labels read from |
 | --- | --- | --- |
-| **Lead source** (`leadSource`) | always | every lead's `leadSource`, every holder's `facets.{groupId}.leadSource` on a contact, and every company's `accountSource` |
+| **Lead source** (`leadSource`) | always | every lead's `leadSource`, every holder's `facets.{groupId}.leadSource` on a contact, every company's `accountSource` and every deal's `leadSource` |
 | **Industry** (`industry`, AGL-3514) | only once the registry holds it; skipped otherwise | the field each of its targets names — a company's `industry` free text |
 
 A definition whose standard values or targets cannot be read from `crm.ts` is

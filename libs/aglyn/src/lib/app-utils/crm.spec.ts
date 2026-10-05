@@ -100,6 +100,14 @@ import {
   normalizeContactFieldKey,
   taskDueState,
   weightedDealAmountCents,
+  CRM_FORECAST_CATEGORIES,
+  CRM_FORECAST_CATEGORY_LABELS,
+  dealForecastCategory,
+  dealProbability,
+  dealStageForecastCategory,
+  dealStageMoveFields,
+  readCrmForecastCategory,
+  readDealProbability,
   DEAL_LINE_ITEMS_MAX,
   dealHasLineItems,
   isPipelineArchived,
@@ -564,32 +572,114 @@ describe('normalizeContactFieldKey', () => {
 })
 
 describe('deal stages', () => {
-  it('ships the default pipeline in order, one won and one lost', () => {
-    expect(DEFAULT_DEAL_STAGES.map((stage) => stage.id)).toEqual([
-      'qualified',
-      'contact-made',
-      'proposal-sent',
-      'negotiation',
-      'won',
-      'lost',
+  it("ships Salesforce's Opportunity stages in order, one won and one lost (AGL-3516)", () => {
+    expect(DEFAULT_DEAL_STAGES.map((stage) => [stage.name, stage.probability, stage.kind])).toEqual([
+      ['Prospecting', 10, 'open'],
+      ['Qualification', 10, 'open'],
+      ['Needs Analysis', 20, 'open'],
+      ['Value Proposition', 50, 'open'],
+      ['Id. Decision Makers', 60, 'open'],
+      ['Perception Analysis', 70, 'open'],
+      ['Proposal/Price Quote', 75, 'open'],
+      ['Negotiation/Review', 90, 'open'],
+      ['Closed Won', 100, 'won'],
+      ['Closed Lost', 0, 'lost'],
     ])
-    expect(DEFAULT_DEAL_STAGES.map((stage) => stage.probability)).toEqual([
-      10, 20, 40, 60, 100, 0,
+    expect(DEFAULT_DEAL_STAGES.map((stage) => stage.forecastCategory)).toEqual([
+      'pipeline',
+      'pipeline',
+      'pipeline',
+      'pipeline',
+      'pipeline',
+      'pipeline',
+      'bestCase',
+      'commit',
+      'closed',
+      'omitted',
     ])
+    // The closing stages keep the ids every pipeline has had.
+    expect(DEFAULT_DEAL_STAGES.find((s) => s.kind === 'won')?.id).toBe('won')
+    expect(DEFAULT_DEAL_STAGES.find((s) => s.kind === 'lost')?.id).toBe('lost')
     expect(DEFAULT_DEAL_STAGES.filter((s) => s.kind === 'won')).toHaveLength(1)
     expect(DEFAULT_DEAL_STAGES.filter((s) => s.kind === 'lost')).toHaveLength(1)
     // Ascending and unique, so a sort on `order` is the pipeline's order.
     const orders = DEFAULT_DEAL_STAGES.map((stage) => stage.order)
     expect(orders).toEqual([...orders].sort((a, b) => a - b))
     expect(new Set(orders).size).toBe(orders.length)
+    expect(new Set(DEFAULT_DEAL_STAGES.map((stage) => stage.id)).size).toBe(orders.length)
   })
 
   it('finds a stage by id and answers null for one the pipeline lost', () => {
     const pipeline = { stages: [...DEFAULT_DEAL_STAGES] }
-    expect(dealStageById(pipeline, 'negotiation')?.probability).toBe(60)
+    expect(dealStageById(pipeline, 'negotiation-review')?.probability).toBe(90)
     expect(dealStageById(pipeline, 'gone')).toBeNull()
     expect(dealStageById(null, 'won')).toBeNull()
     expect(dealStageById({ stages: undefined as never }, 'won')).toBeNull()
+  })
+})
+
+describe('forecast categories (AGL-3516)', () => {
+  it('reads a stage without one as its kind’s', () => {
+    expect(dealStageForecastCategory({ kind: 'open' })).toBe('pipeline')
+    expect(dealStageForecastCategory({ kind: 'won' })).toBe('closed')
+    expect(dealStageForecastCategory({ kind: 'lost' })).toBe('omitted')
+    expect(dealStageForecastCategory({ kind: 'open', forecastCategory: 'commit' })).toBe('commit')
+    expect(dealStageForecastCategory({ kind: 'open', forecastCategory: 'nope' as never })).toBe('pipeline')
+  })
+
+  it("reads a deal's own category, else its stage's, else its status's", () => {
+    const stage = { kind: 'open' as const, forecastCategory: 'bestCase' as const }
+    expect(dealForecastCategory({ forecastCategory: 'commit', status: 'open' }, stage)).toBe('commit')
+    expect(dealForecastCategory({ status: 'open' }, stage)).toBe('bestCase')
+    expect(dealForecastCategory({ status: 'won' }, null)).toBe('closed')
+    expect(dealForecastCategory({ status: 'lost' }, null)).toBe('omitted')
+    expect(dealForecastCategory({ status: 'open' }, null)).toBe('pipeline')
+  })
+
+  it('reads a typed category by key or label, in any case', () => {
+    expect(readCrmForecastCategory('bestCase')).toBe('bestCase')
+    expect(readCrmForecastCategory(' best  case ')).toBe('bestCase')
+    expect(readCrmForecastCategory('COMMIT')).toBe('commit')
+    expect(readCrmForecastCategory('Upside')).toBeNull()
+    expect(readCrmForecastCategory('')).toBeNull()
+    expect(CRM_FORECAST_CATEGORIES.map((key) => CRM_FORECAST_CATEGORY_LABELS[key])).toEqual([
+      'Omitted',
+      'Pipeline',
+      'Best Case',
+      'Commit',
+      'Closed',
+    ])
+  })
+
+  it('stamps the stage’s category and clears the override on a move', () => {
+    expect(dealStageMoveFields({ kind: 'open', forecastCategory: 'commit' })).toEqual({
+      forecastCategory: 'commit',
+      probability: null,
+    })
+    expect(dealStageMoveFields({ kind: 'won' })).toEqual({ forecastCategory: 'closed', probability: null })
+  })
+})
+
+describe('deal probability (AGL-3516)', () => {
+  it('reads an override as a whole number 0–100, blank as none, anything else as unreadable', () => {
+    expect(readDealProbability(35)).toBe(35)
+    expect(readDealProbability('35')).toBe(35)
+    expect(readDealProbability('35%')).toBe(35)
+    expect(readDealProbability(0)).toBe(0)
+    expect(readDealProbability('')).toBeNull()
+    expect(readDealProbability(null)).toBeNull()
+    expect(readDealProbability(undefined)).toBeNull()
+    expect(readDealProbability(101)).toBeUndefined()
+    expect(readDealProbability(-1)).toBeUndefined()
+    expect(readDealProbability(12.5)).toBeUndefined()
+    expect(readDealProbability('lots')).toBeUndefined()
+  })
+
+  it("answers the deal's override, else the stage's, else null", () => {
+    expect(dealProbability({ probability: 35 }, { probability: 10 })).toBe(35)
+    expect(dealProbability({ probability: null }, { probability: 10 })).toBe(10)
+    expect(dealProbability({}, { probability: 10 })).toBe(10)
+    expect(dealProbability({}, null)).toBeNull()
   })
 })
 
@@ -600,6 +690,15 @@ describe('weightedDealAmountCents', () => {
     expect(weightedDealAmountCents({ status: 'open', amountCents: 10_000 }, stage)).toBe(4_000)
     // Rounded to a whole cent.
     expect(weightedDealAmountCents({ status: 'open', amountCents: 1_001 }, stage)).toBe(400)
+  })
+
+  it("weights by the deal's own probability when it overrides the stage's (AGL-3516)", () => {
+    expect(weightedDealAmountCents({ status: 'open', amountCents: 10_000, probability: 75 }, stage)).toBe(7_500)
+    expect(weightedDealAmountCents({ status: 'open', amountCents: 10_000, probability: 0 }, stage)).toBe(0)
+    expect(weightedDealAmountCents({ status: 'open', amountCents: 10_000, probability: null }, stage)).toBe(4_000)
+    // The status still wins, and a lost stage is still worth nothing.
+    expect(weightedDealAmountCents({ status: 'won', amountCents: 10_000, probability: 10 }, stage)).toBe(10_000)
+    expect(weightedDealAmountCents({ status: 'open', amountCents: 10_000, probability: 75 }, null)).toBe(0)
   })
 
   it('lets the status win over the stage', () => {
@@ -1662,7 +1761,7 @@ describe('the lead source picklist', () => {
     expect(list.values.find((value) => value.id === 'partner')?.active).toBe(false)
   })
 
-  it('registers lead source on the Leads tab, rewriting leads, contact facets and company account sources', () => {
+  it('registers lead source on the Leads tab, rewriting leads, contact facets, company account sources and deals', () => {
     // Lead source first; every other picklist registers beside it (AGL-3512 on).
     expect(CRM_PICKLIST_IDS[0]).toBe('leadSource')
     expect(CRM_PICKLIST_DEFINITIONS).toHaveLength(CRM_PICKLIST_IDS.length)
@@ -1671,11 +1770,11 @@ describe('the lead source picklist', () => {
     expect(crmPicklistDefinitionsFor('lead').map((definition) => definition.id)).toEqual(
       expect.arrayContaining(['leadSource', 'leadStatus']),
     )
-    expect(crmPicklistDefinitionsFor('deal')).toEqual([])
     expect(crmPicklistDefinition('leadSource')?.targets).toEqual([
       { object: 'lead', field: 'leadSource', keyField: 'leadSourceKey' },
       { object: 'contact', field: 'leadSource', facet: true },
       { object: 'company', field: 'accountSource', keyField: 'accountSourceKey' },
+      { object: 'deal', field: 'leadSource', keyField: 'leadSourceKey' },
     ])
     expect(crmPicklistKey('  Trade  SHOW ')).toBe(crmPicklistKey('trade show'))
     expect(crmPicklistKey('')).toBeNull()
@@ -1726,6 +1825,36 @@ describe('the lead source picklist', () => {
   it('names the default only while it is active', () => {
     expect(crmPicklistDefaultLabel(list)).toBe('Website form')
     expect(crmPicklistDefaultLabel({ ...list, defaultValueId: 'old' })).toBeNull()
+  })
+})
+
+describe("a deal's Type picklist (AGL-3516)", () => {
+  it("registers Salesforce's Opportunity Type on the Deals tab, keyed for the list", () => {
+    expect(crmPicklistDefinitionsFor('deal').map((definition) => definition.id)).toContain(
+      'opportunityType',
+    )
+    expect(crmPicklistDefinition('opportunityType')?.targets).toEqual([
+      { object: 'deal', field: 'type', keyField: 'typeKey' },
+    ])
+    const standard = effectiveCrmPicklist('opportunityType', undefined)
+    expect(standard.values.map((value) => value.label)).toEqual([
+      'Existing Business',
+      'New Business',
+    ])
+    expect(standard.defaultValueId).toBeNull()
+    expect(isStandardCrmPicklistValue('opportunityType', 'new-business')).toBe(true)
+  })
+
+  it('stores a listed type as the list spells it and refuses the rest', () => {
+    const standard = effectiveCrmPicklist('opportunityType', undefined)
+    expect(judgeCrmPicklistValue('opportunityType', standard, 'new business')).toEqual({
+      ok: true,
+      value: 'New Business',
+    })
+    expect(judgeCrmPicklistValue('opportunityType', standard, 'Upsell')).toEqual({
+      ok: false,
+      error: 'Type must be one of: Existing Business, New Business.',
+    })
   })
 })
 

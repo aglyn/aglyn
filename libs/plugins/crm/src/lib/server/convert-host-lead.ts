@@ -74,6 +74,13 @@
  * nobody chose an owner for — and no rule assigned — stays unowned, which
  * the console renders honestly as unassigned. Either way the caller has
  * already been authorized by its door; nothing here asks again.
+ *
+ * ## The deal carries the lead's lead source (AGL-3516)
+ *
+ * As Salesforce's conversion does, the deal opened here takes the lead's
+ * `leadSource` — a label of the same picklist, already judged when the lead
+ * was written — and its Type as the door judged it, or the org's default
+ * Type when the converter named none. Its forecast category is its stage's.
  */
 
 import {
@@ -86,7 +93,9 @@ import {
   type CrmDealStatus,
   type CrmLeadFields,
   type CrmPipeline,
+  crmPicklistDefaultLabel,
   crmScopeTokens,
+  dealStageForecastCategory,
   DEFAULT_DEAL_STAGES,
   grantedUnderConsentGroup,
   nameSearchFields,
@@ -164,6 +173,11 @@ export interface ConvertHostLeadInput {
     currency: string
     /** A stage of the default pipeline; its first open stage when absent. */
     stageId?: string
+    /**
+     * The deal's Type, as the door judged it against the org's
+     * `opportunityType` list (AGL-3516); absent takes the list's default.
+     */
+    type?: string
   } | null
 }
 
@@ -577,6 +591,11 @@ export async function convertHostLead(
     const stage = stageForNewDeal(pipeline, deal.stageId)
     if (!stage) return { ok: false, reason: 'no-stages' }
     if (await bandFull()) return { ok: false, reason: 'band-full' }
+    const type =
+      deal.type ??
+      crmPicklistDefaultLabel(await readCrmPicklist(firestore, orgId, 'opportunityType')) ??
+      undefined
+    const leadSource = typeof lead.leadSource === 'string' ? lead.leadSource.trim() : ''
     const dealRecord: Record<string, unknown> = {
       title: deal.title,
       titleLower: deal.title.toLowerCase(),
@@ -586,6 +605,9 @@ export async function convertHostLead(
       ...(deal.amountCents !== null ? { amountCents: deal.amountCents } : {}),
       currency: deal.currency,
       stageChangedAtMs: now,
+      forecastCategory: dealStageForecastCategory(stage),
+      ...(type ? { type } : {}),
+      ...(leadSource ? { leadSource } : {}),
       ...(ownerUid ? { ownerUid } : {}),
       contactId,
       ...(companyId ? { companyId } : {}),

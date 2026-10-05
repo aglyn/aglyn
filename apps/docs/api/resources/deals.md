@@ -30,7 +30,7 @@ contacts and companies against the plan's records band, and on a plan that hard-
   "object": "deal",
   "title": "Wholesale beans — Q4",
   "pipelineId": "p_7b2e",
-  "stageId": "proposal-sent",
+  "stageId": "proposal-price-quote",
   "status": "open",
   "amountCents": 250000,
   "currency": "usd",
@@ -46,6 +46,12 @@ contacts and companies against the plan's records band, and on a plan that hard-
   "companyId": "c_1a2b",
   "lostReason": null,
   "notes": null,
+  "type": "New Business",
+  "leadSource": "Trade show",
+  "nextStep": "Walk the second location with the owner",
+  "probability": null,
+  "forecastCategory": "bestCase",
+  "campaignId": "cmp_spring",
   "custom": { "segment": "enterprise" },
   "nextTaskAt": "2026-09-12T15:00:00.000Z",
   "siteId": "site_a1b2c3",
@@ -73,6 +79,12 @@ contacts and companies against the plan's records band, and on a plan that hard-
 | `companyId` | string \| null | The [company](companies.md) the deal is with. Must exist. Writable. |
 | `lostReason` | string \| null | Free text, 5,000 characters. Writable. |
 | `notes` | string \| null | Free text, 5,000 characters. Writable. |
+| `type` | string \| null | Salesforce's Type: one of the organization's deal types — *New Business*, *Existing Business* or its own ([picklist](/content-and-data/crm/custom-fields#picklist-values)). Matched in any case and stored as the list spells it; a value outside the active list is a `400` naming the values it allows, and a deal keeps a value it already holds. A create that sends none takes the list's default, when it has one. Writable. |
+| `leadSource` | string \| null | Where the deal came from: one of the organization's lead sources, judged like `type`. Never defaulted; a [lead's conversion](leads.md#convert-a-lead) stamps the lead's own. Writable. |
+| `nextStep` | string \| null | What happens next, 255 characters. Writable. |
+| `probability` | integer \| null | This deal's own chance of closing, `0`–`100`, over its stage's; `null` uses the stage's. What the weighted forecast multiplies an open deal by. Every [move](#moving) clears it. Writable. |
+| `forecastCategory` | string \| null | `omitted`, `pipeline`, `bestCase`, `commit` or `closed` — a fixed set, as in Salesforce. Every [move](#moving) sets it from the new stage's; `null` only on a deal stored before the field existed, which forecasts as its stage's. Writable. |
+| `campaignId` | string \| null | The campaign the deal is attributed to (Salesforce's Primary Campaign Source). Must be one of the organization's live campaigns; a deal keeps the one it names after that campaign is retired. Writable. |
 | `custom` | object | The organization's [deal custom fields](/content-and-data/crm/custom-fields#over-the-api), keyed by field key; `{}` when the deal has none. Judged against the **deal** definitions: a key that is not one, a retired field, or a value the type cannot hold is a `400` naming `custom.<key>`. A `PATCH` merges the keys it sends; `null` clears one. Writable. |
 | `nextTaskAt` | string \| null | When the earliest **open** [task](tasks.md) filed against the deal is due, or `null` when none is — its [next activity](/content-and-data/crm/tasks#next-activity), and what the console's "stuck deals" figure counts. Maintained by every task write, this resource included. **Read-only.** |
 | `mediaIds` | string[] | Files from the organization's [media library](./media.md) attached to this record, by media id, at most 20. An empty array clears them. Writable. |
@@ -93,6 +105,10 @@ ordered by deal id unless `updatedAfter` is given.
 | `pipelineId` | Deals in this pipeline. |
 | `ownerUid` | Deals owned by this member. |
 | `status` | `open`, `won` or `lost`. Anything else is a `400` — `?status=closed` matching nothing would be a plausible page, and a plausible page is the one you don't check. |
+| `type` | Deals of this type, spelled exactly as stored. |
+| `leadSource` | Deals from this lead source, spelled exactly as stored. |
+| `forecastCategory` | Deals in this forecast category. |
+| `campaignId` | Deals attributed to this campaign. |
 | `updatedAfter` | Deals updated after this instant, oldest change first — the [sync filter](../conventions.md#updated-after). |
 | `limit`, `cursor` | [Standard pagination](../conventions.md#pagination). |
 
@@ -152,6 +168,13 @@ A deal moves by `stageId`, by `status`, or by both:
 
 Every move stamps `stageChangedAt`. A move into a `won` or `lost` stage sets
 `closedAt`; a move back to an open stage clears it.
+
+Every move also sets `forecastCategory` from the new stage and clears
+`probability` back to `null`, so the deal forecasts at the new stage's odds —
+as Salesforce re-defaults a probability when the stage changes. A body that
+sends either beside the move keeps what it sent:
+`{"stageId":"negotiation-review","probability":95}` moves the deal and sets
+95%.
 
 A move into the `won` stage — and a `POST` that creates a deal there — also
 sets the linked contact's lifecycle stage to `customer` for the deal's site,
@@ -218,7 +241,7 @@ it.
 
 | Status | `type` | When |
 | --- | --- | --- |
-| `400` | `bad_request` | `code: "validation_failed"` — a missing `title` or `consentSiteId`, a `pipelineId` or `stageId` that does not exist, an archived `pipelineId`, a `status` that disagrees with the `stageId`, an `amountCents` that is not a whole number `0` or more or that is sent to a deal with line items, a `currency` that is not a three-letter code or that a deal's line items are not in, a line item that fails its [rules](#line-items), an `expectedCloseAt` that is not an ISO 8601 instant, a `contactId` or `companyId` that does not exist, an `ownerUid` who is not a member, a `custom` entry that is not a deal field or does not fit its type (named as `custom.<key>`), or `pipelineId` on a `PATCH`. On the list, a `?status=` outside the three values or a malformed `?updatedAfter=`. `fields` names each key. |
+| `400` | `bad_request` | `code: "validation_failed"` — a missing `title` or `consentSiteId`, a `pipelineId` or `stageId` that does not exist, an archived `pipelineId`, a `status` that disagrees with the `stageId`, a `type` or `leadSource` outside the organization's active lists, a `probability` that is not a whole number `0`–`100`, a `forecastCategory` outside the five, a `campaignId` that is not one of the organization's live campaigns, an `amountCents` that is not a whole number `0` or more or that is sent to a deal with line items, a `currency` that is not a three-letter code or that a deal's line items are not in, a line item that fails its [rules](#line-items), an `expectedCloseAt` that is not an ISO 8601 instant, a `contactId` or `companyId` that does not exist, an `ownerUid` who is not a member, a `custom` entry that is not a deal field or does not fit its type (named as `custom.<key>`), or `pipelineId` on a `PATCH`. On the list, a `?status=` outside the three values or a malformed `?updatedAfter=`. `fields` names each key. |
 | `403` | `plan_required` | `code: "crm"` — the plan doesn't include the CRM suite. `code: "crm_records_quota"` — the CRM records band is full on a plan that doesn't meter the overage. |
 | `403` | `insufficient_scope` | Key lacks `crm:read` / `crm:write`. |
 | `404` | `not_found` | `"No such deal"`. |

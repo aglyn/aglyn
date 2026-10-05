@@ -194,8 +194,27 @@ describe('restamping', () => {
   it('patches only the fields a record carries wrongly, and nothing on a current one', () => {
     const record = { title: 'Acme renewal', visibleTo: ['org'] }
     const patch = crmListFieldsPatch('deals', record)
-    expect(Object.keys(patch).sort()).toEqual(['scopedSearchTokens', 'searchTokens', 'titleLower'])
+    expect(Object.keys(patch).sort()).toEqual([
+      'leadSourceKey',
+      'scopedSearchTokens',
+      'searchTokens',
+      'titleLower',
+      'typeKey',
+    ])
     expect(crmListFieldsPatch('deals', { ...record, ...patch })).toEqual({})
+  })
+
+  it("keys a deal's Type and Lead source as the picklist compares them (AGL-3516)", () => {
+    const fields = crmListFields('deals', {
+      title: 'Acme renewal',
+      visibleTo: ['org'],
+      type: ' New  Business',
+      leadSource: 'Trade show',
+    })
+    expect(fields).toMatchObject({ typeKey: 'new business', leadSourceKey: 'trade show' })
+    expect(crmListFieldsTouched('deals', { type: 'Existing Business' })).toBe(true)
+    expect(crmListFieldsTouched('deals', { leadSource: null })).toBe(true)
+    expect(crmListFieldsTouched('deals', { nextStep: 'Call' })).toBe(false)
   })
 
   it('starts a new contact, company or deal with nothing scheduled', () => {

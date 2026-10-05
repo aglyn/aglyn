@@ -62,6 +62,7 @@ describe('the registry, read from crm.ts (AGL-3511)', () => {
       { object: 'lead', field: 'leadSource' },
       { object: 'contact', field: 'leadSource', facet: true },
       { object: 'company', field: 'accountSource' },
+      { object: 'deal', field: 'leadSource' },
     ])
   })
 

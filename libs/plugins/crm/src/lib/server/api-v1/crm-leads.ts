@@ -89,6 +89,7 @@ import {
   normalizeContactEmail,
   crmPicklistDefaultLabel,
   judgeCrmLeadSource,
+  judgeCrmPicklistValue,
   normalizeCrmLeadProfile,
   personKey,
   readMarketingBasis,
@@ -111,6 +112,7 @@ import {
   type ConvertHostLeadRefusal,
   convertHostLead,
 } from '../convert-host-lead'
+import { readCrmPicklist } from '../read-picklist'
 import { FieldPath, FieldValue, Timestamp } from 'firebase-admin/firestore'
 import {
   type ApiV1Context,
@@ -726,7 +728,7 @@ function readConvertInput(
     } else {
       const deal = body.deal
       for (const key of Object.keys(deal)) {
-        if (!['title', 'amountCents', 'currency', 'stageId'].includes(key)) {
+        if (!['title', 'amountCents', 'currency', 'stageId', 'type'].includes(key)) {
           errors[`deal.${key}`] = 'Not writable on a deal opened here'
         }
       }
@@ -760,7 +762,20 @@ function readConvertInput(
           stageId = deal.stageId.trim().slice(0, CRM_ID_MAX)
         }
       }
-      if (title) plan.deal = { title, amountCents, currency, ...(stageId ? { stageId } : {}) }
+      let type: string | undefined
+      if (deal.type !== undefined && deal.type !== null) {
+        if (typeof deal.type !== 'string') errors['deal.type'] = 'Must be a string'
+        else type = deal.type.trim().slice(0, CRM_TITLE_MAX) || undefined
+      }
+      if (title) {
+        plan.deal = {
+          title,
+          amountCents,
+          currency,
+          ...(stageId ? { stageId } : {}),
+          ...(type ? { type } : {}),
+        }
+      }
     }
   }
 
@@ -782,6 +797,16 @@ async function convertLead(
   const errors: Record<string, string> = {}
   const ownerUid = await readOwner(ctx, body, errors)
   if (ownerUid) Object.assign(errors, await memberError(ctx, 'ownerUid', ownerUid))
+  // The deal's Type against the org's list (AGL-3516), the deal resource's rule.
+  if (parsed.plan.deal?.type) {
+    const judged = judgeCrmPicklistValue(
+      'opportunityType',
+      await readCrmPicklist(ctx.firestore, ctx.orgId, 'opportunityType'),
+      parsed.plan.deal.type,
+    )
+    if (judged.ok === false) errors['deal.type'] = judged.error
+    else parsed.plan.deal.type = judged.value ?? undefined
+  }
   if (Object.keys(errors).length) return crmValidationFailed(ctx, 'conversion', errors)
 
   const ref = leadsCollection(ctx, site.siteId).doc(leadId)

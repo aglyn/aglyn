@@ -18,8 +18,12 @@
 
 import {
   type ContactFieldDefinition,
+  CRM_FORECAST_CATEGORY_LABELS,
+  dealForecastCategory,
+  dealProbability,
   dealStageById,
   pluginDocsHelp,
+  readDealProbability,
   weightedDealAmountCents,
 } from '@aglyn/aglyn'
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
@@ -45,6 +49,8 @@ export interface DealPropertiesCardProps {
    * once for every card on it.
    */
   customFields?: readonly ContactFieldDefinition[]
+  /** The deal's campaign by name, resolved by the page; absent when it names none. */
+  campaignName?: string
 }
 
 function Row(props: { label: string; children: ReactNode }) {
@@ -72,11 +78,18 @@ function Row(props: { label: string; children: ReactNode }) {
  * a stored figure would go stale the moment they did. The contact and the
  * company are links into their own pages — the id is the link; the name on
  * the deal is a caption that may lag a rename.
+ *
+ * Salesforce's Opportunity fields (AGL-3516) follow: the Type, the Lead
+ * source, the Next step, the probability — the deal's own override, with
+ * its stage's beside it, or the stage's — the forecast category and the
+ * campaign. Edit changes them; a stage move re-stamps the last two.
  */
 export function DealPropertiesCard(props: DealPropertiesCardProps) {
-  const { deal, pipeline, ownerLabel, routes, customFields = [] } = props
+  const { deal, pipeline, ownerLabel, routes, customFields = [], campaignName } = props
   const stage = dealStageById(pipeline, deal.stageId)
   const weighted = weightedDealAmountCents(deal, stage)
+  const probability = dealProbability(deal, stage)
+  const overridden = typeof readDealProbability(deal.probability) === 'number'
   const createdMs = timestampMs(deal.createdAt)
   return (
     <CardDisplay
@@ -93,13 +106,26 @@ export function DealPropertiesCard(props: DealPropertiesCardProps) {
         </Row>
         <Row label="Weighted value">
           {`${formatMoney(weighted, deal.currency)}` +
-            (deal.status === 'open' && stage ? ` at ${stage.probability}%` : '')}
+            (deal.status === 'open' && stage && probability !== null ? ` at ${probability}%` : '')}
+        </Row>
+        <Row label="Probability">
+          {probability === null
+            ? 'Not set'
+            : overridden && stage
+              ? `${probability}% · from stage: ${stage.probability}%`
+              : `${probability}%`}
+        </Row>
+        <Row label="Forecast category">
+          {CRM_FORECAST_CATEGORY_LABELS[dealForecastCategory(deal, stage)]}
         </Row>
         <Row label="Expected close">
           {typeof deal.expectedCloseAtMs === 'number'
             ? new Date(deal.expectedCloseAtMs).toLocaleDateString()
             : 'Not set'}
         </Row>
+        <Row label="Type">{deal.type || 'Not set'}</Row>
+        <Row label="Lead source">{deal.leadSource || 'Not set'}</Row>
+        <Row label="Next step">{deal.nextStep || 'Not set'}</Row>
         <Row label="Owner">{ownerLabel || 'Nobody yet'}</Row>
         <Row label="Contact">
           {deal.contactId ? (
@@ -119,6 +145,7 @@ export function DealPropertiesCard(props: DealPropertiesCardProps) {
             'None'
           )}
         </Row>
+        <Row label="Campaign">{campaignName || 'None'}</Row>
         <Row label="Pipeline">{pipeline?.name ?? deal.pipelineId}</Row>
         <Row label="Created">
           {createdMs ? new Date(createdMs).toLocaleDateString() : '—'}

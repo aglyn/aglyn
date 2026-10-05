@@ -833,7 +833,7 @@ describe('/v1/pipelines', () => {
     // The deal landed at the top of the pipeline it seeded.
     expect(deal).toMatchObject({
       pipelineId: pipeline.id,
-      stageId: 'qualified',
+      stageId: 'prospecting',
       status: 'open',
       currency: 'usd',
       closedAt: null,
@@ -918,6 +918,72 @@ describe('/v1/deals', () => {
     })
   })
 
+  /*
+   * Salesforce's Opportunity fields (AGL-3516): the two picklists judged
+   * against the org's lists, a fixed forecast category, a probability
+   * override a stage move clears, and a campaign that must be the org's.
+   */
+  it('writes the Opportunity fields, judged, and a stage move re-stamps the forecast', async () => {
+    mockDocs.set(`${ORG}/emailCampaigns/spring`, { name: 'Spring launch', visibleTo: ['org'] })
+    const created = await call('POST', 'deals', {
+      title: 'Beans',
+      consentSiteId: 'host-1',
+      type: 'new business',
+      leadSource: 'trade show',
+      nextStep: 'Send the quote',
+      probability: 35,
+      campaignId: 'spring',
+    })
+    expect(created.status).toBe(201)
+    const deal = await json(created)
+    expect(deal).toMatchObject({
+      stageId: 'prospecting',
+      type: 'New Business',
+      leadSource: 'Trade show',
+      nextStep: 'Send the quote',
+      probability: 35,
+      // The stage's, stamped at creation.
+      forecastCategory: 'pipeline',
+      campaignId: 'spring',
+    })
+    expect(mockDocs.get(`${DEALS}/${deal.id}`)).toMatchObject({
+      typeKey: 'new business',
+      leadSourceKey: 'trade show',
+    })
+
+    // A value outside the org's lists is refused, naming what they allow.
+    const refused = await json(await call('PATCH', `deals/${deal.id}`, { type: 'Upsell' }))
+    expect(refused.error.fields).toEqual({
+      type: 'Type must be one of: Existing Business, New Business.',
+    })
+    const unknownCampaign = await json(await call('PATCH', `deals/${deal.id}`, { campaignId: 'gone' }))
+    expect(unknownCampaign.error.fields).toEqual({ campaignId: 'No such campaign in this organization' })
+    const badCategory = await json(await call('PATCH', `deals/${deal.id}`, { forecastCategory: 'upside' }))
+    expect(badCategory.error.fields.forecastCategory).toMatch(/omitted, pipeline, bestCase, commit, closed/)
+    const badProbability = await json(await call('PATCH', `deals/${deal.id}`, { probability: 101 }))
+    expect(badProbability.error.fields).toHaveProperty('probability')
+
+    // A move stamps the new stage's category and clears the override…
+    const moved = await json(await call('PATCH', `deals/${deal.id}`, { stageId: 'proposal-price-quote' }))
+    expect(moved).toMatchObject({ forecastCategory: 'bestCase', probability: null })
+    // …unless the same body sets them.
+    const pinned = await json(
+      await call('PATCH', `deals/${deal.id}`, {
+        stageId: 'negotiation-review',
+        probability: 95,
+        forecastCategory: 'commit',
+      }),
+    )
+    expect(pinned).toMatchObject({ forecastCategory: 'commit', probability: 95 })
+    const won = await json(await call('PATCH', `deals/${deal.id}`, { status: 'won' }))
+    expect(won).toMatchObject({ forecastCategory: 'closed', probability: null })
+
+    // Clearing the type clears its key with it.
+    await call('PATCH', `deals/${deal.id}`, { type: null })
+    expect(mockDocs.get(`${DEALS}/${deal.id}`)).toMatchObject({ typeKey: null })
+    expect(mockDocs.get(`${DEALS}/${deal.id}`)).not.toHaveProperty('type')
+  })
+
   it('moves by stage or by status, never by a pair that disagrees', async () => {
     const deal = await json(
       await call('POST', 'deals', { title: 'Beans', consentSiteId: 'host-1' }),
@@ -941,12 +1007,12 @@ describe('/v1/deals', () => {
     const reopened = await json(
       await call('PATCH', `deals/${deal.id}`, { status: 'open' }),
     )
-    expect(reopened).toMatchObject({ stageId: 'qualified', status: 'open', closedAt: null })
+    expect(reopened).toMatchObject({ stageId: 'prospecting', status: 'open', closedAt: null })
 
     const byStage = await json(
-      await call('PATCH', `deals/${deal.id}`, { stageId: 'negotiation' }),
+      await call('PATCH', `deals/${deal.id}`, { stageId: 'negotiation-review' }),
     )
-    expect(byStage).toMatchObject({ stageId: 'negotiation', status: 'open' })
+    expect(byStage).toMatchObject({ stageId: 'negotiation-review', status: 'open' })
 
     const moved = await call('PATCH', `deals/${deal.id}`, { pipelineId: 'other' })
     expect((await json(moved)).error.fields.pipelineId).toMatch(/Not writable/)
@@ -968,7 +1034,7 @@ describe('/v1/deals', () => {
       await call('POST', 'deals', { title: 'Beans', contactId: 'c-1', consentSiteId: 'host-1' }),
     )
     // Open stages and a loss say nothing about a purchase.
-    await call('PATCH', `deals/${deal.id}`, { stageId: 'negotiation' })
+    await call('PATCH', `deals/${deal.id}`, { stageId: 'negotiation-review' })
     await call('PATCH', `deals/${deal.id}`, { status: 'lost' })
     expect(stageOf()).toBe('opportunity')
 
@@ -1480,7 +1546,7 @@ describe('an archived pipeline (AGL-2620)', () => {
     // A deal closed in the archived pipeline can still be moved: its stages resolve.
     mockDocs.set(`${DEALS}/d-old`, { title: 'Old', pipelineId: 'old', stageId: 'won', status: 'won', ...stamp })
     const reopened = await json(await call('PATCH', 'deals/d-old', { status: 'open' }))
-    expect(reopened).toMatchObject({ stageId: 'qualified', status: 'open' })
+    expect(reopened).toMatchObject({ stageId: 'prospecting', status: 'open' })
   })
 })
 

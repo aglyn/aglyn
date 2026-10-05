@@ -317,11 +317,13 @@ describe('a company’s, a deal’s and a lead’s facts', () => {
       record: 'deal',
       title: 'Warehouse re-roof',
       pipeline: 'Sales',
+      // Each stage's odds and forecast category — its kind's on a stage
+      // saved without one (AGL-3516).
       stages: [
-        { id: 'qualified', name: 'Qualified', kind: 'open' },
-        { id: 'proposal-sent', name: 'Proposal sent', kind: 'open' },
-        { id: 'won', name: 'Won', kind: 'won' },
-        { id: 'lost', name: 'Lost', kind: 'lost' },
+        { id: 'qualified', name: 'Qualified', kind: 'open', probability: 10, forecastCategory: 'Pipeline' },
+        { id: 'proposal-sent', name: 'Proposal sent', kind: 'open', probability: 40, forecastCategory: 'Pipeline' },
+        { id: 'won', name: 'Won', kind: 'won', probability: 100, forecastCategory: 'Closed' },
+        { id: 'lost', name: 'Lost', kind: 'lost', probability: 0, forecastCategory: 'Omitted' },
       ],
       stageId: 'qualified',
       stage: 'Qualified',
@@ -330,6 +332,11 @@ describe('a company’s, a deal’s and a lead’s facts', () => {
       expectedClose: null,
       inStageSince: '2026-08-30',
       lostReason: '',
+      type: '',
+      leadSource: '',
+      nextStep: '',
+      probability: 10,
+      forecastCategory: 'Pipeline',
       contact: 'Jane Doe',
       company: 'Acme Roofing Supply',
       products: 1,
@@ -339,6 +346,38 @@ describe('a company’s, a deal’s and a lead’s facts', () => {
       openTasks: [{ title: 'Site visit', kind: 'Meeting', priority: 'normal', due: null, overdue: false }],
     })
     expectNoSecrets(facts)
+  })
+
+  it("reports a deal's Opportunity fields, its own odds over its stage's (AGL-3516)", () => {
+    const facts = dealFacts({
+      deal: {
+        title: 'Warehouse re-roof',
+        pipelineId: 'p-1',
+        stageId: 'proposal-sent',
+        status: 'open',
+        visibleTo: ['org'],
+        hostId: 'host-1',
+        type: 'New Business',
+        leadSource: 'Trade show',
+        nextStep: 'Send the revised quote',
+        probability: 65,
+        forecastCategory: 'commit',
+        campaignId: 'spring',
+      },
+      pipeline: PIPELINE,
+      activities: [],
+      tasks: [],
+      nowMs: NOW,
+    })
+    expect(facts).toMatchObject({
+      type: 'New Business',
+      leadSource: 'Trade show',
+      nextStep: 'Send the revised quote',
+      probability: 65,
+      forecastCategory: 'Commit',
+    })
+    // A campaign id tells the model nothing; it is not a fact.
+    expect(JSON.stringify(facts)).not.toContain('spring')
   })
 
   it('reports a lead’s standing, and never its address, consent or owner', () => {

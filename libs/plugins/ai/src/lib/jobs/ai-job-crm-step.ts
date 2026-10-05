@@ -360,6 +360,12 @@ export function aiCrmFactsLines(kind: AiCrmRecordKind, facts: Facts): string[] {
       ...line('Stages in order', stages.map((stage) => `${text(stage['id'])} "${text(stage['name'])}" (${text(stage['kind'])})`).join('; ')),
       ...line('In this stage since', facts['inStageSince']),
       ...line('Amount', facts['amount']),
+      // Salesforce's Opportunity fields (AGL-3516).
+      ...line('Probability', typeof facts['probability'] === 'number' ? `${facts['probability']}%` : ''),
+      ...line('Forecast category', facts['forecastCategory']),
+      ...line('Type', facts['type']),
+      ...line('Lead source', facts['leadSource']),
+      ...line('Next step', facts['nextStep']),
       ...line('Expected to close', facts['expectedClose']),
       ...line('Lost reason', facts['lostReason']),
       ...line('With', withWhom),
