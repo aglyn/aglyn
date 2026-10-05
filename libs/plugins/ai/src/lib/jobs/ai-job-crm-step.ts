@@ -323,6 +323,127 @@ function customLines(value: unknown): string[] {
 const yesNo = (label: string, value: unknown): string[] => (value === true ? [label] : [])
 
 /**
+ * A record's facts as the CRM's reader marks them when it answered the whole
+ * record (AGL-3520): `wholeRecord: true`, set only while the organization has
+ * `release_crm_assist_whole_record` on. Absent, the facts are the disclosed
+ * ones and are written by {@link aiCrmDisclosedFactsLines}.
+ */
+export const AI_CRM_WHOLE_RECORD_FIELD = 'wholeRecord'
+
+/** Keeps only `keys` of each entry: the disclosed writer's allow-list for nested rows. */
+const only = (value: unknown, keys: readonly string[]): Array<Record<string, unknown>> =>
+  list(value).map((entry) => Object.fromEntries(keys.filter((key) => key in entry).map((key) => [key, entry[key]])))
+
+/** What the disclosed writer reads of a timeline entry: never who an email was from or to. */
+const DISCLOSED_TIMELINE_KEYS = ['on', 'kind', 'direction', 'subject', 'text', 'outcome', 'delivery'] as const
+/** What the disclosed writer reads of an open task: never its assignee, status or notes. */
+const DISCLOSED_TASK_KEYS = ['title', 'kind', 'priority', 'due', 'overdue'] as const
+
+/**
+ * The facts as lines of text while the published pages describe the narrow
+ * set: only the fields named here are written, whatever else a reader
+ * reports, so what reaches a prompt is decided in two places that both have
+ * to agree — the CRM's disclosed builders and this list. A company's account
+ * fields beyond its headcount, and a lead's profile fields, stay out of the
+ * prompt as they always have.
+ */
+export function aiCrmDisclosedFactsLines(kind: AiCrmRecordKind, facts: Facts): string[] {
+  const timeline = timelineLines(only(facts['timeline'], DISCLOSED_TIMELINE_KEYS))
+  const openTasks = taskLines(only(facts['openTasks'], DISCLOSED_TASK_KEYS))
+  if (kind === 'contact') {
+    const orders = Number(facts['orders']) || 0
+    return [
+      ...line('Contact', facts['name']),
+      ...line('Salutation', facts['salutation']),
+      ...line('Job title', facts['jobTitle']),
+      ...line('Department', facts['department']),
+      // A request the person made, which a drafted next step must respect (AGL-3515).
+      ...yesNo('Do not call: they asked not to be phoned', facts['doNotCall']),
+      ...line('Company', facts['company']),
+      ...line('Lifecycle stage', facts['lifecycleStage']),
+      ...line('Tags', words(facts['tags']).join(', ')),
+      ...line('Came in through', words(facts['sources']).join(', ')),
+      ...(orders ? [`Orders: ${orders}${facts['lastPurchase'] ? `, the last on ${text(facts['lastPurchase'])}` : ''}`] : []),
+      ...line('In the CRM since', facts['since']),
+      ...line('Last opened or clicked an email', facts['lastEmailEngagement']),
+      ...line('Notes', facts['notes']),
+      ...timeline,
+      ...openTasks,
+      ...dealLines(facts['deals']),
+    ]
+  }
+  if (kind === 'company') {
+    return [
+      ...line('Company', facts['name']),
+      ...line('Domain', facts['domain']),
+      ...line('Industry', facts['industry']),
+      ...line('Employees', facts['employees'] ?? ''),
+      ...line('Tags', words(facts['tags']).join(', ')),
+      ...line('People in the CRM', facts['people']),
+      ...line('In the CRM since', facts['since']),
+      ...line('Notes', facts['notes']),
+      ...timeline,
+      ...openTasks,
+      ...dealLines(facts['deals']),
+    ]
+  }
+  if (kind === 'deal') {
+    const stages = list(facts['stages'])
+    const withWhom = [text(facts['contact']), text(facts['company'])].filter(Boolean).join(' at ')
+    return [
+      ...line('Deal', facts['title']),
+      ...line('Pipeline', facts['pipeline']),
+      ...line('Status', facts['status']),
+      ...line('Stage', facts['stage'] ? `${text(facts['stage'])} (id ${text(facts['stageId'])})` : ''),
+      ...line('Stages in order', stages.map((stage) => `${text(stage['id'])} "${text(stage['name'])}" (${text(stage['kind'])})`).join('; ')),
+      ...line('In this stage since', facts['inStageSince']),
+      ...line('Amount', facts['amount']),
+      // Salesforce's Opportunity fields (AGL-3516).
+      ...line('Probability', typeof facts['probability'] === 'number' ? `${facts['probability']}%` : ''),
+      ...line('Forecast category', facts['forecastCategory']),
+      ...line('Type', facts['type']),
+      ...line('Lead source', facts['leadSource']),
+      ...line('Next step', facts['nextStep']),
+      ...line('Expected to close', facts['expectedClose']),
+      ...line('Lost reason', facts['lostReason']),
+      ...line('With', withWhom),
+      ...contactRoleLines(facts['contactRoles']),
+      ...line('Products on the deal', typeof facts['products'] === 'number' ? facts['products'] || '' : ''),
+      ...line('In the CRM since', facts['since']),
+      ...line('Notes', facts['notes']),
+      ...timeline,
+      ...openTasks,
+    ]
+  }
+  return [
+    ...line('Lead', facts['name']),
+    ...line('Status', facts['status']),
+    ...line('Captured through', words(facts['sources']).join(', ')),
+    ...line('Captures', Number(facts['captures']) || ''),
+    ...line('First seen', facts['firstSeen']),
+    ...line('Last seen', facts['lastSeen']),
+    `Assigned to a teammate: ${facts['assigned'] === true ? 'yes' : 'no'}`,
+    `Converted to a contact: ${facts['converted'] === true ? 'yes' : 'no'}`,
+    ...line('Unqualified reason', facts['unqualifiedReason']),
+    ...line('Notes', facts['notes']),
+    ...timeline,
+  ]
+}
+
+/** Every contact on a deal and the part each plays (AGL-3521), by name. */
+function contactRoleLines(value: unknown): string[] {
+  return line(
+    'Contact roles',
+    list(value)
+      .map((row) => {
+        const part = [text(row['role']), row['primary'] === true ? 'Primary' : ''].filter(Boolean).join(', ')
+        return part ? `${text(row['name'])} (${part})` : text(row['name'])
+      })
+      .join('; '),
+  )
+}
+
+/**
  * The facts as lines of text: the WHOLE record the CRM reports (AGL-3520) —
  * every standard field, its contact details and addresses, its picklist
  * labels, its custom fields under their labels, its consent, notes,
@@ -428,16 +549,7 @@ export function aiCrmFactsLines(kind: AiCrmRecordKind, facts: Facts): string[] {
       ...line('Lost reason', facts['lostReason']),
       ...line('With', withWhom),
       ...line('Owner', facts['owner']),
-      // Every contact on the deal and the part each plays (AGL-3521).
-      ...line(
-        'Contact roles',
-        list(facts['contactRoles'])
-          .map((row) => {
-            const part = [text(row['role']), row['primary'] === true ? 'Primary' : ''].filter(Boolean).join(', ')
-            return part ? `${text(row['name'])} (${part})` : text(row['name'])
-          })
-          .join('; '),
-      ),
+      ...contactRoleLines(facts['contactRoles']),
       ...(products.length
         ? [
             'Products:',
@@ -535,9 +647,20 @@ export function aiCrmFitFacts(kind: AiCrmRecordKind, facts: Facts): Facts {
   return fitted
 }
 
+/**
+ * The lines a prompt carries for a record: the whole record, fitted, when
+ * the reader marked it {@link AI_CRM_WHOLE_RECORD_FIELD}; otherwise the
+ * disclosed lines alone.
+ */
+export function aiCrmPromptFactsLines(kind: AiCrmRecordKind, facts: Facts): string[] {
+  return facts[AI_CRM_WHOLE_RECORD_FIELD] === true
+    ? aiCrmFactsLines(kind, aiCrmFitFacts(kind, facts))
+    : aiCrmDisclosedFactsLines(kind, facts)
+}
+
 /** The user turn for a record. */
 export function aiCrmRecordPrompt(kind: AiCrmRecordKind, facts: Facts): string {
-  return [`Record: ${kind}`, ...aiCrmFactsLines(kind, aiCrmFitFacts(kind, facts))].join('\n')
+  return [`Record: ${kind}`, ...aiCrmPromptFactsLines(kind, facts)].join('\n')
 }
 
 /** The user turn for an email draft. */
@@ -548,7 +671,7 @@ export function aiCrmEmailPrompt(input: { kind: AiCrmRecordKind; facts: Facts; r
     `The team member asks: ${input.request.replace(/\s+/g, ' ').trim().slice(0, AI_CRM_EMAIL_REQUEST_MAX_CHARS)}`,
     '',
     'Facts:',
-    ...aiCrmFactsLines(input.kind, aiCrmFitFacts(input.kind, input.facts)),
+    ...aiCrmPromptFactsLines(input.kind, input.facts),
   ].join('\n')
 }
 

@@ -158,8 +158,7 @@ that have AI on.
 A build job is sent your brief and what it needs to build against it — the names of the
 components, layouts, forms and datasets your site already has, your theme's values, and
 the copy of anything it is starting from. Each capability's page says exactly what its
-own job is sent: the CRM page lists what a record sends, and the automation page what is
-removed first.
+own job is sent, and the CRM and automation pages say what is removed first.
 
 Your brief is customer text and is kept with the job for 180 days, then deleted. No
 contact, lead, deal, form submission or list member is read to build a page.

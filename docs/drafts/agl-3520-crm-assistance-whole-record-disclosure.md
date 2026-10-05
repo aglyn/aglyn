@@ -117,3 +117,90 @@ the 'Last updated' date and, where appropriate, by additional notice."
 > Privacy Policy and subprocessor list are at aglyn.com/legal. If you don't want your team to
 > use AI in the CRM, remove the **Generate with AI** permission from their role, or switch AI
 > off for the site.
+
+## 6. Held behind a release flag until then
+
+AGL-3520 ships OFF. `release_crm_assist_whole_record` (Staff → Feature flags, label "CRM
+assistance: whole record", default and template seed OFF, no staff preview) decides per
+organization what the CRM's record-facts readers answer:
+
+- **Off** — what production sends today and what the published pages describe: the disclosed
+  builders in `libs/plugins/crm/src/lib/model/record-facts-disclosed.ts`, written into the
+  prompt by `aiCrmDisclosedFactsLines`, with addresses and numbers in typed text replaced.
+- **On** — the whole record (`model/record-facts.ts`), marked `wholeRecord: true`, written by
+  `aiCrmFactsLines`.
+
+The catalog's Anthropic row keeps publishing the disclosed wording
+(`ANTHROPIC_CRM_ASSISTANCE_DISCLOSED`); the open-ended wording in §4 waits beside it as
+`ANTHROPIC_CRM_ASSISTANCE_WHOLE_RECORD` in `libs/plugins/ai/src/lib/providers/catalog.ts`,
+and `libs/plugins/ai/src/lib/subprocessors.spec.ts` pins both. The customer docs describe the
+flag-off behavior; the whole-record text they take on is in §7.
+
+### To turn it on, in this order
+
+1. Republish **Privacy Policy §2** with the §4 sentence as **v10** (hash captured
+   publication-first, as every bump), and the **Subprocessors** Anthropic data cell with the §4
+   text plus its change-log line.
+2. In `catalog.ts`, set the Anthropic row's `dataReceived` to
+   `anthropicDataReceived(ANTHROPIC_CRM_ASSISTANCE_WHOLE_RECORD)` and `publishedOn` to the
+   change-log date; regenerate with `node tools/scripts/generate-plugin-manifests.mjs`; update
+   the published rows pinned in `libs/plugins/ai/src/lib/subprocessors.spec.ts` and
+   `apps/console/constants/subprocessor-inventory-plugins.spec.ts`; bump the acceptance-pinned
+   legal label in `apps/console/constants/legal-documents.ts`.
+3. Put the §7 text into the docs, and take the flag out of `FLAGS_WITHOUT_DOCS` in
+   `apps/console/constants/docs-release-flags.ts` (or declare it in
+   `PUBLISHED_ON_IN_PRODUCTION` if the default stays off).
+4. Promote, then turn the flag on — one organization through its override first, then
+   everyone.
+
+## 7. Docs text to publish with the flip
+
+#### CRM by AI — "What AI reads from a record" (`apps/docs/docs/ai/crm-by-ai.md`)
+
+The CRM decides what AI may read, and it reads the same record you would see. For a summary or
+an email draft, AI is given **the whole record as the CRM shows it to you**:
+
+- every standard field — for a person their name and its parts, salutation, job title,
+  department, company, every email address, every phone and fax number, birthdate, assistant,
+  who they report to, mailing and other address, lifecycle stage, lead source and **Do not
+  call**; for a company its domain, website, phone, fax, account fields, billing and shipping
+  address and parent company; for a deal its pipeline and stages, stage, amount, products,
+  type, lead source, campaign, next step, probability, forecast category, the person and
+  company it is with, and up to 10 of its contacts by name with the role each plays and which
+  is Primary (a contact you cannot see is left out); for a lead its contact details, address,
+  account fields, status and campaigns;
+- your picklists' labels as the record holds them, and your **custom fields**, each under its
+  label;
+- the person's **marketing consent** — opted in and since when, declined, or none recorded;
+- who **owns** the record and who each open task is assigned to, by name;
+- the record's notes (their first 600 characters);
+- its 12 newest timeline entries: the day, the kind of activity, an email's sender, recipient,
+  subject and delivery state, and the first 280 characters of what was logged;
+- up to 8 open tasks with their notes and, for a contact or company, up to 5 deals.
+
+Text you wrote is sent as written. A record that holds a great deal at once has its longest
+texts — notes, timeline entries, task notes and custom values — shortened to fit, and no field
+is left out.
+
+AI is **never** given a password, a sign-in token, an account identifier or a record's
+internal id. A related record — the company someone works for, the person they report to, a
+campaign — is named by its name.
+
+#### Enterprise security and compliance (`apps/docs/docs/enterprise/security-and-compliance.md`), after the subprocessor list bullet
+
+**AI assistance in the CRM sends the whole record.** When a member asks AI to
+summarize a contact, company, deal or lead, or to draft an email from one, the
+AI provider receives the record as the CRM shows it — every standard and custom
+field, contact details and postal addresses included, with its notes, timeline
+and related records — and never a password, a sign-in token, an account
+identifier or a record's internal id. [CRM by AI](../ai/crm-by-ai.md#what-is-sent)
+lists it field by field.
+
+#### Trust & security table row (`apps/docs/src/pages/trust.md`), after Resend; drop its last sentence once the list is republished
+
+| **Anthropic** | AI-assisted features: Aglyn Assist, editor assistance, AI generation, automation explanations, AI insights and AI assistance in the CRM. For CRM assistance it receives the opened record as the CRM shows it, with all of its standard and custom fields, including contact details, notes, timeline and related records — email addresses, phone numbers, postal addresses and marketing consent included. It never receives a password, a sign-in token, an account identifier or a record's internal id. The published list's Anthropic entry, dated September 17, 2026, still describes CRM assistance as sending no email, phone or postal field, consent or custom value; it is being republished to match. |
+
+#### AI overview (`apps/docs/docs/ai/overview.md`), "own job is sent" sentence
+
+> Each capability's page says exactly what its own job is sent: the CRM page lists what a
+> record sends, and the automation page what is removed first.

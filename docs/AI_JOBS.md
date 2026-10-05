@@ -2809,22 +2809,33 @@ from the job, and the step writes no CRM record.
   org-wide at the organization level, or reaches the site under it; the member
   holds `data.manage`; the plan carries the CRM; and the record, with every
   activity, task and deal hanging off it, is visible to the site. It reports
-  the facts its builders list (`libs/plugins/crm/src/lib/model/record-facts.ts`),
-  which since AGL-3520 are the WHOLE record as the CRM shows it: every standard
-  field, every email address, phone number and postal address, birthdate,
-  assistant, the reports-to contact, parent company and campaign by name, the
-  owner and task assignees by display name, the marketing consent, picklist
-  labels, and the custom field values under their labels (definitions read
-  once per record), with notes, newest timeline entries, open tasks and deals.
-  Text a person wrote goes as written. Still never reported: an authentication
-  token, an account identifier (a uid) or a record id other than a pipeline
-  stage's, which a stage proposal must name. The step writes every fact a
-  reader reports (`aiCrmFactsLines`), and fits an oversized record to
-  `AI_CRM_FACTS_MAX_CHARS` by cutting its long texts, never a field
-  (`aiCrmFitFacts`). The disclosure is open-ended to match: the catalog's
-  Anthropic row says the opened record is sent "with all of its standard and
-  custom fields, including contact details, notes, timeline and related
-  records".
+  the facts its builders list, and which builders depends on the
+  `release_crm_assist_whole_record` flag for the org (AGL-3520; off by default,
+  no staff preview). Off, the disclosed builders
+  (`libs/plugins/crm/src/lib/model/record-facts-disclosed.ts`) report what the
+  published Privacy Policy and Subprocessors row describe, which never include
+  an email address, a phone number, a postal address, consent, a custom field
+  value, a team member or a record id. Text a person wrote into the record (a
+  name, a job title, a tag, notes, a logged activity, a capture's summary, a
+  task's or a deal's title, a reason) goes as written, except that an email
+  address or a phone number inside it is replaced by a placeholder first
+  (`crmFactProse`); a postal address typed into a note is not recognized. The
+  step writes into a prompt only the facts `aiCrmDisclosedFactsLines` names,
+  whatever else a reader reports. On, the readers report the WHOLE record
+  (`libs/plugins/crm/src/lib/model/record-facts.ts`) — every standard field,
+  every email address, phone number and postal address, birthdate, assistant,
+  the reports-to contact, parent company and campaign by name, the owner and
+  task assignees by display name, the marketing consent, picklist labels and
+  custom field values under their labels — and mark it `wholeRecord: true`;
+  only then does the step write every fact (`aiCrmFactsLines`), fitting an
+  oversized record to `AI_CRM_FACTS_MAX_CHARS` by cutting its long texts,
+  never a field (`aiCrmFitFacts`). Still never reported either way: an
+  authentication token, an account identifier (a uid) or a record id other
+  than a pipeline stage's. The catalog's Anthropic row publishes the disclosed
+  wording; the open-ended wording waits in
+  `ANTHROPIC_CRM_ASSISTANCE_WHOLE_RECORD` until Privacy Policy section 2 and
+  the Subprocessors row are republished, which is the precondition for
+  turning the flag on.
 - **Why a seam, and not a contract in either plugin.** The package map forbids
   the AI plugin to import the CRM and the CRM to import the AI plugin, and keeps
   CRM shapes out of the core. `plugin-resource-drafts` is the seam a plugin

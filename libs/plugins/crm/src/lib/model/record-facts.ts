@@ -73,6 +73,9 @@ import { LEAD_IMPORT_FIELD_LABELS, LEAD_IMPORT_FIELDS } from './crm-lead-import'
  *
  * ## The whole record (AGL-3520)
  *
+ * These builders answer only for an organization with
+ * `release_crm_assist_whole_record` on; with it off, the readers answer
+ * `record-facts-disclosed.ts`, the fields the published pages promise.
  * A record is reported as the CRM shows it: every standard field —
  * Salesforce's included — with its email addresses, phone numbers, postal
  * addresses, birthdate, assistant and reports-to; the labels of its
@@ -865,7 +868,7 @@ export function dealContactRoleFacts(
 }
 
 /** What a lead's capture surfaces are called, the lead history card's words. */
-function leadSourceFact(source: string): string {
+export function leadSourceFact(source: string): string {
   if (source === 'signup') return 'Sign-up'
   if (source === 'booking') return 'Booking'
   if (source === 'import') return CONTACT_SOURCE_LABELS.import

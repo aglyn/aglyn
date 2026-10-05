@@ -76,8 +76,12 @@ import {
   AI_JOB_CRM_STEP_BUDGET,
   aiCrmAdmissionRefusal,
   AI_CRM_FACTS_MAX_CHARS,
+  AI_CRM_WHOLE_RECORD_FIELD,
+  aiCrmDisclosedFactsLines,
+  aiCrmEmailPrompt,
   aiCrmFactsLines,
   aiCrmFitFacts,
+  aiCrmRecordPrompt,
   aiCrmRecordInstructions,
   aiReusableCrmRecord,
   createAiJobCrmStep,
@@ -429,6 +433,76 @@ describe('a record (AGL-2917)', () => {
     expect(outcome).toMatchObject({ failure: refusal.error, estCostUsd: 0, outputs: [] })
     expect(mockRunAiRequest).not.toHaveBeenCalled()
     expect(writes).toEqual([])
+  })
+})
+
+describe('the disclosed lines, while release_crm_assist_whole_record is off (AGL-3520)', () => {
+  it('writes the headcount the published disclosure names, and none of the other account fields', () => {
+    const lines = aiCrmDisclosedFactsLines('company', {
+      name: 'Acme',
+      industry: 'Retail',
+      employees: 250,
+      type: 'Customer',
+      rating: 'Hot',
+      annualRevenue: '$1,250,000.00',
+    })
+    expect(lines).toEqual(expect.arrayContaining(['Industry: Retail', 'Employees: 250']))
+    expect(lines.join('\n')).not.toMatch(/Customer|Hot|1,250,000/)
+  })
+
+  it('writes a deal’s contact roles by name and its products as a count', () => {
+    const lines = aiCrmDisclosedFactsLines('deal', {
+      title: 'Warehouse re-roof',
+      contact: 'Jane Doe',
+      contactRoles: [
+        { name: 'Jane Doe', role: 'Economic Buyer', primary: true },
+        { name: 'Sam Lee', role: '', primary: false },
+      ],
+      products: 2,
+    })
+    expect(lines).toEqual(
+      expect.arrayContaining(['With: Jane Doe', 'Contact roles: Jane Doe (Economic Buyer, Primary); Sam Lee', 'Products on the deal: 2']),
+    )
+  })
+
+  /*
+   * Facts a reader reports beyond the disclosed set stay out of the prompt
+   * unless the reader marked the whole record: the writer is the second of
+   * the two places that decide what is sent.
+   */
+  const everything = {
+    name: 'Dana Marsh',
+    jobTitle: 'Buyer',
+    emails: ['dana@acme.com'],
+    email: 'dana@acme.com',
+    phone: '+15125550107',
+    owner: 'Sam Rep',
+    marketingConsent: 'opted in on 2026-08-01',
+    mailingAddress: '1 Main St, Austin',
+    custom: [{ label: 'Tier', value: 'Gold' }],
+    timeline: [{ on: '2026-09-01', kind: 'Email', direction: 'inbound', from: 'dana@acme.com', to: 'sam@ourco.test', subject: 'Quote' }],
+    openTasks: [{ title: 'Call Dana', kind: 'Call', priority: 'high', status: 'In Progress', due: null, overdue: false, assignee: 'Sam Rep', notes: 'Ask for the PO.' }],
+  }
+  const WHOLE_ONLY = /dana@acme\.com|sam@ourco\.test|5550107|Sam Rep|opted in|Main St|Gold|In Progress|Ask for the PO/
+
+  it('writes only the disclosed lines for facts the reader did not mark whole', () => {
+    for (const kind of ['contact', 'company', 'deal', 'lead'] as const) {
+      expect(aiCrmRecordPrompt(kind, everything)).not.toMatch(WHOLE_ONLY)
+      expect(aiCrmEmailPrompt({ kind, facts: everything, request: 'Follow up' })).not.toMatch(WHOLE_ONLY)
+    }
+    expect(aiCrmRecordPrompt('contact', everything)).toContain('- 2026-09-01 Email (inbound): "Quote"')
+    expect(aiCrmRecordPrompt('contact', everything)).toContain('- Call Dana (Call, high priority, no due date)')
+  })
+
+  it('writes the whole record when the reader marked it', () => {
+    const whole = { ...everything, [AI_CRM_WHOLE_RECORD_FIELD]: true }
+    const prompt = aiCrmRecordPrompt('contact', whole)
+    expect(prompt).toContain('Email: dana@acme.com')
+    expect(prompt).toContain('Owner: Sam Rep')
+    expect(prompt).toContain('- Tier: Gold')
+    expect(prompt).toContain('from dana@acme.com')
+    expect(prompt).not.toContain('wholeRecord')
+    expect(aiCrmEmailPrompt({ kind: 'lead', facts: whole, request: 'Follow up' })).toContain('Phone: +15125550107')
   })
 })
 
