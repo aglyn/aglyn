@@ -90,6 +90,7 @@ import { mergeContactRoute } from './contacts-merge'
 import { sweepDealContactRoles } from '../deal-contact-roles'
 import {
   cachedContactReader,
+  clearReportsToOf,
   CONTACT_REPORTS_TO_LOOP_REFUSAL,
   CONTACT_REPORTS_TO_SELF_REFUSAL,
   contactReportsToLoops,
@@ -1324,7 +1325,10 @@ async function updateContact(
  * Deletes the document whoever else holds it, and keeps every refusal it
  * held — each site's and the unscoped one — in the organization's retained
  * store in the same transaction (AGL-3338), so deleting a person over the
- * API is not a way to add somebody who said no to a list.
+ * API is not a way to add somebody who said no to a list. Then what pointed
+ * at the person goes: every other contact's reports-to naming them, in
+ * every holder's facet (AGL-3537), and their contact roles on deals
+ * (AGL-3521).
  *
  * Takes an `Idempotency-Key` with `deleteRecord`'s exact semantics, and for a
  * sharper reason: an erasure request is the operation most likely to be run
@@ -1346,9 +1350,14 @@ async function deleteContact(
   const { claim } = claimed
 
   try {
+    // The holders whose facets may name the person as a reports-to (AGL-3537).
+    let holders: string[] = []
     const removed = await removeContactKeepingRefusals({
       contactRef,
-      decide: deleteWholeContact,
+      decide: (contact) => {
+        holders = contactFacetHolders(contact)
+        return deleteWholeContact(contact)
+      },
       nowMs: Date.now(),
     })
     if (removed.outcome === 'missing') {
@@ -1358,7 +1367,14 @@ async function deleteContact(
         headers: ctx.headers,
       })
     }
-    // A deleted person leaves every deal's contact roles (AGL-3521).
+    // Nobody reports to a deleted person (AGL-3537)…
+    await clearReportsToOf(
+      ctx.firestore,
+      ctx.firestore.collection('orgs').doc(ctx.orgId).collection('contacts'),
+      holders,
+      contactRef.id,
+    )
+    // …and they leave every deal's contact roles (AGL-3521).
     await sweepDealContactRoles(
       ctx.firestore,
       ctx.firestore.collection('orgs').doc(ctx.orgId).collection(CRM_COLLECTIONS.deals),

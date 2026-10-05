@@ -173,10 +173,13 @@ and membership records are separate and are deleted from their own pages. It
 is a housekeeping act, and it is not a privacy erasure.
 
 When no other site holds the person, the record itself is deleted, and what
-pointed at it is tidied in the same act: the person is taken off every deal's
-[contact roles](./deals.md#contact-roles), and a deal whose Primary they were
-is left with none. The same happens for a contact deleted over the
-[REST API](/api/resources/contacts).
+pointed at it is tidied in the same act: every other contact's **Reports to**
+that named them is cleared, on every site, and the person is taken off every
+deal's [contact roles](./deals.md#contact-roles) — a deal whose Primary they
+were is left with none. When other sites still hold the person, your site
+lets go of them, and the **Reports to** of your site's contacts that named
+them is cleared; the other sites' are not. The same happens for a contact
+deleted over the [REST API](/api/resources/contacts).
 
 Deleting a contact does not forget that they turned down your marketing email.
 If the person said no to email from a site, that answer is kept after the
@@ -276,6 +279,7 @@ the same for every field:
 | What | After the merge |
 | --- | --- |
 | Phones, salutation, job title, department, company, stage, owner, addresses, birthdate, assistant, reports to, custom fields | The kept record's value where it has one; an empty field fills from the other record. Nothing the kept record holds is overwritten. |
+| Reports to naming either of the two records | Nobody: after the merge it would name the person themselves. The preview says so. |
 | Name, first name and last name | Taken together, as one value: from the kept record when it names the person at all, and from the other record only when it does not. |
 | Do not call | Stands if either record has it. |
 | Tags, campaign filings | Combined. |

@@ -89,6 +89,7 @@ import { crmSuiteRefusal } from './suite-gate'
 import { authorizeCrmWriter, canReach, type Writer } from './task-routes'
 import { contactPrimaryGroup } from '../model/contact-holder'
 import { sweepDealContactRoles } from './deal-contact-roles'
+import { clearReportsToOf, contactFacetHolders } from './contact-reports-to'
 
 /** What the suite gate names for a detach on a plan without the CRM. */
 export const CONTACT_DETACH_SUITE_ACT = 'Removing a contact from one site'
@@ -213,12 +214,35 @@ export const crmContactRemoveHandler: PluginApiHandler = async (req, res) => {
 
     const outcomes = new Map<string, ContactRemoveOutcome>()
     const detached: FirebaseFirestore.DocumentReference[] = []
+    /*
+     * The holders whose facets may point at each removed contact as their
+     * reports-to (AGL-3537), as decided: every holder of a deleted contact,
+     * and the one letting go of a detached one — which no longer holds the
+     * person it would point at.
+     */
+    const lettingGo = new Map<string, string[]>()
+    const deciding = (contactId: string) => (contact: Record<string, unknown>) => {
+      const decided = decide(contact)
+      if (!('refused' in decided)) {
+        lettingGo.set(
+          contactId,
+          decided.action === 'delete'
+            ? contactFacetHolders(contact)
+            : [(siteGroup ?? contactPrimaryGroup(contact, writer.org)).groupId],
+        )
+      }
+      return decided
+    }
     for (let at = 0; at < contactIds.length; at += CONCURRENCY) {
       await Promise.all(
         contactIds.slice(at, at + CONCURRENCY).map(async (contactId) => {
           const contactRef = contacts.doc(contactId)
           try {
-            const removal = await removeContactKeepingRefusals({ contactRef, decide, nowMs })
+            const removal = await removeContactKeepingRefusals({
+              contactRef,
+              decide: deciding(contactId),
+              nowMs,
+            })
             if (removal.outcome === 'missing') {
               outcomes.set(contactId, refused(contactId, 'That contact no longer exists.'))
             } else if (removal.outcome === 'refused') {
@@ -226,9 +250,13 @@ export const crmContactRemoveHandler: PluginApiHandler = async (req, res) => {
             } else if (removal.outcome === 'detached') {
               detached.push(contactRef)
               outcomes.set(contactId, { contactId, ok: true, removed: 'detached' })
+              // The holder letting go points at the person no more (AGL-3537).
+              await clearReportsToOf(firestore, contacts, lettingGo.get(contactId) ?? [], contactId)
             } else {
               outcomes.set(contactId, { contactId, ok: true, removed: 'deleted' })
-              // A deleted person leaves every deal's contact roles (AGL-3521).
+              // Nobody reports to a deleted person (AGL-3537)…
+              await clearReportsToOf(firestore, contacts, lettingGo.get(contactId) ?? [], contactId)
+              // …and they leave every deal's contact roles (AGL-3521).
               await sweepDealContactRoles(
                 firestore,
                 firestore.collection('orgs').doc(writer.orgId).collection(CRM_COLLECTIONS.deals),

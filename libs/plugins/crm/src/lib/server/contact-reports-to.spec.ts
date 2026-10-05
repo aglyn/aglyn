@@ -23,6 +23,8 @@
  */
 
 import {
+  clearReportsToOf,
+  contactFacetHolders,
   contactReportsToLoops,
   CONTACT_REPORTS_TO_DEPTH,
   repointContactReportsTo,
@@ -129,5 +131,20 @@ describe('repointContactReportsTo', () => {
     await repointContactReportsTo(firestore, contacts, ['g1', 'g1', ''], 'gone', null, 'spec')
     expect(docs['ann'].facets.g1).not.toHaveProperty('reportsToContactId')
     expect(docs['bob'].facets.g1).not.toHaveProperty('reportsToContactId')
+  })
+})
+
+describe('a deleted contact (AGL-3537)', () => {
+  it('names every holder of a contact, and none for a record without facets', () => {
+    expect(contactFacetHolders({ facets: { g1: {}, g2: {} } })).toEqual(['g1', 'g2'])
+    expect(contactFacetHolders({})).toEqual([])
+    expect(contactFacetHolders({ facets: ['g1'] })).toEqual([])
+  })
+
+  it('clears every pointer at the deleted person, and only those', async () => {
+    docs = { ann: holder('gone'), keep: holder('other') }
+    expect(await clearReportsToOf(firestore, contacts, ['g1'], 'gone')).toBe(1)
+    expect(docs['ann'].facets.g1).not.toHaveProperty('reportsToContactId')
+    expect(docs['keep'].facets.g1.reportsToContactId).toBe('other')
   })
 })

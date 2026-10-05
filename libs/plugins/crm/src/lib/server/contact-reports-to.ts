@@ -15,7 +15,11 @@
  * limitations under the License.
  */
 
-import { contactFacetPath, readContactFacet } from '@aglyn/aglyn/app-utils/contacts'
+import {
+  CONTACT_FACETS_FIELD,
+  contactFacetPath,
+  readContactFacet,
+} from '@aglyn/aglyn/app-utils/contacts'
 import { FieldValue } from 'firebase-admin/firestore'
 
 /**
@@ -133,4 +137,26 @@ export async function repointContactReportsTo(
     }
   }
   return moved
+}
+
+/** The holders a contact document carries a facet for — every facet a pointer at it can sit in. */
+export function contactFacetHolders(contact: Record<string, unknown>): string[] {
+  const facets = contact[CONTACT_FACETS_FIELD]
+  return facets && typeof facets === 'object' && !Array.isArray(facets) ? Object.keys(facets) : []
+}
+
+/**
+ * Every reports-to in `groupIds`' facets that names `contactId`, cleared —
+ * a contact deleted, or let go by those holders (AGL-3537). A holder can
+ * point only at a contact it holds, so the holders of the removed record
+ * are every facet a pointer can sit in; the sweep is `repointContactReportsTo`
+ * to nobody, which logs a failure and goes on rather than failing the removal.
+ */
+export function clearReportsToOf(
+  firestore: FirebaseFirestore.Firestore,
+  contacts: FirebaseFirestore.CollectionReference,
+  groupIds: Iterable<string>,
+  contactId: string,
+): Promise<number> {
+  return repointContactReportsTo(firestore, contacts, groupIds, contactId, null, 'contact delete')
 }

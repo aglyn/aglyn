@@ -16,6 +16,7 @@
  */
 
 import {
+  CONTACT_MERGE_REPORTS_TO_SELF,
   contactMergePreview,
   mergeContactFacet,
   mergeInteractions,
@@ -448,5 +449,47 @@ describe('contactMergePreview', () => {
     const byKey = Object.fromEntries(rows.map((row) => [row.key, row]))
     expect(byKey['tags']).toMatchObject({ survivor: '', merged: 'b-side', result: 'b-side' })
     expect(byKey['phone']).toMatchObject({ survivor: '', merged: '', result: '', from: 'none' })
+  })
+
+  /*
+   * Reports to, by the rule the write applies (AGL-3537): the kept record's
+   * manager stands, an empty one fills, and a pointer at either record —
+   * one person after the merge — becomes nobody.
+   */
+  describe('Reports to', () => {
+    const ids = { survivorId: 'c-keep', mergedId: 'c-gone' }
+    const names: Record<string, string> = { 'c-boss': 'Dana Boss', 'c-other': 'Lee Other', 'c-gone': 'J Doe' }
+    const contactName = (id: string) => names[id] ?? id
+    const pointing = (survivorTo: string | null, mergedTo: string | null) => {
+      const facet = (to: string | null) => ({ sources: {}, interactions: [], ...(to ? { reportsToContactId: to } : {}) })
+      const rows = contactMergePreview(
+        { email: 'jane@acme.com', facets: { a: facet(survivorTo) } },
+        { email: 'jane@gmail.com', facets: { a: facet(mergedTo) } },
+        'a',
+        { ids, contactName },
+      )
+      return rows.find((row) => row.key === 'reportsTo')
+    }
+
+    it('keeps the kept record’s manager, and fills an empty one from the other record', () => {
+      expect(pointing('c-boss', 'c-other')).toMatchObject({
+        label: 'Reports to',
+        survivor: 'Dana Boss',
+        merged: 'Lee Other',
+        result: 'Dana Boss',
+        from: 'survivor',
+      })
+      expect(pointing(null, 'c-other')).toMatchObject({ result: 'Lee Other', from: 'merged' })
+      expect(pointing(null, null)).toMatchObject({ result: '', from: 'none' })
+    })
+
+    it('makes a pointer at either record nobody, and says so', () => {
+      expect(pointing('c-gone', 'c-other')).toMatchObject({
+        survivor: 'J Doe',
+        result: CONTACT_MERGE_REPORTS_TO_SELF,
+        from: 'none',
+      })
+      expect(pointing(null, 'c-keep')).toMatchObject({ result: CONTACT_MERGE_REPORTS_TO_SELF })
+    })
   })
 })

@@ -459,7 +459,18 @@ export interface ContactMergePreviewRow {
 export interface ContactMergePreviewOptions {
   /** The owner's display name for a uid; the uid itself when absent. */
   memberName?: (uid: string) => string
+  /**
+   * The two records' ids, so the preview applies the rule the write does
+   * to a reports-to (AGL-3537): a pointer at either record would be the
+   * person reporting to themselves, and becomes nobody.
+   */
+  ids?: ContactMergeIds
+  /** A contact's name for an id, for Reports to; the id itself when absent. */
+  contactName?: (contactId: string) => string
 }
+
+/** What Reports to reads when the merge leaves the person reporting to nobody because the pointer was at themselves. */
+export const CONTACT_MERGE_REPORTS_TO_SELF = 'Nobody — it named one of these two records'
 
 function addressLine(value: unknown): string {
   const address = mapOf(value)
@@ -493,7 +504,7 @@ export function contactMergePreview(
   groupId: string,
   options: ContactMergePreviewOptions = {},
 ): ContactMergePreviewRow[] {
-  const plan = planContactMerge(survivor, merged)
+  const plan = planContactMerge(survivor, merged, options.ids)
   const after: Doc = {
     ...survivor,
     ...plan.survivor,
@@ -511,6 +522,20 @@ export function contactMergePreview(
       ? CONTACT_LIFECYCLE_STAGE_LABELS[value as keyof typeof CONTACT_LIFECYCLE_STAGE_LABELS]
       : ''
   const owner = (value: unknown) => (text(value) ? memberName(text(value)) : '')
+  const contactName = options.contactName ?? ((contactId: string) => contactId)
+  const person = (value: unknown) => (text(value) ? contactName(text(value)) : '')
+  /*
+   * Reports to (AGL-3537), as the write leaves it: the kept record's own
+   * manager stands, an empty one fills from the other record's, and a
+   * pointer at either of the two records — which after the merge are one
+   * person — becomes nobody, and says why.
+   */
+  const pair = options.ids ? [options.ids.survivorId, options.ids.mergedId] : []
+  const reportsToResult =
+    person(c.reportsToContactId) ||
+    ([a.reportsToContactId, b.reportsToContactId].some((id) => pair.includes(text(id)))
+      ? CONTACT_MERGE_REPORTS_TO_SELF
+      : '')
   const list = (value: unknown) => strings(value).join(', ')
   const flag = (value: unknown) => (value === true ? 'Yes' : '')
   const money = (facet: ContactFacet) =>
@@ -561,6 +586,17 @@ export function contactMergePreview(
     row('doNotCall', 'Do not call', flag(a.doNotCall), flag(b.doNotCall), flag(c.doNotCall)),
     row('jobTitle', 'Job title', text(a.jobTitle), text(b.jobTitle), text(c.jobTitle)),
     row('department', 'Department', text(a.department), text(b.department), text(c.department)),
+    {
+      ...row(
+        'reportsTo',
+        'Reports to',
+        person(a.reportsToContactId),
+        person(b.reportsToContactId),
+        reportsToResult,
+      ),
+      // Nobody, by the rule — taken from neither record.
+      ...(reportsToResult === CONTACT_MERGE_REPORTS_TO_SELF ? { from: 'none' as const } : {}),
+    },
     row(
       'company',
       'Company',

@@ -303,6 +303,65 @@ describe('a refusal survives the removal', () => {
   })
 })
 
+/*
+ * A REPORTS-TO AT A REMOVED CONTACT (AGL-3537): a delete clears every other
+ * contact's reports-to that names the person, in every holder's facet; a
+ * detach clears it in the facets of the holder letting go, which no longer
+ * holds the person, and leaves the other holder's.
+ */
+describe('a reports-to at a removed contact', () => {
+  const reportsTo = (id: string, groupId: string) =>
+    (contact(id)?.['facets'] as Record<string, Record<string, unknown>> | undefined)?.[groupId]?.[
+      'reportsToContactId'
+    ]
+
+  it('is cleared wherever it names a deleted contact', async () => {
+    mockFirestore.seed(`${CONTACTS}/cy`, {
+      email: 'cy@example.com',
+      visibleTo: [`host:${HOST}`],
+      facets: { [HOST]: { reportsToContactId: 'ada', notes: 'kept' } },
+    })
+    mockFirestore.seed(`${CONTACTS}/di`, {
+      email: 'di@example.com',
+      visibleTo: [`host:${HOST}`],
+      facets: { [HOST]: { reportsToContactId: 'bea' } },
+    })
+    await post({ hostId: HOST, contactIds: ['ada'] })
+    expect(contact('ada')).toBeUndefined()
+    expect(reportsTo('cy', HOST)).toBeUndefined()
+    expect(contact('cy')?.['facets'][HOST]).toMatchObject({ notes: 'kept' })
+    // A pointer at somebody else is not touched.
+    expect(reportsTo('di', HOST)).toBe('bea')
+  })
+
+  it('is cleared in the letting-go holder’s facets on a detach, and kept in the other holder’s', async () => {
+    mockFirestore.seed(`${CONTACTS}/cy`, {
+      email: 'cy@example.com',
+      visibleTo: [`host:${HOST}`, `host:${OTHER_HOST}`],
+      facets: {
+        [HOST]: { reportsToContactId: 'bea' },
+        [OTHER_HOST]: { reportsToContactId: 'bea' },
+      },
+    })
+    const { payload } = await post({ hostId: HOST, contactIds: ['bea'] })
+    expect(payload.results).toEqual([{ contactId: 'bea', ok: true, removed: 'detached' }])
+    expect(reportsTo('cy', HOST)).toBeUndefined()
+    expect(reportsTo('cy', OTHER_HOST)).toBe('bea')
+  })
+
+  it('is left alone when the removal is refused', async () => {
+    caller = { uid: 'scoped-uid' }
+    mockFirestore.seed(`${CONTACTS}/cy`, {
+      email: 'cy@example.com',
+      visibleTo: [`host:${HOST}`],
+      facets: { [HOST]: { reportsToContactId: 'bea' } },
+    })
+    const { payload } = await post({ hostId: HOST, contactIds: ['bea'] })
+    expect(payload.results[0]).toMatchObject({ ok: false })
+    expect(reportsTo('cy', HOST)).toBe('bea')
+  })
+})
+
 describe('who may let a contact go', () => {
   it('lets a site collaborator delete a person only their sites hold', async () => {
     caller = { uid: 'scoped-uid' }

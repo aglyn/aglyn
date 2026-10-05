@@ -81,7 +81,7 @@ row.
 | `birthdate` | string \| null | `YYYY-MM-DD`, a real date that is not in the future; anything else is a `400`. Writable. |
 | `assistantName` | string \| null | 120 characters. Writable. |
 | `assistantPhone` | string \| null | E.164, normalized like `phone`. Writable. |
-| `reportsToContactId` | string \| null | The contact this person reports to. Must be a contact of your organization, never this contact, and never one whose own chain — through the named site's profiles — already reaches this contact; each is a `400` that says which. Writable. |
+| `reportsToContactId` | string \| null | The contact this person reports to. Must be a contact of your organization, never this contact, and never one whose own chain — through the named site's profiles — already reaches this contact; each is a `400` that says which. Cleared when the contact it names is deleted or erased; a merge moves it to the surviving contact. Writable. |
 | `otherAddress` | object \| null | A second postal address, shaped like `address`. Writable. |
 | `doNotCall` | boolean | The person asked not to be phoned. `false` when unset; send `false` or `null` to clear it. Writable. |
 | `mediaIds` | string[] | Files from the organization's [media library](./media.md) attached to this person **by the named site**, by media id, at most 20. Part of [the CRM profile](#crm-profile), so a write needs `consentSiteId`; a read with no site named returns the first holder's list. An empty array clears them. Writable. |
@@ -403,9 +403,10 @@ original `200` receipt is replayed. Send a key whenever a deletion runs from a s
 which is most of them: an erasure request on somebody else's deadline is exactly the
 case where a response lost to a timeout must not read as a failure.
 
-This removes the contact record, and takes the person off every
-[deal's `contactRoles`](deals.md#contact-roles) — clearing a deal's `contactId`
-where they were its Primary. It does not remove the
+This removes the contact record, clears every other contact's
+`reportsToContactId` that named the person, in every site's profile, and takes
+the person off every [deal's `contactRoles`](deals.md#contact-roles) — clearing
+a deal's `contactId` where they were its Primary. It does not remove the
 [form submissions](form-submissions.md), orders, or bookings that person left behind —
 those are separate records with their own endpoints.
 

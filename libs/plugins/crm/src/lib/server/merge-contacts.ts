@@ -52,14 +52,10 @@
  * both records named — the survivor still names the rest.
  */
 
-import {
-  CONTACT_EMAIL_INDEX_COLLECTION,
-  CONTACT_FACETS_FIELD,
-  contactEmails,
-} from '@aglyn/aglyn/app-utils/contacts'
+import { CONTACT_EMAIL_INDEX_COLLECTION, contactEmails } from '@aglyn/aglyn/app-utils/contacts'
 import type { HostActivityActor } from '@aglyn/aglyn/app-utils/activity-presenter'
 import { planContactMerge } from '../model/contact-merge'
-import { repointContactReportsTo } from './contact-reports-to'
+import { contactFacetHolders, repointContactReportsTo } from './contact-reports-to'
 import { sweepDealContactRoles } from './deal-contact-roles'
 import { CRM_COLLECTIONS } from '@aglyn/aglyn/app-utils/crm'
 import { personKey } from '@aglyn/aglyn/app-utils/person-key'
@@ -186,14 +182,6 @@ async function repointLeads(
   return moved
 }
 
-/** The groups holding a facet on a contact document. */
-function facetHolders(data: Record<string, unknown>): string[] {
-  const facets = data[CONTACT_FACETS_FIELD]
-  return facets && typeof facets === 'object' && !Array.isArray(facets)
-    ? Object.keys(facets)
-    : []
-}
-
 export async function mergeContacts(
   options: MergeContactsOptions,
 ): Promise<MergeContactsResult> {
@@ -249,7 +237,7 @@ export async function mergeContacts(
   await repointContactReportsTo(
     firestore,
     contactsRef,
-    [...facetHolders(mergedData), ...facetHolders(survivorData)],
+    [...contactFacetHolders(mergedData), ...contactFacetHolders(survivorData)],
     mergedId,
     survivorId,
     'contact merge',

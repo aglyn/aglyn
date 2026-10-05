@@ -26,8 +26,7 @@ import type {
 import { companyContactsCountFields } from '@aglyn/tenant-data-admin/server/contact-company-link'
 import { deleteWhereEquals } from '@aglyn/tenant-data-admin/server/paged-sweeps'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin/server/firebase-admin'
-import { CONTACT_FACETS_FIELD } from '@aglyn/aglyn/app-utils/contacts'
-import { repointContactReportsTo } from './contact-reports-to'
+import { contactFacetHolders, repointContactReportsTo } from './contact-reports-to'
 import { sweepDealContactRoles } from './deal-contact-roles'
 
 /**
@@ -144,11 +143,10 @@ export function createCrmPersonEraser(deps: CrmPersonEraserDeps): PluginPersonRe
       )
       // A pointer at an erased person is a trace of them: cleared in every
       // holder's facet that could hold one — the holders of this contact.
-      const facets: unknown = contact.get(CONTACT_FACETS_FIELD)
       await repointContactReportsTo(
         db,
         orgRef.collection('contacts'),
-        facets && typeof facets === 'object' ? Object.keys(facets) : [],
+        contactFacetHolders(contact.data() ?? {}),
         contactId,
         null,
         LABEL,
