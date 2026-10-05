@@ -1395,6 +1395,26 @@ export function isConsoleStaffWidgetSlot(slot: string): boolean {
   return (CONSOLE_STAFF_WIDGET_SLOTS as readonly string[]).includes(slot)
 }
 
+/**
+ * The zones whose HOST decides who reads them (AGL-3554): each widget draws
+ * only the props the host hands it, and the host page is already gated on
+ * what its own route requires — a site package import's side-by-side diff,
+ * opened by whoever may import a package into the site. So the console asks
+ * the widget's own `permission` there and not its extension's: an
+ * extension's permission guards the extension's own surfaces and reads (the
+ * Email plugin's `data.manage`, for the audiences its page lists), and
+ * would otherwise hide a preview from the very person importing the item.
+ * The extension's plan feature is still asked.
+ */
+export const CONSOLE_HOST_GATED_WIDGET_SLOTS: readonly ConsoleWidgetSlot[] = [
+  CONSOLE_WIDGET_SLOTS.sitePackageItemPreview,
+]
+
+/** Whether a slot is one of the {@link CONSOLE_HOST_GATED_WIDGET_SLOTS}. */
+export function isConsoleHostGatedWidgetSlot(slot: string): boolean {
+  return (CONSOLE_HOST_GATED_WIDGET_SLOTS as readonly string[]).includes(slot)
+}
+
 /** Search listing values by field; a field the editor does not hold is absent. */
 export type ConsoleSeoFieldValues = Partial<Record<SeoListingFieldKey, string>>
 

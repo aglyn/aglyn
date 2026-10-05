@@ -184,6 +184,15 @@ export function ListDetailCard(props: ListDetailCardProps) {
     null,
   )
   const listName = String(list?.['name'] ?? '')
+  // Each button only for whom the route takes it (AGL-3554), on the site the
+  // list enrolls as — the workspace's verdict until one is chosen.
+  const transferTarget = {
+    resource: listMembersResourceKey(listId),
+    scope: 'host' as const,
+    hostId: enrollHostId || null,
+  }
+  const canExportMembers = Boolean(transfer?.can('export', transferTarget))
+  const canImportMembers = Boolean(transfer?.can('import', transferTarget))
 
   const audiencesHref = `${basePath}/audiences`
   const headerActions = (
@@ -208,7 +217,7 @@ export function ListDetailCard(props: ListDetailCardProps) {
       >
         {'Edit list'}
       </Button>
-      {transfer ? (
+      {transfer && canExportMembers ? (
         <Button
           size="small"
           color="primary"
@@ -229,7 +238,7 @@ export function ListDetailCard(props: ListDetailCardProps) {
           {'Export'}
         </Button>
       ) : null}
-      {transfer ? (
+      {transfer && canImportMembers ? (
         <Button
           size="small"
           color="primary"

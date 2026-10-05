@@ -32,6 +32,8 @@ import { render, screen, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 
 let mockOrg: Record<string, unknown> = { plan: 'free', enabledPlugins: ['crm'] }
+/** Whether the person holds "Manage data" (AGL-3554). */
+let mockManages = true
 
 jest.mock('@aglyn/aglyn/app-utils/transfer-launcher-context', () => {
   const { transferAccessVerdict } = jest.requireActual('../components/transfer-launcher-provider.component')
@@ -45,8 +47,9 @@ jest.mock('@aglyn/aglyn/app-utils/transfer-launcher-context', () => {
         transferAccessVerdict(
           {
             permissionsLoaded: true,
-            can: () => true,
+            can: () => mockManages,
             orgWide: true,
+            orgRole: mockManages ? 'admin' : 'viewer',
             member: null,
             entitled: (feature: string) => plans.checkEntitlement(mockOrg, feature),
           },
@@ -65,6 +68,10 @@ jest.mock('../hooks/use-current-org', () => ({
   default: () => ({ org: mockOrg, orgId: 'org-1', ready: true, entitlementsFromCache: false }),
 }))
 jest.mock('../hooks/use-org-hosts', () => ({ useOrgHosts: () => ({ hosts: [] }) }))
+jest.mock('../hooks/use-org-permissions', () => ({
+  __esModule: true,
+  default: () => ({ loaded: true, can: (permission: string) => mockManages && permission === 'data.manage' }),
+}))
 jest.mock('../hooks/use-org-scope', () => ({ useOrgSlug: () => 'acme' }))
 jest.mock('../hooks/use-console-plugins', () => ({ useConsoleSlotPlugins: () => true }))
 jest.mock('@aglyn/shared-util-http/authorized-token', () => ({ authorizedFetch: jest.fn() }))
@@ -92,6 +99,7 @@ function buttonsOf(label: string): string[] {
 
 beforeEach(() => {
   mockOrg = { plan: 'free', enabledPlugins: ['crm'] }
+  mockManages = true
 })
 
 describe('the hub on Free', () => {
@@ -118,5 +126,23 @@ describe('the hub on Starter', () => {
       expect([label, buttonsOf(label)]).toEqual([label, ['Export']])
     }
     expect(screen.queryByText(/Not included in your current plan/)).toBeNull()
+  })
+})
+
+/*
+ * The hub is open to whoever may export something (AGL-3554), so it must
+ * offer a member without "Manage data" nothing the routes refuse them: no
+ * Import, no package, and an Export only where the resource lets them read.
+ */
+describe('the hub for a member without Manage data (AGL-3554)', () => {
+  it('offers no Import, no package and no Export the resource keeps for managers', () => {
+    mockOrg = { plan: 'starter', enabledPlugins: ['crm'] }
+    mockManages = false
+    render(<OrgDataTransferCard />)
+    for (const label of ['Contacts', 'Leads', 'Companies', 'Deals', 'Tasks', 'Email templates', 'Activities']) {
+      expect([label, buttonsOf(label)]).toEqual([label, []])
+    }
+    expect(screen.queryByText('Export package')).toBeNull()
+    expect(screen.queryByText('Import package')).toBeNull()
   })
 })

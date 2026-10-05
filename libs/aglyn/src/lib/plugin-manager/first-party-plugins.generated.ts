@@ -1088,6 +1088,9 @@ export const PLUGIN_TRANSFER_RESOURCES_DECLARED: readonly ResolvedTransferResour
     "featureFlagExempt": [
       "export"
     ],
+    "importRoles": [
+      "admin"
+    ],
     "label": "Gift cards",
     "singularLabel": "Gift card",
     "scope": "host",

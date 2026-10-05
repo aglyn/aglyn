@@ -329,6 +329,34 @@ describe('the transfer launcher', () => {
     expect(answers()['email.suppressions']).toEqual({ import: true, export: true })
   })
 
+  it('offers gift cards’ Import only to a site’s admins, as the declaration’s importRoles say (AGL-3554)', () => {
+    mockBilling = { org: { plan: 'business' }, ready: true }
+    accessTarget = { resource: 'commerce.gift-cards', scope: 'host', hostId: 'host-a' }
+    const view = render(
+      <TransferLauncherProvider>
+        <PluginList />
+      </TransferLauncherProvider>,
+    )
+    // No role read yet on the workspace: an org-wide member with no role is no admin.
+    expect(access).toEqual({ import: false, export: true })
+
+    mockOrg = { $id: 'org-1', role: 'admin' }
+    view.rerender(
+      <TransferLauncherProvider>
+        <PluginList />
+      </TransferLauncherProvider>,
+    )
+    expect(access).toEqual({ import: true, export: true })
+
+    mockOrg = { $id: 'org-1', role: 'editor', orgWide: true }
+    view.rerender(
+      <TransferLauncherProvider>
+        <PluginList />
+      </TransferLauncherProvider>,
+    )
+    expect(access).toEqual({ import: false, export: true })
+  })
+
   it('keeps one launcher while the answers stand, so a list is not re-rendered for nothing', () => {
     const seen: TransferLauncher[] = []
     function Watcher() {

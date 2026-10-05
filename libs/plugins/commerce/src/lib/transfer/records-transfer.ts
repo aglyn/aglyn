@@ -29,7 +29,6 @@ import {
   type TransferPlanSummary,
   type TransferWarningSample,
 } from '@aglyn/aglyn/data-transfer'
-import { hostRoleFor } from '@aglyn/aglyn/app-utils/organizations'
 import type { PicklistSpec } from '@aglyn/aglyn/app-utils/picklists'
 import { commerceSlug } from '../model/commerce'
 import type { DiscountKind, HostDiscount } from '../model/commerce-discounts'
@@ -591,15 +590,6 @@ export function readGiftCardConfirmation(
   const totalCents = (value as Record<string, unknown>)['totalCents']
   if (typeof totalCents !== 'number' || !Number.isInteger(totalCents) || totalCents <= 0) return null
   return { totalCents, email: (value as Record<string, unknown>)['email'] === true }
-}
-
-/**
- * Whether a member may issue gift cards from a file: the workspace's owners
- * and admins, and a collaborator who is an admin of this site. Money a
- * shopper can spend is minted by the people who answer for the store.
- */
-export function canImportGiftCards(member: Parameters<typeof hostRoleFor>[0], hostId: string): boolean {
-  return hostRoleFor(member, hostId) === 'admin'
 }
 
 /** The card one planned row issues, as the plan decided it. */

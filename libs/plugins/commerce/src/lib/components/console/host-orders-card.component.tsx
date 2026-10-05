@@ -837,7 +837,8 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
             spacing={1}
             sx={{ alignItems: 'center', justifyContent: 'flex-end' }}
           >
-            {transfer ? (
+            {/* Only for whom the route takes it (AGL-3554). */}
+            {transfer?.can('export', { resource: COMMERCE_ORDERS_TRANSFER, scope: 'host', hostId }) ? (
               <Button size="small" onClick={openExport}>
                 {'Export orders'}
               </Button>

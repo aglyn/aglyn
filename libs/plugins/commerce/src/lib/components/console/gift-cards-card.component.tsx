@@ -48,7 +48,6 @@ import { GIFT_CARD_SEARCH_TOKENS_PATH } from '../../model/gift-card-search'
 import { EntitlementGatedCard } from './entitlement-gate.component'
 import TransferHeaderActions from '../../transfer/transfer-header-actions.component'
 import { COMMERCE_GIFT_CARDS_TRANSFER } from '../../transfer/transfer-keys'
-import { useCanImportGiftCards } from '../../transfer/use-can-import-gift-cards'
 
 export interface GiftCardsCardProps {
   hostId: string
@@ -100,8 +99,6 @@ const giftCardsHelp = pluginDocsHelp('commerce', {
  */
 export function GiftCardsCard(props: GiftCardsCardProps) {
   const { hostId } = props
-  // Importing issues spendable money: owners and admins only (AGL-3551).
-  const canImport = useCanImportGiftCards(hostId)
   const firestore = useFirestore()
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
@@ -300,7 +297,7 @@ export function GiftCardsCard(props: GiftCardsCardProps) {
         header={'Gift cards'}
         HeaderProps={{
           action: (
-            <TransferHeaderActions resource={COMMERCE_GIFT_CARDS_TRANSFER} hostId={hostId} canImport={canImport} />
+            <TransferHeaderActions resource={COMMERCE_GIFT_CARDS_TRANSFER} hostId={hostId} />
           ),
         }}
         help={giftCardsHelp}

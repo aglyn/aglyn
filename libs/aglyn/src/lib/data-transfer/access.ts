@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { TransferResourceDescriptor } from './resource'
+import type { TransferImportRole, TransferResourceDescriptor } from './resource'
 import { TRANSFER_PLAN_REQUIRED, type TransferApiRoute, type TransferPlanRequiredResponse } from './transfer-api'
 
 /*==========================================
@@ -27,7 +27,10 @@ import { TRANSFER_PLAN_REQUIRED, type TransferApiRoute, type TransferPlanRequire
  *
  *  - IMPORT (upload, analyze, plan, apply, status, undo — and the job list
  *    and packages, which the gate asks with the same intent) writes records, and
- *    needs `data.manage` — on the named site, or on the workspace.
+ *    needs `data.manage` — on the named site, or on the workspace. A
+ *    resource stricter than that names its `importRoles` (AGL-3554): the
+ *    member's role where the records are must also be one of them (gift
+ *    cards: a site's admins, which a workspace's owners and admins are).
  *  - EXPORT (export, and `fields`, which the export dialog opens with) only
  *    reads them, and asks what the resource declares: `readableByMembers`
  *    admits any member (a collaborator who reaches the named site), the
@@ -47,8 +50,8 @@ import { TRANSFER_PLAN_REQUIRED, type TransferApiRoute, type TransferPlanRequire
  * `false`, so neither button is offered on a plan the route refuses.
  *==========================================*/
 
-/** What a resource declares about who may read its records. */
-export type TransferReadDeclaration = Pick<TransferResourceDescriptor, 'readPermission' | 'readableByMembers'>
+/** What a resource declares about who may read and import its records. */
+export type TransferReadDeclaration = Pick<TransferResourceDescriptor, 'readPermission' | 'readableByMembers' | 'importRoles'>
 
 /** What a resource declares about the plan that moves its records. */
 export type TransferPlanDeclaration = Pick<TransferResourceDescriptor, 'featureFlag' | 'featureFlagExempt'>
@@ -89,6 +92,12 @@ export interface TransferMemberAxis {
   holds(permission: string): boolean
   /** Whether the member reaches the named site; `true` when none is named or the member is org-wide. */
   reachesSite: boolean
+  /**
+   * The member's role where the records are — on the named site
+   * (`hostRoleFor`), or on the workspace (`transferWorkspaceRole`) — for a
+   * resource that names `importRoles`; `null` for none.
+   */
+  role?: TransferImportRole | null
 }
 
 /** Whether a member may `intent` a resource's records: see the block above. */
@@ -98,8 +107,51 @@ export function transferAccessAllowed(
   axis: TransferMemberAxis,
 ): boolean {
   if (!axis.reachesSite) return false
+  if (!transferImportRoleAllowed(intent, descriptor, axis.role ?? null)) return false
   const needed = transferAccessPermissions(intent, descriptor)
   return !needed.length || needed.some((permission) => axis.holds(permission))
+}
+
+/**
+ * Whether a member in `role` may `intent` the records, as far as the
+ * resource's `importRoles` say: always for an export, or a resource that
+ * names none (AGL-3554).
+ */
+export function transferImportRoleAllowed(
+  intent: TransferAccessIntent,
+  descriptor: Pick<TransferResourceDescriptor, 'importRoles'> | null | undefined,
+  role: TransferImportRole | null,
+): boolean {
+  const roles = descriptor?.importRoles
+  if (intent !== 'import' || !roles?.length) return true
+  return role !== null && roles.includes(role)
+}
+
+/**
+ * A workspace role as the site role it is on every site, for a workspace's
+ * records: an owner or an admin is every site's admin (`hostRoleFor`), and
+ * any other role is itself.
+ */
+export function transferWorkspaceRole(role: string | null | undefined): TransferImportRole | null {
+  if (role === 'owner' || role === 'admin') return 'admin'
+  return role === 'editor' || role === 'author' || role === 'viewer' ? role : null
+}
+
+/** The sentence refusing a member whose role is not among the resource's `importRoles`. */
+export function transferImportRoleRefusal(
+  descriptor: Pick<TransferResourceDescriptor, 'importRoles' | 'label' | 'scope'>,
+): string {
+  const roles = descriptor.importRoles ?? []
+  const what = /^[A-Z][a-z]/.test(descriptor.label)
+    ? descriptor.label.charAt(0).toLowerCase() + descriptor.label.slice(1)
+    : descriptor.label
+  if (roles.length === 1 && roles[0] === 'admin') {
+    return descriptor.scope === 'host'
+      ? `Only the workspace’s owners and admins, and the site’s admins, can import ${what}.`
+      : `Only the workspace’s owners and admins can import ${what}.`
+  }
+  const named = roles.map((role) => role.charAt(0).toUpperCase() + role.slice(1)).join(', ')
+  return `Importing ${what} needs one of these roles${descriptor.scope === 'host' ? ' on the site' : ''}: ${named}.`
 }
 
 /**

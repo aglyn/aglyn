@@ -31,9 +31,12 @@
  *    Backup & restore, linked per site.
  *
  * Each button is offered only when the route would take it: records ask the
- * launcher's `can`, which answers the person's access and the workspace's
- * plan; packages ask the plan. A resource whose plan carries none of it
- * (the CRM's on Free, AGL-3555) says so instead, naming the plan that does.
+ * launcher's `can`, which answers the person's access, the resource's
+ * `importRoles` and the workspace's plan; packages ask `data.manage` and the
+ * plan. A resource whose plan carries none of it (the CRM's on Free,
+ * AGL-3555) says so instead, naming the plan that does. The page is shown
+ * to whoever may export something (AGL-3554), so a member who may only
+ * read sees Export alone, and only where they may.
  */
 
 import {
@@ -58,6 +61,7 @@ import { docsHelp } from '../../constants/docs-links'
 import { useConsoleSlotPlugins } from '../../hooks/use-console-plugins'
 import useCurrentOrg from '../../hooks/use-current-org'
 import { useOrgHosts } from '../../hooks/use-org-hosts'
+import useOrgPermissions from '../../hooks/use-org-permissions'
 import { useOrgSlug } from '../../hooks/use-org-scope'
 import { useReleaseFlags } from '../../hooks/use-release-flags'
 import { resolveExtensionEntitlement } from '../../utils/extension-entitlement'
@@ -140,16 +144,24 @@ function InstanceRows(props: {
           ...(hostId ? { hostId } : {}),
           title: `${labelOf(resource)}: ${instance.name}`,
         }
+        // Each only for whom the route takes it (AGL-3554): an instance asks
+        // under its own key, as its route does.
+        const imports = transferResourceImports(resource) && launcher.can('import', launch)
+        const exports = launcher.can('export', launch)
         return (
           <Stack key={instance.id} direction="row" spacing={1} sx={{ alignItems: 'center', justifyContent: 'space-between' }}>
             <Typography variant="body2">{instance.name}</Typography>
             <Stack direction="row" spacing={1}>
-              <Button size="small" onClick={() => launcher.openImport(launch)}>
-                {'Import'}
-              </Button>
-              <Button size="small" onClick={() => launcher.openExport(launch)}>
-                {'Export'}
-              </Button>
+              {imports ? (
+                <Button size="small" onClick={() => launcher.openImport(launch)}>
+                  {'Import'}
+                </Button>
+              ) : null}
+              {exports ? (
+                <Button size="small" onClick={() => launcher.openExport(launch)}>
+                  {'Export'}
+                </Button>
+              ) : null}
             </Stack>
           </Stack>
         )
@@ -165,6 +177,10 @@ export function OrgDataTransferCard(props: { onImported?(): void }) {
   const { org, orgId, ready } = useCurrentOrg()
   const { hosts } = useOrgHosts(firestore, user?.uid, orgId)
   const launcher = useTransferLauncher()
+  // Packages move several resources at once and are the workspace's: the
+  // package route asks `data.manage` (AGL-3554). Records ask `can` per row.
+  const permissions = useOrgPermissions()
+  const managesData = permissions.loaded && permissions.can('data.manage')
   const loaded = useConsoleSlotPlugins([TRANSFER_RESOURCES_LOAD_POINT])
   const [hostId, setHostId] = useState('')
   const [open, setOpen] = useState<Open>(null)
@@ -218,7 +234,7 @@ export function OrgDataTransferCard(props: { onImported?(): void }) {
     const scope = resource.scope
     const base = { resource: resource.key, scope, ...(siteId ? { hostId: siteId } : {}) }
     const records = resource.kinds.includes('records') && launcher
-    const packages = resource.kinds.includes('package') && client
+    const packages = resource.kinds.includes('package') && client && managesData
     const offers = {
       // A resource only exported (a log, a setup) takes no file (AGL-3528).
       recordsImport: Boolean(records && transferResourceImports(resource) && launcher.can('import', base)),
@@ -307,7 +323,7 @@ export function OrgDataTransferCard(props: { onImported?(): void }) {
       </Box>
     ))
 
-  const hasPackages = orgResources.some((resource) => resource.kinds.includes('package'))
+  const hasPackages = managesData && orgResources.some((resource) => resource.kinds.includes('package'))
 
   return (
     <CardDisplay

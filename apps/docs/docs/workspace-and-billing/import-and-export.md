@@ -11,8 +11,16 @@ Everything you can move in or out of your workspace is listed in one place:
 what it would do before it writes anything, asks you how to handle every
 conflict, and can be undone for seven days.
 
-You need the **Manage data** permission to open the page. Owners, admins and
-editors have it by default, and a custom role can grant or withhold it.
+The page is open to anyone who can export something. Importing, packages
+and the list of past imports need the **Manage data** permission. Owners,
+admins and editors have it by default, and a custom role can grant or
+withhold it. Without it you see **Export** only for data your role lets you
+read, such as a dataset's records. Every page with its own **Import** and
+**Export** buttons, such as a list of products or an email list, shows each
+button only when you can use it.
+
+Gift cards are stricter. Only the workspace's owners and admins, and a
+site's admins, can import them, because an import issues spendable money.
 
 ## What you can move
 

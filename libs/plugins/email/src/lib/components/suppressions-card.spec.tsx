@@ -82,7 +82,7 @@ jest.mock('@aglyn/aglyn', () => ({
 }))
 
 /** The console shell's launcher; `null` outside the shell. */
-let mockLauncher: { openImport: jest.Mock; openExport: jest.Mock; close: jest.Mock } | null = null
+let mockLauncher: { openImport: jest.Mock; openExport: jest.Mock; close: jest.Mock; can: jest.Mock } | null = null
 jest.mock('@aglyn/aglyn/app-utils/transfer-launcher-context', () => ({
   useTransferLauncher: () => mockLauncher,
 }))
@@ -214,7 +214,7 @@ beforeEach(() => {
 
 describe('importing and exporting the list (AGL-3529)', () => {
   it('opens the console’s wizard and export dialog on this site’s list', () => {
-    mockLauncher = { openImport: jest.fn(), openExport: jest.fn(), close: jest.fn() }
+    mockLauncher = { openImport: jest.fn(), openExport: jest.fn(), close: jest.fn(), can: jest.fn(() => true) }
     render(<SuppressionsCard hostId="host-1" />)
     fireEvent.click(screen.getByText('Import'))
     expect(mockLauncher.openImport).toHaveBeenCalledWith(
@@ -224,6 +224,20 @@ describe('importing and exporting the list (AGL-3529)', () => {
     expect(mockLauncher.openExport).toHaveBeenCalledWith(
       expect.objectContaining({ resource: 'email.suppressions', hostId: 'host-1' }),
     )
+    mockLauncher = null
+  })
+
+  it('offers each only to whom the launcher’s can says it may (AGL-3554)', () => {
+    mockLauncher = {
+      openImport: jest.fn(),
+      openExport: jest.fn(),
+      close: jest.fn(),
+      can: jest.fn((action: string) => action === 'export'),
+    }
+    render(<SuppressionsCard hostId="host-1" />)
+    expect(screen.queryByText('Import')).toBeNull()
+    expect(screen.getByText('Export')).toBeTruthy()
+    expect(mockLauncher.can).toHaveBeenCalledWith('import', { resource: 'email.suppressions', scope: 'host', hostId: 'host-1' })
     mockLauncher = null
   })
 

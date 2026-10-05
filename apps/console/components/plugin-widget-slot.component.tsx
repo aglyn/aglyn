@@ -17,6 +17,7 @@
 'use client'
 
 import {
+  isConsoleHostGatedWidgetSlot,
   isConsoleStaffWidgetSlot,
   listConsoleWidgets,
   type ConsoleWidgetColumn,
@@ -314,10 +315,14 @@ export function useSlotWidgets(slots: readonly string[]): {
         // The extension's requirement AND the widget's own, exactly as a nav
         // item composes with its extension's: a card cannot escape its
         // extension's gate by declaring a key its reader happens to hold.
+        // A zone its host gates (AGL-3554) asks the widget's own alone.
         permission: staff
           ? ('granted' as const)
           : resolveExtensionPermission(
-              requiredExtensionPermissions(extension, widget),
+              requiredExtensionPermissions(
+                isConsoleHostGatedWidgetSlot(slot) ? undefined : extension,
+                widget,
+              ),
               answers,
             ),
         widget: {

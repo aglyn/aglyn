@@ -451,7 +451,13 @@ otherwise. Importing (upload, analyze, plan, apply, status, undo) needs
 opens with) asks what the resource declares: `readableByMembers` admits any
 member, or a collaborator who reaches the named site (datasets); a
 `readPermission` admits its holders and `data.manage`; a resource that
-declares neither keeps `data.manage`. The export route passes a
+declares neither keeps `data.manage`. A resource stricter than
+`data.manage` names its `importRoles` (AGL-3554): an import — every step,
+the job's resource included — also needs the member's role where the
+records are to be one of them (`hostRoleFor` on the named site, the
+workspace role otherwise; `transferImportRoleAllowed`), refused in the
+words of `transferImportRoleRefusal`. Gift cards declare `["admin"]`: a
+workspace's owners and admins, and a site's admins. The export route passes a
 collaborator's `scopeTokens`, and each resource's `readPage` and `count`
 read only what they reach. Then the resource's plugin must run for the
 request (AGL-3548), the plugin dispatcher's own two questions: switched on
@@ -658,12 +664,16 @@ unsubscribe link sent under it must go on naming it.
 ## The hub
 
 `Settings → Import & export` (`/[orgSlug]/settings/data`, shown to whoever
-holds `data.manage`) lists every resource the workspace's plugins declare —
+may export something — `data.manage`, or a resource whose records the
+person may read on a plan that moves them, `useTransferHubVisible`, AGL-3554)
+lists every resource the workspace's plugins declare —
 the workspace's and, for the site picked, that site's — grouped by plugin,
 leaving out a plugin switched off there or whose release flag is off for
 the workspace (AGL-3548), as the routes refuse it.
-Records open the wizard and the export dialog through the shell's launcher;
-packages open the workspace package export and import; each site links to
+Records open the wizard and the export dialog through the shell's launcher,
+each button — a dataset's per-instance rows too — only where `can` says the
+person may; packages, and the history, are for `data.manage` alone, which
+their routes ask. Packages open the workspace package export and import; each site links to
 its Backup & restore. The history (`/api/transfer/jobs`) lists every import
 — rows, workspace packages, each site's package imports — with its result
 file and Undo while the window is open. It loads the `transferResources`
@@ -902,6 +912,15 @@ written as a preview snapshot under its own version id (`package-site`,
 `package-file`), never a real version's, and the route renders the snapshot
 (`apps/console/utils/site-package-preview.ts`). Both sides are drawn without
 a page's layout chain.
+
+A kind a plugin previews itself — a form, a site email — is drawn by that
+plugin's widget in the `sitePackageItemPreview` zone (AGL-3545). The zone is
+one its host gates (`CONSOLE_HOST_GATED_WIDGET_SLOTS`, AGL-3554): the
+widget draws only the item it is handed, on a card already gated on what
+the import requires, so the console asks the widget's own `permission` and
+not its extension's — the Email plugin's `data.manage`, which guards its
+audiences, no longer hides the email preview from the site editor
+importing it.
 
 ### The ledger — why these routes and not the job engine
 

@@ -22,17 +22,21 @@ import { Stack } from '@mui/material'
 import { useState } from 'react'
 import OrgDataTransferCard from '../../../../../../components/settings/org-data-transfer-card.component'
 import OrgTransferHistoryCard from '../../../../../../components/settings/org-transfer-history-card.component'
+import useOrgPermissions from '../../../../../../hooks/use-org-permissions'
 
 /**
  * Import & export (AGL-3535): everything the workspace can move in and out,
- * and every import it ran, with its results and undo.
+ * and every import it ran, with its results and undo. Open to whoever may
+ * export something (AGL-3554); the history of imports is for those who
+ * may import — the jobs route asks `data.manage`.
  */
 const SettingsData: NextPageWithLayout<Record<string, never>> = () => {
   const [imported, setImported] = useState(0)
+  const permissions = useOrgPermissions()
   return (
     <Stack spacing={2}>
       <OrgDataTransferCard onImported={() => setImported((count) => count + 1)} />
-      <OrgTransferHistoryCard refreshKey={imported} />
+      {permissions.loaded && permissions.can('data.manage') ? <OrgTransferHistoryCard refreshKey={imported} /> : null}
     </Stack>
   )
 }

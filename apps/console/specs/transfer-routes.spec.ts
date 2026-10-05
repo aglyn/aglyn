@@ -764,3 +764,53 @@ describe('every plugin’s plan (AGL-3548)', () => {
     expect((await refused.json()).error).toBe("Exporting events isn't included in any plan — it's a paid add-on. Manage your plan and add-ons from Billing.")
   })
 })
+
+/*
+ * IMPORT ROLES (AGL-3554): a resource that names `importRoles` is imported
+ * only by a member in one of them where the records are — gift cards by a
+ * site's admins, which the workspace's owners and admins are — on top of
+ * Manage data, on every import step; exporting never asks the role. The
+ * declaration is the real one.
+ */
+describe('import roles (AGL-3554)', () => {
+  const upload_ = (hostId = 'host-a') => upload(request('upload', { orgId: 'org-1', resource: 'commerce.gift-cards', hostId, fileName: 'x.csv', content: 'a\n1' }))
+
+  beforeEach(() => {
+    mockOrg = { $id: 'org-1', plan: 'business' }
+    mockEngine.uploadTransferSource.mockResolvedValue({ job: JOB, preview: {} })
+    mockJobs['job-gifts'] = { resource: 'commerce.gift-cards', hostId: 'host-a' }
+  })
+
+  it('refuses an org-wide editor holding Manage data, at every import step, in the declaration’s words', async () => {
+    mockMember = { role: 'editor', allHosts: true }
+    const refused = await upload_()
+    expect(refused.status).toBe(403)
+    expect(await refused.json()).toEqual({
+      code: 'forbidden',
+      error: 'Only the workspace’s owners and admins, and the site’s admins, can import gift cards.',
+    })
+    for (const route of [analyze, plan, apply, status, undo]) {
+      expect((await route(request('step', { orgId: 'org-1', jobId: 'job-gifts' }))).status).toBe(403)
+    }
+    expect(mockEngine.uploadTransferSource).not.toHaveBeenCalled()
+    expect(mockEngine.applyTransferJob).not.toHaveBeenCalled()
+  })
+
+  it('admits the workspace’s admins and a site’s admin, and anyone who may export to export', async () => {
+    mockMember = { role: 'admin' }
+    expect((await upload_()).status).toBe(200)
+    mockMember = { role: 'editor', hostAccess: { 'host-a': 'admin' } }
+    expect((await upload_()).status).toBe(200)
+    mockMember = { role: 'editor', allHosts: true }
+    const exported = await exportRoute(
+      request('export', { orgId: 'org-1', resource: 'commerce.gift-cards', hostId: 'host-a', fieldIds: ['id'], scope: { kind: 'all' }, format: 'csv' }),
+    )
+    expect(exported.status).toBe(200)
+  })
+
+  it('lets staff through, as for every other access question', async () => {
+    mockVerifyIdToken.mockResolvedValue({ uid: 'uid-staff', email: 's@aglyn.test', email_verified: true, staff: true })
+    mockMember = { role: 'editor', allHosts: true }
+    expect((await upload_()).status).toBe(200)
+  })
+})

@@ -121,6 +121,7 @@ async function mountAtOrg(hosts = TWO_SITES) {
     openImport: (props: Record<string, unknown>) => (importProps = props),
     openExport: (props: Record<string, unknown>) => (exportProps = props),
     close: () => undefined,
+    can: () => true,
   }
   window.sessionStorage.clear()
   render(

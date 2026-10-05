@@ -32,6 +32,7 @@ import { buildRoute, Route } from '../../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
 import { useOrgScope, useOrgSlug } from '../../../../../hooks/use-org-scope'
 import useOrgPermissions from '../../../../../hooks/use-org-permissions'
+import useTransferHubVisible from '../../../../../hooks/use-transfer-hub-visible'
 
 /**
  * Organization settings, section by section (AGL-2501).
@@ -50,9 +51,10 @@ export default function SettingsSectionsLayout({
 }) {
   const orgSlug = useOrgSlug()
   const { currentOrg } = useOrgScope()
-  const { loaded: permissionsLoaded, can } = useOrgPermissions()
+  const { loaded: permissionsLoaded } = useOrgPermissions()
   const canManage = canManageOrg(currentOrg?.role)
   const isOwner = currentOrg?.role === 'owner'
+  const transferHubVisible = useTransferHubVisible()
   const section = (route: Route, label: string, visible?: boolean) => ({
     href: buildRoute(route as never, { orgSlug } as never),
     label,
@@ -82,9 +84,11 @@ export default function SettingsSectionsLayout({
     // Everything held, flagged or locked on the workspace, and the way to
     // request a review (AGL-3368). Owners and admins: it is who is told.
     section(Route.ORG_SETTINGS_HOLDS, 'Holds & reviews', canManage),
-    // Import & export (AGL-3535): the transfer routes ask `data.manage`,
-    // so the section is offered to whoever holds it.
-    section(Route.ORG_SETTINGS_DATA, 'Import & export', can('data.manage')),
+    // Import & export (AGL-3535): offered to whoever may export something
+    // (AGL-3554) — `data.manage`, or a resource that lets the person read
+    // its records on a plan that moves them; the page offers each button
+    // only where its route takes it.
+    section(Route.ORG_SETTINGS_DATA, 'Import & export', transferHubVisible),
     section(Route.ORG_SETTINGS_OWNERSHIP, 'Ownership', isOwner),
     section(Route.ORG_SETTINGS_DELETE, 'Delete', isOwner),
   ]

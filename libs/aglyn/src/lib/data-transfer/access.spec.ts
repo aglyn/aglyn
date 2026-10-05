@@ -19,8 +19,12 @@ import {
   TRANSFER_MANAGE_PERMISSION,
   transferAccessAllowed,
   transferAccessPermissions,
+  transferImportRoleAllowed,
+  transferImportRoleRefusal,
   transferRouteIntent,
+  transferWorkspaceRole,
 } from './access'
+import { transferResourceProblems } from './resource'
 
 const holding = (...keys: string[]) => ({ holds: (key: string) => keys.includes(key), reachesSite: true })
 
@@ -66,5 +70,56 @@ describe('transfer access (AGL-3546)', () => {
     const away = { holds: () => true, reachesSite: false }
     expect(transferAccessAllowed('export', { readableByMembers: true }, away)).toBe(false)
     expect(transferAccessAllowed('import', {}, away)).toBe(false)
+  })
+})
+
+/*
+ * A resource stricter than `data.manage` names its `importRoles` (AGL-3554):
+ * gift cards, imported by a site's admins — a workspace's owners and admins
+ * are every site's admin — and by nobody else, whatever they hold. Exporting
+ * never asks the role.
+ */
+describe('import roles (AGL-3554)', () => {
+  const giftCards = { key: 'gifts', label: 'Gift cards', scope: 'host' as const, importRoles: ['admin'] as const }
+  const manager = (role: 'admin' | 'editor' | null) => ({ holds: () => true, reachesSite: true, role })
+
+  it('imports only for a member in one of the roles, on top of the permission', () => {
+    expect(transferAccessAllowed('import', giftCards, manager('admin'))).toBe(true)
+    expect(transferAccessAllowed('import', giftCards, manager('editor'))).toBe(false)
+    expect(transferAccessAllowed('import', giftCards, manager(null))).toBe(false)
+    expect(transferAccessAllowed('import', giftCards, { holds: () => false, reachesSite: true, role: 'admin' })).toBe(false)
+  })
+
+  it('never asks the role to export, nor of a resource that names none', () => {
+    expect(transferAccessAllowed('export', giftCards, manager('editor'))).toBe(true)
+    expect(transferImportRoleAllowed('import', {}, null)).toBe(true)
+    expect(transferImportRoleAllowed('export', giftCards, null)).toBe(true)
+  })
+
+  it('reads a workspace role as the site role it is everywhere', () => {
+    expect(transferWorkspaceRole('owner')).toBe('admin')
+    expect(transferWorkspaceRole('admin')).toBe('admin')
+    expect(transferWorkspaceRole('editor')).toBe('editor')
+    expect(transferWorkspaceRole('stranger')).toBeNull()
+    expect(transferWorkspaceRole(undefined)).toBeNull()
+  })
+
+  it('refuses in a sentence naming who may', () => {
+    expect(transferImportRoleRefusal(giftCards)).toBe('Only the workspace’s owners and admins, and the site’s admins, can import gift cards.')
+    expect(transferImportRoleRefusal({ ...giftCards, scope: 'org' })).toBe('Only the workspace’s owners and admins can import gift cards.')
+    expect(transferImportRoleRefusal({ ...giftCards, importRoles: ['admin', 'editor'] })).toBe(
+      'Importing gift cards needs one of these roles on the site: Admin, Editor.',
+    )
+  })
+
+  it('is refused at registration on a resource never imported, or naming an unknown role', () => {
+    const base = { key: 'gifts', label: 'Gift cards', scope: 'host' as const, kinds: ['records' as const], formats: ['csv' as const] }
+    expect(transferResourceProblems({ ...base, importRoles: ['admin'] })).toEqual([])
+    expect(transferResourceProblems({ ...base, exportOnly: true, importRoles: ['admin'] })).toEqual([
+      'gifts names who may import records it never imports.',
+    ])
+    expect(transferResourceProblems({ ...base, importRoles: ['owner' as never] })).toEqual([
+      'gifts names an import role that is not admin, editor, author, viewer.',
+    ])
   })
 })

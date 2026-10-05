@@ -555,7 +555,8 @@ export function SuppressionsCard(props: SuppressionsCardProps) {
       HeaderProps={{
         action: (
           <Stack direction="row" spacing={1}>
-            {transfer ? (
+            {/* Each only for whom the route takes it (AGL-3554). */}
+            {transfer?.can('export', { resource: SUPPRESSIONS_RESOURCE, scope: 'host', hostId }) ? (
               <Button
                 size="small"
                 variant="outlined"
@@ -572,7 +573,7 @@ export function SuppressionsCard(props: SuppressionsCardProps) {
                 {'Export'}
               </Button>
             ) : null}
-            {transfer ? (
+            {transfer?.can('import', { resource: SUPPRESSIONS_RESOURCE, scope: 'host', hostId }) ? (
               <Button
                 size="small"
                 variant="outlined"

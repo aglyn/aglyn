@@ -834,20 +834,21 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
           >
             {'Add product'}
           </Button>
-          {transfer ? (
-            <>
-              <Button size="small" disabled={!planReady} onClick={openImport}>
-                {'Import'}
-              </Button>
-              <Button
-                size="small"
-                // Nothing matches: there is nothing for the export to write.
-                disabled={products.length === 0 && page === 0}
-                onClick={openExport}
-              >
-                {'Export'}
-              </Button>
-            </>
+          {/* Each only for whom the route takes it (AGL-3554). */}
+          {transfer?.can('import', { resource: COMMERCE_PRODUCTS_TRANSFER, scope: 'host', hostId }) ? (
+            <Button size="small" disabled={!planReady} onClick={openImport}>
+              {'Import'}
+            </Button>
+          ) : null}
+          {transfer?.can('export', { resource: COMMERCE_PRODUCTS_TRANSFER, scope: 'host', hostId }) ? (
+            <Button
+              size="small"
+              // Nothing matches: there is nothing for the export to write.
+              disabled={products.length === 0 && page === 0}
+              onClick={openExport}
+            >
+              {'Export'}
+            </Button>
           ) : null}
         </Stack>
         {/* The cap, standing rather than only on refusal (AGL-2113). The

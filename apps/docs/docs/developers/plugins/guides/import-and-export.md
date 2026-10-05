@@ -103,8 +103,14 @@ flickering away.
   on every plan (`"featureFlagExempt": ["export"]`), which a workspace is
   owed whether or not your plugin is on.
 
-The routes stay the enforcement: `can` only keeps you from offering a
-button they would refuse.
+- **A role**, when your resource is stricter than **Manage data**: declare
+  `"importRoles"` (say `["admin"]`) and only a member in one of those roles
+  where the records are may import them. Don't check the role in your own
+  hook for the button — `can('import')` already answers it.
+
+Ask `can` for every Import and Export button you draw, and draw neither
+when it answers `false`. The routes stay the enforcement: `can` only keeps
+you from offering a button they would refuse.
 
 - `jobId` on `openImport` resumes an import where the person left it; the
   draft of every choice is saved per job.

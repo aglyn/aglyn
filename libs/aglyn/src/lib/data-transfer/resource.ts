@@ -120,7 +120,25 @@ export interface TransferResourceDescriptor {
    * plan's right, while importing them is the CRM.
    */
   featureFlagExempt?: readonly ('import' | 'export')[]
+  /**
+   * The only roles that may IMPORT the records, where the records are —
+   * the member's role on the named site (`hostRoleFor`: a workspace owner or
+   * admin is every site's admin), or on the workspace for a workspace's
+   * records — on top of `data.manage`, for a resource stricter than the
+   * permission: gift cards, which an import issues as spendable money, are
+   * imported by `["admin"]` alone (AGL-3554). The transfer gate refuses
+   * anyone else on every import step, the console's `can('import')` answers
+   * `false` for them, and the hub offers them no Import. See
+   * `data-transfer/access.ts`.
+   */
+  importRoles?: readonly TransferImportRole[]
 }
+
+/** A role {@link TransferResourceDescriptor.importRoles} names: a site role. */
+export type TransferImportRole = 'admin' | 'editor' | 'author' | 'viewer'
+
+/** Every {@link TransferImportRole}, strongest first. */
+export const TRANSFER_IMPORT_ROLES: readonly TransferImportRole[] = ['admin', 'editor', 'author', 'viewer']
 
 /** Whether a file may be imported into the resource. */
 export function transferResourceImports(descriptor: Pick<TransferResourceDescriptor, 'exportOnly'>): boolean {
@@ -311,6 +329,13 @@ export function transferResourceProblems(descriptor: TransferResourceDescriptor)
   }
   if (descriptor.featureFlag !== undefined && !String(descriptor.featureFlag).trim()) {
     problems.push(`${descriptor.key} names an empty plan feature.`)
+  }
+  if (descriptor.importRoles !== undefined) {
+    const roles = descriptor.importRoles
+    if (descriptor.exportOnly === true) problems.push(`${descriptor.key} names who may import records it never imports.`)
+    if (!Array.isArray(roles) || !roles.length || roles.some((role) => !TRANSFER_IMPORT_ROLES.includes(role))) {
+      problems.push(`${descriptor.key} names an import role that is not ${TRANSFER_IMPORT_ROLES.join(', ')}.`)
+    }
   }
   if (descriptor.featureFlagExempt !== undefined) {
     const exempt = descriptor.featureFlagExempt

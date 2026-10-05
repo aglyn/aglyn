@@ -48,6 +48,11 @@ jest.mock('../hooks/use-current-org', () => ({
 jest.mock('../hooks/use-org-hosts', () => ({
   useOrgHosts: () => ({ hosts: [{ $id: 'host-1', name: 'Shop', subdomain: 'shop' }] }),
 }))
+// A member holding "Manage data": the packages are theirs (AGL-3554).
+jest.mock('../hooks/use-org-permissions', () => ({
+  __esModule: true,
+  default: () => ({ loaded: true, can: (permission: string) => permission === 'data.manage' }),
+}))
 jest.mock('../hooks/use-org-scope', () => ({ useOrgSlug: () => 'acme' }))
 jest.mock('../hooks/use-console-plugins', () => ({ useConsoleSlotPlugins: () => true }))
 jest.mock('@aglyn/shared-ui-jsx', () => ({

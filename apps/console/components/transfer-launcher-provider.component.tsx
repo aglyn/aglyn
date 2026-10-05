@@ -33,6 +33,8 @@ import {
   parseTransferResourceKey,
   transferAccessAllowed,
   transferPlanFeature,
+  transferWorkspaceRole,
+  type TransferImportRole,
   type TransferMemberAxis,
 } from '@aglyn/aglyn/data-transfer'
 import { PLUGIN_TRANSFER_RESOURCES_DECLARED } from '@aglyn/aglyn/plugin-manager/first-party-plugins.generated'
@@ -78,6 +80,8 @@ export interface TransferAccessInputs {
   can(permission: string): boolean
   /** Whether the person reaches every site of the workspace. */
   orgWide: boolean
+  /** The person's role on the workspace (`owner`, `admin`, …), for a resource that names `importRoles`. */
+  orgRole?: string | null
   /** A collaborator's member document; `undefined` while it is read, `null` when it could not be. */
   member: Partial<AglynOrgMember> | null | undefined
   /**
@@ -92,9 +96,10 @@ export interface TransferAccessInputs {
  * Whether the person may `action` the target's records — the transfer
  * gate's own rule (`data-transfer/access.ts`, AGL-3546), on the axis the
  * gate decides it: the workspace, or the named site, where a collaborator is
- * decided by what they hold there — on a workspace whose plan carries the
- * resource's `featureFlag` for that action (AGL-3555). `false` until every
- * read the answer needs is in.
+ * decided by what they hold there, and by their role there for a resource
+ * that names `importRoles` (AGL-3554) — on a workspace whose plan carries
+ * the resource's `featureFlag` for that action (AGL-3555). `false` until
+ * every read the answer needs is in.
  */
 export function transferAccessVerdict(
   inputs: TransferAccessInputs,
@@ -111,14 +116,18 @@ export function transferAccessVerdict(
   const hostId = target.hostId?.trim() || null
   let axis: TransferMemberAxis
   if (inputs.orgWide || !hostId) {
-    axis = { holds: (permission) => inputs.can(permission), reachesSite: true }
+    // An org-wide member's role is the same on every site: an owner or an
+    // admin is each site's admin (`hostRoleFor`).
+    axis = { holds: (permission) => inputs.can(permission), reachesSite: true, role: transferWorkspaceRole(inputs.orgRole) }
   } else if (inputs.member === undefined) {
     return false
   } else {
     const onSite = resolveCollaboratorHostPermissions(inputs.member, hostId as never) as Record<string, boolean> | null
+    const role = inputs.member ? (hostRoleFor(inputs.member, hostId as never) as TransferImportRole | null) : null
     axis = {
       holds: (permission) => onSite?.[permission] === true,
-      reachesSite: hostRoleFor(inputs.member, hostId as never) !== null,
+      reachesSite: role !== null,
+      role,
     }
   }
   return transferAccessAllowed(action, declared, axis)
@@ -175,6 +184,7 @@ export function TransferLauncherProvider({ children }: { children?: JSX.Children
     ? PLAN_FEATURES.filter((feature) => resolveExtensionEntitlement(feature as never, billing.org, true) === 'entitled').join(',')
     : null
   const orgWide = isOrgWideMembership(org)
+  const orgRole = (org as { role?: string } | null)?.role ?? null
   const member = useCollaboratorMember(orgId, user?.uid, Boolean(org) && !orgWide)
   const permissionsLoaded = Boolean(orgId) && permissions.loaded && permissions.orgId === orgId
   // The verdicts, not the resolution object: the launcher is a context value,
@@ -193,6 +203,7 @@ export function TransferLauncherProvider({ children }: { children?: JSX.Children
       permissionsLoaded,
       can: (key) => held.has(key),
       orgWide,
+      orgRole,
       member,
       entitled: (feature) => entitled.has(feature),
     }
@@ -212,7 +223,7 @@ export function TransferLauncherProvider({ children }: { children?: JSX.Children
         return answer
       },
     }
-  }, [permissionsLoaded, granted, orgWide, member, entitledFeatures])
+  }, [permissionsLoaded, granted, orgWide, orgRole, member, entitledFeatures])
 
   return (
     <TransferLauncherContext.Provider value={launcher}>

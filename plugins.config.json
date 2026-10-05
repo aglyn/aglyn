@@ -780,10 +780,11 @@
           "description": "Percent-off coupon codes, matched by code. New ones start switched off."
         },
         {
-          "$comment": "Imported by ISSUING each card through the plugin's issue path (AGL-3551), never by writing a balance: owners and admins only, the dry run lists every card and asks for the total typed back, and undo voids only cards nobody has spent from. A card's ID is its code. AGL-3548: issuing cards needs the plan's gift cards (`giftCards`), as the Gift cards card's issue route does; the cards a workspace already holds stay readable, and exportable, on every plan.",
+          "$comment": "Imported by ISSUING each card through the plugin's issue path (AGL-3551), never by writing a balance: owners and admins only, the dry run lists every card and asks for the total typed back, and undo voids only cards nobody has spent from. A card's ID is its code. AGL-3548: issuing cards needs the plan's gift cards (`giftCards`), as the Gift cards card's issue route does; the cards a workspace already holds stay readable, and exportable, on every plan. AGL-3554: imported by the workspace’s owners and admins and the site’s admins alone (importRoles), as an import issues spendable money.",
           "key": "commerce.gift-cards",
           "featureFlag": "giftCards",
           "featureFlagExempt": ["export"],
+          "importRoles": ["admin"],
           "label": "Gift cards",
           "singularLabel": "Gift card",
           "scope": "host",
