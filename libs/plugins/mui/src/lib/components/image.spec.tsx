@@ -519,11 +519,16 @@ describe('Image sizes (AGL-2486)', () => {
     // and centred in its box on the besigner canvas, in _preview and on
     // published sites — which is what `sizes="auto"` shipped and had to be
     // reverted. A delivery win may not be paid for in layout.
-    for (const width of [undefined, '100%', '50vw', 'calc(100% - 2rem)']) {
+    for (const width of [undefined, '100%', 'calc(100% - 2rem)']) {
       const { container } = render(<Image src={CDN} alt="fluid" width={width} />)
       expect(container.querySelector('img')!.getAttribute('loading')).toBe('lazy')
       expect(container.querySelector('img')!.getAttribute('sizes')).toBe('100vw')
     }
+  })
+
+  it('describes a viewport width as itself — it is definite, not circular', () => {
+    const { container } = render(<Image src={CDN} alt="half" width="50vw" />)
+    expect(container.querySelector('img')!.getAttribute('sizes')).toBe('50vw')
   })
 
   it('keeps 100vw on an EAGER fluid image, because auto is inert there', () => {
@@ -907,7 +912,8 @@ describe('Image hero priority and preload (AGL-3485)', () => {
     const link = preloadOf(html)
     expect(link).toMatch(/as="image"/i)
     expect(link).toMatch(/fetchpriority="high"/i)
-    expect(link).toMatch(new RegExp(`imagesrcset="${CDN}\\?w=320 320w`, 'i'))
+    expect(link).toMatch(new RegExp(`imagesrcset="${CDN}\\?w=160 160w`, 'i'))
+    expect(link).toMatch(new RegExp(`${CDN}\\?w=320 320w`, 'i'))
     expect(link).toMatch(/imagesizes="100vw"/i)
   })
 

@@ -35,8 +35,14 @@ import {
   resolveSiteFaviconHref,
 } from '../site-favicon'
 import {
+  siteAppleTouchIconLinks,
+  siteFaviconLinks,
+} from '@aglyn/aglyn/app-utils/site-icon-set'
+import { getSiteIconFacts } from '@aglyn/tenant-runtime/get-site-icon-facts'
+import {
   siteAppleTouchIconSrc,
   siteFaviconSrc,
+  siteIconBackground,
   siteThemeColorMeta,
 } from '../../../utils/site-icons'
 import { HostThemeProviders } from '../host-theme-providers'
@@ -112,9 +118,11 @@ export default async function HostLayout({
    * by the document that declared it, so it has a base URL to resolve against.
    * (The manifest ICON is the exception — the OS fetches it with no page.)
    *
-   * No `type`: the two favicons in production are an `.ico` and a `.png`, the
-   * stored value carries no MIME, and a WRONG `type` is worse than none —
-   * browsers use it to pick between candidates and will skip the only one.
+   * A `type` only where it is known (AGL-3484): on each derived PNG, which is
+   * a PNG by construction, and on an SVG the media document says is one. The
+   * pass-through link for anything else carries none — a WRONG `type` is
+   * worse than none, because browsers use it to pick between candidates and
+   * will skip the only one.
    */
   const siteFavicon = siteFaviconSrc(hostRes.host)
   /**
@@ -264,6 +272,30 @@ export default async function HostLayout({
           hostId: hostRes.host?.$id,
         })
       : undefined
+  /**
+   * Every size of both icons, derived from the one file each (AGL-3484).
+   *
+   * The links used to name the upload itself, with no `sizes`: a 512px PNG
+   * downloaded to paint a 16px tab. Now a favicon is a PNG per tab size
+   * (plus the SVG itself, when it is one) and a touch icon each iOS size,
+   * flattened onto the site's background because iOS paints transparency
+   * black. One projected read of the two source documents supplies their
+   * type and content hash — the version that caches each icon for a year.
+   * A source with no renderer behind it (a hotlink, an `.ico`, `data:,`) is
+   * the single link it always was.
+   */
+  const iconFacts = await getSiteIconFacts({
+    hostId: hostRes.host?.$id,
+    srcs: [faviconHref, appleTouchIcon],
+  })
+  const faviconLinks = faviconHref
+    ? siteFaviconLinks(faviconHref, iconFacts.get(faviconHref))
+    : []
+  const touchIconLinks = siteAppleTouchIconLinks(
+    appleTouchIcon,
+    appleTouchIcon ? iconFacts.get(appleTouchIcon) : undefined,
+    siteIconBackground(hostTheme),
+  )
   const titleParts = hostSeoTitleParts(hostRes.host)
   return (
     <HostThemeProviders
@@ -285,7 +317,9 @@ export default async function HostLayout({
           serves every customer domain and every aglyn.app subdomain without
           the layout needing to know which it is on. */}
       <link rel="manifest" href="/manifest.webmanifest" />
-      {faviconHref ? <link rel="icon" href={faviconHref} /> : null}
+      {faviconLinks.map(({ rel, href, type, sizes }) => (
+        <link key={href} rel={rel} href={href} type={type} sizes={sizes} />
+      ))}
       {faviconDarkHref ? (
         <link
           rel="icon"
@@ -293,9 +327,9 @@ export default async function HostLayout({
           media="(prefers-color-scheme: dark)"
         />
       ) : null}
-      {appleTouchIcon ? (
-        <link rel="apple-touch-icon" href={appleTouchIcon} />
-      ) : null}
+      {touchIconLinks.map(({ rel, href, sizes }) => (
+        <link key={href} rel={rel} href={href} sizes={sizes} />
+      ))}
       {themeColors.map(({ content, media }) => (
         <meta
           key={media ?? 'theme-color'}

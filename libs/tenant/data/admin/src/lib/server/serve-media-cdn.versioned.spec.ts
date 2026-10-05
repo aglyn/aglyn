@@ -129,6 +129,9 @@ const DOC = {
   storagePath: 'orgs/acme/media/m1',
   contentHash: '0123456789abcdef',
   variants: [320, 640],
+  // Made by the encoder this code runs (AGL-3486); the cases below that are
+  // about an older or newer generation say so.
+  variantEncoderVersion: MEDIA_VARIANT_ENCODER_VERSION,
   visibleTo: ['org'],
 }
 
@@ -220,7 +223,7 @@ describe('mediaCdnVersionIsCurrent', () => {
   it('reads an absent encoder field as the first generation', () => {
     const token = { contentHash: 'abc', encoderVersion: 1 }
     expect(mediaCdnVersionIsCurrent({ ...base, token })).toBe(
-      MEDIA_VARIANT_ENCODER_VERSION === 1,
+      (MEDIA_VARIANT_ENCODER_VERSION as number) === 1,
     )
   })
 

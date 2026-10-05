@@ -20,7 +20,14 @@
  * holds a written listing to it.
  */
 
-import { SEO_MAX_KEYWORDS, seoKeywordCount, seoKeywordCoverage, seoKeywordList } from './seo-keywords'
+import {
+  SEO_MAX_KEYWORDS,
+  seoKeywordCount,
+  seoKeywordCoverage,
+  seoKeywordList,
+  seoKeywordSplit,
+  seoQuotedKeywords,
+} from './seo-keywords'
 
 describe('target keywords', () => {
   it('counts whole words in any case, and nothing inside a longer word', () => {
@@ -32,6 +39,12 @@ describe('target keywords', () => {
   it('reads a typed list trimmed, deduplicated and capped', () => {
     expect(seoKeywordList(' Lamps, lamps ,brass\n, ,  desk lamps ')).toEqual(['Lamps', 'brass', 'desk lamps'])
     expect(seoKeywordList('a,b,c,d,e,f,g')).toHaveLength(SEO_MAX_KEYWORDS)
+  })
+
+  it('keeps the keywords past the limit, each once, so a caller can name them (AGL-3501)', () => {
+    expect(seoKeywordSplit('a, b, c, d, e, f, F, g')).toEqual({ keywords: ['a', 'b', 'c', 'd', 'e'], unchecked: ['f', 'g'] })
+    expect(seoKeywordSplit(['a', 'a'])).toEqual({ keywords: ['a'], unchecked: [] })
+    expect(seoQuotedKeywords(['f', 'g'])).toBe('“f”, “g”')
   })
 
   it('reports where a page already says each keyword', () => {

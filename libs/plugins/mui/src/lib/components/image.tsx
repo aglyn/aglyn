@@ -405,11 +405,23 @@ const Image = forwardRef<HTMLElement, ImageProps>((props, ref) => {
   // srcSet is safe for any CDN-form URL. Asked of the RESOLVED url, so a
   // reference and a legacy stored path both keep their WebP variants. Any
   // other url has no candidates, and so no `sizes` either.
-  const srcSet = Aglyn.mediaCdnSrcSet(src)
+  //
+  // The asset's own width caps the list (AGL-3486): the widest candidate is
+  // the source, described truthfully, never a `1920w` for a 1000px photo that
+  // the CDN can only answer with the same 1000 pixels.
+  const srcSet = Aglyn.mediaCdnSrcSet(src, {
+    sourceWidth:
+      typeof intrinsicWidth === 'number' &&
+      Number.isFinite(intrinsicWidth) &&
+      intrinsicWidth > 0
+        ? intrinsicWidth
+        : undefined,
+  })
   /**
    * How wide the image will render, for `sizes` (AGL-3485): the author's own
-   * value, a pixel width, a pixel height at a known shape, or per breakpoint
-   * what the Besigner measured and what the layout states. See
+   * value, else per breakpoint a pixel width or height the element states (in
+   * its attributes or its `sx`, responsive values included), what the
+   * Besigner measured, and what the layout around it states. See
    * `utils/image-sizes.ts` for the order and for why none of it disturbs
    * layout the way `sizes="auto"` did (AGL-2486).
    *
@@ -420,6 +432,7 @@ const Image = forwardRef<HTMLElement, ImageProps>((props, ref) => {
     sizes: authoredSizes,
     width,
     height,
+    sx: nodeSxProp,
     intrinsicWidth,
     intrinsicHeight,
     renderedWidths,

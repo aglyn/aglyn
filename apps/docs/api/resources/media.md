@@ -65,7 +65,7 @@ site.
 | `object` | string | Always `"media"`. |
 | `fileName` | string \| null | Original filename. Not unique — two folders can hold `logo.png`. |
 | `contentType` | string \| null | MIME type as stored. |
-| `sizeBytes` | integer | Size of the original. Generated image variants are **not** counted here, but they *do* count toward your storage quota. |
+| `sizeBytes` | integer | Size of the original. This is what counts toward your storage: generated image variants and delivery copies are rebuilt from the original whenever needed, and are not counted. |
 | `width`, `height` | integer \| null | Pixel dimensions. `null` for non-images and for images we couldn't read — never assume an image has them. |
 | `alt` | string \| null | Alt text. Worth syncing if you're auditing accessibility. |
 | `description` | string \| null | Free text set in the library. |
@@ -136,8 +136,9 @@ file itself.
 
 ### The response does not tell you which variants exist {#no-variants}
 
-Aglyn generates WebP variants at **320**, **640** and **1280** pixels wide when an
-image is uploaded, and `cdnUrl` accepts a `?w=` parameter to select one:
+Aglyn generates WebP variants at **160**, **320**, **480**, **640**, **768**, **960**,
+**1280**, **1600**, **1920** and **2560** pixels wide when an image is uploaded, up to the
+image's own width, and `cdnUrl` accepts a `?w=` parameter to select one:
 
 ```
 https://app.aglyn.com/api/media/cdn/org:org_abc123/m_9fK2xQ?w=640
@@ -151,10 +152,16 @@ what the original is, not what was generated from it. Only the console's media l
 
 Two consequences worth designing around:
 
-- **A `?w=` width the file doesn't have is not an error.** The CDN serves the original
-  bytes instead of resizing or 404ing. So a `srcset` built from all three widths always
-  renders; the cost of guessing wrong is full-size bytes over a mobile connection, not
-  a broken image.
+- **A `?w=` width the file doesn't have is not an error.** The CDN serves what the plain
+  `cdnUrl` serves instead of resizing or 404ing. So a `srcset` built from every width
+  always renders; the cost of guessing wrong is full-size bytes over a mobile
+  connection, not a broken image. A `srcset` that stops at the file's own `width` never
+  guesses wrong.
+- **The plain `cdnUrl` is not always the original.** A JPEG, PNG or WebP larger than
+  2560 pixels on its long edge, carrying details such as a GPS position, or relying on a
+  camera's rotation flag is served as an upright copy in the same format, at most 2560
+  pixels on the long edge, with the details removed. Add `?download=1` for the original
+  exactly as uploaded.
 - **Non-images never have variants.** An SVG, a PDF, a video or a document is served as
   uploaded whatever `?w=` says.
 
@@ -328,9 +335,10 @@ for (const [group, bytes] of Object.entries(byType).sort((a, b) => b[1] - a[1]))
 }
 ```
 
-This measures **originals**. Your billed storage is larger, because Aglyn also stores
-generated image variants — so treat this as "which files should I clean up", not as a
-reconciliation of your invoice. The billed figure is on the
+This measures **originals**, which is also what your storage is billed on: generated
+image variants and delivery copies are not counted. Treat it as "which files should I
+clean up" rather than as a reconciliation of your invoice, which totals every library in
+the workspace. The billed figure is on the
 [billing page](/workspace-and-billing/billing-and-plans/overview#usage-meters).
 
 ### Mirror the library to disk

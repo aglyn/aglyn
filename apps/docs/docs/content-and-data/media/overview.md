@@ -421,6 +421,20 @@ Two things you may see:
 Every plan serves media via a **CDN** with automatic **WebP variants**, so images load fast
 and cache well.
 
+Image optimization is automatic, with nothing to set:
+
+- Each image gets WebP copies at a range of widths, and pages ask for the smallest one
+  that still fills the space the image is shown in. No copy is ever wider than the image
+  you uploaded, and none is kept when it would be larger than the file it stands in for.
+- Photos are turned upright, and the details inside the file — camera, date and the GPS
+  position a phone records — are left out of every copy a visitor receives.
+- An image larger than **2560 pixels** on its long edge is delivered at 2560, in its own
+  format, so a phone photo pasted into a page does not cost visitors several megabytes.
+- Your original is kept exactly as you uploaded it. **Download file** always gives it
+  back byte for byte, and [File info](#file-info) still reads its details.
+- Images already in your library pick up improvements to this on their own, the first
+  time each one is viewed after the change.
+
 Video, audio and documents are sent fresh on every request, so they count toward your
 organization's [bandwidth allowance](../../workspace-and-billing/billing-and-plans/bandwidth.md#how-usage-is-counted)
 by the bytes they send — a play, a seek or a download, from your site or from anywhere
@@ -492,7 +506,7 @@ describes **this file**, and it says one of exactly three things:
 | Line | Dot | What it means |
 | --- | --- | --- |
 | **Served from storage · no CDN, no variants** | gray | This asset has no CDN path — a plan without the media CDN, or an asset stored before you had it. |
-| **CDN · variants 320 / 640 / 1280** | green | On the CDN, with those WebP widths generated for it. The widths listed are the ones this file actually has. |
+| **CDN · variants 320 / 640 / 1280** | green | On the CDN, with those WebP widths generated for it. The widths listed are the ones this file actually has — a 1600-pixel photo lists the widths up to 1600, not the whole range. |
 | **CDN · no responsive variants for this file** | green | On the CDN, serving the original bytes only. |
 
 The third line is **not a fault report**. A file has no variants when there was nothing
@@ -673,18 +687,26 @@ The details behind the sections above, for anyone wiring media into their own co
 
 ### Variant widths {#variant-widths}
 
-Aglyn generates WebP variants at **320**, **640** and **1280** pixels wide when an image
-is uploaded. Those three are the whole set — there is no arbitrary resizing service
-behind the CDN URL.
+Aglyn generates WebP variants at **160**, **320**, **480**, **640**, **768**, **960**,
+**1280**, **1600**, **1920** and **2560** pixels wide when an image is uploaded, up to the
+image's own width. That is the whole set — there is no arbitrary resizing service behind
+the CDN URL.
 
 Add `?w=` to a CDN URL to ask for one: `…/api/media/cdn/org:{orgId}/{mediaId}?w=640`. A
-width the asset does not have generated is not an error and not a resize — the original
-bytes are served instead, so a `?w=200` request answers with the full-size file. Check
-the drawer's [delivery line](#delivery-line) to see which widths a given file has.
+width the asset does not have is not an error and not a resize — the URL's plain answer
+is served instead, so a `?w=200` request answers with the full-size image. Check the
+drawer's [delivery line](#delivery-line) to see which widths a given file has.
 
-`?download=1` on the same URL makes the response save rather than open in a tab. Both
-parameters are read after every access check, so neither widens what is served, and both
-are part of the cache key, so they cannot bleed into each other.
+The plain URL, with no `?w=`, serves the image itself — except for a JPEG, PNG or WebP
+that is larger than 2560 pixels on its long edge, carries details such as a GPS position,
+or relies on a camera's rotation flag. Those are served as a copy in the same format:
+upright, at most 2560 pixels on the long edge, with the details removed. Only the
+original counts toward your storage; the copies are rebuilt from it whenever needed.
+
+`?download=1` on the same URL makes the response save rather than open in a tab, and it
+always serves the original file exactly as uploaded. Both parameters are read after
+every access check, so neither widens what is served, and both are part of the cache
+key, so they cannot bleed into each other.
 
 ### How long a media URL is cached {#media-cache}
 

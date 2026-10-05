@@ -63,9 +63,12 @@ import {
 import { escapeHtml } from '@aglyn/shared-util-tools/escape-html'
 import { CNAME_HOST_PREFIX, getHost } from '../../../utils/get-host'
 import { getOrgBilling } from '../../../utils/get-org-billing'
+import { siteIconSrc } from '@aglyn/aglyn/app-utils/site-icon-set'
+import { resolveSiteTheme } from '@aglyn/aglyn/app-utils/site-theme'
 import {
   siteAppleTouchIconSrc,
   siteFaviconSrc,
+  siteIconBackground,
 } from '../../../utils/site-icons'
 
 export const dynamic = 'force-dynamic'
@@ -219,9 +222,26 @@ export async function GET(request: Request): Promise<Response> {
               ? { kind: 'contained' }
               : { kind: 'none' }
         if (refusal.kind === 'cap' || refusal.kind === 'contained') {
+          // One derived size of each rather than the upload itself (AGL-3484),
+          // unversioned: a refusal page reads nothing more for its icons, and
+          // the CDN serves an unversioned icon under its revalidated policy.
+          // A source the CDN cannot draw from is linked as it is.
+          const favicon = siteFaviconSrc(hostRes.host)
+          const touchIcon = siteAppleTouchIconSrc(hostRes.host)
           siteMarks = {
-            favicon: siteFaviconSrc(hostRes.host),
-            appleTouchIcon: siteAppleTouchIconSrc(hostRes.host),
+            favicon:
+              siteIconSrc(favicon, { plate: 'transparent', size: 32 }) ??
+              favicon,
+            appleTouchIcon:
+              siteIconSrc(
+                touchIcon,
+                { plate: 'flat', size: 180 },
+                {
+                  background: siteIconBackground(
+                    hostRes.host ? resolveSiteTheme(hostRes.host) : undefined,
+                  ),
+                },
+              ) ?? touchIcon,
           }
         }
       }

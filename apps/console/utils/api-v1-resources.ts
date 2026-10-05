@@ -48,6 +48,7 @@ import {
   firebaseAdmin,
   generateMediaVariants,
   getMediaQuarantine,
+  mediaVariantDocFields,
   listResponse,
   parseLimit,
 } from '@aglyn/tenant-data-admin'
@@ -867,8 +868,10 @@ async function createMedia(
           contentType,
           sourceWidth: (dimensions as { width?: number }).width,
           objectPath,
-          saveVariant: async (path: string, webp: Buffer) => {
-            await bucket.file(path).save(webp, { contentType: 'image/webp' })
+          // The display copy too (AGL-3486), as the console's routes make it.
+          display: true,
+          saveVariant: async (path, bytes, type) => {
+            await bucket.file(path).save(bytes, { contentType: type })
           },
         }).catch(() => null)
       : null
@@ -901,7 +904,7 @@ async function createMedia(
       }),
       contentHash,
       contentSha256,
-      variants: (variants as { variants?: number[] })?.variants ?? [],
+      ...(variants ? mediaVariantDocFields(variants) : { variants: [] }),
       ...(embeddedMetadata ? { embeddedMetadata } : {}),
       ...(svg?.removed?.length ? { svgSanitized: svg.removed } : {}),
       // The org library is shared across sites, so a file written there needs

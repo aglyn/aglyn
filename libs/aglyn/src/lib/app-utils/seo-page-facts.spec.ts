@@ -58,7 +58,14 @@ describe('seoPageFacts', () => {
 
   it('reads images with the text before them, and which have no description', () => {
     expect(facts.images).toEqual([
-      { nodeId: 'photo', src: 'media:host-1/lamp', alt: '', decorative: false, context: 'Every lamp is finished by hand.' },
+      {
+        nodeId: 'photo',
+        src: 'media:host-1/lamp',
+        alt: '',
+        decorative: false,
+        editable: true,
+        context: 'Every lamp is finished by hand.',
+      },
     ])
     expect(facts.imagesMissingAlt.map((image) => image.nodeId)).toEqual(['photo'])
   })
@@ -90,7 +97,81 @@ describe('seoPageFacts', () => {
     expect(long.text.length).toBe(SEO_PAGE_TEXT_MAX_CHARS)
   })
 
+  it('does not read a token as copy: a bound heading counts but says nothing, and no fix may rewrite it', () => {
+    const bound = seoPageFacts(
+      {
+        root: { componentId: 'div', nodes: ['title', 'card', 'photo'] },
+        title: { componentId: 'muiTypography', props: { component: 'h1', children: '{{item.name}}' } },
+        card: { componentId: 'muiTypography', props: { children: 'From {{item.city}} with care' } },
+        photo: { componentId: 'image', props: { src: '{{item.photo}}', alt: '{{item.caption}}' } },
+      } as NodeMap,
+      { rootId: 'root' },
+    )
+    expect(bound.h1s).toEqual([{ nodeId: 'title', level: 1, text: '', editable: false }])
+    expect(bound.text).not.toContain('{{')
+    expect(bound.text).toContain('From with care')
+    // Described at render by a value this read cannot see: not reported, not offered to a fix.
+    expect(bound.imagesMissingAlt).toEqual([])
+    expect(bound.images[0]).toMatchObject({ nodeId: 'photo', editable: false })
+  })
+
   it('answers empty for a page with no nodes', () => {
     expect(seoPageFacts(null)).toMatchObject({ text: '', headings: [], images: [], contentRootId: null })
+  })
+})
+
+/**
+ * The page as it publishes (AGL-3501): a heading, copy or image a reusable
+ * component renders is the page's — pointed at the component's placement, and
+ * never offered to a fix that would rewrite the page — and so is a row a
+ * repeat shows.
+ */
+describe('seoPageFacts on a composed page', () => {
+  const pageNodes: NodeMap = {
+    root: { componentId: 'div', nodes: ['main'] },
+    main: { componentId: 'section', props: { component: 'main' }, nodes: ['hero', 'intro', 'list'] },
+    hero: { componentId: 'reusableInstance', props: { refId: 'sectionHeading', propValues: { title: 'Book a free on-site estimate' } } },
+    intro: { componentId: 'muiTypography', props: { component: 'h1', children: 'Contact us' } },
+    list: { componentId: 'muiStack', props: { repeatDataset: 'services' }, nodes: ['item'] },
+    item: { componentId: 'muiTypography', props: { component: 'h2', children: '{{item.name}}' } },
+  }
+  // What the graft and the repeat make of it: the placement IS the component's
+  // root, its inside is prefixed by the placement, and each row is a copy.
+  const composed: NodeMap = {
+    ...pageNodes,
+    main: { ...pageNodes['main'], nodes: ['hero', 'intro', 'list'] },
+    hero: { componentId: 'muiStack', nodes: ['cmp__hero__title', 'cmp__hero__photo'] },
+    cmp__hero__title: { componentId: 'muiTypography', props: { component: 'h1', children: 'Book a free on-site estimate' } },
+    cmp__hero__photo: { componentId: 'image', props: { src: 'media:host-1/truck', alt: '' } },
+    list: { componentId: 'muiStack', nodes: ['rep__list__0__item', 'rep__list__1__item'] },
+    rep__list__0__item: { componentId: 'muiTypography', props: { component: 'h2', children: 'Roofing' } },
+    rep__list__1__item: { componentId: 'muiTypography', props: { component: 'h2', children: 'Siding' } },
+  }
+  const facts = seoPageFacts(composed, { rootId: 'root', pageNodes })
+
+  it('reads the headings a component renders, pointed at its placement and not editable', () => {
+    expect(facts.headings).toEqual([
+      { nodeId: 'hero', level: 1, text: 'Book a free on-site estimate', editable: false, inComponent: true },
+      { nodeId: 'intro', level: 1, text: 'Contact us', editable: true },
+      { nodeId: 'item', level: 2, text: 'Roofing', editable: false },
+      { nodeId: 'item', level: 2, text: 'Siding', editable: false },
+    ])
+    expect(facts.h1s.map((heading) => heading.nodeId)).toEqual(['hero', 'intro'])
+  })
+
+  it('carries a component’s copy and a repeat’s rows in the text', () => {
+    expect(facts.text).toContain('Book a free on-site estimate')
+    expect(facts.text).toContain('Roofing')
+    expect(facts.text).not.toContain('{{')
+  })
+
+  it('reports a component’s image at its placement, as one no page fix can describe', () => {
+    expect(facts.imagesMissingAlt).toEqual([
+      expect.objectContaining({ nodeId: 'hero', src: 'media:host-1/truck', editable: false, inComponent: true }),
+    ])
+  })
+
+  it('keeps the page’s own content region for a heading a fix adds', () => {
+    expect(facts.contentRootId).toBe('main')
   })
 })

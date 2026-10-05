@@ -25,8 +25,7 @@
  *   node tools/scripts/generate-video-renditions.mjs --write --media orgs/ID/media/ID
  *   node tools/scripts/generate-video-renditions.mjs --write --delivery-only
  *
- * REPORT-ONLY IS THE DEFAULT, for the reason `backfill-media-variants.mjs`
- * states: this writes objects to the production bucket and mutates media
+ * REPORT-ONLY IS THE DEFAULT: this writes objects to the production bucket and mutates media
  * documents, and the shape of the corpus should be something you have READ
  * before it is something you have changed.
  *
@@ -309,8 +308,7 @@ const bucket = getStorage().bucket(bucketName)
 
 // The path grammar comes from the WORKSPACE SOURCE through jiti, so this
 // script cannot mint an object path the CDN would not look for. Same
-// discipline, and the same jiti alias construction, as
-// `backfill-media-variants.mjs`.
+// discipline as every workspace-source script here.
 const { default: createJiti } = await import('jiti')
 const { readFileSync } = await import('node:fs')
 const { dirname, resolve: resolvePath } = await import('node:path')

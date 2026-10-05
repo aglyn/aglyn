@@ -105,10 +105,58 @@ with a name and logo) that feeds the site's structured data.
 
 The **App icon** is the square mark someone installs to a phone or desktop home
 screen, and it is a third picture rather than a reuse of the other two on purpose: a
-favicon is a 16–32px glyph with nowhere near the resolution, and a site logo is
-usually a wordmark, which an operating system crops to a square tile. Leave it unset
-and installing your site falls back to the logo, exactly as it always has. Bring a
-square PNG at 512×512.
+favicon is a 16–32px glyph drawn for a browser tab, and a site logo is usually a
+wordmark, which comes out as a thin strip in a square tile. Leave it unset and
+installing your site uses the favicon, then the logo. Bring one square PNG or SVG at
+512×512 or larger.
+
+### Every icon size is generated for you
+
+You upload **one** file for the favicon and **one** for the app icon. Your site
+generates every size browsers, phones and installers ask for from it, so you never
+resize or export anything:
+
+| Where it shows | What your site serves |
+| --- | --- |
+| Browser tabs and bookmarks | 16, 32 and 48px PNGs, each declared with its real size |
+| `yoursite.com/favicon.ico` | One `.ico` file holding the 16, 32 and 48px icons |
+| iPhone and iPad home screens | 180, 167 and 152px touch icons |
+| Installing your site (Android, desktop) | 48, 72, 96, 128, 144, 152, 192, 256, 384 and 512px icons |
+| Android's shaped icons | 192 and 512px *maskable* icons |
+
+A few things happen along the way so each one looks right where it lands:
+
+- **Nothing is stretched.** An image that is not square is centered on a square
+  with transparent space around it, so a wide mark gets smaller rather than squashed.
+- **Home-screen icons sit on your background.** iPhones paint transparent areas
+  black, so the touch icons are placed on your theme's light background color.
+  Android's maskable icons are too, with your mark kept inside the central safe
+  zone so whatever shape the phone cuts — a circle, a squircle — never clips it.
+- **An SVG stays sharp.** Each size is drawn from the vector, and browsers that
+  show SVG favicons get the SVG itself as well.
+- **An `.ico` is used as you uploaded it.** It cannot be redrawn, so for the full
+  set upload a PNG, SVG or JPG instead.
+- **A replaced image updates everywhere.** The generated sizes are made once and
+  cached for a long time, keyed to the exact file. Use **Replace** in the media
+  library and the new image gets fresh icons; pages pick them up as they refresh.
+
+The favicon and app icon come from your media library. A URL you paste in instead is
+used as it is, at the one size the file has.
+
+### Your site's install details (the web app manifest)
+
+When someone installs your site, their device reads a small description of it, the
+*web app manifest*. Your site writes it for you from settings you already have —
+there is nothing extra to fill in:
+
+- **Name** — your site's **Title** on this card, or its name when that is empty.
+- **Short name** — the name cut at a whole word to 12 characters, which is what a
+  home screen has room for under the icon.
+- **Description** — your site's **Description** on this card.
+- **Language** — from the **Languages** card, the same way the page language below is.
+- **Colors** — your theme's light primary color for the title bar, and its light
+  background for the splash screen.
+- **Icons** — the full set above, from your app icon (or favicon, or logo).
 
 The **Social image** card is the default card for the whole site — every page that
 sets none of its own uses it, including collection lists and blog entries with no
@@ -150,6 +198,12 @@ search result or a crawler would find wrong. The check is part of every plan and
 add-on. It changes nothing on your site: fix what it finds in each page's **SEO** card or
 in the designer, publish, and run it again.
 
+Each page is checked as it is published: the headings, text, images and links of the
+[reusable components](../besigner/reusable-components.md) it places count as the page's own, with the values
+that placement gives them, and so do the rows a [repeated](../besigner/repeat.md) element shows. A finding about
+something a component draws points at the component on the page; fix it in the component
+or in the values the page gives it.
+
 A very large site is checked on its first 150 pages, and the card says how many it left
 out. For each page it checks:
 
@@ -179,9 +233,13 @@ The optional **Target keywords by page** box takes one line per page:
 /lamps: brass desk lamps, dimmable
 ```
 
+Each page is checked for at most five keywords. Two lines for the same page count as
+one list, and the card names any keyword past the first five that it did not check.
+
 The check reports where each page already says its keywords, and names a keyword a page
-never says. Use a keyword only where the page is about it. A line for an address the
-check did not cover is reported, not silently dropped.
+never says. Text a component on the page shows counts. Use a keyword only where the page
+is about it. A line for an address the check did not cover is reported, not silently
+dropped.
 
 ### Check one page
 

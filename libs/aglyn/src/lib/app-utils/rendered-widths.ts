@@ -211,21 +211,24 @@ export function mergeRenderedWidths(
 }
 
 /**
- * A `sizes` attribute from a width per band, widest band first, adjacent
- * bands that agree merged into one condition. A band with no width is given
- * the next narrower band's, and the narrowest band falls back to `100vw` —
- * the last resort, used only where nothing better is known.
+ * A `sizes` attribute from a CSS length per band (`'33.3vw'`, `'68px'`),
+ * widest band first, adjacent bands that agree merged into one condition. A
+ * band with no length is given the next narrower band's, and the narrowest
+ * band falls back to `100vw` — the last resort, used only where nothing better
+ * is known.
  *
- * Inheriting the NARROWER band's width is the safe direction: a slot rarely
+ * Inheriting the NARROWER band's length is the safe direction: a slot rarely
  * takes a bigger share of a wider page, so the guess errs towards a larger
  * candidate, which costs bytes, never sharpness.
  */
-export function sizesFromBandWidths(widths: RenderedWidths): string {
-  const resolved: Array<[RenderedWidthBand, number]> = []
-  let carried = 100
+export function sizesFromBandLengths(
+  lengths: Partial<Record<RenderedWidthBand, string>>,
+): string {
+  const resolved: Array<[RenderedWidthBand, string]> = []
+  let carried = '100vw'
   for (const band of RENDERED_WIDTH_BANDS) {
-    const value = usablePercent(widths[band])
-    if (value !== undefined) carried = value
+    const value = lengths[band]
+    if (typeof value === 'string' && value.trim()) carried = value.trim()
     resolved.push([band, carried])
   }
   const parts: string[] = []
@@ -235,9 +238,19 @@ export function sizesFromBandWidths(widths: RenderedWidths): string {
     if (below === value) continue
     parts.push(
       band === 'xs'
-        ? `${value}vw`
-        : `(min-width: ${RENDERED_WIDTH_BAND_MIN[band]}px) ${value}vw`,
+        ? value
+        : `(min-width: ${RENDERED_WIDTH_BAND_MIN[band]}px) ${value}`,
     )
   }
   return parts.join(', ')
+}
+
+/** {@link sizesFromBandLengths} for widths given as percentages of the page. */
+export function sizesFromBandWidths(widths: RenderedWidths): string {
+  const lengths: Partial<Record<RenderedWidthBand, string>> = {}
+  for (const band of RENDERED_WIDTH_BANDS) {
+    const value = usablePercent(widths[band])
+    if (value !== undefined) lengths[band] = `${value}vw`
+  }
+  return sizesFromBandLengths(lengths)
 }

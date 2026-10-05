@@ -28,7 +28,11 @@ import {
   mediaRefPattern,
   mediaBodyImageAttributes,
   mediaCdnSrcSet,
+  mediaCdnSrcSetWidths,
+  mediaOriginalSrc,
   mediaRenditionSrc,
+  MEDIA_CDN_VARIANT_WIDTHS,
+  MEDIA_DELIVERY_MAX_EDGE,
   mediaVariantSrc,
   MEDIA_CDN_ROUTE,
   MEDIA_VARIANT_ENCODER_VERSION,
@@ -666,14 +670,58 @@ describe('a body image asks for the size it renders (AGL-3149)', () => {
   describe('mediaCdnSrcSet', () => {
     it('offers every variant width, each as a ?w= url', () => {
       expect(mediaCdnSrcSet(CDN)).toBe(
-        [320, 640, 1280, 1920].map((w) => `${CDN}?w=${w} ${w}w`).join(', '),
+        MEDIA_CDN_VARIANT_WIDTHS.map((w) => `${CDN}?w=${w} ${w}w`).join(', '),
       )
+    })
+
+    it('steps finely enough that a phone slot is not served a desktop width (AGL-3486)', () => {
+      // The issue's case: a 378px slot at DPR 2 needs 756 pixels. The old
+      // ladder's next step was 1280; this one's is 768.
+      expect(MEDIA_CDN_VARIANT_WIDTHS.find((w) => w >= 378 * 2)).toBe(768)
+      for (let index = 1; index < MEDIA_CDN_VARIANT_WIDTHS.length; index += 1) {
+        const ratio =
+          (MEDIA_CDN_VARIANT_WIDTHS[index] as number) /
+          (MEDIA_CDN_VARIANT_WIDTHS[index - 1] as number)
+        expect(ratio).toBeLessThanOrEqual(2)
+      }
+      expect(Math.max(...MEDIA_CDN_VARIANT_WIDTHS)).toBe(MEDIA_DELIVERY_MAX_EDGE)
+    })
+
+    it('stops at the source’s own width, described truthfully (AGL-3486)', () => {
+      // A 1000px photo: every step below it, then one candidate that asks for
+      // the source-width copy and says it is 1000 pixels wide.
+      expect(mediaCdnSrcSet(CDN, { sourceWidth: 1000 })).toBe(
+        [160, 320, 480, 640, 768, 960]
+          .map((w) => `${CDN}?w=${w} ${w}w`)
+          .concat(`${CDN}?w=1280 1000w`)
+          .join(', '),
+      )
+      // A source on a step ends on that step.
+      expect(mediaCdnSrcSetWidths(1280).at(-1)).toEqual({ request: 1280, descriptor: 1280 })
+      // A source wider than the ladder gets the whole ladder and no more.
+      expect(mediaCdnSrcSetWidths(6000)).toEqual(
+        MEDIA_CDN_VARIANT_WIDTHS.map((w) => ({ request: w, descriptor: w })),
+      )
+      // A tiny one offers its own width only.
+      expect(mediaCdnSrcSetWidths(100)).toEqual([{ request: 160, descriptor: 100 }])
+      // An unknown width is the whole ladder, as before.
+      expect(mediaCdnSrcSetWidths(undefined)).toHaveLength(MEDIA_CDN_VARIANT_WIDTHS.length)
+      expect(mediaCdnSrcSetWidths(0)).toHaveLength(MEDIA_CDN_VARIANT_WIDTHS.length)
     })
 
     it('merges the width into a query the url already carries', () => {
       // `?poster=1?w=320` is a request the CDN answers with the master film
       // (AGL-2958), so the merge is not cosmetic.
       expect(mediaCdnSrcSet(`${CDN}?poster=1`)).toContain(`${CDN}?poster=1&w=320 320w`)
+    })
+
+    it('names the original with ?download=1, and leaves a url that is not ours alone (AGL-3486)', () => {
+      expect(mediaOriginalSrc(CDN)).toBe(`${CDN}?download=1`)
+      expect(mediaOriginalSrc(`${CDN}?exp=1&sig=s`)).toBe(`${CDN}?exp=1&sig=s&download=1`)
+      expect(mediaOriginalSrc(`${CDN}?download=1`)).toBe(`${CDN}?download=1`)
+      expect(mediaOriginalSrc('https://images.example.com/x.png')).toBe(
+        'https://images.example.com/x.png',
+      )
     })
 
     it('offers nothing for a url that is not ours', () => {
@@ -698,8 +746,10 @@ describe('a body image asks for the size it renders (AGL-3149)', () => {
         width: 900,
         height: 600,
         sizes: '(max-width: 900px) 100vw, 900px',
-        srcSet: [320, 640, 1280, 1920]
+        // Capped at the asset's own 900 pixels (AGL-3486).
+        srcSet: [160, 320, 480, 640, 768]
           .map((w) => `${CDN}?w=${w} ${w}w`)
+          .concat(`${CDN}?w=960 900w`)
           .join(', '),
       })
     })
@@ -768,10 +818,14 @@ describe('the versioned URL (AGL-3485)', () => {
     expect(resolveMediaSrc('media:site1/photo@old')).toBe(
       `${MEDIA_CDN_ROUTE}/site1/photo`,
     )
-    // A url that is not a reference is never touched.
+    // A url that is not ours is never touched.
     expect(resolveMediaSrc('https://example.com/a.png', { version: 'h4sh' })).toBe(
       'https://example.com/a.png',
     )
+    // A legacy stored CDN path is the same asset on the same route.
+    expect(
+      resolveMediaSrc(`${MEDIA_CDN_ROUTE}/site1/photo`, { version: 'h4sh' }),
+    ).toBe(`${MEDIA_CDN_ROUTE}/site1/photo?v=${token}`)
   })
 
   it('merges each variant width into the versioned query', () => {
