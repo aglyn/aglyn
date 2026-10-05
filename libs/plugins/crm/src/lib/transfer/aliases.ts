@@ -346,3 +346,236 @@ export const COMPANY_ALIASES: readonly TransferAliasDictionary[] = [
     },
   },
 ]
+
+/*==========================================
+ * LEADS (AGL-3528)
+ *=========================================*/
+
+export const LEAD_ALIASES: readonly TransferAliasDictionary[] = [
+  {
+    source: SALESFORCE,
+    aliases: {
+      salutation: ['Salutation'],
+      firstName: ['First Name'],
+      lastName: ['Last Name'],
+      name: ['Full Name', 'Lead Name'],
+      email: ['Email'],
+      company: ['Company', 'Company / Account'],
+      jobTitle: ['Title'],
+      phone: ['Phone'],
+      mobilePhone: ['Mobile Phone', 'Mobile'],
+      fax: ['Fax'],
+      website: ['Website'],
+      industry: ['Industry'],
+      rating: ['Rating'],
+      numberOfEmployees: ['No. of Employees', 'Employees'],
+      annualRevenue: ['Annual Revenue'],
+      status: ['Lead Status'],
+      owner: ['Lead Owner', 'Owner Name'],
+      leadSource: ['Lead Source'],
+      doNotCall: ['Do Not Call'],
+      notes: ['Description'],
+      ...address('address', {
+        street: ['Street', 'Address Line 1'],
+        city: ['City'],
+        state: ['State/Province', 'State'],
+        postalCode: ['Zip/Postal Code', 'Zip', 'Postal Code'],
+        country: ['Country', 'Country Code'],
+      }),
+    },
+  },
+  {
+    source: HUBSPOT,
+    aliases: {
+      firstName: ['First Name'],
+      lastName: ['Last Name'],
+      email: ['Email'],
+      company: ['Company Name'],
+      jobTitle: ['Job Title'],
+      phone: ['Phone Number'],
+      mobilePhone: ['Mobile Phone Number'],
+      website: ['Website URL'],
+      industry: ['Industry'],
+      annualRevenue: ['Annual Revenue'],
+      numberOfEmployees: ['Number of Employees'],
+      status: ['Lead Status'],
+      owner: ['Contact owner'],
+      leadSource: ['Original Source'],
+      ...address('address', {
+        street: ['Street Address'],
+        city: ['City'],
+        state: ['State/Region'],
+        postalCode: ['Postal Code'],
+        country: ['Country/Region'],
+      }),
+    },
+  },
+  {
+    source: APOLLO,
+    aliases: {
+      firstName: ['First Name'],
+      lastName: ['Last Name'],
+      email: ['Email'],
+      company: ['Company', 'Company Name for Emails'],
+      jobTitle: ['Title'],
+      phone: ['Work Direct Phone', 'First Phone', 'Corporate Phone'],
+      mobilePhone: ['Mobile Phone'],
+      website: ['Website'],
+      industry: ['Industry'],
+      numberOfEmployees: ['# Employees'],
+      annualRevenue: ['Annual Revenue'],
+      owner: ['Contact Owner'],
+      tags: ['Lists'],
+      ...address('address', {
+        street: ['Street'],
+        city: ['City'],
+        state: ['State'],
+        postalCode: ['Postal Code'],
+        country: ['Country'],
+      }),
+    },
+  },
+  {
+    source: PIPEDRIVE,
+    aliases: {
+      name: ['Lead - Title', 'Person - Name'],
+      email: ['Person - Email - Work', 'Person - Email'],
+      phone: ['Person - Phone - Work', 'Person - Phone'],
+      company: ['Organization - Name', 'Lead - Organization'],
+      owner: ['Lead - Owner', 'Owner'],
+      tags: ['Lead - Labels', 'Labels'],
+      leadSource: ['Lead - Source', 'Source'],
+    },
+  },
+  {
+    source: OWN,
+    aliases: {
+      owner: ['Owner'],
+      ...address('address', {
+        street: ['Address line 1'],
+        street2: ['Address line 2'],
+        city: ['City'],
+        state: ['State'],
+        postalCode: ['Postal code'],
+        country: ['Country'],
+      }),
+    },
+  },
+]
+
+/*==========================================
+ * DEALS (AGL-3528)
+ *=========================================*/
+
+export const DEAL_ALIASES: readonly TransferAliasDictionary[] = [
+  {
+    source: SALESFORCE,
+    aliases: {
+      title: ['Opportunity Name'],
+      externalId: ['Opportunity ID', 'Opportunity Id'],
+      stage: ['Stage'],
+      amount: ['Amount'],
+      expectedClose: ['Close Date'],
+      type: ['Type'],
+      leadSource: ['Lead Source'],
+      nextStep: ['Next Step'],
+      probability: ['Probability (%)', 'Probability'],
+      forecastCategory: ['Forecast Category'],
+      company: ['Account Name'],
+      contact: ['Contact Email', 'Primary Contact Email'],
+      owner: ['Opportunity Owner', 'Owner Name'],
+      campaign: ['Primary Campaign Source'],
+      notes: ['Description'],
+      lostReason: ['Loss Reason', 'Closed Lost Reason'],
+    },
+  },
+  {
+    source: HUBSPOT,
+    aliases: {
+      title: ['Deal Name'],
+      externalId: ['Record ID'],
+      pipeline: ['Pipeline'],
+      stage: ['Deal Stage'],
+      amount: ['Amount'],
+      expectedClose: ['Close Date'],
+      type: ['Deal Type'],
+      owner: ['Deal owner'],
+      company: ['Associated Company'],
+      contact: ['Associated Contact'],
+      lostReason: ['Closed Lost Reason'],
+      notes: ['Deal Description'],
+      forecastCategory: ['Forecast category'],
+      probability: ['Deal probability'],
+      nextStep: ['Next step'],
+    },
+  },
+  {
+    source: PIPEDRIVE,
+    aliases: {
+      title: ['Deal - Title', 'Title'],
+      externalId: ['Deal - ID'],
+      pipeline: ['Deal - Pipeline'],
+      stage: ['Deal - Stage'],
+      amount: ['Deal - Value', 'Value'],
+      expectedClose: ['Deal - Expected close date', 'Expected close date'],
+      owner: ['Deal - Owner'],
+      company: ['Deal - Organization', 'Organization'],
+      contact: ['Person - Email', 'Deal - Contact person email'],
+      probability: ['Deal - Probability'],
+      lostReason: ['Deal - Lost reason'],
+    },
+  },
+]
+
+/*==========================================
+ * TASKS (AGL-3528)
+ *=========================================*/
+
+export const TASK_ALIASES: readonly TransferAliasDictionary[] = [
+  {
+    source: SALESFORCE,
+    aliases: {
+      title: ['Subject'],
+      externalId: ['Activity ID', 'Task ID'],
+      type: ['Task Subtype', 'Type'],
+      priority: ['Priority'],
+      status: ['Status'],
+      dueAt: ['Due Date', 'Activity Date'],
+      assignee: ['Assigned To', 'Assigned'],
+      notes: ['Comments'],
+      contact: ['Contact Email'],
+      company: ['Company / Account', 'Account Name'],
+      deal: ['Opportunity Name', 'Related To'],
+    },
+  },
+  {
+    source: HUBSPOT,
+    aliases: {
+      title: ['Task Title'],
+      externalId: ['Record ID'],
+      type: ['Task Type'],
+      priority: ['Priority'],
+      status: ['Task Status'],
+      dueAt: ['Due Date'],
+      assignee: ['Assigned to', 'Activity assigned to'],
+      notes: ['Notes'],
+      contact: ['Associated Contact'],
+      company: ['Associated Company'],
+      deal: ['Associated Deal'],
+    },
+  },
+  {
+    source: PIPEDRIVE,
+    aliases: {
+      title: ['Activity - Subject', 'Subject'],
+      externalId: ['Activity - ID'],
+      type: ['Activity - Type'],
+      dueAt: ['Activity - Due date', 'Due date'],
+      assignee: ['Activity - Assigned to user', 'Assigned to user'],
+      notes: ['Activity - Note', 'Note'],
+      contact: ['Person - Email'],
+      company: ['Organization - Name'],
+      deal: ['Deal - Title'],
+    },
+  },
+]

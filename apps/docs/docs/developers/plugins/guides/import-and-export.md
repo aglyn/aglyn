@@ -253,6 +253,13 @@ Its `plan` decides each row's card and stamps it on the row, an `invariants`
 entry fails the rows it refuses, and a wizard step of its own reads back the
 total for the server to check from `ctx.extras` at both the dry run and Apply.
 
+## A resource that is only exported
+
+Declare `"exportOnly": true` beside the resource in `transferResources` for
+records a file never writes — a log of work done, a setup edited on its own
+page. Register only the reads (`fields`, `readPage`, `lookup`, and `count`);
+the upload refuses the resource, and your surface offers Export alone.
+
 ## What an export asks of your server half
 
 The export reads your records through your `readPage`, a page at a time,

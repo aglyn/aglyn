@@ -74,7 +74,8 @@ export function CrmImportButton(props: CrmImportButtonProps) {
   const transfer = useTransferLauncher()
   const mount = useCrmOrgMount()
   const [asking, setAsking] = useState(false)
-  if (!transfer) return null
+  // Importing needs "Manage data" (AGL-3546); a reader sees no Import.
+  if (!transfer?.can('import', { resource, scope: 'org', hostId })) return null
 
   const open = (site: string) =>
     transfer.openImport({ resource, scope: 'org', hostId: site, ...(mappingZone ? { mappingZone } : {}) })
@@ -134,7 +135,7 @@ export interface CrmExportButtonProps {
 export function CrmExportButton(props: CrmExportButtonProps) {
   const { resource, hostId, selection, filter, label = 'Export…', disabled } = props
   const transfer = useTransferLauncher()
-  if (!transfer) return null
+  if (!transfer?.can('export', { resource, scope: 'org', hostId })) return null
   return (
     <Button
       size="small"

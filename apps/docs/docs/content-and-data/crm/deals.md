@@ -132,58 +132,53 @@ the table's own order. The board has no filters.
 
 The table's rows have checkboxes: tick some and a [bulk bar](./bulk-actions.md#deals)
 appears above it to set their stage, set their owner, mark them lost with one
-reason, export them or delete them. **Export CSV** in the card's header, shown
-with the table, downloads the deals on screen as `deals.csv` — title, pipeline and stage by
-name, the amount in major units beside its currency, the owner by email
-address, the expected close date, status, the contact and the company, when
-it closed, the lost reason and notes, then the type, lead source, next step,
-the deal's own probability (blank when it uses its stage's), the forecast
-category and the campaign by name; the bar's **Export CSV** writes the same
-file over the selection.
+reason, export them or delete them. **Export…** in the card's header opens the
+[export dialog](./export.md) on the list's current filter or every deal, and
+the bar's on the selection: every field, your deal [custom fields](./custom-fields.md)
+included — the pipeline, stage, contact (by email), company and campaign by
+name, the contact roles as `email (Role)`, the owner by email — as CSV, JSON
+or NDJSON. **Export pipelines…** in the [Pipelines](#pipelines) dialog writes
+each pipeline with its stages in order.
 
-## Import from CSV
+## Import and export {#import-from-csv}
 
-**Import CSV** in the card's header takes a spreadsheet of deals —
-an export from another CRM, a forecast sheet — and files each row as a new
-deal. A deal has no key the way a contact has an address, so nothing is
-merged: importing a file twice files it twice. Importing needs the same
-**Manage data** permission as creating a deal.
+**Import** in the card's header takes a file of deals — a Salesforce
+opportunities report, a HubSpot or Pipedrive export, a forecast sheet —
+through the [import wizard](./import.md): every column matched to a field,
+a dry run that shows what each row will do, a choice for every conflict, and
+undo for seven days. Importing needs the same **Manage data** permission as
+creating a deal.
 
-The three steps are the ones the [contacts import](./import.md) walks: choose
-the file (up to 5,000 rows), match its columns — Aglyn proposes a match from
-the header names and shows the first row's value beside each — check the
-ten-row preview, then import in batches of 200 with a progress bar and a
-result that says how many were **added** and **skipped**, with the skipped
-rows downloadable as a CSV that says why. **Download template** hands you the
-export's own header over no rows, so a sheet filled in against it maps itself.
+A row finds its deal by **Aglyn ID** or by its **External ID** — the id the
+deal had in the product it came from (Salesforce's *Opportunity ID*,
+HubSpot's *Record ID*) — so importing the same file again **updates** those
+deals rather than filing them twice.
 
 | Field | What is read |
 | --- | --- |
-| **Title** | Required. A row without one is skipped. |
-| **Pipeline** | By **name**, as it appears in [Pipelines](#pipelines), spelled either way. Left empty, the row lands in the default pipeline. A name your workspace has no pipeline for skips the row as *No pipeline by that name*. |
-| **Stage** | By name within that pipeline. Left empty, the pipeline's first open stage. A name the pipeline has no stage for skips the row as *No stage by that name in that pipeline*. A row filed into **Won** or **Lost** is closed on arrival; no `dealWon` or `dealLost` event fires for it. |
-| **Amount** | In major units (`1250.00`, `$1,250`); the currency symbol and separators are ignored. A cell that is not a number is dropped and reported. |
-| **Currency** | A three-letter code (`USD`, `EUR`); `USD` when empty. Anything else is dropped and reported. |
-| **Owner** | The email address of a member of your organization. An address that matches nobody leaves the deal without an owner, and the result names those addresses. |
-| **Expected close** | A calendar day (`2026-12-01`) or a timestamp. Anything else is dropped and reported. |
-| **Notes** | Free text. |
-| **Type** | One of your [deal types](#type-and-lead-source), in any case. A row with none takes the list's default, when it has one. A value your list does not hold skips the row as *Type is not one of your deal types*. |
-| **Lead source** | One of your lead sources, in any case. A value your list does not hold skips the row as *Lead source is not one of your lead sources*. |
-| **Next step** | Free text, up to 255 characters. |
-| **Probability** | A whole percent from 0 to 100 (`35` or `35%`) — the deal's own, over its stage's. Anything else is dropped and reported. |
-| **Forecast category** | *Omitted*, *Pipeline*, *Best Case*, *Commit* or *Closed*. Left empty, the stage's. Anything else is dropped and reported. |
+| **Deal name** | Required for a new deal. |
+| **External ID** | Kept on the deal; what a later import finds it by. |
+| **Pipeline**, **Stage** | By name. Empty, the default pipeline and its first open stage. A name the workspace has no pipeline or stage for fails that row, named in the results. A new deal filed into **Won** or **Lost** is closed on arrival. A matched deal's pipeline and stage are never moved by a file: a stage moves on the [board](#moving-winning-and-losing), where the move tells your automations. |
+| **Amount** | An amount with its currency (`$1,250`, `1250 EUR`); US dollars when none is named. |
+| **Expected close** | A calendar day. |
+| **Contact** | A contact by email — the deal's Primary [contact role](#contact-roles). |
+| **Company** | A company by its domain or name; one your CRM does not hold can be created. |
+| **Contact roles** | Each contact by email with their role in parentheses, the Primary first: `ana@acme.com (Decision Maker); bo@acme.com`. |
+| **Owner** | A member of your workspace, by email or name. |
+| **Type**, **Lead source** | Your organization's values, by label; a new deal with no Type takes the list's default. |
+| **Next step**, **Lost reason**, **Notes** | Text. |
+| **Probability**, **Forecast category** | A percent from 0 to 100; *Omitted*, *Pipeline*, *Best Case*, *Commit* or *Closed*. Empty, the stage's. |
+| **Campaign** | A campaign by name. |
+| **Custom fields** | Every deal field you defined under [Fields](./custom-fields.md). |
 
-The export's **Status**, **Contact**, **Company**, **Closed**, **Lost
-reason** and **Campaign** columns are proposed as **Do not import**: the stage
-decides the status, and a deal is linked to its contact, company and campaign
-on its own page. A
-new deal counts against your plan's [records band](../../workspace-and-billing/billing-and-plans/overview.md#crm-records);
-on a plan whose band is a hard limit, rows past it are skipped as **CRM
-records limit reached**.
+A contact, company or owner the file names that your CRM does not hold, and
+a list value your organization lacks, are listed on the wizard's **Values**
+step with a choice for each. **Status** and **Closed** are exported and never
+imported: the stage decides them. A new deal counts against your plan's
+[records band](../../workspace-and-billing/billing-and-plans/overview.md#crm-records).
 
-At the [organization level](./overview.md#at-the-organization-level) the
-drawer first asks which site the deals are filed under, because a deal is
-some site's record and the site decides which of your sites may see it.
+At the [organization level](./overview.md#at-the-organization-level),
+**Import** first asks which site the deals are filed under.
 
 ## Creating a deal
 

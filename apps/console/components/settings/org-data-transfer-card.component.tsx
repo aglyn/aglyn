@@ -31,7 +31,7 @@
  *    Backup & restore, linked per site.
  */
 
-import { transferResourceInstanceKey } from '@aglyn/aglyn/data-transfer'
+import { transferResourceImports, transferResourceInstanceKey } from '@aglyn/aglyn/data-transfer'
 import { listTransferResourcesFor, pluginTransferResourceUi, TRANSFER_RESOURCES_LOAD_POINT, type ResolvedTransferResourceDeclaration } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
 import { pluginRecordListQuery, pluginRecordsFromRows } from '@aglyn/aglyn/plugin-manager/plugin-record-lists'
 import { useTransferLauncher, type TransferLauncher } from '@aglyn/aglyn/app-utils/transfer-launcher-context'
@@ -187,9 +187,12 @@ export function OrgDataTransferCard(props: { onImported?(): void }) {
       <Stack direction="row" spacing={1}>
         {resource.kinds.includes('records') && launcher && (
           <>
-            <Button size="small" onClick={() => launcher.openImport(base)}>
-              {'Import'}
-            </Button>
+            {/* A resource only exported (a log, a setup) takes no file (AGL-3528). */}
+            {transferResourceImports(resource) ? (
+              <Button size="small" onClick={() => launcher.openImport(base)}>
+                {'Import'}
+              </Button>
+            ) : null}
             <Button size="small" onClick={() => launcher.openExport(base)}>
               {'Export'}
             </Button>

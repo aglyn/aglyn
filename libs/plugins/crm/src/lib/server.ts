@@ -38,9 +38,9 @@
  * can only be emitted by a server path that performed the write, so a record
  * page that moved the stage client-direct would move the person and tell no
  * automation; the task routes (AGL-2599) carry an assignee's notification and
- * the `taskCompleted` event. Contacts and companies are imported through
- * the transfer framework (AGL-3527, `transfer/`), whose writes go through
- * the same capture door every other server door uses.
+ * the `taskCompleted` event. Every CRM file is imported through the
+ * transfer framework (AGL-3527, AGL-3528, `transfer/`), whose writes go
+ * through the same doors every other server path uses.
  * `crm/deal-stage` (AGL-2598) is the one writer of a deal's stage, won and lost,
  * because a stage change is what automations listen for (`server-deal-stage.ts`).
  * `crm/contacts-create` (AGL-2596) is a person typed into the console by a
@@ -101,9 +101,6 @@ import { crmLeadSourceValuesHandler, crmPicklistValuesHandler } from './server/p
 import { registerCrmRecordEmailStateWriter } from './server/record-email-state'
 import { registerCrmRecordTimelineWriter } from './server/record-timeline'
 import { crmTaskCompleteHandler, crmTaskSaveHandler } from './server/task-routes'
-import { crmDealsImportHandler } from './server/deals-import'
-import { crmLeadsImportHandler } from './server/leads-import'
-import { crmTasksImportHandler } from './server/tasks-import'
 import { crmDealStageHandler } from './server-deal-stage'
 import { crmEmailSendHandler } from './server/email-send'
 import { CRM_EMAIL_CHECK_ROUTE, crmEmailCheckHandler } from './server/email-check'
@@ -673,16 +670,6 @@ export function registerCrmConsoleApi(): void {
   // own address stays registered for a request that names no picklist.
   registerPluginApiRoute(CRM_PICKLIST_VALUES_ROUTE, crmPicklistValuesHandler)
   registerPluginApiRoute(CRM_LEAD_SOURCE_VALUES_ROUTE, crmLeadSourceValuesHandler)
-  // One chunk of a deals file and one of a tasks file (AGL-2662): the
-  // pipeline, the stage and the assignee resolved by name, a row refused
-  // when the org has no such name.
-  registerPluginApiRoute('crm/deals-import', crmDealsImportHandler)
-  registerPluginApiRoute('crm/tasks-import', crmTasksImportHandler)
-  // One chunk of a leads file (AGL-2701), written through `addHostLead` —
-  // the same door a sign-up, a booking and a form submission file a lead
-  // through, so an imported row is keyed, bounded and unconsented exactly
-  // as a captured one is.
-  registerPluginApiRoute('crm/leads-import', crmLeadsImportHandler)
   // The one writer of a deal's stage, won and lost (AGL-2598): the browser
   // could write the field, but only a server can emit the event an
   // automation listens for.

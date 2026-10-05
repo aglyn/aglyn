@@ -32,8 +32,18 @@ import type {
 } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
 import { registerPluginTransferResource } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
 import type { MatchKeySpec, TransferAliasDictionary } from '@aglyn/aglyn/data-transfer'
-import { COMPANY_ALIASES, CONTACT_ALIASES } from './aliases'
-import { CRM_COMPANIES_RESOURCE, CRM_CONTACTS_RESOURCE, CRM_MEMBERS_TARGET } from './fields'
+import { COMPANY_ALIASES, CONTACT_ALIASES, DEAL_ALIASES, LEAD_ALIASES, TASK_ALIASES } from './aliases'
+import {
+  CRM_ACTIVITIES_RESOURCE,
+  CRM_COMPANIES_RESOURCE,
+  CRM_CONTACTS_RESOURCE,
+  CRM_DEALS_RESOURCE,
+  CRM_FIELDS_RESOURCE,
+  CRM_LEADS_RESOURCE,
+  CRM_MEMBERS_TARGET,
+  CRM_PIPELINES_RESOURCE,
+  CRM_TASKS_RESOURCE,
+} from './fields'
 
 /** What a resource is registered with before its module loads. */
 interface LazyResource {
@@ -42,8 +52,13 @@ interface LazyResource {
   aliases?: readonly TransferAliasDictionary[]
   /** Lookup targets the resource answers itself, by key. */
   targets?: readonly string[]
-  load: () => Promise<TransferRecordsHooks>
+  /** The hooks its module answers, beyond the required reads; every one by default. */
+  hooks?: readonly (typeof HOOKS)[number][]
+  load: () => Promise<Partial<TransferRecordsHooks>>
 }
+
+/** The hooks an exported-only resource answers: its reads. */
+const EXPORT_HOOKS = ['fields', 'count', 'readPage', 'lookup'] as const
 
 /** The member target's keys, known before the module loads. */
 const MEMBER_KEYS: readonly MatchKeySpec[] = [
@@ -68,13 +83,13 @@ const HOOKS = [
 
 /** A resource whose hooks load its module with the first call, once. */
 export function lazyCrmTransferResource(resource: LazyResource): PluginTransferResource {
-  let loaded: Promise<TransferRecordsHooks> | null = null
+  let loaded: Promise<Partial<TransferRecordsHooks>> | null = null
   const hooks = () => (loaded ??= resource.load())
   const impl: Record<string, unknown> = {
     matchKeys: resource.matchKeys,
     ...(resource.aliases ? { aliases: resource.aliases } : {}),
   }
-  for (const name of HOOKS) {
+  for (const name of resource.hooks ?? HOOKS) {
     impl[name] = async (...args: unknown[]) => {
       const hook = (await hooks())[name] as ((...args: unknown[]) => unknown) | undefined
       if (!hook) throw new Error(`transfer resource "${resource.key}" has no "${name}"`)
@@ -125,6 +140,56 @@ export const CRM_TRANSFER_RESOURCES: readonly LazyResource[] = [
     aliases: COMPANY_ALIASES,
     targets: [CRM_MEMBERS_TARGET],
     load: async () => (await import('./companies')).companiesTransferResource(),
+  },
+  {
+    key: CRM_LEADS_RESOURCE,
+    matchKeys: [
+      { fieldId: 'id', normalizer: 'aglynId' },
+      { fieldId: 'email', normalizer: 'email' },
+    ],
+    aliases: LEAD_ALIASES,
+    targets: [CRM_MEMBERS_TARGET],
+    hooks: ['fields', 'count', 'readPage', 'lookup', 'picklists', 'addPicklistValues', 'plan', 'lockedRules', 'apply', 'revert'],
+    load: async () => (await import('./leads')).leadsTransferResource(),
+  },
+  {
+    key: CRM_DEALS_RESOURCE,
+    matchKeys: [
+      { fieldId: 'id', normalizer: 'aglynId' },
+      { fieldId: 'externalId', normalizer: 'externalId' },
+    ],
+    aliases: DEAL_ALIASES,
+    targets: [CRM_MEMBERS_TARGET],
+    load: async () => (await import('./deals')).dealsTransferResource(),
+  },
+  {
+    key: CRM_TASKS_RESOURCE,
+    matchKeys: [
+      { fieldId: 'id', normalizer: 'aglynId' },
+      { fieldId: 'externalId', normalizer: 'externalId' },
+    ],
+    aliases: TASK_ALIASES,
+    targets: [CRM_MEMBERS_TARGET],
+    hooks: ['fields', 'count', 'readPage', 'lookup', 'picklists', 'addPicklistValues', 'plan', 'lockedRules', 'apply', 'revert'],
+    load: async () => (await import('./tasks')).tasksTransferResource(),
+  },
+  {
+    key: CRM_ACTIVITIES_RESOURCE,
+    matchKeys: [{ fieldId: 'id', normalizer: 'aglynId' }],
+    hooks: EXPORT_HOOKS,
+    load: async () => (await import('./activities')).activitiesTransferResource(),
+  },
+  {
+    key: CRM_PIPELINES_RESOURCE,
+    matchKeys: [{ fieldId: 'id', normalizer: 'aglynId' }],
+    hooks: EXPORT_HOOKS,
+    load: async () => (await import('./pipelines')).pipelinesTransferResource(),
+  },
+  {
+    key: CRM_FIELDS_RESOURCE,
+    matchKeys: [{ fieldId: 'id', normalizer: 'aglynId' }],
+    hooks: EXPORT_HOOKS,
+    load: async () => (await import('./pipelines')).fieldDefinitionsTransferResource(),
   },
 ]
 

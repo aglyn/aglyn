@@ -646,8 +646,8 @@ describe('the pieces', () => {
       { key: 'custom:budget', label: 'Budget', type: 'number', required: false },
     ])
     expect(contacts.fields.filter((field) => field.required).map((field) => field.key)).toEqual(['email'])
-    // Deals and leads take no custom fields through an import.
-    expect(importFacts('deals', [{ key: 'po', label: 'PO', type: 'text', order: 0, object: 'deal' }]).fields.some((field) => field.key.startsWith('custom:'))).toBe(false)
+    // Deals and leads take their own custom fields through an import (AGL-3528).
+    expect(importFacts('deals', [{ key: 'po', label: 'PO', type: 'text', order: 0, object: 'deal' }]).fields.at(-1)).toMatchObject({ key: 'custom:po' })
     expect(importFacts('companies', [{ key: 'region', label: 'Region', type: 'select', order: 0, object: 'company' }]).fields.at(-1)).toEqual({
       key: 'custom:region',
       label: 'Region',

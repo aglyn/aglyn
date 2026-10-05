@@ -16,34 +16,26 @@ selection and **Clear** it.
 
 :::info Plan availability
 Bulk actions are part of the **CRM**, included from **Starter**. On Free every CRM
-section is shown locked, and no bar is offered. The complete contacts and leads files
-that **Export all…** writes are on every plan under
+section is shown locked, and no bar is offered. Exporting every contact and lead
+is on every plan, from the lists and under
 [Settings → Privacy](../../workspace-and-billing/signing-in-and-sessions.md#privacy-requests).
 See [What each plan includes](./overview.md#what-each-plan-includes).
 :::
 
-## Two exports, and the difference matters
+## Exports
 
-- **Export CSV** writes the rows on screen — the selection, or the page the
-  table has loaded. Instant, and exactly what you are looking at.
-- **Export all…** writes the **whole collection**, whatever the view is
-  narrowed to and however many rows there are. The server streams it, so a
-  workspace with forty thousand contacts gets forty thousand rows.
+**Export…** on a bar opens the [export dialog](./export.md) on the selected
+rows; the same button in a section's header opens it on the list's current
+filter or every record. You choose the fields — every standard and custom
+field — and the format. The file is read from the whole collection on the
+server, not from the rows the list has loaded, and it checks itself: the
+server counts the rows before it starts sending, and a download that arrives
+short is refused rather than saved.
 
-Both files have the same columns in the same order, so the two open the same
-way in a spreadsheet.
-
-**Export all…** checks itself. The server counts the collection before it
-starts sending and states that number in the response; if fewer rows arrive
-than were promised — a connection dropped mid-download — **nothing is saved**
-and you are told how many of how many arrived. A half-written export that
-looks complete is worse than no export, because nothing about a shorter file
-says it is short.
-
-A complete export writes what the SERVER can resolve: owners and assignees by
-email address, a deal's pipeline and stage by name, and a task's contact,
-company and deal by name. Past the first two thousand linked records a task
-file writes the record's id instead.
+Links are written as words a file can carry back: owners and assignees by
+email address, a deal's pipeline and stage by name, a contact by email, a
+company by name — so a **Re-importable** file [imports](./import.md) back
+into the records it came from.
 
 Who can take one: the same people who can open the CRM — the surface has to be
 available to you and your role must be able to manage data. A collaborator
@@ -99,7 +91,7 @@ Board / Table control).
 | **Set stage** | Pick a stage of the selected deals' pipeline — an open stage or **Won**. Each deal is moved [through the server](./deals.md#moving-winning-and-losing), one at a time, so every move fires its `dealStageChanged` or `dealWon` event exactly as a drag on the board does. A selection spanning two pipelines has no one list of stages, and the dialog says so. |
 | **Set owner** | Pick a team member, or **Nobody** to clear the owner. |
 | **Mark lost** | Asks for one reason, then marks each deal lost through the server; the reason is kept on every deal and sent with every `dealLost` event. |
-| **Export CSV** | Download the selected deals as `deals-selected.csv` — the same file the table's **Export CSV** writes: title, pipeline and stage by name, the amount in major units with its currency, the owner by email address, the expected close date, status, the contact and the company, when it closed, the lost reason and notes. |
+| **Export…** | Open the [export dialog](./export.md) on the selected deals — see [Import and export](./deals.md#import-from-csv). |
 | **Delete** | After a confirmation, the selected deals are deleted; the contacts and companies they name are untouched. Each deletion is logged in the site's activity feed. |
 
 ## Tasks
@@ -109,7 +101,7 @@ Board / Table control).
 | **Complete** | Each open selected task is completed [through the server](./tasks.md#completing-and-reopening), one at a time, so every one fires its `taskCompleted` event. Tasks already done are left alone. |
 | **Assign** | Pick a team member, or **Nobody** to clear the assignee. Each task is saved through the server, so the new assignee gets the same [notification](./tasks.md#assigning-a-task-to-someone-else) the drawer sends — assigning to yourself sends nothing. |
 | **Set due** | Pick a date and time for every selected task, or leave it empty to clear the due date. |
-| **Export CSV** | Download the selected tasks as `tasks-selected.csv` — the same file the list's **Export CSV** writes for the page on screen: subject, type, priority and status by your organization's labels, the due date and the completion as timestamps, the assignee by email address, the contact, company and deal by name, and notes. |
+| **Export…** | Open the [export dialog](./export.md) on the selected tasks — see [Import and export](./tasks.md#import-from-csv). |
 | **Delete** | After a confirmation, the selected tasks are deleted for everyone who can see them. A finished task is better ticked done, which keeps it in the Done view. |
 
 ## Leads
@@ -120,7 +112,7 @@ Board / Table control).
 | **Set status** | Pick **New**, **Nurturing** or **Working**. A lead already at that status is skipped and named, and a converted lead is left alone — its status is its conversion. Setting a closed lead back to Working reopens it and clears its reason, as the row does. |
 | **Unqualify** | Asks for one reason, then closes every open selected lead with it; the reason is kept on each so the [lead funnel](./reports.md#lead-funnel) can count it. Leads already closed or converted are skipped and named. |
 | **Add to campaign** | Pick one or more of the site's [campaigns](../../marketing-and-automation/email-campaigns/overview.md#what-belongs-to-a-campaign); each selected lead is filed under them beside the campaigns it is already in. Under a site only — a campaign belongs to one site. Grouping, not consent: nothing is mailed. |
-| **Export CSV** | Download the selected leads as `leads-selected.csv` — the same file the list's **Export CSV** writes: email, name, status, the owner by email address, the sources by name joined with `\|`, first and last seen, how many times the person was captured, the unqualified reason, when the lead converted, and notes. The list's [Import CSV](./leads.md#import-from-csv) reads the columns a file may set back in; the capture columns are its to write, not yours. |
+| **Export…** | Open the [export dialog](./export.md) on the selected leads — see [Import and export](./leads.md#import-from-csv). The capture columns are exported and never imported. |
 | **Clear** | Deselect everything. |
 
 A lead's owner and status are the team's own notes on a capture — no event
@@ -134,12 +126,9 @@ The same bars, over every site's rows at once, on the
 writes one line into the organization's activity feed (**Team → Activity**) —
 "Owner set on 3 deals" — where a site's hub writes into the site's own feed. A
 stage move or a loss over deals is recorded per deal instead, by the move
-itself. The leads bar writes each lead under the site that captured it, and
-its export gains a **Site** column after **Owner**, naming which — and
-**Export all…** there covers every site's leads in one file, up to two hundred
-sites.
+itself. The leads bar writes each lead under the site that captured it.
 
-**Export all…** for contacts writes each person through their **primary
+An export of contacts writes each person through their **primary
 holder** at the organization level — the first site that captured them — which
 is the profile the organization's own table shows. Under a site it writes that
 site's, as the table does.

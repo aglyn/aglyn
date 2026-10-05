@@ -51,9 +51,12 @@ import {
   type CrmTask,
 } from '@aglyn/aglyn/server'
 import type { TransferField, TransferFieldType } from '@aglyn/aglyn/data-transfer'
-import { COMPANY_TRANSFER_FIELDS, CONTACT_TRANSFER_FIELDS } from '../transfer/fields'
-import { DEAL_IMPORT_FIELD_LABELS, DEAL_IMPORT_FIELDS } from './crm-deal-import'
-import { LEAD_IMPORT_FIELD_LABELS, LEAD_IMPORT_FIELDS } from './crm-lead-import'
+import {
+  COMPANY_TRANSFER_FIELDS,
+  CONTACT_TRANSFER_FIELDS,
+  DEAL_TRANSFER_FIELDS,
+  LEAD_TRANSFER_FIELDS,
+} from '../transfer/fields'
 
 /**
  * WHAT THE CRM TELLS ANOTHER PLUGIN ABOUT ONE OF ITS RECORDS (AGL-2917).
@@ -977,34 +980,16 @@ const STANDARD_IMPORT_FIELDS: Record<
   // The transfer catalogs' own ids (AGL-3527): what the import wizard maps to.
   contacts: transferImportFields(CONTACT_TRANSFER_FIELDS),
   companies: transferImportFields(COMPANY_TRANSFER_FIELDS),
-  deals: {
-    keys: DEAL_IMPORT_FIELDS,
-    labels: DEAL_IMPORT_FIELD_LABELS,
-    required: 'title',
-    types: { amount: 'number', ownerEmail: 'email', expectedClose: 'date' },
-  },
-  leads: {
-    keys: LEAD_IMPORT_FIELDS,
-    labels: LEAD_IMPORT_FIELD_LABELS,
-    required: 'email',
-    types: {
-      email: 'email',
-      ownerEmail: 'email',
-      phone: 'phone',
-      mobilePhone: 'phone',
-      fax: 'phone',
-      doNotCall: 'yes-no',
-      website: 'url',
-      numberOfEmployees: 'number',
-      annualRevenue: 'number',
-    },
-  },
+  deals: transferImportFields(DEAL_TRANSFER_FIELDS),
+  leads: transferImportFields(LEAD_TRANSFER_FIELDS),
 }
 
-/** The object a collection's custom fields describe; leads and deals import none. */
+/** The object a collection's custom fields describe. */
 const CUSTOM_FIELD_OBJECT: Partial<Record<CrmImportFactsCollection, CrmFieldObject>> = {
   contacts: 'contact',
   companies: 'company',
+  deals: 'deal',
+  leads: 'lead',
 }
 
 const CUSTOM_FIELD_TYPES: Record<string, CrmImportFieldType> = {

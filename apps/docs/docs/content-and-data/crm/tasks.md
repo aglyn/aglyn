@@ -138,42 +138,39 @@ them, set their due date, export them or delete them. Completing and assigning g
 through the server exactly as the row's checkbox and the drawer do, so every completion
 fires its event and every new assignee is told.
 
-**Export CSV** in the card's header downloads the page on screen as `tasks.csv`:
-**Subject**, **Type**, **Priority** and **Status** by your organization's labels, the
-due date and the completion as timestamps, the
-assignee by email address, the contact, company and deal by name, and notes. The bar's
-**Export CSV** writes the same file over the selection.
+**Export…** in the card's header opens the [export dialog](./export.md) on the
+view's tasks, and the bar's on the selection: **Subject**, **Type**, **Priority**
+and **Status** by your organization's labels, the due date and the completion,
+the assignee by email, the contact by email, the company and the deal by name
+(or the deal's external id), and notes.
 
-### Import from CSV
+### Import and export {#import-from-csv}
 
-**Import CSV** in the card's header takes a spreadsheet of tasks — a
-hand-off list, another tool's export — and files each row as a new task. A
-task has no key, so nothing is merged: importing a file twice files it twice.
-Importing needs the same **Manage data** permission as creating a task, and
-nobody is notified of an imported task, however many name them.
-
-The three steps are the ones the [contacts import](./import.md) walks: choose
-the file (up to 5,000 rows), match its columns, check the ten-row preview,
-then import in batches of 200 with a result that says how many were
-**added** and **skipped**, the skipped rows downloadable as a CSV that says
-why. **Download template** hands you the export's own header over no rows.
+**Import** in the card's header takes a file of tasks — a hand-off list, a
+Salesforce or HubSpot tasks export — through the [import wizard](./import.md).
+A row finds its task by **Aglyn ID** or by its **External ID** (the id it had
+in the product it came from), so importing the same file again **updates**
+those tasks rather than filing them twice. Importing needs the same **Manage
+data** permission as creating a task, and nobody is notified of an imported
+task.
 
 | Field | What is read |
 | --- | --- |
-| **Subject** | Required (a **Title** column reads the same). A row without one is skipped. |
-| **Type** | A value of your **Type** list (*Site visit*) or a meaning (`call`, `email`, `meeting`, `to-do`); **To-do** when empty or unreadable (and an unreadable one is reported). A **Kind** column reads the same. |
-| **Priority** | A value of your **Priority** list, or `low`, `normal` or `high` — `medium` reads as normal, `urgent` as high; **Normal** when empty or unreadable. |
-| **Status** | A value of your **Status** list (*In Progress*), or `open` or `done` (`yes`, `true`, `completed` also read as done). A row whose status means done is filed completed, by you, at the time of the import. **Not Started** when empty. |
-| **Due** | A calendar day (`2026-09-30`, read as noon UTC) or a timestamp. Anything else is dropped and reported; the task has no due date. |
-| **Assignee** | The email address of a member of your organization. An address that matches **nobody on the team skips the row** — a task nobody holds is a task nobody does — as *No team member has that assignee address*. Empty files the task unassigned. |
-| **Notes** | Free text. |
+| **Subject** | Required for a new task. |
+| **External ID** | Kept on the task; what a later import finds it by. |
+| **Type**, **Priority**, **Status** | Your organization's values (*Site visit*, *In Progress*) or a meaning (`call`, `high`, `done`); empty, **To-do**, **Normal** and **Not Started**. A task whose status means done is stamped completed, by you, at the time of the import; one a file reopens loses its stamp. |
+| **Due** | A date or a date and time. |
+| **Assigned to** | A member of your workspace, by email or name. |
+| **Contact** | A contact by email. |
+| **Company** | A company by its domain or name. |
+| **Deal** | A deal by its external id or its name. |
+| **Notes** | Text. |
 
-The export's **Contact**, **Company**, **Deal** and **Completed** columns are
-proposed as **Do not import**: a task is linked to its record from the record's
-own page. Every imported task is the chosen site's task; the organization's
-own tasks — the ones with no site — are filed one at a time from the
-[organization hub](#organization-tasks), which is also where the drawer asks
-which site a file is filed from.
+A person, company or deal the file names that your CRM does not hold is
+listed on the wizard's **Values** step: use a similar record, leave the link
+blank, or refuse the row. Every imported task is the chosen site's task; the
+organization's own tasks — the ones with no site — are filed one at a time
+from the [organization hub](#organization-tasks).
 
 ### Creating a task
 

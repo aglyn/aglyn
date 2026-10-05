@@ -43,7 +43,6 @@ import { useCallback, useMemo, useState } from 'react'
 import { useCrmBulkApply } from '../hooks/use-crm-bulk-apply'
 import type { CrmTaskRow } from '../hooks/use-crm-tasks'
 import type { OrgMemberDirectory } from '../hooks/use-org-member-directory'
-import { downloadTextFile } from '../model/contacts-csv'
 import { refreshCrmNextActivity } from '../model/next-activity-api'
 import {
   type CrmBulkPlan,
@@ -61,14 +60,14 @@ import {
 } from '../model/task-api'
 import { crmTaskCallScope, crmTaskFieldsOf } from '../model/task-routes'
 import { dueAtToLocalInput, localInputToDueAt } from '../model/task-views'
-import { type TaskCsvOptions, tasksCsv } from '../model/tasks-csv'
 import {
   type CrmBulkNoun,
   CrmBulkBarFrame,
   CrmBulkValueDialog,
   countNoun,
 } from './crm-bulk-bar-frame'
-import CrmExportAllButton from './crm-export-all-button'
+import { CrmExportButton } from './crm-transfer-buttons'
+import { CRM_TASKS_RESOURCE } from '../transfer/fields'
 
 export interface TasksBulkBarProps {
   /**
@@ -84,8 +83,6 @@ export interface TasksBulkBarProps {
   onSelectedChange: (ids: string[]) => void
   /** The section's roster — already read for the Assignee column. */
   directory: OrgMemberDirectory
-  /** How the export names the assignee and the linked records — the list's own. */
-  csv?: TaskCsvOptions
 }
 
 const NOUN: CrmBulkNoun = { singular: 'task', plural: 'tasks' }
@@ -106,7 +103,7 @@ export function TasksBulkBar(props: TasksBulkBarProps) {
 TasksBulkBar.displayName = 'TasksBulkBar'
 
 function TasksBulkBarBody(props: TasksBulkBarProps) {
-  const { hostId, scope, rows, selected, onSelectedChange, directory, csv } = props
+  const { hostId, scope, rows, selected, onSelectedChange, directory } = props
   const firestore = useFirestore()
   const { data: user } = useUser()
   const { confirm } = useConfirmationContext()
@@ -249,10 +246,6 @@ function TasksBulkBarBody(props: TasksBulkBarProps) {
     )
   }, [pending, scope, value, directory, selectedRows, runCalls, user, hostId, runPlan])
 
-  const handleExport = useCallback(() => {
-    downloadTextFile('tasks-selected.csv', 'text/csv', tasksCsv(selectedRows, csv))
-  }, [selectedRows, csv])
-
   const handleDelete = useCallback(async () => {
     if (!scope || !selectedRows.length) return
     const count = selectedRows.length
@@ -358,17 +351,11 @@ function TasksBulkBarBody(props: TasksBulkBarProps) {
       >
         {'Set due'}
       </Button>
-      <Button size="small" disabled={busy} onClick={handleExport}>
-        {'Export CSV'}
-      </Button>
-      {/*
-        The selection's file is the rows on screen; this one is the whole
-        collection, streamed by the server (AGL-2662).
-      */}
-      <CrmExportAllButton
-        resource="tasks"
-        orgId={scope?.[1] ?? null}
+      {/* The selection through the export dialog: every field, chosen (AGL-3528). */}
+      <CrmExportButton
+        resource={CRM_TASKS_RESOURCE}
         hostId={hostId}
+        selection={selectedRows.map((row) => row.$id)}
         disabled={busy}
       />
       <Button

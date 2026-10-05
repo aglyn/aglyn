@@ -60,7 +60,11 @@ import {
 import {
   CONTACT_LIFECYCLE_STAGE_LABELS,
   CONTACT_LIFECYCLE_STAGES,
+  CRM_FORECAST_CATEGORIES,
+  CRM_FORECAST_CATEGORY_LABELS,
 } from '@aglyn/aglyn/app-utils/crm'
+import { visibleToHost } from '@aglyn/aglyn/app-utils/scope-tokens'
+import { listOrgContainers } from '@aglyn/tenant-data-admin/server/org-containers'
 import type { PicklistValue } from '@aglyn/aglyn/app-utils/picklists'
 import type { AglynPostalAddress } from '@aglyn/aglyn/foundation/definitions/contact.types'
 import { normalizeAddress } from '@aglyn/aglyn/foundation/definitions/contact.types'
@@ -74,6 +78,7 @@ import {
   type TransferWarning,
 } from '@aglyn/aglyn/data-transfer'
 import type {
+  TransferRecordsHooks,
   TransferLookupResult,
   TransferLookupTargetHooks,
   TransferPicklistList,
@@ -89,6 +94,8 @@ import { crmSuiteRefusal } from '../server/suite-gate'
 import {
   CRM_ADDRESS_PART_KEYS,
   CRM_ADDRESS_PARTS,
+  CRM_CAMPAIGNS_PICKLIST,
+  CRM_FORECAST_CATEGORY_PICKLIST,
   CRM_LIFECYCLE_STAGE_PICKLIST,
   crmCustomPicklistKey,
 } from './fields'
@@ -104,6 +111,9 @@ export const APPLY_CONCURRENCY = 8
 
 /** A row is started only while this much of the chunk's budget is left. */
 export const APPLY_ROW_BUDGET_MS = 3_000
+
+/** The hooks of a resource that is exported and never imported (`exportOnly`): its reads. */
+export type TransferExportHooks = Omit<TransferRecordsHooks, 'apply' | 'revert'>
 
 /** Who is moving CRM records, resolved. */
 export interface CrmTransferEnv {
@@ -229,6 +239,18 @@ const LIFECYCLE_LIST: TransferPicklistList = {
   },
 }
 
+/** The forecast categories: a fixed set a forecast rolls up by, matched onto and never added to. */
+const FORECAST_LIST: TransferPicklistList = {
+  spec: {
+    restricted: true,
+    standardValues: CRM_FORECAST_CATEGORIES.map((id) => ({ id, label: CRM_FORECAST_CATEGORY_LABELS[id] })),
+  },
+  set: {
+    values: CRM_FORECAST_CATEGORIES.map((id) => ({ id, label: CRM_FORECAST_CATEGORY_LABELS[id], active: true })),
+    defaultValueId: null,
+  },
+}
+
 /**
  * The lists behind the picklist fields a catalog names: the CRM's own
  * (`crmPicklists`), the lifecycle stages, and each custom `select` field's
@@ -252,6 +274,19 @@ export async function crmPicklistLists(
   for (const id of picklistIds) {
     if (id === CRM_LIFECYCLE_STAGE_PICKLIST) {
       lists[id] = LIFECYCLE_LIST
+      continue
+    }
+    if (id === CRM_FORECAST_CATEGORY_PICKLIST) {
+      lists[id] = FORECAST_LIST
+      continue
+    }
+    if (id === CRM_CAMPAIGNS_PICKLIST) {
+      const { byName, names } = await campaignDirectory(env)
+      const live = [...new Set(byName.values())].map((campaign) => ({ id: campaign, label: names.get(campaign) ?? campaign }))
+      lists[id] = {
+        spec: { restricted: true, standardValues: live },
+        set: { values: live.map((value) => ({ ...value, active: true })), defaultValueId: null },
+      }
       continue
     }
     const custom = crmCustomPicklistKey(id)
@@ -314,6 +349,34 @@ export async function addCrmPicklistValues(
       { merge: true },
     )
   })
+}
+
+/*==========================================
+ * CAMPAIGNS — named by a deal's and a lead's campaign columns
+ *=========================================*/
+
+/** The most campaigns a file's names are resolved against — the lead import's own ceiling. */
+const CAMPAIGN_CEILING = 200
+
+/**
+ * The organization's live campaigns, by lowercased name and by id. A name
+ * two campaigns share resolves to the one placed on the transfer's site
+ * first, as the lead import resolved it.
+ */
+export async function campaignDirectory(
+  env: CrmTransferEnv,
+): Promise<{ byName: Map<string, string>; names: Map<string, string> }> {
+  const byName = new Map<string, string>()
+  const names = new Map<string, string>()
+  const containers = await listOrgContainers(env.firestore, 'campaign', env.orgId, CAMPAIGN_CEILING).catch(() => [])
+  const live = containers.filter((container) => container.live)
+  const placed = (visibleTo: string[]) => (env.hostId ? visibleToHost(visibleTo, env.hostId) : true)
+  for (const container of [...live.filter((entry) => placed(entry.visibleTo)), ...live.filter((entry) => !placed(entry.visibleTo))]) {
+    const key = container.name.toLowerCase()
+    if (key && !byName.has(key)) byName.set(key, container.id)
+  }
+  for (const container of containers) if (container.name) names.set(container.id, container.name)
+  return { byName, names }
 }
 
 /*==========================================

@@ -51,8 +51,11 @@ instance at a time (one dataset's records): every key reaching it names the
 instance as `<key>:<instance>` (`transferResourceInstanceKey`,
 `parseTransferResourceKey`, `transferResourceInstanceOf(ctx)`), so a job, a
 person's remembered choices and the one running import are each kept per
-instance. `transferResourceProblems` checks one at registration so a
-malformed declaration fails at startup.
+instance. `exportOnly` marks a resource that is exported and never imported
+(a CRM's logged activities, its pipelines — AGL-3528): its plugin registers
+no `apply` or `revert`, the upload refuses it, and `transferResourceImports`
+tells a surface whether to offer Import. `transferResourceProblems` checks
+one at registration so a malformed declaration fails at startup.
 
 `TransferField` is one field: `id`, `label`, `group`, a `type` (`text`,
 `longText`, `email`, `phone`, `url`, `number`, `integer`, `currency`,

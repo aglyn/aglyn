@@ -17,17 +17,32 @@
 
 /*==========================================
  * HOW THE IMPORT WIZARD AND THE EXPORT DIALOG NAME THE CRM'S RECORDS
- * (AGL-3527) — the client half of each resource, registered from the
+ * (AGL-3527, AGL-3528) — the client half of each resource, registered from the
  * console registrar, which loads where the wizard is drawn.
  *=========================================*/
 
 import { registerPluginTransferResourceUi } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
-import { CRM_COMPANIES_RESOURCE, CRM_CONTACTS_RESOURCE } from './fields'
+import {
+  CRM_ACTIVITIES_RESOURCE,
+  CRM_COMPANIES_RESOURCE,
+  CRM_CONTACTS_RESOURCE,
+  CRM_DEALS_RESOURCE,
+  CRM_FIELDS_RESOURCE,
+  CRM_LEADS_RESOURCE,
+  CRM_PIPELINES_RESOURCE,
+  CRM_TASKS_RESOURCE,
+} from './fields'
 
 /** The wizard's title for each resource. */
 export const CRM_TRANSFER_LABELS: Readonly<Record<string, string>> = {
   [CRM_CONTACTS_RESOURCE]: 'Contacts',
   [CRM_COMPANIES_RESOURCE]: 'Companies',
+  [CRM_LEADS_RESOURCE]: 'Leads',
+  [CRM_DEALS_RESOURCE]: 'Deals',
+  [CRM_TASKS_RESOURCE]: 'Tasks',
+  [CRM_ACTIVITIES_RESOURCE]: 'Activities',
+  [CRM_PIPELINES_RESOURCE]: 'Pipelines and stages',
+  [CRM_FIELDS_RESOURCE]: 'Custom fields',
 }
 
 /** Registers the client half of every CRM transfer resource. */

@@ -16,6 +16,8 @@
  */
 'use client'
 
+import { CrmExportButton } from './crm-transfer-buttons'
+import { CRM_PIPELINES_RESOURCE } from '../transfer/fields'
 import { CRM_COLLECTIONS, isPipelineArchived } from '@aglyn/aglyn'
 import {
   mdiArchiveArrowDownOutline,
@@ -474,6 +476,8 @@ export function PipelinesDialog(props: PipelinesDialogProps) {
           </Stack>
         </DialogContent>
         <DialogActions>
+          {/* Every pipeline with its stages, as a file (AGL-3528). */}
+          <CrmExportButton resource={CRM_PIPELINES_RESOURCE} hostId={hostId} label="Export pipelines…" />
           <Button onClick={onClose} disabled={busy !== null}>
             {'Done'}
           </Button>

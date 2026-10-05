@@ -63,7 +63,6 @@ import { useCrmBulkApply } from '../hooks/use-crm-bulk-apply'
 import { useLeadStatusPicklist } from '../hooks/use-lead-status-picklist'
 import { useCrmCampaigns } from '../hooks/use-crm-campaigns'
 import type { OrgMemberOptions } from '../hooks/use-org-member-options'
-import { downloadTextFile } from '../model/contacts-csv'
 import { crmClientListFields } from '../model/crm-list-query'
 import {
   type CrmBulkPlan,
@@ -72,14 +71,14 @@ import {
   crmBulkWriters,
   runCrmBulkWrites,
 } from '../model/crm-bulk-writes'
-import { type LeadCsvOptions, leadsCsv } from '../model/leads-csv'
 import {
   type CrmBulkNoun,
   CrmBulkBarFrame,
   CrmBulkValueDialog,
   countNoun,
 } from './crm-bulk-bar-frame'
-import CrmExportAllButton from './crm-export-all-button'
+import { CrmExportButton } from './crm-transfer-buttons'
+import { CRM_LEADS_RESOURCE } from '../transfer/fields'
 import { CrmBulkShareButton } from './record-sharing-card'
 import { LeadOwnerSelect } from './lead-owner-select'
 import { UNQUALIFY_REASON_MAX } from './lead-unqualify-dialog'
@@ -99,8 +98,6 @@ export interface LeadsBulkBarProps {
   onSelectedChange: (ids: string[]) => void
   /** The section's roster — already read for the Owner column. */
   roster: OrgMemberOptions
-  /** How the export names the owner and, at the org level, the site — the list's own. */
-  csv?: LeadCsvOptions
   /** The organization these leads belong to; null while it is unresolved. */
   orgId?: string | null
   /**
@@ -141,7 +138,7 @@ export function LeadsBulkBar(props: LeadsBulkBarProps) {
 LeadsBulkBar.displayName = 'LeadsBulkBar'
 
 function LeadsBulkBarBody(props: LeadsBulkBarProps) {
-  const { rows, selected, onSelectedChange, roster, csv } = props
+  const { rows, selected, onSelectedChange, roster } = props
   const orgId = props.orgId ?? null
   const hostId = props.hostId ?? null
   const followUpSharing = useCrmSharingFollowUp(hostId, orgId)
@@ -342,10 +339,6 @@ function LeadsBulkBarBody(props: LeadsBulkBarProps) {
     )
   }, [pending, value, campaignIds, campaigns.options, selectedRows, runPlan, logFiling, hostId, props.org, statusChoices, statuses.picklist])
 
-  const handleExport = useCallback(() => {
-    downloadTextFile('leads-selected.csv', 'text/csv', leadsCsv(selectedRows, csv))
-  }, [selectedRows, csv])
-
   const canApply =
     pending === 'owner' ||
     (pending === 'campaign'
@@ -439,17 +432,11 @@ function LeadsBulkBarBody(props: LeadsBulkBarProps) {
         orgId={orgId}
         disabled={busy}
       />
-      <Button size="small" disabled={busy} onClick={handleExport}>
-        {'Export CSV'}
-      </Button>
-      {/*
-        The selection's file is the rows on screen; this one is the whole
-        collection, streamed by the server (AGL-2662).
-      */}
-      <CrmExportAllButton
-        resource="leads"
-        orgId={orgId}
+      {/* The selection through the export dialog: every field, chosen (AGL-3528). */}
+      <CrmExportButton
+        resource={CRM_LEADS_RESOURCE}
         hostId={hostId}
+        selection={selectedRows.map((row) => row.$id)}
         disabled={busy}
       />
     </CrmBulkBarFrame>

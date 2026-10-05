@@ -1120,6 +1120,114 @@ export const PLUGIN_TRANSFER_RESOURCES_DECLARED: readonly ResolvedTransferResour
     "description": "Shared email templates and snippets, and your own personal ones."
   },
   {
+    "pluginId": "crm",
+    "key": "crm.leads",
+    "label": "Leads",
+    "singularLabel": "Lead",
+    "scope": "org",
+    "kinds": [
+      "records"
+    ],
+    "formats": [
+      "csv",
+      "json",
+      "ndjson"
+    ],
+    "limits": {
+      "maxRows": 50000
+    },
+    "description": "Every lead field, custom fields included, with the status, the owner and the campaigns by name."
+  },
+  {
+    "pluginId": "crm",
+    "key": "crm.deals",
+    "label": "Deals",
+    "singularLabel": "Deal",
+    "scope": "org",
+    "kinds": [
+      "records"
+    ],
+    "formats": [
+      "csv",
+      "json",
+      "ndjson"
+    ],
+    "limits": {
+      "maxRows": 50000
+    },
+    "description": "Every deal field, custom fields and contact roles included, with the pipeline, stage, contact and company by name."
+  },
+  {
+    "pluginId": "crm",
+    "key": "crm.tasks",
+    "label": "Tasks",
+    "singularLabel": "Task",
+    "scope": "org",
+    "kinds": [
+      "records"
+    ],
+    "formats": [
+      "csv",
+      "json",
+      "ndjson"
+    ],
+    "limits": {
+      "maxRows": 50000
+    },
+    "description": "Every task, with its type, priority and status as your lists label them and the contact, company and deal it is for."
+  },
+  {
+    "pluginId": "crm",
+    "key": "crm.activities",
+    "label": "Activities",
+    "singularLabel": "Activity",
+    "scope": "org",
+    "kinds": [
+      "records"
+    ],
+    "formats": [
+      "csv",
+      "json",
+      "ndjson"
+    ],
+    "exportOnly": true,
+    "description": "Every call, email, meeting and note the team logged, with who logged it and what it was about."
+  },
+  {
+    "pluginId": "crm",
+    "key": "crm.pipelines",
+    "label": "Pipelines and stages",
+    "singularLabel": "Stage",
+    "scope": "org",
+    "kinds": [
+      "records"
+    ],
+    "formats": [
+      "csv",
+      "json",
+      "ndjson"
+    ],
+    "exportOnly": true,
+    "description": "Each pipeline with its stages in order: their kind, probability and forecast category."
+  },
+  {
+    "pluginId": "crm",
+    "key": "crm.fields",
+    "label": "Custom fields",
+    "singularLabel": "Custom field",
+    "scope": "org",
+    "kinds": [
+      "records"
+    ],
+    "formats": [
+      "csv",
+      "json",
+      "ndjson"
+    ],
+    "exportOnly": true,
+    "description": "Every custom field you defined, on which record, of what type, with its choices."
+  },
+  {
     "pluginId": "outreach",
     "key": "outreach.sequences",
     "label": "Sequences",

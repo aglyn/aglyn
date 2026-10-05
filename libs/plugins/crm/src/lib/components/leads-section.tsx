@@ -72,7 +72,6 @@ import {
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { leadPrimaryGroup } from '../model/contact-holder'
-import { downloadTextFile } from '../model/contacts-csv'
 import { crmRoutes } from '../model/crm-routes'
 import {
   LEAD_EMAIL_FILTER_OPTIONS,
@@ -100,14 +99,14 @@ import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.c
 import { useLeadSourcePicklist } from '../hooks/use-lead-source-picklist'
 import { useLeadStatusPicklist } from '../hooks/use-lead-status-picklist'
 import { useLeadPicklists } from '../hooks/use-lead-picklists'
-import { type LeadCsvOptions, leadsCsv } from '../model/leads-csv'
 import { LeadConvertDialog } from './lead-convert-dialog'
 import {
   leadSourceLabel,
   leadSources,
   leadTimeLabel,
 } from './lead-history-card'
-import { LeadImportButton } from './lead-import-drawer'
+import { CrmExportButton, CrmImportButton } from './crm-transfer-buttons'
+import { CRM_LEADS_RESOURCE } from '../transfer/fields'
 import NewLeadDrawer, { type NewLeadValues } from './new-lead-drawer'
 import { useCrmApi } from './use-crm-api'
 import { LeadOwnerSelect } from './lead-owner-select'
@@ -363,20 +362,13 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
     () => setSelectedIds([]),
     [views.state.filters, searchKey, paged.page],
   )
-  // How the file names the owner and, at the org level, the site.
-  const csvOptions: LeadCsvOptions = useMemo(
-    () => ({
-      ownerEmail: roster.emailFor,
-      // The Status column as the org names it (AGL-3512).
-      leadStatuses: leadStatusList.picklist,
-      ...(hostId ? {} : { siteName: (id: string) => mount?.siteName(id) }),
-    }),
-    [roster.emailFor, hostId, mount, leadStatusList.picklist],
+
+  // The list's filter, when one narrows it, for the export to read the same
+  // records the list does (AGL-3528).
+  const exportFilter = useMemo(
+    () => (paged.plan.served.length || paged.plan.searched ? { label: 'what the list shows', plan: paged.plan } : null),
+    [paged.plan],
   )
-  // The page on screen; Export all on the bulk bar takes the whole list.
-  const handleExport = useCallback(() => {
-    downloadTextFile('leads.csv', 'text/csv', leadsCsv(rows, csvOptions))
-  }, [rows, csvOptions])
 
   const [assigning, setAssigning] = useState<LeadRow | null>(null)
   const [unqualifying, setUnqualifying] = useState<LeadRow | null>(null)
@@ -808,10 +800,8 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
           // The record actions, top right and never clipped (AGL-3311).
           action: (
             <CrmListActions>
-              <LeadImportButton hostId={hostId} orgId={orgId} />
-              <Button size="small" onClick={handleExport} disabled={!rows.length}>
-                {'Export CSV'}
-              </Button>
+              <CrmImportButton resource={CRM_LEADS_RESOURCE} noun="leads" hostId={hostId} mappingZone="leads" />
+              <CrmExportButton resource={CRM_LEADS_RESOURCE} hostId={hostId} filter={exportFilter} />
               <Button
                 size="small"
                 variant="contained"
@@ -852,7 +842,6 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
             selected={selectedIds}
             onSelectedChange={setSelectedIds}
             roster={roster}
-            csv={csvOptions}
             orgId={orgId}
             hostId={hostId}
             org={org as Record<string, unknown> | undefined}

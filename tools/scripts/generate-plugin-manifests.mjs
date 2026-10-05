@@ -2039,7 +2039,7 @@ const TRANSFER_RESOURCE_KEY = /^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$/
 const TRANSFER_SCOPES = ['org', 'host']
 const TRANSFER_KINDS = ['records', 'package']
 const TRANSFER_FORMATS = ['csv', 'json', 'ndjson']
-const TRANSFER_RESOURCE_FIELDS = ['key', 'label', 'singularLabel', 'scope', 'kinds', 'formats', 'limits', 'description', 'instances', 'readableByMembers', 'readPermission']
+const TRANSFER_RESOURCE_FIELDS = ['key', 'label', 'singularLabel', 'scope', 'kinds', 'formats', 'limits', 'description', 'instances', 'readableByMembers', 'readPermission', 'exportOnly']
 const PERMISSION_KEY = /^[A-Za-z][A-Za-z0-9]*(?:\.[A-Za-z0-9]+)*$/
 const TRANSFER_RESOURCES_LOAD_POINT = 'transferResources'
 
@@ -2067,7 +2067,7 @@ function transferResourceRows() {
     }
     for (const entry of declared) {
       const { $comment: _note, ...resource } = entry ?? {}
-      const { key, label, singularLabel, scope, kinds, formats, limits, description, instances, readableByMembers, readPermission } = resource
+      const { key, label, singularLabel, scope, kinds, formats, limits, description, instances, readableByMembers, readPermission, exportOnly } = resource
       const what = `${where} "${key ?? ''}"`
       const unknown = Object.keys(resource).filter((field) => !TRANSFER_RESOURCE_FIELDS.includes(field))
       if (unknown.length) throw new Error(`${what}: ${unknown.join(', ')} is not a resource field`)
@@ -2095,6 +2095,9 @@ function transferResourceRows() {
       }
       if (readableByMembers && readPermission !== undefined) {
         throw new Error(`${what}: "readableByMembers" and "readPermission" each say who exports — declare one`)
+      }
+      if (exportOnly !== undefined && exportOnly !== true) {
+        throw new Error(`${what}: "exportOnly" is true when the resource is exported and never imported, and absent otherwise`)
       }
       for (const [name, list, known] of [['kinds', kinds, TRANSFER_KINDS], ['formats', formats, TRANSFER_FORMATS]]) {
         if (!Array.isArray(list) || !list.length || new Set(list).size !== list.length || list.some((one) => !known.includes(one))) {

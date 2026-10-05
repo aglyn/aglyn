@@ -98,6 +98,18 @@ export interface TransferResourceDescriptor {
    * `data.manage` either way.
    */
   readPermission?: string
+  /**
+   * The resource is exported and never imported — a record of work done (a
+   * CRM's logged activities) or a setup edited on its own page. The upload
+   * refuses it, its plugin registers no `apply` or `revert`, and a surface
+   * offers only Export (AGL-3528).
+   */
+  exportOnly?: boolean
+}
+
+/** Whether a file may be imported into the resource. */
+export function transferResourceImports(descriptor: Pick<TransferResourceDescriptor, 'exportOnly'>): boolean {
+  return descriptor.exportOnly !== true
 }
 
 /** What a field means, which decides how a cell is read and written. */
@@ -261,6 +273,9 @@ export function transferResourceProblems(descriptor: TransferResourceDescriptor)
   }
   if (descriptor.readableByMembers === true && descriptor.readPermission !== undefined) {
     problems.push(`${descriptor.key} is readable by every member and names a read permission; say one.`)
+  }
+  if (descriptor.exportOnly !== undefined && typeof descriptor.exportOnly !== 'boolean') {
+    problems.push(`${descriptor.key} says "exportOnly" with something other than true or false.`)
   }
   return problems
 }

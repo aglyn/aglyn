@@ -41,7 +41,7 @@ else:
 - a **booking**;
 - a **form** whose own page has **Also create a lead from the address someone
   gives this form** switched on;
-- [Import CSV](#import-from-csv), [New lead](#adding-a-lead-by-hand), and
+- [Import](#import-from-csv), [New lead](#adding-a-lead-by-hand), and
   [`POST /v1/leads`](/api/resources/leads#create-a-lead) over the REST API.
 
 A lead surface files a lead and **no contact**. The one exception is a person
@@ -139,7 +139,7 @@ lead, not places it came from. Vendors Aglyn does not run, like a data provider 
 sending tool, are values you add yourself.
 
 Every one of them is editable on the [lead's page](#a-leads-page), comes in through
-[Import CSV](#import-from-csv), and is handed to the contact when the lead converts.
+[Import](#import-from-csv), and is handed to the contact when the lead converts.
 
 Beside them, your organization can define its own lead properties — a budget, a
 territory, a renewal date — on the **Leads** tab of
@@ -293,70 +293,50 @@ Every change here is saved immediately; there is no separate save step.
 Every row has a checkbox. Tick one or more — or the header's checkbox for
 the page — and a bar appears over the list with **Set owner**, **Set
 status**, **Unqualify** (one reason for all of them), **Add to campaign**
-(under a site) and **Export CSV** for the selection, beside **Export all…**
-for every lead. What each does, and which leads it skips by name, is in
+(under a site) and **Export…** for the selection. What each does, and which leads it skips by name, is in
 [Bulk actions → Leads](./bulk-actions.md#leads). The selection clears when
 the filters or the search change.
 
-### Export CSV
+### Import and export {#import-from-csv}
 
-**Export CSV** at the top of the card downloads the page on screen as
-`leads.csv`; the bulk bar's **Export all…** writes every lead. The file holds
-email, name, salutation, first and last name, company, job title, phone,
-mobile phone, fax, do not call, website, industry, rating, employees, annual
-revenue and its currency, status, the owner by email address, the lead source, the sources by name, first and last seen, the
-number of captures, the address in six columns, tags, the unqualified reason,
-when the lead converted, and notes. At the organization level the file also
-names each lead's **Site**.
+**Export…** at the top of the card opens the [export dialog](./export.md) on
+the list's current filter or every lead, and the bulk bar's on the
+selection: every lead field, your lead [custom fields](./custom-fields.md)
+included — the status as your organization labels it, the owner by email,
+the campaigns by name, the address in six columns, and what the capture
+doors recorded (the sources, first and last seen, the number of captures,
+when the lead converted).
 
-### Import from CSV
-
-**Import CSV** beside **Export CSV** takes a spreadsheet of leads — another
-tool's export, a list from an event — and files each row under one of your
-sites. A lead is keyed by email address, so a person the site has already
-met is **updated** rather than added twice, and importing the same file
-again finishes what a closed drawer left. Importing needs the same **Manage
-data** permission as importing contacts.
-
-The three steps are the ones the [contacts import](./import.md) walks: choose
-the file (up to 5,000 rows), match its columns, check the ten-row preview,
-then import in batches of 200 with a result that says how many were
-**added**, **updated** and **skipped**, the skipped rows downloadable as a
-CSV that says why, and how many addresses have no mail server — those leads
-read [**Would bounce**](#email-state). **Download template** hands you the export's own header
-over no rows.
+**Import** takes a file of leads — a Salesforce leads report, a HubSpot,
+Apollo or Pipedrive export, a list from an event — through the
+[import wizard](./import.md) and files each row under one of your sites. A
+lead is the person at an address, so a row finds its lead by **Aglyn ID** or
+**email**, and a person the site has already met is **updated** rather than
+added twice. Every new lead comes in through the door a sign-up or a form
+uses: keyed by address, held to the site's lead ceiling, filed under the site.
+Importing needs the same **Manage data** permission as importing contacts.
 
 | Field | What is read |
 | --- | --- |
-| **Email** | Required, and the identity. A row whose address cannot be read is skipped as *No usable email address*; two rows with the same address skip the second as a duplicate. |
-| **Name** | The person's name, as the list and campaign merge tags read it. |
-| **Salutation**, **First name**, **Last name** | The contacts import's columns. While a row fills a first or last name, the lead's name is the two together, whatever the **Name** column says. A salutation your organization's list does not hold is dropped and reported. |
-| **Company name**, **Job title**, **Phone**, **Mobile phone**, **Fax**, **Website** | The lead's own profile, as text. A phone is read with its country code (a bare ten-digit number as North American); a website as `acme.com` or a full address. A number or website that cannot be read is dropped and reported, and the rest of the row is kept. A column headed `Mobile` or `Cell` is the mobile phone. |
-| **Do not call** | `yes` or `no`. |
-| **Industry**, **Rating** | One of your organization's Industry or Rating values, in any capitalization. Any other value is dropped and reported, and the rest of the row is kept. |
-| **Employees**, **Annual revenue (major units)**, **Currency** | As the companies import reads them: a whole number of employees, revenue like `1250000.00`, and a three-letter currency code. |
-| **Lead source** | One of your organization's active [lead source values](./custom-fields.md#picklist-values), in any capitalization. A row naming any other value is skipped whole as *Names a lead source that isn't one of this organization's active values*, and the drawer lists those values before you import. A lead the site already holds keeps a value the list has since deactivated. A new lead with the cell blank starts from the list's default. |
-| **Address line 1** … **Country (two-letter code)** | The address, six columns as the contacts import takes them. A country typed as a name rather than a code is dropped and reported. |
-| **Tags** | Comma or `\|` separated, lower-cased. |
-| **Campaigns** | Comma or `\|` separated, by **name**, matched to the site's own campaigns without regard to case and added to the campaigns the lead is already in. A row naming a campaign the site does not have is skipped whole as *Names a campaign this site does not have*, rather than filed under half of them. A column headed `Campaign` alone is read as the **Lead source**, which is what another tool's export means by it. |
-| **Status** | `new`, `nurturing`, `working` or `unqualified`, by id or by label. **Qualified** is not a status a file may set — a lead becomes qualified by [converting](#converting-a-lead), beside the contact that conversion created — so a cell naming it is dropped and reported, and the lead keeps the status it has. |
-| **Owner** | The email address of a member of your organization. An address that matches nobody leaves the lead unassigned and is named at the end of the import. |
-| **Unqualified reason** | Kept only on a row whose **Status** is `unqualified`; on any other row it is dropped and reported, because the reason is what an unqualified lead was closed for. |
-| **Notes** | Free text. |
-
-The export's **Sources**, **First seen**, **Last seen** and **Captures**
-columns are proposed as **Do not import**: they are what the capture doors
-recorded about what the visitor actually did, and a file must not be able to
-rewrite it. **Converted** is left out for the same reason — it is stamped
-when a lead really becomes a contact. At the organization level the export's
-**Site** column is left out too: the drawer asks which site the file is
-filed under, and every row in the file goes there.
+| **Email** | Required, and the identity; a matched lead's address never changes. |
+| **Salutation**, **First name**, **Last name**, **Full name** | While a first or last name is set, the lead's name is the two together. |
+| **Company**, **Job title**, **Phone**, **Mobile phone**, **Fax**, **Website** | The lead's own profile, as text; converting the lead links or creates the company. A phone that cannot be read, or a website that is not one, fails the row with why. |
+| **Do not call** | A file can turn it on, never off. |
+| **Industry**, **Rating**, **Lead source**, **Salutation** | Your organization's values, by label; a new lead with none starts from each list's default. |
+| **Employees**, **Annual revenue** | A whole number; an amount with its currency. |
+| **Address** street … country | Six columns; country as a two-letter code. |
+| **Status** | Any of your statuses but **Qualified**: a lead becomes Qualified by [converting](#converting-a-lead) it. A file's Qualified is held back, named on the Review step. |
+| **Owner** | A member of your workspace, by email or name. |
+| **Campaigns** | Your campaigns by name, added to the ones the lead is already filed under. A name your workspace has no campaign for is yours to map, leave out or refuse on the Values step. |
+| **Tags** | Added to the lead's own. |
+| **Unqualified reason** | Kept only on a lead that is Unqualified. |
+| **Notes** | Text. |
+| **Custom fields** | Every lead field you defined under [Fields](./custom-fields.md). |
 
 **No marketing consent is recorded by an import.** A capture writes a
 consent basis only when the visitor ticked a box in front of them, and a
-spreadsheet is not that box, so there is no consent column to fill. An
-imported lead can be included in a campaign audience only if the site
-already holds a consent for that person from an earlier capture — see
+file is not that box. An imported lead can be included in a campaign
+audience only if the site already holds a consent for that person — see
 [Who a campaign is allowed to reach](../../marketing-and-automation/email-campaigns/overview.md#who-a-campaign-is-allowed-to-reach).
 
 ### Who owns a lead

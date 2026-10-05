@@ -709,7 +709,7 @@ describe('FLAT PLATFORM CEILINGS on visitor-created records (AGL-1529)', () => {
     // `addHostLeadOutcome`, which is that writer answering in full (AGL-3330).
     for (const file of [
       'libs/plugins/crm/src/lib/server/capture-contact.ts',
-      'libs/plugins/crm/src/lib/server/leads-import.ts',
+      'libs/plugins/crm/src/lib/transfer/leads.ts',
       'libs/plugins/crm/src/lib/server/lead-create.ts',
     ]) {
       const code = codeOf(file)

@@ -224,6 +224,17 @@ describe('registering the server half', () => {
     ).toThrow(/registers no "revertItems"/)
   })
 
+  it('asks no writes of a resource that is only exported (AGL-3528)', () => {
+    const reads: Record<string, unknown> = { ...RECORDS }
+    delete reads['apply']
+    delete reads['revert']
+    expect(pluginTransferResourceProblems({ ...BOTTLES, exportOnly: true }, reads)).toEqual([])
+    expect(pluginTransferResourceProblems(BOTTLES, reads)).toEqual([
+      'bottles declares records and registers no "apply".',
+      'bottles declares records and registers no "revert".',
+    ])
+  })
+
   it('is refused for a records resource with no match key', () => {
     expect(
       pluginTransferResourceProblems(BOTTLES, { ...RECORDS, matchKeys: [] }),

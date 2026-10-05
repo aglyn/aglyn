@@ -16,6 +16,8 @@
  */
 'use client'
 
+import { CrmExportButton } from './crm-transfer-buttons'
+import { CRM_FIELDS_RESOURCE } from '../transfer/fields'
 import {
   CONTACT_FIELD_TYPE_LABELS,
   CONTACT_FIELD_TYPES,
@@ -852,6 +854,8 @@ export function ContactsFieldsSection(props: ContactsFieldsSectionProps) {
       HeaderProps={{
         action: scope ? (
           <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+            {/* Every custom field, as a file (AGL-3528). */}
+            <CrmExportButton resource={CRM_FIELDS_RESOURCE} hostId={hostId ?? null} />
             <Button size="small" onClick={() => void recomputeNextActivity()} disabled={recomputing}>
               {recomputing ? 'Recomputing…' : 'Recompute next activity'}
             </Button>

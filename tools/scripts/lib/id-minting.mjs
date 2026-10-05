@@ -72,7 +72,7 @@ const ts = createRequire(import.meta.url)('typescript')
  * removed without lowering these), so a removed row never leaves room for a
  * new one. Lower them in the commit that removes the rows.
  */
-export const ID_MINTING_CEILING = { sites: 91, toFix: 35 }
+export const ID_MINTING_CEILING = { sites: 89, toFix: 33 }
 
 /** The id the platform names a document by. A document named by it is never a site. */
 const PLATFORM_ID_HELPERS = new Set(['createResourceUid'])

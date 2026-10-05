@@ -569,12 +569,14 @@ export interface TransferPackageHooks<T = unknown> {
  */
 export type PluginTransferResource = Partial<TransferRecordsHooks> & Partial<TransferPackageHooks>
 
-const RECORDS_HOOKS = ['fields', 'matchKeys', 'readPage', 'lookup', 'apply', 'revert'] as const
+const RECORDS_HOOKS = ['fields', 'matchKeys', 'readPage', 'lookup'] as const
+/** What only an importable records resource answers: its writes and their undo. */
+const IMPORT_HOOKS = ['apply', 'revert'] as const
 const PACKAGE_HOOKS = ['items', 'dependencies', 'remapIds', 'readItems', 'writeItems', 'revertItems'] as const
 
 /** What is missing from `impl` for the kinds a resource declares, as sentences. */
 export function pluginTransferResourceProblems(
-  declared: Pick<TransferResourceDescriptor, 'key' | 'kinds'>,
+  declared: Pick<TransferResourceDescriptor, 'key' | 'kinds' | 'exportOnly'>,
   impl: PluginTransferResource,
 ): string[] {
   const problems: string[] = []
@@ -587,6 +589,7 @@ export function pluginTransferResourceProblems(
     }
   }
   need('records', RECORDS_HOOKS)
+  if (declared.exportOnly !== true) need('records', IMPORT_HOOKS)
   need('package', PACKAGE_HOOKS)
   if (Array.isArray(impl.matchKeys) && !impl.matchKeys.length && declared.kinds.includes('records')) {
     problems.push(`${declared.key} names no match key, so no row could find its record.`)

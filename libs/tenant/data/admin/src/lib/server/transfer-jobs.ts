@@ -123,6 +123,7 @@ import {
   transferUndoExpiresAt,
   transitionTransferJob,
   transferLookupKey,
+  transferResourceImports,
   transferLookupNewValue,
   mayBeTransferRecordId,
   normalizeMatchValue,
@@ -526,6 +527,7 @@ export async function readTransferResourceInfo(
       formats: [...resource.formats],
       ...(resource.limits ? { limits: resource.limits } : {}),
       ...(resource.description ? { description: resource.description } : {}),
+      ...(resource.exportOnly ? { exportOnly: true } : {}),
     },
     fields: catalog.fields,
     groups: catalog.groups,
@@ -604,6 +606,9 @@ export async function uploadTransferSource(
   input: TransferUploadInput,
 ): Promise<{ job: TransferJobRecord; complete: boolean }> {
   const resource = await resolveResource(deps, String(input.resource ?? '').trim())
+  if (!transferResourceImports(resource)) {
+    throw new TransferEngineError('invalid', 400, `${resource.label} are exported, not imported.`)
+  }
   const hostId = transferHostIdFor(resource, input.hostId)
   const fileName = String(input.fileName ?? '').trim().slice(0, 240) || 'import'
   const content = typeof input.content === 'string' ? input.content : ''

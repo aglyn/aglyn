@@ -1,21 +1,31 @@
 ---
 sidebar_position: 3.5
-title: Export contacts and companies
+title: Export CRM records
 description: Choose every field you want, custom fields included, and the records — the selection, the list's filter or everything — as a CSV, JSON or NDJSON file that imports back in.
 ---
 
-# Export contacts and companies
+# Export CRM records
 
-**Export…**, in the header of the Contacts and Companies sections and on the
-[bulk bar](./bulk-actions.md), opens the export dialog. You choose the
+**Export…**, in the header of the Contacts, Companies, Leads, Deals and Tasks
+sections and on every [bulk bar](./bulk-actions.md), opens the export dialog. You choose the
 fields, the records and the format; the file is read from the whole
 collection on the server, not from the rows the list has loaded, and arrives
 checked: it carries how many rows it should hold, and a download that came
 up short is refused rather than saved.
 
 Exporting the people your workspace holds — contacts and leads — is open on
-every plan. Companies, deals and tasks are part of the **CRM**, included from
-**Starter**.
+every plan. Companies, deals, tasks, activities and the CRM's setup are part
+of the **CRM**, included from **Starter**.
+
+| What | Where its Export… is |
+| --- | --- |
+| Contacts, companies, leads, deals, tasks | The section's header (the list's filter, or every record) and its bulk bar (the selection) |
+| Activities — every call, email, meeting and note the team logged | The [Recent activity](./activities.md#the-recent-activity-feed) card |
+| Pipelines and their stages, one row per stage | **Export pipelines…** in the [Pipelines](./deals.md#pipelines) dialog |
+| Your custom fields — name, key, record, type, choices | The [Fields](./custom-fields.md#export-fields) section |
+
+Activities, pipelines and custom fields are exported only: each is logged or
+set up on its own page, never imported from a file.
 
 ## The fields
 
@@ -65,7 +75,9 @@ content.
 
 A file exported with **Re-importable** imports into the records it came from:
 the **Aglyn ID** column finds each record, and every other column is matched
-to its field by name. See [Import contacts and companies](./import.md).
+to its field by name. See [Import contacts and companies](./import.md), and
+the imports of [leads](./leads.md#import-from-csv), [deals](./deals.md#import-from-csv)
+and [tasks](./tasks.md#import-from-csv).
 
 ## Related
 

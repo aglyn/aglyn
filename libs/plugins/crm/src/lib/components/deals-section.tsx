@@ -22,9 +22,7 @@ import {
   type CrmPicklist,
   CRM_COLLECTIONS,
   crmPicklistRank,
-  dealContactRolesOf,
   dealStageById,
-  findOrgMember,
   ORG_SCOPE_TOKEN,
   pluginDocsHelp,
 } from '@aglyn/aglyn'
@@ -57,7 +55,6 @@ import {
   dealQueryClause,
 } from '../constants/deal-filters'
 import { useCrmFoldsScope, useCrmListQuery } from '../hooks/use-crm-list-query'
-import { useCrmCampaigns } from '../hooks/use-crm-campaigns'
 import { useCrmPicklist } from '../hooks/use-crm-picklist'
 import { crmAskClauses, crmQueryRefusals } from '../model/crm-list-query'
 import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
@@ -86,8 +83,6 @@ import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useContactFieldDefinitions } from '../hooks/use-contact-field-definitions'
 import { useCrmScope } from '../hooks/use-crm-scope'
-import { readCrmRecordNames } from '../hooks/use-crm-record-names'
-import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { useDealStageApi } from '../hooks/use-deal-stage-api'
 import {
   BOARD_CLOSED_LIMIT,
@@ -96,9 +91,7 @@ import {
 } from '../hooks/use-deals'
 import { useOrgMemberDirectory } from '../hooks/use-org-member-directory'
 import { usePipeline } from '../hooks/use-pipeline'
-import { downloadTextFile } from '../model/contacts-csv'
 import { crmRoutes } from '../model/crm-routes'
-import { type DealCsvOptions, dealsCsv } from '../model/deals-csv'
 import {
   boardSummary,
   DEAL_STATUS_LABELS,
@@ -109,7 +102,8 @@ import {
 import { customFieldColumns } from './contact-custom-columns'
 import { DealBoard } from './deal-board'
 import { DealEditDrawer } from './deal-edit-drawer'
-import { DealImportButton } from './deal-import-drawer'
+import { CrmExportButton, CrmImportButton } from './crm-transfer-buttons'
+import { CRM_DEALS_RESOURCE } from '../transfer/fields'
 import DealsBulkBar from './deals-bulk-bar'
 import { LostReasonDialog } from './lost-reason-dialog'
 import { OwnerAvatar } from './owner-avatar'
@@ -188,9 +182,9 @@ const ORG_PIPELINE_TOKENS: readonly string[] = [ORG_SCOPE_TOKEN]
  *
  * The table's rows are selectable, and a selection raises `DealsBulkBar`
  * over it — whose stage moves go through the same `useDealStageApi` as a
- * drag. Export CSV beside the status toggle writes the page through
- * `dealsCsv()`, naming the pipeline, the stage and the owner; the bar
- * writes the same file over the selection.
+ * drag. Import and Export open the console's import wizard and export
+ * dialog on `crm.deals` (AGL-3528): the export over the selection, the
+ * list's own query, or every deal.
  */
 export function DealsSection(props: ConsolePluginPageProps) {
   const { hostId, org, basePath } = props
@@ -215,11 +209,9 @@ export function DealsSection(props: ConsolePluginPageProps) {
   const nowMs = useMemo(() => Date.now(), [])
   // The org's deal fields, for the table's optional columns (AGL-2661).
   const dealFields = useContactFieldDefinitions(scope.orgId, 'deal')
-  // Salesforce's Type and Lead source lists, for their columns and filters,
-  // and the campaigns a file names its deals' campaign by (AGL-3516).
+  // Salesforce's Type and Lead source lists, for their columns and filters (AGL-3516).
   const typeList = useCrmPicklist('opportunityType', scope.orgId)
   const leadSourceList = useCrmPicklist('leadSource', scope.orgId)
-  const campaigns = useCrmCampaigns({ hostId, orgId: scope.orgId }, { enabled: true })
 
   const [view, setView] = useState<View>('board')
   const [closedExpanded, setClosedExpanded] = useState(false)
@@ -354,45 +346,12 @@ export function DealsSection(props: ConsolePluginPageProps) {
   // A page or a status is a different set of rows; a selection made on
   // the last one would be a count over rows no longer on screen.
   useEffect(() => setSelectedIds([]), [paged.plan, paged.page])
-  const csvOptions: DealCsvOptions = useMemo(
-    () => ({
-      pipelineName: (id) => pipelineState.pipelineById(id)?.name,
-      stageName: (pipelineId, stageId) =>
-        dealStageById(pipelineState.pipelineById(pipelineId), stageId)?.name,
-      ownerEmail: (uid) => {
-        const member = findOrgMember(roster.members, uid)
-        return member?.email || member?.label || uid
-      },
-      campaignName: (id) => campaigns.options.find((option) => option.value === id)?.label,
-    }),
-    [pipelineState, roster.members, campaigns.options],
+  // The list's filter, when one narrows it, for the export to read the same
+  // records the list does (AGL-3528).
+  const exportFilter = useMemo(
+    () => (paged.plan.served.length || paged.plan.searched ? { label: 'what the list shows', plan: paged.plan } : null),
+    [paged.plan],
   )
-  /*
-   * The file's options for some rows: the table's own, and the names of the
-   * contacts on them for the Contact roles column (AGL-3521) — read when a
-   * file is asked for, never per page shown. A name that cannot be read is
-   * written as the id.
-   */
-  const firestore = useFirestore()
-  const resolveCsv = useCallback(
-    async (rows: readonly DealDoc[]): Promise<DealCsvOptions> => {
-      if (!scope.orgId) return csvOptions
-      const nameOf = await readCrmRecordNames(firestore, {
-        orgId: scope.orgId,
-        groupId: scope.consentGroup?.groupId ?? null,
-        org: (org ?? null) as Record<string, unknown> | null,
-        records: rows.flatMap((row) =>
-          dealContactRolesOf(row).map((role) => ({ kind: 'contact' as const, id: role.contactId })),
-        ),
-      })
-      return { ...csvOptions, contactName: (id) => nameOf('contact', id) }
-    },
-    [csvOptions, firestore, scope.orgId, scope.consentGroup, org],
-  )
-  // The page on screen; Export all on the bulk bar takes the whole list.
-  const handleExport = useCallback(async () => {
-    downloadTextFile('deals.csv', 'text/csv', dealsCsv(paged.rows, await resolveCsv(paged.rows)))
-  }, [paged.rows, resolveCsv])
 
   const columns: GridColDef[] = useMemo(
     () => [
@@ -561,17 +520,8 @@ export function DealsSection(props: ConsolePluginPageProps) {
           // The record actions, top right and never clipped (AGL-3311).
           action: (
             <CrmListActions>
-              <DealImportButton hostId={hostId} />
-              {/* The file is the table's rows, so it is offered with the table. */}
-              {view === 'table' ? (
-                <Button
-                  size="small"
-                  onClick={() => void handleExport()}
-                  disabled={!paged.rows.length}
-                >
-                  {'Export CSV'}
-                </Button>
-              ) : null}
+              <CrmImportButton resource={CRM_DEALS_RESOURCE} noun="deals" hostId={hostId} mappingZone="deals" />
+              <CrmExportButton resource={CRM_DEALS_RESOURCE} hostId={hostId} filter={exportFilter} />
               <Button
                 size="small"
                 startIcon={<MdiIcon path={mdiCogOutline.path} size={0.8} />}
@@ -726,8 +676,6 @@ export function DealsSection(props: ConsolePluginPageProps) {
                     pipelineById={pipelineState.pipelineById}
                     roster={roster}
                     api={api}
-                    csv={csvOptions}
-                    resolveCsv={resolveCsv}
                   />
                   <CrmColumnOrderProvider value={grid.columnOrder}>
                     <ListTable

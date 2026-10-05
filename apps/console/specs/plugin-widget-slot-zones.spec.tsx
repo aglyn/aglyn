@@ -125,7 +125,9 @@ import {
  * reading the zone for table columns; a `hosted` entry is a plugin's own
  * surface drawing the zone through the renderer the shell hands down
  * (`useConsoleWidgetSlot`, which is `PluginWidgetSlot` with its gates), because
- * a plugin cannot import the console's slot.
+ * a plugin cannot import the console's slot. The console's private transfer
+ * kit (`libs/aglyn-transfer-ui`) hosts a zone the same way: it is drawn only
+ * inside the console, and cannot import the console's slot either.
  */
 const MOUNTS: Record<
   string,
@@ -285,8 +287,9 @@ const MOUNTS: Record<
     how: 'slot',
     props: { hostId: 'host-1', orgId: 'org-1' },
   },
-  // AGL-2917: the CRM's record pages, its one-to-one composer and its import
-  // drawers, which are the CRM plugin's own surfaces.
+  // AGL-2917: the CRM's record pages and its one-to-one composer, which are
+  // the CRM plugin's own surfaces; the import mapping step, in the transfer
+  // kit's wizard every plugin's import opens (AGL-3528).
   recordInsights: {
     file: 'libs/plugins/crm/src/lib/components/crm-record-insights-zone.tsx',
     how: 'hosted',
@@ -313,7 +316,7 @@ const MOUNTS: Record<
     },
   },
   importMapping: {
-    file: 'libs/plugins/crm/src/lib/components/csv-import-drawer.tsx',
+    file: 'libs/aglyn-transfer-ui/src/lib/import-mapping-step.component.tsx',
     how: 'hosted',
     props: {
       hostId: 'host-1',
@@ -411,6 +414,7 @@ function mountedZones(): Set<string> {
       '--',
       'apps/console',
       'libs/plugins',
+      'libs/aglyn-transfer-ui',
       ':!apps/console/specs',
       ':!*.spec.*',
     ],
@@ -460,7 +464,8 @@ describe('AGL-2940 · the new zones are in the catalog and mounted', () => {
       if (mount.how === 'hosted') {
         // Drawn through the shell's gated renderer, never a list of its own.
         const hosted = slotMount && source.includes('useConsoleWidgetSlot()')
-        expect(`${zone}: ${mount.file.startsWith('libs/plugins/') && hosted}`).toBe(
+        const host = /^libs\/(?:plugins|aglyn-transfer-ui)\//.test(mount.file)
+        expect(`${zone}: ${host && hosted}`).toBe(
           `${zone}: true`,
         )
       }

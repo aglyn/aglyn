@@ -37,7 +37,7 @@
  */
 
 /*
- * The task routes (AGL-2599) and the import route (AGL-2602) pull the Admin
+ * The task routes (AGL-2599) pull the Admin
  * SDK, the workflow runner and the admin barrel into this module's import
  * graph. None loads under jsdom — `next/cache` extends a `Request` the
  * environment does not define — and none is what this suite is about, so
@@ -216,17 +216,6 @@ describe('the CRM server entry', () => {
     expect(CRM_API_ROUTES.emailSend).toBe('crm/email-send')
     expect(resolvePluginApiRoute(CRM_API_ROUTES.emailSend)).toBeDefined()
   })
-
-  /** The deals and tasks files' doors (AGL-2662), proven the same way. */
-  it.each(['crm/deals-import', 'crm/tasks-import'])(
-    'registers %s, which answers POST only',
-    async (route) => {
-      registerCrmConsoleApi()
-      const { status, headers } = await call(route, 'GET')
-      expect(status).toBe(405)
-      expect(headers['Allow']).toBe('POST')
-    },
-  )
 
   it('registers crm/erase-person, which answers POST only (AGL-2623)', async () => {
     registerCrmConsoleApi()

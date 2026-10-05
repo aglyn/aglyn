@@ -281,6 +281,15 @@ saved under its key stay on the records that carry them, but nothing will show t
 again — and a new field created with the same key would read them as its own, which is
 why the key of a retired field still counts as taken when you create one on that tab.
 
+## Export your fields {#export-fields}
+
+**Export…** at the top of the Fields section writes every custom field you
+defined as a file — its name, key, the record it describes, its type, its
+choices, whether it is required, its position and whether it is retired —
+through the [export dialog](./export.md): a record of your setup, to document
+it or to rebuild it elsewhere. Fields are defined here, so the file is never
+imported. Their values travel with each record's own [export](./export.md).
+
 ## Recompute next activity {#recompute-next-activity}
 
 **Recompute next activity** at the top of the Fields section rewrites every

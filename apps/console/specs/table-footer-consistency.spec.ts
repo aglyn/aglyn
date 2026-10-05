@@ -1368,16 +1368,6 @@ const NOT_A_LIST: Array<[string, string]> = [
       'page the choices a person has to scan anyway.',
   ],
   [
-    'libs/plugins/crm/src/lib/components/csv-import-drawer.tsx',
-    'The spreadsheet PREVIEW and the skipped-row report in the CSV ' +
-      'import (AGL-2602, shared by every section since AGL-2621): rows ' +
-      'parsed from a file the reader just chose, capped on the client and ' +
-      'shown ten at a time as a preview before the import runs. The ' +
-      'contacts and companies drawers are vocabularies over this one walk ' +
-      'and draw no table of their own. The source is a local array, not a ' +
-      'collection, and the full file is what the download offers.',
-  ],
-  [
     'libs/plugins/crm/src/lib/components/deal-products-card.tsx',
     'A deal’s LINE ITEMS (AGL-2620): rows stored on the deal document ' +
       'itself and bounded there by `DEAL_LINE_ITEMS_MAX` (50) — the card ' +
@@ -1967,7 +1957,10 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     // 71 since the Import & export hub (AGL-3535), and these ARE new tables:
     // one package file's dry run and the edited items of one import's undo,
     // each bounded by that one file, and the hub's launch points.
-    expect(NOT_A_LIST).toHaveLength(71)
+    //
+    // 70 since the CRM's imports moved onto the transfer wizard (AGL-3528):
+    // the shared CSV import drawer, and its preview table, are gone.
+    expect(NOT_A_LIST).toHaveLength(70)
   })
 })
 
