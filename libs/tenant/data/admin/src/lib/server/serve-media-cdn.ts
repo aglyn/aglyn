@@ -55,6 +55,7 @@ import { mediaDeliveryProvider } from '@aglyn/aglyn/plugin-manager/media-deliver
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { analyticsDayExpiresAt } from './analytics-retention'
 import { firebaseAdmin } from './firebase-admin'
+import { recordMediaServe } from './media-serve-count'
 import { getPlatformLockdown } from './lockdown'
 import {
   engageMediaBandwidthCap,
@@ -1603,32 +1604,15 @@ export async function serveMediaCdn(
         let evaluation: Promise<void> | null = null
         let recorded: Promise<unknown> | null = null
         if (req.method === 'GET') {
-          const day = new Date().toISOString().slice(0, 10)
           const bandwidthBytes = delivery.sizeBytes
-          recorded = firestore
-            .collection(isOrg ? 'orgs' : 'hosts')
-            .doc(scopeId)
-            .collection('analytics')
-            .doc(day)
-            .set(
-              {
-                expiresAt: analyticsDayExpiresAt(day),
-                ...(bandwidthBytes > 0
-                  ? {
-                      [MEDIA_BANDWIDTH_DAY_FIELD]:
-                        firebaseAdmin.firestore.FieldValue.increment(bandwidthBytes),
-                    }
-                  : {}),
-                media: {
-                  [mediaId]: {
-                    serves: firebaseAdmin.firestore.FieldValue.increment(1),
-                    redirects: firebaseAdmin.firestore.FieldValue.increment(1),
-                  },
-                },
-              },
-              { merge: true },
-            )
-            .catch((error: unknown) => logUncountedServe(scopeSegment, mediaId, error))
+          recorded = recordMediaServe({
+            firestore,
+            collection: isOrg ? 'orgs' : 'hosts',
+            scopeId,
+            mediaId,
+            bandwidthBytes,
+            redirect: true,
+          })
           evaluation = mediaCdnBandwidthEvaluation(scope, bandwidthBytes)
         }
         res.status(302).end()

@@ -258,6 +258,31 @@ describe('resolvePaidMediaDelivery (AGL-2814)', () => {
       ])
       expect(delivery.expiresAtMs).toBe(NOW + TTL)
       expect(delivery.location).not.toContain('token=')
+      // No size reader on this double, so nothing to count — and no failure.
+      expect(delivery).toMatchObject({ collection: 'hosts', scopeId: HOST, sizeBytes: 0 })
+    })
+
+    it('says whose library a signed read opens and how big it is, for the bandwidth count', async () => {
+      const { io } = makeIo()
+      io.storageObjectSize = async (objectPath) =>
+        objectPath === `orgs/${ORG}/media/Programs/week-2.mp4` ? 48_000_000 : 0
+      const delivery = await resolve(downloadUrl(`orgs/${ORG}/media/Programs/week-2.mp4`), io)
+      expect(delivery).toMatchObject({
+        ok: true,
+        via: 'signed-storage',
+        collection: 'orgs',
+        scopeId: ORG,
+        sizeBytes: 48_000_000,
+      })
+    })
+
+    it('signs the read even when Storage will not say how big it is', async () => {
+      const { io } = makeIo()
+      io.storageObjectSize = async () => {
+        throw new Error('metadata unavailable')
+      }
+      const delivery = await resolve(downloadUrl('hosts/host-1/media/Programs/week-1.mp4'), io)
+      expect(delivery).toMatchObject({ ok: true, via: 'signed-storage', sizeBytes: 0 })
     })
 
     it('⛔ refuses a bucket this platform does not serve from, signing nothing', async () => {
@@ -377,10 +402,14 @@ describe('createPaidMediaDeliveryIo', () => {
             configs.push({ path, config })
             return ['https://signed.example/v4']
           },
+          getMetadata: async () => [{ size: path.endsWith('a.mp4') ? '1234' : 'n/a' }],
         }),
       },
     })
     expect(io.bucketName).toBe(BUCKET)
+    // Storage reports the size as a string; one that is not a size reads as 0.
+    expect(await io.storageObjectSize?.('hosts/host-1/media/a.mp4')).toBe(1234)
+    expect(await io.storageObjectSize?.('hosts/host-1/media/b.pdf')).toBe(0)
     expect((await io.readMedia('orgs', 'acme', 'm1')).get('private')).toBe(true)
     expect(await io.orgIdForHost('host-1')).toBe('acme')
     expect(await io.orgIdForHost('host-unindexed')).toBeNull()

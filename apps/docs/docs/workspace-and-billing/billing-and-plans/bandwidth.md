@@ -153,7 +153,8 @@ for both. The weight is the smallest that keeps video at cost plus 30%, after ca
 the same as everything else metered — both inside your allowance and past it. Storing a
 file is billed separately, as storage, and is not counted again here. A video the platform
 serves from a delivery partner rather than from its own servers counts the same way, at
-the file's size each time a viewer starts it.
+the file's size each time a viewer starts it, and so does a members-only video or a paid
+download from your store, each time a buyer opens its link.
 
 Images are the exception — they are part of what a page weighs, which the 1,012.8 KB
 already includes, so counting them again would charge for them twice.
