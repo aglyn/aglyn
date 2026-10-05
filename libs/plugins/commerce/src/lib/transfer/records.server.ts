@@ -53,7 +53,6 @@ import {
   couponWrite,
   discountRecord,
   discountWrite,
-  giftCardRecord,
   orderRecord,
   planWithCreateRequired,
   promotionCode,
@@ -61,7 +60,6 @@ import {
   type CategoryIndex,
   type StoredCategory,
   type StoredCoupon,
-  type StoredGiftCard,
   type StoredOrder,
 } from './records-transfer'
 import {
@@ -79,25 +77,26 @@ import {
 } from './server-common'
 
 /*
- * THE SERVER HALVES OF ORDERS, DISCOUNTS, COUPONS, GIFT CARDS AND
- * CATEGORIES (AGL-3531). Their records are plain documents under the site,
+ * THE SERVER HALVES OF ORDERS, DISCOUNTS, COUPONS AND CATEGORIES
+ * (AGL-3531), and the reads gift cards share (`gift-cards.server.ts`,
+ * AGL-3551). Their records are plain documents under the site,
  * so one shape serves each: an export reads the list's query (orders) or the
  * whole collection page by page; a lookup finds documents by the resource's
  * keys; an import writes the same document the console's card writes, and
  * undo puts back what it held or deletes what the import made.
  *
- * Orders and gift cards declare `records` too — the kind a file of rows
- * is — but refuse every row they are handed: their fields are all read-only
+ * Orders declare `records` too — the kind a file of rows is — but refuse
+ * every row they are handed: their fields are all read-only
  * and the invariant below fails a row that would write, so a dry run says
  * why rather than an apply discovering it.
  */
 
-type Doc = Record<string, unknown>
+export type Doc = Record<string, unknown>
 type Collection = FirebaseFirestore.CollectionReference
 
 const IN_MAX = 30
 
-interface RecordsSpec {
+export interface RecordsSpec {
   collection(firestore: Firestore, ctx: TransferResourceContext): Collection
   /** The list's query an export may carry a filter of. */
   source?: Omit<CommerceListSource, 'collection'>
@@ -111,7 +110,7 @@ interface RecordsSpec {
   find?: Record<string, (collection: Collection, values: string[]) => FirebaseFirestore.Query>
 }
 
-type RecordsExtra = {
+export type RecordsExtra = {
   productNames?: Record<string, string>
   categories?: CategoryIndex
 }
@@ -196,13 +195,20 @@ async function lookup(
   return { lookup: lookupMap, records }
 }
 
+/** The reading hooks every records resource shares: count, a page of an export, and the lookup. */
+export function readableRecords(spec: RecordsSpec): Pick<PluginTransferResource, 'count' | 'readPage' | 'lookup'> {
+  return {
+    count: (ctx, options) => count(spec, ctx, options, firestoreOf()),
+    readPage: (ctx, cursor, fieldIds, options) => readPage(spec, ctx, cursor, fieldIds, options, firestoreOf()),
+    lookup: (ctx, requests) => lookup(spec, ctx, requests, firestoreOf()),
+  }
+}
+
 /** The hooks an export-only resource answers with: read, find by id, and refuse every write. */
 function exportOnly(spec: RecordsSpec, noun: string, why: string): PluginTransferResource {
   return {
     matchKeys: [{ fieldId: 'id', normalizer: 'aglynId' }],
-    count: (ctx, options) => count(spec, ctx, options, firestoreOf()),
-    readPage: (ctx, cursor, fieldIds, options) => readPage(spec, ctx, cursor, fieldIds, options, firestoreOf()),
-    lookup: (ctx, requests) => lookup(spec, ctx, requests, firestoreOf()),
+    ...readableRecords(spec),
     invariants: [{ id: `${noun}-export-only`, label: why, check: () => why }],
     async apply(_ctx, chunk) {
       const results: TransferRowResult[] = chunk.rows.map((row) => ({
@@ -220,7 +226,7 @@ function exportOnly(spec: RecordsSpec, noun: string, why: string): PluginTransfe
 }
 
 /*==========================================
- * ORDERS AND GIFT CARDS — exported only
+ * ORDERS — exported only
  *=========================================*/
 
 const ORDERS: RecordsSpec = {
@@ -254,17 +260,6 @@ export const ordersTransfer: PluginTransferResource = exportOnly(
   'Orders are exported, never imported: an order is the record of a sale, written by checkout, the register or a paid draft.',
 )
 
-const GIFT_CARDS: RecordsSpec = {
-  collection: (firestore, ctx) => hostRefOf(firestore, ctx).collection('giftCards'),
-  record: (id, data) => giftCardRecord(id, data as StoredGiftCard),
-  matchValues: (id) => ({ id }),
-}
-
-export const giftCardsTransfer: PluginTransferResource = exportOnly(
-  GIFT_CARDS,
-  'gift-cards',
-  'Gift cards are exported, never imported: a balance is money a shopper can spend, so a card is issued from the Gift cards card, where its risk checks and its email go with it.',
-)
 
 /*==========================================
  * IMPORTABLE RECORDS

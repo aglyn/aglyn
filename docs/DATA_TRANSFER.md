@@ -773,7 +773,7 @@ server declarations, with the store-touching hooks loaded on first use.
 | `commerce.discounts` | yes | a discount; new ones start switched off |
 | `commerce.coupons` | yes | a coupon, its id being its code; new ones start switched off |
 | `commerce.orders` | no | an order, its money from `totals` (AGL-1747) |
-| `commerce.gift-cards` | no | a gift card, its id being its code |
+| `commerce.gift-cards` | by issuing (AGL-3551) | a gift card, its id being its code |
 
 **Products fold rows.** The resource's `plan` groups the rows of one handle
 (or ID) into a product: the first row's product fields and match (handle,
@@ -802,6 +802,28 @@ reading through the Admin SDK, and pages by `[orderValue, id]`.
 
 **Export-only resources** declare `records`, make every field read-only, and
 refuse a row that would write with an invariant, so a dry run says why.
+
+**Gift cards import by issuing (AGL-3551).** `gift-cards.server.ts` never
+writes a balance: its `plan` (`planGiftCardRows`) stamps each create with
+`giftCard` — the code it is issued under (the file's, joined and upper-cased;
+minted at plan time for a blank cell, or for a taken code whose row chose
+"create a new record"), the amount in cents, US dollars only, at most
+`GIFT_CARD_ISSUE_MAX_CENTS` — and turns a row that would change an existing
+card into a refusal the `gift-card-issuable` invariant fails. A code the
+match missed (spaced or cased differently) is read once and refused too. The
+total of every card is stamped on each row and stated in a `screening`
+warning; the plugin's own wizard step (`gift-card-total`, after Conflicts)
+lists every card from the stored plan and sends the typed total in `extras`.
+Apply reads it again and issues a row only when it equals the planned total,
+each card through `issueGiftCard` (`server/gift-card-issue.ts`, the same
+path the Gift cards card's Issue uses: `create`, never `set`; `issuedBy`;
+an activity line per card under `commerce:giftCard`; email only when the
+step asked). A retried row finds its own card by `importJobId` and
+`importRow`. Plan, Apply and Undo each refuse anybody but the workspace's
+owners and admins and the site's admins (`canImportGiftCards`), and a plan
+without the `giftCards` entitlement. Undo voids (zeroes, never deletes) a
+card nobody has spent from; a card with a redemption or a hold is a conflict
+that is never voided, whatever the decision.
 
 **Shopify.** The Shopify product CSV headers are the products resource's alias
 dictionary (source `Shopify`), and its `shopify` preset writes Shopify's

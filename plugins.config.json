@@ -738,14 +738,15 @@
           "description": "Percent-off coupon codes, matched by code. New ones start switched off."
         },
         {
-          "$comment": "Exported only: a balance is money a shopper can spend, issued with its risk checks and email, never written from a file. A card's ID is its code.",
+          "$comment": "Imported by ISSUING each card through the plugin's issue path (AGL-3551), never by writing a balance: owners and admins only, the dry run lists every card and asks for the total typed back, and undo voids only cards nobody has spent from. A card's ID is its code.",
           "key": "commerce.gift-cards",
           "label": "Gift cards",
           "singularLabel": "Gift card",
           "scope": "host",
           "kinds": ["records"],
           "formats": ["csv", "json", "ndjson"],
-          "description": "Every gift card's code, balance and status. Exported only."
+          "limits": { "maxRows": 2000 },
+          "description": "Every gift card's code, balance and status. An import issues each card, confirmed by the total."
         }
       ],
       "contributes": {

@@ -28,6 +28,7 @@ import {
   COMMERCE_GIFT_CARDS_TRANSFER,
   COMMERCE_ORDERS_TRANSFER,
   COMMERCE_PRODUCTS_TRANSFER,
+  GIFT_CARD_CONFIRM_STEP_ID,
 } from './transfer-keys'
 
 /** The After import step loads with the wizard, not with the products page. */
@@ -37,11 +38,18 @@ function AfterImportStep(props: TransferWizardStepProps) {
   return createElement(Suspense, { fallback: null }, createElement(ProductImportOptionsStep, props))
 }
 
+/** The gift card import's Confirm step loads with the wizard, not with the Gift cards card. */
+const GiftCardConfirmStepBody = lazy(() => import('./gift-card-confirm-step.component'))
+
+function GiftCardConfirmStep(props: TransferWizardStepProps) {
+  return createElement(Suspense, { fallback: null }, createElement(GiftCardConfirmStepBody, props))
+}
+
 /**
  * The client halves of the commerce transfer resources (AGL-3531): how the
- * wizard and the dialog name each, and the products wizard's own After
- * import step, where the `productImport` zone sets what happens to new
- * products.
+ * wizard and the dialog name each, the products wizard's own After import
+ * step, where the `productImport` zone sets what happens to new products,
+ * and the gift card import's Confirm step (AGL-3551).
  */
 export function registerCommerceTransferUi(): void {
   const owner = { pluginId: BUNDLE_ID }
@@ -59,5 +67,15 @@ export function registerCommerceTransferUi(): void {
   registerPluginTransferResourceUi(COMMERCE_ORDERS_TRANSFER, { label: 'Orders' }, owner)
   registerPluginTransferResourceUi(COMMERCE_DISCOUNTS_TRANSFER, { label: 'Discounts' }, owner)
   registerPluginTransferResourceUi(COMMERCE_COUPONS_TRANSFER, { label: 'Coupons' }, owner)
-  registerPluginTransferResourceUi(COMMERCE_GIFT_CARDS_TRANSFER, { label: 'Gift cards' }, owner)
+  registerPluginTransferResourceUi(
+    COMMERCE_GIFT_CARDS_TRANSFER,
+    {
+      label: 'Gift cards',
+      // Every card and its value, and the total typed back (AGL-3551).
+      extraSteps: [
+        { id: GIFT_CARD_CONFIRM_STEP_ID, label: 'Confirm the cards', after: 'conflicts', component: GiftCardConfirmStep },
+      ],
+    },
+    owner,
+  )
 }

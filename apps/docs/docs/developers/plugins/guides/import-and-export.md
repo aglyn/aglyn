@@ -223,8 +223,14 @@ values.
 Declare it with `kinds: ['records']` like any other. Make every field
 `readOnly`, and return an `invariants` entry that refuses any row that would
 write. The dry run then fails such a row with your reason. Leave the Import
-button off your surface; the commerce orders and gift cards resources work
-this way.
+button off your surface; the commerce orders resource works this way.
+
+A record that must come into being through your own path, never as a written
+value, imports by calling that path once per row. The commerce gift card
+import, for example, issues each card through the plugin's issue function.
+Its `plan` decides each row's card and stamps it on the row, an `invariants`
+entry fails the rows it refuses, and a wizard step of its own reads back the
+total for the server to check from `ctx.extras` at both the dry run and Apply.
 
 ## What an export asks of your server half
 

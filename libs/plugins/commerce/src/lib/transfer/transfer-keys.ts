@@ -28,7 +28,7 @@
  * | discounts | yes | matched by code, then name, then ID; new ones start switched off |
  * | coupons | yes | matched by code; new ones start switched off |
  * | orders | no | an order is the record of a sale, written by checkout alone |
- * | gift cards | no | a balance is money a shopper can spend; it is issued, never imported |
+ * | gift cards | yes, by issuing | each row issues a card through the issue path, confirmed by its total; owners and admins only |
  */
 
 export const COMMERCE_PRODUCTS_TRANSFER = 'commerce.products'
@@ -54,4 +54,11 @@ export const COMMERCE_IMPORTABLE_TRANSFERS: ReadonlySet<string> = new Set([
   COMMERCE_CATEGORIES_TRANSFER,
   COMMERCE_DISCOUNTS_TRANSFER,
   COMMERCE_COUPONS_TRANSFER,
+  COMMERCE_GIFT_CARDS_TRANSFER,
 ])
+
+/**
+ * The gift card import's Confirm step (AGL-3551), and the key its answer
+ * rides under in the wizard's `extras`: the total value typed back.
+ */
+export const GIFT_CARD_CONFIRM_STEP_ID = 'gift-card-total'

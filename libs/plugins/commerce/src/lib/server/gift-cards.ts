@@ -16,25 +16,9 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn/server'
-import { randomBytes } from 'crypto'
-import { giftCardSearchTokens } from '../model/gift-card-search'
-import {
-  firebaseAdmin,
-  getOrgForHost,
-  hostSendingIdentity,
-  meterHostEmail,
-  renderHostEmailWithTokens,
-} from '@aglyn/tenant-data-admin'
-import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
+import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
-
-/** A merchant may not mint more than this in one card. */
-const MAX_ISSUE_CENTS = 100_000
-
-/** `GC-` + 12 uppercase hex, the shape `billing-webhook.ts` already mints. */
-function mintCode(): string {
-  return `GC-${randomBytes(6).toString('hex').toUpperCase()}`
-}
+import { GiftCardIssueRefusal, issueGiftCard } from './gift-card-issue'
 
 /**
  * Gift-card issue / void (AGL-2226).
@@ -166,84 +150,25 @@ export const giftCardsHandler: PluginApiHandler = async (req, res) => {
       return res.status(200).json({ ok: true, code })
     }
 
-    const amountCents = Math.round(Number(body.amountCents ?? 0))
-    if (!Number.isFinite(amountCents) || amountCents <= 0) {
-      return res.status(400).json({ error: 'Amount must be above zero' })
-    }
-    if (amountCents > MAX_ISSUE_CENTS) {
-      return res
-        .status(400)
-        .json({ error: `Amount may not exceed $${MAX_ISSUE_CENTS / 100}` })
-    }
-    const recipientEmail = String(body.recipientEmail ?? '').trim().slice(0, 200)
-    const note = String(body.note ?? '').trim().slice(0, 200)
-    const code = mintCode()
-    await hostRef.collection('giftCards').doc(code).set({
-      initialCents: amountCents,
-      balanceCents: amountCents,
-      recipientEmail: recipientEmail || null,
-      // Null rather than absent: the field is what tells a reader whether a
-      // card came from a sale or from the console, and `undefined` would
-      // make an issued-by-hand card indistinguishable from a legacy row.
-      orderId: null,
-      issuedBy: decoded.uid,
-      ...(note ? { note } : {}),
-      // What the console's Gift cards search asks (AGL-3321).
-      searchTokens: giftCardSearchTokens(code, recipientEmail || null),
-      createdAtMs: Date.now(),
+    // Issued through the one issue path the gift card import uses too
+    // (AGL-3551): the amount bounded, the code minted and never overwritten,
+    // the activity line written, and the recipient emailed.
+    const issued = await issueGiftCard({
+      firestore,
+      hostId,
+      amountCents: Number(body.amountCents ?? 0),
+      recipientEmail: String(body.recipientEmail ?? ''),
+      note: String(body.note ?? ''),
+      issuer: { uid: decoded.uid, email: decoded.email ?? null },
+      email: true,
+      ownerOrg: owner?.org,
     })
-
-    let emailed = false
-    if (recipientEmail && isEmailConfigured()) {
-      const value = `$${(amountCents / 100).toFixed(2)}`
-      // The same site-designed template the purchase path uses (AGL-771), so
-      // a hand-issued card arrives looking like a bought one — with the
-      // merchant's note (AGL-3432). A card sent by hand often goes to someone
-      // who has never visited the site, and the note is the only part of the
-      // message the merchant wrote.
-      const designed = await renderHostEmailWithTokens(
-        firestore,
-        hostId,
-        'gift-card',
-        { 'giftcard.code': code, 'giftcard.value': value, 'giftcard.note': note },
-      )
-      const sent = await sendEmail({
-        to: recipientEmail,
-        subject: designed?.subject ?? 'Your gift card',
-        text:
-          designed?.text ||
-          (note ? `${note}\n\n` : '') +
-            `Gift card code: ${code}\nValue: ${value}\n\n` +
-            'Enter it at checkout to apply the balance.',
-        ...(designed?.html ? { html: designed.html } : {}),
-        fromName: Aglyn.resolveBrandingProfile(owner?.org as never).fromName,
-        sendingIdentity: await hostSendingIdentity(hostId),
-        audience: 'tenant',
-        context: 'gift card',
-        // Owed to the recipient by their own order: the phishing
-        // screen's soft rules never hold it (AGL-3356).
-        owedFor: 'order',
-      })
-        .then(() => true)
-        .catch(() => false)
-      if (sent) {
-        // Cost meter (AGL-1438). Transactional: the card has already been
-        // minted and the recipient is owed the code, so a quota may count
-        // this send but never refuse it. Metered on the SUCCESS path only,
-        // matching every other sender — a send the provider rejected costs
-        // nothing, and a meter that counted it would inflate the COGS figure
-        // exactly when mail was broken.
-        await meterHostEmail(hostId)
-      }
-      // The truth, not the intent: the console shows this back to whoever
-      // issued the card, and reporting a delivered email for a send that
-      // threw is how a customer ends up waiting for a code that is not
-      // coming.
-      emailed = sent
-    }
-
+    const { code, emailed } = issued
     return res.status(200).json({ ok: true, code, emailed })
   } catch (error) {
+    if (error instanceof GiftCardIssueRefusal) {
+      return res.status(error.status).json({ error: error.message })
+    }
     console.error(error)
     return res.status(500).json({ error: 'Gift card operation failed' })
   }

@@ -1059,7 +1059,10 @@ export const PLUGIN_TRANSFER_RESOURCES_DECLARED: readonly ResolvedTransferResour
       "json",
       "ndjson"
     ],
-    "description": "Every gift card's code, balance and status. Exported only."
+    "limits": {
+      "maxRows": 2000
+    },
+    "description": "Every gift card's code, balance and status. An import issues each card, confirmed by the total."
   },
   {
     "pluginId": "crm",

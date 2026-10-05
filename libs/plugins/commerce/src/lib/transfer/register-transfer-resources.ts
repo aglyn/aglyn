@@ -39,9 +39,11 @@ import {
   COUPON_TRANSFER_FIELDS,
   DISCOUNT_MATCH_KEYS,
   DISCOUNT_TRANSFER_FIELDS,
+  GIFT_CARD_MATCH_KEYS,
   GIFT_CARD_TRANSFER_FIELDS,
   ORDER_TRANSFER_FIELDS,
   ORDER_TRANSFER_GROUPS,
+  type GiftCardPlannedRow,
 } from './records-transfer'
 import {
   COMMERCE_CATEGORIES_TRANSFER,
@@ -62,6 +64,7 @@ import {
 
 const productsServer = () => import('./products.server')
 const recordsServer = () => import('./records.server')
+const giftCardsServer = () => import('./gift-cards.server')
 
 /** A resource whose store-touching hooks load `pick(module)` on first use. */
 function deferred(
@@ -169,20 +172,25 @@ export function registerCommerceTransferResources(): void {
     { pluginId: BUNDLE_ID },
   )
 
+  // Imported by ISSUING each card (AGL-3551): the plan decides each card and
+  // the total, and a row it refuses is failed here with the reason.
   registerPluginTransferResource(
     COMMERCE_GIFT_CARDS_TRANSFER,
-    deferred(async () => (await recordsServer()).giftCardsTransfer, {
-      fields: catalog({ standard: GIFT_CARD_TRANSFER_FIELDS }),
-      matchKeys: [{ fieldId: 'id', normalizer: 'aglynId' }],
-      invariants: [
-        {
-          id: 'gift-cards-export-only',
-          label: 'Gift cards are exported only',
-          check: () =>
-            'Gift cards are exported, never imported: a balance is money a shopper can spend, so a card is issued from the Gift cards card, where its risk checks and its email go with it.',
-        },
-      ],
-    }),
+    deferred(
+      async () => (await giftCardsServer()).giftCardsTransfer,
+      {
+        fields: catalog({ standard: GIFT_CARD_TRANSFER_FIELDS }),
+        matchKeys: GIFT_CARD_MATCH_KEYS,
+        invariants: [
+          {
+            id: 'gift-card-issuable',
+            label: 'A gift card the store can issue',
+            check: (row) => (row as GiftCardPlannedRow).giftCard?.problem ?? null,
+          },
+        ],
+      },
+      ['count', 'plan'],
+    ),
     { pluginId: BUNDLE_ID },
   )
 }

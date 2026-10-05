@@ -18,17 +18,29 @@
 import {
   buildTransferPlan,
   isBlankTransferValue,
+  TRANSFER_FILE_SAMPLE_ROW,
   TRANSFER_SYSTEM_GROUP,
   type BuildTransferPlanInput,
   type MatchKeySpec,
   type PlannedTransferRow,
   type TransferField,
+  type TransferFieldChange,
   type TransferPlan,
+  type TransferPlanSummary,
+  type TransferWarningSample,
 } from '@aglyn/aglyn/data-transfer'
+import { hostRoleFor } from '@aglyn/aglyn/app-utils/organizations'
 import type { PicklistSpec } from '@aglyn/aglyn/app-utils/picklists'
 import { commerceSlug } from '../model/commerce'
 import type { DiscountKind, HostDiscount } from '../model/commerce-discounts'
-import type { HostGiftCard } from '../model/commerce-gift-cards'
+import { GIFT_CARD_CONFIRM_STEP_ID } from './transfer-keys'
+import {
+  GIFT_CARD_CURRENCY,
+  giftCardAmountProblem,
+  giftCardCodeOf,
+  giftCardCodeProblem,
+  type HostGiftCard,
+} from '../model/commerce-gift-cards'
 import {
   ORDER_CHANNEL_LABELS,
   ORDER_STATUS_LABELS,
@@ -52,10 +64,9 @@ import {
  *   How many times one was used is history, exported and never written.
  * - Orders are exported only: an order is the record of a sale, written by
  *   checkout, the register or a paid draft.
- * - Gift cards are exported only: a balance is money a shopper can spend,
- *   and a card is issued (with its risk checks and its email) rather than
- *   written. A gift card's ID is its code, so the file is worth what the
- *   cards are.
+ * - Gift cards import by ISSUING each card (AGL-3551, below), never by
+ *   writing a balance: a balance is money a shopper can spend. A gift
+ *   card's ID is its code, so the file is worth what the cards are.
  */
 
 const iso = (ms: unknown): string | null => {
@@ -449,24 +460,74 @@ export function couponWrite(
  * GIFT CARDS
  *=========================================*/
 
+/*
+ * A GIFT CARD IMPORT ISSUES CARDS (AGL-3551). A row is never written as a
+ * balance: each one the dry run passes is issued through the same path as
+ * the Gift cards card's Issue (`issueGiftCard`), so its amount is bounded,
+ * its code is never overwritten and its activity line is written.
+ *
+ * - The plan mints the code a row will carry — the file's own, a new one for
+ *   a blank cell, or a new one for a row whose code another card holds and
+ *   whose Conflicts choice is "create a new record" — so the dry run shows
+ *   every card exactly as it will be issued.
+ * - A row whose code another card holds and whose choice is "update" is
+ *   refused: a file never changes a card. "Skip" leaves the card as it is.
+ * - Every card the dry run passes adds to a total the person types back on
+ *   the wizard's Confirm step (`GIFT_CARD_CONFIRM_STEP_ID`). The server reads
+ *   the typed total from `extras` and issues nothing unless it is exactly
+ *   the total of the cards about to be issued.
+ */
+
 export const GIFT_CARD_TRANSFER_FIELDS: readonly TransferField[] = [
   {
     id: 'code',
     label: 'Code',
     group: 'card',
     type: 'text',
-    readOnly: true,
-    description: 'The card’s code, which spends its balance: keep the file as safe as the cards.',
+    matchKey: true,
+    aliases: ['gift card code', 'card code', 'gift card number', 'card number'],
+    description:
+      'The card’s code, which spends its balance: keep the file as safe as the cards. On import, a blank code gets a new one.',
   },
-  { id: 'balance', label: 'Balance', group: 'card', type: 'number', readOnly: true },
+  {
+    id: 'balance',
+    label: 'Balance',
+    group: 'card',
+    type: 'currency',
+    aliases: ['amount', 'value', 'current balance', 'remaining balance', 'balance remaining'],
+    description: 'On import, what the card is issued for, in US dollars — the balance it carries over.',
+  },
+  {
+    id: 'currency',
+    label: 'Currency',
+    group: 'card',
+    type: 'text',
+    aliases: ['currency code'],
+    description: 'Optional. Cards are held in US dollars; a row in another currency is refused, never converted.',
+  },
   { id: 'initial', label: 'Issued for', group: 'card', type: 'number', readOnly: true },
   { id: 'status', label: 'Status', group: 'card', type: 'text', readOnly: true, description: 'Active, Used up, Frozen or Voided.' },
-  { id: 'recipientEmail', label: 'Recipient email', group: 'card', type: 'email', readOnly: true },
+  {
+    id: 'recipientEmail',
+    label: 'Recipient email',
+    group: 'card',
+    type: 'email',
+    aliases: ['email', 'customer email', 'recipient'],
+  },
   { id: 'orderId', label: 'Order ID', group: 'card', type: 'text', readOnly: true, description: 'Blank for a card issued by hand.' },
-  { id: 'note', label: 'Note', group: 'card', type: 'text', readOnly: true },
+  { id: 'note', label: 'Note', group: 'card', type: 'text', aliases: ['notes', 'message'] },
   { id: 'issuedAt', label: 'Issued', group: 'card', type: 'datetime', readOnly: true },
   { id: 'lastUsedAt', label: 'Last used', group: 'card', type: 'datetime', readOnly: true },
 ]
+
+/** A card is found by its code, which is its ID. */
+export const GIFT_CARD_MATCH_KEYS: readonly MatchKeySpec[] = [
+  { fieldId: 'code', normalizer: 'caseless' },
+  { fieldId: 'id', normalizer: 'aglynId' },
+]
+
+/** The fields an issued card's undo entry holds: any of them moving means the card was spent. */
+export const GIFT_CARD_UNDO_FIELDS = ['balance', 'status', 'lastUsedAt'] as const
 
 export type StoredGiftCard = HostGiftCard & {
   initialCents?: number
@@ -475,6 +536,8 @@ export type StoredGiftCard = HostGiftCard & {
   note?: string
   createdAtMs?: number
   lastUsedAtMs?: number
+  importJobId?: string
+  importRow?: number
 }
 
 export function giftCardRecord(id: string, stored: StoredGiftCard): Record<string, unknown> {
@@ -483,6 +546,7 @@ export function giftCardRecord(id: string, stored: StoredGiftCard): Record<strin
     id,
     code: id,
     balance: dollars(balance),
+    currency: GIFT_CARD_CURRENCY,
     initial: dollars(stored.initialCents),
     status: stored.voidedAtMs ? 'Voided' : stored.frozenAtMs ? 'Frozen' : balance > 0 ? 'Active' : 'Used up',
     recipientEmail: stored.recipientEmail ?? null,
@@ -490,6 +554,217 @@ export function giftCardRecord(id: string, stored: StoredGiftCard): Record<strin
     note: stored.note ?? null,
     issuedAt: iso(stored.createdAtMs),
     lastUsedAt: iso(stored.lastUsedAtMs),
+  }
+}
+
+/** Dollars and cents as a person reads them: `$1,250.00`. */
+export function giftCardMoney(amountCents: number): string {
+  return `$${(amountCents / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+}
+
+/** A total as a person types it (`1250`, `$1,250.00`), in cents; `null` for anything else. */
+export function typedDollarsToCents(typed: unknown): number | null {
+  const body = String(typed ?? '')
+    .trim()
+    .replace(/^\$|^usd\s*/i, '')
+    .replace(/\s*usd$/i, '')
+    .replace(/,/g, '')
+    .trim()
+  if (!/^\d+(\.\d{1,2})?$/.test(body)) return null
+  return Math.round(Number(body) * 100)
+}
+
+/** The Confirm step's answer. */
+export interface GiftCardConfirmation {
+  /** The total the person typed, in cents. */
+  totalCents: number
+  /** Email each card's recipient their code as it is issued. */
+  email: boolean
+}
+
+/** The Confirm step's answer from `extras`, or `null` for none: a total is a whole number of cents. */
+export function readGiftCardConfirmation(
+  extras: Readonly<Record<string, unknown>> | undefined,
+): GiftCardConfirmation | null {
+  const value = extras?.[GIFT_CARD_CONFIRM_STEP_ID]
+  if (!value || typeof value !== 'object') return null
+  const totalCents = (value as Record<string, unknown>)['totalCents']
+  if (typeof totalCents !== 'number' || !Number.isInteger(totalCents) || totalCents <= 0) return null
+  return { totalCents, email: (value as Record<string, unknown>)['email'] === true }
+}
+
+/**
+ * Whether a member may issue gift cards from a file: the workspace's owners
+ * and admins, and a collaborator who is an admin of this site. Money a
+ * shopper can spend is minted by the people who answer for the store.
+ */
+export function canImportGiftCards(member: Parameters<typeof hostRoleFor>[0], hostId: string): boolean {
+  return hostRoleFor(member, hostId) === 'admin'
+}
+
+/** The card one planned row issues, as the plan decided it. */
+export interface GiftCardRowPlan {
+  /** The code the card is issued under. */
+  code: string
+  /** The file's code was taken, and the person chose a new one. */
+  newCode: boolean
+  /** The file named no code, so one was made. */
+  madeCode: boolean
+  amountCents: number
+  recipientEmail: string | null
+  note: string | null
+  /** Why the row issues nothing; the `gift-card-issuable` invariant fails it. */
+  problem?: string
+  /** What every card this import issues adds up to. */
+  totalCents: number
+  /** Whether the person typed exactly that total on the Confirm step. */
+  confirmed: boolean
+}
+
+export type GiftCardPlannedRow = PlannedTransferRow & { giftCard?: GiftCardRowPlan }
+
+/** A money cell in cents and its currency: the derived amount, or a number as dollars. */
+function giftCardAmount(value: unknown): { cents: number; currency: string } | null {
+  if (value === null || value === undefined || value === '') return null
+  if (typeof value === 'object' && 'amountMinor' in (value as object)) {
+    const amount = value as { amountMinor: number; currency?: string }
+    return { cents: Math.round(Number(amount.amountMinor)), currency: text(amount.currency).toUpperCase() || GIFT_CARD_CURRENCY }
+  }
+  const number = Number(value)
+  return Number.isFinite(number) ? { cents: Math.round(number * 100), currency: GIFT_CARD_CURRENCY } : null
+}
+
+/** The card a row's changes issue, or the sentence refusing it. */
+export function giftCardIssueOf(
+  changes: Readonly<Record<string, unknown>>,
+  code: { value: string; fromFile: boolean },
+): Omit<GiftCardRowPlan, 'newCode' | 'madeCode' | 'totalCents' | 'confirmed'> {
+  const recipientEmail = text(changes['recipientEmail']).toLowerCase().slice(0, 200) || null
+  const note = text(changes['note']).slice(0, 200) || null
+  const base = { code: code.value, amountCents: 0, recipientEmail, note }
+  const codeProblem = code.fromFile ? giftCardCodeProblem(code.value) : null
+  if (codeProblem) return { ...base, problem: codeProblem }
+  const amount = giftCardAmount(changes['balance'])
+  if (!amount) return { ...base, problem: 'Say what the card is issued for in the Balance column.' }
+  const named = text(changes['currency']).toUpperCase()
+  for (const currency of [amount.currency, named].filter(Boolean)) {
+    if (currency !== GIFT_CARD_CURRENCY) {
+      return { ...base, problem: `Gift cards are held in US dollars; ${currency} is not converted.` }
+    }
+  }
+  const amountProblem = giftCardAmountProblem(amount.cents)
+  if (amountProblem) return { ...base, problem: amountProblem }
+  return { ...base, amountCents: amount.cents }
+}
+
+/**
+ * The core's plan for a gift card file, made into the cards it issues: each
+ * create carrying the card it issues ({@link GiftCardRowPlan}), each row
+ * that would change an existing card refused, the total of every card
+ * counted, and a `screening` warning stating that total — and, when the
+ * Confirm step's answer is missing or names another total, that nothing is
+ * issued until it is confirmed.
+ */
+export function planGiftCardRows(
+  plan: TransferPlan,
+  input: {
+    confirmation: GiftCardConfirmation | null
+    mintCode: () => string
+    /** The file's codes a card on the site already holds, however the file spelled them. */
+    taken?: ReadonlySet<string>
+  },
+): TransferPlan {
+  const issuing = new Map<string, number>()
+  const rows = plan.rows.map((row): GiftCardPlannedRow => {
+    if (row.verdict === 'update' || row.verdict === 'unchanged') {
+      const code = row.recordId ?? ''
+      return {
+        ...row,
+        verdict: 'update',
+        diff: [],
+        giftCard: {
+          code,
+          newCode: false,
+          madeCode: false,
+          amountCents: 0,
+          recipientEmail: null,
+          note: null,
+          problem:
+            `A gift card with the code ${code} already exists, and a file never changes a card. ` +
+            'On the Conflicts step, skip this row, or create a new record to issue it under a new code.',
+          totalCents: 0,
+          confirmed: false,
+        },
+      }
+    }
+    if (row.verdict !== 'create') return row
+    const changes = rowChanges(row)
+    const fileCode = giftCardCodeOf(changes['code'])
+    // A create for a row that matched a card is the person's "create a new
+    // record": the card it names keeps its code, and this one gets another.
+    const newCode = Boolean(fileCode) && row.match.kind !== 'new'
+    const madeCode = !fileCode
+    const code = newCode || madeCode ? input.mintCode() : fileCode
+    const fromFile = !newCode && !madeCode
+    let issue = giftCardIssueOf(changes, { value: code, fromFile })
+    const earlier = issuing.get(code)
+    if (!issue.problem && fromFile && input.taken?.has(code)) {
+      issue = { ...issue, problem: `A gift card with the code ${code} already exists, and a file never changes a card.` }
+    } else if (!issue.problem && earlier !== undefined) {
+      issue = { ...issue, problem: `Row ${earlier + 1} issues the code ${code} already.` }
+    }
+    if (!issue.problem) issuing.set(code, row.index)
+    const diff: TransferFieldChange[] = [
+      ...row.diff.filter((change) => change.fieldId !== 'code'),
+      { fieldId: 'code', before: null, after: code, mode: 'overwrite', source: 'default', rule: 'written' },
+    ]
+    return { ...row, diff, giftCard: { ...issue, newCode, madeCode, totalCents: 0, confirmed: false } }
+  })
+
+  const issued = rows.filter(
+    (row): row is GiftCardPlannedRow & { giftCard: GiftCardRowPlan } =>
+      row.verdict === 'create' && Boolean(row.giftCard) && !row.giftCard?.problem,
+  )
+  const totalCents = issued.reduce((sum, row) => sum + row.giftCard.amountCents, 0)
+  const confirmed = input.confirmation?.totalCents === totalCents
+  for (const row of rows) {
+    if (row.giftCard) row.giftCard = { ...row.giftCard, totalCents, confirmed }
+  }
+
+  const warnings = plan.warnings.filter((warning) => warning.class !== 'screening')
+  if (issued.length) {
+    const samples: TransferWarningSample[] = [
+      {
+        row: TRANSFER_FILE_SAMPLE_ROW,
+        fieldId: 'balance',
+        value: giftCardMoney(totalCents),
+        detail: `Issues ${issued.length.toLocaleString('en-US')} gift card${issued.length === 1 ? '' : 's'} worth ${giftCardMoney(totalCents)} in total.`,
+      },
+    ]
+    if (!confirmed) {
+      samples.push({
+        row: TRANSFER_FILE_SAMPLE_ROW,
+        detail: input.confirmation
+          ? `The total confirmed was ${giftCardMoney(input.confirmation.totalCents)}, not ${giftCardMoney(totalCents)}: no card is issued until the total is confirmed again on the Confirm step.`
+          : 'The total has not been confirmed: no card is issued until it is typed on the Confirm step.',
+      })
+    }
+    warnings.push({
+      class: 'screening',
+      count: issued.length,
+      rows: issued.length,
+      fieldIds: ['balance'],
+      samples,
+      requiresAcknowledgement: true,
+    })
+  }
+  const summary: TransferPlanSummary = { create: 0, update: 0, unchanged: 0, skip: 0, fail: 0, total: rows.length }
+  for (const row of rows) summary[row.verdict] += 1
+  return {
+    rows,
+    summary,
+    warnings,
+    acknowledgementsRequired: warnings.filter((warning) => warning.requiresAcknowledgement).map((warning) => warning.class),
   }
 }
 

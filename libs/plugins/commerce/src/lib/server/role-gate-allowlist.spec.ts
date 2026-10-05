@@ -74,6 +74,10 @@ function makeDocRef(path: string): any {
       const existing = docs.get(path)
       docs.set(path, options?.merge ? { ...(existing ?? {}), ...value } : value)
     },
+    create: async (value: Record<string, any>) => {
+      if (docs.has(path)) throw Object.assign(new Error('exists'), { code: 6 })
+      docs.set(path, value)
+    },
     collection: (name: string) => makeCollectionRef(`${path}/${name}`),
   }
 }
@@ -133,6 +137,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
       slug: 'acme',
     },
   }),
+  logHostActivity: async () => undefined,
   meterHostEmail: async () => undefined,
   renderHostEmailWithTokens: async () => null,
 }))

@@ -39,6 +39,9 @@ jest.mock('./products.server', () => {
 jest.mock('./records.server', () => {
   throw new Error('loaded at boot')
 })
+jest.mock('./gift-cards.server', () => {
+  throw new Error('loaded at boot')
+})
 
 beforeEach(() => {
   resetTransferResourcesForTests()
@@ -79,5 +82,25 @@ describe('the commerce transfer resources', () => {
       'dryRun',
       'apply',
     ])
+  })
+
+  it('imports gift cards, with the Confirm step before the review and the issuable rule failing a refused row', async () => {
+    registerCommerceTransferResources()
+    registerCommerceTransferUi()
+    const cards = await resolveTransferResource('commerce.gift-cards')
+    expect(transferWizardSteps('commerce.gift-cards').map((step) => step.id)).toEqual([
+      'upload',
+      'mapping',
+      'values',
+      'matching',
+      'conflicts',
+      'gift-card-total',
+      'dryRun',
+      'apply',
+    ])
+    const issuable = cards.impl.invariants?.find((rule) => rule.id === 'gift-card-issuable')
+    const row = { index: 0, verdict: 'create' as const, recordId: null, diff: [], heldBack: [], warnings: [], match: { kind: 'new' as const } }
+    expect(issuable?.check({ ...row, giftCard: { problem: 'No.' } } as never, null)).toBe('No.')
+    expect(issuable?.check(row, null)).toBeNull()
   })
 })

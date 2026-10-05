@@ -44,8 +44,9 @@ The **Products** page is the catalog manager:
   (rule-based) collections with a live match preview.
 - **Import and export**: a Shopify product export uploads as it is, a product
   a file matches by handle or SKU is updated, and every step shows its
-  choices and a dry run first. Products, categories, orders, discounts, coupons
-  and gift cards export with the fields you pick. See
+  choices and a dry run first. Gift cards move over by issuing each card.
+  Products, categories, orders, discounts, coupons and gift cards export with
+  the fields you pick. See
   [Import and export store data](store-import-and-export.md).
 - **Payments** — Stripe Connect onboarding status and your plan's fee
   ladder.
@@ -157,6 +158,10 @@ Cards arrive two ways:
   and the code is created and mailed to that person. This is the goodwill
   gesture and the service-recovery path — a refund you would rather keep as
   store credit.
+- **You import them.** Moving from another platform, **Import** issues one
+  card per row of a file, under the codes your shoppers already hold, once
+  you have typed back the total. Owners and admins only. See
+  [Import and export store data](store-import-and-export.md#gift-cards).
 
 Balances apply automatically at checkout; a shopper enters the code and the
 card is drawn down by what the order uses. **Search by code or email** finds a

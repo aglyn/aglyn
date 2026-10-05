@@ -16,8 +16,8 @@
  */
 
 /*
- * Orders, discounts, coupons, gift cards and categories on the transfer
- * framework (AGL-3531), against a fake that answers queries the way
+ * Orders, discounts, coupons and categories on the transfer framework
+ * (AGL-3531; gift cards are `gift-cards.server.spec.ts`), against a fake that answers queries the way
  * Firestore does. The order money assertions of the CSV export it replaces
  * (`buildOrdersCsv`, AGL-1747) live here now: each case is one real writer's
  * stored shape, and every figure is asserted on its own.
@@ -59,7 +59,6 @@ import {
   categoriesTransfer,
   couponsTransfer,
   discountsTransfer,
-  giftCardsTransfer,
   ordersTransfer,
 } from './records.server'
 import {
@@ -213,27 +212,12 @@ describe('orders, exported', () => {
       new Map(),
     )
     expect(failures[0]?.message).toMatch(/exported, never imported/)
-    const applied = await giftCardsTransfer.apply!(
-      ctx('commerce.gift-cards'),
+    const applied = await ordersTransfer.apply!(
+      ctx('commerce.orders'),
       { jobId: 'j', index: 0, start: 0, end: 1, rows: [{ index: 0, verdict: 'create', recordId: null, diff: [], heldBack: [], warnings: [], match: { kind: 'new' } }] },
       memoryWriter(),
     )
     expect(applied.results[0]).toMatchObject({ outcome: 'failed' })
-  })
-})
-
-describe('gift cards, exported', () => {
-  it("reads each card's code, balance and status", async () => {
-    fake.seed(`${HOST}/giftCards/GC-1`, { initialCents: 5000, balanceCents: 1250, createdAtMs: 0, recipientEmail: 'a@b.co' })
-    fake.seed(`${HOST}/giftCards/GC-2`, { initialCents: 5000, balanceCents: 0, voidedAtMs: 5 })
-    const page = await giftCardsTransfer.readPage!(ctx('commerce.gift-cards'), null, ['id', 'balance', 'initial', 'status', 'recipientEmail'], {})
-    expect(page.rows).toEqual([
-      { id: 'GC-1', balance: 12.5, initial: 50, status: 'Active', recipientEmail: 'a@b.co' },
-      { id: 'GC-2', balance: 0, initial: 50, status: 'Voided', recipientEmail: null },
-    ])
-    await expect(
-      giftCardsTransfer.readPage!(ctx('commerce.gift-cards'), null, ['id'], { filter: { anything: 1 } }),
-    ).rejects.toThrow(/exports everything/)
   })
 })
 

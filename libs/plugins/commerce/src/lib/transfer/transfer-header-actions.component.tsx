@@ -29,22 +29,28 @@ export interface TransferHeaderActionsProps {
   noun?: string
   /** Called when the person leaves the import wizard from its results. */
   onImported?(): void
+  /**
+   * Whether this person may import here, for a resource that narrows who
+   * may (gift cards: owners and admins, AGL-3551). The server asks again.
+   */
+  canImport?: boolean
 }
 
 /**
  * A commerce card's Import and Export, for its card header (AGL-3531): the
  * console's import wizard and export dialog on the card's resource, through
- * the core launcher. Import shows only for a resource a file may write. Off
+ * the core launcher. Import shows only for a resource a file may write, to a
+ * person who may write it. Off
  * the console shell there is no launcher, and nothing renders.
  */
 export function TransferHeaderActions(props: TransferHeaderActionsProps) {
-  const { resource, hostId, noun, onImported } = props
+  const { resource, hostId, noun, onImported, canImport = true } = props
   const transfer = useTransferLauncher()
   if (!transfer) return null
   const suffix = noun ? ` ${noun}` : ''
   return (
     <Stack direction="row" spacing={1}>
-      {COMMERCE_IMPORTABLE_TRANSFERS.has(resource) ? (
+      {COMMERCE_IMPORTABLE_TRANSFERS.has(resource) && canImport ? (
         <Button
           size="small"
           onClick={() =>
