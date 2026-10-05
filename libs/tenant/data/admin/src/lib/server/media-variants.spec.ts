@@ -75,7 +75,7 @@ describe('mediaVariantWidthsFor (AGL-1468)', () => {
     for (const contentType of ['image/webp', 'image/avif', 'image/gif']) {
       expect(
         mediaVariantWidthsFor({ contentType, sourceWidth: 1200 }),
-      ).toEqual([320, 640])
+      ).toEqual([160, 320, 480, 640, 768, 960])
     }
   })
 
@@ -94,7 +94,7 @@ describe('mediaVariantWidthsFor (AGL-1468)', () => {
   it('produces nothing for a source already smaller than every width', () => {
     // An icon is served as it is, whatever its format.
     for (const contentType of ['image/png', 'image/jpeg', 'image/webp']) {
-      expect(mediaVariantWidthsFor({ contentType, sourceWidth: 256 })).toEqual([])
+      expect(mediaVariantWidthsFor({ contentType, sourceWidth: 128 })).toEqual([])
     }
   })
 
@@ -158,13 +158,12 @@ describe('generateMediaVariants with real sharp (AGL-1468)', () => {
     })
 
     expect(outcome.error).toBeUndefined()
-    expect(outcome.variants).toEqual([320, 640, 1280, 1920])
-    expect([...written.keys()]).toEqual([
-      'hosts/site-a/media/asset__w320.webp',
-      'hosts/site-a/media/asset__w640.webp',
-      'hosts/site-a/media/asset__w1280.webp',
-      'hosts/site-a/media/asset__w1920.webp',
-    ])
+    expect(outcome.variants).toEqual([...MEDIA_CDN_VARIANT_WIDTHS])
+    expect([...written.keys()]).toEqual(
+      MEDIA_CDN_VARIANT_WIDTHS.map(
+        (width) => `hosts/site-a/media/asset__w${width}.webp`,
+      ),
+    )
     // The whole point of the feature, asserted in bytes.
     for (const [, webp] of written) {
       expect(webp.length).toBeLessThan(buffer.length)
@@ -179,7 +178,7 @@ describe('generateMediaVariants with real sharp (AGL-1468)', () => {
     // The widths at and above the source are the source's own pixels, never
     // an upscale (AGL-3082).
     const sharp = (await import('sharp')).default
-    for (const width of [1280, 1920]) {
+    for (const width of [1280, 1920, 2560]) {
       const webp = written.get(`hosts/site-a/media/asset__w${width}.webp`) as Buffer
       expect((await sharp(webp).metadata()).width).toBe(1200)
     }
@@ -245,8 +244,8 @@ describe('a total failure is reported, not swallowed (AGL-1468)', () => {
         if (calls > 1) throw new Error('storage said no')
       },
     })
-    // The 320 file is really there; the document must keep claiming it.
-    expect(outcome.variants).toEqual([320])
+    // The 160 file is really there; the document must keep claiming it.
+    expect(outcome.variants).toEqual([160])
     expect(outcome.error).toContain('storage said no')
   })
 })
@@ -280,7 +279,7 @@ describe('generateStoredMediaVariants fetches the bytes and generates (AGL-1476)
 
     expect(downloads).toBe(1)
     expect(outcome.error).toBeUndefined()
-    expect(outcome.variants).toEqual([320, 640, 1280, 1920])
+    expect(outcome.variants).toEqual([...MEDIA_CDN_VARIANT_WIDTHS])
     const w320 = written.get('orgs/org-1/media/asset__w320.webp') as Buffer
     const w640 = written.get('orgs/org-1/media/asset__w640.webp') as Buffer
     expect(w320.toString('ascii', 8, 12)).toBe('WEBP')
@@ -316,7 +315,7 @@ describe('generateStoredMediaVariants fetches the bytes and generates (AGL-1476)
     const outcome = await generateStoredMediaVariants({
       contentType: 'image/png',
       sizeBytes: 4096,
-      sourceWidth: 256,
+      sourceWidth: 128,
       objectPath: 'orgs/org-1/media/icon',
       readSource: async () => {
         throw new Error('must not download')

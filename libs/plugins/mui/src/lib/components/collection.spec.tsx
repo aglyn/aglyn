@@ -1100,8 +1100,12 @@ describe('Entry body block (AGL-551)', () => {
         />,
       )
       const image = container.querySelector('img') as HTMLImageElement
+      // Up to the asset's own 1200 pixels, described truthfully (AGL-3486).
       expect(image.getAttribute('srcset')).toBe(
-        [320, 640, 1280, 1920].map((w) => `${CDN}?w=${w} ${w}w`).join(', '),
+        [160, 320, 480, 640, 768, 960]
+          .map((w) => `${CDN}?w=${w} ${w}w`)
+          .concat(`${CDN}?w=1280 1200w`)
+          .join(', '),
       )
       expect(image.getAttribute('sizes')).toBe('(max-width: 1200px) 100vw, 1200px')
       expect(image.getAttribute('width')).toBe('1200')

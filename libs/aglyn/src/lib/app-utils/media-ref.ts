@@ -120,25 +120,116 @@ export const MEDIA_CDN_ROUTE = '/api/media/cdn'
  * literal in `libs/plugins/mui/.../image.tsx`, so a width added to the
  * generator never reached the markup.
  *
- * ⚠️ 1920 EXISTS SO THE LARGEST CANDIDATE IS STILL A VARIANT (2026-08-26).
+ * ## Why ten steps, and not four (AGL-3486)
+ *
+ * The ladder used to be 320 / 640 / 1280 / 1920. A browser picks the smallest
+ * candidate at least as wide as the slot times the device pixel ratio, so a
+ * 378px slot on a DPR 2 phone needs 756 pixels and the next step was 1280 —
+ * 2.9x the pixels it could use. Lighthouse measured exactly that on a customer
+ * home page: four images delivered at `?w=1280` into slots a third that size.
+ * The steps are now close enough that the overshoot is at most ~1.33x, and
+ * 2560 covers a full-bleed hero on a retina laptop. A source is never
+ * enlarged: {@link mediaCdnSrcSet} caps the list at the source's own width,
+ * and the generator skips every width above it.
+ *
+ * 160 serves thumbnails, avatars and logos in a card. Every step is a real
+ * object per asset, so a width earns its place by being the one a common slot
+ * would otherwise overshoot.
+ *
+ * ## The largest candidate is still a variant (2026-08-26)
  *
  * The srcSet used to top out with the BARE url labelled `1920w` — the only
- * candidate that is never WebP. With `sizes="100vw"` any retina desktop needs
- * more effective pixels than 1280w offers, so that bare candidate is the one
- * most desktop visitors actually download. Measured on aglyn.com's own
- * assets: 335 KB / 305 KB / 164 KB PNG originals against 4 KB / 4 KB / 5 KB
- * WebP at `?w=320` — and ~94% of a media serve is bandwidth (AGL-1442).
+ * candidate that is never WebP — and with `sizes="100vw"` that is the one a
+ * retina desktop downloads. Measured on aglyn.com's own assets: 335 KB PNG
+ * originals against 4 KB WebP at `?w=320`, and ~94% of a media serve is
+ * bandwidth (AGL-1442).
  *
  * `mediaVariantWidthsFor` names every width below the source, and for a JPEG
  * or PNG the rest as WebP at the source's own width; `serveMediaCdn` serves
- * the original for a width an asset does not have, so a missing variant
- * degrades to exactly the bytes it served before.
+ * the delivery copy for a width an asset does not have, so a missing variant
+ * degrades to exactly the bytes the bare URL serves.
  *
- * ⛔ EXISTING ASSETS KEEP THE VARIANTS THEY WERE UPLOADED WITH until a backfill
- * runs — no regression, and no saving on them either. The backfill is a
- * `sharp` pass over the corpus, a script and not a patch (AGL-1442 S7).
+ * Existing assets reach a new ladder or a new encoder without a backfill: the
+ * CDN regenerates an asset whose {@link MEDIA_VARIANT_ENCODER_VERSION_FIELD}
+ * is older than {@link MEDIA_VARIANT_ENCODER_VERSION} after serving the
+ * request that found it stale.
  */
-export const MEDIA_CDN_VARIANT_WIDTHS = [320, 640, 1280, 1920] as const
+export const MEDIA_CDN_VARIANT_WIDTHS = [
+  160, 320, 480, 640, 768, 960, 1280, 1600, 1920, 2560,
+] as const
+
+/**
+ * The generation of the encoder that produced an asset's delivery copies —
+ * its `?w=` WebP variants and its display copy (AGL-3486).
+ *
+ * Bump it whenever the encoder's output would change: its quality, effort or
+ * format, the ladder above, or the display copy's rules. Two things key on it:
+ *
+ * 1. **Lazy regeneration.** `serveMediaCdn` compares it with the asset's
+ *    {@link MEDIA_VARIANT_ENCODER_VERSION_FIELD}; an older one is served as it
+ *    is and regenerated after the response, so every existing asset converges
+ *    on its next request and no backfill script is needed.
+ * 2. **Validators and versioned URLs.** The ETag of a variant or display copy
+ *    names the generation, so a browser revalidating an old encode is sent
+ *    the new bytes rather than a 304. It is also half of the versioned URL a
+ *    page names (AGL-3485, {@link mediaCdnVersionToken}), so regenerated
+ *    copies are fetched under a new URL instead of hiding behind a year-long
+ *    copy of the old encode.
+ *
+ * Generation 1 is every variant made before the field existed: WebP quality
+ * 80, effort 4, not auto-oriented, on the 320 / 640 / 1280 / 1920 ladder.
+ * Generation 2: quality 72, effort 5, auto-oriented, metadata stripped, the
+ * ten-step ladder, never a variant larger than its source, and the display
+ * copy.
+ */
+export const MEDIA_VARIANT_ENCODER_VERSION = 2
+
+/**
+ * The media document field that records which encoder generation made the
+ * asset's current delivery copies. Absent means generation 1: every variant
+ * made before the field existed.
+ */
+export const MEDIA_VARIANT_ENCODER_VERSION_FIELD = 'variantEncoderVersion'
+
+/**
+ * The encoder generation a media document's delivery copies were made by.
+ * Absent, or anything that is not a positive integer, is generation 1.
+ */
+export function mediaVariantEncoderVersionOf(value: unknown): number {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0
+    ? value
+    : 1
+}
+
+/**
+ * The longest edge the CDN delivers an image at (AGL-3486).
+ *
+ * A phone photo is 4000-8000 pixels on its long edge and several megabytes,
+ * and no page slot paints more than a retina full-bleed hero — the 2560 that
+ * tops {@link MEDIA_CDN_VARIANT_WIDTHS}. Above it the bare URL serves the
+ * display copy instead of the original: the same format, downscaled to fit.
+ * The original stays exactly as uploaded, for Download file and `?download=1`.
+ */
+export const MEDIA_DELIVERY_MAX_EDGE = 2560
+
+/**
+ * Suffix of an image's DISPLAY COPY in Storage (AGL-3486):
+ * `{objectPath}__display`.
+ *
+ * The display copy is what the bare inline URL serves for a JPEG, PNG or WebP
+ * whose original should not leave as it is: one larger than
+ * {@link MEDIA_DELIVERY_MAX_EDGE}, one carrying EXIF, XMP or IPTC (a phone
+ * photo's GPS position), or one that relies on an EXIF orientation. It keeps
+ * the original's format, so an email client or a link preview that cannot
+ * read WebP still can read it. `__display` cannot collide with the
+ * `__w{n}`, `__poster` and `__r{key}` suffixes.
+ */
+export const MEDIA_DISPLAY_OBJECT_SUFFIX = '__display'
+
+/** Where an image's display copy lives, given the original's object path. */
+export function mediaDisplayObjectPath(objectPath: string): string {
+  return `${objectPath}${MEDIA_DISPLAY_OBJECT_SUFFIX}`
+}
 
 /**
  * The variant width a surface asks for when it can only ask for ONE.
@@ -147,30 +238,10 @@ export const MEDIA_CDN_VARIANT_WIDTHS = [320, 640, 1280, 1920] as const
  * choose. A `<video poster>` attribute and a `thumbnailUrl` in structured data
  * each take a single url, so they have to name a width — and it has to be the
  * SAME width, or a crawler fetching the thumbnail gets different bytes from
- * the visitor looking at the poster. 1280 is the widest variant below a 1920
- * original's own width.
+ * the visitor looking at the poster. 1280 fills a 640px player at DPR 2 and
+ * sits below a 1920 still's own width, so it is always a real variant.
  */
 export const MEDIA_CDN_POSTER_WIDTH = 1280
-
-/**
- * The generation of the WebP encoder that produced an asset's `?w=` variants.
- *
- * Owned by the variant pipeline: a change to the encoder (its quality, its
- * ladder) bumps this, and the regeneration of existing variants records the
- * generation it wrote on the media document under
- * {@link MEDIA_VARIANT_ENCODER_VERSION_FIELD}. It is half of the versioned
- * URL a page names (see {@link mediaCdnVersionToken}), so regenerated variants
- * are fetched under a new URL instead of hiding behind a year-long copy of
- * the old encode.
- */
-export const MEDIA_VARIANT_ENCODER_VERSION = 1
-
-/**
- * The media document field that records which encoder generation its current
- * `?w=` variants were made by. Absent means the first generation: every
- * variant made before the field existed.
- */
-export const MEDIA_VARIANT_ENCODER_VERSION_FIELD = 'variantEncoderVersion'
 
 /**
  * The query parameter that makes a CDN URL a VERSIONED one (AGL-3485).
@@ -580,6 +651,25 @@ export function isMediaCdnUrl(url: string | undefined | null): boolean {
 }
 
 /**
+ * The URL of an asset's ORIGINAL bytes (AGL-3486): the CDN url with
+ * `?download=1`, or the url unchanged when it is not a CDN one.
+ *
+ * Since display copies, the bare CDN url is not the upload: an oversized or
+ * metadata-carrying image is served as an upright, stripped copy no larger
+ * than the delivery edge. That is right for a page and wrong for the two
+ * console actions that promise the file itself — Download file, and the
+ * image editor's "Replace original", which would otherwise save a downscaled
+ * copy over the original. `?download=1` is the one form the CDN answers with
+ * the original byte for byte, and a `fetch` or an `<img>` ignores the
+ * attachment disposition it comes with.
+ */
+export function mediaOriginalSrc(src: string): string {
+  return isMediaCdnUrl(src) && !/[?&]download=1(?:&|$)/.test(src)
+    ? withMediaCdnQuery(src, [['download', '1']])
+    : src
+}
+
+/**
  * One resolved URL at a chosen variant width (AGL-2741).
  *
  * `image.tsx` hands the browser the whole candidate list and lets it choose,
@@ -648,11 +738,57 @@ export function mediaVariantSrc(
  */
 export function mediaCdnSrcSet(
   src: string | undefined | null,
+  options: {
+    /**
+     * The asset's own pixel width, when the caller knows it. The list then
+     * stops at the source (AGL-3486), see {@link mediaCdnSrcSetWidths}.
+     */
+    sourceWidth?: number | null
+  } = {},
 ): string | undefined {
   if (!isMediaCdnUrl(src)) return undefined
-  return MEDIA_CDN_VARIANT_WIDTHS.map(
-    (width) => `${mediaVariantSrc(src, { width })} ${width}w`,
-  ).join(', ')
+  return mediaCdnSrcSetWidths(options.sourceWidth)
+    .map(
+      ({ request, descriptor }) =>
+        `${mediaVariantSrc(src, { width: request })} ${descriptor}w`,
+    )
+    .join(', ')
+}
+
+/**
+ * The `srcSet` candidates for a source of the given width (AGL-3486): which
+ * `?w=` each one asks for, and the width it truthfully describes.
+ *
+ * Every ladder width below the source, then ONE candidate at the source's own
+ * width — requested as the smallest ladder width at or above it, which is the
+ * key the CDN serves a source-width copy under, and described as the source
+ * width because that is how many pixels arrive. Advertising `1920w` for a
+ * 1000px photo told the browser it could get more detail than exists, so a
+ * retina desktop always chose it and was handed the same 1000 pixels.
+ *
+ * A source wider than the ladder ends at the top step: nothing above
+ * {@link MEDIA_DELIVERY_MAX_EDGE} is delivered. An unknown width gets the whole
+ * ladder, exactly as before — the CDN never enlarges, so an overstated
+ * candidate costs a wasted choice, never a wrong picture.
+ */
+export function mediaCdnSrcSetWidths(
+  sourceWidth?: number | null,
+): { request: number; descriptor: number }[] {
+  const ladder = MEDIA_CDN_VARIANT_WIDTHS.map((width) => ({
+    request: width,
+    descriptor: width,
+  }))
+  if (
+    typeof sourceWidth !== 'number' ||
+    !Number.isFinite(sourceWidth) ||
+    sourceWidth <= 0
+  ) {
+    return ladder
+  }
+  const own = Math.round(sourceWidth)
+  const below = ladder.filter(({ request }) => request < own)
+  const cap = MEDIA_CDN_VARIANT_WIDTHS.find((width) => width >= own)
+  return cap === undefined ? below : [...below, { request: cap, descriptor: own }]
 }
 
 /**
@@ -704,7 +840,7 @@ export function mediaBodyImageAttributes(options: {
   )
   const { size } = options
   if (!size) return { src }
-  const srcSet = mediaCdnSrcSet(src)
+  const srcSet = mediaCdnSrcSet(src, { sourceWidth: size.width })
   return {
     src,
     width: size.width,

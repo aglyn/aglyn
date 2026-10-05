@@ -36,7 +36,9 @@ import {
   MEDIA_VARIANT_ENCODER_VERSION_FIELD,
   type MediaCdnVersion,
   isSecurityClassLockdownReason,
+  mediaDisplayObjectPath,
   mediaPosterObjectPath,
+  mediaVariantEncoderVersionOf,
   mediaRenditionObjectPath,
   type MediaVideoRendition,
   normalizeHostLockdown,
@@ -69,6 +71,10 @@ import {
 } from './media-bandwidth-cap'
 import { mediaCdnRateLimitRefusal } from './media-cdn-rate-limit'
 import { mediaDeliveryOrgIdFor, mediaDeliveryRedirect } from './media-delivery'
+import {
+  mediaDeliveryCopiesStale,
+  regenerateMediaDeliveryCopies,
+} from './media-delivery-regeneration'
 import { getMediaQuarantine } from './media-quarantine'
 import { verifyMediaAccess } from './media-signing'
 import { mediaStoragePathInScope } from './media-storage-path'
@@ -816,6 +822,47 @@ export function wantsMediaDownload(value: unknown): boolean {
 }
 
 /**
+ * The display copy a media document records (AGL-3486), or null when it has
+ * none. Only the type is needed to serve it — the object path is derived — and
+ * a record whose type is not an image is treated as no record: the display
+ * copy is always an image, and serving its object under another type would be
+ * a document field choosing a response's `Content-Type`.
+ */
+export function mediaCdnDisplayCopy(
+  value: unknown,
+): { contentType: string } | null {
+  if (!value || typeof value !== 'object') return null
+  const contentType = (value as { contentType?: unknown }).contentType
+  if (typeof contentType !== 'string' || !/^image\/[a-z0-9.+-]+$/.test(contentType)) {
+    return null
+  }
+  return { contentType }
+}
+
+/**
+ * Runs `task` once the response has been sent, through Next's `after()`.
+ * Required when first asked for rather than imported, for the reason
+ * `capture-email-check.ts` gives; false where there is no request to run
+ * after — a spec, a script — and the task is then not run at all.
+ */
+function scheduleAfterResponse(task: () => Promise<void>): boolean {
+  try {
+    const loaded = require('next/server') as {
+      after?: (task: () => Promise<void>) => void
+    }
+    if (typeof loaded?.after !== 'function') return false
+    loaded.after(() =>
+      task().catch((error) => {
+        console.error('[media-cdn] after-response task failed', error)
+      }),
+    )
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
  * Whether `?poster=1` was asked for (AGL-2743).
  *
  * Deliberately the same two-spelling rule as {@link wantsMediaDownload},
@@ -1499,6 +1546,35 @@ export async function serveMediaCdn(
     }
     const useVariant =
       !usePoster && !rendition && Boolean(width) && variants.includes(width)
+    // Read only here, past every gate — a refusal above returns before the
+    // parameter is ever looked at, so `?download=1` can never be the reason
+    // a response happens (AGL-1411).
+    const download = wantsMediaDownload(req.query['download'])
+    /*
+     * THE DISPLAY COPY (AGL-3486).
+     *
+     * An image whose original is larger than the delivery edge, carries EXIF,
+     * XMP or IPTC, or leans on an EXIF orientation has a display copy: the
+     * same format, downscaled, upright and stripped. It answers every INLINE
+     * request that is not a variant — the bare URL, and a `?w=` the asset has
+     * no variant for, which used to fall back to the original. That is the
+     * request a link preview, an email client and a CSS background make, and
+     * it used to hand them a 6 MB photo with the GPS position it was taken at.
+     *
+     * `?download=1` still serves the ORIGINAL, byte for byte: Download file is
+     * a promise the library makes, and it is the one request that asks for the
+     * file rather than for a picture of it.
+     */
+    const display = mediaCdnDisplayCopy(snapshot.get('display'))
+    const useDisplay =
+      !usePoster && !rendition && !useVariant && !download && display !== null
+    // The generation that made the variant or display copy, in its validator:
+    // a regeneration changes the bytes behind the same URL, and a browser
+    // revalidating the old encode must be sent the new one, not a 304.
+    const encoderVersion = mediaVariantEncoderVersionOf(
+      snapshot.get(MEDIA_VARIANT_ENCODER_VERSION_FIELD),
+    )
+    const encoderTag = encoderVersion > 1 ? `-e${encoderVersion}` : ''
     /**
      * The ETag's representation tag, and the cache key's conscience.
      *
@@ -1514,12 +1590,10 @@ export async function serveMediaCdn(
       : rendition
         ? `-r${rendition.key}`
         : useVariant
-          ? `-w${width}`
-          : ''
-    // Read only here, past every gate — a refusal above returns before the
-    // parameter is ever looked at, so `?download=1` can never be the reason
-    // a response happens (AGL-1411).
-    const download = wantsMediaDownload(req.query['download'])
+          ? `-w${width}${encoderTag}`
+          : useDisplay
+            ? `-d${encoderTag}`
+            : ''
 
     // Stable URL: revalidate against an ETag so a replaced asset is picked
     // up (a conditional GET returns 304 while the content is unchanged).
@@ -1576,7 +1650,9 @@ export async function serveMediaCdn(
         ? 'image/webp'
         : rendition
           ? rendition.contentType
-          : snapshot.get('contentType')
+          : useDisplay
+            ? display.contentType
+            : snapshot.get('contentType')
     /*
      * THE BANDWIDTH BAND (AGL-3474).
      *
@@ -1630,7 +1706,9 @@ export async function serveMediaCdn(
      * guards the bytes this route sends; a redirect sends none.
      */
     const deliveryProvider =
-      usePoster || useVariant || download ? null : mediaDeliveryProvider('deliver')
+      usePoster || useVariant || useDisplay || download
+        ? null
+        : mediaDeliveryProvider('deliver')
     if (deliveryProvider) {
       const delivery = await mediaDeliveryRedirect({
         provider: deliveryProvider,
@@ -1686,6 +1764,47 @@ export async function serveMediaCdn(
         return
       }
     }
+    /*
+     * LAZY REGENERATION (AGL-3486) — see `media-delivery-regeneration.ts`.
+     *
+     * An asset whose delivery copies an older encoder made is answered from
+     * what exists, and regenerated once the response has gone. Scheduled
+     * before the 304 exit, because a browser revalidating its copy is a view
+     * of the asset as much as a download is.
+     */
+    if (
+      req.method === 'GET' &&
+      mediaDeliveryCopiesStale({
+        contentType: snapshot.get('contentType'),
+        cdnPath: snapshot.get('cdnPath'),
+        sizeBytes: snapshot.get('sizeBytes'),
+        width: snapshot.get('width'),
+        [MEDIA_VARIANT_ENCODER_VERSION_FIELD]: snapshot.get(
+          MEDIA_VARIANT_ENCODER_VERSION_FIELD,
+        ),
+        variantRegeneration: snapshot.get('variantRegeneration'),
+      })
+    ) {
+      scheduleAfterResponse(async () => {
+        const regenerationPath = mediaStoragePathInScope({
+          storagePath: snapshot.get('storagePath'),
+          base: `${isOrg ? 'orgs' : 'hosts'}/${scopeId}`,
+          mediaId,
+          onRefused: () => undefined,
+        })
+        const outcome = await regenerateMediaDeliveryCopies({
+          docRef: snapshot.ref,
+          bucket: firebaseAdmin
+            .app()
+            .storage()
+            .bucket(process.env['NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET']),
+          basePath: regenerationPath,
+        })
+        if (outcome === 'failed') {
+          console.error('[media-cdn] delivery copies could not be regenerated', scopeSegment, mediaId)
+        }
+      })
+    }
     if (!hashed) {
       setCacheControl(stableCacheControlFor(docServedType))
       if (etag) res.setHeader('ETag', etag)
@@ -1734,8 +1853,10 @@ export async function serveMediaCdn(
         ? mediaRenditionObjectPath(basePath, rendition)
         : useVariant
           ? `${basePath}__w${width}.webp`
-          : basePath
-    const file = bucket.file(objectPath)
+          : useDisplay
+            ? mediaDisplayObjectPath(basePath)
+            : basePath
+    let file = bucket.file(objectPath)
     // The caller's count (AGL-2812), asked here and nowhere earlier: past every
     // gate and the 304 exit, where the Storage reads begin. It starts before the
     // metadata read and is awaited after it, so the two run together. It never
@@ -1748,7 +1869,16 @@ export async function serveMediaCdn(
             rateClass: mediaCdnEdgeCacheable(docServedType) ? 'image' : 'non-image',
           })
         : null
-    const [metadata] = await file.getMetadata().catch(() => [null as any])
+    let [metadata] = await file.getMetadata().catch(() => [null as any])
+    // A display copy the document names but Storage does not hold degrades
+    // to the original — what this URL served before display copies existed —
+    // rather than to a 404 on a live page.
+    let servesDisplay = useDisplay
+    if (!metadata && useDisplay) {
+      servesDisplay = false
+      file = bucket.file(basePath)
+      ;[metadata] = await file.getMetadata().catch(() => [null as any])
+    }
     if (!metadata) {
       res.status(404).json({ error: 'Not found' })
       return
@@ -1770,11 +1900,13 @@ export async function serveMediaCdn(
         ? 'image/webp'
         : rendition
           ? rendition.contentType
-          : String(
-              metadata.contentType ??
-                snapshot.get('contentType') ??
-                'application/octet-stream',
-            )
+          : servesDisplay && display
+            ? display.contentType
+            : String(
+                metadata.contentType ??
+                  snapshot.get('contentType') ??
+                  'application/octet-stream',
+              )
     res.setHeader('Content-Type', servedType)
     // AGL-1474: an SVG (or anything else a browser treats as a document) gets
     // the sandboxing policy. Everything else keeps the base one set above —

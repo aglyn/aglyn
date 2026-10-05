@@ -207,6 +207,11 @@ service cloud.firestore {
      * the asset it sits on; freezing it here keeps a client from writing one
      * at all.
      *
+     * `display` (AGL-3486) records a display copy, and the CDN serves the
+     * object it names under the type it records; `variantEncoderVersion` and
+     * `variantRegeneration` decide when the CDN regenerates. All three are
+     * written by the server alone.
+     *
      * The rest — `cdnPath`, `contentHash`, `createdAt`, `sizeBytes`,
      * `svgSanitized`, `uploadedBy`, `url`, `variants`, `variantsError` — are
      * lower stakes individually, and are frozen for the AGL-1367 reason:
@@ -234,7 +239,8 @@ service cloud.firestore {
         'contentHash', 'contentSha256', 'sizeBytes', 'variants',
         'variantsError', 'svgSanitized', 'uploadedBy', 'createdAt',
         'video', 'poster', 'posterError', 'videoRenditions',
-        'deliveryCopies', 'embeddedMetadata']);
+        'deliveryCopies', 'embeddedMetadata', 'variantEncoderVersion',
+        'display', 'variantRegeneration']);
     }
     function mediaObjectFieldsUnchanged() {
       return !request.resource.data.diff(resource.data).affectedKeys().hasAny([
@@ -242,7 +248,8 @@ service cloud.firestore {
         'contentHash', 'contentSha256', 'sizeBytes', 'variants',
         'variantsError', 'svgSanitized', 'uploadedBy', 'createdAt',
         'video', 'poster', 'posterError', 'videoRenditions',
-        'deliveryCopies', 'embeddedMetadata']);
+        'deliveryCopies', 'embeddedMetadata', 'variantEncoderVersion',
+        'display', 'variantRegeneration']);
     }
 
     /**

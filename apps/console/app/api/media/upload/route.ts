@@ -43,6 +43,7 @@ import {
   emailUnverifiedResponse,
   firebaseAdmin,
   generateMediaVariants,
+  mediaVariantDocFields,
   isImpersonationSession,
   quarantinedUploadRefusal,
 } from '@aglyn/tenant-data-admin'
@@ -386,21 +387,27 @@ async function handler(request: Request): Promise<Response> {
     // retention, so a three-week total outage left 174 assets with empty
     // `variants` and no evidence of why. `variantsError` on the document and
     // `variantFailures` on the counter make the next one a query.
-    const { variants, error: variantsError } = cdnAllowed
+    //
+    // The display copy rides the same call (AGL-3486): what the bare URL
+    // serves for an original that is oversized, carries a GPS position, or
+    // leans on an EXIF orientation. The original stays exactly as uploaded.
+    const variantOutcome = cdnAllowed
       ? await generateMediaVariants({
           buffer,
           contentType,
           sourceWidth: dimensions?.width,
           objectPath,
-          saveVariant: (path, webp) =>
-            bucket.file(path).save(webp, {
-              contentType: 'image/webp',
+          display: true,
+          saveVariant: (path, bytes, type) =>
+            bucket.file(path).save(bytes, {
+              contentType: type,
               metadata: {
                 cacheControl: 'public, max-age=31536000, immutable',
               },
             }),
         })
-      : { variants: [] as number[], error: undefined }
+      : null
+    const variantsError = variantOutcome?.error
 
     // The video half (AGL-2742). This route DOES hold the bytes — but
     // holding them buys nothing here, because the missing capability is a
@@ -458,7 +465,12 @@ async function handler(request: Request): Promise<Response> {
       uploadedBy: decoded.uid,
       contentHash,
       contentSha256,
-      variants,
+      // `variants`, the encoder generation that made them and the display
+      // copy (AGL-3486). Without the CDN there is no generation to record, so
+      // an asset that gains a CDN path later is regenerated on its first view.
+      ...(variantOutcome
+        ? mediaVariantDocFields(variantOutcome)
+        : { variants: [] as number[] }),
       // Only when something actually went wrong. An asset with nothing to
       // generate — an SVG, or a source already narrower than 320px — is the
       // common case and must not carry a fault marker, or the marker stops

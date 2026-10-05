@@ -907,7 +907,8 @@ describe('Image hero priority and preload (AGL-3485)', () => {
     const link = preloadOf(html)
     expect(link).toMatch(/as="image"/i)
     expect(link).toMatch(/fetchpriority="high"/i)
-    expect(link).toMatch(new RegExp(`imagesrcset="${CDN}\\?w=320 320w`, 'i'))
+    expect(link).toMatch(new RegExp(`imagesrcset="${CDN}\\?w=160 160w`, 'i'))
+    expect(link).toMatch(new RegExp(`${CDN}\\?w=320 320w`, 'i'))
     expect(link).toMatch(/imagesizes="100vw"/i)
   })
 
