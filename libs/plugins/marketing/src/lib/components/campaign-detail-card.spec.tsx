@@ -270,6 +270,9 @@ jest.mock('./campaign-reach-sections', () => ({
   CampaignSequencesSection: (props: any) => (
     <div>{`sequences of ${props.campaignId}`}</div>
   ),
+  CampaignVisitsSection: (props: any) => (
+    <div>{`reach of ${props.campaignId}`}</div>
+  ),
 }))
 
 import CampaignDetailCard from './campaign-detail-card'
@@ -878,6 +881,31 @@ describe('the mail-client unsubscribe button (AGL-3307)', () => {
 
     expect(writes[0][0]).toBe('orgs/org-1/emailCampaigns/camp-1')
     expect(writes[0][1].listUnsubscribe).toBe(false)
+  })
+
+  /*
+   * THE utm_campaign LABELS A CAMPAIGN ANSWERS TO (AGL-3461): typed in the
+   * drawer, saved on the container the way the conversion join looks them up
+   * — lowercased, trimmed, deduped — and shown on the page.
+   */
+  it('saves the utm_campaign labels typed in the drawer, normalized', async () => {
+    await openEditor()
+    fireEvent.change(screen.getByLabelText('utm_campaign labels'), {
+      target: { value: ' Vibe-Coders, rt-vibe,vibe-coders ' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save campaign' }))
+    await settle()
+
+    expect(writes[0][0]).toBe('orgs/org-1/emailCampaigns/camp-1')
+    expect(writes[0][1].utmCampaigns).toEqual(['vibe-coders', 'rt-vibe'])
+  })
+
+  it('says which labels credit the campaign, and opens the drawer on them', async () => {
+    containers['camp-1'] = { ...containers['camp-1'], utmCampaigns: ['rt-ai'] }
+    await openEditor()
+
+    expect(screen.getByText(/Links labeled utm_campaign=rt-ai credit this campaign/)).toBeTruthy()
+    expect((screen.getByLabelText('utm_campaign labels') as HTMLInputElement).value).toBe('rt-ai')
   })
 
   it('opens on OFF for a campaign that stored it off', async () => {

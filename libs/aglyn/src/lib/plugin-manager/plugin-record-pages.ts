@@ -48,6 +48,13 @@ export interface PluginRecordPageDeclaration {
    * plugin's own console routes: `/inbox`.
    */
   path: string
+  /**
+   * Where ONE record of the kind opens, when the page can open one (AGL-3461):
+   * a path under the plugin's own console routes, and the query key the page
+   * reads the record's id from — `{ path: '/inbox/submissions', param:
+   * 'submission' }`. Absent: a link to one record is the list's.
+   */
+  record?: { path: string; param: string }
 }
 
 /** A declaration with the plugin whose page it is. */
@@ -63,8 +70,22 @@ export function pluginRecordPage(kind: string): ResolvedPluginRecordPage | null 
  * A notification's link to the page a site's records of `kind` are read on —
  * `/{hostId}{path}`, which the notification layer rewrites onto the site's
  * console address — or `null` when no plugin shows the kind.
+ *
+ * With `recordId`, the link opens that record where the page declares how
+ * (`record`), and is the list's link where it does not: a notification about
+ * one submission still lands where submissions are read.
  */
-export function pluginRecordPageLink(kind: string, hostId: string): string | null {
+export function pluginRecordPageLink(
+  kind: string,
+  hostId: string,
+  recordId?: string | null,
+): string | null {
   const page = pluginRecordPage(kind)
-  return page && hostId ? `/${hostId}${page.path}` : null
+  if (!page || !hostId) return null
+  const id = String(recordId ?? '').trim()
+  if (id && page.record) {
+    const query = new URLSearchParams({ [page.record.param]: id }).toString()
+    return `/${hostId}${page.record.path}?${query}`
+  }
+  return `/${hostId}${page.path}`
 }

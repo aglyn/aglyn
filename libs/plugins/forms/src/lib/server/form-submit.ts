@@ -29,9 +29,16 @@ import recordCapturedContact from '@aglyn/aglyn/plugin-manager/record-captured-c
 // By path: the server-only contract a door credits its outcome through.
 import {
   CONVERSION_TOUCH_DETAIL,
+  conversionDescriptionSentences,
   creditConversion,
+  describeConversion,
   resolveConversionTouch,
 } from '@aglyn/aglyn/plugin-manager/plugin-conversion-credit'
+import { normalizeContainerIds } from '@aglyn/aglyn/app-utils/container-membership'
+import {
+  findScreenIdByRoutePath,
+  screenRoutePathFromUrl,
+} from '@aglyn/aglyn/app-utils/screen-route'
 // The leaf: the Inbox list's search keys, the same function its backfill
 // restates and its query's normalizers read (AGL-3321).
 import { messageSearchFields } from '@aglyn/aglyn/app-utils/message-search'
@@ -160,12 +167,13 @@ async function recordAbuseCeilingTrip(
 
 /**
  * A notification's link to where the site's managers read submissions — the
- * page the plugin that shows `formSubmission` records declares — and no link
- * where no plugin in this build shows them. A key left out rather than set to
- * `undefined`, which Firestore rejects.
+ * page the plugin that shows `formSubmission` records declares, opened on one
+ * submission when `submissionId` is given and that page can open one — and no
+ * link where no plugin in this build shows them. A key left out rather than
+ * set to `undefined`, which Firestore rejects.
  */
-function submissionsLink(hostId: string): { link?: string } {
-  const link = pluginRecordPageLink('formSubmission', hostId)
+function submissionsLink(hostId: string, submissionId?: string): { link?: string } {
+  const link = pluginRecordPageLink('formSubmission', hostId, submissionId)
   return link ? { link } : {}
 }
 
@@ -599,6 +607,39 @@ export async function POST(request: Request): Promise<Response> {
       ? Aglyn.readContainerIds(form.data() as Record<string, unknown>, 'campaign')
       : []
     /*
+     * THE CAMPAIGNS THE PAGE IS FILED UNDER (AGL-3461), stamped beside the
+     * form's for the same reason and with the same caveat: where the merchant
+     * filed the page, true of everyone who submits on it, and never a credit.
+     *
+     * The screen is found in the routing map on the host snapshot this route
+     * already holds, from the path the browser sent, so a path naming no page
+     * this site serves names no screen and costs nothing. Its campaigns are
+     * read off the screen document — one read, only when the path resolves.
+     * A failed read stamps nothing rather than failing the submission.
+     */
+    const pageRoutePath = screenRoutePathFromUrl(typeof path === 'string' ? path : '')
+    const pageScreenId = pageRoutePath
+      ? findScreenIdByRoutePath(
+          hostSnapshot.get('screens') as Record<string, string> | undefined,
+          pageRoutePath,
+        )
+      : undefined
+    const pageCampaignIds = pageScreenId
+      ? await hostRef
+          .collection('screens')
+          .doc(pageScreenId)
+          .get()
+          .then((screen) =>
+            screen.exists
+              ? Aglyn.readContainerIds(screen.data() as Record<string, unknown>, 'campaign')
+              : [],
+          )
+          .catch((error: unknown) => {
+            console.error('form submission page campaigns read failed', error)
+            return [] as string[]
+          })
+      : []
+    /*
      * THE CUSTOM CONTACT FIELDS THIS FORM SAVES TO (AGL-2601).
      *
      * Off the VERIFIED form's declaration, like the campaigns above and for
@@ -673,6 +714,9 @@ export async function POST(request: Request): Promise<Response> {
        * rows that would carry an empty array forever.
        */
       ...(formCampaignIds.length ? { campaignIds: formCampaignIds } : {}),
+      // And the page's, beside them rather than merged in: `campaignIds` is
+      // the form's membership and is read as exactly that (AGL-3461).
+      ...(pageCampaignIds.length ? { pageCampaignIds } : {}),
       formName: resolvedFormName,
       path: String(path ?? '').slice(0, 500),
       fields: sanitizedFields,
@@ -729,6 +773,12 @@ export async function POST(request: Request): Promise<Response> {
     let leadStored = false
     /** Whether that lead is one more person on this form's lead count. */
     let leadCounted = false
+    /**
+     * The lead or contact the person was filed as, for the Inbox to link to
+     * (AGL-3461) — by the id the record system answered with, which is the
+     * id its own record route addresses.
+     */
+    let capturedRecord: { kind: 'lead' | 'contact'; id: string } | null = null
     /*
      * WHERE THE VISITOR ARRIVED FROM, RESOLVED ONCE FOR THE WHOLE SUBMISSION.
      *
@@ -764,6 +814,18 @@ export async function POST(request: Request): Promise<Response> {
       touch: arrival,
       convertedAtMs: submittedAtMs,
     })
+    /*
+     * THE CAMPAIGNS IN WORDS, for the managers' alert below (AGL-3461): the
+     * one the visitor arrived through and the ones the form and page are
+     * filed under, named by the plugin that keeps campaigns. Started here so
+     * its reads overlap the capture and the counters; asked only when there
+     * is something to name, and it never throws.
+     */
+    const filedUnder = normalizeContainerIds([...formCampaignIds, ...pageCampaignIds])
+    const describing =
+      arrival || filedUnder.length
+        ? describeConversion({ hostId, touch: arrival, containerIds: filedUnder })
+        : Promise.resolve(null)
     if (contactEmail) {
       /*
        * WHICH RECORD THE PERSON LANDS ON is the record system's decision
@@ -853,6 +915,10 @@ export async function POST(request: Request): Promise<Response> {
         captured?.ok === true &&
         captured.record === 'lead' &&
         (captured.sourceAdded ?? captured.created) === true
+      if (captured?.ok === true) {
+        const id = captured.record === 'lead' ? captured.leadId : captured.contactId
+        if (id) capturedRecord = { kind: captured.record, id }
+      }
     }
     /*
      * WHERE ELSE THE SUBMISSION IS FILED (AGL-3080): a record in whatever
@@ -873,9 +939,18 @@ export async function POST(request: Request): Promise<Response> {
       body: payload,
       fields: sanitizedFields,
     })
-    if (filed.routing) {
+    /*
+     * What the submission led to, on the row in ONE update: where else it
+     * was filed, and the lead or contact it filed (AGL-3461). Written only
+     * when there is either, so the ordinary anonymous enquiry pays nothing.
+     */
+    const outcomeNotes = {
+      ...(filed.routing ? { routing: filed.routing } : {}),
+      ...(capturedRecord ? { capturedRecord } : {}),
+    }
+    if (Object.keys(outcomeNotes).length) {
       try {
-        await submissionRef.update({ routing: filed.routing })
+        await submissionRef.update(outcomeNotes)
       } catch (error) {
         console.error('form submission routing note failed', error)
       }
@@ -903,17 +978,33 @@ export async function POST(request: Request): Promise<Response> {
     // Event trigger (AGL-128/148): field values join the automation
     // scope; action-produced site alerts ride back to the visitor.
     // In-app notification to the site's managers (AGL-259).
-    // The body names the form and the site on its own (AGL-3432): a manager
-    // of several sites reads the email body, not always the subject, and
-    // "Page: /contact" said neither. `{site}` is filled by
-    // `notifyHostManagers` from the host doc it already reads.
+    /*
+     * The body names the form and the site on its own (AGL-3432): a manager
+     * of several sites reads the email body, not always the subject, and
+     * "Page: /contact" said neither. `{site}` is filled by
+     * `notifyHostManagers` from the host doc it already reads.
+     *
+     * Then the campaigns (AGL-3461): the one the visitor was credited to and
+     * how, and what the form and page are filed under, as the crediting
+     * plugin names them.
+     *
+     * It opens THIS submission, not the list: the address the plugin that
+     * shows submissions declares for one record (`submissionsLink`), stored
+     * in the host-link shape every host notification uses and rewritten onto
+     * the site's address when it is followed, in the console and in the email
+     * alike. A notification holds one link, so the lead and the campaign are
+     * links inside the reader.
+     */
+    const alertPath = typeof path === 'string' ? path.slice(0, 500) : ''
     void notifyHostManagers(hostId, {
       type: 'content.formSubmission',
       title: `New form submission — ${resolvedFormName}`,
-      body:
+      body: [
         `Someone submitted “${resolvedFormName}” on {site}` +
-        (typeof path === 'string' && path ? ` (page ${path.slice(0, 500)}).` : '.'),
-      ...submissionsLink(hostId),
+          (alertPath ? ` (page ${alertPath}).` : '.'),
+        ...conversionDescriptionSentences(await describing),
+      ].join(' '),
+      ...submissionsLink(hostId, submissionRef.id),
     })
     const submittedEmail =
       typeof sanitizedFields['email'] === 'string' ? sanitizedFields['email'] : ''

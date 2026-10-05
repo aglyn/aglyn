@@ -125,7 +125,10 @@ describe('?submission= on the Inbox', () => {
       read: false,
     }
     render(<SubmissionsCard hostId="host-1" />)
-    await waitFor(() => expect(screen.getByText('Quote request')).toBeTruthy())
+    // The reader's title; the form's name is also on its Form line below.
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: 'Quote request' })).toBeTruthy(),
+    )
     expect(getDoc).toHaveBeenCalledTimes(1)
     expect((getDoc as jest.Mock).mock.calls[0][0]).toBe(
       'hosts/host-1/formSubmissions/sub-9',

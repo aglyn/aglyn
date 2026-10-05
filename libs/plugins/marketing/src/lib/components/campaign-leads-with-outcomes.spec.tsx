@@ -277,7 +277,11 @@ interface Shape {
   name: string
   /** Proof the mounted page really is this shape and not the other one. */
   proof: RegExp
-  /** The ids the outcome figures are counted over. */
+  /**
+   * The ids the outcome figures are counted over: the email's own id, or the
+   * container's id and then its sends' — a conversion credited to a page or
+   * a label the campaign declares carries the container's (AGL-3461).
+   */
   sendIds: string[]
   /** Mounts the page over the delivery counters it is handed. */
   mount: (stats?: Record<string, number | boolean>) => Promise<void>
@@ -303,7 +307,7 @@ const oneEmail: Shape = {
 const severalEmails: Shape = {
   name: 'a campaign of several emails',
   proof: /Emails \(2\)/,
-  sendIds: ['send-1', 'send-2'],
+  sendIds: ['camp-1', 'send-1', 'send-2'],
   mount: async (stats = STATS) => {
     listened.set(`orgs/org-1/emailCampaigns/camp-1`, {
       name: 'Spring sale',
