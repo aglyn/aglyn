@@ -36,35 +36,12 @@ let loading: Promise<EventsTransferResource> | null = null
  * A failed load is forgotten, so the next call tries again.
  */
 function eventsResource(): Promise<EventsTransferResource> {
-  loading ??= (async () => {
-    const [
-      { createEventsTransferResource },
-      { firebaseAdmin },
-      { checkEntitlement },
-    ] = await Promise.all([
-      import('./transfer/events-transfer'),
-      import('@aglyn/tenant-data-admin/server/firebase-admin'),
-      import('@aglyn/aglyn/server'),
-    ])
-    const firestore = firebaseAdmin.app().firestore()
-    return createEventsTransferResource({
-      firestore,
-      deleteField: () => firebaseAdmin.firestore.FieldValue.delete(),
-      timestamp: (ms) => firebaseAdmin.firestore.Timestamp.fromMillis(ms),
-      // The add-on the Events page is gated on, read the way the public
-      // listing reads it: from the workspace's own document.
-      entitled: async (orgId) => {
-        const org = await firestore.collection('orgs').doc(orgId).get()
-        return checkEntitlement(
-          org.exists ? (org.data() as never) : null,
-          'eventCalendar',
-        )
-      },
+  loading ??= import('./transfer/events-transfer.server')
+    .then(({ adminEventsTransferResource }) => adminEventsTransferResource())
+    .catch((error: unknown) => {
+      loading = null
+      throw error
     })
-  })().catch((error: unknown) => {
-    loading = null
-    throw error
-  })
   return loading
 }
 

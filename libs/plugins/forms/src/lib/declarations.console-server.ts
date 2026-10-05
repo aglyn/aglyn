@@ -32,11 +32,7 @@ import type { FormSubmissionsTransferResource } from './transfer/form-submission
  * then, never at boot.
  */
 async function formSubmissionsTransfer(): Promise<FormSubmissionsTransferResource> {
-  const [{ createFormSubmissionsTransferResource }, { firebaseAdmin }] = await Promise.all([
-    import('./transfer/form-submissions-transfer'),
-    import('@aglyn/tenant-data-admin/server/firebase-admin'),
-  ])
-  return createFormSubmissionsTransferResource({ firestore: firebaseAdmin.app().firestore() })
+  return (await import('./transfer/form-submissions-transfer.server')).adminFormSubmissionsTransferResource()
 }
 
 /**

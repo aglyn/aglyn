@@ -35,14 +35,9 @@ import {
  */
 let bookingsTransfer: Promise<PluginTransferResource> | null = null
 function bookingsTransferResource(): Promise<PluginTransferResource> {
-  return (bookingsTransfer ??= Promise.all([
-    import('./transfer/bookings-transfer'),
-    import('@aglyn/tenant-data-admin/server/firebase-admin'),
-  ])
-    .then(([{ createBookingsTransferResource }, { firebaseAdmin }]) =>
-      createBookingsTransferResource({
-        firestore: () => firebaseAdmin.app().firestore(),
-      }),
+  return (bookingsTransfer ??= import('./transfer/bookings-transfer.server')
+    .then(({ adminBookingsTransferResource }) =>
+      adminBookingsTransferResource(),
     )
     .catch((error: unknown) => {
       // A failed load is retried by the next export rather than remembered.
