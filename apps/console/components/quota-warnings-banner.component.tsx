@@ -518,11 +518,14 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
   /*
    * The workspace's storage band (AGL-3479), through the site's library —
    * whoever may upload into it may see the band it uploads against, which is
-   * the route's own rule. ONE request per site opened, not per render, and
+   * the route's own rule. On an org page there is no site, so it is asked
+   * through the organization library, which the route answers for any member
+   * of the org (AGL-3482). ONE request per scope opened, not per render, and
    * asked only where the banner may speak (`orgInScope`) and has a plan to
    * speak about. An unlimited band costs the route no read at all.
    */
   const storageBand = useMediaStorageBand({
+    orgId: orgInScope && plan && !hostId ? orgId : null,
     hostId: orgInScope && plan ? hostId : null,
     user,
   })
