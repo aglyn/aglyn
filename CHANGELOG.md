@@ -47,6 +47,7 @@ content on the marketing site and is written separately.
 - **seo:** check each page as it publishes, and name keywords past five ([AGL-3501](https://linear.app/aglyn/issue/AGL-3501))
 - **media:** published images size themselves from the composed tree, no re-save ([AGL-3485](https://linear.app/aglyn/issue/AGL-3485))
 - **commerce:** paid video and downloads served off the CDN count toward bandwidth ([AGL-3505](https://linear.app/aglyn/issue/AGL-3505))
+- **media:** a library file's Storage URL is served through the CDN ([AGL-3506](https://linear.app/aglyn/issue/AGL-3506))
 - **console:** any plan may name the one language its site is in ([AGL-3502](https://linear.app/aglyn/issue/AGL-3502))
 - **media:** a serve is counted before its request ends, and a lost count is logged ([AGL-3503](https://linear.app/aglyn/issue/AGL-3503), [AGL-3474](https://linear.app/aglyn/issue/AGL-3474))
 - **bookings:** the slot listing is a page of whole days, and the widget shows all of them ([AGL-3492](https://linear.app/aglyn/issue/AGL-3492))
