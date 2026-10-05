@@ -714,7 +714,9 @@
         "visibleTo": [
           "org",
           "host:site-a"
-        ]
+        ],
+        "type": "Customer",
+        "industry": "  Food   &  Beverage "
       },
       "expected": {
         "searchTokens": [
@@ -780,7 +782,11 @@
           "host:site-a~acme-coffee",
           "host:site-a~acme-coffee.",
           "host:site-a~com"
-        ]
+        ],
+        "typeKey": "customer",
+        "industryKey": "food & beverage",
+        "ratingKey": null,
+        "accountSourceKey": null
       }
     },
     {
@@ -1594,7 +1600,9 @@
         "visibleTo": [
           "org",
           "host:site-a"
-        ]
+        ],
+        "type": "Customer",
+        "industry": "  Food   &  Beverage "
       },
       "expected": {
         "searchTokens": [
@@ -1661,6 +1669,10 @@
           "host:site-a~acme-coffee.",
           "host:site-a~com"
         ],
+        "typeKey": "customer",
+        "industryKey": "food & beverage",
+        "ratingKey": null,
+        "accountSourceKey": null,
         "nextTaskAtMs": null
       }
     },

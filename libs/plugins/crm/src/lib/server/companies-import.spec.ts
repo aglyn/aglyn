@@ -46,6 +46,8 @@ let companies: Record<string, Record<string, unknown>> = {}
 let companySeq = 0
 /** `orgs/org-1/contactFields`, the org's definitions of every object (AGL-2661). */
 let fieldDefinitions: Record<string, unknown>[] = []
+/** `orgs/org-1/crmPicklists/{id}`, the org's own lists (AGL-3514); absent reads the standard values. */
+let picklistDocs: Record<string, Record<string, unknown>> = {}
 const updates: Array<{ id: string; data: Record<string, unknown> }> = []
 const listMembers = jest.fn(async () => members)
 
@@ -115,6 +117,13 @@ const firestoreHandle = {
       },
       collection: (sub: string) => {
         if (name === 'orgs' && sub === 'companies') return companiesHandle
+        if (name === 'orgs' && sub === 'crmPicklists') {
+          return {
+            doc: (picklistId: string) => ({
+              get: async () => ({ data: () => picklistDocs[picklistId] }),
+            }),
+          }
+        }
         if (name === 'orgs' && sub === 'contactFields') {
           return {
             limit: () => ({
@@ -222,6 +231,7 @@ beforeEach(() => {
   companies = {}
   companySeq = 0
   fieldDefinitions = []
+  picklistDocs = {}
   updates.length = 0
   listMembers.mockClear()
   ;(crmRecordsQuotaForOrg as jest.Mock).mockClear()
@@ -322,6 +332,50 @@ describe('what a row becomes', () => {
       },
     ])
     expect('website' in updates[0].data).toBe(false)
+  })
+
+  it('judges each picklist cell against the org’s list, keeping a matched company’s own value (AGL-3514)', async () => {
+    picklistDocs['rating'] = {
+      values: [{ id: 'hot', label: 'Hot', active: true }],
+      defaultValueId: 'hot',
+    }
+    companies['c-acme'] = {
+      name: 'Acme',
+      nameLower: 'acme',
+      domain: 'acme.com',
+      industry: 'Artisanal roofing',
+      visibleTo: ['host:site-1'],
+    }
+    const out = await importRows([
+      // Matched: its typed industry stays; an unknown type is dropped and counted.
+      { name: 'Acme', domain: 'acme.com', industry: 'artisanal ROOFING', type: 'Vendor' },
+      // New: each cell as its list spells it, and the rating from the list's default.
+      {
+        name: 'Globex',
+        type: 'customer',
+        industry: 'Roofing',
+        accountSource: 'trade show',
+        numberOfEmployees: '1,200',
+        annualRevenue: '1250000',
+        shippingLine1: '1 Dock Rd',
+      },
+    ])
+    expect(out.body).toMatchObject({ created: 1, merged: 1, dropped: { type: 1, industry: 1 } })
+    expect(updates[0].data).toMatchObject({ industry: 'Artisanal roofing', industryKey: 'artisanal roofing' })
+    expect('type' in updates[0].data).toBe(false)
+    expect(companies['company-1']).toMatchObject({
+      type: 'Customer',
+      typeKey: 'customer',
+      rating: 'Hot',
+      ratingKey: 'hot',
+      accountSource: 'Trade show',
+      accountSourceKey: 'trade show',
+      industryKey: null,
+      numberOfEmployees: 1200,
+      annualRevenueCents: 125_000_000,
+      shippingAddress: { line1: '1 Dock Rd' },
+    })
+    expect('industry' in companies['company-1']).toBe(false)
   })
 
   it('falls back to the name when no company carries the domain, and ignores one it cannot see', async () => {

@@ -75,6 +75,7 @@ import {
   AI_CRM_MAPPING_INSTRUCTIONS,
   AI_JOB_CRM_STEP_BUDGET,
   aiCrmAdmissionRefusal,
+  aiCrmFactsLines,
   aiCrmRecordInstructions,
   aiReusableCrmRecord,
   createAiJobCrmStep,
@@ -405,6 +406,21 @@ describe('a record (AGL-2917)', () => {
     expect(outcome).toMatchObject({ failure: refusal.error, estCostUsd: 0, outputs: [] })
     expect(mockRunAiRequest).not.toHaveBeenCalled()
     expect(writes).toEqual([])
+  })
+})
+
+describe('a company’s lines (AGL-3514)', () => {
+  it('writes the headcount the disclosure names, and none of the other account fields', () => {
+    const lines = aiCrmFactsLines('company', {
+      name: 'Acme',
+      industry: 'Retail',
+      employees: 250,
+      type: 'Customer',
+      rating: 'Hot',
+      annualRevenue: '$1,250,000.00',
+    })
+    expect(lines).toEqual(expect.arrayContaining(['Industry: Retail', 'Employees: 250']))
+    expect(lines.join('\n')).not.toMatch(/Customer|Hot|1,250,000/)
   })
 })
 

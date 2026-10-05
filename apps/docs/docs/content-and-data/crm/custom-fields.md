@@ -159,6 +159,12 @@ Lead source's standard values, by group:
 | **Outbound** | Purchased list |
 | *(no group)* | Other |
 
+The **Companies** tab keeps **Type**, **Industry**, **Rating** and **Ownership**, each
+with Salesforce's standard values — see [the lists behind a company's
+choices](./companies.md#the-lists-behind-the-choices). A company's **Account source** is
+a lead source value, so renaming or deleting a lead source moves the companies holding it
+too.
+
 **Meanings** tie a picklist's values to what the platform does with them. Lead status
 has one per standard value — New, Nurturing, Working, Qualified, Unqualified — and the
 **Means** column shows each value's. A value you add picks its meaning when you add it

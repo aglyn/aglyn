@@ -25,18 +25,37 @@
  * a domain already held is a `409 company_exists` naming the first — the
  * contact create's own rule for a second row on one email — and `?domain=`
  * is the lookup a sync starts with.
+ *
+ * Salesforce's Account fields (AGL-3514) ride the same object: Type,
+ * Industry, Rating, Ownership and Account Source are labels of the org's
+ * lists — any other value is a 400 naming what the list allows, and the
+ * value a company already holds is kept — the rest are read through
+ * `readCrmCompanyAccountFields`, and `parentCompanyId` names another
+ * company of the organization that is not this one or below it.
  */
 import { nameSearchFields } from '@aglyn/aglyn/app-utils/name-search'
 import {
   CRM_COLLECTIONS,
+  CRM_COMPANY_ACCOUNT_FIELDS,
+  CRM_COMPANY_PICKLIST_FIELDS,
   CRM_MEDIA_IDS_MAX,
+  type CrmCompanyAccountField,
+  type CrmCompanyPicklistField,
+  type CrmPicklist,
+  type CrmPicklistId,
   createResourceUid,
+  crmCompanyParentId,
+  crmCompanyParentRefusal,
   crmNewRecordListFields,
+  judgeCrmCompanyPicklists,
   normalizeAddress,
   normalizeCompanyDomain,
   normalizeCrmMediaIds,
   normalizePhone,
+  readCrmCompanyAccountFields,
 } from '@aglyn/aglyn/server'
+import { detachChildCompanies } from '../company-children'
+import { readCrmPicklist } from '../read-picklist'
 import { apiJson, ApiErrors, restampCrmListFieldsAt } from '@aglyn/tenant-data-admin'
 import { Timestamp } from 'firebase-admin/firestore'
 import {
@@ -79,8 +98,25 @@ function companyView(doc: FirebaseFirestore.DocumentSnapshot) {
     domain: data.domain ?? null,
     website: data.website ?? null,
     phone: data.phone ?? null,
+    // The billing address, under the name it always had.
     address: data.address ?? null,
     industry: data.industry ?? null,
+    // Salesforce's Account fields (AGL-3514).
+    type: data.type ?? null,
+    rating: data.rating ?? null,
+    ownership: data.ownership ?? null,
+    accountSource: data.accountSource ?? null,
+    annualRevenueCents: typeof data.annualRevenueCents === 'number' ? data.annualRevenueCents : null,
+    // `'usd'` when absent, as a deal's is.
+    currency: data.currency ?? 'usd',
+    numberOfEmployees: typeof data.numberOfEmployees === 'number' ? data.numberOfEmployees : null,
+    fax: data.fax ?? null,
+    accountNumber: data.accountNumber ?? null,
+    site: data.site ?? null,
+    tickerSymbol: data.tickerSymbol ?? null,
+    sicCode: data.sicCode ?? null,
+    shippingAddress: data.shippingAddress ?? null,
+    parentCompanyId: crmCompanyParentId(data.parentCompanyId),
     ownerUid: data.ownerUid ?? null,
     notes: data.notes ?? null,
     // The org's company custom fields, keyed by field key (AGL-2661).
@@ -105,6 +141,10 @@ const COMPANY_WRITABLE = new Set([
   'notes',
   'custom',
   'mediaIds',
+  // Salesforce's Account fields (AGL-3514).
+  ...CRM_COMPANY_PICKLIST_FIELDS.map((entry) => entry.field),
+  ...CRM_COMPANY_ACCOUNT_FIELDS,
+  'parentCompanyId',
 ])
 
 interface CompanyInput {
@@ -113,12 +153,21 @@ interface CompanyInput {
   website?: Clearable<string>
   phone?: Clearable<string>
   address?: Clearable<ReturnType<typeof normalizeAddress>>
-  industry?: Clearable<string>
   ownerUid?: Clearable<string>
   notes?: Clearable<string>
   /** Org-library files attached to the company (AGL-2662), by media id. */
   mediaIds?: string[]
+  /** Salesforce's other account fields, normalized (AGL-3514). */
+  account?: Partial<Record<CrmCompanyAccountField, unknown>>
+  parentCompanyId?: Clearable<string>
 }
+
+/**
+ * The picklist fields as sent (AGL-3514), apart from the values stored as
+ * read: the writers judge them against the org's lists, which is where
+ * that read is paid.
+ */
+type CompanyPicklistInput = Partial<Record<CrmCompanyPicklistField, string | null>>
 
 /**
  * The writable half of a company, validated. `partial` separates PATCH from
@@ -134,9 +183,10 @@ interface CompanyInput {
 function readCompanyInput(
   body: Record<string, unknown>,
   { partial }: { partial: boolean },
-): { values: CompanyInput } | { errors: Record<string, string> } {
+): { values: CompanyInput; picklists: CompanyPicklistInput } | { errors: Record<string, string> } {
   const errors: Record<string, string> = {}
   const values: CompanyInput = {}
+  const picklists: CompanyPicklistInput = {}
   const allowed = new Set(COMPANY_WRITABLE)
   if (!partial) allowed.add('consentSiteId')
   refuseUnknownKeys(body, allowed, 'company', errors)
@@ -215,8 +265,17 @@ function readCompanyInput(
     }
   }
 
-  const industry = readOptionalText(body, 'industry', CRM_LABEL_MAX, errors)
-  if (industry !== undefined) values.industry = industry
+  for (const { field } of CRM_COMPANY_PICKLIST_FIELDS) {
+    const label = readOptionalText(body, field, CRM_LABEL_MAX, errors)
+    if (label !== undefined) picklists[field] = label
+  }
+  const account = readCrmCompanyAccountFields(body)
+  Object.assign(errors, account.errors)
+  values.account = account.values
+
+  const parentCompanyId = readOptionalText(body, 'parentCompanyId', CRM_LABEL_MAX, errors)
+  if (parentCompanyId && parentCompanyId.includes('/')) errors.parentCompanyId = 'No such company'
+  else if (parentCompanyId !== undefined) values.parentCompanyId = parentCompanyId
 
   const ownerUid = readOptionalText(body, 'ownerUid', CRM_LABEL_MAX, errors)
   if (ownerUid !== undefined) values.ownerUid = ownerUid
@@ -232,7 +291,58 @@ function readCompanyInput(
     }
   }
 
-  return Object.keys(errors).length ? { errors } : { values }
+  return Object.keys(errors).length ? { errors } : { values, picklists }
+}
+
+/** The org's list behind every company picklist field the body names. */
+async function readNamedPicklists(
+  ctx: ApiV1Context,
+  named: CompanyPicklistInput,
+  created: boolean,
+): Promise<Partial<Record<CrmPicklistId, CrmPicklist>>> {
+  // A create starts every field from its list's default, so it reads them all.
+  const ids = [
+    ...new Set(
+      CRM_COMPANY_PICKLIST_FIELDS.filter((entry) => created || named[entry.field] !== undefined).map(
+        (entry) => entry.picklistId,
+      ),
+    ),
+  ]
+  const lists = await Promise.all(ids.map((id) => readCrmPicklist(ctx.firestore, ctx.orgId, id)))
+  return Object.fromEntries(ids.map((id, at) => [id, lists[at]]))
+}
+
+/**
+ * The picklist values and the parent a write stores, or the 400's fields:
+ * each label judged against its list with the company's `current` value
+ * kept, and a parent that is this company, one below it, or none the
+ * organization holds refused by name.
+ */
+async function judgeCompanyReferences(
+  ctx: ApiV1Context,
+  collection: FirebaseFirestore.CollectionReference,
+  input: { picklists: CompanyPicklistInput; parentCompanyId?: Clearable<string> },
+  options: { companyId: string | null; current: Record<string, unknown> },
+): Promise<
+  | { picklists: Partial<Record<CrmCompanyPicklistField, string | null>> }
+  | { errors: Record<string, string> }
+> {
+  const created = options.companyId === null
+  const lists = await readNamedPicklists(ctx, input.picklists, created)
+  const judged = judgeCrmCompanyPicklists(lists, input.picklists, {
+    current: options.current,
+    created,
+  })
+  const errors = { ...judged.errors }
+  const parentId = input.parentCompanyId
+  if (parentId && parentId !== crmCompanyParentId(options.current['parentCompanyId'])) {
+    const refusal = await crmCompanyParentRefusal(options.companyId, parentId, async (id) => {
+      const snapshot = await collection.doc(id).get()
+      return snapshot.exists ? { parentCompanyId: crmCompanyParentId(snapshot.get('parentCompanyId')) } : null
+    })
+    if (refusal) errors.parentCompanyId = refusal
+  }
+  return Object.keys(errors).length ? { errors } : { picklists: judged.values }
 }
 
 /**
@@ -258,6 +368,15 @@ async function createCompany(
   const customValues = custom && 'values' in custom ? custom.values : {}
 
   const collection = crmCollection(ctx, CRM_COLLECTIONS.companies)
+  // The org's lists and the parent (AGL-3514), above the claim with the
+  // other deterministic 400s.
+  const references = await judgeCompanyReferences(
+    ctx,
+    collection,
+    { picklists: parsed.picklists, parentCompanyId: parsed.values.parentCompanyId },
+    { companyId: null, current: {} },
+  )
+  if ('errors' in references) return crmValidationFailed(ctx, 'company', references.errors)
   const claimed = await claimWrite(
     ctx,
     '*',
@@ -268,7 +387,7 @@ async function createCompany(
   const { claim } = claimed
 
   try {
-    const { name, domain, ...rest } = parsed.values
+    const { name, domain, account, ...rest } = parsed.values
     if (domain) {
       const existing = await collection.where('domain', '==', domain).limit(1).get()
       if (!existing.empty) {
@@ -293,7 +412,7 @@ async function createCompany(
       // `nameLower`/`nameTokens` travel with the name: the console's company
       // list searches the collection, not the page it fetched.
       ...nameSearchFields(name ?? ''),
-      ...createPayload({ domain, ...rest }),
+      ...createPayload({ domain, ...rest, ...references.picklists, ...account }),
       // An empty map writes no `custom` key at all; a `null` inside one is
       // an explicit clear a fresh record has no use for.
       ...(Object.keys(customValues).length
@@ -330,8 +449,15 @@ async function updateCompany(
   if (Object.keys(owner).length) return crmValidationFailed(ctx, 'company', owner)
   const custom = await readCrmCustomBody(ctx, body, 'company')
   if (custom && 'errors' in custom) return crmValidationFailed(ctx, 'company', custom.errors)
+  const references = await judgeCompanyReferences(
+    ctx,
+    ref.parent,
+    { picklists: parsed.picklists, parentCompanyId: parsed.values.parentCompanyId },
+    { companyId: ref.id, current: snap.data() ?? {} },
+  )
+  if ('errors' in references) return crmValidationFailed(ctx, 'company', references.errors)
 
-  const { name, domain, ...rest } = parsed.values
+  const { name, domain, account, ...rest } = parsed.values
   if (domain && domain !== snap.get('domain')) {
     const existing = await ref.parent.where('domain', '==', domain).limit(1).get()
     if (!existing.empty && existing.docs[0].id !== ref.id) {
@@ -344,13 +470,14 @@ async function updateCompany(
   }
   const update: Record<string, unknown> = {
     ...(name !== undefined ? nameSearchFields(name) : {}),
-    ...updatePayload({ domain, ...rest }),
+    ...updatePayload({ domain, ...rest, ...references.picklists, ...account }),
     ...(custom && 'values' in custom ? crmCustomUpdate(custom.values) : {}),
   }
   // An empty body is a no-op answered with the current company.
   if (Object.keys(update).length > 0) {
     await ref.update({ ...update, updatedAt: Timestamp.now() })
-    // What the console's Companies list searches (AGL-3321).
+    // What the console's Companies list searches (AGL-3321) and filters
+    // by (AGL-3514).
     await restampCrmListFieldsAt(ref, 'companies')
   }
   return apiJson(companyView(await ref.get()), { headers: ctx.headers })
@@ -360,7 +487,8 @@ async function updateCompany(
  * `DELETE /v1/companies/{id}` — the company alone. The deals, tasks and
  * activities filed against it keep their `companyId`; they are records of
  * their own, and a delete that cascaded through them would erase a sales
- * history because somebody removed a duplicate account.
+ * history because somebody removed a duplicate account. The companies
+ * under it keep everything but their `parentCompanyId` (AGL-3514).
  */
 async function deleteCompany(
   request: Request,
@@ -380,6 +508,12 @@ async function deleteCompany(
     if (!snap.exists) {
       await claim.release()
       return ApiErrors.notFound({ message: 'No such company', headers: ctx.headers })
+    }
+    // The companies under it stand on their own (AGL-3514): their parent is
+    // cleared, a batch at a time, before it goes.
+    for (;;) {
+      const pass = await detachChildCompanies(ctx.firestore, ref.parent, ref.id)
+      if (!pass.moreRemain) break
     }
     await ref.delete()
     const view = { id: ref.id, object: 'company', deleted: true }

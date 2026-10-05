@@ -1662,10 +1662,11 @@ describe('the lead source picklist', () => {
     expect(list.values.find((value) => value.id === 'partner')?.active).toBe(false)
   })
 
-  it('registers lead source on the Leads tab, rewriting leads and contact facets', () => {
+  it('registers lead source on the Leads tab, rewriting leads, contact facets and company account sources', () => {
     // Lead source first; every other picklist registers beside it (AGL-3512 on).
     expect(CRM_PICKLIST_IDS[0]).toBe('leadSource')
     expect(CRM_PICKLIST_DEFINITIONS).toHaveLength(CRM_PICKLIST_IDS.length)
+    expect(CRM_PICKLIST_DEFINITIONS.filter((definition) => definition.id === 'leadSource')).toHaveLength(1)
     expect(crmPicklistDefinition('nope')).toBeNull()
     expect(crmPicklistDefinitionsFor('lead').map((definition) => definition.id)).toEqual(
       expect.arrayContaining(['leadSource', 'leadStatus']),
@@ -1674,6 +1675,7 @@ describe('the lead source picklist', () => {
     expect(crmPicklistDefinition('leadSource')?.targets).toEqual([
       { object: 'lead', field: 'leadSource', keyField: 'leadSourceKey' },
       { object: 'contact', field: 'leadSource', facet: true },
+      { object: 'company', field: 'accountSource', keyField: 'accountSourceKey' },
     ])
     expect(crmPicklistKey('  Trade  SHOW ')).toBe(crmPicklistKey('trade show'))
     expect(crmPicklistKey('')).toBeNull()

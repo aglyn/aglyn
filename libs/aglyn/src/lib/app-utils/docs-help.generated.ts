@@ -125,7 +125,7 @@ export const PLUGIN_DOCS = {
   companies: {
     path: '/content-and-data/crm/companies',
     title: 'Companies',
-    excerpt: 'Group your contacts under the businesses they belong to — one record per company, with its domain, owner, address and the people who work there.',
+    excerpt: 'Group your contacts under the businesses they belong to — one record per company, with its domain, owner, type, industry, addresses, parent company and the people who work there.',
   },
   consoleTour: {
     path: '/getting-started/console-tour',
@@ -315,7 +315,7 @@ export const PLUGIN_DOCS_ANCHORS = {
   catalog: ['#products-options-and-variants', '#billing-modes-and-subscriptions', '#ai', '#categories-and-tags', '#collections', '#slugs', '#merchant-center-feed', '#related'],
   commerce: ['#products-hub', '#inventory', '#reserved-stock', '#stock-movements', '#gift-cards', '#recovery-and-alerts', '#orders', '#orders-screen', '#order-statuses', '#order-money-tiles', '#a-lost-dispute', '#shipping--taxes', '#lodging-tax-on-reservations', '#storefront-sales-tax', '#destination-coverage', '#dropshipping', '#related'],
   commerceEndToEnd: ['#1-connect-payments', '#2-create-products', '#3-design-the-storefront', '#catalog-search-filters-and-sort', '#category-pages', '#the-product-page-template', '#4-what-checkout-does', '#paying-without-leaving-your-site', '#5-run-orders-from-the-console', '#6-subscriptions--the-stripe-portal', '#related'],
-  companies: ['#the-companies-list', '#create-a-company', '#a-companys-page', '#contacts-at-a-company', '#linked-on-capture', '#import-from-csv', '#export-csv', '#deleting-a-company', '#who-can-see-a-company', '#files', '#related'],
+  companies: ['#the-companies-list', '#create-a-company', '#the-lists-behind-the-choices', '#a-companys-page', '#contacts-at-a-company', '#linked-on-capture', '#import-from-csv', '#export-csv', '#deleting-a-company', '#who-can-see-a-company', '#files', '#related'],
   consoleTour: ['#the-app-bar', '#in-context-help', '#filter-and-search', '#primary-navigation', '#editing-vs-managing', '#the-sites-list', '#the-status-pill', '#how-the-pill-is-decided', '#your-site-allowance', '#a-sites-dashboard', '#next', '#workspace-settings--notifications', '#the-notifications-feed', '#notification-levels', '#notification-settings', '#one-kind-at-a-time', '#workspace-and-site-overrides', '#daily-digests', '#alerts-on-this-device'],
   contactActivities: ['#four-kinds-of-history', '#reading-the-timeline', '#campaign-email', '#logging-an-activity', '#meeting-from-a-booking', '#click-to-call', '#sending-an-email', '#delivery-states', '#captured-email', '#where-an-activity-is-visible', '#the-recent-activity-feed', '#related'],
   contactFields: ['#define-a-field', '#fields-per-record', '#where-values-show', '#save-a-form-field', '#picklist-values', '#over-the-api', '#retire-restore-delete', '#recompute-next-activity', '#related'],

@@ -42,6 +42,16 @@
  * phone that is not a number, a website that is not a URL, a country that
  * is not a code — each is left off the record and REPORTED under
  * {@link CompanyImportRow.dropped}, never silently discarded.
+ *
+ * ## Salesforce's Account fields (AGL-3514)
+ *
+ * Type, Industry, Rating, Ownership and Account Source arrive as text and
+ * are judged against the org's lists by the server, which alone reads
+ * them: a value the list does not hold is dropped and named like any
+ * other unreadable cell, unless the company already holds it. The address
+ * the company always had is its billing address; a shipping one sits
+ * beside it, and the headers Salesforce exports ("Billing Street",
+ * "Shipping City") map onto both.
  */
 
 import type { AglynPostalAddress } from '@aglyn/aglyn/foundation/definitions/contact.types'
@@ -49,8 +59,11 @@ import { normalizeAddress, normalizePhone } from '@aglyn/aglyn/foundation/defini
 import { normalizeContactEmail } from '@aglyn/aglyn/app-utils/contacts'
 import {
   type ContactFieldDefinition,
+  CRM_COMPANY_EMPLOYEES_MAX,
+  CRM_COMPANY_TEXT_MAX,
   type CrmCustomValue,
   normalizeCompanyDomain,
+  normalizeCompanyText,
   normalizeCompanyWebsite,
 } from '@aglyn/aglyn/app-utils/crm'
 import { parseContactImportCustomValue } from './crm-import'
@@ -83,7 +96,8 @@ export const COMPANY_IMPORT_PREVIEW_ROWS = CSV_IMPORT_PREVIEW_ROWS
 export const COMPANY_IMPORT_TAGS_MAX = 20
 
 const NAME_MAX = 120
-const INDUSTRY_MAX = 80
+/** A picklist label's cap — the lists' own. */
+const PICKLIST_LABEL_MAX = 120
 const NOTES_MAX = 4000
 
 /** The fields a column may be mapped to, in the order the mapping menu lists them. */
@@ -92,7 +106,19 @@ export const COMPANY_IMPORT_FIELDS = [
   'domain',
   'website',
   'phone',
+  'fax',
+  'type',
   'industry',
+  'rating',
+  'ownership',
+  'accountSource',
+  'accountNumber',
+  'site',
+  'tickerSymbol',
+  'sicCode',
+  'numberOfEmployees',
+  'annualRevenue',
+  'currency',
   'ownerEmail',
   'addressLine1',
   'addressLine2',
@@ -100,6 +126,12 @@ export const COMPANY_IMPORT_FIELDS = [
   'addressState',
   'addressPostalCode',
   'addressCountry',
+  'shippingLine1',
+  'shippingLine2',
+  'shippingCity',
+  'shippingState',
+  'shippingPostalCode',
+  'shippingCountry',
   'tags',
   'notes',
 ] as const
@@ -112,14 +144,32 @@ export const COMPANY_IMPORT_FIELD_LABELS: Record<CompanyImportField, string> = {
   domain: 'Domain',
   website: 'Website',
   phone: 'Phone',
+  fax: 'Fax',
+  type: 'Type',
   industry: 'Industry',
+  rating: 'Rating',
+  ownership: 'Ownership',
+  accountSource: 'Account source',
+  accountNumber: 'Account number',
+  site: 'Account site',
+  tickerSymbol: 'Ticker symbol',
+  sicCode: 'SIC code',
+  numberOfEmployees: 'Employees',
+  annualRevenue: 'Annual revenue (major units, 1250000.00)',
+  currency: 'Currency (three-letter code)',
   ownerEmail: 'Owner (team member email)',
-  addressLine1: 'Address line 1',
-  addressLine2: 'Address line 2',
-  addressCity: 'City',
-  addressState: 'State or region',
-  addressPostalCode: 'Postal code',
-  addressCountry: 'Country (two-letter code)',
+  addressLine1: 'Billing address line 1',
+  addressLine2: 'Billing address line 2',
+  addressCity: 'Billing city',
+  addressState: 'Billing state or region',
+  addressPostalCode: 'Billing postal code',
+  addressCountry: 'Billing country (two-letter code)',
+  shippingLine1: 'Shipping address line 1',
+  shippingLine2: 'Shipping address line 2',
+  shippingCity: 'Shipping city',
+  shippingState: 'Shipping state or region',
+  shippingPostalCode: 'Shipping postal code',
+  shippingCountry: 'Shipping country (two-letter code)',
   tags: 'Tags (comma or | separated)',
   notes: 'Notes',
 }
@@ -136,14 +186,42 @@ const FIELD_ALIASES: Record<CompanyImportField, readonly string[]> = {
   domain: ['domain', 'company domain', 'domain name', 'web domain', 'email domain'],
   website: ['website', 'web site', 'url', 'website url', 'homepage', 'web'],
   phone: ['phone', 'phone number', 'telephone', 'company phone', 'main phone'],
+  fax: ['fax', 'fax number', 'company fax'],
+  type: ['type', 'account type', 'company type'],
   industry: ['industry', 'sector', 'vertical', 'category'],
+  rating: ['rating', 'account rating'],
+  ownership: ['ownership'],
+  accountSource: ['account source', 'lead source', 'source'],
+  accountNumber: ['account number', 'account no', 'account no.'],
+  site: ['account site', 'site'],
+  tickerSymbol: ['ticker symbol', 'ticker', 'stock symbol'],
+  sicCode: ['sic code', 'sic'],
+  numberOfEmployees: ['employees', 'number of employees', 'employee count', 'headcount'],
+  annualRevenue: ['annual revenue', 'revenue'],
+  currency: ['currency', 'currency code', 'account currency'],
   ownerEmail: ['owner', 'owner email', 'company owner', 'account owner', 'assigned to'],
-  addressLine1: ['address line 1', 'address', 'street', 'street address', 'address 1'],
-  addressLine2: ['address line 2', 'address 2', 'street 2', 'suite'],
-  addressCity: ['city', 'town', 'locality'],
-  addressState: ['state', 'region', 'province', 'county', 'state/region'],
-  addressPostalCode: ['postal code', 'postcode', 'zip', 'zip code', 'post code'],
-  addressCountry: ['country', 'country code', 'country/region'],
+  // The address a company always had is its billing address (AGL-3514).
+  addressLine1: [
+    'billing address line 1',
+    'address line 1',
+    'billing street',
+    'billing address',
+    'address',
+    'street',
+    'street address',
+    'address 1',
+  ],
+  addressLine2: ['billing address line 2', 'address line 2', 'address 2', 'street 2', 'suite'],
+  addressCity: ['billing city', 'city', 'town', 'locality'],
+  addressState: ['billing state', 'state', 'billing state/province', 'region', 'province', 'county', 'state/region'],
+  addressPostalCode: ['billing postal code', 'postal code', 'billing zip/postal code', 'postcode', 'zip', 'zip code', 'post code'],
+  addressCountry: ['billing country', 'country', 'country code', 'country/region'],
+  shippingLine1: ['shipping address line 1', 'shipping street', 'shipping address'],
+  shippingLine2: ['shipping address line 2'],
+  shippingCity: ['shipping city'],
+  shippingState: ['shipping state', 'shipping state/province'],
+  shippingPostalCode: ['shipping postal code', 'shipping zip/postal code', 'shipping zip'],
+  shippingCountry: ['shipping country'],
   tags: ['tags', 'tag', 'labels', 'groups'],
   notes: ['notes', 'note', 'description', 'comments'],
 }
@@ -214,10 +292,30 @@ export interface CompanyImportRow {
   website?: string
   /** E.164. */
   phone?: string
+  fax?: string
+  /**
+   * The picklist fields as the file spelled them (AGL-3514) — the server
+   * judges each against the org's list and drops what the list refuses.
+   */
+  type?: string
   industry?: string
+  rating?: string
+  ownership?: string
+  accountSource?: string
+  accountNumber?: string
+  site?: string
+  tickerSymbol?: string
+  sicCode?: string
+  numberOfEmployees?: number
+  /** Minor units of {@link CompanyImportRow.currency}. */
+  annualRevenueCents?: number
+  /** Lowercase ISO 4217. */
+  currency?: string
   /** Normalized, for the server to resolve against the org's members. */
   ownerEmail?: string
+  /** The billing address. */
   address?: AglynPostalAddress
+  shippingAddress?: AglynPostalAddress
   /** Lowercased, deduplicated, capped at {@link COMPANY_IMPORT_TAGS_MAX}. */
   tags: string[]
   notes?: string
@@ -233,6 +331,21 @@ export interface CompanyImportRow {
 export type CompanyImportRowVerdict =
   | { ok: true; row: CompanyImportRow }
   | { ok: false; reason: 'missing-name'; input: string }
+
+/**
+ * A revenue cell in major units as minor units, or `null` when it is not
+ * an amount — a deal amount's reading (`parseImportAmountCents`) without
+ * its ceiling, because a company's revenue is not a slip at ten billion.
+ */
+export function parseImportRevenueCents(value: string): number | null {
+  const text = value
+    .trim()
+    .replace(/[,\s]/g, '')
+    .replace(/^[^\d.-]+/, '')
+  if (!/^\d+(\.\d+)?$/.test(text)) return null
+  const cents = Math.round(Number(text) * 100)
+  return Number.isSafeInteger(cents) ? cents : null
+}
 
 /**
  * One raw row as the values that will be written, or the reason it cannot
@@ -284,8 +397,44 @@ export function normalizeCompanyImportRow(
     else drop('phone', phoneText)
   }
 
-  const industry = importTextValue(raw.industry, INDUSTRY_MAX)
-  if (industry) row.industry = industry
+  const faxText = importTextValue(raw.fax, 64)
+  if (faxText) {
+    const fax = normalizePhone(faxText)
+    if (fax) row.fax = fax
+    else drop('fax', faxText)
+  }
+
+  for (const field of ['type', 'industry', 'rating', 'ownership', 'accountSource'] as const) {
+    const label = importTextValue(raw[field], PICKLIST_LABEL_MAX)
+    if (label) row[field] = normalizeCompanyText(label)
+  }
+
+  for (const field of ['accountNumber', 'site', 'tickerSymbol', 'sicCode'] as const) {
+    const text = importTextValue(raw[field], CRM_COMPANY_TEXT_MAX[field])
+    if (text) row[field] = normalizeCompanyText(text)
+  }
+
+  const employeesText = importTextValue(raw.numberOfEmployees, 32)
+  if (employeesText) {
+    const cleaned = employeesText.replace(/[\s,]/g, '')
+    const employees = /^\d+$/.test(cleaned) ? Number(cleaned) : NaN
+    if (employees <= CRM_COMPANY_EMPLOYEES_MAX) row.numberOfEmployees = employees
+    else drop('numberOfEmployees', employeesText)
+  }
+
+  const revenueText = importTextValue(raw.annualRevenue, 64)
+  if (revenueText) {
+    const cents = parseImportRevenueCents(revenueText)
+    if (cents !== null) row.annualRevenueCents = cents
+    else drop('annualRevenue', revenueText)
+  }
+
+  const currencyText = importTextValue(raw.currency, 16)
+  if (currencyText) {
+    const code = currencyText.toLowerCase()
+    if (/^[a-z]{3}$/.test(code)) row.currency = code
+    else drop('currency', currencyText)
+  }
 
   const ownerText = importTextValue(raw.ownerEmail, 320)
   if (ownerText) {
@@ -307,6 +456,18 @@ export function normalizeCompanyImportRow(
   // typed name is not a code — so it is the one part the report has to name.
   const countryText = importTextValue(raw.addressCountry, 64)
   if (countryText && !address?.country) drop('addressCountry', countryText)
+
+  const shipping = normalizeAddress({
+    line1: importTextValue(raw.shippingLine1, 200),
+    line2: importTextValue(raw.shippingLine2, 200),
+    city: importTextValue(raw.shippingCity, 120),
+    state: importTextValue(raw.shippingState, 120),
+    postalCode: importTextValue(raw.shippingPostalCode, 32),
+    country: importTextValue(raw.shippingCountry, 8),
+  })
+  if (shipping) row.shippingAddress = shipping
+  const shippingCountryText = importTextValue(raw.shippingCountry, 64)
+  if (shippingCountryText && !shipping?.country) drop('shippingCountry', shippingCountryText)
 
   const notes = importTextValue(raw.notes, NOTES_MAX)
   if (notes) row.notes = notes

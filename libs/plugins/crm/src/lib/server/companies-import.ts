@@ -47,13 +47,25 @@
  * hundred. A metered plan never refuses; a hard band refuses the rows past
  * it as `records-band`, and updates to matched companies go through either
  * way, because an update adds no record.
+ *
+ * ## The picklists are the org's (AGL-3514)
+ *
+ * Type, Industry, Rating, Ownership and Account Source are judged against
+ * the org's lists, read once per request: a value the list does not hold
+ * is dropped and counted under its field, like any unreadable cell, and a
+ * matched company keeps the value it already holds. A new company with
+ * no value starts from the list's default.
  */
 
 import {
   checkCrmRecordsQuota,
   type ContactFieldDefinition,
   CRM_COLLECTIONS,
+  CRM_COMPANY_PICKLIST_FIELDS,
+  type CrmPicklist,
+  type CrmPicklistId,
   crmCompanyListFields,
+  judgeCrmCompanyPicklists,
   crmNewRecordListFields,
   fieldDefinitionsForObject,
   nameSearchFields,
@@ -78,6 +90,7 @@ import {
   readImportRows,
   resolveImportContext,
 } from './import-context'
+import { readCrmPicklist } from './read-picklist'
 
 type Companies = FirebaseFirestore.CollectionReference
 
@@ -111,17 +124,41 @@ async function findCompany(
 function storedFields(
   row: CompanyImportRow,
   ownerUid: string | undefined,
+  picklists: Readonly<Record<string, string | null | undefined>>,
 ): Record<string, unknown> {
+  const present = (field: string, value: unknown) =>
+    value === undefined || value === null || value === '' ? {} : { [field]: value }
   return {
     ...nameSearchFields(row.name),
-    ...(row.domain ? { domain: row.domain } : {}),
-    ...(row.website ? { website: row.website } : {}),
-    ...(row.phone ? { phone: row.phone } : {}),
-    ...(row.industry ? { industry: row.industry } : {}),
-    ...(ownerUid ? { ownerUid } : {}),
-    ...(row.address ? { address: row.address } : {}),
-    ...(row.notes ? { notes: row.notes } : {}),
+    ...present('domain', row.domain),
+    ...present('website', row.website),
+    ...present('phone', row.phone),
+    ...present('fax', row.fax),
+    // The picklist labels as the org's lists judged them (AGL-3514).
+    ...Object.assign({}, ...CRM_COMPANY_PICKLIST_FIELDS.map(({ field }) => present(field, picklists[field]))),
+    ...present('accountNumber', row.accountNumber),
+    ...present('site', row.site),
+    ...present('tickerSymbol', row.tickerSymbol),
+    ...present('sicCode', row.sicCode),
+    ...present('numberOfEmployees', row.numberOfEmployees),
+    ...present('annualRevenueCents', row.annualRevenueCents),
+    // A currency describes a revenue; alone it says nothing.
+    ...(row.annualRevenueCents !== undefined ? present('currency', row.currency) : {}),
+    ...present('ownerUid', ownerUid),
+    ...present('address', row.address),
+    ...present('shippingAddress', row.shippingAddress),
+    ...present('notes', row.notes),
   }
+}
+
+/** The org's list behind every company picklist field, read once per request. */
+async function readCompanyPicklists(
+  orgId: string,
+): Promise<Partial<Record<CrmPicklistId, CrmPicklist>>> {
+  const firestore = firebaseAdmin.app().firestore()
+  const ids = [...new Set(CRM_COMPANY_PICKLIST_FIELDS.map((entry) => entry.picklistId))]
+  const lists = await Promise.all(ids.map((id) => readCrmPicklist(firestore, orgId, id)))
+  return Object.fromEntries(ids.map((id, at) => [id, lists[at]]))
 }
 
 /**
@@ -211,10 +248,13 @@ export const crmCompaniesImportHandler: PluginApiHandler = async (req, res) => {
       normalized.push({ index, row: verdict.row })
     })
 
-    const owners = await ownerDirectory(
-      context.orgId,
-      normalized.map((entry) => entry.row),
-    )
+    const [owners, picklists] = await Promise.all([
+      ownerDirectory(
+        context.orgId,
+        normalized.map((entry) => entry.row),
+      ),
+      readCompanyPicklists(context.orgId),
+    ])
     const ownersUnresolved = new Set<string>()
     const orgRef = firebaseAdmin.app().firestore().collection('orgs').doc(context.orgId)
     const companies = orgRef.collection(CRM_COLLECTIONS.companies)
@@ -231,7 +271,21 @@ export const crmCompaniesImportHandler: PluginApiHandler = async (req, res) => {
         if (!ownerUid) ownersUnresolved.add(row.ownerEmail)
       }
       const existing = await findCompany(companies, context.readTokens, row)
-      const stored = storedFields(row, ownerUid)
+      /*
+       * Each picklist cell judged against the org's list, the matched
+       * company's own value kept; a refused one is dropped and counted.
+       */
+      const requested = Object.fromEntries(
+        CRM_COMPANY_PICKLIST_FIELDS.map(({ field }) => [field, row[field]]),
+      )
+      const judged = judgeCrmCompanyPicklists(picklists, requested, {
+        current: existing?.data() ?? {},
+        created: !existing,
+      })
+      for (const field of Object.keys(judged.errors)) {
+        dropped[field] = (dropped[field] ?? 0) + 1
+      }
+      const stored = storedFields(row, ownerUid, judged.values)
       if (existing) {
         await existing.ref.update({
           ...stored,

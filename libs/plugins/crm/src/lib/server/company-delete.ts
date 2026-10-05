@@ -39,6 +39,13 @@
  * answer says more remain, so the next delete continues where this one
  * stopped. A company is never deleted with a link still on a contact.
  *
+ * ## The companies under it
+ *
+ * A company may be another's parent (AGL-3514). Deleting it clears
+ * `parentCompanyId` on the companies that name it, in the same bounded
+ * pass, so no company is left under one that is gone; they stand on their
+ * own, as Salesforce leaves the children of a deleted account.
+ *
  * ## Who may call it
  *
  * A CRM writer (`authorizeCrmWriter`) whose reach is the whole organization.
@@ -69,6 +76,7 @@ import {
   COMPANY_DETACH_LIMIT,
   type CompanyDeleteResponse,
 } from '../model/company-delete-route'
+import { detachChildCompanies } from './company-children'
 import { typed } from './contact-profile'
 import { readCrmRouteScope } from './org-caller'
 import { authorizeCrmWriter, canReach } from './task-routes'
@@ -157,13 +165,20 @@ export const crmCompanyDeleteHandler: PluginApiHandler = async (req, res) => {
         linked.map((snapshot) => snapshot.id),
       )
     }
-    if (!moreRemain) await companyRef.delete()
+    // The companies under this one stand on their own once it is gone (AGL-3514).
+    const children = await detachChildCompanies(
+      firestore,
+      orgRef.collection(CRM_COLLECTIONS.companies),
+      companyId,
+    )
+    const remaining = moreRemain || children.moreRemain
+    if (!remaining) await companyRef.delete()
 
     const answer: CompanyDeleteResponse = {
       ok: true,
-      deleted: !moreRemain,
+      deleted: !remaining,
       detached: linked.length,
-      moreRemain,
+      moreRemain: remaining,
     }
     res.status(200).json(answer)
   } catch (error) {

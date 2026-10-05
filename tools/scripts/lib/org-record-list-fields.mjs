@@ -210,7 +210,14 @@ export function crmListFields(collection, record) {
         emailStatus: crmEmailStatusKey(doc),
       }
     case 'companies':
-      return searchFields(doc.visibleTo, [doc.name, doc.domain])
+      return {
+        ...searchFields(doc.visibleTo, [doc.name, doc.domain]),
+        // The picklist keys the Companies list filters by (AGL-3514).
+        typeKey: crmLeadSourceKey(doc.type),
+        industryKey: crmLeadSourceKey(doc.industry),
+        ratingKey: crmLeadSourceKey(doc.rating),
+        accountSourceKey: crmLeadSourceKey(doc.accountSource),
+      }
     case 'deals':
       return {
         ...searchFields(doc.visibleTo, [doc.title]),

@@ -185,6 +185,13 @@ export interface CrmCompanyFacts {
   name: string
   domain: string
   industry: string
+  /** Salesforce's Account fields (AGL-3514), read-only: what the account is, not how to reach it. */
+  type: string
+  rating: string
+  ownership: string
+  accountSource: string
+  employees: number | null
+  annualRevenue: string | null
   tags: string[]
   people: number
   since: string | null
@@ -482,6 +489,15 @@ export function companyFacts(input: CompanyFactsInput): CrmCompanyFacts {
     name: crmFactProse(company.name, CRM_FACTS_LABEL_MAX),
     domain: crmFactText(company.domain, CRM_FACTS_LABEL_MAX),
     industry: crmFactProse(company.industry, CRM_FACTS_LABEL_MAX),
+    type: crmFactProse(company.type, CRM_FACTS_LABEL_MAX),
+    rating: crmFactProse(company.rating, CRM_FACTS_LABEL_MAX),
+    ownership: crmFactProse(company.ownership, CRM_FACTS_LABEL_MAX),
+    accountSource: crmFactProse(company.accountSource, CRM_FACTS_LABEL_MAX),
+    employees:
+      typeof company.numberOfEmployees === 'number' && company.numberOfEmployees >= 0
+        ? Math.floor(company.numberOfEmployees)
+        : null,
+    annualRevenue: crmFactMoney(company.annualRevenueCents, company.currency),
     tags: tagsOf(company.tags),
     people:
       typeof company.contactsCount === 'number' && company.contactsCount > 0
@@ -596,7 +612,14 @@ const STANDARD_IMPORT_FIELDS: Record<
     keys: COMPANY_IMPORT_FIELDS,
     labels: COMPANY_IMPORT_FIELD_LABELS,
     required: 'name',
-    types: { phone: 'phone', ownerEmail: 'email', website: 'url' },
+    types: {
+      phone: 'phone',
+      fax: 'phone',
+      ownerEmail: 'email',
+      website: 'url',
+      numberOfEmployees: 'number',
+      annualRevenue: 'number',
+    },
   },
   deals: {
     keys: DEAL_IMPORT_FIELDS,

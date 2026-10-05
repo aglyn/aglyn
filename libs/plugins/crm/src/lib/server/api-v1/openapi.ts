@@ -42,6 +42,15 @@ import {
  * write body lists its handler's own writable set. `api-v1-openapi.spec.ts`
  * holds the document to every endpoint the documentation promises.
  */
+/** How a company picklist field reads in the description (AGL-3514). */
+function companyPicklistNote(label: string, plural: string): string {
+  return (
+    `${label}: one of the organization's active ${plural} (CRM › Fields › Companies), matched ` +
+    'without regard to case. Any other value is refused with a 400 naming the values allowed; ' +
+    'the value a company already holds is kept even after it is deactivated.'
+  )
+}
+
 export const CRM_API_V1_DESCRIPTIONS: Readonly<Record<string, ApiV1ResourceDescription>> = {
   contacts: {
     tag: 'Contacts',
@@ -122,7 +131,12 @@ export const CRM_API_V1_DESCRIPTIONS: Readonly<Record<string, ApiV1ResourceDescr
     description: 'Organizations in the CRM.',
     schemaName: 'Company',
     required: ['id', 'object', 'name'],
-    writable: ['name', 'domain', 'website', 'phone', 'address', 'industry', 'ownerUid', 'notes', 'custom', 'mediaIds', 'consentSiteId'],
+    writable: [
+      'name', 'domain', 'website', 'phone', 'address', 'industry', 'ownerUid', 'notes', 'custom', 'mediaIds', 'consentSiteId',
+      // Salesforce's Account fields (AGL-3514).
+      'type', 'rating', 'ownership', 'accountSource', 'annualRevenueCents', 'currency', 'numberOfEmployees', 'fax',
+      'accountNumber', 'site', 'tickerSymbol', 'sicCode', 'shippingAddress', 'parentCompanyId',
+    ],
     writeOnly: {
       mediaIds: stringListField('Media library files attached to this company, by id, at most 20. An empty array clears them.'),
       consentSiteId: stringField('The site the company is created on behalf of.'),
@@ -135,8 +149,31 @@ export const CRM_API_V1_DESCRIPTIONS: Readonly<Record<string, ApiV1ResourceDescr
       domain: nullableField(stringField('Primary domain. Unique per organization.')),
       website: nullableField(stringField('Website URL.')),
       phone: nullableField(stringField('Telephone number.')),
-      address: postalAddressField(),
-      industry: nullableField(stringField('Industry label.')),
+      address: { ...postalAddressField(), description: 'Billing address. Members are optional and free-form.' },
+      industry: nullableField(stringField(companyPicklistNote('Industry', 'industries'))),
+      // Salesforce's Account fields (AGL-3514).
+      type: nullableField(stringField(companyPicklistNote('Account type', 'types'))),
+      rating: nullableField(stringField(companyPicklistNote('Rating', 'ratings'))),
+      ownership: nullableField(stringField(companyPicklistNote('Ownership', 'ownership values'))),
+      accountSource: nullableField(
+        stringField(
+          "Where the account came from: one of the organization's active lead source values " +
+            '(CRM › Fields › Leads), matched without regard to case. Any other value is refused ' +
+            'with a 400 naming the values allowed; the value a company already holds is kept.',
+        ),
+      ),
+      annualRevenueCents: nullableField(integerField('Annual revenue in the minor unit of `currency`, 0 or more.')),
+      currency: stringField('Lowercase ISO 4217 code of the annual revenue. `usd` when unset.'),
+      numberOfEmployees: nullableField(integerField('Number of employees, 0 to 99,999,999.')),
+      fax: nullableField(stringField('E.164 fax number.')),
+      accountNumber: nullableField(stringField('Account number, at most 40 characters.')),
+      site: nullableField(stringField('Which of the company’s locations this record is, at most 80 characters.')),
+      tickerSymbol: nullableField(stringField('Stock ticker symbol, at most 20 characters.')),
+      sicCode: nullableField(stringField('Standard Industrial Classification code, at most 20 characters.')),
+      shippingAddress: { ...postalAddressField(), description: 'Shipping address. Members are optional and free-form.' },
+      parentCompanyId: nullableField(
+        stringField('The company this one sits under. Never itself or a company below it; deleting the parent clears it.'),
+      ),
       ownerUid: nullableField(stringField('Owning user.')),
       notes: nullableField(stringField('Free-form notes.')),
       custom: openObjectField('Customer-defined fields.'),

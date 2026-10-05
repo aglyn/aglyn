@@ -61,6 +61,7 @@ describe('the registry, read from crm.ts (AGL-3511)', () => {
     assert.deepEqual(LEAD_SOURCE.targets, [
       { object: 'lead', field: 'leadSource' },
       { object: 'contact', field: 'leadSource', facet: true },
+      { object: 'company', field: 'accountSource' },
     ])
   })
 

@@ -542,14 +542,14 @@ describe('PATCH and DELETE /v1/companies/{id}', () => {
       await call('POST', 'companies', {
         name: 'Acme',
         notes: 'Old',
-        industry: 'Coffee',
+        industry: 'Food & Beverage',
         consentSiteId: 'host-1',
       }),
     )
     const patched = await json(
       await call('PATCH', `companies/${created.id}`, { notes: null, name: 'Acme Ltd' }),
     )
-    expect(patched).toMatchObject({ name: 'Acme Ltd', notes: null, industry: 'Coffee' })
+    expect(patched).toMatchObject({ name: 'Acme Ltd', notes: null, industry: 'Food & Beverage' })
     const stored = mockDocs.get(`${COMPANIES}/${created.id}`)!
     expect(stored).not.toHaveProperty('notes')
     expect(stored.nameLower).toBe('acme ltd')
@@ -583,6 +583,119 @@ describe('PATCH and DELETE /v1/companies/{id}', () => {
     expect(await json(replay)).toEqual(receipt)
     // A wrong id is still a 404, even with a key.
     expect((await call('DELETE', 'companies/never', undefined, 'del-2')).status).toBe(404)
+  })
+
+  it('clears the parent of the companies under a deleted one, and nothing else (AGL-3514)', async () => {
+    const parent = await json(await call('POST', 'companies', { name: 'Acme', consentSiteId: 'host-1' }))
+    const child = await json(
+      await call('POST', 'companies', {
+        name: 'Acme West',
+        parentCompanyId: parent.id,
+        industry: 'Retail',
+        consentSiteId: 'host-1',
+      }),
+    )
+    expect(child.parentCompanyId).toBe(parent.id)
+    expect((await call('DELETE', `companies/${parent.id}`, undefined, 'del-parent')).status).toBe(200)
+    const stored = mockDocs.get(`${COMPANIES}/${child.id}`)!
+    expect(stored).not.toHaveProperty('parentCompanyId')
+    expect(stored.industry).toBe('Retail')
+  })
+})
+
+describe('Salesforce’s Account fields on /v1/companies (AGL-3514)', () => {
+  it('stores each picklist as its list spells it, with the key the list filters by, and the account fields', async () => {
+    const response = await call('POST', 'companies', {
+      name: 'Acme',
+      type: 'customer',
+      industry: 'food & BEVERAGE',
+      rating: 'hot',
+      ownership: 'Private',
+      accountSource: 'trade show',
+      annualRevenueCents: 125_000_000,
+      currency: 'EUR',
+      numberOfEmployees: 250,
+      fax: '(512) 555-0124',
+      accountNumber: 'ACME-001',
+      site: 'Headquarters',
+      tickerSymbol: 'ACME',
+      sicCode: '5812',
+      shippingAddress: { line1: '1 Dock Rd', country: 'us' },
+      consentSiteId: 'host-1',
+    })
+    expect(response.status).toBe(201)
+    const view = await json(response)
+    expect(view).toMatchObject({
+      type: 'Customer',
+      industry: 'Food & Beverage',
+      rating: 'Hot',
+      ownership: 'Private',
+      accountSource: 'Trade show',
+      annualRevenueCents: 125_000_000,
+      currency: 'eur',
+      numberOfEmployees: 250,
+      fax: '+15125550124',
+      accountNumber: 'ACME-001',
+      site: 'Headquarters',
+      tickerSymbol: 'ACME',
+      sicCode: '5812',
+      shippingAddress: { line1: '1 Dock Rd', country: 'US' },
+      parentCompanyId: null,
+    })
+    expect(mockDocs.get(`${COMPANIES}/${view.id}`)).toMatchObject({
+      typeKey: 'customer',
+      industryKey: 'food & beverage',
+      ratingKey: 'hot',
+      accountSourceKey: 'trade show',
+    })
+  })
+
+  it('refuses a value outside a list, naming what it allows, and keeps the value a company already holds', async () => {
+    const refused = await call('POST', 'companies', {
+      name: 'Acme',
+      industry: 'Artisanal roofing',
+      consentSiteId: 'host-1',
+    })
+    expect(refused.status).toBe(400)
+    expect((await json(refused)).error.fields.industry).toMatch(/^Industry must be one of: Agriculture, /)
+    const headcount = await call('POST', 'companies', {
+      name: 'Acme',
+      numberOfEmployees: -3,
+      consentSiteId: 'host-1',
+    })
+    expect((await json(headcount)).error.fields.numberOfEmployees).toMatch(/whole number/)
+    expect(childPaths(COMPANIES)).toEqual([])
+    // A company whose industry was typed while the field was free text keeps it.
+    mockDocs.set(`${COMPANIES}/legacy`, {
+      name: 'Legacy',
+      industry: 'Artisanal roofing',
+      hostId: 'host-1',
+      visibleTo: ['host:host-1'],
+    })
+    const kept = await call('PATCH', 'companies/legacy', { industry: 'artisanal roofing', rating: 'Warm' })
+    expect(kept.status).toBe(200)
+    expect(await json(kept)).toMatchObject({ industry: 'Artisanal roofing', rating: 'Warm' })
+    const changed = await call('PATCH', 'companies/legacy', { industry: 'Woodworking' })
+    expect(changed.status).toBe(400)
+  })
+
+  it('refuses a parent that is the company itself, one below it, or none at all', async () => {
+    const top = await json(await call('POST', 'companies', { name: 'Top', consentSiteId: 'host-1' }))
+    const middle = await json(
+      await call('POST', 'companies', { name: 'Middle', parentCompanyId: top.id, consentSiteId: 'host-1' }),
+    )
+    const self = await call('PATCH', `companies/${top.id}`, { parentCompanyId: top.id })
+    expect((await json(self)).error.fields.parentCompanyId).toMatch(/its own parent/)
+    const cycle = await call('PATCH', `companies/${top.id}`, { parentCompanyId: middle.id })
+    expect((await json(cycle)).error.fields.parentCompanyId).toMatch(/sits under this one/)
+    const missing = await call('POST', 'companies', {
+      name: 'Orphan',
+      parentCompanyId: 'never',
+      consentSiteId: 'host-1',
+    })
+    expect((await json(missing)).error.fields.parentCompanyId).toMatch(/no such parent/)
+    const cleared = await call('PATCH', `companies/${middle.id}`, { parentCompanyId: null })
+    expect(await json(cleared)).toMatchObject({ parentCompanyId: null })
   })
 })
 

@@ -68,7 +68,7 @@ export const DOCS_HELP_EXCERPTS = {
   comingSoonLaunch: 'Put a coming-soon page on your domain, keep the rest of the site out of search while you finish it, collect signups, and reverse all of it on launch day.',
   commerce: 'Sell physical, digital, and service products with a full catalog, orders pipeline, shipping, taxes, and your own Stripe account.',
   commerceEndToEnd: 'Create products with billing modes, design the storefront with Commerce blocks, take Stripe checkout for one-time and subscription sales, and run orders from the console.',
-  companies: 'Group your contacts under the businesses they belong to — one record per company, with its domain, owner, address and the people who work there.',
+  companies: 'Group your contacts under the businesses they belong to — one record per company, with its domain, owner, type, industry, addresses, parent company and the people who work there.',
   components: 'Promote a subtree into a reusable component, give it properties, and insert instances across pages.',
   connectADomain: 'Point your own domain at your Aglyn site — a CNAME for a subdomain, an ALIAS for a bare apex — and verify with one click.',
   consoleAndSite: 'Task-ordered recipes for nav/pages/widgets/providers and canvas components/site runtimes.',

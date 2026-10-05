@@ -214,7 +214,7 @@ describe('crm/picklist-values', () => {
 
   it('renames the value in place, then moves every lead and the holding facet to the new label', async () => {
     const out = await call({ orgId: ORG, action: 'rename', valueId: 'apollo', label: 'Apollo' })
-    expect(out).toEqual({ status: 200, payload: { ok: true, updated: { lead: 2, contact: 1 } } })
+    expect(out).toEqual({ status: 200, payload: { ok: true, updated: { lead: 2, contact: 1, company: 0 } } })
     expect((store[LIST]['values'] as { id: string; label: string }[])[0]).toEqual({
       id: 'apollo',
       label: 'Apollo',
@@ -248,14 +248,14 @@ describe('crm/picklist-values', () => {
       valueId: 'site',
       replaceWith: 'outbound · apollo',
     })
-    expect(moved.payload).toEqual({ ok: true, updated: { lead: 1, contact: 1 } })
+    expect(moved.payload).toEqual({ ok: true, updated: { lead: 1, contact: 1, company: 0 } })
     expect(store[`orgs/${ORG}/leads/l3`]['leadSource']).toBe('Outbound · Apollo')
     expect(read(store[`orgs/${ORG}/contacts/c1`], ['facets', 'site-b', 'leadSource'])).toBe(
       'Outbound · Apollo',
     )
     const cleared = await call({ orgId: ORG, action: 'delete', valueId: 'apollo', replaceWith: null })
     // Both of c1's holders held it by now, and each facet is its own write.
-    expect(cleared.payload).toEqual({ ok: true, updated: { lead: 3, contact: 2 } })
+    expect(cleared.payload).toEqual({ ok: true, updated: { lead: 3, contact: 2, company: 0 } })
     expect(store[`orgs/${ORG}/leads/l1`]).not.toHaveProperty('leadSource')
     expect(store[`orgs/${ORG}/leads/l1`]).toMatchObject({ leadSourceKey: null })
     // The stored values left, then every standard value written down beside them.
@@ -293,9 +293,9 @@ describe('crm/picklist-values', () => {
       { orgId: ORG, picklistId: 'leadSource', action: 'rename', valueId: 'apollo', label: 'Apollo' },
       crmPicklistValuesHandler,
     )
-    expect(out.payload).toEqual({ ok: true, updated: { lead: 2, contact: 1 } })
+    expect(out.payload).toEqual({ ok: true, updated: { lead: 2, contact: 1, company: 0 } })
     const unknown = await call(
-      { orgId: ORG, picklistId: 'industry', action: 'rename', valueId: 'x', label: 'Y' },
+      { orgId: ORG, picklistId: 'nope', action: 'rename', valueId: 'x', label: 'Y' },
       crmPicklistValuesHandler,
     )
     expect(unknown.status).toBe(400)

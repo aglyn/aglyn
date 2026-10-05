@@ -43,6 +43,8 @@ export interface CrmPicklistSelectProps {
   disabled?: boolean
   helperText?: string
   error?: boolean
+  /** The field's label, when a record names it otherwise than the list does. */
+  label?: string
 }
 
 /** How a kept value that the list does not offer reads in the menu and the field. */
@@ -64,7 +66,7 @@ function optionText(option: PicklistOption): string {
  * for a fixed choice, so it sizes, labels and disables like its neighbors.
  */
 export function CrmPicklistSelect(props: CrmPicklistSelectProps) {
-  const { picklistId, picklist, value, onChange, stored, disabled, helperText, error } = props
+  const { picklistId, picklist, value, onChange, stored, disabled, helperText, error, label } = props
   const definition = crmPicklistDefinition(picklistId)
   const options = useMemo(
     () => crmPicklistOptions(picklist, stored || value),
@@ -104,7 +106,7 @@ export function CrmPicklistSelect(props: CrmPicklistSelectProps) {
     <TextField
       select
       size="small"
-      label={definition?.label ?? 'Value'}
+      label={label ?? definition?.label ?? 'Value'}
       value={selected ? value : ''}
       onChange={(event) => onChange(String(event.target.value))}
       disabled={disabled}

@@ -252,32 +252,79 @@ export type CompanyCsvRow = Partial<
     | 'tags'
     | 'notes'
     | 'contactsCount'
+    // Salesforce's Account fields (AGL-3514).
+    | 'type'
+    | 'rating'
+    | 'ownership'
+    | 'accountSource'
+    | 'annualRevenueCents'
+    | 'currency'
+    | 'numberOfEmployees'
+    | 'fax'
+    | 'accountNumber'
+    | 'site'
+    | 'tickerSymbol'
+    | 'sicCode'
   >
-> & { address?: AglynPostalAddress | null }
+> & { address?: AglynPostalAddress | null; shippingAddress?: AglynPostalAddress | null }
 
 export interface CompanyCsvOptions {
   /** The owner's address for a stored uid; absent, the uid is written. */
   ownerEmail?: (uid: string) => string
 }
 
-/** The columns, in order, headed as the import reads them. */
+/**
+ * The columns, in order, headed as the import reads them. The address the
+ * company always had is its BILLING address (AGL-3514), beside a shipping
+ * one, as Salesforce names the two.
+ */
 export const COMPANY_CSV_COLUMNS = [
   'Company',
   'Domain',
   'Website',
   'Phone',
+  'Fax',
+  'Type',
   'Industry',
+  'Rating',
+  'Ownership',
+  'Account source',
+  'Account number',
+  'Account site',
+  'Ticker symbol',
+  'SIC code',
+  'Employees',
+  'Annual revenue',
+  'Currency',
   'Owner',
-  'Address line 1',
-  'Address line 2',
-  'City',
-  'State',
-  'Postal code',
-  'Country',
+  'Billing address line 1',
+  'Billing address line 2',
+  'Billing city',
+  'Billing state',
+  'Billing postal code',
+  'Billing country',
+  'Shipping address line 1',
+  'Shipping address line 2',
+  'Shipping city',
+  'Shipping state',
+  'Shipping postal code',
+  'Shipping country',
   'Tags',
   'Notes',
   'Contacts',
 ] as const
+
+/** A postal address as its six cells, in the header's order. */
+function csvAddressCells(address: AglynPostalAddress | null | undefined): string[] {
+  return [
+    address?.line1 ?? '',
+    address?.line2 ?? '',
+    address?.city ?? '',
+    address?.state ?? '',
+    address?.postalCode ?? '',
+    address?.country ?? '',
+  ]
+}
 
 /** One company's cells, in the header's order. */
 export function companyCsvCells(
@@ -290,14 +337,25 @@ export function companyCsvCells(
     company.domain ?? '',
     company.website ?? '',
     company.phone ?? '',
+    company.fax ?? '',
+    company.type ?? '',
     company.industry ?? '',
+    company.rating ?? '',
+    company.ownership ?? '',
+    company.accountSource ?? '',
+    company.accountNumber ?? '',
+    company.site ?? '',
+    company.tickerSymbol ?? '',
+    company.sicCode ?? '',
+    typeof company.numberOfEmployees === 'number' ? company.numberOfEmployees : '',
+    // Major units, as a deal's amount is written — the import reads it back.
+    csvAmount(company.annualRevenueCents),
+    typeof company.annualRevenueCents === 'number'
+      ? String(company.currency || CSV_DEFAULT_DEAL_CURRENCY).toUpperCase()
+      : '',
     company.ownerUid ? (ownerEmail?.(company.ownerUid) ?? company.ownerUid) : '',
-    company.address?.line1 ?? '',
-    company.address?.line2 ?? '',
-    company.address?.city ?? '',
-    company.address?.state ?? '',
-    company.address?.postalCode ?? '',
-    company.address?.country ?? '',
+    ...csvAddressCells(company.address),
+    ...csvAddressCells(company.shippingAddress),
     (company.tags ?? []).join('|'),
     company.notes ?? '',
     Number(company.contactsCount ?? 0),

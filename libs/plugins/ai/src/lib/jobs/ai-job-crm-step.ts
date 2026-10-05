@@ -333,6 +333,9 @@ export function aiCrmFactsLines(kind: AiCrmRecordKind, facts: Facts): string[] {
       ...line('Company', facts['name']),
       ...line('Domain', facts['domain']),
       ...line('Industry', facts['industry']),
+      // The company's own headcount (AGL-3514). Its other account fields
+      // stay out of the prompt until the subprocessor disclosure names them.
+      ...line('Employees', facts['employees'] ?? ''),
       ...line('Tags', words(facts['tags']).join(', ')),
       ...line('People in the CRM', facts['people']),
       ...line('In the CRM since', facts['since']),

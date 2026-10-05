@@ -85,7 +85,62 @@ describe('guessCompanyImportMapping', () => {
       10: 'addressCountry',
       11: 'tags',
       12: 'notes',
+      // A head count maps to the account's Employees (AGL-3514).
+      14: 'numberOfEmployees',
     })
+  })
+
+  it('reads a Salesforce Accounts export, billing and shipping addresses apart (AGL-3514)', () => {
+    const mapping = guessCompanyImportMapping([
+      'Account Name',
+      'Type',
+      'Industry',
+      'Rating',
+      'Ownership',
+      'Account Source',
+      'Account Number',
+      'Account Site',
+      'Ticker Symbol',
+      'SIC Code',
+      'Annual Revenue',
+      'Employees',
+      'Fax',
+      'Billing Street',
+      'Billing City',
+      'Billing State/Province',
+      'Billing Zip/Postal Code',
+      'Billing Country',
+      'Shipping Street',
+      'Shipping City',
+      'Shipping State/Province',
+      'Shipping Zip/Postal Code',
+      'Shipping Country',
+    ])
+    expect(Object.values(mapping)).toEqual([
+      'name',
+      'type',
+      'industry',
+      'rating',
+      'ownership',
+      'accountSource',
+      'accountNumber',
+      'site',
+      'tickerSymbol',
+      'sicCode',
+      'annualRevenue',
+      'numberOfEmployees',
+      'fax',
+      'addressLine1',
+      'addressCity',
+      'addressState',
+      'addressPostalCode',
+      'addressCountry',
+      'shippingLine1',
+      'shippingCity',
+      'shippingState',
+      'shippingPostalCode',
+      'shippingCountry',
+    ])
   })
 })
 
@@ -102,6 +157,59 @@ describe('mapCompanyImportRow', () => {
 })
 
 describe('normalizeCompanyImportRow', () => {
+  it('reads Salesforce’s account fields, dropping and naming what it cannot read (AGL-3514)', () => {
+    const verdict = normalizeCompanyImportRow({
+      name: 'Acme',
+      fax: '(512) 555-0124',
+      type: '  Customer ',
+      rating: 'Hot',
+      accountSource: 'Trade show',
+      accountNumber: 'ACME-001',
+      site: 'Headquarters',
+      tickerSymbol: 'ACME',
+      sicCode: '5812',
+      numberOfEmployees: '1,200',
+      annualRevenue: '$12,500,000,000.00',
+      currency: 'EUR',
+      shippingLine1: '1 Dock Rd',
+      shippingCountry: 'us',
+    })
+    expect(verdict).toMatchObject({
+      ok: true,
+      row: {
+        fax: '+15125550124',
+        type: 'Customer',
+        rating: 'Hot',
+        accountSource: 'Trade show',
+        accountNumber: 'ACME-001',
+        site: 'Headquarters',
+        tickerSymbol: 'ACME',
+        sicCode: '5812',
+        numberOfEmployees: 1200,
+        // Past a deal amount's ceiling, which a revenue is not held to.
+        annualRevenueCents: 1_250_000_000_000,
+        currency: 'eur',
+        shippingAddress: { line1: '1 Dock Rd', country: 'US' },
+        dropped: [],
+      },
+    })
+    const unreadable = normalizeCompanyImportRow({
+      name: 'Acme',
+      fax: '123',
+      numberOfEmployees: 'about fifty',
+      annualRevenue: 'a lot',
+      currency: 'dollars',
+      shippingCountry: 'United States',
+    })
+    expect(unreadable.ok && unreadable.row.dropped.map((entry) => entry.field)).toEqual([
+      'fax',
+      'numberOfEmployees',
+      'annualRevenue',
+      'currency',
+      'shippingCountry',
+    ])
+  })
+
   it('refuses only a row with no name', () => {
     expect(normalizeCompanyImportRow({ domain: 'acme.com' })).toEqual({
       ok: false,

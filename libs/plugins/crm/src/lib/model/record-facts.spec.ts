@@ -72,6 +72,10 @@ const SECRET_WORDS = [
   'secret custom value',
   'sam@acme.test',
   'Sam Teammate',
+  // A company's fax, shipping address and account number (AGL-3514).
+  '+15125550199',
+  'Dock Rd',
+  'ACCT-SECRET-1',
 ]
 
 function expectNoSecrets(facts: unknown) {
@@ -206,7 +210,7 @@ describe('a contact’s facts', () => {
 })
 
 describe('a company’s, a deal’s and a lead’s facts', () => {
-  it('reports a company without its phone, address, owner or custom values', () => {
+  it('reports a company without its phone, fax, addresses, account number, owner or custom values', () => {
     const facts = companyFacts({
       company: {
         name: 'Acme Roofing Supply',
@@ -215,6 +219,16 @@ describe('a company’s, a deal’s and a lead’s facts', () => {
         phone: '+15125550100',
         address: { line1: '100 Congress Ave' } as never,
         industry: 'Construction',
+        type: 'Customer',
+        rating: 'Hot',
+        ownership: 'Private',
+        accountSource: 'Trade show',
+        numberOfEmployees: 120,
+        annualRevenueCents: 1_250_000_00,
+        currency: 'usd',
+        fax: '+15125550199',
+        shippingAddress: { line1: '1 Dock Rd' } as never,
+        accountNumber: 'ACCT-SECRET-1',
         ownerUid: 'owner-uid',
         tags: ['supplier'],
         contactsCount: 4,
@@ -235,6 +249,12 @@ describe('a company’s, a deal’s and a lead’s facts', () => {
       name: 'Acme Roofing Supply',
       domain: 'acme.test',
       industry: 'Construction',
+      type: 'Customer',
+      rating: 'Hot',
+      ownership: 'Private',
+      accountSource: 'Trade show',
+      employees: 120,
+      annualRevenue: crmFactMoney(1_250_000_00, 'usd'),
       tags: ['supplier'],
       people: 4,
       since: '2025-11-20',

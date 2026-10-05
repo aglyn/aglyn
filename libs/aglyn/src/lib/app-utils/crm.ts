@@ -337,10 +337,43 @@ export interface CrmCompany extends CrmScoped {
   website?: string
   /** E.164 — `normalizePhone` before writing. */
   phone?: string
+  /** The billing address — Salesforce's Billing Address, under its original name. */
   address?: AglynPostalAddress | null
+  /**
+   * Salesforce's Industry: a label of the `industry` picklist (AGL-3514).
+   * A record written while it was free text keeps its text.
+   */
   industry?: string
   ownerUid?: string
   notes?: string
+  /*
+   * SALESFORCE'S ACCOUNT FIELDS (AGL-3514) — see the company account block.
+   * The picklist fields hold the value's LABEL, with the list's key beside
+   * the ones the Companies list filters by.
+   */
+  /** Account Type: a label of the `accountType` picklist. */
+  type?: string | null
+  /** Rating: a label of the `rating` picklist. */
+  rating?: string | null
+  /** Ownership: a label of the `ownership` picklist. */
+  ownership?: string | null
+  /** Account Source: a label of the `leadSource` picklist. */
+  accountSource?: string | null
+  /** Annual revenue in the minor unit of {@link CrmCompany.currency}. */
+  annualRevenueCents?: number | null
+  /** Lowercase ISO 4217, the deals' convention; `'usd'` when absent. */
+  currency?: string
+  numberOfEmployees?: number | null
+  /** E.164 — `normalizePhone`, like `phone`. */
+  fax?: string | null
+  accountNumber?: string | null
+  /** Salesforce's Account Site: which of the company's locations this record is. */
+  site?: string | null
+  tickerSymbol?: string | null
+  sicCode?: string | null
+  shippingAddress?: AglynPostalAddress | null
+  /** Another company of the same scope this one sits under; never itself or a descendant. */
+  parentCompanyId?: string | null
   /**
    * Lowercased, deduplicated, capped at twenty — the same shape a contact's
    * tags take, so a bulk "Add tag" over companies and one over contacts
@@ -1487,6 +1520,233 @@ export function normalizeCompanyWebsite(input: unknown): string | null {
   } catch {
     return null
   }
+}
+
+/*==========================================
+ * A COMPANY'S ACCOUNT FIELDS (AGL-3514).
+ *
+ * Salesforce's Account carries more than a name and a domain: a Type, an
+ * Industry, a Rating, an Ownership and an Account Source, each a picklist;
+ * an annual revenue and a head count; a fax, an account number, a site, a
+ * ticker symbol and an SIC code; a shipping address beside the billing one;
+ * and a parent account. Every door that writes a company — the drawer, the
+ * REST resource, the import, a lead's conversion — reads them through this
+ * block, so a value one door refuses is refused by all of them.
+ *
+ * ## Each field's three answers
+ *
+ * A door reads what a request said about a field: not named (`undefined`)
+ * leaves the record alone, `null` or a blank clears it, and anything else
+ * is normalized or refused by name. A picklist field stores the value's
+ * LABEL, judged against the org's list with the record's current value
+ * kept (see the picklist block); the Companies list filters by the key of
+ * Type, Industry and Rating, which `crmCompanyListFields` writes beside
+ * the label.
+ *=========================================*/
+
+/** Each company picklist field: the list it holds a value of, and the key the list filters by. */
+export const CRM_COMPANY_PICKLIST_FIELDS = [
+  { field: 'type', picklistId: 'accountType', keyField: 'typeKey' },
+  { field: 'industry', picklistId: 'industry', keyField: 'industryKey' },
+  { field: 'rating', picklistId: 'rating', keyField: 'ratingKey' },
+  { field: 'ownership', picklistId: 'ownership' },
+  { field: 'accountSource', picklistId: 'leadSource', keyField: 'accountSourceKey' },
+] as const
+
+export type CrmCompanyPicklistField = (typeof CRM_COMPANY_PICKLIST_FIELDS)[number]['field']
+
+/** The short text fields, each capped at Salesforce's own length. */
+export const CRM_COMPANY_TEXT_MAX = {
+  accountNumber: 40,
+  site: 80,
+  tickerSymbol: 20,
+  sicCode: 20,
+} as const
+
+export type CrmCompanyTextField = keyof typeof CRM_COMPANY_TEXT_MAX
+
+/** The most employees a company records — Salesforce's eight digits. */
+export const CRM_COMPANY_EMPLOYEES_MAX = 99_999_999
+
+/** The account fields that are not picklists, as every door names them. */
+export const CRM_COMPANY_ACCOUNT_FIELDS = [
+  'annualRevenueCents',
+  'currency',
+  'numberOfEmployees',
+  'fax',
+  'accountNumber',
+  'site',
+  'tickerSymbol',
+  'sicCode',
+  'shippingAddress',
+] as const
+
+export type CrmCompanyAccountField = (typeof CRM_COMPANY_ACCOUNT_FIELDS)[number]
+
+/** A short text field as stored: trimmed, single-spaced. */
+export function normalizeCompanyText(value: unknown): string {
+  return String(value ?? '')
+    .trim()
+    .replace(/\s+/g, ' ')
+}
+
+const blank = (value: unknown): boolean =>
+  value === null || (typeof value === 'string' && value.trim() === '')
+
+/**
+ * The account fields a request names, normalized, or the refusal of each
+ * one that cannot be stored — see the block above. A value the door has
+ * already parsed from text (the drawer's revenue, a file's head count)
+ * arrives here as the number it parsed.
+ */
+export function readCrmCompanyAccountFields(input: Readonly<Record<string, unknown>>): {
+  values: Partial<Pick<CrmCompany, CrmCompanyAccountField>>
+  errors: Record<string, string>
+} {
+  const values: Record<string, unknown> = {}
+  const errors: Record<string, string> = {}
+  for (const field of CRM_COMPANY_ACCOUNT_FIELDS) {
+    const raw = input[field]
+    if (raw === undefined) continue
+    if (blank(raw)) {
+      values[field] = null
+      continue
+    }
+    switch (field) {
+      case 'annualRevenueCents':
+        if (typeof raw === 'number' && Number.isSafeInteger(raw) && raw >= 0) values[field] = raw
+        else errors[field] = 'Must be a whole number of cents, 0 or more'
+        break
+      case 'currency': {
+        const code = typeof raw === 'string' ? raw.trim().toLowerCase() : ''
+        if (/^[a-z]{3}$/.test(code)) values[field] = code
+        else errors[field] = 'Must be a three-letter ISO 4217 code, like usd'
+        break
+      }
+      case 'numberOfEmployees':
+        if (typeof raw === 'number' && Number.isInteger(raw) && raw >= 0 && raw <= CRM_COMPANY_EMPLOYEES_MAX) {
+          values[field] = raw
+        } else {
+          errors[field] = `Must be a whole number from 0 to ${CRM_COMPANY_EMPLOYEES_MAX}`
+        }
+        break
+      case 'fax': {
+        const fax = typeof raw === 'string' ? normalizePhone(raw) : null
+        if (fax) values[field] = fax
+        else errors[field] = 'Must be a phone number with a country code, like +15125550123'
+        break
+      }
+      case 'shippingAddress':
+        if (typeof raw === 'object' && !Array.isArray(raw)) {
+          values[field] = normalizeAddress(raw as AglynPostalAddress)
+        } else {
+          errors[field] = 'Must be an address object'
+        }
+        break
+      default: {
+        const max = CRM_COMPANY_TEXT_MAX[field]
+        if (typeof raw !== 'string' && typeof raw !== 'number') {
+          errors[field] = 'Must be text'
+          break
+        }
+        const text = normalizeCompanyText(raw)
+        if (text.length > max) errors[field] = `Must be at most ${max} characters`
+        else values[field] = text
+      }
+    }
+  }
+  return { values: values as Partial<Pick<CrmCompany, CrmCompanyAccountField>>, errors }
+}
+
+/**
+ * The picklist fields a request names, judged against the org's lists —
+ * `lists` holds each list the caller read, and a list it did not read is
+ * judged as the standard values alone. `current` is the record as stored:
+ * its value is kept even when the list no longer offers it, which is how
+ * a company whose industry was typed before Industry became a picklist
+ * keeps it. On a create (`created`), a field not named starts from its
+ * list's default when the org set one.
+ */
+export function judgeCrmCompanyPicklists(
+  lists: Readonly<Partial<Record<CrmPicklistId, CrmPicklist>>>,
+  requested: Readonly<Partial<Record<string, unknown>>>,
+  options: { current?: Readonly<Partial<Record<string, unknown>>>; created?: boolean } = {},
+): {
+  values: Partial<Record<CrmCompanyPicklistField, string | null>>
+  errors: Record<string, string>
+} {
+  const values: Partial<Record<CrmCompanyPicklistField, string | null>> = {}
+  const errors: Record<string, string> = {}
+  for (const { field, picklistId } of CRM_COMPANY_PICKLIST_FIELDS) {
+    const list = lists[picklistId] ?? effectiveCrmPicklist(picklistId, undefined)
+    const raw = requested[field]
+    if (raw === undefined) {
+      const fallback = options.created ? picklistDefaultLabel(list) : null
+      if (fallback) values[field] = fallback
+      continue
+    }
+    if (blank(raw)) {
+      values[field] = null
+      continue
+    }
+    if (typeof raw !== 'string') {
+      errors[field] = 'Must be text'
+      continue
+    }
+    const judged = judgeCrmPicklistValue(picklistId, list, raw, options.current?.[field])
+    if (judged.ok === false) errors[field] = judged.error
+    else values[field] = judged.value
+  }
+  return { values, errors }
+}
+
+/** How deep a chain of parent companies may run. */
+export const CRM_COMPANY_PARENT_DEPTH_MAX = 25
+
+/**
+ * What a parent lookup answers for one company id: its own parent, or
+ * `null` when there is no such company the writer may see.
+ */
+export type CrmCompanyParentReader = (
+  companyId: string,
+) => Promise<{ parentCompanyId: string | null } | null>
+
+/**
+ * Why `parentId` cannot be the parent of `companyId` (`null` for a company
+ * not yet created), or `null` when it can: a company is never its own
+ * parent, the parent must be a company the writer can see, and a company
+ * already UNDER this one cannot be put above it — the cycle Salesforce
+ * refuses too. Walks up from the parent through `read`, at most
+ * {@link CRM_COMPANY_PARENT_DEPTH_MAX} steps.
+ */
+export async function crmCompanyParentRefusal(
+  companyId: string | null,
+  parentId: string,
+  read: CrmCompanyParentReader,
+): Promise<string | null> {
+  if (companyId && parentId === companyId) return 'A company cannot be its own parent.'
+  const parent = await read(parentId)
+  if (!parent) return 'There is no such parent company.'
+  const seen = new Set<string>([parentId])
+  let cursor = parent.parentCompanyId
+  for (let depth = 1; cursor; depth += 1) {
+    if (companyId && cursor === companyId) {
+      return 'That company sits under this one, so it cannot be its parent.'
+    }
+    // A loop above that does not pass through this company is not this write's.
+    if (seen.has(cursor)) return null
+    if (depth >= CRM_COMPANY_PARENT_DEPTH_MAX) {
+      return `A company can sit at most ${CRM_COMPANY_PARENT_DEPTH_MAX} levels under another.`
+    }
+    seen.add(cursor)
+    cursor = (await read(cursor))?.parentCompanyId ?? null
+  }
+  return null
+}
+
+/** A stored parent id as a reader takes it, `null` for none. */
+export function crmCompanyParentId(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() !== '' ? value : null
 }
 
 /**
@@ -2807,6 +3067,8 @@ const LEAD_SOURCE_DEFINITION = {
     { object: 'lead', field: 'leadSource', keyField: 'leadSourceKey' },
     // A contact's lead source is each holder's own, like the rest of its profile.
     { object: 'contact', field: 'leadSource', facet: true },
+    // A company's Account Source is a lead source value (AGL-3514).
+    { object: 'company', field: 'accountSource', keyField: 'accountSourceKey' },
   ],
 } as const satisfies CrmPicklistDefinition
 
@@ -2840,10 +3102,126 @@ const LEAD_STATUS_DEFINITION = {
   targets: [{ object: 'lead', field: 'statusLabel' }],
 } as const satisfies CrmPicklistDefinition
 
+/*------------------------------------------
+ * THE COMPANY PICKLISTS (AGL-3514).
+ *
+ * Salesforce's Account Type, Industry, Rating and Ownership, each kept on
+ * the Companies tab. Industry and Rating are shared with leads, whose
+ * targets join these definitions rather than repeating them. Account
+ * Source is not a list of its own: it holds a lead source value, so it is
+ * a target of the lead source definition above.
+ *-----------------------------------------*/
+
+/** Salesforce's Account Type. */
+const ACCOUNT_TYPE_DEFINITION = {
+  id: 'accountType',
+  label: 'Type',
+  plural: 'account types',
+  object: 'company',
+  restricted: true,
+  standardValues: [
+    { id: 'analyst', label: 'Analyst' },
+    { id: 'press', label: 'Press' },
+    { id: 'competitor', label: 'Competitor' },
+    { id: 'prospect', label: 'Prospect' },
+    { id: 'customer', label: 'Customer' },
+    { id: 'reseller', label: 'Reseller' },
+    { id: 'integrator', label: 'Integrator' },
+    { id: 'investor', label: 'Investor' },
+    { id: 'partner', label: 'Partner' },
+    { id: 'consulting', label: 'Consulting' },
+    { id: 'other', label: 'Other' },
+  ],
+  targets: [{ object: 'company', field: 'type', keyField: 'typeKey' }],
+} as const satisfies CrmPicklistDefinition
+
+/**
+ * Salesforce's Industry. A company written while the field was free text
+ * keeps its text; a write that keeps it is never refused.
+ */
+const INDUSTRY_DEFINITION = {
+  id: 'industry',
+  label: 'Industry',
+  plural: 'industries',
+  object: 'company',
+  restricted: true,
+  standardValues: [
+    { id: 'agriculture', label: 'Agriculture' },
+    { id: 'apparel', label: 'Apparel' },
+    { id: 'banking', label: 'Banking' },
+    { id: 'biotechnology', label: 'Biotechnology' },
+    { id: 'chemicals', label: 'Chemicals' },
+    { id: 'communications', label: 'Communications' },
+    { id: 'construction', label: 'Construction' },
+    { id: 'consulting', label: 'Consulting' },
+    { id: 'education', label: 'Education' },
+    { id: 'electronics', label: 'Electronics' },
+    { id: 'energy', label: 'Energy' },
+    { id: 'engineering', label: 'Engineering' },
+    { id: 'entertainment', label: 'Entertainment' },
+    { id: 'environmental', label: 'Environmental' },
+    { id: 'finance', label: 'Finance' },
+    { id: 'food-and-beverage', label: 'Food & Beverage' },
+    { id: 'government', label: 'Government' },
+    { id: 'healthcare', label: 'Healthcare' },
+    { id: 'hospitality', label: 'Hospitality' },
+    { id: 'insurance', label: 'Insurance' },
+    { id: 'machinery', label: 'Machinery' },
+    { id: 'manufacturing', label: 'Manufacturing' },
+    { id: 'media', label: 'Media' },
+    { id: 'not-for-profit', label: 'Not For Profit' },
+    { id: 'recreation', label: 'Recreation' },
+    { id: 'retail', label: 'Retail' },
+    { id: 'shipping', label: 'Shipping' },
+    { id: 'technology', label: 'Technology' },
+    { id: 'telecommunications', label: 'Telecommunications' },
+    { id: 'transportation', label: 'Transportation' },
+    { id: 'utilities', label: 'Utilities' },
+    { id: 'other', label: 'Other' },
+  ],
+  targets: [{ object: 'company', field: 'industry', keyField: 'industryKey' }],
+} as const satisfies CrmPicklistDefinition
+
+/** Salesforce's Rating. */
+const RATING_DEFINITION = {
+  id: 'rating',
+  label: 'Rating',
+  plural: 'ratings',
+  object: 'company',
+  restricted: true,
+  standardValues: [
+    { id: 'hot', label: 'Hot' },
+    { id: 'warm', label: 'Warm' },
+    { id: 'cold', label: 'Cold' },
+  ],
+  targets: [{ object: 'company', field: 'rating', keyField: 'ratingKey' }],
+} as const satisfies CrmPicklistDefinition
+
+/** Salesforce's Ownership. */
+const OWNERSHIP_DEFINITION = {
+  id: 'ownership',
+  label: 'Ownership',
+  plural: 'ownership values',
+  object: 'company',
+  restricted: true,
+  standardValues: [
+    { id: 'public', label: 'Public' },
+    { id: 'private', label: 'Private' },
+    { id: 'subsidiary', label: 'Subsidiary' },
+    { id: 'other', label: 'Other' },
+  ],
+  targets: [{ object: 'company', field: 'ownership' }],
+} as const satisfies CrmPicklistDefinition
+
 /** Every standard picklist field the CRM keeps, one document each. */
 export const CRM_PICKLIST_DEFINITIONS = [
   LEAD_SOURCE_DEFINITION,
   LEAD_STATUS_DEFINITION,
+  // Companies (AGL-3514).
+  ACCOUNT_TYPE_DEFINITION,
+  INDUSTRY_DEFINITION,
+  RATING_DEFINITION,
+  OWNERSHIP_DEFINITION,
 ] as const satisfies readonly CrmPicklistDefinition[]
 
 export type CrmPicklistId = (typeof CRM_PICKLIST_DEFINITIONS)[number]['id']
@@ -3806,15 +4184,30 @@ export function crmLeadListFields(record: object): {
 /** What a company's search box reads: its name and its domain. */
 export const CRM_COMPANY_SEARCH_SOURCES = ['name', 'domain'] as const
 
+/**
+ * Every field the Companies list queries by: the search tokens, and the
+ * key of each picklist field that names one (AGL-3514) — `null` for none,
+ * so "no value" is a value a query can ask for.
+ */
 export function crmCompanyListFields(record: object): {
   searchTokens: string[]
   scopedSearchTokens: string[]
+  typeKey: string | null
+  industryKey: string | null
+  ratingKey: string | null
+  accountSourceKey: string | null
 } {
   const company = record as Record<string, unknown>
-  return crmSearchFields(
-    company['visibleTo'],
-    CRM_COMPANY_SEARCH_SOURCES.map((field) => company[field]),
-  )
+  return {
+    ...crmSearchFields(
+      company['visibleTo'],
+      CRM_COMPANY_SEARCH_SOURCES.map((field) => company[field]),
+    ),
+    typeKey: crmPicklistKey(company['type']),
+    industryKey: crmPicklistKey(company['industry']),
+    ratingKey: crmPicklistKey(company['rating']),
+    accountSourceKey: crmPicklistKey(company['accountSource']),
+  }
 }
 
 /**
@@ -4004,7 +4397,7 @@ export function crmContactListFields(record: object): {
 export const CRM_LIST_FIELD_INPUTS: Readonly<Record<CrmListCollection, readonly string[]>> = {
   leads: ['visibleTo', ...CRM_LEAD_SEARCH_SOURCES, 'status', 'leadSource', 'emailState', 'campaignIds'],
   contacts: ['visibleTo', ...CRM_CONTACT_SEARCH_SOURCES, 'phone', CONTACT_FACETS_FIELD, 'emailState'],
-  companies: ['visibleTo', ...CRM_COMPANY_SEARCH_SOURCES],
+  companies: ['visibleTo', ...CRM_COMPANY_SEARCH_SOURCES, 'type', 'industry', 'rating', 'accountSource'],
   deals: ['visibleTo', 'title'],
   crmTasks: ['visibleTo', 'title'],
 }
