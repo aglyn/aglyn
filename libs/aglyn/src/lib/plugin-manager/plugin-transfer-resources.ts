@@ -20,8 +20,10 @@ import type { PicklistSpec, PicklistValue, PicklistValueSet } from '../app-utils
 import { getRegisteringPluginId } from '../app-utils/registering-plugin'
 import {
   buildTransferFieldCatalog,
+  TRANSFER_PRESET_IDS,
   type TransferCatalogInput,
   type TransferFieldCatalog,
+  type TransferResourcePreset,
 } from '../data-transfer/field-catalog'
 import type { TransferAliasDictionary } from '../data-transfer/header-match'
 import type { MatchKeySpec, MatchLookup, MatchLookupRequest } from '../data-transfer/match'
@@ -349,6 +351,11 @@ export interface TransferRecordsHooks {
   /** Other products' header spellings for these fields. */
   aliases?: readonly TransferAliasDictionary[]
   /**
+   * Presets of the resource's own, listed after the built-in ones — another
+   * product's layout, with that product's column names (`headers`).
+   */
+  presets?: readonly TransferResourcePreset[]
+  /**
    * How many records an export with these options reads, before its first
    * page, so the file carries its row count and the download can be checked
    * whole. Without it the route counts by reading ahead, and a file larger
@@ -524,6 +531,16 @@ export function pluginTransferResourceProblems(
   need('package', PACKAGE_HOOKS)
   if (Array.isArray(impl.matchKeys) && !impl.matchKeys.length && declared.kinds.includes('records')) {
     problems.push(`${declared.key} names no match key, so no row could find its record.`)
+  }
+  const presetIds = new Set<string>()
+  for (const preset of impl.presets ?? []) {
+    if ((TRANSFER_PRESET_IDS as readonly string[]).includes(preset.id) || presetIds.has(preset.id)) {
+      problems.push(`${declared.key} lists preset "${preset.id}" twice, or under a built-in preset's id.`)
+    }
+    presetIds.add(preset.id)
+    if (!preset.label?.trim() || !preset.fieldIds?.length) {
+      problems.push(`${declared.key} lists preset "${preset.id}" with no label or no fields.`)
+    }
   }
   return problems
 }

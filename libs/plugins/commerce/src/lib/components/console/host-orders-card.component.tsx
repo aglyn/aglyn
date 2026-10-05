@@ -56,12 +56,9 @@ import {
   collection,
   doc,
   getDoc,
-  getDocs,
   limit,
   orderBy,
   query,
-  type QueryDocumentSnapshot,
-  startAfter,
   where,
 } from 'firebase/firestore'
 import { useSearchParams } from 'next/navigation'
@@ -74,10 +71,10 @@ import {
   useUser,
 } from '@aglyn/tenant-feature-instance'
 import { useFirestoreCollection } from '@aglyn/tenant-feature-instance'
-import {
-  listQueryConstraints,
-  useListQuery,
-} from '@aglyn/tenant-feature-instance/hooks/use-list-query'
+import { useListQuery } from '@aglyn/tenant-feature-instance/hooks/use-list-query'
+import { useTransferLauncher } from '@aglyn/aglyn/app-utils/transfer-launcher-context'
+import { commerceListFilter } from '../../transfer/list-filter'
+import { COMMERCE_ORDERS_TRANSFER } from '../../transfer/transfer-keys'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 
 import {
@@ -119,13 +116,6 @@ const OPEN_DISPUTE_CEILING = 50
  */
 const STATS_WINDOW_MS = 60 * 24 * 60 * 60 * 1000
 const STATS_ORDER_CEILING = 500
-
-/**
- * Export CSV walks the list's own query, page by page, up to this many
- * orders, and says so when the matches run past it.
- */
-const ORDERS_EXPORT_CEILING = 5000
-const ORDERS_EXPORT_PAGE = 500
 
 /** The columns the grid draws; every other declared field is a hidden filter column. */
 const ORDER_VISIBLE_COLUMNS = [
@@ -414,64 +404,28 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
   )
 
   /**
-   * Export CSV writes what the QUERY matches — every clause and the search
-   * the grid is showing — not the page on screen. It walks the list's own
-   * plan in pages of `ORDERS_EXPORT_PAGE` up to `ORDERS_EXPORT_CEILING`, and
-   * says so when the matches run past it.
+   * Export (AGL-3531) opens the console's export dialog on the
+   * `commerce.orders` resource: the fields the person picks, for what the
+   * QUERY matches — every clause and the search the grid is showing, not the
+   * page on screen — read and streamed on the server however many orders
+   * match. Orders are exported only; there is no Import.
    */
-  const [exporting, setExporting] = useState(false)
-  const handleExportCsv = useCallback(async () => {
-    setExporting(true)
-    try {
-      const matched: any[] = []
-      let cursor: QueryDocumentSnapshot | null = null
-      let more = true
-      while (more && matched.length < ORDERS_EXPORT_CEILING) {
-        const take = Math.min(
-          ORDERS_EXPORT_PAGE,
-          ORDERS_EXPORT_CEILING - matched.length,
-        )
-        // One past the page: whether more match is a fact, not a guess.
-        const snapshot = await getDocs(
-          query(
-            ordersRef,
-            ...listQueryConstraints(plan),
-            ...(cursor ? [startAfter(cursor)] : []),
-            limit(take + 1),
-          ),
-        )
-        const docs = snapshot.docs.slice(0, take)
-        for (const entry of docs) matched.push({ ...entry.data(), $id: entry.id })
-        more = snapshot.docs.length > take
-        cursor = docs[docs.length - 1] ?? null
-        if (!cursor) more = false
-      }
-      // The rows themselves are built by the pure model helper (AGL-1747) so
-      // the column-by-column arithmetic is unit-testable without Firestore.
-      const csv = CommerceModel.buildOrdersCsv(matched, productNames)
-      const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }))
-      const anchor = document.createElement('a')
-      anchor.href = url
-      anchor.download = 'orders.csv'
-      anchor.click()
-      URL.revokeObjectURL(url)
-      if (more) {
-        enqueueSnackbar(
-          `Exported the ${ORDERS_EXPORT_CEILING.toLocaleString('en-US')} newest matching orders. ` +
-            'Narrow the filters to export the rest.',
-          { variant: 'warning', allowDuplicate: true },
-        )
-      }
-    } catch (error) {
-      console.error('Orders export failed', error)
-      enqueueSnackbar('Export failed — try again', {
-        variant: 'error',
-        allowDuplicate: true,
-      })
-    } finally {
-      setExporting(false)
-    }
-  }, [ordersRef, plan, productNames, enqueueSnackbar])
+  const transfer = useTransferLauncher()
+  const openExport = useCallback(() => {
+    transfer?.openExport({
+      resource: COMMERCE_ORDERS_TRANSFER,
+      scope: 'host',
+      hostId,
+      ...(filtering
+        ? {
+            filter: {
+              label: 'the orders the list’s filters and search find',
+              value: commerceListFilter(plan),
+            },
+          }
+        : {}),
+    })
+  }, [transfer, hostId, filtering, plan])
 
   /**
    * Idempotency key for ONE draft attempt (AGL-1697).
@@ -776,7 +730,7 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
          * every other route into the dialog needs an order to exist first.
          *
          * The filters stay behind deliberately: they belong to a list with
-         * rows in it. Export CSV likewise — a header-only file is not
+         * rows in it. Export orders likewise — a header-only file is not
          * something a merchant on day one is looking for.
          */
         <Stack spacing={1} sx={{ alignItems: 'flex-start' }}>
@@ -874,22 +828,20 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
             </Alert>
           ) : null}
           {/*
-            The buttons stay beside the grid: Export CSV writes the model's
-            own order columns (`buildOrdersCsv`) for every order the query
-            matches, which the grid's own export — one page — cannot.
+            The buttons stay beside the grid: Export orders writes every order
+            the query matches, with the fields the person picks, which the grid's
+            own export — one page — cannot.
            */}
           <Stack
             direction="row"
             spacing={1}
             sx={{ alignItems: 'center', justifyContent: 'flex-end' }}
           >
-            <Button
-              size="small"
-              onClick={() => void handleExportCsv()}
-              disabled={exporting}
-            >
-              {'Export CSV'}
-            </Button>
+            {transfer ? (
+              <Button size="small" onClick={openExport}>
+                {'Export orders'}
+              </Button>
+            ) : null}
             <Button
               size="small"
               variant="contained"

@@ -58,6 +58,7 @@ import {
   transferExportCsvHeader,
   transferExportCsvLine,
   transferExportFileName,
+  transferExportHeaders,
   transferExportRecord,
   type TransferExportChoice,
   type TransferFormat,
@@ -188,7 +189,9 @@ export async function streamTransferExport(
   }
 
   const encoder = new TextEncoder()
-  const label = (fieldId: string) => catalog.byId.get(fieldId)?.label ?? fieldId
+  // A preset's column names (another product's layout) stand in for labels.
+  const headers = transferExportHeaders(fieldIds, input.headers)
+  const label = (fieldId: string) => headers[fieldId] ?? catalog.byId.get(fieldId)?.label ?? fieldId
   let written = 0
   const write = (batch: ReadonlyArray<Readonly<Record<string, unknown>>>): string => {
     let text = ''

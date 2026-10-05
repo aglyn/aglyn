@@ -24,6 +24,7 @@ import {
   resolveTransferFieldSelection,
   resolveTransferPreset,
   searchTransferFields,
+  transferExportHeaders,
 } from './field-catalog'
 import type { TransferField } from './resource'
 
@@ -166,5 +167,22 @@ describe('moveTransferField', () => {
     expect(moveTransferField(['a', 'b', 'c'], 0, 2)).toEqual(['b', 'c', 'a'])
     expect(moveTransferField(['a', 'b', 'c'], 2, -5)).toEqual(['c', 'a', 'b'])
     expect(moveTransferField(['a', 'b'], 9, 0)).toEqual(['a', 'b'])
+  })
+})
+
+describe('transferExportHeaders', () => {
+  it('keeps a trimmed name per chosen field, dropping blanks, non-text, repeats in any case and other fields', () => {
+    expect(
+      transferExportHeaders(['a', 'b', 'c', 'd', 'e'], {
+        a: ' Handle ',
+        b: 'handle',
+        c: '',
+        d: 3,
+        e: 'x'.repeat(200),
+        z: 'Not chosen',
+      }),
+    ).toEqual({ a: 'Handle', e: 'x'.repeat(120) })
+    expect(transferExportHeaders(['a'], null)).toEqual({})
+    expect(transferExportHeaders(['a'], ['Handle'])).toEqual({})
   })
 })

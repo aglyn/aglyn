@@ -65,9 +65,11 @@ matches · **Dry** = dry-run preview · **Undo**
 | Email suppressions | CSV, JSON, NDJSON both ways (since AGL-3529) | `email.suppressions`: add-only — an address already suppressed is never relabeled, and neither the import nor its Undo removes one; field-selectable export with the card's filter | — |
 | Email topics | — | None: a handful of definitions edited in place, better carried by a package | Package kind (later) |
 | Datasets | CSV/JSON/NDJSON both ways | Since AGL-3530: `data.dataset:<datasetId>` on the framework. FS over every field with the record's ID and times; Map (by name, then the old id headers); options fields as picklists (add to the options); references by ID or name, an unresolved one refusing its row; Match on the ID, the page address and any text or number field; Conflict choices; Dry run held to the model and the record cap; server job; Undo that keeps references whole | — |
-| Products | CSV (a common storefront format) | Requires Handle and Title; a colliding slug gets a suffix (always creates); written from the browser | Match by handle or SKU, updates, Map, FS, server job |
-| Orders (export) | CSV | What the list query matches, up to 5,000 | FS, streaming past 5,000 |
-| Discounts, coupons, gift cards, categories, suppliers, locations, subscriptions, site members, inventory | — | None | Everything |
+| Products | CSV, JSON, NDJSON (since AGL-3531) | On the framework: a row per variant folded by handle; matched by handle, then SKU, then ID, and updated; Shopify dictionary and preset; plan room, locked handle and option names, location stock held back; undo | — |
+| Orders (export) | CSV, JSON, NDJSON (since AGL-3531) | Field-selectable, streamed, every match of the list's query | — |
+| Discounts, coupons, categories | CSV, JSON, NDJSON (since AGL-3531) | Import and export; new discounts and coupons start switched off | — |
+| Gift cards (export) | CSV, JSON, NDJSON (since AGL-3531) | Export only: a balance is never imported | Import through issuance, if ever |
+| Suppliers, locations, subscriptions, site members, inventory | — | None | Everything |
 | Whole-site backup | JSON (`aglyn-package` v2; v1 still imports) | Since AGL-3533: the everything preset of a site package. Items with content hashes and dependencies, selective export with dependencies, a plan (new, identical, differs, missing dependency) before any write, per-item decisions (replace as a new version, keep both, skip, merge), missing-dependency choices, plan caps on what is added, a 7-day undo. Carries email templates, forms, redirects, events, experiments and overlays, and the theme and its library too | The item-by-item wizard and a rendered diff (AGL-3534). Not carried: products |
 | Templates and marketplace installs | Internal copy | Copies into the site library | Collision prompts, file import |
 | One page, component or layout as a file | — | None | Everything |

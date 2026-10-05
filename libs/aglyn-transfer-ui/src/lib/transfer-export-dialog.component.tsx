@@ -22,8 +22,10 @@
  *
  * Presets fill the picker — Re-importable (the default: the Aglyn ID and
  * the match keys first, then every writable field, so the file comes back
- * in and finds its records), Everything, Minimal, and the presets the
- * person saved. Any change after a preset is a hand-picked list. The scope
+ * in and finds its records), Everything, Minimal, the resource's own
+ * presets (another product's layout, written under that product's column
+ * names) and the presets the person saved. Any change after a preset is a
+ * hand-picked list. The scope
  * (the selection, the current filter, or everything), the format and the
  * byte-order mark complete the choice, and the whole choice is remembered
  * through the client for the next export of the same resource.
@@ -164,6 +166,14 @@ export function TransferExportDialog(props: TransferExportDialogProps) {
   const selectionCount = selection?.length ?? 0
   const hasFilter = Boolean(filter)
   const hints = useMemo(() => (info ? presetHintsOf(info) : {}), [info])
+  const resourcePresets = useMemo(() => info?.resourcePresets ?? [], [info])
+  /*
+   * A resource preset laid out for another product names its own columns;
+   * they are written only while that preset is chosen as it stands — the
+   * moment the person changes a field, the columns are the fields' labels.
+   */
+  const headers = resourcePresets.find((preset) => preset.id === presetId)
+    ?.headers
 
   useEffect(() => {
     if (!open) return
@@ -228,7 +238,9 @@ export function TransferExportDialog(props: TransferExportDialogProps) {
     if (!catalog) return
     setPresetId(id)
     if (id === CUSTOM_SELECTION) return
-    const saved = presets.find((preset) => preset.id === id)
+    const saved =
+      resourcePresets.find((preset) => preset.id === id) ??
+      presets.find((preset) => preset.id === id)
     const resolved = resolveTransferPreset(
       catalog,
       saved ?? (id as TransferPresetId),
@@ -279,6 +291,7 @@ export function TransferExportDialog(props: TransferExportDialogProps) {
         scope: exportScope,
         format,
         bom: format === 'csv' && bom,
+        ...(headers && format === 'csv' ? { headers: { ...headers } } : {}),
       })
       ;(
         props.download ??
@@ -311,6 +324,12 @@ export function TransferExportDialog(props: TransferExportDialogProps) {
     (info ? `Export ${info.resource.label.toLowerCase()}` : 'Export')
   const presetOptions = [
     ...TRANSFER_PRESET_IDS.map((id) => ({ value: id, ...PRESET_WORDS[id] })),
+    ...resourcePresets.map((preset) => ({
+      value: preset.id,
+      label: preset.label,
+      description:
+        preset.description ?? countOf(preset.fieldIds.length, 'field'),
+    })),
     ...presets.map((preset) => ({
       value: preset.id,
       label: preset.label,

@@ -719,6 +719,19 @@ describe('what the wizard reads (AGL-3539)', () => {
     expect(analysis.matches?.keys.map((key) => key.fieldId)).toEqual(['email'])
   })
 
+  it("lists the resource's own presets, holding only fields its catalog has", async () => {
+    registerPluginTransferResource(
+      'bottles',
+      { ...RESOURCE, presets: [{ id: 'cellar-x', label: 'Cellar X', fieldIds: ['name', 'gone', 'id'], headers: { name: 'Wine' } }] },
+      { pluginId: 'cellar' },
+    )
+    const info = await readTransferResourceInfo(deps, { orgId: ORG, actorUid: ME, resource: 'bottles' })
+    expect(info.resourcePresets).toEqual([
+      { id: 'cellar-x', label: 'Cellar X', fieldIds: ['name', 'id'], headers: { name: 'Wine' } },
+    ])
+    registerPluginTransferResource('bottles', RESOURCE, { pluginId: 'cellar' })
+  })
+
   it('reads a CSV with the delimiter and header row the person confirmed', async () => {
     const job = await uploadTransferSource(deps, {
       orgId: ORG,

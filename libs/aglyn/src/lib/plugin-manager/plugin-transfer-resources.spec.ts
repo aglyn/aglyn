@@ -226,6 +226,23 @@ describe('registering the server half', () => {
     ).toEqual(['bottles names no match key, so no row could find its record.'])
   })
 
+  it("is refused for a preset that takes a built-in preset's id, repeats one, or names nothing", () => {
+    expect(
+      pluginTransferResourceProblems(BOTTLES, {
+        ...RECORDS,
+        presets: [
+          { id: 'everything', label: 'Mine', fieldIds: ['name'] },
+          { id: 'layout', label: 'Layout', fieldIds: ['name'] },
+          { id: 'layout', label: '', fieldIds: [] },
+        ],
+      }),
+    ).toEqual([
+      'bottles lists preset "everything" twice, or under a built-in preset\'s id.',
+      'bottles lists preset "layout" twice, or under a built-in preset\'s id.',
+      'bottles lists preset "layout" with no label or no fields.',
+    ])
+  })
+
   it('replaces the answers when the same plugin registers again', async () => {
     registerPluginTransferResource('bottles', RECORDS, { pluginId: 'cellar' })
     const again = { ...RECORDS }

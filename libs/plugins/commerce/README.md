@@ -41,7 +41,8 @@ The entry in `plugins.config.json` also declares an `accounts` capability ("User
 - A "Commerce" widget in the `commerceGlance` slot, and a "Newest site users" widget in the `hostDashboard` slot under the accounts capability.
 - A "Purchases" widget in the `siteMember` slot: a site user's lifetime purchase total, orders and subscriptions, in their drawer on the site's Users page.
 - The plugin's permissions (`COMMERCE_PERMISSIONS`) and its config schema (`COMMERCE_CONFIG_SCHEMA`, which holds the POS discount ceiling).
-- Three zones its own surfaces host, declared with `registerPluginZone`: `productEditor` (among the product editor's fields), `productsHub` (above the catalog table) and `productImport` (inside the CSV import dialog). Their props are declared on the zone tokens in `components/console/product-zones`.
+- Three zones its own surfaces host, declared with `registerPluginZone`: `productEditor` (among the product editor's fields), `productsHub` (above the catalog table) and `productImport` (the products import wizard's After import step). Their props are declared on the zone tokens in `components/console/product-zones`.
+- The client halves of its six import and export resources, and the products wizard's After import step (`transfer/register-transfer-ui`). The products, orders, discounts, coupons, gift cards and categories cards open the console's import wizard and export dialog through the core launcher (`useTransferLauncher`).
 
 All console pages and cards are code-split.
 
@@ -63,9 +64,10 @@ Routes are served by the host app's API dispatcher under `/api/`, for example `/
 
 | import | contents |
 | -- | -- |
-| `@aglyn/plugins-commerce` | `BUNDLE_ID`, `registerCommerceConsole`, the site half, and the pure model: carts (`upsertCartLine`, `removeCartLine`, `cartCount`, `mergeCarts`), product CSV (`productsToCsv`, `parseProductsCsv`), and the order, discount, promotion, gift card, reservation, shipping, stock hold and tax modules |
+| `@aglyn/plugins-commerce` | `BUNDLE_ID`, `registerCommerceConsole`, the site half, and the pure model: carts (`upsertCartLine`, `removeCartLine`, `cartCount`, `mergeCarts`), and the order, discount, promotion, gift card, reservation, shipping, stock hold and tax modules |
 | `@aglyn/plugins-commerce/site` | `registerCommercePlugin` and `COMMERCE_BUNDLE` only. This is what a published page loads, so it carries no console code |
 | `@aglyn/plugins-commerce/server` | `registerCommerceApi`, `registerCommerceConsoleApi` |
+| `@aglyn/plugins-commerce/transfer/*` | the import and export resources (`commerce.products`, `commerce.categories`, `commerce.orders`, `commerce.discounts`, `commerce.coupons`, `commerce.gift-cards`): their fields, the Shopify product dictionary and preset (`product-transfer`), and the server halves (`products.server`, `records.server`), which the console's server declarations register |
 | `@aglyn/plugins-commerce/*` | any module under `src/lib/`. Console components are deep-imported from `@aglyn/plugins-commerce/components/console/...` and are deliberately not re-exported from the root |
 
 ## Usage

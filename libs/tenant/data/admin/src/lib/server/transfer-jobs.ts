@@ -494,8 +494,8 @@ export function transferJobProgress(job: TransferJobRecord): TransferProgress {
 /**
  * What a resource offers the wizard and the export dialog: its descriptor,
  * every field and group, its match keys (and the ones a person starts with,
- * which the Re-importable preset leads with), the
- * presets' hints, its locked rules and aliases. `prefs` is the person's own
+ * which the Re-importable preset leads with), the presets' hints and its own
+ * presets, its locked rules and aliases. `prefs` is the person's own
  * and is filled by the caller; a custom field cannot be created from here.
  */
 export async function readTransferResourceInfo(
@@ -529,6 +529,15 @@ export async function readTransferResourceInfo(
     matchKeys,
     defaultMatchKeys: offer.defaults,
     presetHints: { matchKeyFieldIds: offer.defaults },
+    ...(hooks.presets?.length
+      ? {
+          resourcePresets: hooks.presets.map((preset) => ({
+            ...preset,
+            // Only fields the catalog has: a preset never names a column the export would refuse.
+            fieldIds: preset.fieldIds.filter((fieldId) => catalog.byId.has(fieldId)),
+          })),
+        }
+      : {}),
     locked: [...(await transferResourceLockedRules(resource, ctx))],
     ...(hooks.aliases?.length ? { dictionaries: [...hooks.aliases] } : {}),
     canCreateCustomField: false,

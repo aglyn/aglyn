@@ -46,6 +46,8 @@ import { pluginDocsHelp } from '@aglyn/aglyn'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { GIFT_CARD_SEARCH_TOKENS_PATH } from '../../model/gift-card-search'
 import { EntitlementGatedCard } from './entitlement-gate.component'
+import TransferHeaderActions from '../../transfer/transfer-header-actions.component'
+import { COMMERCE_GIFT_CARDS_TRANSFER } from '../../transfer/transfer-keys'
 
 export interface GiftCardsCardProps {
   hostId: string
@@ -293,6 +295,9 @@ export function GiftCardsCard(props: GiftCardsCardProps) {
     >
       <CardDisplay
         header={'Gift cards'}
+        HeaderProps={{
+          action: <TransferHeaderActions resource={COMMERCE_GIFT_CARDS_TRANSFER} hostId={hostId} />,
+        }}
         help={giftCardsHelp}
         contentGutterX
         contentGutterY

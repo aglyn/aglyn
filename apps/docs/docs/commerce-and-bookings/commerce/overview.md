@@ -42,8 +42,11 @@ The **Products** page is the catalog manager:
   [Product catalog](catalog.md).
 - **Categories & collections** — a category tree plus manual and smart
   (rule-based) collections with a live match preview.
-- **CSV import/export** in the Shopify column dialect, with a dry-run
-  report — switching from Shopify is a file upload.
+- **Import and export**: a Shopify product export uploads as it is, a product
+  a file matches by handle or SKU is updated, and every step shows its
+  choices and a dry run first. Products, categories, orders, discounts, coupons
+  and gift cards export with the fields you pick. See
+  [Import and export store data](store-import-and-export.md).
 - **Payments** — Stripe Connect onboarding status and your plan's fee
   ladder.
 
@@ -231,7 +234,7 @@ snapshots, totals, and a timeline:
 Open your site's **Products** hub and choose the **Orders** tab. Before your first
 sale the tab is an invitation rather than a table: it explains where orders come from
 and offers **Draft order**, so you can invoice a customer you already have. The
-table and **Export CSV** appear once there are rows to filter.
+table and **Export orders** appear once there are rows to filter.
 
 The table filters through its own toolbar. **Search** matches the start of a word
 in the order number (`1042` or `#1042`), the buyer's email address (`jane`, `acme`,
@@ -256,10 +259,10 @@ The search, **Customer contains**, **Order** and **Product** can't be combined w
 each other: add a second one and a notice above the table says it is not applied,
 rather than showing a partial answer. The same notice refuses **is any of** choices
 across Product, Status, Channel and Disputes that multiply past thirty combinations.
-Beside the table, **Export CSV** writes every
-order the filters and the search match, up to 5,000 (it tells you when there are
-more), and **Draft order** builds an order by hand and sends the buyer a payment
-link.
+Beside the table, **Export orders** writes every
+order the filters and the search match, however many there are, with the fields
+you pick (see [Import and export store data](store-import-and-export.md#export)), and
+**Draft order** builds an order by hand and sends the buyer a payment link.
 
 **Disputes is its own filter, not a status.** An open dispute sits on an order that is
 still **Paid**, and a lost one sits on **Refunded** beside every ordinary refund, so
@@ -349,7 +352,7 @@ Two behaviors here look like bugs and are not:
 The tiles read the last 60 days of orders on their own, apart from the table and its
 filters, up to the 500 most recent — the same bound as the commerce analytics card.
 A store past that many orders in 60 days is reading a slice, and a line under the
-tiles says so. Use **Export CSV** and your Stripe payouts to reconcile; use the tiles
+tiles says so. Use **Export orders** and your Stripe payouts to reconcile; use the tiles
 to see which way the last month went.
 :::
 

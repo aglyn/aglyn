@@ -86,7 +86,16 @@ const deps = () => ({
   }),
 })
 
-const run = (overrides: { fieldIds?: string[]; scope?: TransferExportScope; format?: TransferFormat; bom?: boolean; scopeTokens?: string[] } = {}) =>
+const run = (
+  overrides: {
+    fieldIds?: string[]
+    scope?: TransferExportScope
+    format?: TransferFormat
+    bom?: boolean
+    scopeTokens?: string[]
+    headers?: Record<string, string>
+  } = {},
+) =>
   streamTransferExport(deps(), {
     orgId: 'org-1',
     actorUid: 'uid-1',
@@ -96,6 +105,7 @@ const run = (overrides: { fieldIds?: string[]; scope?: TransferExportScope; form
     format: overrides.format ?? 'csv',
     bom: overrides.bom ?? false,
     ...(overrides.scopeTokens ? { scopeTokens: overrides.scopeTokens } : {}),
+    ...(overrides.headers ? { headers: overrides.headers } : {}),
   })
 
 // `Response.text()` drops a byte-order mark; the bytes keep it.
@@ -119,6 +129,13 @@ describe('the field-selectable export', () => {
     expect(lines[1]).toBe('"Bottle, 0",b0,Merlot; Syrah')
     expect(lines.filter(Boolean)).toHaveLength(8)
     expect(file).toMatchObject({ rows: 7, fileName: 'bottles-2026-10-05.csv', contentType: 'text/csv', label: 'Bottles' })
+  })
+
+  it("writes a preset's column names in place of labels, for the chosen fields only and never twice", async () => {
+    const file = await run({ headers: { name: 'Wine', id: 'wine', grapes: 7 as never, other: 'X' } })
+    const lines = (await text(file.stream)).split('\r\n')
+    // "wine" repeats "Wine" in another case, so the ID keeps its label; a non-text name is ignored.
+    expect(lines[0]).toMatch(/^Wine,.*ID,Grapes$/)
   })
 
   it('writes JSON as one array and NDJSON as one object a line, keyed by field id', async () => {

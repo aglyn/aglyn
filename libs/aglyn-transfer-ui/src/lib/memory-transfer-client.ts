@@ -56,6 +56,7 @@ import {
   transferAmbiguities,
   transferChunkRanges,
   transferDateOrderOptions,
+  transferExportHeaders,
   transferLookupNewValue,
   transferMatchReview,
   transferMatchedRecordIds,
@@ -79,6 +80,7 @@ import type {
   TransferPlanRow,
   TransferPresetHints,
   TransferResourceDescriptor,
+  TransferResourcePreset,
   TransferRowNote,
   TransferRowResult,
   TransferUndoConflict,
@@ -124,6 +126,8 @@ export interface MemoryTransferClientOptions {
   matchKeys: MatchKeySpec[]
   defaultMatchKeys?: string[]
   presetHints?: TransferPresetHints
+  /** The resource's own presets, as its server half would list them. */
+  resourcePresets?: TransferResourcePreset[]
   locked?: TransferLockedRule[]
   dictionaries?: TransferAliasDictionary[]
   /** Picklist id → the list's spec and the organization's values. */
@@ -455,6 +459,9 @@ export function createMemoryTransferClient(
           ? { defaultMatchKeys: options.defaultMatchKeys }
           : {}),
         ...(options.presetHints ? { presetHints: options.presetHints } : {}),
+        ...(options.resourcePresets
+          ? { resourcePresets: options.resourcePresets }
+          : {}),
         locked: options.locked ?? [],
         ...(options.dictionaries ? { dictionaries: options.dictionaries } : {}),
         prefs,
@@ -744,9 +751,13 @@ export function createMemoryTransferClient(
                   ? JSON.stringify(value)
                   : String(value),
           )
+        const headers = transferExportHeaders(
+          request.fieldIds,
+          request.headers,
+        )
         const lines = [
           request.fieldIds
-            .map((id) => cell(byId.get(id)?.label ?? id))
+            .map((id) => cell(headers[id] ?? byId.get(id)?.label ?? id))
             .join(','),
           ...chosen.map((record) =>
             request.fieldIds.map((id) => cell(valueOf(record, id))).join(','),

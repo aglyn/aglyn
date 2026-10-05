@@ -58,6 +58,7 @@ import type {
   TransferFieldCatalog,
   TransferFieldGroup,
   TransferPresetHints,
+  TransferResourcePreset,
   TransferSavedPreset,
 } from './field-catalog'
 import type { HeaderMatchResult, MappingProblems, TransferAliasDictionary } from './header-match'
@@ -364,6 +365,11 @@ export interface TransferExportChoice {
   format: TransferFormat
   /** A CSV starts with a byte-order mark, for spreadsheets. */
   bom: boolean
+  /**
+   * The CSV column name for a field, by field id, in place of its label — a
+   * resource preset's `headers` (see `transferExportHeaders`).
+   */
+  headers?: Readonly<Record<string, string>>
 }
 
 /** Where a person's remembered choices live: `users/{uid}/transferPrefs/{resourceKey}`, a `TransferPrefs`. */
@@ -411,6 +417,8 @@ export interface TransferResourceInfo {
   /** The match keys used when the person has not chosen (every key, in order, by default). */
   defaultMatchKeys?: string[]
   presetHints?: TransferPresetHints
+  /** The resource's own presets, listed after the built-in ones. */
+  resourcePresets?: TransferResourcePreset[]
   /** The owning plugin's rules, shown locked with their reasons. */
   locked: TransferLockedRule[]
   /** Other products' header spellings, from the owning plugin. */

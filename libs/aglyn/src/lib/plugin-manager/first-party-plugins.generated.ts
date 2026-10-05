@@ -954,6 +954,114 @@ export const PLUGIN_SITE_BUNDLE_SECTIONS_DECLARED: readonly ResolvedPluginSiteBu
  */
 export const PLUGIN_TRANSFER_RESOURCES_DECLARED: readonly ResolvedTransferResourceDeclaration[] = [
   {
+    "pluginId": "commerce",
+    "key": "commerce.products",
+    "label": "Products",
+    "singularLabel": "Product",
+    "scope": "host",
+    "kinds": [
+      "records"
+    ],
+    "formats": [
+      "csv",
+      "json",
+      "ndjson"
+    ],
+    "limits": {
+      "maxRows": 50000
+    },
+    "description": "Products with their options, variants, prices, stock, images and search listing."
+  },
+  {
+    "pluginId": "commerce",
+    "key": "commerce.categories",
+    "label": "Product categories",
+    "singularLabel": "Product category",
+    "scope": "host",
+    "kinds": [
+      "records"
+    ],
+    "formats": [
+      "csv",
+      "json",
+      "ndjson"
+    ],
+    "limits": {
+      "maxRows": 2000
+    },
+    "description": "The category tree products are filed under, matched by slug, then name."
+  },
+  {
+    "pluginId": "commerce",
+    "key": "commerce.orders",
+    "label": "Orders",
+    "singularLabel": "Order",
+    "scope": "host",
+    "kinds": [
+      "records"
+    ],
+    "formats": [
+      "csv",
+      "json",
+      "ndjson"
+    ],
+    "description": "Every order with its items, money, customer and addresses. Exported only."
+  },
+  {
+    "pluginId": "commerce",
+    "key": "commerce.discounts",
+    "label": "Discounts",
+    "singularLabel": "Discount",
+    "scope": "host",
+    "kinds": [
+      "records"
+    ],
+    "formats": [
+      "csv",
+      "json",
+      "ndjson"
+    ],
+    "limits": {
+      "maxRows": 5000
+    },
+    "description": "Discount codes and automatic promotions, matched by code, then name. New ones start switched off."
+  },
+  {
+    "pluginId": "commerce",
+    "key": "commerce.coupons",
+    "label": "Coupons",
+    "singularLabel": "Coupon",
+    "scope": "host",
+    "kinds": [
+      "records"
+    ],
+    "formats": [
+      "csv",
+      "json",
+      "ndjson"
+    ],
+    "limits": {
+      "maxRows": 5000
+    },
+    "description": "Percent-off coupon codes, matched by code. New ones start switched off."
+  },
+  {
+    "pluginId": "commerce",
+    "key": "commerce.gift-cards",
+    "label": "Gift cards",
+    "singularLabel": "Gift card",
+    "scope": "host",
+    "kinds": [
+      "records"
+    ],
+    "formats": [
+      "csv",
+      "json",
+      "ndjson"
+    ],
+    "description": "Every gift card's code, balance and status. Exported only."
+  },
+  {
     "pluginId": "data",
     "key": "data.dataset",
     "label": "Dataset records",

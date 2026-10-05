@@ -35,6 +35,11 @@
  *
  * A saved preset is a list of field ids; resolving it drops the ids the
  * catalog no longer has (a deleted custom field) and says which.
+ *
+ * A resource may bring presets of its own (`TransferResourcePreset`): a
+ * named list of its fields, and the column names another product's import
+ * expects for them, so a file laid out for that product comes out of the
+ * export dialog ready to upload there.
  *=========================================*/
 
 import { customImportTarget } from '../app-utils/csv-import'
@@ -212,6 +217,47 @@ export interface TransferSavedPreset {
   id: string
   label: string
   fieldIds: readonly string[]
+}
+
+/**
+ * A preset the resource itself offers, listed after the built-in ones: its
+ * fields in order and, for a layout another product imports, that
+ * product's column name for each field. Its id must not be a built-in
+ * preset's.
+ */
+export interface TransferResourcePreset extends TransferSavedPreset {
+  /** One sentence beside the preset in the picker. */
+  description?: string
+  /** Field id → the CSV column name written instead of the field's label. */
+  headers?: Readonly<Record<string, string>>
+}
+
+/** The longest column name a preset or an export request may give a field. */
+export const TRANSFER_HEADER_MAX = 120
+
+/**
+ * The column names an export may write, from what a request or a preset
+ * carries: only for the chosen fields, trimmed, non-empty, at most
+ * {@link TRANSFER_HEADER_MAX} characters, and never two fields under one
+ * name — a file whose columns repeat cannot be read back.
+ */
+export function transferExportHeaders(
+  fieldIds: readonly string[],
+  headers: unknown,
+): Record<string, string> {
+  const out: Record<string, string> = {}
+  if (!headers || typeof headers !== 'object' || Array.isArray(headers)) return out
+  const taken = new Set<string>()
+  for (const fieldId of fieldIds) {
+    const raw = (headers as Record<string, unknown>)[fieldId]
+    if (typeof raw !== 'string') continue
+    const name = raw.trim().slice(0, TRANSFER_HEADER_MAX)
+    const key = name.toLowerCase()
+    if (!name || taken.has(key)) continue
+    taken.add(key)
+    out[fieldId] = name
+  }
+  return out
 }
 
 /** What a resource says about its own presets. */

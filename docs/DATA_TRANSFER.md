@@ -71,7 +71,12 @@ default: the id and match keys first — the id once, even when a match key
 names it — then every writable field) and
 `minimal`, or resolves a saved preset and reports the field ids that no
 longer exist. `groupTransferFields`, `searchTransferFields` and
-`moveTransferField` back the picker.
+`moveTransferField` back the picker. A `TransferResourcePreset` is a preset a
+resource offers itself — a saved preset's shape with a `description` and,
+for a layout another product imports, `headers` (that product's column name
+per field); `transferExportHeaders` keeps the names a request may use (the
+chosen fields only, trimmed, at most 120 characters, never two fields under
+one name).
 
 ### `header-match.ts` — which field each column means
 
@@ -275,7 +280,9 @@ half with `registerPluginTransferResource(key, impl)`: `fields(ctx)` returning
 `TransferCatalogInput`, `matchKeys` (`MatchKeySpec[]`, or `matchKeys(ctx)`
 answering `{ keys, defaults }` when an instance's own fields are its keys —
 read through `transferResourceMatchKeys`), `aliases`
-(`TransferAliasDictionary[]`), `readPage(ctx, cursor, fieldIds, options)`,
+(`TransferAliasDictionary[]`), `presets` (`TransferResourcePreset[]`, listed
+after the built-in ones; refused under a built-in id, repeated, or empty),
+`readPage(ctx, cursor, fieldIds, options)`,
 `lookup(ctx, requests)` returning the `MatchLookup` and the found records'
 current values, optional `suggest(ctx, { by, values })` (records named like
 a lookup column's unresolved values) and `lookupTargets` (lookup targets
@@ -362,8 +369,8 @@ site's captures — after the gate has checked `data.manage` on that site
 
 | route | does | request → response |
 | -- | -- | -- |
-| `fields` | what a resource offers: its descriptor, every field and group, its match keys (each a default, in order, and the presets' match-key hint), its locked rules and aliases, and the person's `TransferPrefs` from `users/{uid}/transferPrefs/{resourceKey}`. | `TransferFieldsRequest` → `TransferFieldsResponse` |
-| `export` | the chosen fields (checked against the catalog, in the person's order) of the selection (at most 10,000 ids), the list's filter or every record, read page by page through the resource's `readPage` and streamed as CSV (labels as the header, an optional byte-order mark), JSON or NDJSON. The rows are counted before the first byte — by the resource's `count` hook, or by reading ahead 5,000 rows — and sent as `X-Aglyn-Export-Rows`; a resource that cannot count and holds more goes without. An org-wide member reads everything; a collaborator scoped to some sites must reach a named site and is read through their `scopeTokens` (`memberScopeTokens`), which `readPage` must honor — the Admin SDK passes the rules. Audited as `data.transfer.export` with counts, never content. 20 a minute. | `TransferExportRequest` → the file, or `TransferErrorResponse` |
+| `fields` | what a resource offers: its descriptor, every field and group, its match keys (each a default, in order, and the presets' match-key hint), its own presets (`resourcePresets`, each holding only fields the catalog has), its locked rules and aliases, and the person's `TransferPrefs` from `users/{uid}/transferPrefs/{resourceKey}`. | `TransferFieldsRequest` → `TransferFieldsResponse` |
+| `export` | the chosen fields (checked against the catalog, in the person's order) of the selection (at most 10,000 ids), the list's filter or every record, read page by page through the resource's `readPage` and streamed as CSV (labels as the header, or the `headers` a resource preset names; an optional byte-order mark), JSON or NDJSON. The rows are counted before the first byte — by the resource's `count` hook, or by reading ahead 5,000 rows — and sent as `X-Aglyn-Export-Rows`; a resource that cannot count and holds more goes without. An org-wide member reads everything; a collaborator scoped to some sites must reach a named site and is read through their `scopeTokens` (`memberScopeTokens`), which `readPage` must honor — the Admin SDK passes the rules. Audited as `data.transfer.export` with counts, never content. 20 a minute. | `TransferExportRequest` → the file, or `TransferErrorResponse` |
 | `upload` | stores a file whole, or one part of at most 3 MB (`part`, `parts`, then `jobId`), with the CSV `delimiter` and `headerRow` the person confirmed on the first part (kept as the job's `read`); inspects each part and the whole; refuses a format the resource does not take (415), more than 24 MB or the resource's `maxBytes` (413), more rows than its `maxRows` (default 50,000; 413). Makes the job, `draft`. | `TransferUploadRequest` → `TransferUploadResponse` |
 | `analyze` | header proposal (`matchHeaders` with the resource's aliases), 20 sample rows, the catalog, match keys, locked rules, and each mapped picklist column's values against the workspace's list (`picklists` hook) with a proposed choice per unmatched value. `mapping` re-reads the values under the person's mapping and adds every mapped field's `derivations` over the whole file, each mapped lookup column's `lookups` (see below), the rows `matches` against existing records under `matchKeys` (each key, by default) and `recordLabels`; `dateOrders` reads a field's dates in the order the person chose. → `analyzed`. | `TransferAnalyzeRequest` → `TransferAnalyzeResponse` |
 | `plan` | refuses a mapping `mappingProblems` blocks, and any unmatched picklist value or unresolved lookup value without a usable choice (`choicesNeeded`, by field); reads every row, resolves picklists and lookups into row notes, looks matches up in slices of 500 values, runs `matchRows` over the whole file (so an in-file duplicate is caught across chunks) and the resource's plan, fails the rows an invariant refuses, and stores the chunks. Writes no record. → `planned`. Answers the summary, the warnings, 50 rows of each verdict (`sample`), the first 500 `conflicts` (and `conflictCount`), the `ambiguous` rows and `recordLabels`; keeps `dateOrders` and the plugin steps' `extras` on the job. `action: 'rows'` pages the stored plan, by verdict. | `TransferPlanRequest` → `TransferPlanResponse`; `TransferPlanRowsRequest` → `TransferPlanRowsResponse` |
@@ -464,7 +471,8 @@ composed of the core's shapes.
 ### What it renders
 
 - `TransferExportDialog`: presets (Re-importable by default, Everything,
-  Minimal, saved, "save these fields as"), the grouped and searchable
+  Minimal, the resource's own — whose `headers` are sent while the preset is
+  chosen as it stands — saved, "save these fields as"), the grouped and searchable
   `TransferFieldPicker` with select all or none and up/down reordering,
   scope, format and byte-order mark; the choice is saved through
   `savePrefs`.
@@ -681,3 +689,51 @@ engine's guarantees — a plan that writes nothing, an undo for seven days, an
 audit row per apply and undo — rather than teaching the row engine items. An
 apply is one request, with no chunk cursor to lease; two imports are
 serialized where it matters by the screens transaction, as before.
+
+## Commerce (AGL-3531)
+
+The commerce plugin's six resources live in `libs/plugins/commerce/src/lib/transfer/`;
+every one is a site's records (`scope: host`), registered from the console's
+server declarations, with the store-touching hooks loaded on first use.
+
+| resource | import | the record |
+| -- | -- | -- |
+| `commerce.products` | yes | a product, a row per variant (`product-transfer.ts`, `products.server.ts`) |
+| `commerce.categories` | yes | a product category; parent by slug or name |
+| `commerce.discounts` | yes | a discount; new ones start switched off |
+| `commerce.coupons` | yes | a coupon, its id being its code; new ones start switched off |
+| `commerce.orders` | no | an order, its money from `totals` (AGL-1747) |
+| `commerce.gift-cards` | no | a gift card, its id being its code |
+
+**Products fold rows.** The resource's `plan` groups the rows of one handle
+(or ID) into a product: the first row's product fields and match (handle,
+then SKU, then ID) decide the product, planned with `buildTransferPlan`; every
+row's variant fields are planned against the variant it names (SKU, then the
+option values, then a single-variant product's one variant). Each row keeps
+its verdict and diff, and carries `commerce` — the product id (minted at plan
+time for a new product, so a retried create finds what it wrote), the variant
+id, and for a new product its whole document — for the apply. A product the
+model's `validateProduct` would refuse is failed by the `product-storable`
+invariant with the reason. The lookup's record is the product's fields by
+field id plus `$variants` and `$variant:<id>`, so undo restores variants one
+by one and sees a sale since the import as an edit.
+
+**Writes keep the product write path's rules**: a create counted against
+`productsPerHost` in the transaction that creates it, born live with its
+stamps and creator, the derived search, stock and collection keys on every
+write, an activity entry per product, and a stock change logged as a
+`correction` in `inventoryAdjustments`. Locked: an existing product's handle
+and option names. Held back with a warning: a stock count kept by location.
+
+**Lists hand over their query.** The products page and the orders tab pass
+their plan's predicates and order (`commerceListFilter`); the server re-checks
+every path against the list's declaration (`readCommerceListFilter`) before
+reading through the Admin SDK, and pages by `[orderValue, id]`.
+
+**Export-only resources** declare `records`, make every field read-only, and
+refuse a row that would write with an invariant, so a dry run says why.
+
+**Shopify.** The Shopify product CSV headers are the products resource's alias
+dictionary (source `Shopify`), and its `shopify` preset writes Shopify's
+columns in Shopify's order under Shopify's names.
+

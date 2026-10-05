@@ -63,12 +63,9 @@ import {
   doc,
   documentId,
   getCountFromServer,
-  getDocs,
   limit,
   orderBy,
   query,
-  type QueryDocumentSnapshot,
-  startAfter,
   updateDoc,
   where,
 } from 'firebase/firestore'
@@ -80,35 +77,17 @@ import {
   useFirestoreCollection,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
-import {
-  listQueryConstraints,
-  useListQuery,
-} from '@aglyn/tenant-feature-instance/hooks/use-list-query'
+import { useListQuery } from '@aglyn/tenant-feature-instance/hooks/use-list-query'
 import { useHostResourceApi } from '@aglyn/tenant-feature-instance'
 import { useOrgPlan } from '@aglyn/tenant-feature-instance'
 import ProductEditorDialog from './product-editor-dialog.component'
 import { productSlugLedger } from './product-slugs'
-import { productCollectionFields, readSmartCollections } from './smart-collections'
+import { productCollectionFields } from './smart-collections'
 import ProductsHubZone from './products-hub-zone.component'
 import { pluginDocsHelp } from '@aglyn/aglyn'
-import { useConsoleWidgetSlot } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
-import {
-  PRODUCT_IMPORT_ZONE,
-  type ConsoleProductsHubZoneProps,
-} from './product-zones'
-
-/** Products read per request of the CSV export's walk. */
-const EXPORT_PAGE = 500
-
-/**
- * The most products one CSV export writes (AGL-3321).
- *
- * The export walks the table's own query page by page, so it writes what the
- * filters and search match across the whole catalog rather than the rows on
- * screen. It stops here because the file is built in the browser, and says
- * so when it does.
- */
-const EXPORT_CEILING = 10_000
+import { type ConsoleProductsHubZoneProps } from './product-zones'
+import { commerceListFilter } from '../../transfer/list-filter'
+import { COMMERCE_PRODUCTS_TRANSFER } from '../../transfer/transfer-keys'
 
 /**
  * How many of ONE product's license keys the dialog reads.
@@ -171,21 +150,16 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
     reason: CommerceModel.InventoryAdjustmentReason
     locationId: string
   } | null>(null)
-  const [importing, setImporting] = useState<{
-    text: string
-    parsed: CommerceModel.ProductCsvImport | null
-  } | null>(null)
   const [keysFor, setKeysFor] = useState<ProductRow | null>(null)
   const [keysText, setKeysText] = useState('')
   /**
-   * What the import zone set for the import in the dialog, and what the last
-   * import created with those options (AGL-2916), which the hub's zone hands
-   * to its widgets.
+   * What the last import created, with the options its After import step
+   * set (AGL-2916, AGL-3531), which the hub's zone hands to its widgets.
    */
-  const [importOptions, setImportOptions] = useState<Record<string, boolean>>({})
   const [lastImport, setLastImport] =
     useState<ConsoleProductsHubZoneProps['lastImport']>(null)
-  const WidgetSlot = useConsoleWidgetSlot()
+  // The console's import wizard and export dialog; none outside the console.
+  const transfer = Aglyn.useTransferLauncher()
 
   const {
     rows: productDocs,
@@ -519,157 +493,53 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
   )
 
   /*
-   * CSV import/export (AGL-282): Shopify-dialect columns, dry-run first.
+   * Import and export (AGL-3531) run on the console's transfer wizard and
+   * dialog, on the `commerce.products` resource: a product matched by
+   * handle, SKU or ID is updated, every step is a choice, and the export
+   * writes what the table's query matches — its filters and search — on the
+   * server, a row per variant, with a Shopify preset.
    *
-   * The export writes what the table's filters and search MATCH, across the
-   * whole catalog (AGL-3321): it walks the table's own query — the same plan,
-   * so the same scope, predicates and order — a page of `EXPORT_PAGE` at a
-   * time from a cursor, rather than writing the rows on screen. A walk that
-   * reaches `EXPORT_CEILING` stops, asks once whether anything is left, and
-   * says so when something is.
+   * When the wizard closes on its results, the products the import created
+   * reach the hub's zone with the options its After import step set.
    */
-  const [exporting, setExporting] = useState(false)
-  const handleExport = useCallback(async () => {
-    setExporting(true)
-    try {
-      const productsRef = collection(firestore, 'hosts', hostId, 'products')
-      const constraints = listQueryConstraints(plan)
-      const exported: ProductRow[] = []
-      let cursor: QueryDocumentSnapshot | null = null
-      let more = false
-      for (;;) {
-        const room = EXPORT_CEILING - exported.length
-        const snapshot = await getDocs(
-          query(
-            productsRef,
-            ...constraints,
-            ...(cursor ? [startAfter(cursor)] : []),
-            limit(room > 0 ? Math.min(EXPORT_PAGE, room) : 1),
-          ),
-        )
-        if (room <= 0) {
-          more = !snapshot.empty
-          break
-        }
-        for (const product of snapshot.docs) {
-          exported.push({
-            ...CommerceModel.liftLegacyProduct(product.data() as any),
-            $id: product.id,
+  const openImport = useCallback(() => {
+    transfer?.openImport({
+      resource: COMMERCE_PRODUCTS_TRANSFER,
+      scope: 'host',
+      hostId,
+      onFinished: () => {
+        setProductCountEpoch((epoch) => epoch + 1)
+        void (async () => {
+          const { takeProductImport, createdProductIds } = await import(
+            '../../transfer/product-import-results'
+          )
+          const finished = takeProductImport(hostId)
+          if (!finished) return
+          const productIds = await createdProductIds(user, finished)
+          setLastImport({
+            key: `${finished.jobId}-${productIds.length}`,
+            productIds,
+            options: finished.options,
           })
-        }
-        if (snapshot.docs.length < Math.min(EXPORT_PAGE, room)) break
-        cursor = snapshot.docs[snapshot.docs.length - 1]
-      }
-      const csv = CommerceModel.productsToCsv(exported)
-      const blob = new Blob([csv], { type: 'text/csv' })
-      const anchor = document.createElement('a')
-      anchor.href = URL.createObjectURL(blob)
-      anchor.download = `products-${hostId}.csv`
-      anchor.click()
-      URL.revokeObjectURL(anchor.href)
-      if (more) {
-        enqueueSnackbar(
-          `Exported the first ${EXPORT_CEILING.toLocaleString()} matching ` +
-            'products — the most one file holds. Filter the list to export the rest.',
-          { variant: 'info', persist: false },
-        )
-      }
-    } catch (error: any) {
-      enqueueSnackbar(error?.message ?? 'Could not export the products', {
-        variant: 'warning',
-        persist: false,
-      })
-    } finally {
-      setExporting(false)
-    }
-  }, [firestore, hostId, plan, enqueueSnackbar])
-
-  const handleImportApply = useCallback(async () => {
-    const parsed = importing?.parsed
-    if (!parsed || parsed.products.length === 0) return
-    // Batch-aware cap (AGL-471): the whole import must fit the plan.
-    // Not startable until the plan is known (AGL-1064) — the old `org ?`
-    // guard let an import begin against an unknown cap and leaned on the
-    // API rejecting it partway through, leaving a half-imported catalog.
-    if (!planReady) return
-    const batchQuota = Aglyn.checkQuota(
-      org,
-      'productsPerHost',
-      productCount + parsed.products.length - 1,
-    )
-    if (!batchQuota.allowed) {
-      return void enqueueSnackbar(
-        `This import needs ${parsed.products.length} product slots — your ` +
-          `plan allows ${batchQuota.limit}. See Billing to upgrade.`,
-        { variant: 'info', persist: false },
-      )
-    }
-    /*
-     * The duplicate-slug check asks the STORE (AGL-3321): every slug the file
-     * names, by `slug in […]`, and any suffixed one only when it is needed.
-     * It asked the table's rows, which held five hundred products and now
-     * hold one page, so a slug past them was handed out a second time.
-     */
-    const slugs = productSlugLedger(firestore, hostId)
-    const created: string[] = []
-    try {
-      await slugs.ask(parsed.products.map((product) => product.slug))
-      // One read of the host's smart collections for the whole file.
-      const smartCollections = await readSmartCollections(firestore, hostId)
-      // Each create rides the quota-enforcing API (AGL-473); the batch cap
-      // above short-circuits before we start, so this loop stays bounded.
-      for (const product of parsed.products) {
-        const slug = await slugs.claim(product.slug)
-        const { id } = await createHostResource({
-          hostId,
-          resource: 'product',
-          data: {
-            ...product,
-            // Search keys travel with the name on the IMPORT path too — a
-            // catalog arrives here in bulk, and the table orders, pages and
-            // searches it by these keys alone.
-            ...CommerceModel.productSearchFields(product),
-            ...CommerceModel.productStockFields(product),
-            // Its smart collections (AGL-3321).
-            collectionIds: CommerceModel.productCollectionIds(product, smartCollections),
-            slug,
-            priceUsd: product.variants[0]?.priceUsd ?? 0,
-            imageUrl: product.mediaUrls?.[0] ?? null,
-            createdAtMs: Date.now(),
-            updatedAtMs: Date.now(),
-          },
-        })
-        created.push(id)
-      }
-    } catch (error: any) {
-      return void enqueueSnackbar(error?.message ?? 'Import failed', {
-        variant: 'warning',
-        persist: false,
-      })
-    }
-    setLastImport({
-      key: `${Date.now().toString(36)}-${created.length}`,
-      productIds: created,
-      options: importOptions,
+        })()
+      },
     })
-    setImportOptions({})
-    setImporting(null)
-    setProductCountEpoch((epoch) => epoch + 1)
-    enqueueSnackbar(`Imported ${parsed.products.length} products`, {
-      variant: 'success',
-      persist: false,
+  }, [transfer, hostId, user])
+  const openExport = useCallback(() => {
+    transfer?.openExport({
+      resource: COMMERCE_PRODUCTS_TRANSFER,
+      scope: 'host',
+      hostId,
+      ...(filtering
+        ? {
+            filter: {
+              label: 'the products the list’s filters and search find',
+              value: commerceListFilter(plan),
+            },
+          }
+        : {}),
     })
-  }, [
-    importing,
-    firestore,
-    hostId,
-    createHostResource,
-    enqueueSnackbar,
-    org,
-    planReady,
-    productCount,
-    importOptions,
-  ])
+  }, [transfer, hostId, filtering, plan])
 
   const handleAdjustSave = useCallback(async () => {
     if (!adjusting) return
@@ -757,11 +627,6 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
   )
   const onCatalogCreated = useCallback(
     () => setProductCountEpoch((epoch) => epoch + 1),
-    [],
-  )
-  const setImportOption = useCallback(
-    (key: string, on: boolean) =>
-      setImportOptions((current) => ({ ...current, [key]: on })),
     [],
   )
 
@@ -969,24 +834,21 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
           >
             {'Add product'}
           </Button>
-          <Button
-            size="small"
-            disabled={!planReady}
-            onClick={() => {
-              setImportOptions({})
-              setImporting({ text: '', parsed: null })
-            }}
-          >
-            {'Import'}
-          </Button>
-          <Button
-            size="small"
-            // Nothing matches: there is nothing for the walk to write.
-            disabled={exporting || (products.length === 0 && page === 0)}
-            onClick={handleExport}
-          >
-            {exporting ? 'Exporting…' : 'Export'}
-          </Button>
+          {transfer ? (
+            <>
+              <Button size="small" disabled={!planReady} onClick={openImport}>
+                {'Import'}
+              </Button>
+              <Button
+                size="small"
+                // Nothing matches: there is nothing for the export to write.
+                disabled={products.length === 0 && page === 0}
+                onClick={openExport}
+              >
+                {'Export'}
+              </Button>
+            </>
+          ) : null}
         </Stack>
         {/* The cap, standing rather than only on refusal (AGL-2113). The
             count is `productCount` — the site's products, the same number
@@ -1173,90 +1035,6 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
             }}
           >
             {'Add keys'}
-          </Button>
-        </DialogActions>
-      </Dialog>
-      <Dialog
-        open={Boolean(importing)}
-        onClose={() => setImporting(null)}
-        maxWidth="sm"
-        fullWidth
-      >
-        <DialogTitle>{'Import products (CSV)'}</DialogTitle>
-        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-            {'Shopify-compatible columns (Handle, Title, Option/Variant ' +
-              'columns, Image Src). Paste the file contents or choose a file.'}
-          </Typography>
-          <Button component="label" size="small" sx={{ alignSelf: 'flex-start' }}>
-            {'Choose file'}
-            <input
-              type="file"
-              accept=".csv,text/csv"
-              hidden
-              onChange={async (event) => {
-                const file = event.target.files?.[0]
-                if (!file) return
-                const text = await file.text()
-                setImporting({ text, parsed: CommerceModel.parseProductsCsv(text) })
-              }}
-            />
-          </Button>
-          <TextField
-            label="CSV"
-            value={importing?.text ?? ''}
-            onChange={(event) =>
-              setImporting({
-                text: event.target.value,
-                parsed: event.target.value.trim()
-                  ? CommerceModel.parseProductsCsv(event.target.value)
-                  : null,
-              })
-            }
-            size="small"
-            multiline
-            minRows={5}
-            maxRows={10}
-          />
-          {importing?.parsed ? (
-            <>
-              <Typography variant="body2">
-                {`Ready to import ${importing.parsed.products.length} products` +
-                  (importing.parsed.errors.length
-                    ? ` — ${importing.parsed.errors.length} rows skipped:`
-                    : '')}
-              </Typography>
-              {importing.parsed.errors.slice(0, 5).map((error) => (
-                <Typography
-                  key={error}
-                  variant="caption"
-                  color="warning.main"
-                >
-                  {error}
-                </Typography>
-              ))}
-            </>
-          ) : null}
-          {WidgetSlot && importing?.parsed?.products.length ? (
-            <WidgetSlot
-              slot={PRODUCT_IMPORT_ZONE.id}
-              hostId={hostId}
-              orgId={undefined}
-              count={importing.parsed.products.length}
-              options={importOptions}
-              setOption={setImportOption}
-            />
-          ) : null}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setImporting(null)}>{'Cancel'}</Button>
-          <Button
-            variant="contained"
-            color="primary"
-            disabled={!importing?.parsed?.products.length}
-            onClick={handleImportApply}
-          >
-            {`Import${importing?.parsed?.products.length ? ` ${importing.parsed.products.length}` : ''}`}
           </Button>
         </DialogActions>
       </Dialog>

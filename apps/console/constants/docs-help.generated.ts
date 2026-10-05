@@ -645,6 +645,10 @@ export const DOCS_HELP_TOPICS = {
     path: '/staff-console/overview',
     title: 'Staff Console (internal)',
   },
+  storeImportAndExport: {
+    path: '/commerce-and-bookings/commerce/store-import-and-export',
+    title: 'Import and export store data',
+  },
   supportAndCommunity: {
     path: '/workspace-and-billing/support-and-community',
     title: 'Support & community',
@@ -818,7 +822,7 @@ export const DOCS_HELP_ANCHORS = {
   googleAnalytics: ['#setup', '#consent', '#automatic', '#engagement', '#commerce', '#web-vitals', '#authored-events', '#never-sent', '#related'],
   howAglynAiBuilds: ['#where-to-describe-a-build', '#the-plan-comes-first', '#the-building-rules', '#when-an-answer-breaks-a-rule', '#who-can-use-it', '#related'],
   import: ['#three-steps', '#what-each-column-can-hold', '#what-is-skipped-and-why', '#related'],
-  importAndExport: ['#what-a-person-sees', '#open-it', '#one-instance-at-a-time', '#add-a-step-of-your-own', '#warn-about-what-only-you-can-see', '#lock-a-rule', '#resolve-a-column-that-names-another-record', '#what-an-export-asks-of-your-server-half', '#try-it-without-a-server'],
+  importAndExport: ['#what-a-person-sees', '#open-it', '#one-instance-at-a-time', '#add-a-step-of-your-own', '#warn-about-what-only-you-can-see', '#lock-a-rule', '#resolve-a-column-that-names-another-record', '#offer-another-products-layout', '#when-a-record-is-several-rows', '#a-resource-that-only-exports', '#what-an-export-asks-of-your-server-half', '#try-it-without-a-server'],
   importExport: ['#export', '#export-fields', '#export-records', '#export-contents', '#large-exports', '#import', '#import-upload', '#import-columns', '#import-values', '#import-matching', '#import-conflicts', '#import-dry-run', '#import-apply', '#import-undo', '#tips', '#related'],
   injectionZones: ['#zones-a-plugin-hosts', '#how-a-zone-spaces-your-widget', '#staff-zones', '#column-zones', '#widgetid-is-a-persisted-identifier'],
   insights: ['#asking-a-question', '#how-an-answer-is-made', '#asking-about-datasets', '#weekly-insights', '#privacy'],
@@ -888,6 +892,7 @@ export const DOCS_HELP_ANCHORS = {
   siteSearch: ['#how-it-works', '#what-it-searches', '#the-layout-built-in-pages-use', '#configure-it', '#related'],
   sso: ['#setting-it-up', '#1-verify-your-domain', '#2-connect-your-identity-provider', '#rotating-your-signing-certificate', '#3-turn-it-on', '#how-it-works', '#enforcement', '#you-must-keep-one-way-in-that-does-not-go-through-your-idp', '#an-owner-who-signs-in-outside-your-identity-pool', '#or-a-break-glass-account-inside-the-pool', '#transferring-ownership-while-you-are-enforcing', '#if-we-cannot-check', '#consequences-worth-knowing-before-you-switch', '#testing-it', '#related'],
   staffConsole: ['#runbooks', '#whats-there', '#staff-overview', '#support-queue', '#plugin-reviews', '#organizations-admin', '#filter-the-directory', '#organization-detail', '#staff-org-email', '#free-workspace-limit', '#first-party-hosts', '#entitlement-editor', '#plan-comps', '#build-for-a-client', '#sites-admin', '#filter-the-site-list', '#site-detail', '#site-ownership', '#site-transfer', '#site-content', '#staff-automations', '#emails-sent', '#users-admin', '#acquisition', '#password-help', '#sign-one-device-out', '#email-delivery', '#import-delivery-history', '#staff-notes', '#broadcast-announcements', '#billing-insight', '#refunds', '#impersonation', '#system-emails', '#platform-send-rate', '#platform-suppressions', '#feature-flags', '#multi-tenant-architecture', '#audit-archival', '#organization-suspension', '#operator-alerts', '#ai-monitoring', '#sales-tax-return', '#audit-log', '#coupons', '#discount-floors', '#existing-coupons', '#contact-suppressions', '#access', '#which-identity-holds-staff', '#staff-inside-a-customers-tenant--a-property-worth-knowing', '#offboarding', '#break-glass-access', '#requiring-sso-for-a-company-domain', '#why-am-i-getting-a-404', '#related'],
+  storeImportAndExport: ['#export', '#products-are-a-row-per-variant', '#the-shopify-preset', '#import', '#products', '#categories', '#discounts-and-coupons', '#orders-and-gift-cards-are-exported-only'],
   supportAndCommunity: ['#support-tickets', '#ticket-status', '#what-to-include', '#community-forum', '#related'],
   supportQueue: ['#triage', '#notifications', '#related'],
   supportTiers: ['#why-enterprise-is-in-hours-not-business-days', '#what-starts-and-stops-the-clock', '#where-to-see-it'],

@@ -179,6 +179,53 @@ the transfer routes check the person's permission on that site — how a
 workspace's records are read through one site's view and imported as that
 site's captures.
 
+## Offer another product's layout
+
+A preset of your own is listed in the export dialog after the built-in ones.
+Return `presets` with your server half: an `id` that is not a built-in
+preset's, a `label`, the `fieldIds` in order and, for a layout another
+product imports, `headers` — that product's column name for each field. The
+CSV is then written under those names while the preset is chosen as it
+stands. Put the same names in an `aliases` dictionary with that product as
+its `source`, so its own export maps column for column on import.
+
+```ts
+registerPluginTransferResource('my-plugin.items', {
+  // fields, matchKeys, readPage, lookup, apply, revert…
+  aliases: [{ source: 'Other Shop', aliases: { title: ['Item Title'], sku: ['Item SKU'] } }],
+  presets: [
+    {
+      id: 'other-shop',
+      label: 'Other Shop',
+      description: 'The CSV Other Shop imports.',
+      fieldIds: ['title', 'sku'],
+      headers: { title: 'Item Title', sku: 'Item SKU' },
+    },
+  ],
+})
+```
+
+The commerce plugin's products resource offers a Shopify preset this way.
+
+## When a record is several rows
+
+A file can describe one record over several rows. A storefront export writes
+a row per product variant, for example. Give your server half a `plan` of its
+own: it receives every row of the file at once, so it can fold the rows that
+share a key into one record and still give each row its own verdict and diff.
+Anything the apply needs beyond the diff can ride on the planned row, because
+the stored dry run keeps it. The commerce products resource folds rows by
+handle this way, and matches each row's variant by SKU, then by its option
+values.
+
+## A resource that only exports
+
+Declare it with `kinds: ['records']` like any other. Make every field
+`readOnly`, and return an `invariants` entry that refuses any row that would
+write. The dry run then fails such a row with your reason. Leave the Import
+button off your surface; the commerce orders and gift cards resources work
+this way.
+
 ## What an export asks of your server half
 
 The export reads your records through your `readPage`, a page at a time,

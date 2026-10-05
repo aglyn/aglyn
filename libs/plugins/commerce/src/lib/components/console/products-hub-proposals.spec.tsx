@@ -21,17 +21,25 @@
  *
  *  1. A product with a variant that has no price says so in the Price column
  *     rather than reading `$0`, and the hub will not activate it.
- *  2. The import dialog hosts `productImport` with the import's size, and the
- *     options a widget sets there reach `productsHub` with the ids of the
- *     products the import created.
+ *  2. The import wizard's After import step (AGL-3531) hosts `productImport`
+ *     with the dry run's count of new products, and the options a widget
+ *     sets there reach `productsHub` with the ids of the products the
+ *     import created, read from the job's results when the wizard closes.
  *
  * NO STRIPE PATH IS EXERCISED and no production data is read.
  */
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import type { ReactNode } from 'react'
-import { updateDoc } from 'firebase/firestore'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { useState, type ReactNode } from 'react'
+import { getDoc, updateDoc } from 'firebase/firestore'
 import { ConsoleWidgetSlotContext } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
+import {
+  TransferLauncherContext,
+  type TransferImportLaunch,
+  type TransferLauncher,
+} from '@aglyn/aglyn/app-utils/transfer-launcher-context'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
+import { ProductImportOptionsStep } from '../../transfer/product-import-step.component'
 import type {
   ConsoleProductImportZoneProps,
   ConsoleProductsHubZoneProps,
@@ -127,6 +135,9 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
   MdiIcon: () => null,
   useConfirmationContext: () => ({ confirm: jest.fn().mockResolvedValue(undefined) }),
 }))
+jest.mock('@aglyn/shared-util-http/authorized-token', () => ({
+  authorizedFetch: jest.fn(),
+}))
 jest.mock(
   '@aglyn/shared-ui-next/contexts/next-page-title-provider',
   () => ({ NextPageTitle: () => null }),
@@ -154,15 +165,44 @@ function ShellSlot(props: { slot: string } & Record<string, unknown>) {
   )
 }
 
+/** The shell's launcher, recording what the hub opened. */
+const opened: TransferImportLaunch[] = []
+const launcher: TransferLauncher = {
+  openImport: (launch) => void opened.push(launch),
+  openExport: jest.fn(),
+  close: jest.fn(),
+}
+
 const mount = () =>
   render(
-    <ConsoleWidgetSlotContext.Provider value={ShellSlot as never}>
-      <ProductsHubCard hostId="host-1" />
-    </ConsoleWidgetSlotContext.Provider>,
+    <TransferLauncherContext.Provider value={launcher}>
+      <ConsoleWidgetSlotContext.Provider value={ShellSlot as never}>
+        <ProductsHubCard hostId="host-1" />
+      </ConsoleWidgetSlotContext.Provider>
+    </TransferLauncherContext.Provider>,
   )
+
+/** The wizard's After import step, as the wizard renders it for a job. */
+function AfterImport() {
+  const [value, setValue] = useState<unknown>({})
+  return (
+    <ConsoleWidgetSlotContext.Provider value={ShellSlot as never}>
+      <ProductImportOptionsStep
+        resource="commerce.products"
+        orgId="org-1"
+        hostId="host-1"
+        jobId="job-1"
+        value={value}
+        setValue={setValue}
+        setComplete={() => undefined}
+      />
+    </ConsoleWidgetSlotContext.Provider>
+  )
+}
 
 beforeEach(() => {
   jest.clearAllMocks()
+  opened.length = 0
   delete zones.productsHub
   delete zones.productImport
 })
@@ -192,20 +232,42 @@ describe('a product nobody has priced yet, in the products hub (AGL-2916)', () =
   })
 })
 
-describe('what an import does next (AGL-2916)', () => {
-  it('hands the import zone its size, and the options it set to the hub zone with what the import created', async () => {
-    mockCreateResource.mockResolvedValueOnce({ id: 'new-mug' }).mockResolvedValueOnce({ id: 'new-bowl' })
+describe('what an import does next (AGL-2916, AGL-3531)', () => {
+  it('hands the import zone the new products the dry run counts, and the options it set to the hub zone with what the import created', async () => {
+    jest.mocked(getDoc).mockResolvedValueOnce({
+      get: (path: string) => (path === 'summary.create' ? 2 : undefined),
+    } as never)
+    jest.mocked(authorizedFetch).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        ok: true,
+        rows: [
+          { row: 0, outcome: 'created', recordId: 'new-mug' },
+          { row: 1, outcome: 'created', recordId: 'new-mug' },
+          { row: 2, outcome: 'updated', recordId: 'lamp' },
+          { row: 3, outcome: 'created', recordId: 'new-bowl' },
+        ],
+      }),
+    } as never)
     mount()
     expect(zones.productsHub?.lastImport).toBeNull()
     fireEvent.click(await screen.findByText('Import'))
-    fireEvent.change(screen.getByLabelText('CSV'), {
-      target: { value: 'Handle,Title,Variant Price\nmug,Mug,12\nbowl,Bowl,20' },
-    })
-    fireEvent.click(await screen.findByText('Write copy for 2'))
-    expect(zones.productImport?.options).toEqual({ 'ai.writeCopy': true })
+    expect(opened).toEqual([expect.objectContaining({ resource: 'commerce.products', scope: 'host', hostId: 'host-1' })])
 
-    fireEvent.click(screen.getByRole('button', { name: 'Import 2' }))
+    // The wizard draws its After import step for the job.
+    render(<AfterImport />)
+    fireEvent.click(await screen.findByText('Write copy for 2'))
+    await waitFor(() => expect(zones.productImport?.options).toEqual({ 'ai.writeCopy': true }))
+
+    // The person leaves the wizard from its results.
+    act(() => opened[0]?.onFinished?.())
     await waitFor(() => expect(zones.productsHub?.lastImport?.productIds).toEqual(['new-mug', 'new-bowl']))
     expect(zones.productsHub?.lastImport?.options).toEqual({ 'ai.writeCopy': true })
+    expect(jest.mocked(authorizedFetch).mock.calls[0]?.[1]).toBe('/api/transfer/status')
+    expect(JSON.parse(String(jest.mocked(authorizedFetch).mock.calls[0]?.[2]?.body))).toEqual({
+      orgId: 'org-1',
+      jobId: 'job-1',
+      include: 'results',
+    })
   })
 })

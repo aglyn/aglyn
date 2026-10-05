@@ -72,7 +72,7 @@ decrement it.
 ## Write and propose with AI {#ai}
 
 Aglyn AI can write a product's description, search listing and tags from what it says
-and shows, write copy for many products or a CSV import at once, propose a first catalog
+and shows, write copy for many products or an import at once, propose a first catalog
 from a brief, and propose categories and discounts. Every proposal is reviewed before it
 is saved. Proposed products are created as drafts with their prices left empty, and
 proposed discounts are created switched off. See [Products with AI](../../ai/products-with-ai.md).

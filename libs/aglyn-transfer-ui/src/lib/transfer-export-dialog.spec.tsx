@@ -106,6 +106,38 @@ describe('TransferExportDialog', () => {
     expect(order()).toEqual(['1. Email'])
   })
 
+  it("offers the resource's own preset, and writes its columns under that product's names", async () => {
+    const client = createPeopleClient({
+      resourcePresets: [
+        {
+          id: 'crm-x',
+          label: 'CRM X layout',
+          description: 'The columns CRM X imports.',
+          fieldIds: ['email', 'name'],
+          headers: { email: 'E-mail Address', name: 'Full Name' },
+        },
+      ],
+    })
+    const exported = jest.spyOn(client, 'export')
+    const { download } = renderDialog(client)
+    await screen.findByRole('dialog', { name: 'Export people' })
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: /Preset/ }))
+    fireEvent.click(
+      within(screen.getByRole('listbox')).getByRole('option', {
+        name: /^CRM X layout/,
+      }),
+    )
+    expect(order()).toEqual(['1. Email', '2. Name'])
+    fireEvent.click(screen.getByRole('button', { name: 'Export 2 fields' }))
+    await waitFor(() => expect(download).toHaveBeenCalled())
+    expect(exported.mock.calls[0]?.[0]).toEqual(
+      expect.objectContaining({
+        fieldIds: ['email', 'name'],
+        headers: { email: 'E-mail Address', name: 'Full Name' },
+      }),
+    )
+  })
+
   it('exports the fields in the order set, for the selection, and remembers the choice', async () => {
     const { client, download } = renderDialog(createPeopleClient(), {
       selection: ['rec-1'],

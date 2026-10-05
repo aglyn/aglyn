@@ -80,6 +80,9 @@ async function handler(request: Request): Promise<Response> {
       scope,
       format: String(body['format'] ?? 'csv') as TransferFormat,
       bom: body['bom'] === true,
+      ...(body['headers'] && typeof body['headers'] === 'object' && !Array.isArray(body['headers'])
+        ? { headers: body['headers'] as Record<string, string> }
+        : {}),
       ...(scopeTokens ? { scopeTokens } : {}),
     })
     await auditTransferExport(caller, {

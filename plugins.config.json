@@ -682,6 +682,69 @@
           "page": "the Categories page"
         }
       ],
+      "transferResources": [
+        {
+          "$comment": "Products and their variants, a row per variant (AGL-3531): matched by handle, then SKU, then ID, and updated on a match; Shopify's product CSV maps column for column, and the Shopify preset writes one.",
+          "key": "commerce.products",
+          "label": "Products",
+          "singularLabel": "Product",
+          "scope": "host",
+          "kinds": ["records"],
+          "formats": ["csv", "json", "ndjson"],
+          "limits": { "maxRows": 50000 },
+          "description": "Products with their options, variants, prices, stock, images and search listing."
+        },
+        {
+          "key": "commerce.categories",
+          "label": "Product categories",
+          "singularLabel": "Product category",
+          "scope": "host",
+          "kinds": ["records"],
+          "formats": ["csv", "json", "ndjson"],
+          "limits": { "maxRows": 2000 },
+          "description": "The category tree products are filed under, matched by slug, then name."
+        },
+        {
+          "$comment": "Exported only: an order is the record of a sale. Every row a file carries is refused at the dry run.",
+          "key": "commerce.orders",
+          "label": "Orders",
+          "singularLabel": "Order",
+          "scope": "host",
+          "kinds": ["records"],
+          "formats": ["csv", "json", "ndjson"],
+          "description": "Every order with its items, money, customer and addresses. Exported only."
+        },
+        {
+          "key": "commerce.discounts",
+          "label": "Discounts",
+          "singularLabel": "Discount",
+          "scope": "host",
+          "kinds": ["records"],
+          "formats": ["csv", "json", "ndjson"],
+          "limits": { "maxRows": 5000 },
+          "description": "Discount codes and automatic promotions, matched by code, then name. New ones start switched off."
+        },
+        {
+          "key": "commerce.coupons",
+          "label": "Coupons",
+          "singularLabel": "Coupon",
+          "scope": "host",
+          "kinds": ["records"],
+          "formats": ["csv", "json", "ndjson"],
+          "limits": { "maxRows": 5000 },
+          "description": "Percent-off coupon codes, matched by code. New ones start switched off."
+        },
+        {
+          "$comment": "Exported only: a balance is money a shopper can spend, issued with its risk checks and email, never written from a file. A card's ID is its code.",
+          "key": "commerce.gift-cards",
+          "label": "Gift cards",
+          "singularLabel": "Gift card",
+          "scope": "host",
+          "kinds": ["records"],
+          "formats": ["csv", "json", "ndjson"],
+          "description": "Every gift card's code, balance and status. Exported only."
+        }
+      ],
       "contributes": {
         "site": {
           "components": [
@@ -712,7 +775,8 @@
             "commerceGlance",
             "consoleSearch",
             "hostDashboard",
-            "siteMember"
+            "siteMember",
+            "transferResources"
           ]
         }
       }
