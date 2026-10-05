@@ -243,9 +243,9 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
     why: "The bar mounts only for an authenticated editor of this site, and its favicon is resolved by the edit-context route with the same resolver the layout's <link rel=icon> uses. Its <style> is BAR_CSS, ours.",
   },
   'apps/tenant/app/[host]/[scheme]/layout.tsx': {
-    markers: 1,
+    markers: 2,
     guard: 'media-ref',
-    why: "The site favicon, the org brand favicon and its dark-tab partner (the brand profile's faviconDarkUrl, emitted as a second <link rel=icon> under prefers-color-scheme: dark — the one literal marker), the apple-touch-icons (AGL-3382) and the navigation loader logos, all through resolveMediaSrc since AGL-1407. The favicon and touch-icon sets are mapped from siteFaviconLinks / siteAppleTouchIconLinks in libs/aglyn/src/lib/app-utils/site-icon-set.ts (AGL-3484): each href is that resolved src, or the same src with an `?icon=` query naming a size our own CDN draws, so the set adds no host the resolver did not already admit. Site-relative is correct here: a page is present to resolve against.",
+    why: "The site favicon, the org brand favicon and its dark-tab partner (the brand profile's faviconDarkUrl, emitted as a second <link rel=icon> under prefers-color-scheme: dark — the one literal marker), the apple-touch-icons (AGL-3382) and the navigation loader logos, all through resolveMediaSrc since AGL-1407. The favicon and touch-icon sets are mapped from siteFaviconLinks / siteAppleTouchIconLinks in libs/aglyn/src/lib/app-utils/site-icon-set.ts (AGL-3484): each href is that resolved src, or the same src with an `?icon=` query naming a size our own CDN draws, so the set adds no host the resolver did not already admit. Site-relative is correct here: a page is present to resolve against. The second marker is the self-hosted theme-font `<style>` (AGL-3485): its @font-face rules are rebuilt from the theme's validated font fields and point at the site's own font route, never echoed from author text.",
   },
   'apps/tenant/app/api/_legal-intake/chrome.ts': {
     markers: 1,
@@ -276,6 +276,11 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
     markers: 1,
     guard: 'platform',
     why: "Not a sink: the `icons` marker is the JSON SCHEMA that DESCRIBES the web app manifest's `icons[].src` member in `/openapi.json` (AGL-2722). It is a `{ type: 'string' }` under a property key, so the only thing this file emits for it is the word `src` in a published description. The manifest's real icon URLs are built by `buildSiteManifest` in `apps/tenant/utils/site-icons.ts` (AGL-3484), outside this sweep's roots: the resolved app icon, favicon or logo made absolute against the host's public origin, then `siteManifestIcons` in `site-icon-set.ts` appends an `?icon=` query naming a size our own CDN draws — no host the resolver did not already admit. No author string is read here and no URL is produced here.",
+  },
+  'libs/aglyn/src/lib/app-utils/seo-page-facts.ts': {
+    markers: 1,
+    guard: 'off-tenant',
+    why: "Not a sink: the `image:` marker is a `SeoImage` fact the SEO check reads off a page's node tree (AGL-2910, AGL-3501) — the stored src and its alt text, so a finding can name the image whose alt is missing. It is judged by seo-audit.ts in the console's SEO check and by the AI plugin's SEO jobs; nothing here renders the src or emits a URL on a tenant page.",
   },
   'libs/aglyn/src/lib/app-utils/docs-index.generated.ts': {
     markers: 2,
