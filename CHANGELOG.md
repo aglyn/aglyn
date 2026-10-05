@@ -21,6 +21,7 @@ content on the marketing site and is written separately.
 
 ### Fixed
 
+- **console:** the production build turns off Turbopack's build cache to fit the 8 GB builder ([AGL-3570](https://linear.app/aglyn/issue/AGL-3570))
 - **forms:** form leads carry their campaign, auto-replies are transactional, and every workflow runs ([AGL-3458](https://linear.app/aglyn/issue/AGL-3458))
 - **abuse:** one fraud row per charge; a late Stripe signal joins it ([AGL-3490](https://linear.app/aglyn/issue/AGL-3490))
 - **tenant:** a page render awaits no network call without a real deadline ([AGL-3569](https://linear.app/aglyn/issue/AGL-3569))
