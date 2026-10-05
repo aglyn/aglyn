@@ -92,6 +92,36 @@ import { getScreen } from '@aglyn/tenant-runtime/get-screen'
 const screen = await getScreen({ hostId, screenId })
 ```
 
+## The render path never awaits unbounded I/O
+
+A page render, and everything it awaits — the layouts, the page-data loader,
+this pipeline, plugin page enrichers, resolvers, redirect resolvers, repeat
+readers and computed variables, and the middleware in front of them — never
+waits on outbound network I/O without a deadline of its own (AGL-3565).
+
+- Wrap the await in `boundedAwait(work, ms, fallback, label)` from
+  `@aglyn/shared-util-http/bounded-await`: a real timer race that answers with
+  `fallback` when `ms` passes, whatever the work does. Pass its `signal` to
+  `fetch` so the request is canceled too, and put the body read inside the
+  work. An `AbortSignal` on its own is not a deadline: on Vercel, Next's
+  patched `fetch` handed back a promise that never settled with
+  `AbortSignal.timeout(2500)` on it, and every uncached page on the platform
+  waited for the 60-second function limit.
+- Pick a fallback the page can render with, and say what it means: the
+  linked font stylesheet, the verdict "unreachable", a redirect rule held.
+- A process cache that outlives a request holds settled values only
+  (`createSettledValueCache`, which refuses a promise). A cached in-flight
+  promise is awaited by every later render, each with a fresh deadline in
+  front of nothing.
+- Work nothing needs the answer of is detached with `void`, never awaited.
+
+`apps/tenant/specs/render-path-bounded-io.spec.ts` sweeps every symbol a
+render can reach for a `fetch`, a `fetch` passed on as a value, a token
+exchange or `http(s).request`, and refuses one that is not behind
+`boundedAwait` or `void`. Its allowlist carries a reason per row and may only
+shrink. Firestore reads through `firebase-admin` are outside it: they carry
+the client's own deadlines.
+
 ## How it fits
 
 This is the `tenant` scope of the package map. It depends only on

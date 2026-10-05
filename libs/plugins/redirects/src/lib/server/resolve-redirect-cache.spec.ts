@@ -256,6 +256,25 @@ describe('resolveRedirect screens a rule that leaves the site (AGL-3447)', () =>
     expect(writes).toEqual([])
   })
 
+  it('⛔ a review that never answers holds the rule for this render instead of the page (AGL-3565)', async () => {
+    jest.useFakeTimers()
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+    try {
+      mockReviewSiteRedirect.mockReturnValueOnce(new Promise(() => undefined))
+      const pending = resolveRedirect(SITE, 'secure-document-access')
+      await jest.advanceTimersByTimeAsync(5_000)
+      await expect(pending).resolves.toBeNull()
+      expect(writes).toEqual([])
+      expect(warn).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ label: 'redirects.site-redirect-review' }),
+      )
+    } finally {
+      warn.mockRestore()
+      jest.useRealTimers()
+    }
+  })
+
   it('reads the host itself when the hook handed over only its id', async () => {
     await resolveRedirect(HOST, 'secure-document-access')
     expect(mockReviewSiteRedirect).toHaveBeenCalledWith(expect.objectContaining({ host: undefined }))

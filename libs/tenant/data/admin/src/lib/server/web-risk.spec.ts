@@ -176,7 +176,19 @@ describe('the uris.search client', () => {
       fetch: fetch as never,
       timeoutMs: 20,
     })
-    await expect(client.searchUri('https://slow.example/')).rejects.toThrow('aborted')
+    await expect(client.searchUri('https://slow.example/')).rejects.toThrow(/did not answer within 20 ms/)
+    // The request was canceled as well, not only abandoned.
+    expect((fetch.mock.calls[0][1] as RequestInit).signal?.aborted).toBe(true)
+  })
+
+  it('⛔ gives up on a call whose fetch never settles and ignores its signal (AGL-3565)', async () => {
+    const fetch = jest.fn(() => new Promise<Response>(() => undefined))
+    const client = createWebRiskHttpClient({
+      accessToken: async () => 'token-1',
+      fetch: fetch as never,
+      timeoutMs: 20,
+    })
+    await expect(client.searchUri('https://hung.example/')).rejects.toThrow(/did not answer/)
   })
 })
 

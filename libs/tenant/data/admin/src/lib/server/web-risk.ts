@@ -100,6 +100,7 @@ import {
   pickReputationUrls,
   setLinkReputationLookup,
 } from '@aglyn/shared-util-email/link-reputation'
+import { boundedAwait } from '@aglyn/shared-util-http/bounded-await'
 import { getApp } from 'firebase-admin/app'
 import firebaseAdmin from './firebase-admin'
 
@@ -122,6 +123,8 @@ export type WebRiskLookupMode = 'host' | 'url'
 export const WEB_RISK_TIMEOUT_MS = 1_000
 /** One lookup's budget, however many hosts and addresses it asks about. */
 export const WEB_RISK_DEADLINE_MS = 1_200
+/** The service account's token exchange; a cached token answers at once. */
+export const WEB_RISK_TOKEN_DEADLINE_MS = 3_000
 /** How long a clean answer is kept in the store. */
 export const WEB_RISK_CLEAN_TTL_MS = 12 * 60 * 60_000
 /** How long a clean answer is trusted from this process's memory. */
@@ -197,7 +200,6 @@ export function createWebRiskHttpClient(options: {
   timeoutMs?: number
   endpoint?: string
 }): WebRiskClient {
-  const request = options.fetch ?? fetch
   const timeoutMs = options.timeoutMs ?? WEB_RISK_TIMEOUT_MS
   return {
     async searchUri(uri: string): Promise<WebRiskSearchResult> {
@@ -206,21 +208,27 @@ export function createWebRiskHttpClient(options: {
       const url = new URL(options.endpoint ?? WEB_RISK_SEARCH_ENDPOINT)
       for (const type of LINK_THREAT_TYPES) url.searchParams.append('threatTypes', type)
       url.searchParams.set('uri', uri)
-      const controller = new AbortController()
-      const timer = setTimeout(() => controller.abort(), timeoutMs)
-      try {
-        const response = await request(url.toString(), {
-          method: 'GET',
-          headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
-          signal: controller.signal,
-        })
-        if (!response.ok) {
-          throw new WebRiskHttpError(response.status, await response.text().catch(() => ''))
-        }
-        return parseWebRiskSearch(await response.json())
-      } finally {
-        clearTimeout(timer)
-      }
+      // A real deadline over the request AND its body: the signal alone did
+      // not bound Next's patched fetch (AGL-3565). It still cancels the
+      // request where it can.
+      const answer = await boundedAwait(
+        async (signal) => {
+          const response = await (options.fetch ?? fetch)(url.toString(), {
+            method: 'GET',
+            headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+            signal,
+          })
+          if (!response.ok) {
+            throw new WebRiskHttpError(response.status, await response.text().catch(() => ''))
+          }
+          return parseWebRiskSearch(await response.json())
+        },
+        timeoutMs,
+        null,
+        'web-risk.search',
+      )
+      if (!answer) throw new Error(`Web Risk did not answer within ${timeoutMs} ms`)
+      return answer
     },
   }
 }
@@ -233,7 +241,14 @@ async function serviceAccountAccessToken(): Promise<string | null> {
   try {
     const credential = getApp().options.credential
     if (!credential) return null
-    return (await credential.getAccessToken())?.access_token ?? null
+    // A token exchange with Google, on a page render's path (AGL-3565).
+    const token = await boundedAwait(
+      credential.getAccessToken(),
+      WEB_RISK_TOKEN_DEADLINE_MS,
+      null,
+      'web-risk.access-token',
+    )
+    return token?.access_token ?? null
   } catch {
     return null
   }
@@ -535,14 +550,12 @@ async function lookupLinkReputationOrThrow(
       if (hostVerdict?.threats.length) return
       await Promise.all(missingUrls.filter((url) => hostOf.get(url) === host).map((url) => ask(url)))
     })
-    let timer: ReturnType<typeof setTimeout> | undefined
-    await Promise.race([
+    await boundedAwait(
       Promise.allSettled(pipelines),
-      new Promise<void>((resolve) => {
-        timer = setTimeout(resolve, options.deadlineMs ?? WEB_RISK_DEADLINE_MS)
-      }),
-    ])
-    if (timer) clearTimeout(timer)
+      options.deadlineMs ?? WEB_RISK_DEADLINE_MS,
+      undefined,
+      'web-risk.lookup',
+    )
     result.looked = looked
     const late = [...missingHosts, ...missingUrls].filter((key) => !answered.has(key)).length
     if (late) warn(Date.now(), `${late} host(s) or address(es) had no answer within the deadline`)
