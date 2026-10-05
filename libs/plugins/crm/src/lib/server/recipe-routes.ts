@@ -55,16 +55,14 @@ import {
   type AglynOrganization,
   checkEntitlement,
   createResourceUid,
-  crmActionRecipe,
-  type CrmActionRecipeId,
-  hostActionDocument,
-  hostActionRecipeId,
   hostRoleCanWrite,
   planLabelGrantingFeature,
   type PluginApiHandler,
   type PluginApiRequest,
-  validateHostAction,
+  siteInteractionDocument,
 } from '@aglyn/aglyn/server'
+import { interactionRecipeStamp } from '@aglyn/aglyn/plugin-manager/interaction-recipes'
+import { validateStoredInteraction } from '@aglyn/aglyn/plugin-manager/interaction-step-checks'
 import {
   firebaseAdmin,
   getOrgForHost,
@@ -79,6 +77,7 @@ import {
   type CrmRecipeInstallResult,
   type CrmRecipeSiteStatus,
 } from '../constants/api-routes'
+import { crmActionRecipe, type CrmActionRecipeId } from '../model/crm-recipes'
 import { authorizeOrgCaller, orgHostIds, readCrmRouteScope } from './org-caller'
 import { crmSuiteRefusal } from './suite-gate'
 
@@ -199,9 +198,11 @@ function readSiteStamps(rows: FirebaseFirestore.QuerySnapshot): {
   for (const row of rows.docs) {
     if (row.get('deletedAt') != null) continue
     live += 1
-    const stamp = hostActionRecipeId(row.data())
+    const stamp = interactionRecipeStamp(row.data())
     if (stamp === undefined) unstamped += 1
-    else if (stamp && !installed.has(stamp)) installed.set(stamp, row.id)
+    else if (stamp && !installed.has(stamp as CrmActionRecipeId)) {
+      installed.set(stamp as CrmActionRecipeId, row.id)
+    }
   }
   return { installed, unstamped, live }
 }
@@ -301,7 +302,7 @@ export const crmRecipeInstallHandler: PluginApiHandler = async (req, res) => {
 
     const hostRef = writer.host.ref
     let form: { id: string; name: string } | undefined
-    if (recipe.needs === 'form') {
+    if (recipe.picks?.kind === 'form') {
       if (!formId) {
         res.status(400).json({ error: 'Pick one of the site’s forms' })
         return
@@ -323,8 +324,10 @@ export const crmRecipeInstallHandler: PluginApiHandler = async (req, res) => {
       }
     }
 
-    const action = recipe.build(form ? { form } : undefined)
-    const problem = validateHostAction(action)
+    const action = recipe.build(form ? { picked: form } : undefined)
+    // The automation editor's own checks of every step, registered from its
+    // declarations: a recipe installs only what that editor would save.
+    const problem = validateStoredInteraction(action)
     if (problem) {
       res.status(400).json({ error: problem })
       return
@@ -348,7 +351,7 @@ export const crmRecipeInstallHandler: PluginApiHandler = async (req, res) => {
         }
       }
       tx.create(hostRef.collection('actions').doc(actionId), {
-        ...hostActionDocument(action),
+        ...siteInteractionDocument(action),
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
         createdBy: writer.uid,

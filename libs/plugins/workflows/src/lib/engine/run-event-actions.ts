@@ -20,31 +20,16 @@ import {
   checkEntitlement,
   consentGroupForHost,
   planLabelGrantingFeature,
-  checkQuota,
   evaluateExpression,
   evaluateStepGuard,
   evaluateTriggerConditions,
-  FLOW_TIMED_OUT_FIELD,
   flowSubscriptionTopicId,
   hostPublicOrigin,
   isClientActionStep,
-  isFlowSuspendingStep,
-  type HostAction,
-  type HostActionAlert,
-  type HostActionStep,
-  type HostActionStepType,
   type HostEventType,
   type HostFunction,
   type HostVariable,
-  datasetDisplayName,
-  describeDatasetRecordErrors,
-  contactContainerFieldPath,
-  datasetIntegrityFields,
-  datasetIntegrityUpdate,
-  effectiveDatasetModel,
-  ensureDeclaredCustomFieldTypes,
   normalizeTriggerConditions,
-  prepareDatasetRecordWrite,
   type PluginJobHostGate,
   resolveOrgEntitlements,
 } from '@aglyn/aglyn/server'
@@ -55,7 +40,6 @@ import {
   sendFailureReason,
 } from '@aglyn/shared-util-email'
 import {
-  dataStorageRefusal,
   enrollListMember,
   firebaseAdmin,
   flowEmailRefusal,
@@ -64,16 +48,17 @@ import {
   meterHostEmail,
   notifyHostManagers,
   consentGroupForSite,
-  orgDataCollectionForHost,
-  orgDataQueryForHost,
   resolveOrgIdForHost,
 } from '@aglyn/tenant-data-admin'
-import { announceDatasetRecordChange } from '@aglyn/tenant-data-admin/server/dataset-live-pages'
 import { activitySearchTokens } from '@aglyn/aglyn/app-utils/activity-search'
 import { visibleToHost } from '@aglyn/aglyn/app-utils/scope-tokens'
-// The leaf, not the barrel: this library's specs substitute the barrel
-// wholesale, and the lookup must reach the real index logic under them.
-import { findContactByEmail } from '@aglyn/tenant-data-admin/server/contact-email-index'
+// The person behind an address, and their filing under a campaign, through
+// the plugin that keeps people (AGL-3080): the engine opens none of its
+// collections.
+import {
+  filePluginPersonUnder,
+  findPluginPerson,
+} from '@aglyn/aglyn/plugin-manager/plugin-person-records'
 import {
   findOrgContainersByName,
   readOrgContainers,
@@ -97,6 +82,12 @@ import { describeStepOutcome } from '../model/step-outcomes'
 import { type HostWebhook, WEBHOOK_URL_PATTERN } from '../model/webhooks'
 import { eventRunSuspension } from './site-suspension'
 import {
+  recordRuns,
+  type RunMeterScope,
+  runMonthKey,
+  runsUsedThisMonth,
+} from './run-meter'
+import {
   advanceFlowEnrollment,
   claimFlowEnrollment,
   deferFlowEnrollment,
@@ -108,16 +99,9 @@ import {
   type FlowSweepResult,
   sweepDueFlowEnrollments,
 } from './flow-enrollments'
-import {
-  isCrmActionStep,
-  logCrmEmailActivity,
-  prepareCrmEmailActivity,
-  runCrmActionStep,
-} from './crm-action-steps'
 // The runtime's leaves rather than its barrel: the engine's specs substitute
 // each leaf, and a mock of the barrel would take the rest of it down too.
 import type { HostEventPayload } from '@aglyn/tenant-runtime/host-event-listeners'
-import { resolveDatasetDoc } from '@aglyn/tenant-runtime/resolve-dataset'
 import {
   resumeWorkflowEnrollment,
   runEventWorkflows,
@@ -142,6 +126,15 @@ import {
 import { runTriggeredByFields } from './run-trigger-actor'
 // By path, not the barrel: only a server run asks.
 import { pluginServerStepExecutor } from '@aglyn/aglyn/plugin-manager/plugin-server-steps'
+import { preparePluginRecordEmail } from '@aglyn/aglyn/plugin-manager/plugin-record-timeline'
+import {
+  FLOW_TIMED_OUT_FIELD,
+  type HostAction,
+  type HostActionAlert,
+  type HostActionStep,
+  type HostActionStepType,
+  isFlowSuspendingStep,
+} from '../model/host-actions'
 
 /** Bounded fan-out per event, mirroring the workflow runner. */
 const MAX_TRIGGERED_ACTIONS = 10
@@ -159,20 +152,14 @@ export interface ActionRunEnv {
    */
   actionsAllowed: boolean
   webhooksAllowed: boolean
-  /**
-   * Whether the owning org holds the CRM suite (AGL-2611) — the gate the
-   * five CRM steps take, resolved once beside `webhooksAllowed` and for the
-   * same reason: a step gated on the org doc it already read costs no
-   * second read per step.
-   */
-  crmAllowed: boolean
   depth: number
   /**
    * The owning org's billing doc, already read by the entitlement gate that
    * admitted this run, and the org's id beside it.
    *
    * Carried rather than re-read: both entry points resolve `getOrgForHost`
-   * before they build this, so the dataset caps below cost no extra org read.
+   * before they build this, so a step that gates on the plan — another
+   * plugin's step, handed both — costs no extra org read.
    * Null only when the host has no resolvable org, which the gate treats as
    * the free plan.
    */
@@ -228,7 +215,6 @@ export function automationRunEnv(input: {
     alerts: input.alerts ?? [],
     actionsAllowed: checkEntitlement(org as any, 'actions'),
     webhooksAllowed: checkEntitlement(org as any, 'webhooks'),
-    crmAllowed: checkEntitlement(org as any, 'crm'),
     depth: input.depth,
     org,
     orgId: input.owner?.orgId ?? null,
@@ -295,91 +281,6 @@ export function workflowContextFromDocs(
     variables: byName<HostVariable>(variableDocs),
     workflows,
   }
-}
-
-/**
- * Whether this dataset may take ANOTHER record, on the plan of the org that
- * owns the site — the row band and the byte band, in that order. Null when
- * the append may proceed; a reason string when it may not.
- *
- * ## Why an append needs a gate at all
- *
- * Every other door onto `datasets/{id}/records` already has one: the console
- * route re-checks `recordsPerDataset` inside the creating transaction, the
- * `/v1` record route checks it below its idempotency claim, and the public
- * form-submission leg checks the rows and the bytes. A workflow step wrote
- * with no check of either — and it is the door a visitor drives hardest,
- * because an action fires per event on a published site. A cap enforced at
- * three of four doors is not a cap; it is the shape of the one that is left.
- *
- * ## What it does NOT do
- *
- * It refuses the WRITE, never the dataset. A dataset already holding more
- * rows than the plan includes keeps every row it has and keeps being read —
- * nothing here deletes, truncates, or hides anything, and nothing may be
- * added that does. What is refused is the next row, which is the same
- * boundary the other three doors draw, and the reason a plan change cannot
- * cost a customer data they already have.
- *
- * The update leg of `updateDataset` is deliberately NOT gated: merging fields
- * into a record that already exists adds no row, so refusing it would refuse
- * the state of being over rather than the raise.
- *
- * ## What it costs
- *
- * Nothing on the plans that sell the data store. The row count is read only
- * when `recordsPerDataset` is FINITE, so an uncapped plan pays nothing; and
- * `dataStorageRefusal` answers null with no read at all whenever the plan
- * carries an `extraDataGbMonthlyUsd` rate, which every metered plan does. The
- * reads are paid on the shapes that can actually refuse.
- */
-/**
- * Refresh the live pages showing the dataset this step just wrote to
- * (AGL-3113).
- *
- * An automation that appends a row is the same change to a visitor as a form
- * submission or a console edit: the pages repeating over the dataset go on
- * serving the rows they were built from. Announced from the step rather than
- * from the run, so a workflow whose steps write two different datasets
- * refreshes both — the announce coalesces repeats of the SAME dataset itself,
- * which is what a run hitting one dataset several times needs.
- *
- * Silent without an org: datasets are org-scoped, so a host with no resolvable
- * org has no dataset to have written to. Best effort, and never thrown: the
- * row is already stored.
- */
-async function announceDatasetStepWrite(
-  env: ActionRunEnv,
-  datasetId: string,
-): Promise<void> {
-  if (!env.orgId) return
-  await announceDatasetRecordChange({
-    firestore: firebaseAdmin.app().firestore(),
-    orgId: env.orgId,
-    datasetId,
-  })
-}
-
-async function datasetAppendRefusal(
-  env: ActionRunEnv,
-  datasetRef: FirebaseFirestore.DocumentReference,
-): Promise<string | null> {
-  const limit = resolveOrgEntitlements(env.org as never).recordsPerDataset
-  if (Number.isFinite(limit)) {
-    const used = (
-      await datasetRef.collection('records').count().get()
-    ).data().count
-    if (!checkQuota(env.org as never, 'recordsPerDataset', used).allowed) {
-      return `dataset is full (${limit} records on this plan)`
-    }
-  }
-  if (!env.orgId) return null
-  const bytes = await dataStorageRefusal(
-    env.org as never,
-    firebaseAdmin.app().firestore().collection('orgs').doc(env.orgId),
-  )
-  if (!bytes) return null
-  return `dataset storage is full (${bytes.includedMb} MB on this plan)`
 }
 
 /** How a run of an action's step list ended. */
@@ -524,7 +425,7 @@ async function raiseEarnedEvent(
  *
  * An action's step list runs through it one step at a time, and so does
  * every Actions step inside a workflow — so the two engines cannot disagree
- * about what `sendEmail` or `datasetAppend` does, what a step is gated on, or
+ * about what `sendEmail` or `webhookPost` does, what a step is gated on, or
  * how its outcome reads in the run history. There is no second copy of any
  * branch below.
  *
@@ -542,8 +443,8 @@ async function runServerStep(
   const { hostId, hostRef, alerts, depth } = env
   const { event, payload, enrollmentRef } = context
   /**
-   * The one fact worth carrying into the summary — the dataset's name,
-   * the webhook's status. Set by the branch that knows it.
+   * The one fact worth carrying into the summary — the webhook's status, or
+   * whatever a plugin's step answers. Set by the branch that knows it.
    */
   let detail: string | undefined
   const failed = (error: string): ServerStepVerdict => ({ kind: 'failed', error })
@@ -711,178 +612,6 @@ async function runServerStep(
       // until AGL-2171. A 200 and a 204 are both `ok`, and knowing which is
       // the whole reason anyone opens a run history after a webhook.
       detail = String(lastStatus ?? '')
-    } else if (step.type === 'datasetAppend') {
-      // Id-first lookup (AGL-261/556); the name query is the legacy path.
-      const datasetsRef = await orgDataCollectionForHost(hostId, 'datasets')
-      const datasetDoc = await resolveDatasetDoc(datasetsRef, step, hostId)
-      if (!datasetDoc?.exists || datasetDoc.get('deletedAt')) {
-        return failed(`unknown dataset "${step.datasetName || step.datasetId}"`)
-      }
-      // Restrict to the model's field ids (AGL-556) — covers model-only
-      // datasets whose flat v1 `fields` mirror is absent.
-      const appendDataset = {
-        model: datasetDoc.get('model'),
-        fields: Array.isArray(datasetDoc.get('fields'))
-          ? datasetDoc.get('fields')
-          : [],
-      }
-      const appendModel = effectiveDatasetModel(appendDataset)
-      // A plugin's field validator runs only once its plugin registered it.
-      await ensureDeclaredCustomFieldTypes(appendModel)
-      const write = prepareDatasetRecordWrite(appendDataset, payload)
-      const values = write.values
-      // Same name precedence `findDatasetByName` resolves in.
-      const appendLabel = (
-        datasetDisplayName({
-          displayName: datasetDoc.get('displayName'),
-          name: datasetDoc.get('name'),
-        }) ||
-        step.datasetName ||
-        ''
-      ).slice(0, 60)
-      // No event field matched a field of the dataset, so there is nothing
-      // to write. An error rather than a quiet success: a run history that
-      // says `saved to Leads` while nothing saves is how a mismatched field
-      // name goes unnoticed.
-      if (!write.matched.length) {
-        return failed(
-          `no event field matches a field in dataset "${appendLabel || step.datasetId}"`,
-        )
-      }
-      // Held to the model like every other record write (AGL-2773): a value
-      // its field cannot hold refuses the whole record, and the run says
-      // which field and why instead of `saved to Leads`.
-      if (Object.keys(write.errors).length) {
-        return failed(
-          `record failed validation for dataset "${appendLabel || step.datasetId}": ${describeDatasetRecordErrors(write.errors)}`,
-        )
-      }
-      if (!Object.keys(values).length) {
-        return failed(
-          `every event field matching dataset "${appendLabel || step.datasetId}" is empty`,
-        )
-      }
-      const refusal = await datasetAppendRefusal(env, datasetDoc.ref)
-      if (refusal) return failed(refusal)
-      await datasetDoc.ref.collection('records').add({
-        values,
-        // The integrity index the console's delete check queries —
-        // carried by every write that sets `values`, or the index
-        // describes rows this one never held.
-        ...datasetIntegrityFields(appendModel, values),
-        createdAt: FieldValue.serverTimestamp(),
-      })
-      await announceDatasetStepWrite(env, datasetDoc.id)
-      // `saved to Leads` beats `saved to dataset` (AGL-2171).
-      detail = appendLabel
-    } else if (step.type === 'updateDataset') {
-      // Update-or-append (AGL-257): matches the record whose `email`
-      // field equals the payload's email; appends when nothing matches.
-      const datasetsRef = await orgDataCollectionForHost(hostId, 'datasets')
-      const datasetDoc = await resolveDatasetDoc(datasetsRef, step, hostId)
-      if (!datasetDoc?.exists || datasetDoc.get('deletedAt')) {
-        return failed(`unknown dataset "${step.datasetName || step.datasetId}"`)
-      }
-      const updateDataset = {
-        model: datasetDoc.get('model'),
-        fields: Array.isArray(datasetDoc.get('fields'))
-          ? datasetDoc.get('fields')
-          : [],
-      }
-      const updateModel = effectiveDatasetModel(updateDataset)
-      await ensureDeclaredCustomFieldTypes(updateModel)
-      const updateLabel = String(
-        datasetDisplayName({
-          displayName: datasetDoc.get('displayName'),
-          name: datasetDoc.get('name'),
-        }) ||
-          step.datasetName ||
-          step.datasetId ||
-          '',
-      ).slice(0, 60)
-      // Checked before the lookup, as an append: the fields this write
-      // supplies are held to the model whichever leg runs below, and a
-      // refusal costs no read.
-      const incoming = prepareDatasetRecordWrite(updateDataset, payload)
-      // Nothing to merge or append — an error, for the reason the append
-      // branch above gives.
-      if (!incoming.matched.length) {
-        return failed(
-          `no event field matches a field in dataset "${updateLabel}"`,
-        )
-      }
-      if (!Object.keys(incoming.values).length) {
-        return failed(
-          `every event field matching dataset "${updateLabel}" is empty`,
-        )
-      }
-      const email = String((payload as any).email ?? '').trim()
-      // `records.values` is exempt from indexing, so this lookup is served
-      // only by the `values.email` field override in
-      // cloud/firebase-firestore.indexes.json. Without that override
-      // production refuses the query and neither leg below runs.
-      const existing = email
-        ? await datasetDoc.ref
-            .collection('records')
-            .where('values.email', '==', email)
-            .limit(1)
-            .get()
-        : null
-      if (existing && !existing.empty) {
-        // A merge holds only the fields this write sent to the model: a row
-        // stored as text before AGL-2773 is not refused for a legacy value
-        // this run never touched.
-        const write = prepareDatasetRecordWrite(updateDataset, payload, {
-          existing: existing.docs[0].get('values') ?? {},
-        })
-        if (Object.keys(write.errors).length) {
-          return failed(
-            `record failed validation for dataset "${updateLabel}": ${describeDatasetRecordErrors(write.errors)}`,
-          )
-        }
-        const merged = write.values
-        await existing.docs[0].ref.set(
-          {
-            values: merged,
-            // The merging form: an update that clears the last reference
-            // has to REMOVE the index rather than omit it, or a stale
-            // array refuses a delete nothing is holding.
-            ...datasetIntegrityUpdate(
-              updateModel,
-              merged,
-              FieldValue.delete(),
-            ),
-            updatedAt: FieldValue.serverTimestamp(),
-          },
-          // `mergeFields`, not `merge: true`: a merge would fold the new
-          // `filterValues` map into the stored one key by key, and a value
-          // cleared here would go on answering its old equality. Each named
-          // field is replaced whole; `merged` already holds every value.
-          {
-            mergeFields: ['values', 'referencedIds', 'filterKeys', 'filterValues', 'updatedAt'],
-          },
-        )
-      } else {
-        // The APPEND leg of update-or-append, and the only one of the two
-        // that adds a row — the merge above rewrites a record that already
-        // counts against the band. A new row is held to the whole model,
-        // required fields included, like any other append.
-        if (Object.keys(incoming.errors).length) {
-          return failed(
-            `record failed validation for dataset "${updateLabel}": ${describeDatasetRecordErrors(incoming.errors)}`,
-          )
-        }
-        const refusal = await datasetAppendRefusal(env, datasetDoc.ref)
-        if (refusal) return failed(refusal)
-        await datasetDoc.ref.collection('records').add({
-          values: incoming.values,
-          ...datasetIntegrityFields(updateModel, incoming.values),
-          createdAt: FieldValue.serverTimestamp(),
-        })
-      }
-      // Both legs changed a row, so both make the same pages stale — an edited
-      // record reads no differently from a new one on a page that lists them.
-      await announceDatasetStepWrite(env, datasetDoc.id)
     } else if (step.type === 'notifyAdmins') {
       await notifyHostManagers(hostId, {
         type: 'system.announcement',
@@ -1026,21 +755,31 @@ async function runServerStep(
         hostId,
       )
       /*
-       * THE TIMELINE ENTRY (AGL-2615). A message addressed to the contact
-       * the event is about is logged on that contact's timeline as an
-       * email activity — the same row the console's own send logs — so an
-       * automated welcome shows beside the calls a rep made, with its
-       * delivery state. Prepared first because the row's id has to be on
-       * the message for the webhook to find it; written only after the
-       * provider accepted. Behind the suite gate like every other CRM
-       * write an action makes.
+       * THE TIMELINE ENTRY (AGL-2615). A message addressed to the person the
+       * event is about is filed on that person's timeline — the same entry a
+       * member's own send files — so an automated welcome shows beside the
+       * calls a rep made, with its delivery state. Whether the message earns
+       * an entry, and where, is the record system's to say: it is offered
+       * the message first, because the entry's tags have to ride the message
+       * for the delivery webhook to find it, and files it only after the
+       * provider accepted. No record system, or a message that earns no
+       * entry, sends untagged.
        */
-      const emailActivity = env.crmAllowed
-        ? await prepareCrmEmailActivity(
-            { hostId, org: env.org, orgId: env.orgId },
+      const recordEmail = env.orgId
+        ? await preparePluginRecordEmail({
+            orgId: env.orgId,
+            hostId,
             to,
-            payload,
-          )
+            link: {
+              ...(String(payload['contactId'] ?? '').trim()
+                ? { contactId: String(payload['contactId']).trim() }
+                : {}),
+              ...(String(payload['email'] ?? '').trim()
+                ? { email: String(payload['email']).trim() }
+                : {}),
+            },
+            org: env.org,
+          })
         : null
       // In the site's header and footer (AGL-3370): a workflow's email is the
       // site writing to its contact, in words the site owner typed.
@@ -1056,7 +795,7 @@ async function runServerStep(
         text: framed?.text || emailText,
         ...(framed?.html ? { html: framed.html } : {}),
         sendingIdentity: await hostSendingIdentity(hostId),
-        ...(emailActivity ? { tags: emailActivity.tags } : {}),
+        ...(recordEmail ? { tags: [...recordEmail.tags] } : {}),
         audience: 'tenant',
         context: enrollmentRef ? 'flow step' : 'event action',
         // A step staff released above carries its release to the send
@@ -1120,14 +859,12 @@ async function runServerStep(
       // cost.
       if (result.sent) {
         await meterHostEmail(hostId)
-        if (emailActivity) {
-          await logCrmEmailActivity(
-            { hostId, org: env.org, orgId: env.orgId },
-            emailActivity,
-            { subject: emailSubject, body: emailText, to },
-            run.id,
-          )
-        }
+        await recordEmail?.file({
+          subject: emailSubject,
+          body: emailText,
+          to,
+          sourceRef: run.id,
+        })
       }
       if (sendError) return failed(sendError)
     } else if (step.type === 'enrollList') {
@@ -1173,11 +910,11 @@ async function runServerStep(
         return failed('no contact email to assign')
       }
       // Scoped to this host (AGL-1039): a site must not reach a contact
-      // it cannot see, even to tag it onto a campaign. Through the org's
-      // address index (AGL-2633), so an address a merge folded into
-      // another record still names the person who now holds it.
-      const { ref: contactsRef } = await orgDataQueryForHost(hostId, 'contacts')
-      const contact = await findContactByEmail(contactsRef, email, { hostId })
+      // it cannot see, even to tag it onto a campaign. Asked of the plugin
+      // that keeps people (AGL-3080), whose lookup answers an address a
+      // merge folded into another record (AGL-2633) with the person who now
+      // holds it.
+      const contact = await findPluginPerson({ hostId, email, onlyVisibleToSite: true })
       if (!contact) return failed(`no contact for ${email}`)
       /*
        * THE CAMPAIGN IS RESOLVED TO A DOCUMENT, exactly as `enrollList`
@@ -1234,48 +971,20 @@ async function runServerStep(
         return failed(`campaign "${campaignLabel}" is not placed on this site`)
       }
       /*
-       * INSIDE THIS SITE'S FACET, not at the top of the document.
-       *
-       * A contact is one row shared by every site in the org, and which
-       * campaigns a merchant has filed somebody under is that merchant's
-       * business record on the same footing as their notes and their tags.
-       * Written at the top it would be readable by every other site in an
-       * agency's account.
-       *
-       * `update` with a dotted path, never `set({merge:true})`: a `set`
-       * treats the string as a literal field NAME and would mint a
-       * top-level key with dots in it. The document was just read, so the
-       * update cannot fail for absence.
+       * Filed by the plugin that keeps people, as THIS SITE holds them
+       * (AGL-3080): which campaigns a merchant has filed somebody under is
+       * that merchant's business record, on the same footing as their notes
+       * and their tags, and where it lives on the person is the owner's to
+       * know. A person the owner no longer finds for the site is not filed.
        */
-      const group = await consentGroupForSite(hostId)
-      await contact.ref.update({
-        [contactContainerFieldPath(group.groupId, 'campaign')]: FieldValue.arrayUnion(
-          campaign.id,
-        ),
-        updatedAt: FieldValue.serverTimestamp(),
+      const filed = await filePluginPersonUnder({
+        hostId,
+        orgId: campaignOrgId,
+        record: { kind: contact.kind, id: contact.id },
+        containerKind: 'campaign',
+        ids: [campaign.id],
       })
-    } else if (isCrmActionStep(step)) {
-      // The plan gate, the way `webhookPost` takes the `webhooks` one:
-      // refused into the run history with the tier that carries it, so
-      // a Free workspace whose flow names a CRM step reads why the step
-      // did nothing rather than a log that says it ran.
-      if (!env.crmAllowed) {
-        return failed(
-          `CRM steps require the ${planLabelGrantingFeature('crm')} plan`,
-        )
-      }
-      // The five CRM steps (AGL-2605) share a resolver and a scope, so
-      // they share a module; see `crm-action-steps.ts`.
-      const outcome = await runCrmActionStep(
-        { hostId, org: env.org, orgId: env.orgId },
-        run.id,
-        step,
-        payload,
-      )
-      if (outcome.error) return failed(outcome.error)
-      detail = outcome.detail
-      // A stage set by an automation IS a stage change; see `raiseEarnedEvent`.
-      if (outcome.emit) await raiseEarnedEvent(env, outcome.emit)
+      if (!filed?.filed) return failed(`no contact for ${email}`)
     } else {
       /*
        * A STEP ANOTHER PLUGIN RUNS: one that writes that plugin's records,
@@ -1770,12 +1479,9 @@ export async function runEventActions(
     const placed = await findOrgAutomationsForEvent(hostId, event)
     if (!actions.length && !placed) return alerts
 
-    const monthKey = new Date().toISOString().slice(0, 7)
-    const runCounterRef = hostRef.collection('counters').doc('actionRuns')
     // Webhook steps take the higher `webhooks` gate (AGL-149); plan gates
     // ride the owning org's doc (AGL-238).
     let webhooksAllowed = true
-    let crmAllowed = true
     /*
      * Whether each half fits under the month's allowance — all or nothing per
      * half, as the site's own actions always were.
@@ -1784,27 +1490,34 @@ export async function runEventActions(
      * were always asked, so an organization placing automations on a site can
      * never be what stops that site's own actions running. The org half is
      * asked second, against what is left after the site's half, and both
-     * count on this site's one meter: an org automation's run is this site's
+     * count on this site's meter: an org automation's run is this site's
      * run, and the usage card, the usage alerts and the COGS rollup read it
      * there.
      */
     let runSite = false
     let runOrg = false
     // Plan-less orgs resolve as free (AGL-247) — gates always run. Held for
-    // the rest of the run so the dataset caps below cost no second read.
+    // the rest of the run so a step's own plan check costs no second read.
     const owner = await getOrgForHost(hostId)
+    // The band is the WORKSPACE's (AGL-3472): every site's runs count
+    // against it, read off the org's counter — see `run-meter.ts`.
+    const meter: RunMeterScope = {
+      firestore,
+      hostRef,
+      orgId: owner?.orgId,
+      counter: 'actionRuns',
+      month: runMonthKey(),
+    }
     // A suspended site runs nothing (AGL-3356): see `eventRunSuspension`.
     if (await eventRunSuspension(hostRef, owner?.org)) return alerts
     {
       const org = owner?.org
       if (!checkEntitlement(org as any, 'actions')) return alerts
       webhooksAllowed = checkEntitlement(org as any, 'webhooks')
-      crmAllowed = checkEntitlement(org as any, 'crm')
       const limit = resolveOrgEntitlements(
         org as any,
       ).actionRunsPerMonth
-      const counterSnapshot = await runCounterRef.get()
-      const used = Number(counterSnapshot.get(monthKey) ?? 0)
+      const used = await runsUsedThisMonth(meter)
       // Asked as "would it go over", the question this gate has always
       // asked — so a counter that reads as no number refuses nothing, as
       // before, rather than refusing everything.
@@ -1831,7 +1544,6 @@ export async function runEventActions(
       // Admitted by the `actions` gate above.
       actionsAllowed: true,
       webhooksAllowed,
-      crmAllowed,
       depth,
       org: owner?.org ?? null,
       orgId: owner?.orgId ?? null,
@@ -1889,11 +1601,7 @@ export async function runEventActions(
         orgAutomation: { orgId: placed?.orgId ?? '' },
       })
     }
-    if (executed > 0) {
-      await runCounterRef
-        .set({ [monthKey]: FieldValue.increment(executed) }, { merge: true })
-        .catch(() => undefined)
-    }
+    await recordRuns({ ...meter, count: executed })
   } catch (error) {
     console.error('runEventActions failed', hostId, event, error)
   }
@@ -1927,7 +1635,7 @@ export type SingleActionSkip =
 
 /** What one dispatched action did, for a caller that has to say so. */
 export interface SingleActionOutcome {
-  /** Its steps ran, and the run counted on the site's meter. */
+  /** Its steps ran, and the run counted on the site's and workspace's meters. */
   ran: boolean
   /** Why nothing ran; `null` when it ran. */
   skipped: SingleActionSkip | null
@@ -1996,22 +1704,25 @@ export async function runSingleActionOutcome(
       return skipped('conditions')
     }
 
-    const monthKey = new Date().toISOString().slice(0, 7)
-    const runCounterRef = hostRef.collection('counters').doc('actionRuns')
     let webhooksAllowed = true
-    let crmAllowed = true
     // Held for the rest of the run, as in `runEventActions` above.
     const owner = await getOrgForHost(hostId)
+    // The workspace's band, as in `runEventActions` above (AGL-3472).
+    const meter: RunMeterScope = {
+      firestore,
+      hostRef,
+      orgId: owner?.orgId,
+      counter: 'actionRuns',
+      month: runMonthKey(),
+    }
     {
       const org = owner?.org
       if (!checkEntitlement(org as any, 'actions')) return skipped('plan')
       webhooksAllowed = checkEntitlement(org as any, 'webhooks')
-      crmAllowed = checkEntitlement(org as any, 'crm')
       const limit = resolveOrgEntitlements(
         org as any,
       ).actionRunsPerMonth
-      const counterSnapshot = await runCounterRef.get()
-      const used = Number(counterSnapshot.get(monthKey) ?? 0)
+      const used = await runsUsedThisMonth(meter)
       if (used + 1 > limit) return skipped('allowance', limit)
     }
 
@@ -2022,16 +1733,13 @@ export async function runSingleActionOutcome(
       // Admitted by the `actions` gate above.
       actionsAllowed: true,
       webhooksAllowed,
-      crmAllowed,
       depth: 0,
       org: owner?.org ?? null,
       orgId: owner?.orgId ?? null,
       loadWorkflowContext: makeWorkflowContextLoader(hostRef),
     }
     await executeAction(env, doc.id, action, event, payload)
-    await runCounterRef
-      .set({ [monthKey]: FieldValue.increment(1) }, { merge: true })
-      .catch(() => undefined)
+    await recordRuns({ ...meter, count: 1 })
     return { ran: true, skipped: null, alerts }
   } catch (error) {
     console.error('runSingleAction failed', hostId, actionId, error)
@@ -2153,7 +1861,6 @@ export async function resumeFlowEnrollment(
     // Admitted by the `actions` gate above.
     actionsAllowed: true,
     webhooksAllowed: checkEntitlement(owner?.org as any, 'webhooks'),
-    crmAllowed: checkEntitlement(owner?.org as any, 'crm'),
     depth: 0,
     org: owner?.org ?? null,
     orgId: owner?.orgId ?? null,
@@ -2205,12 +1912,14 @@ export async function resumeFlowEnrollment(
    * limit enforced against a person rather than against the decision that
    * added them. The gate belongs at enrollment, and that is where it is.
    */
-  const monthKey = new Date(nowMs).toISOString().slice(0, 7)
-  await hostRef
-    .collection('counters')
-    .doc('actionRuns')
-    .set({ [monthKey]: FieldValue.increment(1) }, { merge: true })
-    .catch(() => undefined)
+  await recordRuns({
+    firestore,
+    hostRef,
+    orgId: owner?.orgId,
+    counter: 'actionRuns',
+    month: runMonthKey(nowMs),
+    count: 1,
+  })
   return ending
 }
 

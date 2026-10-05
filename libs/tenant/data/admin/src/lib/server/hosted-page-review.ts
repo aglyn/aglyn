@@ -68,10 +68,12 @@
  * action or lure, and a call to action that leaves the site beside a lure,
  * only for a workspace in its first fortnight. The workspace's documents are
  * read only when something was found, so a clean page costs no read for
- * this. The page's foreign hosts are looked up first, against a cache
- * (`web-risk.ts`), and noted beside the version it serves so the daily
- * re-check can look again: a harvester is often listed only after it is
- * published. A lookup that fails finds nothing, so it never holds a page.
+ * this. The page's foreign hosts — and, in `'url'` mode (AGL-3459), its
+ * links' addresses without their query strings — are looked up first,
+ * against a cache (`web-risk.ts`), and noted beside the version it serves so
+ * the daily re-check can look again: a harvester is often listed only after
+ * it is published. A lookup that fails finds nothing, so it never holds a
+ * page.
  *
  * Fails CLOSED, unlike the send path: a page the pure screen flagged whose
  * review cannot finish — the workspace read, the row write — is answered
@@ -111,7 +113,8 @@ import {
   signalsThatHold,
 } from '@aglyn/shared-util-email/outbound-phishing-screen'
 import {
-  foreignHostsForReputation,
+  type ForeignReputationLinks,
+  foreignLinksForReputation,
   webRiskSignals,
 } from '@aglyn/shared-util-email/link-reputation'
 import { FieldValue } from 'firebase-admin/firestore'
@@ -121,7 +124,7 @@ import { notifyRiskEvent } from './risk-notice'
 import { orgAgeDays } from './org-age'
 import { requestPageSecurityHold } from './page-security-hold'
 import { getHostDocAdmin, getOrgForHost } from './organizations'
-import { lookupHostReputation, platformReputationExclusions } from './web-risk'
+import { lookupLinkReputation, platformReputationExclusions } from './web-risk'
 import {
   canonicalJson,
   fileOutboundHold,
@@ -189,12 +192,13 @@ const servedMemo = new Map<string, string>()
 const flaggedMemo = new Map<string, number>()
 const FLAGGED_MEMO_TTL_MS = 60 * 60_000
 /**
- * The foreign hosts each reviewed page version links to (AGL-3451), for
+ * The foreign hosts each reviewed page version links to (AGL-3451), and the
+ * addresses on them worth asking about (AGL-3459), for
  * {@link recordServedPageVersion} to note beside the version it served, which
  * is what the daily link re-check walks. Bounded: a process that reviews more
  * pages than this starts again.
  */
-const reviewedForeignHosts = new Map<string, string[]>()
+const reviewedForeignHosts = new Map<string, ForeignReputationLinks>()
 const REVIEWED_FOREIGN_HOSTS_MAX = 10_000
 
 /** Test seam: forget what this process learned. */
@@ -206,26 +210,28 @@ export function resetHostedPageReviewMemoForTests(): void {
 }
 
 /**
- * Every foreign host the page links to, and the ones Google Web Risk lists
- * (AGL-3451). Foreign before the workspace is known: not the platform's
- * own, not a brand's own domain, not a common social link. Never throws; a
- * lookup that failed lists nothing.
+ * Every foreign host the page links to, the addresses on them worth asking
+ * about, and the ones Google Web Risk lists (AGL-3451; addresses only in
+ * `'url'` mode, AGL-3459). Foreign before the workspace is known: not the
+ * platform's own, not a brand's own domain, not a common social link. The
+ * addresses carry no query string or fragment. Never throws; a lookup that
+ * failed lists nothing.
  */
 async function pageLinkReputation(
-  linkHosts: readonly string[],
-): Promise<{ hosts: string[]; signals: PhishingScreenSignal[] }> {
+  linkUrls: readonly string[],
+): Promise<ForeignReputationLinks & { signals: PhishingScreenSignal[] }> {
   // Runs before the review's fail-closed `try`, so it must not throw: an
   // answer it cannot give is no listing, never a reason to hold.
   try {
-    const hosts = foreignHostsForReputation(linkHosts, {
+    const foreign = foreignLinksForReputation(linkUrls, {
       excludeDomains: platformReputationExclusions(),
     })
-    if (!hosts.length) return { hosts, signals: [] }
-    const answer = await lookupHostReputation(hosts)
-    return { hosts, signals: webRiskSignals(answer.hits) }
+    if (!foreign.hosts.length) return { ...foreign, signals: [] }
+    const answer = await lookupLinkReputation(foreign.hosts, { urls: foreign.urls })
+    return { ...foreign, signals: webRiskSignals(answer.hits) }
   } catch (error) {
     console.warn('[page-review] link reputation could not be read — no listing assumed', error)
-    return { hosts: [], signals: [] }
+    return { hosts: [], urls: [], signals: [] }
   }
 }
 
@@ -279,9 +285,12 @@ export async function reviewHostedPage(
   // Every foreign host it points at, against the reputation list
   // (AGL-3451): a harvester known to be bad anywhere holds however plain the
   // page around it is. Strong, so it holds at any workspace age.
-  const reputation = await pageLinkReputation(found.linkHosts)
+  const reputation = await pageLinkReputation(found.linkUrls)
   if (reviewedForeignHosts.size >= REVIEWED_FOREIGN_HOSTS_MAX) reviewedForeignHosts.clear()
-  reviewedForeignHosts.set(`${request.hostId}/${request.screenId}/${request.versionId}`, reputation.hosts)
+  reviewedForeignHosts.set(`${request.hostId}/${request.screenId}/${request.versionId}`, {
+    hosts: reputation.hosts,
+    urls: reputation.urls,
+  })
   const listed = [...reputation.signals, ...(request.extraSignals ?? [])]
   if (!found.signals.length && !listed.length) return { outcome: 'serve' }
 
@@ -476,7 +485,7 @@ export async function reviewSiteRedirect(
   const found = screenSiteRedirect({ source: request.source, destination: request.destination })
   // Where it sends visitors, against the reputation list (AGL-3451): a
   // listed destination holds for every workspace, as a listed link does.
-  const reputation = await pageLinkReputation(found.linkHosts)
+  const reputation = await pageLinkReputation(found.linkUrls)
   if (!found.signals.length && !reputation.signals.length) return { outcome: 'serve' }
 
   const nowMs = request.nowMs ?? Date.now()
@@ -722,25 +731,34 @@ export async function recordServedPageVersion(
   versionId: string,
 ): Promise<void> {
   const key = `${hostId}/${screenId}`
-  // The foreign hosts this version links to, as its review found them
-  // (AGL-3451): noted beside it so the daily link re-check can walk them.
-  const foreignHosts = reviewedForeignHosts.get(`${key}/${versionId}`)
-  const memoValue = foreignHosts ? `${versionId}|${foreignHosts.join(',')}` : versionId
+  // The foreign hosts this version links to, and the addresses on them, as
+  // its review found them (AGL-3451, AGL-3459): noted beside it so the daily
+  // link re-check can walk them. An address carries no query string.
+  const foreign = reviewedForeignHosts.get(`${key}/${versionId}`)
+  const linksKey = foreign ? `${foreign.hosts.join(',')}|${foreign.urls.join(',')}` : ''
+  const memoValue = foreign ? `${versionId}|${linksKey}` : versionId
   if (!versionId || servedMemo.get(key) === memoValue) return
   try {
     const ref = pageReviewRef(hostId, screenId)
     const snapshot = await ref.get()
     const versionMoved = snapshot.get('servedVersionId') !== versionId
-    const stored = snapshot.get('foreignHosts')
-    const hostsMoved =
-      foreignHosts !== undefined &&
-      (Array.isArray(stored) ? stored.join(',') : '') !== foreignHosts.join(',')
-    if (versionMoved || hostsMoved) {
+    const storedHosts = snapshot.get('foreignHosts')
+    const storedLinks = snapshot.get('foreignLinks')
+    const linksMoved =
+      foreign !== undefined &&
+      `${Array.isArray(storedHosts) ? storedHosts.join(',') : ''}|${
+        Array.isArray(storedLinks) ? storedLinks.join(',') : ''
+      }` !== linksKey
+    if (versionMoved || linksMoved) {
       await ref.set(
         {
           ...(versionMoved ? { servedVersionId: versionId, servedAtMs: Date.now() } : {}),
-          ...(foreignHosts
-            ? { foreignHosts, foreignHostCount: foreignHosts.length }
+          ...(foreign
+            ? {
+                foreignHosts: foreign.hosts,
+                foreignHostCount: foreign.hosts.length,
+                foreignLinks: foreign.urls,
+              }
             : {}),
         },
         { merge: true },

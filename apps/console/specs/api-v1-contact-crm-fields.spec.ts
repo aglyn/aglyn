@@ -94,10 +94,16 @@ jest.mock('@aglyn/aglyn/server', () => ({
   ...jest.requireActual(
     '../../../libs/aglyn/src/lib/foundation/definitions/contact.types',
   ),
+  createResourceUid: () => `con_${++mockUidSeq}`,
+}))
+
+// The data plugin's dataset model, as the dataset handlers read it
+// (AGL-3080: the model is the data plugin's own).
+jest.mock('../../../libs/plugins/data/src/lib/model/dataset-models', () => ({
+  ...jest.requireActual('../../../libs/plugins/data/src/lib/model/dataset-models'),
   effectiveDatasetModel: () => ({ fields: [] }),
   coerceDocumentValues: (_m: unknown, v: Record<string, unknown>) => v,
   validateDocument: () => ({}),
-  createResourceUid: () => `con_${++mockUidSeq}`,
 }))
 
 jest.mock('firebase-admin/firestore', () => {
@@ -366,6 +372,51 @@ describe('PATCH /v1/contacts/{id} with a CRM profile', () => {
 })
 
 /**
+ * AGL-3511 — a contact's lead source over `/v1`: a facet field like the
+ * rest of the profile, judged against the org's Lead source list exactly
+ * as a lead's is.
+ */
+describe('a contact’s lead source', () => {
+  it('stores an active value as the list spells it, on the named site’s facet', async () => {
+    const response = await call('POST', 'contacts', {
+      email: 'robin@example.com',
+      consentSiteId: 'host-1',
+      leadSource: '  trade   SHOW ',
+    })
+    expect(response.status).toBe(201)
+    const view = await json(response)
+    expect(view.leadSource).toBe('Trade show')
+    const stored = mockDocs.get(`${CONTACTS}/${view.id}`)!
+    expect((stored.facets as any)['grp-a'].leadSource).toBe('Trade show')
+    expect(stored).not.toHaveProperty('leadSource')
+  })
+
+  it('refuses a value the list does not hold, naming what it allows, and keeps the holder’s own', async () => {
+    const refused = await call('POST', 'contacts', {
+      email: 'robin@example.com',
+      consentSiteId: 'host-1',
+      leadSource: 'Carrier pigeon',
+    })
+    expect(refused.status).toBe(400)
+    expect((await json(refused)).error.fields.leadSource).toMatch(/^Lead source must be one of: Web, /)
+    // A value the holder already keeps is never refused on a re-save.
+    mockDocs.set(`${CONTACTS}/c-1`, {
+      email: 'robin@example.com',
+      facets: { 'grp-a': { sources: {}, interactions: [], leadSource: 'Carrier pigeon' } },
+    })
+    const kept = await call('PATCH', 'contacts/c-1', { consentSiteId: 'host-1', leadSource: 'carrier pigeon' })
+    expect(kept.status).toBe(200)
+    expect((mockDocs.get(`${CONTACTS}/c-1`)!.facets as any)['grp-a'].leadSource).toBe('Carrier pigeon')
+    // …but another holder's value is not this holder's to keep.
+    const other = await call('PATCH', 'contacts/c-1', { consentSiteId: 'host-2', leadSource: 'Carrier pigeon' })
+    expect(other.status).toBe(400)
+    // A null clears it.
+    await call('PATCH', 'contacts/c-1', { consentSiteId: 'host-1', leadSource: null })
+    expect((mockDocs.get(`${CONTACTS}/c-1`)!.facets as any)['grp-a']).not.toHaveProperty('leadSource')
+  })
+})
+
+/**
  * AGL-2662 — a record's files are a facet field like every other. An agency
  * running two client brands has one contact document between them, and a
  * contract one client filed is not the other client's to read; a `mediaIds`
@@ -595,5 +646,138 @@ describe('reading the profile', () => {
     const bad = await call('GET', 'contacts?lifecycleStage=customers')
     expect(bad.status).toBe(400)
     expect((await json(bad)).error.fields.lifecycleStage).toMatch(/Must be one of/)
+  })
+})
+
+/**
+ * AGL-3515 — Salesforce's standard contact fields over `/v1`: per holder
+ * like the rest of the profile, normalized by the console's rules, the
+ * holder's name made of a first and last name, the salutation held to the
+ * org's list, and the reports-to to a contact that does not loop back.
+ */
+describe("Salesforce's standard contact fields", () => {
+  const STANDARD = {
+    salutation: 'dr.',
+    firstName: 'Ada',
+    lastName: 'Lovelace',
+    department: 'Research',
+    mobilePhone: '(512) 555-0101',
+    homePhone: '512 555 0102',
+    otherPhone: '+44 20 7946 0958',
+    fax: '512-555-0109',
+    birthdate: '1815-12-10',
+    assistantName: 'Mary',
+    assistantPhone: '512 555 0103',
+    otherAddress: { line1: '2 Side St', country: 'us' },
+    doNotCall: true,
+  }
+
+  it('files every field on the named facet, normalized, and composes the name', async () => {
+    const response = await call('POST', 'contacts', {
+      email: 'ada@example.com',
+      consentSiteId: 'host-1',
+      ...STANDARD,
+    })
+    expect(response.status).toBe(201)
+    const view = await json(response)
+    const expected = {
+      salutation: 'Dr.',
+      firstName: 'Ada',
+      lastName: 'Lovelace',
+      department: 'Research',
+      mobilePhone: '+15125550101',
+      homePhone: '+15125550102',
+      otherPhone: '+442079460958',
+      fax: '+15125550109',
+      birthdate: '1815-12-10',
+      assistantName: 'Mary',
+      assistantPhone: '+15125550103',
+      otherAddress: { line1: '2 Side St', country: 'US' },
+      doNotCall: true,
+    }
+    expect(view).toMatchObject({ ...expected, name: 'Ada Lovelace', reportsToContactId: null })
+    const stored = mockDocs.get(`${CONTACTS}/${view.id}`)!
+    const facets = stored.facets as Record<string, Record<string, unknown>>
+    expect(facets['grp-a']).toMatchObject({ ...expected, name: 'Ada Lovelace' })
+    for (const field of Object.keys(expected)) expect(stored).not.toHaveProperty(field)
+  })
+
+  it('reads an unset flag as false and every unset field as null', async () => {
+    mockDocs.set(`${CONTACTS}/c-9`, { email: 'kit@example.com' })
+    expect(await json(await call('GET', 'contacts/c-9'))).toMatchObject({
+      salutation: null,
+      firstName: null,
+      birthdate: null,
+      reportsToContactId: null,
+      otherAddress: null,
+      doNotCall: false,
+    })
+  })
+
+  it('names each value that does not survive its rule', async () => {
+    const response = await call('POST', 'contacts', {
+      email: 'ada@example.com',
+      consentSiteId: 'host-1',
+      salutation: 'Sir',
+      mobilePhone: 'ext 12',
+      birthdate: '2999-01-01',
+      doNotCall: 'yes',
+      reportsToContactId: 'c-missing',
+    })
+    expect(response.status).toBe(400)
+    const body = await json(response)
+    expect(body.error.fields).toMatchObject({
+      mobilePhone: 'Must be a phone number with a country code, like +15125550123',
+      birthdate: 'Birthdate must be a past date written YYYY-MM-DD, like 1984-07-21.',
+      doNotCall: 'Must be true or false',
+    })
+    const lookups = await json(
+      await call('POST', 'contacts', {
+        email: 'ada@example.com',
+        consentSiteId: 'host-1',
+        salutation: 'Sir',
+        reportsToContactId: 'c-missing',
+      }),
+    )
+    expect(lookups.error.fields).toEqual({
+      salutation: 'Salutation must be one of: Mr., Ms., Mrs., Dr., Prof..',
+      reportsToContactId: 'No such contact in this organization',
+    })
+  })
+
+  it('recomposes the name on a patch, clears with null, and refuses a reports-to loop', async () => {
+    mockDocs.set(`${CONTACTS}/c-1`, {
+      email: 'ada@example.com',
+      facets: {
+        'grp-a': { sources: {}, interactions: [], name: 'Ada', firstName: 'Ada', doNotCall: true },
+      },
+    })
+    mockDocs.set(`${CONTACTS}/c-2`, {
+      email: 'bea@example.com',
+      facets: { 'grp-a': { sources: {}, interactions: [], reportsToContactId: 'c-1' } },
+    })
+    const patched = await call('PATCH', 'contacts/c-1', {
+      consentSiteId: 'host-1',
+      lastName: 'King',
+      doNotCall: false,
+    })
+    expect(patched.status).toBe(200)
+    const facet = (mockDocs.get(`${CONTACTS}/c-1`)!.facets as any)['grp-a']
+    expect(facet).toMatchObject({ name: 'Ada King', firstName: 'Ada', lastName: 'King' })
+    expect(facet).not.toHaveProperty('doNotCall')
+
+    const self = await call('PATCH', 'contacts/c-1', {
+      consentSiteId: 'host-1',
+      reportsToContactId: 'c-1',
+    })
+    expect((await json(self)).error.fields).toEqual({
+      reportsToContactId: 'A contact cannot report to themselves.',
+    })
+    const loop = await call('PATCH', 'contacts/c-1', {
+      consentSiteId: 'host-1',
+      reportsToContactId: 'c-2',
+    })
+    expect(loop.status).toBe(400)
+    expect((await json(loop)).error.fields.reportsToContactId).toMatch(/would make a loop/)
   })
 })

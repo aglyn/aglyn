@@ -40,13 +40,15 @@ import {
   collectionSearchSchema,
   collectionShareSchema,
   loadCollectionFuse,
+  loadEntriesSearch,
 } from './collection'
 
-// The matcher loads on a reader's first keystroke (AGL-3401). Loaded once up
-// front here, so every search assertion below reads the answer the keystroke
-// produces rather than the fetch in front of it; the fetch itself is
+// The matcher loads on a reader's first keystroke (AGL-3401), and an entries
+// block's search box with the first block that turns it on (AGL-3438). Both
+// are loaded once up front here, so every search assertion below reads the
+// answer rather than the fetch in front of it; the fetches themselves are
 // `collection-search-on-demand.spec.tsx`'s subject.
-beforeAll(() => loadCollectionFuse())
+beforeAll(() => Promise.all([loadCollectionFuse(), loadEntriesSearch()]))
 
 describe('Collection entries block (AGL-551)', () => {
   it('registers under the persisted compose-time component ids', () => {
@@ -1098,8 +1100,12 @@ describe('Entry body block (AGL-551)', () => {
         />,
       )
       const image = container.querySelector('img') as HTMLImageElement
+      // Up to the asset's own 1200 pixels, described truthfully (AGL-3486).
       expect(image.getAttribute('srcset')).toBe(
-        [320, 640, 1280, 1920].map((w) => `${CDN}?w=${w} ${w}w`).join(', '),
+        [160, 320, 480, 640, 768, 960]
+          .map((w) => `${CDN}?w=${w} ${w}w`)
+          .concat(`${CDN}?w=1280 1200w`)
+          .join(', '),
       )
       expect(image.getAttribute('sizes')).toBe('(max-width: 1200px) 100vw, 1200px')
       expect(image.getAttribute('width')).toBe('1200')

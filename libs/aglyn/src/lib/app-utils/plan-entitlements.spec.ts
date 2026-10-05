@@ -196,7 +196,7 @@ describe('plan entitlements', () => {
     // compare it to any more, so what is pinned now is that no plan declares
     // the retired key at all. A default reintroduced by hand would put the
     // staff override field back on the dialog with nothing behind it.
-    expect(PLAN_ENTITLEMENTS.enterprise.storagePerHostMb).toBe(122_880)
+    expect(PLAN_ENTITLEMENTS.enterprise.storagePerHostMb).toBe(40_960)
     for (const plan of Object.values(PLAN_ENTITLEMENTS)) {
       expect(plan).not.toHaveProperty('totalSiteSizeMb')
     }
@@ -357,7 +357,7 @@ describe('plan entitlements', () => {
         extraCollaboratorMonthlyUsd: 1,
         extraDatasetMonthlyUsd: 1,
         extraDataGbMonthlyUsd: 0.36,
-        extraApiRequestsUsdPer1k: 0.2,
+        extraApiRequestsUsdPer1k: 0.25,
         extraAssistCreditsUsdPer1k: 2.25,
         aiAddonMonthlyUsd: 99,
         extraContactsUsdPer1k: 0.4,
@@ -372,7 +372,7 @@ describe('plan entitlements', () => {
         extraCollaboratorMonthlyUsd: 1,
         extraDatasetMonthlyUsd: 1,
         extraDataGbMonthlyUsd: 0.36,
-        extraApiRequestsUsdPer1k: 0.15,
+        extraApiRequestsUsdPer1k: 0.25,
         extraAssistCreditsUsdPer1k: 2,
         aiAddonMonthlyUsd: 299,
         extraContactsUsdPer1k: 0.4,
@@ -506,15 +506,15 @@ describe('plan entitlements', () => {
     // cannot pass.
     expect(checkQuota(org, 'hostLimit', 199).allowed).toBe(true)
     expect(checkQuota(org, 'hostLimit', 200).allowed).toBe(false)
-    expect(checkSeatQuota(org, 'managers', 199).allowed).toBe(true)
-    expect(checkSeatQuota(org, 'managers', 1_000).allowed).toBe(false)
-    expect(checkSeatQuota(org, 'members', 499).allowed).toBe(true)
-    expect(checkDatasetQuota(org, 3_999).allowed).toBe(true)
-    expect(checkDatasetQuota(org, 10_000).allowed).toBe(false)
-    expect(checkDataStorageQuota(org, 1_023_999).allowed).toBe(true)
-    expect(checkDataStorageQuota(org, 1_024_000).allowed).toBe(false)
-    expect(checkApiRequestQuota(org, 9_999_999).allowed).toBe(true)
-    expect(checkApiRequestQuota(org, 10_000_000).allowed).toBe(false)
+    expect(checkSeatQuota(org, 'managers', 19).allowed).toBe(true)
+    expect(checkSeatQuota(org, 'managers', 20).allowed).toBe(false)
+    expect(checkSeatQuota(org, 'members', 9).allowed).toBe(true)
+    expect(checkDatasetQuota(org, 99).allowed).toBe(true)
+    expect(checkDatasetQuota(org, 100).allowed).toBe(false)
+    expect(checkDataStorageQuota(org, 409_599).allowed).toBe(true)
+    expect(checkDataStorageQuota(org, 409_600).allowed).toBe(false)
+    expect(checkApiRequestQuota(org, 169_999).allowed).toBe(true)
+    expect(checkApiRequestQuota(org, 170_000).allowed).toBe(false)
     expect(checkCrmRecordsQuota(org, 999_999).allowed).toBe(true)
     expect(checkCrmRecordsQuota(org, 1_000_000).allowed).toBe(false)
     expect(checkCrmEmailQuota(org, 1_999).allowed).toBe(true)
@@ -558,7 +558,7 @@ describe('plan entitlements', () => {
         .bandwidthGb,
     ).toBe(UNLIMITED)
     // CONTROL: without the override the fallback stands.
-    expect(resolveOrgEntitlements({ plan: 'enterprise' } as any).bandwidthGb).toBe(970)
+    expect(resolveOrgEntitlements({ plan: 'enterprise' } as any).bandwidthGb).toBe(790)
   })
 
   it('reports no list-price revenue for an enterprise org without a deal price', () => {
@@ -600,14 +600,16 @@ describe('plan entitlements', () => {
         ]),
       ),
     ).toEqual({
+      // Included seats are kept small on purpose so buying more is a real
+      // choice; the maxima a plan may buy up to did not move (AGL-3469).
       free: [1, 1, 1, 1],
-      starter: [2, 5, 3, 10],
-      pro: [5, 20, 10, 25],
-      advanced: [50, 250, 100, 250],
-      business: [15, 100, 50, 100],
-      scale: [25, 150, 75, 150],
-      agency: [100, 500, 250, 1000],
-      enterprise: [200, 1000, 500, 2000],
+      starter: [2, 5, 2, 10],
+      pro: [3, 20, 3, 25],
+      advanced: [10, 250, 5, 250],
+      business: [5, 100, 5, 100],
+      scale: [5, 150, 5, 150],
+      agency: [10, 500, 5, 1000],
+      enterprise: [20, 1000, 10, 2000],
     })
   })
 
@@ -672,10 +674,10 @@ describe('plan entitlements', () => {
 
   it('checkDatasetQuota counts purchased addon datasets up to the max (AGL-132/240)', () => {
     const org = { plan: 'starter', seatAddons: { datasets: 2 } } as any
-    const quota = checkDatasetQuota(org, 4)
-    expect(quota.limit).toBe(5)
+    const quota = checkDatasetQuota(org, 3)
+    expect(quota.limit).toBe(4)
     expect(quota.allowed).toBe(true)
-    expect(checkDatasetQuota(org, 5).allowed).toBe(false)
+    expect(checkDatasetQuota(org, 4).allowed).toBe(false)
     // Hard max: starter caps at 10 org datasets no matter how many addons.
     const maxed = { plan: 'starter', seatAddons: { datasets: 99 } } as any
     expect(checkDatasetQuota(maxed, 0).limit).toBe(10)
@@ -929,16 +931,16 @@ describe('plan entitlements', () => {
   })
 
   it('checkDataStorageQuota meters overage on paid plans, blocks on free (AGL-240)', () => {
-    // Starter includes 1 GB; 1.5 GB used → 0.5 GB overage at $0.36/GB.
-    const starter = checkDataStorageQuota({ plan: 'starter' } as any, 1536)
+    // Starter includes 512 MB; 1 GB used → 0.5 GB overage at $0.36/GB.
+    const starter = checkDataStorageQuota({ plan: 'starter' } as any, 1024)
     expect(starter.allowed).toBe(true)
-    expect(starter.includedMb).toBe(1024)
+    expect(starter.includedMb).toBe(512)
     expect(starter.overageGb).toBeCloseTo(0.5)
     expect(starter.overageMonthlyUsd).toBeCloseTo(0.18)
     // Within the included size there is no overage.
     const within = checkDataStorageQuota({ plan: 'pro' } as any, 1024)
     expect(within.overageGb).toBe(0)
-    expect(within.remainingMb).toBe(4096)
+    expect(within.remainingMb).toBe(1024)
     // Free has no metered rate and hard-blocks at the (zero) included size.
     const free = checkDataStorageQuota({ plan: 'free' } as any, 1)
     expect(free.allowed).toBe(false)
@@ -946,21 +948,22 @@ describe('plan entitlements', () => {
   })
 
   it('checkApiRequestQuota meters overage on Business/Advanced, blocks below (AGL-634)', () => {
-    // Business includes 100k requests; 150k used → 50k over at $0.50/1k = $25.
-    const business = checkApiRequestQuota({ plan: 'business' } as any, 150_000)
+    // Business includes 1,500 requests; 51,500 used → 50k over at $0.50/1k = $25.
+    const business = checkApiRequestQuota({ plan: 'business' } as any, 51_500)
     expect(business.allowed).toBe(true)
-    expect(business.included).toBe(100_000)
+    expect(business.included).toBe(1_500)
     expect(business.overageRequests).toBe(50_000)
     expect(business.overageMonthlyUsd).toBeCloseTo(25)
     expect(business.overageRateUsd).toBe(0.5)
-    // Advanced: 1M included, cheaper overage ($0.20/1k). 1.1M → 100k over = $20.
-    const advanced = checkApiRequestQuota({ plan: 'advanced' } as any, 1_100_000)
-    expect(advanced.included).toBe(1_000_000)
-    expect(advanced.overageMonthlyUsd).toBeCloseTo(20)
+    // Advanced: 17,000 included, cheaper overage ($0.25/1k). 117,000 → 100k
+    // over = $25.
+    const advanced = checkApiRequestQuota({ plan: 'advanced' } as any, 117_000)
+    expect(advanced.included).toBe(17_000)
+    expect(advanced.overageMonthlyUsd).toBeCloseTo(25)
     // Within the included quota there is no overage; remaining is tracked.
-    const within = checkApiRequestQuota({ plan: 'business' } as any, 40_000)
+    const within = checkApiRequestQuota({ plan: 'business' } as any, 400)
     expect(within.overageRequests).toBe(0)
-    expect(within.remaining).toBe(60_000)
+    expect(within.remaining).toBe(1_100)
     // Plans without API access have zero included and always block.
     const pro = checkApiRequestQuota({ plan: 'pro' } as any, 1)
     expect(pro.allowed).toBe(false)
@@ -981,7 +984,7 @@ describe('plan entitlements', () => {
     expect(pro.allowed).toBe(true)
     expect(pro.overageMonthlyUsd).toBeCloseTo(1.5)
     // Within the band there is no overage; remaining is tracked.
-    const within = checkCrmRecordsQuota({ plan: 'business' } as any, 40_000)
+    const within = checkCrmRecordsQuota({ plan: 'business' } as any, 20_000)
     expect(within.overageRecords).toBe(0)
     expect(within.remaining).toBe(10_000)
     expect(within.allowed).toBe(true)
@@ -1053,7 +1056,7 @@ describe('plan entitlements', () => {
     // price, not a usability figure.
     const table: Record<OrgPlan, number> = {
       free: 0,
-      starter: 50,
+      starter: 35,
       pro: 150,
       business: 200,
       scale: 300,
@@ -1071,12 +1074,12 @@ describe('plan entitlements', () => {
 
   it('checkCrmEmailQuota hard-caps at the day band on every tier (AGL-2611)', () => {
     const noon = new Date('2026-09-05T12:34:56Z')
-    // Starter: 50 a day. 49 sent → one more is allowed; 50 sent → refused.
-    const room = checkCrmEmailQuota({ plan: 'starter' } as any, 49, noon)
+    // Starter: 35 a day. 34 sent → one more is allowed; 35 sent → refused.
+    const room = checkCrmEmailQuota({ plan: 'starter' } as any, 34, noon)
     expect(room.allowed).toBe(true)
-    expect(room.included).toBe(50)
+    expect(room.included).toBe(35)
     expect(room.remaining).toBe(1)
-    const full = checkCrmEmailQuota({ plan: 'starter' } as any, 50, noon)
+    const full = checkCrmEmailQuota({ plan: 'starter' } as any, 35, noon)
     expect(full.allowed).toBe(false)
     expect(full.remaining).toBe(0)
     // No overage rate exists for this band, so past it stays refused rather
@@ -1151,8 +1154,8 @@ describe('plan entitlements', () => {
     // Enterprise does not meter either, so its wall is real — at the finite
     // per-site fallback of twice Agency's band (2026-09-07), and a contracted
     // override moves it.
-    expect(checkFormSubmissionQuota({ plan: 'enterprise' } as any, 49_999).allowed).toBe(true)
-    expect(checkFormSubmissionQuota({ plan: 'enterprise' } as any, 50_000).allowed).toBe(false)
+    expect(checkFormSubmissionQuota({ plan: 'enterprise' } as any, 19_999).allowed).toBe(true)
+    expect(checkFormSubmissionQuota({ plan: 'enterprise' } as any, 20_000).allowed).toBe(false)
     expect(
       checkFormSubmissionQuota(
         { plan: 'enterprise', entitlements: { formSubmissionsPerMonth: 1e6 } } as any,
@@ -1203,7 +1206,7 @@ describe('plan entitlements', () => {
       { plan: 'enterprise' } as any,
       0,
     )
-    expect(enterprise.ceiling).toBe(50_000 * FORM_ABUSE_CEILING_MULTIPLE)
+    expect(enterprise.ceiling).toBe(20_000 * FORM_ABUSE_CEILING_MULTIPLE)
     expect(
       checkFormSubmissionAbuseCeiling(
         { plan: 'enterprise', entitlements: { formSubmissionsPerMonth: UNLIMITED } } as any,
@@ -1236,20 +1239,19 @@ describe('plan entitlements', () => {
     }
 
     /*
-     * ⚠️ THE PER-HOST LADDER INVERTS AT AGENCY, AND THE ORG-WIDE ONE DOES NOT.
+     * NEITHER LADDER INVERTS.
      *
      * `formSubmissionsPerMonth` is a PER-HOST band and `hostLimit` expands it
-     * (`meteredIncludedAllowance`). Agency's per-host figure is 25,000 against
-     * Advanced's 40,000 — lower — while its org-wide allowance is 2,500,000
-     * against Advanced's 1,000,000, two and a half times larger. So a
-     * per-SITE ceiling really is smaller on the more expensive plan, and the
-     * plan a customer buys really does include far more.
+     * (`meteredIncludedAllowance`). Until AGL-3469 Agency's per-host figure
+     * (25,000) sat under Advanced's (40,000) while its org-wide allowance was
+     * two and a half times larger, so the printed comparison grid read as a
+     * smaller ceiling on the dearer plan. Since both are 10,000 a site the
+     * per-host ladder only ever holds or rises, and the org-wide one rises
+     * with the site count.
      *
-     * Asserted rather than smoothed over because both halves are visible to a
-     * customer: the comparison grid prints the per-host number, and the
-     * invoice bills against the org-wide one. Whether the per-host figure
-     * should be raised so the printed ladder reads correctly is a pricing
-     * decision, and this is where it will be noticed.
+     * Asserted because both halves are visible to a customer: the comparison
+     * grid prints the per-host number, and the invoice bills against the
+     * org-wide one.
      */
     const perHost = ladder.map((plan) =>
       Math.min(
@@ -1263,12 +1265,12 @@ describe('plan entitlements', () => {
         PLAN_ENTITLEMENTS[plan].formSubmissionsPerMonth,
     )
     expect(orgWide).toEqual([...orgWide].sort((a, b) => a - b))
-    // The one inversion, named. A SECOND one appearing here is a regression.
+    // An inversion appearing here is a regression.
     expect(
       ladder
         .slice(1)
         .filter((_plan, index) => perHost[index + 1] < perHost[index]),
-    ).toEqual(['agency'])
+    ).toEqual([])
 
     // A negative count cannot manufacture headroom, and a plan-less org
     // resolves as free rather than as uncapped.

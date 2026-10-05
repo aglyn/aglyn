@@ -28,19 +28,18 @@ export interface EntityOption {
 
 /**
  * Edit-time option lists for id-based entity pickers in component
- * attributes (products, collections, categories, datasets, forms). Names are
- * display-only; nodes persist the id, so renames never break references —
+ * attributes — every kind a plugin declares (a site's products, its forms,
+ * the organization's datasets…). Names are display-only; nodes persist the id, so renames never break references —
  * the same contract as {@link ScreenLinkContext}. Provided by the
  * console's besigner/preview surfaces; absent on the tenant (the tenant
  * only resolves ids, never lists them).
  */
-/** The lists a picker can ask for. */
-export type EntityPickerKind =
-  | 'products'
-  | 'collections'
-  | 'categories'
-  | 'datasets'
-  | 'forms'
+/**
+ * A kind of entity a picker lists, as the plugin that keeps it declares it
+ * (`plugin-manager/plugin-entity-pickers`): `products`, `forms`, `datasets`…
+ * Open, because the kinds are the plugins' to add (AGL-3080).
+ */
+export type EntityPickerKind = string
 
 /**
  * How much an empty list is worth believing.
@@ -96,12 +95,12 @@ export const ENTITY_PICKER_BROWSE_LIMIT = 25
 export const ENTITY_PICKER_SEARCH_LIMIT = 25
 
 export interface EntityPickerContextValue {
-  products?: EntityOption[]
-  collections?: EntityOption[]
-  categories?: EntityOption[]
-  datasets?: EntityOption[]
-  /** The host's form entities, id-first, feeding FORM_SELECT attributes. */
-  forms?: EntityOption[]
+  /**
+   * Each kind's browse list, id-first: the site's products for a
+   * `PRODUCT_SELECT`, its form entities for a `FORM_SELECT`, and every other
+   * kind a plugin declares, keyed by the kind.
+   */
+  options?: Readonly<Partial<Record<EntityPickerKind, EntityOption[]>>>
   /**
    * The fields an entity's documents declare, keyed by kind and then by
    * entity id, in the order the entity declares them: id = the stable field
@@ -158,11 +157,11 @@ export interface EntityPickerContextValue {
    * This kind's documents carry the name-search keys, so a typed query
    * reaches the WHOLE collection rather than only the browse window.
    *
-   * True for products alone today: `nameTokens`/`nameLower` are stamped by
-   * the catalog's own write path, and `hosts/{host}/resources` deliberately
-   * does not stamp them on the other four kinds. A picker for a kind that is
-   * absent here must say its search covers the window only — claiming
-   * otherwise would let an unfound entity read as a nonexistent one.
+   * True for a kind its declaration marks `searchable`, whose documents carry
+   * `nameTokens`/`nameLower` from the owner's own write path —
+   * `hosts/{host}/resources` deliberately does not stamp them. A picker for a
+   * kind that is absent here must say its search covers the window only —
+   * claiming otherwise would let an unfound entity read as a nonexistent one.
    */
   searchable?: Partial<Record<EntityPickerKind, boolean>>
   /**
@@ -250,7 +249,7 @@ export function entityValueNeedsResolution(
 ): string | undefined {
   const id = typeof value === 'string' ? value.trim() : ''
   if (!id || !context?.resolve) return undefined
-  if ((context[kind] ?? []).some((entity) => entity.id === id)) return undefined
+  if ((context.options?.[kind] ?? []).some((entity) => entity.id === id)) return undefined
   if (id in (context.resolved?.[kind] ?? {})) return undefined
   if (entityListState(context, kind) !== 'ready') return undefined
   return id

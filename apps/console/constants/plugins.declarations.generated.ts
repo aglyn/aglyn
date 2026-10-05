@@ -15,6 +15,8 @@ let done: Promise<void> | undefined
 /** Registers every plugin's client declarations once per process. */
 export function registerPluginDeclarations(): Promise<void> {
   done ??= (async () => {
+    ;(await import('@aglyn/plugins-crm/declarations')).registerCrmDeclarations()
+    ;(await import('@aglyn/plugins-workflows/declarations')).registerWorkflowsDeclarations()
     ;(await import('@aglyn/plugins-ai/declarations')).registerAiDeclarations()
   })()
   return done

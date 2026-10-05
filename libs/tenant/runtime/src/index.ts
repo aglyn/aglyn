@@ -15,8 +15,5 @@
  * limitations under the License.
  */
 
-export * from './lib/assign-contact-owner'
-export * from './lib/capture-host-contact'
 export * from './lib/emit-host-event'
 export * from './lib/host-event-listeners'
-export * from './lib/resolve-dataset'

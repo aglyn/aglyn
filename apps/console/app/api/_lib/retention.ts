@@ -142,11 +142,12 @@ export function churnSurveyDetailExpiry(now = new Date()): Date {
 
 /**
  * The winback offer, as constants rather than request inputs — the CLIENT
- * never chooses the discount. 50% for 2 months is margin-checked against the
- * plan floor: every self-serve tier's list price covers its infra cost at
- * well over 2× (metering/overage floors bill separately and are untouched by
- * a subscription coupon), so half price for two cycles keeps every retained
- * org above water while being a real offer.
+ * never chooses the discount. 50% for 2 months is held to the measured
+ * contribution margin on the org that would bear it (`checkDiscountMargin`),
+ * and its full-use verdict — the org using every band it bought, on the two
+ * discounted months — is recorded on the applied winback for staff (AGL-3473)
+ * without refusing it: two months at half price spend cost on a fully used
+ * plan, and keeping the customer is what they are spent on.
  */
 export const WINBACK_PERCENT_OFF = 50
 export const WINBACK_DURATION_MONTHS = 2

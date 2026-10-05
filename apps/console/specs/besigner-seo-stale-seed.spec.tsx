@@ -180,6 +180,17 @@ jest.mock('@aglyn/aglyn', () => ({
   ownScreenSlugFromRoutePath: jest.requireActual(
     '@aglyn/aglyn/app-utils/screen-route',
   ).ownScreenSlugFromRoutePath,
+  // The page-group helpers (AGL-3463), real for the same reason.
+  isScreenGroup: jest.requireActual('@aglyn/aglyn/app-utils/screen-route')
+    .isScreenGroup,
+  liveScreenDescendants: jest.requireActual(
+    '@aglyn/aglyn/app-utils/screen-route',
+  ).liveScreenDescendants,
+  screenClaimsToBeAPage: jest.requireActual(
+    '@aglyn/aglyn/app-utils/screen-route',
+  ).screenClaimsToBeAPage,
+  toScreenRouteNode: jest.requireActual('@aglyn/aglyn/app-utils/screen-route')
+    .toScreenRouteNode,
   // The REAL rule, not a stub (AGL-2076). The besigner's Slug field refuses a
   // reserved address, and a double that answered a constant here would either
   // hide the refusal or invent one — an unfaithful fake fabricates false

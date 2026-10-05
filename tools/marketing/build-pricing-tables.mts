@@ -51,7 +51,10 @@ import {
   POS_REGISTERS_ADDON_MAX,
   ORG_COGS_UNIT_RATES_USD,
   METERED_MARKUP,
+  ORIGIN_MEDIA_BANDWIDTH_SENTENCE,
+  ORIGIN_MEDIA_BANDWIDTH_WEIGHT,
   PAGE_VIEW_CDN_REQUEST_COST_USD,
+  publishedMeteredPrice,
 } from '../../libs/aglyn/src/lib/app-utils/plan-entitlements.ts'
 import {
   onboardingSignupHref,
@@ -668,51 +671,66 @@ const rate = (v: number): string => {
  * columns are computed from the unrounded rate. Rounding the cost to six
  * decimals and then applying the markup to the rounded figure loses the
  * published price when the cost is not a clean decimal: a billed page view's
- * cost is pinned so that cost × 1.3 is exactly $0.70 per 1,000 views, and a
- * cost rounded to $0.538462 first would be ×1.3 = $0.700001, the right
+ * cost is pinned so that cost × 1.3 is exactly $0.80 per 1,000 views, and a
+ * cost rounded to $0.615385 first would be ×1.3 = $0.800001, the right
  * number rendered as the wrong one.
  */
 const METERED_ROWS: Array<{
   label: string
   costUsd: number
   quotedPer: number
+  /** The places the price is published to, rounded UP (AGL-3476). */
+  decimals: number
   unit: string
 }> = [
   {
     label: 'Media & file storage',
     costUsd: ORG_COGS_UNIT_RATES_USD.storagePerGbMonth,
     quotedPer: 1,
+    decimals: 4,
     unit: '/ GB-mo',
   },
   {
     label: 'Page views (bandwidth + reads)',
     costUsd: ORG_COGS_UNIT_RATES_USD.perPageView + PAGE_VIEW_CDN_REQUEST_COST_USD,
     quotedPer: 1000,
+    decimals: 2,
     unit: '/ 1k views',
   },
   {
     label: 'Form submissions',
     costUsd: ORG_COGS_UNIT_RATES_USD.perFormSubmission,
     quotedPer: 1000,
+    decimals: 3,
     unit: '/ 1k',
   },
 ]
 
 const metered = {
-  heading: 'Metered infrastructure — passed through at cost + 30%',
+  heading: 'Metered infrastructure — passed through at cost + 30%, after card fees',
   markupPct: Math.round((METERED_MARKUP - 1) * 100),
-  columns: ['Metered item', 'Our cost', `You pay (+${Math.round((METERED_MARKUP - 1) * 100)}%)`],
+  columns: [
+    'Metered item',
+    'Our cost',
+    `You pay (+${Math.round((METERED_MARKUP - 1) * 100)}% after card fees)`,
+  ],
   rows: METERED_ROWS.map((r) => ({
     label: r.label,
     unit: r.unit,
     ourCost: `${rate(r.costUsd * r.quotedPer)} ${r.unit}`,
-    youPay: `${rate(r.costUsd * r.quotedPer * METERED_MARKUP)} ${r.unit}`,
+    youPay: `${rate(publishedMeteredPrice(r.costUsd * r.quotedPer, r.decimals))} ${r.unit}`,
   })),
   note:
     'Applies only to plans with `meteredInfraPassThrough`. Dataset storage ' +
     'over the included amount is a separate retail rate ' +
     `(${rate(PLAN_PRICING.pro.extraDataGbMonthlyUsd ?? 0)} / GB-mo), not this ` +
     'pass-through.',
+  /**
+   * The origin-media weight (AGL-3474), in the sentence the page states it
+   * in beside the page-view row: video and files count against the same
+   * bandwidth, at a weight derived so they earn cost + 30% after card fees.
+   */
+  mediaNote: ORIGIN_MEDIA_BANDWIDTH_SENTENCE,
 }
 
 const fees = {
@@ -1205,29 +1223,6 @@ for (const [label, [why]] of injected('--declare-extra-row', 2)) {
  */
 const FRAME_STALE_CELLS: Record<string, { frame: string; why: string }> = {}
 
-/**
- * The bandwidth bands re-sized at the CDN's dearest region (AGL-3444): every
- * paid band is cut to what the annual price carries once an included
- * gigabyte's transfer and requests are priced where the CDN is dearest. The
- * four Figma frames still carry the bands sold until 2026-10-01; when they
- * are redrawn and re-extracted, these entries come out.
- */
-const BANDWIDTH_RESIZE_WHY =
-  'the paid bandwidth bands were re-sized so every tier holds the margin ' +
-  "rule with an included gigabyte's transfer and CDN requests priced at the " +
-  'dearest region (AGL-3444). Redraw the four frames, re-extract, and this ' +
-  'entry comes out.'
-for (const [plan, frame] of [
-  ['Starter', '50 GB'],
-  ['Pro', '125 GB'],
-  ['Business', '185 GB'],
-  ['Scale', '290 GB'],
-  ['Advanced', '345 GB'],
-  ['Agency', '1.54 TB'],
-] as const) {
-  FRAME_STALE_CELLS[`Bandwidth / mo · ${plan}`] = { frame, why: BANDWIDTH_RESIZE_WHY }
-}
-
 /*
  * `--declare-stale-cell='<row> · <plan>|<frame value>'`, repeatable.
  *
@@ -1332,28 +1327,7 @@ const frameMetered = frame.sections
 const FRAME_STALE_METERED: Record<
   string,
   { ourCost: string; youPay: string; why: string }
-> = {
-  'Page views (bandwidth + reads)': {
-    ourCost: '$0.161538 / 1k views',
-    youPay: '$0.21 / 1k views',
-    why:
-      'a billed page view now carries the CDN per-request charge past the ' +
-      "hosting plan's allowance (`PAGE_VIEW_CDN_REQUEST_COST_USD`, AGL-1879), " +
-      "and both it and the view's transfer are priced at the CDN's dearest " +
-      'region (AGL-3444), so the published figure is $0.538462 / $0.70 per 1k ' +
-      'views. The four Figma frames still draw the cheapest-region weight-only ' +
-      'cost. Redraw them, re-extract, and this entry comes out.',
-  },
-  'Form submissions': {
-    ourCost: '$0.05 / 1k',
-    youPay: '$0.065 / 1k',
-    why:
-      "a submission's function invocation is priced at Vercel's dearest region " +
-      '(AGL-3444), so the published figure is $0.053846 / $0.07 per 1k. The ' +
-      'four Figma frames still draw the cheapest-region figure. Redraw them, ' +
-      're-extract, and this entry comes out.',
-  },
-}
+> = {}
 
 for (const [label, [ourCost, youPay]] of injected('--declare-stale-metered', 3)) {
   FRAME_STALE_METERED[label] = { ourCost, youPay, why: INJECTED_WHY }
@@ -1697,9 +1671,7 @@ columns.finish()
  * writes them as a single ` · `-joined string, which is why the count can
  * disagree as well as the contents.
  *=========================================*/
-const TIERS_STALE: Record<string, Divergence> = {
-  'Scale · spec 6': { frame: '290 GB bandwidth', why: BANDWIDTH_RESIZE_WHY },
-}
+const TIERS_STALE: Record<string, Divergence> = {}
 
 const tierStrip = reconciler('scale strip', TIERS_STALE)
 const TIER_CARDS = [...tiers.rows, tiers.enterprise]
@@ -1952,6 +1924,36 @@ for (const v of frames) {
 }
 
 addOnRates.finish()
+
+/**
+ * The origin-media weight, wherever the page states one (AGL-3474).
+ *
+ * `metered.mediaNote` is the sentence; every breakpoint is searched for a
+ * weight stated in its shape ("count 1.6× toward bandwidth"), in any group,
+ * because where the page sets it is design's call. A frame that states none
+ * is not a failure — the sentence lands with a republish this check cannot
+ * order — but a frame that states one must state the code's: a weight is a
+ * price, and a stale one on the page is a price nobody is billed.
+ */
+const mediaWeightDiffs: string[] = []
+for (const v of frames) {
+  for (const section of v.data.sections) {
+    for (const group of section.groups) {
+      for (const record of group.records) {
+        for (const cell of record.cells) {
+          const stated = /count\s+([\d.]+)\s*×\s*toward bandwidth/i.exec(cell)?.[1]
+          if (stated !== undefined && Number(stated) !== ORIGIN_MEDIA_BANDWIDTH_WEIGHT) {
+            mediaWeightDiffs.push(
+              `${v.name} · ${section.name} / ${group.name}: states ${stated}×, ` +
+                `the code counts ${ORIGIN_MEDIA_BANDWIDTH_WEIGHT}×`,
+            )
+          }
+        }
+      }
+    }
+  }
+}
+fail('the published origin-media weight disagrees with the code', mediaWeightDiffs)
 
 /*==========================================
  * THE TRANSACTION-FEE LADDER.
@@ -2265,6 +2267,7 @@ for (const [label, d] of Object.entries(FRAME_STALE_METERED)) {
 for (const [key, d] of [
   ...Object.entries(FRAME_STALE_CELLS),
   ...Object.entries(TIERS_STALE).map(([k, v]) => [`scale strip · ${k}`, v] as const),
+  ...Object.entries(USAGE_STALE).map(([k, v]) => [`add-on capacity · ${k}`, v] as const),
 ]) {
   console.log(`  stale cell: ${key} — frame draws ${d.frame}`)
 }

@@ -24,7 +24,7 @@ schemes — applied consistently across every page.
 - Set your palette and typography; changes render in a **live preview**.
 - Configure both **light and dark** schemes — published sites apply the visitor's scheme
   automatically.
-- Fonts load via a Google Fonts URL builder.
+- Pick any Google font; published sites serve it from their own address, so it never blocks the page.
 
 The theme you set here is supplied to the [Besigner](../besigner/overview.md) canvas too,
 so previews match the live site.

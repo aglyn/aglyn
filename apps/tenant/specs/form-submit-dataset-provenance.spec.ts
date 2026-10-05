@@ -103,13 +103,6 @@ const mockCollectionHandle = (path: string): any => ({
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
-  // The attribution seam the route resolves once per submission. Recorded
-  // rather than executed — `campaign-conversion-attribution.spec.ts` owns
-  // what the write does — and defined here at all because a mocked module
-  // answers `undefined` for a name it does not list, which would make the
-  // route throw rather than fail an assertion.
-  resolveCampaignTouch: async () => null,
-  attributeCampaignConversion: async () => null,
   firebaseAdmin: {
     app: () => ({
       firestore: () => ({
@@ -154,8 +147,8 @@ jest.mock('@aglyn/tenant-runtime', () => ({
 /*
  * The route captures through the platform's contact-capture contract now
  * (AGL-3080), and the plugin that keeps people is what calls
- * `captureHostContact`. The CRM imports the LEAF module, so the barrel double
- * above does not intercept it; this forwards the leaf to that same double.
+ * `captureHostContact` from its own module, which the barrel double above
+ * does not intercept; this forwards that module to the same double.
  *
  * Deliberately not a double of the contract itself. Every assertion below is
  * on the options the writer receives, so routing them through the real CRM
@@ -163,7 +156,7 @@ jest.mock('@aglyn/tenant-runtime', () => ({
  * this one loses nothing — which is the half of this move that could fail
  * silently.
  */
-jest.mock('@aglyn/tenant-runtime/capture-host-contact', () => ({
+jest.mock('../../../libs/plugins/crm/src/lib/server/capture-host-contact', () => ({
   captureHostContact: (...args: unknown[]) =>
     (
       jest.requireMock('@aglyn/tenant-runtime') as {
@@ -184,14 +177,20 @@ beforeAll(async () => {
   await registerPluginServerDeclarations()
 })
 
-import { POST } from '../app/api/forms/submit/route'
+// The door as the tenant serves it: the forms plugin's route, through the
+// plugin API dispatcher, with the forms plugin's surface loaded (AGL-3080).
+jest.mock('../utils/server-plugin-loader', () => ({
+  serverPluginLoader: jest.requireActual('./plugin-door-dispatch').formsOnlyServerPluginLoader(),
+}))
+import { POST } from './plugin-door-dispatch'
 import { stampFormRecordTargets } from '@aglyn/aglyn/plugin-manager/submission-record-target'
 
 /*
- * The data plugin reads the dataset through the runtime's LEAF module, which
- * the barrel double above does not intercept; this forwards the leaf to it.
+ * The data plugin finds the dataset through its own `resolve-dataset` module
+ * (AGL-3080), which the runtime double above does not reach; this forwards the
+ * lookup to that double.
  */
-jest.mock('@aglyn/tenant-runtime/resolve-dataset', () => ({
+jest.mock('@aglyn/plugins-data/server/resolve-dataset', () => ({
   resolveDatasetDoc: (...args: unknown[]) =>
     (
       jest.requireMock('@aglyn/tenant-runtime') as {

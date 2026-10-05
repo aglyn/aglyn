@@ -874,7 +874,8 @@ export function buildAddToCartParams(input: {
  * publish. The host's `defaultHomeScreenId` names that placeholder, and its
  * entry is not counted: the site "came alive" when its owner put something on
  * it, not when the platform did. Republishing the placeholder itself after
- * editing it counts, which is the same act.
+ * editing it counts, which is the same act: that publish is read against the
+ * map with the marker still set, and clears it in the same write (AGL-3478).
  */
 export function isFirstPublishedRoute(
   routing: Record<string, unknown> | null | undefined,
@@ -1131,7 +1132,7 @@ const warnedAuthoredNames = new Set<string>()
  * surfaced in the page. Nothing here can reach the author — the code is
  * running for a VISITOR of their site, and turning the author's configuration
  * mistake into something a visitor sees would be a worse bug than the missing
- * metric. The author-facing half lives in `validateHostAction`, which refuses
+ * metric. The author-facing half lives in `validateInteraction`, which refuses
  * to save a name this function would refuse to send, so a silent drop should
  * only ever happen to a step authored before AGL-1587.
  */

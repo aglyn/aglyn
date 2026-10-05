@@ -36,13 +36,12 @@
 
 jest.mock('@aglyn/tenant-data-admin', () => ({ __esModule: true, firebaseAdmin: {} }))
 
-jest.mock('@aglyn/aglyn/app-utils/actions', () => ({
+jest.mock('@aglyn/aglyn/app-utils/site-interactions', () => ({
   __esModule: true,
-  ...jest.requireActual('@aglyn/aglyn/app-utils/actions'),
+  ...jest.requireActual('@aglyn/aglyn/app-utils/site-interactions'),
   ACTIONS_MAX_PER_HOST: 2,
 }))
 
-import { hostActionDocument } from '@aglyn/aglyn/app-utils/actions'
 import { pluginResourceDraftWriter } from '@aglyn/aglyn/plugin-manager/plugin-resource-drafts'
 import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
 import { registerWorkflowsConsoleApi } from './server-console'
@@ -56,6 +55,7 @@ import {
   createAutomationDraftWriter,
   readAutomationDraftContent,
 } from './server-automation-drafts'
+import { siteInteractionDocument } from '@aglyn/aglyn/app-utils/site-interactions'
 
 const NOW = new Date('2026-09-16T20:00:00.000Z')
 
@@ -235,7 +235,7 @@ describe('what the writer stores', () => {
     const read = readAutomationDraftContent({ action: drafted })
     if (read.ok === false) throw new Error('fixture does not read')
     expect(store.get('hosts/host-1/actions/job-1')).toEqual({
-      ...hostActionDocument({ ...read.action, enabled: false, recipe: null }),
+      ...siteInteractionDocument({ ...read.action, enabled: false, recipe: null }),
       createdAt: NOW,
       updatedAt: NOW,
       createdBy: 'uid-editor',

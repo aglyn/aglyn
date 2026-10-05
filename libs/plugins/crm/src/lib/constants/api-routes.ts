@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { CrmActionRecipeId } from '@aglyn/aglyn'
+import type { CrmActionRecipeId } from '../model/crm-recipes'
 
 /**
  * The CRM plugin's console API routes, as the dispatcher keys them.
@@ -90,13 +90,6 @@ export const CRM_API_ROUTES = {
    * `server/inbound-route.ts`.
    */
   inbound: 'crm/inbound',
-  /**
-   * `GET` — one of the organization's CRM collections, or a site's leads,
-   * as a CSV streamed over every row (AGL-2662); the contacts and leads
-   * files are every workspace's (a portability route), see
-   * `server/export-route.ts`.
-   */
-  export: 'crm/export',
 } as const
 
 /**
@@ -119,7 +112,7 @@ export interface CrmRecipeInstallRequest {
   hostId: string
   orgId?: string
   recipeId: CrmActionRecipeId
-  /** The site's form a recipe that `needs: 'form'` is keyed on. */
+  /** The site's form a recipe that picks one (`picks: 'form'`) is keyed on. */
   formId?: string
 }
 

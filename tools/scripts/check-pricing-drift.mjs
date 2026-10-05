@@ -75,7 +75,9 @@ const USAGE_METERING_TS = 'apps/console/utils/usage-metering.ts'
  * $0.21 → $0.36, recorded in "2026-10-01 — Page-view overage $0.21 → $0.36
  * per 1k", then $0.36 → $0.70 the same day, with form submissions $0.065 →
  * $0.07, recorded in "2026-10-01 — Every price and band holds its margin in
- * Vercel's dearest region". Each is pinned here because the decision is
+ * Vercel's dearest region", then $0.70 → $0.80 and $0.07 → $0.08, recorded
+ * in "2026-10-01 — Vercel bills a decimal GB, Firestore is nam5, and an API
+ * request is a function". Each is pinned here because the decision is
  * written down, not because the check was red: a pin moved to silence a
  * failure records nothing and can catch nothing afterwards. Every other
  * column is where Sept 1 put it.
@@ -92,11 +94,12 @@ const LOCKED = {
     advanced: { digital: 0, physical: 0 },
     agency: { digital: 0, physical: 0 },
   },
-  // What `/pricing` publishes: unit cost × 1.30, in the units the page quotes.
+  // What `/pricing` publishes: unit cost + 30% kept after Stripe's fee, rounded
+  // up, in the units the page quotes (AGL-3476).
   publishedMetered: {
-    storagePerGbMonth: 0.0338,
-    perThousandPageViews: 0.7,
-    perThousandFormSubmissions: 0.07,
+    storagePerGbMonth: 0.0349,
+    perThousandPageViews: 0.83,
+    perThousandFormSubmissions: 0.083,
   },
 }
 
@@ -271,11 +274,13 @@ const markupMatch = entitlementsSrc.match(/export const METERED_MARKUP\s*=\s*([\
 const cdnMatch = entitlementsSrc.match(
   /export const PAGE_VIEW_CDN_REQUEST_COST_USD\s*=\s*([\d.]+)/,
 )
-if (metered && markupMatch && cdnMatch) {
+const feeMatch = entitlementsSrc.match(/export const STRIPE_PROCESSOR_FEE_PCT\s*=\s*([\d.]+)/)
+if (metered && markupMatch && cdnMatch && feeMatch) {
   const published = publishedMeteredRates(
     metered,
     Number(markupMatch[1]),
     Number(cdnMatch[1]),
+    Number(feeMatch[1]),
   )
   for (const [key, want] of Object.entries(LOCKED.publishedMetered)) {
     if (published[key] === want) note('in-sync', `published:${key}`, `$${want}`)
@@ -285,7 +290,7 @@ if (metered && markupMatch && cdnMatch) {
   note(
     'unreadable',
     'published:metered',
-    'METERED_MARKUP, PAGE_VIEW_CDN_REQUEST_COST_USD or the unit rates could not be parsed',
+    'METERED_MARKUP, STRIPE_PROCESSOR_FEE_PCT, PAGE_VIEW_CDN_REQUEST_COST_USD or the unit rates could not be parsed',
   )
 }
 

@@ -16,6 +16,7 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
+import { pluginTransferResourceUi } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
 import { BUNDLE_ID } from './constants/bundle-common'
 import {
   EVENTS_CALENDAR_BUNDLE,
@@ -66,6 +67,11 @@ describe('events-calendar plugin', () => {
       (entry) => entry.pluginId === BUNDLE_ID,
     )
     expect(extension?.featureFlag).toBe('eventCalendar')
+    // …and the client half of the `events` import and export.
+    expect(pluginTransferResourceUi('events')).toMatchObject({
+      label: 'Events',
+      pluginId: BUNDLE_ID,
+    })
   })
 
   /**

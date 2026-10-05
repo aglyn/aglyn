@@ -19,12 +19,10 @@
 import {
   type ConsolePluginOrgMount,
   type ConsolePluginPageProps,
-  formSpamCaughtNotice,
-  formSubmissionsPausedNotice,
-  submissionMonthKey,
   visitorRecordRefusedCounterId,
   visitorRecordsPausedNotice,
 } from '@aglyn/aglyn'
+import { utcMonthKey } from '@aglyn/aglyn/app-utils/utc-month'
 import { HubSections } from '@aglyn/shared-ui-next'
 import { useFirestore, useFirestoreDoc } from '@aglyn/tenant-feature-instance'
 import {
@@ -43,6 +41,7 @@ import { InboxCampaignsZone } from './inbox-attribution-zone'
 import type { InboxConsoleSectionId } from './inbox-console-sections'
 import SubmissionsCard from './submissions-card.component'
 import { useInboxSitePick } from './use-inbox-site-pick'
+import { useVisitorDoorNotices, VisitorDoorNotices } from './visitor-door-notices.component'
 
 /**
  * The body of one inbox section, built only when that section is the one being
@@ -141,66 +140,16 @@ export function InboxConsolePage(props: ConsolePluginPageProps) {
    */
   const noticeHostId = hostId ?? sitePick.hostId
 
-  // Submissions this site's abuse ceiling refused (AGL-1655 → AGL-1666).
-  //
-  // Until this, the refusal existed in two places a site owner cannot see: a
-  // counters document only Firestore's console renders, and one in-app
-  // notification that `system.` bucket-muting can suppress at write time —
-  // `notifyUsers` skips the batch entirely, so a muted owner's notification
-  // is never created and cannot be recovered by unmuting. This surface is
-  // the durable one, and it is a plain read of the same document the
-  // dropped-contacts alert uses (AGL-891).
-  const { data: refusedCounter } = useFirestoreDoc<any>(
-    () =>
-      noticeHostId
-        ? doc(
-            firestore,
-            'hosts',
-            noticeHostId,
-            'counters',
-            'formSubmissionsRefused',
-          )
-        : null,
-    [firestore, noticeHostId],
-  )
-  // Keyed by the month the SERVER wrote, via the shared helper — a key
-  // derived differently here would read zero refusals on exactly the sites
-  // being refused.
-  const pausedNotice = formSubmissionsPausedNotice({
-    refused: Number(refusedCounter?.[submissionMonthKey()] ?? 0),
-    ceiling: Number(refusedCounter?.['ceiling']) || undefined,
-  })
-
-  // Bot submissions the honeypot caught (AGL-1831 → AGL-1836). The staff org
-  // page has shown this number per host since AGL-1831; this is the same
-  // count where the site's OWNER already looks, so "is my form being hit by
-  // bots?" is answered by their own inbox instead of a support ticket. Same
-  // client-unwritable counters document shape as the refusal counter above,
-  // same host-admin read the rules already grant (AGL-1367), same shared
-  // month key — and the shared sentence returns null below one catch, so a
-  // quiet month renders nothing rather than a reassuring zero.
-  const { data: spamCounter } = useFirestoreDoc<any>(
-    () =>
-      noticeHostId
-        ? doc(
-            firestore,
-            'hosts',
-            noticeHostId,
-            'counters',
-            'formSubmissionsSpam',
-          )
-        : null,
-    [firestore, noticeHostId],
-  )
-  const spamNotice = formSpamCaughtNotice({
-    spam: Number(spamCounter?.[submissionMonthKey()] ?? 0),
-  })
+  // Every public door's ceiling refusals and honeypot catches (AGL-1666 →
+  // AGL-1836), from the counters the plugin that keeps each door declares.
+  const doorNotices = useVisitorDoorNotices(noticeHostId)
 
   // Sign-ups and leads this site's PLATFORM ceiling refused (AGL-1529).
   //
-  // Same instrument as the form ceiling directly above and read the same way:
-  // a client-unwritable counters document (AGL-1367) that host admins can
-  // already read, keyed by the SERVER's month through the shared helper — a
+  // Same instrument as a public door's ceiling (`VisitorDoorNotices`) and
+  // read the same way: a client-unwritable counters document (AGL-1367) that
+  // host admins can already read, keyed by the SERVER's month through the
+  // shared helper — a
   // key derived differently here would read zero refusals on exactly the
   // sites being refused. The counter id comes from the shared function for
   // the same reason: the writer is in `@aglyn/tenant-data-admin` and this is
@@ -226,7 +175,7 @@ export function InboxConsolePage(props: ConsolePluginPageProps) {
   )
   const membersPausedNotice = visitorRecordsPausedNotice({
     kind: 'siteMembers',
-    refused: Number(membersRefusedCounter?.[submissionMonthKey()] ?? 0),
+    refused: Number(membersRefusedCounter?.[utcMonthKey()] ?? 0),
     ceiling: Number(membersRefusedCounter?.['ceiling']) || undefined,
   })
   const { data: leadsRefusedCounter } = useFirestoreDoc<any>(
@@ -244,7 +193,7 @@ export function InboxConsolePage(props: ConsolePluginPageProps) {
   )
   const leadsPausedNotice = visitorRecordsPausedNotice({
     kind: 'leads',
-    refused: Number(leadsRefusedCounter?.[submissionMonthKey()] ?? 0),
+    refused: Number(leadsRefusedCounter?.[utcMonthKey()] ?? 0),
     ceiling: Number(leadsRefusedCounter?.['ceiling']) || undefined,
   })
 
@@ -254,8 +203,8 @@ export function InboxConsolePage(props: ConsolePluginPageProps) {
    * transient — and rendering a default section here instead would pay for its
    * listens on a URL that is already being replaced.
    *
-   * The four counter reads above run either way, and that is deliberate: they
-   * are four single-document listens, and hoisting them behind this guard
+   * The ceiling counter reads above run either way, and that is deliberate:
+   * they are single-document listens, and hoisting them behind this guard
    * would make a ceiling notice appear a frame late on the section a reader
    * lands on. (On the organization's Inbox they run once a site is picked.)
    */
@@ -263,38 +212,14 @@ export function InboxConsolePage(props: ConsolePluginPageProps) {
 
   const notices = (
     <>
-      {/* Above the RAIL on purpose (AGL-1666). A paused form is not a fact
-          about the Submissions section — it is why the whole inbox stopped
-          filling — and the notification that brings an owner here links to
-          the surface, not to a section. Inside one section's body it would be
-          invisible to anyone who followed a link into another. */}
-      {pausedNotice ? (
-        <Alert severity="warning" sx={{ mb: 2 }}>
-          <AlertTitle>{pausedNotice.title}</AlertTitle>
-          <Typography component="div" variant="body2">
-            {pausedNotice.message}
-          </Typography>
-          <Typography
-            component="div"
-            variant="body2"
-            color="text.secondary"
-            sx={{ mt: 0.5 }}
-          >
-            {pausedNotice.until}
-          </Typography>
-        </Alert>
-      ) : null}
-      {/* Beside the paused notice, and info rather than warning on purpose
-          (AGL-1836): the honeypot count reports protection WORKING — those
-          submissions were caught, dropped, and never stored or billed. An
-          owner whose inbox went quiet checks here; bots absorbed silently is
-          the answer that stops the support ticket. */}
-      {spamNotice ? (
-        <Alert severity="info" sx={{ mb: 2 }}>
-          {spamNotice}
-        </Alert>
-      ) : null}
-      {/* Above the rail for the same reason the form notice is (AGL-1529):
+      {/* Above the RAIL on purpose (AGL-1666). A paused door is not a fact
+          about one section — it is why the whole inbox stopped filling — and
+          the notification that brings an owner here links to the surface,
+          not to a section. Inside one section's body it would be invisible to
+          anyone who followed a link into another. One per door a plugin
+          declares (`visitorDoors`), each beside its own catch count. */}
+      <VisitorDoorNotices notices={doorNotices} />
+      {/* Above the rail for the same reason a door's notice is (AGL-1529):
           the Members and Leads lists are one section of several, and an owner
           who followed a link into another would never see a notice hidden
           inside that one. Two notices rather than one because the two ceilings

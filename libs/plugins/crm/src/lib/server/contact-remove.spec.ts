@@ -262,6 +262,30 @@ describe('a refusal survives the removal', () => {
     }
   })
 
+  it('takes a deleted contact off every deal’s contact roles (AGL-3521)', async () => {
+    const DEALS = `orgs/${ORG_ID}/deals`
+    mockFirestore.seed(`${DEALS}/d1`, {
+      title: 'Committee',
+      visibleTo: [`host:${HOST}`],
+      contactId: 'ada',
+      contactRoles: [
+        { contactId: 'ada', role: 'Decision Maker', primary: true },
+        { contactId: 'zed', role: 'Evaluator', primary: false },
+      ],
+      contactRoleContactIds: ['ada', 'zed'],
+    })
+    // A deal written before roles, naming her as its contact.
+    mockFirestore.seed(`${DEALS}/d2`, { title: 'Old', visibleTo: [`host:${HOST}`], contactId: 'ada' })
+    await post({ hostId: HOST, contactIds: ['ada'] })
+    expect(mockFirestore.read(`${DEALS}/d1`)).toMatchObject({
+      contactRoles: [{ contactId: 'zed', role: 'Evaluator', primary: false }],
+      contactRoleContactIds: ['zed'],
+    })
+    expect(mockFirestore.read(`${DEALS}/d1`)).not.toHaveProperty('contactId')
+    expect(mockFirestore.read(`${DEALS}/d2`)).toMatchObject({ contactRoles: [], contactRoleContactIds: [] })
+    expect(mockFirestore.read(`${DEALS}/d2`)).not.toHaveProperty('contactId')
+  })
+
   it('keeps nothing for a contact that refused nothing', async () => {
     mockFirestore.seed(`${CONTACTS}/ada`, { ...soleHeld(), marketingConsentByHost: { [HOST]: grant(1) } })
     await post({ hostId: HOST, contactIds: ['ada'] })
@@ -276,6 +300,65 @@ describe('a refusal survives the removal', () => {
       { contactId: 'gone', ok: false, error: 'That contact no longer exists.' },
       { contactId: 'bea', ok: true, removed: 'detached' },
     ])
+  })
+})
+
+/*
+ * A REPORTS-TO AT A REMOVED CONTACT (AGL-3537): a delete clears every other
+ * contact's reports-to that names the person, in every holder's facet; a
+ * detach clears it in the facets of the holder letting go, which no longer
+ * holds the person, and leaves the other holder's.
+ */
+describe('a reports-to at a removed contact', () => {
+  const reportsTo = (id: string, groupId: string) =>
+    (contact(id)?.['facets'] as Record<string, Record<string, unknown>> | undefined)?.[groupId]?.[
+      'reportsToContactId'
+    ]
+
+  it('is cleared wherever it names a deleted contact', async () => {
+    mockFirestore.seed(`${CONTACTS}/cy`, {
+      email: 'cy@example.com',
+      visibleTo: [`host:${HOST}`],
+      facets: { [HOST]: { reportsToContactId: 'ada', notes: 'kept' } },
+    })
+    mockFirestore.seed(`${CONTACTS}/di`, {
+      email: 'di@example.com',
+      visibleTo: [`host:${HOST}`],
+      facets: { [HOST]: { reportsToContactId: 'bea' } },
+    })
+    await post({ hostId: HOST, contactIds: ['ada'] })
+    expect(contact('ada')).toBeUndefined()
+    expect(reportsTo('cy', HOST)).toBeUndefined()
+    expect(contact('cy')?.['facets'][HOST]).toMatchObject({ notes: 'kept' })
+    // A pointer at somebody else is not touched.
+    expect(reportsTo('di', HOST)).toBe('bea')
+  })
+
+  it('is cleared in the letting-go holder’s facets on a detach, and kept in the other holder’s', async () => {
+    mockFirestore.seed(`${CONTACTS}/cy`, {
+      email: 'cy@example.com',
+      visibleTo: [`host:${HOST}`, `host:${OTHER_HOST}`],
+      facets: {
+        [HOST]: { reportsToContactId: 'bea' },
+        [OTHER_HOST]: { reportsToContactId: 'bea' },
+      },
+    })
+    const { payload } = await post({ hostId: HOST, contactIds: ['bea'] })
+    expect(payload.results).toEqual([{ contactId: 'bea', ok: true, removed: 'detached' }])
+    expect(reportsTo('cy', HOST)).toBeUndefined()
+    expect(reportsTo('cy', OTHER_HOST)).toBe('bea')
+  })
+
+  it('is left alone when the removal is refused', async () => {
+    caller = { uid: 'scoped-uid' }
+    mockFirestore.seed(`${CONTACTS}/cy`, {
+      email: 'cy@example.com',
+      visibleTo: [`host:${HOST}`],
+      facets: { [HOST]: { reportsToContactId: 'bea' } },
+    })
+    const { payload } = await post({ hostId: HOST, contactIds: ['bea'] })
+    expect(payload.results[0]).toMatchObject({ ok: false })
+    expect(reportsTo('cy', HOST)).toBe('bea')
   })
 })
 

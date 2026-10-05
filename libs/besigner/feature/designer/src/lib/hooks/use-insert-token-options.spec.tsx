@@ -156,7 +156,7 @@ describe('useInsertTokenOptions — a dataset outside the browse window', () => 
       wrapper: datasetWrapper({
         request: () => undefined,
         resolve: (kind, id) => asked.push([kind, id]),
-        datasets: [{ id: 'ds-1', label: 'Signups' }],
+        options: { datasets: [{ id: 'ds-1', label: 'Signups' }] },
         status: { datasets: 'ready' },
       }),
     })
@@ -169,7 +169,7 @@ describe('useInsertTokenOptions — a dataset outside the browse window', () => 
       wrapper: datasetWrapper({
         request: () => undefined,
         resolve: () => undefined,
-        datasets: [{ id: 'ds-1', label: 'Signups' }],
+        options: { datasets: [{ id: 'ds-1', label: 'Signups' }] },
         status: { datasets: 'ready' },
         resolved: {
           datasets: { 'ds-900': { id: 'ds-900', label: 'Newsletter' } },
@@ -200,7 +200,7 @@ describe('useInsertTokenOptions — a dataset outside the browse window', () => 
       wrapper: datasetWrapper({
         request: () => undefined,
         resolve: (kind, id) => asked.push([kind, id]),
-        datasets: [{ id: 'ds-1', label: 'Signups' }],
+        options: { datasets: [{ id: 'ds-1', label: 'Signups' }] },
         status: { datasets: 'ready' },
       }),
     })
@@ -215,7 +215,7 @@ describe('useInsertTokenOptions — a dataset outside the browse window', () => 
       wrapper: datasetWrapper({
         request: () => undefined,
         resolve: (kind, id) => asked.push([kind, id]),
-        datasets: [{ id: 'ds-1', label: 'Signups' }],
+        options: { datasets: [{ id: 'ds-1', label: 'Signups' }] },
         status: { datasets: 'ready' },
       }),
     })
@@ -232,7 +232,7 @@ describe('useInsertTokenOptions — a dataset outside the browse window', () => 
       wrapper: datasetWrapper({
         request: (kind) => askedFor.push(kind),
         resolve: () => undefined,
-        datasets: [],
+        options: { datasets: [] },
         status: { datasets: 'ready' },
         resolved: {
           datasets: { 'ds-900': { id: 'ds-900', label: 'Newsletter' } },
@@ -260,7 +260,7 @@ describe('useInsertTokenOptions — a dataset outside the browse window', () => 
       wrapper: datasetWrapper({
         request: (kind) => askedFor.push(kind),
         resolve: (_kind, id) => resolved.push(id),
-        datasets: [],
+        options: { datasets: [] },
         status: { datasets: 'ready' },
       }),
     })

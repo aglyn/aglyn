@@ -39,17 +39,21 @@ import {
   blockingRouteOwner,
   HostViewType,
   injectLayoutStyleOverrides,
+  isScreenGroup,
   layoutPropValuesFor,
+  liveScreenDescendants,
   MAX_LAYOUT_CHAIN_DEPTH,
   normalizeScreenSlug,
   ownScreenSlugFromRoutePath,
   reservedScreenRouteMessage,
   replaceUnderMerge,
   reservedScreenRouteSegment,
+  screenClaimsToBeAPage,
   SCREEN_SLUG_PATH_SEPARATOR_MESSAGE,
   ScreenLinkContext,
   screenRoutePathToUrl,
   screenSlugHasPathSeparator,
+  toScreenRouteNode,
   wouldCreateScreenCycle,
 } from '@aglyn/aglyn'
 import * as Besigner from '@aglyn/besigner'
@@ -136,7 +140,9 @@ import { withSitePlugins } from '../../../../../../../../../../components/consol
 import PageHoldBanner from '../../../../../../../../../../components/page-holds/page-hold-banner.component'
 import BesignerFunctionsButton from '../../../../../../../../../../components/besigner-functions-button.component'
 import PluginWidgetSlot from '../../../../../../../../../../components/plugin-widget-slot.component'
+import BesignerPageRecordProvider from '../../../../../../../../../../components/besigner-page-record-provider.component'
 import BindingPickerProvider from '../../../../../../../../../../components/binding-picker-provider.component'
+import { useBindingTokenLookups } from '../../../../../../../../../../hooks/use-host-binding-docs'
 import InteractionsProvider from '../../../../../../../../../../components/interactions-provider.component'
 import usePluginDrawerRegistration from '../../../../../../../../../../hooks/use-plugin-drawer-registration'
 import BesignerMediaPickerProvider from '../../../../../../../../../../components/besigner-media-picker-provider.component'
@@ -173,7 +179,12 @@ import {
 } from '../../../../../../../../../../components/host-id-provider'
 import { useOrgSlug } from '../../../../../../../../../../hooks/use-org-scope'
 import useCurrentOrg from '../../../../../../../../../../hooks/use-current-org'
-import { syncScreenRouteEntries } from '../../../../../../../../../../constants/screen-publishing'
+import {
+  publishScreenRoute,
+  syncScreenRouteEntries,
+  unpublishScreenRoute,
+} from '../../../../../../../../../../constants/screen-publishing'
+import { liveDescendantsToastClause } from '../../../../../../../../../../components/live-descendants-note.component'
 import { announceLiveScreenChange } from '../../../../../../../../../../constants/screen-live-announce'
 import {
   buildScreenSeoUpdate,
@@ -572,6 +583,8 @@ function BesignerPage(props) {
     notFound,
   } = useBesignerDocument({
     nodes,
+    // Every save converts a typed `{{name}}` to its id token (AGL-3481).
+    bindingLookups: useBindingTokenLookups(hostId),
     updatedAt: (data as { updatedAt?: unknown } | undefined)?.updatedAt,
     pendingWrites: hasPendingWrites,
     status,
@@ -991,9 +1004,11 @@ function BesignerPage(props) {
       Aglyn.ScreenRouteNode & { displayName?: string }
     > = {}
     for (const screen of screenDocs ?? []) {
+      // `toScreenRouteNode` carries the kind, so a page GROUP above this
+      // screen composes as nothing rather than as an unpublished page that
+      // refuses the path (AGL-3463).
       map[screen.$id] = {
-        slug: screen.slug,
-        parentId: screen.parentId,
+        ...toScreenRouteNode(screen),
         displayName: screen.displayName,
       }
     }
@@ -1052,16 +1067,49 @@ function BesignerPage(props) {
     composedPath ?? normalizedSlug,
   )
 
-  // Routing entries for this screen plus all descendants under a candidate
-  // screens map; null removes entries whose chain no longer resolves.
-  // `publish: false` restricts the write to entries that already exist, for a
-  // caller that is only MOVING a screen (AGL-2571).
+  // Routing entries for this screen plus its descendants under a candidate
+  // screens map. Paths only: a page whose chain stops composing keeps the
+  // route it has, and only `unpublishScreenRoute` takes a page off the site
+  // (AGL-3463). `publish: false` restricts the write to entries that already
+  // exist, for a caller that is only MOVING a screen (AGL-2571).
   const buildRouteEntries = useCallback(
     (
       byId: Record<string, Aglyn.ScreenRouteNode | undefined>,
-      options?: Aglyn.BuildScreenRouteEntriesOptions,
-    ) => buildScreenRouteEntries(screenId, byId, routingMap, options),
-    [screenId, routingMap],
+      options?: Pick<Aglyn.BuildScreenRouteEntriesOptions, 'publish'>,
+    ) =>
+      buildScreenRouteEntries(screenId, byId, routingMap, {
+        ...options,
+        currentById: screensById,
+      }),
+    [screenId, routingMap, screensById],
+  )
+  /**
+   * How many pages under this one keep serving when it is unpublished
+   * (AGL-3463). The unpublish here has no confirmation, so the toast says it.
+   */
+  const liveDescendantCount = useMemo(
+    () => liveScreenDescendants(screenId, screensById, routingMap).length,
+    [screenId, screensById, routingMap],
+  )
+  /**
+   * What the Parent page picker offers: pages and page GROUPS (AGL-3463),
+   * never a screen that is not a page — an email, an error screen, an entry
+   * template or a deleted screen has no address to nest under, and choosing
+   * one would leave this page with a chain that composes nothing. The
+   * current parent stays on the list whatever it is, so the field never
+   * shows a value it cannot name.
+   */
+  const parentOptions = useMemo(
+    () =>
+      (screenDocs ?? []).filter(
+        (screen: any) =>
+          screen.$id === parentId ||
+          (screen.$id !== screenId &&
+            !screen.deletedAt &&
+            (isScreenGroup(screen) || screenClaimsToBeAPage(screen)) &&
+            !wouldCreateScreenCycle(screenId, screen.$id, screensById)),
+      ),
+    [screenDocs, parentId, screenId, screensById],
   )
 
   /** Did the last save actually land? See `onSaved`. */
@@ -1244,13 +1292,44 @@ function BesignerPage(props) {
       if (remoteChanged) return
     }
     const livePointer = screenResult?.data?.versionId
-    if (livePointer !== versionId) {
+    /*
+     * THE PLACEHOLDER HOME PAGE BECOMES THEIR HOME PAGE (AGL-3478).
+     *
+     * A new site is born with a Home page the platform routed at `/`, and
+     * the host names it in `defaultHomeScreenId` so a starter may take the
+     * root back from it. Editing it and pressing this button is the obvious
+     * way to make a site's home page, and from here on it is the owner's: a
+     * starter must not unpublish it, the guided start must stop reading the
+     * site as blank, and `first_publish` counts this publish. So the
+     * placeholder publishes through the route seam, which moves the pointer,
+     * restamps the route and clears the marker in one write.
+     *
+     * Reached only past the "Already published" return above, so a click
+     * that changes nothing changes nothing here either. An author cannot
+     * clear the marker (the rules hold it to the publishing roles), and is
+     * left on the pointer write alone.
+     */
+    const publishesPlaceholder =
+      canPublish &&
+      !isEmailScreen &&
+      Boolean(publishedPath) &&
+      screenId === defaultHomeScreenId
+    if (livePointer !== versionId || publishesPlaceholder) {
       // The pointer write is the publish. Unhandled, a rejection here skips
       // the success toast without ever raising one of its own, so the author
       // is told nothing at all — the same silence as a green toast over a
       // failed publish, minus even the wrong message.
       try {
-        await updateScreenDoc({ versionId } as any)
+        if (publishesPlaceholder) {
+          await publishScreenRoute(
+            firestore,
+            { hostId, screenId, versionId, user },
+            screenResult?.data?.slug ?? publishedPath,
+            publishedPath,
+          )
+        } else {
+          await updateScreenDoc({ versionId } as any)
+        }
       } catch (error) {
         return enqueueSnackbar(
           `Saved, but publishing failed: ${
@@ -1311,9 +1390,14 @@ function BesignerPage(props) {
     livePublished,
     remoteChanged,
     screenResult?.data?.versionId,
+    screenResult?.data?.slug,
     versionId,
     updateScreenDoc,
     draft.sharedDraftUnopened,
+    canPublish,
+    publishedPath,
+    defaultHomeScreenId,
+    firestore,
     user,
     hostId,
     screenId,
@@ -1347,7 +1431,7 @@ function BesignerPage(props) {
         ? // `publishedAt` rides the same write the routing entry does
           // (AGL-2571). It is what the screens list and the screen details
           // page call "published", and only `publishScreenRoute` — a
-          // different publish path, which this editor does not use — was
+          // different publish path, which this handler does not use — was
           // stamping it, so the two surfaces disagreed by construction.
           updateScreenDoc({
             slug: normalizedSlug,
@@ -1359,6 +1443,10 @@ function BesignerPage(props) {
                 hostId,
                 buildRouteEntries(candidateById),
                 { user },
+                // This screen is what the button publishes — so a placeholder
+                // home page published here is the owner's from now on
+                // (AGL-3478). Its subtree is only re-addressed.
+                { published: screenId },
               ),
             )
             .then(() => {
@@ -1378,33 +1466,21 @@ function BesignerPage(props) {
                 { variant: 'success', persist: false },
               )
             })
-        : updateScreenDoc({
-            slug: deleteField(),
-            // An unpublished screen never keeps a published date (AGL-2571).
-            publishedAt: deleteField(),
-          } as any)
-            .then(() =>
-              syncScreenRouteEntries(
-                firestore,
-                hostId,
-                buildRouteEntries({
-                  ...screensById,
-                  [screenId]: {
-                    ...screensById[screenId],
-                    slug: undefined,
-                    parentId,
-                  },
-                }),
-                { user },
-              ),
+        : // Clearing the slug and pressing Unpublish takes THIS page off the
+          // site and nothing else (AGL-3463): its own entry, its slug and its
+          // published date go in one write, and pages nested under it keep
+          // the addresses they have.
+          unpublishScreenRoute(
+            firestore,
+            { hostId, screenId, user },
+            { clearSlug: true },
+          ).then(() => {
+            setSlugInput(null)
+            enqueueSnackbar(
+              `Page unpublished${liveDescendantsToastClause(liveDescendantCount)}`,
+              { variant: 'success', persist: false },
             )
-            .then(() => {
-              setSlugInput(null)
-              enqueueSnackbar('Page unpublished', {
-                variant: 'success',
-                persist: false,
-              })
-            })
+          })
     await action.catch((e) => {
       enqueueSnackbar(`Error: ${JSON.stringify(e)}`, {
         variant: 'error',
@@ -1419,8 +1495,6 @@ function BesignerPage(props) {
     normalizedSlug,
     composedPath,
     candidateById,
-    screensById,
-    parentId,
     buildRouteEntries,
     updateScreenDoc,
     firestore,
@@ -1431,6 +1505,7 @@ function BesignerPage(props) {
     publishedPath,
     routesByScreenId,
     user,
+    liveDescendantCount,
   ])
 
   // One-click publish from the app bar (AGL-452). Publish points the live
@@ -1441,27 +1516,16 @@ function BesignerPage(props) {
   const handleTogglePublish = useCallback(async () => {
     try {
       if (publishedPath) {
-        await syncScreenRouteEntries(
-          firestore,
-          hostId,
-          buildRouteEntries({
-            ...screensById,
-            [screenId]: {
-              ...screensById[screenId],
-              slug: undefined,
-              parentId,
-            },
-          }),
-          { user },
-        )
-        // The slug stays, so re-publishing is one click; the published date
-        // does not, or an unpublished screen reads as live everywhere the
+        // This page's entry and nothing else (AGL-3463): pages nested under
+        // it keep serving at their own addresses. The slug stays, so
+        // re-publishing is one click; the published date goes in the same
+        // write, or an unpublished screen reads as live everywhere the
         // console shows that date (AGL-2571).
-        await updateScreenDoc({ publishedAt: deleteField() } as any)
-        enqueueSnackbar('Page unpublished', {
-          variant: 'success',
-          persist: false,
-        })
+        await unpublishScreenRoute(firestore, { hostId, screenId, user })
+        enqueueSnackbar(
+          `Page unpublished${liveDescendantsToastClause(liveDescendantCount)}`,
+          { variant: 'success', persist: false },
+        )
         return
       }
       if (!normalizedSlug) {
@@ -1509,6 +1573,9 @@ function BesignerPage(props) {
         hostId,
         buildRouteEntries(candidateById),
         { user },
+        // See `handlePublish`: a placeholder home page published here is the
+        // owner's from now on (AGL-3478).
+        { published: screenId },
       )
       // The one-click publish (AGL-452) reaches the routing map through
       // `syncScreenRouteEntries` rather than `publishScreenRoute`, so it does
@@ -1540,8 +1607,6 @@ function BesignerPage(props) {
     slugPathSeparator,
     composedPath,
     candidateById,
-    screensById,
-    parentId,
     buildRouteEntries,
     updateScreenDoc,
     firestore,
@@ -1552,6 +1617,7 @@ function BesignerPage(props) {
     isCollectionTemplate,
     routesByScreenId,
     user,
+    liveDescendantCount,
   ])
 
   /** Is there a typed slug the screen document has not been told about? */
@@ -1703,8 +1769,16 @@ function BesignerPage(props) {
           ),
         )
         .then(() => {
+          const verb = nextParentId ? 'Parent page assigned' : 'Parent page removed'
           enqueueSnackbar(
-            nextParentId ? 'Parent page assigned' : 'Parent page removed',
+            // A live page whose new chain composes no address keeps the one
+            // it has (AGL-3463) — say so, or the move reads as an unpublish.
+            publishedPath && !nextSelfPath
+              ? `${verb} — still served at ${screenRoutePathToUrl(publishedPath)}` +
+                  ', its address until you publish it again'
+              : publishedPath && nextSelfPath && nextSelfPath !== publishedPath
+                ? `${verb} — now served at ${screenRoutePathToUrl(nextSelfPath)}`
+                : verb,
             { variant: 'success', persist: false },
           )
         })
@@ -1719,6 +1793,8 @@ function BesignerPage(props) {
       screenId,
       screensById,
       routingMap,
+      publishedPath,
+      defaultHomeScreenId,
       buildRouteEntries,
       updateScreenDoc,
       firestore,
@@ -1898,6 +1974,8 @@ function BesignerPage(props) {
                 disabled={screenKind === 'email'}
               >
                 <BesignerMediaPickerProvider hostId={hostId}>
+                {/* A record template draws for one of its records (AGL-3475). */}
+                <BesignerPageRecordProvider hostId={hostId} screenId={screenId}>
                 {/* The Attributes panel's plugin section (AGL-2940): the
                     designer draws whatever this context carries under the
                     selected element's fields, and this is the one place
@@ -2253,7 +2331,7 @@ function BesignerPage(props) {
                       </Typography>
                       <Typography variant="caption" color="text.secondary">
                         {
-                          'The slug is this page\'s own path segment; nesting under a parent page composes the full path (parent "company" + slug "about" → /company/about). Use "/" for the home page. Clearing the slug and pressing Unpublish removes the page (and unroutes its children) from the site.'
+                          'The slug is this page\'s own path segment; nesting under a parent page composes the full path (parent "company" + slug "about" → /company/about). A group adds nothing to the path. Use "/" for the home page. Clearing the slug and pressing Unpublish takes this page off the site; pages nested under it keep their own addresses.'
                         }
                       </Typography>
                       <TextField
@@ -2266,21 +2344,13 @@ function BesignerPage(props) {
                         <MenuItem value="__none__">
                           {'None (top level)'}
                         </MenuItem>
-                        {(screenDocs ?? [])
-                          .filter(
-                            (screen) =>
-                              screen.$id !== screenId &&
-                              !wouldCreateScreenCycle(
-                                screenId,
-                                screen.$id,
-                                screensById,
-                              ),
-                          )
-                          .map((screen) => (
-                            <MenuItem key={screen.$id} value={screen.$id}>
-                              {screen.displayName ?? screen.$id}
-                            </MenuItem>
-                          ))}
+                        {parentOptions.map((screen) => (
+                          <MenuItem key={screen.$id} value={screen.$id}>
+                            {isScreenGroup(screen)
+                              ? `${screen.displayName ?? screen.$id} (group)`
+                              : (screen.displayName ?? screen.$id)}
+                          </MenuItem>
+                        ))}
                       </TextField>
                       <Stack
                         direction="row"
@@ -2505,6 +2575,15 @@ function BesignerPage(props) {
                           {'Save'}
                         </Button>
                       </Stack>
+                      {/* What a plugin makes of the page itself (AGL-3475):
+                          a record template's dataset, base and fields. */}
+                      <PluginWidgetSlot
+                        slot="besignerPageProperties"
+                        hostId={hostId}
+                        orgId={orgId}
+                        screenId={screenId}
+                        screenKind={typeof screenKind === 'string' ? screenKind : undefined}
+                      />
                     </Stack>
                   </PropertiesDialogComponent>
                   {Boolean(canvas.rootNode && jsonOpen) && (
@@ -2516,6 +2595,7 @@ function BesignerPage(props) {
                     />
                   )}
                 </BesignerInspectorExtrasContext.Provider>
+                </BesignerPageRecordProvider>
                 </BesignerMediaPickerProvider>
               </InteractionsProvider>
             </BindingPickerProvider>

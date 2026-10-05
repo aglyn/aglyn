@@ -72,7 +72,12 @@ interface SeededHost {
   orgId: string
   /** This month's page views for the site. */
   pageViews: number
+  /** This month's video and file bytes the media CDN counted (AGL-3474). */
+  mediaBytes?: number
 }
+
+/** Each org library's month of counted video and file bytes (AGL-3474). */
+let mockOrgLibraryMediaBytes: Record<string, number> = {}
 
 /**
  * The org documents, MUTATED IN PLACE by the double's `set()`.
@@ -182,15 +187,20 @@ async function fireDuringSweep(): Promise<void> {
   await hook()
 }
 
-/** One `hosts/{id}/analytics/{day}` document carrying the whole month. */
-function analyticsCollection(pageViews: number): any {
+/** One `{hosts|orgs}/{id}/analytics/{day}` document carrying the whole month. */
+function analyticsCollection(pageViews: number, mediaBytes = 0): any {
   const api: any = {
     where: () => api,
     get: async () => (await fireDuringSweep(), {
       docs: [
         {
           id: `${MONTH}-01`,
-          get: (field: string) => (field === 'total' ? pageViews : undefined),
+          get: (field: string) =>
+            field === 'total'
+              ? pageViews
+              : field === 'mediaBandwidthBytes'
+                ? mediaBytes
+                : undefined,
         },
       ],
     }),
@@ -206,7 +216,7 @@ function fakeHostDoc(host: SeededHost) {
       id: host.id,
       collection: (name: string) =>
         name === 'analytics'
-          ? analyticsCollection(host.pageViews)
+          ? analyticsCollection(host.pageViews, host.mediaBytes)
           : emptyCollection(),
     },
   }
@@ -245,16 +255,18 @@ function fakeOrgDoc(orgId: string) {
         if (!options?.merge) mergeInto(data, value)
       },
       collection: (name: string) =>
-        name === 'datasets'
-          ? {
-              ...emptyCollection(),
-              count: () => ({
-                get: async () => ({
-                  data: () => ({ count: mockDatasetCounts[orgId] ?? 0 }),
+        name === 'analytics'
+          ? analyticsCollection(0, mockOrgLibraryMediaBytes[orgId] ?? 0)
+          : name === 'datasets'
+            ? {
+                ...emptyCollection(),
+                count: () => ({
+                  get: async () => ({
+                    data: () => ({ count: mockDatasetCounts[orgId] ?? 0 }),
+                  }),
                 }),
-              }),
-            }
-          : emptyCollection(),
+              }
+            : emptyCollection(),
       update: async (patch: Record<string, unknown>) => {
         // Dotted paths are NESTED paths in `update()` only — the distinction
         // `api/billing/usage-budget` turns on. Modelled so this suite can
@@ -406,6 +418,7 @@ jest.mock('../utils/screen-cap-reconciliation', () => ({
 import { POST } from '../app/api/billing/usage-alerts/route'
 import { pageViewsFromBandwidthGb } from '../utils/usage-metering'
 import { PLAN_ENTITLEMENTS } from '@aglyn/aglyn/server'
+import { ORIGIN_MEDIA_BANDWIDTH_WEIGHT } from '@aglyn/aglyn/app-utils/plan-entitlements'
 
 /** ~8.7k views. Free's 5 GB band, in the unit the counter is in. */
 const FREE_BAND_VIEWS = Math.round(
@@ -463,6 +476,7 @@ beforeEach(() => {
   jest.clearAllMocks()
   orgStore = {}
   mockHosts = []
+  mockOrgLibraryMediaBytes = {}
   duringSweep = null
   mockOrgWrites = []
   mockOrgNotifications = []
@@ -726,6 +740,33 @@ describe('the seed suppresses ALERTS, never ENFORCEMENT (AGL-2413)', () => {
     // …and it did so without mailing anybody.
     expect(sendCount()).toBe(0)
     await expect(response.json()).resolves.toMatchObject({ capped: 1 })
+  })
+
+  it('engages it on video and files alone, the org library’s included (AGL-3474)', async () => {
+    // No page view at all: a site whose traffic is its media, half of it
+    // served from the site's library and half from the org's.
+    const bandBytes = PLAN_ENTITLEMENTS.free.bandwidthGb * 1024 * 1024 * 1024
+    orgStore = neverSubscribedOrg()
+    mockHosts = [
+      { id: 'site-a', orgId: 'org-organic', pageViews: 0, mediaBytes: bandBytes * 0.6 },
+    ]
+    mockOrgLibraryMediaBytes = { 'org-organic': bandBytes * 0.6 }
+    await run()
+    expect(orgStore['org-organic']['bandwidthCap']).toMatchObject({ month: MONTH })
+  })
+
+  it('NEGATIVE: the same media inside the band engages nothing', async () => {
+    // Inside it at the weight a film counts — 0.8 of the band once weighted.
+    const bandBytes =
+      (PLAN_ENTITLEMENTS.free.bandwidthGb * 1024 * 1024 * 1024) /
+      ORIGIN_MEDIA_BANDWIDTH_WEIGHT
+    orgStore = neverSubscribedOrg()
+    mockHosts = [
+      { id: 'site-a', orgId: 'org-organic', pageViews: 0, mediaBytes: bandBytes * 0.4 },
+    ]
+    mockOrgLibraryMediaBytes = { 'org-organic': bandBytes * 0.4 }
+    await run()
+    expect(orgStore['org-organic']['bandwidthCap']).toBeUndefined()
   })
 })
 

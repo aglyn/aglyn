@@ -85,9 +85,9 @@ function sectionBody(
  * and every site's own workflows, actions and webhooks listed with the site
  * each belongs to.
  *
- * No run allowance line: the allowance is each site's, and an org
- * automation's runs count on the site they run on — each site's own
- * Automation reports its meter.
+ * The run allowance line heads the workflows and actions lists here too: the
+ * allowance is the workspace's (AGL-3472), every site's runs spend it, and
+ * this is the page that lists them all.
  */
 function orgSectionBody(
   section: WorkflowsConsoleSectionId,
@@ -100,7 +100,17 @@ function orgSectionBody(
       return <OrgAutomationsCard mount={mount} org={org} canEdit={canEdit} />
     case 'workflows':
     case 'actions':
-      return <OrgSiteAutomationList mount={mount} kind={section} canRead />
+      return (
+        <Stack spacing={1}>
+          <RunQuotaLine
+            hostId={null}
+            orgId={mount.orgId}
+            org={org}
+            counter={section === 'workflows' ? 'workflowRuns' : 'actionRuns'}
+          />
+          <OrgSiteAutomationList mount={mount} kind={section} canRead />
+        </Stack>
+      )
     case 'webhooks':
       // A webhook holds its site's secret: the rules admit a site's admins
       // and editors, which every org-wide member but a viewer is.

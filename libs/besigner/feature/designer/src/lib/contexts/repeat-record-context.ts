@@ -15,8 +15,10 @@
  * limitations under the License.
  */
 
-import type { RepeatableDataset } from '@aglyn/aglyn/app-utils/expand-repeatables'
-import type { DatasetModel } from '@aglyn/aglyn/app-utils/dataset-models'
+import type {
+  RepeatableDataset,
+  RepeatRowsModel,
+} from '@aglyn/aglyn/app-utils/expand-repeatables'
 import { createContext } from 'react'
 
 /**
@@ -32,8 +34,8 @@ import { createContext } from 'react'
 export interface RepeatRecordContextValue {
   /** The record's value map, with `$id` (AGL-180 hops resolve through it). */
   record: Record<string, unknown>
-  /** Model of the repeated rows; a reference hop needs its field configs. */
-  model?: DatasetModel
+  /** The repeated rows' references; a reference hop needs them. */
+  model?: RepeatRowsModel
   /** Rows by key, so `{{item.author.name}}` resolves on the canvas too. */
   datasetsByKey?: Record<string, RepeatableDataset | undefined>
 }

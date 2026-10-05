@@ -55,6 +55,9 @@ import {
   AI_PAGE_SECTION_TOOL,
   aiEmptyPage,
   aiPageCheckContext,
+  aiPageRecordNote,
+  aiPageRecordTemplate,
+  aiPageRecordTokens,
   aiPageSectionCheck,
   aiPageSectionNodeId,
   aiPageSectionPrompt,
@@ -499,6 +502,63 @@ describe('what a pass asks for', () => {
     // The catalog shows no Grid's container or spacing, so the instructions name both and the size format (AGL-3055).
     expect(AI_PALETTE_CATALOG.screen).not.toMatch(/muiGrid \(Grid\)[^\n]*container=/)
     expect(AI_JOB_PAGE_INSTRUCTIONS[0].text).toContain('a Grid ("container": true, "spacing": 3) of Grid items sized like "xs:12 md:4"')
+  })
+})
+
+describe('a record template’s page (AGL-3475)', () => {
+  const fixture = AI_PAGE_BRIEF_FIXTURES[1]
+  const plan = confirmed(fixture)
+  const inventory = {
+    ...fixture.inventory,
+    datasets: [{ id: 'ds-services', name: 'Services', fields: ['Name', 'Photo'], fieldIds: ['name', 'photo'] }],
+  }
+  const screen = { ...plan.screens[0], record: { dataset: 'ds-services', base: 'services' } }
+  const job = { brief: fixture.brief, inputs: { pageType: fixture.pageType } }
+
+  it('reads the dataset’s fields by id, with the name a member gave each', () => {
+    const template = aiPageRecordTemplate(screen.record, inventory, plan)
+    expect(template).toEqual({
+      dataset: 'ds-services',
+      name: 'Services',
+      base: 'services',
+      fields: [
+        { id: 'name', name: 'Name' },
+        { id: 'photo', name: 'Photo' },
+      ],
+    })
+    expect(aiPageRecordTokens(template)).toEqual(['{{item.name}}', '{{item.photo}}', '{{item.url}}'])
+    expect(aiPageRecordTemplate(null, inventory, plan)).toBeNull()
+  })
+
+  it('binds a dataset the plan creates by the field names it was planned with', () => {
+    const planned = {
+      ...plan,
+      create: [{ kind: 'dataset' as const, name: 'Locations', why: 'None yet.', duplicateOf: null, fields: ['city'] }],
+    }
+    expect(aiPageRecordTemplate({ dataset: 'new:Locations', base: 'areas' }, inventory, planned)).toMatchObject({
+      name: 'Locations',
+      fields: [{ id: 'city', name: 'city' }],
+    })
+  })
+
+  it('asks every pass for {{item.*}} copy, and admits the tokens where a link or an image names one', () => {
+    const record = aiPageRecordTemplate(screen.record, inventory, plan)
+    const prompt = aiPageSectionPrompt({ job, plan, screen, index: 0, maxElements: 23, record })
+    expect(prompt).toContain('This page is the record template of the dataset "Services"')
+    expect(prompt).toContain('/services/<record address>')
+    expect(prompt).toContain('{{item.name}} (Name), {{item.photo}} (Photo)')
+    expect(aiPageSectionPrompt({ job, plan, screen, index: 0, maxElements: 23 })).not.toContain('record template')
+    expect(aiPageCheckContext(inventory, { recordTokens: aiPageRecordTokens(record) }).bindingTokens).toEqual([
+      '{{item.name}}',
+      '{{item.photo}}',
+      '{{item.url}}',
+    ])
+    expect(aiPageCheckContext(inventory).bindingTokens).toBeUndefined()
+  })
+
+  it('tells the member where the binding is saved, which the job never writes', () => {
+    const record = aiPageRecordTemplate(screen.record, inventory, plan)
+    expect(aiPageRecordNote(record as never)).toContain('Page Properties → Record pages')
   })
 })
 

@@ -146,6 +146,18 @@ export interface ListMembersPanelProps {
   findRule?: DynamicListRule | null
   /** The same filters in sentences, so the button says what it will find. */
   ruleSummary?: readonly string[]
+  /**
+   * Told what the table is filtered to — `null` when it is not — so the
+   * card's Export can offer "the current filter": the predicates this
+   * table's own query is asking, which the export reads with the same query.
+   */
+  onFilterChange?: (filter: ListMembersFilter | null) => void
+}
+
+/** The member table's filter, as the export dialog offers it. */
+export interface ListMembersFilter {
+  label: string
+  value: { filters: ReadonlyArray<{ path: string; op: string; value: unknown }> }
 }
 
 /**
@@ -355,6 +367,19 @@ export function ListMembersPanel(props: ListMembersPanelProps) {
   })
   const filtering =
     gridFilter.clauses.length > 0 || gridFilter.searchWords.some((word) => word.trim())
+  const { onFilterChange } = props
+  const filterKey = filtering ? JSON.stringify(plan.filters) : ''
+  useEffect(() => {
+    if (!onFilterChange) return
+    onFilterChange(
+      filterKey
+        ? {
+            label: 'Members matching the table’s filters',
+            value: { filters: JSON.parse(filterKey) },
+          }
+        : null,
+    )
+  }, [filterKey, onFilterChange])
   const refusals = useMemo(
     () =>
       listQueryRefusals(plan.refused, {

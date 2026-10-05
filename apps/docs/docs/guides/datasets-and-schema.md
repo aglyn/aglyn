@@ -77,6 +77,7 @@ The types you can author:
 | **Coordinates** | Latitude / longitude pairs |
 | **List** | Ordered arrays |
 | **Reference** | A link to a record in another dataset — see [relations](../content-and-data/datasets/relations.md) |
+| **Page address** | A record's own segment of its page's address, filled in from a text field — see [page address fields](../content-and-data/datasets/model-builder.md#page-address-fields) |
 
 Plugins can register **custom field types**, which appear in the type picker
 suffixed with the plugin id. The console, imports, site restores and the REST
@@ -124,23 +125,20 @@ organization's plan:
 
 ## Import & export
 
-The Data page round-trips **CSV and JSON**:
+The Data page moves records in and out as **CSV, JSON or NDJSON**:
 
-- **Export** — the **CSV** and **JSON** toolbar buttons download every record in
-  the dataset, not only the rows loaded in the table, with one column per model
-  field.
-- **Import** — the **Import records** dialog takes pasted **CSV (with a header
-  row) or a JSON array**. Columns match by field id first, then
-  case-insensitively by display name; rows are validated against the model on
-  the way in.
-- **Upsert** — pick a **Match on field (upsert)** key (say, an email field) and
-  matching rows update records in place instead of appending duplicates. Only
-  genuinely new rows count against the record quota.
+- **Export** opens a dialog where you pick the fields — every field of the
+  dataset, plus the record's ID and its created and updated times — and
+  whether to take every record or only what the table's filters show. Your
+  choice is remembered for next time.
+- **Import** opens a step-by-step wizard: upload or paste a file, check how its
+  columns match the dataset's fields, decide what happens to values the
+  dataset does not hold, choose how rows find the records they update, and
+  review a dry run before anything is written. An import can be undone for
+  seven days.
 
-![The Import records dialog with the CSV/JSON textarea and the Match on field upsert select](/img/guides/datasets-import-dialog.png)
-
-See [import & export](../content-and-data/datasets/import-export.md) for
-round-trip tips.
+See [import & export](../content-and-data/datasets/import-export.md) for each
+step and the choices it offers.
 
 ## Repeatables
 
@@ -181,7 +179,7 @@ Automation steps live in the **Do** list of an action — see
 
 **Delete** removes the dataset *and every record in it*, permanently — the
 confirmation tells you how many documents go with it. There is no undo and no
-retention window, so export first (**CSV** or **JSON**) if you might want the
+retention window, so **Export** it first if you might want the
 rows back. Deleting a single record from the table leaves the dataset itself
 alone.
 

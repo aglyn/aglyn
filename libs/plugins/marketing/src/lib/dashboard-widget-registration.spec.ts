@@ -72,9 +72,10 @@ describe('the marketing plugin registers the campaign glance', () => {
       CAMPAIGN_WIDGET,
       // Campaign attribution, in the zones the CRM and the Inbox host.
       'marketing-crm-record-attribution',
-      // The Emails page's Messages section and a template's recipients, in
-      // the zones the Email plugin hosts.
+      // The Emails page's Messages section, and what a template's emails did
+      // and who received them, in the zones the Email plugin hosts.
       'marketing-email-messages',
+      'marketing-email-template-report',
       'marketing-email-template-recipients',
       'marketing-inbox-campaigns',
       'marketing-inbox-record-attribution',

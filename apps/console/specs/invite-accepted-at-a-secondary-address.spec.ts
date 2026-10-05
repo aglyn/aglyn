@@ -71,6 +71,13 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     Response.json({ error: 'Verify your email' }, { status: 403 }),
   collaboratorSeatRefusalResponse: () => null,
   collaboratorSeatRefusal: () => null,
+  // The staff-seat and owner-handoff helpers (AGL-3466), with their real
+  // answers for an ordinary invite: not staff, no handoff refusal.
+  isStaffAddress: async () => false,
+  ownerHandoffSeatRefusal: async () => null,
+  ownerHandoffRefusalResponse: () => null,
+  acceptOwnerHandoff: async () => ({ previousOwnerUid: 'owner', previousOwner: 'stay' }),
+  orgOwnerSeatRefusalResponse: () => null,
   isImpersonationSession: (...args: unknown[]) => mockIsImpersonationSession(...args),
   lockdownRefusal: async () => null,
   logOrgActivity: async () => undefined,

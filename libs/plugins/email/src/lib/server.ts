@@ -46,7 +46,6 @@ import {
   firebaseAdmin,
   mirrorPlatformResubscribe,
   mirrorPlatformUnsubscribe,
-  resolveCampaignSendRef,
   resolveOrgIdForHost,
   setMarketingCadence,
   UNSUBSCRIBE_SUPPRESSION_REASON,
@@ -57,6 +56,7 @@ import type {
   PluginEmailStreamRejoinResult,
 } from '@aglyn/aglyn/plugin-manager/plugin-email-streams'
 import { stampRecordEmailState } from '@aglyn/aglyn/plugin-manager/plugin-record-email-state'
+import { tallySendUnsubscribe } from '@aglyn/aglyn/plugin-manager/plugin-send-tallies'
 /*
  * The pure cadence rule from the shared email library, where the SEND path
  * reads it too. The preference page and the gate must agree about what
@@ -410,7 +410,7 @@ const unsubscribeHandler: PluginApiHandler = async (req, res) => {
      * suppression mails somebody who asked us not to. Where the send is, and
      * why the write never creates it, is {@link countSendUnsubscribe}'s.
      */
-    if (created) await countSendUnsubscribe(firestore, hostId, campaignId)
+    if (created) await countSendUnsubscribe(hostId, campaignId)
     // The account's answer about product updates, when this is the
     // platform's own marketing site (AGL-3305). After the suppression, and it
     // never throws: the list is what stops the mail.
@@ -445,36 +445,17 @@ const unsubscribeHandler: PluginApiHandler = async (req, res) => {
  * One more unsubscribe on the send a link named (`cid`), never throwing.
  *
  * The link carries the site and the send id it was signed over, and nothing
- * else; the send itself is the organization's
- * (`orgs/{orgId}/campaigns/{sendId}`), or still the site's when the
- * migration has not reached it, and `resolveCampaignSendRef` finds whichever
- * holds it. A send in neither place was discarded, and there is nothing to
- * count against.
- *
- * `update()`, never a merge-set: a merge-set would re-create a send deleted
- * between the resolve and the write as a husk holding one `stats` map, and
- * `update()` refuses a missing document — the count for a send nobody can
- * open has no reader. Every failure is swallowed, because the suppression
- * has already been written and a statistic must never be able to cost one.
+ * else. The send, and the unsubscribe count its report reads, belong to the
+ * plugin that sent it, which counts it through the send-tally contract
+ * (`plugin-send-tallies`) — finding the send where it is and never creating
+ * one it cannot find. A send nobody keeps is not counted, and that is the
+ * honest answer: the count for a send nobody can open has no reader. The
+ * seam swallows every failure, because the suppression has already been
+ * written and a statistic must never be able to cost one.
  */
-async function countSendUnsubscribe(
-  firestore: FirebaseFirestore.Firestore,
-  hostId: string,
-  campaignId: string,
-): Promise<void> {
+async function countSendUnsubscribe(hostId: string, campaignId: string): Promise<void> {
   if (!isCampaignPathId(campaignId)) return
-  try {
-    const orgId = await resolveOrgIdForHost(hostId)
-    const sendRef = await resolveCampaignSendRef({
-      hostId,
-      sendId: campaignId,
-      orgId,
-      firestore,
-    })
-    await sendRef?.update({ 'stats.unsubscribes': FieldValue.increment(1) })
-  } catch {
-    // The suppression is the write that mattered, and it has landed.
-  }
+  await tallySendUnsubscribe({ hostId, sendId: campaignId })
 }
 
 /**
@@ -838,7 +819,7 @@ const preferencesHandler: PluginApiHandler = async (req, res) => {
         campaignId,
         topicId,
       })
-      if (created) await countSendUnsubscribe(firestore, hostId, campaignId)
+      if (created) await countSendUnsubscribe(hostId, campaignId)
       await mirrorPlatformUnsubscribe({ hostId, email, left: 'everything' })
       return void sendPage(
         res,

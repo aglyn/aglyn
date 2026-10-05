@@ -171,19 +171,30 @@ const collectionRef = (
 
 const firestoreHandle: any = {
   collection: (name: string) => collectionRef(name),
+  // The run meter's one write: the site's counter and the workspace's.
+  batch: () => {
+    const writes: Array<() => Promise<void>> = []
+    return {
+      set: (ref: any, data: any, options?: { merge?: boolean }) => {
+        writes.push(() => ref.set(data, options))
+      },
+      commit: async () => {
+        for (const write of writes) await write()
+      },
+    }
+  },
   runTransaction: async (work: (transaction: any) => Promise<unknown>) =>
     work({
       get: (ref: any) => ref.get(),
-      set: (ref: any, data: Record<string, any>) => ref.set(data),
+      getAll: (...refs: any[]) => Promise.all(refs.map((ref) => ref.get())),
+      set: (ref: any, data: Record<string, any>, options?: { merge?: boolean }) =>
+        ref.set(data, options),
       update: (ref: any, data: Record<string, any>) => ref.update(data),
     }),
 }
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
-  // The list-fields restamp (AGL-3321) is `crm-records`' own spec's; here a no-op.
-  restampCrmListFieldsAt: async () => 'current',
-  restampCrmListFieldsOf: async () => ({ restamped: 0, current: 0, missing: 0 }),
   firebaseAdmin: {
     app: () => ({ firestore: () => firestoreHandle }),
     firestore: {
@@ -219,26 +230,6 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     notices.push(notice)
   },
   enrollListMember: async () => undefined,
-  countCrmActivitiesForRecord: async () => 0,
-  recomputeCrmNextTaskAt: async () => ({ records: 0, missing: 0 }),
-  newCrmActivityRef: (_firestore: unknown, orgId: string) =>
-    collectionRef(`orgs/${orgId}/crmActivities`).doc(),
-  writeCrmEmailActivity: async (ref: any, activity: Record<string, any>) =>
-    ref.set(activity),
-}))
-
-// The dataset lookup is the runtime's, and not what is under test: it answers
-// the dataset the step names by id, from the store.
-jest.mock('@aglyn/tenant-runtime/resolve-dataset', () => ({
-  __esModule: true,
-  resolveDatasetDoc: async (datasetsRef: any, step: { datasetId?: string }) =>
-    datasetsRef.doc(String(step.datasetId ?? '')).get(),
-}))
-
-jest.mock('@aglyn/tenant-runtime/assign-contact-owner', () => ({
-  __esModule: true,
-  OWNER_ASSIGNMENT_REFUSALS: {},
-  reassignContactOwner: async () => ({ outcome: 'none', reason: 'failed' }),
 }))
 
 jest.mock('@aglyn/shared-util-email', () => ({
@@ -269,6 +260,8 @@ jest.mock('@aglyn/tenant-data-admin/server/outbound-send-review', () => ({
 
 import { activitySearchTokens } from '@aglyn/aglyn/app-utils/activity-search'
 import { contactFacetPath } from '@aglyn/aglyn/app-utils/contacts'
+import { standInCrmSteps } from '../testing/stand-in-crm-steps'
+import { standInDatasetSteps } from '../testing/stand-in-dataset-steps'
 import { resumeFlowEnrollment, runEventActions } from './run-event-actions'
 import { runEventWorkflows } from './run-event-workflows'
 import { validateWorkflowSteps } from './workflow-steps'
@@ -289,6 +282,10 @@ const history = () =>
 const counter = (name: 'workflowRuns' | 'actionRuns') =>
   store[`${hostPath}/counters/${name}`]?.[MONTH]
 
+/** The workspace's counter, which the band is enforced against (AGL-3472). */
+const workspaceCounter = (name: 'workflowRuns' | 'actionRuns') =>
+  store[`orgs/${ORG_ID}/counters/${name}`]?.[MONTH]
+
 /** The records written under the Leads dataset. */
 const leadRecords = () =>
   Object.keys(store)
@@ -303,6 +300,34 @@ const SUBMISSION = {
   name: 'Ada',
   budget: 40,
 }
+
+// The dataset step is the data plugin's, run through the server-step seam;
+// this plugin's specs stand it in over the store (AGL-3080).
+let unregisterDatasetSteps: () => void = () => undefined
+beforeAll(() => {
+  unregisterDatasetSteps = standInDatasetSteps({
+    dataset: (_request, id) => docRef(`orgs/${ORG_ID}/datasets/${id}`).get(),
+    append: (_request, id, record) =>
+      collectionRef(`orgs/${ORG_ID}/datasets/${id}/records`).add(record),
+  })
+})
+afterAll(() => unregisterDatasetSteps())
+
+// The CRM steps are the CRM's, run through the server-step seam; this
+// plugin's specs stand them in over the store (AGL-3080).
+let unregisterCrmSteps: () => void = () => undefined
+beforeAll(() => {
+  unregisterCrmSteps = standInCrmSteps({
+    groupId: GROUP_ID,
+    contact: async (request) => {
+      const id = String(request.payload['contactId'] ?? '')
+      return id && store[`orgs/${ORG_ID}/contacts/${id}`]
+        ? docRef(`orgs/${ORG_ID}/contacts/${id}`)
+        : null
+    },
+  })
+})
+afterAll(() => unregisterCrmSteps())
 
 beforeEach(() => {
   store = {}
@@ -504,6 +529,8 @@ describe('one run, metered once', () => {
 
     expect(counter('workflowRuns')).toBe(1)
     expect(counter('actionRuns')).toBeUndefined()
+    expect(workspaceCounter('workflowRuns')).toBe(1)
+    expect(workspaceCounter('actionRuns')).toBeUndefined()
   })
 
   it('counts an action whose step runs such a workflow once, on the action meter', async () => {
@@ -529,6 +556,8 @@ describe('one run, metered once', () => {
     // …which is the one run on the one meter.
     expect(counter('actionRuns')).toBe(1)
     expect(counter('workflowRuns')).toBeUndefined()
+    expect(workspaceCounter('actionRuns')).toBe(1)
+    expect(workspaceCounter('workflowRuns')).toBeUndefined()
   })
 })
 

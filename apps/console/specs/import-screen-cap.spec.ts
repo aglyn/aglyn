@@ -176,6 +176,9 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   // AGL-1506: inert verdict — the 423 wiring has its own specs; these
   // suites test other properties and must not depend on lockdown reads.
   lockdownRefusal: async () => null,
+  // A package import reads the site it lands in first (AGL-3533), media
+  // included; the host-scope narrowing has its own suite.
+  scopedToHost: (ref: any) => ref,
   emailUnverifiedResponse: () =>
     Response.json({ error: 'Verify your email' }, { status: 403 }),
 }))
@@ -188,13 +191,12 @@ jest.mock('@aglyn/aglyn/server', () => ({
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/plan-entitlements'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/screen-route'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/collection-kind'),
-  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/dataset-models'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/scope-tokens'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/name-search'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/binding-tokens'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/stored-nodes'),
   // The REAL flat platform caps (AGL-2266) — the import route reads both.
-  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/actions'),
+  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/site-interactions'),
   ...jest.requireActual(
     '../../../libs/aglyn/src/lib/app-utils/collection-entries',
   ),

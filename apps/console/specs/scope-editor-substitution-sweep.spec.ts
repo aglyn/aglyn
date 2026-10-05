@@ -74,11 +74,13 @@ const SUBSTITUTION =
 /**
  * The survivors, and why each is not a display seed.
  *
- * Exactly one entry, and it is a **write**: the scope a newly forked
- * marketplace copy is CREATED with. A create has to answer the question, and
- * `[ORG_SCOPE_TOKEN]` is a stated default rather than an assumption about
- * what somebody already chose — the inverse of the editors above. Reviewed
- * during the AGL-1480 sweep and left alone, and again here.
+ * None today. The one there was is gone with the copy it scoped: the scope a
+ * forked marketplace dataset would have been CREATED with, a write default
+ * rather than an assumption about a stored choice, reviewed during the
+ * AGL-1480 sweep and left alone. A dataset schema's update is answered by the
+ * plugin that keeps datasets since AGL-3080, merge only, so no fork of one
+ * is ever created and nothing needs the default. A survivor added here has
+ * to be a write in the same sense, with its reason beside it.
  *
  * `apps/console/utils/server/backfill-scope.ts` is worth naming for its
  * absence. AGL-1484 expected it here, and a looser pattern did flag it — but
@@ -87,7 +89,7 @@ const SUBSTITUTION =
  * stamp without ever writing the ternary, so it belongs in neither list, and
  * the pattern was narrowed rather than the allowlist widened.
  */
-const ALLOWED = ['libs/plugins/marketplace/src/lib/server/update-artifact.ts']
+const ALLOWED: string[] = []
 
 describe('AGL-1484 · nothing substitutes the org token for an absent scope', () => {
   /**

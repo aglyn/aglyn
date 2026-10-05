@@ -23,8 +23,11 @@ Scopes and the site rule are shared with every CRM resource — see
   "title": "Call back about the proposal",
   "notes": null,
   "kind": "call",
+  "typeLabel": "Call",
   "priority": "high",
+  "priorityLabel": "High",
   "status": "open",
+  "statusLabel": "In Progress",
   "dueAt": "2026-09-10T15:00:00.000Z",
   "remindAt": "2026-09-10T15:00:00.000Z",
   "reminderSentAt": null,
@@ -45,9 +48,12 @@ Scopes and the site rule are shared with every CRM resource — see
 | `object` | string | Always `"task"`. |
 | `title` | string | Required. Trimmed, truncated to 200 characters. Writable. |
 | `notes` | string \| null | Free text, 5,000 characters. Writable. |
-| `kind` | string | `call`, `email`, `meeting` or `todo`. `todo` when never set. Writable. |
-| `priority` | string | `low`, `normal` or `high`. `normal` when never set. Writable. |
-| `status` | string | `open` or `done`. `open` when never set. Writable — marking a task `done` stamps `completedAt`; marking it `open` again clears it, so a reopened task never reads as completed on the day it was first closed. |
+| `kind` | string | The task's Type, as its meaning: `call`, `email`, `meeting` or `todo`. `todo` when never set. Writable: send a meaning, or a value of your organization's **Type** picklist (`"Meeting"`, `"Site visit"`) and the task stores the meaning that value carries. |
+| `typeLabel` | string | Your organization's label for the type — the one the task holds, or the first active value of its meaning when it holds none. **Read-only**; set through `kind`. |
+| `priority` | string | `low`, `normal` or `high`. `normal` when never set. Writable, as a meaning or a value of the **Priority** picklist. |
+| `priorityLabel` | string | Your organization's label for the priority. **Read-only**; set through `priority`. |
+| `status` | string | `open` or `done`. `open` when never set. Writable, as a meaning or a value of the **Status** picklist (`"In Progress"`, `"Completed"`) — marking a task `done` stamps `completedAt`; marking it `open` again clears it, so a reopened task never reads as completed on the day it was first closed. A value of the same meaning (`"Waiting on someone else"` on an open task) relabels it and changes nothing else. |
+| `statusLabel` | string | Your organization's label for the status — `"Not Started"` and `"Completed"` among the standard values. **Read-only**; set through `status`. |
 | `dueAt` | string \| null | ISO 8601 instant. Writable. |
 | `remindAt` | string \| null | ISO 8601 instant. When the assignee is reminded — a console notification and an email, sent by an hourly runner, so it arrives within the hour after this time. Writable. Omitted on create, it is the due time (or `null` when there is none). Omitted on update, it **follows a moved `dueAt`** when it still sat on the old due time, and stays put when it was set to a time of its own; send `null` for no reminder. Marking the task `done` clears a reminder that has not yet been sent. |
 | `reminderSentAt` | string \| null | When the runner handled the reminder. **Read-only.** Cleared whenever `remindAt` changes, so a moved reminder is sent again. |
@@ -136,7 +142,7 @@ curl -X PATCH "https://app.aglyn.com/api/v1/tasks/t_5e0d" \
 
 | Status | `type` | When |
 | --- | --- | --- |
-| `400` | `bad_request` | `code: "validation_failed"` — a missing `title` or `consentSiteId`, a `kind`, `priority` or `status` outside its list, a `dueAt` or `remindAt` that is not an ISO 8601 instant, an `assigneeUid` who is not a member, or a `contactId`, `companyId` or `dealId` that does not exist. On the list, a `?status=` outside `open`/`done` or a malformed `?updatedAfter=`. `fields` names each key. |
+| `400` | `bad_request` | `code: "validation_failed"` — a missing `title` or `consentSiteId`, a `kind`, `priority` or `status` that is neither a meaning nor an active value of your organization's picklist (the error names the values it allows), a `dueAt` or `remindAt` that is not an ISO 8601 instant, an `assigneeUid` who is not a member, or a `contactId`, `companyId` or `dealId` that does not exist. On the list, a `?status=` outside `open`/`done` or a malformed `?updatedAfter=`. `fields` names each key. |
 | `403` | `insufficient_scope` | Key lacks `crm:read` / `crm:write`. |
 | `404` | `not_found` | `"No such task"`. |
 | `405` | `method_not_allowed` | `Allow`: `GET, POST` on `/v1/tasks`, `GET, PATCH, DELETE` on one task. |

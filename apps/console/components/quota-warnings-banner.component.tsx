@@ -24,9 +24,14 @@ import {
   UNLIMITED,
 } from '@aglyn/aglyn'
 import { pluginOrgCapacities } from '@aglyn/aglyn/plugin-manager/plugin-org-capacity'
+import {
+  pluginUsageBands,
+  type ResolvedPluginUsageBand,
+} from '@aglyn/aglyn/plugin-manager/plugin-usage-axes'
 import { AppLink } from '@aglyn/shared-ui-jsx'
+import { USAGE_METER_WARNING_PCT } from '@aglyn/shared-ui-jsx/components/usage-meter.component'
 import { Alert, Button } from '@mui/material'
-import { collection, doc, getCountFromServer, getDoc } from 'firebase/firestore'
+import { collection, getCountFromServer } from 'firebase/firestore'
 import { useParams } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
 import { useFirestore, useScopeTokens, useUser } from '@aglyn/tenant-feature-instance'
@@ -34,6 +39,8 @@ import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { buildRoute, Route } from '../constants/route-links'
 import { updatePaymentMethodHref } from '../utils/update-payment-method-link'
 import { useHostId } from '../components/host-id-provider'
+import type { MediaStorageBand } from './media/media-storage-copy'
+import { useMediaStorageBand } from './media/use-media-storage-band'
 import { useOrgScope, useOrgSlug } from '../hooks/use-org-scope'
 import { useUrlNamesOrg } from '../hooks/use-secondary-nav'
 import useCurrentOrg from '../hooks/use-current-org'
@@ -74,26 +81,131 @@ interface QuotaState {
   used: number
   limit: number
   /**
-   * The AI credits row (AGL-2898) carries a key because its sentence is its
-   * own: what happens at the band differs by plan, and the generic "upgrade
-   * to keep adding" is wrong for a band that is sold past.
+   * A plugin band's row (AGL-2898, AGL-3080) carries the band's id, because
+   * its sentence is its own: what happens at a band can differ by plan, and
+   * the generic "upgrade to keep adding" is wrong for a band that is sold
+   * past.
    */
-  key?: 'assistCredits'
-  /**
-   * What happens at the band, as the AI plugin's credits route reports the
-   * reservation's own verdict: `true` stops, `false` sells past.
-   */
-  stopsAtBand?: boolean
+  key?: string
+  /** The band's own sentence, as its declaration words it for this standing. */
+  sentence?: string
+  /** The sentence names Billing → Usage, so the banner links it. */
+  linksUsage?: boolean
 }
 
-/** The AI credits row's label, used to find it again among the others. */
-const ASSIST_CREDITS_LABEL = 'AI assist credits'
+/** The bands a plugin warns about here, from its compiled declaration. */
+type WarnedBand = ResolvedPluginUsageBand & {
+  consoleWarning: NonNullable<ResolvedPluginUsageBand['consoleWarning']>
+}
+
+const warnedBands = (): WarnedBand[] =>
+  pluginUsageBands().filter((band): band is WarnedBand => Boolean(band.consoleWarning))
+
+/**
+ * A band's sentence for its standing: approaching it, or at it — and at it,
+ * whether the plugin's route reports that the band stops there or bills past
+ * it. A route that did not say reads as the wall: promising a charge the plan
+ * may not bill is the worse of the two sentences.
+ */
+function bandSentence(
+  warning: WarnedBand['consoleWarning'],
+  used: number,
+  limit: number,
+  stopsAtBand: unknown,
+): string {
+  if (used < limit) return warning.approach
+  return stopsAtBand === false ? warning.reached.bills : warning.reached.stops
+}
+
+/**
+ * The storage row's sentences (AGL-3479), by who is reading and by what the
+ * band does: storage is the WORKSPACE's band — every site's library and the
+ * organization's share it (AGL-2075) — so no sentence calls it this site's,
+ * and at the band a plan that bills past it is never told uploads stop.
+ */
+const STORAGE_SENTENCES = {
+  orgWide: {
+    approach: {
+      stops:
+        `You're above ${USAGE_METER_WARNING_PCT}% of your workspace's ` +
+        'storage — every site and the organization library share it, and ' +
+        'uploads stop when it is full.',
+      bills:
+        `You're above ${USAGE_METER_WARNING_PCT}% of your workspace's ` +
+        'storage — every site and the organization library share it, and ' +
+        'past it extra storage is billed unless you set a storage cap under ' +
+        'Billing → Usage.',
+    },
+    reached: {
+      stops:
+        "You've used all of your workspace's storage — new uploads stop " +
+        'until you free up space or upgrade.',
+      bills:
+        "You've used your workspace's included storage — extra storage is " +
+        'billed at your plan’s rate unless you set a storage cap under ' +
+        'Billing → Usage.',
+    },
+  },
+  scoped: {
+    approach: {
+      stops:
+        `This workspace is above ${USAGE_METER_WARNING_PCT}% of its ` +
+        'storage, which every site shares — uploads stop when it is full.',
+      bills:
+        `This workspace is above ${USAGE_METER_WARNING_PCT}% of its ` +
+        'storage, which every site shares — past it, extra storage is ' +
+        'billed to the workspace.',
+    },
+    reached: {
+      stops:
+        'This workspace has used all of its storage — new uploads stop ' +
+        'until space is freed or a workspace admin upgrades.',
+      bills:
+        'This workspace has used its included storage — extra storage is ' +
+        'billed to the workspace.',
+    },
+  },
+} as const
+
+/**
+ * The storage row (AGL-3479): the workspace's pooled bytes against its pooled
+ * band, both from `/api/media/storage` — `resolveOrgMediaBand`, the function
+ * the upload gate calls — and never one site's counter against the per-site
+ * figure, which reads a workspace whose other libraries are full as having
+ * room, and a single busy site as over a band it shares.
+ *
+ * No band (a failed read, a viewer the route refuses) or an unlimited one is
+ * no row. `hardBand` is the gate's own refusing arm, so "stops" and "bills"
+ * follow what an upload past the band actually does on this plan.
+ */
+function storageQuota(
+  band: MediaStorageBand | null,
+  scopedViewer: boolean,
+): QuotaState | null {
+  if (!band || !Number.isFinite(band.allowanceMb) || band.allowanceMb <= 0) {
+    return null
+  }
+  const used = band.usedBytes / (1024 * 1024)
+  const limit = band.allowanceMb
+  const bills = !band.hardBand
+  const words = STORAGE_SENTENCES[scopedViewer ? 'scoped' : 'orgWide']
+  return {
+    label: 'storage',
+    used,
+    limit,
+    sentence: (used >= limit ? words.reached : words.approach)[
+      bills ? 'bills' : 'stops'
+    ],
+    linksUsage: bills,
+  }
+}
 
 /**
  * Site-wide quota warnings (AGL-136, grown from the AGL-98 dashboard
  * banner): rendered by DashboardLayout on every host and manage page when
- * any tracked quota — screens, storage, datasets per host, or team seats —
- * crosses 80% (warning) or 100% (error), with an Upgrade link to Billing.
+ * any tracked quota — pages, the workspace's storage, datasets, or team
+ * seats — crosses 80% (warning) or 100% (error), with an Upgrade link to
+ * Billing.
  * Dismissible per browser session. Consistent with the dark-launch rule,
  * workspaces without an explicit plan see nothing.
  *
@@ -188,8 +300,9 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
   const planComp = resolvePlanComp(org)
   const plan = org?.plan || planComp?.plan
 
-  // Host-level quotas — screens and media storage — plus every org capacity
-  // a plugin backs, which today is the data plugin's datasets.
+  // Host-level quotas — screens — plus every org capacity a plugin backs,
+  // which today is the data plugin's datasets. Storage is not among them: it
+  // is the workspace's band, read below.
   useEffect(() => {
     if (!orgInScope || !plan || !hostId) return
     let active = true
@@ -214,9 +327,6 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
       getCountFromServer(
         collection(firestore, 'hosts', hostId, 'screens'),
       ).catch(() => null),
-      getDoc(doc(firestore, 'hosts', hostId, 'counters', 'media')).catch(
-        () => null,
-      ),
       Promise.all(
         capacities.map((capacity) =>
           orgWideViewer && orgId
@@ -226,25 +336,18 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
             : Promise.resolve(null),
         ),
       ),
-    ]).then(([screens, media, counted]) => {
+    ]).then(([screens, counted]) => {
       if (!active) return
-      const mediaBytes = media?.exists() ? (media.data()?.bytes ?? 0) : 0
       setQuotas((previous) => [
-        // The org-level rows — seats and AI credits — are owned by their
-        // own effects and survive a host change untouched.
+        // The org-level rows — seats and the plugins' bands — are owned by
+        // their own effects and survive a host change untouched.
         ...previous.filter(
-          (quota) =>
-            quota.label === 'team seats' || quota.key === 'assistCredits',
+          (quota) => quota.label === 'team seats' || quota.key !== undefined,
         ),
         {
           label: 'pages',
           used: screens?.data().count ?? 0,
           limit: entitlements.screensPerHost,
-        },
-        {
-          label: 'storage',
-          used: mediaBytes / (1024 * 1024),
-          limit: entitlements.storagePerHostMb,
         },
         // No count, no row. Previously an unanswerable count fell through
         // to `?? 0`, which reads as "0 datasets used" — a confident wrong
@@ -361,52 +464,71 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
   const userRef = useRef(user)
   userRef.current = user
 
-  // The AI credits band (AGL-2898), from the billing route that owns the
-  // meter. Not a Firestore read: `orgs/{id}/assistUsage` is default-deny for
-  // every client, and the route answers in CREDITS, the unit the customer was
-  // sold — no dollar figure of ours crosses this boundary. Gated exactly as
-  // the seat count is: an org-scoped route, and a viewer who can see org
-  // totals. `credits: null` is a plan with no band, and no band is no row.
+  // The plugins' bands that warn here (AGL-2898, AGL-3080) — the AI plugin's
+  // assist credits — each from the console route its plugin declares, which
+  // answers the standing in the band's own unit. Not a Firestore read: a
+  // band's meter may be default-deny for every client (`assistUsage` is), and
+  // the route answers in the unit the customer was sold, so no dollar figure
+  // of ours crosses this boundary. Gated exactly as the seat count is: an
+  // org-scoped route, and a viewer who can see org totals. A standing with
+  // `limit: null` is a plan with no band, and no band is no row.
   useEffect(() => {
     if (!orgInScope || !plan || !orgId || !orgWideViewer) return
     let active = true
-    void (async () => {
-      try {
-        const response = await authorizedFetch(
-          userRef.current,
-          `/api/ai/billing/credits?orgId=${encodeURIComponent(orgId)}`,
-        )
-        if (!response.ok || !active) return
-        const payload = await response.json().catch(() => null)
-        const credits = payload?.credits
-        // A standing with no band — an uncapped staff comp (AGL-3049) — is
-        // no row, and `null` must not reach `Number()`, which reads it as 0.
-        if (credits?.limit === null) return
-        const used = Number(credits?.used)
-        const limit = Number(credits?.limit)
-        // A standing we could not read is not a standing of zero — the
-        // datasets and seats rows hold the same line, for the same reason.
-        if (!active || !Number.isFinite(used) || !Number.isFinite(limit)) return
-        setQuotas((previous) => [
-          ...previous.filter((quota) => quota.key !== 'assistCredits'),
-          {
-            key: 'assistCredits',
-            label: ASSIST_CREDITS_LABEL,
-            used,
-            limit,
-            // A route that did not say reads as the wall: promising a charge
-            // the plan may not bill is the worse of the two sentences.
-            stopsAtBand: payload?.stopsAtBand !== false,
-          },
-        ])
-      } catch {
-        // Network trouble: no AI credits row, and no stale one either.
-      }
-    })()
+    for (const band of warnedBands()) {
+      const warning = band.consoleWarning
+      void (async () => {
+        try {
+          const response = await authorizedFetch(
+            userRef.current,
+            `${warning.standing}?orgId=${encodeURIComponent(orgId)}`,
+          )
+          if (!response.ok || !active) return
+          const payload = await response.json().catch(() => null)
+          const standing = payload?.[warning.member]
+          // A standing with no band — an uncapped staff comp (AGL-3049) — is
+          // no row, and `null` must not reach `Number()`, which reads it as 0.
+          if (standing?.limit === null) return
+          const used = Number(standing?.used)
+          const limit = Number(standing?.limit)
+          // A standing we could not read is not a standing of zero — the
+          // datasets and seats rows hold the same line, for the same reason.
+          if (!active || !Number.isFinite(used) || !Number.isFinite(limit)) return
+          setQuotas((previous) => [
+            ...previous.filter((quota) => quota.key !== band.id),
+            {
+              key: band.id,
+              label: band.label,
+              used,
+              limit,
+              sentence: bandSentence(warning, used, limit, payload?.stopsAtBand),
+              linksUsage: warning.linksUsage === true,
+            },
+          ])
+        } catch {
+          // Network trouble: no row for the band, and no stale one either.
+        }
+      })()
+    }
     return () => {
       active = false
     }
   }, [orgId, plan, orgWideViewer, orgInScope])
+
+  /*
+   * The workspace's storage band (AGL-3479), through the site's library —
+   * whoever may upload into it may see the band it uploads against, which is
+   * the route's own rule. On an org page there is no site, so it is asked
+   * through the organization library, which the route answers for any member
+   * of the org (AGL-3482). ONE request per scope opened, not per render, and
+   * asked only where the banner may speak (`orgInScope`) and has a plan to
+   * speak about. An unlimited band costs the route no read at all.
+   */
+  const storageBand = useMediaStorageBand({
+    orgId: orgInScope && plan && !hostId ? orgId : null,
+    hostId: orgInScope && plan ? hostId : null,
+    user,
+  })
 
   // ONE gate for every branch below (AGL-1916), placed above all three rather
   // than repeated inside them. Suspension and dunning are org claims of the
@@ -569,34 +691,21 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
   }
 
   if (!plan || dismissed) return null
-  const breached = quotas.filter(
+  const storage = storageQuota(storageBand, scopedViewer)
+  // The same point every Billing meter turns amber at.
+  const breached = [...quotas, ...(storage ? [storage] : [])].filter(
     (quota) =>
       quota.limit !== UNLIMITED &&
       quota.limit > 0 &&
-      quota.used / quota.limit >= 0.8,
+      (quota.used / quota.limit) * 100 >= USAGE_METER_WARNING_PCT,
   )
   if (!breached.length) return null
   const exceeded = breached.some((quota) => quota.used >= quota.limit)
-  // The AI credits row speaks for itself (AGL-2898); every other row shares
+  // A plugin band's row speaks for itself (AGL-2898); every other row shares
   // the one sentence below.
-  const assistRow = breached.find((quota) => quota.key === 'assistCredits')
-  const others = breached.filter((quota) => quota.key !== 'assistCredits')
+  const ownWords = breached.filter((quota) => quota.sentence)
+  const others = breached.filter((quota) => !quota.sentence)
   const names = others.map((quota) => quota.label).join(' and ')
-  // What happens at the AI band is a fact about the plan and the org's own
-  // switch, and the credits route answers it with the same predicate the
-  // reservation refuses on — so the banner cannot promise a stop the
-  // assistant will not make, or a charge the plan cannot bill.
-  const assistStops = assistRow?.stopsAtBand !== false
-  const assistSentence = !assistRow
-    ? ''
-    : assistRow.used >= assistRow.limit
-      ? assistStops
-        ? "You've used your included AI assist credits — AI assist stops " +
-          'until next month or an upgrade, and nothing is billed for it.'
-        : "You've used your included AI assist credits — extra credits are " +
-          'billed at your plan’s rate unless you set a stop under ' +
-          'Billing → Usage.'
-      : "You're above 80% of your included AI assist credits."
 
   return (
     <Alert
@@ -606,8 +715,8 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
         // MUI's action slot replaces the onClose icon, so the dismiss
         // button lives beside Upgrade explicitly.
         <>
-          {orgWideViewer && assistRow ? (
-            // Where the AI stop and ceiling live (AGL-2898): the sentence
+          {orgWideViewer && ownWords.some((quota) => quota.linksUsage) ? (
+            // Where a band's stop and ceiling live (AGL-2898): the sentence
             // names the page, so the button takes the reader there.
             <AppLink
               componentVariant="button"
@@ -644,10 +753,10 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
       {/*
        * A site collaborator cannot buy anything, so "upgrade to keep adding"
        * is an instruction they cannot follow (AGL-1072). The warning itself
-       * still earns its place — the rows they can see are host-scoped
-       * (screens, storage) and they are the ones about to hit them — so the
-       * limit stays and only the call to action changes. The org's quotas
-       * are theirs to work within, not to act on.
+       * still earns its place — the rows they can see are this site's pages
+       * and the workspace's storage, and they are the ones about to hit them
+       * — so the limit stays and only the call to action changes. The org's
+       * quotas are theirs to work within, not to act on.
        */}
       {[
         !others.length
@@ -656,11 +765,11 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
             ? others.some((quota) => quota.used >= quota.limit)
               ? `This site has reached its ${names} limit — ask a workspace ` +
                 'admin to upgrade to keep adding.'
-              : `This site is above 80% of its ${names} quota.`
+              : `This site is above ${USAGE_METER_WARNING_PCT}% of its ${names} quota.`
             : others.some((quota) => quota.used >= quota.limit)
               ? `You've reached your ${names} limit — upgrade to keep adding.`
-              : `You're above 80% of your ${names} quota.`,
-        assistSentence,
+              : `You're above ${USAGE_METER_WARNING_PCT}% of your ${names} quota.`,
+        ...ownWords.map((quota) => quota.sentence),
       ]
         .filter(Boolean)
         .join(' ')}

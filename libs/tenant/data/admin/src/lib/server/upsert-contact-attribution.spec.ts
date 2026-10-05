@@ -18,7 +18,7 @@
 /**
  * THE PURCHASE DOOR IS THE ATTRIBUTION DOOR.
  *
- * `email-revenue-attribution.spec.ts` proves the join is right. This proves
+ * The crediting plugin's own spec proves the join is right. This proves
  * it is REACHED, and reached from the one place every purchase in the product
  * announces itself — and, most importantly, that it is reached from OUTSIDE
  * the audience-band gate. A join wired inside that gate would silently lose a
@@ -26,18 +26,19 @@
  * every test of the join itself would still be green.
  */
 
-const attributeOrderToEmail = jest.fn(async () => null)
-jest.mock('./email-revenue-attribution', () => ({
+/*
+ * The credit is asked of whichever plugin credits outcomes, through the
+ * platform's contract (`plugin-conversion-credit`); what it then writes is
+ * that plugin's own spec's claim.
+ */
+const creditOrderConversion = jest.fn(async () => false)
+const creditConversion = jest.fn(async () => false)
+jest.mock('@aglyn/aglyn/plugin-manager/plugin-conversion-credit', () => ({
   __esModule: true,
-  attributeOrderToEmail: (...args: unknown[]) =>
-    (attributeOrderToEmail as any)(...args),
-}))
-
-const attributeCampaignConversion = jest.fn(async () => null)
-jest.mock('./campaign-conversion-attribution', () => ({
-  __esModule: true,
-  attributeCampaignConversion: (...args: unknown[]) =>
-    (attributeCampaignConversion as any)(...args),
+  creditOrderConversion: (...args: unknown[]) =>
+    (creditOrderConversion as any)(...args),
+  creditConversion: (...args: unknown[]) =>
+    (creditConversion as any)(...args),
 }))
 
 jest.mock('firebase-admin/firestore', () => ({
@@ -152,8 +153,8 @@ describe('upsertHostContact reaches the revenue join', () => {
     added = []
     droppedCounter.length = 0
     quotaAllowed = true
-    attributeOrderToEmail.mockClear()
-    attributeCampaignConversion.mockClear()
+    creditOrderConversion.mockClear()
+    creditConversion.mockClear()
   })
 
   it('offers a purchase to the join, with the order it names', async () => {
@@ -165,7 +166,7 @@ describe('upsertHostContact reaches the revenue join', () => {
       interaction: { refId: 'order_7', atMs: 1_700_000_000_000 },
     })
 
-    expect(attributeOrderToEmail).toHaveBeenCalledWith(
+    expect(creditOrderConversion).toHaveBeenCalledWith(
       expect.objectContaining({
         hostId: 'h1',
         orderId: 'order_7',
@@ -193,7 +194,7 @@ describe('upsertHostContact reaches the revenue join', () => {
 
     expect(added).toEqual([])
     expect(droppedCounter.length).toBe(1)
-    expect(attributeOrderToEmail).toHaveBeenCalledTimes(1)
+    expect(creditOrderConversion).toHaveBeenCalledTimes(1)
   })
 
   it('passes a currency through when the door knows one', async () => {
@@ -205,7 +206,7 @@ describe('upsertHostContact reaches the revenue join', () => {
       purchaseCurrency: 'eur',
       interaction: { refId: 'order_7' },
     })
-    expect(attributeOrderToEmail).toHaveBeenCalledWith(
+    expect(creditOrderConversion).toHaveBeenCalledWith(
       expect.objectContaining({ currency: 'eur' }),
     )
   })
@@ -217,7 +218,7 @@ describe('upsertHostContact reaches the revenue join', () => {
       source: 'form',
       interaction: { refId: 'form_1' },
     })
-    expect(attributeOrderToEmail).not.toHaveBeenCalled()
+    expect(creditOrderConversion).not.toHaveBeenCalled()
   })
 
   it('does not offer an order that names nothing it could be filed under', async () => {
@@ -228,7 +229,7 @@ describe('upsertHostContact reaches the revenue join', () => {
       purchaseCents: 4_200,
       interaction: { summary: 'Placed an order' },
     })
-    expect(attributeOrderToEmail).not.toHaveBeenCalled()
+    expect(creditOrderConversion).not.toHaveBeenCalled()
   })
 
   it('does not offer a capture with no address at all', async () => {
@@ -239,7 +240,7 @@ describe('upsertHostContact reaches the revenue join', () => {
       purchaseCents: 4_200,
       interaction: { refId: 'order_7' },
     })
-    expect(attributeOrderToEmail).not.toHaveBeenCalled()
+    expect(creditOrderConversion).not.toHaveBeenCalled()
   })
 })
 
@@ -248,7 +249,7 @@ describe('upsertHostContact reaches the revenue join', () => {
  * cover.
  *
  * The two joins share a function and must never share a conversion: an order
- * is credited by `attributeOrderToEmail`, keyed on the order id, and a second
+ * is credited by `creditOrderConversion`, keyed on the order id, and a second
  * record for the same sale would be one sale counted twice under two rules.
  */
 describe('upsertHostContact reaches the conversion join', () => {
@@ -263,8 +264,8 @@ describe('upsertHostContact reaches the conversion join', () => {
     added = []
     droppedCounter.length = 0
     quotaAllowed = true
-    attributeOrderToEmail.mockClear()
-    attributeCampaignConversion.mockClear()
+    creditOrderConversion.mockClear()
+    creditConversion.mockClear()
   })
 
   it('credits a NEW contact to the campaign the door resolved', async () => {
@@ -273,10 +274,10 @@ describe('upsertHostContact reaches the conversion join', () => {
       email: 'visitor@example.com',
       source: 'form',
       interaction: { refId: 'form_1', atMs: 1_700_000_100_000 },
-      campaignTouch: TOUCH,
+      conversionTouch: TOUCH,
     })
 
-    expect(attributeCampaignConversion).toHaveBeenCalledWith(
+    expect(creditConversion).toHaveBeenCalledWith(
       expect.objectContaining({
         hostId: 'h1',
         kind: 'contact',
@@ -296,7 +297,7 @@ describe('upsertHostContact reaches the conversion join', () => {
     })
 
     expect(added).toHaveLength(1)
-    expect(attributeCampaignConversion).not.toHaveBeenCalled()
+    expect(creditConversion).not.toHaveBeenCalled()
   })
 
   it('credits nothing for a person the site ALREADY held', async () => {
@@ -307,14 +308,14 @@ describe('upsertHostContact reaches the conversion join', () => {
       email: 'visitor@example.com',
       source: 'form',
       interaction: { refId: 'form_2' },
-      campaignTouch: TOUCH,
+      conversionTouch: TOUCH,
     })
 
     // A returning visitor's capture is another visit, not a new person.
     // Crediting it would let whichever campaign ran most recently re-earn the
     // entire contact list.
     expect(added).toEqual([])
-    expect(attributeCampaignConversion).not.toHaveBeenCalled()
+    expect(creditConversion).not.toHaveBeenCalled()
   })
 
   it('credits nothing when the audience band gate DROPS the contact', async () => {
@@ -330,11 +331,11 @@ describe('upsertHostContact reaches the conversion join', () => {
       email: 'visitor@example.com',
       source: 'form',
       interaction: { refId: 'form_1' },
-      campaignTouch: TOUCH,
+      conversionTouch: TOUCH,
     })
 
     expect(added).toEqual([])
     expect(droppedCounter.length).toBe(1)
-    expect(attributeCampaignConversion).not.toHaveBeenCalled()
+    expect(creditConversion).not.toHaveBeenCalled()
   })
 })

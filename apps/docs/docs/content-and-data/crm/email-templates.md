@@ -33,7 +33,7 @@ writing to, so you need not type them.
 
 | Field | What it fills in |
 | --- | --- |
-| `{{contact.firstName}}`, `{{contact.lastName}}`, `{{contact.name}}` | The person's name as the sending site knows it — the first word, the rest, or the whole. |
+| `{{contact.firstName}}`, `{{contact.lastName}}`, `{{contact.name}}` | The person's name as the sending site knows it — its first and last name when the record keeps them, otherwise the first word and the rest — or the whole. |
 | `{{contact.email}}` | The address the email goes to. |
 | `{{contact.company}}` | The company the person is filed under, as typed or picked on their record. |
 | `{{contact.title}}` | Their job title. |

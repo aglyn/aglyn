@@ -15,10 +15,11 @@
  * limitations under the License.
  */
 
-import type { HostActionAlert, HostEventType } from '@aglyn/aglyn/server'
+import type { HostEventType } from '@aglyn/aglyn/server'
 import type { HostEventPayload } from '@aglyn/tenant-runtime/host-event-listeners'
 import { runEventActions } from './run-event-actions'
 import { runEventWorkflows } from './run-event-workflows'
+import type { HostActionAlert } from '../model/host-actions'
 
 /**
  * Everything the automation engine runs for one host event: the workflows

@@ -276,3 +276,38 @@ describe('a sent email on the log (AGL-2615)', () => {
     expect(screen.getByLabelText('Edit activity')).toBeTruthy()
   })
 })
+
+/**
+ * A HAND-LOGGED CALL OR EMAIL SAYS WHICH WAY IT WENT (AGL-3517), in its
+ * kind's own chip, and stays editable — only a message the platform sent
+ * or captured reads as sent or received.
+ */
+describe('a logged call’s direction (AGL-3517)', () => {
+  const renderWith = (rows: unknown[]) => {
+    mockPaged.mockReturnValue({
+      data: rows,
+      rows,
+      hasMore: false,
+      page: 0,
+      pageSize: 100,
+      setPage,
+      setPageSize: jest.fn(),
+      status: 'success',
+      fromCache: false,
+    })
+    return renderCard()
+  }
+
+  it('reads "Inbound call" and "Outbound email", and keeps the edit', () => {
+    renderWith([
+      { ...row('act-in', 'u-1', 6_000), direction: 'inbound' },
+      { ...row('act-out', 'u-1', 5_000), kind: 'email', body: 'Sent the deck', direction: 'outbound' },
+      { ...row('act-team', 'u-1', 4_000), direction: 'internal' },
+    ])
+    expect(screen.getByText('Inbound call')).toBeTruthy()
+    expect(screen.getByText('Outbound email')).toBeTruthy()
+    expect(screen.getByText('Internal call')).toBeTruthy()
+    expect(screen.queryByTestId('activity-direction')).toBeNull()
+    expect(screen.getAllByLabelText('Edit activity')).toHaveLength(3)
+  })
+})

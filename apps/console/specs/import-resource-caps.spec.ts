@@ -195,6 +195,9 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   // AGL-1506: inert verdict — the 423 wiring has its own specs; these
   // suites test other properties and must not depend on lockdown reads.
   lockdownRefusal: async () => null,
+  // A package import reads the site it lands in first (AGL-3533), media
+  // included; the host-scope narrowing has its own suite.
+  scopedToHost: (ref: any) => ref,
   emailUnverifiedResponse: () =>
     Response.json({ error: 'Verify your email' }, { status: 403 }),
 }))
@@ -209,13 +212,12 @@ jest.mock('@aglyn/aglyn/server', () => ({
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/plan-entitlements'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/screen-route'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/collection-kind'),
-  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/dataset-models'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/scope-tokens'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/name-search'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/binding-tokens'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/stored-nodes'),
   // The REAL flat platform caps (AGL-2266) — the import route reads both.
-  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/actions'),
+  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/site-interactions'),
   ...jest.requireActual(
     '../../../libs/aglyn/src/lib/app-utils/collection-entries',
   ),
@@ -356,7 +358,7 @@ describe('the premise: every bundle cap is at or over the Pro plan cap', () => {
     expect(PRO.functionsPerHost).toBe(50)
 
     expect(DATASETS_LIMIT).toBe(50)
-    expect(PRO.datasetsPerOrg).toBe(15)
+    expect(PRO.datasetsPerOrg).toBe(5)
     // Exactly the hard max: a full bundle takes the whole addon runway too.
     expect(PRO.maxDatasetsPerOrg).toBe(50)
 
@@ -391,7 +393,7 @@ describe('datasets: the leg that leaks revenue, and the org-scoped one', () => {
   it('restores an ordinary under-cap bundle completely, records and all', async () => {
     // The positive control. A refusal that also refused this would have closed
     // the bug by breaking the feature.
-    const wanted = ids(10, 'ds')
+    const wanted = ids(4, 'ds')
     const response = await runImport('host-1', bundleOf({
       datasets: wanted.map((id) => datasetItem(id, ['r-1', 'r-2'])),
     }))
@@ -400,15 +402,15 @@ describe('datasets: the leg that leaks revenue, and the org-scoped one', () => {
     expect(storedIdsIn('orgs/org-1/datasets')).toEqual(wanted)
     expect(
       writes.filter((entry) => entry.path.endsWith('/records/r-1')),
-    ).toHaveLength(10)
+    ).toHaveLength(4)
   })
 
   it('counts the addon datasets the workspace has actually bought', async () => {
     // `checkDatasetQuota` and not `checkQuota(org, 'datasetsPerOrg')`: an org
-    // that has PAID for 35 extra datasets is entitled to 50, and a check
+    // that has PAID for 45 extra datasets is entitled to 50, and a check
     // reading the plan's included number would refuse a customer their own
     // backup after taking their money for the room to hold it.
-    mockOrg = { plan: 'pro', seatAddons: { datasets: 35 } }
+    mockOrg = { plan: 'pro', seatAddons: { datasets: 45 } }
     const wanted = ids(DATASETS_LIMIT, 'ds')
     const response = await runImport('host-1', bundleOf({
       datasets: wanted.map((id) => datasetItem(id)),
@@ -421,7 +423,7 @@ describe('datasets: the leg that leaks revenue, and the org-scoped one', () => {
   it('names upgrading, not addons, once the addon runway is gone', async () => {
     // At the hard max the addon is not an escape and offering it would be a
     // dead end — `checkDatasetQuota` already knows this as `upgradeRequired`.
-    mockOrg = { plan: 'pro', seatAddons: { datasets: 35 } }
+    mockOrg = { plan: 'pro', seatAddons: { datasets: 45 } }
     seedWorkspaceDatasets('org-1', ids(50, 'have'))
     const response = await runImport('host-1', bundleOf({
       datasets: [datasetItem('one-more')],
@@ -515,7 +517,7 @@ describe('datasets: the leg that leaks revenue, and the org-scoped one', () => {
     // limit had before AGL-1382 gave it one home, which is why the slice lives
     // in the route's `sectionItems` and the section's refusal and restore both
     // read it.
-    mockOrg = { plan: 'pro', seatAddons: { datasets: 35 } }
+    mockOrg = { plan: 'pro', seatAddons: { datasets: 45 } }
     const response = await runImport('host-1', bundleOf({
       datasets: ids(DATASETS_LIMIT + 10, 'ds').map((id) =>
         datasetItem(id),

@@ -876,7 +876,7 @@ async function pluginUsageAxes() {
       costAxes.push({ pluginId: plugin.id, ...axis })
     }
     for (const band of declaredBands) {
-      const { id, label, order, fields, fallbackFields, entitlement, perHost, unitCostUsd, hostCounter, alert, metered } = band ?? {}
+      const { id, label, order, fields, fallbackFields, entitlement, perHost, unitCostUsd, hostCounter, orgCounter, alert, metered, consoleWarning } = band ?? {}
       const what = `${where} band "${id ?? ''}"`
       if (typeof id !== 'string' || !PLAIN_NAME.test(id)) throw new Error(`${where}: a band needs a plain "id"`)
       if (bandOwners.has(id)) throw new Error(`${what} is already measured by ${bandOwners.get(id)}`)
@@ -897,6 +897,9 @@ async function pluginUsageAxes() {
       if (hostCounter !== undefined && (typeof hostCounter !== 'string' || !PLAIN_NAME.test(hostCounter))) {
         throw new Error(`${what}: "hostCounter" is the plain name of the per-site counter holding the month's figure`)
       }
+      if (orgCounter !== undefined && (typeof orgCounter !== 'string' || !PLAIN_NAME.test(orgCounter))) {
+        throw new Error(`${what}: "orgCounter" is the plain name of the workspace-wide counter the band is enforced against`)
+      }
       if (
         alert !== undefined &&
         (['label', 'noun', 'reached', 'approach'].some((field) => typeof alert?.[field] !== 'string' || !alert[field].trim()) ||
@@ -906,6 +909,21 @@ async function pluginUsageAxes() {
       }
       if (alert !== undefined && hostCounter === undefined) {
         throw new Error(`${what}: "alert" needs the "hostCounter" the band is measured by`)
+      }
+      if (consoleWarning !== undefined) {
+        const { standing, member, approach, reached, linksUsage } = consoleWarning ?? {}
+        if (typeof standing !== 'string' || !/^\/api\/[a-z0-9/-]+$/.test(standing)) {
+          throw new Error(`${what}: "consoleWarning.standing" is the console API path the band's standing is read from`)
+        }
+        if (typeof member !== 'string' || !PLAIN_NAME.test(member)) {
+          throw new Error(`${what}: "consoleWarning.member" is the plain name the route answers the standing under`)
+        }
+        if ([approach, reached?.stops, reached?.bills].some((sentence) => typeof sentence !== 'string' || !sentence.trim())) {
+          throw new Error(`${what}: "consoleWarning" needs its "approach" sentence and the two at the band, "reached.stops" and "reached.bills"`)
+        }
+        if (linksUsage !== undefined && typeof linksUsage !== 'boolean') {
+          throw new Error(`${what}: "consoleWarning.linksUsage" is a boolean`)
+        }
       }
       if (metered !== undefined) {
         const { rate, quotedPer, noun, withheldUntil } = metered ?? {}
@@ -1600,6 +1618,7 @@ function hostCollectionRows() {
   const rows = []
   const owners = new Map()
   const resourceKinds = new Map()
+  const packageKinds = new Map()
   for (const plugin of config.plugins) {
     const declared = plugin.hostCollections
     if (!declared) continue
@@ -1641,7 +1660,7 @@ function hostCollectionRows() {
         row.resource = hostResourceRow(declaration.resource, `${what} resource`, resourceKinds, plugin.id)
       }
       if (declaration.siteExport !== undefined) {
-        row.siteExport = siteExportRow(declaration.siteExport, `${what} siteExport`, name, row.resource)
+        row.siteExport = siteExportRow(declaration.siteExport, `${what} siteExport`, name, row.resource, packageKinds, plugin.id)
       }
       rows.push(row)
     }
@@ -1773,11 +1792,117 @@ function stampRecord(stamps, what, writable) {
 const CORE_SITE_EXPORT_KEYS = [
   'format', 'version', 'exportedAt', 'sourceHostId', 'host',
   'screens', 'layouts', 'versions', 'components', 'authors', 'collections', 'entries',
-  'media', 'mediaFolders', 'hostMedia', 'hostMediaFolders',
+  'media', 'mediaFolders', 'hostMedia', 'hostMediaFolders', 'emailTemplates', 'emailTemplateVersions', 'themes',
 ]
 
 /** The most documents one bundle may carry of one collection. */
 const SITE_EXPORT_MAX_LIMIT = 1000
+
+/**
+ * The item kinds the platform's own site package carries (AGL-3533, core
+ * `data-transfer/site-package.ts`). A plugin's package kind is its own word
+ * for its items, so it may not take one of these.
+ */
+const CORE_SITE_PACKAGE_KINDS = [
+  'settings', 'theme', 'page', 'email', 'emailTemplate', 'layout', 'component', 'author', 'collection',
+  'media', 'mediaFolder', 'siteMedia', 'siteMediaFolder', 'savedTheme',
+]
+
+/** The binding-token prefixes core's grammar holds (`{{var:id}}`, `{{fn:id(…)}}`). */
+const SITE_PACKAGE_BINDING_TOKENS = ['var', 'fn']
+
+const PACKAGE_KIND = /^[a-z][A-Za-z0-9]*$/
+
+/**
+ * What a site package calls one of a declaration's items (AGL-3533): its
+ * `kind`, the plural `label` the import screen groups them under, the field
+ * holding its name or slug (what an incoming item is matched by when its id is
+ * new), the fields holding ids of other site items, and the binding token
+ * that names one of its items inside a design. Every kind has one owner.
+ */
+function sitePackageRow(
+  pkg,
+  what,
+  fields,
+  kinds,
+  owner,
+  allowed = ['kind', 'label', 'nameField', 'slugField', 'references', 'bindingToken', 'placements'],
+) {
+  if (!pkg || typeof pkg !== 'object' || Array.isArray(pkg)) {
+    throw new Error(`${what} needs a "package": the kind a site package lists its items as`)
+  }
+  const { $comment: _note, ...row } = pkg
+  const unknown = Object.keys(row).filter((key) => !allowed.includes(key))
+  if (unknown.length) throw new Error(`${what}: ${unknown.join(', ')} is not a package field`)
+  const { kind, label, nameField, slugField, references, bindingToken, placements } = row
+  if (typeof kind !== 'string' || !PACKAGE_KIND.test(kind)) throw new Error(`${what}: "kind" is one word in camelCase`)
+  if (CORE_SITE_PACKAGE_KINDS.includes(kind)) throw new Error(`${what}: "${kind}" is a kind the platform's own package carries`)
+  const held = kinds.get(kind)
+  if (held) throw new Error(`${what}: kind "${kind}" is already declared by ${held} — one kind has one owner`)
+  kinds.set(kind, owner)
+  if (typeof label !== 'string' || !label.trim()) throw new Error(`${what} needs a "label", plural, for the import screen`)
+  for (const [key, value] of [['nameField', nameField], ['slugField', slugField]]) {
+    if (value === undefined) continue
+    if (typeof value !== 'string' || !PLAIN_FIELD.test(value)) throw new Error(`${what}: "${key}" is a plain field name`)
+    if (fields && !fields.includes(value)) throw new Error(`${what}: "${key}" "${value}" is not one of the fields a restore writes`)
+  }
+  if (!nameField && !slugField) throw new Error(`${what} needs a "nameField" or a "slugField": an item with a new id is matched by one`)
+  const refs = []
+  for (const ref of references ?? []) {
+    const { field, kind: target } = ref ?? {}
+    if (typeof field !== 'string' || !PLAIN_FIELD.test(field)) throw new Error(`${what}: a reference's "field" is a plain field name`)
+    if (fields && !fields.includes(field)) throw new Error(`${what}: reference "${field}" is not one of the fields a restore writes`)
+    if (typeof target !== 'string' || !PACKAGE_KIND.test(target)) throw new Error(`${what}: reference "${field}" names the "kind" it points at`)
+    refs.push({ field, kind: target })
+  }
+  if (references !== undefined && !Array.isArray(references)) throw new Error(`${what}: "references" is a list`)
+  if (bindingToken !== undefined && !SITE_PACKAGE_BINDING_TOKENS.includes(bindingToken)) {
+    throw new Error(`${what}: "bindingToken" is one of ${SITE_PACKAGE_BINDING_TOKENS.join(', ')}`)
+  }
+  if (placements !== undefined && !Array.isArray(placements)) throw new Error(`${what}: "placements" is a list`)
+  const placed = []
+  for (const placement of placements ?? []) {
+    const { componentId, prop } = placement ?? {}
+    if (typeof prop !== 'string' || !PLAIN_FIELD.test(prop)) throw new Error(`${what}: a placement's "prop" is a plain prop name`)
+    if (componentId !== undefined && (typeof componentId !== 'string' || !componentId.trim())) {
+      throw new Error(`${what}: a placement's "componentId" is an element id, or is left out to mean any node`)
+    }
+    placed.push({ ...(componentId ? { componentId } : {}), prop })
+  }
+  return {
+    kind,
+    label,
+    ...(nameField ? { nameField } : {}),
+    ...(slugField ? { slugField } : {}),
+    ...(refs.length ? { references: refs } : {}),
+    ...(bindingToken ? { bindingToken } : {}),
+    ...(placed.length ? { placements: placed } : {}),
+  }
+}
+
+/**
+ * What a restore of a collection with no `resource` is met against
+ * (AGL-3533): a plan `quotaKey`, a flat `platformCap` by the name of core's
+ * constant, or `uncapped` with the reason a count would add nothing — a
+ * collection the browser already creates without one, where a restore can
+ * mint no more than an editor can.
+ */
+function siteExportCountRow(count, what) {
+  if (!count || typeof count !== 'object' || Array.isArray(count)) throw new Error(`${what} is an object`)
+  const { $comment: _note, ...row } = count
+  const keys = Object.keys(row)
+  if (keys.length !== 1 || !['quotaKey', 'platformCap', 'uncapped'].includes(keys[0])) {
+    throw new Error(`${what} is one of { "quotaKey" }, { "platformCap" } or { "uncapped": "<why>" }`)
+  }
+  const [key] = keys
+  const value = row[key]
+  if (key === 'uncapped') {
+    if (typeof value !== 'string' || value.trim().length < 20) throw new Error(`${what}: "uncapped" says why no count applies`)
+  } else if (typeof value !== 'string' || !/^[A-Za-z][A-Za-z0-9_]*$/.test(value)) {
+    throw new Error(`${what}: "${key}" is a plain key`)
+  }
+  return { [key]: value }
+}
 
 /**
  * A plugin's host collection in the whole-site export (AGL-3080): the export
@@ -1796,16 +1921,19 @@ const SITE_EXPORT_MAX_LIMIT = 1000
  *    an external destination's approver is provenance a file cannot supply.
  *  - NO KEY THE PLATFORM'S OWN BUNDLE USES.
  */
-function siteExportRow(siteExport, what, collection, resource) {
+function siteExportRow(siteExport, what, collection, resource, packageKinds, pluginId) {
   if (!siteExport || typeof siteExport !== 'object' || Array.isArray(siteExport)) throw new Error(`${what} is an object`)
   const { $comment: _note, ...fields } = siteExport
-  const unknown = Object.keys(fields).filter((key) => !['limit', 'fields'].includes(key))
+  const unknown = Object.keys(fields).filter((key) => !['limit', 'fields', 'package', 'count'].includes(key))
   if (unknown.length) throw new Error(`${what}: ${unknown.join(', ')} is not a site export field`)
   if (CORE_SITE_EXPORT_KEYS.includes(collection)) {
     throw new Error(`${what}: "${collection}" is a key the platform's own bundle writes`)
   }
-  if (!resource) {
-    throw new Error(`${what} needs the collection's "resource": a restore creates documents here, and the resource names the count they are met against`)
+  if (resource && fields.count !== undefined) {
+    throw new Error(`${what}: "count" is for a collection with no "resource" — the resource already names the count`)
+  }
+  if (!resource && fields.count === undefined) {
+    throw new Error(`${what} needs the collection's "resource", or a "count": a restore creates documents here, and the count is what they are met against`)
   }
   const { limit } = fields
   if (!Number.isInteger(limit) || limit < 1 || limit > SITE_EXPORT_MAX_LIMIT) {
@@ -1815,12 +1943,17 @@ function siteExportRow(siteExport, what, collection, resource) {
   const never = [
     ...SERVER_STAMPED_FIELDS,
     'visibleTo',
-    ...(resource.externalDestination ? [resource.externalDestination.approvedByField] : []),
+    ...(resource?.externalDestination ? [resource.externalDestination.approvedByField] : []),
   ]
   for (const field of restored) {
     if (never.includes(field)) throw new Error(`${what}: "${field}" is stamped or scoped by the restore, never read from a bundle`)
   }
-  return { limit, fields: restored }
+  return {
+    limit,
+    fields: restored,
+    package: sitePackageRow(fields.package, `${what} package`, restored, packageKinds, `"${pluginId}" host collection "${collection}"`),
+    ...(fields.count !== undefined ? { count: siteExportCountRow(fields.count, `${what} count`) } : {}),
+  }
 }
 
 /**
@@ -1837,10 +1970,10 @@ function siteExportRow(siteExport, what, collection, resource) {
  */
 function siteBundleSectionRows() {
   const rows = []
-  const taken = new Map(
-    hostCollectionRows()
-      .filter((row) => row.siteExport)
-      .map((row) => [row.name, `"${row.pluginId}" host collection`]),
+  const carried = hostCollectionRows().filter((row) => row.siteExport)
+  const taken = new Map(carried.map((row) => [row.name, `"${row.pluginId}" host collection`]))
+  const packageKinds = new Map(
+    carried.map((row) => [row.siteExport.package.kind, `"${row.pluginId}" host collection "${row.name}"`]),
   )
   for (const plugin of config.plugins) {
     const declared = plugin.siteBundleSections
@@ -1859,7 +1992,7 @@ function siteBundleSectionRows() {
       const { $comment: _note, ...section } = entry ?? {}
       const { key, limit } = section
       const what = `${where} "${key ?? ''}"`
-      const unknown = Object.keys(section).filter((field) => !['key', 'limit'].includes(field))
+      const unknown = Object.keys(section).filter((field) => !['key', 'limit', 'package'].includes(field))
       if (unknown.length) throw new Error(`${what}: ${unknown.join(', ')} is not a section field`)
       if (typeof key !== 'string' || !PLAIN_FIELD.test(key)) throw new Error(`${where}: a section's "key" is a plain bundle key`)
       if (CORE_SITE_EXPORT_KEYS.includes(key)) throw new Error(`${what} is a key the platform's own bundle writes`)
@@ -1869,7 +2002,148 @@ function siteBundleSectionRows() {
       if (!Number.isInteger(limit) || limit < 1 || limit > SITE_EXPORT_MAX_LIMIT) {
         throw new Error(`${what}: "limit" is a whole number from 1 to ${SITE_EXPORT_MAX_LIMIT}`)
       }
-      rows.push({ pluginId: plugin.id, key, limit })
+      // A section's items are the plugin's own shape, so it answers for their
+      // references itself (registered `package` hooks) rather than naming
+      // reference fields here.
+      const pkg = sitePackageRow(section.package, `${what} package`, null, packageKinds, `"${plugin.id}" section "${key}"`, [
+        'kind',
+        'label',
+        'nameField',
+        'slugField',
+        'placements',
+      ])
+      rows.push({ pluginId: plugin.id, key, limit, package: pkg })
+    }
+  }
+  return rows
+}
+
+/**
+ * What each plugin can import and export (AGL-3523): its transfer resources,
+ * each a `TransferResourceDescriptor` from core `data-transfer/resource.ts`.
+ * Compiled, and read with the registered halves (core
+ * `plugin-transfer-resources.ts`): a resource declared and never registered
+ * fails the job that asks for it rather than reading as nothing to move.
+ *
+ * Checked here, in the shape core's `transferResourceProblems` checks again
+ * at registration: a resource key no other plugin uses, a label, a scope, at
+ * least one known kind and format, positive whole limits, and `instances:
+ * true` for a resource moved one instance at a time (one dataset's records), and
+ * who may export it (AGL-3546): `readableByMembers: true`, or a `readPermission`
+ * that is a permission key, never both; the plan feature that moves it
+ * (AGL-3555), `featureFlag`, with the intents `featureFlagExempt` keeps open
+ * on every plan; and the only roles that may import it, where its records
+ * are (AGL-3554), `importRoles`, on a resource that imports. And the two
+ * places the halves are registered from: a `serverDeclarations` or
+ * `consoleServerDeclarations` entry for the server half, and a console
+ * registrar that loads at the `transferResources` slot for the client half.
+ */
+const TRANSFER_RESOURCE_KEY = /^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$/
+const TRANSFER_SCOPES = ['org', 'host']
+const TRANSFER_KINDS = ['records', 'package']
+const TRANSFER_FORMATS = ['csv', 'json', 'ndjson']
+const TRANSFER_RESOURCE_FIELDS = ['key', 'label', 'singularLabel', 'scope', 'kinds', 'formats', 'limits', 'description', 'instances', 'readableByMembers', 'readPermission', 'exportOnly', 'featureFlag', 'featureFlagExempt', 'importRoles']
+const TRANSFER_INTENTS = ['import', 'export']
+const TRANSFER_IMPORT_ROLES = ['admin', 'editor', 'author', 'viewer']
+const FEATURE_FLAG_KEY = /^[a-z][A-Za-z0-9]*$/
+const PERMISSION_KEY = /^[A-Za-z][A-Za-z0-9]*(?:\.[A-Za-z0-9]+)*$/
+const TRANSFER_RESOURCES_LOAD_POINT = 'transferResources'
+
+function transferResourceRows() {
+  const rows = []
+  const owners = new Map()
+  for (const plugin of config.plugins) {
+    const declared = plugin.transferResources
+    if (declared === undefined) continue
+    const where = `plugins.config.json: "${plugin.id}" transferResources`
+    if (!Array.isArray(declared) || !declared.length) {
+      throw new Error(`${where} is present and declares nothing — drop it, or name the resource`)
+    }
+    if (!plugin.register?.serverDeclarations && !plugin.register?.consoleServerDeclarations) {
+      throw new Error(
+        `${where}: a resource's server half is registered from a "serverDeclarations" (or "consoleServerDeclarations") entry, ` +
+          'and this plugin names neither — a declared resource nothing registers fails every job',
+      )
+    }
+    if (!plugin.register?.console || !(plugin.contributes?.console?.slots ?? []).includes(TRANSFER_RESOURCES_LOAD_POINT)) {
+      throw new Error(
+        `${where}: a resource's client half is registered from the plugin's console registrar, ` +
+          `which loads where the wizard is drawn only when "${TRANSFER_RESOURCES_LOAD_POINT}" is among its contributes.console.slots`,
+      )
+    }
+    for (const entry of declared) {
+      const { $comment: _note, ...resource } = entry ?? {}
+      const { key, label, singularLabel, scope, kinds, formats, limits, description, instances, readableByMembers, readPermission, exportOnly, featureFlag, featureFlagExempt, importRoles } = resource
+      const what = `${where} "${key ?? ''}"`
+      const unknown = Object.keys(resource).filter((field) => !TRANSFER_RESOURCE_FIELDS.includes(field))
+      if (unknown.length) throw new Error(`${what}: ${unknown.join(', ')} is not a resource field`)
+      if (typeof key !== 'string' || key.length > 64 || !TRANSFER_RESOURCE_KEY.test(key)) {
+        throw new Error(`${where}: a resource's "key" is lowercase words joined by - or . (at most 64 characters)`)
+      }
+      const held = owners.get(key)
+      if (held) throw new Error(`${what} is already declared by "${held}" — one key has one owner`)
+      owners.set(key, plugin.id)
+      if (typeof label !== 'string' || !label.trim()) throw new Error(`${what}: "label" is required`)
+      for (const [name, value] of [['singularLabel', singularLabel], ['description', description]]) {
+        if (value !== undefined && (typeof value !== 'string' || !value.trim())) {
+          throw new Error(`${what}: "${name}" is a sentence when present`)
+        }
+      }
+      if (!TRANSFER_SCOPES.includes(scope)) throw new Error(`${what}: "scope" is ${TRANSFER_SCOPES.join(' or ')}`)
+      if (instances !== undefined && instances !== true) {
+        throw new Error(`${what}: "instances" is true when the resource is moved one instance at a time, and absent otherwise`)
+      }
+      if (readableByMembers !== undefined && readableByMembers !== true) {
+        throw new Error(`${what}: "readableByMembers" is true when every member may export the records, and absent otherwise`)
+      }
+      if (readPermission !== undefined && (typeof readPermission !== 'string' || !PERMISSION_KEY.test(readPermission))) {
+        throw new Error(`${what}: "readPermission" is a permission key ("crm.view") when present`)
+      }
+      if (readableByMembers && readPermission !== undefined) {
+        throw new Error(`${what}: "readableByMembers" and "readPermission" each say who exports — declare one`)
+      }
+      if (exportOnly !== undefined && exportOnly !== true) {
+        throw new Error(`${what}: "exportOnly" is true when the resource is exported and never imported, and absent otherwise`)
+      }
+      if (featureFlag !== undefined && (typeof featureFlag !== 'string' || !FEATURE_FLAG_KEY.test(featureFlag))) {
+        throw new Error(`${what}: "featureFlag" is the plan feature that moves the records ("crm") when present`)
+      }
+      if (importRoles !== undefined) {
+        if (exportOnly === true) throw new Error(`${what}: "importRoles" names who may import a resource that is never imported`)
+        if (
+          !Array.isArray(importRoles) ||
+          !importRoles.length ||
+          new Set(importRoles).size !== importRoles.length ||
+          importRoles.some((one) => !TRANSFER_IMPORT_ROLES.includes(one))
+        ) {
+          throw new Error(`${what}: "importRoles" lists one or more of ${TRANSFER_IMPORT_ROLES.join(', ')}, each once`)
+        }
+      }
+      if (featureFlagExempt !== undefined) {
+        if (featureFlag === undefined) throw new Error(`${what}: "featureFlagExempt" exempts intents from a "featureFlag" it does not name`)
+        if (
+          !Array.isArray(featureFlagExempt) ||
+          !featureFlagExempt.length ||
+          new Set(featureFlagExempt).size !== featureFlagExempt.length ||
+          featureFlagExempt.some((one) => !TRANSFER_INTENTS.includes(one))
+        ) {
+          throw new Error(`${what}: "featureFlagExempt" lists one or more of ${TRANSFER_INTENTS.join(', ')}, each once`)
+        }
+      }
+      for (const [name, list, known] of [['kinds', kinds, TRANSFER_KINDS], ['formats', formats, TRANSFER_FORMATS]]) {
+        if (!Array.isArray(list) || !list.length || new Set(list).size !== list.length || list.some((one) => !known.includes(one))) {
+          throw new Error(`${what}: "${name}" lists one or more of ${known.join(', ')}, each once`)
+        }
+      }
+      if (limits !== undefined) {
+        const { maxRows, maxBytes, ...extra } = limits ?? {}
+        if (Object.keys(extra).length) throw new Error(`${what}: limits.${Object.keys(extra).join(', limits.')} is not a limit`)
+        if (!Number.isInteger(maxRows) || maxRows < 1) throw new Error(`${what}: "limits.maxRows" is a positive whole number`)
+        if (maxBytes !== undefined && (!Number.isInteger(maxBytes) || maxBytes < 1)) {
+          throw new Error(`${what}: "limits.maxBytes" is a positive whole number when present`)
+        }
+      }
+      rows.push({ pluginId: plugin.id, ...resource })
     }
   }
   return rows
@@ -1928,6 +2202,54 @@ function sitemapSectionRows() {
       }
       if (lastmod !== undefined) plainFieldList(lastmod, `${what} lastmod`)
       rows.push({ pluginId: plugin.id, ...declaration })
+    }
+  }
+  return rows
+}
+
+/**
+ * The child-sitemap families each plugin's READER lists (AGL-3475), for pages
+ * no single site collection describes — record pages, served at a base each
+ * site picks from rows the organization keeps.
+ *
+ * Checked here: one owner per family, a lowercase segment that is none of the
+ * platform's sections, no `content-` and no plugin's declared collection
+ * section, no family that is a prefix of another (a child name has to say
+ * which family it is), and a `serverDeclarations` registrar to register the
+ * reader from.
+ */
+function sitemapReaderRows() {
+  const rows = []
+  const owners = new Map()
+  const collectionSections = new Set(sitemapSectionRows().map((row) => row.section))
+  for (const plugin of config.plugins) {
+    const declared = plugin.sitemapReaders
+    if (!declared) continue
+    const where = `plugins.config.json: "${plugin.id}" sitemapReaders`
+    if (!Array.isArray(declared) || !declared.length) {
+      throw new Error(`${where} is present and declares nothing — drop it, or name the section`)
+    }
+    if (!plugin.register?.serverDeclarations) {
+      throw new Error(`${where}: a reader registers from serverDeclarations, which "${plugin.id}" does not declare`)
+    }
+    for (const entry of declared) {
+      const { $comment: _note, ...declaration } = entry
+      const { section, ...rest } = declaration
+      if (Object.keys(rest).length) throw new Error(`${where}: a reader declares only its "section"`)
+      if (typeof section !== 'string' || !/^[a-z][a-z0-9]*$/.test(section)) {
+        throw new Error(`${where}: a section is a lowercase word, no hyphens — its children are "{section}-{key}"`)
+      }
+      const what = `${where} "${section}"`
+      if (CORE_SITEMAP_SECTIONS.includes(section) || section === 'content') {
+        throw new Error(`${what} is a section the platform builds itself`)
+      }
+      if ([...collectionSections].some((name) => name === section || name.startsWith(`${section}-`))) {
+        throw new Error(`${what} collides with a declared sitemap section`)
+      }
+      const held = owners.get(section)
+      if (held) throw new Error(`${what} is already declared by "${held}" — one section has one owner`)
+      owners.set(section, plugin.id)
+      rows.push({ pluginId: plugin.id, section })
     }
   }
   return rows
@@ -2069,6 +2391,83 @@ function orgCapacityRows() {
     }
   }
   return rows.sort((a, b) => a.order - b.order)
+}
+
+/**
+ * The kinds of entity a besigner picker lists, each declared by the plugin
+ * that keeps it (AGL-3080).
+ *
+ * Compiled because the besigner decides whether an attribute IS a picker from
+ * these on the panel's first render, and a kind that had not registered yet
+ * would draw a bound element as an unbound field. Checked here: one owner per
+ * kind and per attribute type, a scope core knows how to read, the words a
+ * picker says, and a field-attribute only with the record kind its fields come
+ * from.
+ */
+const ENTITY_PICKER_KEYS = new Set([
+  'kind', 'attribute', 'scope', 'collection', 'nameField', 'where', 'searchable',
+  'fieldsAttribute', 'fieldsFrom', 'singular', 'plural', 'page',
+])
+
+function entityPickerRows() {
+  const rows = []
+  const kinds = new Map()
+  const attributes = new Map()
+  for (const plugin of config.plugins) {
+    const declared = plugin.entityPickers
+    if (declared === undefined) continue
+    const where = `plugins.config.json: "${plugin.id}" entityPickers`
+    if (!Array.isArray(declared) || !declared.length) {
+      throw new Error(`${where} is present and declares nothing — drop it, or name the kinds the plugin supplies`)
+    }
+    for (const declaration of declared) {
+      const what = `${where} "${declaration?.kind ?? ''}"`
+      const unknown = Object.keys(declaration ?? {}).filter((key) => !ENTITY_PICKER_KEYS.has(key))
+      if (unknown.length) throw new Error(`${what}: unknown key(s) ${unknown.join(', ')}`)
+      const { kind, attribute, scope, collection, nameField, where: clauses, searchable, fieldsAttribute, fieldsFrom } = declaration
+      for (const [field, value] of [
+        ['kind', kind],
+        ['attribute', attribute],
+        ['collection', collection],
+        ['nameField', nameField],
+        ['singular', declaration.singular],
+        ['plural', declaration.plural],
+        ['page', declaration.page],
+      ]) {
+        if (typeof value !== 'string' || !value.trim()) throw new Error(`${what} needs a "${field}"`)
+      }
+      if (scope !== 'host' && scope !== 'orgData') {
+        throw new Error(`${what}: "scope" is "host" (the site's own) or "orgData" (the organization's data, shared per site)`)
+      }
+      if (searchable !== undefined && typeof searchable !== 'boolean') throw new Error(`${what}: "searchable" is a boolean`)
+      if (
+        clauses !== undefined &&
+        (!Array.isArray(clauses) ||
+          clauses.some(
+            (clause) =>
+              typeof clause?.field !== 'string' ||
+              !clause.field.trim() ||
+              !['string', 'number', 'boolean'].includes(typeof clause.equals) ||
+              Object.keys(clause).length !== 2,
+          ))
+      ) {
+        throw new Error(`${what}: "where" is a list of { field, equals } equality clauses`)
+      }
+      if ((fieldsAttribute === undefined) !== (fieldsFrom === undefined)) {
+        throw new Error(`${what}: "fieldsAttribute" and "fieldsFrom" come together — the attribute that offers an entity's fields, and the record kind they are read from`)
+      }
+      const heldKind = kinds.get(kind)
+      if (heldKind) throw new Error(`${what} is already declared by "${heldKind}" — one kind has one owner`)
+      kinds.set(kind, plugin.id)
+      for (const type of [attribute, fieldsAttribute].filter(Boolean)) {
+        const held = attributes.get(type)
+        if (held) throw new Error(`${what}: attribute type "${type}" already lists "${held}"`)
+        attributes.set(type, kind)
+      }
+      rows.push({ pluginId: plugin.id, ...declaration })
+    }
+  }
+  return rows
 }
 
 /**
@@ -2274,6 +2673,51 @@ function formRecordTargetRow() {
 }
 
 /**
+ * The installable artifact types a plugin keeps the copies of (AGL-3080),
+ * through `plugin-manager/plugin-artifact-types.ts`: the installer asks the
+ * type's owner to publish, install and update a copy, and never reaches into
+ * the owner's storage. Declared as well as registered for the reason
+ * `repeatSourceRow` gives: a boot that did not register an owner must be
+ * refused, not read as "nobody keeps this type".
+ *
+ * Checked here: a plain camelCase `type` (it is stored on listings and
+ * provenance stamps), one owner per type, no other key, and a declarations
+ * entry on the console's server for the owner to register from.
+ */
+function artifactTypeRows() {
+  const rows = []
+  const owners = new Map()
+  for (const plugin of config.plugins) {
+    const declared = plugin.artifactTypes
+    if (declared === undefined) continue
+    const where = `plugins.config.json: "${plugin.id}" artifactTypes`
+    if (!Array.isArray(declared) || !declared.length) {
+      throw new Error(`${where} is present and declares nothing — drop it, or name the types this plugin keeps`)
+    }
+    if (!plugin.register?.consoleServerDeclarations && !plugin.register?.serverDeclarations) {
+      throw new Error(
+        `${where}: an owner is registered from a "consoleServerDeclarations" (or "serverDeclarations") entry, ` +
+          'and this plugin names neither — a declared type nothing registers refuses every install of it',
+      )
+    }
+    for (const [index, row] of declared.entries()) {
+      const at = `${where}[${index}]`
+      const { $comment: _comment, type, ...rest } = row ?? {}
+      if (Object.keys(rest).length) throw new Error(`${at}: unknown key(s) ${Object.keys(rest).join(', ')}`)
+      if (typeof type !== 'string' || !/^[a-z][A-Za-z0-9]*$/.test(type)) {
+        throw new Error(`${at}: "type" is the artifact type's plain camelCase id`)
+      }
+      if (owners.has(type)) {
+        throw new Error(`${at}: type "${type}" is already declared by "${owners.get(type)}"`)
+      }
+      owners.set(type, plugin.id)
+      rows.push({ pluginId: plugin.id, type })
+    }
+  }
+  return rows
+}
+
+/**
  * A plugin's top-level collections whose documents name an organization in a
  * field (AGL-3080), which a workspace erasure sweeps by that field in every
  * process. One owner per collection; plain names only.
@@ -2405,6 +2849,111 @@ function notificationCategoryRows() {
 }
 
 /**
+ * A plugin's public door, as its owner and staff are told about a flood
+ * (AGL-3080): the two site counters its ceiling refusals and its honeypot
+ * catches are kept in, and the words the notices are built from. Compiled so
+ * the Inbox and the staff pages read every door without loading the plugin
+ * that keeps it.
+ *
+ * Checked here: a plain door no other plugin declares, two plain counters no
+ * other door keeps, every word, and each noun in both its counts.
+ */
+const VISITOR_DOOR_WORDS = ['pausedTitle', 'cause', 'pausedChip', 'caughtBy']
+const VISITOR_DOOR_NOUNS = ['noun', 'staffNoun', 'caught', 'caughtChip']
+
+function visitorDoorRows() {
+  const doors = new Map()
+  const counters = new Map()
+  const rows = []
+  for (const plugin of config.plugins) {
+    const declared = plugin.visitorDoors
+    if (declared === undefined) continue
+    const where = `plugins.config.json: "${plugin.id}" visitorDoors`
+    if (!Array.isArray(declared) || !declared.length) {
+      throw new Error(`${where} is present and declares nothing — drop it, or name the door`)
+    }
+    for (const declaration of declared) {
+      const { door, refusedCounter, caughtCounter, words } = declaration ?? {}
+      const what = `${where} "${door ?? ''}"`
+      const unknown = Object.keys(declaration ?? {}).filter(
+        (key) => !['door', 'refusedCounter', 'caughtCounter', 'words'].includes(key),
+      )
+      if (unknown.length) throw new Error(`${what}: unknown key(s) ${unknown.join(', ')}`)
+      if (typeof door !== 'string' || !PLAIN_NAME.test(door)) throw new Error(`${what}: "door" is a plain name`)
+      if (doors.has(door)) throw new Error(`${what} is already kept by "${doors.get(door)}"`)
+      doors.set(door, plugin.id)
+      for (const [field, counter] of [['refusedCounter', refusedCounter], ['caughtCounter', caughtCounter]]) {
+        if (typeof counter !== 'string' || !PLAIN_NAME.test(counter)) {
+          throw new Error(`${what}: "${field}" is the plain id of a site counter`)
+        }
+        if (counters.has(counter)) throw new Error(`${what}: counter "${counter}" is already ${counters.get(counter)}'s`)
+        counters.set(counter, door)
+      }
+      if (!words || typeof words !== 'object') throw new Error(`${what} needs its "words"`)
+      const unknownWords = Object.keys(words).filter(
+        (key) => !VISITOR_DOOR_WORDS.includes(key) && !VISITOR_DOOR_NOUNS.includes(key),
+      )
+      if (unknownWords.length) throw new Error(`${what}: unknown word(s) ${unknownWords.join(', ')}`)
+      for (const key of VISITOR_DOOR_WORDS) {
+        if (typeof words[key] !== 'string' || !words[key].trim()) throw new Error(`${what}: "words.${key}" is a sentence`)
+      }
+      for (const key of VISITOR_DOOR_NOUNS) {
+        const noun = words[key]
+        if ([noun?.one, noun?.other].some((form) => typeof form !== 'string' || !form.trim())) {
+          throw new Error(`${what}: "words.${key}" is { one, other }`)
+        }
+      }
+      rows.push({ pluginId: plugin.id, door, refusedCounter, caughtCounter, words })
+    }
+  }
+  return rows
+}
+
+/**
+ * Where a person reads a record kind, declared by the plugin whose console
+ * page shows it (AGL-3080), compiled so a server that tells a person about a
+ * record — a notification's link — can ask for the kind without loading the
+ * plugin that draws the page.
+ *
+ * Checked here: a plain kind no other plugin shows, and a path under one of
+ * the declaring plugin's OWN site console routes, so a plugin can only point
+ * at a page it draws.
+ */
+function recordPageRows() {
+  const owners = new Map()
+  const rows = []
+  for (const plugin of config.plugins) {
+    const declared = plugin.recordPages
+    if (declared === undefined) continue
+    const where = `plugins.config.json: "${plugin.id}" recordPages`
+    if (!Array.isArray(declared) || !declared.length) {
+      throw new Error(`${where} is present and declares nothing — drop it, or name the kinds its pages show`)
+    }
+    const routes = plugin.contributes?.console?.routes ?? []
+    for (const declaration of declared) {
+      const { kind, path } = declaration ?? {}
+      const what = `${where} "${kind ?? ''}"`
+      const unknown = Object.keys(declaration ?? {}).filter((key) => key !== 'kind' && key !== 'path')
+      if (unknown.length) throw new Error(`${what}: unknown key(s) ${unknown.join(', ')}`)
+      if (typeof kind !== 'string' || !PLAIN_NAME.test(kind)) {
+        throw new Error(`${what}: "kind" is the plain record kind the page shows`)
+      }
+      if (owners.has(kind)) throw new Error(`${what} is already shown by "${owners.get(kind)}"`)
+      owners.set(kind, plugin.id)
+      if (
+        typeof path !== 'string' ||
+        !/^\/[a-z0-9/-]+$/.test(path) ||
+        !routes.some((route) => path === route || path.startsWith(`${route}/`))
+      ) {
+        throw new Error(`${what}: "path" "${path ?? ''}" is not under one of "${plugin.id}"'s own console routes (${routes.join(', ') || 'none'})`)
+      }
+      rows.push({ pluginId: plugin.id, kind, path })
+    }
+  }
+  return rows
+}
+
+/**
  * Digests a plugin sends on its own schedule (AGL-3080), compiled into core
  * so the settings page draws each switch without loading the plugin.
  *
@@ -2441,19 +2990,26 @@ function notificationDigestRows() {
 }
 
 /**
- * The interaction steps (AGL-3080): each plugin whose step the interaction
- * builder offers declares it under `interactionSteps` — the `type` it is
- * stored under, how the builder names it, and, for a step that PICKS one of
- * the plugin's records, the site collection the records are listed from and
- * the step fields that hold the pick. Core compiles them into the catalog,
- * because the builder and every validator read them with no plugin loaded,
- * and a step whose pick nothing checked would save naming nothing.
+ * The interaction steps (AGL-3080): each plugin that adds a step to
+ * interactions declares it under `interactionSteps` — the `type` it is stored
+ * under, how editors, run histories and drafters name it, and, for a step
+ * that PICKS one of the plugin's records, the site collection the records are
+ * listed from and the step fields that hold the pick. A step only an
+ * automation holds is `offered: false`, so the besigner's interaction builder
+ * leaves it out; a step that suspends the run `holds` it for a band of whole
+ * minutes; and `typedFields` are the fields a person types words into, where a
+ * drafted step may leave a placeholder. Core compiles them into the catalog,
+ * because the builder, every validator, a visitor's page and a drafter read
+ * them with no plugin loaded, and a step whose pick nothing checked would save
+ * naming nothing.
  *
  * Checked here: a plain type no other plugin declares, a label, only the
  * known keys, and a pick listed from a collection the SAME plugin declares
  * under `hostCollections` — a plugin offers its own records, never another's —
  * with plain, distinct field names, a limit from 1 to 200, and the words the
- * builder shows.
+ * builder shows; `offered` only as `false`; a hold band of whole minutes, at
+ * least one, its floor under its ceiling, and a plain timeout field; typed
+ * fields named once each, with the words a sentence calls them.
  */
 function interactionStepRows() {
   const claimed = new Map()
@@ -2469,7 +3025,7 @@ function interactionStepRows() {
     }
     const owned = new Set((plugin.hostCollections ?? []).map((collection) => collection.name))
     for (const step of declared) {
-      const { type, label, picks, ...rest } = step ?? {}
+      const { type, label, picks, offered, holds, typedFields, ...rest } = step ?? {}
       if (typeof type !== 'string' || !plain.test(type)) {
         throw new Error(`${where}: "type" is the plain name a step is stored under`)
       }
@@ -2479,6 +3035,37 @@ function interactionStepRows() {
       claimed.set(type, plugin.id)
       if (!words(label)) throw new Error(`${what}: "label" is how the builder names the step`)
       const row = { pluginId: plugin.id, type, label }
+      if (offered !== undefined) {
+        if (offered !== false) throw new Error(`${what}: "offered" is only ever false — a declared step is offered unless it says not`)
+        row.offered = false
+      }
+      if (holds !== undefined) {
+        const { minMinutes, maxMinutes, timeoutField, ...extra } = holds ?? {}
+        if (Object.keys(extra).length) throw new Error(`${what}: unknown "holds" key(s) ${Object.keys(extra).join(', ')}`)
+        if (!Number.isInteger(minMinutes) || !Number.isInteger(maxMinutes) || minMinutes < 1 || maxMinutes < minMinutes) {
+          throw new Error(`${what}: "holds" is a band of whole minutes, from at least 1, its floor no higher than its ceiling`)
+        }
+        if (timeoutField !== undefined && (typeof timeoutField !== 'string' || !/^_?[a-z][A-Za-z0-9]*$/.test(timeoutField))) {
+          throw new Error(`${what}: "holds.timeoutField" is the plain name of the field a timed-out hold leaves in scope`)
+        }
+        row.holds = { minMinutes, maxMinutes, ...(timeoutField !== undefined ? { timeoutField } : {}) }
+      }
+      if (typedFields !== undefined) {
+        if (!Array.isArray(typedFields) || !typedFields.length) {
+          throw new Error(`${what}: "typedFields" is present and names nothing — drop it, or name the fields a person types words into`)
+        }
+        const keys = new Set()
+        row.typedFields = typedFields.map((field) => {
+          const { key, names, ...extra } = field ?? {}
+          if (Object.keys(extra).length) throw new Error(`${what}: unknown "typedFields" key(s) ${Object.keys(extra).join(', ')}`)
+          if (typeof key !== 'string' || !plain.test(key) || keys.has(key)) {
+            throw new Error(`${what}: each of "typedFields" names one of the step's fields, once`)
+          }
+          if (!words(names)) throw new Error(`${what}: typed field "${key}" needs "names", what a sentence calls it`)
+          keys.add(key)
+          return { key, names }
+        })
+      }
       if (picks !== undefined) {
         const { collection, limit, idField, nameField, label: pickLabel, missing, ...extra } = picks ?? {}
         if (Object.keys(extra).length) throw new Error(`${what}: unknown "picks" key(s) ${Object.keys(extra).join(', ')}`)
@@ -2551,6 +3138,43 @@ function serverStepRows() {
   return rows
 }
 
+/**
+ * The interaction recipes (AGL-3080): a plugin that offers ready-to-edit
+ * interactions declares their ids under `interactionRecipes`, and registers
+ * the recipes themselves — which build their interaction in code — from its
+ * declarations. The ids are compiled into core because a stored interaction
+ * names the recipe it began as, and a validator must know that name in a
+ * process where the author's declarations never ran.
+ *
+ * Checked here: an array of `{ id }` rows, only the known keys, a plain id,
+ * and one owner per id.
+ */
+function interactionRecipeRows() {
+  const claimed = new Map()
+  const rows = []
+  const plain = /^[a-z][A-Za-z0-9]*$/
+  for (const plugin of config.plugins) {
+    const declared = plugin.interactionRecipes
+    if (declared === undefined) continue
+    const where = `plugins.config.json: "${plugin.id}" interactionRecipes`
+    if (!Array.isArray(declared) || !declared.length) {
+      throw new Error(`${where} is present and declares nothing — drop it, or name the recipes the plugin offers`)
+    }
+    for (const recipe of declared) {
+      const { id, ...rest } = recipe ?? {}
+      if (typeof id !== 'string' || !plain.test(id)) {
+        throw new Error(`${where}: "id" is the plain name a stored interaction's \`recipe\` stamp holds`)
+      }
+      const what = `${where} "${id}"`
+      if (Object.keys(rest).length) throw new Error(`${what}: unknown key(s) ${Object.keys(rest).join(', ')}`)
+      if (claimed.has(id)) throw new Error(`${what} is already declared by "${claimed.get(id)}"`)
+      claimed.set(id, plugin.id)
+      rows.push({ pluginId: plugin.id, id })
+    }
+  }
+  return rows
+}
+
 /** The plugins whose org eraser an erasure may not run without (AGL-3080). */
 function requiredOrgEraserIds() {
   return config.plugins
@@ -2558,6 +3182,30 @@ function requiredOrgEraserIds() {
       if (plugin.requiredOrgEraser === undefined) return false
       if (plugin.requiredOrgEraser !== true) {
         throw new Error(`plugins.config.json: "${plugin.id}" requiredOrgEraser is true, or is left out`)
+      }
+      return true
+    })
+    .map((plugin) => plugin.id)
+}
+
+/**
+ * The plugins whose person eraser a person erasure may not run without
+ * (AGL-3080): each keeps a share of a person the erasure promises to remove —
+ * the record system's people, a shop's buyers, a calendar's bookers, an
+ * audience's members.
+ */
+function requiredPersonEraserIds() {
+  return config.plugins
+    .filter((plugin) => {
+      if (plugin.requiredPersonEraser === undefined) return false
+      if (plugin.requiredPersonEraser !== true) {
+        throw new Error(`plugins.config.json: "${plugin.id}" requiredPersonEraser is true, or is left out`)
+      }
+      if (!plugin.register?.serverDeclarations && !plugin.register?.consoleServerDeclarations) {
+        throw new Error(
+          `plugins.config.json: "${plugin.id}" requiredPersonEraser needs a serverDeclarations or ` +
+            'consoleServerDeclarations entry to register the eraser from',
+        )
       }
       return true
     })
@@ -2654,7 +3302,7 @@ function catalogContent(videoEmbedRows, planEntitlements, usageAxes) {
  * the types and the resolvers in \`enabled-plugins.ts\`; it holds no row.
  */
 
-import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'\nimport type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'\nimport type { ResolvedPluginSitemapSection } from './plugin-sitemap-sections'\nimport type { ResolvedPluginSiteBundleSectionDeclaration } from './plugin-site-bundle'\nimport type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'\nimport type { ResolvedPluginCostAxis, ResolvedPluginSpendLine, ResolvedPluginUsageBand, ResolvedPluginUsageMeter } from './plugin-usage-axes'\nimport type { ResolvedPluginPlanFeature, ResolvedPluginPlanQuota } from './plugin-plan-entitlements'\nimport type { FunctionBindings } from './plugin-contributions'\nimport type { PluginDistribution } from './plugin-distribution'\nimport type { RepeatSourceDeclaration } from './repeat-rows'\nimport type { PluginTemplateSource } from './plugin-template-sources'\nimport type { FormRecordTargetDeclaration } from './submission-record-target'\nimport type { ResolvedBesignerDocument } from './besigner-documents'\nimport type { PluginOrgKeyedCollection } from './plugin-org-erasure'\nimport type { ResolvedVideoEmbedProvider } from './video-embed-provider'\nimport type { AnalyticsProviderDeclaration } from '../app-utils/analytics-provider'\nimport type { InteractionStepDeclaration } from '../app-utils/site-interactions'\nimport type { ServerStepDeclaration } from './plugin-server-steps'\nimport type { NotificationCategoryDeclaration, NotificationDigestDeclaration } from '../app-utils/notifications'
+import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'\nimport type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'\nimport type { ResolvedPluginSitemapSection } from './plugin-sitemap-sections'\nimport type { ResolvedPluginSitemapReaderDeclaration } from './plugin-sitemap-readers'\nimport type { ResolvedPluginSiteBundleSectionDeclaration } from './plugin-site-bundle'\nimport type { ResolvedTransferResourceDeclaration } from './plugin-transfer-resources'\nimport type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'\nimport type { ResolvedPluginEntityPicker } from './plugin-entity-pickers'\nimport type { ResolvedPluginRecordPage } from './plugin-record-pages'\nimport type { ResolvedVisitorDoor } from './plugin-visitor-doors'\nimport type { ResolvedPluginCostAxis, ResolvedPluginSpendLine, ResolvedPluginUsageBand, ResolvedPluginUsageMeter } from './plugin-usage-axes'\nimport type { ResolvedPluginPlanFeature, ResolvedPluginPlanQuota } from './plugin-plan-entitlements'\nimport type { FunctionBindings } from './plugin-contributions'\nimport type { PluginDistribution } from './plugin-distribution'\nimport type { RepeatSourceDeclaration } from './repeat-rows'\nimport type { PluginTemplateSource } from './plugin-template-sources'\nimport type { FormRecordTargetDeclaration } from './submission-record-target'\nimport type { ArtifactTypeDeclaration } from './plugin-artifact-types'\nimport type { ResolvedBesignerDocument } from './besigner-documents'\nimport type { PluginOrgKeyedCollection } from './plugin-org-erasure'\nimport type { ResolvedVideoEmbedProvider } from './video-embed-provider'\nimport type { AnalyticsProviderDeclaration } from '../app-utils/analytics-provider'\nimport type { InteractionStepDeclaration } from '../app-utils/site-interactions'\nimport type { ServerStepDeclaration } from './plugin-server-steps'\nimport type { InteractionRecipeDeclaration } from './interaction-recipes'\nimport type { NotificationCategoryDeclaration, NotificationDigestDeclaration } from '../app-utils/notifications'
 
 export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
 ${rows.map((row) => `  ${indent(JSON.stringify(row.plugin, null, 2))},`).join('\n')}
@@ -2689,10 +3337,22 @@ ${sitemapSectionRows().map((row) => `  ${indent(JSON.stringify(row, null, 2))},`
 ]
 
 /**
+ * Every child-sitemap family a first-party plugin's reader lists, declared by
+ * that plugin (AGL-3475), in the order the index lists them.
+ */
+export const PLUGIN_SITEMAP_READERS_DECLARED: readonly ResolvedPluginSitemapReaderDeclaration[] = ${JSON.stringify(sitemapReaderRows(), null, 2)}
+
+/**
  * Every section of the whole-site backup a first-party plugin answers for,
  * declared by that plugin (AGL-3080), in the order the bundle carries them.
  */
 export const PLUGIN_SITE_BUNDLE_SECTIONS_DECLARED: readonly ResolvedPluginSiteBundleSectionDeclaration[] = ${JSON.stringify(siteBundleSectionRows(), null, 2)}
+
+/**
+ * Every resource a first-party plugin can import or export, declared by that
+ * plugin (AGL-3523), in the order the transfer hub lists them.
+ */
+export const PLUGIN_TRANSFER_RESOURCES_DECLARED: readonly ResolvedTransferResourceDeclaration[] = ${JSON.stringify(transferResourceRows(), null, 2)}
 
 /**
  * Every org collection a first-party plugin owns whose documents the media
@@ -2709,6 +3369,31 @@ ${orgCollectionRows().map((row) => `  ${indent(JSON.stringify(row, null, 2))},`)
  */
 export const PLUGIN_ORG_CAPACITIES_DECLARED: readonly ResolvedPluginOrgCapacity[] = [
 ${orgCapacityRows().map((row) => `  ${indent(JSON.stringify(row, null, 2))},`).join('\n')}
+]
+
+/**
+ * Every kind of entity a besigner picker lists, declared by the plugin that
+ * keeps it (AGL-3080). Core reads, browses and resolves; this says where and
+ * in what words.
+ */
+export const PLUGIN_ENTITY_PICKERS_DECLARED: readonly ResolvedPluginEntityPicker[] = [
+${entityPickerRows().map((row) => `  ${indent(JSON.stringify(row, null, 2))},`).join('\n')}
+]
+
+/**
+ * Every public door a first-party plugin keeps a ceiling and a honeypot on,
+ * with its counters and words, declared by that plugin (AGL-3080).
+ */
+export const PLUGIN_VISITOR_DOORS_DECLARED: readonly ResolvedVisitorDoor[] = [
+${visitorDoorRows().map((row) => `  ${indent(JSON.stringify(row, null, 2))},`).join('\n')}
+]
+
+/**
+ * Where a person reads each record kind a first-party plugin's console page
+ * shows, declared by that plugin (AGL-3080), for a server's notification link.
+ */
+export const PLUGIN_RECORD_PAGES_DECLARED: readonly ResolvedPluginRecordPage[] = [
+${recordPageRows().map((row) => `  ${indent(JSON.stringify(row, null, 2))},`).join('\n')}
 ]
 
 /**
@@ -2776,6 +3461,12 @@ ${orgKeyedCollectionRows().map((row) => `  ${indent(JSON.stringify(row, null, 2)
 export const PLUGIN_REQUIRED_ORG_ERASERS: readonly string[] = ${JSON.stringify(requiredOrgEraserIds())}
 
 /**
+ * The plugins whose person eraser a person erasure may not run without
+ * (AGL-3080): each keeps a share of the person the erasure promises to remove.
+ */
+export const PLUGIN_REQUIRED_PERSON_ERASERS: readonly string[] = ${JSON.stringify(requiredPersonEraserIds())}
+
+/**
  * The plugins whose sales the operator's sales tax return may not be filed
  * without (AGL-3080): each registers a tax return source, and one that did
  * not is refused rather than read as nothing sold.
@@ -2819,6 +3510,15 @@ ${besignerDocumentRows().map((row) => `  ${JSON.stringify(row, null, 2).split('\
 export const PLUGIN_FORM_RECORD_TARGET_DECLARED: FormRecordTargetDeclaration | null = ${JSON.stringify(formRecordTargetRow(), null, 2)}
 
 /**
+ * The installable artifact types a first-party plugin keeps the copies of,
+ * declared by that plugin (AGL-3080). Empty when none does, and an installer
+ * then refuses every listing of a type nobody keeps.
+ */
+export const PLUGIN_ARTIFACT_TYPES_DECLARED: readonly ArtifactTypeDeclaration[] = [
+${artifactTypeRows().map((row) => `  ${JSON.stringify(row)},`).join('\n')}
+]
+
+/**
  * What a site's template library calls a template a plugin installed, by the
  * \`source.type\` that plugin stamps, declared by that plugin (AGL-3080).
  * Core names no installer.
@@ -2850,6 +3550,15 @@ ${interactionStepRows().map((row) => `  ${indent(JSON.stringify(row, null, 2))},
  */
 export const PLUGIN_SERVER_STEPS_DECLARED: readonly ServerStepDeclaration[] = [
 ${serverStepRows().map((row) => `  ${indent(JSON.stringify(row, null, 2))},`).join('\n')}
+]
+
+/**
+ * Every ready-to-edit interaction a first-party plugin offers, by the id a
+ * stored interaction's stamp names it with, declared by that plugin
+ * (AGL-3080). Core names no recipe.
+ */
+export const PLUGIN_INTERACTION_RECIPES_DECLARED: readonly InteractionRecipeDeclaration[] = [
+${interactionRecipeRows().map((row) => `  ${indent(JSON.stringify(row, null, 2))},`).join('\n')}
 ]
 
 /**

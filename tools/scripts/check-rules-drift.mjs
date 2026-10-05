@@ -96,7 +96,11 @@ const repoRoot = fileURLToPath(new URL('../..', import.meta.url))
 
 const SURFACES = {
   firestore: {
-    file: 'cloud/firebase-firestore.rules',
+    // What deploys is the comment-stripped artifact (AGL-3544). A ref cut
+    // before it existed deployed the documented source itself, so that is
+    // the file to compare when the artifact is absent at the ref.
+    file: 'cloud/firebase-firestore.deploy.rules',
+    fallbackFile: 'cloud/firebase-firestore.rules',
     jsonAware: false,
     fetchLive: ({ token, projectId }) =>
       fetchLiveRulesetContent({ token, projectId, releaseId: 'cloud.firestore' }),
@@ -278,8 +282,17 @@ try {
   process.exit(2)
 }
 
-function baselineContent(file) {
-  return git(['show', `${baselineSha}:${file}`])
+/**
+ * The surface's deployed file at a commit, and which path that was: its
+ * `file`, or its `fallbackFile` at a commit older than the file.
+ */
+function contentAt(sha, surface) {
+  try {
+    return { content: git(['show', `${sha}:${surface.file}`]), path: surface.file }
+  } catch (error) {
+    if (!surface.fallbackFile) throw error
+    return { content: git(['show', `${sha}:${surface.fallbackFile}`]), path: surface.fallbackFile }
+  }
 }
 
 let sawDrift = false
@@ -290,7 +303,7 @@ for (const name of selected) {
   const surface = SURFACES[name]
   let head
   try {
-    head = baselineContent(surface.file)
+    head = contentAt(baselineSha, surface).content
   } catch (error) {
     console.error(
       `CANNOT CHECK ${name}: git show ${baselineRef}:${surface.file} failed: ${error.message}`,
@@ -314,7 +327,7 @@ for (const name of selected) {
   let headOfCheckout
   if (headIsAheadOfBaseline) {
     try {
-      headOfCheckout = git(['show', `HEAD:${surface.file}`])
+      headOfCheckout = contentAt('HEAD', surface).content
     } catch {
       headOfCheckout = undefined
     }
@@ -378,7 +391,19 @@ for (const name of selected) {
 // exactly the promotion window, the state the deploy process is designed to
 // pass through. Printed so the signal survives without blocking (AGL-1690).
 if (!baselineIsHead) {
-  const files = selected.map((name) => SURFACES[name].file)
+  // A baseline older than a surface's file owes the commits that changed
+  // its fallback too: those are the ones its deploy has not shipped.
+  const files = selected.flatMap((name) => {
+    const surface = SURFACES[name]
+    if (!surface.fallbackFile) return [surface.file]
+    let path
+    try {
+      path = contentAt(baselineSha, surface).path
+    } catch {
+      path = surface.fallbackFile
+    }
+    return path === surface.file ? [surface.file] : [surface.file, surface.fallbackFile]
+  })
   let pending = ''
   try {
     pending = git([

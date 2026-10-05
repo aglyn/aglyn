@@ -64,7 +64,11 @@
  *
  * `stageId`, `status` (from the target stage's `kind`, never from the body),
  * `stageChangedAtMs`, `closedAtMs` (set on a close, cleared on a reopen) and
- * `lostReason` (kept on a loss, removed on anything else). A move to the
+ * `lostReason` (kept on a loss, removed on anything else). And, as Salesforce
+ * does on a stage change (AGL-3516), the target stage's `forecastCategory`
+ * stamped onto the deal and its `probability` override cleared, so the deal
+ * forecasts at the new stage's odds — the deal page may set either again
+ * afterwards (`dealStageMoveFields`). A move to the
  * stage the deal is already in writes nothing and emits nothing — an
  * automation must not fire twice because a card was dropped where it was.
  *
@@ -89,6 +93,7 @@ import {
   type CrmDeal,
   type CrmPipeline,
   dealStageById,
+  dealStageMoveFields,
   hostRoleFor,
   hostScopeToken,
   ORG_SCOPE_TOKEN,
@@ -284,6 +289,7 @@ export const crmDealStageHandler: PluginApiHandler = async (req, res) => {
     stageChangedAtMs: nowMs,
     closedAtMs: nextStatus === 'open' ? null : nowMs,
     lostReason: nextStatus === 'lost' ? lostReason : FieldValue.delete(),
+    ...dealStageMoveFields(target),
     updatedAt: new Date(),
   })
 

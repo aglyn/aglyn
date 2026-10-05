@@ -18,6 +18,8 @@
 import type { Firestore, Query } from 'firebase/firestore'
 import { setRegisteringPluginId } from '../app-utils/registering-plugin'
 import {
+  PLUGIN_RECORD_LIST_IDS_MAX,
+  pluginRecordListByIdsQuery,
   pluginRecordListQuery,
   pluginRecordListSource,
   pluginRecordsFromRows,
@@ -92,6 +94,32 @@ describe('record list sources', () => {
     expect(asked).toEqual([{ orgId: 'o1', memberScope: ['host:h1'], installedFrom: 'listing-1', limit: 21 }])
   })
 
+  it('hands the rows back with the request, so the owner applies what the query could not state', () => {
+    registerPluginRecordListSource(
+      'view',
+      {
+        query: () => null,
+        // A member's private view is theirs to list, and nobody else's.
+        record: (id, data, request) =>
+          data['shared'] === true || (request?.viewerUid && data['ownerUid'] === request.viewerUid)
+            ? { id, name: String(data['name']), facts: {} }
+            : null,
+      },
+      { pluginId: 'cellar' },
+    )
+    const rows = [
+      { $id: 'v1', name: 'Shared', shared: true },
+      { $id: 'v2', name: 'Mine', ownerUid: 'u1' },
+      { $id: 'v3', name: 'Theirs', ownerUid: 'u2' },
+    ]
+    expect(pluginRecordsFromRows('view', rows, '$id', { viewerUid: 'u1', limit: 5 }).map((record) => record.id)).toEqual([
+      'v1',
+      'v2',
+    ])
+    // No reader named: only what is shared.
+    expect(pluginRecordsFromRows('view', rows).map((record) => record.id)).toEqual(['v1'])
+  })
+
   it('answers no query and no records for a kind no plugin keeps here', () => {
     expect(pluginRecordListSource('bottle')).toBeNull()
     expect(pluginRecordListQuery('bottle', FIRESTORE, { hostId: 'h1', limit: 5 })).toBeNull()
@@ -117,5 +145,36 @@ describe('record list sources', () => {
   it('refuses a source with no kind or no owner', () => {
     expect(() => registerPluginRecordListSource(' ', source('x'), { pluginId: 'cellar' })).toThrow(/kind/)
     expect(() => registerPluginRecordListSource('bottle', source('x'))).toThrow(/no owner/)
+  })
+})
+
+describe('records by name', () => {
+  it('asks the owner for at most thirty named records at a time', () => {
+    const asked: string[][] = []
+    registerPluginRecordListSource(
+      'bottle',
+      {
+        ...source('cellar'),
+        byIds: (_firestore, request) => {
+          asked.push([...request.ids])
+          return { ids: request.ids } as unknown as Query
+        },
+      },
+      { pluginId: 'cellar' },
+    )
+    const ids = Array.from({ length: 40 }, (_, index) => `b${index}`)
+    expect(pluginRecordListByIdsQuery('bottle', FIRESTORE, { hostId: 'h1', ids })).toEqual({
+      ids: ids.slice(0, PLUGIN_RECORD_LIST_IDS_MAX),
+    })
+    expect(asked[0]).toHaveLength(30)
+    // No ids asks for nothing, and says so without asking.
+    expect(pluginRecordListByIdsQuery('bottle', FIRESTORE, { hostId: 'h1', ids: ['', ''] })).toBeNull()
+    expect(asked).toHaveLength(1)
+  })
+
+  it('answers nothing where the source reads none by name, or no plugin keeps the kind', () => {
+    registerPluginRecordListSource('bottle', source('cellar'), { pluginId: 'cellar' })
+    expect(pluginRecordListByIdsQuery('bottle', FIRESTORE, { hostId: 'h1', ids: ['b1'] })).toBeNull()
+    expect(pluginRecordListByIdsQuery('glass', FIRESTORE, { hostId: 'h1', ids: ['g1'] })).toBeNull()
   })
 })

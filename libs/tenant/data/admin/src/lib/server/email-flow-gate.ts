@@ -72,10 +72,8 @@ import {
   marketingConsentDecision,
   resolveMarketingConsentPolicy,
 } from '@aglyn/aglyn/server'
-import firebaseAdmin from './firebase-admin'
-import { findContactByEmail } from './contact-email-index'
+import { findPluginPerson } from '@aglyn/aglyn/plugin-manager/plugin-person-records'
 import { filterTopicSendable } from './email-suppression'
-import { orgDataQueryForHost } from './organizations'
 
 /** Why a flow's email was not sent. Null when it may go. */
 export type FlowEmailRefusal =
@@ -121,55 +119,45 @@ export type FlowEmailRefusal =
 export type FlowEmailScope = 'scheduled' | 'immediate'
 
 /**
- * The person's own record, from the two silos that hold a consent basis for
- * somebody an automation can reach.
+ * The person's own record, wherever the workspace keeps them, asked of the
+ * plugin that keeps people (`plugin-person-records`, AGL-3080).
  *
- * `contacts` first because it is the canonical person store and the one the
- * consent capture surfaces write; `leads` second because a welcome series
- * fires on a sign-up that may not have produced a contact yet. Two keyed
- * reads at most, and only on a message that is about to be sent — the
+ * Any kind of record, not only a known person's: a welcome series fires on a
+ * sign-up that may not have produced a contact yet, so reading only the
+ * qualified record would refuse the very audience the feature exists for.
+ * One question, and only on a message that is about to be sent — the
  * expensive shape would be reading these on a beat, for people no step is
  * mailing.
  *
- * The contact is found through the org's address index narrowed to this
- * site (AGL-2633): a basis recorded on a record that was later merged into
- * another is the survivor's basis now, and the address the message goes to
- * may be the one that became an alternate.
+ * Narrowed to this site, by the owner, on the one record the address names:
+ * a basis recorded on a record a sibling brand keeps is not this site's, and
+ * one recorded on a record that was later merged into another is the
+ * survivor's basis now (AGL-2633), under whichever of its addresses the
+ * message goes to.
  *
- * An address in NEITHER silo reads as record-less, which is what
- * `readMarketingBasis(null)` describes: `unrecorded`, with no capture date.
- * Under a `forward` policy that grandfathers and under `strict` it is
+ * An address the workspace holds nobody at reads as record-less, which is
+ * what `readMarketingBasis(null)` describes: `unrecorded`, with no capture
+ * date — as does a workspace no plugin keeps people for, and a lookup that
+ * failed. Under a `forward` policy that grandfathers and under `strict` it is
  * withheld — the same answer a campaign gives the same address, which is the
  * property that matters.
  */
 async function readPersonRecord(
   hostId: string,
   email: string,
-  firestore?: any,
 ): Promise<Record<string, unknown> | null> {
-  const db = firestore ?? firebaseAdmin.app().firestore()
   try {
-    const { ref } = await orgDataQueryForHost(hostId, 'contacts')
-    const contact = await findContactByEmail(ref, email, { hostId })
-    if (contact) return contact.data() as Record<string, unknown>
+    const person = await findPluginPerson({
+      hostId,
+      email,
+      onlyVisibleToSite: true,
+      anyKind: true,
+    })
+    return person ? { ...person.data } : null
   } catch (error) {
-    console.error('[flow-email] contact lookup failed', hostId, error)
+    console.error('[flow-email] person lookup failed', hostId, error)
+    return null
   }
-  try {
-    /*
-     * SCOPED (AGL-3275). The collection is org-wide now, so an unnarrowed
-     * `where('email', ...)` would answer this site with a sibling brand's
-     * lead — and this function decides whether to MAIL the person it finds.
-     * `orgDataQueryForHost` applies the same `visibleTo` clause the contact
-     * lookup above already goes through.
-     */
-    const { query } = await orgDataQueryForHost(hostId, 'leads')
-    const lead = (await query.where('email', '==', email).limit(1).get()).docs[0]
-    if (lead) return lead.data() as Record<string, unknown>
-  } catch (error) {
-    console.error('[flow-email] lead lookup failed', hostId, error)
-  }
-  return null
 }
 
 /**
@@ -206,11 +194,7 @@ export async function flowEmailRefusal(options: {
       'marketingConsentPolicy'
     ],
   )
-  const record = await readPersonRecord(
-    options.hostId,
-    email,
-    options.firestore,
-  )
+  const record = await readPersonRecord(options.hostId, email)
   /*
    * The group the SEND belongs to, not the site alone. Three sites declared
    * as one sender share a basis, and an automation running on any of them is

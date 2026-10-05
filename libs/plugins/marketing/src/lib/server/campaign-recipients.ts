@@ -22,13 +22,13 @@ import { firebaseAdmin, resolveOrgIdForHost } from '@aglyn/tenant-data-admin'
 // delivery-log reader with whatever the factory listed, and this handler's
 // whole behaviour is what that reader returns.
 import {
-  readCampaignEngagement,
-  EMAIL_CAMPAIGN_ENGAGEMENT_MAX_CAMPAIGNS,
+  readSendEngagement,
+  EMAIL_SEND_ENGAGEMENT_MAX_SENDS,
   type EmailEngagementFilter,
 } from '@aglyn/tenant-data-admin/server/email-delivery-log'
 import { isDocumentId } from '@aglyn/tenant-data-admin/server/document-id'
 import { FieldPath } from 'firebase-admin/firestore'
-import { CAMPAIGN_SEND_HOST_FIELD } from '@aglyn/shared-ui-email-campaigns/model'
+import { CAMPAIGN_SEND_HOST_FIELD } from '../model/campaign-container'
 import { orgCampaignSends, sendIsOnHost } from './campaign-org-refs'
 
 /**
@@ -170,7 +170,7 @@ export const campaignRecipientsHandler: PluginApiHandler = async (req, res) => {
      * than the surface silently describing thirty messages as if they were
      * all of them.
      */
-    const ceiling = EMAIL_CAMPAIGN_ENGAGEMENT_MAX_CAMPAIGNS + 1
+    const ceiling = EMAIL_SEND_ENGAGEMENT_MAX_SENDS + 1
     const messageDocs = emailId
       ? [await sends.doc(emailId).get()].filter(
           (snapshot: any) => snapshot.exists && sendIsOnHost(snapshot, hostId),
@@ -195,9 +195,9 @@ export const campaignRecipientsHandler: PluginApiHandler = async (req, res) => {
       subjects[doc.id] = String(doc.get('subject') ?? '')
     }
 
-    const page = await readCampaignEngagement({
+    const page = await readSendEngagement({
       hostId,
-      campaignIds,
+      sendIds: campaignIds,
       filter,
       cursor: cursor || null,
       firestore,
@@ -228,8 +228,8 @@ export const campaignRecipientsHandler: PluginApiHandler = async (req, res) => {
       })),
       cursor: page.cursor,
       lookupFailed: page.lookupFailed,
-      campaignsRead: campaignIds.length - page.campaignsOmitted,
-      campaignsOmitted: page.campaignsOmitted,
+      campaignsRead: campaignIds.length - page.sendsOmitted,
+      campaignsOmitted: page.sendsOmitted,
     })
   } catch (error) {
     console.error(error)

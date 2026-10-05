@@ -23,12 +23,12 @@
  * exercised here rather than described a second time.
  */
 
-/** The person's record in `contacts`, or null for an address with none. */
+/** The person's known record, or null for an address with none. */
 let contact: Record<string, any> | null = null
-/** The person's record in `leads`, consulted only when `contacts` misses. */
+/** The person's record before they were known, answered only to a caller asking for any kind. */
 let lead: Record<string, any> | null = null
-/** Which silos were queried, so the fallback order is an assertion. */
-let silosRead: string[] = []
+/** What the gate asked the record system, so the question itself is an assertion. */
+let asked: PluginPersonFindRequest[] = []
 /** Topics this address has left, by topic id. */
 let topicsLeft: Record<string, any> = {}
 /**
@@ -38,80 +38,46 @@ let topicsLeft: Record<string, any> = {}
 let topicsLeftBySite: Record<string, Record<string, any>> = {}
 /** Make the topic lookup throw, for the fail-open case. */
 let topicLookupThrows = false
-/** `orgs/{org}/emailIndex/{personKey}` → `{ email, contactId }` (AGL-2625). */
-let emailIndex: Record<string, Record<string, any>> = {}
-
-const singleDocQuery = (
-  row: Record<string, any> | null,
-  silo: string,
-): any => ({
-  where: () => singleDocQuery(row, silo),
-  limit: () => singleDocQuery(row, silo),
-  get: async () => {
-    silosRead.push(silo)
-    return {
-      empty: row === null,
-      docs:
-        row === null ? [] : [{ data: () => row, get: (f: string) => row[f] }],
-    }
-  },
-})
 
 /**
- * The contact as the org's collection holds it. A row the scoped query
- * used to answer was visible to the site by construction; the lookup now
- * checks `visibleTo` itself, so the default here is the org-wide stamp and
- * a case that wants a sibling site's row says so.
+ * The plugin that keeps people, standing in for the one that does (AGL-3080):
+ * the person behind an address — by it, or by an alternate one a merge folded
+ * in (AGL-2633) — narrowed to the site when asked, and the not-yet-qualified
+ * record only to a caller that asked for any kind. That the real owner
+ * answers the same is held by the CRM's own `person-records.spec.ts`.
  */
-const contactRow = () =>
-  contact === null ? null : { visibleTo: ['org'], ...contact }
-
-const contactSnapshot = (row: Record<string, any> | null) => ({
-  id: 'contact-1',
-  exists: row !== null,
-  data: () => row ?? undefined,
-  get: (f: string) => row?.[f],
-})
-
-const emailIndexRef: any = {
-  doc: (key: string) => ({
-    get: async () => ({
-      exists: Boolean(emailIndex[key]),
-      get: (f: string) => emailIndex[key]?.[f],
-    }),
-    set: async (value: Record<string, any>) => {
-      emailIndex[key] = { ...(emailIndex[key] ?? {}), ...value }
-    },
-  }),
-}
-
-/** The org's contacts collection: matched on the address, as the real query is. */
-const contactsRef: any = {
-  parent: {
-    collection: (name: string) => (name === 'emailIndex' ? emailIndexRef : contactsRef),
-  },
-  doc: (id: string) => ({
-    get: async () => contactSnapshot(id === 'contact-1' ? contactRow() : null),
-  }),
-  where: (field: string, _op: string, value: unknown) => ({
-    limit: () => ({
-      get: async () => {
-        silosRead.push('contacts')
-        const row = contactRow()
-        const hit = row !== null && row[field] === value ? row : null
-        return { empty: hit === null, docs: hit === null ? [] : [contactSnapshot(hit)] }
+function standInPersonRecords(): void {
+  registerPluginPersonRecords(
+    {
+      async find(request) {
+        asked.push(request)
+        const email = String(request.email ?? '').trim().toLowerCase()
+        const visible = (row: Record<string, any>) =>
+          !request.onlyVisibleToSite || visibleToHost(row['visibleTo'], String(request.hostId))
+        // A contact the lookup could see by construction carries the org-wide
+        // stamp; a case that wants a sibling site's row says so.
+        const known = contact === null ? null : { visibleTo: ['org'], ...contact }
+        if (known && (known['email'] === email || (known['alternateEmails'] ?? []).includes(email))) {
+          return visible(known) ? { kind: 'contact', id: 'contact-1', email, data: known } : null
+        }
+        const early = lead === null ? null : { visibleTo: ['org'], ...lead }
+        if (request.anyKind && early && early['email'] === email && visible(early)) {
+          return { kind: 'lead', id: 'lead-1', email, data: early }
+        }
+        return null
       },
-    }),
-  }),
+      async read(request) {
+        return request.records.map(() => null)
+      },
+    },
+    { pluginId: 'records' },
+  )
 }
 
 const firestore: any = {
   collection: (name: string) => ({
     doc: (site?: string) => ({
-      collection: (sub: string) =>
-        sub === 'leads'
-          ? singleDocQuery(lead, 'leads')
-          : { doc: (id: string) => ({ path: `${name}/${site}/${sub}/${id}` }) },
+      collection: (sub: string) => ({ doc: (id: string) => ({ path: `${name}/${site}/${sub}/${id}` }) }),
     }),
   }),
   getAll: async (...refs: any[]) => {
@@ -129,26 +95,12 @@ const firestore: any = {
   },
 }
 
-jest.mock('./firebase-admin', () => ({
-  __esModule: true,
-  default: { app: () => ({ firestore: () => firestore }) },
-  firebaseAdmin: { app: () => ({ firestore: () => firestore }) },
-}))
-
-/*
- * The lead silo is an org collection now (AGL-3275), so it comes through the
- * same scoped door the contacts lookup already used — and the double answers
- * per collection rather than assuming every caller wants contacts.
- */
-jest.mock('./organizations', () => ({
-  __esModule: true,
-  orgDataQueryForHost: async (_hostId: string, name: string) =>
-    name === 'leads'
-      ? { ref: contactsRef, query: singleDocQuery(lead, 'leads') }
-      : { ref: contactsRef, query: singleDocQuery(contact, 'contacts') },
-}))
-
-import { personKey } from '@aglyn/aglyn/app-utils/person-key'
+import { visibleToHost } from '@aglyn/aglyn/app-utils/scope-tokens'
+import {
+  registerPluginPersonRecords,
+  type PluginPersonFindRequest,
+} from '@aglyn/aglyn/plugin-manager/plugin-person-records'
+import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
 import {
   declineMarketingConsentFields,
   marketingConsentFieldsForHost,
@@ -178,11 +130,12 @@ const grantedTo = (hostId: string) =>
 beforeEach(() => {
   contact = null
   lead = null
-  silosRead = []
+  asked = []
   topicsLeft = {}
   topicsLeftBySite = {}
   topicLookupThrows = false
-  emailIndex = {}
+  resetPluginServicesForTests()
+  standInPersonRecords()
 })
 
 describe('the consent split, applied to one person', () => {
@@ -351,13 +304,10 @@ describe('the consent split, applied to one person', () => {
       alternateEmails: [EMAIL],
       ...grantedTo(HOST),
     }
-    emailIndex[personKey(EMAIL)!] = { email: EMAIL, contactId: 'contact-1' }
 
     expect(
       await flowEmailRefusal({ hostId: HOST, email: EMAIL, org: STRICT, firestore }),
     ).toBeNull()
-    // The index answered; neither the contacts query nor the lead silo ran.
-    expect(silosRead).toEqual([])
   })
 
   it('REFUSES when the survivor an alternate names belongs to a sibling site', async () => {
@@ -367,14 +317,13 @@ describe('the consent split, applied to one person', () => {
       visibleTo: ['host:site-2'],
       ...grantedTo(HOST),
     }
-    emailIndex[personKey(EMAIL)!] = { email: EMAIL, contactId: 'contact-1' }
 
     expect(
       await flowEmailRefusal({ hostId: HOST, email: EMAIL, org: STRICT, firestore }),
     ).toBe('consent-withheld')
   })
 
-  it('falls back to the lead silo when there is no contact', async () => {
+  it('reads the record of a person not yet known, when there is no other', async () => {
     // A welcome series fires on a sign-up that may not have produced a
     // contact yet, so reading contacts alone would refuse the very audience
     // the feature exists for.
@@ -389,10 +338,9 @@ describe('the consent split, applied to one person', () => {
         firestore,
       }),
     ).toBeNull()
-    expect(silosRead).toEqual(['contacts', 'leads'])
   })
 
-  it('does not pay for the lead read when the contact answered', async () => {
+  it('asks once, for any kind of record, as this site may see it', async () => {
     contact = { email: EMAIL, ...grantedTo(HOST) }
 
     await flowEmailRefusal({
@@ -402,14 +350,26 @@ describe('the consent split, applied to one person', () => {
       firestore,
     })
 
-    expect(silosRead).toEqual(['contacts'])
+    expect(asked).toEqual([
+      { hostId: HOST, email: EMAIL, onlyVisibleToSite: true, anyKind: true },
+    ])
+  })
+
+  it('reads a workspace no plugin keeps people for as record-less', async () => {
+    resetPluginServicesForTests()
+    expect(
+      await flowEmailRefusal({ hostId: HOST, email: EMAIL, org: STRICT, firestore }),
+    ).toBe('consent-withheld')
+    expect(
+      await flowEmailRefusal({ hostId: HOST, email: EMAIL, org: FORWARD, firestore }),
+    ).toBeNull()
   })
 
   it('refuses an empty address without reading anything', async () => {
     expect(
       await flowEmailRefusal({ hostId: HOST, email: '  ', org: {}, firestore }),
     ).toBe('consent-withheld')
-    expect(silosRead).toEqual([])
+    expect(asked).toEqual([])
   })
 })
 

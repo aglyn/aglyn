@@ -146,6 +146,20 @@ export interface AiBuildPlanSection {
   items: number
 }
 
+/**
+ * A screen that is one dataset's record template (AGL-3475): the data plugin
+ * serves it once per record at `/{base}/{slug}`, its copy bound with
+ * `{{item.<field>}}`. The plan names the binding and the build drafts the
+ * page; the member saves the binding in Page Properties → Record pages, since
+ * a binding is a route and a job writes drafts only (rule 13).
+ */
+export interface AiBuildPlanRecord {
+  /** The dataset: an inventory id or `new:<name>`. */
+  dataset: string
+  /** The path its record pages live under, one or more segments: `services`, `services/residential`. */
+  base: string
+}
+
 export interface AiBuildPlanScreen {
   title: string
   slug: string
@@ -160,6 +174,12 @@ export interface AiBuildPlanScreen {
   seoTitle: string
   seoDescription: string
   sections: AiBuildPlanSection[]
+  /**
+   * The dataset this page is the record template of, or null for a page that
+   * is one page. A plan kept before record templates carries none, which
+   * reads as null.
+   */
+  record: AiBuildPlanRecord | null
   /**
    * The id the draft screen is written under, where a unit of the job builds
    * it (AGL-3079). Minted when the job keeps the plan, never part of the
@@ -402,9 +422,64 @@ export const AI_BUILD_PLAN_EMBEDS_TOOL: AiTool = {
   },
 }
 
-/** The plan tool a brief is answered with. */
-export function aiBuildPlanToolFor(brief: string): AiTool {
-  return AI_PLAN_ASKS_FOR_VIDEO.test(brief) ? AI_BUILD_PLAN_EMBEDS_TOOL : AI_BUILD_PLAN_TOOL
+const RECORD_SCHEMA = {
+  anyOf: [
+    {
+      type: 'object',
+      additionalProperties: false,
+      required: ['dataset', 'base'],
+      properties: {
+        dataset: string('The dataset: an inventory id or new:<name>.'),
+        base: string('The path its record pages live under, e.g. services for /services/roofing.'),
+      },
+    },
+    { type: 'null' },
+  ],
+  description:
+    "When this page is one dataset's record template, serving a page per record at /<base>/<record address> with its copy bound as {{item.<field>}}: the dataset and the base. Otherwise null.",
+}
+
+/** A plan tool whose screens each name the dataset they are the record template of, or null. */
+function withRecords(tool: AiTool): AiTool {
+  const properties = tool.inputSchema['properties'] as Record<string, unknown>
+  const screens = properties['screens'] as { items: Record<string, unknown> }
+  return {
+    ...tool,
+    inputSchema: {
+      ...tool.inputSchema,
+      properties: {
+        ...properties,
+        screens: {
+          ...screens,
+          items: {
+            ...screens.items,
+            required: [...(screens.items['required'] as string[]), 'record'],
+            properties: {
+              ...(screens.items['properties'] as Record<string, unknown>),
+              record: RECORD_SCHEMA,
+            },
+          },
+        },
+      },
+    },
+  }
+}
+
+/**
+ * The plan tools with a record template on every screen (AGL-3475), offered
+ * only where the job may bind a dataset: a site with a dataset, or a job that
+ * may create one. Record pages are a Starter feature, and every other plan's
+ * request is the plain tool, byte for byte, so the field costs a Free taste
+ * nothing and a model planning a site with no dataset has none to bind.
+ */
+export const AI_BUILD_PLAN_RECORDS_TOOL: AiTool = withRecords(AI_BUILD_PLAN_TOOL)
+export const AI_BUILD_PLAN_EMBEDS_RECORDS_TOOL: AiTool = withRecords(AI_BUILD_PLAN_EMBEDS_TOOL)
+
+/** The plan tool a brief is answered with, on a job that may or may not bind a dataset. */
+export function aiBuildPlanToolFor(brief: string, options: { records?: boolean } = {}): AiTool {
+  const video = AI_PLAN_ASKS_FOR_VIDEO.test(brief)
+  if (options.records) return video ? AI_BUILD_PLAN_EMBEDS_RECORDS_TOOL : AI_BUILD_PLAN_RECORDS_TOOL
+  return video ? AI_BUILD_PLAN_EMBEDS_TOOL : AI_BUILD_PLAN_TOOL
 }
 
 export type AiBuildPlanParse =
@@ -465,6 +540,18 @@ export function parseAiBuildPlan(input: unknown): AiBuildPlanParse {
       throw new PlanShapeError(`${path} is not one of ${allowed.join(', ')}`)
     }
     return value as T
+  }
+  // Absent or null is a page that is one page. A base is held to the shape a
+  // record page's address takes, so the binding the member saves from it is
+  // one the save route admits.
+  const planRecord = (value: unknown, path: string): AiBuildPlanRecord | null => {
+    if (value === null || value === undefined) return null
+    const entry = record(value, path)
+    const dataset = text(entry['dataset'], `${path}.dataset`)
+    if (!dataset) throw new PlanShapeError(`${path}.dataset is empty`)
+    const base = aiPlanRecordBase(text(entry['base'], `${path}.base`))
+    if (!base) throw new PlanShapeError(`${path}.base is not a path of lowercase words joined by hyphens`)
+    return { dataset, base }
   }
 
   try {
@@ -539,6 +626,7 @@ export function parseAiBuildPlan(input: unknown): AiBuildPlanParse {
               items,
             }
           }),
+          record: planRecord(entry['record'], `screens[${index}].record`),
         }
       },
     )
@@ -565,6 +653,22 @@ export function parseAiBuildPlan(input: unknown): AiBuildPlanParse {
     if (error instanceof PlanShapeError) return { ok: false, error: error.message }
     throw error
   }
+}
+
+/**
+ * A record template's base as the data plugin's save route stores it
+ * (`normalizeRecordPageBase`, which this plugin may not import): one to four
+ * lowercase segments of letters, digits and hyphens, with no leading or
+ * trailing slash; null for a base that is no such path.
+ */
+export function aiPlanRecordBase(base: string): string | null {
+  const segments = base.trim().toLowerCase().split('/').filter(Boolean)
+  if (!segments.length || segments.length > 4) return null
+  return segments.every(
+    (segment) => segment.length <= 60 && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(segment),
+  )
+    ? segments.join('/')
+    : null
 }
 
 /** Whether a reference names something the plan creates. */

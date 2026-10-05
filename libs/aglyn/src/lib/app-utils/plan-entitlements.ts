@@ -409,12 +409,12 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     sharedLayoutsPerHost: 3,
     templatesPerHost: 50,
     storagePerHostMb: 2048,
-    membersPerHost: 3,
+    membersPerHost: 2,
     managersPerOrg: 2,
     maxManagersPerOrg: 5,
     maxMembersPerHost: 10,
     // Sized by the same annual-price invariant as Pro's — see that band.
-    bandwidthGb: 20,
+    bandwidthGb: 15,
     formsPerHost: FORMS_PER_HOST_CEILING,
     variablesPerHost: 25,
     functionsPerHost: 10,
@@ -444,10 +444,10 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     emailSendsPerMonth: 0,
     actionRunsPerMonth: 0,
     apiRequestsPerMonth: 0,
-    datasetsPerOrg: 3,
+    datasetsPerOrg: 2,
     maxDatasetsPerOrg: 10,
     recordsPerDataset: 1000,
-    dataStorageMbPerOrg: 1024,
+    dataStorageMbPerOrg: 512,
     productsPerHost: 100,
     inventoryLocations: 1,
     posRegisters: 0,
@@ -513,31 +513,33 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     screensPerHost: 100,
     sharedLayoutsPerHost: UNLIMITED,
     templatesPerHost: UNLIMITED,
-    storagePerHostMb: 10240,
-    membersPerHost: 10,
-    managersPerOrg: 5,
+    storagePerHostMb: 5120,
+    membersPerHost: 3,
+    managersPerOrg: 3,
     maxManagersPerOrg: 20,
     maxMembersPerHost: 25,
     // Page views are the largest term of this tier's modeled COGS. One GB is
-    // 1,035 views at `ESTIMATED_PAGE_TRANSFER_BYTES`, priced where the CDN is
-    // dearest because it bills in the region that serves a visitor: $0.367 of
-    // weight (`perPageView`, transfer at $0.35 a GB) and $0.190 of CDN
-    // requests once the hosting plan's monthly allowance is spent
-    // (`PAGE_VIEW_CDN_REQUEST_COST_USD`, $3.20 per million). So a GB of
-    // included bandwidth costs $0.557, and the bandwidth band is what decides
-    // whether the tier survives a customer spending the whole allowance it
-    // was sold.
+    // 1,035 views at `ESTIMATED_PAGE_TRANSFER_BYTES`, priced where Vercel is
+    // dearest because it bills in the region that serves a visitor: $0.413 of
+    // weight (`perPageView` — transfer at $0.35 a decimal GB, reads at nam5)
+    // and $0.224 of requests once the hosting plan's monthly allowance is
+    // spent (`PAGE_VIEW_CDN_REQUEST_COST_USD` — 57 CDN requests at $3.20 per
+    // million and the analytics beacon's function). So a GB of included
+    // bandwidth costs $0.637, and the bandwidth band is what decides whether
+    // the tier survives a customer spending the whole allowance it was sold.
     //
     // The invariant the band is sized against is the ANNUAL price ($39 a
     // month) net of Stripe's fee, with every band at 100% and the CRM seat
     // and one-to-one email terms counted — the 2026-09-07 pricing decision —
-    // at that all-in gigabyte (AGL-3444). 35 GB is what it carries; every
-    // paid band on the ladder is sized the same way.
+    // at that all-in gigabyte (AGL-3444), and it must cover that cost plus
+    // 30%, the same markup the metered overages carry (AGL-3469). 25 GB is
+    // what it carries beside the storage and campaign bands it now sits
+    // with; every paid band on the ladder is sized the same way.
     // `tier-margin-floor.spec.ts` holds the model and pins the figure.
     //
     // `meteredInfraPassThrough` is true here, so traffic past the band BILLS
     // at the page-view pass-through rather than being refused or absorbed.
-    bandwidthGb: 35,
+    bandwidthGb: 25,
     formsPerHost: FORMS_PER_HOST_CEILING,
     variablesPerHost: 100,
     functionsPerHost: 50,
@@ -545,13 +547,13 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     servicesPerHost: UNLIMITED,
     redirectsPerHost: 100,
     contactsPerHost: 10000,
-    emailSendsPerMonth: 5000,
+    emailSendsPerMonth: 2500,
     actionRunsPerMonth: 5000,
     apiRequestsPerMonth: 0,
-    datasetsPerOrg: 15,
+    datasetsPerOrg: 5,
     maxDatasetsPerOrg: 50,
     recordsPerDataset: 10000,
-    dataStorageMbPerOrg: 5120,
+    dataStorageMbPerOrg: 2048,
     productsPerHost: 2500,
     inventoryLocations: 2,
     posRegisters: 1,
@@ -623,27 +625,27 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     screensPerHost: UNLIMITED,
     sharedLayoutsPerHost: UNLIMITED,
     templatesPerHost: UNLIMITED,
-    storagePerHostMb: 20480,
-    membersPerHost: 50,
-    managersPerOrg: 15,
+    storagePerHostMb: 10240,
+    membersPerHost: 5,
+    managersPerOrg: 5,
     maxManagersPerOrg: 100,
     maxMembersPerHost: 100,
     // Sized by the same annual-price invariant as Pro's — see that band.
-    bandwidthGb: 55,
+    bandwidthGb: 45,
     formsPerHost: FORMS_PER_HOST_CEILING,
     variablesPerHost: 1000,
     functionsPerHost: 250,
     workflowsPerHost: 100,
     servicesPerHost: UNLIMITED,
     redirectsPerHost: UNLIMITED,
-    contactsPerHost: 50000,
-    emailSendsPerMonth: 25000,
+    contactsPerHost: 30000,
+    emailSendsPerMonth: 15000,
     actionRunsPerMonth: 50000,
-    apiRequestsPerMonth: 100_000,
-    datasetsPerOrg: 100,
+    apiRequestsPerMonth: 1_500,
+    datasetsPerOrg: 10,
     maxDatasetsPerOrg: 250,
     recordsPerDataset: 100000,
-    dataStorageMbPerOrg: 25600,
+    dataStorageMbPerOrg: 10240,
     productsPerHost: 10000,
     inventoryLocations: 4,
     posRegisters: 2,
@@ -695,13 +697,13 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     screensPerHost: UNLIMITED,
     sharedLayoutsPerHost: UNLIMITED,
     templatesPerHost: UNLIMITED,
-    storagePerHostMb: 30720,
-    membersPerHost: 75,
-    managersPerOrg: 25,
+    storagePerHostMb: 15360,
+    membersPerHost: 5,
+    managersPerOrg: 5,
     maxManagersPerOrg: 150,
     maxMembersPerHost: 150,
     // Sized by the same annual-price invariant as Pro's — see that band.
-    bandwidthGb: 90,
+    bandwidthGb: 70,
     formsPerHost: FORMS_PER_HOST_CEILING,
     variablesPerHost: 5000,
     functionsPerHost: 500,
@@ -709,13 +711,13 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     servicesPerHost: UNLIMITED,
     redirectsPerHost: UNLIMITED,
     contactsPerHost: 100000,
-    emailSendsPerMonth: 40000,
+    emailSendsPerMonth: 25000,
     actionRunsPerMonth: 100000,
-    apiRequestsPerMonth: 300000,
-    datasetsPerOrg: 250,
+    apiRequestsPerMonth: 5_000,
+    datasetsPerOrg: 15,
     maxDatasetsPerOrg: 500,
     recordsPerDataset: 500000,
-    dataStorageMbPerOrg: 51200,
+    dataStorageMbPerOrg: 25600,
     productsPerHost: 25000,
     inventoryLocations: 6,
     posRegisters: 3,
@@ -764,13 +766,13 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     screensPerHost: UNLIMITED,
     sharedLayoutsPerHost: UNLIMITED,
     templatesPerHost: UNLIMITED,
-    storagePerHostMb: 40960,
-    membersPerHost: 100,
-    managersPerOrg: 50,
+    storagePerHostMb: 20480,
+    membersPerHost: 5,
+    managersPerOrg: 10,
     maxManagersPerOrg: 250,
     maxMembersPerHost: 250,
     // Sized by the same annual-price invariant as Pro's — see that band.
-    bandwidthGb: 105,
+    bandwidthGb: 80,
     formsPerHost: FORMS_PER_HOST_CEILING,
     variablesPerHost: UNLIMITED,
     functionsPerHost: 1000,
@@ -780,11 +782,11 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     contactsPerHost: 150000,
     emailSendsPerMonth: 65000,
     actionRunsPerMonth: 250000,
-    apiRequestsPerMonth: 1_000_000,
-    datasetsPerOrg: 500,
+    apiRequestsPerMonth: 17_000,
+    datasetsPerOrg: 25,
     maxDatasetsPerOrg: 1000,
     recordsPerDataset: 1000000,
-    dataStorageMbPerOrg: 102400,
+    dataStorageMbPerOrg: 51200,
     productsPerHost: UNLIMITED,
     inventoryLocations: 10,
     posRegisters: 5,
@@ -837,13 +839,13 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     screensPerHost: UNLIMITED,
     sharedLayoutsPerHost: UNLIMITED,
     templatesPerHost: UNLIMITED,
-    storagePerHostMb: 61440,
-    membersPerHost: 250,
-    managersPerOrg: 100,
+    storagePerHostMb: 20480,
+    membersPerHost: 5,
+    managersPerOrg: 10,
     maxManagersPerOrg: 500,
     maxMembersPerHost: 1000,
     // Sized by the same annual-price invariant as Pro's — see that band.
-    bandwidthGb: 485,
+    bandwidthGb: 395,
     formsPerHost: FORMS_PER_HOST_CEILING,
     variablesPerHost: UNLIMITED,
     functionsPerHost: UNLIMITED,
@@ -853,11 +855,11 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     contactsPerHost: 500000,
     emailSendsPerMonth: 130000,
     actionRunsPerMonth: 1000000,
-    apiRequestsPerMonth: 5000000,
-    datasetsPerOrg: 2000,
+    apiRequestsPerMonth: 85_000,
+    datasetsPerOrg: 50,
     maxDatasetsPerOrg: 5000,
     recordsPerDataset: UNLIMITED,
-    dataStorageMbPerOrg: 512000,
+    dataStorageMbPerOrg: 204800,
     productsPerHost: UNLIMITED,
     inventoryLocations: 50,
     posRegisters: 20,
@@ -947,12 +949,12 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     screensPerHost: UNLIMITED,
     sharedLayoutsPerHost: UNLIMITED,
     templatesPerHost: UNLIMITED,
-    storagePerHostMb: 122_880,
-    membersPerHost: 500,
-    managersPerOrg: 200,
+    storagePerHostMb: 40_960,
+    membersPerHost: 10,
+    managersPerOrg: 20,
     maxManagersPerOrg: 1_000,
     maxMembersPerHost: 2_000,
-    bandwidthGb: 970,
+    bandwidthGb: 790,
     formsPerHost: FORMS_PER_HOST_CEILING,
     variablesPerHost: UNLIMITED,
     functionsPerHost: UNLIMITED,
@@ -962,11 +964,11 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     contactsPerHost: 1_000_000,
     emailSendsPerMonth: ENTERPRISE_EMAIL_SENDS_PER_MONTH,
     actionRunsPerMonth: 2_000_000,
-    apiRequestsPerMonth: 10_000_000,
-    datasetsPerOrg: 4_000,
+    apiRequestsPerMonth: 170_000,
+    datasetsPerOrg: 100,
     maxDatasetsPerOrg: 10_000,
     recordsPerDataset: UNLIMITED,
-    dataStorageMbPerOrg: 1_024_000,
+    dataStorageMbPerOrg: 409_600,
     productsPerHost: UNLIMITED,
     inventoryLocations: 100,
     posRegisters: 40,
@@ -1532,7 +1534,10 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraCollaboratorMonthlyUsd: 1,
     extraDatasetMonthlyUsd: 1,
     extraDataGbMonthlyUsd: 0.36,
-    extraApiRequestsUsdPer1k: 0.2,
+    // FLOORED at the 50% retail margin, with Agency's: a `/v1` request costs
+    // $0.117 per 1,000 at the dearest region, so $0.25 is the round figure at
+    // or above $0.234 (AGL-3444).
+    extraApiRequestsUsdPer1k: 0.25,
     extraAssistCreditsUsdPer1k: 2.25,
     aiAddonMonthlyUsd: 99,
     // FLOORED at the 50% retail margin, not stepped down again. The ladder
@@ -1565,7 +1570,8 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraCollaboratorMonthlyUsd: 1,
     extraDatasetMonthlyUsd: 1,
     extraDataGbMonthlyUsd: 0.36,
-    extraApiRequestsUsdPer1k: 0.15,
+    // FLOORED at the 50% retail margin — see Advanced's.
+    extraApiRequestsUsdPer1k: 0.25,
     extraAssistCreditsUsdPer1k: 2,
     aiAddonMonthlyUsd: 299,
     // $0.40, because the band it meters is now FINITE.
@@ -2391,27 +2397,59 @@ export const INFRA_COGS_PER_SITE_USD = 2
  * where the page's generator can read it.
  *
  * The console keeps importing it from `usage-metering` unchanged.
+ *
+ * It is the margin KEPT: cost + 30% after Stripe's processor fee, not before
+ * it (AGL-3476). A price of cost × 1.3 kept cost × 1.26 once 2.9% came off,
+ * so the published rates are set by {@link METERED_PRICE_MULTIPLE}, and this
+ * stays the figure every full-utilization rule is held to.
  */
 export const METERED_MARKUP = 1.3
 
 /**
- * What the CDN requests behind ONE page view cost once the platform is past
- * its hosting plan's included request allowance, at the DEAREST region the
- * CDN bills, in USD per view (AGL-1879, AGL-3444). A page view billed past a
- * plan's band is priced at `(perPageView + this) × METERED_MARKUP` — $0.70
- * per 1,000 — and every `bandwidthGb` band is sized with it counted.
+ * What a passed-through cost is multiplied by to reach its price, so that
+ * cost + 30% survives Stripe's percentage fee: 1.3 ÷ 0.971 ≈ 1.3388
+ * (AGL-3476). The fixed 30¢ is paid by the subscription charge the overage
+ * rides on, so only the percentage is grossed up.
+ */
+export const METERED_PRICE_MULTIPLE = METERED_MARKUP / (1 - STRIPE_PROCESSOR_FEE_PCT)
+
+/**
+ * A published overage price: `costPerQuotedUnitUsd` × {@link
+ * METERED_PRICE_MULTIPLE}, rounded UP at the `decimals` it is quoted in, so
+ * the price the page prints and the invoice bills is the same round figure
+ * and never less than the rule. The product is settled to six places before
+ * the ceiling so a figure that is exact in decimal — or a pinned cost carried
+ * to eleven places, like the page-view pair — is not lifted a step by its
+ * tail.
+ */
+export function publishedMeteredPrice(costPerQuotedUnitUsd: number, decimals: number): number {
+  const scale = 10 ** decimals
+  return (
+    Math.ceil(Number((costPerQuotedUnitUsd * METERED_PRICE_MULTIPLE * scale).toFixed(6))) / scale
+  )
+}
+
+/**
+ * What the REQUESTS behind ONE page view cost once the platform is past its
+ * hosting plan's included request allowance, at the DEAREST region the CDN
+ * and functions bill, in USD per view (AGL-1879, AGL-3444): the CDN requests
+ * a cold load makes, and the one of them that reaches a function — the
+ * analytics beacon. A page view billed past a plan's band is priced at
+ * `(perPageView + this) × METERED_MARKUP` — $0.80 per 1,000 — and every
+ * `bandwidthGb` band is sized with it counted.
  *
  * ## Why a page view needs a second cost term
  *
- * `perPageView` prices what a view WEIGHS: the bytes it transfers at the
- * CDN's per-GB rate, plus the Firestore reads behind the render. The CDN also
- * charges per REQUEST once the team's monthly allowance is spent — Vercel Pro
- * includes 10,000,000 a month, then bills $2.00 to $3.20 per million by
- * region. A cold load of `aglyn.com/` makes 57 first-party requests to settle
- * (`tools/tenant-page-budget.json`, `wireCalibration.measuredAgainst`), so the
- * allowance is about 175,000 views of that page a month, platform-wide —
- * about 169 GB of included bandwidth — where the 1 TB transfer allowance
- * lasts about 1.4 million. The request allowance runs out first.
+ * `perPageView` prices what a view WEIGHS: the bytes it transfers, plus the
+ * Firestore reads behind the render. A view also costs per REQUEST, which is
+ * not proportional to weight: Vercel Pro includes 10,000,000 CDN requests a
+ * month, then bills $2.00 to $3.20 per million by region, and a cold load of
+ * `aglyn.com/` makes 57 first-party requests to settle
+ * (`tools/tenant-page-budget.json`, `wireCalibration.measuredAgainst`) — so
+ * the allowance is about 175,000 views a month, platform-wide, and runs out
+ * long before the transfer allowance. One of those requests is the analytics
+ * beacon (`apps/tenant/app/api/analytics/collect`), which runs a function on
+ * every view and writes two counter documents.
  *
  * ## Why the dearest region
  *
@@ -2420,27 +2458,29 @@ export const METERED_MARKUP = 1.3
  * São Paulo or Cape Town costs what those regions cost, and nothing about a
  * plan can choose otherwise. The platform's rule is that no plan is under
  * water at any utilization and that "at cost + 30%" is true of every billed
- * unit, so both terms of a page view are priced where the CDN is dearest:
- * transfer at $0.35 per GB (in `perPageView`) and requests at $3.20 per
- * million (here). Past the allowance a view then costs:
- *
- * |                                   | weight     | requests  | cost / 1k | margin at $0.70 |
- * |-----------------------------------|------------|-----------|-----------|-----------------|
- * | the page as measured (748.5 KB)   | $0.262148  | $0.182400 | $0.4445   | +36.5%          |
- * | the priced basis (1012.8 KB)      | $0.354715  | $0.182400 | $0.5371   | +23.3%          |
- *
- * — at least 30% over cost in every region, which is the claim `/pricing`
- * makes.
+ * unit, so every Vercel-billed term of a page view is priced where Vercel is
+ * dearest.
  *
  * ## The figure
  *
- * $0.00018374681 is 57.42 requests at $3.20 per million — the measured 57,
- * with the basis set ABOVE the measurement as the weight basis is — pinned so
- * the billed price lands on a whole cent: ($0.354715 + $0.1824) × 1.3 is
- * $0.6982 per 1,000, rounded up to $0.70, and ($0.354715 + $0.183747) × 1.3
- * is exactly $0.70. Published as "Our cost $0.538462 / You pay $0.70", the
- * "at cost + 30%" claim stays true of the cost a billed view incurs in the
- * dearest region, and so in every other.
+ * Per view, past the allowance, at the dearest region:
+ *
+ * |                                                        |              |
+ * |--------------------------------------------------------|--------------|
+ * | 57 CDN requests at $3.20 per million                   | $0.00018240  |
+ * | the beacon's function: 0.4 s billed as active CPU at   | $0.00002922  |
+ * |   $0.221/hr, 2 GB at $0.0183/GB-hr, $0.60 per million  |              |
+ * | the beacon's two counter writes at nam5's $0.18/100k   | $0.00000360  |
+ * | the beacon's ~1 KB through the function at $0.43/GB    | $0.00000044  |
+ * | **requests, measured**                                 | $0.00021566  |
+ *
+ * ($0.399028 weight + $0.215662) × 1.3 is $0.7991 per 1,000, rounded up to
+ * $0.80, and this term is pinned so ($0.399028 + $0.216357) × 1.3 is exactly
+ * $0.80 — "Our cost $0.615385 / You pay $0.80" — with the basis set ABOVE the
+ * measurement as the weight basis is. "At cost + 30%" holds of the cost a
+ * billed view incurs in the dearest region, and so in every other. The 0.4 s
+ * is the one function duration on record (the form-submission route), billed
+ * whole as CPU because nothing measured splits it from I/O wait.
  *
  * ## ⛔ Not in {@link ORG_COGS_UNIT_RATES_USD}, deliberately
  *
@@ -2453,16 +2493,16 @@ export const METERED_MARKUP = 1.3
  * ## The INCLUDED bands carry it too
  *
  * A view inside a plan's band makes the same requests as one past it, and
- * once the platform is past the allowance the CDN bills them either way, so
- * the `bandwidthGb` bands are sized with this term counted: $0.190 per
- * included GB on top of $0.367 of weight. `tier-margin-floor.spec.ts`
+ * once the platform is past the allowance they cost the same either way, so
+ * the `bandwidthGb` bands are sized with this term counted: $0.224 per
+ * included GB on top of $0.413 of weight. `tier-margin-floor.spec.ts`
  * multiplies it in and pins every tier at 100% of every band.
  *
  * Lives HERE, beside the markup, for the reason the markup does: the
  * `/pricing` generator publishes the cost column from it and cannot import
  * anything under `apps/console`.
  */
-export const PAGE_VIEW_CDN_REQUEST_COST_USD = 0.00018374681
+export const PAGE_VIEW_CDN_REQUEST_COST_USD = 0.00021635711
 
 /**
  * Monthly unit costs for the meters the rollup already records (AGL-1134).
@@ -2496,14 +2536,18 @@ export const PAGE_VIEW_CDN_REQUEST_COST_USD = 0.00018374681
  * ## Every Vercel-billed input is priced at Vercel's dearest region
  *
  * The CDN and functions bill by region, from $0.15 to $0.35 per GB of
- * transfer, $2.00 to $3.20 per million requests, and $0.128 to $0.221 per
- * hour of active CPU (memory $0.0106 to $0.0183 per GB-hour), and a plan
- * cannot choose where its visitors are. So the Vercel share of every rate
- * here is priced at the dearest region (AGL-3444): the transfer inside
- * `perPageView`, the function invocation inside `perFormSubmission`, and the
- * compute inside `perRun`. The GCP shares — object and Firestore storage, and
- * the Firestore reads and writes behind a render, a submission or a run —
- * are priced as they were.
+ * transfer (a decimal GB), $2.00 to $3.20 per million requests, and $0.128 to
+ * $0.221 per hour of active CPU (memory $0.0106 to $0.0183 per GB-hour), and
+ * a plan cannot choose where its visitors are. So the Vercel share of every
+ * rate here is priced at the dearest region (AGL-3444): the transfer inside
+ * `perPageView`, the function, CDN request and transfer inside
+ * `perFormSubmission` and `perApiRequest`, and the compute inside `perRun`.
+ *
+ * The GCP shares are priced at the database's own location. Production's
+ * Firestore is `nam5` (read from the Admin API 2026-10-01), at $0.06 per
+ * 100,000 reads, $0.18 per 100,000 writes and $0.18 per GiB-month — twice
+ * the single-region figures — and every Firestore operation in this table is
+ * priced there. Object storage is GCS US multi-region, `storagePerGbMonth`.
  *
  * Everything else here is a cost-model input ONLY. `dataStoragePerGbMonth`,
  * `perApiRequest`, `perContactMonth` and `perEmailSend` price what an org
@@ -2515,8 +2559,9 @@ export const PAGE_VIEW_CDN_REQUEST_COST_USD = 0.00018374681
  * The first three were corrected 2026-08-09 (AGL-1280) — storage $0.03 →
  * $0.026 and form submissions $0.0005 → $0.00005 — `perPageView` was
  * re-pegged 2026-09-09 (AGL-2711), from $0.0001 to $0.00016153846, and the
- * last two were re-priced at Vercel's dearest region on 2026-10-01
- * (AGL-3444): page views $0.00035471473, form submissions $0.000053846154.
+ * last two were re-priced at Vercel's dearest region and Firestore's `nam5`
+ * on 2026-10-01 (AGL-3444): page views $0.00039902751, form submissions
+ * $0.000061538462.
  * All three MUST be changed here and in `METERED_UNIT_RATES_USD` together. See that
  * table for each figure's basis; it is the one a customer is billed against,
  * so it is the one that carries the working.
@@ -2541,11 +2586,46 @@ export const ORG_COGS_UNIT_RATES_USD = {
    * the cost of a gigabyte's weight, and that — with the request term — is
    * what every bandwidthGb band on the ladder is sized against.
    */
-  perPageView: 0.00035471473,
-  perFormSubmission: 0.000053846154,
-  /** Firestore-backed dataset bytes — an order pricier than object storage. */
+  perPageView: 0.00039902751,
+  perFormSubmission: 0.000061538462,
+  /**
+   * Firestore-backed dataset bytes — nam5's $0.18 per GiB-month, an order
+   * pricier than object storage.
+   */
   dataStoragePerGbMonth: 0.18,
-  perApiRequest: 0.000002,
+  /**
+   * One `/v1` request — $117 per million (AGL-3444).
+   *
+   * Every request is a function invocation behind a CDN request, and it reads
+   * before it answers (`apps/console/utils/api-v1.ts`). The ledger for a
+   * default list page — 25 records, read as 26 — at Vercel's dearest region
+   * and nam5's list prices:
+   *
+   *   - reads: the key, the rate-limit window, the org, the month's quota
+   *     counter, the site the resource sits under, and the page — 31, at
+   *     $0.06 per 100,000 = $0.0000186
+   *   - writes: the rate-limit window and the usage counter — 2, at $0.18 per
+   *     100,000 = $0.0000036
+   *   - the function, 0.4 s billed as active CPU at $0.221/hr, 2 GB at
+   *     $0.0183/GB-hr, $0.60 per million invocations = $0.0000292
+   *   - the CDN request: $3.20 per million = $0.0000032
+   *   - the response, 25 records at 3 KB — the largest mean document size
+   *     measured on production across the collections `/v1` lists (leads,
+   *     3.0 KB; records, contacts, media and the rest 1.0–1.5 KB) — plus 2 KB
+   *     of request and envelope, through Fast Data Transfer ($0.35 a GB) and
+   *     Fast Origin Transfer ($0.43 a GB), decimal GB = $0.0000615
+   *
+   * $0.0001161, carried up to $0.000117. A page of 100 — the most a client
+   * may ask for — costs about three times that, so the figure is the default
+   * request rather than the ceiling; see the 2026-10-01 decision entry.
+   */
+  perApiRequest: 0.000117,
+  /**
+   * One CRM record held for a month. An operator-tuned estimate (AGL-1134),
+   * not built from a per-operation price: at `nam5`'s $0.06 per 100,000 it
+   * covers about 333 reads a record a month, plus the record's storage at
+   * $0.18 per GiB-month — well beyond what a record is read.
+   */
   perContactMonth: 0.0002,
   /**
    * One delivered email, whatever produced it — $0.90 per 1,000.
@@ -5088,6 +5168,168 @@ export function bandwidthGbFromPageViews(pageViews: number): number {
   )
 }
 
+/** The decimal GB Vercel bills transfer in (AGL-3444). */
+const DECIMAL_GB_BYTES = 1_000_000_000
+
+/** The binary GB `bandwidthGb` and GCS egress are counted in. */
+const BINARY_GB_BYTES = 1024 * 1024 * 1024
+
+/**
+ * How long one decimal GB keeps a streaming function open: a viewer draws a
+ * 720p film at about 5 Mbit/s, and the media route reads Storage only as fast
+ * as the viewer takes the bytes (AGL-2810), so the function lives for the
+ * film, not for the transfer — 1,600 seconds a GB.
+ */
+const ORIGIN_MEDIA_STREAM_SECONDS_PER_GB = (DECIMAL_GB_BYTES * 8) / 5_000_000
+
+/**
+ * The range requests one decimal GB arrives in: a player asks for a film a
+ * slice at a time, and a slice of about a megabyte is the small end of what
+ * players ask for, so per-request costs are counted a thousand times a GB.
+ */
+const ORIGIN_MEDIA_REQUESTS_PER_GB = 1_000
+
+/**
+ * What ONE DECIMAL GB of video, audio or a file costs to SERVE FROM ORIGIN, by
+ * term, at the dearest region every Vercel term is billed in (AGL-3474).
+ *
+ * The media CDN serves every type the edge must never hold (AGL-1515) on
+ * every request, from origin, so a GB of it pays both of Vercel's transfer
+ * meters and Storage's egress — where a page's GB is mostly answered by the
+ * edge. This is the basis {@link ORIGIN_MEDIA_BANDWIDTH_WEIGHT} is derived
+ * from, and the figure the published "at cost + 30%" has to be true of.
+ *
+ * | term | basis | per decimal GB |
+ * |---|---|---|
+ * | `fastDataTransfer` | Vercel Fast Data Transfer, dearest region, decimal GB | $0.35 |
+ * | `fastOriginTransfer` | Vercel Fast Origin Transfer, dearest region, decimal GB | $0.43 |
+ * | `storageEgress` | GCS internet egress at list, $0.12 per GiB (0–1 TiB) | $0.111759 |
+ * | `streamingMemory` | 2 GB (the function default) at $0.0183/GB-hour, held 1,600 s | $0.016267 |
+ * | `streamingCpu` | 60 s of active CPU at $0.221/hour — an allowance, see below | $0.003683 |
+ * | `requests` | 1,000 range requests × $0.0000070 | $0.007 |
+ * | **total** | | **$0.918709** |
+ *
+ * Each request is a CDN request ($3.20 per million), a function invocation
+ * ($0.60 per million), the media document's read ($0.0000006 at `nam5`), the
+ * day document's counter write ($0.0000018) and two Storage Class B
+ * operations, the metadata read and the object read ($0.0000004 each). The
+ * lockdown, quarantine and rate-limit reads are cached across requests and
+ * cost nothing a request.
+ *
+ * `streamingCpu` is the one unmeasured term. The bytes are copied, not
+ * computed — piping a GB through Node is a few seconds of CPU — and the
+ * minute allowed here is chosen to err high, as every other basis in this
+ * file does.
+ *
+ * ## Storing the bytes is NOT here
+ *
+ * A file in the library is already metered as storage (`storagePerGbMonth`)
+ * and billed past the plan's storage at cost + 30% after card fees; serving
+ * it does not store it again. Adding storage here would charge for the same
+ * bytes twice.
+ */
+export const ORIGIN_MEDIA_SERVE_COST_USD_PER_GB = {
+  fastDataTransfer: 0.35,
+  fastOriginTransfer: 0.43,
+  storageEgress: (0.12 * DECIMAL_GB_BYTES) / BINARY_GB_BYTES,
+  streamingMemory: (2 * 0.0183 * ORIGIN_MEDIA_STREAM_SECONDS_PER_GB) / 3600,
+  streamingCpu: (60 * 0.221) / 3600,
+  requests:
+    ORIGIN_MEDIA_REQUESTS_PER_GB *
+    (3.2 / 1_000_000 + 0.6 / 1_000_000 + 0.0000006 + 0.0000018 + 2 * 0.0000004),
+} as const
+
+/** {@link ORIGIN_MEDIA_SERVE_COST_USD_PER_GB}, summed: about $0.9187 a decimal GB. */
+export const ORIGIN_MEDIA_COST_USD_PER_GB = Object.values(
+  ORIGIN_MEDIA_SERVE_COST_USD_PER_GB,
+).reduce((sum, term) => sum + term, 0)
+
+/**
+ * The published page-view overage, per view: what a billed view costs us
+ * (`perPageView` and the request term) at {@link METERED_PRICE_MULTIPLE},
+ * rounded up to the cent per 1,000 it is quoted in — $0.83 per 1,000. The
+ * same expression as the console's `METERED_BILLED_RATES_USD.perPageView`,
+ * computed here because the weight below is, and a spec holds the two equal.
+ */
+export const PAGE_VIEW_PUBLISHED_PRICE_USD =
+  publishedMeteredPrice(
+    (ORG_COGS_UNIT_RATES_USD.perPageView + PAGE_VIEW_CDN_REQUEST_COST_USD) * 1000,
+    2,
+  ) / 1000
+
+/**
+ * (a) THE OVERAGE: does counting origin media at `weight` bill a GB of it past
+ * the band at cost + 30%, kept after Stripe's percentage fee?
+ *
+ * A counted GB is `weight` GB of page views at {@link PAGE_VIEW_PUBLISHED_PRICE_USD}.
+ */
+export function originMediaOverageHolds(weight: number): boolean {
+  const billedPerGbUsd =
+    weight * PAGE_VIEW_PUBLISHED_PRICE_USD * (DECIMAL_GB_BYTES / ESTIMATED_PAGE_TRANSFER_BYTES)
+  return (
+    billedPerGbUsd * (1 - STRIPE_PROCESSOR_FEE_PCT) >=
+    METERED_MARKUP * ORIGIN_MEDIA_COST_USD_PER_GB
+  )
+}
+
+/**
+ * (b) THE BAND: does counting origin media at `weight` keep a plan that spends
+ * its whole bandwidth band on it inside what the band was sized on?
+ *
+ * Every `bandwidthGb` band is sized at the cost of the views one GiB buys —
+ * their weight (`perPageView`) and their requests
+ * (`PAGE_VIEW_CDN_REQUEST_COST_USD`), $0.63712 a GiB — and
+ * `tier-margin-floor.spec.ts` holds every tier at 1.3× its full-use cost on
+ * that figure. A GiB of origin media spends `weight` GiB of the band, so the
+ * band holds while `weight` GiB of band costs at least one GiB of media.
+ */
+export function originMediaBandHolds(weight: number): boolean {
+  const bandCostPerGibUsd =
+    (ORG_COGS_UNIT_RATES_USD.perPageView + PAGE_VIEW_CDN_REQUEST_COST_USD) *
+    pageViewsFromBandwidthGb(1)
+  const originCostPerGibUsd =
+    (ORIGIN_MEDIA_COST_USD_PER_GB * BINARY_GB_BYTES) / DECIMAL_GB_BYTES
+  return weight * bandCostPerGibUsd >= originCostPerGibUsd
+}
+
+/**
+ * How many GB of bandwidth one GB of video, audio or a file served from origin
+ * counts as (AGL-3474, decided by the account owner 2026-10-02): the smallest
+ * weight, in tenths and never below 1, that satisfies BOTH
+ * {@link originMediaOverageHolds} and {@link originMediaBandHolds}.
+ *
+ * One weight rather than a second meter or a second rate, because it moves
+ * the band and the overage together: the Free wall, the abuse ceiling, the
+ * meters, the alerts and the invoice all read media through
+ * `pageViewsFromMediaBytes`, which applies it. At today's bases the overage
+ * needs 1.54 and the band 1.55, so it is 1.6 — the published sentence names
+ * it, and the docs and `/pricing` have to change before it does.
+ *
+ * Derived, never written down: a rate or a band basis that moves re-derives
+ * it, and `media-bandwidth.spec.ts` pins the figure so that a move is a
+ * decision with a red test attached rather than a silent re-price.
+ */
+export const ORIGIN_MEDIA_BANDWIDTH_WEIGHT = ((): number => {
+  for (let tenths = 10; tenths <= 1000; tenths += 1) {
+    const weight = tenths / 10
+    if (originMediaOverageHolds(weight) && originMediaBandHolds(weight)) return weight
+  }
+  throw new Error('no origin-media weight up to 100 covers its cost')
+})()
+
+/**
+ * The sentence every customer surface states the weight in — `/pricing`
+ * beside the metered rates (`tools/marketing/build-pricing-tables.mts`), and
+ * the bandwidth, billing and media docs, which
+ * `media-bandwidth-weight-copy.spec.ts` holds to this exact text. Built from
+ * the derived figure, so a weight that moves turns those red before it can
+ * bill anyone.
+ */
+export const ORIGIN_MEDIA_BANDWIDTH_SENTENCE =
+  'Video, audio, file downloads and other media served from our servers count ' +
+  `${ORIGIN_MEDIA_BANDWIDTH_WEIGHT}× toward bandwidth, because serving them ` +
+  'costs more than serving pages.'
+
 /**
  * How far past a plan's own included bandwidth the abuse ceiling sits
  * (AGL-2155). Three times the bandwidth the customer bought is not growth; it
@@ -5096,7 +5338,7 @@ export function bandwidthGbFromPageViews(pageViews: number): number {
  * It is a CAP, not a price, and it is lower than {@link
  * FORM_ABUSE_CEILING_MULTIPLE} because bandwidth is the largest cost line the
  * platform carries and the one a stranger can spend on the customer's behalf.
- * Past the band every 1,000 views bills $0.70 against at most $0.54 of real
+ * Past the band every 1,000 views bills $0.80 against at most $0.62 of real
  * cost — the dearest region's — once the CDN's request allowance is spent
  * ({@link PAGE_VIEW_CDN_REQUEST_COST_USD}), so the tail is not a loss — but a
  * scraper, a hotlinked asset or a botnet still bills the account holder for
@@ -5114,10 +5356,10 @@ export const BANDWIDTH_ABUSE_CEILING_MULTIPLE = 3
  * Free includes 2 GB ≈ 2,071 views; 3× would be ~6,212, which a genuinely
  * successful hobby site (a post that lands on Hacker News) reaches in an
  * afternoon and would be a miserable first experience of the platform.
- * 100,000 views/month ≈ 96.6 GB ≈ **$54 of real COGS** at the dearest
+ * 100,000 views/month ≈ 96.6 GB ≈ **$62 of real COGS** at the dearest
  * region (`METERED_UNIT_RATES_USD.perPageView` plus
  * `PAGE_VIEW_CDN_REQUEST_COST_USD`) — well above the free band, and an order
- * of magnitude below the $538 a million views costs. It is the number
+ * of magnitude below the $615 a million views costs. It is the number
  * that makes "free stays free" true without making it stingy.
  */
 export const BANDWIDTH_ABUSE_CEILING_FLOOR = 100_000

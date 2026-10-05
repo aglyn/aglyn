@@ -24,6 +24,7 @@ import {
   PageHeaderActions,
   pluginDocsHelp,
   Route,
+  useTransferLauncher,
 } from '@aglyn/aglyn'
 import { useConsoleWidgetSlot } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
 import { ICON_VARIANT_SHOW_DETAIL } from '@aglyn/shared-data-enums'
@@ -88,6 +89,7 @@ import {
   FORM_STATUS_OPTIONS,
   formListRequest,
 } from './form-list-query'
+import { FORM_SUBMISSIONS_TRANSFER_KEY } from '../transfer/form-submissions-transfer-key'
 import { HOST_FORMS_ZONE } from './form-zones'
 
 /**
@@ -160,10 +162,19 @@ export interface HostFormsCardProps {
  * carries no figure at all and renders as a dash rather than as `0`. A zero
  * would say this form has produced no leads, which for an unrouted form is a
  * measurement nobody took.
+ *
+ * ## Export submissions, in the card header
+ *
+ * Every form's submissions on this site, through the console's export dialog
+ * (`forms.submissions`, unfiltered): each form's questions are a group of
+ * columns, so one file holds the whole site. One form's alone is exported
+ * from that form's page. There is no Import: a submission is what a visitor
+ * sent, and a file cannot have sent one.
  */
 export function HostFormsCard(props: HostFormsCardProps) {
   const { hostId, basePath, org } = props
   const router = useRouter()
+  const transfer = useTransferLauncher()
   // Duplicate (AGL-2936): the copy is a form of its own — its submissions
   // start empty — and opens on its detail page once made.
   const duplicate = useDuplicateResource({
@@ -703,6 +714,26 @@ export function HostFormsCard(props: HostFormsCardProps) {
             'A form collects submissions into the Inbox, and its design is ' +
             'drawn in the besigner like any other artifact.',
         })}
+        HeaderProps={
+          transfer?.can('export', { resource: FORM_SUBMISSIONS_TRANSFER_KEY, scope: 'host', hostId })
+            ? {
+                action: (
+                  <Button
+                    size="small"
+                    onClick={() =>
+                      transfer?.openExport({
+                        resource: FORM_SUBMISSIONS_TRANSFER_KEY,
+                        scope: 'host',
+                        hostId,
+                      })
+                    }
+                  >
+                    {'Export submissions'}
+                  </Button>
+                ),
+              }
+            : undefined
+        }
       >
         {retireError ? (
           <Alert severity="error" sx={{ mb: 2 }}>

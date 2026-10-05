@@ -17,11 +17,7 @@
  * @jest-environment node
  */
 
-import {
-  applyArtifactUpdate,
-  planArtifactUpdate,
-  summarizeSchemaChange,
-} from './artifact-merge'
+import { applyArtifactUpdate, planArtifactUpdate } from './artifact-merge'
 
 const node = (id: string, title: string, childIds: string[] = []) => ({
   id,
@@ -185,48 +181,5 @@ describe('applyArtifactUpdate (AGL-1018)', () => {
     })
     const result = applyArtifactUpdate(plan, base)
     expect(Object.keys((result.content as any).nodes)).toEqual(['r'])
-  })
-})
-
-describe('summarizeSchemaChange (AGL-1018)', () => {
-  const schema = (fields: Record<string, { type: string }>) => ({
-    order: Object.keys(fields),
-    fields,
-  })
-
-  it('calls an added field additive', () => {
-    const summary = summarizeSchemaChange(
-      schema({ a: { type: 'text' } }),
-      schema({ a: { type: 'text' }, b: { type: 'number' } }),
-    )
-    expect(summary.added).toEqual(['b'])
-    expect(summary.additiveOnly).toBe(true)
-  })
-
-  it('refuses to call a removed field additive', () => {
-    const summary = summarizeSchemaChange(
-      schema({ a: { type: 'text' }, b: { type: 'number' } }),
-      schema({ a: { type: 'text' } }),
-    )
-    expect(summary.removed).toEqual(['b'])
-    expect(summary.additiveOnly).toBe(false)
-  })
-
-  it('treats a retype as destructive — existing values may not survive', () => {
-    const summary = summarizeSchemaChange(
-      schema({ a: { type: 'text' } }),
-      schema({ a: { type: 'number' } }),
-    )
-    expect(summary.retyped).toEqual(['a'])
-    expect(summary.additiveOnly).toBe(false)
-  })
-
-  it('separates a cosmetic field edit from a retype', () => {
-    const summary = summarizeSchemaChange(
-      { order: ['a'], fields: { a: { type: 'text', label: 'A' } as never } },
-      { order: ['a'], fields: { a: { type: 'text', label: 'Name' } as never } },
-    )
-    expect(summary.edited).toEqual(['a'])
-    expect(summary.additiveOnly).toBe(true)
   })
 })

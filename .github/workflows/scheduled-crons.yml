@@ -288,6 +288,12 @@ on:
           # nothing. Safe by hand — each hold is claimed once and a placed
           # one is never placed again.
           - /api/admin/security-holds
+          # The import sweep (AGL-3524), the same as the fifteen-minute
+          # `consoleFastCrons` tick: resumes every import a closed tab left
+          # applying. A GET lists them and resumes nothing. Safe by hand —
+          # each import is leased and every row it writes is in a ledger, so
+          # a manual run beside a browser never writes a row twice.
+          - /api/admin/transfer-jobs
           # The daily link re-check (AGL-3451), the same as the
           # `consoleWebRiskRecheck` job. A GET walks one chunk of sites and
           # reports what it would look up; the POST looks them up and holds a

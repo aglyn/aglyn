@@ -22,7 +22,6 @@ import type {
   ConsentGroup,
   CrmLeadFields,
   CrmLeadProfilePatch,
-  CrmLeadStatus,
 } from '@aglyn/aglyn'
 import { mdiAccountCancelOutline } from '@aglyn/shared-data-mdi'
 import { AppLink, CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
@@ -38,7 +37,6 @@ import {
   Button,
   FormControl,
   InputLabel,
-  MenuItem,
   Select,
   Stack,
   TextField,
@@ -49,6 +47,8 @@ import { deleteField, doc, serverTimestamp, updateDoc } from 'firebase/firestore
 import { useEffect, useId, useMemo, useState } from 'react'
 import { useContactFieldDefinitions } from '../hooks/use-contact-field-definitions'
 import { useLeadSourcePicklist } from '../hooks/use-lead-source-picklist'
+import { useLeadStatusPicklist } from '../hooks/use-lead-status-picklist'
+import { useLeadPicklists } from '../hooks/use-lead-picklists'
 import {
   crmCustomDraftChanges,
   type CrmCustomDraft,
@@ -59,10 +59,11 @@ import {
 import { CrmCustomFieldControl } from './crm-custom-field-control'
 import { crmRoutes } from '../model/crm-routes'
 import {
-  addressDraftFrom,
-  ContactAddressFields,
-  type AddressDraft,
-} from './contact-address-fields'
+  LeadProfileFields,
+  type LeadProfileDraft,
+  leadProfileDraftBody,
+  leadProfileDraftFrom,
+} from './lead-profile-fields'
 import { CrmCallButton, CrmPhoneLink } from './crm-call-actions'
 import { CrmEmailStateChip } from './crm-email-state-chip'
 import { CrmEmailGatewayChip } from './crm-email-check'
@@ -70,40 +71,21 @@ import { CrmRecordChip, CrmRecordHeader } from './crm-record-header'
 import { CrmSendEmailButton } from './crm-send-email-button'
 import type { OrgMemberOptions } from '../hooks/use-org-member-options'
 import { LeadOwnerSelect } from './lead-owner-select'
-import { LeadSourceSelect } from './lead-source-select'
 import { LeadStatusChip } from './lead-status-chip'
+import { leadStatusChoices, leadStatusMenuItems } from './lead-status-options'
 import { crmClientListFields, CRM_CLIENT_SEARCH_FIELDS } from '../model/crm-list-query'
 import { useCrmSharingFollowUp } from '../hooks/use-crm-sharing'
 
 /** The Leads list's fields a profile save rewrites; the verdict key is the server's. */
-const LEAD_CLIENT_LIST_FIELDS = [...CRM_CLIENT_SEARCH_FIELDS, 'leadSourceKey'] as const
+const LEAD_CLIENT_LIST_FIELDS = [
+  ...CRM_CLIENT_SEARCH_FIELDS,
+  'leadSourceKey',
+  // Industry and Rating (AGL-3513).
+  'industryKey',
+  'ratingKey',
+] as const
 
 const NOTES_MAX = Aglyn.CRM_LEAD_NOTES_MAX
-const TEXT_MAX = Aglyn.CRM_LEAD_TEXT_MAX
-
-/** The profile as the form holds it: every field a string, the address a draft. */
-interface ProfileDraft {
-  company: string
-  jobTitle: string
-  phone: string
-  website: string
-  leadSource: string
-  tags: string
-  address: AddressDraft
-}
-
-/** The stored profile as a draft the fields can edit. */
-function profileDraftFrom(lead: Record<string, unknown> & CrmLeadFields): ProfileDraft {
-  return {
-    company: String(lead.company ?? ''),
-    jobTitle: String(lead.jobTitle ?? ''),
-    phone: String(lead.phone ?? lead['phone'] ?? ''),
-    website: String(lead.website ?? ''),
-    leadSource: String(lead.leadSource ?? ''),
-    tags: (lead.tags ?? []).join(', '),
-    address: addressDraftFrom(lead.address ?? null),
-  }
-}
 
 /** The patch as the document takes it: a cleared field is deleted, not blanked. */
 function profileWrite(patch: CrmLeadProfilePatch): Record<string, unknown> {
@@ -165,7 +147,8 @@ export interface LeadPropertiesCardProps {
   basePath: string
   roster: OrgMemberOptions
   onConvert: () => void
-  onUnqualify: () => void
+  /** Opens the Unqualify dialog — with the Unqualified value picked, when the status select named one. */
+  onUnqualify: (statusLabel?: string) => void
   /**
    * Items the page adds to the overflow beside Unqualify — the privacy
    * erasure (AGL-2623) lives on the page, because it needs the workspace
@@ -255,6 +238,9 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
   const emailState = Aglyn.readEmailState(lead)
   /** What a capture that took a number left on the document (AGL-2661). */
   const leadPhone = String(lead['phone'] ?? '').trim()
+  const leadMobile = String(lead.mobilePhone ?? '').trim()
+  // The person asked not to be phoned (AGL-3513): a hint on every dial control.
+  const doNotCall = lead.doNotCall === true
 
   const [notes, setNotes] = useState(String(lead.notes ?? ''))
   // The label's id, so the status combobox is named "Status" rather than
@@ -262,31 +248,25 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
   const statusLabelId = useId()
   const [notesDirty, setNotesDirty] = useState(false)
   /*
-   * THE LEAD'S OWN PROFILE (AGL-3231) — company, title, phone, website,
-   * address, tags, lead source — edited in the Details card with the notes
-   * and the custom fields, under one Save, the way the contact's Properties
-   * card saves. Seeded from the document and guarded on save: a draft
-   * edited over a cached read must not overwrite a newer profile with an
-   * older one.
+   * THE LEAD'S OWN PROFILE (AGL-3231, AGL-3513) — the name's parts,
+   * company, title, the phones, website, address, tags, lead source,
+   * industry, rating, size and revenue — edited in the Details card with
+   * the notes and the custom fields, under one Save, the way the contact's
+   * Properties card saves. Seeded from the document and guarded on save: a
+   * draft edited over a cached read must not overwrite a newer profile
+   * with an older one.
    */
-  const [profile, setProfile] = useState<ProfileDraft>(() => profileDraftFrom(lead))
+  const [profile, setProfile] = useState<LeadProfileDraft>(() => leadProfileDraftFrom(lead))
   const [profileDirty, setProfileDirty] = useState(false)
   const [saving, setSaving] = useState(false)
   const [profileErrors, setProfileErrors] = useState<Record<string, string>>({})
+  // The stored profile as one value, so a change to any of its fields reseeds.
+  const profileSeed = JSON.stringify(Aglyn.CRM_LEAD_PROFILE_KEYS.map((key) => lead[key] ?? null))
   useEffect(() => {
-    if (!profileDirty) setProfile(profileDraftFrom(lead))
-    // The draft follows the document until it is edited; the fields are
-    // read one by one so a change to any of them reseeds.
-  }, [
-    profileDirty,
-    lead.company,
-    lead.jobTitle,
-    lead.phone,
-    lead.website,
-    lead.leadSource,
-    lead.tags,
-    lead.address,
-  ])
+    if (!profileDirty) setProfile(leadProfileDraftFrom(lead))
+    // The draft follows the document until it is edited.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profileDirty, profileSeed])
   /*
    * THE ORG'S OWN LEAD FIELDS (AGL-3272), edited under the same Save as
    * the profile: one button over one card, so a person filling a lead in
@@ -300,10 +280,18 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
   const fields = useContactFieldDefinitions(orgId, 'lead')
   // The org's lead source values (AGL-3298), for the select below.
   const leadSources = useLeadSourcePicklist(orgId)
+  // The org's lead status values (AGL-3512): the chip's words and the select's choices.
+  const leadStatuses = useLeadStatusPicklist(orgId)
+  // The org's Salutation, Industry and Rating lists (AGL-3513).
+  const leadPicklists = useLeadPicklists(orgId)
+  const statusChoices = useMemo(
+    () => leadStatusChoices(leadStatuses.picklist, lead),
+    [leadStatuses.picklist, lead],
+  )
   const storedCustom = useMemo(() => lead.custom ?? {}, [lead.custom])
   const [custom, setCustom] = useState<CrmCustomDraft>({})
 
-  const editProfile = <K extends keyof ProfileDraft>(key: K, value: ProfileDraft[K]) => {
+  const editProfile = <K extends keyof LeadProfileDraft>(key: K, value: LeadProfileDraft[K]) => {
     setProfile((current) => ({ ...current, [key]: value }))
     setProfileDirty(true)
   }
@@ -348,7 +336,7 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
 
   /** Every draft back to what the document holds. */
   const discard = () => {
-    setProfile(profileDraftFrom(lead))
+    setProfile(leadProfileDraftFrom(lead))
     setProfileDirty(false)
     setProfileErrors({})
     setCustom({})
@@ -364,17 +352,12 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
   const saveDetails = async () => {
     const update: Record<string, unknown> = {}
     if (!converted && (profileDirty || customChanged)) {
-      const { patch, errors } = Aglyn.normalizeCrmLeadProfile({
-        company: profile.company,
-        jobTitle: profile.jobTitle,
-        phone: profile.phone,
-        website: profile.website,
-        leadSource: profile.leadSource,
-        tags: profile.tags,
-        address: profile.address,
-      })
-      setProfileErrors(errors)
-      if (Object.keys(errors).length) return
+      const { body, revenueError } = leadProfileDraftBody(profile)
+      const { patch, errors } = Aglyn.normalizeCrmLeadProfile(body)
+      const shown: Record<string, string> = { ...errors }
+      if (revenueError) shown['annualRevenueCents'] = revenueError
+      setProfileErrors(shown)
+      if (Object.keys(shown).length) return
       /*
        * A required field the reader CLEARED is refused; one the lead has
        * always lacked is not this save's to demand, or a field added after
@@ -393,6 +376,9 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
         return
       }
       const profileFields = profileWrite(patch)
+      // While a first or last name is set, the name is theirs (AGL-3513).
+      const composed = Aglyn.crmLeadComposedName(lead, patch)
+      if (composed && composed !== lead['name']) profileFields['name'] = composed
       Object.assign(
         update,
         profileFields,
@@ -512,7 +498,8 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
               hostId={hostId}
               org={org}
               link={{ leadId }}
-              phone={leadPhone}
+              phone={leadPhone || leadMobile}
+              doNotCall={doNotCall}
             />
             <CrmSendEmailButton
               hostId={hostId}
@@ -531,7 +518,7 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
                   label: 'Unqualify',
                   icon: <MdiIcon path={mdiAccountCancelOutline.path} size={0.8} />,
                   destructive: true,
-                  onClick: onUnqualify,
+                  onClick: () => onUnqualify(),
                 } satisfies RowActionsMenuItem,
               ]
             : []),
@@ -539,7 +526,7 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
         ]}
         chips={
           <>
-            <LeadStatusChip lead={lead} />
+            <LeadStatusChip lead={lead} statuses={leadStatuses.picklist} />
             {/* The verdict on the address (AGL-3245), beside the status: a
                 bounce does not move New or Working, but it is the first
                 thing a person deciding whether to write must see. */}
@@ -562,13 +549,19 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
         <Stack spacing={3}>
           {banner}
           {/*
-            Only when the capture carried one (AGL-2661): the sign-up and
-            booking doors write no phone, so a row for every lead would be a
+            Only when the capture carried one (AGL-2661): the sign-up door
+            writes no phone, and a booking only when its service asks for
+            one (AGL-3493), so a row for every lead would often be a
             permanent blank. A form that captures one fills this.
           */}
           {leadPhone ? (
             <Fact label="Phone">
-              <CrmPhoneLink phone={leadPhone} />
+              <CrmPhoneLink phone={leadPhone} doNotCall={doNotCall} />
+            </Fact>
+          ) : null}
+          {leadMobile ? (
+            <Fact label="Mobile phone">
+              <CrmPhoneLink phone={leadMobile} doNotCall={doNotCall} />
             </Fact>
           ) : null}
           <Fact label="Marketing consent">{consentLine}</Fact>
@@ -576,7 +569,7 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
             {converted ? (
               <Fact label="Status">
                 <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-                  <LeadStatusChip lead={lead} />
+                  <LeadStatusChip lead={lead} statuses={leadStatuses.picklist} />
                   <Typography variant="body2" color="text.secondary">
                     {lead.convertedAtMs
                       ? `Converted ${new Date(lead.convertedAtMs).toLocaleString()}`
@@ -590,30 +583,29 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
                 <Select
                   labelId={statusLabelId}
                   label="Status"
-                  value={status === 'unqualified' ? 'unqualified' : status}
+                  value={Aglyn.crmLeadStatusLabel(lead, leadStatuses.picklist)}
                   onChange={(event) => {
-                    const next = String(event.target.value) as CrmLeadStatus
-                    if (next === 'unqualified') {
-                      onUnqualify()
+                    const choice = statusChoices.find((entry) => entry.label === event.target.value)
+                    if (!choice) return
+                    if (choice.status === 'unqualified') {
+                      onUnqualify(choice.label)
                       return
                     }
-                    // Reopening drops the reason with the closed state: a lead
-                    // being worked again is not "unqualified because …".
+                    // The meaning and the org's label for it, together
+                    // (AGL-3512). Reopening drops the reason with the closed
+                    // state: a lead being worked again is not "unqualified
+                    // because …".
                     void write(
                       {
-                        status: next,
+                        status: choice.status,
+                        statusLabel: choice.label,
                         ...(status === 'unqualified' ? { unqualifiedReason: deleteField() } : {}),
                       },
                       'Status updated',
                     )
                   }}
                 >
-                  <MenuItem value="new">{Aglyn.CRM_LEAD_STATUS_LABELS.new}</MenuItem>
-                  <MenuItem value="nurturing">{Aglyn.CRM_LEAD_STATUS_LABELS.nurturing}</MenuItem>
-                  <MenuItem value="working">{Aglyn.CRM_LEAD_STATUS_LABELS.working}</MenuItem>
-                  <MenuItem value="unqualified">
-                    {`${Aglyn.CRM_LEAD_STATUS_LABELS.unqualified}…`}
-                  </MenuItem>
+                  {leadStatusMenuItems(statusChoices)}
                 </Select>
               </FormControl>
             )}
@@ -663,74 +655,14 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
         }}
       >
         <Stack spacing={2}>
-          <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
-            <TextField
-              size="small"
-              label="Company"
-              value={profile.company}
-              onChange={(event) => editProfile('company', event.target.value)}
-              disabled={converted}
-              slotProps={{ htmlInput: { maxLength: TEXT_MAX } }}
-              fullWidth
-            />
-            <TextField
-              size="small"
-              label="Job title"
-              value={profile.jobTitle}
-              onChange={(event) => editProfile('jobTitle', event.target.value)}
-              disabled={converted}
-              slotProps={{ htmlInput: { maxLength: TEXT_MAX } }}
-              fullWidth
-            />
-          </Stack>
-          <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
-            <TextField
-              size="small"
-              label="Phone"
-              value={profile.phone}
-              onChange={(event) => editProfile('phone', event.target.value)}
-              disabled={converted}
-              error={Boolean(profileErrors['phone'])}
-              helperText={profileErrors['phone'] || 'With the country code, like +1 512 555 0107'}
-              fullWidth
-            />
-            <TextField
-              size="small"
-              label="Website"
-              value={profile.website}
-              onChange={(event) => editProfile('website', event.target.value)}
-              disabled={converted}
-              error={Boolean(profileErrors['website'])}
-              helperText={profileErrors['website'] || 'Like acme.com'}
-              fullWidth
-            />
-          </Stack>
-          <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
-            {/* The org's own values (AGL-3298); the stored one stays shown when the list no longer offers it. */}
-            <LeadSourceSelect
-              picklist={leadSources.picklist}
-              value={profile.leadSource}
-              stored={String(lead.leadSource ?? '')}
-              onChange={(label) => editProfile('leadSource', label)}
-              disabled={converted}
-            />
-            <TextField
-              size="small"
-              label="Tags"
-              value={profile.tags}
-              onChange={(event) => editProfile('tags', event.target.value)}
-              disabled={converted}
-              helperText="Comma-separated"
-              fullWidth
-            />
-          </Stack>
-          <Typography variant="caption" color="text.secondary">
-            {'Address'}
-          </Typography>
-          <ContactAddressFields
-            value={profile.address}
-            onChange={(next) => editProfile('address', next)}
+          <LeadProfileFields
+            draft={profile}
+            onChange={editProfile}
+            errors={profileErrors}
             disabled={converted}
+            leadSources={leadSources.picklist}
+            lists={leadPicklists.lists}
+            stored={lead}
           />
           {/*
             The org's own lead fields (AGL-3272), after the built-in ones

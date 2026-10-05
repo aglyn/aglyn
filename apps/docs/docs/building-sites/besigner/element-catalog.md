@@ -368,10 +368,45 @@ itself change what the rest of the page shows — wire an
 
 | Element | What it's for |
 | --- | --- |
-| **Image** | An image with fit, size and radius controls, an optional link, and an automatic responsive `srcSet` for media-library URLs. |
+| **Image** | An image with fit, size and radius controls, an optional link, and an automatic responsive `srcSet` for media-library URLs. See [Image](#image) below. |
 | **Video** | A video file from your media library, poster first. See [Video](video.md). |
 | **Icon** | Any icon from the icon picker. |
 | **Image List** / **Image List Item** | A dense gallery. See [Image List](#image-list) below. |
+
+### Image
+
+A picture from your media library is delivered in several widths, and each visitor's
+browser downloads the one that fits the space the image takes on their screen — a
+phone gets a small file, a wide desktop a larger one. You do not set anything for this.
+
+**How Aglyn knows how big the image shows.** Every published page works it out from
+where the image sits, with nothing for you to do and nothing to re-save:
+
+- a size you gave the image itself — a pixel **Width**, or a pixel **Height** with the
+  width left on auto (a logo set 56px tall is as wide as its picture is at that height),
+  including different sizes per screen size;
+- the layout around it — a **Grid** cell set to `xs:12 md:4` is a third of the page from
+  tablet width up, an image in a grid of three equal columns is a third, the gaps
+  between them come off, and a **Container** stops the slot growing past its max width.
+
+On top of that, the Besigner measures how wide each image renders at the screen size you
+are looking at, and saving or publishing the page stores it with the image — which
+covers layouts the rules above cannot read. Check the page on another device in the
+preview switcher (**XS - Mobile**, **MD**, **LG**…) before you save and that size is
+measured too. Only when nothing at all is known does the browser assume the image is as
+wide as the screen.
+
+The **first image of the page itself** — not the logo in your header — is treated as the
+page's main picture: it starts loading with the page at high priority, unless it is
+measured as small (a logo or an icon placed at the top of a page).
+
+**Sizes** *(advanced)* overrides all of this with an HTML `sizes` value used exactly as
+you type it, for example `(min-width: 900px) 33vw, 100vw`. Leave it empty unless you know
+you need it — a wrong value makes visitors download a file that is too large or blurry.
+
+The file's address carries a version that changes when you **Replace** the file in the
+media library, so visitors' browsers keep each version as long as they like, and pick up
+a replacement the next time the page is built.
 
 ### Image List
 

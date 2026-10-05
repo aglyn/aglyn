@@ -23,6 +23,12 @@
       "@aglyn/aglyn-markdown-editor/*": [
         "../../libs/aglyn-markdown-editor/src/lib/*"
       ],
+      "@aglyn/aglyn-transfer-ui": [
+        "../../libs/aglyn-transfer-ui/src/index.ts"
+      ],
+      "@aglyn/aglyn-transfer-ui/*": [
+        "../../libs/aglyn-transfer-ui/src/lib/*"
+      ],
       "@aglyn/aglyn-node-renderer": [
         "../../libs/aglyn-node-renderer/src/index.ts"
       ],

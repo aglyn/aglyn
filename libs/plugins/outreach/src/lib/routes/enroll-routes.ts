@@ -15,28 +15,17 @@
  * limitations under the License.
  */
 
-import {
-  containerMembershipField,
-  contactContainerFieldPath,
-  normalizeContainerIds,
-} from '@aglyn/aglyn/app-utils/container-membership'
+import { stampRecordOrigin } from '@aglyn/aglyn/plugin-manager/plugin-record-origin'
+import { normalizeContainerIds } from '@aglyn/aglyn/app-utils/container-membership'
 import { consentGroupForHost } from '@aglyn/aglyn/app-utils/consent-groups'
-import { scopeTokensForHost, seenOnlyThroughGrant } from '@aglyn/aglyn/app-utils/scope-tokens'
 import {
-  CRM_COLLECTIONS,
-  crmLeadStatus,
-  crmViewIsListed,
-  isCrmLeadOpen,
-  normalizeCrmViewFilters,
-} from '@aglyn/aglyn/app-utils/crm'
-import { dynamicListDimensionsForCrmView } from '@aglyn/aglyn/app-utils/dynamic-list-rule'
+  filePluginPersonUnder,
+  pluginPeopleInView,
+} from '@aglyn/aglyn/plugin-manager/plugin-person-records'
 import type { PluginRecordTimelineWriter } from '@aglyn/aglyn/plugin-manager/plugin-record-timeline'
 import type { PluginTextGenerator } from '@aglyn/aglyn/plugin-manager/plugin-text-generation'
 import type { PluginWebApiHandler } from '@aglyn/aglyn/server'
-import { findContactByEmail } from '@aglyn/tenant-data-admin/server/contact-email-index'
 import { readOrgContainers } from '@aglyn/tenant-data-admin/server/org-containers'
-import { restampCrmListFieldsAt } from '@aglyn/tenant-data-admin/server/crm-records'
-import { FieldValue } from 'firebase-admin/firestore'
 import { outreachCuratedEntry, outreachEnrolledEntry } from '../engine/enrollment-activity'
 import {
   buildOutreachEnrollment,
@@ -123,12 +112,6 @@ export const OUTREACH_READS_PEOPLE: OutreachRouteExtraPermission = {
 
 /** Everything enrolling reaches beyond the routes' own dependencies. */
 export interface OutreachEnrollRouteDeps extends OutreachRouteDeps {
-  /**
-   * The addresses a saved Contacts view selects among one site's contacts,
-   * read the way the dynamic-list sweep reads one, and whether the read
-   * reached the whole view before its budget.
-   */
-  crmViewEmails(input: { hostId: string; viewId: string }): Promise<{ emails: string[]; complete: boolean }>
   /**
    * The workspace's record system on the timeline seam (AGL-3274), when a
    * plugin keeps one: the enroll files "Enrolled in" on the person's record
@@ -272,7 +255,7 @@ async function readPeople(
   enrolledHere: Set<string>
   lookups: Map<string, OutreachGateLookups>
 }> {
-  const candidates = await readOutreachEnrollCandidates(firestore, {
+  const candidates = await readOutreachEnrollCandidates({
     orgId: caller.orgId,
     hostId: sequence.hostId,
     contactGroupId: context.contactGroupId,
@@ -315,56 +298,6 @@ const uniqueIds = (values: unknown): string[] =>
     ? [...new Set(values.map(readOutreachDocumentId).filter((id): id is string => id !== null))]
     : []
 
-/** The most leads a saved Leads view reads — the Leads list's own window. */
-const LEADS_VIEW_WINDOW = 200
-
-/**
- * The people a saved LEADS view selects (AGL-3234): the sequence's site's
- * most recently seen leads, narrowed by the view's status clause the way
- * the Leads list narrows its window — open leads when the view names no
- * status, one status when it does, everything for `all`. The person key IS
- * the id, so there is no address to resolve — and since AGL-3275 the window is
- * narrowed by `visibleTo` rather than by the collection's parent.
- */
-async function leadsViewPeople(
-  firestore: Firestore,
-  orgId: string,
-  sequence: OutreachSequence,
-  filters: ReturnType<typeof normalizeCrmViewFilters>,
-): Promise<{ people: OutreachPersonRef[]; total: number; truncated: boolean }> {
-  const statusClause = filters.find((clause) => clause.field === 'status' && clause.op === 'equals')
-  const wanted = String(statusClause?.value ?? 'open')
-  /*
-   * SCOPED (AGL-3275). The collection is org-wide, so the window is narrowed
-   * to what the sequence's site may see before it is ordered — otherwise an
-   * agency's sequence would offer another client's people to enroll. The
-   * composite index for `visibleTo array-contains-any` + `lastSeenAtMs desc`
-   * is in `cloud/firestore.indexes.json`.
-   */
-  const window = await firestore
-    .collection('orgs')
-    .doc(orgId)
-    .collection('leads')
-    .where('visibleTo', 'array-contains-any', scopeTokensForHost(sequence.hostId))
-    .orderBy('lastSeenAtMs', 'desc')
-    .limit(LEADS_VIEW_WINDOW + 1)
-    .get()
-  const matching = window.docs.slice(0, LEADS_VIEW_WINDOW).filter((doc) => {
-    const lead = doc.data() as Record<string, unknown>
-    // Held, not merely seen: a lead shared with this site (AGL-3336) is not
-    // its to sequence.
-    if (seenOnlyThroughGrant(lead, sequence.hostId)) return false
-    if (wanted === 'all') return true
-    if (wanted === 'open') return isCrmLeadOpen(lead as never) && !lead['convertedContactId']
-    return crmLeadStatus(lead as never) === wanted
-  })
-  return {
-    people: matching.slice(0, OUTREACH_ENROLL_BATCH_MAX).map((doc) => ({ kind: 'lead', id: doc.id })),
-    total: matching.length,
-    truncated: matching.length > OUTREACH_ENROLL_BATCH_MAX || window.docs.length > LEADS_VIEW_WINDOW,
-  }
-}
-
 export function createOutreachEnrollRoutes(deps: OutreachEnrollRouteDeps): OutreachEnrollRoutes {
   /**
    * The person joins the sequence's campaigns (AGL-3254), the moment they
@@ -377,29 +310,26 @@ export function createOutreachEnrollRoutes(deps: OutreachEnrollRouteDeps): Outre
    * stamped is one the list's bulk bar can add by hand.
    */
   async function joinSequenceCampaigns(
-    firestore: Firestore,
     orgId: string,
     sequence: OutreachSequence,
-    contactGroupId: string,
     candidate: OutreachEnrollCandidate,
     nowMs: number,
   ): Promise<void> {
     const campaignIds = normalizeContainerIds(sequence.campaignIds)
     if (!campaignIds.length) return
     try {
-      const ref =
-        candidate.target === 'lead' && candidate.leadId
-          ? firestore.collection('orgs').doc(orgId).collection('leads').doc(candidate.leadId)
-          : candidate.contactId
-            ? firestore.collection('orgs').doc(orgId).collection('contacts').doc(candidate.contactId)
-            : null
-      if (ref) {
-        const field =
-          candidate.target === 'lead' ? containerMembershipField('campaign') : contactContainerFieldPath(contactGroupId, 'campaign')
-        await ref.update({ [field]: FieldValue.arrayUnion(...campaignIds), updatedAt: FieldValue.serverTimestamp() })
-        // A lead's campaigns are what the Leads list's Campaign filter reads
-        // under a site (AGL-3321): restamped from the lead as it now stands.
-        if (candidate.target === 'lead') await restampCrmListFieldsAt(ref, 'leads')
+      const id = candidate.target === 'lead' ? candidate.leadId : candidate.contactId
+      if (id) {
+        // Filed by the plugin that keeps people (AGL-3080), as the sequence's
+        // site holds the person: on a lead its own field, on a contact the
+        // site's facet — the field every other campaign member carries.
+        await filePluginPersonUnder({
+          hostId: sequence.hostId,
+          orgId,
+          record: { kind: candidate.target, id },
+          containerKind: 'campaign',
+          ids: campaignIds,
+        })
       }
     } catch (error) {
       console.error('[outreach] the enrolled person could not join the sequence’s campaigns', error)
@@ -440,7 +370,6 @@ export function createOutreachEnrollRoutes(deps: OutreachEnrollRouteDeps): Outre
    * address, leads by their own key.
    */
   async function sourcePeople(
-    firestore: Firestore,
     caller: OutreachRouteCaller,
     sequence: OutreachSequence,
     source: Record<string, unknown>,
@@ -459,49 +388,38 @@ export function createOutreachEnrollRoutes(deps: OutreachEnrollRouteDeps): Outre
       return outreachRefusal(400, 'invalid-request', 'Enroll people from a saved view or a search.')
     }
     const viewId = readOutreachDocumentId(source['viewId'])
-    const view = viewId
-      ? await firestore.collection('orgs').doc(caller.orgId).collection(CRM_COLLECTIONS.views).doc(viewId).get()
+    // The record system takes the view for the sequence's site (AGL-3080):
+    // a colleague's private view is theirs, so it does not exist for this
+    // member; a Leads view takes the site's leads by the view's status, a
+    // Contacts view the contacts it selects there.
+    const taken = viewId
+      ? await pluginPeopleInView({
+          orgId: caller.orgId,
+          hostId: sequence.hostId,
+          viewId,
+          viewerUid: caller.uid,
+          limit: OUTREACH_ENROLL_BATCH_MAX,
+        })
       : null
-    const data = view?.exists ? (view.data() as Record<string, unknown>) : null
-    // A colleague's private view is theirs: it is not listed for this
-    // reader, so it does not exist for them here either.
-    if (
-      !viewId ||
-      !data ||
-      !crmViewIsListed({ shared: data['shared'] === true, ownerUid: String(data['ownerUid'] ?? '') }, caller.uid)
-    ) {
+    if (!taken || (taken.ok === false && taken.reason === 'not-found')) {
       return outreachRefusal(404, 'view-not-found', 'That saved view no longer exists.')
     }
-    if (data['section'] === 'leads') {
-      return leadsViewPeople(firestore, caller.orgId, sequence, normalizeCrmViewFilters(data['filters']))
-    }
-    if (data['section'] !== 'contacts') {
+    if (taken.ok === false && taken.reason === 'not-people') {
       return outreachRefusal(400, 'view-unsupported', 'Enroll from a saved view of Contacts or Leads.')
     }
-    const { unsupported } = dynamicListDimensionsForCrmView(normalizeCrmViewFilters(data['filters']))
-    if (unsupported.length) {
+    if (taken.ok === false) {
       // Dropping the filter enrolling cannot read would enroll more people
       // than the view shows, so the view is refused whole.
       return outreachRefusal(
         400,
         'view-unsupported',
-        `This view filters on ${unsupported.map((clause) => clause.label || clause.field).join(', ')}, which enrolling can't apply. Pick another view, or search.`,
+        `This view filters on ${(taken.unsupported ?? []).join(', ') || 'something'}, which enrolling can't apply. Pick another view, or search.`,
       )
     }
-    const { emails, complete } = await deps.crmViewEmails({ hostId: sequence.hostId, viewId })
-    const ordered = [...new Set(emails)].sort()
-    const contacts = firestore.collection('orgs').doc(caller.orgId).collection('contacts')
-    const found = await Promise.all(
-      ordered
-        .slice(0, OUTREACH_ENROLL_BATCH_MAX)
-        .map((email) => findContactByEmail(contacts, email, { hostId: sequence.hostId })),
-    )
     return {
-      people: [...new Set(found.filter((snapshot) => snapshot).map((snapshot) => String(snapshot?.id)))].map(
-        (id) => ({ kind: 'contact', id }),
-      ),
-      total: ordered.length,
-      truncated: ordered.length > OUTREACH_ENROLL_BATCH_MAX || !complete,
+      people: taken.people.map((person) => ({ kind: person.kind === 'lead' ? 'lead' : 'contact', id: person.id })),
+      total: taken.total,
+      truncated: taken.truncated,
     }
   }
 
@@ -514,7 +432,7 @@ export function createOutreachEnrollRoutes(deps: OutreachEnrollRouteDeps): Outre
     const sequence = await loadActiveSequence(firestore, caller.orgId, body['sequenceId'])
     if (sequence instanceof Response) return sequence
     const source = body['source'] && typeof body['source'] === 'object' ? (body['source'] as Record<string, unknown>) : {}
-    const named = await sourcePeople(firestore, caller, sequence, source)
+    const named = await sourcePeople(caller, sequence, source)
     if (named instanceof Response) return named
     const context = await enrollContext(firestore, caller, sequence)
     const { candidates, enrolledHere, lookups } = await readPeople(
@@ -749,7 +667,16 @@ export function createOutreachEnrollRoutes(deps: OutreachEnrollRouteDeps): Outre
             ],
           }
         }
-        await joinSequenceCampaigns(firestore, caller.orgId, sequence, context.contactGroupId, candidate, nowMs)
+        await joinSequenceCampaigns(caller.orgId, sequence, candidate, nowMs)
+        // A person reached first by this sequence came from it (AGL-3519):
+        // the record system stamps its Sequence lead source on a record
+        // naming none, and leaves any other alone.
+        await stampRecordOrigin({
+          orgId: caller.orgId,
+          hostId: sequence.hostId,
+          email: decision.email,
+          origin: 'sequence',
+        })
         // The person's record says so (AGL-3274): "Enrolled in <sequence>",
         // with the campaigns it carried them into, once per enrollment.
         const entry = outreachEnrolledEntry({

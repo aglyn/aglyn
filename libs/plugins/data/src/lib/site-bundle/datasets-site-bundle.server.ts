@@ -15,11 +15,6 @@
  * limitations under the License.
  */
 
-import {
-  datasetIntegrityFields,
-  effectiveDatasetModel,
-  validateDocument,
-} from '@aglyn/aglyn/app-utils/dataset-models'
 import { checkDatasetQuota } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { hostScopeToken, newResourceScopeFields } from '@aglyn/aglyn/app-utils/scope-tokens'
 import type {
@@ -31,6 +26,7 @@ import type {
 } from '@aglyn/aglyn/plugin-manager/plugin-site-bundle'
 import { firebaseAdmin, scopedToHost } from '@aglyn/tenant-data-admin'
 import { loadCustomFieldTypes } from '../server/custom-field-types'
+import { datasetIntegrityFields, effectiveDatasetModel, validateDocument } from '../model/dataset-models'
 
 /**
  * A site's datasets in its whole-site backup (AGL-163), answered by the plugin

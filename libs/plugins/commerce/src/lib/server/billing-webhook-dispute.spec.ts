@@ -15,7 +15,12 @@
  * limitations under the License.
  */
 
+import type { PluginPersonRefundRequest } from '@aglyn/aglyn/plugin-manager/plugin-person-records'
 import { commerceBillingWebhookHandler } from './billing-webhook'
+import {
+  reportedRefundLedger,
+  standInPersonRecords,
+} from '../testing/stand-in-person-records'
 
 /**
  * Shopper chargebacks against a merchant's store (AGL-1787).
@@ -33,8 +38,7 @@ import { commerceBillingWebhookHandler } from './billing-webhook'
  *    that had the bug.
  *  - `update()` REJECTS an absent document with gRPC `NOT_FOUND` (code 5) and
  *    `set(…, {merge:true})` CONJURES one — the AGL-1763 pair. `updateExisting`
- *    is the REAL one here, taken from its leaf path, so the contact write is
- *    genuinely refused for a contact that does not exist.
+ *    is the REAL one here, taken from its leaf path.
  *  - `FieldValue.increment` resolves to a NUMBER, so a double-count cannot hide
  *    inside a sentinel — the whole point of the redelivery cases.
  *  - `collectionGroup` really scans across hosts and can be made to fail with
@@ -283,25 +287,24 @@ const staffNotices: any[] = []
 /*
  * The campaign revenue reversal, mocked for the reason `refund.spec.ts` mocks
  * it: whether a reversal lands correctly is settled against a real double in
- * `email-revenue-attribution.spec.ts`, and what this file is the only place
+ * the crediting plugin's own spec, and what this file is the only place
  * to prove is that a LOST DISPUTE reaches it — money reversed is money
  * reversed whichever door it left by. Left unmocked it would reach the real
  * firebase-admin, which this suite has no app for.
  */
 const reverseAttributedRevenue = jest.fn(async () => true)
 jest.mock(
-  '@aglyn/tenant-data-admin/server/email-revenue-attribution',
+  '@aglyn/aglyn/plugin-manager/plugin-conversion-credit',
   () => ({
     __esModule: true,
-    reverseEmailAttributedRevenue: (...args: unknown[]) =>
+    reverseOrderConversion: (...args: unknown[]) =>
       (reverseAttributedRevenue as any)(...args),
   }),
 )
 
 jest.mock('@aglyn/tenant-data-admin', () => {
   // The REAL `updateExisting`, from its leaf path: it is what distinguishes
-  // gRPC NOT_FOUND from every other failure, and `contact-refund.ts` imports it
-  // from that leaf precisely so this barrel mock cannot stand in for it.
+  // gRPC NOT_FOUND from every other failure.
   const { updateExisting } = jest.requireActual(
     '@aglyn/tenant-data-admin/server/update-existing',
   )
@@ -351,15 +354,7 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     notifyStaff: async (payload: any) => {
       staffNotices.push(payload)
     },
-    upsertHostContact: async () => undefined,
     renderHostEmailWithTokens: async () => null,
-    // Contacts are ORG-scoped (AGL-237), and host reads narrow to what the
-    // host may see (AGL-1039) — the same pair `recordContactRefund` resolves
-    // through, with the real `visibleTo` filter rather than a permissive stub.
-    orgDataCollectionForHost: async (_hostId: string, name: string) =>
-      makeCollectionRef(`orgs/org-1/${name}`),
-    scopedToHost: (ref: any, hostId: string) =>
-      ref.where('visibleTo', 'array-contains-any', ['org', `host:${hostId}`]),
   }
 })
 
@@ -454,23 +449,17 @@ async function deliver(type: string, object: any) {
 }
 
 const order = () => docs.get('hosts/host-1/orders/order-1') ?? {}
-const contact = () => docs.get('orgs/org-1/contacts/contact-1') ?? {}
+/**
+ * What the reversal REPORTED to the plugin that keeps people (AGL-1754,
+ * AGL-3080), added up as the customer's ledger would be. What a report does
+ * to the customer's record is the CRM's, held by its `person-refund.spec.ts`.
+ */
+let refundReports: PluginPersonRefundRequest[] = []
+const ledger = () => reportedRefundLedger(refundReports)
 const disputeEvents = () =>
   ((order().timeline ?? []) as any[]).filter(
     (entry) => entry.event === 'dispute',
   )
-
-/**
- * `recordContactRefund` swallows its own failures so it can never fail a
- * reversal that already landed — which means a contact assertion could
- * otherwise pass because nothing ran at all. Paired with every one of them.
- */
-function expectNothingSwallowed() {
-  expect(consoleError).not.toHaveBeenCalledWith(
-    'recordContactRefund failed',
-    expect.anything(),
-  )
-}
 
 let consoleError: jest.SpyInstance
 
@@ -533,21 +522,9 @@ beforeEach(() => {
       totalCents: ORDER_TOTAL_CENTS,
     },
   })
-  // The buyer, already a contact from an earlier sale. The order's
-  // `Buyer@Example.com` is NOT the contact's `buyer@example.com`, which pins
-  // the normalized join rather than an accidental exact match.
-  docs.set('orgs/org-1/contacts/contact-1', {
-    hostId: 'host-1',
-    visibleTo: ['org'],
-    email: 'buyer@example.com',
-    name: 'Dana Buyer',
-    sources: { order: true },
-    interactions: [
-      { type: 'order', atMs: 1, refId: 'order-1', summary: 'Ordered ($62.00)' },
-    ],
-    ltvCents: 9100,
-    ordersCount: 4,
-  })
+  // The buyer's record is the record system's; this suite holds what the
+  // reversal reports to it (AGL-3080).
+  refundReports = standInPersonRecords()
   // The product the sale decremented (AGL-1797). Stocked at 8, which is not
   // any other figure in this file, and the order line names no variant so the
   // first-variant fallback is the path under test.
@@ -584,8 +561,7 @@ describe('charge.dispute.created — flag, reverse nothing (AGL-1787)', () => {
     await deliver('charge.dispute.created', disputeEvent())
     expect(order().status).toBe('paid')
     expect(order().refundedCents ?? 0).toBe(0)
-    expect(contact().refundedCents).toBeUndefined()
-    expect(contact().ltvCents).toBe(9100)
+    expect(refundReports).toHaveLength(0)
   })
 
   /** The flag itself: what the merchant's order now carries. */
@@ -694,12 +670,20 @@ describe('charge.dispute.closed — the only event that moves money', () => {
   })
 
   /** The buyer's side of the ledger (AGL-1754), by the second door. */
-  it('records the reversal against the buyer contact', async () => {
+  it('reports the reversal against the buyer, as a chargeback', async () => {
     await deliver('charge.dispute.closed', disputeEvent({ status: 'lost' }))
-    expect(contact().refundedCents).toBe(DISPUTE_CENTS)
-    expect(contact().refundedOrdersCount).toBe(1)
-    expect(typeof contact().lastRefundAtMs).toBe('number')
-    expectNothingSwallowed()
+    expect(refundReports).toEqual([
+      {
+        hostId: 'host-1',
+        refId: 'order-1',
+        // Raw, as the order typed it: keying the address is the owner's.
+        email: 'Buyer@Example.com',
+        amountCents: DISPUTE_CENTS,
+        closedTheSale: true,
+        // The wording a chargeback earns on the timeline is the owner's.
+        reason: 'chargeback',
+      },
+    ])
   })
 
   /** The campaign's side of the same ledger. */
@@ -718,32 +702,10 @@ describe('charge.dispute.closed — the only event that moves money', () => {
 
   it('takes nothing back off a campaign when the dispute is WON', async () => {
     // Nothing was reversed, so nothing is missing — the same guard that keeps
-    // a $0 entry off the buyer's contact.
+    // a $0 report off the buyer's record.
     reverseAttributedRevenue.mockClear()
     await deliver('charge.dispute.closed', disputeEvent({ status: 'won' }))
     expect(reverseAttributedRevenue).not.toHaveBeenCalled()
-  })
-
-  /** Gross stays gross — AGL-1754's decision, not re-litigated here. */
-  it('does not decrement the contact lifetime value or order count', async () => {
-    await deliver('charge.dispute.closed', disputeEvent({ status: 'lost' }))
-    expect(contact().ltvCents).toBe(9100)
-    expect(contact().ordersCount).toBe(4)
-  })
-
-  /** The wording is the whole reason `kind` exists on the writer. */
-  it('says "charged back" on the contact timeline, not "refunded"', async () => {
-    await deliver('charge.dispute.closed', disputeEvent({ status: 'lost' }))
-    const latest = contact().interactions[0]
-    expect(latest.refId).toBe('order-1')
-    expect(latest.summary).toContain('charged back')
-    expect(latest.summary).not.toContain('refunded')
-  })
-
-  /** A reversal captures nobody — AGL-1754's `sources` rule, inherited. */
-  it('does not add a capture source to the contact', async () => {
-    await deliver('charge.dispute.closed', disputeEvent({ status: 'lost' }))
-    expect(contact().sources).toEqual({ order: true })
   })
 
   /**
@@ -771,13 +733,12 @@ describe('a dispute that is WON', () => {
    * reversed, so nothing has to be un-reversed — a stronger guarantee than
    * undoing correctly, and the only one available given a monotonic contact.
    */
-  it('leaves the order and the contact untouched', async () => {
+  it('leaves the order untouched and reports nothing', async () => {
     await deliver('charge.dispute.created', disputeEvent())
     await deliver('charge.dispute.closed', disputeEvent({ status: 'won' }))
     expect(order().status).toBe('paid')
     expect(order().refundedCents ?? 0).toBe(0)
-    expect(contact().refundedCents).toBeUndefined()
-    expect(contact().refundedOrdersCount).toBeUndefined()
+    expect(refundReports).toHaveLength(0)
   })
 
   /** But the outcome is recorded, so the flag does not sit open forever. */
@@ -814,9 +775,8 @@ describe('redelivery and races', () => {
     await deliver('charge.dispute.closed', disputeEvent({ status: 'lost' }))
     await deliver('charge.dispute.closed', disputeEvent({ status: 'lost' }))
     expect(order().refundedCents).toBe(DISPUTE_CENTS)
-    expect(contact().refundedCents).toBe(DISPUTE_CENTS)
-    expect(contact().refundedOrdersCount).toBe(1)
-    expect(contact().interactions).toHaveLength(2)
+    expect(refundReports).toHaveLength(1)
+    expect(ledger()).toEqual({ refundedCents: DISPUTE_CENTS, refundedOrdersCount: 1 })
   })
 
   /**
@@ -866,7 +826,7 @@ describe('redelivery and races', () => {
     })
     await deliver('charge.dispute.closed', disputeEvent({ status: 'lost' }))
     expect(order().refundedCents).toBe(ORDER_TOTAL_CENTS)
-    expect(contact().refundedCents).toBe(ORDER_TOTAL_CENTS - 1700)
+    expect(ledger().refundedCents).toBe(ORDER_TOTAL_CENTS - 1700)
     expect(order().dispute.reversedCents).toBe(ORDER_TOTAL_CENTS - 1700)
   })
 
@@ -885,7 +845,7 @@ describe('redelivery and races', () => {
     })
     await deliver('charge.dispute.closed', disputeEvent({ status: 'lost' }))
     expect(order().refundedCents).toBe(ORDER_TOTAL_CENTS)
-    expect(contact().refundedOrdersCount).toBeUndefined()
+    expect(ledger().refundedOrdersCount).toBeUndefined()
     expect(order().dispute.outcome).toBe('lost')
   })
 
@@ -915,8 +875,8 @@ describe('redelivery and races', () => {
     await deliver('charge.dispute.closed', disputeEvent({ status: 'lost' }))
     expect(order().status).toBe('refunded')
     expect(order().refundedCents).toBe(DISPUTE_CENTS)
-    expect(contact().refundedOrdersCount).toBe(1)
-    expect(contact().refundedCents).toBe(DISPUTE_CENTS)
+    expect(ledger().refundedOrdersCount).toBe(1)
+    expect(ledger().refundedCents).toBe(DISPUTE_CENTS)
   })
 
   /**
@@ -935,7 +895,7 @@ describe('redelivery and races', () => {
       disputeEvent({ status: 'lost', amount: DISPUTE_CENTS - 3000 }),
     )
     expect(order().status).toBe('cancelled')
-    expect(contact().refundedOrdersCount).toBeUndefined()
+    expect(ledger().refundedOrdersCount).toBeUndefined()
   })
 })
 
@@ -1125,31 +1085,6 @@ describe('the failure that no redelivery can fix', () => {
   })
 })
 
-describe('the contact the reversal cannot reach', () => {
-  /**
-   * AGL-1754's refuse-and-record, reached through the chargeback door. The
-   * reversal is durable on the ORDER, which is what the AGL-1753 rebuild
-   * reads, so refusing discards nothing — and creating a contact here would
-   * mint one holding a reversal and no purchase.
-   */
-  it('refuses to create a contact and counts the miss', async () => {
-    docs.delete('orgs/org-1/contacts/contact-1')
-    await deliver('charge.dispute.closed', disputeEvent({ status: 'lost' }))
-    expect(order().refundedCents).toBe(DISPUTE_CENTS)
-    expect(
-      [...docs.keys()].some((key) => key.startsWith('orgs/org-1/contacts/')),
-    ).toBe(false)
-    expect(
-      docs.get('hosts/host-1/counters/contactRefundsUnmatched'),
-    ).toMatchObject({
-      total: 1,
-      lastReason: 'no-contact',
-      lastOrderId: 'order-1',
-    })
-    expectNothingSwallowed()
-  })
-})
-
 /**
  * The shelf's side of the ledger (AGL-1797), through the chargeback door.
  *
@@ -1263,9 +1198,7 @@ describe('the stock a chargeback left off the shelf (AGL-1797)', () => {
     await deliver('charge.dispute.closed', disputeEvent({ status: 'lost' }))
     expect(order().refundedCents).toBe(DISPUTE_CENTS)
     expect(order().status).toBe('refunded')
-    expect(contact().refundedCents).toBe(DISPUTE_CENTS)
-    expect(contact().ltvCents).toBe(9100)
-    expectNothingSwallowed()
+    expect(ledger().refundedCents).toBe(DISPUTE_CENTS)
   })
 })
 
@@ -1634,8 +1567,8 @@ describe('the seller share of a lost dispute (AGL-1794)', () => {
         String(notice.title).includes('Payout adjusted'),
       ),
     ).toHaveLength(1)
-    expect(contact().refundedCents).toBe(DISPUTE_CENTS)
-    expect(contact().refundedOrdersCount).toBe(1)
+    expect(ledger().refundedCents).toBe(DISPUTE_CENTS)
+    expect(ledger().refundedOrdersCount).toBe(1)
   })
 
   /**

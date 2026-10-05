@@ -37,9 +37,12 @@
  * — the generative door, the credits band, the credits overage rate and the
  * add-on card — from the AGL-2900 republish of **2026-09-14**, and Starter's
  * two AI cells re-transcribed from the AGL-3203 republish of **2026-09-21**
- * (version `ZZkN4U426l`), and the page-view rate and bandwidth bands from the
- * AGL-1879 / AGL-3444 republish of **2026-10-01** (version `ZqxHI66ATZ`) —
- * and their
+ * (version `ZZkN4U426l`), and the page-view and form rates and bandwidth
+ * bands from the AGL-1879 / AGL-3444 republishes of **2026-10-01** (versions
+ * `ZqxHI66ATZ`, then `4goVJMQCh9`), and those three with the API bands and
+ * the API overage rates from the republish of **2026-10-02** (version
+ * `-jejSg7GLa`), and every allowance and metered rate AGL-3469 and AGL-3476
+ * moved from the second republish that day (version `qE5PwfZM-K`) — and their
  * whole job is to be a fixed point that does NOT move when the constants do.
  * Deriving them from `PLAN_ENTITLEMENTS` would make the file assert `x === x`
  * and prove nothing at all.
@@ -223,68 +226,47 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
      *
      * `storagePerHostMb` and `bandwidthGb` are per-tier bands whose cost was
      * never multiplied against the tier's price. Bandwidth is the largest
-     * single line item on every plan above Pro — a GB of it costs $0.367 of
-     * weight at the CDN's dearest region, `ESTIMATED_PAGE_TRANSFER_BYTES`
+     * single line item on every plan above Pro — a GB of it costs $0.413 of
+     * weight at Vercel's dearest region, `ESTIMATED_PAGE_TRANSFER_BYTES`
      * divided into a gigabyte and priced at `perPageView`, before the CDN
      * requests the same views make (the bandwidth row below) — and Agency's
      * 20 TB alone was $3,495/month
      * against a $799 subscription at the $0.175 a GB then in force.
      * `tier-margin-floor.spec.ts` carries the model and the resulting figures.
      */
-    it('Storage per site — 250 MB · 2 · 10 · 20 · 30 · 40 · 60 GB', () => {
-      const PUBLISHED: Row = [250, 2048, 10240, 20480, 30720, 40960, 61440]
+    /**
+     * RE-TRANSCRIBED 2026-10-02 from version `qE5PwfZM-K` (AGL-3469): "250
+     * MB · 2 GB · 5 GB · 10 GB · 15 GB · 20 GB · 20 GB" — cut so every tier
+     * covers its full-use cost plus 30% after Stripe's fee, storage first
+     * because the site count multiplies it.
+     */
+    it('Storage per site — 250 MB · 2 · 5 · 10 · 15 · 20 · 20 GB', () => {
+      const PUBLISHED: Row = [250, 2048, 5120, 10240, 15360, 20480, 20480]
       expect(quotaColumn('storagePerHostMb')).toEqual(PUBLISHED)
     })
 
     /**
-     * RE-TRANSCRIBED 2026-10-01 from the republish of screen `v0clP6xQl-` to
-     * version `ZqxHI66ATZ`, "Page views $0.36 and bandwidth bands (AGL-1879,
-     * AGL-3444)": the compare table (cells `C3oFLVp_Ct`, `xyyWBGRcwZ`,
-     * `57wlzIAcAq`, `P9rbaJ3Wmd`, `11Bq-jNDQh`, `IjzIRIwOGn`) and the six
-     * mobile plan panels (`4pyJAdNqX5`, `eBq4LpeK4g`, `nGHS0TH9oX`,
-     * `XXmf0O3gfa`, `1wzSCLDebB`, `Q5xiBvBks3`) read "2 GB · 35 GB · 60 GB ·
-     * 90 GB · 145 GB · 175 GB · 790 GB", and the Scale room-to-grow strip
-     * (`1vMwEC7XXV`, `_99Id5AtWv`) reads "145 GB bandwidth". Those were the
-     * bands sized with each included gigabyte's CDN requests at the dearest
-     * region and its transfer at the cheapest.
+     * RE-TRANSCRIBED 2026-10-02 from the republish of screen `v0clP6xQl-` to
+     * version `qE5PwfZM-K` (AGL-3469; Starter and Pro were 20 and 30 GB at
+     * `-jejSg7GLa`): the compare table (cells `C3oFLVp_Ct`,
+     * `xyyWBGRcwZ`, `57wlzIAcAq`, `P9rbaJ3Wmd`, `11Bq-jNDQh`, `IjzIRIwOGn`)
+     * and the six mobile plan panels (`4pyJAdNqX5`, `eBq4LpeK4g`,
+     * `nGHS0TH9oX`, `XXmf0O3gfa`, `1wzSCLDebB`, `Q5xiBvBks3`) read "2 GB · 15
+     * GB · 25 GB · 45 GB · 70 GB · 80 GB · 395 GB", and the Scale
+     * room-to-grow strip (`1vMwEC7XXV`, `_99Id5AtWv`) reads "70 GB
+     * bandwidth".
      *
-     * PINNED APART AGAIN, THE SAME DAY. Every Vercel-billed input is now
-     * priced at the dearest region — the transfer inside a page view's weight
-     * as well as its requests — and each paid band is the largest multiple of
-     * 5 GB the annual price carries at that cost (`tier-margin-floor.spec.ts`
-     * carries the model and the mutations that prove it). Free's band can
-     * never be metered — there is no subscription to bill an overage onto —
-     * so it is a give, and it does not move.
-     *
-     * The page is AHEAD of the code until it catches up: it promises more than
-     * a plan includes. It is republished with the code's figures BEFORE the
-     * promotion that ships them, so that from then until the deploy it
-     * promises less than production enforces — the safe direction. When it
-     * is: set `PUBLISHED` to the code's figures, delete the gap case, and
-     * record the version id here. Terabytes are decimal and shown to the
-     * gigabyte, and no band on the ladder reads in TB: 485 GB is "485 GB".
+     * Vercel bills transfer by the decimal GB, production's Firestore is
+     * `nam5`, and the analytics beacon runs a function on every view, so an
+     * included gigabyte costs $0.63712 and each paid band is the largest
+     * multiple of 5 GB the annual price carries at that
+     * (`tier-margin-floor.spec.ts` carries the model and the mutations that
+     * prove it). Free's band can never be metered, so it is a give.
      */
-    describe('Bandwidth / mo — the page reads 2 · 35 · 60 · 90 · 145 · 175 · 790 GB, the code includes 2 · 20 · 35 · 55 · 90 · 105 · 485 GB', () => {
-      /** What the live page says, in GB (version `ZqxHI66ATZ`). */
-      const PUBLISHED: Row = [2, 35, 60, 90, 145, 175, 790]
-      /** What the code includes, in GB — a literal, so the pin cannot be `x === x`. */
-      const INCLUDED: Row = [2, 20, 35, 55, 90, 105, 485]
-
-      it('the code includes 2 · 20 · 35 · 55 · 90 · 105 · 485 GB', () => {
-        expect(quotaColumn('bandwidthGb')).toEqual(INCLUDED)
-      })
-
-      it('GAP: the page has not caught up — republish it, then fold this back into one row', () => {
-        expect(quotaColumn('bandwidthGb')).not.toEqual(PUBLISHED)
-        // Free is the one cell that agrees; every paid cell on the page is
-        // LARGER than the band the code includes.
-        expect(quotaColumn('bandwidthGb')[0]).toBe(PUBLISHED[0])
-        for (let column = 1; column < PUBLISHED.length; column++) {
-          expect(
-            `${PUBLISHED_COLUMNS[column]}: ${quotaColumn('bandwidthGb')[column] < PUBLISHED[column]}`,
-          ).toBe(`${PUBLISHED_COLUMNS[column]}: true`)
-        }
-      })
+    it('Bandwidth / mo — 2 · 15 · 25 · 45 · 70 · 80 · 395 GB', () => {
+      /** What the live page says, in GB (version `qE5PwfZM-K`). */
+      const PUBLISHED: Row = [2, 15, 25, 45, 70, 80, 395]
+      expect(quotaColumn('bandwidthGb')).toEqual(PUBLISHED)
     })
 
     it.each([
@@ -311,18 +293,21 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
   // "Team". The page renders seats as "included · max N".
   // ---------------------------------------------------------------------
   describe('Team', () => {
-    it('Team seats — 1 · 2·5 · 5·20 · 15·100 · 25·150 · 50·250 · 100·500', () => {
+    // Re-transcribed 2026-10-02 from version `qE5PwfZM-K` (AGL-3469): the
+    // included seats start small so buying more is a real choice; the
+    // maxima did not move.
+    it('Team seats — 1 · 2·5 · 3·20 · 5·100 · 5·150 · 10·250 · 10·500', () => {
       expect(quotaColumn('managersPerOrg')).toEqual([
-        1, 2, 5, 15, 25, 50, 100,
+        1, 2, 3, 5, 5, 10, 10,
       ] satisfies Row)
       expect(quotaColumn('maxManagersPerOrg')).toEqual([
         1, 5, 20, 100, 150, 250, 500,
       ] satisfies Row)
     })
 
-    it('Site collaborators — 1 · 3·10 · 10·25 · 50·100 · 75·150 · 100·250 · 250·1,000', () => {
+    it('Site collaborators — 1 · 2·10 · 3·25 · 5·100 · 5·150 · 5·250 · 5·1,000', () => {
       expect(quotaColumn('membersPerHost')).toEqual([
-        1, 3, 10, 50, 75, 100, 250,
+        1, 2, 3, 5, 5, 5, 5,
       ] satisfies Row)
       expect(quotaColumn('maxMembersPerHost')).toEqual([
         1, 10, 25, 100, 150, 250, 1000,
@@ -360,15 +345,15 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
   // "Content & data"
   // ---------------------------------------------------------------------
   describe('Content & data', () => {
-    it('Datasets — — · 3·10 · 15·50 · 100·250 · 250·500 · 500·1,000 · 2,000·5,000', () => {
+    it('Datasets — — · 2·10 · 5·50 · 10·250 · 15·500 · 25·1,000 · 50·5,000', () => {
       expect(quotaColumn('datasetsPerOrg')).toEqual([
         NONE,
-        3,
+        2,
+        5,
+        10,
         15,
-        100,
-        250,
-        500,
-        2000,
+        25,
+        50,
       ] satisfies Row)
       expect(quotaColumn('maxDatasetsPerOrg')).toEqual([
         NONE,
@@ -455,10 +440,11 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
      * Bounding it is safe because Agency METERS: `meteredInfraPassThrough` is
      * true, so submissions past the band bill at the pass-through rate rather
      * than being refused, and a merchant's lead form does not stop working at
-     * 25,000.
+     * the band. Re-transcribed 2026-10-02 from version `qE5PwfZM-K`
+     * (AGL-3469).
      */
-    it('Form submissions / mo, per site — 20 · 200 · 1k · 8k · 25k · 40k · 25k', () => {
-      const PUBLISHED: Row = [20, 200, 1000, 8000, 25000, 40000, 25000]
+    it('Form submissions / mo, per site — 20 · 200 · 1k · 5k · 10k · 10k · 10k', () => {
+      const PUBLISHED: Row = [20, 200, 1000, 5000, 10000, 10000, 10000]
       expect(quotaColumn('formSubmissionsPerMonth')).toEqual(PUBLISHED)
       // Every self-serve cell is a finite number, which is the property the
       // cost model needs; only Enterprise's "Talk to us" is unbounded.
@@ -486,8 +472,9 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
      * `prices` block below. That rate is what makes the bound METER rather
      * than wall: without it `checkCrmRecordsQuota` refuses past the band.
      */
-    it('CRM records included — — · 1k · 10k · 50k · 100k · 150k · 500k', () => {
-      const PUBLISHED = [NO_CRM, 1000, 10000, 50000, 100000, 150000, 500000]
+    it('CRM records included — — · 1k · 10k · 30k · 100k · 150k · 500k', () => {
+      // Business re-transcribed 2026-10-02 from version `qE5PwfZM-K` (AGL-3469).
+      const PUBLISHED = [NO_CRM, 1000, 10000, 30000, 100000, 150000, 500000]
       expect(crmColumn('contactsPerHost')).toEqual(PUBLISHED)
       // Every band is finite, the one Free keeps included, which is the
       // property the cost model needs; only Enterprise's "Talk to us" is
@@ -557,10 +544,11 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
       })
     })
 
-    it('One-to-one emails / day — — · 50 · 150 · 200 · 300 · 500 · 1,000', () => {
+    it('One-to-one emails / day — — · 35 · 150 · 200 · 300 · 500 · 1,000', () => {
+      // Starter re-transcribed 2026-10-02 from version `qE5PwfZM-K` (AGL-3469).
       expect(quotaColumn('crmEmailsPerDay')).toEqual([
         NONE,
-        50,
+        35,
         150,
         200,
         300,
@@ -600,10 +588,13 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
      * kept both inside the Sept 1 freeze.
      */
     describe('Campaign emails / mo — the page carries the code\'s bands', () => {
-      /** What the page says, per column, and what the code bills against. */
-      const PUBLISHED = [NONE, NONE, 5000, 25000, 40000, 65000, 130000] satisfies Row
+      /**
+       * What the page says, per column, and what the code bills against —
+       * re-transcribed 2026-10-02 from version `qE5PwfZM-K` (AGL-3469).
+       */
+      const PUBLISHED = [NONE, NONE, 2500, 15000, 25000, 65000, 130000] satisfies Row
 
-      it('— · — · 5,000 · 25,000 · 40,000 · 65,000 · 130,000', () => {
+      it('— · — · 2,500 · 15,000 · 25,000 · 65,000 · 130,000', () => {
         expect(quotaColumn('emailSendsPerMonth')).toEqual(PUBLISHED)
       })
 
@@ -783,16 +774,19 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
       expect(flagColumn(flag as string)).toEqual(published)
     })
 
-    it('API access — — · — · — · 100k · 300k · 1M · 5M per month', () => {
-      expect(quotaColumn('apiRequestsPerMonth')).toEqual([
-        NONE,
-        NONE,
-        NONE,
-        100000,
-        300000,
-        1000000,
-        5000000,
-      ] satisfies Row)
+    /**
+     * THE PAGE CAUGHT UP ON 2026-10-02 (AGL-3444). Every `/v1` request is a
+     * function invocation behind a CDN request that reads, writes and answers
+     * — $0.117 per 1,000 at Vercel's dearest region and nam5 where it was
+     * priced at $0.002 — so each API band was cut to the dollars it was sized
+     * to cost. Version `-jejSg7GLa` reads "1.5k / mo · 5k / mo · 17k / mo ·
+     * 85k / mo" in the compare table and the mobile panels, "API access ·
+     * 1.5k req/mo" on the Business card, and "5k / 17k / 85k API
+     * requests/mo" in the Scale, Advanced and Agency room-to-grow strips.
+     */
+    it('API access — — · — · — · 1.5k · 5k · 17k · 85k per month', () => {
+      const PUBLISHED: Row = [NONE, NONE, NONE, 1500, 5000, 17000, 85000]
+      expect(quotaColumn('apiRequestsPerMonth')).toEqual(PUBLISHED)
     })
 
     /**
@@ -984,7 +978,7 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
      *
      * ⛔ This is the DATASET add-on line, not the metered storage
      * pass-through: `/pricing` carries two per-GB-month figures and the other
-     * one, $0.0338, is correct and must not be touched.
+     * one, $0.0349, is correct and must not be touched.
      */
     it('Extra dataset storage, per GB-month — $0.36 on every paid plan', () => {
       const PUBLISHED = [0.36, 0.36, 0.36, 0.36, 0.36, 0.36]
@@ -997,9 +991,15 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
       expect((0.36 - 0.18) / 0.36).toBeGreaterThanOrEqual(0.5)
     })
 
-    it('API requests per 1,000 over limit — — · — · $0.50 · $0.35 · $0.20 · $0.15', () => {
+    /**
+     * THE PAGE CAUGHT UP ON 2026-10-02 (AGL-3444, version `-jejSg7GLa`). At
+     * $0.117 per 1,000 requests of cost, the 50% retail floor is $0.234, so
+     * Advanced's $0.20 and Agency's $0.15 rose to $0.25.
+     */
+    it('API requests per 1,000 over limit — $0.50 · $0.35 · $0.25 · $0.25', () => {
+      const PUBLISHED = [null, null, 0.5, 0.35, 0.25, 0.25]
       expect(PAID.map((p) => PLAN_PRICING[p].extraApiRequestsUsdPer1k)).toEqual(
-        [null, null, 0.5, 0.35, 0.2, 0.15],
+        PUBLISHED,
       )
     })
 
@@ -1108,43 +1108,29 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
       }
     })
 
-    it('is "our infrastructure cost plus a 30% margin"', () => {
+    it('is "our infrastructure cost plus a 30% margin, after card fees"', () => {
+      // Version `qE5PwfZM-K` (AGL-3476): the margin is what is kept once
+      // Stripe's fee comes off, so every billed rate clears it net.
       expect(METERED_MARKUP).toBe(1.3)
+      for (const key of ['storagePerGbMonth', 'perPageView', 'perFormSubmission'] as const) {
+        expect(METERED_BILLED_RATES_USD[key] * (1 - 0.029)).toBeGreaterThanOrEqual(
+          METERED_UNIT_RATES_USD[key] * METERED_MARKUP,
+        )
+      }
     })
 
     /**
-     * PINNED APART ON PURPOSE (AGL-1879, AGL-3444, 2026-10-01).
-     *
-     * The page caught up with the $0.36 overage on 2026-10-01 — screen
-     * `v0clP6xQl-`, version `ZqxHI66ATZ`, cell `aQCceq6U4W` reads "$0.36 /
-     * 1,000" — and the code moved past it the same day. A billed page view
-     * now costs its weight with the transfer at the CDN's dearest region
-     * ($0.35 a GB) and its requests at the dearest region ($3.20 a million),
-     * so "at cost + 30%" is true wherever the CDN serves the view: $0.70 per
-     * 1,000.
-     *
-     * That is the code AHEAD of the page, the direction
-     * `docs/PRICING_SURFACES.md` calls urgent. The page is republished with
-     * $0.70 BEFORE the promotion that bills it, so that from then until the
-     * deploy it quotes more than production charges, never less. When it is:
-     * set `PUBLISHED` to 0.7, delete the gap case, and record the version id
-     * here.
+     * THE PAGE CAUGHT UP ON 2026-10-02 (AGL-1879, AGL-3444, AGL-3476): screen
+     * `v0clP6xQl-`, version `qE5PwfZM-K`, cell `aQCceq6U4W` reads "$0.83 /
+     * 1,000". Vercel bills transfer by the decimal GB, production's Firestore
+     * is `nam5`, and the analytics beacon runs a function on every view, so a
+     * billed view costs $0.615385 per 1,000 at the dearest region, and cost +
+     * 30% kept after the card fee, rounded up, is $0.83.
      */
-    describe('Page views (bandwidth + reads) — the page reads $0.36, the code bills $0.70', () => {
-      /** What the live page says, per 1,000 views (version `ZqxHI66ATZ`). */
-      const PUBLISHED = 0.36
-
-      it('the code bills $0.70 / 1,000: weight plus CDN requests, at the dearest region, at cost + 30%', () => {
-        expect(METERED_BILLED_RATES_USD.perPageView * 1000).toBeCloseTo(0.7, 6)
-      })
-
-      it('GAP: the page has not caught up — republish it, then fold this back into one row', () => {
-        expect(
-          Math.round(METERED_BILLED_RATES_USD.perPageView * 1000 * 100) / 100,
-        ).not.toBe(PUBLISHED)
-        // The page quotes LESS than the code bills — the urgent direction.
-        expect(METERED_BILLED_RATES_USD.perPageView * 1000).toBeGreaterThan(PUBLISHED)
-      })
+    it('Page views (bandwidth + reads) — $0.83 / 1,000: weight plus requests, at the dearest region, at cost + 30% after card fees', () => {
+      /** What the live page says, per 1,000 views (version `qE5PwfZM-K`). */
+      const PUBLISHED = 0.83
+      expect(METERED_BILLED_RATES_USD.perPageView * 1000).toBeCloseTo(PUBLISHED, 6)
     })
 
     /**
@@ -1208,12 +1194,16 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
       expect(wireCalibration.pricedForKb).toBe(1012.8)
       expect(wireCalibration.measuredKb).toBeGreaterThan(0)
       // The rate is the one the recorded basis implies, at the per-KB cost the
-      // 2026-08-09 calibration fixed — its transfer share re-priced at the
-      // CDN's dearest region, $0.20 a GB more than the $0.15 it was measured
-      // at (AGL-3444). Seven places, because the rate is the 2026-09-09 peg
-      // plus that re-price rather than a round cost, and the two part company
+      // 2026-08-09 calibration fixed — its transfer share re-priced at
+      // Vercel's dearest region by the decimal GB, and its reads at nam5
+      // (AGL-3444). Seven places, because the rate is the 2026-09-09 peg plus
+      // those re-prices rather than a round cost, and the two part company
       // below that.
-      const usdPerKb = 0.0001 / 627 + 0.2 / (1024 * 1024)
+      const usdPerKb =
+        0.0001 / 627 +
+        (0.35 * 1024) / 1e9 -
+        0.15 / (1024 * 1024) +
+        (40 * 0.0000003) / 627
       expect(METERED_UNIT_RATES_USD.perPageView).toBeCloseTo(
         usdPerKb * wireCalibration.pricedForKb,
         7,
@@ -1251,40 +1241,22 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
     })
 
     /**
-     * PINNED APART ON PURPOSE (AGL-3444, 2026-10-01).
-     *
-     * A form submission's function invocation is priced at Vercel's dearest
-     * region and with its whole duration as active CPU, beside the Firestore
-     * reads and writes behind it — $0.0000526, ×1.3 rounded up to $0.07 per
-     * 1,000 (`METERED_UNIT_RATES_USD` carries the working). The page — cell
-     * `_4aeO1e1lf` of version `ZqxHI66ATZ` — still reads "$0.065 / 1,000":
-     * the code ahead of the page, republished with the page-view rate above
-     * before the promotion that bills it.
+     * THE PAGE CAUGHT UP ON 2026-10-02 (AGL-3444, AGL-3476): cell
+     * `_4aeO1e1lf`, version `qE5PwfZM-K`, reads "$0.083 / 1,000". The
+     * submission's POST is also a CDN request with bytes through the CDN and
+     * the function, priced at the dearest region, and the price keeps cost +
+     * 30% after the card fee, rounded up (`METERED_UNIT_RATES_USD` carries the
+     * working).
      */
-    describe('Form submissions — the page reads $0.065, the code bills $0.07', () => {
+    it('Form submissions — $0.083 / 1,000, at cost + 30% after card fees', () => {
       /** What the live page says, per 1,000 submissions. */
-      const PUBLISHED = 0.065
-
-      it('the code bills $0.07 / 1,000, at cost + 30%', () => {
-        expect(
-          METERED_UNIT_RATES_USD.perFormSubmission * METERED_MARKUP * 1000,
-        ).toBeCloseTo(0.07, 6)
-      })
-
-      it('GAP: the page has not caught up — republish it, then fold this back into one row', () => {
-        expect(
-          Math.round(METERED_UNIT_RATES_USD.perFormSubmission * METERED_MARKUP * 1000 * 1000) / 1000,
-        ).not.toBe(PUBLISHED)
-        expect(
-          METERED_UNIT_RATES_USD.perFormSubmission * METERED_MARKUP * 1000,
-        ).toBeGreaterThan(PUBLISHED)
-      })
+      const PUBLISHED = 0.083
+      expect(METERED_BILLED_RATES_USD.perFormSubmission * 1000).toBeCloseTo(PUBLISHED, 6)
     })
 
-    it('Site media & file storage — $0.0338 / GB-mo', () => {
-      expect(
-        METERED_UNIT_RATES_USD.storagePerGbMonth * METERED_MARKUP,
-      ).toBeCloseTo(0.0338, 6)
+    it('Site media & file storage — $0.0349 / GB-mo', () => {
+      // Version `qE5PwfZM-K` (AGL-3476).
+      expect(METERED_BILLED_RATES_USD.storagePerGbMonth).toBeCloseTo(0.0349, 6)
     })
   })
 

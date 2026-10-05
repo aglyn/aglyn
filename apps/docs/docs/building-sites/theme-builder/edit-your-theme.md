@@ -61,7 +61,12 @@ whichever theme you pick.
 ## Set colors and fonts
 
 - Choose your **palette** and **typography**.
-- Fonts load through a Google Fonts URL builder.
+- Pick any Google font. Your published site serves it from its **own address** — the
+  font rules are part of the page and the files come from your site with a long cache,
+  so text never waits on a stylesheet from Google, and visitors' browsers never contact
+  Google for your fonts. The one or two fonts the top of the page uses start loading
+  with the page itself. Text shows in a fallback font for the moment a font file is
+  still arriving, never as blank space.
 - Configure both **light and dark** schemes. Published sites follow the visitor's system
   scheme (or their choice in the theme mode switcher); anything you leave unset under
   **Dark** comes from the platform's default dark palette, so a site goes dark without a

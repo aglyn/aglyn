@@ -21,13 +21,17 @@ import { getSiteLockdown } from '@aglyn/tenant-data-admin'
 // Deep import: one predicate and the set it reads, not the theme barrel's
 // React providers.
 import { wearsPlatformBrand } from '@aglyn/shared-ui-theme/tenant.theme'
+import { resolveSiteTheme } from '@aglyn/aglyn/app-utils/site-theme'
+import { getSiteIconFacts } from '@aglyn/tenant-runtime/get-site-icon-facts'
 import { orgBrandFavicon } from '../../[host]/site-favicon'
 import getHost from '../../../utils/get-host'
 import getOrgBilling from '../../../utils/get-org-billing'
 import {
   siteFaviconSrc,
   siteIconAnswer,
+  siteIconBackground,
   type SiteIconKind,
+  siteIconSourceFor,
 } from '../../../utils/site-icons'
 
 export const dynamic = 'force-dynamic'
@@ -71,6 +75,13 @@ async function siteLocked(hostId: string | undefined): Promise<boolean> {
  * and signs these files, and a relative `Location` resolves against whatever
  * domain the visitor asked on — a custom domain or the platform subdomain —
  * without this route needing to know which.
+ *
+ * Since AGL-3484 the redirect names a DERIVED icon rather than the upload:
+ * `/favicon.ico` a real multi-size ICO (16, 32 and 48px) and
+ * `/apple-touch-icon.png` the 180px touch icon flattened onto the site's
+ * background, each versioned by the source's content hash so the CDN draws it
+ * once. A source the CDN cannot draw from — a hotlink, an uploaded `.ico` —
+ * is still redirected to as it is.
  */
 export async function GET(request: Request): Promise<Response> {
   const url = new URL(request.url)
@@ -103,6 +114,15 @@ export async function GET(request: Request): Promise<Response> {
       ? resolveMediaSrc(orgBrandFavicon(org), { hostId: site.$id })
       : undefined
 
+  // The source's type and hash: whether it can be drawn from, and the
+  // version that lets the derived icon cache for a year (AGL-3484).
+  const facts = platformBrand
+    ? undefined
+    : await getSiteIconFacts({
+        hostId: site?.$id,
+        srcs: [siteIconSourceFor(kind, site, brandFavicon)],
+      })
+
   const answer = siteIconAnswer({
     kind,
     platformBrand,
@@ -111,6 +131,8 @@ export async function GET(request: Request): Promise<Response> {
     // An unread org suppresses, as the layout's link does: a blank tab for
     // one render beats our mark on a paid customer's domain.
     attribution: org ? showsPlatformAttribution(org) : false,
+    facts,
+    background: siteIconBackground(site ? resolveSiteTheme(site) : undefined),
   })
   if (answer.kind === 'redirect') {
     return new Response(null, {

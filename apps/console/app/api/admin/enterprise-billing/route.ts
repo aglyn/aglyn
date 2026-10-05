@@ -26,6 +26,11 @@ import {
   writeOrgBilling,
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
+import {
+  FULL_USE_QUOTE_MULTIPLE,
+  describeFullUseFloor,
+  orgFullUseFloor,
+} from '@aglyn/aglyn/app-utils/full-use-cost'
 import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 
 /**
@@ -42,6 +47,11 @@ import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write
  *          immediately and Stripe bills by invoice.
  *        - `mode: 'checkout'` — returns a Checkout link to send the customer,
  *          who enters payment themselves; the webhook activates it.
+ *
+ * The quote must clear cost + 30% (AGL-3473): net of Stripe, the amount has
+ * to cover `FULL_USE_QUOTE_MULTIPLE` × what the org would cost using every
+ * band it resolves to on the deal's plan at 100%. Below that it is refused
+ * before anything is created, with the figures.
  *
  * Every Stripe object is stamped `metadata.custom='true'` + `plan` + `orgId`,
  * so the billing webhook (AGL-1110) mirrors the amount onto
@@ -227,6 +237,39 @@ async function handler(request: Request): Promise<Response> {
           code: 'subscription_exists',
         },
         { status: 409 },
+      )
+    }
+
+    // THE QUOTE FLOOR (AGL-3473): cost + 30% after Stripe's fee, with the
+    // customer using 100% of what the deal sells. Priced on the org as it
+    // will bill once provisioned — the deal's plan, the org's overrides and
+    // add-ons, the negotiated amount as its list price — so a contracted
+    // raise or a bought site costs what it delivers. An unbounded band
+    // cannot be quoted at all until an override bounds it.
+    const quote = orgFullUseFloor(
+      {
+        ...orgData,
+        ...billing,
+        plan,
+        subscription: {
+          status: 'active',
+          interval,
+          customMonthlyUsd: amountMonthlyUsd,
+        },
+      } as never,
+      { multiple: FULL_USE_QUOTE_MULTIPLE },
+    )
+    if (!quote.ok) {
+      return Response.json(
+        {
+          error:
+            `This quote is under the enterprise floor of ${FULL_USE_QUOTE_MULTIPLE.toFixed(2)}× ` +
+            'the full-use cost, net of Stripe. It ' +
+            describeFullUseFloor(quote),
+          code: 'quote_floor',
+          fullUse: quote,
+        },
+        { status: 400 },
       )
     }
 

@@ -40,7 +40,38 @@
 import * as Aglyn from '@aglyn/aglyn'
 import { act, render, waitFor } from '@testing-library/react'
 import { useContext, useEffect } from 'react'
+import { registerPluginRecordListSource } from '@aglyn/aglyn/plugin-manager/plugin-record-lists'
 import EntityPickerProvider from '../components/entity-picker-provider.component'
+
+/**
+ * The data plugin's dataset list source, as its console registrar publishes
+ * it (`dataset-record-list.ts`): a dataset's `fields` fact, in its model's
+ * order. A stand-in, because this suite mocks the client SDK the plugin's
+ * module is built on; the real source's shape is the data plugin's own spec.
+ */
+registerPluginRecordListSource(
+  'dataset',
+  {
+    query: () => null,
+    record: (id, data) => {
+      const model = (data['model'] ?? {}) as {
+        order?: string[]
+        fields?: Record<string, { name?: string }>
+      }
+      return {
+        id,
+        name: String(data['displayName'] ?? id),
+        facts: {
+          fields: (model.order ?? []).map((fieldId) => ({
+            id: fieldId,
+            name: model.fields?.[fieldId]?.name || fieldId,
+          })),
+        },
+      }
+    },
+  },
+  { pluginId: 'data' },
+)
 
 /** Every query a listener was opened on, in order. */
 const listening: Array<{ path: string; constraints: any[] }> = []
@@ -101,6 +132,11 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
       ? { scope: ['orgs', 'org-1'], orgId: 'org-1', ready: true }
       : { scope: null, orgId: null, ready: true }
   },
+}))
+// The console's load point: the owners of the kinds' list sources are in.
+jest.mock('../hooks/use-console-plugins', () => ({
+  __esModule: true,
+  useConsoleSlotPlugins: () => true,
 }))
 jest.mock('../hooks/use-firestore-collection', () => ({
   __esModule: true,
@@ -325,8 +361,8 @@ describe('a picker reads a page, not a catalog', () => {
         <Capture onValue={(value) => (latest = value)} />
       </EntityPickerProvider>,
     )
-    expect(latest.forms).toHaveLength(Aglyn.ENTITY_PICKER_BROWSE_LIMIT)
-    expect(latest.forms?.map((form) => form.id)).not.toContain('form-26')
+    expect(latest.options?.forms).toHaveLength(Aglyn.ENTITY_PICKER_BROWSE_LIMIT)
+    expect(latest.options?.forms?.map((form) => form.id)).not.toContain('form-26')
   })
 
   it('says the list is truncated when the probe comes back', () => {
@@ -357,7 +393,7 @@ describe('a picker reads a page, not a catalog', () => {
       </EntityPickerProvider>,
     )
     expect(latest.truncated?.forms).toBe(false)
-    expect(latest.forms).toHaveLength(25)
+    expect(latest.options?.forms).toHaveLength(25)
   })
 
   it('narrows catalog collections on the SERVER, not after the read', () => {
@@ -671,7 +707,7 @@ describe('search reaches past the window, and only when it can', () => {
     })
     expect(Aglyn.ENTITY_PICKER_SEARCH_LIMIT).toBe(25)
     await waitFor(() =>
-      expect(latest().products?.map((option) => option.id)).toContain('p-999'),
+      expect(latest().options?.products?.map((option) => option.id)).toContain('p-999'),
     )
   })
 
@@ -686,9 +722,9 @@ describe('search reaches past the window, and only when it can', () => {
     const latest = mount(['products'])
     await type(latest, 'products', 'coffee')
     await waitFor(() =>
-      expect(latest().products?.map((option) => option.id)).toContain('p-999'),
+      expect(latest().options?.products?.map((option) => option.id)).toContain('p-999'),
     )
-    const ids = latest().products?.map((option) => option.id) ?? []
+    const ids = latest().options?.products?.map((option) => option.id) ?? []
     expect(ids.filter((id) => id === 'p-1')).toHaveLength(1)
   })
 
@@ -714,11 +750,11 @@ describe('search reaches past the window, and only when it can', () => {
     const latest = mount(['products'])
     await type(latest, 'products', 'coffee')
     await waitFor(() =>
-      expect(latest().products?.map((option) => option.id)).toContain('p-999'),
+      expect(latest().options?.products?.map((option) => option.id)).toContain('p-999'),
     )
     await type(latest, 'products', '')
     await waitFor(() =>
-      expect(latest().products?.map((option) => option.id)).not.toContain(
+      expect(latest().options?.products?.map((option) => option.id)).not.toContain(
         'p-999',
       ),
     )
@@ -757,7 +793,7 @@ describe('the picker context says why a list is empty', () => {
     const value = capture(['forms'])
     expect(value.status?.forms).toBe('ready')
     // Settled AND empty is the site's answer: it has no forms yet.
-    expect(value.forms).toEqual([])
+    expect(value.options?.forms).toEqual([])
   })
 
   it('reports error when the read failed, so nothing claims "no forms"', () => {
@@ -787,7 +823,7 @@ describe('the picker context says why a list is empty', () => {
     const value = capture(['forms'])
     // The id is the reference; the name is resolved fresh at edit time, so a
     // rename never splits a form's submission history.
-    expect(value.forms).toEqual([
+    expect(value.options?.forms).toEqual([
       { id: 'form-1', label: 'Contact us' },
       { id: 'form-2', label: 'Apply now' },
     ])
@@ -796,7 +832,7 @@ describe('the picker context says why a list is empty', () => {
   it('falls back to the id rather than hiding a form with no name', () => {
     statusFor['hosts/h1/forms'] = 'success'
     docsFor['hosts/h1/forms'] = [{ $id: 'form-9' }]
-    expect(capture(['forms']).forms).toEqual([
+    expect(capture(['forms']).options?.forms).toEqual([
       { id: 'form-9', label: 'form-9' },
     ])
   })

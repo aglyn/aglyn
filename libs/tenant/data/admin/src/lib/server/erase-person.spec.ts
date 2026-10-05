@@ -15,9 +15,19 @@
  * limitations under the License.
  */
 
+/**
+ * THE PLATFORM'S PART OF A PERSON ERASURE (AGL-2623, AGL-3080): the door, the
+ * order, the log and the audit. What each plugin keeps is erased by that
+ * plugin through `plugin-person-erasure`, stood in here; the real shares run
+ * together in `apps/console/specs/person-erasure.spec.ts`.
+ */
+
 import {
   registerPluginPersonEraser,
+  registerPluginPersonRecordsEraser,
   resetPluginPersonErasersForTests,
+  standInRequiredPersonErasersForTests,
+  type PluginPersonErasureRequest,
 } from '@aglyn/aglyn/plugin-manager/plugin-person-erasure'
 import { createHash } from 'node:crypto'
 import { erasePerson } from './erase-person'
@@ -42,14 +52,6 @@ const mockEraseDeliveries = jest.fn(async (_addresses: unknown, _db: unknown) =>
   addresses: ['jane@example.com'],
   contestedAddresses: [],
 }))
-import {
-  registerPluginEventHandler,
-  resetPluginEventHandlersForTests,
-  type PluginEventPayloads,
-} from '@aglyn/aglyn/plugin-manager/plugin-events'
-
-/** What the erasure told the plugins it removed (AGL-3330). */
-const mockRemoved: Array<PluginEventPayloads['host.records.removed']> = []
 
 jest.mock('./email-delivery-log', () => ({
   eraseEmailDeliveriesForAddresses: (addresses: unknown, db: unknown) =>
@@ -58,32 +60,18 @@ jest.mock('./email-delivery-log', () => ({
 
 /*==========================================
  * A path-keyed store: every document is `docs.get('a/b/c/d')`. Queries
- * filter the direct children of a collection path on `==`; `getAll`
- * resolves refs by path; a batch replays its writes in order. Enough to
- * watch what the sweep touches and what it leaves.
+ * filter the direct children of a collection path on `==`. Enough to watch
+ * what the platform's part touches.
  *=========================================*/
 const docs = new Map<string, Record<string, any>>()
 const audit: Record<string, any>[] = []
 let autoId = 0
-/** Called with the path just before a document delete lands. */
-let onDelete: ((path: string) => void) | null = null
 
 function childPaths(path: string): string[] {
   const prefix = `${path}/`
   return [...docs.keys()].filter(
     (key) => key.startsWith(prefix) && !key.slice(prefix.length).includes('/'),
   )
-}
-
-function applyPatch(existing: Record<string, any>, patch: Record<string, any>) {
-  const next = { ...existing }
-  for (const [field, value] of Object.entries(patch)) {
-    if (value && typeof value === 'object' && '__delete' in value) delete next[field]
-    else if (value && typeof value === 'object' && '__increment' in value) {
-      next[field] = Number(next[field] ?? 0) + Number(value.__increment)
-    } else next[field] = value
-  }
-  return next
 }
 
 function snapshot(path: string) {
@@ -103,33 +91,21 @@ function docRef(path: string): any {
     path,
     get: async () => snapshot(path),
     set: async (value: Record<string, any>, options?: { merge?: boolean }) => {
-      docs.set(path, options?.merge ? applyPatch(docs.get(path) ?? {}, value) : { ...value })
+      docs.set(path, options?.merge ? { ...(docs.get(path) ?? {}), ...value } : { ...value })
     },
-    update: async (value: Record<string, any>) => {
-      const existing = docs.get(path)
-      if (existing === undefined) throw new Error(`NOT_FOUND ${path}`)
-      docs.set(path, applyPatch(existing, value))
-    },
-    delete: async () => {
-      onDelete?.(path)
-      docs.delete(path)
-    },
+    delete: async () => void docs.delete(path),
     collection: (name: string) => collectionRef(`${path}/${name}`),
   }
 }
 
 function collectionRef(path: string): any {
-  const make = (filters: Array<[string, unknown]>, max?: number): any => ({
-    where: (field: string, op: string, value: unknown) => {
-      if (op !== '==') throw new Error(`unsupported op ${op}`)
-      return make([...filters, [field, value]], max)
-    },
-    limit: (n: number) => make(filters, n),
+  const make = (filters: Array<[string, unknown]>): any => ({
+    where: (field: string, _op: string, value: unknown) => make([...filters, [field, value]]),
+    limit: () => make(filters),
     get: async () => {
       const hits = childPaths(path)
         .map(snapshot)
         .filter((snap) => filters.every(([field, value]) => snap.data()?.[field] === value))
-        .slice(0, max ?? Number.POSITIVE_INFINITY)
       return { empty: hits.length === 0, size: hits.length, docs: hits }
     },
     doc: (id?: string) => docRef(`${path}/${id ?? `auto-${++autoId}`}`),
@@ -143,263 +119,131 @@ function collectionRef(path: string): any {
   return make([])
 }
 
-const store = {
-  collection: (name: string) => collectionRef(name),
-  getAll: async (...refs: any[]) => refs.map((ref) => snapshot(ref.path)),
-  batch: () => {
-    const queued: Array<() => Promise<void>> = []
-    return {
-      delete: (ref: any) => void queued.push(() => ref.delete()),
-      update: (ref: any, value: Record<string, any>) => void queued.push(() => ref.update(value)),
-      commit: async () => {
-        for (const write of queued) await write()
-      },
-    }
-  },
-}
+const store = { collection: (name: string) => collectionRef(name) }
 
 const ORG = 'org1'
 const EMAIL = 'jane@example.com'
 const KEY = createHash('sha256').update(EMAIL).digest('hex')
 
+/** What each stand-in share was handed, and whether the door was closed by then. */
+let handed: Array<{ pluginId: string; request: PluginPersonErasureRequest; doorClosed: boolean }> = []
+
+const doorClosed = () =>
+  docs.get(`hosts/h1/suppressions/${KEY}`)?.reason === 'erasure' &&
+  docs.get(`hosts/h2/suppressions/${KEY}`)?.reason === 'erasure'
+
+/** The record system and one other share, stood in, and every other required share as a no-op. */
+function standInShares() {
+  registerPluginPersonRecordsEraser(
+    {
+      locate: async () => ['c1'],
+      erase: async (request) => {
+        handed.push({ pluginId: 'crm', request, doorClosed: doorClosed() })
+        return { contacts: request.contactIds.length }
+      },
+    },
+    { pluginId: 'crm' },
+  )
+  registerPluginPersonEraser(
+    async (request) => {
+      handed.push({ pluginId: 'mail', request, doorClosed: doorClosed() })
+      return { enrollments: 2 }
+    },
+    { pluginId: 'mail' },
+  )
+  standInRequiredPersonErasersForTests()
+}
+
 function seedWorkspace() {
   docs.set('hosts/h1', { orgId: ORG })
   docs.set('hosts/h2', { orgId: ORG })
   docs.set('hosts/other', { orgId: 'org2' })
-  docs.set(`orgs/${ORG}/contacts/c1`, {
-    email: EMAIL,
-    companyIds: ['co1', 'co2'],
-    visibleTo: ['host:h1', 'host:h2'],
-    facets: { h1: { notes: 'private' }, h2: { notes: 'also private' } },
-  })
-  docs.set(`orgs/${ORG}/contacts/c9`, { email: 'someone@else.com', companyIds: ['co1'] })
-  docs.set(`orgs/${ORG}/companies/co1`, { name: 'Acme', contactsCount: 2 })
-  docs.set(`orgs/${ORG}/companies/co2`, { name: 'Globex', contactsCount: 1 })
-  docs.set(`orgs/${ORG}/deals/d1`, { title: 'Renewal', contactId: 'c1', amountCents: 5000 })
-  docs.set(`orgs/${ORG}/deals/d2`, { title: 'Other', contactId: 'c9' })
-  docs.set(`orgs/${ORG}/crmTasks/t1`, { title: 'Call Jane', contactId: 'c1' })
-  docs.set(`orgs/${ORG}/crmTasks/t2`, { title: 'Call someone', contactId: 'c9' })
-  docs.set(`orgs/${ORG}/crmActivities/a1`, { body: 'Spoke to Jane', contactId: 'c1' })
-  docs.set(`orgs/${ORG}/crmActivities/a2`, { body: 'Spoke to Jane again', contactId: 'c1' })
-  docs.set(`orgs/${ORG}/lists/l1`, { name: 'Newsletter' })
-  docs.set(`orgs/${ORG}/lists/l1/members/${KEY}`, { email: EMAIL })
-  docs.set(`orgs/${ORG}/lists/l1/members/stranger`, { email: 'someone@else.com' })
-  docs.set(`orgs/${ORG}/lists/l2`, { name: 'Empty' })
-  docs.set(`hosts/h1/leads/${KEY}`, { email: EMAIL, name: 'Jane' })
-  docs.set(`hosts/other/leads/${KEY}`, { email: EMAIL, name: 'Jane' })
-  docs.set('hosts/h1/orders/o1', {
-    customerEmail: EMAIL,
-    customerName: 'Jane Doe',
-    shippingAddress: { line1: '1 Main St', phone: '+15125550107' },
-    totals: { totalCents: 4200 },
-    // What the orders list queries by (AGL-3321): the address's key and
-    // prefixes, and the quick search's array holding them beside the item's.
-    customerEmailLower: EMAIL,
-    customerEmailTokens: ['j', 'ja', 'jane'],
-    searchTokens: ['#1', '1', 'j', 'ja', 'jane', 'm', 'mu', 'mug'],
-  })
-  docs.set('hosts/h2/orders/o2', { customerEmail: 'someone@else.com', customerName: 'Other' })
-  docs.set('hosts/h2/bookings/b1', { email: EMAIL, name: 'Jane', phone: '+15125550107', serviceId: 's1' })
 }
 
 beforeEach(() => {
   docs.clear()
   audit.length = 0
   autoId = 0
-  onDelete = null
+  handed = []
   mockEraseDeliveries.mockClear()
-  mockRemoved.length = 0
-  resetPluginEventHandlersForTests()
-  registerPluginEventHandler('host.records.removed', (payload) => {
-    mockRemoved.push(payload)
-  }, { pluginId: 'forms' })
   resetPluginPersonErasersForTests()
+  seedWorkspace()
 })
 
 describe('erasePerson', () => {
   it('refuses an address it cannot key, touching nothing', async () => {
-    seedWorkspace()
+    standInShares()
     const before = docs.size
     expect(await erasePerson({ orgId: ORG, email: 'nope', firestore: store })).toEqual({
       ok: false,
       skippedReason: 'invalid-email',
     })
     expect(docs.size).toBe(before)
+    expect(handed).toEqual([])
   })
 
-  it('deletes the shared contact document whole, whoever holds it', async () => {
-    // Not a detach: both sites' facets go with the row.
-    seedWorkspace()
-    const result = await erasePerson({ orgId: ORG, email: ' Jane@Example.com ', firestore: store, now: 1000 })
-    expect(result.ok).toBe(true)
-    expect(docs.has(`orgs/${ORG}/contacts/c1`)).toBe(false)
-    expect(docs.has(`orgs/${ORG}/contacts/c9`)).toBe(true)
-    expect(result).toMatchObject({ contacts: 1, hosts: 2 })
+  it('refuses before writing anything while a promised share cannot run here (AGL-3080)', async () => {
+    // No record system, no shop, no calendar, no audience: a boot that
+    // registered none of them must not produce an erased request.
+    const before = new Map(docs)
+    await expect(erasePerson({ orgId: ORG, email: EMAIL, firestore: store })).rejects.toThrow(
+      /refused: .*crm.*required person eraser/,
+    )
+    expect(docs).toEqual(before)
+    expect(mockEraseDeliveries).not.toHaveBeenCalled()
   })
 
-  it('moves each linked company\'s contact count down once', async () => {
-    seedWorkspace()
+  it('closes every site’s door with an address-free row BEFORE any share erases', async () => {
+    standInShares()
     const result = await erasePerson({ orgId: ORG, email: EMAIL, firestore: store })
-    expect(docs.get(`orgs/${ORG}/companies/co1`)?.contactsCount).toBe(1)
-    expect(docs.get(`orgs/${ORG}/companies/co2`)?.contactsCount).toBe(0)
-    expect(result).toMatchObject({ companyLinks: 2 })
-  })
-
-  it('unlinks the person\'s deals and keeps them; deletes their tasks and activities', async () => {
-    seedWorkspace()
-    const result = await erasePerson({ orgId: ORG, email: EMAIL, firestore: store })
-    expect(docs.get(`orgs/${ORG}/deals/d1`)).toMatchObject({ title: 'Renewal', amountCents: 5000 })
-    expect(docs.get(`orgs/${ORG}/deals/d1`)).not.toHaveProperty('contactId')
-    expect(docs.get(`orgs/${ORG}/deals/d2`)?.contactId).toBe('c9')
-    expect(docs.has(`orgs/${ORG}/crmTasks/t1`)).toBe(false)
-    expect(docs.has(`orgs/${ORG}/crmTasks/t2`)).toBe(true)
-    expect(docs.has(`orgs/${ORG}/crmActivities/a1`)).toBe(false)
-    expect(docs.has(`orgs/${ORG}/crmActivities/a2`)).toBe(false)
-    expect(result).toMatchObject({ deals: 1, tasks: 1, activities: 2 })
-  })
-
-  it('deletes the lead on every site of the workspace and no other workspace\'s', async () => {
-    seedWorkspace()
-    const result = await erasePerson({ orgId: ORG, email: EMAIL, firestore: store })
-    expect(docs.has(`hosts/h1/leads/${KEY}`)).toBe(false)
-    // Another workspace's relationship with the same person is not this
-    // request's to end.
-    expect(docs.has(`hosts/other/leads/${KEY}`)).toBe(true)
-    expect(result).toMatchObject({ leads: 1 })
-  })
-
-  it('tells the plugins which leads it removed, once they are gone (AGL-3330)', async () => {
-    seedWorkspace()
-    docs.set(`orgs/${ORG}/leads/${KEY}`, { email: EMAIL, sources: ['form:form-1', 'booking'] })
-    docs.set(`hosts/h1/leads/${KEY}`, { email: EMAIL, sources: ['form:form-2'] })
-    // Raised AFTER the rows are gone, so a recount it prompts sees them gone.
-    let leftWhenTold: boolean | null = null
-    resetPluginEventHandlersForTests()
-    registerPluginEventHandler('host.records.removed', (payload) => {
-      leftWhenTold = docs.has(`orgs/${ORG}/leads/${KEY}`)
-      mockRemoved.push(payload)
-    }, { pluginId: 'forms' })
-    await erasePerson({ orgId: ORG, email: EMAIL, firestore: store })
-    expect(leftWhenTold).toBe(false)
-    expect(mockRemoved).toEqual([
-      {
-        orgId: ORG,
-        hostIds: expect.arrayContaining(['h1']),
-        collection: 'leads',
-        records: [
-          { id: KEY, data: { email: EMAIL, sources: ['form:form-1', 'booking'] } },
-          { id: KEY, data: { email: EMAIL, sources: ['form:form-2'] } },
-        ],
-      },
-    ])
-  })
-
-  it('raises nothing when the erased person was on no lead', async () => {
-    seedWorkspace()
-    docs.delete(`hosts/h1/leads/${KEY}`)
-    await erasePerson({ orgId: ORG, email: EMAIL, firestore: store })
-    expect(mockRemoved).toEqual([])
-  })
-
-  it('takes the person off every audience list, leaving the list and its other members', async () => {
-    seedWorkspace()
-    const result = await erasePerson({ orgId: ORG, email: EMAIL, firestore: store })
-    expect(docs.has(`orgs/${ORG}/lists/l1/members/${KEY}`)).toBe(false)
-    expect(docs.has(`orgs/${ORG}/lists/l1/members/stranger`)).toBe(true)
-    expect(docs.has(`orgs/${ORG}/lists/l1`)).toBe(true)
-    expect(result).toMatchObject({ listMemberships: 1 })
-  })
-
-  it('anonymizes orders and bookings rather than deleting them', async () => {
-    seedWorkspace()
-    const result = await erasePerson({ orgId: ORG, email: EMAIL, firestore: store, now: 777 })
-    const order = docs.get('hosts/h1/orders/o1')
-    expect(order).toMatchObject({ customerEmail: null, customerName: null, customerErasedAtMs: 777 })
-    expect(order).not.toHaveProperty('shippingAddress')
-    // The financial record survives.
-    expect(order?.totals).toEqual({ totalCents: 4200 })
-    // The list's search no longer answers to the address; the order's own
-    // number and item still find it.
-    expect(order).toMatchObject({ customerEmailLower: null, customerEmailTokens: [] })
-    expect(order?.searchTokens).toEqual(['#1', '1', 'm', 'mu', 'mug'])
-    expect(docs.get('hosts/h2/orders/o2')?.customerEmail).toBe('someone@else.com')
-    const booking = docs.get('hosts/h2/bookings/b1')
-    expect(booking).toMatchObject({ email: null, serviceId: 's1', customerErasedAtMs: 777 })
-    expect(booking).not.toHaveProperty('name')
-    expect(booking).not.toHaveProperty('phone')
-    expect(result).toMatchObject({ orders: 1, bookings: 1 })
-  })
-
-  it('writes an address-free erasure row on every site BEFORE deleting anything', async () => {
-    seedWorkspace()
-    // A capture during the sweep must find the door already closed, so the
-    // suppression rows are the first writes: read their state at the moment
-    // the contact document goes.
-    let suppressedWhenContactWent: boolean | null = null
-    onDelete = (path) => {
-      if (path !== `orgs/${ORG}/contacts/c1`) return
-      suppressedWhenContactWent =
-        docs.get(`hosts/h1/suppressions/${KEY}`)?.reason === 'erasure' &&
-        docs.get(`hosts/h2/suppressions/${KEY}`)?.reason === 'erasure'
-    }
-    const result = await erasePerson({ orgId: ORG, email: EMAIL, firestore: store })
-    expect(suppressedWhenContactWent).toBe(true)
+    expect(handed.map((entry) => entry.doorClosed)).toEqual([true, true])
     expect(docs.get(`hosts/h1/suppressions/${KEY}`)?.email).toBeNull()
     expect(docs.has(`hosts/other/suppressions/${KEY}`)).toBe(false)
-    expect(result).toMatchObject({ hostsSuppressed: 2 })
+    expect(result).toMatchObject({ hosts: 2, hostsSuppressed: 2 })
+  })
+
+  it('hands every share the person and the records the record system named, and runs the record system last', async () => {
+    standInShares()
+    const result = await erasePerson({ orgId: ORG, email: ' Jane@Example.com ', firestore: store, now: 777 })
+    expect(handed.map((entry) => entry.pluginId)).toEqual(['mail', 'crm'])
+    for (const { request } of handed) {
+      expect(request).toEqual({
+        orgId: ORG,
+        email: EMAIL,
+        key: KEY,
+        dryRun: false,
+        atMs: 777,
+        contactIds: ['c1'],
+      })
+    }
+    expect(result).toMatchObject({
+      ok: true,
+      records: 1,
+      plugins: { mail: { enrollments: 2 }, crm: { contacts: 1 } },
+    })
   })
 
   it('sweeps the delivery log under the address and reports its count', async () => {
-    seedWorkspace()
+    standInShares()
     const result = await erasePerson({ orgId: ORG, email: EMAIL, firestore: store })
     expect(mockEraseDeliveries).toHaveBeenCalledWith([{ address: EMAIL }], store)
     expect(result).toMatchObject({ emailDeliveries: 3 })
   })
 
   it('records counts and the hash on the audit row, never the address', async () => {
-    seedWorkspace()
+    standInShares()
     await erasePerson({ orgId: ORG, email: EMAIL, firestore: store })
     expect(audit).toHaveLength(1)
     expect(audit[0]).toMatchObject({
       action: 'person.erased',
       target: `orgs/${ORG}/people/${KEY}`,
-      after: { contacts: 1, leads: 1, orders: 1 },
+      after: { records: 1, plugins: { mail: { enrollments: 2 }, crm: { contacts: 1 } } },
     })
     expect(JSON.stringify(audit[0])).not.toContain(EMAIL)
   })
 
-  it("runs each plugin's eraser with the address, its key and the contacts, after the door closes and before the contacts go (AGL-2981)", async () => {
-    seedWorkspace()
-    let seen: Record<string, unknown> | null = null
-    registerPluginPersonEraser(
-      async (request) => {
-        seen = {
-          ...request,
-          suppressed: docs.get(`hosts/h1/suppressions/${KEY}`)?.reason === 'erasure',
-          contactStillThere: docs.has(`orgs/${ORG}/contacts/c1`),
-        }
-        return { enrollments: 2 }
-      },
-      { pluginId: 'mail' },
-    )
-    const result = await erasePerson({ orgId: ORG, email: ' Jane@Example.com ', firestore: store })
-    expect(seen).toEqual({
-      orgId: ORG,
-      email: EMAIL,
-      key: KEY,
-      contactIds: ['c1'],
-      dryRun: false,
-      suppressed: true,
-      contactStillThere: true,
-    })
-    expect(result).toMatchObject({ plugins: { mail: { enrollments: 2 } } })
-    // The audit row carries the plugins' counts, and still no address.
-    expect(audit[0]).toMatchObject({ after: { plugins: { mail: { enrollments: 2 } } } })
-    expect(JSON.stringify(audit[0])).not.toContain(EMAIL)
-  })
-
-  it("records a plugin eraser that failed as null and still erases the person (AGL-2981)", async () => {
-    seedWorkspace()
+  it('records a share it was not promised that failed as null, and still erases the person', async () => {
+    standInShares()
     registerPluginPersonEraser(
       async () => {
         throw new Error('plugin store down')
@@ -409,17 +253,31 @@ describe('erasePerson', () => {
     const spy = jest.spyOn(console, 'error').mockImplementation(() => undefined)
     const result = await erasePerson({ orgId: ORG, email: EMAIL, firestore: store })
     spy.mockRestore()
-    expect(result).toMatchObject({ ok: true, contacts: 1, plugins: { mail: null } })
-    expect(docs.has(`orgs/${ORG}/contacts/c1`)).toBe(false)
+    expect(result).toMatchObject({ ok: true, plugins: { mail: null, crm: { contacts: 1 } } })
   })
 
-  it('finishes, with counts, when one sweep fails', async () => {
-    seedWorkspace()
+  it('fails, for the job to retry, when a promised share failed — after the rest ran', async () => {
+    standInShares()
+    registerPluginPersonEraser(
+      async () => {
+        throw new Error('orders unavailable')
+      },
+      { pluginId: 'commerce' },
+    )
+    const spy = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    await expect(erasePerson({ orgId: ORG, email: EMAIL, firestore: store })).rejects.toThrow(
+      /required eraser of commerce failed/,
+    )
+    spy.mockRestore()
+    expect(handed.map((entry) => entry.pluginId)).toEqual(['mail', 'crm'])
+  })
+
+  it('finishes, with counts, when the delivery log sweep fails', async () => {
+    standInShares()
     mockEraseDeliveries.mockRejectedValueOnce(new Error('log unavailable'))
     const spy = jest.spyOn(console, 'error').mockImplementation(() => undefined)
     const result = await erasePerson({ orgId: ORG, email: EMAIL, firestore: store })
     spy.mockRestore()
-    expect(result.ok).toBe(true)
-    expect(result).toMatchObject({ contacts: 1, emailDeliveries: 0 })
+    expect(result).toMatchObject({ ok: true, records: 1, emailDeliveries: 0 })
   })
 })

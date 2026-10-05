@@ -181,9 +181,9 @@ beforeEach(() => {
   mockStripeCalls = []
   subscriptionPlanPrice = 'price_pro_monthly'
   // A Pro org well past what Starter includes: 4 sites (Starter includes 1),
-  // 5 manager seats (2) and 6 datasets (3).
+  // 5 manager seats (2) and 5 datasets (2).
   mockSiteCount = 4
-  mockDatasetCount = 6
+  mockDatasetCount = 5
   mockMembers = [
     { role: 'owner' },
     { role: 'admin' },
@@ -253,7 +253,7 @@ describe('the fixture reaches the code under test', () => {
     )
     expect(PLAN_ENTITLEMENTS.starter.hostLimit).toBe(1)
     expect(PLAN_ENTITLEMENTS.starter.managersPerOrg).toBe(2)
-    expect(PLAN_ENTITLEMENTS.starter.datasetsPerOrg).toBe(3)
+    expect(PLAN_ENTITLEMENTS.starter.datasetsPerOrg).toBe(2)
     // The purchase CEILING is a different number, and measuring against it is
     // the defect this comparison already had once.
     expect(PLAN_ENTITLEMENTS.starter.maxDatasetsPerOrg).toBe(10)
@@ -269,7 +269,7 @@ describe('a downgrade is refused while the org exceeds the target plan', () => {
     expect(payload.error).toBe(
       'You have 4 sites. Starter includes 1. Remove 3 to continue. ' +
         'You have 5 team members. Starter includes 2. Remove 3 to continue. ' +
-        'You have 6 datasets. Starter includes 3. Remove 3 to continue.',
+        'You have 5 datasets. Starter includes 2. Remove 3 to continue.',
     )
   })
 
@@ -278,7 +278,7 @@ describe('a downgrade is refused while the org exceeds the target plan', () => {
     expect(payload.overLimit).toEqual([
       { kind: 'sites', count: 4, included: 1, excess: 3 },
       { kind: 'seats', count: 5, included: 2, excess: 3 },
-      { kind: 'datasets', count: 6, included: 3, excess: 3 },
+      { kind: 'datasets', count: 5, included: 2, excess: 3 },
     ])
   })
 
@@ -287,7 +287,7 @@ describe('a downgrade is refused while the org exceeds the target plan', () => {
     mockMembers = [{ role: 'owner' }]
     const payload = await (await call({ action: 'switch', plan: 'starter' })).json()
     expect(payload.error).toBe(
-      'You have 6 datasets. Starter includes 3. Remove 3 to continue.',
+      'You have 5 datasets. Starter includes 2. Remove 3 to continue.',
     )
   })
 
@@ -307,7 +307,7 @@ describe('a downgrade is refused while the org exceeds the target plan', () => {
 describe('CONTROL — what the gate must still let through', () => {
   it('an org that FITS the target plan downgrades as before', async () => {
     mockSiteCount = 1
-    mockDatasetCount = 3
+    mockDatasetCount = 2
     mockMembers = [{ role: 'owner' }, { role: 'admin' }]
     const response = await call({ action: 'switch', plan: 'starter' })
     expect(response.status).toBe(200)

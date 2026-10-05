@@ -35,7 +35,10 @@ import {
 } from '@aglyn/aglyn'
 import { pluginOrgCapacities } from '@aglyn/aglyn/plugin-manager/plugin-org-capacity'
 import { planQuotaOf } from '@aglyn/aglyn/plugin-manager/plugin-plan-entitlements'
-import { countedPluginBands } from '@aglyn/aglyn/plugin-manager/plugin-usage-axes'
+import {
+  countedPluginBands,
+  orgCountedPluginBands,
+} from '@aglyn/aglyn/plugin-manager/plugin-usage-axes'
 import { type HelpTipContent } from '@aglyn/shared-ui-jsx'
 import { UsageMeter as SharedUsageMeter } from '@aglyn/shared-ui-jsx/components/usage-meter.component'
 import { Link, LinearProgress, Stack, Typography } from '@mui/material'
@@ -59,8 +62,13 @@ import {
   planExceedsDeliverableMonthly,
   type OrgEmailSendCeiling,
 } from '../../utils/email-send-ceiling'
-import { orgBandwidthGb } from '../../utils/usage-metering'
+import {
+  meteredIncludedAllowance,
+  orgBandwidthGb,
+} from '../../utils/usage-metering'
 import { docsHelp } from '../../constants/docs-links'
+import { formatMediaBytes } from '../media/media-storage-copy'
+import { useMediaStorageBand } from '../media/use-media-storage-band'
 
 export interface BillingUsageProps {
   org: Partial<AglynOrgBilling> | null | undefined
@@ -123,11 +131,22 @@ function capacityMeterLabel(many: string): string {
 }
 
 /**
- * The plugin bands counted per site each month (`countedPluginBands`) — the
- * workflows plugin's runs today — each metered per site from its host
- * counter, under the label its declaration gives.
+ * The plugin bands counted per site each month (`countedPluginBands`), each
+ * metered per site from its host counter, under the label its declaration
+ * gives — except a band kept on a workspace-wide counter, which is metered
+ * once for the organization below.
  */
-const COUNTED_BANDS = countedPluginBands()
+const COUNTED_BANDS = countedPluginBands().filter((band) => !band.orgCounter)
+
+/**
+ * The plugin bands enforced against a workspace-wide counter
+ * (`orgCountedPluginBands`) — the workflows plugin's workflow and action runs
+ * (AGL-3472). One meter each for the organization, read from the counter the
+ * run gates are held to: a per-site meter would show each site its own slice
+ * against the whole workspace's band, which is headroom the gate has already
+ * spent on the other sites.
+ */
+const ORG_COUNTED_BANDS = orgCountedPluginBands()
 
 function HostUsageMeters(props: {
   host: any
@@ -194,8 +213,8 @@ function HostUsageMeters(props: {
       getDoc(doc(firestore, 'hosts', host.$id, 'counters', 'media')).catch(
         () => null,
       ),
-      // Each counted band's month — the workflows plugin's event-triggered
-      // runs (AGL-165) — off the per-site counter it declares.
+      // Each per-site counted band's month, off the per-site counter it
+      // declares.
       Promise.all(
         COUNTED_BANDS.map((band) =>
           getDoc(
@@ -214,7 +233,9 @@ function HostUsageMeters(props: {
         functions: functions?.data().count ?? null,
         members: members?.data().count ?? null,
         forms: forms?.data().count ?? null,
-        storageMb: Math.round((bytes / (1024 * 1024)) * 10) / 10,
+        // A read that failed is not an empty library: it stays unmetered.
+        storageMb:
+          media == null ? null : Math.round((bytes / (1024 * 1024)) * 10) / 10,
         counted: Object.fromEntries(
           COUNTED_BANDS.map((band, index) => {
             const counter = counters[index]
@@ -281,12 +302,23 @@ function HostUsageMeters(props: {
         used={counts.functions}
         limit={entitlements.functionsPerHost}
       />
-      <UsageMeter
-        label="Storage"
-        used={counts.storageMb}
-        limit={entitlements.storagePerHostMb}
-        unit="MB"
-      />
+      {/* What this site's library stores — a share of the organization's
+          storage, not a meter (AGL-3479). Storage is one band for the whole
+          workspace (AGL-2075), metered once in `BillingUsageComponent`; this
+          site's bytes written "of" a cap would read as room the other
+          libraries may already have used. */}
+      <Stack
+        direction="row"
+        sx={{ justifyContent: 'space-between', mb: 2 }}
+        data-testid="site-storage-share"
+      >
+        <Typography variant="body2">{'Storage on this site'}</Typography>
+        <Typography variant="body2" color="text.secondary">
+          {counts.storageMb == null
+            ? 'not yet metered'
+            : `${counts.storageMb} MB · counts toward the organization’s storage`}
+        </Typography>
+      </Stack>
       {COUNTED_BANDS.map((band) => (
         <UsageMeter
           key={band.id}
@@ -310,7 +342,9 @@ function HostUsageMeters(props: {
 
 /**
  * Usage section of the billing page (AGL-70): the hosts meter plus per-host
- * screens/layouts/members/storage meters, and the org-level bandwidth row.
+ * screens/layouts/members meters and each site's share of storage, and the
+ * org-level rows — storage, bandwidth and the rest — whose bands are the
+ * workspace's.
  */
 export function BillingUsageComponent(props: BillingUsageProps) {
   const { org, hosts, billingHref = '' } = props
@@ -420,6 +454,14 @@ export function BillingUsageComponent(props: BillingUsageProps) {
    * `null` until read: an unread counter has no honest overage to quote.
    */
   const [totalEmails, setTotalEmails] = useState<number | null>(null)
+  /*
+   * Each workspace-counted band's month (AGL-3472), by band id, off
+   * `orgs/{orgId}/counters/{orgCounter}`. A band stays absent until its read
+   * answers, and its meter shows "not yet metered" rather than 0.
+   */
+  const [orgCounted, setOrgCounted] = useState<
+    Readonly<Record<string, number>>
+  >({})
   /*
    * The HOURLY campaign ceiling, and how much of this hour is already spent.
    *
@@ -557,6 +599,23 @@ export function BillingUsageComponent(props: BillingUsageProps) {
       .catch(() => {
         // Meter keeps its "not yet metered" state on failure.
       })
+    // The workspace's run counters, in the same subcollection: one
+    // single-document read per band, whatever the site count.
+    for (const band of ORG_COUNTED_BANDS) {
+      void getDoc(doc(firestore, 'orgs', orgId, 'counters', band.orgCounter))
+        .then((snapshot) => {
+          if (!active) return
+          // No document is a workspace that has not run one: a settled zero.
+          const monthKey = new Date().toISOString().slice(0, 7)
+          const used = snapshot.exists()
+            ? Number(snapshot.data()?.[monthKey] ?? 0)
+            : 0
+          setOrgCounted((previous) => ({ ...previous, [band.id]: used }))
+        })
+        .catch(() => {
+          // Meter keeps its "not yet metered" state on failure.
+        })
+    }
     // The sibling counter in the same subcollection: one more single-document
     // read, on a path this component already reads.
     void getDoc(doc(firestore, 'orgs', orgId, 'counters', 'emailSends'))
@@ -648,6 +707,11 @@ export function BillingUsageComponent(props: BillingUsageProps) {
   // used to render one site's reading against it, understating by up to
   // `hostLimit`×. `host-usage` stays per-site (its authorization is per-site
   // membership); the summing moved here, where the denominator lives.
+  //
+  // Plus the ORG LIBRARY's video and file delivery (AGL-3474), which the media
+  // CDN counts on the org's own day documents and no site's reading includes:
+  // one more reading from the same route, asked once for the org rather than
+  // once per site.
   const hostKey = hosts.map((host) => host?.$id).filter(Boolean).join(',')
   useEffect(() => {
     const hostIds = hostKey ? hostKey.split(',') : []
@@ -655,12 +719,16 @@ export function BillingUsageComponent(props: BillingUsageProps) {
     let active = true
     void (async () => {
       try {
+        const scopes = [
+          ...hostIds.map((hostId) => `hostId=${encodeURIComponent(hostId)}`),
+          ...(orgId ? [`orgId=${encodeURIComponent(orgId)}`] : []),
+        ]
         const readings = await Promise.all(
-          hostIds.map(async (hostId) => {
+          scopes.map(async (scope) => {
             try {
               const response = await authorizedFetch(
                 user,
-                `/api/billing/host-usage?hostId=${encodeURIComponent(hostId)}`,
+                `/api/billing/host-usage?${scope}`,
               )
               if (!response.ok) return null
               const payload = await response.json()
@@ -684,7 +752,7 @@ export function BillingUsageComponent(props: BillingUsageProps) {
     return () => {
       active = false
     }
-  }, [hostKey, user])
+  }, [hostKey, orgId, user])
   const teamSeatLimit = checkSeatQuota(org, 'managers', 0).limit
   /*
    * The records band's live figure: `null` until every part has answered —
@@ -771,6 +839,62 @@ export function BillingUsageComponent(props: BillingUsageProps) {
     recordsQuota.overageRecords > 0 &&
     recordsQuota.overageRateUsd != null &&
     releaseFlagsReady
+  /*
+   * Media storage, metered ONCE for the organization (AGL-3479).
+   *
+   * One band for the whole workspace since AGL-2075 — every site's library and
+   * the org's shared one, against `hostLimit × storagePerHostMb` — and that
+   * band is what ingress refuses at, what the invoice subtracts and what the
+   * usage alerts warn on. So the meter reads `/api/media/storage`, the route
+   * that answers with `resolveOrgMediaBand`, the function the upload gate
+   * itself calls: the pool and the band arrive in one request (one `getAll`
+   * server-side), whatever the site count, and the figure on this meter is the
+   * figure an upload is gated on. Summing counters here instead would be a
+   * second pooled sum, and a low one wherever this viewer cannot read a site.
+   *
+   * Until it answers — or if it cannot — the meter is "not yet metered"
+   * against the band the invoice subtracts, `meteredIncludedAllowance`: the
+   * same arithmetic, so the limit does not move when the reading lands.
+   */
+  const storageBand = useMediaStorageBand({ orgId, user })
+  const includedStorage = meteredIncludedAllowance(org)
+  const storageLimitMb = storageBand
+    ? storageBand.allowanceMb
+    : includedStorage.storageGb * 1024
+  const storageUnlimited = !Number.isFinite(storageLimitMb)
+  const storageUsedMb =
+    storageBand && !storageUnlimited
+      ? Math.round((storageBand.usedBytes / (1024 * 1024)) * 10) / 10
+      : null
+  /*
+   * What the band is, and what happens at it — the gate's answer
+   * (`mediaStorageGate`), never one sentence for every plan. An unmetered
+   * plan (Free, a staff comp) refuses past the band; a metered plan accepts
+   * and bills, and only a cap the customer sets stops it. The org library
+   * is refused at the band on a metered plan too while its storage is not
+   * on the invoice yet — the route's `hardBand` for the org scope says so.
+   */
+  const storageCaption = [
+    'Every site’s media library and the organization library share this ' +
+      'one allowance.',
+    storageBand && storageBand.scopeBytes > 0
+      ? `${formatMediaBytes(storageBand.scopeBytes)} of it is in the ` +
+        'organization library.'
+      : '',
+    storageUnlimited
+      ? ''
+      : !includedStorage.metered
+        ? 'Uploads stop when your workspace reaches it — free up space or ' +
+          'upgrade to add more.'
+        : 'Past it, extra storage is billed on your invoice unless you set ' +
+          'a storage cap.' +
+          (storageBand?.hardBand
+            ? ' Uploads to the organization library stop at it for now, ' +
+              'because its storage is not billed yet.'
+            : ''),
+  ]
+    .filter(Boolean)
+    .join(' ')
   return (
     <>
       <UsageMeter
@@ -802,6 +926,34 @@ export function BillingUsageComponent(props: BillingUsageProps) {
           limit={checkPluginOrgCapacityQuota(org, capacity.kind, 0).limit}
         />
       ))}
+      {storageUnlimited ? (
+        // No figure "of" a band that caps nothing — and the route reads no
+        // counter for one, so a used figure here would be an invented zero.
+        <Stack
+          direction="row"
+          sx={{ justifyContent: 'space-between', mb: 2 }}
+        >
+          <Typography variant="body2">{'Storage (organization)'}</Typography>
+          <Typography variant="body2" color="text.secondary">
+            {'Unlimited'}
+          </Typography>
+        </Stack>
+      ) : (
+        <UsageMeter
+          label="Storage (organization)"
+          used={storageUsedMb}
+          limit={storageLimitMb}
+          unit="MB"
+          help={docsHelp('billing', { anchor: '#storage-overage' })}
+        />
+      )}
+      <Typography
+        variant="caption"
+        color="text.secondary"
+        sx={{ display: 'block', mt: -1.5, mb: 2 }}
+      >
+        {storageCaption}
+      </Typography>
       <UsageMeter
         label="Data storage (organization)"
         used={dataStorageMb}
@@ -925,6 +1077,20 @@ export function BillingUsageComponent(props: BillingUsageProps) {
             "month's invoice."}
         </Typography>
       ) : null}
+      {/* Workflow and action runs, once for the organization (AGL-3472):
+          the bands are the workspace's and the run gates are held to the
+          workspace's count. Rendered only where a band is sold — Free
+          includes no runs, and "0 / 0" is not a readout of anything. */}
+      {ORG_COUNTED_BANDS.map((band) =>
+        planQuotaOf(entitlements, band.entitlement) > 0 ? (
+          <UsageMeter
+            key={band.id}
+            label={`${band.label} (this month, organization)`}
+            used={orgCounted[band.id] ?? null}
+            limit={planQuotaOf(entitlements, band.entitlement)}
+          />
+        ) : null,
+      )}
       {/* Org-wide by definition (AGL-1371): `bandwidthGb` is an org limit, not
           a per-site one, and the invoice and the usage-alerts cron both
           measure the org-wide total against it. Rendered here, once, rather

@@ -239,7 +239,7 @@ beforeEach(() => {
     d1: {
       title: 'Roaster upgrade',
       pipelineId: 'default',
-      stageId: 'proposal-sent',
+      stageId: 'proposal-price-quote',
       status: 'open',
       amountCents: 250_000,
       currency: 'usd',
@@ -268,30 +268,30 @@ describe('the deal-stage route (AGL-2598)', () => {
 
   it('answers a refused token 401 and a certificate outage 500 (AGL-2852)', async () => {
     const logged = jest.spyOn(console, 'error').mockImplementation(() => undefined)
-    const move = { hostId: 'shop', dealId: 'd1', stageId: 'negotiation' }
+    const move = { hostId: 'shop', dealId: 'd1', stageId: 'negotiation-review' }
     expect((await call(move, { token: 'forged' })).status).toBe(401)
     expect((await call(move, { token: 'outage' })).status).toBe(500)
     logged.mockRestore()
   })
 
   it('refuses a GET, a missing session, and a member without data.manage', async () => {
-    const get = await call({ hostId: 'shop', dealId: 'd1', stageId: 'negotiation' }, { method: 'GET' })
+    const get = await call({ hostId: 'shop', dealId: 'd1', stageId: 'negotiation-review' }, { method: 'GET' })
     expect(get.status).toBe(405)
     expect(get.headers['Allow']).toBe('POST')
 
     const anonymous = await call(
-      { hostId: 'shop', dealId: 'd1', stageId: 'negotiation' },
+      { hostId: 'shop', dealId: 'd1', stageId: 'negotiation-review' },
       { token: null },
     )
     expect(anonymous.status).toBe(401)
 
     state.permitted = false
-    const unpermitted = await call({ hostId: 'shop', dealId: 'd1', stageId: 'negotiation' })
+    const unpermitted = await call({ hostId: 'shop', dealId: 'd1', stageId: 'negotiation-review' })
     expect(unpermitted.status).toBe(403)
 
     state.permitted = true
     state.member = { role: 'viewer', allHosts: true }
-    const viewer = await call({ hostId: 'shop', dealId: 'd1', stageId: 'negotiation' })
+    const viewer = await call({ hostId: 'shop', dealId: 'd1', stageId: 'negotiation-review' })
     expect(viewer.status).toBe(403)
 
     expect(state.updates).toEqual([])
@@ -302,7 +302,7 @@ describe('the deal-stage route (AGL-2598)', () => {
     const { status, body } = await call({
       hostId: 'other-shop',
       dealId: 'd1',
-      stageId: 'negotiation',
+      stageId: 'negotiation-review',
     })
     expect(status).toBe(403)
     expect(body.error).toMatch(/not visible/)
@@ -314,26 +314,29 @@ describe('the deal-stage route (AGL-2598)', () => {
     const { status, body } = await call({
       hostId: 'shop',
       dealId: 'd1',
-      stageId: 'negotiation',
+      stageId: 'negotiation-review',
     })
     expect(status).toBe(200)
     expect(body).toMatchObject({
       ok: true,
       dealId: 'd1',
-      stageId: 'negotiation',
+      stageId: 'negotiation-review',
       status: 'open',
-      previousStageId: 'proposal-sent',
+      previousStageId: 'proposal-price-quote',
       event: 'dealStageChanged',
     })
 
     expect(state.updates).toHaveLength(1)
     const patch = state.updates[0].patch
-    expect(patch['stageId']).toBe('negotiation')
+    expect(patch['stageId']).toBe('negotiation-review')
     expect(patch['status']).toBe('open')
     expect(typeof patch['stageChangedAtMs']).toBe('number')
     expect(patch['closedAtMs']).toBeNull()
     // A reopened or moved deal carries no stale loss reason.
     expect(patch['lostReason']).toBe('__delete')
+    // The new stage's forecast category, and the stage's odds again (AGL-3516).
+    expect(patch['forecastCategory']).toBe('commit')
+    expect(patch['probability']).toBeNull()
 
     expect(emitted).toEqual([
       {
@@ -344,8 +347,8 @@ describe('the deal-stage route (AGL-2598)', () => {
           title: 'Roaster upgrade',
           amountCents: 250_000,
           currency: 'usd',
-          stageId: 'negotiation',
-          previousStageId: 'proposal-sent',
+          stageId: 'negotiation-review',
+          previousStageId: 'proposal-price-quote',
           ownerUid: 'u9',
           contactId: 'c1',
           companyId: '',
@@ -361,9 +364,10 @@ describe('the deal-stage route (AGL-2598)', () => {
     const patch = state.updates[0].patch
     expect(patch['status']).toBe('won')
     expect(typeof patch['closedAtMs']).toBe('number')
+    expect(patch['forecastCategory']).toBe('closed')
     expect(emitted[0].event).toBe('dealWon')
     expect(emitted[0].payload['stageId']).toBe('won')
-    expect(emitted[0].payload['previousStageId']).toBe('proposal-sent')
+    expect(emitted[0].payload['previousStageId']).toBe('proposal-price-quote')
   })
 
   /*
@@ -401,9 +405,9 @@ describe('the deal-stage route (AGL-2598)', () => {
   )
 
   it('leaves the contact alone on a move, a loss and a reopen', async () => {
-    await call({ hostId: 'shop', dealId: 'd1', stageId: 'negotiation' })
+    await call({ hostId: 'shop', dealId: 'd1', stageId: 'negotiation-review' })
     const lost = await call({ hostId: 'shop', dealId: 'd1', status: 'lost', lostReason: 'Budget' })
-    const reopened = await call({ hostId: 'shop', dealId: 'd1', stageId: 'qualified' })
+    const reopened = await call({ hostId: 'shop', dealId: 'd1', stageId: 'prospecting' })
     expect(state.contactUpdates).toEqual([])
     expect(lost.body.customer).toBeNull()
     expect(reopened.body.customer).toBeNull()
@@ -419,7 +423,7 @@ describe('the deal-stage route (AGL-2598)', () => {
     const orphan = await call({ hostId: 'shop', dealId: 'd1', status: 'won' })
     expect(orphan.status).toBe(200)
     expect(orphan.body.customer).toBeNull()
-    state.deals['d1'] = { ...state.deals['d1'], stageId: 'qualified', status: 'open', contactId: 'gone' }
+    state.deals['d1'] = { ...state.deals['d1'], stageId: 'prospecting', status: 'open', contactId: 'gone' }
     const missing = await call({ hostId: 'shop', dealId: 'd1', status: 'won' })
     expect(missing.status).toBe(200)
     expect(missing.body.customer).toBeNull()
@@ -454,7 +458,7 @@ describe('the deal-stage route (AGL-2598)', () => {
     const { status, body } = await call({
       hostId: 'shop',
       dealId: 'd1',
-      stageId: 'proposal-sent',
+      stageId: 'proposal-price-quote',
     })
     expect(status).toBe(200)
     expect(body.event).toBeNull()
@@ -478,17 +482,17 @@ describe('the deal-stage route at the organization level (AGL-2634)', () => {
     // An org-wide member, and no site role consulted: the org variant asks
     // the membership and the permission catalog, never a site role.
     state.member = { role: 'owner' }
-    const { status, body } = await call({ ...ORG, stageId: 'negotiation' })
+    const { status, body } = await call({ ...ORG, stageId: 'negotiation-review' })
     expect(status).toBe(200)
-    expect(body).toMatchObject({ ok: true, stageId: 'negotiation', event: 'dealStageChanged' })
-    expect(state.updates[0].patch['stageId']).toBe('negotiation')
+    expect(body).toMatchObject({ ok: true, stageId: 'negotiation-review', event: 'dealStageChanged' })
+    expect(state.updates[0].patch['stageId']).toBe('negotiation-review')
     expect(emitted).toHaveLength(1)
     expect(emitted[0].hostId).toBe('shop')
     expect(state.orgLines).toEqual([
       {
         orgId: 'org-1',
         actor: { uid: 'u1', email: null },
-        action: 'Moved deal to Negotiation',
+        action: 'Moved deal to Negotiation/Review',
         target: { type: 'deal', id: 'd1', name: 'Roaster upgrade' },
       },
     ])
@@ -499,7 +503,7 @@ describe('the deal-stage route at the organization level (AGL-2634)', () => {
     ;(state.contacts['c1']['facets'] as any).shop.lifecycleStage = 'customer'
     await call({ ...ORG, status: 'won' })
     expect(state.orgLines[0].action).toBe('Marked deal won')
-    state.deals['d1']['stageId'] = 'proposal-sent'
+    state.deals['d1']['stageId'] = 'proposal-price-quote'
     state.deals['d1']['status'] = 'open'
     await call({ ...ORG, status: 'lost', lostReason: 'Budget cut' })
     expect(state.orgLines[1].action).toBe('Marked deal lost')
@@ -508,7 +512,7 @@ describe('the deal-stage route at the organization level (AGL-2634)', () => {
 
   it('refuses a site-scoped member and an org-wide one without data.manage, writing nothing', async () => {
     state.orgPermissions = { ...state.orgPermissions, orgWide: false, hostRole: 'admin' }
-    expect((await call({ ...ORG, stageId: 'negotiation' })).status).toBe(403)
+    expect((await call({ ...ORG, stageId: 'negotiation-review' })).status).toBe(403)
     state.orgPermissions = {
       ...state.orgPermissions,
       orgWide: true,
@@ -516,7 +520,7 @@ describe('the deal-stage route at the organization level (AGL-2634)', () => {
     }
     // The permission catalog is what answers `data.manage` (AGL-2843).
     state.permitted = false
-    expect((await call({ ...ORG, stageId: 'negotiation' })).status).toBe(403)
+    expect((await call({ ...ORG, stageId: 'negotiation-review' })).status).toBe(403)
     expect(state.updates).toEqual([])
     expect(emitted).toEqual([])
     expect(state.orgLines).toEqual([])
@@ -525,7 +529,7 @@ describe('the deal-stage route at the organization level (AGL-2634)', () => {
   it('moves a deal no site captured, with no event to emit and the org line still written', async () => {
     delete state.deals['d1']['hostId']
     state.deals['d1']['visibleTo'] = ['org']
-    const { status, body } = await call({ ...ORG, stageId: 'negotiation' })
+    const { status, body } = await call({ ...ORG, stageId: 'negotiation-review' })
     expect(status).toBe(200)
     expect(body.event).toBe('dealStageChanged')
     expect(emitted).toEqual([])
@@ -560,9 +564,9 @@ describe('the deal-stage route at the organization level (AGL-2634)', () => {
   })
 
   it('answers a no-op with no line, and an unknown deal with 404', async () => {
-    expect((await call({ ...ORG, stageId: 'proposal-sent' })).status).toBe(200)
+    expect((await call({ ...ORG, stageId: 'proposal-price-quote' })).status).toBe(200)
     expect(state.orgLines).toEqual([])
-    expect((await call({ orgId: 'org-1', dealId: 'nope', stageId: 'negotiation' })).status).toBe(404)
+    expect((await call({ orgId: 'org-1', dealId: 'nope', stageId: 'negotiation-review' })).status).toBe(404)
   })
 })
 
@@ -588,14 +592,14 @@ describe('the plan (AGL-2787)', () => {
 
   it('refuses a Free workspace under a site, for a move and a win alike', async () => {
     state.org = { plan: 'free' }
-    expectRefused(await call({ hostId: 'shop', dealId: 'd1', stageId: 'negotiation' }))
+    expectRefused(await call({ hostId: 'shop', dealId: 'd1', stageId: 'negotiation-review' }))
     expectRefused(await call({ hostId: 'shop', dealId: 'd1', status: 'won' }))
     expectNothingMoved()
   })
 
   it('refuses a Free workspace at the organization level', async () => {
     state.org = { plan: 'free' }
-    expectRefused(await call({ orgId: 'org-1', dealId: 'd1', stageId: 'negotiation' }))
+    expectRefused(await call({ orgId: 'org-1', dealId: 'd1', stageId: 'negotiation-review' }))
     expectRefused(await call({ orgId: 'org-1', dealId: 'd1', status: 'won' }))
     expectNothingMoved()
   })
@@ -604,7 +608,7 @@ describe('the plan (AGL-2787)', () => {
     state.org = { plan: 'free' }
     state.orgPermissions = { ...state.orgPermissions, orgWide: false, permissions: {} }
     expectRefused(
-      await call({ orgId: 'org-1', dealId: 'd1', stageId: 'negotiation' }, { token: 'staff' }),
+      await call({ orgId: 'org-1', dealId: 'd1', stageId: 'negotiation-review' }, { token: 'staff' }),
     )
     expectNothingMoved()
   })
@@ -612,15 +616,15 @@ describe('the plan (AGL-2787)', () => {
   it('tells a member without data.manage about the permission, not the plan', async () => {
     state.org = { plan: 'free' }
     state.permitted = false
-    const { status, body } = await call({ hostId: 'shop', dealId: 'd1', stageId: 'negotiation' })
+    const { status, body } = await call({ hostId: 'shop', dealId: 'd1', stageId: 'negotiation-review' })
     expect(status).toBe(403)
     expect(body).toEqual({ error: 'Moving a deal requires the "Manage data" permission.' })
   })
 
   it('admits Starter, the lowest plan that carries the suite, at both levels', async () => {
     state.org = { plan: 'starter' }
-    expect((await call({ hostId: 'shop', dealId: 'd1', stageId: 'negotiation' })).status).toBe(200)
-    expect((await call({ orgId: 'org-1', dealId: 'd1', stageId: 'qualified' })).status).toBe(200)
+    expect((await call({ hostId: 'shop', dealId: 'd1', stageId: 'negotiation-review' })).status).toBe(200)
+    expect((await call({ orgId: 'org-1', dealId: 'd1', stageId: 'prospecting' })).status).toBe(200)
     expect(state.updates).toHaveLength(2)
   })
 })

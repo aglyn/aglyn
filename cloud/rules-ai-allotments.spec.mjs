@@ -49,7 +49,8 @@ const env = await initializeTestEnvironment({
   firestore: {
     host: '127.0.0.1',
     port: 8082,
-    rules: readFileSync('cloud/firebase-firestore.rules', 'utf8'),
+    // The comment-stripped artifact is what deploys (AGL-3544).
+    rules: readFileSync('cloud/firebase-firestore.deploy.rules', 'utf8'),
   },
 })
 

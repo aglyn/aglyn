@@ -160,18 +160,24 @@ jest.mock('@aglyn/aglyn/server', () => ({
   checkEntitlement: jest.requireActual(
     '../../../libs/aglyn/src/lib/app-utils/plan-entitlements',
   ).checkEntitlement,
+  createResourceUid: () => `rec_${++mockUidSeq}`,
+}))
+
+// The data plugin's dataset model, as the dataset handlers read it
+// (AGL-3080: the model is the data plugin's own).
+jest.mock('../../../libs/plugins/data/src/lib/model/dataset-models', () => ({
+  ...jest.requireActual('../../../libs/plugins/data/src/lib/model/dataset-models'),
   // The REAL referential-integrity index: `createRecord` derives
   // `referencedIds` from the record's values, and a mock that omits the helper
   // is a CLOSED WORLD — the route 500s and the refusal it is supposed to be
   // asserting never runs.
   datasetIntegrityFields: jest.requireActual(
-    '../../../libs/aglyn/src/lib/app-utils/dataset-models',
+    '../../../libs/plugins/data/src/lib/model/dataset-models',
   ).datasetIntegrityFields,
   effectiveDatasetModel: () => ({ fields: [] }),
   coerceDocumentValues: (_model: unknown, values: Record<string, unknown>) =>
     values,
   validateDocument: () => ({}),
-  createResourceUid: () => `rec_${++mockUidSeq}`,
 }))
 
 jest.mock('firebase-admin/firestore', () => {

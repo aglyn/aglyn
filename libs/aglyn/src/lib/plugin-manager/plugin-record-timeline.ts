@@ -193,9 +193,61 @@ export interface PluginRecordDeliveryRequest {
   detail?: string | null
 }
 
+/**
+ * An email a plugin is about to send to a person (AGL-3080), offered to the
+ * record system BEFORE it goes so the entry it files can follow the
+ * message's delivery: the record system answers with the provider tags the
+ * message has to carry for the delivery webhook to find the entry, and with
+ * how to file it once the provider has accepted it.
+ *
+ * Only a message addressed to the person `link` names — the person an
+ * automation's event is about — earns an entry: an alert routed to the
+ * merchant's own inbox would put that inbox on a customer's history.
+ */
+export interface PluginRecordEmailPrepareRequest {
+  orgId: string
+  /** The site the message goes out as: the entry carries its scope. */
+  hostId: string
+  /** The address the message is sent to, raw. */
+  to: string
+  /** The person the sender means: by id where it holds one, else by address. */
+  link: Pick<PluginRecordLink, 'contactId' | 'email'>
+  /**
+   * The organization's billing document, when the caller already read it —
+   * the record system's plan gate and scope read it; absent, the owner reads
+   * it itself.
+   */
+  org?: unknown
+}
+
+/** The message as it was sent, for the entry the record system files. */
+export interface PluginRecordEmailSent {
+  subject: string
+  body: string
+  to: string
+  /** When it was accepted, epoch ms; now when absent. */
+  atMs?: number
+  /** The sender's own id for what sent it — an automation's id. */
+  sourceRef: string
+}
+
+/** What the record system answered a prepared email with. */
+export interface PluginRecordPreparedEmail {
+  /** Provider tags the message must carry for its delivery to reach the entry. */
+  tags: ReadonlyArray<{ name: string; value: string }>
+  /** Files the entry, once the provider accepted the message. Never throws. */
+  file(sent: PluginRecordEmailSent): Promise<void>
+}
+
 export interface PluginRecordTimelineWriter {
   logActivity(request: PluginRecordActivityRequest): Promise<PluginRecordWrite>
   createTask(request: PluginRecordTaskRequest): Promise<PluginRecordWrite>
+  /**
+   * Prepares the entry an email to a person will earn (AGL-3080). Optional:
+   * a record system that files no sent mail answers nothing. `null` for a
+   * message that earns no entry. Never throws.
+   */
+  prepareEmail?(request: PluginRecordEmailPrepareRequest): Promise<PluginRecordPreparedEmail | null>
   /**
    * Marks a filed email bounced or reported (AGL-3245). Optional: a record
    * system that keeps no delivery state answers nothing, and the caller's
@@ -234,4 +286,24 @@ export interface ResolvedPluginRecordTimelineWriter {
 export function pluginRecordTimelineWriter(): ResolvedPluginRecordTimelineWriter | null {
   const entry = resolvePluginServices(PLUGIN_RECORD_TIMELINE)[0]
   return entry ? { pluginId: entry.pluginId, writer: entry.impl } : null
+}
+
+/**
+ * Asks whichever plugin keeps records to prepare the entry an email to a
+ * person will earn, or answers `null` when none does, the one that does
+ * files no sent mail, or this message earns no entry. Never throws: the
+ * entry is bookkeeping beside a send, and a lookup that failed must not
+ * become a message that never left.
+ */
+export async function preparePluginRecordEmail(
+  request: PluginRecordEmailPrepareRequest,
+): Promise<PluginRecordPreparedEmail | null> {
+  const resolved = pluginRecordTimelineWriter()
+  if (!resolved?.writer.prepareEmail) return null
+  try {
+    return await resolved.writer.prepareEmail(request)
+  } catch (error) {
+    console.error('[record-timeline] the record system could not prepare an email entry', error)
+    return null
+  }
 }

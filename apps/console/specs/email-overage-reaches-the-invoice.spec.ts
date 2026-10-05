@@ -358,12 +358,12 @@ describe('the premise: the fixture meters email and nothing else', () => {
     // Free resolves for an unknown org and its band is 0, which would make
     // every send an overage — the shape that would let this file pass with
     // the plan lookup broken. Business is asserted by its effect: 30,000
-    // sends leave 5,000 over, not 30,000.
+    // sends leave 15,000 over, not 30,000.
     seedOrg('business')
     mockEmailSends = 30_000
     await runRollup(loadRoute(MONTH))
     expect(mockDocs.get(`orgs/org-1/usage/${MONTH}`)!['emailSendsOverage']).toBe(
-      5_000,
+      15_000,
     )
   })
 })

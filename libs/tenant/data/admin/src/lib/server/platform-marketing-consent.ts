@@ -65,6 +65,7 @@
  * reopen that list and nothing else (`plugin-email-streams`).
  */
 
+import { stampRecordOrigin } from '@aglyn/aglyn/plugin-manager/plugin-record-origin'
 import {
   readTopicSubscriptionState,
   TOPIC_OPT_OUTS_SUBCOLLECTION,
@@ -99,18 +100,14 @@ import {
   rejoinEmailStream,
 } from '@aglyn/aglyn/plugin-manager/plugin-email-streams'
 import { attributableAccountForAddress } from './account-addresses'
-import { findContactByEmail } from './contact-email-index'
+import { findPluginPerson } from '@aglyn/aglyn/plugin-manager/plugin-person-records'
 import {
   EMAIL_SUPPRESSIONS_COLLECTION,
   emailSuppressionKey,
   HOST_SUPPRESSIONS_SUBCOLLECTION,
 } from './email-suppression'
 import firebaseAdmin from './firebase-admin'
-import {
-  consentGroupForSite,
-  getOrgForHost,
-  orgDataCollectionForHost,
-} from './organizations'
+import { consentGroupForSite, getOrgForHost } from './organizations'
 import { upsertHostContact } from './upsert-contact'
 
 const firestore = () => firebaseAdmin.app().firestore()
@@ -276,6 +273,11 @@ export async function recordPlatformMarketingConsent(
     'refused' in verdict
       ? { status: 'refused', reason: verdict.refused }
       : { status: 'recorded', contactId: verdict.contactId, created: verdict.created }
+  // Where the person came from (AGL-3519): an account sign-up, on a record
+  // the platform's own CRM just started and that names no lead source.
+  if (contact.status === 'recorded') {
+    await stampRecordOrigin({ hostId, email, origin: 'account', firstTouchOnly: true })
+  }
   if (input.decision !== 'granted') return { atMs, contact }
 
   /*
@@ -494,19 +496,15 @@ export async function readPlatformMarketingReach(input: {
     const owner = await getOrgForHost(hostId)
     if (!owner) return { status: 'unreadable', hostId }
     const org = owner.org as Record<string, unknown>
-    const [contact, group, suppression, topic] = await Promise.all([
-      // Through the org-data seam, as the capture door finds the same row.
-      orgDataCollectionForHost(hostId, 'contacts').then((contacts) =>
-        findContactByEmail(contacts, email),
-      ),
+    const [person, group, suppression, topic] = await Promise.all([
+      // The operator's person for the address, asked of the plugin that
+      // keeps people (AGL-3080) — the record the capture door wrote.
+      findPluginPerson({ orgId: owner.orgId, hostId, email }),
       consentGroupForSite(hostId, org),
       readPlatformMarketingSuppression(db, hostId, email),
       readPlatformMarketingTopic(db, hostId, email),
     ])
-    const record = readMarketingBasis(
-      (contact?.data?.() as Record<string, unknown> | undefined) ?? null,
-      group,
-    )
+    const record = readMarketingBasis(person ? { ...person.data } : null, group)
     const decision = marketingConsentDecision(
       record,
       resolveMarketingConsentPolicy(org['marketingConsentPolicy']),
@@ -516,7 +514,7 @@ export async function readPlatformMarketingReach(input: {
       hostId,
       orgId: owner.orgId,
       orgSlug: typeof org['slug'] === 'string' ? org['slug'] : null,
-      contactId: contact?.id ?? null,
+      contactId: person?.id ?? null,
       basis: record.basis,
       basisAtMs: record.basisAtMs,
       assertedBy: record.assertedBy,

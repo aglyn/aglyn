@@ -122,6 +122,21 @@ describe('leadQueryClause', () => {
     expect(crmLeadListFields({}).leadSourceKey).toBeNull()
   })
 
+  it('asks Industry and Rating by the key their writers store (AGL-3513)', () => {
+    const stored = crmLeadListFields({ industry: 'Food & Beverage', rating: 'Hot' })
+    expect(leadQueryClause({ field: 'industry', op: 'equals', value: 'food & beverage' })).toEqual({
+      field: 'industryKey',
+      op: 'equals',
+      value: stored.industryKey,
+    })
+    // A label typed into a stored view keys the same way.
+    expect(leadQueryClause({ field: 'rating', op: 'isAnyOf', value: 'HOT,Warm' })).toEqual({
+      field: 'ratingKey',
+      op: 'isAnyOf',
+      value: `${stored.ratingKey},warm`,
+    })
+  })
+
   it('asks a campaign as array-contains on the lead, and an owner as stored', () => {
     expect(leadQueryClause({ field: 'campaignIds', op: 'contains', value: 'spring' })).toEqual({
       field: 'campaignIds',
@@ -166,6 +181,15 @@ describe('the Leads query plan', () => {
       'leadSourceKey',
       'ownerUid',
     ])
+  })
+
+  it('serves Industry and Rating, each beside the newest-seen order (AGL-3513)', () => {
+    for (const field of ['industry', 'rating']) {
+      const served = plan([{ field, op: 'equals', value: 'hot' }])
+      expect(served.refused).toEqual([])
+      expect(served.filters.map((filter) => filter.path)).toEqual([`${field}Key`])
+      expect(served.orderBy).toEqual({ path: 'lastSeenAtMs', direction: 'desc' })
+    }
   })
 
   it('searches the tokens every lead writer stamps, and refuses a campaign beside it by name', () => {

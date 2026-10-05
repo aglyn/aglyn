@@ -24,9 +24,11 @@
 
 import type {
   AglynOrgMember,
+  AglynOrgOwnerHandoff,
   HostAccessRole,
   HostUid,
   OrgRole,
+  OwnerHandoffPreviousOwner,
   ScopeToken,
   UserOrgMembership,
 } from '../foundation'
@@ -265,11 +267,88 @@ export function isOrgWideMember(
  * `role`/`allHosts`/`hostAccess` shape and reserves the seat it will become.
  */
 export function countManagerSeats(
-  entries: ReadonlyArray<Partial<AglynOrgMember> | null | undefined>,
+  entries: ReadonlyArray<
+    | (Partial<AglynOrgMember> & { handoff?: unknown })
+    | null
+    | undefined
+  >,
 ): number {
   let count = 0
-  for (const entry of entries) if (isOrgWideMember(entry)) count += 1
+  for (const entry of entries) {
+    if (usesCustomerSeat(entry) && isOrgWideMember(entry)) count += 1
+  }
   return count
+}
+
+/**
+ * Whether a roster row or pending invite takes one of the customer's seats
+ * at all (AGL-3466). Every seat counter asks this before it asks which kind
+ * of seat, so the two populations below never include either exception.
+ *
+ * Two kinds of entry hold access without a seat:
+ *
+ * - **Platform staff.** A row or invite stamped `staffSeat: true` belongs to
+ *   an account holding the `staff` claim. Staff build workspaces for
+ *   prospects and join them to help; billing the customer a seat for either
+ *   is what made a Free workspace (one seat) unable to invite the client it
+ *   was built for without a hand-written override.
+ * - **An owner handoff.** An invite carrying `handoff` moves the owner seat
+ *   from one person to another rather than adding one. Whether the outgoing
+ *   owner staying on needs a seat of their own is decided when the handoff is
+ *   sent and again when it is accepted, never by counting the invite.
+ */
+export function usesCustomerSeat(
+  entry:
+    | { staffSeat?: unknown; handoff?: unknown }
+    | null
+    | undefined,
+): boolean {
+  if (!entry) return false
+  if (entry.staffSeat === true) return false
+  return !entry.handoff
+}
+
+/**
+ * Whether a roster row belongs to platform staff (AGL-3466) — the Team
+ * page's "no seat" chip, and the row every seat count leaves out.
+ */
+export function isStaffSeat(
+  entry: { staffSeat?: unknown } | null | undefined,
+): boolean {
+  return entry?.staffSeat === true
+}
+
+/** The outgoing owner's choices, in the order the picker offers them. */
+export const OWNER_HANDOFF_PREVIOUS_OWNER: readonly OwnerHandoffPreviousOwner[] = [
+  'stay',
+  'leave',
+]
+
+/** What each choice does, for the picker and the confirmation. */
+export const OWNER_HANDOFF_PREVIOUS_OWNER_LABELS: Record<
+  OwnerHandoffPreviousOwner,
+  string
+> = {
+  stay: 'Stay on as an admin after the handoff',
+  leave: 'Leave after the handoff',
+}
+
+/**
+ * The handoff half of an invite request, or null when it is not a usable
+ * one (AGL-3466).
+ *
+ * Read in one place because the same body reaches the server from three
+ * surfaces (the Team page, the staff organization page and the staff site
+ * page), and an unknown `previousOwner` must be refused rather than guessed:
+ * guessing `leave` takes someone off a roster they meant to stay on, and
+ * guessing `stay` spends a seat they meant to free.
+ */
+export function parseOwnerHandoff(raw: unknown): AglynOrgOwnerHandoff | null {
+  if (!raw || typeof raw !== 'object') return null
+  const previousOwner = (raw as { previousOwner?: unknown }).previousOwner
+  return previousOwner === 'stay' || previousOwner === 'leave'
+    ? { previousOwner }
+    : null
 }
 
 /**
@@ -286,6 +365,10 @@ export interface CollaboratorSeatEntry {
   role?: unknown
   allHosts?: boolean
   hostAccess?: Record<string, unknown> | null
+  /** Platform staff hold no seat (AGL-3466) — see `usesCustomerSeat`. */
+  staffSeat?: boolean | null
+  /** An owner-handoff invite holds no seat (AGL-3466). */
+  handoff?: unknown
 }
 
 /**
@@ -348,7 +431,7 @@ export function collaboratorSeatKeys(
   const keys = new Set<string>()
   if (!hostId) return keys
   for (const entry of entries) {
-    if (!entry) continue
+    if (!usesCustomerSeat(entry)) continue
     // Managers are the other counter's population, whatever host map they
     // happen to carry — a promoted collaborator keeps their old `hostAccess`.
     if (isOrgWideMember(entry as Partial<AglynOrgMember>)) continue
@@ -428,7 +511,7 @@ export function managerSeatKeys(
 ): Set<string> {
   const keys = new Set<string>()
   for (const entry of entries) {
-    if (!entry) continue
+    if (!usesCustomerSeat(entry)) continue
     if (!isOrgWideMember(entry as Partial<AglynOrgMember>)) continue
     const key = collaboratorSeatKey(entry)
     if (key) keys.add(key)

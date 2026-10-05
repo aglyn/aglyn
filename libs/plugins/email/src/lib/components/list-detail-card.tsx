@@ -53,6 +53,7 @@
  * answer: a consent column for no site would be a column about nobody.
  */
 
+import { TransferResumeImport } from '@aglyn/aglyn/app-utils/transfer-resume-import'
 import {
   consentGroupForHost,
   normalizeDynamicListRule,
@@ -60,7 +61,12 @@ import {
   pluginDocsHelp,
   type ConsentGroup,
 } from '@aglyn/aglyn'
-import { mdiPencilOutline, mdiTrayArrowUp } from '@aglyn/shared-data-mdi'
+import { useTransferLauncher } from '@aglyn/aglyn/app-utils/transfer-launcher-context'
+import {
+  mdiPencilOutline,
+  mdiTrayArrowDown,
+  mdiTrayArrowUp,
+} from '@aglyn/shared-data-mdi'
 import { AppLink, CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
 import { Button, Chip, Stack, Typography } from '@mui/material'
 import { collection, doc, getCountFromServer } from 'firebase/firestore'
@@ -72,8 +78,8 @@ import {
   useEmailDataScope,
   useEmailOrgMount,
 } from './email-org-mount'
-import ListImportDrawer from './list-import-drawer'
-import ListMembersPanel from './list-members-panel'
+import { listMembersResourceKey } from '../transfer/email-transfer-catalog'
+import ListMembersPanel, { type ListMembersFilter } from './list-members-panel'
 
 export interface ListDetailCardProps {
   /** The site, or `null` on the organization's Emails page. */
@@ -167,13 +173,27 @@ export function ListDetailCard(props: ListDetailCardProps) {
   )
 
   /*
-   * Importing is a DRAWER opened from the header, not a control inside the
-   * membership panel. It is a multi-step act — choose a file, read what is in
-   * it, state that you have permission — and the middle step is the one that
-   * must not be cramped, because it carries the screening warnings and the
-   * consent readout the attestation is given against.
+   * IMPORT AND EXPORT open the console's transfer wizard and export dialog
+   * (AGL-3529) on this list — `email.list-members:<listId>`, one list at a
+   * time — worked as the site chosen above. The wizard carries everything the import's
+   * controls are: the preview, the screening, the statement of permission,
+   * the staged and resumable write, the undo. Outside the console shell
+   * there is no launcher, and the buttons are not drawn.
    */
-  const [importing, setImporting] = useState(false)
+  const transfer = useTransferLauncher()
+  const [memberFilter, setMemberFilter] = useState<ListMembersFilter | null>(
+    null,
+  )
+  const listName = String(list?.['name'] ?? '')
+  // Each button only for whom the route takes it (AGL-3554), on the site the
+  // list enrolls as — the workspace's verdict until one is chosen.
+  const transferTarget = {
+    resource: listMembersResourceKey(listId),
+    scope: 'host' as const,
+    hostId: enrollHostId || null,
+  }
+  const canExportMembers = Boolean(transfer?.can('export', transferTarget))
+  const canImportMembers = Boolean(transfer?.can('import', transferTarget))
 
   const audiencesHref = `${basePath}/audiences`
   const headerActions = (
@@ -198,17 +218,56 @@ export function ListDetailCard(props: ListDetailCardProps) {
       >
         {'Edit list'}
       </Button>
-      <Button
-        size="small"
-        color="primary"
-        variant="contained"
-        startIcon={<MdiIcon path={mdiTrayArrowUp.path} size={0.8} />}
-        // An import enrolls as a site; on the org page one has to be chosen.
-        disabled={!enrollHostId}
-        onClick={() => setImporting(true)}
-      >
-        {'Import'}
-      </Button>
+      {transfer && canExportMembers ? (
+        <Button
+          size="small"
+          color="primary"
+          variant="outlined"
+          startIcon={<MdiIcon path={mdiTrayArrowDown.path} size={0.8} />}
+          // Consent is read as a site; on the org page one has to be chosen.
+          disabled={!enrollHostId}
+          onClick={() =>
+            transfer.openExport({
+              resource: listMembersResourceKey(listId),
+              scope: 'host',
+              hostId: enrollHostId,
+              ...(listName ? { title: `Export ${listName}` } : {}),
+              ...(memberFilter ? { filter: memberFilter } : {}),
+            })
+          }
+        >
+          {'Export'}
+        </Button>
+      ) : null}
+      {/* An import left unfinished, reopened where it stopped (AGL-3549). */}
+      {transfer && enrollHostId ? (
+        <TransferResumeImport
+          target={transferTarget}
+          {...(listName ? { title: `Import into ${listName}` } : {})}
+          onFinished={onMembershipChanged}
+        />
+      ) : null}
+      {transfer && canImportMembers ? (
+        <Button
+          size="small"
+          color="primary"
+          variant="contained"
+          startIcon={<MdiIcon path={mdiTrayArrowUp.path} size={0.8} />}
+          // An import enrolls as a site; on the org page one has to be chosen.
+          disabled={!enrollHostId}
+          onClick={() =>
+            transfer.openImport({
+              resource: listMembersResourceKey(listId),
+              scope: 'host',
+              hostId: enrollHostId,
+              ...(listName ? { title: `Import into ${listName}` } : {}),
+              onFinished: onMembershipChanged,
+            })
+          }
+        >
+          {'Import'}
+        </Button>
+      ) : null}
     </Stack>
   )
 
@@ -349,24 +408,10 @@ export function ListDetailCard(props: ListDetailCardProps) {
              */
             findRule={dynamic || !hasFilters ? null : rule}
             ruleSummary={summary}
+            onFilterChange={setMemberFilter}
           />
         ) : null}
       </Stack>
-      {/*
-        Mounted only while it is open, so a page nobody is importing on runs
-        none of its effects — the drawer looks for an unfinished import when
-        it opens, and that read must not be a cost of visiting an audience.
-       */}
-      {importing && enrollHostId ? (
-        <ListImportDrawer
-          open
-          onClose={() => setImporting(false)}
-          hostId={enrollHostId}
-          listId={listId}
-          listName={String(list['name'] ?? '')}
-          onMembershipChanged={onMembershipChanged}
-        />
-      ) : null}
     </CardDisplay>
   )
 

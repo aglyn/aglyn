@@ -42,14 +42,29 @@ describe('a dataset record write announces to the live pages', () => {
     expect(route).toContain(
       "import { announceDatasetRecords as announceDatasetChange } from './announce-dataset-records'",
     )
-    // Three: the create, the import's single post-loop call, and the leg the
-    // browser's own client-direct edits reach. A fourth would mean the import
-    // loop had grown a per-chunk announce, which is the burst this bounds.
-    expect(route.match(/announceDatasetChange\(/g)).toHaveLength(3)
+    // Four: the create, the import's single post-loop call, the leg the
+    // browser's own client-direct edits reach, and the page-address fill's
+    // single post-loop call (AGL-3475). A fifth would mean a chunk loop had
+    // grown a per-chunk announce, which is the burst this bounds.
+    expect(route.match(/announceDatasetChange\(/g)).toHaveLength(4)
+    // The address fill writes in chunks too, and announces once after them.
+    const fillAt = route.indexOf("action === 'add-address-field'")
+    const fillAnnounceAt = route.indexOf(
+      'await announceDatasetChange({ firestore, orgId, datasetId })',
+      fillAt,
+    )
+    const fillLoopEnd = route.lastIndexOf('await batch.commit()', fillAnnounceAt)
+    expect(fillAt).toBeGreaterThan(0)
+    expect(fillLoopEnd).toBeGreaterThan(fillAt)
+    expect(route.slice(fillLoopEnd, fillAnnounceAt)).not.toContain('for (')
     // After the chunk loop, never inside it: a thousand rows arrive as one
     // import and make the same pages stale once.
     const loopEnd = route.indexOf('if (refusedAt !== null) {')
-    const announceAt = route.indexOf('await announceDatasetChange({ firestore, orgId, datasetId })')
+    // The import's call is the last in the file; the address fill's is earlier.
+    const announceAt = route.lastIndexOf(
+      'await announceDatasetChange({ firestore, orgId, datasetId })',
+      loopEnd,
+    )
     expect(announceAt).toBeGreaterThan(0)
     expect(announceAt).toBeLessThan(loopEnd)
     expect(route.slice(announceAt, loopEnd)).not.toContain('for (')
@@ -73,7 +88,7 @@ describe('a dataset record write announces to the live pages', () => {
     // submit route files through the platform's contract and names no dataset.
     const route = source('libs/plugins/data/src/lib/form-target/dataset-form-record-target.server.ts')
     expect(route).toContain(
-      "import { announceDatasetRecordChange } from '@aglyn/tenant-data-admin/server/dataset-live-pages'",
+      "import { announceDatasetRecordChange } from '../server/dataset-live-pages'",
     )
     const announceAt = route.indexOf('await announceDatasetRecordChange({')
     const swallowAt = route.indexOf("console.error('form dataset append failed', error)")
@@ -83,23 +98,36 @@ describe('a dataset record write announces to the live pages', () => {
     expect(announceAt).toBeLessThan(swallowAt)
   })
 
-  it('the automation dataset steps announce — append, and both legs of update', () => {
-    const engine = source(
-      'libs/plugins/workflows/src/lib/engine/run-event-actions.ts',
-    )
-    expect(engine).toContain(
-      "import { announceDatasetRecordChange } from '@aglyn/tenant-data-admin/server/dataset-live-pages'",
-    )
-    // One call per step branch that writes a row: `datasetAppend`, and
-    // `updateDataset` covering its merge and its append leg together.
-    expect(engine.match(/await announceDatasetStepWrite\(env, datasetDoc\.id\)/g))
+  it('an import and its undo announce on the server, once per chunk', () => {
+    // A dataset import runs on the transfer framework (AGL-3530): the
+    // plugin's `apply` and `revert` hooks write the records, so they tell the
+    // pages — once for each chunk they wrote, not once per row.
+    const transfer = source('libs/plugins/data/src/lib/transfer/dataset-transfer.server.ts')
+    expect(transfer).toContain("import { announceDatasetRecords } from '../server/announce-dataset-records'")
+    expect(transfer.match(/await announceDatasetRecords\(\{ firestore: deps\.firestore, orgId: ctx\.orgId, datasetId: dataset\.id \}\)/g))
       .toHaveLength(2)
-    // The AGL-3105 workflow executor and the older Actions runner share
-    // `runServerStep`, so both are covered by the same two calls.
-    expect(engine).toContain('async function runServerStep(')
   })
 
-  it('the browser leg announces its client-direct edits, deletes and updating imports', () => {
+  it('the automation dataset steps announce — append, and both legs of update', () => {
+    // The steps are the data plugin's, run for the engine through the
+    // platform's server-step seam (AGL-3080).
+    const steps = source('libs/plugins/data/src/lib/server/dataset-steps.server.ts')
+    expect(steps).toContain("import { announceDatasetRecordChange } from './dataset-live-pages'")
+    // One call per step that writes a row: `datasetAppend`, and
+    // `updateDataset` covering its merge and its append leg together.
+    expect(steps.match(/await announceDatasetStepWrite\(request\.orgId, datasetDoc\.id\)/g))
+      .toHaveLength(2)
+    expect(source('libs/plugins/data/src/lib/declarations.server.ts')).toContain(
+      'registerServerStepExecutor(\n    DATASET_STEP_TYPES,',
+    )
+    // The AGL-3105 workflow executor and the older Actions runner share
+    // `runServerStep`, and it hands every plugin's step to the seam.
+    const engine = source('libs/plugins/workflows/src/lib/engine/run-event-actions.ts')
+    expect(engine).toContain('async function runServerStep(')
+    expect(engine).toContain('await pluginServerStepExecutor(step.type)')
+  })
+
+  it('the browser leg announces its client-direct edits and deletes', () => {
     // Record edits and deletes never reach a server route — AGL-473 moved
     // only creates there, for quota — so a server-only fix would have left
     // the two most ordinary console actions refreshing nothing.
@@ -107,10 +135,10 @@ describe('a dataset record write announces to the live pages', () => {
       'libs/plugins/data/src/lib/components/host-datasets-card.component.tsx',
     )
     expect(card).toContain("action: 'announce-records'")
-    // Three: a record edit, a delete — which loops over every dataset its
-    // reference fixups rewrote as well — and an import that only updated
-    // existing rows and so never reached the server leg.
-    expect(card.match(/await announceRecords\(/g)).toHaveLength(3)
+    // Two: a record edit, and a delete — which loops over every dataset its
+    // reference fixups rewrote as well. Imports run on the server since
+    // AGL-3530 and announce there, below.
+    expect(card.match(/await announceRecords\(/g)).toHaveLength(2)
     expect(card).toContain('alsoChanged.add(other.$id)')
     // The route's own leg, gated by the same membership and visibility the
     // create is — a drop grants nothing the rules withhold, but which

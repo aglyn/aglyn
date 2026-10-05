@@ -48,9 +48,12 @@ import {
   forwardRef,
   HTMLAttributes,
   useCallback,
+  useContext,
   useMemo,
 } from 'react'
 import { CanvasHostTokensProvider } from '../contexts/canvas-host-tokens-context'
+import CanvasPageRecordContext from '../contexts/canvas-page-record-context'
+import RepeatRecordContext from '../contexts/repeat-record-context'
 import CanvasRevealContext, {
   CanvasMutedClassesContext,
 } from '../contexts/canvas-reveal-context'
@@ -254,6 +257,21 @@ const ThemedElementContainer = ({ children }) => {
   const [revealedNodeIds] = useAglynBesignerFlag('revealedNodeIds')
   // Classes switched off for comparison (AGL-2486), subscribed the same way.
   const [mutedClasses] = useAglynBesignerFlag('mutedClasses')
+  // A record template's previewed record (AGL-3475), laid over the editable
+  // document and its chrome alike, as the published page's composition lays
+  // the routed record over both. A repeat inside the page provides its own.
+  const pageRecord = useContext(CanvasPageRecordContext)
+  const pageScope = useMemo(
+    () =>
+      pageRecord
+        ? {
+            record: pageRecord.record,
+            model: pageRecord.model,
+            datasetsByKey: pageRecord.datasetsByKey,
+          }
+        : undefined,
+    [pageRecord],
+  )
   return (
     <SiteSchemeThemesContext.Provider value={schemeThemes}>
       <ThemeProvider theme={canvasTheme}>
@@ -263,7 +281,15 @@ const ThemedElementContainer = ({ children }) => {
             <LeafSxTransformContext.Provider value={sxTransform}>
               {/* The site whose host variables every leaf fills in (AGL-2881),
                   decided once for the editable document and its chrome alike. */}
-              <CanvasHostTokensProvider>{children}</CanvasHostTokensProvider>
+              <CanvasHostTokensProvider>
+                {pageScope ? (
+                  <RepeatRecordContext.Provider value={pageScope}>
+                    {children}
+                  </RepeatRecordContext.Provider>
+                ) : (
+                  children
+                )}
+              </CanvasHostTokensProvider>
             </LeafSxTransformContext.Provider>
           </CanvasMutedClassesContext.Provider>
         </CanvasRevealContext.Provider>

@@ -36,6 +36,7 @@ import {
 const ANSWERS: PluginSiteBundleSection = {
   export: async () => [],
   import: async () => [],
+  package: { dependencies: () => [], remapIds: (item) => item },
 }
 
 const declared = listDeclaredSiteBundleSections()
@@ -53,6 +54,22 @@ describe('declared site bundle sections', () => {
   it('gives each key one owner', () => {
     const keys = declared.map((one) => one.key)
     expect(new Set(keys).size).toBe(keys.length)
+  })
+})
+
+describe('a section as site package items (AGL-3533)', () => {
+  it('declares a package kind and label for every section', () => {
+    for (const one of declared) {
+      expect([one.key, typeof one.package.kind, one.package.label.length > 0]).toEqual([one.key, 'string', true])
+    }
+  })
+
+  it('is refused when it declares a kind and registers no package hooks', () => {
+    const [first] = declared
+    const { package: _hooks, ...withoutHooks } = ANSWERS
+    expect(() =>
+      registerPluginSiteBundleSection(first.key, withoutHooks as PluginSiteBundleSection, { pluginId: first.pluginId }),
+    ).toThrow(/registers no package hooks/)
   })
 })
 

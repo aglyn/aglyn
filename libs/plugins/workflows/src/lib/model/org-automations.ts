@@ -16,23 +16,25 @@
  */
 
 import {
-  ACTION_MAX_CONDITIONS,
-  ACTION_MAX_STEPS,
-  HOST_ACTION_STEP_LABELS,
-  type HostActionStep,
-  type HostActionStepType,
-  type HostActionTriggerCondition,
-  TRIGGER_COMBINATORS,
-  TRIGGER_CONDITION_OPS,
-  type TriggerCombinator,
-  validateHostAction,
-} from '@aglyn/aglyn/app-utils/actions'
-import {
   normalizeVisibleTo,
   type ScopeToken,
   visibleToHost,
 } from '@aglyn/aglyn/app-utils/scope-tokens'
 import type { HostEventType } from '@aglyn/aglyn/app-utils/host-events'
+import {
+  ACTION_MAX_CONDITIONS,
+  ACTION_MAX_STEPS,
+  TRIGGER_COMBINATORS,
+  TRIGGER_CONDITION_OPS,
+  type TriggerCombinator,
+} from '@aglyn/aglyn/app-utils/site-interactions'
+import {
+  HOST_ACTION_STEP_LABELS,
+  type HostActionStep,
+  type HostActionStepType,
+  type HostActionTriggerCondition,
+  validateHostAction,
+} from './host-actions'
 
 /**
  * ORG AUTOMATIONS (AGL-3302): one automation the organization writes once and
@@ -305,11 +307,12 @@ const STEP_FIELDS: Record<
   createCrmTask: {
     title: 200,
     kind: 64,
+    priority: 16,
     dueInDays: 'number',
     assigneeUid: 128,
     assigneeEmail: 320,
   },
-  logCrmActivity: { kind: 64, body: 2000 },
+  logCrmActivity: { kind: 64, body: 2000, direction: 16 },
   customEvent: { eventName: 64 },
   wait: { delayMinutes: 'number' },
   waitForEvent: { eventName: 64, timeoutMinutes: 'number' },

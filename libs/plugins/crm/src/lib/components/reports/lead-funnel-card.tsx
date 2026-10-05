@@ -37,6 +37,7 @@ import {
 import { useMemo } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { useCrmOrgMount } from '../../hooks/use-crm-org-mount'
+import { useLeadStatusPicklist } from '../../hooks/use-lead-status-picklist'
 import { ReportBreakdown } from './report-breakdown'
 import { ReportExport } from './report-export'
 import { plural, reportFilename } from './report-format'
@@ -106,7 +107,7 @@ const LEAD_FUNNEL_HELP = Aglyn.pluginDocsHelp('crmReports', {
  * — the descending one for the window, the ascending one for the counts,
  * which name no order (AGL-3443).
  */
-function leadsBetween(
+export function leadsBetween(
   firestore: Firestore,
   orgId: string,
   visibleTo: readonly string[] | null,
@@ -325,6 +326,9 @@ function LeadFunnelBody(props: {
   const status = window.status
 
   const funnel = useMemo(() => leadFunnel(window.rows), [window])
+  // Each status counted by its MEANING, named as the org names it (AGL-3512).
+  const { picklist: statuses } = useLeadStatusPicklist(report.scope[1])
+  const statusName = (status: Aglyn.CrmLeadStatus) => Aglyn.crmLeadStatusLabelFor(statuses, status)
   const read = status === 'success'
   const figures = captured.value
   const share = (count: number, of: number): string | null =>
@@ -348,7 +352,7 @@ function LeadFunnelBody(props: {
               rows={() => [
                 ...Aglyn.CRM_LEAD_STATUSES.map((leadStatus) => [
                   'Status',
-                  Aglyn.CRM_LEAD_STATUS_LABELS[leadStatus],
+                  statusName(leadStatus),
                   funnel.byStatus[leadStatus],
                   share(funnel.byStatus[leadStatus], funnel.total) ?? '',
                 ]),
@@ -384,7 +388,7 @@ function LeadFunnelBody(props: {
             href={routes.section('leads')}
           />
           <ReportStatTile
-            label={'Qualified'}
+            label={statusName('qualified')}
             value={read ? funnel.byStatus.qualified.toLocaleString() : null}
             note={
               funnel.qualifiedRate === null
@@ -395,7 +399,7 @@ function LeadFunnelBody(props: {
             }
           />
           <ReportStatTile
-            label={'Unqualified'}
+            label={statusName('unqualified')}
             value={read ? funnel.byStatus.unqualified.toLocaleString() : null}
             note={
               funnel.unqualifiedRate === null
@@ -418,7 +422,7 @@ function LeadFunnelBody(props: {
           <ReportBreakdown
             rows={Aglyn.CRM_LEAD_STATUSES.map((leadStatus) => ({
               key: leadStatus,
-              label: Aglyn.CRM_LEAD_STATUS_LABELS[leadStatus],
+              label: statusName(leadStatus),
               value: funnel.byStatus[leadStatus],
               note: share(funnel.byStatus[leadStatus], funnel.total) ?? undefined,
               color:

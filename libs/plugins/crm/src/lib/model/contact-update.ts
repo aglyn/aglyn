@@ -45,11 +45,40 @@ export const CRM_CONTACT_UPDATE_MAX = 200
  * A text field sent as `''` is CLEARED — removed from the facet — except
  * `notes`, which are stored as typed. A list replaces the stored list;
  * `addTag` and `removeTag` change one tag and leave the rest as the server
- * holds them.
+ * holds them. An address or the reports-to sent as `null` clears it, and
+ * `doNotCall: false` clears the flag.
  */
 export interface ContactUpdateFields {
-  /** This holder's own name for the person. The canonical name is never written. */
+  /**
+   * This holder's own name for the person. The canonical name is never
+   * written. While the holder keeps a first or last name, the name is their
+   * composition, and a `name` that differs from it is refused (AGL-3515).
+   */
   name?: string
+  /** One of the org's salutation values, by label, or `''` to clear (AGL-3515). */
+  salutation?: string
+  /** Given and family names; the facet's `name` follows them — see `ContactFacet.firstName`. */
+  firstName?: string
+  lastName?: string
+  department?: string
+  /** As typed; stored as E.164, and refused when it cannot be read as a number. */
+  mobilePhone?: string
+  homePhone?: string
+  otherPhone?: string
+  fax?: string
+  assistantPhone?: string
+  /** `YYYY-MM-DD`, not in the future, or `''` to clear. */
+  birthdate?: string
+  assistantName?: string
+  /**
+   * Another contact the holder can see, or `null` to clear. Refused when it
+   * is the contact itself or when its own chain leads back to the contact.
+   */
+  reportsToContactId?: string | null
+  /** The second postal address — `address` is the mailing one. */
+  otherAddress?: AglynPostalAddress | null
+  /** The person asked not to be phoned; `false` clears the flag. */
+  doNotCall?: boolean
   /** As typed; stored as E.164, and refused when it cannot be read as a number. */
   phone?: string
   jobTitle?: string
@@ -82,10 +111,24 @@ export interface ContactUpdateFields {
 /** Every field the route reads. A body naming any other is refused, not trimmed. */
 export const CONTACT_UPDATE_FIELDS: ReadonlyArray<keyof ContactUpdateFields> = [
   'name',
+  'salutation',
+  'firstName',
+  'lastName',
   'phone',
+  'mobilePhone',
+  'homePhone',
+  'otherPhone',
+  'fax',
   'jobTitle',
+  'department',
+  'birthdate',
+  'assistantName',
+  'assistantPhone',
+  'reportsToContactId',
   'leadSource',
   'address',
+  'otherAddress',
+  'doNotCall',
   'notes',
   'tags',
   'addTag',

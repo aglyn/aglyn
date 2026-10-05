@@ -187,6 +187,17 @@ describe('renderEmailHtml', () => {
       ).toContain('src="//cdn.other.test/x.png"')
     })
 
+    it('routes a library object\'s storage URL through the CDN (AGL-3506)', () => {
+      const stored =
+        'https://firebasestorage.googleapis.com/v0/b/x/o/' +
+        'hosts%2Fh1%2Fmedia%2Fmed123?alt=media&token=t'
+      const html = render(stored, { mediaOrigin: 'https://acme.test' })
+      expect(html).toContain('src="https://acme.test/api/media/cdn/h1/med123"')
+      expect(html).not.toContain('firebasestorage')
+      // With no origin to send from, the absolute URL it was still fetches.
+      expect(render(stored)).toContain('src="https://firebasestorage.googleapis.com/')
+    })
+
     it('drops the image rather than emitting an unfetchable src', () => {
       // The regression guard: BOTH broken forms must be absent from the HTML
       // that actually goes out, not merely "handled somewhere".

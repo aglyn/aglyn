@@ -31,9 +31,7 @@
 
 import { render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
-import type {
-  CampaignStats,
-} from '@aglyn/shared-ui-email-campaigns/model/campaign-report'
+import type { SendStats } from '@aglyn/shared-ui-email-campaigns/model/send-report'
 import type {
   CampaignRevenueRollup,
 } from '../model/campaign-revenue'
@@ -90,7 +88,7 @@ const REVENUE_PATH = 'orgs/org-1/campaigns/camp_1/reports/revenue'
  * off the screen passes against any of them, and the one test worth writing
  * — that the money is divided by the right population — proves nothing.
  */
-const STATS: CampaignStats = {
+const STATS: SendStats = {
   audienceSize: 1200,
   recipients: 1000,
   sent: 1000,
@@ -106,7 +104,7 @@ const STATS: CampaignStats = {
 }
 
 async function renderReport(options: {
-  stats?: CampaignStats
+  stats?: SendStats
   revenue?: CampaignRevenueRollup
   campaign?: Record<string, unknown>
 }): Promise<void> {

@@ -281,6 +281,8 @@ function SystemEmailBesignerPage() {
     notFound,
   } = useBesignerDocument({
     nodes,
+    // A platform template has no site, so no variables to name (AGL-3481).
+    bindingLookups: null,
     updatedAt: version?.updatedAt,
     pendingWrites: hasPendingWrites,
     // A refused template never builds a document ref, so `useFirestoreDoc`

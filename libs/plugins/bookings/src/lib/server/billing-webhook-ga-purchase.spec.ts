@@ -135,6 +135,9 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     org: { id: 'org-1', plan: 'business', ownerUid: 'owner-1' },
   }),
   meterHostEmail: async () => undefined,
+  // The paid booking's managers' notification (AGL-3493), asserted in
+  // `billing-webhook.spec.ts`.
+  notifyHostManagers: async () => undefined,
   renderHostEmailWithTokens: async () => null,
   upsertHostContact: async () => undefined,
   sendGa4Purchase: async (input: any) => {

@@ -199,6 +199,30 @@ export interface PluginApiRouteOptions {
    * a payment, so a new visitor door cannot skip the declaration.
    */
   cardPayment?: boolean
+  /**
+   * The route is a public VISITOR door that runs every visitor gate itself,
+   * because its answers to them are a published contract the tenant
+   * dispatcher's own would change (AGL-3080).
+   *
+   * The forms plugin's `forms/submit` is the case: one door for every form
+   * and for a Marketing popup's capture, judged by the switch of the plugin
+   * whose door a submission came through (not the route's owner), answering
+   * a site with Forms off with its own "not accepting" notice, limiting per
+   * site and address and capping a flood per month with its own bodies and
+   * `Retry-After`s, and placing lockdown among those where its comments say
+   * why. The dispatcher's enablement 404, its write limit, its cross-origin
+   * refusal and its lockdown would each answer first, and differently.
+   *
+   * So the tenant dispatcher hands such a route the request untouched: no
+   * cross-origin check, no site read from the body, no per-site enablement or
+   * release gate, no lockdown, no write limit, no card velocity. Declaring it
+   * takes ALL of those on — a door that skips lockdown is one a paused site
+   * keeps open — so it is honored only for a FIRST-PARTY plugin's
+   * registration, made under the loader's marker; anyone else's keeps the
+   * dispatcher's gates, and the drop is logged. The console's dispatcher does
+   * not read it.
+   */
+  ownVisitorGates?: boolean
 }
 
 /** Leading/trailing slashes stripped so '/events/list' and 'events/list' key alike. */
@@ -218,6 +242,7 @@ const apiRouteOptions = new Map<string, PluginApiRouteOptions>()
  * plugin loader's existing import keeps working unchanged.
  */
 import { getRegisteringPluginId } from './registering-plugin'
+import { isFirstPartyPlugin } from '../plugin-manager/enabled-plugins'
 
 export {
   setRegisteringPluginId,
@@ -267,8 +292,28 @@ export function registerPluginApiRoute(
   apiRouteOwners.set(key, owner)
   // Replaced with the handler, never merged: a re-registration that drops its
   // subject resolver must not keep answering with the previous one.
-  if (options) apiRouteOptions.set(key, options)
+  if (options) apiRouteOptions.set(key, ownGatesAllowed(key, owner, options))
   else apiRouteOptions.delete(key)
+}
+
+/**
+ * The options as registered, less `ownVisitorGates` where the registration
+ * may not take the visitor gates on itself: only a first-party plugin's,
+ * under the loader's marker (AGL-3080).
+ */
+function ownGatesAllowed(
+  key: string,
+  owner: string,
+  options: PluginApiRouteOptions,
+): PluginApiRouteOptions {
+  if (!options.ownVisitorGates || (owner !== ANONYMOUS_OWNER && isFirstPartyPlugin(owner))) {
+    return options
+  }
+  console.error(
+    `[plugins] API route "${key}" keeps the dispatcher's visitor gates: only a ` +
+      `first-party plugin may run its own, and "${owner || 'an anonymous registration'}" is not one`,
+  )
+  return { ...options, ownVisitorGates: false }
 }
 
 /** The marker for a registration made outside any loader context. */
@@ -370,6 +415,16 @@ export function isPluginMachineRoute(path: string): boolean {
 export function isPluginPortabilityRoute(path: string): boolean {
   const matched = matchRegisteredApiKey(path)
   return matched ? apiRouteOptions.get(matched.key)?.portability === true : false
+}
+
+/**
+ * Whether a request path resolves to a route that keeps its own visitor
+ * gates — {@link PluginApiRouteOptions.ownVisitorGates} — what the tenant
+ * dispatcher asks before any gate of its own.
+ */
+export function isPluginOwnVisitorGatesRoute(path: string): boolean {
+  const matched = matchRegisteredApiKey(path)
+  return matched ? apiRouteOptions.get(matched.key)?.ownVisitorGates === true : false
 }
 
 /**

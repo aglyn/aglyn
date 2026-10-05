@@ -19,7 +19,9 @@ import { setRegisteringPluginId } from '../app-utils/registering-plugin'
 import {
   PLUGIN_RECORD_TIMELINE,
   pluginRecordTimelineWriter,
+  preparePluginRecordEmail,
   registerPluginRecordTimelineWriter,
+  type PluginRecordEmailSent,
   type PluginRecordTimelineWriter,
 } from './plugin-record-timeline'
 import { hasPluginService, resetPluginServicesForTests } from './plugin-services'
@@ -101,5 +103,57 @@ describe('the record timeline writer (AGL-2981)', () => {
 
   it('refuses a writer with no owner', () => {
     expect(() => registerPluginRecordTimelineWriter(writer('records'))).toThrow(/no owner/)
+  })
+})
+
+describe('an email prepared for the record (AGL-3080)', () => {
+  const REQUEST = {
+    orgId: 'org-1',
+    hostId: 'host-1',
+    to: 'pat@example.com',
+    link: { email: 'pat@example.com' },
+  }
+
+  it('answers null while no plugin keeps records, or for one that files no sent mail', async () => {
+    expect(await preparePluginRecordEmail(REQUEST)).toBeNull()
+    registerPluginRecordTimelineWriter(writer('records'), { pluginId: 'records' })
+    expect(await preparePluginRecordEmail(REQUEST)).toBeNull()
+  })
+
+  it('hands back the tags the message carries, and files the entry once it went', async () => {
+    const filed: PluginRecordEmailSent[] = []
+    registerPluginRecordTimelineWriter(
+      {
+        ...writer('records'),
+        async prepareEmail(request) {
+          return {
+            tags: [{ name: 'entry', value: `${request.hostId}:${request.to}` }],
+            file: async (sent) => {
+              filed.push(sent)
+            },
+          }
+        },
+      },
+      { pluginId: 'records' },
+    )
+    const prepared = await preparePluginRecordEmail(REQUEST)
+    expect(prepared?.tags).toEqual([{ name: 'entry', value: 'host-1:pat@example.com' }])
+    await prepared?.file({ subject: 'Hi', body: 'Hello', to: 'pat@example.com', sourceRef: 'action-1' })
+    expect(filed).toEqual([{ subject: 'Hi', body: 'Hello', to: 'pat@example.com', sourceRef: 'action-1' }])
+  })
+
+  it('never throws at the sender: a failing preparation is logged and answered as null', async () => {
+    jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    registerPluginRecordTimelineWriter(
+      {
+        ...writer('records'),
+        async prepareEmail() {
+          throw new Error('storage down')
+        },
+      },
+      { pluginId: 'records' },
+    )
+    expect(await preparePluginRecordEmail(REQUEST)).toBeNull()
+    jest.restoreAllMocks()
   })
 })

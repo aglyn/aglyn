@@ -74,7 +74,7 @@ const formWrites = (source: string): DocumentWrite[] =>
  */
 const BOOKKEEPING: ReadonlyArray<{ file: string; data: string; why: string }> = [
   {
-    file: 'apps/tenant/utils/increment-form-stats.ts',
+    file: 'libs/plugins/forms/src/lib/server/increment-form-stats.ts',
     data: 'patch',
     why: "a submission's counters; a visitor's submission is not an edit to the form",
   },
@@ -141,7 +141,7 @@ describe('AGL-3330 · every write to a form keeps the Forms list true', () => {
       'libs/plugins/forms/src/lib/components/form-detail-card.tsx',
       'libs/plugins/crm/src/lib/components/lead-surfaces-note.tsx',
       'libs/plugins/forms/src/lib/server/form-promote-route.ts',
-      'apps/tenant/utils/increment-form-stats.ts',
+      'libs/plugins/forms/src/lib/server/increment-form-stats.ts',
     ]) {
       expect([file, files.has(file)]).toEqual([file, true])
     }

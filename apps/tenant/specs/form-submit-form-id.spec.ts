@@ -106,13 +106,6 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
    * case here starts with a lead already on file.
    */
   readLeadForHost: async () => null,
-  // The attribution seam the route resolves once per submission. Recorded
-  // rather than executed — `campaign-conversion-attribution.spec.ts` owns
-  // what the write does — and defined here at all because a mocked module
-  // answers `undefined` for a name it does not list, which would make the
-  // route throw rather than fail an assertion.
-  resolveCampaignTouch: async () => null,
-  attributeCampaignConversion: async () => null,
   // The CRM's capture writer asks whether the workspace already holds the
   // address as a contact before it files a lead (AGL-3232). Nobody, here.
   findContactByEmail: async () => null,
@@ -185,8 +178,8 @@ jest.mock('@aglyn/tenant-runtime', () => ({
 /*
  * The route captures through the platform's contact-capture contract now
  * (AGL-3080), and the plugin that keeps people is what calls
- * `captureHostContact`. The CRM imports the LEAF module, so the barrel double
- * above does not intercept it; this forwards the leaf to that same double.
+ * `captureHostContact` from its own module, which the barrel double above
+ * does not intercept; this forwards that module to the same double.
  *
  * Deliberately not a double of the contract itself. Every assertion below is
  * on the options the writer receives, so routing them through the real CRM
@@ -204,7 +197,7 @@ jest.mock('@aglyn/tenant-runtime/emit-host-event', () => ({
   emitHostEvent: async () => ({ alerts: [] }),
 }))
 
-jest.mock('@aglyn/tenant-runtime/capture-host-contact', () => ({
+jest.mock('../../../libs/plugins/crm/src/lib/server/capture-host-contact', () => ({
   captureHostContact: (...args: unknown[]) =>
     (
       jest.requireMock('@aglyn/tenant-runtime') as {
@@ -225,12 +218,17 @@ beforeAll(async () => {
   await registerPluginServerDeclarations()
 })
 
-import { POST } from '../app/api/forms/submit/route'
+// The door as the tenant serves it: the forms plugin's route, through the
+// plugin API dispatcher, with the forms plugin's surface loaded (AGL-3080).
+jest.mock('../utils/server-plugin-loader', () => ({
+  serverPluginLoader: jest.requireActual('./plugin-door-dispatch').formsOnlyServerPluginLoader(),
+}))
+import { POST } from './plugin-door-dispatch'
 // The REAL key, not a hand-rolled `slice(0, 7)`: what is under test is that
 // the per-form series and the site-wide counter agree about which month a
 // submission belongs to, and a spec that derived its own would pass while
 // they disagreed.
-import { submissionMonthKey } from '@aglyn/aglyn/server'
+import { utcMonthKey } from '@aglyn/aglyn/server'
 
 const submit = (body: Record<string, unknown> = {}) =>
   POST(
@@ -547,7 +545,7 @@ describe('a lead-capture form finally captures a lead', () => {
  * collection that grows without bound and the one the customer is billed on.
  */
 describe('a submission counts itself onto the form it names', () => {
-  const month = submissionMonthKey()
+  const month = utcMonthKey()
   const statsPatch = () =>
     mockUpdates.find((update) => update.path.endsWith('forms/form-1'))?.patch
 

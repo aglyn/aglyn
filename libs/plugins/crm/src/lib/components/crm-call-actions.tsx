@@ -19,7 +19,7 @@
 import { type AglynOrgBilling, crmTelHref } from '@aglyn/aglyn'
 import { mdiPhoneOutline } from '@aglyn/shared-data-mdi'
 import { MdiIcon } from '@aglyn/shared-ui-jsx'
-import { Button, Link, Tooltip } from '@mui/material'
+import { Button, Link, Tooltip, Typography } from '@mui/material'
 import { useState } from 'react'
 import type { ActivityRecordLink } from './activity-queries'
 import { useActivityScope } from './activity-queries'
@@ -46,7 +46,12 @@ export interface CrmPhoneLinkProps {
   phone?: string | null
   /** What a record with no number shows; nothing renders by default. */
   fallback?: React.ReactNode
+  /** The person asked not to be phoned (AGL-3515): the number says so beside it. */
+  doNotCall?: boolean
 }
+
+/** The sentence every do-not-call hint carries, so a list and a page say one thing. */
+export const CRM_DO_NOT_CALL_HINT = 'Marked do not call — they asked not to be phoned.'
 
 /**
  * A phone number as a `tel:` link, the one shape every CRM surface prints a
@@ -54,15 +59,27 @@ export interface CrmPhoneLinkProps {
  * — see `crmTelHref` — because a link that cannot ring is worse than text.
  */
 export function CrmPhoneLink(props: CrmPhoneLinkProps) {
-  const { phone, fallback = null } = props
+  const { phone, fallback = null, doNotCall = false } = props
   const text = String(phone ?? '').trim()
   if (!text) return <>{fallback}</>
   const href = crmTelHref(text)
-  if (!href) return <>{text}</>
-  return (
+  const number = href ? (
     <Link href={href} underline="hover">
       {text}
     </Link>
+  ) : (
+    <>{text}</>
+  )
+  if (!doNotCall) return number
+  return (
+    <Tooltip title={CRM_DO_NOT_CALL_HINT}>
+      <span>
+        {number}{' '}
+        <Typography component="span" variant="caption" color="warning.main">
+          {'(do not call)'}
+        </Typography>
+      </span>
+    </Tooltip>
   )
 }
 CrmPhoneLink.displayName = 'CrmPhoneLink'
@@ -83,6 +100,12 @@ export interface CrmCallButtonProps {
    * dialing the number writes nothing, and stays.
    */
   suiteLocked?: boolean
+  /**
+   * The person asked not to be phoned (AGL-3515). **Call** still dials — a
+   * returned call, a call they asked for — but reads as a warning, and its
+   * tooltip says why before anyone taps it.
+   */
+  doNotCall?: boolean
 }
 
 /**
@@ -99,7 +122,7 @@ export interface CrmCallButtonProps {
  * is, because a call placed from a mobile is still a call to log.
  */
 export function CrmCallButton(props: CrmCallButtonProps) {
-  const { hostId, org, link, phone, suiteLocked = false } = props
+  const { hostId, org, link, phone, suiteLocked = false, doNotCall = false } = props
   const [open, setOpen] = useState(false)
   const scope = useActivityScope(hostId, org)
   const text = String(phone ?? '').trim()
@@ -108,16 +131,19 @@ export function CrmCallButton(props: CrmCallButtonProps) {
     ? 'This record has no phone number'
     : !href
       ? `“${text}” is not a number a dialer can take`
-      : ''
+      : doNotCall
+        ? CRM_DO_NOT_CALL_HINT
+        : ''
   const call = (
     <Button
       size="small"
       variant="outlined"
+      color={doNotCall ? 'warning' : 'primary'}
       disabled={!href}
       startIcon={<MdiIcon path={mdiPhoneOutline.path} size={0.8} />}
       {...(href ? { component: 'a' as const, href } : {})}
     >
-      {'Call'}
+      {doNotCall ? 'Call (do not call)' : 'Call'}
     </Button>
   )
   return (

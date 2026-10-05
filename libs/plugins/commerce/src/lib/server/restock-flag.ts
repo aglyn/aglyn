@@ -101,7 +101,7 @@ import { firebaseAdmin } from '@aglyn/tenant-data-admin'
  * `saleReleaseCaps` and `capRestockLines` are shared with the cancellation
  * writer, so what this ASKS and what that RETURNS cannot drift apart.
  *
- * FAILURES ARE SWALLOWED, like `recordContactRefund`'s. The money has already
+ * FAILURES ARE SWALLOWED, like the person's refund's. The money has already
  * moved and the order already records it; a flag that cannot be written must
  * not fail a refund that has left the merchant's account.
  */
@@ -112,7 +112,7 @@ export async function flagOrderRestock(options: {
   kind: 'refund' | 'chargeback'
   /**
    * True only for the write that moved the order INTO `refunded` — the same
-   * signal `recordContactRefund` takes, decided by the caller from the status
+   * signal the person's refund takes (`closedTheSale`), decided by the caller from the status
    * transition it made rather than from the total it read, because
    * `fullyRefunded` is not a once-only signal (AGL-1754).
    */

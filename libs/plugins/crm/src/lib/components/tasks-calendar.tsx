@@ -16,6 +16,7 @@
  */
 'use client'
 
+import { type CrmTaskPicklists, crmTaskPicklistLabels } from '@aglyn/aglyn'
 import { mdiChevronLeft, mdiChevronRight } from '@aglyn/shared-data-mdi'
 import { MdiIcon } from '@aglyn/shared-ui-jsx'
 import { Box, Button, ButtonBase, IconButton, Stack, Typography } from '@mui/material'
@@ -39,6 +40,8 @@ export interface TasksCalendarProps {
   onOpen: (task: CrmTaskRow) => void
   /** The list's window filled, so neither surface is showing everything. */
   truncated?: boolean
+  /** The org's task lists, which name each entry's type and status on hover (AGL-3517). */
+  picklists?: CrmTaskPicklists
 }
 
 /**
@@ -66,7 +69,13 @@ export interface TasksCalendarProps {
  * would carry.
  */
 export function TasksCalendar(props: TasksCalendarProps) {
-  const { tasks, onOpen, truncated } = props
+  const { tasks, onOpen, truncated, picklists } = props
+  /** "Call Ada · Call · In Progress" — the entry's type and status on hover. */
+  const hoverText = (task: CrmTaskRow) => {
+    if (!picklists) return task.title
+    const labels = crmTaskPicklistLabels(task, picklists)
+    return `${task.title} · ${labels.type} · ${labels.status}`
+  }
   /*
    * The clock is read ONCE, at mount. A component that read `Date.now()`
    * per render would move the today square under a reader who left the tab
@@ -182,6 +191,7 @@ export function TasksCalendar(props: TasksCalendarProps) {
                       <ButtonBase
                         key={task.$id}
                         onClick={() => onOpen(task)}
+                        title={hoverText(task)}
                         sx={{
                           justifyContent: 'flex-start',
                           width: '100%',

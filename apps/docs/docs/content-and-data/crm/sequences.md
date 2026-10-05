@@ -302,6 +302,56 @@ page on screen; a combination it cannot answer at once is named above the table
 instead of being applied to some rows. See
 [Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
 
+#### Import and export the do-not-contact list {#import-export-do-not-contact}
+
+**Import** and **Export** are in the **Do not contact domains** card's header.
+
+**Import** takes a CSV, JSON or NDJSON file of email addresses, domains, or
+both, one per row, in a column the wizard maps to **Entry**. Each value
+decides what it adds: an email address (`casey@example.com`, or
+`Casey <casey@example.com>`) puts that one address on the list; anything else
+that reads as a domain (`example.com`, `@example.com`, `https://www.example.com`)
+puts the whole domain on it. An optional **Note** column says why, and is kept
+with the entry. Each new entry is recorded as added by you, exactly as if you
+had added it on this page.
+
+An import only adds. A row whose entry is already on the list is skipped,
+whatever you choose in the wizard: the entry keeps the reason, the date and
+the note it was first added with, because that is the record of why it is
+there. Two spellings of one entry in the same file (`Acme.com` and
+`www.acme.com`) are imported once.
+
+Before anything is written, the wizard's review step lists what each row will
+do, and asks you to acknowledge these:
+
+- **Neither an email address nor a domain** — the value cannot be read as
+  either, so the row is not imported. A value that looks like an address but
+  is not a valid one (`casey morgan@acme.com`) is refused rather than read as
+  its domain, so a typo never blocks a whole company.
+- **A public mailbox provider** — the row adds a domain such as `gmail.com`
+  or `outlook.com`. That blocks every person with an address there, not one
+  person; add their address instead unless that is what you mean.
+- **Already covered** — the row adds an address whose domain is on the list
+  already, or is added by another row of the same file. The address is still
+  added, so it stays blocked if the domain is ever taken off.
+
+Importing needs the same access as this page — **Use Sequences**, across the
+whole organization, in a workspace whose plan includes Sequences — and every
+row is refused, with the reason, for anyone without it.
+
+**Export** downloads the listed **domains** — all of them, or only the ones
+the table's search and filters show — with why each was listed, who added it
+and when. **Addresses are never exported.** The list keeps an address as a
+one-way fingerprint, never the address itself, so that it can go on refusing
+someone who asked not to be emailed without holding who they are; there is no
+address to read back out.
+
+For seven days after an import, **Undo** on its results takes off the entries
+that import added, and only those. An entry that was taken off and added again
+since is asked about rather than removed, and one that Sequences added on its
+own since — a reply asking not to be emailed, an unsubscribe or a bounce — is
+always kept.
+
 ## Sequences {#sequences}
 
 A **sequence** is the emails, and the tasks between them, one person gets from
@@ -403,13 +453,28 @@ It has a cost, which is why it is off by default:
   the sender. Use it to measure a slice of your sends — a new segment for a
   week, say — rather than leaving it on everywhere.
 
-Not every image load is a person reading. Gmail opens count: Gmail loads the
-image through its own proxy only when the reader opens the email. Apple Mail
-Privacy Protection opens don't: Apple loads every image the moment the email
-arrives, whether or not anyone reads it. Yahoo's image proxy, security gateways
-that open messages to inspect them, and any load within 30 seconds of delivery
-don't count either. Those loads are counted as **Machine opens**, shown beside
-the open figures and left out of the open rate. The
+Not every image load is a person reading. Each load is judged by what it says
+it is and by whose network it came from:
+
+- **Gmail opens count.** Gmail loads the image through its own proxy when the
+  reader opens the email.
+- **Apple Mail Privacy Protection doesn't count.** Apple loads every image
+  through its privacy relay the moment the email arrives, whether or not
+  anyone reads it.
+- **Mail scanners don't count.** That covers loads from Google's mail network
+  other than Gmail's proxy, loads from Microsoft's mail filter, and loads that
+  borrow Apple's anonymous signature from anywhere but Apple's relay. Mail
+  sent to Google Workspace and Microsoft 365 addresses is often scanned this
+  way, at delivery and again later.
+- **These don't count either:** Yahoo's image proxy, security gateways that
+  name themselves, and any load within 30 seconds of delivery.
+
+Those loads are counted as **Machine opens**, shown beside the open figures
+and left out of the open rate. When every load so far was a machine's, the
+card shows the **Open rate** as **Unmeasured** rather than 0%: the scanners
+answered for everyone, and whether a person read the email behind them can't
+be told. A person's page lists each load with why it was or wasn't counted
+and which network it came from. The address itself is never kept. The
 **Open rate** is taken over the people who were sent at least one email
 carrying the image, not everyone the sequence emailed, so turning the switch
 on part-way through doesn't dilute it.
@@ -641,7 +706,11 @@ times the person clicked and how many different links they followed — *2 · 1
 link*. Clicks made by security scanners aren't in it. **Filters** adds
 **Clicked** and **Link followed**, and the column chooser adds **Links
 followed**, **Last click** and **Scanner clicks**, which the export then
-includes. **Stop reason** shows the short reason; hover it for the whole of it.
+includes. On a sequence that counts opens, the **Opens** column beside it shows
+the person's own opens, with any loads by mail proxies and scanners under them
+— *2*, then *3 by machines* — which aren't in the number. The column chooser
+adds **Last open**. **Stop reason** shows the short reason; hover it for the
+whole of it.
 
 The sequence's **Results** card leads to the same list: select the **Clicked**
 figure to see the people who clicked, or a destination under **Links followed**

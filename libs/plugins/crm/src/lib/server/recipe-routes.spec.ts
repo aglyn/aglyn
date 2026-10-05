@@ -33,11 +33,8 @@
  */
 
 import type { PluginApiRequest, PluginApiResponse } from '@aglyn/aglyn/server'
-import {
-  ACTIONS_MAX_PER_HOST,
-  crmActionRecipe,
-  hostActionDocument,
-} from '@aglyn/aglyn/server'
+import { ACTIONS_MAX_PER_HOST, siteInteractionDocument } from '@aglyn/aglyn/server'
+import { crmActionRecipe } from '../model/crm-recipes'
 
 // ---------------------------------------------------------------------------
 // In-memory Firestore: documents by path; queries over one collection with
@@ -258,7 +255,7 @@ describe('crm/recipe-install', () => {
     const landed = actionsOf('host-a')
     expect(Object.keys(landed)).toEqual([answer.actionId])
     expect(landed[answer.actionId]).toEqual({
-      ...hostActionDocument(crmActionRecipe('welcomeNewLead')!.build()),
+      ...siteInteractionDocument(crmActionRecipe('welcomeNewLead')!.build()),
       createdAt: '__serverTimestamp',
       updatedAt: '__serverTimestamp',
       createdBy: 'u-1',

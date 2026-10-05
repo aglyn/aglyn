@@ -96,10 +96,15 @@ jest.mock('@aglyn/shared-ui-snackstack', () => ({
   }),
 }))
 
-const downloads: Array<{ name: string; body: string }> = []
-jest.mock('../model/contacts-csv', () => ({
-  downloadTextFile: (name: string, _type: string, body: string) =>
-    void downloads.push({ name, body }),
+/** The console's launcher, recording what the bar opened (AGL-3528). */
+const mockExports: unknown[] = []
+jest.mock('@aglyn/aglyn/app-utils/transfer-launcher-context', () => ({
+  useTransferLauncher: () => ({
+    openImport: () => undefined,
+    openExport: (launch: unknown) => void mockExports.push(launch),
+    can: () => true,
+    close: () => undefined,
+  }),
 }))
 
 const roster = {
@@ -149,7 +154,6 @@ function mount(selected: string[], onSelectedChange = jest.fn()) {
       // Every write targets `orgs/{orgId}/leads` now (AGL-3275).
       orgId="org-1"
       roster={roster}
-      csv={{ ownerEmail: roster.emailFor, siteName: (id: string) => (id === 'site-1' ? 'Shop' : undefined) }}
     />,
   )
   return { onSelectedChange }
@@ -161,7 +165,7 @@ const ALL = rows.map((row) => row.$id)
 beforeEach(() => {
   ops = []
   notices = []
-  downloads.length = 0
+  mockExports.length = 0
 })
 
 describe('the bar and its selection', () => {
@@ -172,7 +176,7 @@ describe('the bar and its selection', () => {
     expect(container.innerHTML).toBe('')
     mount(ALL.slice(0, 2))
     expect(screen.getByText('2 selected')).toBeTruthy()
-    for (const name of ['Set owner', 'Set status', 'Unqualify', 'Export CSV', 'Clear']) {
+    for (const name of ['Set owner', 'Set status', 'Unqualify', 'Export…', 'Clear']) {
       expect(screen.getByRole('button', { name })).toBeTruthy()
     }
   })
@@ -342,26 +346,14 @@ describe('unqualifying', () => {
   })
 })
 
+const ALL_IDS = rows.map((row) => row.$id)
+
 describe('the file', () => {
-  it('exports the selection with the owner by address and the site by name', () => {
-    mount([ALL[0]])
-    fireEvent.click(screen.getByRole('button', { name: 'Export CSV' }))
-    expect(downloads).toHaveLength(1)
-    expect(downloads[0].name).toBe('leads-selected.csv')
-    const [header, line] = downloads[0].body.split('\n')
-    // The profile columns (AGL-3231) come before the working state, and
-    // the site sits beside the owner; a lead with no profile leaves them blank.
-    expect(header.split(',').slice(0, 9)).toEqual([
-      'Email',
-      'Name',
-      'Company',
-      'Job title',
-      'Phone',
-      'Website',
-      'Status',
-      'Owner',
-      'Site',
+  it('opens the export dialog on the selection (AGL-3528)', () => {
+    mount(ALL_IDS)
+    fireEvent.click(screen.getByRole('button', { name: 'Export…' }))
+    expect(mockExports).toEqual([
+      { resource: 'crm.leads', scope: 'org', hostId: null, selection: ALL_IDS },
     ])
-    expect(line.startsWith('maya@example.com,maya,,,,,New,,Shop,')).toBe(true)
   })
 })

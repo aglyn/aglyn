@@ -25,7 +25,8 @@ import {
   EMAIL_ATTRIBUTION_MODEL,
   EMAIL_ATTRIBUTION_WINDOW_DAYS,
 } from '@aglyn/shared-util-email'
-import { campaignRate, type CampaignCaveat } from '@aglyn/shared-ui-email-campaigns/model/campaign-report'
+import { sendRate } from '@aglyn/shared-ui-email-campaigns/model/send-report'
+import { type CampaignCaveat } from './campaign-report'
 
 /**
  * WHAT A CAMPAIGN EARNED — the read half of the commerce↔email join.
@@ -158,7 +159,7 @@ export interface CampaignRevenueRollup {
 }
 
 /**
- * Money over a population, with the population named — {@link CampaignRate}'s
+ * Money over a population, with the population named — {@link SendRate}'s
  * rule applied to an average instead of a share.
  *
  * A percentage and an average go wrong the same way, so they carry the same
@@ -247,7 +248,7 @@ function count(raw: unknown): number {
 /**
  * Money per message, or `null` when the division cannot honestly be taken.
  *
- * The three refusals are {@link campaignRate}'s, and this defers to it rather
+ * The three refusals are {@link sendRate}'s, and this defers to it rather
  * than restating them: a zero denominator, an unrecorded denominator, and a
  * non-finite input all answer `null` there, so a second implementation of
  * "when may we divide" cannot drift from the first.
@@ -258,7 +259,7 @@ export function campaignMoneyPerMessage(
   denominatorLabel: string,
   currency: string,
 ): CampaignMoneyPerMessage | null {
-  const divisible = campaignRate(numeratorCents, denominator, denominatorLabel)
+  const divisible = sendRate(numeratorCents, denominator, denominatorLabel)
   if (!divisible) return null
   return {
     cents: divisible.value,

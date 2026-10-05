@@ -26,23 +26,28 @@
  *
  * So {@link recheckLivePageLinks} walks every live page's foreign hosts, as
  * the review noted them beside the version it served
- * (`pageReviews/{screenId}.foreignHosts`), looks them up again, and sends
- * each page with a newly listed host back through `reviewHostedPage` with the
- * listing as an extra signal — the same path, so it is held or flagged, its
- * row filed, and a young workspace's security hold requested (AGL-3450),
- * exactly as at render. The console's `/api/admin/web-risk-recheck` runs it
- * a chunk of sites at a time.
+ * (`pageReviews/{screenId}.foreignHosts`), looks them up again — and, in
+ * `'url'` mode (AGL-3459), the addresses on them noted beside the hosts
+ * (`foreignLinks`, never a query string) — and sends each page with a newly
+ * listed host or address back through `reviewHostedPage` with the listing as
+ * an extra signal — the same path, so it is held or flagged, its row filed,
+ * and a young workspace's security hold requested (AGL-3450), exactly as at
+ * render. The console's `/api/admin/web-risk-recheck` runs it a chunk of
+ * sites at a time; its first chunk of a walk also deletes the addresses'
+ * stored answers that expired a day ago.
  *=========================================*/
 
 import {
   type HostReputationHit,
   MAX_REPUTATION_HOSTS_PER_LOOKUP,
+  MAX_REPUTATION_URLS_PER_LOOKUP,
+  normalizeReputationLink,
   webRiskSignals,
 } from '@aglyn/shared-util-email/link-reputation'
 import { FieldPath } from 'firebase-admin/firestore'
 import firebaseAdmin from './firebase-admin'
 import { PAGE_REVIEW_SUBCOLLECTION, reviewHostedPage } from './hosted-page-review'
-import { lookupHostReputation } from './web-risk'
+import { lookupLinkReputation, reapExpiredWebRiskUrlVerdicts, webRiskLookupMode } from './web-risk'
 
 /** One live page whose foreign hosts the review noted. */
 interface LivePageLinks {
@@ -50,6 +55,8 @@ interface LivePageLinks {
   screenId: string
   versionId: string
   hosts: string[]
+  /** The addresses on those hosts the review noted (AGL-3459); empty before it did. */
+  links: string[]
 }
 
 /** What one chunk of the re-check did. */
@@ -60,9 +67,11 @@ export interface LivePageLinkRecheck {
   pages: number
   /** Distinct foreign hosts looked up. */
   hosts: number
-  /** Of those, how many Web Risk lists. */
+  /** Distinct addresses looked up on them — none unless the lookup is in `'url'` mode. */
+  addresses: number
+  /** Of the hosts and addresses, how many Web Risk lists. */
   listed: number
-  /** Hosts nobody could answer for: not evidence, looked up again next time. */
+  /** Hosts and addresses nobody could answer for: not evidence, looked up again next time. */
   unknown: number
   /** Pages sent back through the review with a listed host. */
   reviewed: number
@@ -70,6 +79,8 @@ export interface LivePageLinkRecheck {
   held: number
   /** The sites a hold was placed on, whose cached pages need dropping. */
   heldHostIds: string[]
+  /** Addresses' stored answers deleted a day after they expired (first chunk of a walk only). */
+  reapedAddressVerdicts: number
   nextCursor: string | null
   done: boolean
 }
@@ -127,12 +138,14 @@ export async function recheckLivePageLinks(
       for (const review of reviews.docs) {
         const versionId = review.get('servedVersionId')
         const hosts = review.get('foreignHosts')
+        const links = review.get('foreignLinks')
         if (typeof versionId !== 'string' || !versionId || !Array.isArray(hosts)) continue
         pages.push({
           hostId: site.id,
           screenId: review.id,
           versionId,
           hosts: hosts.filter((host): host is string => typeof host === 'string'),
+          links: Array.isArray(links) ? links.filter((link): link is string => typeof link === 'string') : [],
         })
       }
     }
@@ -148,24 +161,60 @@ export async function recheckLivePageLinks(
     done: sites.size < limit,
   }
   if (options.dryRun) {
-    return { ...chunk, listed: 0, unknown: 0, reviewed: 0, held: 0, heldHostIds: [] }
+    return {
+      ...chunk,
+      addresses: 0,
+      listed: 0,
+      unknown: 0,
+      reviewed: 0,
+      held: 0,
+      heldHostIds: [],
+      reapedAddressVerdicts: 0,
+    }
   }
+  // Once a walk, before its first chunk: addresses' answers long expired.
+  const reapedAddressVerdicts = options.cursor
+    ? 0
+    : await reapExpiredWebRiskUrlVerdicts({ nowMs, firestore })
+
+  // The addresses go with their hosts, and only in 'url' mode.
+  const mode = await webRiskLookupMode(nowMs)
+  const addressHost = new Map<string, string>()
+  if (mode === 'url') {
+    for (const link of new Set(pages.flatMap((page) => page.links))) {
+      const host = normalizeReputationLink(link)?.host
+      if (host) addressHost.set(link, host)
+    }
+  }
+  // Keyed by host for a host's listing, by address for an address's: an
+  // address always holds `://`, a host never does.
   const listed = new Map<string, HostReputationHit>()
-  let unknown = 0
+  const unknown = new Set<string>()
   for (let at = 0; at < distinct.length; at += MAX_REPUTATION_HOSTS_PER_LOOKUP) {
-    const answer = await lookupHostReputation(
-      distinct.slice(at, at + MAX_REPUTATION_HOSTS_PER_LOOKUP),
-      { deadlineMs: RECHECK_DEADLINE_MS, nowMs },
-    )
-    for (const hit of answer.hits) listed.set(hit.host, hit)
-    unknown += answer.unknown.length
+    const group = distinct.slice(at, at + MAX_REPUTATION_HOSTS_PER_LOOKUP)
+    const inGroup = new Set(group)
+    const urls = [...addressHost].filter(([, host]) => inGroup.has(host)).map(([url]) => url)
+    // A later slice of addresses finds the group's answered hosts in memory.
+    let offset = 0
+    do {
+      const answer = await lookupLinkReputation(group, {
+        urls: urls.slice(offset, offset + MAX_REPUTATION_URLS_PER_LOOKUP),
+        deadlineMs: RECHECK_DEADLINE_MS,
+        nowMs,
+      })
+      for (const hit of answer.hits) listed.set(hit.url ?? hit.host, hit)
+      for (const key of answer.unknown) unknown.add(key)
+      offset += MAX_REPUTATION_URLS_PER_LOOKUP
+    } while (offset < urls.length)
   }
 
   let reviewed = 0
   let held = 0
   const heldHostIds = new Set<string>()
   for (const page of pages) {
-    const hits = page.hosts.map((host) => listed.get(host)).filter(Boolean) as HostReputationHit[]
+    const hits = [...page.hosts, ...page.links]
+      .map((key) => listed.get(key))
+      .filter(Boolean) as HostReputationHit[]
     if (!hits.length) continue
     reviewed += 1
     try {
@@ -189,10 +238,12 @@ export async function recheckLivePageLinks(
 
   return {
     ...chunk,
+    addresses: addressHost.size,
     listed: listed.size,
-    unknown,
+    unknown: unknown.size,
     reviewed,
     held,
     heldHostIds: [...heldHostIds],
+    reapedAddressVerdicts,
   }
 }

@@ -440,10 +440,12 @@ export function ContentScopeProvider({ children }: { children: ReactNode }) {
     [firestore, hostId],
     { idField: '$id' },
   )
+  // A page group (AGL-3463) renders nothing, and /api/hosts/collections
+  // refuses one as a template, so it is never offered.
   const screenOptions = useMemo(
     () =>
       [...(screenDocs ?? [])]
-        .filter((screen: any) => !screen.deletedAt)
+        .filter((screen: any) => !screen.deletedAt && !Aglyn.isScreenGroup(screen))
         .sort((a: any, b: any) =>
           String(a.displayName ?? '').localeCompare(
             String(b.displayName ?? ''),

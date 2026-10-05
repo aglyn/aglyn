@@ -69,6 +69,13 @@ import {
   parseScopeToken,
   SCOPE_GRANTS_FIELD,
 } from '@aglyn/aglyn/app-utils/scope-tokens'
+import type { CrmPicklist } from '@aglyn/aglyn/app-utils/crm'
+import {
+  isLeadSourceDirection,
+  LEAD_SOURCE_DIRECTION_LABELS,
+  leadSourceDirectionOf,
+  STANDARD_LEAD_SOURCES,
+} from './lead-source-direction'
 
 /*==========================================
  * WHAT IS SHARED.
@@ -347,6 +354,13 @@ export const CRM_SHARING_CRITERION_MAX = 20
 export interface CrmSharingCriteria {
   /** A lead's or a contact's lead source, by label. */
   leadSources?: string[]
+  /**
+   * A lead's or a contact's lead source DIRECTION — `inbound` or `outbound`,
+   * the Lead source picklist's groups (AGL-3511). Expanded through the org's
+   * list when the rule is evaluated, so a value moved between groups moves
+   * the records that hold it.
+   */
+  leadSourceGroups?: string[]
   /** Any of these tags (lead, contact, company). */
   tags?: string[]
   /** Filed under any of these campaigns (lead, contact). */
@@ -359,6 +373,7 @@ export interface CrmSharingCriteria {
 
 export const CRM_SHARING_CRITERIA_KEYS = [
   'leadSources',
+  'leadSourceGroups',
   'tags',
   'campaignIds',
   'stages',
@@ -369,8 +384,8 @@ export const CRM_SHARING_CRITERIA_KEYS = [
 export const CRM_SHARING_CRITERIA_FOR: Readonly<
   Record<CrmSharingObject, readonly (keyof CrmSharingCriteria)[]>
 > = {
-  leads: ['leadSources', 'tags', 'campaignIds', 'stages', 'ownerUids'],
-  contacts: ['leadSources', 'tags', 'campaignIds', 'stages', 'ownerUids'],
+  leads: ['leadSources', 'leadSourceGroups', 'tags', 'campaignIds', 'stages', 'ownerUids'],
+  contacts: ['leadSources', 'leadSourceGroups', 'tags', 'campaignIds', 'stages', 'ownerUids'],
   companies: ['tags', 'ownerUids'],
   deals: ['stages', 'ownerUids'],
 }
@@ -436,7 +451,9 @@ export function readCrmSharingRule(raw: unknown): CrmSharingRule | null {
   const rawCriteria = (value['criteria'] ?? {}) as Record<string, unknown>
   const criteria: CrmSharingCriteria = {}
   for (const key of CRM_SHARING_CRITERIA_FOR[value['object']]) {
-    const list = stringList(rawCriteria[key])
+    let list = stringList(rawCriteria[key])
+    // A direction is one of the picklist's groups, never free text.
+    if (key === 'leadSourceGroups') list = list.filter(isLeadSourceDirection)
     if (list.length) criteria[key] = key === 'tags' ? list.map((tag) => tag.toLowerCase()) : list
   }
   const run = value['run'] as Record<string, unknown> | undefined
@@ -592,11 +609,29 @@ const anyOf = (wanted: readonly string[] | undefined, have: readonly string[], f
   return wanted.some((value) => set.has(fold ? value.toLowerCase() : value))
 }
 
+/**
+ * What a rule is evaluated against beyond the record: the org's Lead source
+ * list, which a direction criterion is expanded through (AGL-3511). Absent,
+ * the standard values alone answer.
+ */
+export interface CrmSharingContext {
+  leadSources?: CrmPicklist
+}
+
+/** Whether any active rule for `object` asks a lead source direction — whether the list must be read. */
+export function sharingRulesAskLeadSourceDirection(
+  rules: readonly CrmSharingRule[],
+  object: CrmSharingObject,
+): boolean {
+  return activeSharingRules(rules, object).some((rule) => Boolean(rule.criteria.leadSourceGroups?.length))
+}
+
 /** Whether a rule shares this record. */
 export function crmSharingRuleMatches(
   rule: CrmSharingRule,
   object: CrmSharingObject,
   record: Readonly<Record<string, unknown>>,
+  context: CrmSharingContext = {},
 ): boolean {
   if (!rule.enabled || rule.deleting || rule.object !== object) return false
   const facts = crmSharingFacts(object, record)
@@ -604,8 +639,14 @@ export function crmSharingRuleMatches(
     return false
   }
   const { criteria } = rule
+  const directions = criteria.leadSourceGroups?.length
+    ? facts.leadSources
+        .map((label) => leadSourceDirectionOf(context.leadSources ?? STANDARD_LEAD_SOURCES, label))
+        .filter((direction): direction is NonNullable<typeof direction> => direction !== null)
+    : []
   return (
     anyOf(criteria.leadSources, facts.leadSources, true) &&
+    anyOf(criteria.leadSourceGroups, directions) &&
     anyOf(criteria.tags, facts.tags, true) &&
     anyOf(criteria.campaignIds, facts.campaignIds) &&
     anyOf(criteria.stages, facts.stages) &&
@@ -627,6 +668,7 @@ export function evaluateRecordGrants(
   record: Readonly<Record<string, unknown>>,
   rules: readonly CrmSharingRule[],
   atMs: number,
+  context: CrmSharingContext = {},
 ): Record<string, CrmShareGrant> {
   const current = readRecordGrants(record)
   const next: Record<string, CrmShareGrant> = {}
@@ -634,7 +676,7 @@ export function evaluateRecordGrants(
     if (grant.source === 'manual') next[key] = grant
   }
   for (const rule of activeSharingRules(rules, object)) {
-    if (!crmSharingRuleMatches(rule, object, record)) continue
+    if (!crmSharingRuleMatches(rule, object, record, context)) continue
     const key = ruleGrantKey(rule.id)
     const before = current[key]
     next[key] = {
@@ -832,6 +874,12 @@ export function describeSharingRuleScope(
   }
   const { criteria } = rule
   if (criteria.leadSources?.length) parts.push(`from ${criteria.leadSources.join(' or ')}`)
+  if (criteria.leadSourceGroups?.length) {
+    const directions = criteria.leadSourceGroups.map((group) =>
+      isLeadSourceDirection(group) ? LEAD_SOURCE_DIRECTION_LABELS[group] : group,
+    )
+    parts.push(`${directions.join(' or ')} by lead source`)
+  }
   if (criteria.tags?.length) parts.push(`tagged ${criteria.tags.join(' or ')}`)
   if (criteria.campaignIds?.length) {
     parts.push(`in ${criteria.campaignIds.length === 1 ? 'a campaign' : `${criteria.campaignIds.length} campaigns`}`)

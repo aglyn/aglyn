@@ -43,6 +43,13 @@ interface OutboxRow {
 }
 
 let mockRows: OutboxRow[] = []
+/**
+ * When the rows were written: taken before each test's request, as a stored
+ * `createdAt` is. Reading `Date.now()` at query time instead put every row
+ * after the drain's own `startedAt`, so an entry aged `ageMs` came out a
+ * millisecond short whenever one passed in between (AGL-3462).
+ */
+let mockWrittenAtMs = 0
 const mockDeleted: string[] = []
 const mockMerged: { id: string; data: Record<string, unknown> }[] = []
 const mockHostDocs = new Map<
@@ -102,7 +109,7 @@ const mockOutboxQuery = () => {
     get: (field: string) => {
       if (field === 'createdAt') {
         const ageMs = row.ageMs ?? 10 * 60_000
-        return { toMillis: () => Date.now() - ageMs }
+        return { toMillis: () => mockWrittenAtMs - ageMs }
       }
       return (row as unknown as Record<string, unknown>)[field]
     },
@@ -156,6 +163,7 @@ beforeEach(() => {
   jest.clearAllMocks()
   process.env.CRON_SECRET = SECRET
   mockRows = []
+  mockWrittenAtMs = Date.now()
   mockDeleted.length = 0
   mockMerged.length = 0
   mockHostDocs.clear()

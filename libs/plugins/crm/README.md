@@ -34,10 +34,11 @@ The CRM is console-only. Its records live in Firestore and it has no canvas comp
 - A "Saves to contact fields" widget in the `formContactFields` slot, a zone the forms plugin hosts on a form's page.
 - Two zones the CRM hosts for other plugins to draw in: one for booking a meeting from a record, and one that says which campaign or link a record came from.
 - The CRM's record routes, so other surfaces can link to a record.
+- Record count sources for `lead` (the leads a site captured) and `contact` (the organization's, a count that crosses sites) (`plugin-record-counts`), which a campaign's conversion report divides by.
 
 ### On the server
 
-`registerCrmConsoleApi()` from `@aglyn/plugins-crm/server` (the `consoleApi` surface) registers routes under the `crm` prefix for contact stage and field updates, contact creation and merge, lead conversion, deal stages, tasks, CSV imports of contacts, companies, deals, tasks and leads, one-to-one email and a contact's email history, erasing a person, organization-level activity, recipes, and the workspace's inbound email capture address. It also registers the CRM on two core seams, so another plugin can read a record's facts or file an item on a record's timeline without importing this package.
+`registerCrmConsoleApi()` from `@aglyn/plugins-crm/server` (the `consoleApi` surface) registers routes under the `crm` prefix for contact stage and field updates, contact creation and merge, lead conversion, deal stages, tasks, one-to-one email and a contact's email history, erasing a person, organization-level activity, recipes, and the workspace's inbound email capture address. Contacts, companies, leads, deals and tasks are imported and exported through the platform's transfer framework, and activities, pipelines and custom fields exported: `registerCrmConsoleServerDeclarations()` registers each resource's server half (`src/lib/transfer/`) and the console registrar its name in the import wizard and export dialog. It also registers the CRM on two core seams, so another plugin can read a record's facts or file an item on a record's timeline without importing this package.
 
 At the console's boot (`registerCrmConsoleServerDeclarations`) it registers a membership detacher (`plugin-membership-detach`): when the plugin that keeps a container — a campaign — removes it, the container comes off every lead and every contact facet that names it, and the records stay.
 

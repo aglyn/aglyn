@@ -73,18 +73,40 @@ const RULES_REMEDY =
   'Comments count toward the limit: trim them, and prove the trim comment-only with a comment-stripped diff.'
 
 /**
- * The three rules sources this repo deploys, each with the limit its own
- * service applies, where that limit comes from, how a refusal reads, and how
- * to make room.
+ * The sanity cap on the documented Firestore source, which no service reads.
+ *
+ * Since AGL-3544 the Firestore deploy ships `cloud/firebase-firestore.deploy.rules`,
+ * the source without its comments, so the comments no longer count toward
+ * the Rules API's limit. The source still gets a ceiling: twice the API's,
+ * which no amount of honest documentation approaches, and which a runaway
+ * edit (a pasted file, a duplicated block) crosses at once.
+ */
+export const FIRESTORE_SOURCE_SANITY_CAP_BYTES = 2 * RULES_API_SOURCE_LIMIT_BYTES
+
+/**
+ * The four files this guard measures: the three rules files that deploy,
+ * each against the limit its own service applies, and the documented
+ * Firestore source against its sanity cap. Each names where its limit comes
+ * from, how a refusal reads, and how to make room.
  */
 export const RULES_SOURCES = Object.freeze([
   Object.freeze({
-    path: 'cloud/firebase-firestore.rules',
+    path: 'cloud/firebase-firestore.deploy.rules',
     service: 'Cloud Firestore',
     limitBytes: RULES_API_SOURCE_LIMIT_BYTES,
     limitSource: 'Rules API ruleset source, 256 KiB (docs/rules/manage-deploy; measured in AGL-3027)',
     refusal: RULES_API_REFUSAL,
-    remedy: RULES_REMEDY,
+    remedy:
+      'This is the comment-stripped artifact of cloud/firebase-firestore.rules (AGL-3544), so trimming comments frees nothing: what is left is rules. Simplify or factor the rules, then run `npm run generate:rules-deploy`.',
+  }),
+  Object.freeze({
+    path: 'cloud/firebase-firestore.rules',
+    service: 'Cloud Firestore (documented source, not deployed)',
+    limitBytes: FIRESTORE_SOURCE_SANITY_CAP_BYTES,
+    limitSource:
+      'sanity cap, twice the Rules API limit; the deploy ships the comment-stripped artifact instead (AGL-3544)',
+    refusal: 'No deploy refuses this file: the cap is ours, and it means something has bloated the source.',
+    remedy: 'Look for a pasted or duplicated block; long explanations belong in docs/, linked from the rule.',
   }),
   Object.freeze({
     path: 'cloud/firebase-storage.rules',

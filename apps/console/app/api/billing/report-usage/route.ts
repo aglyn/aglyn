@@ -16,6 +16,8 @@
  */
 
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
+// By path: the route's specs replace the `/server` barrel wholesale.
+import { analyticsBandwidthReading } from '@aglyn/aglyn/app-utils/media-bandwidth'
 import {
   listPluginUsageMeters,
   unregisteredPluginUsageMeters,
@@ -437,27 +439,44 @@ function finiteUsd(value: unknown): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
 }
 
+/**
+ * One scope's month of analytics day documents — a site's, or the org
+ * library's — as the bandwidth it records: page views, plus the video and
+ * file bytes the media CDN counted on the same documents (AGL-3474).
+ */
+async function monthBandwidth(
+  scopeRef: FirebaseFirestore.DocumentReference,
+  month: string,
+): Promise<Pick<HostUsageSnapshot, 'pageViews' | 'mediaBandwidthBytes'>> {
+  const analytics = await scopeRef
+    .collection('analytics')
+    .where(
+      firebaseAdmin.firestore.FieldPath.documentId(),
+      '>=',
+      `${month}-01`,
+    )
+    .where(
+      firebaseAdmin.firestore.FieldPath.documentId(),
+      '<=',
+      `${month}-31`,
+    )
+    .get()
+  const reading = analyticsBandwidthReading(analytics.docs)
+  return {
+    pageViews: reading.meteredPageViews,
+    mediaBandwidthBytes: reading.mediaBytes,
+  }
+}
+
 async function hostUsage(
   hostRef: FirebaseFirestore.DocumentReference,
   month: string,
 ): Promise<HostUsageSnapshot> {
   // Each metered band's per-site counter, beside the platform's two.
   const counterNames = meteredBands().map((band) => band.hostCounter)
-  const [media, analytics, ...counters] = await Promise.all([
+  const [media, bandwidth, ...counters] = await Promise.all([
     hostRef.collection('counters').doc('media').get(),
-    hostRef
-      .collection('analytics')
-      .where(
-        firebaseAdmin.firestore.FieldPath.documentId(),
-        '>=',
-        `${month}-01`,
-      )
-      .where(
-        firebaseAdmin.firestore.FieldPath.documentId(),
-        '<=',
-        `${month}-31`,
-      )
-      .get(),
+    monthBandwidth(hostRef, month),
     ...counterNames.map((name) => hostRef.collection('counters').doc(name).get()),
   ])
   return {
@@ -465,10 +484,7 @@ async function hostUsage(
     meters: hostMeterReadings((name) =>
       counters[counterNames.indexOf(name)]?.get(month),
     ),
-    pageViews: analytics.docs.reduce(
-      (sum, day) => sum + Number(day.get('total') ?? 0),
-      0,
-    ),
+    ...bandwidth,
   }
 }
 
@@ -692,6 +708,7 @@ async function handler(request: Request): Promise<Response> {
         counterTotals,
         offlineFeesSnap,
         existing,
+        orgLibraryBandwidth,
       ] = await Promise.all([
         Promise.all(hostRefs.map(usageFor)),
         orgRef.get(),
@@ -741,6 +758,10 @@ async function handler(request: Request): Promise<Response> {
         // the read belongs beside the other independent ones rather than on
         // its own round trip per org.
         usageRef.get(),
+        // The ORG LIBRARY's video and file delivery (AGL-3474): the media
+        // CDN counts an org-library asset's bytes on the org's own day
+        // documents, which no site's sum reaches.
+        monthBandwidth(orgRef, month),
       ])
       // One read of the org doc for every quota decision below — the four
       // meters must agree about which plan they are pricing against.
@@ -798,6 +819,17 @@ async function handler(request: Request): Promise<Response> {
         storageBytes: counterTotals.orgLibraryBytes,
         pageViews: 0,
       }
+      // The org library's DELIVERY, as its own snapshot (AGL-3474). Kept apart
+      // from `orgLibrary` because the two reach the invoice on different
+      // terms: the library's stored bytes wait behind
+      // `BILL_ORG_LIBRARY_STORAGE_FROM`, while the video and files it serves
+      // are bandwidth, which is billed past the band like every site's, from
+      // the first month the CDN counted them.
+      const orgLibraryDelivery: HostUsageSnapshot = {
+        storageBytes: 0,
+        ...orgLibraryBandwidth,
+      }
+      const deliveredUsage = [...usage, orgLibraryDelivery]
       // Only usage BEYOND the plan's included storage/bandwidth/metered bands
       // is billed (AGL-1280) — `billedCents` is the excess; `costUsd` stays
       // the gross figure the COGS model and staff views read.
@@ -817,7 +849,10 @@ async function handler(request: Request): Promise<Response> {
       // a side effect of correcting the sum. Once the switch is set the two
       // estimates are the same figure and the branch costs nothing — it is a
       // pure function over numbers already in hand, no extra read.
-      const estimate = estimateMonthlyUsageCost([...usage, orgLibrary], orgData)
+      const estimate = estimateMonthlyUsageCost(
+        [...deliveredUsage, orgLibrary],
+        orgData,
+      )
       const orgLibraryBilled = billsOrgLibraryStorage(
         month,
         process.env.BILL_ORG_LIBRARY_STORAGE_FROM,
@@ -850,11 +885,11 @@ async function handler(request: Request): Promise<Response> {
       // direction that silently loosens the discount guardrail.
       const billedEstimateBeforeWithholding = orgLibraryBilled
         ? estimate
-        : estimateMonthlyUsageCost(usage, orgData)
+        : estimateMonthlyUsageCost(deliveredUsage, orgData)
       const estimateWithholding = (
         bands: readonly ResolvedPluginMeteredBand[],
       ) => {
-        const billedHosts = usage.map((host) => ({
+        const billedHosts = deliveredUsage.map((host) => ({
           ...host,
           meters: Object.fromEntries(
             Object.entries(host.meters ?? {}).map(([id, count]) => [
@@ -1162,6 +1197,10 @@ async function handler(request: Request): Promise<Response> {
           hostCount: hostRefs.length,
           storageGb: estimate.storageGb,
           pageViews: estimate.pageViews,
+          // The video and file delivery inside `pageViews` (AGL-3474), in GB,
+          // so the audit doc says how much of the band was media rather than
+          // leaving it to be rederived from day documents that expire.
+          mediaBandwidthGb: estimate.mediaBandwidthBytes / (1024 * 1024 * 1024),
           // Each metered band's count, under the band's field. COUNTED ALWAYS
           // (AGL-1688), like `contactsCount` below: the units are real, the
           // count is what the abuse ceiling and the plan quota are evaluated

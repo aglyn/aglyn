@@ -34,7 +34,7 @@
  *     campaigns, and the email-channel lookup is one keyed read rather than
  *     three; and
  *  3. a submission with NO campaign hands nothing on. Not an empty object,
- *     not a placeholder — a contact upsert carrying `campaignTouch: null`
+ *     not a placeholder — a contact upsert carrying `conversionTouch: null`
  *     would be a door reporting a campaign it does not have, and would make
  *     every organic conversion look attributable.
  */
@@ -44,9 +44,9 @@ const HOST_ID = 'site-1'
 let mockStore: Record<string, Record<string, any>> = {}
 let mockContactUpserts: Record<string, any>[] = []
 let mockLeads: Record<string, any>[] = []
-/** Every `resolveCampaignTouch` call the route made, in order. */
+/** Every `resolveConversionTouch` call the route made, in order. */
 let mockResolves: Record<string, any>[] = []
-/** Every `attributeCampaignConversion` call the route made. */
+/** Every `creditConversion` call the route made. */
 let mockConversions: Record<string, any>[] = []
 /** What the stubbed resolver answers for this case. */
 let mockResolved: Record<string, any> | null = null
@@ -80,6 +80,25 @@ const mockCollectionHandle = (path: string): any => ({
   add: async () => ({ id: 'submission-1', update: async () => undefined }),
 })
 
+/*
+ * The crediting plugin, asked through the platform's contract
+ * (`plugin-conversion-credit`): recorded rather than executed, because what a
+ * credit writes is that plugin's own spec's claim. The constant the touch
+ * rides under in a capture's `detail` is the real one.
+ */
+jest.mock('@aglyn/aglyn/plugin-manager/plugin-conversion-credit', () => ({
+  __esModule: true,
+  ...jest.requireActual('@aglyn/aglyn/plugin-manager/plugin-conversion-credit'),
+  resolveConversionTouch: async (options: Record<string, any>) => {
+    mockResolves.push(options)
+    return mockResolved
+  },
+  creditConversion: async (options: Record<string, any>) => {
+    mockConversions.push(options)
+    return false
+  },
+}))
+
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
   /*
@@ -89,14 +108,6 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
    * case here starts with a lead already on file.
    */
   readLeadForHost: async () => null,
-  resolveCampaignTouch: async (options: Record<string, any>) => {
-    mockResolves.push(options)
-    return mockResolved
-  },
-  attributeCampaignConversion: async (options: Record<string, any>) => {
-    mockConversions.push(options)
-    return null
-  },
   // The CRM's capture writer asks whether the workspace already holds the
   // address as a contact before it files a lead (AGL-3232). Nobody, here.
   findContactByEmail: async () => null,
@@ -156,8 +167,8 @@ jest.mock('@aglyn/tenant-runtime', () => ({
 /*
  * The route captures through the platform's contact-capture contract now
  * (AGL-3080), and the plugin that keeps people is what calls
- * `captureHostContact`. The CRM imports the LEAF module, so the barrel double
- * above does not intercept it; this forwards the leaf to that same double.
+ * `captureHostContact` from its own module, which the barrel double above
+ * does not intercept; this forwards that module to the same double.
  *
  * Deliberately not a double of the contract itself. Every assertion below is
  * on the options the writer receives, so routing them through the real CRM
@@ -175,7 +186,7 @@ jest.mock('@aglyn/tenant-runtime/emit-host-event', () => ({
   emitHostEvent: async () => ({ alerts: [] }),
 }))
 
-jest.mock('@aglyn/tenant-runtime/capture-host-contact', () => ({
+jest.mock('../../../libs/plugins/crm/src/lib/server/capture-host-contact', () => ({
   captureHostContact: (...args: unknown[]) =>
     (
       jest.requireMock('@aglyn/tenant-runtime') as {
@@ -196,7 +207,12 @@ beforeAll(async () => {
   await registerPluginServerDeclarations()
 })
 
-import { POST } from '../app/api/forms/submit/route'
+// The door as the tenant serves it: the forms plugin's route, through the
+// plugin API dispatcher, with the forms plugin's surface loaded (AGL-3080).
+jest.mock('../utils/server-plugin-loader', () => ({
+  serverPluginLoader: jest.requireActual('./plugin-door-dispatch').formsOnlyServerPluginLoader(),
+}))
+import { POST } from './plugin-door-dispatch'
 
 const WIRE = 'utm_source=google&utm_campaign=sept-launch&t=1700000000000'
 
@@ -265,7 +281,7 @@ describe('a submission that carries a campaign', () => {
   it('hands the SAME resolved touch to the contact', async () => {
     await submit({ campaignTouch: WIRE })
 
-    expect(mockContactUpserts[0].campaignTouch).toBe(TOUCH)
+    expect(mockContactUpserts[0].conversionTouch).toBe(TOUCH)
   })
 
   it('hands the SAME resolved touch to the lead', async () => {
@@ -318,10 +334,10 @@ describe('a submission with no campaign', () => {
   it('hands NO touch field to the contact', async () => {
     await submit()
 
-    // Not `campaignTouch: null`. A writer that received the key would be
+    // Not `conversionTouch: null`. A writer that received the key would be
     // being told about a campaign, and the shape a direct conversion takes on
     // the way in has to be the same absence it takes on the way out.
-    expect(mockContactUpserts[0]).not.toHaveProperty('campaignTouch')
+    expect(mockContactUpserts[0]).not.toHaveProperty('conversionTouch')
   })
 
   it('hands NO touch field to the lead', async () => {

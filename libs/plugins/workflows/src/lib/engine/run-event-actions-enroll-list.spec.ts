@@ -133,6 +133,26 @@ const collectionHandle = (path: string): any => {
 const firestoreHandle: any = {
   collection: (name: string) => collectionHandle(name),
   getAll: async (...refs: any[]) => refs.map((ref) => snapshotFor(ref.path)),
+  // The run meter's one write and its seed (AGL-3472).
+  batch: () => {
+    const writes: Array<() => Promise<void>> = []
+    return {
+      set: (ref: any, data: any, options?: { merge?: boolean }) => {
+        writes.push(() => ref.set(data, options))
+      },
+      commit: async () => {
+        for (const write of writes) await write()
+      },
+    }
+  },
+  runTransaction: async (body: (transaction: any) => Promise<any>) =>
+    await body({
+      get: async (ref: any) => await ref.get(),
+      getAll: async (...refs: any[]) => refs.map((ref) => snapshotFor(ref.path)),
+      set: (ref: any, data: any, options?: { merge?: boolean }) => {
+        void ref.set(data, options)
+      },
+    }),
 }
 
 jest.mock('@aglyn/tenant-data-admin', () => ({

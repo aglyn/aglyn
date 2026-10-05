@@ -1,0 +1,39 @@
+{
+  "name": "@aglyn/aglyn-transfer-ui",
+  "version": "1.0.0-beta.222",
+  "private": true,
+  "license": "Apache-2.0",
+  "homepage": "https://aglyn.com",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/aglyn/aglyn.git",
+    "directory": "libs/aglyn-transfer-ui"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "default": "./src/index.js"
+    },
+    "./*": {
+      "types": "./src/lib/*.d.ts",
+      "default": "./src/lib/*.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "dependencies": {
+    "@aglyn/aglyn": "1.0.0-beta.222",
+    "@aglyn/shared-ui-jsx": "1.0.0-beta.222",
+    "@swc/helpers": "0.5.23"
+  },
+  "peerDependencies": {
+    "@mui/icons-material": "^9.3.1",
+    "@mui/material": "^9.3.1",
+    "react": "^19.2.8"
+  },
+  "sideEffects": false
+}

@@ -21,7 +21,6 @@ import type {
   ConsolePluginPageProps,
   CrmLeadFields,
   CrmViewFilterClause,
-  CrmLeadStatus,
 } from '@aglyn/aglyn'
 import {
   mdiAccountArrowRight,
@@ -59,7 +58,6 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
-  MenuItem,
   Select,
   Stack,
   Typography,
@@ -74,7 +72,6 @@ import {
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { leadPrimaryGroup } from '../model/contact-holder'
-import { downloadTextFile } from '../model/contacts-csv'
 import { crmRoutes } from '../model/crm-routes'
 import {
   LEAD_EMAIL_FILTER_OPTIONS,
@@ -82,9 +79,11 @@ import {
   LEAD_LIST_DECLARATION,
   LEAD_LIST_FILTER_FIELDS,
   LEAD_LIST_FILTER_HEADERS,
+  LEAD_PICKLIST_FILTERS,
+  LEAD_SOURCE_DIRECTION_FILTER_OPTIONS,
   LEAD_SOURCE_FILTER_NONE,
-  LEAD_STATUS_FILTER_OPTIONS,
   leadClausesForGrid,
+  leadStatusFilterOptions,
   LEAD_PREFIX_SEARCH,
   leadClauseImpliesScope,
   leadClausesToStore,
@@ -98,20 +97,23 @@ import {
 import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
 import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
 import { useLeadSourcePicklist } from '../hooks/use-lead-source-picklist'
-import { type LeadCsvOptions, leadsCsv } from '../model/leads-csv'
+import { useLeadStatusPicklist } from '../hooks/use-lead-status-picklist'
+import { useLeadPicklists } from '../hooks/use-lead-picklists'
 import { LeadConvertDialog } from './lead-convert-dialog'
 import {
   leadSourceLabel,
   leadSources,
   leadTimeLabel,
 } from './lead-history-card'
-import { LeadImportButton } from './lead-import-drawer'
+import { CrmExportButton, CrmImportButton } from './crm-transfer-buttons'
+import { CRM_LEADS_RESOURCE } from '../transfer/fields'
 import NewLeadDrawer, { type NewLeadValues } from './new-lead-drawer'
 import { useCrmApi } from './use-crm-api'
 import { LeadOwnerSelect } from './lead-owner-select'
 import { CONVERT_PENDING_ERASURE_REASON } from './lead-properties-card'
 import { CrmEmailStateChip } from './crm-email-state-chip'
 import { LeadStatusChip } from './lead-status-chip'
+import { type LeadStatusChoice, leadStatusChoices, leadStatusMenuItems } from './lead-status-options'
 import { CrmShareChipView } from './record-sharing-card'
 import { crmShareChipFor } from '../model/crm-sharing'
 import { useCrmSharingFollowUp } from '../hooks/use-crm-sharing'
@@ -133,6 +135,12 @@ import OrgLeadSurfacesNote from './org-lead-surfaces-note'
  */
 type LeadRow = Record<string, unknown> &
   CrmLeadFields & { $id: string; leadId: string }
+
+/** Salesforce's Industry and Rating columns (AGL-3513), off until a reader turns one on. */
+const LEAD_HIDDEN_COLUMNS: Readonly<Record<string, boolean>> = {
+  industry: false,
+  rating: false,
+}
 
 /**
  * `/crm/leads` — the people a site has met but not yet qualified (AGL-2608).
@@ -168,6 +176,11 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
   // The org's lead source values (AGL-3298): the filter's menu and the
   // column's sort order.
   const leadSourceList = useLeadSourcePicklist(orgId)
+  // The org's lead status values (AGL-3512): the chips' words, the inline
+  // select's choices and the Status filter's names.
+  const leadStatusList = useLeadStatusPicklist(orgId)
+  // The org's Industry and Rating lists (AGL-3513): their filters' choices.
+  const leadPicklists = useLeadPicklists(orgId)
   const routes = crmRoutes(basePath ?? '')
 
   /*
@@ -210,7 +223,13 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
   const gridFilter = useListGridFilter({
     clauses,
     onChange: setClauses,
-    selectFields: ['status', 'emailState', 'ownerUid'],
+    selectFields: [
+      'status',
+      'emailState',
+      'ownerUid',
+      'leadSourceDirection',
+      ...LEAD_PICKLIST_FILTERS.map((entry) => entry.column),
+    ],
     codecs: LEAD_FILTER_CODECS,
   })
   const campaigns = useCrmCampaigns({ hostId, orgId }, { enabled: true })
@@ -244,8 +263,25 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
       })),
       { value: LEAD_SOURCE_FILTER_NONE, label: 'No lead source' },
     ]
+    /*
+     * Industry and Rating (AGL-3513): every value the org keeps, valued by
+     * the key the query compares and captioned by the label, inactive ones
+     * marked — the Companies list's choices.
+     */
+    const picklistOptions = Object.fromEntries(
+      LEAD_PICKLIST_FILTERS.map((entry) => {
+        const known = (leadPicklists.lists[entry.picklistId]?.values ?? []).flatMap((value) => {
+          const key = Aglyn.crmPicklistKey(value.label)
+          return key
+            ? [{ value: key, label: value.active ? value.label : `${value.label} (inactive)` }]
+            : []
+        })
+        return [entry.column, [...known, ...stale(entry.column, known)]]
+      }),
+    )
     return {
-      status: LEAD_STATUS_FILTER_OPTIONS,
+      ...picklistOptions,
+      status: leadStatusFilterOptions(leadStatusList.picklist),
       emailState: LEAD_EMAIL_FILTER_OPTIONS,
       ownerUid: roster.options.map((option) => ({
         value: option.uid,
@@ -253,8 +289,17 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
       })),
       campaignIds: [...campaignOptions, ...stale('campaignIds', campaignOptions)],
       leadSource: [...sourceOptions, ...stale('leadSource', sourceOptions)],
+      // The picklist's groups (AGL-3511): Inbound and Outbound.
+      leadSourceDirection: LEAD_SOURCE_DIRECTION_FILTER_OPTIONS,
     }
-  }, [clauses, campaigns.options, leadSourceList.picklist, roster.options])
+  }, [
+    clauses,
+    campaigns.options,
+    leadSourceList.picklist,
+    leadStatusList.picklist,
+    leadPicklists.lists,
+    roster.options,
+  ])
   /*
    * Every clause and the search word on ONE query (AGL-3321): each stored
    * clause asked through the field its writer keeps (`leadQueryClause`),
@@ -264,9 +309,14 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
   const asked = useMemo(
     () =>
       crmAskClauses(clauses, (clause) =>
-        leadQueryClause(clause, { scopeTokens, foldsScope }),
+        leadQueryClause(clause, {
+          scopeTokens,
+          foldsScope,
+          // A direction is expanded through the org's own groups (AGL-3511).
+          leadSources: leadSourceList.picklist,
+        }),
       ),
-    [clauses, scopeTokens, foldsScope],
+    [clauses, scopeTokens, foldsScope, leadSourceList.picklist],
   )
   const searchKey = gridFilter.searchWords.join(' ')
   const paged = useCrmListQuery<Record<string, unknown> & CrmLeadFields & { $id: string }>({
@@ -312,21 +362,18 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
     () => setSelectedIds([]),
     [views.state.filters, searchKey, paged.page],
   )
-  // How the file names the owner and, at the org level, the site.
-  const csvOptions: LeadCsvOptions = useMemo(
-    () => ({
-      ownerEmail: roster.emailFor,
-      ...(hostId ? {} : { siteName: (id: string) => mount?.siteName(id) }),
-    }),
-    [roster.emailFor, hostId, mount],
+
+  // The list's filter, when one narrows it, for the export to read the same
+  // records the list does (AGL-3528).
+  const exportFilter = useMemo(
+    () => (paged.plan.served.length || paged.plan.searched ? { label: 'what the list shows', plan: paged.plan } : null),
+    [paged.plan],
   )
-  // The page on screen; Export all on the bulk bar takes the whole list.
-  const handleExport = useCallback(() => {
-    downloadTextFile('leads.csv', 'text/csv', leadsCsv(rows, csvOptions))
-  }, [rows, csvOptions])
 
   const [assigning, setAssigning] = useState<LeadRow | null>(null)
   const [unqualifying, setUnqualifying] = useState<LeadRow | null>(null)
+  // The Unqualified value the row's select picked (AGL-3512).
+  const [unqualifyAs, setUnqualifyAs] = useState<string | null>(null)
   // The row whose conversion dialog is open (AGL-2641) — the same dialog
   // the lead's page opens, fed the row so the list is one click shorter.
   const [converting, setConverting] = useState<LeadRow | null>(null)
@@ -366,6 +413,8 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
           // filled — the route reads the definitions to judge the map, and
           // a body without it pays for no read.
           ...(values.custom ? { custom: values.custom } : {}),
+          // Salesforce's standard lead fields (AGL-3513), the filled ones.
+          ...values.standard,
           status: values.status,
         })
         if (!response.ok) {
@@ -476,19 +525,23 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
         headerName: 'Status',
         flex: 0.9,
         minWidth: 150,
+        // The meaning, which the Status filter asks; the cell shows the org's label.
         valueGetter: (_value, row: LeadRow) => Aglyn.crmLeadStatus(row),
         renderCell: ({ row }: { row: LeadRow }) => (
           <InlineStatus
             lead={row}
+            statuses={leadStatusList.picklist}
             onChange={(next) => {
-              if (next === 'unqualified') {
+              if (next.status === 'unqualified') {
                 setUnqualifying(row)
+                setUnqualifyAs(next.label)
                 return
               }
               void writeLead(
                 row,
                 {
-                  status: next,
+                  status: next.status,
+                  statusLabel: next.label,
                   ...(Aglyn.crmLeadStatus(row) === 'unqualified'
                     ? { unqualifiedReason: deleteField() }
                     : {}),
@@ -587,6 +640,21 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
         minWidth: 140,
         valueGetter: (_value, row: LeadRow) => (row.tags ?? []).join(', '),
       },
+      /*
+       * Salesforce's Industry and Rating (AGL-3513), optional: valued by
+       * the key their filters compare, drawn as the label the lead holds.
+       */
+      ...LEAD_PICKLIST_FILTERS.map(
+        (entry): GridColDef => ({
+          field: entry.column,
+          headerName: entry.header,
+          flex: 0.8,
+          minWidth: 130,
+          sortable: false,
+          valueGetter: (_value, row: LeadRow) => Aglyn.crmPicklistKey(row[entry.column]) ?? '',
+          renderCell: ({ row }: { row: LeadRow }) => String(row[entry.column] ?? '') || '—',
+        }),
+      ),
       // The campaigns the lead is filed under (AGL-3254), by name — the
       // ids are the storage.
       {
@@ -676,7 +744,10 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
                     icon: (
                       <MdiIcon path={mdiAccountCancelOutline.path} size={0.8} />
                     ),
-                    onClick: () => setUnqualifying(row),
+                    onClick: () => {
+                      setUnqualifyAs(null)
+                      setUnqualifying(row)
+                    },
                     disabled:
                       !Aglyn.isCrmLeadOpen(row) ||
                       Boolean(row.convertedContactId),
@@ -702,6 +773,7 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
       campaignName,
       leadFields.active,
       leadSourceList.picklist,
+      leadStatusList.picklist,
     ],
   )
   /*
@@ -713,7 +785,7 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
       listFilterGridColumns(columns, LEAD_LIST_FILTER_FIELDS, filterOptions, LEAD_LIST_FILTER_HEADERS),
     [columns, filterOptions],
   )
-  const grid = useCrmViewGrid(views, filterColumns)
+  const grid = useCrmViewGrid(views, filterColumns, LEAD_HIDDEN_COLUMNS)
 
   return (
     <>
@@ -728,10 +800,8 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
           // The record actions, top right and never clipped (AGL-3311).
           action: (
             <CrmListActions>
-              <LeadImportButton hostId={hostId} orgId={orgId} />
-              <Button size="small" onClick={handleExport} disabled={!rows.length}>
-                {'Export CSV'}
-              </Button>
+              <CrmImportButton resource={CRM_LEADS_RESOURCE} noun="leads" hostId={hostId} mappingZone="leads" />
+              <CrmExportButton resource={CRM_LEADS_RESOURCE} hostId={hostId} filter={exportFilter} />
               <Button
                 size="small"
                 variant="contained"
@@ -772,7 +842,6 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
             selected={selectedIds}
             onSelectedChange={setSelectedIds}
             roster={roster}
-            csv={csvOptions}
             orgId={orgId}
             hostId={hostId}
             org={org as Record<string, unknown> | undefined}
@@ -854,6 +923,7 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
         leadLabel={String(
           unqualifying?.['name'] || unqualifying?.['email'] || '',
         )}
+        statusLabel={unqualifyAs}
       />
       {/* The site the conversion is filed as (AGL-2641), which since
           AGL-3275 is the first site that captured this person rather than
@@ -888,17 +958,18 @@ CrmLeadsSection.displayName = 'CrmLeadsSection'
  */
 function InlineStatus(props: {
   lead: LeadRow
-  onChange: (next: CrmLeadStatus) => void
+  statuses: Aglyn.CrmPicklist
+  onChange: (next: LeadStatusChoice) => void
 }) {
-  const { lead, onChange } = props
+  const { lead, statuses, onChange } = props
   if (lead.convertedContactId) {
     return (
       <Box sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
-        <LeadStatusChip lead={lead} />
+        <LeadStatusChip lead={lead} statuses={statuses} />
       </Box>
     )
   }
-  const status = Aglyn.crmLeadStatus(lead)
+  const choices = leadStatusChoices(statuses, lead)
   return (
     <Box
       onClick={(event) => event.stopPropagation()}
@@ -913,19 +984,15 @@ function InlineStatus(props: {
         size="small"
         variant="standard"
         disableUnderline
-        value={status}
-        onChange={(event) => onChange(event.target.value as CrmLeadStatus)}
-        renderValue={() => <LeadStatusChip lead={lead} />}
+        value={Aglyn.crmLeadStatusLabel(lead, statuses)}
+        onChange={(event) => {
+          const choice = choices.find((entry) => entry.label === event.target.value)
+          if (choice) onChange(choice)
+        }}
+        renderValue={() => <LeadStatusChip lead={lead} statuses={statuses} />}
         sx={{ width: '100%' }}
       >
-        <MenuItem value="new">{Aglyn.CRM_LEAD_STATUS_LABELS.new}</MenuItem>
-        <MenuItem value="nurturing">
-          {Aglyn.CRM_LEAD_STATUS_LABELS.nurturing}
-        </MenuItem>
-        <MenuItem value="working">
-          {Aglyn.CRM_LEAD_STATUS_LABELS.working}
-        </MenuItem>
-        <MenuItem value="unqualified">{`${Aglyn.CRM_LEAD_STATUS_LABELS.unqualified}…`}</MenuItem>
+        {leadStatusMenuItems(choices)}
       </Select>
     </Box>
   )

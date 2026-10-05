@@ -16,12 +16,15 @@ reproducible. Prod project: **`aglyn-main`**, database **`(default)`**.
 single-field overrides/exemptions from `cloud/firebase-firestore.indexes.json`,
 and **deletes anything in the project that isn't in that file** (composite
 indexes and `fieldOverrides` alike). `firestore:rules` replaces the ruleset from
-`cloud/firebase-firestore.rules`. So:
+`cloud/firebase-firestore.deploy.rules`, the comment-stripped artifact of
+`cloud/firebase-firestore.rules` (AGL-3544; regenerate it with
+`npm run generate:rules-deploy`). So:
 
 - Composite indexes → `firebase-firestore.indexes.json` `indexes`
 - Single-field index exemptions (e.g. the large `nodes`/snapshot blobs) →
   `firebase-firestore.indexes.json` `fieldOverrides` with `indexes: []`
-- Security rules → `firebase-firestore.rules`
+- Security rules → `firebase-firestore.rules` (edited), deployed as
+  `firebase-firestore.deploy.rules` (generated)
 
 **Always diff BOTH `indexes` and `fieldOverrides` against the live project before
 an index deploy.** That diff is now a command (AGL-1804):
@@ -98,6 +101,10 @@ running the deploy, which is the one action that can destroy them.
 | `churnSurveyDetails` | `expiresAt` | The churn survey's free text (AGL-1978), split out of `orgs/{orgId}/retention` into its own document so it can expire without taking the closed-set `reason` with it — the reason breakdown is the whole point of the funnel (AGL-1859/AGL-1863) and must not be reaped. **365 days** (`CHURN_SURVEY_DETAIL_RETENTION_DAYS` in `apps/console/app/api/_lib/retention.ts`), because churn analysis is annual. TTL `ACTIVE`, enabled and verified 2026-08-19. |
 | `apiIdempotency` | `expiresAt` | REST/POS/marketplace replay keys (AGL-618, AGL-1978). **30 days** (`API_IDEMPOTENCY_RETENTION_DAYS` in `libs/aglyn/src/lib/app-utils/api-idempotency.ts`). Not merely a key: a settled claim stores the **original response body**, which for the REST API is the created record's `values` — so this collection was a permanent second copy of every record created through the API, surviving the record's own deletion. Top-level and `orgId`-keyed, so `eraseOrgIdempotencyKeys` sweeps it on erasure; the TTL is what bounds it for a **live** org. The published contract in `apps/docs/api/conventions.md` moved from "never expire" to the 30-day window in the same change. TTL `ACTIVE`, enabled and verified 2026-08-19. |
 | `authHandoffs` | `expiresAt` | Cross-domain console session handoff records (AGL-1902). Each holds the SHA-256 of **two** secrets that together buy a session, plus the `uid` it would be minted for — so an unexpired leftover is the one document in the database worth stealing. Expiry is enforced in code on redemption as well; the TTL is what bounds the row itself, and it is the only thing bounding it on a self-host install. Top-level, single-use, both hashes nulled on consume. TTL `ACTIVE`, enabled and verified 2026-08-20. |
+| `packageImports` | `expiresAt` | A site package import's record (AGL-3533, AGL-3543) at `hosts/{hostId}/packageImports/{importId}`: who imported what, each item's decision and target. **8 days** — the 7-day undo window and a day (`PACKAGE_LEDGER_RETENTION_MS` in `apps/console/app/api/_lib/site-package-ledger.ts`); the import route stamps `packageLedgerExpiry(...)` when it files the record and again when the import applies. Undo itself closes at 7 days in code (`packageImportUndoable`). **OWED: not yet enabled** — run the command below after the index deploy that carries the declaration. |
+| `snapshots` | `expiresAt` | The undo snapshot beneath a package import (AGL-3543), `packageImports/{importId}/snapshots/{n}`: every replaced or merged item's previous content **verbatim**, as JSON pieces of up to 900,000 characters — a whole-site restore into itself snapshots the whole site. Same 8 days; `writeLedgerPieces` stamps each piece, since TTL does not cascade from the record. The collection-group name is the generic `snapshots`; nothing else in the schema writes a subcollection by that name. **OWED: not yet enabled.** |
+| `writtenPaths` | `expiresAt` | The document paths a package import wrote per item (AGL-3543), `packageImports/{importId}/writtenPaths/{n}`, which undo deletes. Same 8 days, same writer. **OWED: not yet enabled.** |
+| `imports` | `expiresAt` | An email list's import ledger (AGL-3529, AGL-3549) at `orgs/{orgId}/lists/{listId}/imports/{jobId}`: up to 25 sample shared-mailbox addresses **verbatim**, the column names that read as a bought list, the consent sample's counts, and who stated permission (`attestedByUid`). **15 days** — the 7 days a planned import may wait to be applied, its 7-day undo window, and a day (`LIST_IMPORT_LEDGER_RETENTION_MS` in `libs/plugins/email/src/lib/transfer/list-members.server.ts`); every dry run re-stamps `listImportLedgerExpiry(Date.now())`. The collection-group name is the generic `imports`; nothing else in the schema writes a subcollection by that name. **OWED: not yet enabled** — run the command below after the index deploy that carries the declaration. |
 
 Not TTL targets (deliberately): `apiKeys.expiresAt` (validity field — keep expired
 keys as records), `orgSlugs.movedTo` tombstones (intentional persistent
@@ -148,6 +155,19 @@ gcloud firestore fields ttls update expiresAt \
 # AGL-2928 — run 2026-09-14, now ACTIVE:
 gcloud firestore fields ttls update expiresAt \
   --collection-group=months --enable-ttl \
+  --project=aglyn-main --database='(default)'
+# AGL-3543 — OWED, run after the index deploy that declares them:
+gcloud firestore fields ttls update expiresAt \
+  --collection-group=imports --enable-ttl \
+  --project=aglyn-main --database='(default)'
+gcloud firestore fields ttls update expiresAt \
+  --collection-group=packageImports --enable-ttl \
+  --project=aglyn-main --database='(default)'
+gcloud firestore fields ttls update expiresAt \
+  --collection-group=snapshots --enable-ttl \
+  --project=aglyn-main --database='(default)'
+gcloud firestore fields ttls update expiresAt \
+  --collection-group=writtenPaths --enable-ttl \
   --project=aglyn-main --database='(default)'
 # verify:
 gcloud firestore fields ttls list --project=aglyn-main --database='(default)'

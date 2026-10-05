@@ -30,6 +30,7 @@
 
 import { cert, getApps, initializeApp } from 'firebase-admin/app'
 import { getAuth } from 'firebase-admin/auth'
+import { FieldValue, getFirestore } from 'firebase-admin/firestore'
 
 const args = process.argv.slice(2)
 const identifier = args.find((a) => !a.startsWith('--'))
@@ -74,6 +75,43 @@ if (remove) {
 }
 
 await auth.setCustomUserClaims(user.uid, claims)
+
+// A former staff member takes a seat like anyone else (AGL-3466): the
+// no-seat stamp comes off every roster row they hold, found through their
+// `users/{uid}/orgs` reverse index, and off their pending invites. The same
+// clear `/api/admin/users/manage` makes on `revokeStaff`.
+if (remove) {
+  const db = getFirestore()
+  const refs = []
+  const memberships = await db.collection('users').doc(user.uid).collection('orgs').get()
+  for (const membership of memberships.docs) {
+    const row = await db
+      .collection('orgs')
+      .doc(membership.id)
+      .collection('members')
+      .doc(user.uid)
+      .get()
+    if (row.exists && row.get('staffSeat') !== undefined) refs.push(row.ref)
+  }
+  if (user.email) {
+    const invites = await db
+      .collectionGroup('invites')
+      .where('email', '==', user.email.toLowerCase())
+      .where('acceptedAt', '==', null)
+      .get()
+    for (const invite of invites.docs) {
+      if (invite.get('staffSeat') !== undefined) refs.push(invite.ref)
+    }
+  }
+  for (let i = 0; i < refs.length; i += 500) {
+    const batch = db.batch()
+    for (const ref of refs.slice(i, i + 500)) {
+      batch.update(ref, { staffSeat: FieldValue.delete() })
+    }
+    await batch.commit()
+  }
+  console.log(`Cleared the no-seat staff stamp from ${refs.length} row(s) and invite(s).`)
+}
 console.log(
   `${
     remove

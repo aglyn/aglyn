@@ -357,11 +357,32 @@ from another domain will render without those parts.
 
 :::
 
-Storage is metered per site against your plan (Free 250 MB, Starter 2 GB, Pro 10 GB,
-Business 20 GB, Scale 30 GB, Advanced 40 GB, Agency 60 GB, Enterprise 120 GB by default) —
-the library's toolbar shows the running total, and the
-[billing page](../../workspace-and-billing/billing-and-plans/overview.md#usage-meters)
-meters it alongside everything else.
+### Storage {#storage}
+
+Storage is one allowance for the whole workspace: your plan's storage per site, times
+the number of sites your plan allows, add-on sites included (the figures are on
+[the pricing page](https://aglyn.com/pricing)).
+Every site's library and the organization's shared library count toward it together,
+so room one library isn't using is there for the others.
+
+The library's toolbar says where you stand:
+
+- **Files.** With no folder open, how many files the library holds. With a folder open,
+  how many are in that folder and how many are in the library — for example
+  *15 files in Project photos · 17 in the library*. Both are totals, not how many
+  thumbnails have loaded.
+- **Storage.** How much this library holds out of your plan's allowance. When other
+  libraries in the workspace hold files too, the line shows this library's share first,
+  marked **here**, and then the workspace's total out of the allowance, marked **across
+  your workspace** — so one library's size is never read as if it were the whole
+  workspace's. A plan with unlimited storage says so instead of showing an allowance.
+- **The meter.** A slim bar under the storage line fills as the workspace uses its
+  allowance. It turns amber at 80% and red when the allowance is used up, the same as
+  the [billing page's meters](../../workspace-and-billing/billing-and-plans/overview.md#usage-meters),
+  which show storage alongside everything else.
+
+What happens past the allowance depends on your plan — see
+[storage overage](../../workspace-and-billing/billing-and-plans/overview.md#storage-overage).
 
 ### Edit images
 
@@ -399,6 +420,30 @@ Two things you may see:
 
 Every plan serves media via a **CDN** with automatic **WebP variants**, so images load fast
 and cache well.
+
+Image optimization is automatic, with nothing to set:
+
+- Each image gets WebP copies at a range of widths, and pages ask for the smallest one
+  that still fills the space the image is shown in. No copy is ever wider than the image
+  you uploaded, and none is kept when it would be larger than the file it stands in for.
+- Photos are turned upright, and the details inside the file — camera, date and the GPS
+  position a phone records — are left out of every copy a visitor receives.
+- An image larger than **2560 pixels** on its long edge is delivered at 2560, in its own
+  format, so a phone photo pasted into a page does not cost visitors several megabytes.
+- Your original is kept exactly as you uploaded it. **Download file** always gives it
+  back byte for byte, and [File info](#file-info) still reads its details.
+- Images already in your library pick up improvements to this on their own, the first
+  time each one is viewed after the change.
+
+Video, audio and documents are sent fresh on every request, so they count toward your
+organization's [bandwidth
+allowance](../../workspace-and-billing/billing-and-plans/bandwidth.md#how-usage-is-counted)
+by the bytes they send — a play, a seek or a download, from your site or from anywhere
+else the link is used. Video, audio, file downloads and other media served from our
+servers count 1.6× toward bandwidth, because serving them costs more than serving pages.
+Public images do not count separately: they are part of what a page weighs, which the
+allowance already counts. A private image, which only a signed link opens, counts like a
+file. Your own team previewing it in the console does not.
 
 ### URLs are stable
 
@@ -464,7 +509,7 @@ describes **this file**, and it says one of exactly three things:
 | Line | Dot | What it means |
 | --- | --- | --- |
 | **Served from storage · no CDN, no variants** | gray | This asset has no CDN path — a plan without the media CDN, or an asset stored before you had it. |
-| **CDN · variants 320 / 640 / 1280** | green | On the CDN, with those WebP widths generated for it. The widths listed are the ones this file actually has. |
+| **CDN · variants 320 / 640 / 1280** | green | On the CDN, with those WebP widths generated for it. The widths listed are the ones this file actually has — a 1600-pixel photo lists the widths up to 1600, not the whole range. |
 | **CDN · no responsive variants for this file** | green | On the CDN, serving the original bytes only. |
 
 The third line is **not a fault report**. A file has no variants when there was nothing
@@ -645,18 +690,40 @@ The details behind the sections above, for anyone wiring media into their own co
 
 ### Variant widths {#variant-widths}
 
-Aglyn generates WebP variants at **320**, **640** and **1280** pixels wide when an image
-is uploaded. Those three are the whole set — there is no arbitrary resizing service
-behind the CDN URL.
+Aglyn generates WebP variants at **160**, **320**, **480**, **640**, **768**, **960**,
+**1280**, **1600**, **1920** and **2560** pixels wide when an image is uploaded, up to the
+image's own width. That is the whole set — there is no arbitrary resizing service behind
+the CDN URL.
 
 Add `?w=` to a CDN URL to ask for one: `…/api/media/cdn/org:{orgId}/{mediaId}?w=640`. A
-width the asset does not have generated is not an error and not a resize — the original
-bytes are served instead, so a `?w=200` request answers with the full-size file. Check
-the drawer's [delivery line](#delivery-line) to see which widths a given file has.
+width the asset does not have is not an error and not a resize — the URL's plain answer
+is served instead, so a `?w=200` request answers with the full-size image. Check the
+drawer's [delivery line](#delivery-line) to see which widths a given file has.
 
-`?download=1` on the same URL makes the response save rather than open in a tab. Both
-parameters are read after every access check, so neither widens what is served, and both
-are part of the cache key, so they cannot bleed into each other.
+The plain URL, with no `?w=`, serves the image itself — except for a JPEG, PNG or WebP
+that is larger than 2560 pixels on its long edge, carries details such as a GPS position,
+or relies on a camera's rotation flag. Those are served as a copy in the same format:
+upright, at most 2560 pixels on the long edge, with the details removed. Only the
+original counts toward your storage; the copies are rebuilt from it whenever needed.
+
+`?download=1` on the same URL makes the response save rather than open in a tab, and it
+always serves the original file exactly as uploaded. Both parameters are read after
+every access check, so neither widens what is served, and both are part of the cache
+key, so they cannot bleed into each other.
+
+### How long a media URL is cached {#media-cache}
+
+The ordinary URL — the one **Copy URL** gives you — is revalidated: a browser keeps it for
+60 seconds and the CDN edge for an hour, so a **Replace** reaches every copy of it
+within that time.
+
+A published page asks for its images by a **versioned** URL instead, the same address
+with `?v=` and a version that changes whenever the file is replaced (or its smaller
+widths are regenerated). While the version is the current one, the response may be kept
+for a year by the visitor's browser, so a returning visitor loads the page's images
+from their own disk. The page names the new version the next time it is built after a
+replace; an old version still in someone's copy of the page is answered with the
+current file under the ordinary 60-second rule, never with a year of the old one.
 
 ### Tag limits {#tag-limits}
 

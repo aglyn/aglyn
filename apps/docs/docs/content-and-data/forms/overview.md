@@ -47,6 +47,20 @@ That per-address limit is one of several protections in front of your form — s
 [Spam and abuse protection](#spam-and-abuse-protection).
 :::
 
+### Place a saved form on a page {#place-a-saved-form}
+
+A form built on the **Forms** page goes on a page through a **Form** element: drop one
+in the Besigner and pick the form under **Form**. The page then draws that form's
+fields, and its button text, **Success message**, **After submit** outcome and styling
+come from the form itself, so editing them on the form changes every page that places
+it.
+
+Picking the form clears the button text, message and caption the element started with
+(the **Contact Section** block's *Send message*, for example), so they can't hide the
+form's own. To change one of them on one page only, set it on the placed element after
+picking the form, or under **Change it on this page only**. That replaces just the
+setting you changed; anything you leave empty still follows the form.
+
 ### Monthly allowance per plan
 
 Each tier includes a monthly form-submission allowance, counted per site:
@@ -440,6 +454,12 @@ as *subscribe* or *marketing consent* — counts even before you pick it as the 
 field. **See the contacts this form captured in the CRM** opens the Contacts list
 narrowed to source Form and this form.
 
+Each card saves what it shows, from the **Save** in its own header: **Details** saves the
+name and campaigns, and **CRM routing** saves the lead switch and the consent field.
+A card's **Save** and **Discard changes** stay grayed out until something in that card
+differs from what's saved, and saving one card never saves the other. If you reload or
+close the page, or open the Besigner, while a card has unsaved changes, you're asked first.
+
 **What this form has collected** carries the counters:
 
 - **Views** — times the form was rendered on a live page. Not times it was *seen*: a
@@ -483,6 +503,39 @@ The sender's name and email are recognized from the field name (see
 
 Submissions collected before a form became a form entity are filed under the name they
 were sent with rather than this form's id, so they stay in the Inbox under **All forms**.
+
+## Export submissions {#export-submissions}
+
+Take a copy of what visitors sent, as a file:
+
+- **One form's submissions.** On the form's own page, **Export** in the header of the
+  **Submissions to this form** card exports that form's submissions, newest first.
+- **Every form's at once.** On the **Forms** page, **Export submissions** in the header of
+  the **Forms** card exports every submission the site has received, including those sent
+  before a form became a form entity.
+
+You choose the columns, and their order, or start from a preset:
+
+- **Submission** — the Aglyn ID, when it was submitted, the form's ID and the name it had
+  when the submission arrived, the page it was sent from, whether it's been read, when it
+  was last replied to, the form's campaigns at the time, where else it was filed (such as
+  a dataset), and the site's ID.
+- **Answers** — one column per question, labeled with the question. Exporting one form
+  offers that form's questions; exporting the whole site offers every form's, each form
+  its own group, and a question two forms share by field name (such as *email*) is one
+  column. Answers are exported exactly as the visitor typed them.
+- **Other answers** — answers the form's recent submissions carry that its current
+  design no longer asks for, so a question you've since removed isn't lost.
+
+Files come as **CSV**, **JSON** or **NDJSON**, and your last choice of columns is
+remembered for next time.
+
+Exporting needs the **Manage data** permission on the site, and every export is recorded
+in the workspace's audit log — who exported, when and how many submissions, never the
+submissions themselves.
+
+Submissions can't be imported. A submission is what a visitor sent through a published
+form, stamped with the time and the page it came from; a file can't have sent one.
 
 ## Find a form in the list {#find-a-form}
 

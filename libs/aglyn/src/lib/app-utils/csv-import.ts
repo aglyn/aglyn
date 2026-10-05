@@ -42,6 +42,8 @@
  * console request's budget, not about what the rows hold.
  */
 
+import { escapeCsvCell } from './csv'
+
 /**
  * The most rows one uploaded file may carry.
  *
@@ -216,27 +218,9 @@ export function parseImportTags(value: unknown, max: number): string[] {
   ].slice(0, max)
 }
 
-/**
- * A yes/no cell as a boolean, or `null` when it is neither.
- *
- * The affirmatives are the ones consent and checkbox columns actually
- * carry; the negatives are listed so that an explicit `no` is a `false`
- * rather than an unreadable value that gets reported as dropped.
- */
-export function parseImportFlag(value: unknown): boolean | null {
-  if (typeof value === 'boolean') return value
-  if (typeof value === 'number') return value === 1 ? true : value === 0 ? false : null
-  const text = String(value ?? '')
-    .trim()
-    .toLowerCase()
-  if (['yes', 'y', 'true', '1', 'on', 'subscribed', 'opted in', 'opted-in'].includes(text)) {
-    return true
-  }
-  if (['no', 'n', 'false', '0', 'off', 'unsubscribed', ''].includes(text)) {
-    return false
-  }
-  return null
-}
+// The yes/no reader moved to the import/export core with the other cell
+// parsers (AGL-3522); this name stays for every importer that reads it here.
+export { parseImportFlag } from '../data-transfer/derive'
 
 /** A cell as trimmed text capped at `max`, or `undefined` when blank. */
 export function importTextValue(value: unknown, max: number): string | undefined {
@@ -253,10 +237,13 @@ export interface ImportDroppedValue {
   value: string
 }
 
-/** A CSV cell, quoted only when it has to be. */
+/**
+ * A CSV cell through {@link escapeCsvCell}: guarded against running as a
+ * spreadsheet formula, quoted only when it has to be. A number value is
+ * written as the number it is (`-5`, not `'-5`).
+ */
 export function csvCell(value: unknown): string {
-  const text = String(value ?? '')
-  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text
+  return escapeCsvCell(String(value ?? ''), { numeric: typeof value === 'number' || typeof value === 'bigint' })
 }
 
 /**
@@ -267,9 +254,10 @@ export function csvCell(value: unknown): string {
  * table's export.
  * Quoting is decided in {@link csvCell} and nowhere else — a cell holding a
  * comma, a quote or a line break is wrapped in quotes with its quotes
- * doubled, no other cell is touched, and a `null` or `undefined` cell is
- * empty rather than the word — so that a report's file and a contacts file
- * open the same way in a spreadsheet.
+ * doubled, a text cell a spreadsheet would run as a formula gets a leading
+ * `'`, and a `null` or `undefined` cell is empty rather than the word — so
+ * that a report's file and a contacts file open the same way in a
+ * spreadsheet.
  */
 export function csvDocument(
   header: readonly unknown[],

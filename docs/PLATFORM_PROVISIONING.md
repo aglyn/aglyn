@@ -24,7 +24,7 @@ Sections (each skips with instructions when its credential is absent):
 
 | Section | What it converges | Credentials |
 | -- | -- | -- |
-| Firebase rules | Deploys `cloud/firebase-firestore.rules`, indexes, and `cloud/firebase-storage.rules` | `FIREBASE_PROJECT_ID` + firebase CLI auth |
+| Firebase rules | Deploys the Firestore rules (`cloud/firebase-firestore.deploy.rules`, the comment-stripped `cloud/firebase-firestore.rules`), indexes, and `cloud/firebase-storage.rules` | `FIREBASE_PROJECT_ID` + firebase CLI auth |
 | *(not converged)* | **Bucket CORS** — `firebase deploy` cannot express it, and without it every signed direct-to-storage upload fails its preflight (AGL-1408). Apply `cloud/storage-cors.json` by hand: see [`docs/STORAGE_MANUAL_CONFIG.md`](STORAGE_MANUAL_CONFIG.md) | `gcloud` auth |
 | Stripe | Products/prices (lookup-key idempotent) + subscription webhook via `setup-stripe.mjs` | `STRIPE_SECRET_KEY` (+ `STRIPE_WEBHOOK_URL`) |
 | Vercel env sync | Upserts the console/tenant projects' env vars from the current shell (incl. `ANTHROPIC_API_KEY` for AI assist, AGL-89) | `VERCEL_TOKEN`, `VERCEL_CONSOLE_PROJECT_ID`, `VERCEL_TENANT_PROJECT_ID` (+ `VERCEL_TEAM_ID`) |

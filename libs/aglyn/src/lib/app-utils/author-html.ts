@@ -564,7 +564,7 @@ export function authorHtmlBreaksContainer(
  * The render path never asks for these. They exist for the AUTHORING side,
  * which is the only place a person who can fix the markup is standing; the
  * runtime is executing for a VISITOR and can do nothing but drop the value
- * silently. Same reasoning as the reserved-name refusal in `actions.ts`.
+ * silently. Same reasoning as the reserved-name refusal in `site-interactions.ts`.
  */
 export interface AuthorHtmlRemoval {
   kind: 'element' | 'attribute' | 'style' | 'url'

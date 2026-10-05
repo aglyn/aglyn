@@ -17,53 +17,38 @@
 'use client'
 
 import {
-  contactDisplayName,
-  normalizeContactEmail,
-} from '@aglyn/aglyn/app-utils/contacts'
-import {
-  CRM_COLLECTIONS,
-  crmLeadDisplayName,
-  crmViewIsListed,
-  isCrmLeadOpen,
-  normalizeCrmViewFilters,
-} from '@aglyn/aglyn/app-utils/crm'
-import {
-  CRM_EMAIL_TEMPLATES_LIMIT,
-  crmEmailTemplateIsListed,
-  normalizeCrmEmailTemplate,
-} from '@aglyn/aglyn/app-utils/crm-email-templates'
-import { dynamicListDimensionsForCrmView } from '@aglyn/aglyn/app-utils/dynamic-list-rule'
-import { nameSearchToken } from '@aglyn/aglyn/app-utils/name-search'
-import { scopeTokensForHost } from '@aglyn/aglyn/app-utils/scope-tokens'
-import { visibleToHost } from '@aglyn/aglyn/app-utils/scope-tokens'
+  pluginRecordListQuery,
+  pluginRecordsFromRows,
+  type PluginRecordListRequest,
+} from '@aglyn/aglyn/plugin-manager/plugin-record-lists'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
-import {
-  collection,
-  getDocs,
-  limit,
-  onSnapshot,
-  orderBy,
-  query,
-  where,
-} from 'firebase/firestore'
+import { getDocs, onSnapshot, type DocumentData, type QuerySnapshot } from 'firebase/firestore'
 import { useEffect, useState } from 'react'
 import type { OutreachLoad } from './use-outreach-data'
 
 /**
- * What Outreach reads from the organization's CRM (AGL-2980): the saved
- * Contacts views people can be enrolled from, the email templates a step
- * can send, and the contacts a search finds.
+ * What Outreach lists from the organization's record system (AGL-2980): the
+ * saved views people can be enrolled from, the email templates a step can
+ * send, and the people a search finds.
  *
- * Through the core's own CRM model — the collection names, the listing
- * rules, the view translation the dynamic-list sweep uses — and never
- * through the CRM plugin, which a plugin may not import. The Firestore
- * rules gate every one of these reads on `data.manage`, the same permission
- * the enroll routes ask for, so a member who cannot read the people cannot
- * enroll them either.
+ * Through the record system's own list sources (`plugin-record-lists`,
+ * AGL-3080) — the kinds `savedView`, `messageTemplate`, `contact` and `lead`
+ * — and never through its collections or its plugin, which a plugin may not
+ * import. The owner builds the query its security rules prove and applies
+ * its own listing rules to what comes back; with no plugin keeping people,
+ * each list reads as empty. The rules gate every one of these reads on
+ * `data.manage`, the same permission the enroll routes ask for, so a member
+ * who cannot read the people cannot enroll them either.
  */
 
 const denied = (error: unknown) =>
   (error as { code?: unknown } | null)?.code === 'permission-denied'
+
+/** A listener's documents as rows a list source reads back, the id beside the fields. */
+const rowsOf = (snapshot: QuerySnapshot<DocumentData>) =>
+  snapshot.docs.map((entry) => ({ ...entry.data(), $id: entry.id }))
+
+const text = (value: unknown): string => (typeof value === 'string' ? value : '')
 
 /** A saved Contacts or Leads view people can be enrolled from (AGL-3234). */
 export interface OutreachViewOption {
@@ -77,11 +62,11 @@ export interface OutreachViewOption {
 export const OUTREACH_VIEWS_LIMIT = 50
 
 /**
- * The saved Contacts views this reader may enroll from: their own and the
- * shared ones — a colleague's private view is theirs — that translate whole
- * into an audience. A view filtering on something enrolling cannot apply is
- * not offered, because dropping that filter would enroll more people than
- * the view shows.
+ * The saved Contacts and Leads views this reader may enroll from: their own
+ * and the shared ones — a colleague's private view is theirs, and the record
+ * system leaves it out — that it says can be taken whole as an audience. A
+ * view filtering on something enrolling cannot apply is not offered, because
+ * dropping that filter would enroll more people than the view shows.
  */
 export function useOutreachSavedViews(
   orgId: string | null,
@@ -95,43 +80,26 @@ export function useOutreachSavedViews(
   useEffect(() => {
     setResult({ status: 'loading', data: [] })
     if (!orgId) return undefined
+    const request: PluginRecordListRequest = { orgId, viewerUid: uid, limit: OUTREACH_VIEWS_LIMIT }
+    const views = pluginRecordListQuery('savedView', firestore, request)
+    if (!views) {
+      setResult({ status: 'ready', data: [] })
+      return undefined
+    }
     return onSnapshot(
-      query(
-        collection(firestore, 'orgs', orgId, CRM_COLLECTIONS.views),
-        where('section', 'in', ['contacts', 'leads']),
-        orderBy('name'),
-        limit(OUTREACH_VIEWS_LIMIT),
-      ),
+      views,
       (snapshot) =>
         setResult({
           status: 'ready',
-          data: snapshot.docs
-            .map((entry) => ({
-              id: entry.id,
-              data: entry.data() as Record<string, unknown>,
-            }))
-            .filter(
-              ({ data }) =>
-                typeof data['name'] === 'string' &&
-                data['name'] !== '' &&
-                crmViewIsListed(
-                  {
-                    shared: data['shared'] === true,
-                    ownerUid: String(data['ownerUid'] ?? ''),
-                  },
-                  uid,
-                ) &&
-                // A Leads view narrows by status alone, which enrolling can
-                // always apply; a Contacts view must be readable as a list.
-                (data['section'] === 'leads' ||
-                  dynamicListDimensionsForCrmView(
-                    normalizeCrmViewFilters(data['filters']),
-                  ).unsupported.length === 0),
-            )
-            .map(({ id, data }) => ({
-              id,
-              name: String(data['name']),
-              section: data['section'] === 'leads' ? ('leads' as const) : ('contacts' as const),
+          data: pluginRecordsFromRows('savedView', rowsOf(snapshot), '$id', request)
+            // A view the owner says cannot be taken whole is not offered:
+            // dropping the filter it could not apply would enroll more
+            // people than the view shows.
+            .filter((view) => view.facts['takeable'] === true)
+            .map((view) => ({
+              id: view.id,
+              name: view.name,
+              section: view.facts['recordKind'] === 'lead' ? ('leads' as const) : ('contacts' as const),
             })),
         }),
       (error) => {
@@ -144,7 +112,7 @@ export function useOutreachSavedViews(
   return result
 }
 
-/** A CRM email template a step can send the body of. */
+/** An email template the record system keeps, which a step can send the body of. */
 export interface OutreachTemplateOption {
   id: string
   name: string
@@ -153,9 +121,9 @@ export interface OutreachTemplateOption {
 }
 
 /**
- * The CRM email templates a step at this site can use: whole letters, not
- * snippets; the team's and this reader's own; written for the whole
- * organization or for this site.
+ * The email templates a step at this site can use: whole letters, not
+ * snippets — and, as the record system lists them, the team's and this
+ * reader's own, written for the whole organization or for this site.
  */
 export function useOutreachEmailTemplates(
   orgId: string | null,
@@ -170,31 +138,30 @@ export function useOutreachEmailTemplates(
   useEffect(() => {
     setResult({ status: 'loading', data: [] })
     if (!orgId) return undefined
+    const request: PluginRecordListRequest = {
+      orgId,
+      hostId,
+      viewerUid: uid,
+      limit: OUTREACH_TEMPLATES_LIMIT,
+    }
+    const templates = pluginRecordListQuery('messageTemplate', firestore, request)
+    if (!templates) {
+      setResult({ status: 'ready', data: [] })
+      return undefined
+    }
     return onSnapshot(
-      query(
-        collection(firestore, 'orgs', orgId, CRM_COLLECTIONS.emailTemplates),
-        orderBy('name'),
-        limit(CRM_EMAIL_TEMPLATES_LIMIT),
-      ),
+      templates,
       (snapshot) =>
         setResult({
           status: 'ready',
-          data: snapshot.docs
-            .map((entry) => ({
-              id: entry.id,
-              template: normalizeCrmEmailTemplate(entry.data()),
-            }))
-            .filter(
-              ({ template }) =>
-                template.kind === 'template' &&
-                crmEmailTemplateIsListed(template, uid) &&
-                (!hostId || visibleToHost(template.visibleTo, hostId)),
-            )
-            .map(({ id, template }) => ({
-              id,
+          data: pluginRecordsFromRows('messageTemplate', rowsOf(snapshot), '$id', request)
+            // Whole letters, not snippets.
+            .filter((template) => template.facts['kind'] === 'template')
+            .map((template) => ({
+              id: template.id,
               name: template.name,
-              subject: template.subject,
-              body: template.body,
+              subject: text(template.facts['subject']),
+              body: text(template.facts['body']),
             })),
         }),
       (error) => {
@@ -214,13 +181,16 @@ export interface OutreachContactOption {
   email: string | null
 }
 
+/** The most templates the picker reads — the record system's own ceiling. */
+export const OUTREACH_TEMPLATES_LIMIT = 200
+
 /** The most contacts one search answers with. */
 export const OUTREACH_SEARCH_LIMIT = 25
 
 /**
- * The contacts at `hostId` a search finds: by address when the text is one,
- * otherwise by a word of the name — the `nameTokens` the contacts carry for
- * the CRM's own search. `idle` until something is typed.
+ * The contacts at `hostId` a search finds — by address when the text is one,
+ * otherwise by a word of the name, the record system's own search — named as
+ * the sequence's consent group knows them. `idle` until something is typed.
  */
 export function useOutreachContactSearch(input: {
   orgId: string | null
@@ -228,59 +198,41 @@ export function useOutreachContactSearch(input: {
   contactGroupId: string | null
   text: string
 }): OutreachLoad<OutreachContactOption[]> & { idle: boolean } {
-  const { orgId, hostId, contactGroupId, text } = input
+  const { orgId, hostId, contactGroupId } = input
   const firestore = useFirestore()
   const [result, setResult] = useState<OutreachLoad<OutreachContactOption[]>>({
     status: 'ready',
     data: [],
   })
-  const email = normalizeContactEmail(text)
-  const token = email ? '' : nameSearchToken(text)
-  const idle = !orgId || !hostId || (!email && !token)
+  const search = input.text
+  const request: PluginRecordListRequest | null =
+    orgId && hostId
+      ? { orgId, hostId, consentGroupId: contactGroupId, search, limit: OUTREACH_SEARCH_LIMIT }
+      : null
+  // Nothing to look for — no site, nothing typed, or no record system — is
+  // idle rather than an empty answer.
+  const idle = !request || !pluginRecordListQuery('contact', firestore, request)
   useEffect(() => {
-    if (idle || !orgId || !hostId) {
+    if (idle || !request) {
       setResult({ status: 'ready', data: [] })
       return undefined
     }
+    const contacts = pluginRecordListQuery('contact', firestore, request)
+    if (!contacts) return undefined
     let current = true
     setResult((previous) => ({ status: 'loading', data: previous.data }))
-    const contacts = collection(firestore, 'orgs', orgId, 'contacts')
     // Settles the typing before it reads: one query per pause, not per key.
     const timer = setTimeout(() => {
-      getDocs(
-        email
-          ? query(
-              contacts,
-              where('email', '==', email),
-              limit(OUTREACH_SEARCH_LIMIT),
-            )
-          : query(
-              contacts,
-              where('nameTokens', 'array-contains', token),
-              orderBy('nameLower'),
-              limit(OUTREACH_SEARCH_LIMIT),
-            ),
-      )
+      getDocs(contacts)
         .then((snapshot) => {
           if (!current) return
           setResult({
             status: 'ready',
-            data: snapshot.docs
-              .map((entry) => ({
-                id: entry.id,
-                data: entry.data() as Record<string, unknown>,
-              }))
-              .filter(({ data }) =>
-                visibleToHost(
-                  data['visibleTo'] as string[] | undefined,
-                  hostId,
-                ),
-              )
-              .map(({ id, data }) => ({
-                id,
-                name: contactDisplayName(data, contactGroupId ?? hostId).trim(),
-                email: normalizeContactEmail(data['email']),
-              })),
+            data: pluginRecordsFromRows('contact', rowsOf(snapshot), '$id', request).map((contact) => ({
+              id: contact.id,
+              name: contact.name,
+              email: text(contact.facts['email']) || null,
+            })),
           })
         })
         .catch((error: unknown) => {
@@ -294,7 +246,9 @@ export function useOutreachContactSearch(input: {
       current = false
       clearTimeout(timer)
     }
-  }, [firestore, orgId, hostId, contactGroupId, email, token, idle])
+    // The request is data; these are its parts.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [firestore, orgId, hostId, contactGroupId, search, idle])
   return { ...result, idle }
 }
 
@@ -305,9 +259,10 @@ export const OUTREACH_LEADS_WINDOW = 200
  * The open leads at `hostId` a search finds (AGL-3234): the site's most
  * recently seen leads, read once while the tab is open and narrowed in
  * the browser by a word of the name or the address — a lead carries no
- * search tokens, and the window is the Leads list's own. Converted and
- * closed leads are left out: they are a contact's, or a verdict's, to
- * enroll. `idle` until something is typed.
+ * search tokens, and the window is the Leads list's own. Leads the record
+ * system says are no longer open — converted or closed — are left out: they
+ * are a contact's, or a verdict's, to enroll. `idle` until something is
+ * typed.
  */
 export function useOutreachLeadSearch(input: {
   orgId: string | null
@@ -315,7 +270,7 @@ export function useOutreachLeadSearch(input: {
   text: string
   enabled: boolean
 }): OutreachLoad<OutreachContactOption[]> & { idle: boolean } {
-  const { orgId, hostId, text, enabled } = input
+  const { orgId, hostId, text: typed, enabled } = input
   const firestore = useFirestore()
   const [window, setWindow] = useState<OutreachLoad<OutreachContactOption[]>>({
     status: 'ready',
@@ -326,30 +281,26 @@ export function useOutreachLeadSearch(input: {
       setWindow({ status: 'ready', data: [] })
       return undefined
     }
+    const request: PluginRecordListRequest = { orgId, hostId, limit: OUTREACH_LEADS_WINDOW }
+    const leads = pluginRecordListQuery('lead', firestore, request)
+    if (!leads) {
+      setWindow({ status: 'ready', data: [] })
+      return undefined
+    }
     let current = true
     setWindow({ status: 'loading', data: [] })
-    getDocs(
-      query(
-        // The org collection, narrowed to the site this view belongs to
-        // (AGL-3275) — unscoped it would offer one agency client another
-        // client's people to enroll.
-        collection(firestore, 'orgs', orgId, 'leads'),
-        where('visibleTo', 'array-contains-any', scopeTokensForHost(hostId)),
-        orderBy('lastSeenAtMs', 'desc'),
-        limit(OUTREACH_LEADS_WINDOW),
-      ),
-    )
+    getDocs(leads)
       .then((snapshot) => {
         if (!current) return
         setWindow({
           status: 'ready',
-          data: snapshot.docs
-            .map((entry) => ({ id: entry.id, data: entry.data() as Record<string, unknown> }))
-            .filter(({ data }) => isCrmLeadOpen(data as never) && !data['convertedContactId'])
-            .map(({ id, data }) => ({
-              id,
-              name: crmLeadDisplayName(data),
-              email: normalizeContactEmail(data['email']),
+          data: pluginRecordsFromRows('lead', rowsOf(snapshot), '$id', request)
+            // Converted and closed leads are a contact's, or a verdict's, to enroll.
+            .filter((lead) => lead.facts['open'] === true)
+            .map((lead) => ({
+              id: lead.id,
+              name: lead.name,
+              email: text(lead.facts['email']) || null,
             })),
         })
       })
@@ -362,7 +313,7 @@ export function useOutreachLeadSearch(input: {
       current = false
     }
   }, [firestore, orgId, hostId, enabled])
-  const needle = text.trim().toLowerCase()
+  const needle = typed.trim().toLowerCase()
   const idle = !hostId || !needle
   const data = idle
     ? []

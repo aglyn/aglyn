@@ -185,8 +185,10 @@ describe('the included campaign-email bands', () => {
    *
    * Free and Starter are both 0: campaign email begins at Pro, because a site
    * that may send needs its own verified provider sending domain and
-   * provisioning one is a per-site operational cost. Pro did not move — its
-   * email COGS was already 8.0% of price.
+   * provisioning one is a per-site operational cost. Pro to Scale came down
+   * again on 2026-10-02 (AGL-3469), when every tier had to cover its full-use
+   * cost plus 30% after Stripe's fee: Pro 5,000 → 2,500, Business 25,000 →
+   * 15,000, Scale 40,000 → 25,000.
    */
   it('are exactly these, on every plan', () => {
     expect(
@@ -196,9 +198,9 @@ describe('the included campaign-email bands', () => {
     ).toEqual({
       free: 0,
       starter: 0,
-      pro: 5_000,
-      business: 25_000,
-      scale: 40_000,
+      pro: 2_500,
+      business: 15_000,
+      scale: 25_000,
       advanced: 65_000,
       agency: 130_000,
       enterprise: 260_000,
@@ -282,9 +284,9 @@ describe('the included campaign-email bands', () => {
     expect(Object.fromEntries(PAID.map((plan) => [plan, share(plan)]))).toEqual({
       // No band, so no included COGS — the axis costs this tier nothing.
       starter: 0,
-      pro: 8,
-      business: 16.2,
-      scale: 14.5,
+      pro: 4,
+      business: 9.7,
+      scale: 9,
       advanced: 14.7,
       // Agency reads lower than its neighbours because its PRICE moved as
       // well as its band — $1,299, not $799.
@@ -370,7 +372,7 @@ describe('the billed rate and the cost rate are different numbers', () => {
   const RETAIL_LINES = [
     { rate: 'extraEmailSendsUsdPer1k', cost: 0.0009 * 1000, unit: 'per 1,000 emails' },
     { rate: 'extraContactsUsdPer1k', cost: 0.0002 * 1000, unit: 'per 1,000 contact-months' },
-    { rate: 'extraApiRequestsUsdPer1k', cost: 0.000002 * 1000, unit: 'per 1,000 API requests' },
+    { rate: 'extraApiRequestsUsdPer1k', cost: 0.000117 * 1000, unit: 'per 1,000 API requests' },
   ] as const
 
   /** Retail lines below the floor, from any pricing table shape. */
@@ -428,8 +430,9 @@ describe('the billed rate and the cost rate are different numbers', () => {
   })
 
   it('does NOT apply the floor to the infra pass-through', () => {
-    // The three pass-through rates earn 23% by construction — they are cost x
-    // 1.30, and "at cost + 30%" is a published promise. A guard that swept
+    // The three pass-through rates earn ~26% of the price by construction —
+    // cost x 1.30 grossed up for the card fee and rounded up (AGL-3476), and
+    // "at cost + 30%, after card fees" is a published promise. A guard that swept
     // them in would be red on shipped, correct, PUBLISHED prices, and the
     // cheapest way to get it green would be to change one of them. The cost
     // is a BILLED view's, weight and CDN requests both.
@@ -437,7 +440,7 @@ describe('the billed rate and the cost rate are different numbers', () => {
       (METERED_BILLED_RATES_USD.perPageView -
         METERED_OVERAGE_COST_USD.perPageView) /
       METERED_BILLED_RATES_USD.perPageView
-    expect(passThroughMargin).toBeCloseTo(0.2308, 4)
+    expect(passThroughMargin).toBeCloseTo(0.2586, 4)
     expect(passThroughMargin).toBeLessThan(0.5)
     // …and none of the three is a key this guard reads.
     for (const { rate } of RETAIL_LINES) {
@@ -474,10 +477,10 @@ describe('the billed rate and the cost rate are different numbers', () => {
       )
     }
     expect(METERED_MARKUP).toBe(1.3)
-    expect(METERED_BILLED_RATES_USD.storagePerGbMonth).toBeCloseTo(0.0338, 6)
-    expect(METERED_BILLED_RATES_USD.perPageView * 1000).toBeCloseTo(0.7, 6)
+    expect(METERED_BILLED_RATES_USD.storagePerGbMonth).toBeCloseTo(0.0349, 6)
+    expect(METERED_BILLED_RATES_USD.perPageView * 1000).toBeCloseTo(0.83, 6)
     expect(METERED_BILLED_RATES_USD.perFormSubmission * 1000).toBeCloseTo(
-      0.07,
+      0.083,
       6,
     )
   })
@@ -745,7 +748,7 @@ describe('exactly one list price moved with the email change', () => {
 
   it('the dataset add-on rate is NOT the metered storage pass-through', () => {
     // `/pricing` carries two per-GB-month figures and they mean different
-    // things: $0.0338 is the metered pass-through on GCS media bytes, and
+    // things: $0.0349 is the metered pass-through on GCS media bytes, and
     // this is the retail line on Firestore-backed dataset bytes. Confusing
     // them is a standing hazard, so both are pinned here beside each other.
     for (const plan of PAID) {
@@ -753,7 +756,7 @@ describe('exactly one list price moved with the email change', () => {
         `${plan}: 0.36`,
       )
     }
-    expect(METERED_BILLED_RATES_USD.storagePerGbMonth).toBeCloseTo(0.0338, 6)
+    expect(METERED_BILLED_RATES_USD.storagePerGbMonth).toBeCloseTo(0.0349, 6)
     // …and the retail line clears the 50% floor against its own cost, which
     // is what moved it off $0.25 (a 28% margin).
     const cost = ORG_COGS_UNIT_RATES_USD.dataStoragePerGbMonth

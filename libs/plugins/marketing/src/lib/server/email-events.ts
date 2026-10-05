@@ -52,10 +52,11 @@ import {
 // record staff have of what we sent someone, and a mocked-away writer is a
 // green test over an empty log.
 import {
-  recordEmailCampaignTouch,
   recordEmailDeliveryEvents,
   recordPersonEngagement,
 } from '@aglyn/tenant-data-admin/server/email-delivery-log'
+// This plugin's touch map, on the same person document.
+import { recordEmailCampaignTouch } from './email-campaign-touch'
 // The contact's own stamp is the record system's, asked through the core's
 // seam: what the record page, the list and the re-engagement audience read.
 import { stampRecordEmailEngagement } from '@aglyn/aglyn/plugin-manager/plugin-record-email-state'
@@ -68,7 +69,7 @@ import { getOrgForHost } from '@aglyn/tenant-data-admin/server/organizations'
 // The leaf again: which document a delivery event counts against is the
 // question every counter below depends on, and a stub would answer it for
 // them.
-import { resolveCampaignSendRef } from '@aglyn/tenant-data-admin/server/campaign-conversion-attribution'
+import { resolveCampaignSendRef } from './campaign-conversion-attribution'
 import { recordEmailReputationFailure } from '@aglyn/tenant-data-admin/server/email-sender-reputation'
 // The leaf again: the ledger is what holds a sending domain's bulk mail, and
 // a wholesale mock would green a webhook that taught it nothing.
@@ -78,9 +79,9 @@ import { recordDeliverabilityFromDeliveryEvents } from '@aglyn/tenant-data-admin
 // the shape the webhook writes and the shape the report reads cannot drift
 // into two definitions of what a "link" is.
 import {
-  CAMPAIGN_LINK_ROLLUP_MAX,
-  campaignLinkKey,
-} from '@aglyn/shared-ui-email-campaigns/model'
+  SEND_LINK_ROLLUP_MAX,
+  sendLinkKey,
+} from '@aglyn/shared-ui-email-campaigns/model/send-report'
 import { createHash } from 'crypto'
 import { FieldValue } from 'firebase-admin/firestore'
 import { assignExperimentVariant, type HostExperiment } from '../model/experiments'
@@ -315,7 +316,7 @@ async function recordCampaignLinkClick(args: {
     // contain `.`, `/` or `~`, and every URL contains at least two of them.
     // The URL itself rides in the value, so nothing has to be un-hashed.
     const key = createHash('sha256').update(link).digest('hex').slice(0, 32)
-    if (links[key] === undefined && Object.keys(links).length >= CAMPAIGN_LINK_ROLLUP_MAX) {
+    if (links[key] === undefined && Object.keys(links).length >= SEND_LINK_ROLLUP_MAX) {
       transaction.set(
         ref,
         { overflowClicks: FieldValue.increment(1) },
@@ -735,7 +736,7 @@ export const emailEventsHandler: PluginApiHandler = async (req, res) => {
        * ONE DOCUMENT, not a document per URL. The report then reads the whole
        * table with a single `getDoc`, and the map cannot grow without bound
        * because the transaction refuses a new key past the cap and counts the
-       * click as overflow instead. `campaignLinkKey` drops the query string,
+       * click as overflow instead. `sendLinkKey` drops the query string,
        * so a link personalised per recipient cannot mint a row per recipient
        * — see that function for why that is a correctness requirement and not
        * only a size one.
@@ -750,7 +751,7 @@ export const emailEventsHandler: PluginApiHandler = async (req, res) => {
           await recordCampaignLinkClick({
             firestore,
             campaignRef,
-            link: campaignLinkKey(data?.click?.link),
+            link: sendLinkKey(data?.click?.link),
           }).catch(() => undefined)
         }
 

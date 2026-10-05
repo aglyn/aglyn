@@ -25,7 +25,14 @@ import {
 } from '@aglyn/tenant-feature-instance'
 
 export interface RunQuotaLineProps {
-  hostId: string
+  /**
+   * The site the line sits on, or `null` on the organization's hub. Its own
+   * counter is read only when there is no workspace id to read the
+   * workspace's by.
+   */
+  hostId: string | null
+  /** The workspace whose runs are reported; defaults to the org doc's `$id`. */
+  orgId?: string | null
   /** The resolved org doc, from the plugin shell. */
   org: unknown
   /** Which counter to report. */
@@ -53,21 +60,35 @@ const COUNTER_LIMIT = {
  * returns early once `used + actions.length > limit`) was invisible on the
  * page where a person is looking at their automations.
  *
- * Renders NOTHING while the counter or the plan is unresolved. `0 runs
- * this month` is what an unread counter looks like, and it is the one
- * reading that makes a customer stop debugging.
+ * The figure is the WORKSPACE's (AGL-3472): the band is the organization's,
+ * and the run gates hold it to every site's runs, counted at
+ * `orgs/{orgId}/counters/{counter}`. One site's own count against the whole
+ * band would read as headroom the gate has already spent elsewhere. Only a
+ * line with no workspace id falls back to the site's counter.
+ *
+ * Renders NOTHING while the counter or the plan is unresolved, or when the
+ * counter cannot be read. `0 runs this month` is what an unread counter looks
+ * like, and it is the one reading that makes a customer stop debugging.
  */
 export function RunQuotaLine(props: RunQuotaLineProps) {
   const { hostId, org, counter } = props
   const firestore = useFirestore()
   const monthKey = new Date().toISOString().slice(0, 7)
+  const orgId =
+    props.orgId ?? (org as { $id?: unknown } | null | undefined)?.$id
+  const workspaceId = typeof orgId === 'string' && orgId ? orgId : null
   const { data: counterDoc, status } = useFirestoreDoc<Record<string, unknown>>(
-    () => doc(firestore, 'hosts', hostId, 'counters', counter),
-    [firestore, hostId, counter],
+    () =>
+      workspaceId
+        ? doc(firestore, 'orgs', workspaceId, 'counters', counter)
+        : hostId
+          ? doc(firestore, 'hosts', hostId, 'counters', counter)
+          : null,
+    [firestore, workspaceId, hostId, counter],
   )
-  // A host that has never run one has no counter document; that is a
+  // A workspace that has never run one has no counter document; that is a
   // settled zero, not a pending read.
-  if (status === 'loading') return null
+  if (status !== 'success') return null
   const limit = (
     resolveOrgEntitlements(org as never) as Record<string, unknown>
   )?.[COUNTER_LIMIT[counter]]

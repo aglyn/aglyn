@@ -54,6 +54,11 @@ let mount: Record<string, unknown> | null = null
 const opened: Array<Record<string, unknown>> = []
 
 // The org's lead source list (AGL-3298), read as the starter set.
+/** The console shell's launcher, which the list's Import and Export open (AGL-3528). */
+jest.mock('@aglyn/aglyn/app-utils/transfer-launcher-context', () => ({
+  useTransferLauncher: () => ({ openImport: () => undefined, openExport: () => undefined, close: () => undefined, can: () => true }),
+}))
+
 jest.mock('../hooks/use-lead-source-picklist', () => {
   const { effectiveCrmLeadSourcePicklist } = jest.requireActual('@aglyn/aglyn/app-utils/crm')
   const picklist = effectiveCrmLeadSourcePicklist(null)
@@ -381,11 +386,12 @@ describe('New lead on the Leads list (AGL-3231)', () => {
 })
 
 describe('the Leads card layout (AGL-3311, AGL-3313)', () => {
-  it('puts Import CSV and New lead in the header, and hands every filter to the grid', () => {
+  it('puts Import, Export and New lead in the header, and hands every filter to the grid', () => {
     const { container } = renderSite()
     const header = container.querySelector('[data-slot="header-action"]') as HTMLElement
     expect(within(header).getByRole('button', { name: 'New lead' })).toBeTruthy()
-    expect(within(header).getByRole('button', { name: 'Import CSV' })).toBeTruthy()
+    expect(within(header).getByRole('button', { name: 'Import' })).toBeTruthy()
+    expect(within(header).getByRole('button', { name: 'Export…' })).toBeTruthy()
     // No bespoke dropdowns or search box: the grid's toolbar holds them.
     for (const name of ['Show', 'Email', 'Campaign', 'Lead source']) {
       expect(screen.queryByRole('combobox', { name })).toBeNull()

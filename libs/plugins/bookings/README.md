@@ -33,12 +33,13 @@ This package is a first-party Aglyn plugin. It is loaded through Aglyn's plugin 
 - A **Bookings** nav item and page at `/bookings`, behind the `bookings` feature flag. The page is code-split and loads when opened.
 - A "Book a meeting" widget in the `crmRecordBooking` slot. The CRM plugin hosts that zone on a record; this plugin draws the control in it, so neither package imports the other.
 - A plugin config schema (`BOOKINGS_CONFIG_SCHEMA`) with two settings: `maxDaysAhead` (the booking horizon in days) and `bookingPath` (the page on the site that holds the Booking block, used to build booking links).
+- A record count source for `booking` (`plugin-record-counts`): how many bookings a site took, which a campaign's conversion report divides by.
 
 ### On the server
 
 `@aglyn/plugins-bookings/server` imports `firebase-admin` and is kept out of the client entry point.
 
-- `registerBookingsApi()` (the `tenantApi` surface) registers the site-facing routes `bookings/slots` (open slots for a service) and `bookings/book` (take a booking; a paid service goes through Stripe Checkout).
+- `registerBookingsApi()` (the `tenantApi` surface) registers the site-facing routes `bookings/slots` (open slots for a service, a page of `BOOKING_SLOT_PAGE_DAYS` whole days at a time; `from` asks for the page its `nextFromMs` named) and `bookings/book` (take a booking; a paid service goes through Stripe Checkout).
 - `registerBookingsConsoleApi()` (the `consoleApi` surface) registers `bookings/reminders`, `bookings/refund` and `bookings/booking-analytics`, a handler on the platform billing webhook that confirms paid bookings, and a bookings-by-service figure reader.
 - Loading the module registers two scheduled plugin jobs: `expire-stale-holds` and `booking-reminders` (a reminder email about a day before a confirmed booking). This is why `package.json` lists `./src/lib/server.*` under `sideEffects`.
 
@@ -48,7 +49,7 @@ Routes are served by the host app's API dispatcher under `/api/`, for example `/
 
 | import | contents |
 | -- | -- |
-| `@aglyn/plugins-bookings` | `BUNDLE_ID`, `registerBookingsConsole`, the site half, and the pure model (`computeOpenSlots`, `isSlotOpen`, `bookingLinkFor`, `normalizeBookingPath`, the `HostBookingService` and `BookingSlot` types) |
+| `@aglyn/plugins-bookings` | `BUNDLE_ID`, `registerBookingsConsole`, the site half, and the pure model (`computeOpenSlots`, `computeOpenSlotPage`, `isSlotOpen`, `bookingLinkFor`, `normalizeBookingPath`, the `HostBookingService` and `BookingSlot` types) |
 | `@aglyn/plugins-bookings/site` | `registerBookingsPlugin` and `BOOKINGS_BUNDLE` only. This is what a published page loads, so it carries no console code |
 | `@aglyn/plugins-bookings/server` | `registerBookingsApi`, `registerBookingsConsoleApi`, `slotsHandler`, `bookHandler`, `scanBookingReminders` |
 | `@aglyn/plugins-bookings/*` | any module under `src/lib/` |

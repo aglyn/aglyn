@@ -15,13 +15,7 @@
  * limitations under the License.
  */
 
-import {
-  checkQuota,
-  datasetIntegrityFields,
-  effectiveDatasetModel,
-  ensureDeclaredCustomFieldTypes,
-  prepareDatasetRecordWrite,
-} from '@aglyn/aglyn/server'
+import { checkQuota, ensureDeclaredCustomFieldTypes } from '@aglyn/aglyn/server'
 import type {
   FormRecordWriteOutcome,
   FormRecordWriteRequest,
@@ -31,11 +25,13 @@ import {
   firebaseAdmin,
   orgDataCollectionForHost,
 } from '@aglyn/tenant-data-admin'
-import { announceDatasetRecordChange } from '@aglyn/tenant-data-admin/server/dataset-live-pages'
-import { resolveDatasetDoc } from '@aglyn/tenant-runtime/resolve-dataset'
+import { announceDatasetRecordChange } from '../server/dataset-live-pages'
+import { resolveDatasetDoc } from '../server/resolve-dataset'
 import { FieldValue } from 'firebase-admin/firestore'
 import { verifyFormDatasetBinding } from './form-dataset-binding-token'
 import { FORM_DATASET_BINDING_FIELD } from './stamp-form-dataset-bindings'
+import { datasetIntegrityFields, effectiveDatasetModel } from '../model/dataset-models'
+import { prepareDatasetRecordWrite } from '../model/datasets'
 
 /**
  * THE DATASET A SUBMISSION ALSO WRITES A RECORD TO (AGL-141/556), decided on

@@ -80,6 +80,24 @@ export function aiUsageAxes(): PluginUsageAxesDeclaration {
         fields: ['assistCostUsd'],
         entitlement: 'assistCreditsPerMonth',
         unitCostUsd: ASSIST_CREDIT_COST_USD,
+        // The console's quota banner (AGL-2898): the credits route answers the
+        // standing in credits and whether the band stops or bills past, by
+        // the reservation's own predicate (`assistBandRefuses`).
+        consoleWarning: {
+          standing: '/api/ai/billing/credits',
+          member: 'credits',
+          approach: "You're above 80% of your included AI assist credits.",
+          reached: {
+            stops:
+              "You've used your included AI assist credits — AI assist stops " +
+              'until next month or an upgrade, and nothing is billed for it.',
+            bills:
+              "You've used your included AI assist credits — extra credits are " +
+              'billed at your plan’s rate unless you set a stop under ' +
+              'Billing → Usage.',
+          },
+          linksUsage: true,
+        },
       },
     ],
     meters: [{ id: AI_USAGE_METER_ID }],

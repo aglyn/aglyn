@@ -15,11 +15,7 @@
  * limitations under the License.
  */
 
-import {
-  checkEntitlement,
-  FLOW_TIMED_OUT_FIELD,
-  type HostActionStep,
-} from '@aglyn/aglyn/server'
+import { checkEntitlement } from '@aglyn/aglyn/server'
 import { scopeTokensForHost } from '@aglyn/aglyn/app-utils/scope-tokens'
 import {
   firebaseAdmin,
@@ -27,7 +23,6 @@ import {
   resolveOrgIdForHost,
 } from '@aglyn/tenant-data-admin'
 import type { HostEventPayload } from '@aglyn/tenant-runtime/host-event-listeners'
-import { FieldValue } from 'firebase-admin/firestore'
 import {
   isOrgAutomationTriggerEvent,
   MAX_TRIGGERED_ORG_AUTOMATIONS,
@@ -48,6 +43,8 @@ import {
   makeWorkflowContextLoader,
   stopFlowEnrollment,
 } from './run-event-actions'
+import { FLOW_TIMED_OUT_FIELD, type HostActionStep } from '../model/host-actions'
+import { recordRuns, runMonthKey } from './run-meter'
 
 /**
  * THE ORGANIZATION'S AUTOMATIONS, as the engine meets them (AGL-3302).
@@ -160,8 +157,9 @@ export async function findOrgAutomationsForEvent(
  * - The site must still belong to that organization, and its plan must
  *   still carry the actions builder.
  * - The snapshot runs, never the automation's current steps.
- * - Counted on this site's action-run meter, never refused by it: the person
- *   is already inside, and the gate belongs at enrollment.
+ * - Counted on this site's action-run meter and the workspace's, never
+ *   refused by them: the person is already inside, and the gate belongs at
+ *   enrollment.
  */
 export async function resumeOrgAutomationEnrollment(
   enrollment: FlowEnrollment,
@@ -206,7 +204,6 @@ export async function resumeOrgAutomationEnrollment(
     // Admitted by the `actions` gate above.
     actionsAllowed: true,
     webhooksAllowed: checkEntitlement(owner.org as any, 'webhooks'),
-    crmAllowed: checkEntitlement(owner.org as any, 'crm'),
     depth: 0,
     org: owner.org ?? null,
     orgId: owner.orgId,
@@ -235,11 +232,13 @@ export async function resumeOrgAutomationEnrollment(
     return ending
   }
   if (ending !== 'waiting') await endFlowEnrollment(ref)
-  const monthKey = new Date(nowMs).toISOString().slice(0, 7)
-  await hostRef
-    .collection('counters')
-    .doc('actionRuns')
-    .set({ [monthKey]: FieldValue.increment(1) }, { merge: true })
-    .catch(() => undefined)
+  await recordRuns({
+    firestore,
+    hostRef,
+    orgId: owner.orgId,
+    counter: 'actionRuns',
+    month: runMonthKey(nowMs),
+    count: 1,
+  })
   return ending
 }

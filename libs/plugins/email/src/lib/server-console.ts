@@ -65,11 +65,11 @@
  * ## The gate itself is `server-list-gate.ts`
  *
  * Who may change a list's membership, and what is true about each address, are
- * asked by three route modules now: these two, and the file importer in
- * `server-list-import.ts`. They live in a module of their own so the importer
- * shares this file's answer rather than importing this file — which would be a
- * cycle, and a cycle whose module-level constants would evaluate in whichever
- * order the loader happened to reach them.
+ * asked by these two routes and by the file importer (the list-member transfer
+ * resource, `transfer/list-members.server.ts`). They live in a module of their
+ * own so the importer shares this file's answer rather than importing this
+ * file — which would be a cycle, and a cycle whose module-level constants
+ * would evaluate in whichever order the loader happened to reach them.
  */
 
 import { registerEmailDesignDraftWriter } from './server-email-drafts'
@@ -463,10 +463,10 @@ export function registerEmailConsoleApi(): void {
     emailListMembersPreviewHandler,
   )
   registerPluginApiRoute('email/list-members-add', emailListMembersAddHandler)
-  // The importer is four routes over one staged job, so it has its own
-  // module — but not its own gate: it reaches this file's `resolveListContext`
-  // and `resolveAddresses` rather than a bulk-shaped copy of them, which is
-  // the whole reason an import cannot enroll somebody the add path refuses.
+  // The importer runs on the transfer framework (its resource registers from
+  // the console declarations), and its permission step reads what the dry
+  // run found through this one route — behind `resolveListContext`, the gate
+  // the import's own writes reach through `resolveAddresses` too.
   registerEmailListImportApi()
   // Suppressions live in their own module: they are a per-SITE list gated on
   // the site role, where list membership is an ORG audience gated on org-wide

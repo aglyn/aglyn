@@ -37,7 +37,8 @@ import { isFirstPublishedRoute } from '@aglyn/aglyn/app-utils/analytics-events'
  * site with no page a visitor can reach. A new site is created with exactly
  * one entry — the placeholder home page named by `defaultHomeScreenId`
  * (AGL-3408) — and that entry does not count: the platform put it there, not
- * the owner, so a genuinely new site still qualifies. This is the same
+ * the owner, so a genuinely new site still qualifies. The owner publishing
+ * that page clears the marker (AGL-3478), and from then on it counts. This is the same
  * reading `first_publish` makes, through the same predicate, so "blank" and
  * "has not published yet" cannot come to disagree. The settings layout already subscribes the host
  * document for every form in the hub, so this costs NO additional read, which

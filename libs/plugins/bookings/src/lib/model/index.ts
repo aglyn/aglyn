@@ -23,3 +23,5 @@
 export * from './bookings'
 export * from './booking-record'
 export * from './booking-time'
+export * from './booking-contact-fields'
+export * from './booking-price'

@@ -856,8 +856,9 @@ function PlanWithoutSubscriptionNotice({
       sx={{ display: 'block', mt: topGap, mb: 1.5 }}
     >
       {`Your organization is on ${label} with no subscription behind it, so ` +
-        'there is nothing here to cancel or move down from. Reach out and we ' +
-        'can change the plan for you.'}
+        'there is nothing here to cancel or move down from. Start its ' +
+        'subscription to keep it, or reach out and we can change the plan ' +
+        'for you.'}
     </Typography>
   )
 }
@@ -954,6 +955,14 @@ function FocusedTierView(props: {
   totalCount: number
   subscribeCollectsNotice: string | null
   planWithoutSubscription: boolean
+  /**
+   * The current tier's card offers to START its subscription (AGL-3466):
+   * a paid plan with nothing paying for it — a staff comp, most often a
+   * sales trial — that the org can buy as it stands.
+   */
+  subscribeToCurrent: boolean
+  /** …and that offer is the page's one contained control. */
+  subscribeToCurrentHighlighted: boolean
   onSelect: (plan: OrgPlan) => void
   onCompare: () => void
 }) {
@@ -967,6 +976,8 @@ function FocusedTierView(props: {
     totalCount,
     subscribeCollectsNotice,
     planWithoutSubscription,
+    subscribeToCurrent,
+    subscribeToCurrentHighlighted,
     onSelect,
     onCompare,
   } = props
@@ -1086,14 +1097,25 @@ function FocusedTierView(props: {
                     : taglines[rung as OrgPlan]}
                 </Typography>
 
-                {/* Exactly one contained control on the page. */}
+                {/* Exactly one contained control on the page: the step up,
+                    unless the reader came to start the plan they are on. */}
                 {role === 'recommended' ? (
                   <Button
                     fullWidth
-                    variant="contained"
+                    variant={subscribeToCurrentHighlighted ? 'outlined' : 'contained'}
                     onClick={() => onSelect(rung as OrgPlan)}
                   >
                     {`Upgrade to ${label}`}
+                  </Button>
+                ) : role === 'current' && subscribeToCurrent && rung !== 'enterprise' ? (
+                  // The comped tier, bought as it stands (AGL-3466). The same
+                  // subscribe path every upgrade takes.
+                  <Button
+                    fullWidth
+                    variant={subscribeToCurrentHighlighted ? 'contained' : 'outlined'}
+                    onClick={() => onSelect(rung as OrgPlan)}
+                  >
+                    {`Start your ${label} subscription`}
                   </Button>
                 ) : role === 'higher' ? (
                   <Button
@@ -1145,7 +1167,9 @@ function FocusedTierView(props: {
                     Pro, and meeting an address form unannounced is the same
                     small betrayal of a button labelled Upgrade whichever card
                     it was pressed on. */}
-                {(role === 'recommended' || role === 'higher') &&
+                {(role === 'recommended' ||
+                  role === 'higher' ||
+                  (role === 'current' && subscribeToCurrent)) &&
                 subscribeCollectsNotice ? (
                   <Typography
                     variant="caption"
@@ -1788,6 +1812,19 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
    */
   const noSelfServeRouteDown =
     planWithoutSubscription && !enterprise && currentIndex > 0
+  /*
+   * …BUT THE ROUTE TO BUYING IT IS OPEN (AGL-3466). The same org — a paid
+   * tier, nothing paying for it — can subscribe to that very tier:
+   * `/api/billing/checkout` refuses only an org that already has a live
+   * subscription. That is the end of a sales trial, where staff comp the
+   * workspace to the tier being sold and the client buys it once they have
+   * evaluated it, so the current card offers it instead of a dead "Your
+   * plan". Emphasized when the reader came for it: a `?plan=` naming this
+   * tier, or the plan staff proposed.
+   */
+  const subscribeToCurrent = noSelfServeRouteDown
+  const subscribeToCurrentHighlighted =
+    subscribeToCurrent && !!highlight && highlight === plan
 
   if (!compareAll && plan) {
     return (
@@ -1819,6 +1856,8 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
           // The same predicate the grid's controls read, so the sentence
           // and the dead buttons it explains can never disagree.
           planWithoutSubscription={noSelfServeRouteDown}
+          subscribeToCurrent={subscribeToCurrent}
+          subscribeToCurrentHighlighted={subscribeToCurrentHighlighted}
           onSelect={onSelect}
           onCompare={() => setCompareAll(true)}
         />
@@ -2050,9 +2089,31 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
                   </>
                 ) : (
                   <>
-                  <Button fullWidth size="small" disabled sx={{ mb: 1.5 }}>
-                    {'Your plan'}
-                  </Button>
+                  {subscribeToCurrent ? (
+                    // The comped tier, bought as it stands (AGL-3466).
+                    <Button
+                      fullWidth
+                      size="small"
+                      variant={subscribeToCurrentHighlighted ? 'contained' : 'outlined'}
+                      onClick={() => onSelect(tier)}
+                      sx={{ mb: 1.5 }}
+                    >
+                      {`Start your ${PLAN_LABELS[tier]} subscription`}
+                    </Button>
+                  ) : (
+                    <Button fullWidth size="small" disabled sx={{ mb: 1.5 }}>
+                      {'Your plan'}
+                    </Button>
+                  )}
+                  {subscribeToCurrent && subscribeCollectsNotice ? (
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      sx={{ display: 'block', mt: -1, mb: 1.5 }}
+                    >
+                      {subscribeCollectsNotice}
+                    </Typography>
+                  ) : null}
                   {/* WHY THE CONTROLS BELOW BEHAVE DIFFERENTLY, said before
                       the reader meets one of them. The Enterprise card has
                       carried its own version of this since AGL-1118; a

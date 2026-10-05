@@ -191,7 +191,38 @@ function docRef(collectionPath: string, id: string): any {
  * at COMMIT by the versions it recorded, which is the property Firestore
  * actually provides and the property the fix leans on.
  */
+/**
+ * How many imports the transaction holds at its door until all have arrived.
+ *
+ * Two requests are concurrent when both pass the route's pre-check before
+ * either commits. A package import reads the whole site and hashes every item
+ * before it counts anything (AGL-3533), so left to the event loop the second
+ * request's pre-check can run after the first has committed — and be refused
+ * there, which is correct and proves nothing about the transaction. Holding
+ * each at the door until the other arrives is what two requests landing
+ * together look like, and it puts the race where this suite means to look.
+ */
+let RACE_ARRIVALS = 0
+let arrived = 0
+let releaseArrivals: (() => void) | null = null
+const arrivalsDone = () =>
+  new Promise<void>((resolve) => {
+    arrived += 1
+    if (!RACE_ARRIVALS || arrived >= RACE_ARRIVALS) {
+      releaseArrivals?.()
+      releaseArrivals = null
+      resolve()
+      return
+    }
+    const previous = releaseArrivals
+    releaseArrivals = () => {
+      previous?.()
+      resolve()
+    }
+  })
+
 const mockRunTransaction = async (body: (tx: any) => Promise<any>) => {
+  await arrivalsDone()
   for (let attempt = 0; attempt < 8; attempt += 1) {
     attempts += 1
     const readVersions = new Map<string, number>()
@@ -274,6 +305,9 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   getOrgForHost: async () => ({ orgId: 'org-1', org: mockOrg }),
   isImpersonationSession: () => false,
   lockdownRefusal: async () => null,
+  // A package import reads the site it lands in first (AGL-3533), media
+  // included; the host-scope narrowing has its own suite.
+  scopedToHost: (ref: any) => ref,
   emailUnverifiedResponse: () =>
     Response.json({ error: 'Verify your email' }, { status: 403 }),
 }))
@@ -286,13 +320,12 @@ jest.mock('@aglyn/aglyn/server', () => ({
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/plan-entitlements'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/screen-route'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/collection-kind'),
-  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/dataset-models'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/scope-tokens'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/name-search'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/binding-tokens'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/stored-nodes'),
   // The REAL flat platform caps (AGL-2266) — the import route reads both.
-  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/actions'),
+  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/site-interactions'),
   ...jest.requireActual(
     '../../../libs/aglyn/src/lib/app-utils/collection-entries',
   ),
@@ -421,6 +454,9 @@ beforeAll(async () => {
 beforeEach(() => {
   jest.clearAllMocks()
   RANGE_TRACKING = true
+  RACE_ARRIVALS = 0
+  arrived = 0
+  releaseArrivals = null
   mockVerifyIdToken.mockResolvedValue({ uid: 'user-1', email_verified: true })
   mockOrg = { plan: 'pro' }
 })
@@ -449,6 +485,7 @@ describe('the screens leg is atomic (AGL-2370)', () => {
    * cap of 100.
    */
   it('refuses the second of two concurrent imports that would overshoot', async () => {
+    RACE_ARRIVALS = 2
     seedHost({ screens: ids(PRO_SCREEN_CAP - 40, 'held') })
     // NO host patch: the count has to defend itself. See `bundleOf`.
     const first = runImport(
@@ -490,6 +527,7 @@ describe('the screens leg is atomic (AGL-2370)', () => {
    * silently toothless.
    */
   it('the naive per-document double reports a false green', async () => {
+    RACE_ARRIVALS = 2
     RANGE_TRACKING = false
     seedHost({ screens: ids(PRO_SCREEN_CAP - 40, 'held') })
     const [a, b] = await Promise.all([
@@ -541,6 +579,7 @@ describe('the screens leg is atomic (AGL-2370)', () => {
    * site that has none of their screens.
    */
   it('writes no host patch for the loser of a race', async () => {
+    RACE_ARRIVALS = 2
     seedHost({ screens: ids(PRO_SCREEN_CAP - 40, 'held') })
     const [a, b] = await Promise.all([
       runImport(bundleOf(ids(40, 'first').map((id) => screenItem(id)))),
@@ -561,6 +600,7 @@ describe('the screens leg is atomic (AGL-2370)', () => {
 
   /** An UNLIMITED plan lands all of them — the cap fix did not become a wall. */
   it('lets an unlimited plan land both concurrent imports', async () => {
+    RACE_ARRIVALS = 2
     mockOrg = { plan: 'business' }
     seedHost({ screens: ids(10, 'held') })
     const [a, b] = await Promise.all([

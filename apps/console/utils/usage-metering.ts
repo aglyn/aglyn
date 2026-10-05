@@ -22,8 +22,8 @@
 // (AGL-405). The specific modules underneath are safe in both.
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation'
 import {
-  METERED_MARKUP,
   PAGE_VIEW_CDN_REQUEST_COST_USD,
+  publishedMeteredPrice,
   bandwidthGbFromPageViews,
   pageViewsFromBandwidthGb,
   planMetersInfraOverage,
@@ -63,7 +63,10 @@ import {
  * import this module. Re-exported so every console caller keeps importing it
  * from the module it always did — one definition, no drift, no import churn.
  */
-export { METERED_MARKUP } from '@aglyn/aglyn/app-utils/plan-entitlements'
+export {
+  METERED_MARKUP,
+  METERED_PRICE_MULTIPLE,
+} from '@aglyn/aglyn/app-utils/plan-entitlements'
 
 /**
  * Unit rates in USD — OUR marginal cost, before `METERED_MARKUP`.
@@ -88,19 +91,22 @@ export { METERED_MARKUP } from '@aglyn/aglyn/app-utils/plan-entitlements'
  *
  * - `storagePerGbMonth` **0.026** (2026-08-09) — GCS Standard **US
  *   multi-region** list, the SKU actually on our invoice. Was 0.03, ~15% over.
- * - `perPageView` **0.00035471473** (2026-10-01, AGL-3444) — folds bandwidth
+ * - `perPageView` **0.00039902751** (2026-10-01, AGL-3444) — folds bandwidth
  *   (~1.0 MB avg transfer, see `ESTIMATED_PAGE_TRANSFER_BYTES`, which states
  *   this same page in bytes and moves only with this rate) together with the
  *   Firestore reads behind a render. The per-KB cost is the one AGL-1280 fixed
  *   on 2026-08-09 — a real cold tenant page load of 24 requests and **627 KB
  *   encoded** gave ~$0.000088 transfer at Vercel's cheapest $0.15/GB + ~40
  *   reads @ $3e-7 + edge/ISR ≈ **$0.000102**, i.e. $0.0001 within +2% — with
- *   its TRANSFER share re-priced at Vercel's dearest $0.35/GB: $0.20 more per
- *   GB of page, which on the 1012.8 KB basis is $0.00019317627 a view on top
- *   of the $0.00016153846 the cheapest region priced. The reads are GCP's and
- *   do not move with the region; the edge/ISR share (~$0.0000003 a view on
- *   the calibration page, 1.6× at the dearest region) sits inside the cent the
- *   billed rate rounds up to (see `PAGE_VIEW_CDN_REQUEST_COST_USD`).
+ *   two of its shares re-priced on 2026-10-01: the TRANSFER at Vercel's
+ *   dearest $0.35 per DECIMAL GB (1,000,000,000 bytes, the unit Vercel's own
+ *   docs count in) instead of $0.15 per binary GB, and the READS at
+ *   production Firestore's `nam5` $0.0000006 instead of the single-region
+ *   $0.0000003. On the 1012.8 KB basis that is $0.00021810532 and
+ *   $0.00001938373 a view on top of the $0.00016153846 the 2026-09-09 peg
+ *   priced. The edge/ISR share (~$0.0000003 a view on the calibration page,
+ *   1.6× at the dearest region) sits inside the cent the billed rate rounds
+ *   up to (see `PAGE_VIEW_CDN_REQUEST_COST_USD`).
  *
  *   The rate now prices a **1012.8 KB** page. A cold load of `aglyn.com/`
  *   settles at **976.1 KB** of first-party encoded bytes, measured on
@@ -116,26 +122,26 @@ export { METERED_MARKUP } from '@aglyn/aglyn/app-utils/plan-entitlements'
  *   `tools/tenant-page-budget.json` under `wireCalibration`, and
  *   `npm run check:page-view-rate` fails if a later measurement pushes a
  *   published page back above the weight this rate is priced for.
- * - `perFormSubmission` **0.000053846154** (2026-10-01, AGL-3444) — measured
- *   from `apps/tenant/app/api/forms/submit/route.ts` on 2026-08-09: ~12
+ * - `perFormSubmission` **0.000061538462** (2026-10-01, AGL-3444) — measured
+ *   from `libs/plugins/forms/src/lib/server/form-submit.ts` on 2026-08-09: ~12
  *   Firestore reads, ~9 writes, one ~0.4s function invocation. No email is
  *   sent (`notifyHostManagers` is in-app only) and there is no reCAPTCHA
  *   assessment — spam control is a honeypot plus a Firestore rate limiter.
- *   Priced with the invocation at Vercel's DEAREST region and the whole
- *   0.4 s billed as active CPU, because nothing measured splits it from I/O
- *   wait: 0.4 s × $0.221/hour of CPU ($0.0000246) + 2 GB (the Pro default) ×
- *   0.4 s × $0.0183/GB-hour of memory ($0.0000041) + $0.60 per million
- *   invocations ($0.0000006), and the Firestore side at nam5 list — 12 reads
- *   × $0.0000006 + 9 writes × $0.0000018 ($0.0000234). $0.0000526 a
- *   submission, ×1.3 is $0.0684 per 1,000, rounded up to $0.07 and pinned
- *   so the billed figure lands on it: $0.07 ÷ 1.3 ÷ 1,000. The cheapest
- *   region's same ledger is $0.0000406, which is what the $0.00005 it
- *   replaced covered.
+ *   Priced with every Vercel term at the DEAREST region and the whole 0.4 s
+ *   billed as active CPU, because nothing measured splits it from I/O wait:
+ *   0.4 s × $0.221/hour of CPU ($0.0000246) + 2 GB (the Pro default) × 0.4 s
+ *   × $0.0183/GB-hour of memory ($0.0000041) + $0.60 per million invocations
+ *   ($0.0000006) + the POST's CDN request at $3.20 per million ($0.0000032)
+ *   + 4 KB in and out through Fast Data Transfer and Fast Origin Transfer at
+ *   $0.35 and $0.43 a decimal GB ($0.0000032); and the Firestore side at
+ *   `nam5` — 12 reads × $0.0000006 + 9 writes × $0.0000018 ($0.0000234).
+ *   $0.0000590 a submission, ×1.3 is $0.0767 per 1,000, rounded up to $0.08
+ *   and pinned so the billed figure lands on it: $0.08 ÷ 1.3 ÷ 1,000.
  */
 export const METERED_UNIT_RATES_USD = {
   storagePerGbMonth: 0.026,
-  perPageView: 0.00035471473,
-  perFormSubmission: 0.000053846154,
+  perPageView: 0.00039902751,
+  perFormSubmission: 0.000061538462,
 }
 
 /**
@@ -160,8 +166,10 @@ export const METERED_OVERAGE_COST_USD = {
 
 /**
  * What a customer is CHARGED per unit past the included band: the overage
- * cost above times {@link METERED_MARKUP} — $0.0338/GB-month, $0.70 per 1,000
- * page views, $0.07 per 1,000 form submissions.
+ * cost above times {@link METERED_PRICE_MULTIPLE}, rounded UP at the precision
+ * each is published in — $0.0349/GB-month, $0.83 per 1,000 page views, $0.083
+ * per 1,000 form submissions (AGL-3476). The multiple is cost + 30% grossed up
+ * for Stripe's percentage fee, so 30% is what is kept, not what is charged.
  *
  * The rate above is our cost; this is the published price, and they are three
  * decimal places apart. A billing surface that printed the cost table would be
@@ -169,10 +177,13 @@ export const METERED_OVERAGE_COST_USD = {
  * customer-facing figure is the product, not the input.
  *
  * Derived rather than written out, so a rate correction moves both together.
+ * The invoice multiplies units by THESE rates — not the cost by a markup — so
+ * the page and the invoice name the same round figure.
  *
  * ⛔ **Three meters, and email is not a fourth.** Every figure in this table
- * is a cost passed through at `METERED_MARKUP`, and the published sentence
- * for it is "at cost + 30%" — so anything added here inherits that claim.
+ * is a cost passed through at `METERED_PRICE_MULTIPLE`, and the published
+ * sentence for it is "at cost + 30%, after card fees" — so anything added here
+ * inherits that claim.
  * Email overage is a retail price on `PLAN_PRICING.extraEmailSendsUsdPer1k`
  * that descends with the tier, like contacts and API requests; it is not
  * derived from our cost and must never be quoted as though it were. Our
@@ -180,9 +191,10 @@ export const METERED_OVERAGE_COST_USD = {
  * COGS model reads and no customer surface does.
  */
 export const METERED_BILLED_RATES_USD = {
-  storagePerGbMonth: METERED_OVERAGE_COST_USD.storagePerGbMonth * METERED_MARKUP,
-  perPageView: METERED_OVERAGE_COST_USD.perPageView * METERED_MARKUP,
-  perFormSubmission: METERED_OVERAGE_COST_USD.perFormSubmission * METERED_MARKUP,
+  storagePerGbMonth: publishedMeteredPrice(METERED_OVERAGE_COST_USD.storagePerGbMonth, 4),
+  perPageView: publishedMeteredPrice(METERED_OVERAGE_COST_USD.perPageView * 1000, 2) / 1000,
+  perFormSubmission:
+    publishedMeteredPrice(METERED_OVERAGE_COST_USD.perFormSubmission * 1000, 3) / 1000,
 }
 
 /**
@@ -352,7 +364,7 @@ export function meteredOverageCostUsd(band: ResolvedPluginMeteredBand): number {
 
 /** What a customer is charged per unit of a metered band past its band. */
 export function meteredBilledRateUsd(band: ResolvedPluginMeteredBand): number {
-  return meteredOverageCostUsd(band) * METERED_MARKUP
+  return meteredRate(METERED_BILLED_RATES_USD, 'METERED_BILLED_RATES_USD', band)
 }
 
 /**
@@ -373,7 +385,14 @@ export function hostMeterReadings(
 /** One month of usage for a single host (from the per-host counters). */
 export interface HostUsageSnapshot {
   storageBytes: number
+  /**
+   * The bandwidth meter's reading, in page views: the views the beacon
+   * counted plus the video and file bytes the media CDN counted, converted at
+   * the page weight (`analyticsBandwidthReading`, AGL-3474).
+   */
   pageViews: number
+  /** The video and file bytes inside `pageViews`, kept to say how much. */
+  mediaBandwidthBytes?: number
   /**
    * Each metered band's month on this host, by band id (`hostMeterReadings`).
    * A band left out reads as zero — the org library, which serves no pages
@@ -436,7 +455,10 @@ export function meteredIncludedAllowance(
 
 export interface UsageCostEstimate {
   storageGb: number
+  /** Page views, video and file delivery included — see `HostUsageSnapshot`. */
   pageViews: number
+  /** The video and file bytes counted inside `pageViews`. */
+  mediaBandwidthBytes: number
   /** Each metered band's month, by band id, summed over the snapshots. */
   meters: Record<string, number>
   /** The bands subtracted before anything is priced. */
@@ -464,8 +486,8 @@ export interface UsageCostEstimate {
    * What each meter contributes to the charge, in USD AFTER markup: storage,
    * page views, and each metered band under its id.
    *
-   * They add up to `billableCostUsd × METERED_MARKUP` exactly — they are the
-   * same products `billedCents` is rounded from, split out rather than
+   * They add up to what `billedCents` is rounded from exactly — each is the
+   * excess units at their `METERED_BILLED_RATES_USD` price, split out rather than
    * recomputed, so a surface can attribute the total to the meter that
    * caused it without running a second cost model. Zero on a plan that hard-
    * caps rather than metering, matching `billableCostUsd`.
@@ -481,7 +503,8 @@ export interface UsageCostEstimate {
     [bandId: string]: number
   }
   /**
-   * What the org is billed: billable excess × METERED_MARKUP, whole cents.
+   * What the org is billed: billable excess at the published billed rates
+   * (`METERED_BILLED_RATES_USD`), whole cents.
    * Zero on a plan that hard-caps rather than metering.
    */
   billedCents: number
@@ -510,6 +533,10 @@ export function estimateMonthlyUsageCost(
   )
   const pageViews = hosts.reduce(
     (sum, host) => sum + Math.max(0, host.pageViews || 0),
+    0,
+  )
+  const mediaBandwidthBytes = hosts.reduce(
+    (sum, host) => sum + Math.max(0, host.mediaBandwidthBytes || 0),
     0,
   )
   const meters: Record<string, number> = Object.fromEntries(
@@ -558,19 +585,32 @@ export function estimateMonthlyUsageCost(
   const billableCostUsd = included.metered
     ? priced(billableStorageGb, billablePageViews, billableMeters)
     : 0
-  // One meter's share of the charge, from the SAME `priced` call the total
-  // uses — isolated multiplications here would be a second cost model to
-  // drift from the first. Each is `priced` with every other dimension
-  // zeroed, so the shares provably sum to `billableCostUsd`.
-  const billableShareUsd = (
+  // What the excess is CHARGED: each unit at its published billed rate, so
+  // the invoice and the page name the same round figure.
+  const billed = (
     storage: number,
     views: number,
     units: Readonly<Record<string, number>>,
   ): number =>
-    included.metered ? priced(storage, views, units) * METERED_MARKUP : 0
+    storage * METERED_BILLED_RATES_USD.storagePerGbMonth +
+    views * METERED_BILLED_RATES_USD.perPageView +
+    bands.reduce(
+      (sum, band) => sum + (units[band.id] ?? 0) * meteredBilledRateUsd(band),
+      0,
+    )
+  // One meter's share of the charge, from the SAME `billed` call the total
+  // uses — isolated multiplications here would be a second price model to
+  // drift from the first. Each is `billed` with every other dimension
+  // zeroed, so the shares provably sum to `billedCents`.
+  const billableShareUsd = (
+    storage: number,
+    views: number,
+    units: Readonly<Record<string, number>>,
+  ): number => (included.metered ? billed(storage, views, units) : 0)
   return {
     storageGb,
     pageViews,
+    mediaBandwidthBytes,
     meters,
     included,
     billableStorageGb,
@@ -588,6 +628,8 @@ export function estimateMonthlyUsageCost(
         ]),
       ),
     },
-    billedCents: Math.round(billableCostUsd * METERED_MARKUP * 100),
+    billedCents: Math.round(
+      billableShareUsd(billableStorageGb, billablePageViews, billableMeters) * 100,
+    ),
   }
 }

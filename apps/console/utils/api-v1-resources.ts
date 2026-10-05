@@ -17,13 +17,16 @@
 
 /**
  * Resource handlers for the customer REST API v1 (AGL-618). All data is
- * org-scoped from the authenticated key (see api-v1.ts). Sites, their form
- * submissions and the media library are the platform's resources. A resource
+ * org-scoped from the authenticated key (see api-v1.ts). Sites, their
+ * publishing and the media library are the platform's resources. A resource
  * a plugin models — the data plugin's datasets and their records, the CRM's
- * contacts, deals and the rest — is served by that plugin, found through the
- * `/v1` resource registry (`dispatchResource`).
+ * contacts, deals and the rest, and under a site the forms plugin's
+ * submissions and the commerce plugin's orders and products — is served by
+ * that plugin, found through the `/v1` resource registry (`dispatchResource`,
+ * `handleSites`).
  */
 import { mediaFilterKeys } from '@aglyn/aglyn/app-utils/media-metadata'
+import { MEDIA_CDN_ROUTE } from '@aglyn/aglyn/app-utils/media-ref'
 import {
   checkApiRequestQuota,
   checkDataStorageQuota,
@@ -31,12 +34,9 @@ import {
   checkQuota,
   createResourceUid,
   defaultScopeForNewResource,
-  getOrderFulfilmentService,
   inspectUploadBytes,
-  isHostPluginEnabled,
   isBlockedSubdomain,
   readImageDimensions,
-  type OrderFulfilmentTarget,
   screenRoutePathToUrl,
   SUBDOMAIN_PATTERN,
 } from '@aglyn/aglyn/server'
@@ -49,15 +49,18 @@ import {
   firebaseAdmin,
   generateMediaVariants,
   getMediaQuarantine,
+  mediaVariantDocFields,
   listResponse,
   parseLimit,
 } from '@aglyn/tenant-data-admin'
-import { runPluginEventHandlers } from '@aglyn/aglyn/plugin-manager/plugin-events'
 import { runPluginDeclarationsRepair } from '@aglyn/aglyn/plugin-manager/plugin-declarations-repair'
 // The registry's leaf: a resource a plugin serves is found here (AGL-3080).
 import {
+  type ApiV1Resource,
   apiV1Resource,
   apiV1Resources,
+  apiV1SiteResource,
+  apiV1SiteResources,
   describeApiV1Resources,
   readApiV1UsageFigures,
 } from '@aglyn/tenant-data-admin/server/api-v1-resources'
@@ -66,6 +69,7 @@ import { usageBand } from '@aglyn/tenant-data-admin/server/api-v1-kit'
 import { createHash, randomUUID } from 'crypto'
 import { Timestamp } from 'firebase-admin/firestore'
 import { type ApiV1Context, apiUsageMonth, requireScope } from './api-v1'
+import { announceNewSite } from '../app/api/_lib/growth-announcements'
 import {
   claimWrite,
   orgOwnsHost,
@@ -99,6 +103,7 @@ import {
   findSubdomainConflict,
 } from './server/provision-host'
 import { postTenantRevalidate } from './server/tenant-revalidate'
+import { pluginLivePaths } from '@aglyn/aglyn/plugin-manager/plugin-live-paths'
 import { mediaStorageGate, scopeBillsStorageOverage } from './storage-overage'
 
 // ── Sites & form submissions ────────────────────────────────────────────────
@@ -299,6 +304,14 @@ async function createSite(request: Request, ctx: ApiV1Context): Promise<Response
       subdomain,
     } as never)
     await claim.record(200, view)
+    // Told to staff like a console-made site (AGL-3491); never throws.
+    await announceNewSite({
+      hostId: created.hostId,
+      displayName,
+      subdomain,
+      orgSlug: (ctx.org.slug as string | undefined) ?? null,
+      createdBy: ctx.keyName ? `API key ${ctx.keyName}` : 'An API key',
+    })
     return apiJson(view, { status: 201, headers: ctx.headers })
   } catch (error) {
     await claim.release()
@@ -352,12 +365,6 @@ async function handleSites(
     return apiJson(site, { headers: ctx.headers })
   }
 
-  if (sub === 'form-submissions') {
-    return handleFormSubmissions(request, ctx, segments, url)
-  }
-
-  if (sub === 'orders') return handleOrders(request, ctx, segments, url)
-  if (sub === 'products') return handleProducts(request, ctx, segments, url)
   if (sub === 'media')
     return handleScopedMedia(request, ctx, url, hostRef(ctx, hostId), {
       collection: 'hosts',
@@ -366,6 +373,14 @@ async function handleSites(
       cdnScope: hostId,
     })
   if (sub === 'publish') return handlePublish(request, ctx, hostId)
+  /*
+   * A resource a plugin models under the site is the plugin's (AGL-3080) — a
+   * site's orders and products, its form submissions. Asked only AFTER
+   * `orgOwnsHost` above: ownership is decided here, once, for every
+   * sub-resource, and a handler is never handed a site its key cannot reach.
+   */
+  const plugin = await pluginSiteResource(sub)
+  if (plugin) return servePluginResource(plugin.resource, request, ctx, segments, url)
   // Kept below the sub-resources so an unknown one still 404s here.
 
   return ApiErrors.notFound({ message: 'Unknown endpoint', headers: ctx.headers })
@@ -491,9 +506,14 @@ async function handlePublish(
   // did not perform, which is the "reported fast, still slow" confusion the
   // original bug was made of.
   const screens = (snap.get('screens') ?? {}) as Record<string, unknown>
-  const paths = Object.values(screens)
-    .filter((path) => typeof path === 'string')
-    .map((path) => screenRoutePathToUrl(path as string))
+  const paths = [
+    ...Object.values(screens)
+      .filter((path) => typeof path === 'string')
+      .map((path) => screenRoutePathToUrl(path as string)),
+    // The pages plugins serve from the site's screens with no routing-map
+    // entry of their own — a record template's (AGL-3475).
+    ...(await pluginLivePaths({ hostId })),
+  ].filter((path, index, all) => all.indexOf(path) === index)
   if (!paths.length) {
     return apiJson(
       {
@@ -535,729 +555,9 @@ async function handlePublish(
   )
 }
 
-// ── Form submissions ────────────────────────────────────────────────────────
-
-function formSubmissionView(doc: FirebaseFirestore.DocumentSnapshot) {
-  return {
-    id: doc.id,
-    object: 'form_submission',
-    // The form ENTITY this was sent to, `null` for a row written before the
-    // form was adopted. `form` below stays the caption — an integration
-    // grouping by it is grouping by a display string that a rename splits,
-    // which is the whole reason this field exists.
-    form_id: doc.get('formId') ?? null,
-    form: doc.get('formName') ?? null,
-    path: doc.get('path') ?? null,
-    fields: doc.get('fields') ?? {},
-    read: Boolean(doc.get('read')),
-    // Where the platform already sent this row. Omitting it meant an
-    // integration syncing submissions into a CRM could not tell that a record
-    // had already been written to a dataset — the one fact that stops it
-    // duplicating work the platform had done.
-    routing: doc.get('routing') ?? null,
-    created: serialize(doc.get('createdAt')) ?? null,
-  }
-}
-
-/**
- * `/v1/sites/{siteId}/form-submissions[/{submissionId}]` (AGL-2127).
- *
- * The list was the whole surface, and that shaped every integration written
- * against it badly. A lead sync polls, pushes new rows into a CRM, and then
- * has nowhere to record that it did — so it either re-pushes the same lead
- * next poll, or keeps its own high-water mark of ids against a list that
- * `conventions.md` publishes as ordered by DOCUMENT ID, not by time. The
- * `read` flag the console's inbox toggles on the very same document is the
- * state the integration needed and could not write.
- *
- * `read` is the ONLY writable field. A submission is what a visitor typed,
- * and an API that let an integration quietly rewrite it would make the
- * inbox's contents unattributable — so anything else in the body is a
- * `validation_failed` naming the offending key rather than a silent drop.
- */
-async function handleFormSubmissions(
-  request: Request,
-  ctx: ApiV1Context,
-  segments: string[],
-  url: URL,
-): Promise<Response> {
-  const [, hostId, , submissionId] = segments
-  const collection = ctx.firestore
-    .collection('hosts')
-    .doc(hostId)
-    .collection('formSubmissions')
-
-  if (!submissionId) {
-    const denied = requireScope(ctx, 'forms:read')
-    if (denied) return denied
-    if (request.method !== 'GET') {
-      return ApiErrors.methodNotAllowed({
-        headers: { ...ctx.headers, Allow: 'GET' },
-      })
-    }
-    // An EMPTY value means the filter is absent, matching `?email=` and
-    // `?tag=` on contacts and `conventions.md`'s single rule for all three.
-    // A client serializing an unset form field sends `?read=`, and refusing
-    // that while `?email=` accepts it would be an inconsistency an integrator
-    // discovers one filter at a time.
-    const rawRead = url.searchParams.get('read') || null
-    if (rawRead !== null && rawRead !== 'true' && rawRead !== 'false') {
-      return ApiErrors.badRequest({
-        message: 'Form submission filter failed validation',
-        code: 'validation_failed',
-        fields: { read: 'Must be true or false' },
-        headers: ctx.headers,
-      })
-    }
-    const read = rawRead === null ? null : rawRead === 'true'
-
-    let query: FirebaseFirestore.Query = collection
-    const form = url.searchParams.get('form')
-    const formId = url.searchParams.get('formId')
-    // `formId` is the id-first filter and wins when both are sent: it is the
-    // one that survives a rename. `?form=` is NOT removed and is not
-    // deprecated here — it filters on the caption every submission still
-    // carries, which is the only thing a form that has not been adopted yet
-    // can be filtered by. The same posture the legacy `?collection=` content
-    // parameters take.
-    if (formId) query = query.where('formId', '==', formId)
-    else if (form) query = query.where('formName', '==', form)
-    // `read` goes to FIRESTORE only when it is the sole filter, and is
-    // applied after the read when it joins `form` (AGL-2460).
-    //
-    // Two equality clauses plus the `orderBy(FieldPath.documentId())` every
-    // list here applies is a three-clause query, and Firestore serves that
-    // only from a composite index. Shipping one to serve a filter
-    // COMBINATION is a migration with a backfill, not a feature — and the
-    // failure mode while it builds is this route's documented realistic 500
-    // (see the route's `safeDispatch` docblock). Narrowing on `formName` and
-    // dropping the rest in memory keeps the pre-existing `?form=` query
-    // byte-for-byte what it already was, which is the property worth more
-    // than one saved round trip.
-    //
-    // `read=false` IS exact against Firestore, unlike `?channel=online` on
-    // orders. That filter is applied after the read because older orders
-    // predate the `channel` field and a `where` would silently drop them.
-    // The equivalent question was checked here rather than assumed: the
-    // ONLY writer of this collection is the tenant's form-submit route, and
-    // it has stamped `read: false` on every row since the feature's first
-    // commit (AGL-76/77, `fc149e538`). There is no fieldless generation to
-    // drop, so the cheap query is also the correct one.
-    // Either form filter already spent this list's one equality clause, so
-    // `read` is applied after the read exactly as it is for `?form=` — a
-    // second `where` plus the document-id ordering is a three-clause query
-    // and needs its own composite index per combination. The `formId ASC,
-    // createdAt DESC` index this work ships serves the CONSOLE's ordered
-    // list; `/v1` lists are ordered by document id and are a different query.
-    const narrowedByForm = Boolean(formId || form)
-    if (read !== null && !narrowedByForm) {
-      query = query.where('read', '==', read)
-    }
-    const { docs, nextCursor } = await paginate(query, url)
-    const matched =
-      read !== null && narrowedByForm
-        ? docs.filter((doc) => Boolean(doc.get('read')) === read)
-        : docs
-    return listResponse(matched.map(formSubmissionView), nextCursor, ctx.headers)
-  }
-
-  const submissionRef = collection.doc(submissionId)
-
-  if (request.method === 'GET') {
-    const denied = requireScope(ctx, 'forms:read')
-    if (denied) return denied
-    const snap = await submissionRef.get()
-    if (!snap.exists) {
-      return ApiErrors.notFound({
-        message: 'No such form submission',
-        headers: ctx.headers,
-      })
-    }
-    return apiJson(formSubmissionView(snap), { headers: ctx.headers })
-  }
-
-  if (request.method === 'PATCH') {
-    const denied = requireScope(ctx, 'forms:write')
-    if (denied) return denied
-    return updateFormSubmission(request, ctx, submissionRef)
-  }
-
-  if (request.method === 'DELETE') {
-    const denied = requireScope(ctx, 'forms:write')
-    if (denied) return denied
-    return deleteFormSubmission(request, ctx, hostId, submissionRef)
-  }
-
-  return ApiErrors.methodNotAllowed({
-    headers: { ...ctx.headers, Allow: 'GET, PATCH, DELETE' },
-  })
-}
-
-/**
- * Mark one submission read or unread. No `Idempotency-Key`: the same body
- * twice lands the same state AND returns the same `200`, which is the test
- * `updateRecord` and `updateDataset` are held to.
- */
-async function updateFormSubmission(
-  request: Request,
-  ctx: ApiV1Context,
-  submissionRef: FirebaseFirestore.DocumentReference,
-): Promise<Response> {
-  const body = await readJsonBody(request)
-  const unknown = Object.keys(body).filter((key) => key !== 'read')
-  if (unknown.length > 0) {
-    // Named, not dropped. `values` on a record drops unknown fields because a
-    // dataset model defines what exists; a submission has no model, so a
-    // silent drop here would read as "we stored your correction" when nothing
-    // was stored, and the visitor's answers are exactly the thing that must
-    // not be quietly editable.
-    return ApiErrors.badRequest({
-      message: 'Only `read` can be changed on a form submission',
-      code: 'validation_failed',
-      fields: Object.fromEntries(
-        unknown.map((key) => [key, 'Not writable on a form submission']),
-      ),
-      headers: ctx.headers,
-    })
-  }
-  if (typeof body.read !== 'boolean') {
-    return ApiErrors.badRequest({
-      message: 'Form submission failed validation',
-      code: 'validation_failed',
-      fields: { read: 'Must be true or false' },
-      headers: ctx.headers,
-    })
-  }
-
-  const snap = await submissionRef.get()
-  if (!snap.exists) {
-    return ApiErrors.notFound({
-      message: 'No such form submission',
-      headers: ctx.headers,
-    })
-  }
-  await submissionRef.update({ read: body.read })
-  return apiJson(formSubmissionView(await submissionRef.get()), {
-    headers: ctx.headers,
-  })
-}
-
-/**
- * Delete one submission. Accepts an `Idempotency-Key` for the reason
- * `deleteRecord` does: a purge that runs after an export is the operation
- * most likely to be retried on a timer, and without a key the retry cannot
- * tell "already gone" from "wrong id".
- */
-async function deleteFormSubmission(
-  request: Request,
-  ctx: ApiV1Context,
-  hostId: string,
-  submissionRef: FirebaseFirestore.DocumentReference,
-): Promise<Response> {
-  const claimed = await claimWrite(
-    ctx,
-    hostId,
-    request.headers.get('Idempotency-Key'),
-    'form-submission-deletes',
-  )
-  if ('replay' in claimed) return claimed.replay
-  const { claim } = claimed
-
-  try {
-    const snap = await submissionRef.get()
-    if (!snap.exists) {
-      await claim.release()
-      return ApiErrors.notFound({
-        message: 'No such form submission',
-        headers: ctx.headers,
-      })
-    }
-    const removed = { id: snap.id, data: (snap.data() ?? {}) as Record<string, unknown> }
-    await submissionRef.delete()
-    /*
-     * Whatever counted this row when it arrived (a form's counters, AGL-3330)
-     * cannot see a delete, so the plugins are told what left. Best effort,
-     * isolated per plugin by the seam: the delete is the request, and a
-     * recount that fails leaves its figures for the next one rather than
-     * failing a purge that already happened.
-     */
-    await runPluginEventHandlers('host.records.removed', {
-      orgId: ctx.orgId,
-      hostIds: [hostId],
-      collection: 'formSubmissions',
-      records: [removed],
-    }).catch((error) => console.error('records-removed event after an API delete failed', error))
-    const view = {
-      id: submissionRef.id,
-      object: 'form_submission',
-      deleted: true,
-    }
-    await claim.record(200, view)
-    return apiJson(view, { headers: ctx.headers })
-  } catch (error) {
-    await claim.release()
-    throw error
-  }
-}
-
-// ── Commerce: orders & products (read) ──────────────────────────────────────
-
-/**
- * Commerce resources need the `commerce` entitlement as well as the scope
- * (AGL-1928). `apiAccess` alone is the wrong gate here: it says the org may
- * call the API at all, not that it may still use the store. AGL-1873 closed
- * exactly this class on the write side — two money doors that asked the
- * plugin switch (`org.enabledPlugins`) instead of the plan, so a lapsed org
- * kept selling — and the same reasoning applies to a read. `enabledPlugins`
- * is the customer's own on/off switch and survives a downgrade; the plan does
- * not, and the published rule is that paid features stop at the door when the
- * plan no longer includes them.
- *
- * Answered as `plan_required` rather than `not_found`, deliberately. Hiding a
- * store that plainly exists behind a 404 sends an integrator hunting a wrong
- * site id; the honest answer names the plan.
- */
-function requireCommerce(ctx: ApiV1Context): Response | null {
-  return checkEntitlement(ctx.org, 'commerce')
-    ? null
-    : ApiErrors.planRequired({
-        message: 'Commerce is not included in this organization’s plan',
-        code: 'commerce',
-        headers: ctx.headers,
-      })
-}
-
+/** A site's document, which every platform resource under a site hangs off. */
 function hostRef(ctx: ApiV1Context, hostId: string) {
   return ctx.firestore.collection('hosts').doc(hostId)
-}
-
-/**
- * Orders carry a legacy Commerce Starter shape (AGL-90) alongside the modern
- * one: `amountCents`/`feeCents` at the top level rather than a `totals` map.
- * The console lifts them through `CommerceModel.liftLegacyOrder` and reads
- * `lifted.totals?.totalCents ?? order.amountCents`. The API cannot publish two
- * shapes for one object, so the legacy fields are folded into `totals` here
- * and a client only ever sees the modern one. `channel` defaults to `online`
- * for the same reason the console's list does — an absent channel is a
- * pre-channel order, not an unknown one.
- */
-function orderView(doc: FirebaseFirestore.DocumentSnapshot) {
-  const data = doc.data() ?? {}
-  const totals = (data.totals ?? {}) as Record<string, unknown>
-  const legacyTotal = Number(data.amountCents ?? NaN)
-  const totalCents = Number.isFinite(Number(totals.totalCents))
-    ? Number(totals.totalCents)
-    : Number.isFinite(legacyTotal)
-      ? legacyTotal
-      : null
-  const legacyFee = Number(data.feeCents ?? NaN)
-  return {
-    id: doc.id,
-    object: 'order',
-    number: typeof data.number === 'number' ? data.number : null,
-    status: (data.status as string) ?? null,
-    channel: (data.channel as string) ?? 'online',
-    currency: 'usd',
-    customerEmail: data.customerEmail ?? null,
-    customerName: data.customerName ?? null,
-    lineItems: serialize(data.lineItems ?? []),
-    totals: {
-      itemsCents: Number(totals.itemsCents ?? 0),
-      shippingCents: Number(totals.shippingCents ?? 0),
-      taxCents: Number(totals.taxCents ?? 0),
-      discountCents: Number(totals.discountCents ?? 0),
-      totalCents,
-      // The Connect application fee. NOT subtracted from `totalCents` — it is
-      // Aglyn's cut of a total the shopper already paid in full, so a client
-      // that nets it out of revenue would understate what it collected.
-      feeCents: Number.isFinite(Number(totals.feeCents))
-        ? Number(totals.feeCents)
-        : Number.isFinite(legacyFee)
-          ? legacyFee
-          : 0,
-    },
-    // Money already handed back, for any reason. A chargeback lands here too,
-    // so `refundedCents > 0` does not by itself mean the merchant chose it.
-    refundedCents: Number(data.refundedCents ?? 0),
-    disputed: Boolean(data.dispute),
-    shippingAddress: serialize(data.shippingAddress) ?? null,
-    couponCode: data.couponCode ?? null,
-    // Shipment records — the half of fulfilment an integration can use
-    // without a write (AGL-2460). `status` says an order is `fulfilled`; it
-    // does not say which carrier took it or under what tracking number, so a
-    // 3PL or accounting reconcile could see THAT an order shipped and never
-    // WHICH shipment it was. The console's order dialog shows both, and an
-    // order that has been shipped twice (a split shipment) is indistinguish-
-    // able from one shipped once when only the status is published.
-    //
-    // `atMs` is a number of milliseconds, not a Firestore Timestamp, so
-    // `serialize` passes it through untouched. It is republished as `at` in
-    // ISO 8601 to match `created` and every other time this API emits: one
-    // object publishing two time formats is a bug an integrator finds late,
-    // in their own timezone conversion, and blames on their own code.
-    fulfillments: (Array.isArray(data.fulfillments) ? data.fulfillments : []).map(
-      (entry: Record<string, unknown>) => {
-        const atMs = Number((entry ?? {}).atMs)
-        return {
-          id: (entry ?? {}).id ?? null,
-          lineItemIds: Array.isArray((entry ?? {}).lineItemIds)
-            ? (entry as { lineItemIds: unknown[] }).lineItemIds
-            : [],
-          carrier: (entry ?? {}).carrier ?? null,
-          trackingNumber: (entry ?? {}).trackingNumber ?? null,
-          trackingUrl: (entry ?? {}).trackingUrl ?? null,
-          at: Number.isFinite(atMs) ? new Date(atMs).toISOString() : null,
-        }
-      },
-    ),
-    created: serialize(data.createdAt) ?? null,
-  }
-}
-
-async function handleOrders(
-  request: Request,
-  ctx: ApiV1Context,
-  segments: string[],
-  url: URL,
-): Promise<Response> {
-  const [, hostId, , orderId] = segments
-  // `orders:write` is checked BEFORE `orders:read`, matching `handleSites`
-  // and `handleScopedMedia` (AGL-900): a fulfilment key that only records
-  // shipments must not be told it lacks a read scope it was never meant to
-  // hold.
-  if (request.method === 'PATCH' && orderId) {
-    const deniedWrite = requireScope(ctx, 'orders:write')
-    if (deniedWrite) return deniedWrite
-    const unentitledWrite = requireCommerce(ctx)
-    if (unentitledWrite) return unentitledWrite
-    return updateOrder(request, ctx, hostId, orderId)
-  }
-  const denied = requireScope(ctx, 'orders:read')
-  if (denied) return denied
-  const unentitled = requireCommerce(ctx)
-  if (unentitled) return unentitled
-  if (request.method !== 'GET') {
-    return ApiErrors.methodNotAllowed({
-      headers: { ...ctx.headers, Allow: orderId ? 'GET, PATCH' : 'GET' },
-    })
-  }
-  const collection = hostRef(ctx, hostId).collection('orders')
-
-  if (orderId) {
-    const snap = await collection.doc(orderId).get()
-    if (!snap.exists) {
-      return ApiErrors.notFound({ message: 'No such order', headers: ctx.headers })
-    }
-    return apiJson(orderView(snap), { headers: ctx.headers })
-  }
-
-  let query: FirebaseFirestore.Query = collection
-  const status = url.searchParams.get('status')
-  if (status) query = query.where('status', '==', status)
-  const channel = url.searchParams.get('channel')
-  // `online` is the DEFAULT, not a stored value on older orders, so filtering
-  // for it in Firestore would silently drop every pre-channel order. Those are
-  // exactly the oldest orders an accounting backfill is reaching for, so this
-  // one value is filtered after the read instead. The page can therefore come
-  // back shorter than `limit` while `has_more` is still true — which the
-  // published pagination contract already tells clients to expect (check
-  // `has_more`, never a page's length).
-  if (channel && channel !== 'online') query = query.where('channel', '==', channel)
-  const { docs, nextCursor } = await paginate(query, url)
-  const data = docs
-    .map(orderView)
-    .filter((order) => (channel === 'online' ? order.channel === 'online' : true))
-  return listResponse(data, nextCursor, ctx.headers)
-}
-
-/**
- * Statuses this endpoint will move an order TO, and the two it names as
- * refused. Kept as data so the 400 can list them and the docs can be checked
- * against the same source the handler branches on.
- */
-const ORDER_WRITE_TARGETS: OrderFulfilmentTarget[] = ['fulfilled', 'delivered']
-
-/**
- * Transitions that exist in the commerce model and are DELIBERATELY not
- * reachable here — refused by name with a 400 that says why, never silently
- * ignored. `cancelled` releases held stock under its own transaction and
- * `refunded` moves money under another; admitting either here would hand a
- * caller a door around exactly the specifics those two routes exist to
- * enforce, and an API key is the credential least able to answer the
- * questions they ask.
- */
-const ORDER_WRITE_REFUSED: Record<string, string> = {
-  cancelled:
-    'Canceling an order releases held stock, so it is not part of this endpoint. Cancel it in the console.',
-  refunded:
-    'Refunding an order moves money, so it is not part of this endpoint. Refund it in the console.',
-}
-
-/**
- * `PATCH /v1/sites/{siteId}/orders/{orderId}` — record a shipment (AGL-2461).
- *
- * ## The write does not live here, and that is the point
- *
- * Not one line of order semantics is implemented in this file. The transition
- * rule, the transaction that re-asks it under the write, the fulfillment
- * append and the timeline entry all belong to the commerce plugin, which
- * `apps/console` may not import (`eslint.config.mjs`, `scope:app` →
- * `notDependOnLibsWithTags:['aglyn:addons']`). This handler reaches them
- * through the core `registerOrderFulfilmentService` capability registry, the
- * same app↔plugin shape as the billing-webhook hooks and site-page resolvers.
- *
- * A second copy of `ORDER_TRANSITIONS` inside `/v1` was the alternative, and
- * it is the bug rather than the fix: two tables drift, and drift here means
- * the API writing an order status the console forbids — `paid → delivered`
- * skipping fulfilment, or a write onto a `refunded` order. That is the class
- * AGL-1818/AGL-1819 exist to close, and it is money-adjacent.
- *
- * ## What THIS function is responsible for: all of the authorization
- *
- * The capability is pre-authorized by contract — it takes `hostId` on trust —
- * so every gate is here, and all four are load-bearing:
- *
- * 1. `orders:write` on the key (checked by the caller, above).
- * 2. The `commerce` PLAN entitlement (checked by the caller, above) — the
- *    plan, never the plugin switch, which is the AGL-1873 distinction.
- * 3. **Org owns the site** — `handleSites` refuses an unowned `hostId` with a
- *    404 before dispatching to any sub-resource, which is what keeps this
- *    from being a cross-tenant write primitive addressable by anyone who can
- *    guess a host id. Deliberately NOT re-checked here: a second copy would
- *    be a gate no test can redden (removing either one alone leaves the other
- *    answering), and an unproven guard on a cross-tenant write is worse than
- *    the one guard a test actually holds. `api-v1-order-fulfilment.spec.ts`'s
- *    "CANNOT move another org's order" case is that test, and it fails when
- *    `handleSites`' `orgOwnsHost` is removed.
- * 4. **The plugin is switched on for this site.** The registry is process-
- *    global and filled by `ensureAll`, so a registered service says nothing
- *    about one org's configuration; without this an org that switched
- *    commerce off for a site would still accept writes into it, which is the
- *    per-site enablement rule (AGL-1014) the plugin API dispatcher applies to
- *    every other commerce door.
- *
- * ## No `Idempotency-Key`
- *
- * None is needed and none is accepted: the capability returns without writing
- * when the order is already in the target status, so a retry lands the same
- * state AND returns the same `200` with the same order body — the contract
- * `updateRecord`, `updateContact` and `updateFormSubmission` are held to.
- */
-async function updateOrder(
-  request: Request,
-  ctx: ApiV1Context,
-  hostId: string,
-  orderId: string,
-): Promise<Response> {
-  const body = await readJsonBody(request)
-  const unknown = Object.keys(body).filter(
-    (key) => key !== 'status' && key !== 'carrier' && key !== 'trackingNumber',
-  )
-  if (unknown.length > 0) {
-    // Named, not dropped — the `updateFormSubmission` / `updateContact` rule.
-    // A silently ignored `trackingUrl` here reads as "we recorded your
-    // shipment as you described it" when half of it went nowhere, and the
-    // caller is a warehouse system that will never look again.
-    return ApiErrors.badRequest({
-      message:
-        'Only `status`, `carrier` and `trackingNumber` can be set on an order',
-      code: 'validation_failed',
-      fields: Object.fromEntries(
-        unknown.map((key) => [key, 'Not writable on an order']),
-      ),
-      headers: ctx.headers,
-    })
-  }
-
-  const status = String(body.status ?? '')
-  const refusal = ORDER_WRITE_REFUSED[status]
-  if (refusal) {
-    return ApiErrors.badRequest({
-      message: refusal,
-      code: 'validation_failed',
-      fields: { status: refusal },
-      headers: ctx.headers,
-    })
-  }
-  if (!(ORDER_WRITE_TARGETS as string[]).includes(status)) {
-    return ApiErrors.badRequest({
-      message: 'Order failed validation',
-      code: 'validation_failed',
-      fields: {
-        status: `Must be one of: ${ORDER_WRITE_TARGETS.join(', ')}`,
-      },
-      headers: ctx.headers,
-    })
-  }
-  // Bounded exactly as the console route bounds them, so one field cannot be
-  // used to stuff an order document through a door the console keeps narrow.
-  const carrier = String(body.carrier ?? '').slice(0, 40)
-  const trackingNumber = String(body.trackingNumber ?? '').slice(0, 60)
-
-  // The plugin's server surface, activated the same way the plugin API
-  // dispatcher activates it — one shared loader per process, so this costs
-  // nothing after the first request.
-  //
-  // IMPORTED HERE, NOT AT MODULE SCOPE, and that is not a style choice.
-  // `server-plugin-loader` builds the console's plugin manifest as a side
-  // effect of being loaded, so a top-level import would run that for EVERY
-  // /v1 request — a contacts read, a dataset write — to serve the one path
-  // that needs it. It also drags the whole plugin manifest into the module
-  // graph of every module that touches this file. Both are paid only by the
-  // request that actually records a shipment this way. Node caches the
-  // module, so the second call is a map lookup.
-  const { serverPluginLoader } = await import('./server-plugin-loader')
-  await serverPluginLoader.ensureAll(['consoleApi'])
-  const service = getOrderFulfilmentService()
-  if (!service) {
-    // No loaded plugin provides order fulfilment — a build without commerce,
-    // or a self-host that dropped it. The endpoint genuinely does not exist
-    // in that deployment, and 404 is the honest answer rather than a 500.
-    return ApiErrors.notFound({
-      message: 'Order fulfilment is not available on this deployment',
-      headers: ctx.headers,
-    })
-  }
-
-  // Gate 4. `service.pluginId`, never a hard-coded `'commerce'` — the app
-  // does not know the addon layer's names, and asking the capability which
-  // plugin owns it is what keeps that true.
-  const hostSnap = await hostRef(ctx, hostId).get()
-  if (!isHostPluginEnabled(ctx.org, hostSnap.data(), service.pluginId)) {
-    return ApiErrors.notFound({
-      message: 'No such site',
-      headers: ctx.headers,
-    })
-  }
-
-  const outcome = await service.recordShipment({
-    hostId,
-    orderId,
-    to: status as OrderFulfilmentTarget,
-    carrier,
-    trackingNumber,
-  })
-  if (outcome.outcome === 'no_such_order') {
-    return ApiErrors.notFound({
-      message: 'No such order',
-      headers: ctx.headers,
-    })
-  }
-  if (outcome.outcome === 'blocked') {
-    // A NEW 409 code (`order_transition`), because an integrator has to be
-    // able to tell "the order moved on without me" apart from every other
-    // conflict this API can raise — it is the one a fulfilment poller will
-    // actually hit, and the one it must not retry forever.
-    return ApiErrors.conflict({
-      message: `Orders in "${outcome.from}" cannot be marked ${status}`,
-      code: 'order_transition',
-      headers: ctx.headers,
-    })
-  }
-  // The order object, on both `recorded` and `already` — a retry lands the
-  // same state and reads the same 200. Re-read after the write so the body
-  // shows the shipment that was just recorded rather than the one before it.
-  return apiJson(orderView(await hostRef(ctx, hostId).collection('orders').doc(orderId).get()), {
-    headers: ctx.headers,
-  })
-}
-
-/**
- * Price and stock live on VARIANTS, never on the product — a product-level
- * `inventory` exists only as a denormalized sum the console rewrites on every
- * decrement, and a product-level `priceUsd` is the legacy single-variant
- * shape. Publishing either as the product's price would be wrong the moment a
- * product has two variants, so the variant array is the contract and the
- * product carries only the roll-up, clearly named.
- *
- * `inventory: null` on a variant means UNTRACKED and `0` means SOLD OUT.
- * Collapsing them (the `?? 0` an integrator writes on the first day) turns
- * every untracked product into an out-of-stock one, so the distinction is
- * carried through verbatim rather than defaulted.
- */
-function variantView(variant: Record<string, unknown>) {
-  const inventory = variant.inventory
-  return {
-    id: variant.id ?? null,
-    sku: variant.sku ?? null,
-    barcode: variant.barcode ?? null,
-    options: variant.options ?? {},
-    priceUsd: typeof variant.priceUsd === 'number' ? variant.priceUsd : null,
-    compareAtPriceUsd:
-      typeof variant.compareAtPriceUsd === 'number'
-        ? variant.compareAtPriceUsd
-        : null,
-    weightGrams:
-      typeof variant.weightGrams === 'number' ? variant.weightGrams : null,
-    inventory: typeof inventory === 'number' ? inventory : null,
-    inventoryTracked: typeof inventory === 'number',
-  }
-}
-
-function productView(doc: FirebaseFirestore.DocumentSnapshot) {
-  const data = doc.data() ?? {}
-  const variants = Array.isArray(data.variants)
-    ? (data.variants as Array<Record<string, unknown>>)
-    : []
-  const tracked = variants.filter((v) => typeof v.inventory === 'number')
-  return {
-    id: doc.id,
-    object: 'product',
-    name: data.name ?? null,
-    slug: data.slug ?? null,
-    description: data.description ?? null,
-    type: data.type ?? null,
-    status: data.status ?? null,
-    tags: data.tags ?? [],
-    categoryIds: data.categoryIds ?? [],
-    mediaUrls: data.mediaUrls ?? [],
-    options: data.options ?? [],
-    variants: variants.map(variantView),
-    // The sum across TRACKED variants only, and `null` when none of them is
-    // tracked — so an untracked catalogue reads as "we don't count this"
-    // rather than as a store with nothing left to sell.
-    inventory: tracked.length
-      ? tracked.reduce((sum, v) => sum + Number(v.inventory ?? 0), 0)
-      : null,
-    subscription: serialize(data.subscription) ?? null,
-    created: data.createdAtMs ? new Date(Number(data.createdAtMs)).toISOString() : null,
-    updated: data.updatedAtMs ? new Date(Number(data.updatedAtMs)).toISOString() : null,
-  }
-}
-
-async function handleProducts(
-  request: Request,
-  ctx: ApiV1Context,
-  segments: string[],
-  url: URL,
-): Promise<Response> {
-  const [, hostId, , productId] = segments
-  const denied = requireScope(ctx, 'products:read')
-  if (denied) return denied
-  const unentitled = requireCommerce(ctx)
-  if (unentitled) return unentitled
-  if (request.method !== 'GET') {
-    return ApiErrors.methodNotAllowed({ headers: ctx.headers })
-  }
-  const collection = hostRef(ctx, hostId).collection('products')
-
-  if (productId) {
-    const snap = await collection.doc(productId).get()
-    // A soft-deleted product is gone as far as a customer is concerned. The
-    // console filters `deletedAt` client-side; the API must not hand back a
-    // product the merchant deleted just because the document survives.
-    if (!snap.exists || snap.get('deletedAt')) {
-      return ApiErrors.notFound({ message: 'No such product', headers: ctx.headers })
-    }
-    return apiJson(productView(snap), { headers: ctx.headers })
-  }
-
-  let query: FirebaseFirestore.Query = collection
-  const status = url.searchParams.get('status')
-  if (status) query = query.where('status', '==', status)
-  const { docs, nextCursor } = await paginate(query, url)
-  const data = docs.filter((doc) => !doc.get('deletedAt')).map(productView)
-  return listResponse(data, nextCursor, ctx.headers)
 }
 
 // ── Media (read) ────────────────────────────────────────────────────────────
@@ -1269,15 +569,28 @@ async function handleProducts(
  * rather than picking one and lying about the other.
  *
  * `url` is the durable download URL and is always present. `cdnUrl` is the
- * CDN path, which exists only when the plan includes `mediaCdn` AND the asset
- * is not private, so it is published as a separate nullable field rather than
- * folded into `url` — an integrator building a public `<img>` needs to know
- * which one it got. Private assets carry neither a CDN path nor a usable
- * public link and are marked `private: true`.
+ * CDN URL, which every asset that is not private has, so it is published as
+ * a separate nullable field rather than folded into `url` — an integrator
+ * building a public `<img>` needs to know which one it got. Private assets
+ * carry neither a CDN path nor a usable public link and are marked
+ * `private: true`.
+ *
+ * An asset uploaded before the CDN reached every plan (AGL-1152) has no
+ * stored `cdnPath`; its stable path is derived from the library it lives in
+ * and its id (AGL-3506). Publishing `null` for it pushed integrators onto
+ * `url`, whose bytes reach the visitor straight from Storage — uncounted by
+ * the bandwidth band and out of reach of a lockdown.
  */
-function mediaView(doc: FirebaseFirestore.DocumentSnapshot, origin: string) {
+function mediaView(
+  doc: FirebaseFirestore.DocumentSnapshot,
+  origin: string,
+  cdnScope: string,
+) {
   const data = doc.data() ?? {}
-  const cdnPath = data.cdnPath as string | undefined
+  const cdnPath = data.private
+    ? undefined
+    : ((data.cdnPath as string | undefined) ||
+      `${MEDIA_CDN_ROUTE}/${cdnScope}/${doc.id}`)
   return {
     id: doc.id,
     object: 'media',
@@ -1578,8 +891,10 @@ async function createMedia(
           contentType,
           sourceWidth: (dimensions as { width?: number }).width,
           objectPath,
-          saveVariant: async (path: string, webp: Buffer) => {
-            await bucket.file(path).save(webp, { contentType: 'image/webp' })
+          // The display copy too (AGL-3486), as the console's routes make it.
+          display: true,
+          saveVariant: async (path, bytes, type) => {
+            await bucket.file(path).save(bytes, { contentType: type })
           },
         }).catch(() => null)
       : null
@@ -1612,7 +927,7 @@ async function createMedia(
       }),
       contentHash,
       contentSha256,
-      variants: (variants as { variants?: number[] })?.variants ?? [],
+      ...(variants ? mediaVariantDocFields(variants) : { variants: [] }),
       ...(embeddedMetadata ? { embeddedMetadata } : {}),
       ...(svg?.removed?.length ? { svgSanitized: svg.removed } : {}),
       // The org library is shared across sites, so a file written there needs
@@ -1662,7 +977,11 @@ async function createMedia(
       contentType,
     })
 
-    const view = mediaView(await scopeRef.collection('media').doc(mediaId).get(), origin)
+    const view = mediaView(
+      await scopeRef.collection('media').doc(mediaId).get(),
+      origin,
+      scope.cdnScope,
+    )
     // Stored as 200 so a replay is distinguishable from the fresh 201.
     await claim.record(200, view)
     return apiJson(view, { status: 201, headers: ctx.headers })
@@ -1716,7 +1035,9 @@ async function handleScopedMedia(
     if (!snap.exists || snap.get('deletedAt')) {
       return ApiErrors.notFound({ message: 'No such file', headers: ctx.headers })
     }
-    return apiJson(mediaView(snap, origin), { headers: ctx.headers })
+    return apiJson(mediaView(snap, origin, scope.cdnScope), {
+      headers: ctx.headers,
+    })
   }
 
   let query: FirebaseFirestore.Query = collection
@@ -1725,7 +1046,7 @@ async function handleScopedMedia(
   const { docs, nextCursor } = await paginate(query, url)
   const data = docs
     .filter((doc) => !doc.get('deletedAt'))
-    .map((doc) => mediaView(doc, origin))
+    .map((doc) => mediaView(doc, origin, scope.cdnScope))
   return listResponse(data, nextCursor, ctx.headers)
 }
 
@@ -1863,7 +1184,7 @@ const PLATFORM_USAGE_FIGURES: ReadonlySet<string> = new Set([
  * itself, so this is one attempt per process.
  */
 async function ensurePluginDeclarations(): Promise<void> {
-  if (apiV1Resources().length > 0) return
+  if (apiV1Resources().length > 0 || apiV1SiteResources().length > 0) return
   await runPluginDeclarationsRepair().catch(() => false)
 }
 
@@ -1897,6 +1218,45 @@ async function pluginResource(name: string) {
   return apiV1Resource(name)
 }
 
+/** The resource a plugin serves under a site, on the same repair-once terms. */
+async function pluginSiteResource(name: string) {
+  const found = apiV1SiteResource(name)
+  if (found) return found
+  if (!(await runPluginDeclarationsRepair().catch(() => false))) return null
+  return apiV1SiteResource(name)
+}
+
+/**
+ * Hand a request to the plugin that serves it, after the plan question.
+ *
+ * The plan comes before the scope and before the handler, here rather than
+ * inside each: a scope is mintable on a key whose org was later moved to a
+ * plan without the feature by a staff override, and a scope that still
+ * answered would be the shell's "extensions cannot bypass entitlements"
+ * promise broken over the wire. Same shape as the `dataStore` refusal on
+ * datasets. A registration that names no feature asks its own plan
+ * questions, in the order it documents.
+ */
+function servePluginResource(
+  resource: ApiV1Resource,
+  request: Request,
+  ctx: ApiV1Context,
+  segments: string[],
+  url: URL,
+): Promise<Response> {
+  const { entitlement } = resource
+  if (entitlement && !checkEntitlement(ctx.org, entitlement.feature)) {
+    return Promise.resolve(
+      ApiErrors.planRequired({
+        message: entitlement.message,
+        code: entitlement.feature,
+        headers: ctx.headers,
+      }),
+    )
+  }
+  return resource.handle(request, ctx, segments, url)
+}
+
 /** Route a `/v1/<resource>/...` request to its handler. */
 export async function dispatchResource(
   request: Request,
@@ -1925,26 +1285,11 @@ export async function dispatchResource(
   }
   /*
    * A resource a plugin models is the plugin's (AGL-3080): it registered a
-   * handler under the name, and the plan feature the resource needs. The
-   * plan question comes before the scope one and before the handler, here
-   * rather than inside each: a scope is mintable on a key whose org was
-   * later moved to a plan without the feature by a staff override, and a
-   * scope that still answered would be the shell's "extensions cannot bypass
-   * entitlements" promise broken over the wire. Same shape as the
-   * `dataStore` refusal on datasets.
+   * handler under the name, and the plan feature the resource needs, which
+   * `servePluginResource` asks first.
    */
   const plugin = segments[0] ? await pluginResource(segments[0]) : null
-  if (plugin) {
-    const { entitlement } = plugin.resource
-    if (entitlement && !checkEntitlement(ctx.org, entitlement.feature)) {
-      return ApiErrors.planRequired({
-        message: entitlement.message,
-        code: entitlement.feature,
-        headers: ctx.headers,
-      })
-    }
-    return plugin.resource.handle(request, ctx, segments, url)
-  }
+  if (plugin) return servePluginResource(plugin.resource, request, ctx, segments, url)
   return ApiErrors.notFound({
     message: `Unknown endpoint: /v1/${segments.join('/')}`,
     headers: ctx.headers,

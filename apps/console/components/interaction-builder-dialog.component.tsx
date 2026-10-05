@@ -31,6 +31,7 @@ import {
   isClientActionStep,
   isClientStepEntitled,
   isInteractionAttributeAllowed,
+  isScreenGroup,
   planLabelGrantingFeature,
   SCROLL_TO_MAX_OFFSET_PX,
   validateInteraction,
@@ -147,17 +148,21 @@ const PLATFORM_STEP_TYPES: Array<{ value: string; label: string }> = [
  * Every step the picker offers: the platform's own, with each step a plugin
  * declares (`interactionSteps` in `plugins.config.json`) listed after the
  * message step, where the steps that act on a site's records have always
- * been. The builder names no plugin step.
+ * been. A step only an automation holds (`offered: false`) — an email, a wait,
+ * a CRM write — is the automation editor's, and is not offered here. The
+ * builder names no plugin step.
  */
 const STEP_TYPES: Array<{ value: string; label: string }> = (() => {
   const at =
     PLATFORM_STEP_TYPES.findIndex((entry) => entry.value === 'siteAlert') + 1
   return [
     ...PLATFORM_STEP_TYPES.slice(0, at),
-    ...declaredInteractionSteps().map((declaration) => ({
-      value: declaration.type,
-      label: declaration.label,
-    })),
+    ...declaredInteractionSteps()
+      .filter((declaration) => declaration.offered !== false)
+      .map((declaration) => ({
+        value: declaration.type,
+        label: declaration.label,
+      })),
     ...PLATFORM_STEP_TYPES.slice(at),
   ]
 })()
@@ -336,7 +341,7 @@ interface StepPlanGate {
  * Nothing is sanitized here, on purpose. Every pair typed into these fields
  * is delivered by `trackAuthoredEvent`, which runs the shared
  * `sanitizeEventParams` over it — the one sanitizing path — and
- * `validateHostAction` re-runs that same function so a parameter the runtime
+ * `validateInteraction` re-runs that same function so a parameter the runtime
  * would strip is named to the author instead of vanishing on a visitor's
  * page. A second set of rules here could only drift from those.
  *
@@ -1267,11 +1272,15 @@ export function InteractionBuilderDialog(props: InteractionBuilderDialogProps) {
                     sx={{ flex: 1 }}
                   >
                     <MenuItem value="">{'Custom URL…'}</MenuItem>
-                    {(screenDocs ?? []).map((screen: any) => (
-                      <MenuItem key={screen.$id} value={screen.$id}>
-                        {screen.displayName ?? screen.slug ?? screen.$id}
-                      </MenuItem>
-                    ))}
+                    {/* A page group (AGL-3463) has no address to send a
+                        visitor to, so it is not a redirect target. */}
+                    {(screenDocs ?? [])
+                      .filter((screen: any) => !isScreenGroup(screen))
+                      .map((screen: any) => (
+                        <MenuItem key={screen.$id} value={screen.$id}>
+                          {screen.displayName ?? screen.slug ?? screen.$id}
+                        </MenuItem>
+                      ))}
                   </TextField>
                   {!step.screenId ? (
                     <TextField

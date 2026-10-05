@@ -163,6 +163,7 @@ function facetKeysOf(group, facet, into) {
       if (/^[A-Za-z0-9_-]{1,64}$/.test(key)) add(`custom.${key}`, value)
     }
   }
+  add('leadSource', facet.leadSource)
 }
 
 /** `crmContactFacetKeys`: every holder's keys, and any holder's under `*`. */
@@ -180,6 +181,48 @@ export function crmContactFacetKeys(record) {
 }
 
 /** `crmListFields`: every list field of one record, from the record as stored. */
+/** `DEAL_CONTACT_ROLES_MAX`: the most contacts one deal names. */
+const DEAL_CONTACT_ROLES_MAX = 50
+
+/**
+ * `dealContactRolesOf`: a deal's stored roles, read defensively, with the
+ * contact `contactId` names as the one Primary — added, with no role, when
+ * the list does not name them (a deal written before roles).
+ */
+export function dealContactRolesOf(doc) {
+  const roles = []
+  const seen = new Set()
+  for (const entry of Array.isArray(doc.contactRoles) ? doc.contactRoles : []) {
+    if (!entry || typeof entry !== 'object') continue
+    const contactId = typeof entry.contactId === 'string' ? entry.contactId.trim() : ''
+    if (!contactId || contactId.length > 200 || contactId.includes('/') || seen.has(contactId)) continue
+    seen.add(contactId)
+    const role =
+      typeof entry.role === 'string' ? entry.role.trim().replace(/\s+/g, ' ').slice(0, CRM_LEAD_TEXT_MAX) : ''
+    roles.push({ contactId, ...(role ? { role } : {}) })
+    if (roles.length >= DEAL_CONTACT_ROLES_MAX) break
+  }
+  const primary = typeof doc.contactId === 'string' ? doc.contactId.trim() : ''
+  if (primary && !roles.some((row) => row.contactId === primary)) roles.unshift({ contactId: primary })
+  return roles.slice(0, DEAL_CONTACT_ROLES_MAX)
+}
+
+/** `crmDealContactRoleListFields`: the arrays a deal's contact roles are found by. */
+export function crmDealContactRoleListFields(doc) {
+  const roles = dealContactRolesOf(doc)
+  const contactRoleContactIds = roles.map((row) => row.contactId)
+  const keys = new Set()
+  for (const row of roles) {
+    const key = crmLeadSourceKey(row.role)
+    if (key) keys.add(key)
+  }
+  return {
+    contactRoleContactIds,
+    scopedContactRoleContactIds: scopedSearchTokens(doc.visibleTo, contactRoleContactIds),
+    contactRoleKeys: [...keys],
+  }
+}
+
 export function crmListFields(collection, record) {
   const doc = record ?? {}
   switch (collection) {
@@ -198,6 +241,9 @@ export function crmListFields(collection, record) {
         status: CRM_LEAD_STATUSES.includes(doc.status) ? doc.status : 'new',
         leadSourceKey: crmLeadSourceKey(doc.leadSource),
         emailStatus: crmEmailStatusKey(doc),
+        // The Industry and Rating the Leads list filters by (AGL-3513).
+        industryKey: crmLeadSourceKey(doc.industry),
+        ratingKey: crmLeadSourceKey(doc.rating),
       }
     case 'contacts':
       return {
@@ -209,11 +255,23 @@ export function crmListFields(collection, record) {
         emailStatus: crmEmailStatusKey(doc),
       }
     case 'companies':
-      return searchFields(doc.visibleTo, [doc.name, doc.domain])
+      return {
+        ...searchFields(doc.visibleTo, [doc.name, doc.domain]),
+        // The picklist keys the Companies list filters by (AGL-3514).
+        typeKey: crmLeadSourceKey(doc.type),
+        industryKey: crmLeadSourceKey(doc.industry),
+        ratingKey: crmLeadSourceKey(doc.rating),
+        accountSourceKey: crmLeadSourceKey(doc.accountSource),
+      }
     case 'deals':
       return {
         ...searchFields(doc.visibleTo, [doc.title]),
         titleLower: nameSearchKey(typeof doc.title === 'string' ? doc.title : ''),
+        // The Deals list's Type and Lead source keys (AGL-3516).
+        typeKey: crmLeadSourceKey(doc.type),
+        leadSourceKey: crmLeadSourceKey(doc.leadSource),
+        // The deal's contact roles (AGL-3521).
+        ...crmDealContactRoleListFields(doc),
       }
     case 'crmTasks':
       return searchFields(doc.visibleTo, [doc.title])

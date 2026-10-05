@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { DocumentData, Firestore, Query } from 'firebase/firestore'
+import type { DocumentData, DocumentReference, Firestore, Query } from 'firebase/firestore'
 import { getRegisteringPluginId } from '../app-utils/registering-plugin'
 import type { PluginIndexedRecord } from './plugin-record-index'
 import {
@@ -81,8 +81,40 @@ export interface PluginRecordListRequest {
    * owner keeps it. A kind that is never installed answers none.
    */
   installedFrom?: string | null
+  /**
+   * The consent group the named site presents as (`app-utils/consent-groups`),
+   * for a kind whose records say different things to different groups — a
+   * person's name as one brand knows them. Absent reads as the site alone.
+   */
+  consentGroupId?: string | null
+  /**
+   * The signed-in member, for a kind some of whose records are one member's
+   * own — a saved view kept private: the owner leaves out what this member
+   * may not list. Absent reads as nobody's, which lists only what is shared.
+   */
+  viewerUid?: string | null
   /** The most documents the query may answer — a reader asks one past its window to learn it was cut. */
   limit: number
+}
+
+/** Where a reader walks a kind, or opens one record of it. */
+export interface PluginRecordListScope {
+  /** The organization, where no site is named. */
+  orgId?: string | null
+  /** The site; named, it wins over the organization. */
+  hostId?: string | null
+}
+
+/**
+ * The most records one by-name read asks for: Firestore's `in` takes thirty
+ * values, so a reader with more asks in chunks.
+ */
+export const PLUGIN_RECORD_LIST_IDS_MAX = 30
+
+/** Named records of a scope, for a reader that already holds their ids. */
+export type PluginRecordListByIdsRequest = Omit<PluginRecordListRequest, 'limit' | 'search'> & {
+  /** At most {@link PLUGIN_RECORD_LIST_IDS_MAX}; the owner reads no more. */
+  ids: readonly string[]
 }
 
 export interface PluginRecordListSource {
@@ -92,8 +124,43 @@ export interface PluginRecordListSource {
    * kind asked at the organization, a search with nothing to match).
    */
   query(firestore: Firestore, request: PluginRecordListRequest): Query<DocumentData> | null
-  /** One stored document as the owner shares it, or `null` to leave it out (deleted, unnamed). */
-  record(id: string, data: Readonly<Record<string, unknown>>): PluginIndexedRecord | null
+  /**
+   * The query for NAMED records of the scope — a reader that holds ids from
+   * somewhere else, an attribution naming the submission it credits — or
+   * `null` where none can be read. Optional: a source without it answers no
+   * by-name read, and the reader treats every id as one it could not find.
+   */
+  byIds?(firestore: Firestore, request: PluginRecordListByIdsRequest): Query<DocumentData> | null
+  /**
+   * One stored document as the owner shares it, or `null` to leave it out
+   * (deleted, unnamed, or not the reader's to list). `request` is the one the
+   * query was built from, when the reader hands it back: a rule the query
+   * cannot state — a site's view of an org-wide row, a member's own view —
+   * is applied here.
+   */
+  record(
+    id: string,
+    data: Readonly<Record<string, unknown>>,
+    request?: PluginRecordListRequest,
+  ): PluginIndexedRecord | null
+  /**
+   * The base a reader WALKS the kind from with the console's paged list query
+   * (`useListQuery`), which adds its filters, its order and its pages over the
+   * stored fields the owner documents for the kind — or `null` for a scope
+   * the kind has none in. For a kind whose reader pages a whole list rather
+   * than picking from a window. Where the rules admit a read only narrowed by
+   * a field, the owner's registration says which, and the reader adds it.
+   */
+  walk?(firestore: Firestore, scope: PluginRecordListScope): Query<DocumentData> | null
+  /**
+   * One record's document, for a reader that opens it whole or changes what
+   * the owner documents a reader may change — the security rules hold the
+   * rest — or `null` for a scope the kind has none in.
+   */
+  doc?(
+    firestore: Firestore,
+    request: PluginRecordListScope & { id: string },
+  ): DocumentReference<DocumentData> | null
 }
 
 export const PLUGIN_RECORD_LISTS = definePluginServiceContract<PluginRecordListSource>(
@@ -150,19 +217,62 @@ export function pluginRecordListQuery(
 }
 
 /**
+ * The base a reader walks `kind` from in a scope, or `null` — no plugin keeps
+ * the kind here, it offers no walk, or the scope has none.
+ */
+export function pluginRecordListWalk(
+  kind: string,
+  firestore: Firestore,
+  scope: PluginRecordListScope,
+): Query<DocumentData> | null {
+  return pluginRecordListSource(kind)?.source.walk?.(firestore, scope) ?? null
+}
+
+/**
+ * One record of `kind`'s document, or `null` — no plugin keeps the kind here,
+ * it offers no document, or the scope has none.
+ */
+export function pluginRecordListDoc(
+  kind: string,
+  firestore: Firestore,
+  request: PluginRecordListScope & { id: string },
+): DocumentReference<DocumentData> | null {
+  return pluginRecordListSource(kind)?.source.doc?.(firestore, request) ?? null
+}
+
+/**
+ * The query for named records of `kind` — at most
+ * {@link PLUGIN_RECORD_LIST_IDS_MAX} ids, the rest left for the next chunk —
+ * or `null` when no plugin keeps the kind here, its source reads none by
+ * name, or there is no id to ask for.
+ */
+export function pluginRecordListByIdsQuery(
+  kind: string,
+  firestore: Firestore,
+  request: PluginRecordListByIdsRequest,
+): Query<DocumentData> | null {
+  const ids = request.ids.filter(Boolean).slice(0, PLUGIN_RECORD_LIST_IDS_MAX)
+  if (!ids.length) return null
+  return pluginRecordListSource(kind)?.source.byIds?.(firestore, { ...request, ids }) ?? null
+}
+
+/**
  * The documents a reader's listener answered for `kind`, as their owner
  * shares them: each row's id is read from `idField` (the listener's), and a
- * row the owner leaves out (deleted, unnamed) is not answered. None where no
- * plugin keeps the kind here.
+ * row the owner leaves out (deleted, unnamed, not this reader's) is not
+ * answered. None where no plugin keeps the kind here. `request` is the one
+ * the query was built from: hand it back, so the owner can apply what the
+ * query could not state.
  */
 export function pluginRecordsFromRows(
   kind: string,
   rows: ReadonlyArray<Readonly<Record<string, unknown>>> | null | undefined,
   idField = '$id',
+  request?: PluginRecordListRequest,
 ): PluginIndexedRecord[] {
   const source = pluginRecordListSource(kind)?.source
   if (!source) return []
   return (rows ?? [])
-    .map((row) => source.record(String(row[idField] ?? ''), row))
+    .map((row) => source.record(String(row[idField] ?? ''), row, request))
     .filter((record): record is PluginIndexedRecord => record !== null)
 }

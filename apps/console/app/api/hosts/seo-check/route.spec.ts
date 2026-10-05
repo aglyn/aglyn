@@ -107,6 +107,14 @@ jest.mock('@aglyn/aglyn/server', () => ({
   }),
 }))
 
+const mockReadRepeatRows = jest.fn(async (..._args: unknown[]) => ({
+  services: { records: [{ $id: 'r1', name: 'Dimmable floor lamps' }] },
+}))
+jest.mock('@aglyn/aglyn/plugin-manager/repeat-rows', () => ({
+  __esModule: true,
+  readRepeatRows: (...args: unknown[]) => mockReadRepeatRows(...args),
+}))
+
 jest.mock('../../_lib/invalid-id-token-response', () => ({
   __esModule: true,
   invalidIdTokenResponse: () => null,
@@ -162,6 +170,31 @@ describe('the SEO check is the platform’s', () => {
     expect(report.site).toEqual([])
     // Template screens are not pages: the runtime's list is what excludes them.
     expect(mockTemplateScreenIds).toHaveBeenCalledWith({ hostId: 'h1' })
+  })
+
+  it('checks each page as it publishes: a component’s heading and a repeat’s rows are the page’s (AGL-3501)', async () => {
+    docs['hosts/h1/screens/lamps/versions/v2'] = {
+      rootId: 'root',
+      nodes: {
+        root: { componentId: 'div', nodes: ['main'] },
+        main: { componentId: 'section', props: { component: 'main' }, nodes: ['hero', 'list'] },
+        hero: { componentId: 'reusableInstance', props: { refId: 'heading', propValues: { title: 'Brass floor lamps' } }, nodes: [] },
+        list: { componentId: 'muiStack', props: { repeatDataset: 'services' }, nodes: ['row'] },
+        row: { componentId: 'muiTypography', props: { children: '{{item.name}}' }, nodes: [] },
+      },
+    }
+    docs['hosts/h1/components/heading'] = {
+      rootId: 't',
+      nodes: { t: { componentId: 'muiTypography', props: { variant: 'h1', children: '{{prop.title}}' }, nodes: [] } },
+      props: [{ name: 'title', type: 'text', defaultValue: '' }],
+    }
+    const response = await call('hostId=h1&keywords=%2Flamps%3A%20floor%20lamps%2C%20dimmable')
+    const { report } = await response.json()
+    const lamps = report.pages.find((page: { screenId: string }) => page.screenId === 'lamps')
+    const codes = lamps.findings.map((entry: { code: string }) => entry.code)
+    expect(codes).not.toContain('h1-missing')
+    expect(codes).not.toContain('keyword-missing')
+    expect(mockReadRepeatRows).toHaveBeenCalledWith({ hostId: 'h1', keys: ['services'] })
   })
 
   it('tells a stranger to the site nothing', async () => {

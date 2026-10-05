@@ -17,6 +17,16 @@
 
 // Deep import, like every other reader of these fields on the render path.
 import { resolveMediaSrc } from '@aglyn/aglyn/app-utils/media-ref'
+import { resolvePageLocale } from '@aglyn/aglyn/app-utils/seo-locale'
+import {
+  DEFAULT_SITE_ICON_BACKGROUND,
+  normalizeSiteIconBackground,
+  type SiteIconSourceFacts,
+  type SiteManifestIcon,
+  siteIconDerivable,
+  siteIconSrc,
+  siteManifestIcons,
+} from '@aglyn/aglyn/app-utils/site-icon-set'
 import type { HostTheme } from '@aglyn/shared-data-types'
 
 /**
@@ -36,6 +46,21 @@ import type { HostTheme } from '@aglyn/shared-data-types'
 export interface SiteIconHost {
   $id?: string
   seo?: { favicon?: string; appIcon?: string } | null
+}
+
+/** The fields of a host record the manifest reads. */
+export interface SiteManifestHost extends SiteIconHost {
+  name?: string
+  displayName?: string
+  logoUrl?: string
+  defaultLocale?: string
+  locales?: string[]
+  seo?: {
+    title?: string
+    description?: string
+    favicon?: string
+    appIcon?: string
+  } | null
 }
 
 /**
@@ -142,6 +167,126 @@ export function manifestShortName(name: string): string {
   return short
 }
 
+/**
+ * The plate a flattened or maskable icon is drawn on, and the manifest's
+ * `background_color`: the light scheme's page background, as six hex digits.
+ *
+ * Light for the manifest's reason — these paint before any
+ * `prefers-color-scheme` applies — and white when the site has no theme or a
+ * background that is not a plain color, so a site with nothing set looks
+ * unbranded rather than like ours.
+ */
+export function siteIconBackground(
+  theme: HostTheme | null | undefined,
+): string {
+  return (
+    normalizeSiteIconBackground(
+      theme?.colorSchemes?.light?.background?.default,
+    ) ?? DEFAULT_SITE_ICON_BACKGROUND
+  )
+}
+
+/**
+ * The source of the manifest's icon set (AGL-3484): the site's App icon, then
+ * its favicon, then its logo — resolved, still site-relative.
+ *
+ * Every size is center-fit from this one file, so a wide logo installs
+ * letterboxed rather than stretched; the App icon leads because it is the
+ * artwork drawn for exactly this slot.
+ */
+export function siteManifestIconSrc(
+  host: SiteManifestHost | null | undefined,
+): string | undefined {
+  return (
+    resolveMediaSrc(host?.seo?.appIcon, { hostId: host?.$id }) ||
+    siteFaviconSrc(host) ||
+    resolveMediaSrc(host?.logoUrl, { hostId: host?.$id })
+  )
+}
+
+/** The site's web app manifest, every field derived from its settings. */
+export interface SiteManifest {
+  name: string
+  short_name: string
+  description?: string
+  lang: string
+  start_url: '/'
+  scope: '/'
+  display: 'standalone'
+  theme_color: string
+  background_color: string
+  icons?: SiteManifestIcon[]
+}
+
+/**
+ * The whole web app manifest for a site (AGL-3484) — nothing in it is entered
+ * by hand, so a customer who never thinks about installability still gets a
+ * complete one from what they already filled in.
+ *
+ *  - `name` — the SEO title, then the site's display name, then its name.
+ *  - `short_name` — {@link manifestShortName} of that.
+ *  - `description` — the SEO description, when there is one.
+ *  - `lang` — the Languages card, through the same chain as `<html lang>`.
+ *  - `start_url` and `scope` — the site root.
+ *  - `theme_color` / `background_color` — the LIGHT scheme's primary and page
+ *    background, neutral black and white when unset.
+ *  - `icons` — {@link siteManifestIcons} of {@link siteManifestIconSrc}, made
+ *    absolute against `origin`. A site with no mark, or one whose mark cannot
+ *    be absolutized, gets no `icons` at all, so an installer falls back to a
+ *    screenshot instead of a broken tile (AGL-1022).
+ *
+ * `facts` is what `getSiteIconFacts` read for the icon source, keyed by its
+ * site-relative src; absent facts derive the set without a cache version.
+ */
+export function buildSiteManifest(options: {
+  site: SiteManifestHost | null | undefined
+  theme: HostTheme | null | undefined
+  /** The site's public origin, for absolute icon URLs. */
+  origin?: string | null
+  facts?: ReadonlyMap<string, SiteIconSourceFacts>
+}): SiteManifest {
+  const { site, theme, origin, facts } = options
+  const name =
+    site?.seo?.title?.trim() || site?.displayName || site?.name || 'Site'
+  const description = site?.seo?.description?.trim()
+  const background = siteIconBackground(theme)
+  const relative = siteManifestIconSrc(site)
+  const icons = siteManifestIcons(
+    absoluteIconSrc(relative, origin),
+    relative ? facts?.get(relative) : undefined,
+    background,
+  )
+  return {
+    name,
+    short_name: manifestShortName(name),
+    ...(description ? { description } : {}),
+    lang: resolvePageLocale({ host: site }),
+    start_url: '/',
+    scope: '/',
+    display: 'standalone',
+    theme_color: siteThemeColor(theme, 'light') || '#000000',
+    background_color: `#${background}`,
+    ...(icons.length ? { icons } : {}),
+  }
+}
+
+/**
+ * A resolved src made absolute: an installer fetches manifest icons out of
+ * band, with no page to resolve a relative src against (AGL-1407). Already
+ * absolute passes through; relative with no origin is `undefined`, never a
+ * guess.
+ */
+function absoluteIconSrc(
+  src: string | undefined,
+  origin: string | null | undefined,
+): string | undefined {
+  if (!src) return undefined
+  if (/^[a-z][a-z0-9+.-]*:/i.test(src)) return src
+  if (src.startsWith('//')) return `https:${src}`
+  if (!origin) return undefined
+  return src.startsWith('/') ? `${origin}${src}` : `${origin}/${src}`
+}
+
 /** The two origin-level icon paths an unfurler or browser falls back to. */
 export type SiteIconKind = 'favicon' | 'apple-touch-icon'
 
@@ -185,18 +330,64 @@ export function siteIconAnswer(options: {
   brandFavicon?: string
   /** `showsPlatformAttribution(org)` — false when the org could not be read. */
   attribution?: boolean
+  /** `getSiteIconFacts` for the source, keyed by its resolved src. */
+  facts?: ReadonlyMap<string, SiteIconSourceFacts>
+  /** {@link siteIconBackground} — the touch icon's plate. */
+  background?: string
 }): SiteIconAnswer {
   const { kind, platformBrand, host, brandFavicon, attribution } = options
   if (platformBrand) {
     return { kind: 'redirect', location: PLATFORM_ICON_PATHS[kind] }
   }
-  const location =
-    kind === 'apple-touch-icon'
-      ? siteAppleTouchIconSrc(host)
-      : siteFaviconSrc(host) || brandFavicon
-  if (location) return { kind: 'redirect', location }
+  const source = siteIconSourceFor(kind, host, brandFavicon)
+  if (source) {
+    return {
+      kind: 'redirect',
+      location: siteIconLocation(kind, source, options),
+    }
+  }
   if (kind === 'apple-touch-icon') return { kind: 'not-found' }
   return attribution
     ? { kind: 'redirect', location: PLATFORM_ICON_PATHS.favicon }
     : { kind: 'blank' }
+}
+
+/** The file `/favicon.ico` or `/apple-touch-icon.png` is derived from. */
+export function siteIconSourceFor(
+  kind: SiteIconKind,
+  host: SiteIconHost | null | undefined,
+  brandFavicon?: string,
+): string | undefined {
+  return kind === 'apple-touch-icon'
+    ? siteAppleTouchIconSrc(host)
+    : siteFaviconSrc(host) || brandFavicon
+}
+
+/**
+ * Where an origin-level icon path sends the browser (AGL-3484): the derived
+ * multi-size ICO for `/favicon.ico`, the 180px flattened touch icon for
+ * `/apple-touch-icon.png`, both versioned so they cache for a year. A source
+ * with no renderer behind it — a hotlink, an uploaded `.ico` — is the
+ * original, as it always was.
+ */
+function siteIconLocation(
+  kind: SiteIconKind,
+  source: string,
+  options: {
+    facts?: ReadonlyMap<string, SiteIconSourceFacts>
+    background?: string
+  },
+): string {
+  const facts = options.facts?.get(source)
+  if (!siteIconDerivable(source, facts)) return source
+  const version = facts?.contentHash
+  return (
+    (kind === 'apple-touch-icon'
+      ? siteIconSrc(
+          source,
+          { plate: 'flat', size: 180 },
+          { background: options.background, version },
+        )
+      : siteIconSrc(source, { plate: 'ico' }, { version })) ?? source
+  )
 }

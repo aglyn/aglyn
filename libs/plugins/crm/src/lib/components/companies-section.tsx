@@ -20,6 +20,7 @@ import {
   type AglynOrgBilling,
   CRM_COLLECTIONS,
   type CrmCompany,
+  crmPicklistKey,
   pluginDocsHelp,
   crmMemberPickerLabel,
 } from '@aglyn/aglyn'
@@ -56,17 +57,19 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   COMPANY_LIST_DECLARATION,
   COMPANY_LIST_FILTER_FIELDS,
+  COMPANY_PICKLIST_FILTERS,
   COMPANY_PREFIX_SEARCH,
 } from '../constants/company-filters'
+import { useCompanyPicklists } from '../hooks/use-company-picklists'
+import { formatMoney } from '../model/deal-board-model'
 import { useContactFieldDefinitions } from '../hooks/use-contact-field-definitions'
 import { useCrmScope } from '../hooks/use-crm-scope'
 import { useOrgMemberOptions } from '../hooks/use-org-member-options'
-import { type CompanyCsvOptions, companiesCsv } from '../model/companies-csv'
-import { downloadTextFile } from '../model/contacts-csv'
+import { CRM_COMPANIES_RESOURCE } from '../transfer/fields'
 import { crmRoutes } from '../model/crm-routes'
 import CompaniesBulkBar from './companies-bulk-bar'
 import CompanyEditDrawer from './company-edit-drawer'
-import { CompanyImportButton } from './company-import-drawer'
+import { CrmExportButton, CrmImportButton } from './crm-transfer-buttons'
 import { customFieldColumns } from './contact-custom-columns'
 
 export interface CompaniesSectionProps {
@@ -85,6 +88,37 @@ const COMPANY_GRID_FILTER_HEADERS: Readonly<Record<string, string>> = {
   name: 'Company',
   ownerUid: 'Owner',
   [CRM_NEXT_ACTIVITY_FILTER_FIELD.column]: CRM_NEXT_ACTIVITY_FILTER_HEADER,
+  ...Object.fromEntries(COMPANY_PICKLIST_FILTERS.map((entry) => [entry.column, entry.header])),
+}
+
+/** The grid's select columns — the owner and each picklist — as the filter hook names them. */
+const COMPANY_SELECT_FIELDS = ['ownerUid', ...COMPANY_PICKLIST_FILTERS.map((entry) => entry.column)]
+
+/**
+ * Salesforce's Account columns (AGL-3514), optional: a reader turns one on
+ * from the column menu, and a view that shows it stores it by name.
+ */
+const COMPANY_HIDDEN_COLUMNS: Readonly<Record<string, boolean>> = {
+  type: false,
+  industry: false,
+  rating: false,
+  accountSource: false,
+  numberOfEmployees: false,
+  annualRevenueCents: false,
+}
+
+/** A text cell that reads as a dash when empty. */
+function textCell(value: unknown) {
+  const text = value === null || value === undefined ? '' : String(value)
+  return text ? (
+    <Typography variant="body2" noWrap>
+      {text}
+    </Typography>
+  ) : (
+    <Typography variant="body2" color="text.secondary">
+      {'—'}
+    </Typography>
+  )
 }
 
 /**
@@ -124,9 +158,9 @@ const COMPANY_GRID_FILTER_HEADERS: Readonly<Record<string, string>> = {
  * ## Selection, the bar and the file (AGL-2621)
  *
  * The rows are selectable, and a selection raises `CompaniesBulkBar` over
- * the table. Export CSV writes the loaded page through `companiesCsv()` —
- * the same file the bar writes over the selection, headed as the import
- * reads it — and Import CSV opens the companies drawer beside it.
+ * the table. Import and Export open the console's import wizard and
+ * export dialog on `crm.companies` (AGL-3527): the export over the
+ * selection, the list's own query, or every company.
  */
 export function CompaniesSection(props: CompaniesSectionProps) {
   const { hostId, org, basePath } = props
@@ -141,6 +175,8 @@ export function CompaniesSection(props: CompaniesSectionProps) {
   const members = useOrgMemberOptions(orgId)
   // The org's company fields, for the optional columns below (AGL-2661).
   const companyFields = useContactFieldDefinitions(orgId, 'company')
+  // The lists behind Type, Industry and Rating, for their filters (AGL-3514).
+  const picklists = useCompanyPicklists(orgId)
 
   /*
    * The clauses are the saved VIEW'S (AGL-2617), beside its columns and
@@ -176,18 +212,12 @@ export function CompaniesSection(props: CompaniesSectionProps) {
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   // A filter, a search or a page is a different set of rows.
   useEffect(() => setSelectedIds([]), [plan, page])
-  /*
-   * The owner is written by ADDRESS, because the companies import resolves
-   * an owner by email; the same options reach the bar, so the page's file
-   * and the selection's are one format.
-   */
-  const csvOptions: CompanyCsvOptions = useMemo(
-    () => ({ ownerEmail: members.emailFor }),
-    [members.emailFor],
+  // The list's filter, when one narrows it, for the export to read the same
+  // records the list does (AGL-3527).
+  const exportFilter = useMemo(
+    () => (plan.served.length || plan.searched ? { label: 'what the list shows', plan } : null),
+    [plan],
   )
-  const handleExport = useCallback(() => {
-    downloadTextFile('companies.csv', 'text/csv', companiesCsv(companies, csvOptions))
-  }, [companies, csvOptions])
   const openCompany = useCallback(
     (id: string) => router.push(routes.company(id)),
     [router, routes],
@@ -350,6 +380,63 @@ export function CompaniesSection(props: CompaniesSectionProps) {
       },
       // When the earliest open task against the company is due (AGL-2661).
       nextActivityColumn(nowMs),
+      // Salesforce's Account fields (AGL-3514), each optional. Type, Industry
+      // and Rating filter by the key stored beside the label; the rest read.
+      ...COMPANY_PICKLIST_FILTERS.map(
+        (entry): GridColDef => ({
+          field: entry.column,
+          headerName: entry.header,
+          flex: 0.8,
+          minWidth: 130,
+          sortable: false,
+          valueGetter: (_value, row: CompanyRow) =>
+            crmPicklistKey(row[entry.column as 'type' | 'industry' | 'rating']) ?? '',
+          renderCell: ({ row }: { row: CompanyRow }) =>
+            textCell(row[entry.column as 'type' | 'industry' | 'rating']),
+        }),
+      ),
+      {
+        field: 'accountSource',
+        headerName: 'Account source',
+        flex: 0.8,
+        minWidth: 140,
+        filterable: false,
+        sortable: false,
+        valueGetter: (_value, row: CompanyRow) => String(row.accountSource ?? ''),
+        renderCell: ({ row }: { row: CompanyRow }) => textCell(row.accountSource),
+      },
+      {
+        field: 'numberOfEmployees',
+        headerName: 'Employees',
+        width: 120,
+        align: 'right',
+        headerAlign: 'right',
+        filterable: false,
+        sortable: false,
+        valueGetter: (_value, row: CompanyRow) =>
+          typeof row.numberOfEmployees === 'number' ? row.numberOfEmployees : null,
+        renderCell: ({ row }: { row: CompanyRow }) =>
+          textCell(
+            typeof row.numberOfEmployees === 'number' ? row.numberOfEmployees.toLocaleString() : '',
+          ),
+      },
+      {
+        field: 'annualRevenueCents',
+        headerName: 'Annual revenue',
+        width: 150,
+        align: 'right',
+        headerAlign: 'right',
+        filterable: false,
+        sortable: false,
+        valueGetter: (_value, row: CompanyRow) =>
+          typeof row.annualRevenueCents === 'number' ? row.annualRevenueCents : null,
+        renderCell: ({ row }: { row: CompanyRow }) =>
+          textCell(
+            typeof row.annualRevenueCents === 'number'
+              ? formatMoney(row.annualRevenueCents, row.currency)
+              : '',
+          ),
+      },
       // The org's company fields as optional columns (AGL-2661), read off
       // the row's own `custom` map the way the contacts list reads its own.
       ...customFieldColumns(companyFields.active),
@@ -369,15 +456,41 @@ export function CompaniesSection(props: CompaniesSectionProps) {
       })),
     [members.options],
   )
+  /*
+   * Each picklist's choices (AGL-3514): every value the org keeps, valued
+   * by the key the query compares and captioned by the label, inactive
+   * ones marked. A stored clause naming a key no longer listed stays a
+   * choice, so the panel can show it and clear it.
+   */
+  const filterOptions = useMemo(() => {
+    const options: Record<string, Array<{ value: string; label: string }>> = {
+      ownerUid: ownerOptions,
+    }
+    for (const entry of COMPANY_PICKLIST_FILTERS) {
+      const list = picklists.lists[entry.picklistId]
+      const known = (list?.values ?? []).flatMap((value) => {
+        const key = crmPicklistKey(value.label)
+        return key ? [{ value: key, label: value.active ? value.label : `${value.label} (inactive)` }] : []
+      })
+      const stale = viewFilters
+        .filter((clause) => clause.field === entry.column)
+        .flatMap((clause) => clause.value.split(','))
+        .map((value) => value.trim())
+        .filter((value) => value && !known.some((option) => option.value === value))
+        .map((value) => ({ value, label: value }))
+      options[entry.column] = [...known, ...stale]
+    }
+    return options
+  }, [ownerOptions, picklists.lists, viewFilters])
   const filterColumns = useMemo(
     () =>
-      listFilterGridColumns(columns, COMPANY_GRID_FILTER_FIELDS, { ownerUid: ownerOptions }, COMPANY_GRID_FILTER_HEADERS),
-    [columns, ownerOptions],
+      listFilterGridColumns(columns, COMPANY_GRID_FILTER_FIELDS, filterOptions, COMPANY_GRID_FILTER_HEADERS),
+    [columns, filterOptions],
   )
   const gridFilter = useListGridFilter({
     clauses: viewFilters,
     onChange: views.setFilters,
-    selectFields: ['ownerUid'],
+    selectFields: COMPANY_SELECT_FIELDS,
     search: { words: searchWords, onChange: setSearchWords },
   })
   // What the query could not hold, named by the clause the reader set.
@@ -386,9 +499,9 @@ export function CompaniesSection(props: CompaniesSectionProps) {
       listQueryRefusals(plan.refused, {
         fields: COMPANY_GRID_FILTER_FIELDS,
         headers: COMPANY_GRID_FILTER_HEADERS,
-        options: { ownerUid: ownerOptions },
+        options: filterOptions,
       }),
-    [plan.refused, ownerOptions],
+    [plan.refused, filterOptions],
   )
   /*
    * The grid's models are the view's (AGL-2617). The filter model shows the
@@ -396,7 +509,7 @@ export function CompaniesSection(props: CompaniesSectionProps) {
    * stored `equals` back as the single-select `is` the panel offers — so a
    * view opened from its address reads as filtered, not as a mystery.
    */
-  const grid = useCrmViewGrid(views, filterColumns)
+  const grid = useCrmViewGrid(views, filterColumns, COMPANY_HIDDEN_COLUMNS)
 
   /** Whether anything narrows the list, so an empty one is "no match", not "none yet". */
   const narrowed = viewFilters.length > 0 || searchWords.some((word) => word.trim())
@@ -425,10 +538,8 @@ export function CompaniesSection(props: CompaniesSectionProps) {
         // The record actions, top right and never clipped (AGL-3311).
         action: (
           <CrmListActions>
-            <CompanyImportButton hostId={hostId} org={org} />
-            <Button size="small" onClick={handleExport} disabled={!companies.length}>
-              {'Export CSV'}
-            </Button>
+            <CrmImportButton resource={CRM_COMPANIES_RESOURCE} noun="companies" hostId={hostId} mappingZone="companies" />
+            <CrmExportButton resource={CRM_COMPANIES_RESOURCE} hostId={hostId} filter={exportFilter} />
             {newCompanyButton}
           </CrmListActions>
         ),
@@ -448,7 +559,7 @@ export function CompaniesSection(props: CompaniesSectionProps) {
             headers={COMPANY_GRID_FILTER_HEADERS}
             clauses={viewFilters}
             onChange={views.setFilters}
-            options={{ ownerUid: ownerOptions }}
+            options={filterOptions}
             marksServed={false}
           />
         </CrmListToolbar>
@@ -460,7 +571,6 @@ export function CompaniesSection(props: CompaniesSectionProps) {
           selected={selectedIds}
           onSelectedChange={setSelectedIds}
           members={members}
-          csv={csvOptions}
         />
         <CrmColumnOrderProvider value={grid.columnOrder}>
           <ListTable

@@ -89,7 +89,6 @@ export * from './lib/server/email-metering'
 // Side-effecting on purpose (AGL-2409): evaluating this module INSTALLS the
 // platform send-rate governor on `sendEmail`. Every server surface already
 // imports this barrel, so nothing has to remember to call an installer.
-export * from './lib/server/campaign-conversion-attribution'
 export * from './lib/server/email-send-rate'
 // Side-effecting on purpose, for the same reason (AGL-3328): evaluating this
 // module INSTALLS the deliverability preflight on `sendEmail`, so a recipient
@@ -122,6 +121,10 @@ export * from './lib/server/operator-alerts'
 export * from './lib/server/operator-health'
 export * from './lib/server/org-billing'
 export * from './lib/server/organizations'
+// Platform staff take no customer seat, and a workspace is asked to upgrade
+// as a separate step after it is handed over (AGL-3466).
+export * from './lib/server/staff-seat'
+export * from './lib/server/upgrade-proposal'
 export * from './lib/server/duplicate-activity'
 export * from './lib/server/duplicate-resource'
 export * from './lib/server/workspace-domains'
@@ -147,6 +150,7 @@ export * from './lib/server/media-storage-path'
 export * from './lib/server/safe-equal'
 export * from './lib/server/media-strong-digest'
 export * from './lib/server/media-tombstone'
+export * from './lib/server/media-delivery-regeneration'
 export * from './lib/server/media-variants'
 export * from './lib/server/serve-media-cdn'
 export * from './lib/server/serve-plugin-fetch'

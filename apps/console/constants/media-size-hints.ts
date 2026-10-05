@@ -48,25 +48,29 @@ export const SOCIAL_IMAGE_HINT =
   'Recommended: 1200×630 PNG or JPG — the size social networks crop to.'
 
 /**
- * Browsers ask for many favicon sizes and derive them from one square file.
- * 512 is the largest anything asks for, so it is the one that scales down to
- * all of them without being upscaled into anything.
+ * Browsers ask for many favicon sizes, and the site generates every one of
+ * them from this single file (AGL-3484): 16, 32 and 48px PNGs, a multi-size
+ * `/favicon.ico` and the touch icons. 512 is the largest anything asks for,
+ * so it is the one that scales down to all of them without being upscaled.
+ * An `.ico` is linked as it is — nothing can redraw it — so the hint names
+ * the formats that get the generated set.
  */
 export const FAVICON_HINT =
-  'Recommended: a square PNG or ICO, 512×512 — browsers scale it down for ' +
-  'every tab, bookmark and home-screen size.'
+  'Recommended: one square PNG, SVG or JPG, 512×512 or larger — every tab, ' +
+  'bookmark and home-screen size is generated for you.'
 
 /**
  * The icon an installed site shows on a home screen.
  *
- * 512 is the largest size any installer asks for and every smaller tile is
- * derived from it, so a single 512×512 file covers the whole set. Square
- * because the OS crops to a square (or a circle inside one) regardless, and a
- * wordmark handed to that crop loses its own name.
+ * Every size an installer asks for, 48 to 512px, and the maskable tiles
+ * Android crops into its own shapes are generated from this one file
+ * (AGL-3484), so a single 512×512 upload covers the whole set. Square
+ * because a wider file is letterboxed to fit, and a wordmark shrunk into a
+ * tile loses its own name.
  */
 export const APP_ICON_HINT =
-  'Recommended: a square PNG, 512×512 — a mark rather than a wordmark, ' +
-  'because the operating system crops it to a square tile.'
+  'Recommended: one square PNG or SVG, 512×512 or larger — a mark rather ' +
+  'than a wordmark. Every home-screen and install size is generated for you.'
 
 /**
  * Google's structured-data guidance sets a floor for a publisher logo, and a

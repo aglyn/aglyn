@@ -129,10 +129,16 @@ is shown locked, so there is no record page to log from.
 | Field | What it is |
 | --- | --- |
 | **Kind** | Call, Email, Meeting, Note or Other. |
+| **Direction** | For a call: **Outbound** (your team placed it), **Inbound** (they called you) or **Internal** (a call between teammates about the record) — Salesforce's Call Type. For an email: Outbound or Inbound. Outbound to start; **Not said** leaves it off. |
 | **When** | When it happened, which is not always when you are logging it. Defaults to now. |
 | **What happened** | The body of the entry. |
 | **Outcome** | For a call or a meeting: how it ended — "left a voicemail", "agreed to a trial". |
 | **Minutes** | For a call or a meeting: how long it took. |
+
+A call or an email with a direction reads as it in its chip — **Inbound call**,
+**Outbound email**, **Internal call**. The **Log a CRM activity** automation step and
+`POST /v1/activities` take the same direction (`direction`), and only on a call or an
+email.
 
 Each entry shows who logged it and how long ago. The author can edit or delete
 their own entries; an org-wide member can edit or delete anyone's. A colleague
@@ -290,6 +296,12 @@ linking to the record it is about. Its rows are collapsed like the timeline's
 and open the same way, **Expand all** is in its header, and it is paged ten at
 a time. The card appears once something has been logged. It is a glance at what
 the team has been doing; the record's own page is where the whole log lives.
+
+**Export…** in the card's header takes every logged activity out as a file —
+its type, direction, when, the details and outcome, who logged it, and the
+contact (by email), company, deal and lead it is about — through the
+[export dialog](./export.md). Activities are logged on records as they
+happen, so they are exported and never imported.
 
 ## Related
 

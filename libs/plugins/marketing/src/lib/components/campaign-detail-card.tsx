@@ -92,11 +92,11 @@ import {
   campaignSiteIds,
   campaignVisibleTo,
   campaignWindowState,
-  emailListTimeMs,
   type CampaignAggregate,
   type CampaignSend,
   type EmailCampaign,
-} from '@aglyn/shared-ui-email-campaigns/model'
+} from '../model/campaign-container'
+import { emailListTimeMs } from '../model/email-record'
 import {
   CAMPAIGN_EMAILS_QUERY,
   CAMPAIGN_SEND_STATUS_OPTIONS,

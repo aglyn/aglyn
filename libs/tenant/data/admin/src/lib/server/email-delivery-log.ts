@@ -81,7 +81,7 @@ import {
   type EmailDeliverySnapshot,
   worstDeliveryStatus,
 } from '@aglyn/shared-util-email'
-import { eraseCampaignAttributionsForPersonKey } from './campaign-attribution-store'
+import { eraseConversionCredits } from '@aglyn/aglyn/plugin-manager/plugin-conversion-credit'
 import { nameSearchTokens } from '@aglyn/aglyn/app-utils/name-search'
 import { emailSearchTokens, emailSuppressionKey } from './email-suppression'
 import firebaseAdmin from './firebase-admin'
@@ -668,240 +668,6 @@ export async function readPersonEngagementByKeys(
   return found
 }
 
-/*==========================================
- * THE CAMPAIGN TOUCH — which campaign this person last CLICKED, per site.
- *
- * The engagement rollup above answers "is this person still listening". It
- * cannot answer "which email brought them here", because it keeps instants
- * and not identities, and that second question is what revenue attribution
- * is: an order arrives, and something has to say which campaign preceded it.
- *
- * ## Here, on the person's own document
- *
- * The alternative was a per-host collection of touch documents, and it fails
- * on erasure. `eraseEmailDeliveriesForAddresses` erases by ADDRESS and knows
- * nothing about which sites have mailed it, so a per-host collection would be
- * a record of a person's clicks that an erasure request could not reach. On
- * the person document it is one field, deleted with the stamps it belongs
- * beside — a click is the same personal fact as the open recorded next to it.
- *
- * ## A CLICK ONLY
- *
- * `ENGAGEMENT_TYPES` includes opens because the control it feeds REFUSES to
- * mail people, and the generous signal is the correct one for a refusal. This
- * is the opposite kind of decision — it CREDITS a campaign with money — so it
- * takes the strict signal. Since Apple's Mail Privacy Protection an open is
- * substantially a statement about the recipient's mail client, and crediting
- * revenue to one would credit whichever campaign most recently reached an
- * Apple Mail user with orders from people who never read it.
- *
- * ## Per host, and capped
- *
- * A single global touch would credit site A's campaign with site B's order,
- * or refuse both — the send path refuses cross-site reach and the revenue
- * join has to agree with it. So the field is a map keyed by host, and a map
- * on a document has to be bounded: past {@link EMAIL_TOUCH_MAX_HOSTS} the
- * oldest touch is evicted, inside the transaction the forward-only rule
- * already pays for. A person who clicks mail from eleven different sites
- * loses their oldest click, which costs an attribution rather than a fact
- * anybody else reads.
- *=========================================*/
-
-/** The field on `emailDeliveries/{key}` holding the per-host touches. */
-export const EMAIL_TOUCH_FIELD = 'campaignTouches'
-
-/**
- * How many sites' touches one person's document keeps.
- *
- * A cap, not a page size: the map lives in a document with a 1 MiB ceiling
- * and nothing else bounds how many sites may mail one address.
- */
-export const EMAIL_TOUCH_MAX_HOSTS = 10
-
-/**
- * The last campaign one person clicked on one site.
- *
- * A click on a SEQUENCE email (AGL-3254) is the same touch with two more
- * facts: the sequence and the enrollment the email went out under. The
- * campaign is then the container the sequence is in, and the identify
- * moments this touch is credited to read as the sequence's rather than as
- * a campaign send's.
- */
-export interface EmailCampaignTouch {
-  hostId: string
-  campaignId: string
-  /** When the click happened, epoch ms — the provider's instant. */
-  clickedAtMs: number
-  sequenceId?: string
-  enrollmentId?: string
-}
-
-/** One host's entry in the touch map, as stored. */
-interface StoredTouch {
-  campaignId: string
-  atMs: number
-  sequenceId?: string
-  enrollmentId?: string
-}
-
-/** Reads the touch map off a person document's data, defensively. */
-function touchesFrom(
-  data: Record<string, unknown> | null | undefined,
-): Record<string, StoredTouch> {
-  const raw = data?.[EMAIL_TOUCH_FIELD]
-  if (!raw || typeof raw !== 'object') return {}
-  const found: Record<string, StoredTouch> = {}
-  for (const [hostId, entry] of Object.entries(
-    raw as Record<
-      string,
-      { campaignId?: unknown; atMs?: unknown; sequenceId?: unknown; enrollmentId?: unknown }
-    >,
-  )) {
-    const campaignId = String(entry?.campaignId ?? '')
-    const atMs = Number(entry?.atMs ?? 0)
-    if (!campaignId || !Number.isFinite(atMs) || atMs <= 0) continue
-    const sequenceId = String(entry?.sequenceId ?? '')
-    const enrollmentId = String(entry?.enrollmentId ?? '')
-    found[hostId] = {
-      campaignId,
-      atMs,
-      ...(sequenceId && enrollmentId ? { sequenceId, enrollmentId } : {}),
-    }
-  }
-  return found
-}
-
-/**
- * Records that this person clicked this campaign's mail. Never throws.
- *
- * Forward-only, in a transaction, for the reason {@link recordPersonEngagement}
- * is: provider delivery is at-least-once and unordered, so a replayed click
- * from last month must not displace this week's. That same property is what
- * makes this idempotent — a redelivered event finds its own instant already
- * stored and writes nothing.
- *
- * @returns whether the touch moved forward.
- */
-export async function recordEmailCampaignTouch(
-  touch: {
-    email: string | null | undefined
-    hostId: string
-    campaignId: string
-    atMs: number
-    /** Both or neither: a sequence click names the enrollment it came through. */
-    sequenceId?: string
-    enrollmentId?: string
-  },
-  firestore?: any,
-): Promise<boolean> {
-  const key = emailSuppressionKey(touch.email)
-  const hostId = String(touch.hostId ?? '')
-  const campaignId = String(touch.campaignId ?? '')
-  const atMs = Number(touch.atMs)
-  if (!key || !hostId || !campaignId) return false
-  if (!Number.isFinite(atMs) || atMs <= 0) return false
-  const sequenceId = String(touch.sequenceId ?? '')
-  const enrollmentId = String(touch.enrollmentId ?? '')
-  const viaSequence = sequenceId && enrollmentId ? { sequenceId, enrollmentId } : {}
-
-  try {
-    const db = firestore ?? defaultFirestore()
-    const ref = db.collection(EMAIL_DELIVERIES_COLLECTION).doc(key)
-    let moved = false
-    await db.runTransaction(async (transaction: any) => {
-      moved = false
-      const snapshot = await transaction.get(ref)
-      const stored = touchesFrom(
-        (snapshot.exists ? snapshot.data() : null) ?? {},
-      )
-      const held = stored[hostId]
-      // Not newer than what is already there, so nothing is written. An
-      // out-of-order or replayed event is the ordinary case this skips.
-      if (held && held.atMs >= atMs) return
-
-      /*
-       * A merge-set merges nested maps at depth, so a campaign click after a
-       * sequence click would keep the sequence's ids beside the new campaign
-       * unless they are deleted by name: the two are written as the value
-       * or as `FieldValue.delete()` whenever the held entry carried them.
-       */
-      const dropSequence =
-        held?.sequenceId && !('sequenceId' in viaSequence)
-          ? { sequenceId: FieldValue.delete(), enrollmentId: FieldValue.delete() }
-          : {}
-      const update: Record<string, unknown> = {
-        [hostId]: { campaignId, atMs, ...viaSequence, ...dropSequence },
-      }
-      /*
-       * EVICTION, and only when this host is NEW to the map. Replacing an
-       * existing host's touch cannot grow it, so the cap is checked exactly
-       * where the map can cross it. The oldest goes, because the window makes
-       * an old touch the one least likely to be credited with anything.
-       *
-       * `FieldValue.delete()` INSIDE the map: a merge-set merges nested maps
-       * at depth, which is what keeps every other host's touch — and is also
-       * why an evicted key has to be deleted explicitly rather than by
-       * omission.
-       */
-      if (!held && Object.keys(stored).length >= EMAIL_TOUCH_MAX_HOSTS) {
-        const oldest = Object.entries(stored).sort(
-          (a, b) => a[1].atMs - b[1].atMs || a[0].localeCompare(b[0]),
-        )[0]
-        if (oldest) update[oldest[0]] = FieldValue.delete()
-      }
-
-      transaction.set(
-        ref,
-        { [EMAIL_TOUCH_FIELD]: update, updatedAt: FieldValue.serverTimestamp() },
-        { merge: true },
-      )
-      moved = true
-    })
-    return moved
-  } catch (error) {
-    console.error('[email-delivery-log] campaign touch write failed', error)
-    return false
-  }
-}
-
-/**
- * The last campaign this person clicked on this site, or `null`.
- *
- * One keyed document read — no query, no index, and nothing that can be
- * truncated. `null` for an address we hold no touch for AND for a read that
- * failed, which are the same answer on purpose: both mean "we cannot say
- * which campaign preceded this order", and the only safe thing to do with
- * that is credit nobody.
- */
-export async function readEmailCampaignTouch(
-  email: string | null | undefined,
-  hostId: string,
-  firestore?: any,
-): Promise<EmailCampaignTouch | null> {
-  const key = emailSuppressionKey(email)
-  if (!key || !hostId) return null
-  try {
-    const db = firestore ?? defaultFirestore()
-    const snapshot = await db
-      .collection(EMAIL_DELIVERIES_COLLECTION)
-      .doc(key)
-      .get()
-    const held = touchesFrom(snapshot.data() ?? {})[hostId]
-    if (!held) return null
-    return {
-      hostId,
-      campaignId: held.campaignId,
-      clickedAtMs: held.atMs,
-      ...(held.sequenceId && held.enrollmentId
-        ? { sequenceId: held.sequenceId, enrollmentId: held.enrollmentId }
-        : {}),
-    }
-  } catch (error) {
-    console.error('[email-delivery-log] campaign touch read failed', error)
-    return null
-  }
-}
-
 /** What one {@link importEmailDeliveryHistory} run did. */
 export interface EmailDeliveryImportResult {
   /** Provider messages read. */
@@ -1053,17 +819,20 @@ export async function readEmailDeliveryHistory(
 }
 
 /*==========================================
- * ACROSS THE CAMPAIGNS OF ONE SITE.
+ * ACROSS THE BULK SENDS OF ONE SITE.
  *
  * The readers above answer "what did we send this person". This one answers
- * the other direction — "who did this campaign reach, and which of them
- * opened it" — and it is the SAME store, queried across the recipient
- * documents instead of down one of them.
+ * the other direction — "who did this send reach, and which of them opened
+ * it" — and it is the SAME store, queried across the recipient documents
+ * instead of down one of them. A send is whatever the sender tagged its
+ * messages with when they went out: the mail rail stamps every bulk message
+ * with the site and the send's id (`send-email.ts`), under the field name
+ * `campaignId` it has always been stored as, whichever plugin sent it.
  *
  * That direction is a collection-group query, and it is the one shape this
  * file's header says the per-address layout avoids. It is worth the index
  * here for the reason the index exists at all: the alternative is a second
- * per-recipient store keyed by campaign, written by the same webhook, which
+ * per-recipient store keyed by send, written by the same webhook, which
  * would be two records of the same fact and one of them eventually wrong.
  *
  * ⚠️ EVERY caller must be authorised on `hostId` before calling. The rows
@@ -1072,24 +841,24 @@ export async function readEmailDeliveryHistory(
  * says nothing about who is asking.
  *=========================================*/
 
-/** The most recipient rows one campaign-engagement read returns. */
-export const EMAIL_CAMPAIGN_ENGAGEMENT_PAGE_SIZE = 25
+/** The most recipient rows one send-engagement read returns. */
+export const EMAIL_SEND_ENGAGEMENT_PAGE_SIZE = 25
 
 /**
- * How many campaigns one engagement read can span.
+ * How many sends one engagement read can span.
  *
  * Firestore's `in` operator takes at most 30 values, and the query below runs
  * as a merge of one sub-query per value — so this is a hard limit of the
- * store rather than a number worth tuning. A design used by more campaigns
- * than this reads its most recent 30, and the caller is told so.
+ * store rather than a number worth tuning. A design used by more sends than
+ * this reads its most recent 30, and the caller is told so.
  */
-export const EMAIL_CAMPAIGN_ENGAGEMENT_MAX_CAMPAIGNS = 30
+export const EMAIL_SEND_ENGAGEMENT_MAX_SENDS = 30
 
-/** Which recipients a campaign-engagement read returns. */
+/** Which recipients a send-engagement read returns. */
 export type EmailEngagementFilter = 'all' | 'opened' | 'clicked'
 
 /** One page of recipient rows. */
-export interface EmailCampaignEngagementPage {
+export interface EmailSendEngagementPage {
   rows: EmailDeliveryRecord[]
   /**
    * Cursor for the next page, or null at the end.
@@ -1104,12 +873,12 @@ export interface EmailCampaignEngagementPage {
   cursor: string | null
   /** The read failed, as distinct from finding nothing. */
   lookupFailed: boolean
-  /** Campaigns past {@link EMAIL_CAMPAIGN_ENGAGEMENT_MAX_CAMPAIGNS}. */
-  campaignsOmitted: number
+  /** Sends past {@link EMAIL_SEND_ENGAGEMENT_MAX_SENDS}. */
+  sendsOmitted: number
 }
 
 /**
- * The recipients of one site's campaigns, newest message first.
+ * The recipients of one site's bulk sends, newest message first.
  *
  * ## What each filter orders on, and why it is not one query with a flag
  *
@@ -1125,24 +894,24 @@ export interface EmailCampaignEngagementPage {
  * ## Never throws
  *
  * Same contract as the rest of this file: `lookupFailed` distinguishes a read
- * that could not run — a missing index is the likely one — from a campaign
+ * that could not run — a missing index is the likely one — from a send
  * nobody opened. Rendering those two the same way is how a merchant concludes
- * their campaign reached nobody.
+ * their mail reached nobody.
  */
-export async function readCampaignEngagement(options: {
+export async function readSendEngagement(options: {
   /** The site whose mail this is. The caller must already have proven it. */
   hostId: string
-  /** Campaign ids to read, most recent first. */
-  campaignIds: readonly string[]
+  /** Send ids to read, most recent first. */
+  sendIds: readonly string[]
   filter?: EmailEngagementFilter
   limit?: number
   /** A `cursor` from a previous page. */
   cursor?: string | null
   firestore?: any
-}): Promise<EmailCampaignEngagementPage> {
+}): Promise<EmailSendEngagementPage> {
   const {
     hostId,
-    campaignIds,
+    sendIds,
     filter = 'all',
     cursor = null,
     firestore,
@@ -1150,22 +919,22 @@ export async function readCampaignEngagement(options: {
   const pageSize = Math.max(
     1,
     Math.min(
-      EMAIL_CAMPAIGN_ENGAGEMENT_PAGE_SIZE,
-      options.limit ?? EMAIL_CAMPAIGN_ENGAGEMENT_PAGE_SIZE,
+      EMAIL_SEND_ENGAGEMENT_PAGE_SIZE,
+      options.limit ?? EMAIL_SEND_ENGAGEMENT_PAGE_SIZE,
     ),
   )
-  const ids = campaignIds
+  const ids = sendIds
     .filter(Boolean)
-    .slice(0, EMAIL_CAMPAIGN_ENGAGEMENT_MAX_CAMPAIGNS)
-  const campaignsOmitted = Math.max(
+    .slice(0, EMAIL_SEND_ENGAGEMENT_MAX_SENDS)
+  const sendsOmitted = Math.max(
     0,
-    campaignIds.filter(Boolean).length - ids.length,
+    sendIds.filter(Boolean).length - ids.length,
   )
-  const empty: EmailCampaignEngagementPage = {
+  const empty: EmailSendEngagementPage = {
     rows: [],
     cursor: null,
     lookupFailed: false,
-    campaignsOmitted,
+    sendsOmitted,
   }
   if (!hostId || !ids.length) return empty
 
@@ -1174,8 +943,9 @@ export async function readCampaignEngagement(options: {
     let query = db
       .collectionGroup(EMAIL_DELIVERY_MESSAGES_COLLECTION)
       // `hostId` first so the read is provably one site's mail even if a
-      // caller ever passes a campaign id belonging to another.
+      // caller ever passes a send id belonging to another.
       .where('hostId', '==', hostId)
+      // The send tag's stored name (see the section header).
       .where('campaignId', 'in', ids)
     if (filter === 'opened') {
       query = query.where('openCount', '>', 0).orderBy('openCount', 'desc')
@@ -1205,10 +975,10 @@ export async function readCampaignEngagement(options: {
           ? String(snapshot.docs[snapshot.docs.length - 1].ref.path)
           : null,
       lookupFailed: false,
-      campaignsOmitted,
+      sendsOmitted,
     }
   } catch (error) {
-    console.error('[email-delivery-log] campaign engagement read failed', error)
+    console.error('[email-delivery-log] send engagement read failed', error)
     return { ...empty, lookupFailed: true }
   }
 }
@@ -1441,17 +1211,6 @@ export async function eraseEmailDeliveriesForAddresses(
             lastEngagedAtMs: FieldValue.delete(),
             lastOpenedAtMs: FieldValue.delete(),
             lastClickedAtMs: FieldValue.delete(),
-            /*
-             * And the campaign touches, for the same reason and one step
-             * further: "this person clicked THIS campaign on the 3rd" names
-             * both the person and what they were reading, so it is the
-             * strongest personal fact on the document. The orders it has
-             * already been credited with keep their own record — that one is
-             * a commercial fact about a sale, held under the order's id
-             * rather than the person's — but nothing here may go on
-             * attributing their FUTURE orders to mail they asked us to forget.
-             */
-            [EMAIL_TOUCH_FIELD]: FieldValue.delete(),
             updatedAt: FieldValue.serverTimestamp(),
           },
           { merge: true },
@@ -1461,22 +1220,25 @@ export async function eraseEmailDeliveriesForAddresses(
     }
 
     /*
-     * And the CONCLUSIONS drawn from those touches, on every site.
+     * And what was CONCLUDED from this person's clicks, on every site.
      *
-     * A conversion attribution says "this person came from that campaign and
-     * then submitted this form / became this lead / made this booking". It is
-     * derived from the click stamp deleted a few lines above and is a
-     * strictly stronger statement than the stamp was, so deleting the stamp
-     * and keeping the attribution would be an erasure that removed the
-     * evidence and kept the conclusion.
+     * The plugin that credits outcomes (`plugin-conversion-credit.ts`) keeps
+     * which campaign a person last clicked, on this same document, and which
+     * campaign each of their sign-ups, leads and bookings was credited to —
+     * "this person clicked THIS campaign on the 3rd" names both the person
+     * and what they were reading, the strongest personal fact here, and a
+     * credit drawn from it is a stronger statement still. Deleting the
+     * engagement above and keeping either would be an erasure that removed
+     * the evidence and kept the conclusion. The orders already credited keep
+     * their own record — a commercial fact about a sale, held under the
+     * order's id rather than the person's.
      *
-     * Keyed on `personKey`, which is `emailSuppressionKey` — the same
-     * derivation, one function — so the sweep covers exactly the person this
-     * loop is erasing. Per address rather than per host, because an erasure
-     * request names an address and knows nothing about which sites it ever
-     * visited.
+     * Asked by the same key — `personKey` is `emailSuppressionKey`, one
+     * derivation — so it covers exactly the person this loop is erasing, and
+     * per address rather than per site, because an erasure request names an
+     * address and knows nothing about which sites it ever visited.
      */
-    await eraseCampaignAttributionsForPersonKey(key, db)
+    await eraseConversionCredits(key)
   }
 
   return { removed, addresses: erased, contestedAddresses }

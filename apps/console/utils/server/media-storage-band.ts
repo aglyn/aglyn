@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { resolveOrgEntitlements, UNLIMITED } from '@aglyn/aglyn/server'
+import { resolveOrgEntitlements } from '@aglyn/aglyn/server'
 import type { AglynOrgBilling } from '@aglyn/aglyn/server'
 
 /**
@@ -61,6 +61,37 @@ export interface OrgMediaBand {
    * Feed this to `mediaStorageGate` as `allowanceMb`.
    */
   allowanceMb: number
+  /**
+   * Each library's share of `usedBytes`, keyed by its Firestore parent —
+   * `hosts/{hostId}` or `orgs/{orgId}` — from the same `getAll`, so the parts
+   * always add up to the whole they were read with. Empty on an unlimited
+   * band, which reads nothing.
+   */
+  byScope: Record<string, number>
+}
+
+/**
+ * The org-wide media band in MB, from already-resolved entitlements:
+ * `Math.max(1, hostLimit) × storagePerHostMb`, or `Infinity` when either
+ * figure is unlimited.
+ *
+ * The one expression the band is sized with. Ingress (`resolveOrgMediaBand`)
+ * and the usage alerts call it, and `meteredIncludedAllowance` sizes what the
+ * invoice subtracts with the same arithmetic, so the figure an upload is
+ * refused at, the figure a customer is warned about and the figure billing
+ * starts past are one number. `Math.max(1, …)` is part of that: a workspace
+ * whose site limit resolves to 0 still has the one site's band the invoice
+ * includes, not a band of zero.
+ */
+export function orgMediaAllowanceMb(entitlements: {
+  hostLimit: number
+  storagePerHostMb: number
+}): number {
+  const perScopeMb = entitlements.storagePerHostMb
+  if (!Number.isFinite(perScopeMb)) return Number.POSITIVE_INFINITY
+  const hostLimit = Math.max(1, entitlements.hostLimit)
+  if (!Number.isFinite(hostLimit)) return Number.POSITIVE_INFINITY
+  return hostLimit * perScopeMb
 }
 
 /**
@@ -113,23 +144,20 @@ export async function resolveOrgMediaBand(options: {
   currentHostId?: string | null
 }): Promise<OrgMediaBand> {
   const { firestore, orgId, org, currentHostId } = options
-  const entitlements = resolveOrgEntitlements(org)
-  const perScopeMb = entitlements.storagePerHostMb
-  if (perScopeMb === UNLIMITED || !Number.isFinite(perScopeMb)) {
-    return { usedBytes: 0, allowanceMb: Number.POSITIVE_INFINITY }
-  }
-  // `Math.max(1, …)` mirrors `meteredIncludedAllowance` exactly — the band
-  // the invoice subtracts and the band ingress refuses at must be the same
-  // arithmetic, not two expressions that happen to agree today.
-  const hostLimit = Math.max(1, entitlements.hostLimit)
-  const allowanceMb =
-    hostLimit === UNLIMITED || !Number.isFinite(hostLimit)
-      ? Number.POSITIVE_INFINITY
-      : hostLimit * perScopeMb
+  // `Math.max(1, …)` inside mirrors `meteredIncludedAllowance` exactly — the
+  // band the invoice subtracts and the band ingress refuses at must be the
+  // same arithmetic, not two expressions that happen to agree today.
+  const allowanceMb = orgMediaAllowanceMb(resolveOrgEntitlements(org))
   if (!Number.isFinite(allowanceMb)) {
-    return { usedBytes: 0, allowanceMb }
+    return { usedBytes: 0, allowanceMb, byScope: {} }
   }
   const hostIds = await orgHostIds(firestore, orgId, org ?? {}, currentHostId)
+  // The library each counter belongs to, in the order the refs are built —
+  // `getAll` answers in request order, so index `i` names snapshot `i`.
+  const scopes = [
+    ...hostIds.map((hostId) => `hosts/${hostId}`),
+    `orgs/${orgId}`,
+  ]
   const refs = [
     ...hostIds.map((hostId) =>
       firestore.collection('hosts').doc(hostId).collection('counters').doc('media'),
@@ -138,10 +166,14 @@ export async function resolveOrgMediaBand(options: {
   ]
   const snapshots = await firestore.getAll(...refs)
   let usedBytes = 0
-  for (const snapshot of snapshots) {
+  const byScope: Record<string, number> = {}
+  snapshots.forEach((snapshot, index) => {
     const bytes = Number(snapshot.get('bytes') ?? 0)
     // A corrupt or negative counter must not become free capacity.
-    if (Number.isFinite(bytes) && bytes > 0) usedBytes += bytes
-  }
-  return { usedBytes, allowanceMb }
+    const counted = Number.isFinite(bytes) && bytes > 0 ? bytes : 0
+    usedBytes += counted
+    const scope = scopes[index]
+    if (scope) byScope[scope] = (byScope[scope] ?? 0) + counted
+  })
+  return { usedBytes, allowanceMb, byScope }
 }

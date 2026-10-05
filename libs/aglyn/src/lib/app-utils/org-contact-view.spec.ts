@@ -68,6 +68,22 @@ const twoHostContact = () => ({
       ownerUid: `${FACET_SECRET}-owner-a`,
       lifecycleStage: 'customer',
       custom: { budget: `${FACET_SECRET}-custom-a` },
+      // Salesforce's standard contact fields (AGL-3515) — personal data every
+      // one, and the birthdate above all.
+      salutation: `${FACET_SECRET}-salutation-a`,
+      firstName: `${FACET_SECRET}-first-a`,
+      lastName: `${FACET_SECRET}-last-a`,
+      department: `${FACET_SECRET}-department-a`,
+      mobilePhone: `+1556${FACET_SECRET}`,
+      homePhone: `+1557${FACET_SECRET}`,
+      otherPhone: `+1558${FACET_SECRET}`,
+      fax: `+1559${FACET_SECRET}`,
+      birthdate: `${FACET_SECRET}-1984-07-21`,
+      assistantName: `${FACET_SECRET}-assistant-a`,
+      assistantPhone: `+1550${FACET_SECRET}`,
+      reportsToContactId: `${FACET_SECRET}-manager-a`,
+      otherAddress: { line1: `${FACET_SECRET}-other-street-a`, country: 'US' },
+      doNotCall: true,
     },
     'host-b': {
       notes: `${FACET_SECRET}-notes-b`,
@@ -181,6 +197,21 @@ describe('the org view carries NO per-host facet content', () => {
       'ownerUid',
       'lifecycleStage',
       'custom',
+      // Salesforce's standard contact fields (AGL-3515).
+      'salutation',
+      'firstName',
+      'lastName',
+      'department',
+      'mobilePhone',
+      'homePhone',
+      'otherPhone',
+      'fax',
+      'birthdate',
+      'assistantName',
+      'assistantPhone',
+      'reportsToContactId',
+      'otherAddress',
+      'doNotCall',
     ]) {
       expect(row[forbidden]).toBeUndefined()
     }

@@ -34,6 +34,11 @@ import { fireEvent, render, screen, within } from '@testing-library/react'
 import { updateDoc } from 'firebase/firestore'
 import type { ReactNode } from 'react'
 import SubmissionsCard from './submissions-card.component'
+import { standInFormSubmissionList } from '../testing/stand-in-form-submissions'
+
+// The submissions are the forms plugin's, walked and opened through the list
+// source it publishes (AGL-3080); stood in over this file's Firestore double.
+standInFormSubmissionList()
 
 /** Every query the card built, as the collection name and its predicates. */
 let queries: Array<{ collection: string; predicates: string[] }>

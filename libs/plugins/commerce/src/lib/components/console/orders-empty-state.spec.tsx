@@ -18,7 +18,7 @@
 /**
  * A store with no orders can still draft one (AGL-1805).
  *
- * The whole toolbar — four filters, Export CSV and the **Draft order**
+ * The whole toolbar — four filters, Export orders and the **Draft order**
  * button — used to live inside the `orders.length > 0` arm of a ternary, so
  * the one state a draft order exists for (no sales yet, invoice the customer
  * you already have) was the one state that could not reach it. Every other
@@ -188,7 +188,7 @@ describe('orders empty state (AGL-1805)', () => {
     expect(screen.queryByLabelText('Status')).toBeNull()
     expect(screen.queryByLabelText('Period')).toBeNull()
     expect(screen.queryByLabelText('Channel')).toBeNull()
-    expect(screen.queryByRole('button', { name: 'Export CSV' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Export orders' })).toBeNull()
   })
 
   it('explains the empty Product select instead of showing a dead dropdown', async () => {

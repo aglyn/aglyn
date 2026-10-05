@@ -43,9 +43,11 @@ storefront orders, paid memberships and paid bookings alike — separate from
 Stripe's payment-processing fees. Upgrading is the way to reduce them.
 
 Every plan also includes an amount of monthly **traffic** — 2 GB on Free, rising to
-970 GB on Enterprise by default (an agreement can set more). Passing it is metered and
+790 GB on Enterprise by default (an agreement can set more). Passing it is metered and
 billed on a paid plan, and pauses the site until the start of next month on Free. See [Bandwidth](bandwidth.md) for the table and
 for what a paused site shows a visitor.
+
+Video, audio, file downloads and other media served from our servers count 1.6× toward bandwidth, because serving them costs more than serving pages. See [how usage is counted](bandwidth.md#how-usage-is-counted).
 
 ### Links on a new Free site {#leaving-notice}
 
@@ -56,6 +58,27 @@ neither Aglyn nor your site will ever ask for a password there, and offers **Con
 and **Go back**. Links to your own pages, your custom domain and Aglyn, and email and
 phone links, open as usual, and search indexing is unaffected. The page stops appearing
 as soon as the workspace is on a paid plan or 14 days old.
+
+### A plan the Aglyn team set up for you {#plan-without-subscription}
+
+Sometimes a workspace is on a paid plan with no subscription behind it. Most often the
+Aglyn team built the workspace for you and put it on the plan you are evaluating, so you
+can try every feature of it before you pay. The plan's card on the Billing page shows
+**Current plan**, and says the workspace is on that plan with no subscription behind it.
+
+When you are ready to keep it, choose **Start your *plan* subscription** on that card.
+It runs the same checkout as any upgrade, and from then on the subscription is what
+keeps the workspace on the plan. You can also pick a higher plan instead. Moving to a
+lower plan still goes through us, because there is no subscription to move down from.
+
+#### When the Aglyn team proposes a plan {#upgrade-proposal}
+
+When the Aglyn team proposes a plan for your workspace, the owner gets an email, and
+everyone who manages billing sees a card on the workspace's home and at the top of the
+Billing page: **"*Workspace*'s Aglyn team proposed the *Plan* plan"**. **Review the
+plan** opens Billing with that plan selected. Nothing is charged until you start the
+subscription yourself. The card goes away once a subscription is live, or when the team
+withdraws the proposal. Other members never see it.
 
 ### Enterprise
 
@@ -109,9 +132,21 @@ Nothing here guarantees that a price or feature set will remain the same.
 
 - The **billing page** shows meters for every quota — storage, bandwidth, datasets, seats,
   sends, CRM records (with the contacts, companies and deals beneath the total),
-  one-to-one emails sent today, [AI assist credits](#assist-overage), and more — with
-  redesigned plan cards.
+  one-to-one emails sent today, [AI assist credits](#assist-overage), workflow and action
+  runs, and more — with redesigned plan cards. Workflow and action runs are one monthly
+  allowance for the whole workspace, so every site's runs count against them.
+- **Storage** is one allowance for the whole workspace too — see
+  [storage overage](#storage-overage). **Storage (organization)** shows everything your
+  workspace stores — every site's media library and the organization library — out of
+  that allowance, with how much of it the organization library holds. Under each site,
+  **Storage on this site** lists what that site's library holds: its share of the one
+  allowance, not a limit of its own. The **Metered usage estimate** counts the
+  organization library in the same Storage line; it has no separate allowance.
 - A **usage-cap banner** appears site-wide at 80% and 100% of a quota, with an upgrade link.
+  Its storage warning is about the whole workspace's storage, and says what happens at the
+  allowance on your plan: on a paid plan, extra storage is billed unless you set a
+  [storage cap](#if-you-would-rather-uploads-stopped), with a link to **Billing → Usage**;
+  on Free, new uploads stop until you free up space or upgrade.
 - Org admins also get an in-app **notification** and an email when sites, pages on a site,
   storage, datasets, email sends, or [bandwidth](bandwidth.md) crosses 75%, 80%, 90% or 100%,
   so nobody has to be watching the console to find out. Only the highest step reached is
@@ -120,9 +155,14 @@ Nothing here guarantees that a price or feature set will remain the same.
   workspace has — sites, pages, datasets, stored files and data — is announced when it first
   reaches a threshold and again only if it drops below and reaches it again, and a monthly
   meter — email sends, runs, bandwidth, AI credits — once per threshold each month, because
-  it starts from zero on the 1st. The bandwidth message differs by
-  plan, because what happens next differs by plan: paid organizations are told the extra is
-  billed, Free organizations are told the site will be paused.
+  it starts from zero on the 1st. The storage message is about the workspace's one
+  allowance — every site's media library and the organization library together — and
+  says how much of it the organization library holds; there is no separate notice for the
+  organization library. The storage and bandwidth messages differ by plan, because what
+  happens next differs by plan: paid organizations are told the extra is billed (for
+  storage, unless they set a [storage cap](#if-you-would-rather-uploads-stopped)); Free
+  organizations are told new uploads stop when storage is full, and that the site will be
+  paused when bandwidth is.
 - The monthly email allowance caps **campaign sends**. Transactional mail — password
   resets, invites, order confirmations, booking reminders and workflow notifications — is
   counted toward your usage but is never blocked by the cap, at any plan. Going over shows
@@ -164,14 +204,15 @@ them requires **Manage billing**. See
 
 ## Storage overage
 
-Each site includes a fixed amount of storage. On a paid plan, going past it is **not** a
-wall:
+Your plan includes an amount of storage for each of its sites, and the workspace shares
+it as one allowance: every site's media library and the organization library draw on the
+same total. On a paid plan, going past it is **not** a wall:
 
 - **Uploads keep working.** You are never stopped from adding files because you reached
   your included storage.
 - **The extra storage is billed** on your monthly invoice at our infrastructure cost
-  plus 30% — the exact per-GB rate is on [the pricing page](https://aglyn.com/pricing)
-  and in **Billing → Storage cap**.
+  plus 30%, kept after card fees — the exact per-GB rate is on
+  [the pricing page](https://aglyn.com/pricing) and in **Billing → Storage cap**.
 - **We tell you before it happens.** You get an alert as you approach your included
   storage and another when you cross it, so the invoice is never the first you hear of
   it. See [usage meters](#usage-meters).
@@ -188,10 +229,10 @@ takes effect immediately.
 
 :::info Free plans are never billed for storage
 On the Free plan there is no storage overage at all. Your included storage is a fixed
-cap: uploads stop there, nothing is metered, and no amount of usage produces a charge —
+cap, shared the same way: uploads stop when the workspace reaches it, wherever they are
+going, nothing is metered, and no amount of usage produces a charge —
 so there is nothing to cap and nothing to configure. Enterprise storage is a fixed
-default of 120 GB per site that an agreement raises, with no overage either: uploads stop
-there.
+default that an agreement raises, with no overage either: uploads stop there.
 :::
 
 :::tip No surprise bills
@@ -314,6 +355,8 @@ warning you against the new number straight away.
   [Aglyn AI](add-ons.md#aglyn-ai).
 - **Site member accounts are not seats**: visitors who sign up to your published
   site are unlimited on every plan.
+- **Aglyn staff take no seat**, whether they built the workspace or joined it to help.
+  See [Aglyn staff on your team](../teams-and-roles/invite-teammates.md#aglyn-staff).
 
 ## CRM records {#crm-records}
 

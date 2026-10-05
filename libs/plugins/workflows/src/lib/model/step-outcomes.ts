@@ -15,12 +15,12 @@
  * limitations under the License.
  */
 
-import type { HostActionStepType } from '@aglyn/aglyn/app-utils/actions'
+import type { HostActionStepType } from './host-actions'
 
 /**
  * Past-tense phrases for a run summary (AGL-2171).
  *
- * `HOST_ACTION_STEP_LABELS` (core `actions.ts`) names what a step WILL do, in the
+ * `HOST_ACTION_STEP_LABELS` (`host-actions.ts`) names what a step WILL do, in the
  * imperative, for a `Do` select — "Send an email". A run history is the
  * opposite tense and a different audience: it says what already happened,
  * on one line, several steps at a time. `/product/workflows` advertises

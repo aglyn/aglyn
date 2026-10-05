@@ -30,17 +30,29 @@
  * it behind, and cleared by completion while it is still owed — the rule
  * in `crmTaskReminderAfterEdit`, the same one the console's drawer keeps.
  * `reminderSentAt` is read-only: when the hourly runner handled it.
+ *
+ * `kind`, `priority` and `status` (AGL-3517) take a value of the org's
+ * Type, Priority or Status picklist — its label, "In Progress" — or the
+ * meaning behind it, `open`; the task stores both, and answers the meaning
+ * under the field's own name with the label beside it as `typeLabel`,
+ * `priorityLabel` and `statusLabel`.
  */
 import {
   CRM_COLLECTIONS,
+  CRM_TASK_PICKLIST_IDS,
+  type CrmPicklistId,
+  crmPicklistLabelForNew,
   type CrmTask,
   type CrmTaskKind,
+  type CrmTaskPicklists,
+  crmTaskPicklistLabels,
   type CrmTaskPriority,
   crmTaskReminderAfterEdit,
   crmTaskReminderPending,
   type CrmTaskStatus,
   createResourceUid,
   crmTaskListFields,
+  resolveCrmSemanticPicklistWrite,
 } from '@aglyn/aglyn/server'
 import {
   apiJson,
@@ -70,7 +82,6 @@ import {
   listCrm,
   memberError,
   parseIsoInstant,
-  readChoice,
   readCrmSite,
   readEqualityFilters,
   readOptionalText,
@@ -78,22 +89,29 @@ import {
   refuseUnknownKeys,
   updatePayload,
 } from './crm-shared'
+import { readCrmTaskPicklists } from '../read-picklist'
 
-const TASK_KINDS = ['call', 'email', 'meeting', 'todo'] as const
-const TASK_PRIORITIES = ['low', 'normal', 'high'] as const
 const TASK_STATUSES = ['open', 'done'] as const
 
+/** The org's task picklists, read once for a request. */
+const taskPicklistsOf = (ctx: ApiV1Context): Promise<CrmTaskPicklists> =>
+  readCrmTaskPicklists(ctx.firestore, ctx.orgId)
+
 /** The task object as published. Every writable field appears here. */
-function taskView(doc: FirebaseFirestore.DocumentSnapshot) {
+function taskView(doc: FirebaseFirestore.DocumentSnapshot, picklists: CrmTaskPicklists) {
   const data = (doc.data() ?? {}) as Partial<CrmTask>
+  const labels = crmTaskPicklistLabels(data, picklists)
   return {
     id: doc.id,
     object: 'task',
     title: data.title ?? null,
     notes: data.notes ?? null,
     kind: data.kind ?? 'todo',
+    typeLabel: labels.type,
     priority: data.priority ?? 'normal',
+    priorityLabel: labels.priority,
     status: data.status ?? 'open',
+    statusLabel: labels.status,
     dueAt: isoFromMs(data.dueAtMs),
     remindAt: isoFromMs(data.remindAtMs),
     reminderSentAt: isoFromMs(data.reminderSentAtMs),
@@ -121,12 +139,18 @@ const TASK_WRITABLE = new Set([
   'dealId',
 ])
 
+/** A picklist field as resolved: the meaning stored under its name, the label beside it. */
+interface Picked<T extends string> {
+  meaning: T
+  label: string | null
+}
+
 interface TaskInput {
   title?: string
   notes?: Clearable<string>
-  kind?: CrmTaskKind
-  priority?: CrmTaskPriority
-  status?: CrmTaskStatus
+  kind?: Picked<CrmTaskKind>
+  priority?: Picked<CrmTaskPriority>
+  status?: Picked<CrmTaskStatus>
   dueAtMs?: Clearable<number>
   remindAtMs?: Clearable<number>
   assigneeUid?: Clearable<string>
@@ -135,9 +159,37 @@ interface TaskInput {
   dealId?: Clearable<string>
 }
 
+/**
+ * A Type, Priority or Status as the body names it — a label or a meaning —
+ * against the org's list; the stored label is kept when the body names it
+ * again. Absent answers `undefined`; anything the list does not hold is an
+ * error naming the values it does.
+ */
+function readPicklistField<T extends string>(
+  body: Record<string, unknown>,
+  key: 'kind' | 'priority' | 'status',
+  id: CrmPicklistId,
+  picklists: CrmTaskPicklists,
+  stored: string | null | undefined,
+  errors: Record<string, string>,
+): Picked<T> | undefined {
+  const value = body[key]
+  if (value === undefined) return undefined
+  const list =
+    key === 'kind' ? picklists.type : key === 'priority' ? picklists.priority : picklists.status
+  const resolved =
+    typeof value === 'string' ? resolveCrmSemanticPicklistWrite(id, list, value, stored) : null
+  if (resolved?.ok) return { meaning: resolved.meaning as T, label: resolved.label }
+  errors[key] =
+    resolved?.ok === false ? resolved.error : 'Must be a value of the list, or its meaning'
+  return undefined
+}
+
 function readTaskInput(
   body: Record<string, unknown>,
   { partial }: { partial: boolean },
+  picklists: CrmTaskPicklists,
+  stored: Partial<CrmTask> | null = null,
 ): { values: TaskInput } | { errors: Record<string, string> } {
   const errors: Record<string, string> = {}
   const values: TaskInput = {}
@@ -155,11 +207,17 @@ function readTaskInput(
 
   const notes = readOptionalText(body, 'notes', CRM_TEXT_MAX, errors)
   if (notes !== undefined) values.notes = notes
-  const kind = readChoice(body, 'kind', TASK_KINDS, errors)
+  const kind = readPicklistField<CrmTaskKind>(
+    body, 'kind', CRM_TASK_PICKLIST_IDS.type, picklists, stored?.typeLabel, errors,
+  )
   if (kind) values.kind = kind
-  const priority = readChoice(body, 'priority', TASK_PRIORITIES, errors)
+  const priority = readPicklistField<CrmTaskPriority>(
+    body, 'priority', CRM_TASK_PICKLIST_IDS.priority, picklists, stored?.priorityLabel, errors,
+  )
   if (priority) values.priority = priority
-  const status = readChoice(body, 'status', TASK_STATUSES, errors)
+  const status = readPicklistField<CrmTaskStatus>(
+    body, 'status', CRM_TASK_PICKLIST_IDS.status, picklists, stored?.statusLabel, errors,
+  )
   if (status) values.status = status
 
   if (body.dueAt !== undefined) {
@@ -237,7 +295,8 @@ async function settleNextActivity(
 /** `POST /v1/tasks`. */
 async function createTask(request: Request, ctx: ApiV1Context): Promise<Response> {
   const body = await readJsonBody(request)
-  const parsed = readTaskInput(body, { partial: false })
+  const picklists = await taskPicklistsOf(ctx)
+  const parsed = readTaskInput(body, { partial: false }, picklists)
   if ('errors' in parsed) return crmValidationFailed(ctx, 'task', parsed.errors)
   const site = readCrmSite(ctx, 'task', body)
   if ('response' in site) return site.response
@@ -255,14 +314,26 @@ async function createTask(request: Request, ctx: ApiV1Context): Promise<Response
   const { claim } = claimed
 
   try {
-    const { title, kind, priority, status, remindAtMs, ...rest } = parsed.values
+    const { title, kind: pickedKind, priority: pickedPriority, status: pickedStatus, remindAtMs, ...rest } =
+      parsed.values
+    const kind = pickedKind?.meaning ?? 'todo'
+    const priority = pickedPriority?.meaning ?? 'normal'
+    const status = pickedStatus?.meaning ?? 'open'
     const id = createResourceUid()
     const stamp = crmCreateStamp(ctx, site.siteId)
     const record: Record<string, unknown> = {
       title,
-      kind: kind ?? 'todo',
-      priority: priority ?? 'normal',
-      status: status ?? 'open',
+      // Each meaning with the org's label beside it (AGL-3517).
+      kind,
+      typeLabel: pickedKind ? pickedKind.label : crmPicklistLabelForNew(picklists.type, kind),
+      priority,
+      priorityLabel: pickedPriority
+        ? pickedPriority.label
+        : crmPicklistLabelForNew(picklists.priority, priority),
+      status,
+      statusLabel: pickedStatus
+        ? pickedStatus.label
+        : crmPicklistLabelForNew(picklists.status, status),
       // A task created done was completed the instant it was created — the
       // same instant its `createdAt` carries.
       ...(status === 'done' ? { completedAtMs: stamp.createdAt.toMillis() } : {}),
@@ -289,7 +360,7 @@ async function createTask(request: Request, ctx: ApiV1Context): Promise<Response
     // What the console's Tasks list searches by (AGL-3321).
     await collection.doc(id).create({ ...record, ...crmTaskListFields(record) })
     await settleNextActivity(ctx, [rest as Record<string, unknown>])
-    const view = taskView(await collection.doc(id).get())
+    const view = taskView(await collection.doc(id).get(), picklists)
     await claim.record(200, view)
     return apiJson(view, { status: 201, headers: ctx.headers })
   } catch (error) {
@@ -304,22 +375,36 @@ async function updateTask(
   ctx: ApiV1Context,
   ref: FirebaseFirestore.DocumentReference,
 ): Promise<Response> {
-  const parsed = readTaskInput(await readJsonBody(request), { partial: true })
-  if ('errors' in parsed) return crmValidationFailed(ctx, 'task', parsed.errors)
+  const body = await readJsonBody(request)
   const snap = await ref.get()
   if (!snap.exists) {
     return ApiErrors.notFound({ message: 'No such task', headers: ctx.headers })
   }
+  const picklists = await taskPicklistsOf(ctx)
+  const parsed = readTaskInput(body, { partial: true }, picklists, snap.data() as Partial<CrmTask>)
+  if ('errors' in parsed) return crmValidationFailed(ctx, 'task', parsed.errors)
   const refErrors = await taskRefErrors(ctx, parsed.values)
   if (Object.keys(refErrors).length) return crmValidationFailed(ctx, 'task', refErrors)
 
-  const { status, remindAtMs, ...rest } = parsed.values
+  const { status: pickedStatus, kind: pickedKind, priority: pickedPriority, remindAtMs, ...rest } =
+    parsed.values
   const update: Record<string, unknown> = updatePayload(rest)
+  // Each meaning with the org's label beside it (AGL-3517).
+  if (pickedKind) {
+    update.kind = pickedKind.meaning
+    update.typeLabel = pickedKind.label
+  }
+  if (pickedPriority) {
+    update.priority = pickedPriority.meaning
+    update.priorityLabel = pickedPriority.label
+  }
   // A cleared due date is stored `null`, not deleted — see the create.
   if (rest.dueAtMs === null) update.dueAtMs = null
   // One instant for the write: a task completed at T reads updated at T.
   const now = Timestamp.now()
+  const status = pickedStatus?.meaning
   const completing = status === 'done' && status !== snap.get('status')
+  if (pickedStatus) update.statusLabel = pickedStatus.label
   if (status !== undefined && status !== snap.get('status')) {
     update.status = status
     update.completedAtMs = status === 'done' ? now.toMillis() : null
@@ -354,7 +439,7 @@ async function updateTask(
     // What the console's Tasks list searches (AGL-3321).
     if ('title' in update) await restampCrmListFieldsAt(ref, 'crmTasks')
   }
-  return apiJson(taskView(await ref.get()), { headers: ctx.headers })
+  return apiJson(taskView(await ref.get(), picklists), { headers: ctx.headers })
 }
 
 /** `DELETE /v1/tasks/{id}`. */
@@ -409,7 +494,8 @@ async function listTasks(
     'assigneeUid',
     'status',
   ])
-  return listCrm(ctx, collection, url, filters, taskView)
+  const picklists = await taskPicklistsOf(ctx)
+  return listCrm(ctx, collection, url, filters, (doc) => taskView(doc, picklists))
 }
 
 export async function handleTasks(
@@ -445,7 +531,7 @@ export async function handleTasks(
     if (!snap.exists) {
       return ApiErrors.notFound({ message: 'No such task', headers: ctx.headers })
     }
-    return apiJson(taskView(snap), { headers: ctx.headers })
+    return apiJson(taskView(snap, await taskPicklistsOf(ctx)), { headers: ctx.headers })
   }
   if (request.method === 'PATCH') {
     const denied = requireScope(ctx, 'crm:write')

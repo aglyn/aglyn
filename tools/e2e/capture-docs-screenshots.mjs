@@ -23,7 +23,12 @@
 //   1. npx -y firebase-tools@13 emulators:start --config firebase.e2e.json …
 //   2. npm run seed:e2e
 //   3. dev server with the emulator flags
-//   4. E2E_BASE_URL=http://localhost:4210 node tools/e2e/capture-docs-screenshots.mjs
+//   4. E2E_BASE_URL=http://localhost:4210 npm run docs:screenshots
+//
+// `docs:screenshots` seeds tools/e2e/seed-docs-fixtures.mjs before it runs
+// this. Running this file alone (`--only=<part of the out path>`) needs that
+// seed first: it enables Sequences on the e2e org, and without it the
+// staff-only preflight finds no `release_outreach` marker and refuses the run.
 //
 // Each shot waits for seeded content, strips the emulator warning
 // banner and the Next dev indicator, and lets images/fonts settle.
@@ -91,6 +96,12 @@ const TIMEOUT_MS = Number(process.env.E2E_TIMEOUT_MS ?? 60_000)
  *
  * Run a subset with `--only=<out-substring>[,<out-substring>…]`.
  */
+/** Selects the seeded Team dataset in the Data page's Dataset dropdown. */
+const pickTeamDataset = [
+  { click: 'role=combobox[name="Dataset"]' },
+  { click: 'role=option[name="Team"]', waitFor: 'Avery Quinn', settleMs: 800 },
+]
+
 const shots = [
   {
     out: 'getting-started/console-dashboard.png',
@@ -116,10 +127,45 @@ const shots = [
       { rect: { x: 16, y: 300, width: 1408, height: 540 }, n: 5 },
     ],
   },
+  // The Data page opens on the first dataset by name, and the seeded
+  // scoped-sharing fixture ("Internal rates") sorts before Team — so the
+  // Data page shots pick Team, the dataset their pages describe.
   {
     out: 'datasets/data-page.png',
     path: `/${HOST_BASE}/data`,
-    waitFor: 'Avery Quinn',
+    waitFor: 'Add dataset',
+    // A click on blank card space takes the focus ring off the select and
+    // the pointer off the table's column header.
+    actions: [...pickTeamDataset, { clickXY: [1000, 560], settleMs: 600 }],
+  },
+  // The import wizard on the seeded Team dataset (AGL-3547), at Columns:
+  // rows are pasted rather than a file chosen, so the shot needs no fixture
+  // on disk, and nothing is written — the wizard stops before the dry run.
+  // `text-is` picks the card's own Import and Export: the records grid's
+  // toolbar carries an icon button named Export too.
+  {
+    out: 'datasets/import-wizard-columns.png',
+    path: `/${HOST_BASE}/data`,
+    waitFor: 'Add dataset',
+    actions: [
+      ...pickTeamDataset,
+      { click: 'button:text-is("Import")', waitFor: 'Or paste rows' },
+      {
+        fill: [
+          'role=textbox[name="Or paste rows"]',
+          'Name,Role,Photo\nAvery Quinn,Head Baker and Owner,https://picsum.photos/seed/avery/240\nRiley Chen,Barista,https://picsum.photos/seed/riley/240',
+        ],
+      },
+      { click: 'role=button[name="Read pasted rows"]', waitFor: 'Upload and continue' },
+      { click: 'role=button[name="Upload and continue"]', waitFor: 'Why', settleMs: 2000 },
+    ],
+  },
+  // The export dialog's field picker on the same dataset (AGL-3547).
+  {
+    out: 'datasets/export-dialog.png',
+    path: `/${HOST_BASE}/data`,
+    waitFor: 'Add dataset',
+    actions: [...pickTeamDataset, { click: 'button:text-is("Export")', waitFor: 'Search fields', settleMs: 2000 }],
   },
   {
     out: 'media/media-page.png',
@@ -137,10 +183,9 @@ const shots = [
     settleMs: 4000,
   },
   {
-    // The List view (AGL-3327): the same files as a table, the site
-    // library's card only — the organization library below it is empty on
-    // the seeded workspace. Put back to the Grid view by the shot above on
-    // the next run.
+    // The List view (AGL-3327): the same files as a table, the Library card
+    // on its This site tab (AGL-3457). Put back to the Grid view by the shot
+    // above on the next run.
     out: 'media/media-list-view.png',
     path: `/${HOST_BASE}/media`,
     waitFor: 'hero.jpg',

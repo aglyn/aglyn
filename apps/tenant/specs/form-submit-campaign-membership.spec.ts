@@ -93,6 +93,15 @@ const mockCollectionHandle = (path: string): any => ({
   },
 })
 
+// The crediting plugin, asked through the platform's contract: it answers
+// the case's touch, and credits nothing here.
+jest.mock('@aglyn/aglyn/plugin-manager/plugin-conversion-credit', () => ({
+  __esModule: true,
+  ...jest.requireActual('@aglyn/aglyn/plugin-manager/plugin-conversion-credit'),
+  resolveConversionTouch: async () => mockResolved,
+  creditConversion: async () => false,
+}))
+
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
   /*
@@ -102,8 +111,6 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
    * case here starts with a lead already on file.
    */
   readLeadForHost: async () => null,
-  resolveCampaignTouch: async () => mockResolved,
-  attributeCampaignConversion: async () => null,
   // The CRM's capture writer asks whether the workspace already holds the
   // address as a contact before it files a lead (AGL-3232). Nobody, here.
   findContactByEmail: async () => null,
@@ -164,8 +171,8 @@ jest.mock('@aglyn/tenant-runtime', () => ({
 /*
  * The route captures through the platform's contact-capture contract now
  * (AGL-3080), and the plugin that keeps people is what calls
- * `captureHostContact`. The CRM imports the LEAF module, so the barrel double
- * above does not intercept it; this forwards the leaf to that same double.
+ * `captureHostContact` from its own module, which the barrel double above
+ * does not intercept; this forwards that module to the same double.
  *
  * Deliberately not a double of the contract itself. Every assertion below is
  * on the options the writer receives, so routing them through the real CRM
@@ -183,7 +190,7 @@ jest.mock('@aglyn/tenant-runtime/emit-host-event', () => ({
   emitHostEvent: async () => ({ alerts: [] }),
 }))
 
-jest.mock('@aglyn/tenant-runtime/capture-host-contact', () => ({
+jest.mock('../../../libs/plugins/crm/src/lib/server/capture-host-contact', () => ({
   captureHostContact: (...args: unknown[]) =>
     (
       jest.requireMock('@aglyn/tenant-runtime') as {
@@ -204,7 +211,12 @@ beforeAll(async () => {
   await registerPluginServerDeclarations()
 })
 
-import { POST } from '../app/api/forms/submit/route'
+// The door as the tenant serves it: the forms plugin's route, through the
+// plugin API dispatcher, with the forms plugin's surface loaded (AGL-3080).
+jest.mock('../utils/server-plugin-loader', () => ({
+  serverPluginLoader: jest.requireActual('./plugin-door-dispatch').formsOnlyServerPluginLoader(),
+}))
+import { POST } from './plugin-door-dispatch'
 
 const SPRING = 'camp_spring'
 const SUMMER = 'camp_summer'
@@ -323,7 +335,7 @@ describe('the campaign a form is IN, and the campaign a visitor came FROM', () =
     await submit({ formId: 'f1', campaignTouch: 'utm_campaign=sept-launch' })
 
     expect(mockContactUpserts[0].campaignIds).toEqual([SPRING])
-    expect(mockContactUpserts[0].campaignTouch).toBe(TOUCH)
+    expect(mockContactUpserts[0].conversionTouch).toBe(TOUCH)
   })
 
   it('files a person a campaign never touched', async () => {
@@ -333,7 +345,7 @@ describe('the campaign a form is IN, and the campaign a visitor came FROM', () =
     await submit({ formId: 'f1' })
 
     expect(mockContactUpserts[0].campaignIds).toEqual([SPRING])
-    expect(mockContactUpserts[0]).not.toHaveProperty('campaignTouch')
+    expect(mockContactUpserts[0]).not.toHaveProperty('conversionTouch')
   })
 
   /**

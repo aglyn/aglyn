@@ -309,6 +309,7 @@ import { PLAN_ENTITLEMENTS } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import type { OrgPlan } from '@aglyn/aglyn'
 import { registerPluginRecordCardReader } from '@aglyn/aglyn/plugin-manager/plugin-record-cards'
 import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
+import { registerPluginRevocationReader } from '@aglyn/aglyn/plugin-manager/plugin-revocations'
 import {
   CampaignSendDeferredError,
   CampaignSendError,
@@ -1369,6 +1370,21 @@ describe('a killed marketplace email stops sending', () => {
     assurance: 'unreviewed',
   })
 
+  /*
+   * The kill switch is the distribution channel's to keep, read through the
+   * platform's slot (`plugin-revocations`, AGL-3080). Stood in over this
+   * file's store, as the marketplace's reader reads its own — after the seed,
+   * which starts the registry over.
+   */
+  const standInRevocations = () =>
+    registerPluginRevocationReader(
+      {
+        revocation: async (listingId) =>
+          (mockState.store[`revocations/${listingId}`] as never) ?? null,
+      },
+      { pluginId: 'marketplace' },
+    )
+
   const seedInstalled = (version: string | null = '3') => {
     seed(pooledBuffer())
     ;(
@@ -1377,6 +1393,7 @@ describe('a killed marketplace email stops sending', () => {
         unknown
       >
     )['installedFrom'] = installedFrom(version)
+    standInRevocations()
   }
 
   const kill = (versions: string[] | 'all', reason?: string) => {
@@ -1384,7 +1401,26 @@ describe('a killed marketplace email stops sending', () => {
       versions,
       ...(reason ? { reason } : {}),
     }
+    standInRevocations()
   }
+
+
+  it('refuses the send when the kill switch cannot be read', async () => {
+    seedInstalled()
+    registerPluginRevocationReader(
+      {
+        revocation: async () => {
+          throw new Error('unavailable')
+        },
+      },
+      { pluginId: 'marketplace' },
+    )
+
+    // Not mailed on a guess: a design whose kill switch could not be read is
+    // a design that may have been pulled.
+    await expect(send()).rejects.toThrow()
+    expect(mockState.sent).toHaveLength(0)
+  })
 
   it('refuses the send and names why', async () => {
     seedInstalled()

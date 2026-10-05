@@ -252,7 +252,7 @@ const mockNotifyRecordAssigned = jest.fn(async () => true)
  * wrapper so `contactCreated` fires (AGL-2605); the double answers what the
  * case under test needs.
  */
-jest.mock('../../../../../tenant/runtime/src/lib/capture-host-contact', () => ({
+jest.mock('./capture-host-contact', () => ({
   __esModule: true,
   captureHostContact: (...args: unknown[]) => (mockUpsertHostContact as any)(...args),
 }))
@@ -265,7 +265,7 @@ jest.mock('../../../../../tenant/runtime/src/lib/hand-off-lead', () => ({
   __esModule: true,
   handOffLeadRecords: (...args: unknown[]) => (mockHandOff as any)(...args),
 }))
-jest.mock('../../../../../tenant/runtime/src/lib/assign-contact-owner', () => ({
+jest.mock('./assign-contact-owner', () => ({
   __esModule: true,
   assignOwnerForCapture: (...args: unknown[]) => (mockAssignOwnerForCapture as any)(...args),
   notifyRecordAssigned: (...args: unknown[]) => (mockNotifyRecordAssigned as any)(...args),
@@ -724,12 +724,17 @@ describe('converting a lead', () => {
       title: 'Acme — first order',
       titleLower: 'acme — first order',
       pipelineId: pipelines[0].id,
-      stageId: 'qualified',
+      stageId: 'prospecting',
       status: 'open',
+      // The new stage's forecast category (AGL-3516).
+      forecastCategory: 'pipeline',
       amountCents: 12_500,
       currency: 'usd',
       ownerUid: CALLER,
       contactId: contact.id,
+      // The converted person is the Primary contact role (AGL-3521).
+      contactRoles: [{ contactId: contact.id, primary: true }],
+      contactRoleContactIds: [contact.id],
       companyId: company.id,
       visibleTo: ['host:h1'],
       hostId: HOST,
@@ -834,14 +839,182 @@ describe('converting a lead', () => {
     const { body } = await call({
       hostId: HOST,
       leadId: 'lead-1',
-      deal: { title: 'Acme', stageId: 'proposal-sent' },
+      deal: { title: 'Acme', stageId: 'proposal-price-quote' },
     })
     expect(all(`orgs/${ORG}/pipelines`)).toHaveLength(1)
     const [deal] = all(`orgs/${ORG}/deals`)
     expect(deal.pipelineId).toBe('p-1')
-    expect(deal.stageId).toBe('proposal-sent')
+    expect(deal.stageId).toBe('proposal-price-quote')
     expect(deal.status).toBe('open')
+    expect(deal.forecastCategory).toBe('bestCase')
     expect(body.dealId).toBe(deal.id)
+  })
+
+  /*
+   * THE DEAL CARRIES THE LEAD'S LEAD SOURCE (AGL-3516), as Salesforce's
+   * conversion hands it to the opportunity, and the Type the converter
+   * picked — judged against the org's list before anything is written.
+   */
+  it("stamps the lead's lead source and the picked Type on the deal it opens", async () => {
+    docs.set(leadPath('lead-1'), { ...docs.get(leadPath('lead-1')), leadSource: 'Trade show' })
+    const { status } = await call({
+      hostId: HOST,
+      leadId: 'lead-1',
+      deal: { title: 'Acme', type: 'new business' },
+    })
+    expect(status).toBe(200)
+    const [deal] = all(`orgs/${ORG}/deals`)
+    expect(deal).toMatchObject({
+      leadSource: 'Trade show',
+      leadSourceKey: 'trade show',
+      type: 'New Business',
+      typeKey: 'new business',
+    })
+  })
+
+  /*
+   * EVERY STANDARD FIELD LANDS WHERE SALESFORCE'S CONVERSION PUTS IT
+   * (AGL-3513): the person's on the contact, the account's on the company,
+   * the most recent campaign on the deal.
+   */
+  const SALESFORCE_LEAD = {
+    salutation: 'Dr.',
+    firstName: 'Ann',
+    lastName: 'Lee',
+    mobilePhone: '+15125550108',
+    fax: '+15125550109',
+    doNotCall: true,
+    phone: '+15125550107',
+    website: 'https://acme.com/',
+    address: { line1: '1 Main St', city: 'Austin', country: 'US' },
+    leadSource: 'Trade show',
+    industry: 'Food & Beverage',
+    rating: 'Hot',
+    annualRevenueCents: 125_000_000,
+    currency: 'eur',
+    numberOfEmployees: 42,
+    campaignIds: ['camp-old', 'camp-new'],
+  }
+
+  it("hands the person's standard fields to the contact's facet (AGL-3513)", async () => {
+    docs.set(leadPath('lead-1'), { ...docs.get(leadPath('lead-1')), ...SALESFORCE_LEAD })
+    await call({ hostId: HOST, leadId: 'lead-1' })
+    expect(mockUpsertHostContact).toHaveBeenCalledWith(
+      expect.objectContaining({
+        facet: expect.objectContaining({
+          salutation: 'Dr.',
+          firstName: 'Ann',
+          lastName: 'Lee',
+          mobilePhone: '+15125550108',
+          fax: '+15125550109',
+          doNotCall: true,
+        }),
+      }),
+    )
+  })
+
+  it('never hands the contact a Do not call the lead did not set', async () => {
+    docs.set(leadPath('lead-1'), { ...docs.get(leadPath('lead-1')), doNotCall: false })
+    await call({ hostId: HOST, leadId: 'lead-1' })
+    expect(mockUpsertHostContact.mock.calls[0][0].facet).not.toHaveProperty('doNotCall')
+  })
+
+  it("creates the company with the lead's account fields, and the deal with its latest campaign (AGL-3513)", async () => {
+    docs.set(leadPath('lead-1'), { ...docs.get(leadPath('lead-1')), ...SALESFORCE_LEAD })
+    const { status } = await call({
+      hostId: HOST,
+      leadId: 'lead-1',
+      createCompany: { name: 'Acme', domain: 'acme.com' },
+      deal: { title: 'Acme' },
+    })
+    expect(status).toBe(200)
+    const [company] = all(`orgs/${ORG}/companies`)
+    expect(company).toMatchObject({
+      industry: 'Food & Beverage',
+      industryKey: 'food & beverage',
+      rating: 'Hot',
+      ratingKey: 'hot',
+      accountSource: 'Trade show',
+      accountSourceKey: 'trade show',
+      annualRevenueCents: 125_000_000,
+      currency: 'eur',
+      numberOfEmployees: 42,
+      fax: '+15125550109',
+      website: 'https://acme.com/',
+      phone: '+15125550107',
+      // The lead's address is the account's billing address.
+      address: { line1: '1 Main St', city: 'Austin', country: 'US' },
+    })
+    // The lead's most recent campaign is the deal's Primary Campaign Source.
+    expect(all(`orgs/${ORG}/deals`)[0]).toMatchObject({ campaignId: 'camp-new' })
+  })
+
+  it('fills only the blanks of a company the org already held (AGL-3513)', async () => {
+    docs.set(leadPath('lead-1'), { ...docs.get(leadPath('lead-1')), ...SALESFORCE_LEAD })
+    docs.set(`orgs/${ORG}/companies/co-1`, {
+      name: 'Acme',
+      nameLower: 'acme',
+      visibleTo: ['host:h1'],
+      industry: 'Retail',
+      phone: '+15125550000',
+      numberOfEmployees: 0,
+    })
+    await call({ hostId: HOST, leadId: 'lead-1', companyId: 'co-1' })
+    const company = docs.get(`orgs/${ORG}/companies/co-1`)
+    expect(company).toMatchObject({
+      // What the company holds stays.
+      industry: 'Retail',
+      phone: '+15125550000',
+      numberOfEmployees: 0,
+      // Its blanks take the lead's.
+      rating: 'Hot',
+      accountSource: 'Trade show',
+      annualRevenueCents: 125_000_000,
+      currency: 'eur',
+      fax: '+15125550109',
+      website: 'https://acme.com/',
+      address: { line1: '1 Main St', city: 'Austin', country: 'US' },
+    })
+    // A linked company keeps the Type it lacks: only a company created here starts from a default.
+    expect(company).not.toHaveProperty('type')
+  })
+
+  it('leaves a value the org has since dropped from its list behind, converting anyway', async () => {
+    docs.set(leadPath('lead-1'), { ...docs.get(leadPath('lead-1')), industry: 'Basket weaving' })
+    const { status } = await call({
+      hostId: HOST,
+      leadId: 'lead-1',
+      createCompany: { name: 'Acme' },
+    })
+    expect(status).toBe(200)
+    expect(all(`orgs/${ORG}/companies`)[0]).not.toHaveProperty('industry')
+  })
+
+  it('refuses a Type the org does not have, writing nothing', async () => {
+    const { status, body } = await call({
+      hostId: HOST,
+      leadId: 'lead-1',
+      deal: { title: 'Acme', type: 'Upsell' },
+    })
+    expect(status).toBe(400)
+    expect(body).toEqual({
+      error: 'Type must be one of: Existing Business, New Business.',
+      field: 'deal.type',
+    })
+    expect(all(`orgs/${ORG}/contacts`)).toHaveLength(0)
+    expect(all(`orgs/${ORG}/deals`)).toHaveLength(0)
+  })
+
+  it("files a deal with no Type under the list's default, and none when the list has none", async () => {
+    docs.set(`orgs/${ORG}/crmPicklists/opportunityType`, {
+      values: [
+        { id: 'new-business', label: 'New Business', active: true },
+        { id: 'existing-business', label: 'Existing Business', active: true },
+      ],
+      defaultValueId: 'new-business',
+    })
+    await call({ hostId: HOST, leadId: 'lead-1', deal: { title: 'Acme' } })
+    expect(all(`orgs/${ORG}/deals`)[0]).toMatchObject({ type: 'New Business' })
   })
 
   it('answers the same contact on a second call and creates nothing more', async () => {
@@ -970,14 +1143,14 @@ describe('stageForNewDeal', () => {
   const stages = [...DEFAULT_DEAL_STAGES]
 
   it('takes the requested stage when the pipeline has it', () => {
-    expect(stageForNewDeal({ stages }, 'negotiation')?.id).toBe('negotiation')
+    expect(stageForNewDeal({ stages }, 'negotiation-review')?.id).toBe('negotiation-review')
   })
 
   it('falls back to the first open stage by order, whatever the array order', () => {
     expect(stageForNewDeal({ stages: [...stages].reverse() }, undefined)?.id).toBe(
-      'qualified',
+      'prospecting',
     )
-    expect(stageForNewDeal({ stages }, 'not-a-stage')?.id).toBe('qualified')
+    expect(stageForNewDeal({ stages }, 'not-a-stage')?.id).toBe('prospecting')
   })
 
   it('never defaults into a closed stage while an open one exists', () => {

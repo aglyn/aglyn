@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { HostAction } from '@aglyn/aglyn/app-utils/actions'
+import type { AiAutomation } from './ai-automation-format'
 import { emptyAiAutomationRecords, type AiAutomationRecords } from './ai-automation-draft'
 import {
   AI_OUTLINE_RUN_ERRORS_MAX,
@@ -50,7 +50,7 @@ describe('aiRedactPersonal', () => {
 })
 
 describe('aiActionOutline', () => {
-  const action: HostAction = {
+  const action: AiAutomation = {
     name: 'Follow up quote requests',
     enabled: false,
     trigger: {
@@ -77,13 +77,13 @@ describe('aiActionOutline', () => {
       },
       { type: 'assignContactOwner', ownerUid: 'uid-sales-lead' },
       { type: 'assignContactOwner', roundRobin: true },
-      { type: 'createCrmTask', title: 'Call them', kind: 'call', dueInDays: 1, assigneeEmail: 'rep@bigco.test' },
-      { type: 'logCrmActivity', kind: 'note', body: 'Asked for a quote' },
+      { type: 'createCrmTask', title: 'Call them', kind: 'call', priority: 'high', dueInDays: 1, assigneeEmail: 'rep@bigco.test' },
+      { type: 'logCrmActivity', kind: 'call', direction: 'inbound', body: 'Asked for a quote' },
       { type: 'addClass', selector: '#zzselector', className: 'zzclass' },
       { type: 'runJs', code: 'zzscript()' },
       { type: 'setContactStage', lifecycleStage: 'sales-qualified' },
     ],
-  } as HostAction
+  } as AiAutomation
 
   it('outlines the automation by the labels the editor shows, with what each named record’s standing is', () => {
     expect(aiActionOutline(action, RECORDS).split('\n')).toEqual([
@@ -101,8 +101,9 @@ describe('aiActionOutline', () => {
       '7. End the flow here. Only if _waitTimedOut is not empty.',
       '8. Assign the contact an owner: a named teammate.',
       '9. Assign the contact an owner: by round robin.',
-      '10. Create a CRM task: "Call them", a call, due in 1 day, for a named teammate.',
-      '11. Log a CRM activity: a note: "Asked for a quote".',
+      // A task's priority and a call's direction (AGL-3538).
+      '10. Create a CRM task: "Call them", a high-priority call, due in 1 day, for a named teammate.',
+      '11. Log a CRM activity: an inbound call: "Asked for a quote".',
       '12. Add a CSS class: runs in the visitor’s browser on the page.',
       '13. Run custom JS (Business): runs in the visitor’s browser on the page.',
       '14. Set the contact’s lifecycle stage: "Sales qualified".',

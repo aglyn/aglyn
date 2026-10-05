@@ -51,7 +51,7 @@ jest.mock('@aglyn/aglyn', () => ({
   useSiteFetch: () => mockSiteFetch,
 }))
 
-import Booking from './booking'
+import Booking, { bookingDayLabel } from './booking'
 
 const gtag = jest.fn()
 
@@ -111,7 +111,7 @@ async function fillBooking(service: typeof PAID): Promise<HTMLElement> {
     }),
   )
   fireEvent.click(
-    await screen.findByText(new Date(SLOT_MS).toLocaleDateString()),
+    await screen.findByText(bookingDayLabel(SLOT_MS)),
   )
   fireEvent.click(
     await screen.findByText(

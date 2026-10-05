@@ -156,18 +156,23 @@ export function apiV1Resources(): Array<{ name: string; pluginId: string; resour
 }
 
 /**
- * The descriptions of every resource the plugins serve, in registration
- * order. A description that fails to load is left out and logged, rather
- * than taking the platform's own description with it.
+ * The descriptions of every resource the plugins serve — the top-level ones,
+ * then those under a site — each in registration order. A description that
+ * fails to load is left out and logged, rather than taking the platform's
+ * own description with it.
  */
 export async function describeApiV1Resources(): Promise<ApiV1ResourceDescription[]> {
+  const registered = [
+    ...apiV1Resources().map((entry) => ({ ...entry, path: `/v1/${entry.name}` })),
+    ...apiV1SiteResources().map((entry) => ({ ...entry, path: `/v1/sites/{siteId}/${entry.name}` })),
+  ]
   const described = await Promise.all(
-    apiV1Resources().map(async ({ name, pluginId, resource }) => {
+    registered.map(async ({ path, pluginId, resource }) => {
       if (!resource.describe) return null
       try {
         return await resource.describe()
       } catch (error) {
-        console.error(`[api-v1] ${pluginId} could not describe /v1/${name}`, error)
+        console.error(`[api-v1] ${pluginId} could not describe ${path}`, error)
         return null
       }
     }),
@@ -181,6 +186,80 @@ export function apiV1Resource(
 ): { pluginId: string; resource: ApiV1Resource } | null {
   const key = String(resource ?? '').trim()
   const entry = resolvePluginServices(API_V1_RESOURCES).find((one) => one.key === key)
+  return entry ? { pluginId: entry.pluginId, resource: entry.impl } : null
+}
+
+// ── A site's resources ─────────────────────────────────────────────────────
+
+/**
+ * A plugin's resources UNDER a site, `/v1/sites/{siteId}/<resource>/…`
+ * (AGL-3080) — a site's orders, its products, its form submissions.
+ *
+ * The same registration a top-level resource takes, one level down. The
+ * router answers `/v1/sites/{siteId}` itself and refuses a site the key's
+ * organization does not own — `404 No such site` — BEFORE any registration
+ * is asked, so a handler is only ever handed a site its caller may reach,
+ * and asks nothing about ownership again. It is handed the whole path
+ * (`['sites', '<siteId>', 'orders', '<orderId>']`), asks for its own scopes
+ * and answers in the published envelope, as a top-level handler does.
+ *
+ * The platform's own (`media`, `publish`) are not registrable, a second
+ * plugin claiming a resource another serves is refused naming both, and
+ * `describe` reaches the OpenAPI document through
+ * {@link describeApiV1Resources} like every other description.
+ */
+export const API_V1_SITE_RESOURCES = definePluginServiceContract<ApiV1Resource>(
+  'core.api-v1-site-resources',
+  { multiple: true },
+)
+
+/** The resources under a site the router answers itself, which no plugin may take. */
+export const PLATFORM_API_V1_SITE_RESOURCES: ReadonlySet<string> = new Set(['media', 'publish'])
+
+/**
+ * Serves `/v1/sites/{siteId}/<resource>` from a plugin, on the terms
+ * {@link registerApiV1Resource} sets for a top-level one: the owner is the
+ * loader's marker or `options.pluginId`, the name one lowercase path
+ * segment, a platform resource and one another plugin serves refused.
+ */
+export function registerApiV1SiteResource(
+  resource: string,
+  registration: ApiV1Resource,
+  options?: { pluginId?: string },
+): void {
+  const key = String(resource ?? '').trim()
+  if (!RESOURCE.test(key)) {
+    throw new Error(`a /v1 site resource needs a lowercase path segment for its name, not "${key}"`)
+  }
+  if (PLATFORM_API_V1_SITE_RESOURCES.has(key)) {
+    throw new Error(`/v1/sites/{siteId}/${key} is the platform's own resource`)
+  }
+  const pluginId = (getRegisteringPluginId() ?? options?.pluginId ?? '').trim()
+  if (!pluginId) throw new Error(`the /v1/sites/{siteId}/${key} resource was registered with no owner`)
+  const incumbent = resolvePluginServices(API_V1_SITE_RESOURCES).find((entry) => entry.key === key)
+  if (incumbent && incumbent.pluginId !== pluginId) {
+    throw new Error(
+      `/v1/sites/{siteId}/${key} is already served by "${incumbent.pluginId}"; refused "${pluginId}"`,
+    )
+  }
+  registerPluginService(API_V1_SITE_RESOURCES, registration, { pluginId, key })
+}
+
+/** Every resource under a site the plugins serve here, in registration order. */
+export function apiV1SiteResources(): Array<{ name: string; pluginId: string; resource: ApiV1Resource }> {
+  return resolvePluginServices(API_V1_SITE_RESOURCES).map((entry) => ({
+    name: entry.key ?? '',
+    pluginId: entry.pluginId,
+    resource: entry.impl,
+  }))
+}
+
+/** The plugin serving `/v1/sites/{siteId}/<resource>` here, or `null` when none does. */
+export function apiV1SiteResource(
+  resource: string,
+): { pluginId: string; resource: ApiV1Resource } | null {
+  const key = String(resource ?? '').trim()
+  const entry = resolvePluginServices(API_V1_SITE_RESOURCES).find((one) => one.key === key)
   return entry ? { pluginId: entry.pluginId, resource: entry.impl } : null
 }
 

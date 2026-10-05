@@ -13,6 +13,13 @@ service firebase.storage {
     // A blanket `allow read: if true` here does nothing for the tokenized
     // media case but exposes the staff audit archives and plugin bundles
     // in the same bucket to anyone who guesses an object path — so deny.
+    // An import's uploaded file (AGL-3524) is the job engine's alone: it is
+    // inspected and stored by `/api/transfer/upload` and read back by the
+    // engine, never by a client. Written out, rather than left to the deny
+    // below, because it holds a workspace's customer records in bulk.
+    match /orgs/{orgId}/transfers/{allPaths=**} {
+      allow read, write: if false;
+    }
     match /{allPaths=**} {
       allow read, write: if false;
     }

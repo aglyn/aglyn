@@ -56,20 +56,35 @@ export function seoKeywordCount(text: string | null | undefined, keyword: string
   return [...text.toLowerCase().matchAll(pattern)].length
 }
 
-/** Keywords as a person typed them: trimmed, deduplicated, capped at {@link SEO_MAX_KEYWORDS}. */
-export function seoKeywordList(raw: unknown): string[] {
+/**
+ * Keywords as a person typed them — trimmed, deduplicated — split at
+ * {@link SEO_MAX_KEYWORDS}: the ones a page is checked for, and the distinct
+ * ones past the limit, which a caller names rather than drops in silence.
+ */
+export function seoKeywordSplit(raw: unknown): { keywords: string[]; unchecked: string[] } {
   const parts = Array.isArray(raw) ? raw.map(String) : String(raw ?? '').split(/[,\n]/)
   const seen = new Set<string>()
-  const out: string[] = []
+  const keywords: string[] = []
+  const unchecked: string[] = []
   for (const part of parts) {
     const keyword = part.replace(/\s+/g, ' ').trim().slice(0, SEO_KEYWORD_MAX_CHARS)
     const key = keyword.toLowerCase()
     if (!keyword || seen.has(key)) continue
     seen.add(key)
-    out.push(keyword)
-    if (out.length >= SEO_MAX_KEYWORDS) break
+    if (keywords.length < SEO_MAX_KEYWORDS) keywords.push(keyword)
+    else unchecked.push(keyword)
   }
-  return out
+  return { keywords, unchecked }
+}
+
+/** Keywords as a person typed them: trimmed, deduplicated, capped at {@link SEO_MAX_KEYWORDS}. */
+export function seoKeywordList(raw: unknown): string[] {
+  return seoKeywordSplit(raw).keywords
+}
+
+/** How a note names keywords: each quoted, in the order they were typed. */
+export function seoQuotedKeywords(keywords: readonly string[]): string {
+  return keywords.map((keyword) => `“${keyword}”`).join(', ')
 }
 
 /** Where a page already says each target keyword. */

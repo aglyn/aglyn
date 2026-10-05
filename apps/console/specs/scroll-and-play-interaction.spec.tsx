@@ -180,7 +180,7 @@ describe('Scroll to element (AGL-2867)', () => {
         offsetPx: 72,
       },
     ])
-    expect(Aglyn.validateHostAction(onSave.mock.calls[0][0])).toBeNull()
+    expect(Aglyn.validateInteraction(onSave.mock.calls[0][0])).toBeNull()
   })
 
   it('stores nothing for the defaults: smooth, no offset', () => {
@@ -240,5 +240,25 @@ describe('Play a video (AGL-2867)', () => {
   it('does not second-guess a custom selector', () => {
     renderDialog([{ type: 'playVideo', selector: '.hero video' }])
     expect(screen.queryByText(/is not a Video/)).toBeNull()
+  })
+})
+
+describe('the Action picker offers what a page runs (AGL-3080)', () => {
+  it('lists each step a plugin offers, and none only an automation holds', () => {
+    renderDialog([{ type: 'siteAlert', message: 'hi' }])
+    const offered = options('Action').map((option) => option.textContent ?? '')
+    const declared = Aglyn.declaredInteractionSteps()
+    const automationOnly = declared.filter((step) => step.offered === false)
+    // THE CONTROL: the catalog does declare steps of both kinds.
+    expect(automationOnly.length).toBeGreaterThan(0)
+    expect(declared.length).toBeGreaterThan(automationOnly.length)
+    for (const step of declared) {
+      // An option may carry the plan that unlocks it after its label.
+      const listed = offered.some((text) => text.startsWith(step.label))
+      expect({ type: step.type, offered: listed }).toEqual({
+        type: step.type,
+        offered: step.offered !== false,
+      })
+    }
   })
 })

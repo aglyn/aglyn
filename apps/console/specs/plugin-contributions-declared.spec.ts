@@ -43,7 +43,19 @@ import {
 } from '@aglyn/aglyn'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+import {
+  ENTITY_PICKERS_LOAD_POINT,
+  pluginEntityPickers,
+} from '@aglyn/aglyn/plugin-manager/plugin-entity-pickers'
+import { pluginRecordListSource } from '@aglyn/aglyn/plugin-manager/plugin-record-lists'
+import {
+  listDeclaredTransferResources,
+  listPluginTransferResourceUis,
+  resolveTransferResources,
+  TRANSFER_RESOURCES_LOAD_POINT,
+} from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
 import { CONSOLE_PLUGIN_MANIFEST } from '../constants/plugins.client.generated'
+import { registerPluginServerDeclarations } from '../constants/plugins.declarations.server.generated'
 
 const REPO_ROOT = resolve(__dirname, '../../..')
 
@@ -106,6 +118,22 @@ function consoleContributions(extensions: readonly ConsoleExtension[]) {
 
 const sorted = (list: readonly string[] | undefined) => [...(list ?? [])].sort()
 
+type ManifestEntry = (typeof CONSOLE_PLUGIN_MANIFEST)[number]
+
+/** The plugins whose console and staff registrars have run in this file. */
+const ranConsoleRegistrars = new Set<string>()
+
+async function runConsoleRegistrars(entry: ManifestEntry): Promise<void> {
+  const mod = await entry.load()
+  for (const surface of ['console', 'staff']) {
+    const name = entry.register[surface]
+    // Awaited, because a registrar that loads what the surface uses
+    // returns a promise (AGL-3141).
+    if (name) await (mod[name] as () => void | Promise<void>)()
+  }
+  ranConsoleRegistrars.add(entry.id)
+}
+
 describe('first-party plugins declare what they register (AGL-3116)', () => {
   // The registries log every registration; the comparison is the output.
   beforeAll(() => {
@@ -127,13 +155,7 @@ describe('first-party plugins declare what they register (AGL-3116)', () => {
     ).map((entry) => [entry.id, entry] as const),
   )('%s declares the console surfaces its registrar registers', async (id, entry) => {
     const before = new Set(listConsoleExtensions().map((extension) => extension.pluginId))
-    const mod = await entry.load()
-    for (const surface of ['console', 'staff']) {
-      const name = entry.register[surface]
-      // Awaited, because a registrar that loads what the surface uses
-      // returns a promise (AGL-3141).
-      if (name) await (mod[name] as () => void | Promise<void>)()
-    }
+    await runConsoleRegistrars(entry)
     // A registrar may register more than one extension — commerce registers
     // the User Accounts card under the `accounts` switch — and every one of
     // them loads with this plugin's code.
@@ -147,6 +169,21 @@ describe('first-party plugins declare what they register (AGL-3116)', () => {
     const drawsAFieldType = listCustomFieldTypes().some(
       (fieldType) => fieldType.pluginId === id,
     )
+    // A registrar whose record list source shares an entity picker kind's
+    // fields loads where the picker provider does (AGL-3080): the kind is
+    // compiled, its fields are read through that source at run time.
+    const sharesPickerFields = pluginEntityPickers().some(
+      (picker) =>
+        picker.fieldsFrom && pluginRecordListSource(picker.fieldsFrom)?.pluginId === id,
+    )
+    if (sharesPickerFields) {
+      found.slots = [...new Set([...found.slots, ENTITY_PICKERS_LOAD_POINT])].sort()
+    }
+    // A registrar that registers a transfer resource's client half loads
+    // where the import wizard and the export dialog are drawn (AGL-3523).
+    if (listPluginTransferResourceUis().some((ui) => ui.pluginId === id)) {
+      found.slots = [...new Set([...found.slots, TRANSFER_RESOURCES_LOAD_POINT])].sort()
+    }
     const own = declared.get(id)?.console ?? {}
     expect({ id, ...found, shell: found.shell || drawsAFieldType }).toEqual({
       id,
@@ -188,5 +225,30 @@ describe('first-party plugins declare what they register (AGL-3116)', () => {
         components: sorted(declared.get(entry.id)?.site?.components),
       })
     }
+  })
+
+  /**
+   * A transfer resource has two halves (AGL-3523), and the declaration is
+   * held to both: the console registrar registers how the wizard shows it,
+   * and the server declarations register what moves it. A resource declared
+   * with either half missing is on the hub and fails the person at Apply.
+   */
+  it('registers the client half of every declared transfer resource, and of no other', async () => {
+    for (const entry of CONSOLE_PLUGIN_MANIFEST) {
+      if ((entry.register['console'] || entry.register['staff']) && !ranConsoleRegistrars.has(entry.id)) {
+        await runConsoleRegistrars(entry)
+      }
+    }
+    const declared = listDeclaredTransferResources().map((one) => `${one.pluginId}:${one.key}`)
+    const registered = listPluginTransferResourceUis().map((one) => `${one.pluginId}:${one.key}`)
+    expect(sorted(registered)).toEqual(sorted(declared))
+  })
+
+  it('registers the server half of every declared transfer resource at boot', async () => {
+    await registerPluginServerDeclarations()
+    const resolved = await resolveTransferResources()
+    expect(resolved.map((one) => `${one.pluginId}:${one.key}`)).toEqual(
+      listDeclaredTransferResources().map((one) => `${one.pluginId}:${one.key}`),
+    )
   })
 })

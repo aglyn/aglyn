@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { declaredServerSteps } from '@aglyn/aglyn/plugin-manager/plugin-server-steps'
 import { describeStepOutcome, HOST_ACTION_STEP_OUTCOMES } from './step-outcomes'
 
 /** A run's summary line, one past-tense phrase per step it took (AGL-2171). */
@@ -57,5 +58,17 @@ describe('describeStepOutcome', () => {
     // (Business)" — plan suffix and all — into a log line.
     expect(HOST_ACTION_STEP_OUTCOMES.sendEmail).toBe('sent email')
     expect(HOST_ACTION_STEP_OUTCOMES.webhookPost).not.toMatch(/Business/)
+  })
+
+  /*
+   * A step another plugin runs (AGL-3080) still prints its line here: the
+   * owner answers a detail, the engine prints the phrase. One with no phrase
+   * would print a bare enum in every run history it appears in.
+   */
+  it('has a phrase for every server step a plugin declares', () => {
+    expect(declaredServerSteps().length).toBeGreaterThan(0)
+    for (const { type } of declaredServerSteps()) {
+      expect(HOST_ACTION_STEP_OUTCOMES[type as keyof typeof HOST_ACTION_STEP_OUTCOMES]).toBeTruthy()
+    }
   })
 })

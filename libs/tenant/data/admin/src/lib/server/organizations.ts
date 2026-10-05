@@ -36,6 +36,8 @@ import {
   isOrgWideMember,
   isValidOrgSlug,
   hostPermissionKeys,
+  parseOwnerHandoff,
+  usesCustomerSeat,
   orgPermissionLabel,
   pluginOrgPermissionKeys,
   projectHostMemberPermissions,
@@ -51,6 +53,7 @@ import {
   type HostAccessRole,
   type OrgPermission,
   type OrgRole,
+  type OwnerHandoffPreviousOwner,
 } from '@aglyn/aglyn/server'
 import type { PluginActivityTargetType } from '@aglyn/aglyn/plugin-manager/plugin-activity-actions'
 import {
@@ -92,6 +95,7 @@ import {
   orgMemberListFields,
   orgMemberSearchTokens,
 } from './org-member-list-fields'
+import { isStaffAccount } from './staff-seat'
 import { updateExisting } from './update-existing'
 import { attachWorkspaceDomain } from './workspace-domains'
 
@@ -245,6 +249,13 @@ export interface CreateOrganizationOptions {
    * nothing else.
    */
   bypassFreeWorkspaceCap?: boolean
+  /**
+   * Whether the creator holds the `staff` claim, when the caller already
+   * knows (AGL-3466). Absent, it is looked up. A staff creator's owner row is
+   * stamped `staffSeat: true`, so a workspace staff build for a prospect
+   * leaves the prospect's one Free seat free for the prospect.
+   */
+  ownerStaffSeat?: boolean
 }
 
 /**
@@ -268,6 +279,9 @@ export async function createOrganization(
   const capConfig: FreeWorkspaceCapConfig | null = options.bypassFreeWorkspaceCap
     ? null
     : await readFreeWorkspaceCapConfig()
+  // Read outside the transaction for the same reason: an auth record, not a
+  // document this creation races with (AGL-3466).
+  const ownerStaffSeat = options.ownerStaffSeat ?? (await isStaffAccount(ownerUid))
   await db.runTransaction(async (tx) => {
     const reservation = await tx.get(db.collection('orgSlugs').doc(slug))
     const held = reservation.exists
@@ -390,6 +404,8 @@ export async function createOrganization(
         email: ownerEmail ?? null,
         displayName: ownerDisplayName ?? null,
         joinedAt: FieldValue.serverTimestamp(),
+        // A staff creator takes none of the workspace's seats (AGL-3466).
+        ...(ownerStaffSeat ? { staffSeat: true } : {}),
         /*
          * The rules projection, stamped AT CREATION (AGL-1038).
          *
@@ -1315,6 +1331,9 @@ export interface HostActivityTarget {
     // a contact added by hand, a lead converted — and read back by the
     // feed's presenter as links into the hub.
     | 'contact' | 'company' | 'deal' | 'lead'
+    // A plugin's own resource, `pluginId:noun` (AGL-2978), as the org feed
+    // takes it: a gift card the commerce plugin issued (AGL-3551).
+    | PluginActivityTargetType
   id?: string
   name?: string
   versionId?: string
@@ -1468,6 +1487,20 @@ async function readSeatEntries(
 }
 
 /**
+ * The principal a seat gate is admitting, as every gate below receives it.
+ *
+ * `staffSeat` is the AGL-3466 exemption: an account holding the `staff`
+ * claim takes none of the customer's seats, so a gate handed one has
+ * nothing to charge and returns before it reads the roster.
+ */
+interface SeatSelf {
+  uid?: string | null
+  email?: string | null
+  emails?: readonly (string | null | undefined)[] | null
+  staffSeat?: boolean
+}
+
+/**
  * The hard cap itself, evaluated against the POST-state and inside the same
  * transaction that performs the grant (AGL-2068).
  *
@@ -1503,15 +1536,12 @@ async function assertCollaboratorSeats(options: {
   orgRef: FirebaseFirestore.DocumentReference
   org: Partial<AglynOrgBilling>
   hostIds: string[]
-  self: {
-    uid?: string | null
-    email?: string | null
-    emails?: readonly (string | null | undefined)[] | null
-  }
+  self: SeatSelf
   read: (query: FirebaseFirestore.Query) => Promise<FirebaseFirestore.QuerySnapshot>
 }): Promise<void> {
   const { orgRef, org, hostIds, self, read } = options
-  if (!hostIds.length) return
+  // Platform staff take no seat (AGL-3466), so there is nothing to charge.
+  if (!hostIds.length || self.staffSeat) return
   const entries = await readSeatEntries(orgRef, read)
   for (const hostId of hostIds) {
     const used = countCollaboratorSeats(entries, hostId, self)
@@ -1532,12 +1562,19 @@ function newlyScopedHosts(options: {
   allHosts: boolean
   hostAccess: Record<string, unknown>
   existing: Partial<AglynOrgMember> | undefined
+  /** The member is platform staff and takes no seat (AGL-3466). */
+  staffSeat?: boolean
 }): string[] {
-  const { role, allHosts, hostAccess, existing } = options
+  const { role, allHosts, hostAccess, existing, staffSeat } = options
+  if (staffSeat) return []
   if (isOrgWideMember({ role, allHosts, hostAccess } as Partial<AglynOrgMember>)) {
     return []
   }
-  const prior = (existing?.hostAccess ?? {}) as Record<string, unknown>
+  // A row stamped as staff held no seat on any of its sites, so a former
+  // staff member keeping a site is taking that seat now, not re-writing one.
+  const prior = (
+    usesCustomerSeat(existing) ? (existing?.hostAccess ?? {}) : {}
+  ) as Record<string, unknown>
   return Object.keys(hostAccess).filter((hostId) => !prior[hostId])
 }
 
@@ -1581,10 +1618,11 @@ export async function collaboratorSeatRefusal(options: {
   orgId: string
   org: Partial<AglynOrgBilling>
   hostIds: string[]
-  self?: { uid?: string | null; email?: string | null }
+  /** `staffSeat` admits platform staff without a seat (AGL-3466). */
+  self?: { uid?: string | null; email?: string | null; staffSeat?: boolean }
 }): Promise<Response | null> {
   const { orgId, org, hostIds, self } = options
-  if (!hostIds.length) return null
+  if (!hostIds.length || self?.staffSeat) return null
   try {
     await assertCollaboratorSeats({
       orgRef: firestore().collection('orgs').doc(orgId),
@@ -1693,15 +1731,12 @@ async function assertManagerSeats(options: {
   org: Partial<AglynOrgBilling>
   /** Is this write ADMITTING a manager who was not one already? */
   becomesManager: boolean
-  self: {
-    uid?: string | null
-    email?: string | null
-    emails?: readonly (string | null | undefined)[] | null
-  }
+  self: SeatSelf
   read: (query: FirebaseFirestore.Query) => Promise<FirebaseFirestore.QuerySnapshot>
 }): Promise<void> {
   const { orgRef, org, becomesManager, self, read } = options
-  if (!becomesManager) return
+  // Platform staff take no seat (AGL-3466).
+  if (!becomesManager || self.staffSeat) return
   const entries = await readSeatEntries(orgRef, read)
   const used = countManagerSeatsExcluding(entries, self)
   const quota = checkSeatQuota(org, 'managers', used)
@@ -1731,7 +1766,10 @@ function becomesOrgManager(options: {
   allHosts: boolean
   hostAccess: Record<string, HostAccessRole>
   existing: Partial<AglynOrgMember> | undefined
+  /** The member is platform staff and takes no seat (AGL-3466). */
+  staffSeat?: boolean
 }): boolean {
+  if (options.staffSeat) return false
   const next = isOrgWideMember({
     role: options.role,
     allHosts: options.allHosts,
@@ -1741,7 +1779,13 @@ function becomesOrgManager(options: {
   // An ABSENT row is not a manager, and `isOrgWideMember(undefined)` is
   // already false — but saying so explicitly keeps the "was it one before?"
   // question readable next to the legacy shape that predates `allHosts`.
-  return !options.existing || !isOrgWideMember(options.existing)
+  // A row stamped as staff held no seat either (AGL-3466): a former staff
+  // manager whose row is rewritten is taking a customer seat now.
+  return (
+    !options.existing ||
+    !usesCustomerSeat(options.existing) ||
+    !isOrgWideMember(options.existing)
+  )
 }
 
 /**
@@ -1781,10 +1825,11 @@ export async function managerSeatRefusal(options: {
   orgId: string
   org: Partial<AglynOrgBilling>
   becomesManager: boolean
-  self?: { uid?: string | null; email?: string | null }
+  /** `staffSeat` admits platform staff without a seat (AGL-3466). */
+  self?: { uid?: string | null; email?: string | null; staffSeat?: boolean }
 }): Promise<Response | null> {
   const { orgId, org, becomesManager, self } = options
-  if (!becomesManager) return null
+  if (!becomesManager || self?.staffSeat) return null
   try {
     await assertManagerSeats({
       orgRef: firestore().collection('orgs').doc(orgId),
@@ -1876,6 +1921,22 @@ export function orgOwnerSeatRefusalResponse(error: unknown): Response | null {
 }
 
 /**
+ * The `staffSeat` field of a member write (AGL-3466): stamped while the
+ * account holds the `staff` claim, and taken off a row that still carries a
+ * stamp once it does not, so the row converges on the claim the next time
+ * anything writes it.
+ */
+function staffSeatWrite(
+  staffSeat: boolean,
+  existing: Partial<AglynOrgMember> | undefined,
+): { staffSeat?: unknown } {
+  if (staffSeat) return { staffSeat: true }
+  return existing?.staffSeat !== undefined
+    ? { staffSeat: FieldValue.delete() }
+    : {}
+}
+
+/**
  * Creates or updates a member transactionally with its reverse-index
  * entry, then re-syncs host projections.
  *
@@ -1946,6 +2007,10 @@ export async function upsertOrgMember(
   // refusing here is what lets the spec assert that NOTHING was written
   // rather than that a throw happened somewhere.
   if (role === 'owner') throw new OrgOwnerSeatError('grant')
+  // Platform staff take none of the customer's seats (AGL-3466). Asked of
+  // the auth record at write time, so the claim decides it rather than
+  // anything the caller says, and a lookup that fails answers "not staff".
+  const staffSeat = await isStaffAccount(uid)
   const db = firestore()
   await db.runTransaction(async (tx) => {
     const orgSnapshot = await tx.get(db.collection('orgs').doc(orgId))
@@ -1957,6 +2022,7 @@ export async function upsertOrgMember(
       .collection('members')
       .doc(uid)
     const existing = await tx.get(memberRef)
+    const existingData = existing.data() as Partial<AglynOrgMember> | undefined
     // The owner's own row is not writable here (AGL-1888). Both facts, not
     // one standing in for the other — see the note on this function.
     if (
@@ -1979,9 +2045,10 @@ export async function upsertOrgMember(
         role,
         allHosts: allHosts ?? false,
         hostAccess: hostAccess ?? {},
-        existing: existing.data() as Partial<AglynOrgMember> | undefined,
+        existing: existingData,
+        staffSeat,
       }),
-      self: { uid, email, emails: seatAliasEmails },
+      self: { uid, email, emails: seatAliasEmails, staffSeat },
       read: (query) => tx.get(query),
     })
     // Manager seat cap, in the same read slot and for the same reason. This
@@ -1997,9 +2064,10 @@ export async function upsertOrgMember(
         role,
         allHosts: allHosts ?? false,
         hostAccess: hostAccess ?? {},
-        existing: existing.data() as Partial<AglynOrgMember> | undefined,
+        existing: existingData,
+        staffSeat,
       }),
-      self: { uid, email, emails: seatAliasEmails },
+      self: { uid, email, emails: seatAliasEmails, staffSeat },
       read: (query) => tx.get(query),
     })
     tx.set(
@@ -2008,6 +2076,7 @@ export async function upsertOrgMember(
         role,
         allHosts: allHosts ?? false,
         hostAccess: hostAccess ?? {},
+        ...staffSeatWrite(staffSeat, existingData),
         ...(roleId !== undefined ? { roleId } : {}),
         ...(email !== undefined ? { email } : {}),
         ...(displayName !== undefined ? { displayName } : {}),
@@ -2162,6 +2231,103 @@ export async function backfillMemberIdentityEverywhere(
 }
 
 /**
+ * One ownership move, as both doors that make one describe it (AGL-3466):
+ * the staff/owner transfer below and the owner-handoff acceptance.
+ */
+interface OwnershipMove {
+  orgId: string
+  fromUid: string
+  toUid: string
+  /**
+   * `stay` demotes the outgoing owner to admin; `leave` takes them off the
+   * roster with their reverse-index entry. A transfer is always `stay`.
+   */
+  previousOwner: OwnerHandoffPreviousOwner
+  /** Written onto the incoming owner's row beside the role (merged). */
+  newOwnerRow?: Record<string, unknown>
+  /** Written onto the incoming owner's reverse-index entry (merged). */
+  newOwnerIndex?: Record<string, unknown>
+}
+
+/**
+ * The writes that move the owner seat, inside the caller's transaction.
+ *
+ * THE ONE COPY. `transferOrgOwnership` and `acceptOwnerHandoff` both call
+ * this, so an org can never end up with an owner one door produced and the
+ * other would not recognize: one `ownerUid`, exactly one `role: 'owner'` row,
+ * and reverse-index entries that agree with both.
+ *
+ * Every member write is a MERGE, which is what keeps a `staffSeat` stamp
+ * where it was (AGL-3466): a staff owner handing over and staying on remains
+ * a no-seat admin, and a staff member taking over remains a no-seat owner.
+ *
+ * `createdByUid` is not written here and must never be (AGL-2265) — see the
+ * note on `transferOrgOwnership`.
+ */
+function writeOwnershipMove(
+  tx: FirebaseFirestore.Transaction,
+  db: FirebaseFirestore.Firestore,
+  move: OwnershipMove,
+): void {
+  const { orgId, fromUid, toUid, previousOwner } = move
+  const orgRef = db.collection('orgs').doc(orgId)
+  tx.set(
+    orgRef,
+    { ownerUid: toUid, updatedAt: FieldValue.serverTimestamp() },
+    { merge: true },
+  )
+  tx.set(
+    orgRef.collection('members').doc(toUid),
+    { ...(move.newOwnerRow ?? {}), role: 'owner', allHosts: true },
+    { merge: true },
+  )
+  tx.set(
+    db.collection('users').doc(toUid).collection('orgs').doc(orgId),
+    // Both principals end up owner/admin, which is org-wide reach whatever
+    // they were before — a promoted site collaborator must lose the scoped
+    // console along with the scoped membership (AGL-1032).
+    { ...(move.newOwnerIndex ?? {}), role: 'owner', orgWide: true },
+    { merge: true },
+  )
+  if (previousOwner === 'stay') {
+    tx.set(
+      orgRef.collection('members').doc(fromUid),
+      { role: 'admin' },
+      { merge: true },
+    )
+    tx.set(
+      db.collection('users').doc(fromUid).collection('orgs').doc(orgId),
+      { role: 'admin', orgWide: true },
+      { merge: true },
+    )
+    return
+  }
+  // Leaving: the same three documents `removeOrgMember` deletes, inside this
+  // transaction so the org is never briefly without its outgoing owner AND
+  // without its incoming one.
+  tx.delete(orgRef.collection('members').doc(fromUid))
+  tx.delete(orgRef.collection(MEMBER_EMAIL_ALIASES_COLLECTION).doc(fromUid))
+  tx.delete(db.collection('users').doc(fromUid).collection('orgs').doc(orgId))
+}
+
+/**
+ * The projections an ownership move changes, after its transaction: the
+ * whole roster's auth projections, and each principal's host reverse index
+ * (the owner spans every host — AGL-844). A principal who left has theirs
+ * deleted, as `removeOrgMember` does.
+ */
+async function settleOwnershipMove(move: OwnershipMove): Promise<void> {
+  const { orgId, fromUid, toUid, previousOwner } = move
+  await syncOrgAuthProjections(orgId)
+  await Promise.all([
+    syncMemberHostProjections(orgId, toUid),
+    previousOwner === 'stay'
+      ? syncMemberHostProjections(orgId, fromUid)
+      : deleteMemberHostProjections(orgId, fromUid),
+  ])
+}
+
+/**
  * Transfers org ownership (AGL-232): the target must already be on the
  * roster; the previous owner steps down to admin. One transaction across
  * the org doc, both member docs and both reverse-index entries, then the
@@ -2181,6 +2347,7 @@ export async function transferOrgOwnership(
 ): Promise<void> {
   if (fromUid === toUid) throw new Error('Target already owns this org')
   const db = firestore()
+  const move: OwnershipMove = { orgId, fromUid, toUid, previousOwner: 'stay' }
   await db.runTransaction(async (tx) => {
     const orgRef = db.collection('orgs').doc(orgId)
     const orgSnapshot = await tx.get(orgRef)
@@ -2194,37 +2361,9 @@ export async function transferOrgOwnership(
     if (!target.exists) {
       throw new Error('The new owner must already be an org member')
     }
-    tx.set(
-      orgRef,
-      { ownerUid: toUid, updatedAt: FieldValue.serverTimestamp() },
-      { merge: true },
-    )
-    tx.set(targetRef, { role: 'owner', allHosts: true }, { merge: true })
-    tx.set(
-      orgRef.collection('members').doc(fromUid),
-      { role: 'admin' },
-      { merge: true },
-    )
-    tx.set(
-      db.collection('users').doc(toUid).collection('orgs').doc(orgId),
-      // Both principals end up owner/admin, which is org-wide reach whatever
-      // they were before — a promoted site collaborator must lose the scoped
-      // console along with the scoped membership (AGL-1032).
-      { role: 'owner', orgWide: true },
-      { merge: true },
-    )
-    tx.set(
-      db.collection('users').doc(fromUid).collection('orgs').doc(orgId),
-      { role: 'admin', orgWide: true },
-      { merge: true },
-    )
+    writeOwnershipMove(tx, db, move)
   })
-  await syncOrgAuthProjections(orgId)
-  // Both principals' host access changed (owner spans every host) — AGL-844.
-  await Promise.all([
-    syncMemberHostProjections(orgId, toUid),
-    syncMemberHostProjections(orgId, fromUid),
-  ])
+  await settleOwnershipMove(move)
   /*
    * A workspace changing hands is the highest-consequence thing that can
    * happen to an account, and until AGL-118 it left no trace anywhere: the
@@ -2264,6 +2403,322 @@ export async function transferOrgOwnership(
 }
 
 /**
+ * An owner handoff refused because it would need a team seat the plan does
+ * not have (AGL-3466).
+ *
+ * The loophole guard. A handoff reserves no seat, because the owner seat
+ * MOVES — but a `stay` handoff keeps the outgoing owner as an admin, so the
+ * workspace ends with one more manager than it started with. On Free that is
+ * a second manager on a one-seat plan, and without this check any owner could
+ * mint free managers by handing the workspace back and forth. The refusal
+ * names the way out: the outgoing owner leaving instead.
+ *
+ * Separate from {@link ManagerSeatLimitError} because the remedy is
+ * different, and a client that branches on `code` must be able to tell.
+ */
+export class OwnerHandoffSeatError extends Error {
+  readonly limit: number
+  readonly upgradeRequired: boolean
+  readonly previousOwner: OwnerHandoffPreviousOwner
+  constructor(
+    previousOwner: OwnerHandoffPreviousOwner,
+    quota: { limit: number; upgradeRequired: boolean },
+  ) {
+    super(
+      previousOwner === 'stay'
+        ? `Team seats full (${quota.limit}) — the current owner can't stay on ` +
+            'as an admin after the handoff without a seat of their own. ' +
+            'Choose "Leave after the handoff", or add a seat first.'
+        : `Team seats full (${quota.limit}) — the new owner needs a team ` +
+            'seat, and every seat is taken. Remove a member or add a seat first.',
+    )
+    this.name = 'OwnerHandoffSeatError'
+    this.limit = quota.limit
+    this.upgradeRequired = quota.upgradeRequired
+    this.previousOwner = previousOwner
+  }
+}
+
+/**
+ * An owner handoff that can no longer be accepted as asked (AGL-3466): the
+ * invite was answered or withdrawn in the meantime, is not a handoff, is
+ * addressed to somebody else, or the accepter already owns the workspace.
+ */
+export class OwnerHandoffError extends Error {
+  readonly reason: 'not-pending' | 'not-handoff' | 'not-addressed' | 'already-owner'
+  constructor(reason: OwnerHandoffError['reason']) {
+    super(
+      reason === 'not-pending'
+        ? 'This handoff was already answered or withdrawn.'
+        : reason === 'not-handoff'
+          ? 'This invitation does not hand the workspace over.'
+          : reason === 'not-addressed'
+            ? 'This handoff is for a different (or unverified) email.'
+            : 'You already own this workspace.',
+    )
+    this.name = 'OwnerHandoffError'
+    this.reason = reason
+  }
+}
+
+/**
+ * Turn a handoff refusal into the response the invite route returns, or
+ * null when the error is something else and must keep propagating.
+ */
+export function ownerHandoffRefusalResponse(error: unknown): Response | null {
+  if (error instanceof OwnerHandoffSeatError) {
+    return Response.json(
+      {
+        error: error.message,
+        code: 'owner_handoff_seat',
+        limit: error.limit,
+        upgradeRequired: error.upgradeRequired,
+        previousOwner: error.previousOwner,
+      },
+      { status: 403 },
+    )
+  }
+  if (error instanceof OwnerHandoffError) {
+    return Response.json(
+      { error: error.message, code: 'owner_handoff', reason: error.reason },
+      { status: error.reason === 'not-addressed' ? 403 : 409 },
+    )
+  }
+  return null
+}
+
+/**
+ * Does accepting this handoff leave the workspace with one more manager
+ * seat in use than it has now? (AGL-3466)
+ *
+ * The incoming owner takes the owner seat. That costs nothing when they are
+ * staff, or already hold a manager seat here. Otherwise it is one more seat —
+ * unless the outgoing owner LEAVES and frees one, which they only do if they
+ * held a seat to free: a staff owner leaving frees nothing.
+ */
+function handoffTakesManagerSeat(options: {
+  previousOwner: OwnerHandoffPreviousOwner
+  inviteeStaff: boolean
+  invitee: Partial<AglynOrgMember> | undefined
+  owner: Partial<AglynOrgMember> | undefined
+}): boolean {
+  const { previousOwner, inviteeStaff, invitee, owner } = options
+  const heldSeat = (row: Partial<AglynOrgMember> | undefined) =>
+    !!row && usesCustomerSeat(row) && isOrgWideMember(row)
+  if (inviteeStaff || heldSeat(invitee)) return false
+  return !(previousOwner === 'leave' && heldSeat(owner))
+}
+
+/**
+ * The seat check a handoff answers, at send and again at accept.
+ *
+ * Grandfathered the way every seat gate here is: only the transition is
+ * charged, so a handoff that leaves the seat count where it was is never
+ * refused, however far over its cap the workspace already is.
+ */
+async function assertOwnerHandoffSeat(options: {
+  orgRef: FirebaseFirestore.DocumentReference
+  org: Partial<AglynOrgBilling>
+  previousOwner: OwnerHandoffPreviousOwner
+  inviteeStaff: boolean
+  invitee: Partial<AglynOrgMember> | undefined
+  owner: Partial<AglynOrgMember> | undefined
+  self: SeatSelf
+  read: (query: FirebaseFirestore.Query) => Promise<FirebaseFirestore.QuerySnapshot>
+}): Promise<void> {
+  if (!handoffTakesManagerSeat(options)) return
+  const entries = await readSeatEntries(options.orgRef, options.read)
+  const used = countManagerSeatsExcluding(entries, options.self)
+  const quota = checkSeatQuota(options.org, 'managers', used)
+  if (!quota.allowed) throw new OwnerHandoffSeatError(options.previousOwner, quota)
+}
+
+/**
+ * The handoff seat check, asked when the invitation is SENT (AGL-3466), so
+ * nobody is mailed a handoff that will be refused when they click it.
+ *
+ * Not the enforcement — `acceptOwnerHandoff` asks again inside its
+ * transaction, against the account that actually accepts. Here the invitee
+ * is only an address, so their current seat is read off the roster row that
+ * carries it.
+ *
+ * @returns the 403 to send, or null to proceed.
+ */
+export async function ownerHandoffSeatRefusal(options: {
+  orgId: string
+  email: string
+  previousOwner: OwnerHandoffPreviousOwner
+  inviteeStaff: boolean
+}): Promise<Response | null> {
+  const { orgId, previousOwner, inviteeStaff } = options
+  const email = options.email.trim().toLowerCase()
+  const db = firestore()
+  const orgRef = db.collection('orgs').doc(orgId)
+  const orgSnapshot = await orgRef.get()
+  if (!orgSnapshot.exists) return null
+  const org = orgSnapshot.data() as AglynOrganization & Partial<AglynOrgBilling>
+  const ownerSnapshot = org.ownerUid
+    ? await orgRef.collection('members').doc(org.ownerUid).get()
+    : null
+  const roster = await orgRef.collection('members').where('email', '==', email).limit(1).get()
+  try {
+    await assertOwnerHandoffSeat({
+      orgRef,
+      org,
+      previousOwner,
+      inviteeStaff,
+      invitee: roster.empty
+        ? undefined
+        : (roster.docs[0].data() as Partial<AglynOrgMember>),
+      owner: ownerSnapshot?.exists
+        ? (ownerSnapshot.data() as Partial<AglynOrgMember>)
+        : undefined,
+      self: { email },
+      read: (query) => query.get(),
+    })
+  } catch (error) {
+    const refusal = ownerHandoffRefusalResponse(error)
+    if (refusal) return refusal
+    throw error
+  }
+  return null
+}
+
+export interface AcceptOwnerHandoffOptions {
+  orgId: string
+  inviteId: string
+  /** The account accepting, which becomes the owner. */
+  uid: string
+  /** The accepter's primary address, mirrored onto their roster row. */
+  email: string
+  /**
+   * Every CONFIRMED address on the accepting account (AGL-2486). The invite
+   * must be addressed to one of them, re-checked inside the transaction.
+   */
+  emails: readonly string[]
+  displayName?: string
+  photoURL?: string
+}
+
+export interface AcceptOwnerHandoffResult {
+  previousOwnerUid: string
+  previousOwner: OwnerHandoffPreviousOwner
+}
+
+/**
+ * Accept an owner handoff (AGL-3466): the invitee becomes the owner, the
+ * outgoing owner stays on as an admin or leaves, and the invite is marked
+ * accepted — all in ONE transaction, with the seat check inside it.
+ *
+ * The move itself is {@link writeOwnershipMove}, the same writes a transfer
+ * makes. What this adds is what an invitation needs that a transfer does not:
+ * the incoming owner may not be on the roster yet, so their row is created
+ * with the identity a join would give it; and the outgoing owner may leave.
+ *
+ * The SSO lockout check is the CALLER's, for the reason
+ * `assessOwnershipTransferLockout` gives: it cannot live in this library
+ * without an import cycle, and `sso-transfer-lockout-wiring.spec.ts` pins
+ * that every caller of this asks it first.
+ */
+export async function acceptOwnerHandoff(
+  options: AcceptOwnerHandoffOptions,
+): Promise<AcceptOwnerHandoffResult> {
+  const { orgId, inviteId, uid, email, displayName, photoURL } = options
+  const addresses = new Set(
+    [email, ...options.emails].map((address) => address.trim().toLowerCase()),
+  )
+  // The accepter's claim, read at accept rather than trusted from the send.
+  const inviteeStaff = await isStaffAccount(uid)
+  const db = firestore()
+  let move: OwnershipMove | null = null
+  let ownerEmail: string | null = null
+  await db.runTransaction(async (tx) => {
+    const orgRef = db.collection('orgs').doc(orgId)
+    const orgSnapshot = await tx.get(orgRef)
+    if (!orgSnapshot.exists) throw new Error(`Unknown org: ${orgId}`)
+    const org = orgSnapshot.data() as AglynOrganization & Partial<AglynOrgBilling>
+    const inviteRef = orgRef.collection('invites').doc(inviteId)
+    const inviteSnapshot = await tx.get(inviteRef)
+    const invite = inviteSnapshot.data() as
+      | (Record<string, unknown> & { handoff?: unknown })
+      | undefined
+    if (!inviteSnapshot.exists || !invite || invite['acceptedAt']) {
+      throw new OwnerHandoffError('not-pending')
+    }
+    const handoff = parseOwnerHandoff(invite.handoff)
+    if (invite['role'] !== 'owner' || !handoff) {
+      throw new OwnerHandoffError('not-handoff')
+    }
+    if (!addresses.has(String(invite['email'] ?? '').toLowerCase())) {
+      throw new OwnerHandoffError('not-addressed')
+    }
+    const fromUid = typeof org.ownerUid === 'string' ? org.ownerUid : ''
+    if (!fromUid) throw new Error(`Org ${orgId} has no owner to hand over`)
+    if (fromUid === uid) throw new OwnerHandoffError('already-owner')
+    const inviteeSnapshot = await tx.get(orgRef.collection('members').doc(uid))
+    const ownerSnapshot = await tx.get(orgRef.collection('members').doc(fromUid))
+    const invitee = inviteeSnapshot.data() as Partial<AglynOrgMember> | undefined
+    const owner = ownerSnapshot.data() as Partial<AglynOrgMember> | undefined
+    ownerEmail = typeof owner?.email === 'string' ? owner.email : null
+    await assertOwnerHandoffSeat({
+      orgRef,
+      org,
+      previousOwner: handoff.previousOwner,
+      inviteeStaff,
+      invitee,
+      owner,
+      self: { uid, email, emails: [...addresses] },
+      read: (query) => tx.get(query),
+    })
+    move = {
+      orgId,
+      fromUid,
+      toUid: uid,
+      previousOwner: handoff.previousOwner,
+      newOwnerRow: {
+        email,
+        ...(displayName !== undefined ? { displayName } : {}),
+        ...(photoURL !== undefined ? { photoURL } : {}),
+        ...staffSeatWrite(inviteeStaff, invitee),
+        ...(inviteeSnapshot.exists
+          ? {}
+          : {
+              hostAccess: {},
+              joinedAt: FieldValue.serverTimestamp(),
+              ...(typeof invite['invitedBy'] === 'string'
+                ? { invitedBy: invite['invitedBy'] }
+                : {}),
+            }),
+      },
+      newOwnerIndex: { orgName: org.name ?? null, slug: org.slug ?? null },
+    }
+    writeOwnershipMove(tx, db, move)
+    tx.set(
+      inviteRef,
+      { acceptedAt: FieldValue.serverTimestamp(), acceptedBy: uid },
+      { merge: true },
+    )
+  })
+  // Assigned inside the transaction, which has returned without throwing.
+  const settled = move as unknown as OwnershipMove
+  await settleOwnershipMove(settled)
+  // Both principals, as the transfer's row names them, written by the
+  // person who accepted — the only party who could make this happen.
+  await logOrgActivity(
+    orgId,
+    { uid, email },
+    settled.previousOwner === 'stay'
+      ? `Took over the workspace; ${ownerEmail ?? 'the previous owner'} stays on as an admin`
+      : `Took over the workspace; ${ownerEmail ?? 'the previous owner'} left it`,
+    { type: 'member', id: uid, name: email },
+  )
+  return {
+    previousOwnerUid: settled.fromUid,
+    previousOwner: settled.previousOwner,
+  }
+}
+
+/**
  * Grants (or updates) per-host access for a uid without disturbing an
  * existing membership's org role or allHosts flag (AGL-238: the host user
  * manager rides org membership). Creates a viewer membership scoped to
@@ -2280,6 +2735,8 @@ export async function grantHostAccess(options: {
   invitedBy?: string
 }): Promise<void> {
   const { orgId, uid, hostId, role, email, displayName, invitedBy } = options
+  // Platform staff take no collaborator seat either (AGL-3466).
+  const staffSeat = await isStaffAccount(uid)
   const db = firestore()
   await db.runTransaction(async (tx) => {
     const orgRef = db.collection('orgs').doc(orgId)
@@ -2288,6 +2745,7 @@ export async function grantHostAccess(options: {
     const org = orgSnapshot.data() as AglynOrganization
     const memberRef = orgRef.collection('members').doc(uid)
     const existing = await tx.get(memberRef)
+    const existingData = existing.data() as Partial<AglynOrgMember> | undefined
     // Collaborator seat cap (AGL-2068). This door DID meter, but against
     // `hosts/{hostId}/members` — a display roster only its own route writes,
     // so it could not see anyone admitted by invite or by `/api/orgs/members`
@@ -2303,12 +2761,15 @@ export async function grantHostAccess(options: {
       // precisely so it is not locked out, must not be re-classified into a
       // collaborator seat by the act of writing a host key onto it.
       hostIds: (() => {
-        const current = existing.data() as Partial<AglynOrgMember> | undefined
-        if (existing.exists && isOrgWideMember(current)) return []
-        if (current?.hostAccess?.[hostId]) return []
+        if (existing.exists && isOrgWideMember(existingData)) return []
+        // A stamped row held no seat on this site, so keeping it after the
+        // claim is gone takes one now (AGL-3466).
+        if (usesCustomerSeat(existingData) && existingData?.hostAccess?.[hostId]) {
+          return []
+        }
         return [hostId]
       })(),
-      self: { uid, email },
+      self: { uid, email, staffSeat },
       read: (query) => tx.get(query),
     })
     tx.set(
@@ -2322,6 +2783,7 @@ export async function grantHostAccess(options: {
               joinedAt: FieldValue.serverTimestamp(),
             }),
         hostAccess: { [hostId]: role },
+        ...staffSeatWrite(staffSeat, existingData),
         ...(email !== undefined ? { email } : {}),
         ...(displayName !== undefined ? { displayName } : {}),
         ...(invitedBy ? { invitedBy } : {}),

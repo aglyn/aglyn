@@ -423,7 +423,12 @@ export function renderEmailHtml(options: EmailRenderOptions): RenderedEmail {
     const resolved = resolveEmailMediaSrc(subUrl(value), mediaHostId)
     if (!resolved || !hasSafeMediaScheme(resolved)) return undefined
     if (!resolved.startsWith('/') || resolved.startsWith('//')) return resolved
-    return origin ? `${origin}${resolved}` : undefined
+    if (origin) return `${origin}${resolved}`
+    // A Storage download URL resolves to the CDN path (AGL-3506). With no
+    // origin to send it from, the absolute URL it already was still fetches,
+    // which beats dropping the picture.
+    const stored = subUrl(value)
+    return stored && /^https:\/\//i.test(stored) ? stored : undefined
   }
 
   const renderChildren = (ids: string[] | undefined): string =>

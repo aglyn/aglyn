@@ -181,10 +181,16 @@ jest.mock('@aglyn/aglyn/server', () => ({
   ...jest.requireActual(
     '../../../libs/aglyn/src/lib/foundation/definitions/contact.types',
   ),
+  createResourceUid: () => `id_${++mockUidSeq}`,
+}))
+
+// The data plugin's dataset model, as the dataset handlers read it
+// (AGL-3080: the model is the data plugin's own).
+jest.mock('../../../libs/plugins/data/src/lib/model/dataset-models', () => ({
+  ...jest.requireActual('../../../libs/plugins/data/src/lib/model/dataset-models'),
   effectiveDatasetModel: () => ({ fields: [] }),
   coerceDocumentValues: (_m: unknown, v: Record<string, unknown>) => v,
   validateDocument: () => ({}),
-  createResourceUid: () => `id_${++mockUidSeq}`,
 }))
 
 jest.mock('firebase-admin/firestore', () => {
@@ -208,27 +214,20 @@ jest.mock('firebase-admin/firestore', () => {
 /*
  * The lead door (AGL-3231): `POST /v1/leads` writes through the real
  * `addHostLead`, so the create is judged on what the door leaves — the
- * person-key id, the `capturedByHostIds` stamp, no basis. Its two side
- * effects on the way past are stubbed: no campaign touch travels with an
- * API create, and nothing here trips the platform ceiling.
+ * person-key id, the `capturedByHostIds` stamp, no basis. Its side effect on
+ * the way past is stubbed: nothing here trips the platform ceiling. No
+ * touch travels with an API create, so nothing is credited.
  */
-jest.mock(
-  '../../../libs/tenant/data/admin/src/lib/server/campaign-conversion-attribution',
-  () => ({
-    __esModule: true,
-    attributeCampaignConversion: jest.fn(async () => undefined),
-  }),
-)
 jest.mock('../../../libs/tenant/data/admin/src/lib/server/notifications', () => ({
   __esModule: true,
   notifyHostManagers: jest.fn(async () => undefined),
 }))
 
-jest.mock('../../../libs/tenant/runtime/src/lib/capture-host-contact', () => ({
+jest.mock('../../../libs/plugins/crm/src/lib/server/capture-host-contact', () => ({
   __esModule: true,
   captureHostContact: (...args: unknown[]) => mockCapture(...args),
 }))
-jest.mock('../../../libs/tenant/runtime/src/lib/assign-contact-owner', () => ({
+jest.mock('../../../libs/plugins/crm/src/lib/server/assign-contact-owner', () => ({
   __esModule: true,
   assignOwnerForCapture: (...args: unknown[]) => mockAssignOwner(...args),
   notifyRecordAssigned: (...args: unknown[]) => mockNotifyAssigned(...args),
@@ -475,6 +474,7 @@ describe('GET /v1/leads', () => {
       email: 'ann@acme.com',
       name: 'Ann Lee',
       status: 'new',
+      statusLabel: 'New',
       ownerUid: null,
       notes: null,
       unqualifiedReason: null,
@@ -485,6 +485,18 @@ describe('GET /v1/leads', () => {
       address: null,
       tags: [],
       leadSource: null,
+      // Salesforce's standard lead fields (AGL-3513).
+      salutation: null,
+      firstName: null,
+      lastName: null,
+      mobilePhone: null,
+      fax: null,
+      doNotCall: false,
+      industry: null,
+      rating: null,
+      annualRevenueCents: null,
+      currency: 'usd',
+      numberOfEmployees: null,
       sources: ['signup'],
       submissionCount: 1,
       firstSeen: new Date(2_000).toISOString(),
@@ -579,8 +591,9 @@ describe('PATCH /v1/leads/{id}', () => {
       status: expect.stringContaining('POST /v1/leads/{id}/convert'),
     })
     const unknown = await patch('lead-a', { status: 'hot', email: 'x@y.z' })
+    // Named by the org's labels (AGL-3512) — the standard ones here.
     expect((await json(unknown)).error.fields).toEqual({
-      status: 'Must be one of: new, nurturing, working, unqualified',
+      status: 'Lead status must be one of: New, Nurturing, Working, Unqualified.',
       email: 'Not writable on a lead',
     })
     expect(mockDocs.get(`${LEADS}/lead-a`)?.status).toBeUndefined()
@@ -591,6 +604,22 @@ describe('PATCH /v1/leads/{id}', () => {
     const moved = await json(await patch('lead-a', { status: 'nurturing' }))
     expect(moved).toMatchObject({ status: 'nurturing' })
     expect(mockDocs.get(`${LEADS}/lead-a`)?.status).toBe('nurturing')
+  })
+
+  it('takes one of the org’s own lead status values by its label, storing its meaning beside it (AGL-3512)', async () => {
+    mockDocs.set('orgs/org-1/crmPicklists/leadStatus', {
+      values: [
+        { id: 'contacted', label: 'Contacted', active: true, meaning: 'working' },
+        { id: 'won', label: 'Won', active: true, meaning: 'qualified' },
+      ],
+      defaultValueId: null,
+    })
+    const moved = await json(await patch('lead-a', { status: 'contacted' }))
+    expect(moved).toMatchObject({ status: 'working', statusLabel: 'Contacted' })
+    expect(mockDocs.get(`${LEADS}/lead-a`)).toMatchObject({ status: 'working', statusLabel: 'Contacted' })
+    // A Qualified value is a conversion's, by whatever name.
+    const won = await patch('lead-a', { status: 'Won' })
+    expect((await json(won)).error.fields.status).toContain('POST /v1/leads/{id}/convert')
   })
 
   it('writes the status and the notes, stamps updated, and clears a note with null', async () => {
@@ -767,8 +796,9 @@ describe('POST /v1/leads', () => {
       leadSource: 'Old list',
     })
     expect(refused.status).toBe(400)
+    // The org's own values first, then every standard value it has not stored.
     expect(JSON.stringify(await json(refused))).toContain(
-      'Lead source must be one of: Outbound · Apollo, Website form.',
+      'Lead source must be one of: Outbound · Apollo, Website form, Phone inquiry, ',
     )
     expect(all(LEADS).filter((lead) => lead.email === 'kit@acme.com')).toEqual([])
     const matched = await json(
@@ -804,6 +834,21 @@ describe('POST /v1/leads', () => {
     expect(lead.name).toBe('Ann Lee')
     expect(lead.sources).toEqual(['signup', 'api'])
     expect(lead.submissionCount).toBe(2)
+  })
+
+  it("keeps the name a held lead's first and last names make, whatever a create calls it (AGL-3513)", async () => {
+    const { personKey } = jest.requireActual('../../../libs/aglyn/src/lib/app-utils/person-key')
+    const id = personKey('ann@acme.com')
+    mockDocs.set(
+      `${LEADS}/${id}`,
+      captured('ann@acme.com', 3_000, { name: 'Ann Lee', firstName: 'Ann', lastName: 'Lee' }),
+    )
+    const response = await call('POST', `leads?siteId=${HOST}`, {
+      email: 'ann@acme.com',
+      name: 'Annie',
+    })
+    expect(response.status).toBe(200)
+    expect((await json(response)).name).toBe('Ann Lee')
   })
 
   it('refuses a malformed body by the field, before any write', async () => {
@@ -867,6 +912,66 @@ describe('PATCH /v1/leads/{id} — the profile', () => {
     })
     expect(response.status).toBe(400)
     expect(Object.keys((await json(response)).error.fields).sort()).toEqual(['phone', 'website'])
+  })
+
+  /*
+   * SALESFORCE'S STANDARD LEAD FIELDS (AGL-3513): Salutation, Industry and
+   * Rating held to the org's lists, the name composed from its parts, and
+   * the rest normalized as the contact and the company store them.
+   */
+  it("writes the standard fields, judging the picklists and composing the name (AGL-3513)", async () => {
+    mockDocs.set(`${LEADS}/lead-a`, captured('ann@acme.com', 3_000, { name: 'Ann Lee' }))
+    const response = await call('PATCH', `leads/lead-a?siteId=${HOST}`, {
+      salutation: 'ms.',
+      firstName: 'Ann',
+      lastName: 'Leigh',
+      mobilePhone: '5125550108',
+      doNotCall: true,
+      industry: 'banking',
+      rating: 'warm',
+      annualRevenueCents: 50_000_00,
+      currency: 'GBP',
+      numberOfEmployees: 12,
+    })
+    expect(response.status).toBe(200)
+    expect(await json(response)).toMatchObject({
+      name: 'Ann Leigh',
+      salutation: 'Ms.',
+      firstName: 'Ann',
+      lastName: 'Leigh',
+      mobilePhone: '+15125550108',
+      doNotCall: true,
+      industry: 'Banking',
+      rating: 'Warm',
+      annualRevenueCents: 50_000_00,
+      currency: 'gbp',
+      numberOfEmployees: 12,
+    })
+    // Clearing a part recomposes; `false` clears Do not call.
+    const cleared = await json(
+      await call('PATCH', `leads/lead-a?siteId=${HOST}`, { firstName: null, doNotCall: false }),
+    )
+    expect(cleared).toMatchObject({ name: 'Leigh', firstName: null, doNotCall: false })
+    expect(mockDocs.get(`${LEADS}/lead-a`)).not.toHaveProperty('doNotCall')
+  })
+
+  it('refuses a picklist value the org lacks and a flag that is not one, by the field', async () => {
+    mockDocs.set(`${LEADS}/lead-a`, captured('ann@acme.com', 3_000))
+    const response = await call('PATCH', `leads/lead-a?siteId=${HOST}`, {
+      rating: 'Freezing',
+      doNotCall: 'yes',
+      numberOfEmployees: -1,
+    })
+    expect(response.status).toBe(400)
+    expect(Object.keys((await json(response)).error.fields).sort()).toEqual([
+      'doNotCall',
+      'numberOfEmployees',
+    ])
+    const picklist = await call('PATCH', `leads/lead-a?siteId=${HOST}`, { rating: 'Freezing' })
+    expect(picklist.status).toBe(400)
+    expect((await json(picklist)).error.fields).toEqual({
+      rating: 'Rating must be one of: Hot, Warm, Cold.',
+    })
   })
 })
 
@@ -990,6 +1095,10 @@ describe('POST /v1/leads/{id}/convert', () => {
       'deal.stageId': 'Must be a stage id',
       notes: 'Not writable on a conversion',
     })
+    const type = await convert('lead-a', { deal: { title: 'Acme', type: 'Upsell' } })
+    expect((await json(type)).error.fields).toEqual({
+      'deal.type': 'Type must be one of: Existing Business, New Business.',
+    })
     const domain = await convert('lead-a', { company: { create: { name: 'Acme', domain: 'acme' } } })
     expect((await json(domain)).error.fields).toEqual({
       'company.create.domain': 'Must be a domain, like acme.com',
@@ -1001,7 +1110,7 @@ describe('POST /v1/leads/{id}/convert', () => {
   it('converts through the console’s own function: contact, company, deal, then the lead', async () => {
     const response = await convert('lead-a', {
       company: { create: { name: '  Acme Coffee ', domain: 'https://www.Acme.com/about' } },
-      deal: { title: 'Acme — first order', amountCents: 12_500, currency: 'USD' },
+      deal: { title: 'Acme — first order', amountCents: 12_500, currency: 'USD', type: 'new business' },
     })
     expect(response.status).toBe(201)
     const receipt = await json(response)
@@ -1041,8 +1150,11 @@ describe('POST /v1/leads/{id}/convert', () => {
     expect(deal).toMatchObject({
       title: 'Acme — first order',
       pipelineId: pipeline.id,
-      stageId: 'qualified',
+      stageId: 'prospecting',
       status: 'open',
+      // The Type as the org's list spells it, and the stage's forecast (AGL-3516).
+      type: 'New Business',
+      forecastCategory: 'pipeline',
       amountCents: 12_500,
       currency: 'usd',
       contactId: contact.id,

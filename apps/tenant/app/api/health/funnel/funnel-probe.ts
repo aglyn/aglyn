@@ -59,9 +59,13 @@
  * reachability and authorization WITHOUT committing the write.
  *
  * Concretely, it runs every gate `/api/forms/submit` runs before its first
- * write, through the same shared functions the route calls, and grades the
- * verdicts. If this says the next submission would be accepted and routed,
- * it is because the real predicates said so about the real documents.
+ * write — the platform's (lockdown, who would be told) itself, and the forms
+ * plugin's (the site's Forms switch, the plan's allowance, the flood
+ * ceiling) through the intake gate that plugin registers for the `form` door
+ * (`plugin-intake-gates`), which evaluates the route's own predicates — and
+ * grades the verdicts. If this says the next submission would be accepted and
+ * routed, it is because the real predicates said so about the real
+ * documents.
  *
  * ## What it therefore does NOT prove
  *
@@ -73,12 +77,21 @@
  *
  * ## Cost
  *
- * One alias query, one host document, one org document, one counter document
- * and one small collection read of the host's forms, memoised per instance
+ * One alias query, one host document, one org document, the form door's own
+ * reads (its month counter) and one small collection read of the host's
+ * forms, memoised per instance
  * for `PROBE_TTL_MS`. The endpoint is public, so that memo is what bounds
  * what anyone can make it spend.
  */
 import * as Aglyn from '@aglyn/aglyn/server'
+// The registries' own modules: the form door's gates are the plugin's that
+// keeps the door (AGL-3080).
+import {
+  pluginIntakeGate,
+  type PluginIntakeRequest,
+  type PluginIntakeVerdict,
+} from '@aglyn/aglyn/plugin-manager/plugin-intake-gates'
+import { runPluginDeclarationsRepair } from '@aglyn/aglyn/plugin-manager/plugin-declarations-repair'
 import {
   firebaseAdmin,
   getOrgForHost,
@@ -187,6 +200,23 @@ export async function probeFunnel(
   return { intake, routing }
 }
 
+/** The door a form submission comes through, as lockdown and the gates name it. */
+const FORM_DOOR = 'form' as const
+
+/**
+ * What the form door's own gates would answer a submission now, from the
+ * plugin that keeps the door. A process whose boot failed runs the app's
+ * declarations step once and asks again; no plugin keeping the door is a
+ * door that takes nothing, which is what a site with Forms off is.
+ */
+async function formDoorVerdict(request: PluginIntakeRequest): Promise<PluginIntakeVerdict> {
+  let door = pluginIntakeGate(FORM_DOOR)
+  if (!door && (await runPluginDeclarationsRepair().catch(() => false))) {
+    door = pluginIntakeGate(FORM_DOOR)
+  }
+  return door ? door.gate(request) : 'switched-off'
+}
+
 /**
  * Every gate `/api/forms/submit` clears before its first write, in the order
  * the route clears them, through the same functions.
@@ -204,14 +234,13 @@ async function probeIntake(
   try {
     const firestore = firebaseAdmin.app().firestore()
     const hostRef = firestore.collection('hosts').doc(hostId)
-    const [hostSnapshot, paused, owningOrg, counterSnapshot] = await Promise.all([
+    const [hostSnapshot, paused, owningOrg] = await Promise.all([
       hostRef.get(),
       // `intent: 'write'` rather than a request, because there is no visitor
       // request here and the gate must be asked the question a submission
       // would ask it, not the one a GET would.
-      visitorWriteRefusal({ hostId, intent: 'write', surface: 'form' }),
+      visitorWriteRefusal({ hostId, intent: 'write', surface: FORM_DOOR }),
       getOrgForHost(hostId),
-      hostRef.collection('counters').doc('formSubmissions').get(),
     ])
     const memberRoles =
       (hostSnapshot.get('memberRoles') as Record<string, string> | undefined) ?? {}
@@ -221,23 +250,20 @@ async function probeIntake(
       (role) => role === 'admin' || role === 'editor',
     ).length
     if (paused) return funnelIntakeHealth({ kind: 'paused' }, recipients, elapsed())
-    const orgBilling = owningOrg?.org
-    // The site's Forms switch (AGL-3029), asked the way the route asks it: a
-    // form's door, against the org's set minus this host's deny-list.
-    if (
-      !Aglyn.isHostPluginEnabled(
-        orgBilling as never,
-        hostSnapshot.data() as never,
-        Aglyn.formSubmissionDoorPlugin({}),
-      )
-    ) {
+    // The door's own gates, in the order the route clears them: the site's
+    // Forms switch (AGL-3029), the plan's allowance, the flood ceiling.
+    const verdict = await formDoorVerdict({
+      hostId,
+      host: hostSnapshot.data(),
+      org: owningOrg?.org as Record<string, unknown> | undefined,
+    })
+    if (verdict === 'switched-off') {
       return funnelIntakeHealth({ kind: 'forms-off' }, recipients, elapsed())
     }
-    const used = Number(counterSnapshot.get(Aglyn.submissionMonthKey()) ?? 0)
-    if (!Aglyn.checkFormSubmissionQuota(orgBilling as never, used).allowed) {
+    if (verdict === 'plan-exhausted') {
       return funnelIntakeHealth({ kind: 'quota-exhausted' }, recipients, elapsed())
     }
-    if (Aglyn.checkFormSubmissionAbuseCeiling(orgBilling as never, used).exceeded) {
+    if (verdict === 'flood-ceiling') {
       return funnelIntakeHealth({ kind: 'ceiling-tripped' }, recipients, elapsed())
     }
     if (recipients <= 0) {

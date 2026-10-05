@@ -183,11 +183,25 @@ function mockCollection(path: string): any {
 const mockFirestore: any = {
   collection: (name: string) => mockCollection(name),
   doc: (path: string) => mockDocRef(path),
+  // The run meter's one write: the site's counter and the workspace's.
+  batch: () => {
+    const writes: Array<() => Promise<void>> = []
+    return {
+      set: (ref: any, data: any, options?: { merge?: boolean }) => {
+        writes.push(() => ref.set(data, options))
+      },
+      commit: async () => {
+        for (const write of writes) await write()
+      },
+    }
+  },
   runTransaction: async (body: (transaction: any) => Promise<any>) =>
     await body({
       get: async (ref: any) => await ref.get(),
-      set: async (ref: any, data: any) => {
-        await ref.set(data)
+      getAll: async (...refs: any[]) =>
+        await Promise.all(refs.map((ref) => ref.get())),
+      set: async (ref: any, data: any, options?: { merge?: boolean }) => {
+        await ref.set(data, options)
       },
       update: async (ref: any, patch: any) => {
         await ref.update(patch)
@@ -217,28 +231,9 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   orgDataQueryForHost: async () => ({ ref: mockCollection(`orgs/${ORG_ID}/contacts`) }),
 }))
 
-jest.mock('@aglyn/tenant-data-admin/server/dataset-live-pages', () => ({
-  __esModule: true,
-  announceDatasetRecordChange: async () => undefined,
-}))
-
 jest.mock('@aglyn/tenant-data-admin/server/contact-email-index', () => ({
   __esModule: true,
   findContactByEmail: async () => null,
-}))
-
-jest.mock('@aglyn/tenant-runtime/resolve-dataset', () => ({
-  __esModule: true,
-  resolveDatasetDoc: async () => null,
-}))
-
-// The CRM steps are held to their own suites; here a CRM write is a line in
-// the run history, and the email's timeline row is somebody else's question.
-jest.mock('./crm-action-steps', () => ({
-  __esModule: true,
-  prepareCrmEmailActivity: async () => null,
-  logCrmEmailActivity: async () => undefined,
-  runCrmActionStep: async () => ({ detail: 'tagged' }),
 }))
 
 jest.mock('@aglyn/shared-util-email', () => {
@@ -274,6 +269,9 @@ const enrollmentsOf = (hostId: string) =>
 const monthKey = new Date().toISOString().slice(0, 7)
 const actionRuns = (hostId: string) =>
   Number(mockDocs.get(`hosts/${hostId}/counters/actionRuns`)?.[monthKey] ?? 0)
+/** The workspace's action runs — the figure the band is held to (AGL-3472). */
+const workspaceActionRuns = () =>
+  Number(mockDocs.get(`orgs/${ORG_ID}/counters/actionRuns`)?.[monthKey] ?? 0)
 
 /** An org automation as the save route stores one. */
 function seedOrgAutomation(
@@ -480,7 +478,7 @@ describe('what asking costs', () => {
   })
 })
 
-describe('one meter, the site’s', () => {
+describe('one meter, the site’s, inside one band, the workspace’s', () => {
   function seedSiteAction(): void {
     mockDocs.set(`hosts/${SITE}/actions/site-action-1`, {
       name: 'Site welcome',
@@ -501,6 +499,7 @@ describe('one meter, the site’s', () => {
       'Welcome',
     ])
     expect(actionRuns(SITE)).toBe(2)
+    expect(workspaceActionRuns()).toBe(2)
   })
 
   it('never lets the organization’s automations stop the site’s own', async () => {
@@ -509,6 +508,7 @@ describe('one meter, the site’s', () => {
     // Room for exactly one more run this month.
     const limit = 1000
     mockOrg = { plan: 'pro', entitlements: { actionRunsPerMonth: limit } }
+    mockDocs.set(`hosts/${SITE}`, { orgId: ORG_ID })
     mockDocs.set(`hosts/${SITE}/counters/actionRuns`, { [monthKey]: limit - 1 })
 
     await runEventActions(SITE, 'formSubmission', { email: 'a@b.co' })
@@ -516,6 +516,33 @@ describe('one meter, the site’s', () => {
     // The site's action fits and runs; the org automation would go over.
     expect(mockSent.map((message) => message.subject)).toEqual(['From the site'])
     expect(actionRuns(SITE)).toBe(limit)
+    expect(workspaceActionRuns()).toBe(limit)
+  })
+
+  it('spends one band across the sites: a sibling’s runs leave this site less', async () => {
+    seedSiteAction()
+    seedOrgAutomation('org-auto-1')
+    const limit = 1000
+    mockOrg = { plan: 'pro', entitlements: { actionRunsPerMonth: limit } }
+    // This site has run nothing this month; its sibling has run all but one
+    // of the workspace's runs. The workspace's counter is seeded from both.
+    mockDocs.set(`hosts/${SITE}`, { orgId: ORG_ID })
+    mockDocs.set(`hosts/${SIBLING}`, { orgId: ORG_ID })
+    mockDocs.set(`hosts/${SIBLING}/counters/actionRuns`, { [monthKey]: limit - 1 })
+
+    await runEventActions(SITE, 'formSubmission', { email: 'a@b.co' })
+
+    // One run was left, so the site's own action takes it and the org
+    // automation does not run — on a site whose own counter read 0.
+    expect(mockSent.map((message) => message.subject)).toEqual(['From the site'])
+    expect(actionRuns(SITE)).toBe(1)
+    expect(workspaceActionRuns()).toBe(limit)
+
+    // And the band is spent for this site too: nothing more runs.
+    mockSent = []
+    await runEventActions(SITE, 'formSubmission', { email: 'c@d.co' })
+    expect(mockSent).toEqual([])
+    expect(workspaceActionRuns()).toBe(limit)
   })
 })
 

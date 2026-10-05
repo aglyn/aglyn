@@ -54,7 +54,7 @@ Three findings dominate everything else in this document:
    (`libs/plugins/commerce/src/lib/server/membership-register.ts:169`,
    `libs/plugins/bookings/src/lib/server.ts:634` and `:653`). The form-submit
    route calls `upsertHostContact` and never `addHostLead`
-   (`apps/tenant/app/api/forms/submit/route.ts:363-375`). A lead-capture form
+   (`libs/plugins/forms/src/lib/server/form-submit.ts:363-375`). A lead-capture form
    — the thing the endpoint's own docblock calls itself, "Lead-capture
    submissions endpoint (AGL-76)" — has never created a lead.
 
@@ -87,9 +87,9 @@ before a reusable form can honestly claim to capture leads.
 | Honeypot | :371-378 | `name="website"`, `tabIndex={-1}`, off-canvas at `left: -5000px`. |
 | Field→dataset mapping | :525-532, `FIELD_MAP_INPUT_PREFIX = '__map__'` (:85) | A hidden input per mapped field carries `datasetFieldId`; the route re-validates every id against the dataset model and drops unknowns. |
 | After-submit outcomes | `FormProps` :47-77 | `message \| redirect \| reveal`, with `sanitizeRedirectUrl` (:102) refusing anything that is not https-absolute or same-origin. |
-| Submit endpoint | `apps/tenant/app/api/forms/submit/route.ts` | Honeypot drop + count → shape validation (`MAX_FIELDS = 20`, `MAX_PAYLOAD_CHARS = 10000`) → per-(site, IP) rate limit 10/60s → host exists → lockdown → plan quota → abuse ceiling → write → contact → dataset → counter → notify → event. |
+| Submit endpoint | `libs/plugins/forms/src/lib/server/form-submit.ts` | Honeypot drop + count → shape validation (`MAX_FIELDS = 20`, `MAX_PAYLOAD_CHARS = 10000`) → per-(site, IP) rate limit 10/60s → host exists → lockdown → plan quota → abuse ceiling → write → contact → dataset → counter → notify → event. |
 | Submission document | route :332-360 | `formName`, `path`, `fields` (keys ≤ 64 chars, values ≤ 2000), `read`, `createdAt`, optional `rateDegraded`, optional `routing.dataset { id, name, recordId }`. |
-| Containment, fully built | `libs/aglyn/src/lib/app-utils/plan-entitlements.ts:3384-3440`, `form-abuse-ceiling.ts` | `FORM_ABUSE_CEILING_MULTIPLE = 10`, `FORM_ABUSE_CEILING_FLOOR = 5_000`, `FORM_ABUSE_CEILING_UNLIMITED = 1_000_000`, counted per site per month, with a refusal counter, a manager notification on the month's first trip, and a visitor-facing fallback address. |
+| Containment, fully built | `libs/aglyn/src/lib/app-utils/plan-entitlements.ts:3384-3440`, the forms plugin's `model/form-unavailable.ts` and its `visitorDoors` declaration | `FORM_ABUSE_CEILING_MULTIPLE = 10`, `FORM_ABUSE_CEILING_FLOOR = 5_000`, `FORM_ABUSE_CEILING_UNLIMITED = 1_000_000`, counted per site per month, with a refusal counter, a manager notification on the month's first trip, and a visitor-facing fallback address. |
 | Metered, not walled, on paid plans | `checkFormSubmissionQuota` :3368-3382 | `allowed: metered ? true : used < included`. Free hard-walls at `formSubmissionsPerMonth` (20); every plan carrying `meteredInfraPassThrough` accepts and bills the excess. |
 | Inbox, ordered and paged | `libs/plugins/inbox/src/lib/components/inbox-console-page.tsx:120-138` | `orderBy('createdAt', 'desc')` + `usePagedCollection`. The docblock records that this was `limit(200)` with no `orderBy` and a client sort on top, and names why the missing rows left no visible gap. |
 | Sender presentation | `libs/plugins/inbox/src/lib/model/submission-presenter.ts` | Avatar, initials, deterministic hue, relative time. |
@@ -394,6 +394,38 @@ Preview and the published page all run:
   offers the same parts (both under *Change it on this page only*, AGL-3288). A page may change a field's label or
   placeholder, the submit button's text and the success message.
 
+**The form's own root settings render on every placement (AGL-3494).** A
+published design's root is the `form` node naming the form (publish unwraps the
+canvas root), and the graft unwraps that root onto the placement. The props the
+placement renders are the design root's — submit label, success message, caption,
+after-submit outcome, dataset binding — with the placement's own props laid over
+them **one prop at a time**, and only the ones it sets: `undefined`, `null` and
+`''` say nothing, `false` and `0` are kept. The `root` attribute slice goes over
+both, last. `sx` merges the same way (`mergeNodeSx`: design root with the `root`
+style slice, then the placement's own), classes and interactions join with the
+design root's first, and a design-internal `revealNodeId` is renamed to its
+grafted id. So a placement that set nothing follows the form, and one saved with
+its own copies (every placement from before this) keeps rendering them.
+`placementPropsOverRoot` in `compose-reusable-components.ts` is the merge.
+
+Because a placement's own prop is an override, what a `form` node merely STARTED
+with must not survive the moment it becomes a placement: the Contact Section
+preset seeds *Send message* and a thank-you line, the Contact Form preset a
+caption. Picking a form in the Attributes panel therefore drops
+`FORM_ENTITY_OWNED_PROPS` from the node (`formPropsOnBind` in `forms.ts`); only
+a change of `formId` does this, so an existing placement keeps what it carries.
+
+A design whose root is a container (the form node one level down) is grafted
+like an instance: the container takes the placement's place and the inner form
+node renders the design's own props. The placement's form props have no element
+to land on there, and are not moved onto the inner node, so no existing
+placement changes what it shows.
+
+A reusable-component instance is unchanged: its root is never the instance's
+own component, so the instance's props are bookkeeping (`refId`, `name`,
+`propValues`) and the definition root's props already render, with the
+instance's `sx` over the root's.
+
 What a page may **not** change is anything that alters what the form submits.
 `PLACED_FORM_REFUSED_ATTR_PROPS` in `compose-reusable-components.ts` is the
 list — `formId`, `formName`, the dataset binding, the after-submit outcome, and
@@ -659,7 +691,7 @@ the shape `tools/scripts/backfills/` already uses, and never in a request path.
 | **Views** | `forms/{formId}.stats.views`, incremented by the analytics beacon | **one extra write per rendered form** — see 5b |
 | **Starts** | `stats.starts`, from the same beacon on a visitor's first edit | one extra write per form a visitor types into |
 | **Completion / abandonment / lead rate** | computed in the browser from counters already on the one document the page reads | zero |
-| **Per-month series** | `stats.periods['YYYY-MM']`, the same four counters keyed by `submissionMonthKey()`, riding the same writes | **zero** — a document write is priced per write, not per field |
+| **Per-month series** | `stats.periods['YYYY-MM']`, the same four counters keyed by `utcMonthKey()`, riding the same writes | **zero** — a document write is priced per write, not per field |
 
 ⚠️ **The rates are taken over the months the denominator was recorded in, not
 over the lifetime totals.** `submissions` has counted since the form entity

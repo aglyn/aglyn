@@ -104,6 +104,7 @@ Each field offers what the list's query can answer:
 | **Owner**, **Stage** | **is** one, or **is any of** several. **Owner** offers **Me** first. |
 | **Source** | **is** one, or **is any of** several. |
 | **Company** | **is** one. |
+| **Lead source** | **is** one of your [lead source values](./custom-fields.md#picklist-values), **is any of** several, or **is not empty**. |
 | A custom field | **is** a choice, or **is any of** several, for a choice field; **equals** and **is not empty** for text; **=** and **is not empty** for a number; **is not empty** for a date; **is** ticked or not for a checkbox. |
 
 **Search** finds a person by a word of their name, their email addresses or
@@ -116,13 +117,13 @@ some letters, each order the list by their own field, so each stands on its
 own: with another filter or the search beside it, it is not applied, and the
 notice says so. **Last activity** combines with anything.
 
-Under a site, the owner, stage, source, company, tags, custom-field and orders
+Under a site, the owner, stage, source, company, lead source, tags, custom-field and orders
 filters read that site's own record of the person; at the organization level,
 they match on any site's record.
 
 Only one of these filters stands at a time: a name **contains** word,
 **Tags**, **Form ID**, one of the other per-site fields — Owner, Stage,
-Source, Company, a custom field, Orders or Lifetime value — or the search.
+Source, Company, Lead source, a custom field, Orders or Lifetime value — or the search.
 A second one is not applied, and the notice says so. Under a site, the
 site's own narrowing already holds that one place, so a name **contains**
 word is not applied there — use **starts with**, or the search; Tags, Form
@@ -138,8 +139,8 @@ footer to turn the page.
 
 ## Filters on the other lists
 
-- **Leads** — Status, Email, Owner and Lead source (one, or any of several)
-  and Campaign (one); the search
+- **Leads** — Status, Email, Owner, Lead source and Lead source direction
+  (one, or any of several) and Campaign (one); the search
   finds a lead by a word of its name, email address, company, title or tags.
   **Campaign** and the search cannot be combined. See
   [the leads list](./leads.md#filter-the-leads).

@@ -18,9 +18,19 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
+  registerInteractionRecipes,
+  resetInteractionRecipesForTests,
+} from '../plugin-manager/interaction-recipes'
+import {
+  CLIENT_ACTION_STEP_TYPES,
+  CLIENT_INTERACTION_STEP_LABELS,
   declaredInteractionStep,
   declaredInteractionSteps,
   type InteractionStepDeclaration,
+  interactionStepHolds,
+  interactionStepLabel,
+  interactionStepsForClient,
+  interactionStepTypedFields,
   isClientActionStep,
   type SiteInteraction,
   type InteractionStepBase,
@@ -136,5 +146,91 @@ describe('a plugin’s step', () => {
     for (const step of declaredInteractionSteps()) {
       expect(source).not.toContain(`'${step.picks?.collection}'`)
     }
+  })
+})
+
+/** A plugin's step that holds the run, as a declaration names it. */
+const REST: InteractionStepDeclaration = {
+  pluginId: 'cellar',
+  type: 'restDough',
+  label: 'Let the dough rest',
+  offered: false,
+  holds: { minMinutes: 5, maxMinutes: 600, timeoutField: '_restedOut' },
+  typedFields: [{ key: 'note', names: 'the note' }],
+}
+
+describe('how a step is named, held and typed', () => {
+  it('names a client step the platform’s way, and a plugin’s step by its declaration', () => {
+    expect(interactionStepLabel('showElement', [REST])).toBe('Show an element')
+    expect(interactionStepLabel('restDough', [REST])).toBe('Let the dough rest')
+    expect(interactionStepLabel('notAStep', [REST])).toBeNull()
+  })
+
+  it('labels every client step', () => {
+    for (const type of CLIENT_ACTION_STEP_TYPES) {
+      expect(CLIENT_INTERACTION_STEP_LABELS[type as keyof typeof CLIENT_INTERACTION_STEP_LABELS]).toBeTruthy()
+    }
+  })
+
+  it('reads a hold and the typed fields off the declaration', () => {
+    expect(interactionStepHolds('restDough', [REST])).toEqual(REST.holds)
+    expect(interactionStepHolds('showElement', [REST])).toBeNull()
+    expect(interactionStepTypedFields('restDough', [REST])).toEqual(REST.typedFields)
+    expect(interactionStepTypedFields('siteAlert', [REST])).toEqual([{ key: 'message', names: 'the message' }])
+    expect(interactionStepTypedFields('showElement', [REST])).toEqual([])
+  })
+
+  it('hands a visitor’s page nothing past the first step that holds the run', () => {
+    const steps: InteractionStepBase[] = [
+      { type: 'showElement', selector: '#a' },
+      { type: 'pourBottle', bottleId: 'b' },
+      { type: 'restDough' },
+      { type: 'hideElement', selector: '#a' },
+    ]
+    expect(interactionStepsForClient(steps, [REST]).map((step) => step.type)).toEqual([
+      'showElement',
+      'pourBottle',
+    ])
+    expect(interactionStepsForClient([{ type: 'restDough' }], [REST])).toEqual([])
+    expect(interactionStepsForClient(null, [REST])).toEqual([])
+  })
+
+  it('compiles every declared hold as a band of whole minutes from at least one', () => {
+    const holds = declaredInteractionSteps().flatMap((step) => (step.holds ? [step.holds] : []))
+    expect(holds.length).toBeGreaterThan(0)
+    for (const hold of holds) {
+      expect(Number.isInteger(hold.minMinutes) && hold.minMinutes >= 1).toBe(true)
+      expect(hold.maxMinutes).toBeGreaterThanOrEqual(hold.minMinutes)
+    }
+  })
+
+  it('compiles a label for every declared step, and leaves the ones only an automation holds out of the builder', () => {
+    for (const step of declaredInteractionSteps()) expect(interactionStepLabel(step.type)).toBeTruthy()
+    expect(declaredInteractionSteps().some((step) => step.offered === false)).toBe(true)
+  })
+})
+
+describe('the recipe stamp', () => {
+  beforeAll(() =>
+    registerInteractionRecipes(
+      [
+        {
+          id: 'specProve',
+          title: 'Prove the dough',
+          description: 'Proves it.',
+          build: () => ({ ...click([{ type: 'showElement', selector: '#a' }]), recipe: 'specProve' }),
+        },
+      ],
+      { pluginId: 'cellar' },
+    ),
+  )
+  afterAll(() => resetInteractionRecipesForTests())
+
+  it('passes a known recipe, null and absent, and refuses one nobody offers', () => {
+    const interaction = click([{ type: 'showElement', selector: '#a' }])
+    expect(validateInteraction({ ...interaction, recipe: 'specProve' })).toBeNull()
+    expect(validateInteraction({ ...interaction, recipe: null })).toBeNull()
+    expect(validateInteraction(interaction)).toBeNull()
+    expect(validateInteraction({ ...interaction, recipe: 'retiredRecipe' })).toBe('Unknown recipe')
   })
 })

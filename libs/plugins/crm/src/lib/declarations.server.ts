@@ -25,17 +25,23 @@ import {
 import { registerPluginLeadConversionListener } from '@aglyn/aglyn/plugin-manager/plugin-lead-conversion'
 import { registerPluginPersonMatcher } from '@aglyn/aglyn/plugin-manager/plugin-person-matches'
 import {
+  registerPluginPersonRecords,
+  type PluginPersonRecords,
+} from '@aglyn/aglyn/plugin-manager/plugin-person-records'
+import {
   registerPluginRecordIndex,
   type PluginRecordIndex,
 } from '@aglyn/aglyn/plugin-manager/plugin-record-index'
 import { registerPluginRecordEmailStateWriter } from '@aglyn/aglyn/plugin-manager/plugin-record-email-state'
+import { registerPluginRecordOriginWriter } from '@aglyn/aglyn/plugin-manager/plugin-record-origin'
 import {
   registerPluginRecordTimelineWriter,
   type PluginRecordTimelineWriter,
 } from '@aglyn/aglyn/plugin-manager/plugin-record-timeline'
 import { registerPluginRecordWrittenListener } from '@aglyn/aglyn/plugin-manager/plugin-record-written'
+import { registerServerStepExecutor } from '@aglyn/aglyn/plugin-manager/plugin-server-steps'
 import { registerPluginUsageMeter } from '@aglyn/aglyn/plugin-manager/plugin-usage-meters'
-import { BUNDLE_ID, CRM_RECORDS_METER_ID } from './constants/bundle-common'
+import { BUNDLE_ID, CRM_RECORDS_METER_ID, CRM_STEP_TYPES } from './constants/bundle-common'
 import { summarizeConsentGroupChange } from './model/consent-group-summary'
 
 /**
@@ -55,6 +61,38 @@ export const crmContactCaptureWriter: PluginContactCaptureWriter = {
 }
 
 /**
+ * The CRM as the plugin other plugins ask for people (AGL-3080), deferred
+ * like the capture: `server/person-records.ts` and the Admin SDK it brings
+ * load with the first question, not when the process starts.
+ */
+export const crmPersonRecordsService: PluginPersonRecords = {
+  async find(request) {
+    const { crmPersonRecords } = await import('./server/person-records')
+    return crmPersonRecords.find(request)
+  },
+  async read(request) {
+    const { crmPersonRecords } = await import('./server/person-records')
+    return crmPersonRecords.read(request)
+  },
+  async fileUnder(request) {
+    const { crmPersonRecords } = await import('./server/person-records')
+    return crmPersonRecords.fileUnder(request)
+  },
+  async recordRefund(request) {
+    const { crmPersonRecords } = await import('./server/person-records')
+    return crmPersonRecords.recordRefund(request)
+  },
+  async peopleInView(request) {
+    const { crmPersonRecords } = await import('./server/person-records')
+    return crmPersonRecords.peopleInView(request)
+  },
+  async wroteIn(request) {
+    const { crmPersonRecords } = await import('./server/person-records')
+    return crmPersonRecords.wroteIn(request)
+  },
+}
+
+/**
  * The `pipeline` record index, its reads loaded with the first one — see
  * `server/pipeline-record-index.ts` for what it answers.
  */
@@ -68,6 +106,26 @@ export const crmPipelineRecordIndex: PluginRecordIndex = {
     return pipelineRecordIndex.get(request)
   },
 }
+
+/** One of `server/crm-record-indexes.ts`'s indexes, its reads loaded with the first one. */
+function lazyCrmRecordIndex(kind: 'company' | 'messageTemplate'): PluginRecordIndex {
+  return {
+    async list(request) {
+      const { crmRecordIndexes } = await import('./server/crm-record-indexes')
+      return crmRecordIndexes()[kind].list(request)
+    },
+    async get(request) {
+      const { crmRecordIndexes } = await import('./server/crm-record-indexes')
+      return crmRecordIndexes()[kind].get(request)
+    },
+  }
+}
+
+/** The companies a person works for, as another plugin reads them (AGL-3080). */
+export const crmCompanyRecordIndex = lazyCrmRecordIndex('company')
+
+/** The email templates and snippets reps write, as another plugin reads them (AGL-3080). */
+export const crmMessageTemplateRecordIndex = lazyCrmRecordIndex('messageTemplate')
 
 /**
  * The CRM's writer on the record-timeline seam (AGL-2981), deferred: the
@@ -88,6 +146,12 @@ export const crmRecordTimelineWriter: PluginRecordTimelineWriter = {
     const { createCrmRecordTimelineWriter, defaultCrmRecordTimelineDeps } =
       await import('./server/record-timeline')
     return createCrmRecordTimelineWriter(defaultCrmRecordTimelineDeps()).recordEmailDelivery!(request)
+  },
+  // An automation's email to the person its event is about, filed on that
+  // person's timeline with its delivery state (AGL-2615, AGL-3080).
+  async prepareEmail(request) {
+    const { prepareCrmRecordEmail } = await import('./server/automation-steps')
+    return prepareCrmRecordEmail(request)
   },
 }
 
@@ -118,6 +182,11 @@ export function registerCrmServerDeclarations(): void {
   registerPluginContactCaptureWriter(crmContactCaptureWriter, {
     pluginId: BUNDLE_ID,
   })
+  // The other half of keeping people (AGL-3080): another plugin that holds
+  // an address, or a record the CRM handed it, asks here for the person —
+  // a flow email's consent read, a refund, an automation filing somebody
+  // under a campaign — and never opens the CRM's collections itself.
+  registerPluginPersonRecords(crmPersonRecordsService, { pluginId: BUNDLE_ID })
   // The CRM's own share of a lead conversion (AGL-3254): the lead's
   // campaigns go onto the contact's facet. Through the seam every door
   // that converts a lead reaches, and deferred like the capture: the
@@ -176,6 +245,12 @@ export function registerCrmServerDeclarations(): void {
           await import('./server/record-email-state')
         return createCrmRecordEmailStateWriter(defaultCrmRecordEmailStateDeps()).reached!(request)
       },
+      // A lead that wrote back, moved to Working (AGL-3080).
+      async replied(request) {
+        const { createCrmRecordEmailStateWriter, defaultCrmRecordEmailStateDeps } =
+          await import('./server/record-email-state')
+        return createCrmRecordEmailStateWriter(defaultCrmRecordEmailStateDeps()).replied!(request)
+      },
     },
     { pluginId: BUNDLE_ID },
   )
@@ -185,6 +260,19 @@ export function registerCrmServerDeclarations(): void {
   // through it (AGL-2660). Deferred like the rest; an API registration
   // replaces this one with the same writer, loaded eagerly.
   registerPluginRecordTimelineWriter(crmRecordTimelineWriter, { pluginId: BUNDLE_ID })
+  // Where a person came from (AGL-3519): a door the CRM does not run — the
+  // platform's account sign-up, a sequence enrolling someone — names its
+  // origin, and the CRM stamps the built-in Lead source on a record holding
+  // none. Deferred like the rest.
+  registerPluginRecordOriginWriter(
+    {
+      async stamp(request) {
+        const { crmRecordOriginWriter } = await import('./server/record-origin')
+        return crmRecordOriginWriter.stamp(request)
+      },
+    },
+    { pluginId: BUNDLE_ID },
+  )
   // Sharing rules (AGL-3336), re-evaluated after every server write of a
   // lead, a contact, a company or a deal: the core tells its record-written
   // listeners from the list-field restamp every such writer ends with, in
@@ -201,6 +289,18 @@ export function registerCrmServerDeclarations(): void {
   // them (AGL-3080): an automation the AI drafts names the stage a deal
   // moves to. Deferred like the rest: the reads load with the first one.
   registerPluginRecordIndex('pipeline', crmPipelineRecordIndex, { pluginId: BUNDLE_ID })
+  // The company a person works for, and the templates reps write, as a sales
+  // sequence reads them (AGL-3080). Deferred like the rest.
+  registerPluginRecordIndex('company', crmCompanyRecordIndex, { pluginId: BUNDLE_ID })
+  registerPluginRecordIndex('messageTemplate', crmMessageTemplateRecordIndex, { pluginId: BUNDLE_ID })
+  // The automation steps that write the CRM (AGL-2605, AGL-3080), run for the
+  // workflows engine through the server-step seam and declared under
+  // `serverSteps`. Deferred like the rest: the writes load with the first step.
+  registerServerStepExecutor(
+    CRM_STEP_TYPES,
+    async (request) => (await import('./server/automation-steps')).runCrmAutomationStep(request),
+    { pluginId: BUNDLE_ID },
+  )
   registerPluginConsentGroupParticipant(
     {
       async preview(request) {

@@ -28,8 +28,8 @@ import { useOrgSlug } from '../../../../../../../../hooks/use-org-scope'
 import { useHostSettingsScope } from '../../../host-settings-scope'
 
 /**
- * Theme — where the site's theme came from, what has been changed in it, and
- * the editor (AGL-2501).
+ * Theme — where the site's theme came from, the editor, and what has been
+ * changed in it (AGL-2501).
  *
  * Gated on `hostHasEmitted` rather than on a success status (AGL-1066): a
  * refused listen can reach `'error'` while the persistent cache is still
@@ -61,16 +61,6 @@ export default function HostSetupThemeSection() {
       <div style={{ marginBottom: 24 }}>
         <ThemeLibraryCard hostId={hostId} host={data} />
       </div>
-      {/* "What have I changed?" is a read of the stored patch (AGL-1021), so
-          it cannot disagree with what is applied — for whichever theme is
-          picked, since every edit is a patch on it (AGL-3404). */}
-      <div style={{ marginBottom: 24 }}>
-        <ThemeOverridesCard
-          hostId={hostId}
-          host={data}
-          onWriteOverride={handleWriteOverride}
-        />
-      </div>
       {/* Plugin zone (AGL-2938): widgets that propose a change to this theme.
           A proposal reaches the editor below as unsaved changes, and only the
           editor's own Save writes it. */}
@@ -92,6 +82,18 @@ export default function HostSetupThemeSection() {
         proposedDraft={themeDraft}
         onProposedDraftSettled={settleThemeDraft}
       />
+      {/* "What have I changed?" is a read of the stored patch (AGL-1021), so
+          it cannot disagree with what is applied — for whichever theme is
+          picked, since every edit is a patch on it (AGL-3404). Last on the
+          page, because a long patch above the editor pushed the controls it
+          lists out of reach (AGL-3471). */}
+      <div style={{ marginTop: 24 }}>
+        <ThemeOverridesCard
+          hostId={hostId}
+          host={data}
+          onWriteOverride={handleWriteOverride}
+        />
+      </div>
     </>
   )
 }

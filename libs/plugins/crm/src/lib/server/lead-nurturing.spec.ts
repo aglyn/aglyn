@@ -11,7 +11,7 @@ jest.mock('firebase-admin/firestore', () => ({
 }))
 
 import { personKey } from '@aglyn/aglyn/app-utils/person-key'
-import { nurtureReachedLeads } from './lead-nurturing'
+import { nurtureReachedLeads, workRepliedLeads } from './lead-nurturing'
 
 const docs = new Map<string, Record<string, unknown>>()
 let commits = 0
@@ -90,5 +90,33 @@ describe('nurtureReachedLeads', () => {
     await expect(nurtureReachedLeads(broken, { orgId: ORG, hostId: HOST, emails: ['dana@example.com'] })).resolves.toBe(0)
     expect(error).toHaveBeenCalled()
     error.mockRestore()
+  })
+})
+
+describe('workRepliedLeads (AGL-3080)', () => {
+  it('moves a lead nobody worked — New or Nurturing — to Working once it wrote back', async () => {
+    lead('dana@example.com')
+    lead('lee@example.com', { status: 'nurturing' })
+    await expect(
+      workRepliedLeads(firestore, { orgId: ORG, hostId: HOST, emails: ['Dana@Example.com', 'lee@example.com'] }),
+    ).resolves.toBe(2)
+    expect(docs.get(leadPath('dana@example.com'))).toMatchObject({ status: 'working' })
+    expect(docs.get(leadPath('lee@example.com'))).toMatchObject({ status: 'working' })
+  })
+
+  it('never reopens a verdict, moves a converted lead, or touches one the site does not hold', async () => {
+    lead('a@example.com', { status: 'working' })
+    lead('b@example.com', { status: 'unqualified' })
+    lead('c@example.com', { status: 'new', convertedContactId: 'c-1' })
+    lead('d@example.com', { visibleTo: ['host:other-site'] })
+    const before = new Map(docs)
+    await expect(
+      workRepliedLeads(firestore, {
+        orgId: ORG,
+        hostId: HOST,
+        emails: ['a@example.com', 'b@example.com', 'c@example.com', 'd@example.com'],
+      }),
+    ).resolves.toBe(0)
+    expect(docs).toEqual(before)
   })
 })

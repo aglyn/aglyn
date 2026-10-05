@@ -299,22 +299,25 @@ await step(tally, page, "a lead's org-level address names its site", async () =>
   await page.getByRole('columnheader', { name: 'Site' }).waitFor({ timeout: TIMEOUT_MS })
   await rowOf(owen.name).waitFor({ state: 'visible', timeout: TIMEOUT_MS })
   await rowOf(owen.name).getByText(owen.name, { exact: true }).click()
-  await page.waitForURL((url) => url.pathname.endsWith(`/crm/leads/${HOST_ID}/${owen.id}`), {
+  // A lead is the organization's record (AGL-3275), so its org-level address
+  // is the lead's alone, and the record itself names the site holding it.
+  await page.waitForURL((url) => url.pathname === `/${ORG_SLUG}/crm/leads/${owen.id}`, {
     timeout: TIMEOUT_MS,
   })
   await page.getByRole('heading', { name: owen.name }).first().waitFor({ timeout: TIMEOUT_MS })
-  tally.pass("a lead's org-level address names its site", new URL(page.url()).pathname)
+  await page.getByText(`Held by ${SITE_NAME}`).first().waitFor({ timeout: TIMEOUT_MS })
+  tally.pass("a lead's org-level address names its site", `${new URL(page.url()).pathname} · held by ${SITE_NAME}`)
 })
 
 await step(tally, page, 'a deal moved from the org board lands on the document and in the org feed', async () => {
   const startedAtMs = Date.now()
   await page.goto(orgUrl('/crm/deals'), { waitUntil: 'domcontentloaded', timeout: TIMEOUT_MS })
-  await rowAction(page, CRM_FIXTURE.dealTitle, 'Move to Negotiation')
-  await expectSnackbar(page, 'Moved to Negotiation')
+  await rowAction(page, CRM_FIXTURE.dealTitle, 'Move to Negotiation/Review')
+  await expectSnackbar(page, 'Moved to Negotiation/Review')
   const dealRef = orgRef.collection('deals').doc(CRM_FIXTURE.dealId)
   const stored = await waitFor(
     async () => (await dealRef.get()).data(),
-    (deal) => deal?.stageId === 'negotiation',
+    (deal) => deal?.stageId === 'negotiation-review',
   )
   // The org feed's line, written by the route's org variant with the Admin
   // SDK — the feed is closed to clients, so nothing else could have.
@@ -325,7 +328,7 @@ await step(tally, page, 'a deal moved from the org board lands on the document a
         .map((doc) => doc.data())
         .find(
           (entry) =>
-            entry.action === 'Moved deal to Negotiation' &&
+            entry.action === 'Moved deal to Negotiation/Review' &&
             (entry.createdAt?.toMillis?.() ?? 0) >= startedAtMs - 5_000,
         )
     },
@@ -333,7 +336,7 @@ await step(tally, page, 'a deal moved from the org board lands on the document a
   )
   tally.check(
     'a deal moved from the org board lands on the document and in the org feed',
-    stored?.stageId === 'negotiation' && stored?.status === 'open' && line?.target?.type === 'deal',
+    stored?.stageId === 'negotiation-review' && stored?.status === 'open' && line?.target?.type === 'deal',
     `${stored?.stageId} · ${stored?.status} · feed: ${line ? `${line.action} by ${line.actorId}` : 'no line'}`,
   )
   await shot(page, 'crm-org-hub-deal-moved')
@@ -343,14 +346,16 @@ await step(tally, page, 'a task filed with the organization has no site and the 
   await page.goto(orgUrl('/crm/tasks'), { waitUntil: 'domcontentloaded', timeout: TIMEOUT_MS })
   await page.getByRole('button', { name: 'New task' }).first().click({ timeout: TIMEOUT_MS })
   const drawer = page.getByRole('dialog').last()
-  await drawer.getByRole('textbox', { name: /^Title/ }).waitFor({ timeout: TIMEOUT_MS })
+  // A task's title is its Subject: Salesforce's combobox, typed into or
+  // picked from the org's subject picklist (AGL-3517).
+  await drawer.getByRole('combobox', { name: /^Subject/ }).waitFor({ timeout: TIMEOUT_MS })
   // The picker asks even with one site: the site, or the organization.
   const sitePicker = drawer.getByRole('combobox', { name: /^Site/ })
   await sitePicker.waitFor({ timeout: TIMEOUT_MS })
   await pickSelect(page, 'Site', 'This organization (no site)', drawer)
   await drawer.getByText(/A task of the organization itself/).waitFor({ timeout: TIMEOUT_MS })
   await shot(page, 'crm-org-hub-new-org-task')
-  await drawer.getByRole('textbox', { name: /^Title/ }).fill(ORG_TASK_TITLE)
+  await drawer.getByRole('combobox', { name: /^Subject/ }).fill(ORG_TASK_TITLE)
   await drawer.getByRole('button', { name: 'Create task' }).click()
   await expectSnackbar(page, 'Task created')
   const stored = await waitFor(orgTaskDoc, (found) => Boolean(found))
@@ -383,10 +388,10 @@ await step(tally, page, "the organization task reads from the site's hub too, as
   // against: the org token leads every site's read set, so an org task is a
   // shared record from a site's point of view.
   await page.goto(hostUrl('/crm/tasks'), { waitUntil: 'domcontentloaded', timeout: TIMEOUT_MS })
-  await page
-    .getByRole('group', { name: 'Task view' })
-    .getByRole('button', { name: 'Done' })
-    .click({ timeout: TIMEOUT_MS })
+  // Which tasks show is a filter on the list's query (AGL-3321): Filters → Value.
+  await page.getByRole('button', { name: 'Filters', exact: true }).click({ timeout: TIMEOUT_MS })
+  await pickSelect(page, 'Value', 'Done', page.locator('.MuiDataGrid-panel').last())
+  await page.keyboard.press('Escape')
   const listed = await rowOf(ORG_TASK_TITLE)
     .waitFor({ state: 'visible', timeout: TIMEOUT_MS })
     .then(() => true)

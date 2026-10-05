@@ -171,7 +171,8 @@ describe('HostActionsCard CRM steps (AGL-2605)', () => {
     fireEvent.change(screen.getByLabelText('Title'), {
       target: { value: 'Call them back' },
     })
-    pick('Kind', 'Email')
+    pick('Type', 'Email')
+    pick('Priority', 'High')
     fireEvent.change(screen.getByLabelText('Due in (days)'), {
       target: { value: '3' },
     })
@@ -185,8 +186,31 @@ describe('HostActionsCard CRM steps (AGL-2605)', () => {
       type: 'createCrmTask',
       title: 'Call them back',
       kind: 'email',
+      // By meaning; the run stores the org's label for it (AGL-3517).
+      priority: 'high',
       dueInDays: 3,
       assigneeEmail: 'sam@example.com',
+    })
+  })
+
+  it('saves a logged call with which way it went, and asks a note for none (AGL-3517)', async () => {
+    startAction('Log it')
+    pick('Trigger event', 'Contact changed stage')
+    pick('Do', 'Log a CRM activity')
+    // A note, the step's first kind, takes no direction.
+    expect(screen.queryByLabelText('Direction')).toBeNull()
+    pick('Kind', 'Call')
+    pick('Direction', 'Internal')
+    fireEvent.change(screen.getByLabelText('What happened'), {
+      target: { value: 'They rang about the quote' },
+    })
+
+    const payload = await savedPayload()
+    expect(payload.steps[0]).toMatchObject({
+      type: 'logCrmActivity',
+      kind: 'call',
+      direction: 'internal',
+      body: 'They rang about the quote',
     })
   })
 

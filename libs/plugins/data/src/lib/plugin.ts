@@ -22,7 +22,14 @@ import { mdiDatabaseOutline } from '@aglyn/shared-data-mdi'
 import { lazy } from 'react'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { registerDatasetRecordList } from './model/dataset-record-list'
+import { registerPageRecordSource } from '@aglyn/aglyn/app-utils/page-record-sources'
+import { registerPluginTransferResourceUi } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
+import { DATASET_TRANSFER_RESOURCE } from './transfer/dataset-transfer-key'
 import { DATASET_REPEAT_SOURCE } from './repeat/dataset-repeat-source'
+import { RECORD_PAGE_ADDRESS_FIELD } from './record-pages/record-pages'
+import { RECORD_PAGE_SOURCE } from './record-pages/record-page-source'
+import RecordTemplateRowChip from './record-pages/record-template-row-chip.component'
+import RecordTemplateSection from './record-pages/record-template-section.component'
 
 /** Code-split: the Data console page only loads when opened. */
 const DataConsolePage = lazy(() => import('./components/data-console-page'))
@@ -36,6 +43,10 @@ const DataConsolePage = lazy(() => import('./components/data-console-page'))
  * entitlement. The org Data page (`Route.ORG_DATA`) is an org-scoped app route
  * that imports {@link HostDatasetsCard} directly.
  *
+ * Record pages (AGL-3475) add a section to the besigner's Page Properties, a
+ * chip to the Pages list's rows, and the page-record source that draws a
+ * record template on the canvas for one of its records.
+ *
  * It also registers datasets as a repeat source (AGL-3111), which is what puts
  * "Repeat over dataset" on every element's Attributes panel and draws a
  * repeat's copies from the real rows on the besigner canvas. Registered here,
@@ -45,8 +56,21 @@ const DataConsolePage = lazy(() => import('./components/data-console-page'))
  */
 export function registerDataConsole(): void {
   registerRepeatSource(DATASET_REPEAT_SOURCE)
+  // The "Page address" field type (AGL-3475), for the schema dialog's type
+  // list and the record editor's checks.
+  Aglyn.registerCustomFieldType(RECORD_PAGE_ADDRESS_FIELD)
+  // A record template draws on the canvas for one of its records (AGL-3475).
+  registerPageRecordSource(RECORD_PAGE_SOURCE)
   // The workspace's datasets, for another plugin's picker (AGL-3080).
   registerDatasetRecordList()
+  // A dataset's records in the import wizard and the export dialog
+  // (AGL-3530); the Data card names the dataset when it opens them.
+  registerPluginTransferResourceUi(
+    DATASET_TRANSFER_RESOURCE,
+    // The Import & export hub lists each dataset from the `dataset` record list (AGL-3535).
+    { label: 'Dataset records', icon: { path: mdiDatabaseOutline.path }, instancesFrom: 'dataset' },
+    { pluginId: BUNDLE_ID },
+  )
   Aglyn.registerConsoleExtension({
     // Org datasets card (AGL-419): org/data renders it through the
     // 'orgData' widget slot.
@@ -55,6 +79,18 @@ export function registerDataConsole(): void {
         slot: 'orgData',
         widgetId: 'data-org-datasets',
         Component: HostDatasetsCard,
+      },
+      // Record pages (AGL-3475): the template's settings in Page Properties,
+      // and its chip in the Pages list.
+      {
+        slot: 'besignerPageProperties',
+        widgetId: 'data-record-template',
+        Component: RecordTemplateSection,
+      },
+      {
+        slot: 'hostScreenRow',
+        widgetId: 'data-record-template-chip',
+        Component: RecordTemplateRowChip,
       },
     ],
     pluginId: BUNDLE_ID,

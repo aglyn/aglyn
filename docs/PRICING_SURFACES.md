@@ -168,29 +168,140 @@ and the calculator's site variables followed.
 transcription taken off the HTML finds the desktop cells only. Edit by node in
 the besigner, and count the nodes a row lives in before calling it done.
 
-### Owed before the next promotion: the dearest-region rates and bands
+Later the same day it was republished again, ahead of billing, to version
+`4goVJMQCh9`: page views $0.70 and form submissions $0.07 per 1,000, the
+bandwidth row 20 · 35 · 55 · 90 · 105 · 485 GB in the desktop cells and the six
+mobile panels, and the Scale strip's "90 GB bandwidth"; `/alternatives/webflow`
+went to version `-jEj6Vk0Eq` and the calculator's variables followed.
 
-The same day every Vercel-billed cost moved to Vercel's dearest region
-(AGL-3444): page views $0.36 → $0.70 and form submissions $0.065 → $0.07 per
-1,000, and the bands 35 · 60 · 90 · 145 · 175 · 790 → 20 · 35 · 55 · 90 · 105 ·
-485 GB. Per the rule above they are republished BEFORE the promotion that
-bills them:
+### 2026-10-02 — Vercel's decimal GB, nam5, and the API as a function
 
-- `/pricing`: the page-view cell (`aQCceq6U4W`) and the form-submission cell
-  (`_4aeO1e1lf`), the six desktop bandwidth cells and the six mobile panels
-  above, and the Scale strip in both nodes.
-- `/alternatives/webflow`: the sentence quoting the three metered rates.
+On 2026-10-01 the cost model took three facts on board (AGL-3444): Vercel
+bills transfer by the decimal GB, production's Firestore is `nam5`, and a page
+view's analytics beacon and every `/v1` request are functions. Page views
+$0.70 → $0.80 and form submissions $0.07 → $0.08 per 1,000; the bandwidth
+bands 20 · 35 · 55 · 90 · 105 · 485 → 20 · 30 · 45 · 70 · 80 · 395 GB; the API
+bands 100k · 300k · 1M · 5M → 1.5k · 5k · 17k · 85k a month; and the API
+overage on Advanced and Agency $0.20 and $0.15 → $0.25 per 1,000. Per the rule
+above they were republished on 2026-10-02, BEFORE the promotion that bills
+them:
+
+- `/pricing` went to version `-jejSg7GLa`: the page-view cell (`aQCceq6U4W`)
+  and the form-submission cell (`_4aeO1e1lf`); the bandwidth row in the
+  desktop cells and the six mobile panels; the "API access" row in the four
+  desktop cells (`LO-C0ctVsX`, `1Ch9wpFueA`, `ZzoEjN9-fJ`, `0tmOwxBwQI`) and
+  the four mobile panels (`OKAvIuz-_u`, `O_JkndyspV`, `78l74v-ICr`,
+  `rCJmfDzHG_`); the Advanced and Agency cells of "API requests, per 1,000
+  over limit" (desktop `qjVxdVCQdN`, `A9RzUA2JGM`, mobile `HC8_EHkl6l`,
+  `Ld97lqZz0Z`); the Business plan card's feature line "API access · 1.5k
+  req/mo" (`7HnQ3s4-jo`, `aHQGeLTPgE`); and the room-to-grow strips, each in
+  two nodes: Scale's "5k API requests/mo" and "70 GB bandwidth" (`1vMwEC7XXV`,
+  `_99Id5AtWv`), Advanced's "17k" (`lf2hQCN09V`, `WHZY4HVAaB`) and Agency's
+  "85k" (`a2mSWiFsmr`, `_LxrAWxlN3`).
+- `/alternatives/webflow` went to version `MmyN28bYIs`: the sentence quoting
+  the metered rates.
+- `/use-cases/saas-websites` (screen `RW-hQ3pFrd`) went to version
+  `x5iCQ0J0dn`. Its API card had quoted the request bands ("100k requests/mo
+  on Business, 1M on Advanced"); it now names none ("REST API with scoped keys,
+  on Business and above"), so a band change no longer reaches it. A product
+  page that quotes a band is a pricing surface; prefer not to quote one.
 - The pricing calculator (`/resources/pricing-calculator`) and the simple cost
   sheet (`/resources/multi-site-cost-sheet`) read Aglyn's figures from SITE
   VARIABLES rather than from the page body: `plan_rates.page_views_per_1k`
   and `.forms_per_1k`, and, per paid plan, `plan_<id>.bandwidth_gb`, `.views`
-  and `.views_ceiling`. No parity spec reads them, so a rate or band change
-  owes them an edit too.
-- The four Figma frames, declared stale in `build-pricing-tables.mts` until
-  they are redrawn.
+  (the band × 1,048,576 ÷ 1,012.8 KB a view), `.views_ceiling` (the larger of
+  100,000 and three times `.views`), `.api` and `.api_rate`. No parity spec
+  reads them, so a rate or band change owes them an edit too. They moved with
+  this republish.
 
-The parity spec pins each gap by name; fold each back into one row with the
-version id when the page catches up.
+The parity spec's gaps were folded back into single rows the same day.
+
+The four Figma frames caught up on 2026-10-02, redrawn together with the
+AGL-3469 and AGL-3476 figures below and re-extracted into `copy-*.json`. Every
+`FRAME_STALE_CELLS`, `TIERS_STALE`, `USAGE_STALE` and `FRAME_STALE_METERED`
+entry those three issues had declared is deleted, and `check:pricing-tables` is
+clean again with zero declared divergences from the frames.
+
+### 2026-10-02, later — every plan covers its full-use cost plus 30% after card fees
+
+AGL-3469 cut the included bands so every paid plan covers its cost at 100% of
+every band plus 30%, after Stripe's fee — storage and form submissions per site
+first, then dataset storage, campaign email, CRM records, one-to-one email and
+Starter's and Pro's bandwidth — and cut the included collaborators, team seats
+and datasets so buying more is a real choice. AGL-3476 priced the three
+pass-through rates to keep 30% after the card fee: storage $0.0349 per GB-month,
+page views $0.83 and form submissions $0.083 per 1,000. Both were republished
+on 2026-10-02 BEFORE the promotion that bills them, and every page that quoted
+a moved figure moved with them:
+
+- `/pricing` went to version `qE5PwfZM-K` (88 edits on 86 nodes): the compare
+  table's storage, bandwidth, team seats, site collaborators, datasets, form
+  submissions, CRM records, one-to-one and campaign email rows, in the desktop
+  cells and all seven plan panels; the Starter, Pro and Business plan cards
+  ("25 pages · 2 collaborators", "3 sites · 3 collaborators" and "2,500
+  campaign emails/mo", "10 sites · 5 collaborators" and "15,000 campaign
+  emails/mo"); the Scale, Advanced and Agency strips ("5 collaborators", Scale
+  "25,000 campaign emails/mo"); and the metered section — the paragraph now says
+  "cost plus a 30% margin, after card fees", and the three rates. The SEO
+  description quotes no moved figure.
+- `/alternatives/webflow` → `k5VFgsxyYJ` (the metered rates and the seats
+  sentence); `/alternatives/squarespace` → `uZGvM7VkC5`, `/alternatives/wix`
+  → `rQPNNXkuJ3`, `/alternatives/shopify` → `cchHOzhEiC` and
+  `/alternatives/duda` → `fwSdslyYNw` (the seats row, "2 · 3 · 5 · 5 · 10 ·
+  10"); `/product` → `nQNoMt30-J` (plan-card collaborators);
+  `/campaign-landing-pages` → `sT72n37Dkg`, `/launch-day-email` →
+  `DWEf1r0vxn` and `/ai-campaign-email` → `qQVGriCbyd` (campaign and
+  one-to-one email bands); `/brand-assets-and-sites` → `SAxswMrffg` (storage
+  per site); `/resources/pricing-calculator` → `xE1HkWSogI` (its metered
+  sentence).
+- The calculator's site variables — `plan_rates` (0.83 / 0.083 / 0.0349) and
+  each `plan_<id>` with every moved band and its derived `views`,
+  `views_ceiling` and `forms_ceiling` — and the `estimate_plan` function's
+  dataset-storage label, which now prints Starter's 0.5 GB rather than rounding
+  it to 1.
+- The four Figma frames were redrawn the same night (201 text nodes, AGL-3444's
+  bands and rates included).
+
+Comparison pages that quoted the seat ladder are why the seat row is a pricing
+surface: a band quoted in prose is as live as a cell here. Prefer not to quote
+one.
+
+### 2026-10-02 — video, audio and file downloads count 1.6× (AGL-3474)
+
+Origin-served media counts against bandwidth at `ORIGIN_MEDIA_BANDWIDTH_WEIGHT`
+(1.6, derived), so it bills past the band at 1.6× the page-view rate. That is a
+price rise for anyone serving video, so the page went first: `/pricing` states
+the sentence on aglyn.com (read from the live page's text on 2026-10-04, before
+the promotion that bills it), and no page in the sitemap says media is exempt.
+
+- `/pricing`, in the metered section beside the page-view row: the sentence in
+  `tables.json` → `metered.mediaNote` (`ORIGIN_MEDIA_BANDWIDTH_SENTENCE`).
+  `check:pricing-tables` fails any breakpoint that states a different weight,
+  and reads nothing until one states it.
+- The four Figma frames state it directly under the metered paragraph (under
+  the sub-line on mobile), in a clone of that text node, and `copy-*.json` is
+  re-extracted. So `check:pricing-tables` now reads a stated weight on every
+  breakpoint, and a frame that drifts from 1.6× fails it.
+- The calculator converts a band to views and has no media input, so it moves
+  only if a video line is added to it.
+- The docs (`bandwidth.md`, `billing-and-plans/overview.md`,
+  `media/overview.md`) already state it; `media-bandwidth-weight-copy.spec.ts`
+  holds them to the code's sentence.
+
+### 2026-10-05 — "and other media served from our servers" (AGL-3518)
+
+Private images now count toward bandwidth like files, so the media sentence was
+broadened, general on purpose, before the code that counts them landed:
+"Video, audio, file downloads and other media served from our servers count
+1.6× toward bandwidth, because serving them costs more than serving pages."
+
+- `/pricing`: node `N-m49_NSMG` on screen `v0clP6xQl-`, version `1rNY19KoQ7`.
+- Figma: the four frames' sentence nodes `2253:2351` (desktop), `2253:2352`
+  (widescreen), `2253:2353` (tablet) and `2253:2354` (mobile), edited in place,
+  and the one string patched in each `copy-*.json` (the frames were otherwise
+  current, so nothing was re-extracted).
+- The weight still reads as `count 1.6× toward bandwidth`, the shape
+  `check:pricing-tables` parses.
 
 ## Enterprise has no price here, but it has bands
 

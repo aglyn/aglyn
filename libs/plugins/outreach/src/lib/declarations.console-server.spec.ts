@@ -34,6 +34,13 @@ import {
   listPluginUserErasers,
   resetPluginUserErasersForTests,
 } from '@aglyn/aglyn/plugin-manager/plugin-user-erasure'
+import {
+  declaredTransferResource,
+  pluginTransferResourceProblems,
+  resetTransferResourcesForTests,
+  resolveTransferResource,
+} from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
+import { OUTREACH_DNC_MATCH_KEYS, OUTREACH_DO_NOT_CONTACT_TRANSFER_KEY } from './constants/transfer-resources'
 import { registerOutreachConsoleServerDeclarations } from './declarations.console-server'
 
 /**
@@ -50,6 +57,7 @@ beforeEach(() => {
   resetPluginUserErasersForTests()
   resetPluginPersonErasersForTests()
   resetPluginConsoleCronsForTests()
+  resetTransferResourcesForTests()
 })
 
 describe('registerOutreachConsoleServerDeclarations (AGL-2978)', () => {
@@ -89,6 +97,18 @@ describe('registerOutreachConsoleServerDeclarations (AGL-2978)', () => {
     expect(source).not.toMatch(/^import[^\n]*from '\.\/runtime\//m)
     expect(source).toContain("import('./runtime/send-job')")
     expect(source).toContain("import('./runtime/sync-job')")
+  })
+
+  it('registers the do-not-contact transfer resource, every hook loaded when a transfer first asks', async () => {
+    registerOutreachConsoleServerDeclarations()
+    const resolved = await resolveTransferResource(OUTREACH_DO_NOT_CONTACT_TRANSFER_KEY)
+    expect(resolved.pluginId).toBe('outreach')
+    expect(resolved.impl.matchKeys).toBe(OUTREACH_DNC_MATCH_KEYS)
+    const declared = declaredTransferResource(OUTREACH_DO_NOT_CONTACT_TRANSFER_KEY)
+    expect(pluginTransferResourceProblems(declared as NonNullable<typeof declared>, resolved.impl)).toEqual([])
+    const source = readFileSync(join(__dirname, 'declarations.console-server.ts'), 'utf8')
+    expect(source).not.toMatch(/^import[^\n]*from '\.\/transfer\//m)
+    expect(source).toContain("import('./transfer/do-not-contact-transfer')")
   })
 
   it('is called by the console’s server declarations manifest and by no tenant manifest', () => {

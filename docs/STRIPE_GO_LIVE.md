@@ -321,18 +321,25 @@ subscription product, Stripe records them and charges no one.
    platform COGS model (`orgMonthlyCogsUsd`) prices views on weight alone.
 
    **The same day every Vercel-billed input moved to Vercel's DEAREST region
-   (AGL-3444): published page views $0.36 → $0.70 and form submissions
-   $0.065 → $0.07 per 1,000.** The CDN bills transfer ($0.15–$0.35/GB) and
-   requests ($2.00–$3.20/M) in the region that serves a visitor, and
-   functions bill active CPU ($0.128–$0.221/hr) and memory by region, so
-   "at cost + 30%" is held at the dearest end: `perPageView` $0.00035471473
-   (the 2026-09-09 peg plus $0.20/GB more transfer on the 1012.8 KB basis),
-   `PAGE_VIEW_CDN_REQUEST_COST_USD` $0.00018374681 (57.42 requests at $3.20/M,
-   pinned so ($0.354715 + $0.183747) × 1.3 is exactly $0.70),
-   `perFormSubmission` $0.000053846154 (the invocation at the dearest region,
-   ×1.3 rounded up to $0.07). The included bands are sized on the same costs.
-   No Stripe object changes — the meter value is cents and both metered
-   prices are $0.01/unit, and no Stripe object carries a band.
+   (AGL-3444), and the cost model took three facts on board: Vercel bills
+   transfer by the decimal GB, production's Firestore is `nam5`, and a page
+   view's analytics beacon and every `/v1` request are functions.** Published
+   page views $0.36 → $0.80 and form submissions $0.065 → $0.08 per 1,000
+   (the page went through $0.70 / $0.07 on the way). The CDN bills transfer
+   ($0.15–$0.35 per decimal GB) and requests ($2.00–$3.20/M) in the region
+   that serves a visitor, and functions bill CPU ($0.128–$0.221/hr) and
+   memory by region, so "at cost + 30%" is held at the dearest end:
+   `perPageView` $0.00039902751 (the 2026-09-09 peg, its transfer at $0.35 a
+   decimal GB and its reads at nam5), `PAGE_VIEW_CDN_REQUEST_COST_USD`
+   $0.00021635711 (57 requests at $3.20/M plus the beacon's function and
+   writes, pinned so ($0.399028 + $0.216357) × 1.3 is exactly $0.80),
+   `perFormSubmission` $0.000061538462 (the invocation, its CDN request and
+   its transfer at the dearest region, ×1.3 rounded up to $0.08). The
+   included bands are sized on the same costs, and the API overage on
+   Advanced and Agency rose to $0.25 per 1,000 to keep its 50% retail floor
+   over a $0.117 request. No Stripe object changes — the meter value is cents
+   and both metered prices are $0.01/unit, and no Stripe object carries a
+   band.
 
    **Re-validate this table once a real paid month exists**, i.e. once the
    Vercel team is off Hobby and GCP usage clears the free tier. Until then
@@ -475,7 +482,14 @@ subscription product, Stripe records them and charges no one.
      with more than one site: uploads are enforced per scope against
      `storagePerHostMb`, the check compared a summed total to
      `hostLimit × storagePerHostMb`, and on Pro a *full* library reads as 33%
-     of the band. An alert that cannot fire reads as coverage.
+     of the band. An alert that cannot fire reads as coverage. *(Superseded:
+     since AGL-2075 uploads are enforced against the pooled band, so that
+     check could warn a workspace well inside its band. Since AGL-3482 there is
+     one storage alert — `mediaStorage`, every library against
+     `Math.max(1, hostLimit) × storagePerHostMb`, the band ingress refuses at
+     and the invoice subtracts — whose body names the library's share.
+     `usageAlerts.orgLibraryStorage` guards left on org docs are read by
+     nothing.)*
    - Thresholds are a fixed ladder — 75, 80, 90 and 100% (AGL-3431), the
      highest step reached sent once; `USAGE_ALERT_APPROACH_PCT` is gone.
    - **Overage protection is ALERTS plus an OPTIONAL customer cap** — see the
@@ -485,7 +499,9 @@ subscription product, Stripe records them and charges no one.
      written only by `/api/billing/storage-overage`), and only then are
      uploads refused, citing their own number. Free still hard-bands.
    - The Billing card shows the library's usage **against its own allowance**,
-     before any invoice.
+     before any invoice. *(Superseded: since AGL-2075 the library has no
+     allowance of its own — it shares the org-wide band — and since AGL-3479
+     the card names its bytes as a share of that band.)*
    - The rollup records `orgLibraryBilledFrom` verbatim beside
      `orgLibraryBilled`, so a month's audit document says why it billed.
 

@@ -48,7 +48,7 @@ organization **Data** page (or any site's Data page — both edit the same data)
    - `comments` → type **Text**.
 4. **Save schema**.
 
-![A site's Data page with the Survey responses dataset selected: the Add record, Schema, Import, CSV and JSON buttons above the records table and its Columns, Filters, Export and Search controls](/img/guides/survey-data-page.png)
+![A site's Data page with the Survey responses dataset selected: the Add record, Schema, Import, Export and Delete buttons above the records table and its Columns, Filters, Export and Search controls](/img/guides/survey-data-page.png)
 
 Each field's **Display name** is what you see in dialogs and table headers; the
 **field id** next to it (a slug generated once from the display name) is the
@@ -165,7 +165,8 @@ On the Data page, use **Filters** (`satisfaction` `=` `5`) or **Search** (a word
 the comments) to narrow the records. Both reach every record in the dataset, not only the
 page on screen; a number field offers `=` but no ranges, and the column headers don't
 sort. See [Filter and search the records](../content-and-data/datasets/overview.md#filter-records).
-Export everything with the **CSV** / **JSON** buttons.
+Download the records with **Export**, which lets you pick the fields and the format
+(CSV, JSON or NDJSON) — see [Import & export](../content-and-data/datasets/import-export.md).
 
 ![The Data page after a submission: the new survey response in the records table, under the table's Columns, Filters, Export and Search controls](/img/guides/survey-records-after-submit.png)
 

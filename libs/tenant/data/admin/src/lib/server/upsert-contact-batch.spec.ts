@@ -59,11 +59,6 @@ jest.mock('./firebase-admin', () => {
   return { __esModule: true, default: firebaseAdmin, firebaseAdmin }
 })
 
-jest.mock('./email-revenue-attribution', () => ({
-  __esModule: true,
-  attributeOrderToEmail: async () => null,
-}))
-
 jest.mock('./capture-email-check', () => ({
   __esModule: true,
   scheduleCapturedEmailCheck: () => undefined,

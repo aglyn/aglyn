@@ -32,7 +32,7 @@ import {
   siteLockdownFromDocs,
   visibleToHost,
 } from '@aglyn/aglyn/server'
-import type { PluginRevocation } from '@aglyn/aglyn/server'
+import { readListingRevocation } from '@aglyn/aglyn/plugin-manager/plugin-revocations'
 import { renderRecipientEmail } from '@aglyn/aglyn/app-utils/recipient-email-render'
 import { composeHostComponentNodes } from '@aglyn/aglyn/app-utils/load-referenced-components'
 import type { EmailRenderProduct } from '@aglyn/shared-util-email'
@@ -41,7 +41,7 @@ import {
   campaignHeldForReviewNotice,
   campaignPlacedOnHost,
   campaignSendHeldForReview,
-} from '@aglyn/shared-ui-email-campaigns/model'
+} from '../model/campaign-container'
 import { readPluginRecordCard } from '@aglyn/aglyn/plugin-manager/plugin-record-cards'
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import { hostPublicOrigin } from '@aglyn/aglyn/server'
@@ -66,9 +66,9 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { raiseOperatorAlert } from '@aglyn/tenant-data-admin/server/operator-alerts'
 import { MARKETING_REPUTATION_BREAKER } from '../constants/operator-alerts'
-// The leaf, not the barrel: this plugin's specs substitute the barrel
-// wholesale, and the lookup must reach the real index logic under them.
-import { findContactByEmail } from '@aglyn/tenant-data-admin/server/contact-email-index'
+// The person behind an address, through the plugin that keeps people
+// (AGL-3080): the sender never opens the record system's collections.
+import { findPluginPerson } from '@aglyn/aglyn/plugin-manager/plugin-person-records'
 import { siteEmailFrame } from '@aglyn/tenant-data-admin/server/host-email-tokens'
 import { isDocumentId } from '@aglyn/tenant-data-admin/server/document-id'
 /*
@@ -686,9 +686,14 @@ async function loadEmailTemplate(hostId: string, screenId: string) {
     | { listingId?: string | null; version?: string | null }
     | undefined
   if (installedFrom?.listingId) {
-    const revocation = (
-      await firestore.collection('revocations').doc(installedFrom.listingId).get()
-    ).data() as PluginRevocation | undefined
+    /*
+     * The revocation is kept by the plugin that runs the distribution channel
+     * the design came from, and asked through the platform's slot
+     * (`plugin-revocations`). A reader that FAILS throws through, so a send
+     * that cannot learn whether its design was pulled is refused rather than
+     * mailed — the direction the read had when this file made it itself.
+     */
+    const revocation = await readListingRevocation(installedFrom.listingId)
     const block = emailStarterSendBlock({ installedFrom, revocation })
     if (block) throw new CampaignSendError(block.reason, 409)
   }
@@ -3519,13 +3524,12 @@ export async function proofPersonasForHost(
  * The three sources are the three an audience is built from, tried in the
  * order a small site grows them. Nothing here is taken from the request.
  *
- * The org `contacts` lookup goes through the org's address index narrowed
- * to this site (AGL-2633): the index is consulted for the address, the
- * contact it names is checked against `visibleTo` in memory, and only
- * then does the `email ==` query run. So a person whose two records were
- * merged is found under the address that became an alternate, and the
- * scope check is not skipped — it is applied to the one document an
- * address names, which is the same shape the segment branch above uses.
+ * The third is the person the workspace keeps for the address, asked of the
+ * plugin that keeps people (`plugin-person-records`, AGL-3080) and narrowed
+ * to this site: the owner's address lookup answers an alternate address a
+ * merge folded in (AGL-2633), and the scope check is applied to the one
+ * record an address names, which is the same shape the segment branch above
+ * uses.
  */
 async function findAudienceDocument(
   hostId: string,
@@ -3551,15 +3555,14 @@ async function findAudienceDocument(
     }
   }
 
-  const contacts = await orgDataCollectionForHost(hostId, 'contacts').catch(
-    () => null,
-  )
-  const contact = contacts
-    ? await findContactByEmail(contacts, email, { hostId }).catch(() => null)
-    : null
-  return contact
+  const person = await findPluginPerson({
+    hostId,
+    email,
+    onlyVisibleToSite: true,
+  }).catch(() => null)
+  return person
     ? {
-        data: (contact.data() ?? {}) as Record<string, unknown>,
+        data: { ...person.data },
         nameFields: ['name', 'firstName'],
       }
     : null

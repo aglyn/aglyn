@@ -324,7 +324,7 @@ jest.mock('@aglyn/shared-util-email', () => ({
 }))
 
 import type { PluginApiResponse } from '@aglyn/aglyn/server'
-import { emailSentAs } from '@aglyn/shared-ui-email-campaigns/model/email-record'
+import { emailSentAs } from '../model/email-record'
 import { campaignSendHandler } from './campaign-send'
 
 const HOST = 'host-1'

@@ -54,6 +54,13 @@ const COVERED_INGRESSES = [
   //    the bytes, but the text it writes into them is the caller's, behind a
   //    `cdnPath` pages already embed.
   'apps/console/app/api/media/metadata/route.ts',
+  // 7. An import's file (AGL-3524) — a CSV or JSON a member uploads, stored
+  //    beside the workspace's other objects and read back by the job engine.
+  //    Each part and then the whole file are inspected before either is stored.
+  'libs/tenant/data/admin/src/lib/server/transfer-jobs.ts',
+  // 8. A workspace package (AGL-3535) — a JSON file a member imports, stored
+  //    as the package job's source and read back at apply.
+  'libs/tenant/data/admin/src/lib/server/transfer-packages.ts',
 ]
 
 /**
@@ -164,7 +171,7 @@ describe('structural upload inspection covers every ingress (AGL-1475)', () => {
     }
   })
 
-  it('leaves NO bucket write unaccounted for — a seventh ingress fails here', () => {
+  it('leaves NO bucket write unaccounted for — an eighth ingress fails here', () => {
     const writers = sourceFiles
       .filter((file) => BUCKET_WRITE.test(file.source))
       .map((file) => file.path)

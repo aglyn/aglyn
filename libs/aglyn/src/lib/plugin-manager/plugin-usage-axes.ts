@@ -37,9 +37,10 @@
  *  - a BAND names the rollup fields that measure it and the entitlement that
  *    says what the plan includes. The utilization table reads it beside
  *    core's own bands. A METERED band is also billed past what the plan
- *    includes, at cost × `METERED_MARKUP`, beside storage and bandwidth: the
- *    invoice sweep, the Billing card's estimate, the monthly summary and the
- *    staff usage rows read it from here.
+ *    includes, at its published billed rate (cost + 30% kept after card
+ *    fees), beside storage and bandwidth: the invoice sweep, the Billing
+ *    card's estimate, the monthly summary and the staff usage rows read it
+ *    from here.
  *  - a SPEND LINE names the month document holding what the plugin's usage
  *    came to at the rates it bills, the deployment variable naming the month
  *    it is first charged for, and the unit a customer sees it in. The usage
@@ -140,6 +141,17 @@ export interface PluginUsageBandDeclaration {
    */
   hostCounter?: string
   /**
+   * The WORKSPACE-wide monthly counter the band is enforced against:
+   * `orgs/{orgId}/counters/{orgCounter}`, field `{month}` (AGL-3472). Declared
+   * by a band whose runtime counts every unit on the org's counter as well as
+   * on the site's, in one write, so a workspace-wide band is held to every
+   * site's use rather than handed to each site whole. The Billing card meters
+   * the band once for the organization from it, where a band without one is
+   * metered per site. The usage sweep and alerts still sum `hostCounter`,
+   * which the same write moves.
+   */
+  orgCounter?: string
+  /**
    * The workspace is WARNED as it approaches and reaches this band, by the
    * usage-alerts sweep, from its `hostCounter` against what the plan includes
    * of `entitlement`, once per threshold per month. `label` names the band in
@@ -156,9 +168,33 @@ export interface PluginUsageBandDeclaration {
     approach: string
   }
   /**
+   * The console's quota banner WARNS an organization-wide reader on every
+   * console page as the workspace approaches and reaches this band
+   * (AGL-2898, AGL-3080). `standing` is a console API path the plugin
+   * serves, asked `?orgId=` with the reader's token, that answers the
+   * band's standing in its own unit under `member` — `{ used, limit }`,
+   * `limit: null` for a plan with no band, which is no row — and
+   * `stopsAtBand`: whether reaching it stops the feature (the reading when
+   * the route does not say) or bills past it. `approach` is the sentence
+   * above 80%; `reached.stops` and `reached.bills` the two at the band.
+   * `linksUsage` says the sentences name Billing → Usage, and the banner
+   * offers the link.
+   *
+   * A route, not a counter: a band's meter may be one no client may read,
+   * and the route answers in the unit the customer was sold.
+   */
+  consoleWarning?: {
+    standing: string
+    member: string
+    approach: string
+    reached: { stops: string; bills: string }
+    linksUsage?: boolean
+  }
+  /**
    * The band is one of the INFRASTRUCTURE meters (AGL-1280): what the
-   * workspace uses past it is billed at our cost × `METERED_MARKUP`, beside
-   * storage and bandwidth, on the same invoice line and the same estimate.
+   * workspace uses past it is billed at its published billed rate (cost +
+   * 30% kept after card fees), beside storage and bandwidth, on the same
+   * invoice line and the same estimate.
    * A metered band names one rollup field and the `hostCounter` it is
    * measured by.
    */
@@ -280,6 +316,22 @@ export function countedPluginBands(): readonly ResolvedPluginCountedBand[] {
   return PLUGIN_USAGE_BANDS_DECLARED.filter(
     (band): band is ResolvedPluginCountedBand =>
       Boolean(band.hostCounter && !band.metered),
+  )
+}
+
+/** A declared band kept on a workspace-wide counter. */
+export type ResolvedPluginOrgCountedBand = ResolvedPluginUsageBand & {
+  orgCounter: string
+}
+
+/**
+ * Every band with a workspace-wide counter (`orgCounter`), in band order: the
+ * bands the Billing card meters once for the organization, from the counter
+ * the band is enforced against.
+ */
+export function orgCountedPluginBands(): readonly ResolvedPluginOrgCountedBand[] {
+  return PLUGIN_USAGE_BANDS_DECLARED.filter(
+    (band): band is ResolvedPluginOrgCountedBand => Boolean(band.orgCounter),
   )
 }
 

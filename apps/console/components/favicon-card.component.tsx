@@ -82,8 +82,9 @@ export function FaviconCard(props: FaviconCardProps) {
       header={'Favicon'}
       help={docsHelp('media', {
         excerpt:
-          'The small icon browsers show in tabs and bookmarks — pick an ' +
-          '.ico or .png from your media library, or paste a URL below.',
+          'The small icon browsers show in tabs and bookmarks — pick one ' +
+          'image from your media library and every size is generated for ' +
+          'you, or paste a URL below.',
       })}
     >
       <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>

@@ -133,6 +133,12 @@ describe('BillingStorageOverageCard (AGL-1957)', () => {
 
     expect(await screen.findByText(/keep working/)).toBeTruthy()
     expect(screen.getByText(/10240 MB/)).toBeTruthy()
+    // The figure is per site the plan allows, and the allowance is the
+    // workspace's (AGL-3479) — never "each site includes … past that".
+    expect(
+      screen.getByText(/shared by every site and the organization library/),
+    ).toBeTruthy()
+    expect(screen.queryByText(/Each site includes/)).toBeNull()
     // The price is named — from the route, which serves the same constants the
     // rollup bills from (AGL-1957), so this number is the invoiced number.
     expect(screen.getByText(/\$0\.034 per GB/)).toBeTruthy()

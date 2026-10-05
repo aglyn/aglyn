@@ -44,3 +44,36 @@ export function emailTopicsFromDocs(
     .map((doc) => normalizeSubscriptionTopic(doc.id, doc.data() ?? null))
     .filter((topic): topic is SubscriptionTopic => !!topic)
 }
+
+/** What one topic's document says: the fields a person edits on the topic's page. */
+export interface EmailTopicFields {
+  name: string
+  description: string
+  archived: boolean
+  /** `true`/`false` decides for this stream; `null` clears it back to the site's setting; omitted leaves it. */
+  doubleOptIn?: boolean | null
+}
+
+/**
+ * The document every writer of the catalog stores — the console's topic
+ * page and list (`writeEmailTopic`) and a package import — so a topic
+ * written by either is the same document. Merged into what is stored.
+ *
+ * `archived` is written every time, because a merge that omitted it would
+ * carry an old retirement forward. `doubleOptIn` is the one field with three
+ * states, so it is written only when given, and `clear` (the SDK's
+ * `deleteField()`) is how `null` returns it to the site's setting.
+ */
+export function emailTopicDocument<Clear>(
+  topic: EmailTopicFields,
+  clear: Clear,
+): { name: string; description: string; archived: boolean; doubleOptIn?: boolean | Clear } {
+  return {
+    name: topic.name,
+    description: topic.description,
+    archived: topic.archived,
+    ...(topic.doubleOptIn === undefined
+      ? {}
+      : { doubleOptIn: topic.doubleOptIn === null ? clear : topic.doubleOptIn }),
+  }
+}

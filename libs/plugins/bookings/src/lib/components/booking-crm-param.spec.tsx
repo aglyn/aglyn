@@ -35,7 +35,7 @@ jest.mock('@aglyn/aglyn', () => ({
   useSiteFetch: () => mockSiteFetch,
 }))
 
-import Booking from './booking'
+import Booking, { bookingDayLabel } from './booking'
 
 const FREE = {
   $id: 'svc-free',
@@ -81,7 +81,7 @@ function postedBody(): Record<string, unknown> {
 
 /** From a preselected service: pick the slot, fill the form, confirm. */
 async function bookThroughTheLink() {
-  fireEvent.click(await screen.findByText(new Date(SLOT_MS).toLocaleDateString()))
+  fireEvent.click(await screen.findByText(bookingDayLabel(SLOT_MS)))
   fireEvent.click(
     await screen.findByText(
       new Date(SLOT_MS).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),

@@ -116,16 +116,29 @@ export function signMediaAccess(
   scope: string,
   mediaId: string,
   expiresAtMs: number,
+  audience?: MediaSignatureAudience,
 ): string {
   return createHmac('sha256', tokenSigningSecret())
-    .update(`media:${scope}:${mediaId}:${expiresAtMs}`)
+    .update(`media:${scope}:${mediaId}:${expiresAtMs}${audience ? `:${audience}` : ''}`)
     .digest('hex')
     .slice(0, 32)
 }
 
+/**
+ * Who a signature was minted for, when it is not a visitor (AGL-3474).
+ *
+ * `team` marks the console's own preview of a private asset: the workspace
+ * looking at its library, which is not a serve the bandwidth band bills. It is
+ * inside the HMAC payload, so a buyer's link cannot be turned into a team one
+ * by adding `aud=team`, nor a team link into a buyer's by dropping it — either
+ * edit breaks the signature.
+ */
+export type MediaSignatureAudience = 'team'
+
 export interface MediaSignature {
   exp: number
   sig: string
+  aud?: MediaSignatureAudience
 }
 
 /**
@@ -151,9 +164,10 @@ export function verifyMediaAccess(
   if (exp - nowMs > MEDIA_SIGNATURE_MAX_TTL_MS + MEDIA_SIGNATURE_CLOCK_SKEW_MS) {
     return false
   }
+  const aud = presented?.aud === 'team' ? 'team' : undefined
   let expected: string
   try {
-    expected = signMediaAccess(scope, mediaId, exp)
+    expected = signMediaAccess(scope, mediaId, exp, aud)
   } catch {
     // Secret missing — fail closed rather than serving the bytes.
     return false
@@ -163,7 +177,10 @@ export function verifyMediaAccess(
 
 /** The query string that carries a signature on a CDN URL. */
 export function mediaSignatureQuery(signature: MediaSignature): string {
-  return `exp=${signature.exp}&sig=${encodeURIComponent(signature.sig)}`
+  return (
+    `exp=${signature.exp}&sig=${encodeURIComponent(signature.sig)}` +
+    (signature.aud ? `&aud=${signature.aud}` : '')
+  )
 }
 
 /**
@@ -194,8 +211,13 @@ export function mintMediaSignature(
   mediaId: string,
   nowMs: number = Date.now(),
   ttlMs: number = MEDIA_SIGNATURE_TTL_MS,
+  audience?: MediaSignatureAudience,
 ): MediaSignature {
   assertMediaSignatureTtl(ttlMs)
   const exp = nowMs + ttlMs
-  return { exp, sig: signMediaAccess(scope, mediaId, exp) }
+  return {
+    exp,
+    sig: signMediaAccess(scope, mediaId, exp, audience),
+    ...(audience ? { aud: audience } : {}),
+  }
 }

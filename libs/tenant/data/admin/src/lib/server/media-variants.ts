@@ -15,13 +15,20 @@
  * limitations under the License.
  */
 
+import { readImageDimensions } from '@aglyn/aglyn/server'
+// By path: the media-ref grammar is a leaf, and the routes that spread this
+// module's helpers into a document reach it the same way.
 import {
+  MEDIA_CDN_VARIANT_WIDTHS,
+  MEDIA_DELIVERY_MAX_EDGE,
   MEDIA_POSTER_OBJECT_SUFFIX,
+  MEDIA_VARIANT_ENCODER_VERSION,
+  mediaDisplayObjectPath,
   mediaPosterObjectPath,
-  readImageDimensions,
-} from '@aglyn/aglyn/server'
-
-import { MEDIA_CDN_VARIANT_WIDTHS } from './serve-media-cdn'
+  mediaRenditionObjectPath,
+  parseMediaRenditions,
+} from '@aglyn/aglyn/app-utils/media-ref'
+import type { Sharp, SharpOptions } from 'sharp'
 
 /**
  * WebP variant generation for a media asset (AGL-175), and the record of
@@ -60,21 +67,173 @@ import { MEDIA_CDN_VARIANT_WIDTHS } from './serve-media-cdn'
  * the widths that landed are real files that the CDN route can serve.
  */
 
-/** The shape of `sharp`'s default export, narrowed to what is used here. */
-type SharpFactory = (input: Buffer) => {
-  resize(options: { width: number; withoutEnlargement: boolean }): {
-    webp(options: { quality: number }): { toBuffer(): Promise<Buffer> }
-  }
+/** The shape of `sharp`'s default export. */
+type SharpFactory = (input?: Buffer, options?: SharpOptions) => Sharp
+
+/**
+ * What a media document records about its delivery copies' display half
+ * (AGL-3486). Present only when a display object was written; its absence on
+ * a document at the current encoder generation means the original is clean
+ * enough to serve as it is.
+ */
+export interface MediaDisplayCopy {
+  /** Always the original's own type — the display copy never changes format. */
+  contentType: string
+  width: number
+  height: number
+  sizeBytes: number
 }
 
 export interface MediaVariantOutcome {
   /** Widths actually written. Safe to store — every entry is a real object. */
   variants: number[]
   /**
+   * The display copy written for this asset, when one was needed and made.
+   * Only ever produced when the caller asked for one (`display: true`).
+   */
+  display?: MediaDisplayCopy
+  /**
    * Present ONLY when generation was attempted and did not complete.
    * `undefined` means nothing went wrong, which includes "nothing to do".
    */
   error?: string
+}
+
+/**
+ * Writes one derived object. `contentType` is the type the bytes ARE: WebP
+ * for a variant, the original's own type for a display copy.
+ */
+export type SaveMediaDerivedObject = (
+  path: string,
+  bytes: Buffer,
+  contentType: string,
+) => Promise<void>
+
+/**
+ * The WebP encoder settings for every `?w=` variant (AGL-3486).
+ *
+ * Quality 72 is where a photo stops showing a difference to the eye at the
+ * size it is painted; 80, the setting since AGL-175, spent 15-25% more bytes
+ * on detail nobody sees. Effort 5 of 6: measured on the four images the issue
+ * names, effort 6 saved another 1-2% for twice the encode time, and the
+ * encode runs inside an upload request or after a CDN response.
+ *
+ * Changing either value changes the bytes every asset should hold, so it
+ * bumps `MEDIA_VARIANT_ENCODER_VERSION` — that is what reaches the existing
+ * corpus.
+ */
+export const MEDIA_VARIANT_WEBP_OPTIONS = Object.freeze({
+  quality: 72,
+  effort: 5,
+})
+
+/**
+ * The quality the display copy is re-encoded at (AGL-3486). Higher than a
+ * variant's because the display copy is what a link preview, an email client
+ * and a CSS background receive at full size — it stands in for the original.
+ */
+export const MEDIA_DISPLAY_QUALITY = 82
+
+/**
+ * Formats that get a display copy. JPEG, PNG and WebP are the formats a
+ * camera, a screenshot tool and a design export produce, and the ones `sharp`
+ * re-encodes losslessly enough to stand in for the original. Not GIF, whose
+ * animation the encoder would flatten, and not SVG or ICO, which have no
+ * variants at all.
+ */
+export const MEDIA_DISPLAY_TYPES: ReadonlySet<string> = new Set([
+  'image/jpeg',
+  'image/jpg',
+  'image/png',
+  'image/webp',
+])
+
+/**
+ * Encode one `?w=` variant: auto-oriented, downscaled, metadata stripped.
+ *
+ * `rotate()` with no angle applies the EXIF orientation, which a WebP cannot
+ * carry — before AGL-3486 a portrait phone photo's variants came out lying on
+ * their side. `sharp` writes no EXIF, XMP or IPTC unless asked to keep it, so
+ * a photo's GPS position never reaches a variant.
+ */
+export async function encodeMediaVariant(
+  sharp: SharpFactory,
+  source: Buffer,
+  width: number,
+): Promise<Buffer> {
+  return sharp(source)
+    .rotate()
+    .resize({ width, withoutEnlargement: true })
+    .webp(MEDIA_VARIANT_WEBP_OPTIONS)
+    .toBuffer()
+}
+
+/**
+ * The display copy of an image, or null when the original can be served as
+ * it is (AGL-3486).
+ *
+ * The bare URL is what a link preview, an email client, a CSS background and
+ * every pasted Copy URL fetch, and before this it served the upload byte for
+ * byte: a 6 MB, 6000-pixel phone photo with the GPS position it was taken at.
+ * A display copy is made when the original has any of three properties:
+ *
+ * - **larger than {@link MEDIA_DELIVERY_MAX_EDGE} on its long edge** —
+ *   downscaled to fit, since nothing on a page paints more;
+ * - **EXIF, XMP or IPTC metadata** — stripped. This is the privacy half, and
+ *   it is kept even when the re-encode is not smaller: a location is not
+ *   something to trade for bytes;
+ * - **an EXIF orientation** — applied, so the pixels are upright without it.
+ *
+ * Same format as the original, so nothing that could read the original loses
+ * the ability to read the copy. Null for an animated image, whose frames the
+ * encoder would drop, and for a format outside {@link MEDIA_DISPLAY_TYPES}.
+ */
+export async function encodeMediaDisplay(
+  sharp: SharpFactory,
+  source: Buffer,
+  contentType: string,
+): Promise<{ bytes: Buffer; copy: MediaDisplayCopy } | null> {
+  if (!MEDIA_DISPLAY_TYPES.has(contentType)) return null
+  const metadata = await sharp(source).metadata()
+  if ((metadata.pages ?? 1) > 1) return null
+  const width = metadata.width ?? 0
+  const height = metadata.height ?? 0
+  const oversize = Math.max(width, height) > MEDIA_DELIVERY_MAX_EDGE
+  const oriented = (metadata.orientation ?? 1) > 1
+  const carriesMetadata = Boolean(metadata.exif || metadata.xmp || metadata.iptc)
+  if (!oversize && !oriented && !carriesMetadata) return null
+
+  let pipeline = sharp(source).rotate()
+  if (oversize) {
+    pipeline = pipeline.resize({
+      width: MEDIA_DELIVERY_MAX_EDGE,
+      height: MEDIA_DELIVERY_MAX_EDGE,
+      fit: 'inside',
+      withoutEnlargement: true,
+    })
+  }
+  pipeline =
+    contentType === 'image/png'
+      ? pipeline.png({
+          compressionLevel: 9,
+          // A palette PNG re-encoded as truecolor can triple in size.
+          palette: Boolean((metadata as { isPalette?: boolean }).isPalette),
+        })
+      : contentType === 'image/webp'
+        ? pipeline.webp({ ...MEDIA_VARIANT_WEBP_OPTIONS, quality: MEDIA_DISPLAY_QUALITY })
+        : pipeline.jpeg({ quality: MEDIA_DISPLAY_QUALITY, mozjpeg: true })
+  const { data, info } = await pipeline.toBuffer({ resolveWithObject: true })
+  // Only the privacy reason justifies a copy that is not smaller.
+  if (!carriesMetadata && data.length >= source.length) return null
+  return {
+    bytes: data,
+    copy: {
+      contentType,
+      width: info.width,
+      height: info.height,
+      sizeBytes: data.length,
+    },
+  }
 }
 
 /**
@@ -112,9 +271,10 @@ const SOURCE_WIDTH_WEBP_TYPES: ReadonlySet<string> = new Set([
  * outcome, and it has to read as one or the fault counter measures the favicon
  * instead of a fault (AGL-3121).
  *
- * Exported because the backfill script has to skip exactly this set. It kept a
- * second copy of the SVG half, which is how ICO came to be missing from one
- * and not the other.
+ * Exported because lazy regeneration (`media-delivery-regeneration.ts`) has to
+ * skip exactly this set. The backfill script it replaced kept a second copy of
+ * the SVG half, which is how ICO came to be missing from one and not the
+ * other.
  */
 export const MEDIA_TYPES_WITHOUT_VARIANTS: ReadonlySet<string> = new Set([
   'image/svg+xml',
@@ -224,12 +384,25 @@ function describe(error: unknown): string {
 }
 
 /**
- * Generate the WebP variants for one asset and report the outcome.
+ * Generate the delivery copies for one asset and report the outcome: its
+ * WebP variants, and with `display: true` its display copy (AGL-3486).
  *
  * `saveVariant` is a callback rather than a `Bucket` so this stays free of a
  * storage dependency and so a spec can assert on the BYTES it produces —
  * which is the only assertion that distinguishes a working variant from the
  * original served back under a `?w=` that selects nothing.
+ *
+ * ## A variant is never larger than what it replaces
+ *
+ * A width the asset has no variant for is answered with the display copy, or
+ * the original when there is none — so a variant is only worth storing when
+ * it is SMALLER than that answer. Measured on a customer's 1280px JPEGs before
+ * AGL-3486: the source-width WebP at `?w=1280` was 384 KB against a 305 KB
+ * original, so the variant made every retina visit 26% heavier. A width whose
+ * encode comes out no smaller is now skipped and the smaller bytes serve it.
+ *
+ * The display copy is made FIRST for that reason: it is what the comparison
+ * is against.
  */
 export async function generateMediaVariants(options: {
   buffer: Buffer
@@ -237,28 +410,117 @@ export async function generateMediaVariants(options: {
   sourceWidth?: number | null
   /** Object path of the ORIGINAL; variants are `${objectPath}__w{n}.webp`. */
   objectPath: string
-  saveVariant: (path: string, webp: Buffer) => Promise<void>
+  saveVariant: SaveMediaDerivedObject
+  /** Also make the display copy. Asked for by an asset, never by a poster. */
+  display?: boolean
 }): Promise<MediaVariantOutcome> {
   const widths = mediaVariantWidthsFor(options)
-  if (!widths.length) return { variants: [] }
+  const wantsDisplay =
+    options.display === true && MEDIA_DISPLAY_TYPES.has(options.contentType)
+  if (!widths.length && !wantsDisplay) return { variants: [] }
 
   const variants: number[] = []
+  let display: MediaDisplayCopy | undefined
   try {
     const sharp = await loadSharp()
+    let fallbackBytes = options.buffer.length
+    if (wantsDisplay) {
+      const made = await encodeMediaDisplay(sharp, options.buffer, options.contentType)
+      if (made) {
+        await options.saveVariant(
+          mediaDisplayObjectPath(options.objectPath),
+          made.bytes,
+          options.contentType,
+        )
+        display = made.copy
+        fallbackBytes = made.bytes.length
+      }
+    }
     for (const width of widths) {
-      const webp = await sharp(options.buffer)
-        .resize({ width, withoutEnlargement: true })
-        .webp({ quality: 80 })
-        .toBuffer()
-      await options.saveVariant(`${options.objectPath}__w${width}.webp`, webp)
+      const webp = await encodeMediaVariant(sharp, options.buffer, width)
+      if (webp.length >= fallbackBytes) continue
+      await options.saveVariant(
+        `${options.objectPath}__w${width}.webp`,
+        webp,
+        'image/webp',
+      )
       variants.push(width)
     }
   } catch (error) {
     // Still never fails the upload — but no longer only whispers.
     console.error('media variant generation failed', options.objectPath, error)
-    return { variants, error: describe(error) }
+    return { variants, ...(display ? { display } : {}), error: describe(error) }
   }
-  return { variants }
+  return { variants, ...(display ? { display } : {}) }
+}
+
+/**
+ * The media document fields a generation outcome writes (AGL-3486), shared by
+ * every route that generates so none of them can forget the encoder
+ * generation — the field lazy regeneration keys on.
+ *
+ * `display` is written as `null` rather than left out when there is none, so
+ * a replace whose new bytes need no display copy clears the previous one's
+ * record instead of pointing at an object it just deleted. The caller decides
+ * `variantsError`, because the routes record it with a counter beside it.
+ */
+export function mediaVariantDocFields(
+  outcome: Pick<MediaVariantOutcome, 'variants' | 'display'>,
+): {
+  variants: number[]
+  variantEncoderVersion: number
+  display: MediaDisplayCopy | null
+} {
+  return {
+    variants: outcome.variants,
+    variantEncoderVersion: MEDIA_VARIANT_ENCODER_VERSION,
+    display: outcome.display ?? null,
+  }
+}
+
+/**
+ * Every derived object a media document names, given its original's path
+ * (AGL-3486): the `?w=` variants, the display copy, a video's poster and the
+ * poster's widths, and its renditions.
+ *
+ * The one list every path that moves, replaces or deletes an asset reads, so
+ * a new kind of derived object is added in one place. Before it, each of the
+ * three kept its own: a replace dropped all four kinds, while a folder move
+ * and a delete knew only the variants — so a moved film lost its poster and
+ * renditions to the old prefix, and a deleted one left them in the bucket.
+ */
+export function mediaDerivedObjectPaths(
+  objectPath: string,
+  /** The media document's fields, or its snapshot. */
+  document:
+    | {
+        variants?: unknown
+        display?: unknown
+        poster?: unknown
+        videoRenditions?: unknown
+      }
+    | { get(field: string): unknown },
+): string[] {
+  const read = (field: 'variants' | 'display' | 'poster' | 'videoRenditions') =>
+    'get' in document && typeof document.get === 'function'
+      ? document.get(field)
+      : (document as Record<string, unknown>)[field]
+  const widths = (value: unknown): number[] =>
+    Array.isArray(value)
+      ? value.filter((width): width is number => Number.isInteger(width) && width > 0)
+      : []
+  const poster = read('poster') as { variants?: unknown } | null | undefined
+  return [
+    ...widths(read('variants')).map((width) => `${objectPath}__w${width}.webp`),
+    ...(read('display') ? [mediaDisplayObjectPath(objectPath)] : []),
+    ...(poster ? [mediaPosterObjectPath(objectPath)] : []),
+    ...widths(poster?.variants).map(
+      (width) => `${objectPath}${MEDIA_POSTER_OBJECT_SUFFIX}__w${width}.webp`,
+    ),
+    ...parseMediaRenditions(read('videoRenditions')).map((rendition) =>
+      mediaRenditionObjectPath(objectPath, rendition),
+    ),
+  ]
 }
 
 /**
@@ -314,11 +576,15 @@ export async function generateStoredMediaVariants(options: {
   objectPath: string
   /** Fetches the whole object. Only ever called when there is work to do. */
   readSource: () => Promise<Buffer>
-  saveVariant: (path: string, webp: Buffer) => Promise<void>
+  saveVariant: SaveMediaDerivedObject
   maxSourceBytes?: number
+  /** Also make the display copy (see {@link generateMediaVariants}). */
+  display?: boolean
 }): Promise<MediaVariantOutcome> {
   const widths = mediaVariantWidthsFor(options)
-  if (!widths.length) return { variants: [] }
+  const wantsDisplay =
+    options.display === true && MEDIA_DISPLAY_TYPES.has(options.contentType)
+  if (!widths.length && !wantsDisplay) return { variants: [] }
 
   const maxSourceBytes = options.maxSourceBytes ?? MEDIA_VARIANT_SOURCE_MAX_BYTES
   if (options.sizeBytes > maxSourceBytes) {
@@ -376,18 +642,10 @@ export async function probeMediaVariantSupport(): Promise<{
         pixels[index + 2] = Math.round((((x + y) % 300) * 255) / 300)
       }
     }
-    const source = await (
-      sharp as unknown as (
-        input: Buffer,
-        options: unknown,
-      ) => { png(): { toBuffer(): Promise<Buffer> } }
-    )(pixels, { raw: { width, height, channels: 3 } })
+    const source = await sharp(pixels, { raw: { width, height, channels: 3 } })
       .png()
       .toBuffer()
-    const resized = await sharp(source)
-      .resize({ width: 320, withoutEnlargement: true })
-      .webp({ quality: 80 })
-      .toBuffer()
+    const resized = await encodeMediaVariant(sharp, source, 320)
     // `RIFF....WEBP` — a WebP, not the PNG handed back.
     const isWebp =
       resized.length > 12 &&
@@ -424,8 +682,8 @@ export const MEDIA_POSTER_MAX_BYTES = 4 * 1024 * 1024
  */
 export const MEDIA_POSTER_MAX_WIDTH = 1920
 
-/** WebP quality for the poster. Higher than a variant's 80 would not show. */
-const POSTER_QUALITY = 72
+/** WebP quality for the poster — the variants' own since AGL-3486. */
+const POSTER_QUALITY = MEDIA_VARIANT_WEBP_OPTIONS.quality
 
 export interface MediaPosterOutcome {
   /** Set only when a poster object was actually written. */
@@ -479,7 +737,7 @@ export async function generateMediaPoster(options: {
   buffer: Buffer
   /** Object path of the ORIGINAL video, without the poster suffix. */
   objectPath: string
-  saveVariant: (path: string, bytes: Buffer) => Promise<void>
+  saveVariant: SaveMediaDerivedObject
   maxWidth?: number
 }): Promise<MediaPosterOutcome> {
   const posterPath = mediaPosterObjectPath(options.objectPath)
@@ -507,7 +765,7 @@ export async function generateMediaPoster(options: {
   }
 
   try {
-    await options.saveVariant(posterPath, webp)
+    await options.saveVariant(posterPath, webp, 'image/webp')
   } catch (error) {
     console.error('media poster save failed', posterPath, error)
     return { error: `poster save failed — ${describe(error)}` }

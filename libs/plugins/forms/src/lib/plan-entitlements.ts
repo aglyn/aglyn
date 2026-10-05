@@ -47,9 +47,9 @@ export const FORM_SUBMISSIONS_PER_MONTH_BY_PLAN: Readonly<Record<OrgPlan, number
   free: 20,
   starter: 200,
   pro: 1000,
-  business: 8000,
-  scale: 25000,
-  advanced: 40000,
+  business: 5000,
+  scale: 10000,
+  advanced: 10000,
   // FINITE, where every other capacity row on this tier is unbounded. The
   // band is multiplied by `hostLimit` to get the org-wide band, so at 100
   // hosts an unbounded figure was not merely large — it made this tier's cost
@@ -60,9 +60,9 @@ export const FORM_SUBMISSIONS_PER_MONTH_BY_PLAN: Readonly<Record<OrgPlan, number
   //
   // Metering makes it safe to bound. `meteredInfraPassThrough` is true here,
   // so submissions past the band BILL at the pass-through rate rather than
-  // being refused — a merchant's lead form does not stop working at 25,000.
-  agency: 25000,
-  enterprise: 50_000,
+  // being refused — a merchant's lead form does not stop working at the band.
+  agency: 10000,
+  enterprise: 20_000,
 }
 
 /** The forms plugin's plan figures, for the manifest generator. */

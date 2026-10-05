@@ -337,7 +337,7 @@ describe('no field on a dataset record is written by every writer', () => {
     // root is asserted outright.
     expect(readRepo('package.json')).toContain('"name"')
     expect(
-      readRepo('apps/tenant/app/api/forms/submit/route.ts').length,
+      readRepo('libs/plugins/forms/src/lib/server/form-submit.ts').length,
     ).toBeGreaterThan(1000)
   })
 
@@ -353,8 +353,8 @@ describe('no field on a dataset record is written by every writer', () => {
     expect(block).not.toMatch(/\border:/)
   })
 
-  it('the workflow append actions write `createdAt` and no `order`', () => {
-    const source = readRepo('libs/plugins/workflows/src/lib/engine/run-event-actions.ts')
+  it('the automation dataset steps write `createdAt` and no `order`', () => {
+    const source = readRepo('libs/plugins/data/src/lib/server/dataset-steps.server.ts')
     const appends = [
       ...source.matchAll(/\.collection\('records'\)\.add\(\{[\s\S]{0,800}?\}\)/g),
     ].map((match) => match[0])
@@ -380,22 +380,28 @@ describe('no field on a dataset record is written by every writer', () => {
     )
   })
 
-  it('the card orders BOTH its record reads on the document NAME', () => {
+  it('the card and the export both order their record reads on the document NAME', () => {
     // Not a field, so it cannot be absent, so each walk is total. Asserted on
     // the component because this is the conclusion the three facts above
     // force, and the place a future change would undo it.
     //
-    // Both reads, counted: the table's page and the import's key index run
-    // over the same collection and face the same question, and asserting that
-    // the string appears SOMEWHERE would let either one be changed to a field
-    // while the other kept the file passing.
+    // Both reads: the table's page here, and the export's pages and the
+    // records it finds by key on the server (AGL-3530) — they run over the
+    // same collection and face the same question.
     const card = readRepo(
       'libs/plugins/data/src/lib/components/host-datasets-card.component.tsx',
     )
-    // The import's key index names it outright; the table takes the one
-    // order its query plan holds (AGL-3321), which is the document name
-    // whatever is filtered — no field is offered a range that could lead it.
-    expect(card.split('orderBy(documentId())').length - 1).toBe(1)
+    const transfer = readRepo(
+      'libs/plugins/data/src/lib/transfer/dataset-transfer.server.ts',
+    )
+    // The export reads every record in the order the table's own query
+    // holds (AGL-3321), which is the document name whatever is filtered — no
+    // field is offered a range that could lead it.
+    expect(transfer).toContain('dataset.records.orderBy(FieldPath.documentId())')
+    expect(transfer).toContain('applyListQuery(dataset.records, plan)')
+    for (const field of ['order', 'createdAt', 'updatedAt']) {
+      expect(transfer).not.toContain(`orderBy('${field}'`)
+    }
     expect(card).toContain('...listQueryConstraints(recordPlan.plan)')
     const filter = datasetRecordFilter(PAGING_MODEL as any)
     expect(filter.declaration.sorts).toEqual([{ path: '__name__', direction: 'asc' }])

@@ -32,6 +32,7 @@
 
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
+import { pluginEntityPicker } from '@aglyn/aglyn/plugin-manager/plugin-entity-pickers'
 
 // Jest's cwd is the repo root here, not apps/console.
 const EDITOR_ROOT = join('apps', 'console', 'app', '(editor)')
@@ -141,8 +142,17 @@ describe('the provider reads the host forms collection', () => {
   )
 
   it('lists the forms of the host it was mounted for', () => {
+    // The kind is the forms plugin's declaration (AGL-3080): a site's own
+    // `forms` collection, and the provider builds every site kind's path
+    // from the host it was mounted for.
+    expect(pluginEntityPicker('forms')).toMatchObject({
+      pluginId: 'forms',
+      scope: 'host',
+      collection: 'forms',
+      nameField: 'displayName',
+    })
     const provider = source(PROVIDER)
-    expect(provider).toContain("['hosts', hostId, 'forms']")
+    expect(provider).toContain("['hosts', hostId, picker.collection]")
   })
 
   it('orders by document id, so an unnamed form is still in its own picker', () => {

@@ -16,10 +16,12 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
+import { registerPluginTransferResourceUi } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
 import { mdiSignDirection } from '@aglyn/shared-data-mdi'
 import { lazy } from 'react'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { REDIRECTS_SEARCH_SOURCES } from './model/redirects-search-sources'
+import { REDIRECTS_TRANSFER_KEY } from './transfer/redirects-transfer-fields'
 
 /** Code-split: the Redirects console page only loads when opened. */
 const RedirectsConsolePage = lazy(
@@ -56,4 +58,12 @@ export function registerRedirectsConsole(): void {
       },
     ],
   })
+  // The client half of the `redirects` transfer resource: how the import
+  // wizard and the export dialog name it. The server half is registered from
+  // `declarations.console-server.ts`.
+  registerPluginTransferResourceUi(
+    REDIRECTS_TRANSFER_KEY,
+    { label: 'Redirects', icon: { path: mdiSignDirection.path } },
+    { pluginId: BUNDLE_ID },
+  )
 }

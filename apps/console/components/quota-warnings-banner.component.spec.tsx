@@ -37,6 +37,7 @@
  */
 
 import { render, screen, waitFor } from '@testing-library/react'
+import { getDoc } from 'firebase/firestore'
 
 /** Every org/host path the banner ASKED for, by count() or getDocs(). */
 const countedPaths: string[] = []
@@ -135,8 +136,10 @@ jest.mock('../hooks/use-org-scope', () => ({
 jest.mock('../hooks/use-secondary-nav', () => ({
   useUrlNamesOrg: () => routeScope.namesOrg,
 }))
+/** The site the page is on; `null` on an org page. */
+let mockHostId: string | null = 'host-1'
 jest.mock('../components/host-id-provider', () => ({
-  useHostId: () => 'host-1',
+  useHostId: () => mockHostId,
 }))
 jest.mock('next/navigation', () => ({ useParams: () => ({}) }))
 
@@ -146,10 +149,16 @@ const orgPaths = () => countedPaths.filter((p) => p.startsWith('orgs/'))
 
 /** Seat-count fetches made by the banner (AGL-1253). */
 const seatFetches: string[] = []
+/** Storage band fetches (AGL-3479), kept apart from the seat count's. */
+const storageFetches: string[] = []
+/** What `/api/media/storage` answers; `null` is a refusal. */
+let mockStorageBody: Record<string, unknown> | null = null
 
 beforeEach(() => {
   countedPaths.length = 0
   seatFetches.length = 0
+  storageFetches.length = 0
+  mockStorageBody = null
   scope.orgWide = true
   scope.loaded = false
   currentOrg.org = { plan: 'business' }
@@ -161,7 +170,19 @@ beforeEach(() => {
   // so a scope-gating regression shows up as an unexpected ENTRY here, not as
   // an unhandled rejection buried in the output.
   global.fetch = jest.fn(async (input: RequestInfo | URL) => {
-    seatFetches.push(String(input))
+    const url = String(input)
+    // The storage band is the site library's route, not an org total, and
+    // is asked on its own terms (AGL-3479) — recorded apart so the seat
+    // assertions below keep meaning "the seat count".
+    if (url.startsWith('/api/media/storage')) {
+      storageFetches.push(url)
+      return {
+        ok: mockStorageBody != null,
+        status: mockStorageBody != null ? 200 : 403,
+        json: async () => mockStorageBody ?? {},
+      } as unknown as Response
+    }
+    seatFetches.push(url)
     return new Response(JSON.stringify({ managerSeats: 1, memberCount: 1 }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
@@ -458,6 +479,158 @@ describe('QuotaWarningsBanner off an org-scoped route (AGL-1916)', () => {
     await waitFor(() =>
       expect(seatFetches.join('\n')).toContain('/api/orgs/members?orgId=org-1'),
     )
+  })
+})
+
+/**
+ * Storage is the WORKSPACE's band (AGL-3479).
+ *
+ * Since AGL-2075 every site's media library and the organization's share one
+ * band, and the upload gate measures the pool against it. The banner read
+ * this site's own counter against the per-site figure instead: a workspace
+ * whose other libraries had filled the band read as having room, a single
+ * busy site read as over a band it shares, and a paid workspace past the band
+ * was told to "upgrade to keep adding" when its uploads were being accepted
+ * and billed.
+ *
+ * The row now reads `/api/media/storage` through this site's library — the
+ * pooled bytes and the pooled band, from the resolver the gate calls — and
+ * says what the band does on this plan: stops, or bills.
+ */
+describe('QuotaWarningsBanner storage row (AGL-3479)', () => {
+  const MB = 1024 * 1024
+  /** The route's answer for a pool of `usedMb` against a `bandMb` band. */
+  const answerStorage = (usedMb: number, bandMb: number, hardBand: boolean) => {
+    mockStorageBody = {
+      allowanceMb: bandMb,
+      unlimited: false,
+      usedBytes: usedMb * MB,
+      scopeBytes: 1 * MB,
+      hardBand,
+    }
+  }
+  const bannerText = () => screen.getByRole('alert').textContent ?? ''
+
+  beforeEach(() => {
+    scope.loaded = true
+    scope.orgWide = true
+    // Every other row under its limit, so the only breach is storage.
+    mockCountFor['hosts/host-1/screens'] = 0
+    mockCountFor['orgs/org-1/datasets'] = 0
+  })
+  afterEach(() => {
+    for (const key of Object.keys(mockCountFor)) delete mockCountFor[key]
+    mockHostId = 'host-1'
+  })
+
+  it('reads the pooled band through the site library, never the site’s counter', async () => {
+    answerStorage(250, 300, true)
+    render(<QuotaWarningsBanner />)
+    await screen.findByText(/above 80% of your workspace's storage/)
+    expect(storageFetches).toEqual(['/api/media/storage?hostId=host-1'])
+    // The per-site counter is not read at all any more.
+    expect(
+      jest.mocked(getDoc).mock.calls.map(([path]) => String(path)),
+    ).not.toContain('hosts/host-1/counters/media')
+    expect(bannerText()).toMatch(/every site and the organization library share it/)
+  })
+
+  it('says nothing about storage while the pool has room', async () => {
+    // Half the pooled band. A breached pages row lands in the same banner, so
+    // a rendered banner proves the storage row was weighed and stayed quiet.
+    answerStorage(150, 300, true)
+    mockCountFor['hosts/host-1/screens'] = 3
+    render(<QuotaWarningsBanner />)
+    await screen.findByText(/reached your pages limit/)
+    await waitFor(() => expect(storageFetches).toHaveLength(1))
+    expect(bannerText()).not.toMatch(/storage/)
+  })
+
+  it('past the band on a plan that bills: billed unless a cap is set, with a Usage link — never "stop"', async () => {
+    answerStorage(310, 300, false)
+    render(<QuotaWarningsBanner />)
+    await screen.findByText(
+      /extra storage is billed at your plan’s rate unless you set a storage cap under Billing → Usage/,
+    )
+    expect(bannerText()).not.toMatch(/stop|upgrade to keep adding/i)
+    expect(billingLinks().map((link) => link.textContent)).toEqual([
+      'Usage',
+      'Upgrade',
+    ])
+  })
+
+  it('approaching the band on a plan that bills says what passing it costs', async () => {
+    answerStorage(260, 300, false)
+    render(<QuotaWarningsBanner />)
+    await screen.findByText(/above 80% of your workspace's storage/)
+    expect(bannerText()).toMatch(/past it extra storage is billed/)
+    expect(bannerText()).not.toMatch(/stop/i)
+  })
+
+  it('at the band on a hard band: uploads stop, and nothing about a bill', async () => {
+    answerStorage(300, 300, true)
+    render(<QuotaWarningsBanner />)
+    await screen.findByText(
+      /used all of your workspace's storage — new uploads stop until you free up space or upgrade/,
+    )
+    expect(bannerText()).not.toMatch(/bill/i)
+    expect(billingLinks().map((link) => link.textContent)).toEqual(['Upgrade'])
+  })
+
+  it('tells a site collaborator it is the workspace’s storage, with no Billing links', async () => {
+    scope.orgWide = false
+    answerStorage(300, 300, true)
+    const { unmount } = render(<QuotaWarningsBanner />)
+    await screen.findByText(
+      /This workspace has used all of its storage — new uploads stop until space is freed or a workspace admin upgrades/,
+    )
+    expect(bannerText()).not.toMatch(/This site/)
+    expect(billingLinks()).toEqual([])
+    unmount()
+    answerStorage(310, 300, false)
+    render(<QuotaWarningsBanner />)
+    await screen.findByText(
+      /This workspace has used its included storage — extra storage is billed to the workspace/,
+    )
+  })
+
+  it('has no storage row for an unlimited band, or when the route refuses', async () => {
+    mockStorageBody = {
+      allowanceMb: null,
+      unlimited: true,
+      usedBytes: 0,
+      scopeBytes: 0,
+      hardBand: false,
+    }
+    mockCountFor['hosts/host-1/screens'] = 3
+    const { unmount } = render(<QuotaWarningsBanner />)
+    await screen.findByText(/reached your pages limit/)
+    await waitFor(() => expect(storageFetches).toHaveLength(1))
+    expect(bannerText()).not.toMatch(/storage/)
+    unmount()
+    mockStorageBody = null
+    render(<QuotaWarningsBanner />)
+    await screen.findByText(/reached your pages limit/)
+    await waitFor(() => expect(storageFetches).toHaveLength(2))
+    expect(bannerText()).not.toMatch(/storage/)
+  })
+
+  it('reads the same band through the organization library on an org page', async () => {
+    mockHostId = null
+    answerStorage(250, 300, true)
+    render(<QuotaWarningsBanner />)
+    await screen.findByText(/above 80% of your workspace's storage/)
+    expect(storageFetches).toEqual(['/api/media/storage?orgId=org-1'])
+  })
+
+  it('asks for no storage band off an org route', async () => {
+    routeScope.namesOrg = false
+    routeScope.pathOrgSlug = null
+    answerStorage(300, 300, true)
+    const { container } = render(<QuotaWarningsBanner />)
+    await waitFor(() => expect(seatFetches).toEqual([]))
+    expect(storageFetches).toEqual([])
+    expect(container.innerHTML).toBe('')
   })
 })
 

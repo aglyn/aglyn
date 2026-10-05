@@ -43,8 +43,9 @@
  * The stored action, through `runSingleActionOutcome` — the single-action path
  * a page's dispatch takes — so the switch, the conditions, the plan gate and
  * the month's run allowance are the ones a real run meets, the run is metered
- * on the site's `actionRuns`, and it lands in the action's Runs history like
- * any other. It is marked rather than simulated: see `actionTestRunPayload`.
+ * on the site's and the workspace's `actionRuns`, and it lands in the action's
+ * Runs history like any other. It is marked rather than simulated: see
+ * `actionTestRunPayload`.
  * When a gate stops it, the refusal names the gate, because a test that ran
  * nothing must not read as one that ran.
  *
@@ -54,7 +55,6 @@
  */
 
 import {
-  type HostAction,
   hostRoleCanPublish,
   isSiteEventType,
   type PluginApiHandler,
@@ -74,6 +74,7 @@ import type {
   SingleActionSkip,
 } from '../engine/run-event-actions'
 import { actionTestRunPayload } from '../model/action-test-run'
+import type { HostAction } from '../model/host-actions'
 
 export { ACTION_TEST_RUN_API_ROUTE } from '../model/action-test-run'
 

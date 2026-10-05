@@ -10,8 +10,13 @@
 import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'
 import type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'
 import type { ResolvedPluginSitemapSection } from './plugin-sitemap-sections'
+import type { ResolvedPluginSitemapReaderDeclaration } from './plugin-sitemap-readers'
 import type { ResolvedPluginSiteBundleSectionDeclaration } from './plugin-site-bundle'
+import type { ResolvedTransferResourceDeclaration } from './plugin-transfer-resources'
 import type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'
+import type { ResolvedPluginEntityPicker } from './plugin-entity-pickers'
+import type { ResolvedPluginRecordPage } from './plugin-record-pages'
+import type { ResolvedVisitorDoor } from './plugin-visitor-doors'
 import type { ResolvedPluginCostAxis, ResolvedPluginSpendLine, ResolvedPluginUsageBand, ResolvedPluginUsageMeter } from './plugin-usage-axes'
 import type { ResolvedPluginPlanFeature, ResolvedPluginPlanQuota } from './plugin-plan-entitlements'
 import type { FunctionBindings } from './plugin-contributions'
@@ -19,12 +24,14 @@ import type { PluginDistribution } from './plugin-distribution'
 import type { RepeatSourceDeclaration } from './repeat-rows'
 import type { PluginTemplateSource } from './plugin-template-sources'
 import type { FormRecordTargetDeclaration } from './submission-record-target'
+import type { ArtifactTypeDeclaration } from './plugin-artifact-types'
 import type { ResolvedBesignerDocument } from './besigner-documents'
 import type { PluginOrgKeyedCollection } from './plugin-org-erasure'
 import type { ResolvedVideoEmbedProvider } from './video-embed-provider'
 import type { AnalyticsProviderDeclaration } from '../app-utils/analytics-provider'
 import type { InteractionStepDeclaration } from '../app-utils/site-interactions'
 import type { ServerStepDeclaration } from './plugin-server-steps'
+import type { InteractionRecipeDeclaration } from './interaction-recipes'
 import type { NotificationCategoryDeclaration, NotificationDigestDeclaration } from '../app-utils/notifications'
 
 export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
@@ -170,7 +177,7 @@ export const PUBLISHED_SITE_IMPACT: Readonly<Record<string, PublishedSiteImpact>
   "marketplace": "console-only",
   "crm": "console-only",
   "outreach": "console-only",
-  "data": "console-only",
+  "data": "routes",
   "email": "elements",
   "events-calendar": "elements",
   "inbox": "console-only",
@@ -207,7 +214,50 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
   {
     "pluginId": "forms",
     "name": "forms",
-    "routeSlug": "forms"
+    "routeSlug": "forms",
+    "siteExport": {
+      "limit": 200,
+      "fields": [
+        "displayName",
+        "slug",
+        "fields",
+        "consentFieldName",
+        "routing",
+        "legacyMatch",
+        "rootId",
+        "nodes",
+        "archivedAt",
+        "retired",
+        "campaignIds",
+        "inCampaign",
+        "stats",
+        "nameLower",
+        "nameTokens",
+        "nameReversed",
+        "searchTokens"
+      ],
+      "package": {
+        "kind": "form",
+        "label": "Forms",
+        "nameField": "displayName",
+        "slugField": "slug",
+        "placements": [
+          {
+            "componentId": "form",
+            "prop": "formId"
+          }
+        ]
+      },
+      "count": {
+        "quotaKey": "formsPerHost"
+      }
+    }
+  },
+  {
+    "pluginId": "forms",
+    "name": "formSubmissions",
+    "mediaScan": "none",
+    "mediaScanReason": "Visitor form submissions. Unbounded, PII-heavy, and a file attached to one is the visitor's upload — not a library asset an author picked, and not something deleting a library asset would break."
   },
   {
     "pluginId": "bookings",
@@ -227,7 +277,10 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
         "timezone",
         "windows",
         "crmFollowUpTask",
-        "crmMeetingActivity"
+        "crmMeetingActivity",
+        "askPhone",
+        "askAddress",
+        "priceDisplay"
       ]
     },
     "siteExport": {
@@ -240,8 +293,16 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
         "timezone",
         "windows",
         "crmFollowUpTask",
-        "crmMeetingActivity"
-      ]
+        "crmMeetingActivity",
+        "askPhone",
+        "askAddress",
+        "priceDisplay"
+      ],
+      "package": {
+        "kind": "service",
+        "label": "Booking services",
+        "nameField": "name"
+      }
     }
   },
   {
@@ -470,6 +531,13 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
     "mediaScanReason": "Captured leads, on the same footing as `formSubmissions`: visitor-submitted, unbounded, and never a place an author places an asset."
   },
   {
+    "pluginId": "data",
+    "name": "recordPages",
+    "label": "record template",
+    "mediaScan": "none",
+    "mediaScanReason": "A binding holds a dataset id, a base path and field ids — never a value. The images a record page shows are the record's own, in the organization's dataset records, which no site collection holds."
+  },
+  {
     "pluginId": "email",
     "name": "suppressions",
     "mediaScan": "none",
@@ -478,13 +546,29 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
   {
     "pluginId": "events-calendar",
     "name": "events",
-    "routeSlug": "events"
-  },
-  {
-    "pluginId": "inbox",
-    "name": "formSubmissions",
-    "mediaScan": "none",
-    "mediaScanReason": "Visitor form submissions. Unbounded, PII-heavy, and a file attached to one is the visitor's upload — not a library asset an author picked, and not something deleting a library asset would break."
+    "routeSlug": "events",
+    "siteExport": {
+      "limit": 200,
+      "fields": [
+        "title",
+        "startsAtMs",
+        "endsAtMs",
+        "location",
+        "organizer",
+        "description",
+        "coverImage",
+        "coverImageAlt",
+        "status"
+      ],
+      "package": {
+        "kind": "event",
+        "label": "Events",
+        "nameField": "title"
+      },
+      "count": {
+        "uncapped": "The events page creates an event with a client write and no count, so a restore mints nothing an editor could not already."
+      }
+    }
   },
   {
     "pluginId": "logic",
@@ -512,7 +596,13 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
         "variables",
         "operations",
         "returnValue"
-      ]
+      ],
+      "package": {
+        "kind": "function",
+        "label": "Functions",
+        "nameField": "name",
+        "bindingToken": "fn"
+      }
     }
   },
   {
@@ -541,18 +631,88 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
         "value",
         "workflowId",
         "workflowName"
-      ]
+      ],
+      "package": {
+        "kind": "variable",
+        "label": "Variables",
+        "nameField": "name",
+        "references": [
+          {
+            "field": "workflowId",
+            "kind": "workflow"
+          }
+        ],
+        "bindingToken": "var"
+      }
     }
   },
   {
     "pluginId": "marketing",
     "name": "experiments",
-    "routeSlug": "marketing"
+    "routeSlug": "marketing",
+    "siteExport": {
+      "limit": 100,
+      "fields": [
+        "name",
+        "nameLower",
+        "nameTokens",
+        "nameReversed",
+        "status",
+        "target",
+        "screenId",
+        "nodeId",
+        "variants",
+        "goal",
+        "winnerVariantId",
+        "endAtMs",
+        "autoWinner",
+        "autoCompleted",
+        "completedAt"
+      ],
+      "package": {
+        "kind": "experiment",
+        "label": "Experiments",
+        "nameField": "name",
+        "references": [
+          {
+            "field": "screenId",
+            "kind": "page"
+          }
+        ]
+      },
+      "count": {
+        "uncapped": "The experiments card creates an experiment with a client write and no count, so a restore mints nothing an editor could not already."
+      }
+    }
   },
   {
     "pluginId": "marketing",
     "name": "overlays",
-    "routeSlug": "marketing"
+    "routeSlug": "marketing",
+    "siteExport": {
+      "limit": 100,
+      "fields": [
+        "kind",
+        "name",
+        "enabled",
+        "startAtMs",
+        "endAtMs",
+        "pathPatterns",
+        "excludePathPatterns",
+        "order",
+        "bar",
+        "popup",
+        "stats"
+      ],
+      "package": {
+        "kind": "overlay",
+        "label": "Bars and popups",
+        "nameField": "name"
+      },
+      "count": {
+        "uncapped": "The overlays card creates a bar or popup with a client write and no count, so a restore mints nothing an editor could not already."
+      }
+    }
   },
   {
     "pluginId": "marketing",
@@ -584,6 +744,22 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
         "approvedByField": "externalDestinationApprovedBy"
       },
       "livePathField": "source"
+    },
+    "siteExport": {
+      "limit": 500,
+      "fields": [
+        "source",
+        "destination",
+        "statusCode",
+        "kind",
+        "priority",
+        "enabled"
+      ],
+      "package": {
+        "kind": "redirect",
+        "label": "Redirects",
+        "nameField": "source"
+      }
     }
   },
   {
@@ -621,7 +797,12 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
         "steps",
         "returnValue",
         "trigger"
-      ]
+      ],
+      "package": {
+        "kind": "workflow",
+        "label": "Workflows",
+        "nameField": "name"
+      }
     }
   },
   {
@@ -676,7 +857,12 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
         "steps",
         "enabled",
         "recipe"
-      ]
+      ],
+      "package": {
+        "kind": "action",
+        "label": "Interactions and actions",
+        "nameField": "name"
+      }
     }
   },
 ]
@@ -726,6 +912,17 @@ export const PLUGIN_SITEMAP_SECTIONS_DECLARED: readonly ResolvedPluginSitemapSec
 ]
 
 /**
+ * Every child-sitemap family a first-party plugin's reader lists, declared by
+ * that plugin (AGL-3475), in the order the index lists them.
+ */
+export const PLUGIN_SITEMAP_READERS_DECLARED: readonly ResolvedPluginSitemapReaderDeclaration[] = [
+  {
+    "pluginId": "data",
+    "section": "records"
+  }
+]
+
+/**
  * Every section of the whole-site backup a first-party plugin answers for,
  * declared by that plugin (AGL-3080), in the order the bundle carries them.
  */
@@ -733,7 +930,548 @@ export const PLUGIN_SITE_BUNDLE_SECTIONS_DECLARED: readonly ResolvedPluginSiteBu
   {
     "pluginId": "data",
     "key": "datasets",
-    "limit": 50
+    "limit": 50,
+    "package": {
+      "kind": "dataset",
+      "label": "Datasets",
+      "nameField": "displayName",
+      "placements": [
+        {
+          "prop": "repeatDataset"
+        },
+        {
+          "componentId": "form",
+          "prop": "datasetId"
+        }
+      ]
+    }
+  }
+]
+
+/**
+ * Every resource a first-party plugin can import or export, declared by that
+ * plugin (AGL-3523), in the order the transfer hub lists them.
+ */
+export const PLUGIN_TRANSFER_RESOURCES_DECLARED: readonly ResolvedTransferResourceDeclaration[] = [
+  {
+    "pluginId": "forms",
+    "key": "forms.submissions",
+    "label": "Form submissions",
+    "singularLabel": "Form submission",
+    "scope": "host",
+    "kinds": [
+      "records"
+    ],
+    "formats": [
+      "csv",
+      "json",
+      "ndjson"
+    ],
+    "description": "What visitors sent through this site’s forms: each answer, and when, on which page and through which form it arrived.",
+    "exportOnly": true
+  },
+  {
+    "pluginId": "bookings",
+    "key": "bookings",
+    "featureFlag": "bookings",
+    "label": "Bookings",
+    "singularLabel": "Booking",
+    "scope": "host",
+    "kinds": [
+      "records"
+    ],
+    "formats": [
+      "csv",
+      "json",
+      "ndjson"
+    ],
+    "description": "Every booking on this site: the service, the time, the customer’s details, its status and what was paid.",
+    "exportOnly": true
+  },
+  {
+    "pluginId": "commerce",
+    "key": "commerce.products",
+    "label": "Products",
+    "singularLabel": "Product",
+    "scope": "host",
+    "kinds": [
+      "records"
+    ],
+    "formats": [
+      "csv",
+      "json",
+      "ndjson"
+    ],
+    "limits": {
+      "maxRows": 50000
+    },
+    "description": "Products with their options, variants, prices, stock, images and search listing."
+  },
+  {
+    "pluginId": "commerce",
+    "key": "commerce.categories",
+    "label": "Product categories",
+    "singularLabel": "Product category",
+    "scope": "host",
+    "kinds": [
+      "records"
+    ],
+    "formats": [
+      "csv",
+      "json",
+      "ndjson"
+    ],
+    "limits": {
+      "maxRows": 2000
+    },
+    "description": "The category tree products are filed under, matched by slug, then name."
+  },
+  {
+    "pluginId": "commerce",
+    "key": "commerce.orders",
+    "label": "Orders",
+    "singularLabel": "Order",
+    "scope": "host",
+    "kinds": [
+      "records"
+    ],
+    "formats": [
+      "csv",
+      "json",
+      "ndjson"
+    ],
+    "exportOnly": true,
+    "description": "Every order with its items, money, customer and addresses. Exported only."
+  },
+  {
+    "pluginId": "commerce",
+    "key": "commerce.discounts",
+    "label": "Discounts",
+    "singularLabel": "Discount",
+    "scope": "host",
+    "kinds": [
+      "records"
+    ],
+    "formats": [
+      "csv",
+      "json",
+      "ndjson"
+    ],
+    "limits": {
+      "maxRows": 5000
+    },
+    "description": "Discount codes and automatic promotions, matched by code, then name. New ones start switched off."
+  },
+  {
+    "pluginId": "commerce",
+    "key": "commerce.coupons",
+    "label": "Coupons",
+    "singularLabel": "Coupon",
+    "scope": "host",
+    "kinds": [
+      "records"
+    ],
+    "formats": [
+      "csv",
+      "json",
+      "ndjson"
+    ],
+    "limits": {
+      "maxRows": 5000
+    },
+    "description": "Percent-off coupon codes, matched by code. New ones start switched off."
+  },
+  {
+    "pluginId": "commerce",
+    "key": "commerce.gift-cards",
+    "featureFlag": "giftCards",
+    "featureFlagExempt": [
+      "export"
+    ],
+    "importRoles": [
+      "admin"
+    ],
+    "label": "Gift cards",
+    "singularLabel": "Gift card",
+    "scope": "host",
+    "kinds": [
+      "records"
+    ],
+    "formats": [
+      "csv",
+      "json",
+      "ndjson"
+    ],
+    "limits": {
+      "maxRows": 2000
+    },
+    "description": "Every gift card's code, balance and status. An import issues each card, confirmed by the total."
+  },
+  {
+    "pluginId": "crm",
+    "key": "crm.contacts",
+    "featureFlag": "crm",
+    "featureFlagExempt": [
+      "export"
+    ],
+    "label": "Contacts",
+    "singularLabel": "Contact",
+    "scope": "org",
+    "kinds": [
+      "records"
+    ],
+    "formats": [
+      "csv",
+      "json",
+      "ndjson"
+    ],
+    "limits": {
+      "maxRows": 50000
+    },
+    "description": "Every contact field, custom fields included, with the company, the manager and the owner by name."
+  },
+  {
+    "pluginId": "crm",
+    "key": "crm.companies",
+    "featureFlag": "crm",
+    "label": "Companies",
+    "singularLabel": "Company",
+    "scope": "org",
+    "kinds": [
+      "records"
+    ],
+    "formats": [
+      "csv",
+      "json",
+      "ndjson"
+    ],
+    "limits": {
+      "maxRows": 50000
+    },
+    "description": "Every company field, custom fields included, with the parent company and the owner by name."
+  },
+  {
+    "pluginId": "crm",
+    "key": "crm.email-templates",
+    "featureFlag": "crm",
+    "label": "Email templates",
+    "singularLabel": "Email template",
+    "scope": "org",
+    "kinds": [
+      "package"
+    ],
+    "formats": [
+      "json"
+    ],
+    "limits": {
+      "maxRows": 200
+    },
+    "description": "Shared email templates and snippets, and your own personal ones."
+  },
+  {
+    "pluginId": "crm",
+    "key": "crm.leads",
+    "featureFlag": "crm",
+    "featureFlagExempt": [
+      "export"
+    ],
+    "label": "Leads",
+    "singularLabel": "Lead",
+    "scope": "org",
+    "kinds": [
+      "records"
+    ],
+    "formats": [
+      "csv",
+      "json",
+      "ndjson"
+    ],
+    "limits": {
+      "maxRows": 50000
+    },
+    "description": "Every lead field, custom fields included, with the status, the owner and the campaigns by name."
+  },
+  {
+    "pluginId": "crm",
+    "key": "crm.deals",
+    "featureFlag": "crm",
+    "label": "Deals",
+    "singularLabel": "Deal",
+    "scope": "org",
+    "kinds": [
+      "records"
+    ],
+    "formats": [
+      "csv",
+      "json",
+      "ndjson"
+    ],
+    "limits": {
+      "maxRows": 50000
+    },
+    "description": "Every deal field, custom fields and contact roles included, with the pipeline, stage, contact and company by name."
+  },
+  {
+    "pluginId": "crm",
+    "key": "crm.tasks",
+    "featureFlag": "crm",
+    "label": "Tasks",
+    "singularLabel": "Task",
+    "scope": "org",
+    "kinds": [
+      "records"
+    ],
+    "formats": [
+      "csv",
+      "json",
+      "ndjson"
+    ],
+    "limits": {
+      "maxRows": 50000
+    },
+    "description": "Every task, with its type, priority and status as your lists label them and the contact, company and deal it is for."
+  },
+  {
+    "pluginId": "crm",
+    "key": "crm.activities",
+    "featureFlag": "crm",
+    "label": "Activities",
+    "singularLabel": "Activity",
+    "scope": "org",
+    "kinds": [
+      "records"
+    ],
+    "formats": [
+      "csv",
+      "json",
+      "ndjson"
+    ],
+    "exportOnly": true,
+    "description": "Every call, email, meeting and note the team logged, with who logged it and what it was about."
+  },
+  {
+    "pluginId": "crm",
+    "key": "crm.pipelines",
+    "featureFlag": "crm",
+    "label": "Pipelines and stages",
+    "singularLabel": "Stage",
+    "scope": "org",
+    "kinds": [
+      "records"
+    ],
+    "formats": [
+      "csv",
+      "json",
+      "ndjson"
+    ],
+    "exportOnly": true,
+    "description": "Each pipeline with its stages in order: their kind, probability and forecast category."
+  },
+  {
+    "pluginId": "crm",
+    "key": "crm.fields",
+    "featureFlag": "crm",
+    "label": "Custom fields",
+    "singularLabel": "Custom field",
+    "scope": "org",
+    "kinds": [
+      "records"
+    ],
+    "formats": [
+      "csv",
+      "json",
+      "ndjson"
+    ],
+    "exportOnly": true,
+    "description": "Every custom field you defined, on which record, of what type, with its choices."
+  },
+  {
+    "pluginId": "outreach",
+    "key": "outreach.sequences",
+    "featureFlag": "outreach",
+    "label": "Sequences",
+    "singularLabel": "Sequence",
+    "scope": "org",
+    "kinds": [
+      "package"
+    ],
+    "formats": [
+      "json"
+    ],
+    "limits": {
+      "maxRows": 500
+    },
+    "description": "Each sequence's steps and settings, imported as a draft. Never who was enrolled or what was sent."
+  },
+  {
+    "pluginId": "outreach",
+    "key": "outreach.do-not-contact",
+    "featureFlag": "outreach",
+    "label": "Do-not-contact list",
+    "singularLabel": "Do-not-contact entry",
+    "scope": "org",
+    "kinds": [
+      "records"
+    ],
+    "formats": [
+      "csv",
+      "json",
+      "ndjson"
+    ],
+    "description": "The domains and addresses sequences never email. An import only adds to it; an address is kept as a fingerprint, so only domains are exported."
+  },
+  {
+    "pluginId": "data",
+    "key": "data.dataset",
+    "featureFlag": "dataStore",
+    "label": "Dataset records",
+    "singularLabel": "Dataset record",
+    "description": "The records of one dataset, with every field it defines.",
+    "scope": "org",
+    "kinds": [
+      "records"
+    ],
+    "formats": [
+      "csv",
+      "json",
+      "ndjson"
+    ],
+    "limits": {
+      "maxRows": 50000
+    },
+    "instances": true,
+    "readableByMembers": true
+  },
+  {
+    "pluginId": "email",
+    "key": "email.list-members",
+    "label": "List members",
+    "singularLabel": "List member",
+    "scope": "host",
+    "kinds": [
+      "records"
+    ],
+    "formats": [
+      "csv",
+      "json",
+      "ndjson"
+    ],
+    "limits": {
+      "maxRows": 50000
+    },
+    "instances": true,
+    "description": "The people on one email list, with the consent each was added under."
+  },
+  {
+    "pluginId": "email",
+    "key": "email.suppressions",
+    "label": "Suppressions",
+    "singularLabel": "Suppression",
+    "scope": "host",
+    "kinds": [
+      "records"
+    ],
+    "formats": [
+      "csv",
+      "json",
+      "ndjson"
+    ],
+    "limits": {
+      "maxRows": 50000
+    },
+    "description": "The addresses a site's marketing email skips, and why."
+  },
+  {
+    "pluginId": "email",
+    "key": "email.topics",
+    "label": "Email topics",
+    "singularLabel": "Email topic",
+    "scope": "org",
+    "kinds": [
+      "package"
+    ],
+    "formats": [
+      "json"
+    ],
+    "limits": {
+      "maxRows": 200
+    },
+    "description": "Each topic's name, what recipients are told they get, and whether it is retired. Never who chose it."
+  },
+  {
+    "pluginId": "events-calendar",
+    "key": "events",
+    "featureFlag": "eventCalendar",
+    "label": "Events",
+    "singularLabel": "Event",
+    "scope": "host",
+    "kinds": [
+      "records"
+    ],
+    "formats": [
+      "csv",
+      "json",
+      "ndjson"
+    ],
+    "limits": {
+      "maxRows": 2000
+    },
+    "description": "This site’s calendar events, matched on their ID, then the title and start together."
+  },
+  {
+    "pluginId": "marketing",
+    "key": "marketing.campaigns",
+    "label": "Campaigns",
+    "singularLabel": "Campaign",
+    "scope": "org",
+    "kinds": [
+      "package"
+    ],
+    "formats": [
+      "json"
+    ],
+    "limits": {
+      "maxRows": 500
+    },
+    "description": "Each campaign's name, dates, lists and its emails' copy, imported as drafts. Never what was sent or its results."
+  },
+  {
+    "pluginId": "redirects",
+    "key": "redirects",
+    "featureFlag": "redirects",
+    "label": "Redirects",
+    "singularLabel": "Redirect",
+    "scope": "host",
+    "kinds": [
+      "records"
+    ],
+    "formats": [
+      "csv",
+      "json",
+      "ndjson"
+    ],
+    "limits": {
+      "maxRows": 5000
+    },
+    "description": "This site’s redirect rules, matched on the path they redirect from."
+  },
+  {
+    "pluginId": "workflows",
+    "key": "workflows.org-automations",
+    "featureFlag": "actions",
+    "label": "Org automations",
+    "singularLabel": "Org automation",
+    "scope": "org",
+    "kinds": [
+      "package"
+    ],
+    "formats": [
+      "json"
+    ],
+    "limits": {
+      "maxRows": 100
+    },
+    "description": "The organization's automations — trigger, steps and sites — imported switched off."
   }
 ]
 
@@ -792,6 +1530,125 @@ export const PLUGIN_ORG_CAPACITIES_DECLARED: readonly ResolvedPluginOrgCapacity[
 ]
 
 /**
+ * Every kind of entity a besigner picker lists, declared by the plugin that
+ * keeps it (AGL-3080). Core reads, browses and resolves; this says where and
+ * in what words.
+ */
+export const PLUGIN_ENTITY_PICKERS_DECLARED: readonly ResolvedPluginEntityPicker[] = [
+  {
+    "pluginId": "forms",
+    "kind": "forms",
+    "attribute": "form-select",
+    "scope": "host",
+    "collection": "forms",
+    "nameField": "displayName",
+    "singular": "form",
+    "plural": "forms",
+    "page": "the Forms page"
+  },
+  {
+    "pluginId": "commerce",
+    "kind": "products",
+    "attribute": "product-select",
+    "scope": "host",
+    "collection": "products",
+    "nameField": "name",
+    "searchable": true,
+    "singular": "product",
+    "plural": "products",
+    "page": "the Products page"
+  },
+  {
+    "pluginId": "commerce",
+    "kind": "collections",
+    "attribute": "collection-select",
+    "scope": "host",
+    "collection": "collections",
+    "nameField": "name",
+    "where": [
+      {
+        "field": "kind",
+        "equals": "catalog"
+      }
+    ],
+    "singular": "collection",
+    "plural": "collections",
+    "page": "the Collections page"
+  },
+  {
+    "pluginId": "commerce",
+    "kind": "categories",
+    "attribute": "category-select",
+    "scope": "host",
+    "collection": "productCategories",
+    "nameField": "name",
+    "singular": "category",
+    "plural": "categories",
+    "page": "the Categories page"
+  },
+  {
+    "pluginId": "data",
+    "kind": "datasets",
+    "attribute": "dataset-select",
+    "fieldsAttribute": "dataset-field-select",
+    "fieldsFrom": "dataset",
+    "scope": "orgData",
+    "collection": "datasets",
+    "nameField": "displayName",
+    "singular": "dataset",
+    "plural": "datasets",
+    "page": "the Data page"
+  },
+]
+
+/**
+ * Every public door a first-party plugin keeps a ceiling and a honeypot on,
+ * with its counters and words, declared by that plugin (AGL-3080).
+ */
+export const PLUGIN_VISITOR_DOORS_DECLARED: readonly ResolvedVisitorDoor[] = [
+  {
+    "pluginId": "forms",
+    "door": "form",
+    "refusedCounter": "formSubmissionsRefused",
+    "caughtCounter": "formSubmissionsSpam",
+    "words": {
+      "pausedTitle": "Form submissions are paused",
+      "noun": {
+        "one": "submission",
+        "other": "submissions"
+      },
+      "staffNoun": {
+        "one": "form submission",
+        "other": "form submissions"
+      },
+      "cause": "This usually means a bot is filling in one of your forms — if it is real traffic, contact support and we will raise the limit.",
+      "pausedChip": "forms paused",
+      "caught": {
+        "one": "bot submission",
+        "other": "bot submissions"
+      },
+      "caughtBy": "the honeypot",
+      "caughtChip": {
+        "one": "bot hit",
+        "other": "bot hits"
+      }
+    }
+  },
+]
+
+/**
+ * Where a person reads each record kind a first-party plugin's console page
+ * shows, declared by that plugin (AGL-3080), for a server's notification link.
+ */
+export const PLUGIN_RECORD_PAGES_DECLARED: readonly ResolvedPluginRecordPage[] = [
+  {
+    "pluginId": "inbox",
+    "kind": "formSubmission",
+    "path": "/inbox"
+  },
+]
+
+/**
  * What each plan includes of every quota a first-party plugin owns, declared
  * by that plugin (AGL-3080). `PLAN_ENTITLEMENTS` composes these; core names
  * no key.
@@ -805,11 +1662,11 @@ export const PLUGIN_PLAN_QUOTAS_DECLARED: readonly ResolvedPluginPlanQuota[] = [
       "free": 20,
       "starter": 200,
       "pro": 1000,
-      "business": 8000,
-      "scale": 25000,
-      "advanced": 40000,
-      "agency": 25000,
-      "enterprise": 50000
+      "business": 5000,
+      "scale": 10000,
+      "advanced": 10000,
+      "agency": 10000,
+      "enterprise": 20000
     }
   },
   {
@@ -834,7 +1691,7 @@ export const PLUGIN_PLAN_QUOTAS_DECLARED: readonly ResolvedPluginPlanQuota[] = [
     "label": "One-to-one emails / day",
     "byPlan": {
       "free": 0,
-      "starter": 50,
+      "starter": 35,
       "pro": 150,
       "business": 200,
       "scale": 300,
@@ -1048,7 +1905,17 @@ export const PLUGIN_USAGE_BANDS_DECLARED: readonly ResolvedPluginUsageBand[] = [
       "assistCostUsd"
     ],
     "entitlement": "assistCreditsPerMonth",
-    "unitCostUsd": 0.001
+    "unitCostUsd": 0.001,
+    "consoleWarning": {
+      "standing": "/api/ai/billing/credits",
+      "member": "credits",
+      "approach": "You're above 80% of your included AI assist credits.",
+      "reached": {
+        "stops": "You've used your included AI assist credits — AI assist stops until next month or an upgrade, and nothing is billed for it.",
+        "bills": "You've used your included AI assist credits — extra credits are billed at your plan’s rate unless you set a stop under Billing → Usage."
+      },
+      "linksUsage": true
+    }
   },
   {
     "pluginId": "workflows",
@@ -1060,6 +1927,7 @@ export const PLUGIN_USAGE_BANDS_DECLARED: readonly ResolvedPluginUsageBand[] = [
     ],
     "entitlement": "workflowRunsPerMonth",
     "hostCounter": "workflowRuns",
+    "orgCounter": "workflowRuns",
     "alert": {
       "label": "monthly workflow runs",
       "noun": "workflow runs",
@@ -1076,7 +1944,8 @@ export const PLUGIN_USAGE_BANDS_DECLARED: readonly ResolvedPluginUsageBand[] = [
     "fields": [
       "actionRuns"
     ],
-    "entitlement": "actionRunsPerMonth"
+    "entitlement": "actionRunsPerMonth",
+    "orgCounter": "actionRuns"
   },
 ]
 
@@ -1134,6 +2003,12 @@ export const PLUGIN_ORG_KEYED_COLLECTIONS: readonly PluginOrgKeyedCollection[] =
  * (AGL-3080): each holds a record the erasure promises to destroy.
  */
 export const PLUGIN_REQUIRED_ORG_ERASERS: readonly string[] = ["marketplace"]
+
+/**
+ * The plugins whose person eraser a person erasure may not run without
+ * (AGL-3080): each keeps a share of the person the erasure promises to remove.
+ */
+export const PLUGIN_REQUIRED_PERSON_ERASERS: readonly string[] = ["bookings","commerce","crm","email"]
 
 /**
  * The plugins whose sales the operator's sales tax return may not be filed
@@ -1200,6 +2075,15 @@ export const PLUGIN_FORM_RECORD_TARGET_DECLARED: FormRecordTargetDeclaration | n
 }
 
 /**
+ * The installable artifact types a first-party plugin keeps the copies of,
+ * declared by that plugin (AGL-3080). Empty when none does, and an installer
+ * then refuses every listing of a type nobody keeps.
+ */
+export const PLUGIN_ARTIFACT_TYPES_DECLARED: readonly ArtifactTypeDeclaration[] = [
+  {"pluginId":"data","type":"datasetSchema"},
+]
+
+/**
  * What a site's template library calls a template a plugin installed, by the
  * `source.type` that plugin stamps, declared by that plugin (AGL-3080).
  * Core names no installer.
@@ -1234,6 +2118,78 @@ export const ANALYTICS_PROVIDERS_DECLARED: readonly AnalyticsProviderDeclaration
  */
 export const PLUGIN_INTERACTION_STEPS_DECLARED: readonly InteractionStepDeclaration[] = [
   {
+    "pluginId": "crm",
+    "type": "setContactStage",
+    "label": "Set the contact’s lifecycle stage",
+    "offered": false
+  },
+  {
+    "pluginId": "crm",
+    "type": "addContactTag",
+    "label": "Tag the contact",
+    "offered": false,
+    "typedFields": [
+      {
+        "key": "tag",
+        "names": "the tag"
+      }
+    ]
+  },
+  {
+    "pluginId": "crm",
+    "type": "assignContactOwner",
+    "label": "Assign the contact an owner",
+    "offered": false
+  },
+  {
+    "pluginId": "crm",
+    "type": "createCrmTask",
+    "label": "Create a CRM task",
+    "offered": false,
+    "typedFields": [
+      {
+        "key": "title",
+        "names": "the title"
+      }
+    ]
+  },
+  {
+    "pluginId": "crm",
+    "type": "logCrmActivity",
+    "label": "Log a CRM activity",
+    "offered": false,
+    "typedFields": [
+      {
+        "key": "body",
+        "names": "the text"
+      }
+    ]
+  },
+  {
+    "pluginId": "data",
+    "type": "datasetAppend",
+    "label": "Write to a dataset",
+    "offered": false,
+    "typedFields": [
+      {
+        "key": "datasetName",
+        "names": "the dataset"
+      }
+    ]
+  },
+  {
+    "pluginId": "data",
+    "type": "updateDataset",
+    "label": "Update a dataset record",
+    "offered": false,
+    "typedFields": [
+      {
+        "key": "datasetName",
+        "names": "the dataset"
+      }
+    ]
+  },
+  {
     "pluginId": "marketing",
     "type": "showOverlay",
     "label": "Open an overlay",
@@ -1250,6 +2206,12 @@ export const PLUGIN_INTERACTION_STEPS_DECLARED: readonly InteractionStepDeclarat
     "pluginId": "workflows",
     "type": "runWorkflow",
     "label": "Run a workflow",
+    "typedFields": [
+      {
+        "key": "workflowName",
+        "names": "the workflow"
+      }
+    ],
     "picks": {
       "collection": "workflows",
       "limit": 100,
@@ -1259,6 +2221,107 @@ export const PLUGIN_INTERACTION_STEPS_DECLARED: readonly InteractionStepDeclarat
       "missing": "pick a workflow"
     }
   },
+  {
+    "pluginId": "workflows",
+    "type": "customEvent",
+    "label": "Fire a custom event",
+    "offered": false
+  },
+  {
+    "pluginId": "workflows",
+    "type": "webhookPost",
+    "label": "Send a webhook (Business)",
+    "offered": false,
+    "typedFields": [
+      {
+        "key": "webhookName",
+        "names": "the webhook"
+      }
+    ]
+  },
+  {
+    "pluginId": "workflows",
+    "type": "sendEmail",
+    "label": "Send an email",
+    "offered": false,
+    "typedFields": [
+      {
+        "key": "subject",
+        "names": "the subject"
+      },
+      {
+        "key": "body",
+        "names": "the text"
+      }
+    ]
+  },
+  {
+    "pluginId": "workflows",
+    "type": "notifyAdmins",
+    "label": "Notify site admins",
+    "offered": false,
+    "typedFields": [
+      {
+        "key": "title",
+        "names": "the title"
+      },
+      {
+        "key": "body",
+        "names": "the text"
+      }
+    ]
+  },
+  {
+    "pluginId": "workflows",
+    "type": "enrollList",
+    "label": "Enroll in a list",
+    "offered": false,
+    "typedFields": [
+      {
+        "key": "listName",
+        "names": "the list"
+      }
+    ]
+  },
+  {
+    "pluginId": "workflows",
+    "type": "assignCampaign",
+    "label": "Assign to a campaign",
+    "offered": false,
+    "typedFields": [
+      {
+        "key": "campaignName",
+        "names": "the campaign"
+      }
+    ]
+  },
+  {
+    "pluginId": "workflows",
+    "type": "wait",
+    "label": "Wait",
+    "offered": false,
+    "holds": {
+      "minMinutes": 1,
+      "maxMinutes": 129600
+    }
+  },
+  {
+    "pluginId": "workflows",
+    "type": "waitForEvent",
+    "label": "Wait for something to happen",
+    "offered": false,
+    "holds": {
+      "minMinutes": 1,
+      "maxMinutes": 129600,
+      "timeoutField": "_waitTimedOut"
+    }
+  },
+  {
+    "pluginId": "workflows",
+    "type": "exitFlow",
+    "label": "End the flow here",
+    "offered": false
+  },
 ]
 
 /**
@@ -1266,7 +2329,58 @@ export const PLUGIN_INTERACTION_STEPS_DECLARED: readonly InteractionStepDeclarat
  * declared by that plugin (AGL-3080). Core names no plugin step.
  */
 export const PLUGIN_SERVER_STEPS_DECLARED: readonly ServerStepDeclaration[] = [
+  {
+    "pluginId": "crm",
+    "type": "setContactStage"
+  },
+  {
+    "pluginId": "crm",
+    "type": "addContactTag"
+  },
+  {
+    "pluginId": "crm",
+    "type": "assignContactOwner"
+  },
+  {
+    "pluginId": "crm",
+    "type": "createCrmTask"
+  },
+  {
+    "pluginId": "crm",
+    "type": "logCrmActivity"
+  },
+  {
+    "pluginId": "data",
+    "type": "datasetAppend"
+  },
+  {
+    "pluginId": "data",
+    "type": "updateDataset"
+  },
+]
 
+/**
+ * Every ready-to-edit interaction a first-party plugin offers, by the id a
+ * stored interaction's stamp names it with, declared by that plugin
+ * (AGL-3080). Core names no recipe.
+ */
+export const PLUGIN_INTERACTION_RECIPES_DECLARED: readonly InteractionRecipeDeclaration[] = [
+  {
+    "pluginId": "crm",
+    "id": "welcomeNewLead"
+  },
+  {
+    "pluginId": "crm",
+    "id": "followUpWonDeal"
+  },
+  {
+    "pluginId": "crm",
+    "id": "reengageStaleLead"
+  },
+  {
+    "pluginId": "crm",
+    "id": "tagByForm"
+  },
 ]
 
 /**

@@ -251,13 +251,8 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     '@aglyn/tenant-data-admin/server/email-unsubscribe-link',
   ),
   firebaseAdmin: { app: () => ({ firestore: () => fakeFirestore }) },
-  /*
-   * The site's org, and the REAL send lookup over this file's store: the
-   * counter is written wherever the send is — the org's `campaigns`, or the
-   * site's for a send the migration has not reached.
-   */
+  // The site's org.
   resolveOrgIdForHost: async () => 'org-1',
-  ...jest.requireActual('@aglyn/tenant-data-admin/server/campaign-conversion-attribution'),
   // The account mirror (AGL-3305) is `platform-marketing-mirror.spec.ts`'s
   // subject; here it is a site that is not the platform's.
   mirrorPlatformUnsubscribe: async () => ({ status: 'not-platform' }),
@@ -267,8 +262,15 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 import { resolvePluginApiRoute } from '@aglyn/aglyn/server'
 import { createHash, createHmac } from 'crypto'
 import { registerEmailApi } from './server'
+import { standInSendTally } from './testing/stand-in-send-tally'
 
 registerEmailApi()
+/*
+ * The sender's tally over this file's store: the counter is written wherever
+ * the send is — the org's `campaigns`, or the site's for a send the
+ * migration has not reached — by the plugin that sent it.
+ */
+standInSendTally({ firestore: () => fakeFirestore, orgIdForHost: async () => 'org-1' })
 
 // ---------------------------------------------------------------------------
 // Fixtures

@@ -177,15 +177,6 @@ const suppressionKey = (email: string) =>
     .digest('hex')
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
-  /*
-   * The campaign-touch lookup, answering "no campaign".
-   *
-   * The double was missing it entirely, so the newsletter route threw on its
-   * first line and the enrollment under test never ran. Answering null is the
-   * honest default for a request carrying no touch, and it is what keeps this
-   * file about enrollment rather than about attribution.
-   */
-  resolveCampaignTouch: async () => null,
   // The real resolution's shape: an org that declared no pooling resolves
   // every site to a group of ONE — the narrow answer, which is the direction
   // a wrong group may fail in.
@@ -347,7 +338,14 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 }))
 
 import { inboxAssignListHandler } from './server'
+import { standInPersonRecords } from './testing/stand-in-person-records'
 import { performCampaignSend } from '@aglyn/plugins-marketing/server/campaign-send'
+import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { standInFormSubmissionIndex } from './testing/stand-in-form-submissions'
+
+// The submissions are the forms plugin's, found through the index it
+// publishes (AGL-3080); stood in over this file's Firestore double.
+standInFormSubmissionIndex(() => firebaseAdmin.app().firestore() as never)
 
 /** Drives the real Inbox route the merchant's button posts to. */
 async function addToList(body: Record<string, unknown> = {}) {
@@ -406,6 +404,8 @@ afterAll(() => {
 
 beforeEach(() => {
   mockStore = {}
+  // The person behind an address is the record system's to find (AGL-3080).
+  standInPersonRecords({ store: () => mockStore, orgId: ORG_ID })
   mockAutoId = 0
   mockSentMessages.length = 0
   mockStore[`hosts/${HOST_ID}`] = {

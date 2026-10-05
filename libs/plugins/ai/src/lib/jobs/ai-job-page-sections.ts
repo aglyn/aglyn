@@ -18,7 +18,12 @@
 import { REUSABLE_INSTANCE_COMPONENT_ID } from '@aglyn/aglyn/app-utils/reusable-component-keys'
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
 import type { NodesMap } from '@aglyn/aglyn/types/nodes'
-import type { AiBuildPlanScreen, AiBuildPlanSection } from '../model/ai-build-plan'
+import {
+  aiPlanCreateFor,
+  type AiBuildPlanRecord,
+  type AiBuildPlanScreen,
+  type AiBuildPlanSection,
+} from '../model/ai-build-plan'
 import { aiPageTypeDefinition, parseAiPageJobInputs } from '../model/ai-page-job'
 import type { AiJob, AiJobPlan } from '../model/ai-jobs.types'
 import { aiHomeScreenIds, type AiSiteInventory } from '../model/ai-site-inventory'
@@ -127,6 +132,70 @@ function referenceOf(plan: AiJobPlan, ref: string): string {
   return label ? `${ref} ("${label}")` : ref
 }
 
+/**
+ * A record template as a page pass reads it (AGL-3475): the dataset by name,
+ * its base, and the fields its copy binds, as `{{item.<id>}}` with the name a
+ * member gave each. A dataset the plan creates has no ids yet, so its tokens
+ * are the field names it was planned with.
+ */
+export interface AiPageRecordTemplate {
+  /** The dataset: an inventory id, or the plan's `new:<name>`. */
+  dataset: string
+  name: string
+  base: string
+  fields: Array<{ id: string; name: string }>
+}
+
+/** The record template a plan screen is, read against the site's datasets; null for a page that is one page. */
+export function aiPageRecordTemplate(
+  record: AiBuildPlanRecord | null | undefined,
+  inventory: AiSiteInventory | null,
+  plan: AiJobPlan,
+): AiPageRecordTemplate | null {
+  if (!record) return null
+  const row = inventory?.datasets.find((entry) => entry.id === record.dataset)
+  if (row) {
+    return {
+      dataset: record.dataset,
+      name: row.name,
+      base: record.base,
+      fields: row.fields.map((name, index) => ({ id: row.fieldIds?.[index] || name, name })),
+    }
+  }
+  const created = aiPlanCreateFor(plan, record.dataset)
+  return {
+    dataset: record.dataset,
+    name: created?.name ?? plan.labels?.[record.dataset] ?? record.dataset,
+    base: record.base,
+    fields: (created?.fields ?? []).map((name) => ({ id: name, name })),
+  }
+}
+
+/** Every token a record template's page may bind: each field, and `{{item.url}}`. */
+export function aiPageRecordTokens(template: AiPageRecordTemplate | null): string[] {
+  if (!template) return []
+  return [...template.fields.map((field) => `{{item.${field.id}}}`), '{{item.url}}']
+}
+
+/** What a section request says on a record template's page. */
+export function aiPageRecordLine(template: AiPageRecordTemplate): string {
+  const fields = template.fields.length
+    ? ` Its fields: ${template.fields
+        .map((field) => (field.name === field.id ? `{{item.${field.id}}}` : `{{item.${field.id}}} (${field.name})`))
+        .join(', ')}.`
+    : ''
+  return `This page is the record template of the dataset "${template.name}": it is served once per record, at /${template.base}/<record address>. Write what differs from one record to the next as {{item.<field>}}, never one record's copy, and write out what every record page shares.${fields}`
+}
+
+/**
+ * What a record template's draft tells the member to do next. The binding is
+ * a route, so the job never writes it (rule 13): the member saves it where
+ * every record template is set up.
+ */
+export function aiPageRecordNote(template: AiPageRecordTemplate): string {
+  return `This page is drafted as the record template of "${template.name}". To serve a page per record at /${template.base}/…, open Page Properties → Record pages and save its dataset, address and fields.`
+}
+
 export interface AiPageSectionPromptInput {
   job: Pick<AiJob, 'brief' | 'inputs'>
   plan: AiJobPlan
@@ -139,6 +208,8 @@ export interface AiPageSectionPromptInput {
    * (AGL-3030); `false` asks for the section built inline. Absent is `true`.
    */
   reusableComponents?: boolean
+  /** The dataset this page is the record template of; absent for a page that is one page. */
+  record?: AiPageRecordTemplate | null
 }
 
 /** What a section request says where the workspace keeps no reusable components or saved forms. */
@@ -239,6 +310,7 @@ export function aiPageSectionPrompt(input: AiPageSectionPromptInput): string {
   return [
     `Page: "${screen.title}" at ${screen.slug}`,
     ...(type ? [`Page type: ${type.purpose}`] : []),
+    ...(input.record ? [aiPageRecordLine(input.record)] : []),
     aiJobBriefLine(job),
     ...aiPlanReferenceLines(plan),
     `Build section ${index + 1} of ${screen.sections.length}: "${section.name}".${places}${items}`,
@@ -331,6 +403,8 @@ export function aiPageCheckContext(
     reusableComponents?: boolean
     sections?: readonly string[]
     embeds?: AiDoctrineTreeContext['plannedEmbeds']
+    /** A record template's tokens, which its links and images may name (AGL-3475). */
+    recordTokens?: readonly string[]
   } = {},
 ): AiDoctrineTreeContext {
   return {
@@ -340,6 +414,7 @@ export function aiPageCheckContext(
     ...(options.reusableComponents === false ? { reusableComponents: false } : {}),
     ...(options.sections?.length ? { pageSections: options.sections } : {}),
     ...(options.embeds?.length ? { plannedEmbeds: options.embeds } : {}),
+    ...(options.recordTokens?.length ? { bindingTokens: options.recordTokens } : {}),
   }
 }
 

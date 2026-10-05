@@ -60,6 +60,7 @@ import {
   CRM_WRITE_SCOPE_FIELD,
   type CrmShareAccess,
   type CrmShareGrant,
+  type CrmSharingContext,
   type CrmSharingCriteria,
   type CrmSharingObject,
   type CrmSharingResponse,
@@ -76,9 +77,11 @@ import {
   recordHeldScope,
   sharingPlanChanges,
   shareTargetsFrom,
+  sharingRulesAskLeadSourceDirection,
   withManualShares,
   withoutManualShares,
 } from '../model/crm-sharing'
+import { readLeadSourcePicklist } from './lead-source-picklist'
 import { authorizeOrgCaller, orgHostIds, readCrmRouteScope } from './org-caller'
 import { crmSuiteRefusal } from './suite-gate'
 import { authorizeCrmWriter } from './task-routes'
@@ -119,6 +122,21 @@ export async function crmSharingRulesOf(
   return { rules, fresh: true }
 }
 
+/**
+ * What the rules for `object` are evaluated against beyond the record: the
+ * org's Lead source list, read only when an active rule asks a lead source
+ * direction (AGL-3511) — an org whose rules never do pays no read for it.
+ */
+export async function crmSharingContextFor(
+  firestore: Firestore,
+  orgId: string,
+  rules: readonly CrmSharingRule[],
+  object: CrmSharingObject,
+): Promise<CrmSharingContext> {
+  if (!sharingRulesAskLeadSourceDirection(rules, object)) return {}
+  return { leadSources: await readLeadSourcePicklist(firestore, orgId) }
+}
+
 /*==========================================
  * ONE RECORD, RECOMPUTED.
  *=========================================*/
@@ -134,6 +152,8 @@ export interface RecomputeRecordSharingInput {
   fresh: boolean
   /** The hand shares' change, for a share or an unshare. */
   manual?: (grants: Record<string, CrmShareGrant>) => Record<string, CrmShareGrant>
+  /** What the rules are evaluated against beyond the record — see {@link crmSharingContextFor}. */
+  context?: CrmSharingContext
   atMs: number
 }
 
@@ -164,7 +184,12 @@ export async function recomputeRecordSharing(
         rules = readCrmSharingRules(org.data() ?? null)
       }
     }
-    let grants = evaluateRecordGrants(object, record, rules, atMs)
+    // A rule read afresh above may ask a direction the caller's context was not read for.
+    const context =
+      input.context?.leadSources || rules === input.rules
+        ? input.context
+        : await crmSharingContextFor(firestore, orgId, rules, object)
+    let grants = evaluateRecordGrants(object, record, rules, atMs, context)
     if (input.manual) grants = input.manual(grants)
     const plan = planRecordSharing(record, grants)
     if (!sharingPlanChanges(record, plan)) return 'unchanged' as const
@@ -219,8 +244,9 @@ export async function evaluateCrmSharing(
 ): Promise<{ changed: number; missing: number }> {
   const { rules, fresh } = await crmSharingRulesOf(firestore, orgId)
   if (!activeSharingRules(rules, object).length) return { changed: 0, missing: 0 }
+  const context = await crmSharingContextFor(firestore, orgId, rules, object)
   const outcome = await recomputeMany(
-    { firestore, orgId, object, rules, fresh, atMs: Date.now() },
+    { firestore, orgId, object, rules, fresh, context, atMs: Date.now() },
     ids,
   )
   return { changed: outcome.changed.length, missing: outcome.missing }
@@ -479,6 +505,7 @@ export async function advanceSharingRuleRun(
   try {
     while (Date.now() < deadlineMs) {
       const { rules } = await crmSharingRulesOf(firestore, orgId, { fresh: true })
+      const context = await crmSharingContextFor(firestore, orgId, rules, rule.object)
       let page: FirebaseFirestore.QuerySnapshot
       if (run.mode === 'apply') {
         let query = records.orderBy(FieldPath.documentId()).limit(RUN_PAGE)
@@ -492,7 +519,10 @@ export async function advanceSharingRuleRun(
       const moving = page.docs
         .filter((doc) => {
           const record = (doc.data() ?? {}) as Record<string, unknown>
-          const plan = planRecordSharing(record, evaluateRecordGrants(rule!.object, record, rules, atMs))
+          const plan = planRecordSharing(
+            record,
+            evaluateRecordGrants(rule!.object, record, rules, atMs, context),
+          )
           return sharingPlanChanges(record, plan)
         })
         .map((doc) => doc.id)
@@ -501,7 +531,7 @@ export async function advanceSharingRuleRun(
       }
       for (const doc of page.docs) seen.add(doc.id)
       const outcome = await recomputeMany(
-        { firestore, orgId, object: rule.object, rules, fresh: true, atMs },
+        { firestore, orgId, object: rule.object, rules, fresh: true, context, atMs },
         moving,
       )
       const done = run.mode === 'apply' ? page.size < RUN_PAGE : page.empty
@@ -644,6 +674,7 @@ export const crmSharingHandler: PluginApiHandler = async (req, res) => {
       }
       const access: CrmShareAccess = body['access'] === 'edit' ? 'edit' : 'read'
       const { rules, fresh } = await crmSharingRulesOf(firestore, orgId)
+      const context = await crmSharingContextFor(firestore, orgId, rules, object)
       const outcome = await recomputeMany(
         {
           firestore,
@@ -651,6 +682,7 @@ export const crmSharingHandler: PluginApiHandler = async (req, res) => {
           object,
           rules,
           fresh,
+          context,
           atMs: nowMs,
           manual: (grants) =>
             action === 'share'

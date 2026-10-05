@@ -88,6 +88,9 @@ export function isCrmTaskKind(value: unknown): value is CrmTaskKind {
  */
 export const CRM_TASK_MAX_DUE_DAYS = 365
 
+/** Longest tag an automation may write — the console's own tag field cap. */
+export const CONTACT_TAG_MAX_LENGTH = 60
+
 /**
  * What a person can log, in the order the picker offers them (AGL-2600).
  *

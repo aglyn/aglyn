@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { validateHostAction } from '@aglyn/aglyn/app-utils/actions'
+import { validateStoredInteraction } from '@aglyn/aglyn/plugin-manager/interaction-step-checks'
 import { AI_AUTOMATION_STEP_TYPES } from './ai-workflow-job'
 import {
   AI_AUTOMATION_DEFAULT_NAME,
@@ -52,8 +52,10 @@ const NULL_STEP: Omit<AiAutomationAnswerStep, 'type'> = {
   tag: null,
   owner: null,
   taskKind: null,
+  priority: null,
   dueInDays: null,
   activityKind: null,
+  direction: null,
 }
 
 const step = (
@@ -145,6 +147,9 @@ describe('aiAutomationDraft', () => {
       step('assignContactOwner', { owner: 'sam@example.test' }),
       step('createCrmTask', { title: 'Call them', taskKind: 'call', dueInDays: 2 }),
       step('logCrmActivity', { activityKind: 'note', body: 'Signed up for the newsletter' }),
+      // A task's priority and a call's direction (AGL-3538).
+      step('createCrmTask', { title: 'Call them today', taskKind: 'call', priority: 'high', dueInDays: 0 }),
+      step('logCrmActivity', { activityKind: 'call', direction: 'inbound', body: 'They called about the quote' }),
     ]
     const first = aiAutomationDraft(answer({ steps }), RECORDS)
     const second = aiAutomationDraft(answer({ trigger: { event: 'lead', conditions: [], combinator: 'and' }, steps: more }), RECORDS)
@@ -169,10 +174,12 @@ describe('aiAutomationDraft', () => {
       { type: 'assignContactOwner', ownerEmail: 'sam@example.test' },
       { type: 'createCrmTask', title: 'Call them', kind: 'call', dueInDays: 2 },
       { type: 'logCrmActivity', kind: 'note', body: 'Signed up for the newsletter' },
+      { type: 'createCrmTask', title: 'Call them today', kind: 'call', priority: 'high', dueInDays: 0 },
+      { type: 'logCrmActivity', kind: 'call', body: 'They called about the quote', direction: 'inbound' },
     ])
     const covered = new Set([...first.action.steps, ...second.action.steps].map((one) => one.type))
     expect([...covered].sort()).toEqual([...AI_AUTOMATION_STEP_TYPES].sort())
-    expect([validateHostAction(first.action), validateHostAction(second.action)]).toEqual([null, null])
+    expect([validateStoredInteraction(first.action), validateStoredInteraction(second.action)]).toEqual([null, null])
     expect([first.placeholders, second.placeholders]).toEqual([[], []])
   })
 
@@ -203,12 +210,12 @@ describe('aiAutomationDraft', () => {
         when: { conditions: [{ field: 'plan', op: 'equals', value: 'pro' }] },
       },
     ])
-    expect(validateHostAction(draft.action)).toBeNull()
+    expect(validateStoredInteraction(draft.action)).toBeNull()
     expect(draft.placeholders).toEqual([
-      { step: null, field: 'condition', text: 'booking request' },
-      { step: 1, field: 'list', text: 'customers' },
-      { step: 2, field: 'campaign', text: 'winter sale' },
-      { step: 3, field: 'body', text: 'your phone number' },
+      { step: null, field: 'condition', names: 'a condition value', text: 'booking request' },
+      { step: 1, field: 'listName', names: 'the list', text: 'customers' },
+      { step: 2, field: 'campaignName', names: 'the campaign', text: 'winter sale' },
+      { step: 3, field: 'body', names: 'the text', text: 'your phone number' },
     ])
   })
 

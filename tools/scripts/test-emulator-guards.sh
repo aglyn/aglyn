@@ -137,11 +137,11 @@ PROJECTS=(
   libs/tenant/runtime
   libs/tenant/feature/instance
   # Plugins own emulator specs too: Outreach proves its Google mailbox connect
-  # against the real emulator, and the automation engine its `updateDataset`
-  # index check, beside the engine in the Workflows plugin.
+  # against the real emulator, and the Workflows engine its org automations.
   libs/plugins/outreach
   libs/plugins/workflows
-  # The Data plugin proves a repeat's scoped sharing against the real rules.
+  # The Data plugin proves a repeat's scoped sharing against the real rules,
+  # and its `updateDataset` automation step's index check (AGL-3080).
   libs/plugins/data
   # The CRM files a BCC from a member's send-as alias on the prospect, and its
   # spec moved here with the capture path (AGL-3080).
