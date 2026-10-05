@@ -19,10 +19,11 @@
 import {
   CONTACT_LIFECYCLE_STAGE_LABELS,
   CONTACT_LIFECYCLE_STAGES,
-  CRM_LEAD_STATUS_LABELS,
   CRM_LEAD_SOURCE_PICKLIST,
   CRM_LEAD_STATUSES,
   type CrmPicklist,
+  STANDARD_CRM_LEAD_STATUS_PICKLIST,
+  crmLeadStatusLabelFor,
   crmMemberPickerLabel,
   crmPicklistDefinition,
   crmPicklistOptions,
@@ -87,6 +88,8 @@ export interface SharingRuleDrawerProps {
   campaigns: readonly { value: string; label: string }[]
   /** The org's Lead source list, which the Lead source criterion picks from. */
   leadSourceList?: CrmPicklist
+  /** The org's Lead status list, whose labels name the statuses a rule matches (AGL-3512). */
+  leadStatusList?: CrmPicklist
   busy: boolean
   onSubmit: (draft: SharingRuleDraft) => void
 }
@@ -136,7 +139,11 @@ export function SharingRuleDrawer(props: SharingRuleDrawerProps) {
   const offers = CRM_SHARING_CRITERIA_FOR[object]
   const stageOptions: { value: string; label: string }[] =
     object === 'leads'
-      ? CRM_LEAD_STATUSES.map((value) => ({ value, label: CRM_LEAD_STATUS_LABELS[value] }))
+      ? // A rule matches the MEANING, named as the org names it.
+        CRM_LEAD_STATUSES.map((value) => ({
+          value,
+          label: crmLeadStatusLabelFor(props.leadStatusList ?? STANDARD_CRM_LEAD_STATUS_PICKLIST, value),
+        }))
       : object === 'contacts'
         ? CONTACT_LIFECYCLE_STAGES.map((value) => ({
             value,

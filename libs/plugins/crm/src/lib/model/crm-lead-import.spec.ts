@@ -25,6 +25,7 @@
  * with the capture door's columns left alone.
  */
 
+import { effectiveCrmLeadStatusPicklist } from '@aglyn/aglyn/app-utils/crm'
 import { leadCsvHeader } from './crm-csv'
 import {
   LEAD_IMPORT_FIELD_LABELS,
@@ -37,6 +38,7 @@ import {
   mapLeadImportRow,
   normalizeLeadImportRow,
   parseImportLeadStatus,
+  parseImportLeadStatusValue,
 } from './crm-lead-import'
 
 describe('the lead vocabulary', () => {
@@ -175,6 +177,28 @@ describe('parseImportLeadStatus', () => {
     expect(parseImportLeadStatus('')).toBeNull()
     expect(parseImportLeadStatus(undefined)).toBeNull()
   })
+
+  it('reads any active value of the org’s list as its meaning and its label (AGL-3512)', () => {
+    const statuses = effectiveCrmLeadStatusPicklist({
+      values: [
+        { id: 'contacted', label: 'Contacted', active: true, meaning: 'working' },
+        { id: 'stale', label: 'Stale', active: false, meaning: 'working' },
+        { id: 'converted', label: 'Converted', active: true, meaning: 'qualified' },
+      ],
+      defaultValueId: null,
+    })
+    expect(parseImportLeadStatusValue(' contacted ', statuses)).toEqual({
+      status: 'working',
+      statusLabel: 'Contacted',
+    })
+    // A bare meaning takes the meaning's own label.
+    expect(parseImportLeadStatusValue('working', statuses)).toEqual({
+      status: 'working',
+      statusLabel: 'Working',
+    })
+    expect(parseImportLeadStatusValue('Stale', statuses)).toBeNull()
+    expect(parseImportLeadStatusValue('Converted', statuses)).toBeNull()
+  })
 })
 
 describe('normalizeLeadImportRow', () => {
@@ -192,6 +216,7 @@ describe('normalizeLeadImportRow', () => {
         email: 'dana@example.com',
         name: 'Dana Marsh',
         status: 'working',
+        statusLabel: 'Working',
         ownerEmail: 'rep@example.com',
         notes: 'Met at the trade show',
         profile: {},

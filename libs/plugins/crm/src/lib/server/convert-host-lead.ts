@@ -80,6 +80,8 @@ import {
   consentGroupDisclosureKey,
   consentGroupScope,
   CRM_COLLECTIONS,
+  CRM_LEAD_STATUS_PICKLIST,
+  crmLeadStatusLabelFor,
   type CrmDealStage,
   type CrmDealStatus,
   type CrmLeadFields,
@@ -108,6 +110,7 @@ import {
 import { FieldPath, FieldValue } from 'firebase-admin/firestore'
 import { assignOwnerForCapture, notifyRecordAssigned } from './assign-contact-owner'
 import { captureHostContact } from './capture-host-contact'
+import { readCrmPicklist } from './read-picklist'
 import { handOffLeadRecords } from '@aglyn/tenant-runtime/hand-off-lead'
 
 /** Who is converting, as far as the writes need to know. */
@@ -207,7 +210,7 @@ export type ConvertHostLeadResult =
 
 /** The stamp the conversion leaves on the lead — see `CrmLeadFields`. */
 type LeadConversionStamp = Required<
-  Pick<CrmLeadFields, 'status' | 'convertedContactId' | 'convertedAtMs'>
+  Pick<CrmLeadFields, 'status' | 'statusLabel' | 'convertedContactId' | 'convertedAtMs'>
 > &
   Pick<CrmLeadFields, 'dealId' | 'companyId' | 'ownerUid'>
 
@@ -605,6 +608,11 @@ export async function convertHostLead(
    *=========================================*/
   const stamp: LeadConversionStamp = {
     status: 'qualified',
+    // The org's label for Qualified, beside the meaning (AGL-3512).
+    statusLabel: crmLeadStatusLabelFor(
+      await readCrmPicklist(firestore, orgId, CRM_LEAD_STATUS_PICKLIST),
+      'qualified',
+    ),
     convertedContactId: contactId,
     convertedAtMs: now,
     ...(ownerUid ? { ownerUid } : {}),

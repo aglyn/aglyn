@@ -139,8 +139,9 @@ need mapping.
 
 Some standard fields are **picklists** — a fixed set of choices, the way Salesforce's
 standard fields are. Each picklist's values are kept on the tab of the record it belongs
-to, below that tab's custom fields. Today that is **Lead source** on the **Leads** tab,
-under **Lead source values**: every lead's page, the **New lead** drawer and every
+to, below that tab's custom fields. On the **Leads** tab that is **Lead source**, under
+**Lead source values**, and [**Lead status**](./leads.md#lead-statuses), under **Lead
+status values**. Lead source: every lead's page, the **New lead** drawer and every
 contact's page offer its values as a select, the leads and contacts lists filter by
 them — the leads list by a value's group too — and [Reports](./reports.md#lead-sources)
 counts leads by them.
@@ -158,6 +159,12 @@ Lead source's standard values, by group:
 | **Outbound** | Purchased list |
 | *(no group)* | Other |
 
+**Meanings** tie a picklist's values to what the platform does with them. Lead status
+has one per standard value — New, Nurturing, Working, Qualified, Unqualified — and the
+**Means** column shows each value's. A value you add picks its meaning when you add it
+(never Qualified, which only converting a lead sets), and deleting it moves its records to
+another value of the same meaning; it cannot clear them.
+
 **Groups** sort a picklist's values under headings. Lead source groups each value as
 **Inbound** — the lead came to you — or **Outbound** — you went to them. The **Group**
 column sets a value's group, standard or your own; the selects list values under their
@@ -170,9 +177,9 @@ group's heading, with values in no group last.
 | **Sort A–Z** | Puts the whole list in alphabetical order. |
 | **Group** | Files the value under a group, or none. |
 | **Rename** | Renames the value, and every record holding it — for lead source, every lead and contact — is updated to the new name in the same step, so a report grouped by the field follows the rename. |
-| **Make default** | New records start with this value — in the **New lead** drawer, over the API, and from a CSV row that names none. **Clear default** removes it. |
+| **Make default** | New records start with this value — in the **New lead** drawer, over the API, and from a CSV row that names none. On Lead status, the default is the label a lead of its meaning shows when it was given the meaning alone. **Clear default** removes it. |
 | **Deactivate** | Takes the value out of every select without touching the records that hold it. They show it as *(inactive)* and keep it until someone changes it. **Activate** brings it back. |
-| **Delete…** | Offered only on your own values. Removes the value for good: you pick another active value to move its records to, or clear it from them. To keep it on those records, deactivate it instead. |
+| **Delete…** | Offered only on your own values. Removes the value for good: you pick another active value to move its records to, or clear it from them — on Lead status, another value of the same meaning, and never clear. To keep it on those records, deactivate it instead. |
 
 An organization that has never edited a picklist reads its standard values; your first
 change makes the list your own. A lead or contact holding a value that is neither

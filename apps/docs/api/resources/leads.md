@@ -47,6 +47,7 @@ There is no organization-wide list of leads. To read every site's leads, walk yo
   "email": "ann@acme.com",
   "name": "Ann Lee",
   "status": "working",
+  "statusLabel": "Working",
   "ownerUid": "u_9f1c",
   "notes": "Asked for a demo on Thursday",
   "unqualifiedReason": null,
@@ -80,7 +81,8 @@ There is no organization-wide list of leads. To read every site's leads, walk yo
 | `siteId` | string | The site that captured the lead. **Read-only.** |
 | `email` | string \| null | The address — the lead's identity within its site. Set on [create](#create-a-lead); **read-only** after. |
 | `name` | string \| null | The person's name. Set on create or by a capture; **read-only** on a `PATCH`. |
-| `status` | string | `new`, `nurturing`, `working`, `qualified` or `unqualified` — see [Status](#status). Writable, with rules. |
+| `status` | string | What the lead's status MEANS: `new`, `nurturing`, `working`, `qualified` or `unqualified` — see [Status](#status). What `?status=` and every automation read. Writable, with rules — by one of your organization's [lead status values](/content-and-data/crm/custom-fields#picklist-values) or by a meaning. |
+| `statusLabel` | string | Your organization's label for the lead status value the lead holds — one of `status`'s meaning, such as `Contacted` for `working`. A lead given only a meaning shows the meaning's default value. **Read-only** — set it through `status`. |
 | `ownerUid` | string \| null | The team member working the lead. Must be a member of your organization. Writable — by uid, or as `ownerEmail` (see [Update a lead](#update-a-lead)). |
 | `notes` | string \| null | Free text, 5,000 characters. Writable. |
 | `unqualifiedReason` | string \| null | Why the lead was closed without converting. Present only while `status` is `unqualified`. Writable, with `status`. |
@@ -150,7 +152,7 @@ come from [converting](#convert-a-lead) it, from what the lead holds by then.
 | `email` | **Required.** The lead's identity within its site — one address is one lead per site. |
 | `name` | The person's name. |
 | `company`, `jobTitle`, `phone`, `website`, `address`, `tags`, `leadSource` | The lead's own profile, as [above](#the-lead-object). |
-| `status` | `new` (the default) or `working`. |
+| `status` | One of your organization's active lead status values of New or Working, by its label in any case, or the meaning `new` (the default) or `working`. Stored as the meaning and the label together. |
 | `ownerUid` / `ownerEmail` | Who works the lead. |
 | `notes` | Free text. |
 | `custom` | The organization's lead fields, keyed by field key, as [above](#the-lead-object). |
@@ -185,7 +187,7 @@ An omitted key is left alone, `null` clears an optional field, `{}` is a no-op.
 
 | Key | Notes |
 | --- | --- |
-| `status` | `new`, `nurturing`, `working` or `unqualified`. Not `qualified` — [convert](#convert-a-lead) instead. |
+| `status` | One of your organization's active lead status values by its label, in any case, or a meaning: `new`, `nurturing`, `working` or `unqualified`. Stored as the meaning and the label together; the value a lead already holds is kept even after it is deactivated. Not a Qualified value, by any name — [convert](#convert-a-lead) instead. Anything else is a `400` naming the values allowed. |
 | `unqualifiedReason` | Required when `status` becomes `unqualified`; may be sent alone to reword the reason of a lead already unqualified. Refused with any other status. Setting the status back to `new`, `nurturing` or `working` drops it. |
 | `ownerUid` | A member's uid, or `null` to clear. |
 | `ownerEmail` | A member's address, resolved against your organization's roster — for a spreadsheet or a zap that has the address and not the uid. Not with `ownerUid` in the same request. `null` clears. |

@@ -20,10 +20,9 @@ import {
   CONTACT_SOURCE_LABELS,
   CRM_ACTIVITY_KIND_LABELS,
   CRM_EMAIL_DELIVERY_STATE_LABELS,
-  CRM_LEAD_STATUS_LABELS,
   CRM_TASK_KIND_LABELS,
   contactDisplayName,
-  crmLeadStatus,
+  crmLeadStatusLabel,
   customImportTarget,
   dealStageById,
   fieldDefinitionObject,
@@ -38,6 +37,7 @@ import {
   type CrmCompany,
   type CrmDeal,
   type CrmFieldObject,
+  type CrmPicklist,
   type CrmPipeline,
   type CrmTask,
 } from '@aglyn/aglyn/server'
@@ -551,10 +551,12 @@ function leadSourceFact(source: string): string {
 export interface LeadFactsInput {
   lead: Record<string, unknown>
   activities: ReadonlyArray<Partial<CrmActivity>>
+  /** The org's Lead status list, whose label the status fact reads (AGL-3512); the standard ones without it. */
+  leadStatuses?: CrmPicklist
 }
 
 export function leadFacts(input: LeadFactsInput): CrmLeadFacts {
-  const { lead } = input
+  const { lead, leadStatuses } = input
   const rawSources = Array.isArray(lead['sources'])
     ? lead['sources']
     : typeof lead['source'] === 'string'
@@ -564,7 +566,7 @@ export function leadFacts(input: LeadFactsInput): CrmLeadFacts {
   return {
     record: 'lead',
     name: crmFactProse(lead['name'], CRM_FACTS_LABEL_MAX),
-    status: CRM_LEAD_STATUS_LABELS[crmLeadStatus(lead as { status?: never })],
+    status: crmLeadStatusLabel(lead as { status?: never; statusLabel?: string }, leadStatuses),
     sources: [...new Set(rawSources.map((source) => leadSourceFact(String(source))))].sort(),
     captures: Number.isFinite(captures) && captures > 0 ? Math.floor(captures) : 0,
     firstSeen: crmFactDay(lead['firstSeenAtMs']),

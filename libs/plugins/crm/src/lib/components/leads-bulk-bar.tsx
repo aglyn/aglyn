@@ -44,10 +44,12 @@
 
 import {
   CRM_LEAD_OPEN_STATUSES,
-  CRM_LEAD_STATUS_LABELS,
   type CrmLeadFields,
   type CrmLeadStatus,
   crmLeadStatus,
+  crmLeadStatusLabel,
+  crmLeadStatusLabelFor,
+  crmLeadStatusOptions,
   isCrmLeadOpen,
   readContainerIds,
 } from '@aglyn/aglyn'
@@ -58,6 +60,7 @@ import { arrayUnion, deleteField, doc, serverTimestamp } from 'firebase/firestor
 import { useCallback, useMemo, useState } from 'react'
 import { useCampaignFilingLog } from '../hooks/use-campaign-filing-log'
 import { useCrmBulkApply } from '../hooks/use-crm-bulk-apply'
+import { useLeadStatusPicklist } from '../hooks/use-lead-status-picklist'
 import { useCrmCampaigns } from '../hooks/use-crm-campaigns'
 import type { OrgMemberOptions } from '../hooks/use-org-member-options'
 import { downloadTextFile } from '../model/contacts-csv'
@@ -142,6 +145,13 @@ function LeadsBulkBarBody(props: LeadsBulkBarProps) {
   const orgId = props.orgId ?? null
   const hostId = props.hostId ?? null
   const followUpSharing = useCrmSharingFollowUp(hostId, orgId)
+  // The org's lead status values (AGL-3512): Set status picks a value by its
+  // label, and every write stamps the meaning and the label together.
+  const statuses = useLeadStatusPicklist(orgId)
+  const statusChoices = useMemo(
+    () => crmLeadStatusOptions(statuses.picklist, SETTABLE_STATUSES),
+    [statuses.picklist],
+  )
   const firestore = useFirestore()
   const { busy, report, apply, dismissReport } = useCrmBulkApply({ recordKind: 'lead' })
 
@@ -273,15 +283,17 @@ function LeadsBulkBarBody(props: LeadsBulkBarProps) {
       return
     }
     if (action === 'status') {
-      const status = value as CrmLeadStatus
+      const choice = statusChoices.find((entry) => entry.label === value)
+      if (!choice) return
+      const status = choice.status
       for (const lead of selectedRows) {
         const current = crmLeadStatus(lead)
         if (lead.convertedContactId) {
           skipped.push({ label: labelOf(lead), reason: 'was converted' })
-        } else if (current === status) {
+        } else if (current === status && crmLeadStatusLabel(lead, statuses.picklist) === choice.label) {
           skipped.push({
             label: labelOf(lead),
-            reason: `already ${CRM_LEAD_STATUS_LABELS[status]}`,
+            reason: `already ${choice.label}`,
           })
         } else {
           writes.push({
@@ -290,6 +302,7 @@ function LeadsBulkBarBody(props: LeadsBulkBarProps) {
             kind: 'update',
             data: {
               status,
+              statusLabel: choice.label,
               // Reopening an unqualified lead clears its reason, as the row does.
               ...(current === 'unqualified' ? { unqualifiedReason: deleteField() } : {}),
               updatedAt: serverTimestamp(),
@@ -316,6 +329,7 @@ function LeadsBulkBarBody(props: LeadsBulkBarProps) {
           kind: 'update',
           data: {
             status: 'unqualified' satisfies CrmLeadStatus,
+            statusLabel: crmLeadStatusLabelFor(statuses.picklist, 'unqualified'),
             unqualifiedReason: reason,
             updatedAt: serverTimestamp(),
           },
@@ -326,7 +340,7 @@ function LeadsBulkBarBody(props: LeadsBulkBarProps) {
       { writes, skipped },
       (count) => `Marked ${countNoun(count, NOUN)} unqualified`,
     )
-  }, [pending, value, campaignIds, campaigns.options, selectedRows, runPlan, logFiling, hostId, props.org])
+  }, [pending, value, campaignIds, campaigns.options, selectedRows, runPlan, logFiling, hostId, props.org, statusChoices, statuses.picklist])
 
   const handleExport = useCallback(() => {
     downloadTextFile('leads-selected.csv', 'text/csv', leadsCsv(selectedRows, csv))
@@ -371,9 +385,9 @@ function LeadsBulkBarBody(props: LeadsBulkBarProps) {
               onChange={(event) => setValue(event.target.value)}
               helperText="Closing a lead goes through Unqualify, which asks why."
             >
-              {SETTABLE_STATUSES.map((status) => (
-                <MenuItem key={status} value={status}>
-                  {CRM_LEAD_STATUS_LABELS[status]}
+              {statusChoices.map((choice) => (
+                <MenuItem key={choice.label} value={choice.label}>
+                  {choice.label}
                 </MenuItem>
               ))}
             </TextField>

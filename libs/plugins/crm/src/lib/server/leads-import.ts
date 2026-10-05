@@ -79,6 +79,7 @@
 import {
   checkVisitorRecordCeiling,
   type ContactSource,
+  CRM_LEAD_STATUS_PICKLIST,
   LEADS_MAX_PER_HOST,
   personKey,
   type PluginApiHandler,
@@ -118,6 +119,7 @@ import {
   resolveImportContext,
 } from './import-context'
 import { readLeadSourcePicklist, resolveLeadSourceWrite } from './lead-source-picklist'
+import { readCrmPicklist } from './read-picklist'
 
 /**
  * The surface an imported lead names, beside `signup`, `booking` and
@@ -177,7 +179,9 @@ function workingState(
   campaignIds: readonly string[],
 ): Record<string, unknown> | null {
   const fields: Record<string, unknown> = {
+    // The meaning and the org's label for it, together (AGL-3512).
     ...(row.status ? { status: row.status } : {}),
+    ...(row.status && row.statusLabel ? { statusLabel: row.statusLabel } : {}),
     ...(ownerUid ? { ownerUid } : {}),
     ...(row.unqualifiedReason ? { unqualifiedReason: row.unqualifiedReason } : {}),
     ...(row.notes ? { notes: row.notes } : {}),
@@ -221,8 +225,14 @@ export const crmLeadsImportHandler: PluginApiHandler = async (req, res) => {
      * own dedupe answers, and reports a merge.
      */
     const seen = new Set<string>()
+    // The org's lead statuses (AGL-3512): a Status cell may name any of them.
+    const leadStatuses = await readCrmPicklist(
+      firebaseAdmin.app().firestore(),
+      context.orgId,
+      CRM_LEAD_STATUS_PICKLIST,
+    )
     read.rows.forEach((raw, index) => {
-      const verdict = normalizeLeadImportRow(raw)
+      const verdict = normalizeLeadImportRow(raw, leadStatuses)
       if (verdict.ok === false) {
         skipped.push({ index, email: verdict.input, reason: verdict.reason })
         return

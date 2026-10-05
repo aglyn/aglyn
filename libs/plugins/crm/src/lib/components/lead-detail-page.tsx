@@ -125,6 +125,8 @@ export function LeadDetailPage(props: CrmDetailPageProps) {
   })
   const [converting, setConverting] = useState(false)
   const [unqualifying, setUnqualifying] = useState(false)
+  // The Unqualified value the status select picked, if it named one (AGL-3512).
+  const [unqualifyAs, setUnqualifyAs] = useState<string | null>(null)
   // The privacy erasure (AGL-2623), offered from the lead as from the
   // contact: the same request, filed by the lead's address.
   const leadEmail = lead ? normalizeContactEmail(lead['email']) : null
@@ -194,7 +196,10 @@ export function LeadDetailPage(props: CrmDetailPageProps) {
           basePath={basePath}
           roster={roster}
           onConvert={() => setConverting(true)}
-          onUnqualify={() => setUnqualifying(true)}
+          onUnqualify={(statusLabel) => {
+            setUnqualifyAs(statusLabel ?? null)
+            setUnqualifying(true)
+          }}
           extraMenuItems={erase.menuItems}
           banner={erase.banner}
           erasurePending={erase.pendingSinceMs !== null}
@@ -269,6 +274,7 @@ export function LeadDetailPage(props: CrmDetailPageProps) {
         hostId={siteHostId}
         leadId={id}
         leadLabel={label ?? id}
+        statusLabel={unqualifyAs}
       />
       {erase.dialog}
     </CrmCreateSiteDefault>

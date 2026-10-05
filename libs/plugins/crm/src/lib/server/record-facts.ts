@@ -23,6 +23,7 @@ import {
 } from '@aglyn/aglyn/plugin-manager/plugin-record-facts'
 import {
   CRM_COLLECTIONS,
+  CRM_LEAD_STATUS_PICKLIST,
   crmReadTokens,
   isOrgWideMember,
   type ConsentGroup,
@@ -54,6 +55,7 @@ import {
   leadFacts,
   type CrmRecordFactsKind,
 } from '../model/record-facts'
+import { readCrmPicklist } from './read-picklist'
 import { crmSuiteRefusal } from './suite-gate'
 import { contactPrimaryGroup } from '../model/contact-holder'
 
@@ -299,7 +301,12 @@ export const crmLeadFactsReader = reader(async (scope, request) => {
     direction: 'desc',
     limit: CRM_FACTS_ACTIVITIES_READ,
   })
-  return { ok: true, facts: { ...leadFacts({ lead: (snapshot.data() ?? {}) as Data, activities }) } }
+  // The status fact reads as the org names it (AGL-3512).
+  const leadStatuses = await readCrmPicklist(firestore(), scope.orgId, CRM_LEAD_STATUS_PICKLIST)
+  return {
+    ok: true,
+    facts: { ...leadFacts({ lead: (snapshot.data() ?? {}) as Data, activities, leadStatuses }) },
+  }
 })
 
 export const crmImportFactsReader = reader(async (scope, request) => {

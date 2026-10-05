@@ -1,10 +1,11 @@
 'use client'
 
 import {
-  CRM_LEAD_STATUS_LABELS,
   CRM_LEAD_TEXT_MAX,
   type CrmCustomValue,
   type CrmLeadStatus,
+  crmLeadStatusLabelFor,
+  crmLeadStatusOptions,
   containerMembershipValue,
   crmPicklistDefaultLabel,
   normalizeCrmLeadTags,
@@ -45,6 +46,10 @@ import {
 import { LeadOwnerSelect } from './lead-owner-select'
 import { LeadSourceSelect } from './lead-source-select'
 import { useLeadSourcePicklist } from '../hooks/use-lead-source-picklist'
+import { useLeadStatusPicklist } from '../hooks/use-lead-status-picklist'
+
+/** The meanings a lead is entered in by hand: New or Working (AGL-3231). */
+const NEW_LEAD_STATUSES: readonly CrmLeadStatus[] = ['new', 'working']
 
 /** What the drawer hands back — already normalized where the route would. */
 export interface NewLeadValues {
@@ -55,7 +60,8 @@ export interface NewLeadValues {
   phone: string
   website: string
   leadSource: string
-  status: Extract<CrmLeadStatus, 'new' | 'working'>
+  /** One of the org's New or Working values, by its label (AGL-3512). */
+  status: string
   ownerUid: string
   tags: string[]
   /** The site's campaigns to file the lead under (AGL-3254), by id. */
@@ -142,7 +148,13 @@ export function NewLeadDrawer(props: NewLeadDrawerProps) {
   useEffect(() => {
     if (open && !leadSourceTouched) setLeadSource(defaultLeadSource)
   }, [open, leadSourceTouched, defaultLeadSource])
-  const [status, setStatus] = useState<NewLeadValues['status']>('new')
+  // The org's New and Working values (AGL-3512); a new lead starts as New's.
+  const leadStatuses = useLeadStatusPicklist(orgId ?? null)
+  const statusChoices = crmLeadStatusOptions(leadStatuses.picklist, NEW_LEAD_STATUSES)
+  const [status, setStatus] = useState('')
+  const shownStatus = statusChoices.some((choice) => choice.label === status)
+    ? status
+    : crmLeadStatusLabelFor(leadStatuses.picklist, 'new')
   const [ownerUid, setOwnerUid] = useState('')
   const [tags, setTags] = useState('')
   const [campaignIds, setCampaignIds] = useState<string[]>([])
@@ -179,7 +191,7 @@ export function NewLeadDrawer(props: NewLeadDrawerProps) {
     setWebsite('')
     setLeadSource('')
     setLeadSourceTouched(false)
-    setStatus('new')
+    setStatus('')
     setOwnerUid('')
     setTags('')
     setCampaignIds([])
@@ -223,7 +235,7 @@ export function NewLeadDrawer(props: NewLeadDrawerProps) {
       phone: patch.phone ?? '',
       website: patch.website ?? '',
       leadSource: patch.leadSource ?? '',
-      status,
+      status: shownStatus,
       ownerUid,
       tags: patch.tags ?? [],
       campaignIds: containerMembershipValue(campaignIds),
@@ -347,16 +359,15 @@ export function NewLeadDrawer(props: NewLeadDrawerProps) {
               select
               size="small"
               label="Status"
-              value={status}
-              onChange={(event) =>
-                setStatus(event.target.value as NewLeadValues['status'])
-              }
+              value={statusChoices.some((choice) => choice.label === shownStatus) ? shownStatus : ''}
+              onChange={(event) => setStatus(String(event.target.value))}
               fullWidth
             >
-              <MenuItem value="new">{CRM_LEAD_STATUS_LABELS.new}</MenuItem>
-              <MenuItem value="working">
-                {CRM_LEAD_STATUS_LABELS.working}
-              </MenuItem>
+              {statusChoices.map((choice) => (
+                <MenuItem key={choice.label} value={choice.label}>
+                  {choice.label}
+                </MenuItem>
+              ))}
             </TextField>
             <LeadOwnerSelect
               value={ownerUid}

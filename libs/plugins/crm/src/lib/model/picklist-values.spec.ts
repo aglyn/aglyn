@@ -20,11 +20,14 @@ import {
   type CrmPicklistDefinition,
   crmPicklistDefinition,
   effectiveCrmLeadSourcePicklist,
+  effectiveCrmLeadStatusPicklist,
 } from '@aglyn/aglyn/app-utils/crm'
 import {
   addPicklistValue,
   deletePicklistValue,
   movePicklistValue,
+  picklistAddableMeanings,
+  picklistMeaningLabel,
   picklistReplacements,
   renamePicklistValue,
   setPicklistDefault,
@@ -177,6 +180,34 @@ describe('the picklist moves (AGL-3298, AGL-3510)', () => {
       'Old list',
       'Outbound · Apollo',
       'Website form',
+    ])
+  })
+})
+
+describe('the lead status picklist’s values (AGL-3512)', () => {
+  const LEAD_STATUS = crmPicklistDefinition('leadStatus') as CrmPicklistDefinition
+  const list = effectiveCrmLeadStatusPicklist({
+    values: [{ id: 'contacted', label: 'Contacted', active: true, meaning: 'working' }],
+    defaultValueId: null,
+  })
+
+  it('offers every meaning but Qualified to an added value, by its label', () => {
+    expect(picklistAddableMeanings(LEAD_STATUS)).toEqual(['new', 'nurturing', 'working', 'unqualified'])
+    expect(picklistMeaningLabel(LEAD_STATUS, 'nurturing')).toBe('Nurturing')
+    const refused = addPicklistValue(LEAD_STATUS, list, 'Won', { meaning: 'qualified' })
+    expect(refused).toEqual({ ok: false, error: 'Only the platform sets Qualified; pick another meaning.' })
+    expect(addPicklistValue(LEAD_STATUS, list, 'Meeting set', { meaning: 'working' }).ok).toBe(true)
+  })
+
+  it('refuses a delete that would clear its leads, and moves them only within the meaning', () => {
+    expect(deletePicklistValue(LEAD_STATUS, list, 'contacted', null)).toEqual({
+      ok: false,
+      error: 'Pick a value that means the same as “Contacted” to move its records to.',
+    })
+    expect(deletePicklistValue(LEAD_STATUS, list, 'contacted', 'New').ok).toBe(false)
+    expect(deletePicklistValue(LEAD_STATUS, list, 'contacted', 'working').ok).toBe(true)
+    expect(picklistReplacements(LEAD_STATUS, list, 'contacted').map((value) => value.label)).toEqual([
+      'Working',
     ])
   })
 })

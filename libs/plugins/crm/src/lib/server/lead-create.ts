@@ -54,6 +54,7 @@ import {
   CRM_COLLECTIONS,
   type CrmCustomValue,
   type CrmLeadProfilePatch,
+  CRM_LEAD_STATUS_PICKLIST,
   type CrmLeadStatus,
   LEADS_MAX_PER_HOST,
   normalizeContactEmail,
@@ -61,6 +62,7 @@ import {
   personKey,
   type PluginApiHandler,
   readCrmCustomInput,
+  resolveCrmLeadStatusWrite,
 } from '@aglyn/aglyn/server'
 import {
   addHostLead,
@@ -80,6 +82,7 @@ import type { CampaignFilingRef } from '../model/campaign-filing-activity'
 import { fileCampaignFilingActivities } from './campaign-filing-activity'
 import { readLeadSourcePicklist, resolveLeadSourceWrite } from './lead-source-picklist'
 import { holdsDataManage } from './org-caller'
+import { readCrmPicklist } from './read-picklist'
 import { crmSuiteRefusal } from './suite-gate'
 
 /** The statuses a lead may be entered in — everything but the converted state. */
@@ -103,7 +106,11 @@ export interface LeadCreateRequest {
   address?: Record<string, unknown> | null
   tags?: string[]
   leadSource?: string
-  status?: CrmLeadStatus
+  /**
+   * One of the org's Lead status values by its label, or a meaning — New
+   * or Working either way (AGL-3512).
+   */
+  status?: string
   ownerUid?: string
   notes?: string
   /** The org's campaigns to file the lead under (AGL-3254), by container id. */
@@ -212,10 +219,6 @@ export const leadCreateHandler: PluginApiHandler = async (req, res) => {
     return
   }
   const rawStatus = String(body.status ?? '').trim()
-  if (rawStatus && !CREATE_STATUSES.includes(rawStatus as CrmLeadStatus)) {
-    res.status(400).json({ error: 'A new lead is New or Working.' })
-    return
-  }
   const name = String(body.name ?? '')
     .trim()
     .replace(/\s+/g, ' ')
@@ -315,6 +318,21 @@ export const leadCreateHandler: PluginApiHandler = async (req, res) => {
     if (leadSource.write === undefined) delete patch.leadSource
     else patch.leadSource = leadSource.write
     /*
+     * THE ORG'S LEAD STATUSES (AGL-3512): a label or a meaning, of New or
+     * Working only, stored as the meaning and the org's label together.
+     */
+    const status = rawStatus
+      ? resolveCrmLeadStatusWrite(
+          await readCrmPicklist(firestore, resolved.orgId, CRM_LEAD_STATUS_PICKLIST),
+          rawStatus,
+          { allowed: CREATE_STATUSES, current: before?.data() ?? null },
+        )
+      : null
+    if (status?.ok === false) {
+      res.status(400).json({ error: `A new lead is New or Working. ${status.error}`, field: 'status' })
+      return
+    }
+    /*
      * The platform ceiling, judged here so the drawer can say WHY rather
      * than only that the lead could not be saved; the door re-judges it
      * inside its own transaction, so a race is still refused there.
@@ -349,7 +367,7 @@ export const leadCreateHandler: PluginApiHandler = async (req, res) => {
     }
     const working: Record<string, unknown> = {
       ...leadProfileWrite(patch),
-      ...(rawStatus ? { status: rawStatus } : {}),
+      ...(status?.ok ? { status: status.status, statusLabel: status.statusLabel } : {}),
       ...(ownerUid ? { ownerUid } : {}),
       ...(notes ? { notes } : {}),
       // Added to what a lead the site already held carries, never in place

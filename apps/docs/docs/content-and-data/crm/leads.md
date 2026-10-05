@@ -175,6 +175,21 @@ New or Nurturing lead to Working. Neither ever moves a lead back: a lead
 already Working, Qualified or Unqualified keeps its status, and a converted
 lead is never touched. You can still set any open status by hand.
 
+**Your own statuses.** Lead status is a [picklist](./custom-fields.md#picklist-values)
+like Salesforce's: the five above are its standard values, and on the **Leads** tab of
+**CRM → Fields**, under **Lead status values**, you can rename them, reorder them,
+deactivate one, and add your own — "Contacted", "Meeting set", "Lost to competitor".
+Every value you add **means** one of the five, picked when you add it in the **Means**
+column; it cannot mean Qualified, which only a conversion sets. The meaning is what the
+list filters by, what the open count and the digest count, and what sequences and sharing
+rules read; your label is what the lead shows. A lead set to "Contacted" is a Working lead
+labeled Contacted. A lead given only a meaning — by a capture, a sequence or an
+automation — shows the default value when it has that meaning, else the first active value
+of that meaning. Deleting a value you added moves its leads to another value of the same
+meaning. The status select on a lead, the row's select, **Set status** on the bulk bar and
+the **New lead** drawer list your active values; picking an Unqualified one opens the
+dialog that asks why. The **Status** filter still picks a meaning, named by your values of it.
+
 The [Daily CRM digest](./tasks.md#the-daily-digest) lists only New leads as
 unworked, and counts the Nurturing ones on a line of their own ("12 leads
 are in sequences or campaigns"), because email is already reaching them.

@@ -75,6 +75,8 @@ import {
   addPicklistValue,
   crmPicklistValuesRouteUrl,
   movePicklistValue,
+  picklistAddableMeanings,
+  picklistMeaningLabel,
   picklistReplacements,
   type PicklistValuesAction,
   type PicklistValuesRequest,
@@ -157,6 +159,8 @@ export function PicklistValuesCard(props: PicklistValuesCardProps) {
 
   const groups = definition.groups ?? []
   const meanings = definition.meanings ?? []
+  // An added value may not take a meaning only the platform sets (AGL-3512).
+  const addableMeanings = picklistAddableMeanings(definition)
   const [noun, nouns] = OBJECT_NOUNS[definition.object]
   const holders = targetObjects(definition).map((object) => OBJECT_NOUNS[object])
   const field = definition.label.toLowerCase()
@@ -349,7 +353,7 @@ export function PicklistValuesCard(props: PicklistValuesCardProps) {
   }
 
   const replacements = deleting ? picklistReplacements(definition, picklist, deleting.id) : []
-  const columns = groups.length ? 5 : 4
+  const columns = 4 + (groups.length ? 1 : 0) + (meanings.length ? 1 : 0)
   const heldBy = sentenceList(holders.map(([, many]) => many)).replace(/^./, (letter) =>
     letter.toUpperCase(),
   )
@@ -395,6 +399,7 @@ export function PicklistValuesCard(props: PicklistValuesCardProps) {
               <TableCell sx={{ width: 120 }}>{'Order'}</TableCell>
               <TableCell>{'Value'}</TableCell>
               {groups.length ? <TableCell>{'Group'}</TableCell> : null}
+              {meanings.length ? <TableCell>{'Means'}</TableCell> : null}
               <TableCell>{'Status'}</TableCell>
               <TableCell align="right" />
             </TableRow>
@@ -500,6 +505,14 @@ export function PicklistValuesCard(props: PicklistValuesCardProps) {
                     </TextField>
                   </TableCell>
                 ) : null}
+                {meanings.length ? (
+                  // Fixed for a standard value, and chosen when an added one is made.
+                  <TableCell>
+                    <Typography variant="body2" color={value.meaning ? 'text.primary' : 'text.secondary'}>
+                      {value.meaning ? picklistMeaningLabel(definition, value.meaning) : '—'}
+                    </Typography>
+                  </TableCell>
+                ) : null}
                 <TableCell>
                   <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', alignItems: 'center' }}>
                     {value.active ? null : (
@@ -589,9 +602,9 @@ export function PicklistValuesCard(props: PicklistValuesCardProps) {
                 }}
                 fullWidth
               >
-                {meanings.map((meaning) => (
+                {addableMeanings.map((meaning) => (
                   <MenuItem key={meaning} value={meaning}>
-                    {meaning}
+                    {picklistMeaningLabel(definition, meaning)}
                   </MenuItem>
                 ))}
               </TextField>
@@ -616,8 +629,10 @@ export function PicklistValuesCard(props: PicklistValuesCardProps) {
           <Stack spacing={1.5} sx={{ pt: 1 }}>
             <DialogContentText variant="body2">
               {`The value leaves the list for good. ${heldBy} that hold it ` +
-                'are moved to the value you pick here, or cleared. To keep it on ' +
-                'those records instead, deactivate it.'}
+                (meanings.length
+                  ? 'are moved to the value you pick here, which means the same. '
+                  : 'are moved to the value you pick here, or cleared. ') +
+                'To keep it on those records instead, deactivate it.'}
             </DialogContentText>
             <TextField
               select
@@ -628,7 +643,8 @@ export function PicklistValuesCard(props: PicklistValuesCardProps) {
               fullWidth
               slotProps={{ select: { displayEmpty: true }, inputLabel: { shrink: true } }}
             >
-              <MenuItem value="">{'None — clear it'}</MenuItem>
+              {/* A value with a meaning moves its records to another of that meaning, never off. */}
+              {meanings.length ? null : <MenuItem value="">{'None — clear it'}</MenuItem>}
               {replacements.map((value) => (
                 <MenuItem key={value.id} value={value.label}>
                   {value.label}
@@ -642,7 +658,7 @@ export function PicklistValuesCard(props: PicklistValuesCardProps) {
           <Button
             variant="contained"
             color="error"
-            disabled={busy}
+            disabled={busy || (meanings.length > 0 && !replaceWith)}
             onClick={() => void submitDelete()}
           >
             {'Delete value'}

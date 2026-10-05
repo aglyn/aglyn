@@ -116,6 +116,10 @@ export function addPicklistValue(
   if (meanings.length && !meanings.includes(options.meaning ?? '')) {
     return { ok: false, error: 'Pick what the value means.' }
   }
+  if (definition.reservedMeanings?.includes(options.meaning ?? '')) {
+    const name = picklistMeaningLabel(definition, options.meaning as string)
+    return { ok: false, error: `Only the platform sets ${name}; pick another meaning.` }
+  }
   const groups = definition.groups ?? []
   const value: CrmPicklistValue = {
     id: crmPicklistValueId(label, [
@@ -177,6 +181,14 @@ export function deletePicklistValue(
       error: `“${value.label}” is a standard value and cannot be deleted. Deactivate it instead.`,
     }
   }
+  // On a definition with meanings a record's meaning must survive the
+  // delete, so its label moves to another value of that meaning — never off.
+  if (replaceWith === null && definition.meanings?.length) {
+    return {
+      ok: false,
+      error: `Pick a value that means the same as “${value.label}” to move its records to.`,
+    }
+  }
   if (replaceWith !== null) {
     const target = crmPicklistValueByLabel(picklist, replaceWith)
     if (!target || target.id === valueId || !target.active) {
@@ -196,6 +208,16 @@ export function deletePicklistValue(
       defaultValueId: picklist.defaultValueId === valueId ? null : picklist.defaultValueId,
     },
   }
+}
+
+/** How a meaning reads on screen: the definition's own label for it, else the id. */
+export function picklistMeaningLabel(definition: CrmPicklistDefinition, meaning: string): string {
+  return definition.meaningLabels?.[meaning] ?? meaning
+}
+
+/** The meanings an org-added value may take: every one but those the platform reserves. */
+export function picklistAddableMeanings(definition: CrmPicklistDefinition): string[] {
+  return (definition.meanings ?? []).filter((meaning) => !definition.reservedMeanings?.includes(meaning))
 }
 
 /**

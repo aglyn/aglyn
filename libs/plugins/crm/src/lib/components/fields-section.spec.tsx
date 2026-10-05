@@ -44,6 +44,8 @@ let mockPlan: { filters: unknown[] } | null = null
 
 /** The org's stored picklist document; `null` reads as the standard values alone. */
 let mockPicklistDoc: Record<string, unknown> | null = null
+/** The org's stored Lead status document (AGL-3512); `null` reads as the standard values alone. */
+let mockStatusDoc: Record<string, unknown> | null = null
 
 // The org's picklists (AGL-3298, AGL-3510), each read from `mockPicklistDoc`.
 jest.mock('../hooks/use-crm-picklist', () => {
@@ -53,8 +55,8 @@ jest.mock('../hooks/use-crm-picklist', () => {
   return {
     useCrmPicklist: (id: string) => ({
       definition: crmPicklistDefinition(id),
-      picklist: effectiveCrmPicklist(id, mockPicklistDoc),
-      stored: mockPicklistDoc !== null,
+      picklist: effectiveCrmPicklist(id, id === 'leadStatus' ? mockStatusDoc : mockPicklistDoc),
+      stored: (id === 'leadStatus' ? mockStatusDoc : mockPicklistDoc) !== null,
       ready: true,
       fromCache: false,
     }),
@@ -293,7 +295,8 @@ describe('the lead source values on the Leads tab (AGL-3298, AGL-3510)', () => {
     expect(within(table).getByRole('combobox', { name: 'Group of Purchased list' }).textContent).toBe(
       'Outbound',
     )
-    expect(screen.getByText(/These are the standard values/)).toBeTruthy()
+    // One caption per card on the tab: Lead source's and Lead status's.
+    expect(screen.getAllByText(/These are the standard values/)).toHaveLength(2)
   })
 
   it('offers no Delete on a standard value, and keeps Rename, Default and Deactivate', () => {
@@ -326,7 +329,8 @@ describe('the lead source values on the Leads tab (AGL-3298, AGL-3510)', () => {
       expect(within(table).getByRole('combobox', { name: 'Group of Referral' }).textContent).toBe(
         'None',
       )
-      expect(screen.queryByText(/These are the standard values/)).toBeNull()
+      // Lead status still reads its standard values; Lead source does not.
+      expect(screen.getAllByText(/These are the standard values/)).toHaveLength(1)
     } finally {
       mockPicklistDoc = null
     }
@@ -335,7 +339,8 @@ describe('the lead source values on the Leads tab (AGL-3298, AGL-3510)', () => {
   it('adds a value last under the group picked, writing the whole list with the org-wide stamp', async () => {
     render(<ContactsFieldsSection hostId="host-1" org={{}} />)
     fireEvent.click(screen.getByRole('tab', { name: 'Leads' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Add value' }))
+    // The Lead source card's, the first of the tab's two.
+    fireEvent.click(screen.getAllByRole('button', { name: 'Add value' })[0])
     fireEvent.change(screen.getByRole('textbox', { name: 'Value' }), {
       target: { value: 'Podcast' },
     })
@@ -359,13 +364,69 @@ describe('the lead source values on the Leads tab (AGL-3298, AGL-3510)', () => {
   it('refuses a value the list already holds, in any case, and writes nothing', () => {
     render(<ContactsFieldsSection hostId="host-1" org={{}} />)
     fireEvent.click(screen.getByRole('tab', { name: 'Leads' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Add value' }))
+    fireEvent.click(screen.getAllByRole('button', { name: 'Add value' })[0])
     fireEvent.change(screen.getByRole('textbox', { name: 'Value' }), {
       target: { value: 'trade SHOW' },
     })
     fireEvent.click(screen.getByRole('button', { name: 'Add' }))
     expect(screen.getByText('“Trade show” is already in the list.')).toBeTruthy()
     expect(setDoc).not.toHaveBeenCalled()
+  })
+})
+
+describe('the lead status values on the Leads tab (AGL-3512)', () => {
+  it('lists one standard value per meaning, with a Means column', () => {
+    render(<ContactsFieldsSection hostId="host-1" org={{}} />)
+    fireEvent.click(screen.getByRole('tab', { name: 'Leads' }))
+    const table = screen.getByRole('table', { name: 'Lead status values' })
+    expect(within(table).getByRole('columnheader', { name: 'Means' })).toBeTruthy()
+    expect(within(table).getAllByText('Standard')).toHaveLength(5)
+    const rows = within(table).getAllByRole('row').slice(1)
+    expect(rows.map((row) => row.querySelectorAll('td')[2]?.textContent)).toEqual([
+      'New',
+      'Nurturing',
+      'Working',
+      'Qualified',
+      'Unqualified',
+    ])
+  })
+
+  it('asks what an added value means, never offering Qualified, and stores the meaning', async () => {
+    render(<ContactsFieldsSection hostId="host-1" org={{}} />)
+    fireEvent.click(screen.getByRole('tab', { name: 'Leads' }))
+    fireEvent.click(screen.getAllByRole('button', { name: 'Add value' })[1])
+    fireEvent.change(screen.getByRole('textbox', { name: 'Value' }), {
+      target: { value: 'Contacted' },
+    })
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Means' }))
+    const offered = screen.getAllByRole('option').map((option) => option.textContent)
+    expect(offered).toEqual(['New', 'Nurturing', 'Working', 'Unqualified'])
+    fireEvent.click(screen.getByRole('option', { name: 'Working' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }))
+    await waitFor(() => expect(setDoc).toHaveBeenCalledTimes(1))
+    const [ref, written] = (setDoc as jest.Mock).mock.calls[0]
+    expect(ref.path).toBe('orgs/org-1/crmPicklists/leadStatus')
+    expect(written.values.at(-1)).toEqual({
+      id: 'contacted',
+      label: 'Contacted',
+      active: true,
+      meaning: 'working',
+    })
+  })
+
+  it('moves a deleted value’s leads to one of the same meaning, never off', () => {
+    mockStatusDoc = {
+      values: [{ id: 'contacted', label: 'Contacted', active: true, meaning: 'working' }],
+      defaultValueId: null,
+    }
+    try {
+      render(<ContactsFieldsSection hostId="host-1" org={{}} />)
+      fireEvent.click(screen.getByRole('tab', { name: 'Leads' }))
+      const actions = document.querySelector('[data-row-actions="Contacted"]')?.textContent
+      expect(actions).toBe('rename default active delete')
+    } finally {
+      mockStatusDoc = null
+    }
   })
 })
 

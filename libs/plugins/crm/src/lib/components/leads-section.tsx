@@ -21,7 +21,6 @@ import type {
   ConsolePluginPageProps,
   CrmLeadFields,
   CrmViewFilterClause,
-  CrmLeadStatus,
 } from '@aglyn/aglyn'
 import {
   mdiAccountArrowRight,
@@ -59,7 +58,6 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
-  MenuItem,
   Select,
   Stack,
   Typography,
@@ -84,8 +82,8 @@ import {
   LEAD_LIST_FILTER_HEADERS,
   LEAD_SOURCE_DIRECTION_FILTER_OPTIONS,
   LEAD_SOURCE_FILTER_NONE,
-  LEAD_STATUS_FILTER_OPTIONS,
   leadClausesForGrid,
+  leadStatusFilterOptions,
   LEAD_PREFIX_SEARCH,
   leadClauseImpliesScope,
   leadClausesToStore,
@@ -99,6 +97,7 @@ import {
 import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
 import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
 import { useLeadSourcePicklist } from '../hooks/use-lead-source-picklist'
+import { useLeadStatusPicklist } from '../hooks/use-lead-status-picklist'
 import { type LeadCsvOptions, leadsCsv } from '../model/leads-csv'
 import { LeadConvertDialog } from './lead-convert-dialog'
 import {
@@ -113,6 +112,7 @@ import { LeadOwnerSelect } from './lead-owner-select'
 import { CONVERT_PENDING_ERASURE_REASON } from './lead-properties-card'
 import { CrmEmailStateChip } from './crm-email-state-chip'
 import { LeadStatusChip } from './lead-status-chip'
+import { type LeadStatusChoice, leadStatusChoices, leadStatusMenuItems } from './lead-status-options'
 import { CrmShareChipView } from './record-sharing-card'
 import { crmShareChipFor } from '../model/crm-sharing'
 import { useCrmSharingFollowUp } from '../hooks/use-crm-sharing'
@@ -169,6 +169,9 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
   // The org's lead source values (AGL-3298): the filter's menu and the
   // column's sort order.
   const leadSourceList = useLeadSourcePicklist(orgId)
+  // The org's lead status values (AGL-3512): the chips' words, the inline
+  // select's choices and the Status filter's names.
+  const leadStatusList = useLeadStatusPicklist(orgId)
   const routes = crmRoutes(basePath ?? '')
 
   /*
@@ -246,7 +249,7 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
       { value: LEAD_SOURCE_FILTER_NONE, label: 'No lead source' },
     ]
     return {
-      status: LEAD_STATUS_FILTER_OPTIONS,
+      status: leadStatusFilterOptions(leadStatusList.picklist),
       emailState: LEAD_EMAIL_FILTER_OPTIONS,
       ownerUid: roster.options.map((option) => ({
         value: option.uid,
@@ -257,7 +260,7 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
       // The picklist's groups (AGL-3511): Inbound and Outbound.
       leadSourceDirection: LEAD_SOURCE_DIRECTION_FILTER_OPTIONS,
     }
-  }, [clauses, campaigns.options, leadSourceList.picklist, roster.options])
+  }, [clauses, campaigns.options, leadSourceList.picklist, leadStatusList.picklist, roster.options])
   /*
    * Every clause and the search word on ONE query (AGL-3321): each stored
    * clause asked through the field its writer keeps (`leadQueryClause`),
@@ -324,9 +327,11 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
   const csvOptions: LeadCsvOptions = useMemo(
     () => ({
       ownerEmail: roster.emailFor,
+      // The Status column as the org names it (AGL-3512).
+      leadStatuses: leadStatusList.picklist,
       ...(hostId ? {} : { siteName: (id: string) => mount?.siteName(id) }),
     }),
-    [roster.emailFor, hostId, mount],
+    [roster.emailFor, hostId, mount, leadStatusList.picklist],
   )
   // The page on screen; Export all on the bulk bar takes the whole list.
   const handleExport = useCallback(() => {
@@ -335,6 +340,8 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
 
   const [assigning, setAssigning] = useState<LeadRow | null>(null)
   const [unqualifying, setUnqualifying] = useState<LeadRow | null>(null)
+  // The Unqualified value the row's select picked (AGL-3512).
+  const [unqualifyAs, setUnqualifyAs] = useState<string | null>(null)
   // The row whose conversion dialog is open (AGL-2641) — the same dialog
   // the lead's page opens, fed the row so the list is one click shorter.
   const [converting, setConverting] = useState<LeadRow | null>(null)
@@ -484,19 +491,23 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
         headerName: 'Status',
         flex: 0.9,
         minWidth: 150,
+        // The meaning, which the Status filter asks; the cell shows the org's label.
         valueGetter: (_value, row: LeadRow) => Aglyn.crmLeadStatus(row),
         renderCell: ({ row }: { row: LeadRow }) => (
           <InlineStatus
             lead={row}
+            statuses={leadStatusList.picklist}
             onChange={(next) => {
-              if (next === 'unqualified') {
+              if (next.status === 'unqualified') {
                 setUnqualifying(row)
+                setUnqualifyAs(next.label)
                 return
               }
               void writeLead(
                 row,
                 {
-                  status: next,
+                  status: next.status,
+                  statusLabel: next.label,
                   ...(Aglyn.crmLeadStatus(row) === 'unqualified'
                     ? { unqualifiedReason: deleteField() }
                     : {}),
@@ -684,7 +695,10 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
                     icon: (
                       <MdiIcon path={mdiAccountCancelOutline.path} size={0.8} />
                     ),
-                    onClick: () => setUnqualifying(row),
+                    onClick: () => {
+                      setUnqualifyAs(null)
+                      setUnqualifying(row)
+                    },
                     disabled:
                       !Aglyn.isCrmLeadOpen(row) ||
                       Boolean(row.convertedContactId),
@@ -710,6 +724,7 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
       campaignName,
       leadFields.active,
       leadSourceList.picklist,
+      leadStatusList.picklist,
     ],
   )
   /*
@@ -862,6 +877,7 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
         leadLabel={String(
           unqualifying?.['name'] || unqualifying?.['email'] || '',
         )}
+        statusLabel={unqualifyAs}
       />
       {/* The site the conversion is filed as (AGL-2641), which since
           AGL-3275 is the first site that captured this person rather than
@@ -896,17 +912,18 @@ CrmLeadsSection.displayName = 'CrmLeadsSection'
  */
 function InlineStatus(props: {
   lead: LeadRow
-  onChange: (next: CrmLeadStatus) => void
+  statuses: Aglyn.CrmPicklist
+  onChange: (next: LeadStatusChoice) => void
 }) {
-  const { lead, onChange } = props
+  const { lead, statuses, onChange } = props
   if (lead.convertedContactId) {
     return (
       <Box sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
-        <LeadStatusChip lead={lead} />
+        <LeadStatusChip lead={lead} statuses={statuses} />
       </Box>
     )
   }
-  const status = Aglyn.crmLeadStatus(lead)
+  const choices = leadStatusChoices(statuses, lead)
   return (
     <Box
       onClick={(event) => event.stopPropagation()}
@@ -921,19 +938,15 @@ function InlineStatus(props: {
         size="small"
         variant="standard"
         disableUnderline
-        value={status}
-        onChange={(event) => onChange(event.target.value as CrmLeadStatus)}
-        renderValue={() => <LeadStatusChip lead={lead} />}
+        value={Aglyn.crmLeadStatusLabel(lead, statuses)}
+        onChange={(event) => {
+          const choice = choices.find((entry) => entry.label === event.target.value)
+          if (choice) onChange(choice)
+        }}
+        renderValue={() => <LeadStatusChip lead={lead} statuses={statuses} />}
         sx={{ width: '100%' }}
       >
-        <MenuItem value="new">{Aglyn.CRM_LEAD_STATUS_LABELS.new}</MenuItem>
-        <MenuItem value="nurturing">
-          {Aglyn.CRM_LEAD_STATUS_LABELS.nurturing}
-        </MenuItem>
-        <MenuItem value="working">
-          {Aglyn.CRM_LEAD_STATUS_LABELS.working}
-        </MenuItem>
-        <MenuItem value="unqualified">{`${Aglyn.CRM_LEAD_STATUS_LABELS.unqualified}…`}</MenuItem>
+        {leadStatusMenuItems(choices)}
       </Select>
     </Box>
   )

@@ -19,8 +19,8 @@
 import {
   CONTACT_LIFECYCLE_STAGE_LABELS,
   type ContactLifecycleStage,
-  CRM_LEAD_STATUS_LABELS,
-  type CrmLeadStatus,
+  crmLeadStatusLabelFor,
+  isCrmLeadStatus,
   pluginDocsHelp,
 } from '@aglyn/aglyn'
 import { mdiDeleteOutline, mdiPencilOutline, mdiRefresh } from '@aglyn/shared-data-mdi'
@@ -43,6 +43,7 @@ import { useCallback, useState } from 'react'
 import { useCrmCampaigns } from '../hooks/use-crm-campaigns'
 import { useCrmSharingRules, useCrmSharingSites } from '../hooks/use-crm-sharing'
 import { useLeadSourcePicklist } from '../hooks/use-lead-source-picklist'
+import { useLeadStatusPicklist } from '../hooks/use-lead-status-picklist'
 import type { CrmOrgDoc } from '../hooks/use-crm-scope'
 import { useOrgMemberDirectory } from '../hooks/use-org-member-directory'
 import {
@@ -96,6 +97,8 @@ export function SharingRulesCard(props: SharingRulesCardProps) {
   const campaigns = useCrmCampaigns({ hostId: null, orgId }, { enabled: canManage })
   // The values the Lead source criterion picks from, under their groups (AGL-3511).
   const leadSources = useLeadSourcePicklist(canManage ? orgId : null)
+  // The org's names for the lead statuses a rule matches (AGL-3512).
+  const leadStatuses = useLeadStatusPicklist(orgId)
   const [editing, setEditing] = useState<CrmSharingRule | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -130,7 +133,7 @@ export function SharingRulesCard(props: SharingRulesCardProps) {
 
   const canEdit = ready && canManage && !busy
   const stageLabel = (id: string) =>
-    CRM_LEAD_STATUS_LABELS[id as CrmLeadStatus] ??
+    (isCrmLeadStatus(id) ? crmLeadStatusLabelFor(leadStatuses.picklist, id) : null) ??
     CONTACT_LIFECYCLE_STAGE_LABELS[id as ContactLifecycleStage] ??
     id
   return (
@@ -261,6 +264,7 @@ export function SharingRulesCard(props: SharingRulesCardProps) {
         members={roster.members}
         campaigns={campaigns.options}
         leadSourceList={leadSources.picklist}
+        leadStatusList={leadStatuses.picklist}
         busy={busy}
         onSubmit={save}
       />

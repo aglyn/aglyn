@@ -173,6 +173,32 @@ export const LEAD_SOURCE_DIRECTION_FILTER_OPTIONS = LEAD_SOURCE_DIRECTIONS.map((
   label: LEAD_SOURCE_DIRECTION_LABELS[direction],
 }))
 
+/**
+ * The Status choices as an org reads them (AGL-3512): still one choice per
+ * MEANING — the query asks `status` — each named by the org's values of that
+ * meaning, so a list that keeps "Contacted" and "Meeting set" as Working
+ * reads "Working: Contacted, Meeting set".
+ */
+export function leadStatusFilterOptions(
+  picklist: CrmPicklist,
+): Array<{ value: string; label: string }> {
+  const named = (status: CrmLeadStatus): string => {
+    const labels = picklist.values
+      .filter((value) => value.meaning === status && value.active)
+      .map((value) => value.label)
+    const meaning = picklistMeaningName(status)
+    if (!labels.length) return meaning
+    if (labels.length === 1 && labels[0] === meaning) return meaning
+    return `${meaning}: ${labels.join(', ')}`
+  }
+  return LEAD_FILTERS.filter((option) => option !== 'all').map((option) => ({
+    value: option,
+    label: option === 'open' ? 'Open (new, nurturing or working)' : named(option),
+  }))
+}
+
+const picklistMeaningName = (status: CrmLeadStatus): string => CRM_LEAD_STATUS_LABELS[status]
+
 const STATUS_OPEN: CrmViewFilterClause = { field: 'status', op: 'equals', value: 'open' }
 const STATUS_ALL: CrmViewFilterClause = { field: 'status', op: 'equals', value: 'all' }
 

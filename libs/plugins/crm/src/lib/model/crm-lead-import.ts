@@ -70,14 +70,14 @@
 import { CONTAINER_MEMBERSHIP_CAP } from '@aglyn/aglyn/app-utils/container-membership'
 import { normalizeContactEmail } from '@aglyn/aglyn/app-utils/contacts'
 import {
-  CRM_LEAD_STATUS_LABELS,
   CRM_LEAD_STATUSES,
   CRM_LEAD_TEXT_MAX,
   type CrmLeadProfile,
   type CrmLeadStatus,
   type CrmPicklist,
-  isCrmLeadStatus,
   judgeCrmLeadSource,
+  resolveCrmLeadStatusWrite,
+  STANDARD_CRM_LEAD_STATUS_PICKLIST,
   normalizeCrmPicklistLabel,
   normalizeCrmLeadTags,
   normalizeCompanyWebsite,
@@ -168,7 +168,7 @@ export const LEAD_IMPORT_FIELD_LABELS: Record<LeadImportField, string> = {
   phone: 'Phone',
   website: 'Website',
   leadSource: 'Lead source',
-  status: 'Status (new, nurturing, working, unqualified)',
+  status: 'Status (a lead status value, or new, nurturing, working, unqualified)',
   ownerEmail: 'Owner (team member email)',
   addressLine1: 'Address line 1',
   addressLine2: 'Address line 2',
@@ -298,6 +298,8 @@ export interface LeadImportRow {
   campaigns?: string[]
   /** Absent leaves an existing lead's status alone and a new one reading as `new`. */
   status?: CrmLeadStatus
+  /** The org's label for the value the cell named, written beside `status` (AGL-3512). */
+  statusLabel?: string
   /** Normalized, for the server to resolve against the org's members. */
   ownerEmail?: string
   /** Only ever set beside `status: 'unqualified'` — the pair is one fact. */
@@ -311,23 +313,27 @@ export type LeadImportRowVerdict =
   | { ok: false; reason: 'invalid-email'; input: string }
 
 /**
- * A status cell by id or by label — `working`, `Working` and `WORKING` are
- * one status. `null` for a cell naming no status a file may set, which
- * includes the well-spelled `Qualified` the export writes for a converted
- * lead.
+ * A status cell by label or by meaning (AGL-3512): any ACTIVE value of the
+ * org's Lead status list, in any case or spacing, stores its meaning and its
+ * label; a bare meaning — `working`, `Working`, `WORKING` — stores that
+ * meaning and the org's label for it. `null` for a cell naming no status a
+ * file may set, which includes every Qualified value the export writes for
+ * a converted lead.
  */
-export function parseImportLeadStatus(value: unknown): CrmLeadStatus | null {
-  const text = String(value ?? '')
-    .trim()
-    .toLowerCase()
-  if (!text) return null
-  const byId = isCrmLeadStatus(text) ? text : null
-  const byLabel =
-    LEAD_IMPORT_STATUSES.find(
-      (status) => CRM_LEAD_STATUS_LABELS[status].toLowerCase() === text,
-    ) ?? null
-  const status = byId ?? byLabel
-  return status && LEAD_IMPORT_STATUSES.includes(status) ? status : null
+export function parseImportLeadStatusValue(
+  value: unknown,
+  picklist: CrmPicklist = STANDARD_CRM_LEAD_STATUS_PICKLIST,
+): { status: CrmLeadStatus; statusLabel: string } | null {
+  const judged = resolveCrmLeadStatusWrite(picklist, value, { allowed: LEAD_IMPORT_STATUSES })
+  return judged.ok ? { status: judged.status, statusLabel: judged.statusLabel } : null
+}
+
+/** {@link parseImportLeadStatusValue}'s meaning alone. */
+export function parseImportLeadStatus(
+  value: unknown,
+  picklist: CrmPicklist = STANDARD_CRM_LEAD_STATUS_PICKLIST,
+): CrmLeadStatus | null {
+  return parseImportLeadStatusValue(value, picklist)?.status ?? null
 }
 
 /**
@@ -336,7 +342,10 @@ export function parseImportLeadStatus(value: unknown): CrmLeadStatus | null {
  * the document id; the owner is refused by the server, which alone can
  * look them up.
  */
-export function normalizeLeadImportRow(raw: LeadImportRawRow): LeadImportRowVerdict {
+export function normalizeLeadImportRow(
+  raw: LeadImportRawRow,
+  leadStatuses: CrmPicklist = STANDARD_CRM_LEAD_STATUS_PICKLIST,
+): LeadImportRowVerdict {
   const emailText = importTextValue(raw.email, 320) ?? ''
   const email = normalizeContactEmail(emailText)
   if (!email) {
@@ -412,9 +421,11 @@ export function normalizeLeadImportRow(raw: LeadImportRawRow): LeadImportRowVerd
 
   const statusText = importTextValue(raw.status, 32)
   if (statusText) {
-    const status = parseImportLeadStatus(statusText)
-    if (status) row.status = status
-    else drop('status', statusText)
+    const status = parseImportLeadStatusValue(statusText, leadStatuses)
+    if (status) {
+      row.status = status.status
+      row.statusLabel = status.statusLabel
+    } else drop('status', statusText)
   }
 
   const ownerText = importTextValue(raw.ownerEmail, 320)

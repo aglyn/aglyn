@@ -2454,6 +2454,12 @@ export function isCrmLeadStatus(value: unknown): value is CrmLeadStatus {
  */
 export interface CrmLeadFields extends CrmLeadProfile {
   status?: CrmLeadStatus
+  /**
+   * Which of the org's Lead status values of `status`'s meaning the lead
+   * holds (AGL-3512); absent, the lead shows its meaning's default label —
+   * see `crmLeadStatusLabel`.
+   */
+  statusLabel?: string
   /** The team member working the lead. */
   ownerUid?: string
   notes?: string
@@ -2758,6 +2764,13 @@ export interface CrmPicklistDefinition extends PicklistSpec {
   object: CrmFieldObject
   /** Every place records hold its label — what a rename and a delete rewrite. */
   targets: readonly CrmPicklistTarget[]
+  /** How each of `meanings` reads on screen — the Fields page's Means column (AGL-3512). */
+  meaningLabels?: Readonly<Record<string, string>>
+  /**
+   * Meanings only the platform sets, which an org-added value may not take
+   * (AGL-3512): a lead is Qualified by its conversion alone.
+   */
+  reservedMeanings?: readonly string[]
 }
 
 /**
@@ -2797,9 +2810,40 @@ const LEAD_SOURCE_DEFINITION = {
   ],
 } as const satisfies CrmPicklistDefinition
 
+/*------------------------------------------
+ * LEAD STATUS (AGL-3512) — a SEMANTIC picklist.
+ *
+ * Every value MEANS one of {@link CRM_LEAD_STATUSES}, and the meaning stays
+ * on the lead as `status`, which every query, count, index, automation and
+ * rule reads exactly as before. The value's label sits beside it as
+ * `statusLabel` — see {@link crmLeadStatusLabel}. Salesforce ships one
+ * standard value per meaning; an org adds its own ("Contacted", "Meeting
+ * set") under a meaning, never under Qualified, which only a conversion
+ * sets.
+ *-----------------------------------------*/
+const LEAD_STATUS_DEFINITION = {
+  id: 'leadStatus',
+  label: 'Lead status',
+  plural: 'lead statuses',
+  object: 'lead',
+  restricted: true,
+  meanings: CRM_LEAD_STATUSES,
+  meaningLabels: CRM_LEAD_STATUS_LABELS,
+  reservedMeanings: ['qualified'],
+  standardValues: [
+    { id: 'new', label: CRM_LEAD_STATUS_LABELS.new, meaning: 'new' },
+    { id: 'nurturing', label: CRM_LEAD_STATUS_LABELS.nurturing, meaning: 'nurturing' },
+    { id: 'working', label: CRM_LEAD_STATUS_LABELS.working, meaning: 'working' },
+    { id: 'qualified', label: CRM_LEAD_STATUS_LABELS.qualified, meaning: 'qualified' },
+    { id: 'unqualified', label: CRM_LEAD_STATUS_LABELS.unqualified, meaning: 'unqualified' },
+  ],
+  targets: [{ object: 'lead', field: 'statusLabel' }],
+} as const satisfies CrmPicklistDefinition
+
 /** Every standard picklist field the CRM keeps, one document each. */
 export const CRM_PICKLIST_DEFINITIONS = [
   LEAD_SOURCE_DEFINITION,
+  LEAD_STATUS_DEFINITION,
 ] as const satisfies readonly CrmPicklistDefinition[]
 
 export type CrmPicklistId = (typeof CRM_PICKLIST_DEFINITIONS)[number]['id']
@@ -2963,6 +3007,142 @@ export const crmPicklistOptions = picklistOptions
  * chose is the order a sort by the field reads in, as Salesforce's does.
  */
 export const crmPicklistRank = picklistRank
+
+/*------------------------------------------
+ * A LEAD'S STATUS LABEL (AGL-3512).
+ *
+ * `status` is the meaning and stays the truth: a writer that knows only the
+ * meaning — an automation, an inbox reply, a rule — sets `status` alone and
+ * the lead still reads right. `statusLabel` names which of the org's values
+ * of that meaning the lead holds, and is believed only while it IS one of
+ * that meaning; otherwise, or when absent, the lead shows the default value
+ * when it is active and of that meaning, else the first active value of
+ * that meaning, else the standard label.
+ *-----------------------------------------*/
+
+/** The lead status value set's document id. */
+export const CRM_LEAD_STATUS_PICKLIST: CrmPicklistId = 'leadStatus'
+
+/** The field a lead's status label is stored in, beside `status`. */
+export const CRM_LEAD_STATUS_LABEL_FIELD = 'statusLabel'
+
+/** The org's lead status list as every reader should take it. */
+export function effectiveCrmLeadStatusPicklist(raw: unknown): CrmPicklist {
+  return effectiveCrmPicklist(CRM_LEAD_STATUS_PICKLIST, raw)
+}
+
+/** The standard lead statuses alone — what a reader answers before the org's list is read. */
+export const STANDARD_CRM_LEAD_STATUS_PICKLIST: CrmPicklist = effectiveCrmLeadStatusPicklist(null)
+
+/**
+ * The value a lead with `status` shows when it names none of its own: the
+ * default when active and of that meaning, else the first active value of
+ * that meaning, else the first of that meaning at all.
+ */
+export function crmLeadStatusValueFor(
+  picklist: CrmPicklist,
+  status: CrmLeadStatus,
+): CrmPicklistValue | null {
+  const ofMeaning = picklist.values.filter((value) => value.meaning === status)
+  const preferred = ofMeaning.find((value) => value.id === picklist.defaultValueId && value.active)
+  return preferred ?? ofMeaning.find((value) => value.active) ?? ofMeaning[0] ?? null
+}
+
+/** The label a writer stamps beside `status` when it sets a meaning and names no value. */
+export function crmLeadStatusLabelFor(picklist: CrmPicklist, status: CrmLeadStatus): string {
+  return crmLeadStatusValueFor(picklist, status)?.label ?? CRM_LEAD_STATUS_LABELS[status]
+}
+
+/**
+ * How a lead's status reads: its own `statusLabel` while that is a value of
+ * its `status`'s meaning (as the list spells it), else the meaning's label
+ * by {@link crmLeadStatusLabelFor}. A label the list no longer holds is shown
+ * as stored while nothing contradicts it — a value deleted without moving
+ * every lead off it reads as what the lead was given.
+ */
+export function crmLeadStatusLabel(
+  lead: Pick<CrmLeadFields, 'status' | 'statusLabel'> | null | undefined,
+  picklist: CrmPicklist = STANDARD_CRM_LEAD_STATUS_PICKLIST,
+): string {
+  const status = crmLeadStatus(lead)
+  const held = normalizeCrmPicklistLabel(lead?.statusLabel)
+  if (held) {
+    const value = picklistValueByLabel(picklist, held)
+    if (value?.meaning === status) return value.label
+    if (!value) return held
+  }
+  return crmLeadStatusLabelFor(picklist, status)
+}
+
+/** A status write, as both fields a lead stores — or why it is refused. */
+export type CrmLeadStatusWrite =
+  | { ok: true; status: CrmLeadStatus; statusLabel: string }
+  | { ok: false; error: string }
+
+/**
+ * What a write naming a lead status stores (AGL-3512): an ACTIVE value's
+ * label, in any case or spacing, stores its meaning and its label; one of
+ * the meanings themselves (`working`) stores that meaning and the label
+ * {@link crmLeadStatusLabelFor} gives it; the lead's `current` label is
+ * kept even when inactive. `allowed` narrows the meanings this door may
+ * set — every door but a conversion leaves Qualified out — and anything
+ * else is refused naming what the door accepts.
+ */
+export function resolveCrmLeadStatusWrite(
+  picklist: CrmPicklist,
+  requested: unknown,
+  options: {
+    allowed?: readonly CrmLeadStatus[]
+    current?: Pick<CrmLeadFields, 'status' | 'statusLabel'> | null
+  } = {},
+): CrmLeadStatusWrite {
+  const allowed = options.allowed ?? CRM_LEAD_STATUSES
+  const text = normalizeCrmPicklistLabel(requested)
+  const refuse = (): CrmLeadStatusWrite => {
+    const labels = picklist.values
+      .filter((value) => value.active && allowed.includes(value.meaning as CrmLeadStatus))
+      .map((value) => value.label)
+    return { ok: false, error: `Lead status must be one of: ${labels.join(', ')}.` }
+  }
+  if (!text) return refuse()
+  const value = picklistValueByLabel(picklist, text)
+  const current = options.current ? normalizeCrmPicklistLabel(options.current.statusLabel) : ''
+  const keeps = Boolean(value && current && picklistLabelKeyOf(current) === picklistLabelKeyOf(value.label))
+  if (value && isCrmLeadStatus(value.meaning) && (value.active || keeps)) {
+    return allowed.includes(value.meaning)
+      ? { ok: true, status: value.meaning, statusLabel: value.label }
+      : refuse()
+  }
+  const meaning = text.toLowerCase()
+  if (isCrmLeadStatus(meaning) && allowed.includes(meaning)) {
+    return { ok: true, status: meaning, statusLabel: crmLeadStatusLabelFor(picklist, meaning) }
+  }
+  return refuse()
+}
+
+const picklistLabelKeyOf = (label: string): string => normalizeCrmPicklistLabel(label).toLowerCase()
+
+/**
+ * The values a lead status select offers for a lead holding `current`:
+ * every active value whose meaning `allowed` admits, in the list's order,
+ * then the lead's own value when the list would not otherwise show it.
+ */
+export function crmLeadStatusOptions(
+  picklist: CrmPicklist,
+  allowed: readonly CrmLeadStatus[] = CRM_LEAD_STATUSES,
+  current?: Pick<CrmLeadFields, 'status' | 'statusLabel'> | null,
+): Array<{ label: string; status: CrmLeadStatus; inactive: boolean }> {
+  const options = picklist.values
+    .filter((value) => value.active && allowed.includes(value.meaning as CrmLeadStatus))
+    .map((value) => ({ label: value.label, status: value.meaning as CrmLeadStatus, inactive: false }))
+  if (current) {
+    const label = crmLeadStatusLabel(current, picklist)
+    if (!options.some((option) => option.label === label)) {
+      options.push({ label, status: crmLeadStatus(current), inactive: true })
+    }
+  }
+  return options
+}
 
 /** The name a lead is listed under: the name it carries, else its address. */
 export function crmLeadDisplayName(

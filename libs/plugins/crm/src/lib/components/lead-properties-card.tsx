@@ -22,7 +22,6 @@ import type {
   ConsentGroup,
   CrmLeadFields,
   CrmLeadProfilePatch,
-  CrmLeadStatus,
 } from '@aglyn/aglyn'
 import { mdiAccountCancelOutline } from '@aglyn/shared-data-mdi'
 import { AppLink, CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
@@ -38,7 +37,6 @@ import {
   Button,
   FormControl,
   InputLabel,
-  MenuItem,
   Select,
   Stack,
   TextField,
@@ -49,6 +47,7 @@ import { deleteField, doc, serverTimestamp, updateDoc } from 'firebase/firestore
 import { useEffect, useId, useMemo, useState } from 'react'
 import { useContactFieldDefinitions } from '../hooks/use-contact-field-definitions'
 import { useLeadSourcePicklist } from '../hooks/use-lead-source-picklist'
+import { useLeadStatusPicklist } from '../hooks/use-lead-status-picklist'
 import {
   crmCustomDraftChanges,
   type CrmCustomDraft,
@@ -72,6 +71,7 @@ import type { OrgMemberOptions } from '../hooks/use-org-member-options'
 import { LeadOwnerSelect } from './lead-owner-select'
 import { LeadSourceSelect } from './lead-source-select'
 import { LeadStatusChip } from './lead-status-chip'
+import { leadStatusChoices, leadStatusMenuItems } from './lead-status-options'
 import { crmClientListFields, CRM_CLIENT_SEARCH_FIELDS } from '../model/crm-list-query'
 import { useCrmSharingFollowUp } from '../hooks/use-crm-sharing'
 
@@ -165,7 +165,8 @@ export interface LeadPropertiesCardProps {
   basePath: string
   roster: OrgMemberOptions
   onConvert: () => void
-  onUnqualify: () => void
+  /** Opens the Unqualify dialog — with the Unqualified value picked, when the status select named one. */
+  onUnqualify: (statusLabel?: string) => void
   /**
    * Items the page adds to the overflow beside Unqualify — the privacy
    * erasure (AGL-2623) lives on the page, because it needs the workspace
@@ -300,6 +301,12 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
   const fields = useContactFieldDefinitions(orgId, 'lead')
   // The org's lead source values (AGL-3298), for the select below.
   const leadSources = useLeadSourcePicklist(orgId)
+  // The org's lead status values (AGL-3512): the chip's words and the select's choices.
+  const leadStatuses = useLeadStatusPicklist(orgId)
+  const statusChoices = useMemo(
+    () => leadStatusChoices(leadStatuses.picklist, lead),
+    [leadStatuses.picklist, lead],
+  )
   const storedCustom = useMemo(() => lead.custom ?? {}, [lead.custom])
   const [custom, setCustom] = useState<CrmCustomDraft>({})
 
@@ -531,7 +538,7 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
                   label: 'Unqualify',
                   icon: <MdiIcon path={mdiAccountCancelOutline.path} size={0.8} />,
                   destructive: true,
-                  onClick: onUnqualify,
+                  onClick: () => onUnqualify(),
                 } satisfies RowActionsMenuItem,
               ]
             : []),
@@ -539,7 +546,7 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
         ]}
         chips={
           <>
-            <LeadStatusChip lead={lead} />
+            <LeadStatusChip lead={lead} statuses={leadStatuses.picklist} />
             {/* The verdict on the address (AGL-3245), beside the status: a
                 bounce does not move New or Working, but it is the first
                 thing a person deciding whether to write must see. */}
@@ -577,7 +584,7 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
             {converted ? (
               <Fact label="Status">
                 <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-                  <LeadStatusChip lead={lead} />
+                  <LeadStatusChip lead={lead} statuses={leadStatuses.picklist} />
                   <Typography variant="body2" color="text.secondary">
                     {lead.convertedAtMs
                       ? `Converted ${new Date(lead.convertedAtMs).toLocaleString()}`
@@ -591,30 +598,29 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
                 <Select
                   labelId={statusLabelId}
                   label="Status"
-                  value={status === 'unqualified' ? 'unqualified' : status}
+                  value={Aglyn.crmLeadStatusLabel(lead, leadStatuses.picklist)}
                   onChange={(event) => {
-                    const next = String(event.target.value) as CrmLeadStatus
-                    if (next === 'unqualified') {
-                      onUnqualify()
+                    const choice = statusChoices.find((entry) => entry.label === event.target.value)
+                    if (!choice) return
+                    if (choice.status === 'unqualified') {
+                      onUnqualify(choice.label)
                       return
                     }
-                    // Reopening drops the reason with the closed state: a lead
-                    // being worked again is not "unqualified because …".
+                    // The meaning and the org's label for it, together
+                    // (AGL-3512). Reopening drops the reason with the closed
+                    // state: a lead being worked again is not "unqualified
+                    // because …".
                     void write(
                       {
-                        status: next,
+                        status: choice.status,
+                        statusLabel: choice.label,
                         ...(status === 'unqualified' ? { unqualifiedReason: deleteField() } : {}),
                       },
                       'Status updated',
                     )
                   }}
                 >
-                  <MenuItem value="new">{Aglyn.CRM_LEAD_STATUS_LABELS.new}</MenuItem>
-                  <MenuItem value="nurturing">{Aglyn.CRM_LEAD_STATUS_LABELS.nurturing}</MenuItem>
-                  <MenuItem value="working">{Aglyn.CRM_LEAD_STATUS_LABELS.working}</MenuItem>
-                  <MenuItem value="unqualified">
-                    {`${Aglyn.CRM_LEAD_STATUS_LABELS.unqualified}…`}
-                  </MenuItem>
+                  {leadStatusMenuItems(statusChoices)}
                 </Select>
               </FormControl>
             )}

@@ -302,7 +302,7 @@ export const CRM_API_V1_DESCRIPTIONS: Readonly<Record<string, ApiV1ResourceDescr
     writeRequired: ['email'],
     writeOnly: {
       siteId: stringField('The site the lead belongs to, instead of the `siteId` query parameter.'),
-      status: stringField('`new`, `nurturing`, `working` or `unqualified` (`nurturing` and `unqualified` on a `PATCH` only). A lead becomes `qualified` by being converted.'),
+      status: stringField('One of the organization’s active lead status values by its label (CRM › Fields › Leads), or a meaning — `new`, `nurturing`, `working` or `unqualified` (`nurturing` and `unqualified` on a `PATCH` only). Stored as the meaning and the label together. A lead becomes `qualified` by being converted.'),
       ownerEmail: stringField('A member’s address, resolved against the organization’s roster. Not with `ownerUid` in the same request.'),
     },
     fields: {
@@ -311,7 +311,8 @@ export const CRM_API_V1_DESCRIPTIONS: Readonly<Record<string, ApiV1ResourceDescr
       siteId: stringField('Site the lead arrived on.'),
       email: nullableField(stringField('Email — the lead’s identity within its site.')),
       name: nullableField(stringField('Name, when supplied.')),
-      status: stringField('Lead status.'),
+      status: stringField('What the lead status means: `new`, `nurturing`, `working`, `qualified` or `unqualified`. What every filter and automation reads.'),
+      statusLabel: stringField('The organization’s label for the lead status value the lead holds — one of `status`’s meaning. Read-only; set it through `status`.'),
       ownerUid: nullableField(stringField('Owning user.')),
       notes: nullableField(stringField('Free-form notes.')),
       unqualifiedReason: nullableField(stringField('Why the lead was disqualified.')),

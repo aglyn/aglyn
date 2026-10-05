@@ -41,6 +41,15 @@ jest.mock('../hooks/use-lead-source-picklist', () => {
   }
 })
 
+// The org's lead statuses (AGL-3512): the standard ones.
+jest.mock('../hooks/use-lead-status-picklist', () => {
+  const { effectiveCrmLeadStatusPicklist } = jest.requireActual('@aglyn/aglyn/app-utils/crm')
+  const picklist = effectiveCrmLeadStatusPicklist(null)
+  return {
+    useLeadStatusPicklist: () => ({ picklist, stored: false, ready: true, fromCache: false }),
+  }
+})
+
 jest.mock('firebase/firestore', () => ({
   doc: (_db: unknown, ...segments: string[]) => ({ path: segments.join('/') }),
   deleteField: () => ({ op: 'delete' }),

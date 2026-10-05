@@ -19,6 +19,7 @@ import {
   checkEntitlement,
   consentGroupForHost,
   CRM_COLLECTIONS,
+  CRM_LEAD_STATUS_PICKLIST,
   csvCell,
   hostScopeToken,
   isOrgWideMember,
@@ -50,6 +51,7 @@ import {
   isCrmExportResource,
 } from '../model/crm-csv'
 import { contactPrimaryGroup } from '../model/contact-holder'
+import { readCrmPicklist } from './read-picklist'
 
 /**
  * Documents read per round trip. Not a cap — the stream keeps paging until
@@ -362,6 +364,14 @@ export async function crmExportRoute(request: Request): Promise<Response> {
         }
         options.siteName = (id) => siteNames.get(id)
       }
+    }
+
+    if (resource === 'leads') {
+      // The Status column reads as the org names it (AGL-3512); a list that
+      // cannot be read writes the standard labels.
+      options.leadStatuses = await readCrmPicklist(firestore, orgId, CRM_LEAD_STATUS_PICKLIST).catch(
+        () => undefined,
+      )
     }
 
     /** One resource's rows, as a query per collection the file spans. */

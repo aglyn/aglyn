@@ -1662,13 +1662,14 @@ describe('the lead source picklist', () => {
     expect(list.values.find((value) => value.id === 'partner')?.active).toBe(false)
   })
 
-  it('registers lead source alone, on the Leads tab, rewriting leads and contact facets', () => {
-    expect(CRM_PICKLIST_IDS).toEqual(['leadSource'])
-    expect(CRM_PICKLIST_DEFINITIONS).toHaveLength(1)
+  it('registers lead source on the Leads tab, rewriting leads and contact facets', () => {
+    // Lead source first; every other picklist registers beside it (AGL-3512 on).
+    expect(CRM_PICKLIST_IDS[0]).toBe('leadSource')
+    expect(CRM_PICKLIST_DEFINITIONS).toHaveLength(CRM_PICKLIST_IDS.length)
     expect(crmPicklistDefinition('nope')).toBeNull()
-    expect(crmPicklistDefinitionsFor('lead').map((definition) => definition.id)).toEqual([
-      'leadSource',
-    ])
+    expect(crmPicklistDefinitionsFor('lead').map((definition) => definition.id)).toEqual(
+      expect.arrayContaining(['leadSource', 'leadStatus']),
+    )
     expect(crmPicklistDefinitionsFor('deal')).toEqual([])
     expect(crmPicklistDefinition('leadSource')?.targets).toEqual([
       { object: 'lead', field: 'leadSource', keyField: 'leadSourceKey' },
@@ -1731,5 +1732,72 @@ describe('openLeadsFromCounts', () => {
     expect(openLeadsFromCounts(12, 5)).toBe(7)
     expect(openLeadsFromCounts(3, 5)).toBe(0)
     expect(openLeadsFromCounts(Number.NaN, 2)).toBe(0)
+  })
+})
+
+describe('the lead status picklist (AGL-3512)', () => {
+  const crm = jest.requireActual('./crm') as typeof import('./crm')
+  const list = crm.effectiveCrmLeadStatusPicklist({
+    values: [
+      { id: 'working', label: 'In progress', active: true },
+      { id: 'contacted', label: 'Contacted', active: true, meaning: 'working' },
+      { id: 'parked', label: 'Parked', active: false, meaning: 'unqualified' },
+    ],
+    defaultValueId: null,
+  })
+
+  it('ships one standard value per meaning, Qualified reserved to conversion', () => {
+    const definition = crm.crmPicklistDefinition('leadStatus')
+    expect(definition?.meanings).toEqual(crm.CRM_LEAD_STATUSES)
+    expect(definition?.standardValues.map((value) => [value.id, value.label, value.meaning])).toEqual(
+      crm.CRM_LEAD_STATUSES.map((status) => [status, crm.CRM_LEAD_STATUS_LABELS[status], status]),
+    )
+    expect(definition?.reservedMeanings).toEqual(['qualified'])
+    expect(definition?.targets).toEqual([{ object: 'lead', field: 'statusLabel' }])
+  })
+
+  it('labels a lead by its own value of its meaning, else the meaning’s first active value', () => {
+    expect(crm.crmLeadStatusLabel({ status: 'working', statusLabel: 'contacted' }, list)).toBe('Contacted')
+    expect(crm.crmLeadStatusLabel({ status: 'working' }, list)).toBe('In progress')
+    // A label of another meaning is stale — a writer moved the meaning alone.
+    expect(crm.crmLeadStatusLabel({ status: 'new', statusLabel: 'Contacted' }, list)).toBe('New')
+    // A label the list no longer holds reads as given.
+    expect(crm.crmLeadStatusLabel({ status: 'working', statusLabel: 'Gone' }, list)).toBe('Gone')
+    expect(crm.crmLeadStatusLabel({}, list)).toBe('New')
+    expect(crm.crmLeadStatusLabel({ status: 'qualified' })).toBe('Qualified')
+  })
+
+  it('judges a write by label or by meaning, within the meanings a door may set', () => {
+    expect(crm.resolveCrmLeadStatusWrite(list, ' CONTACTED ')).toEqual({
+      ok: true,
+      status: 'working',
+      statusLabel: 'Contacted',
+    })
+    expect(crm.resolveCrmLeadStatusWrite(list, 'working')).toEqual({
+      ok: true,
+      status: 'working',
+      statusLabel: 'In progress',
+    })
+    expect(crm.resolveCrmLeadStatusWrite(list, 'Qualified', { allowed: ['new', 'working'] }).ok).toBe(false)
+    // An inactive value is refused, unless it is the lead's own.
+    expect(crm.resolveCrmLeadStatusWrite(list, 'Parked').ok).toBe(false)
+    expect(
+      crm.resolveCrmLeadStatusWrite(list, 'parked', {
+        current: { status: 'unqualified', statusLabel: 'Parked' },
+      }),
+    ).toEqual({ ok: true, status: 'unqualified', statusLabel: 'Parked' })
+    const refused = crm.resolveCrmLeadStatusWrite(list, 'Banana', { allowed: ['new', 'working'] })
+    expect(refused).toEqual({ ok: false, error: 'Lead status must be one of: In progress, Contacted, New.' })
+  })
+
+  it('offers a select the active values of the allowed meanings, and the lead’s own', () => {
+    expect(
+      crm.crmLeadStatusOptions(list, ['working', 'unqualified'], { status: 'unqualified', statusLabel: 'Parked' }),
+    ).toEqual([
+      { label: 'In progress', status: 'working', inactive: false },
+      { label: 'Contacted', status: 'working', inactive: false },
+      { label: 'Unqualified', status: 'unqualified', inactive: false },
+      { label: 'Parked', status: 'unqualified', inactive: true },
+    ])
   })
 })

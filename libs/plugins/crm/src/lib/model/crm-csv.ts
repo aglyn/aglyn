@@ -58,15 +58,15 @@ import {
 } from '@aglyn/aglyn/app-utils/contacts'
 import {
   CONTACT_LIFECYCLE_STAGE_LABELS,
-  CRM_LEAD_STATUS_LABELS,
   CRM_TASK_KIND_LABELS,
   type ContactCustomValue,
   type ContactFieldDefinition,
   type ContactLifecycleStage,
   type CrmCompany,
   type CrmLeadFields,
+  type CrmPicklist,
   type CrmTask,
-  crmLeadStatus,
+  crmLeadStatusLabel,
   isContactLifecycleStage,
 } from '@aglyn/aglyn/app-utils/crm'
 import { csvDocument } from '@aglyn/aglyn/app-utils/csv-import'
@@ -530,6 +530,7 @@ export type LeadCsvRow = Record<string, unknown> &
   Pick<
     CrmLeadFields,
     | 'status'
+    | 'statusLabel'
     | 'ownerUid'
     | 'notes'
     | 'unqualifiedReason'
@@ -554,6 +555,8 @@ export interface LeadCsvOptions {
    * column — the organization-level file; absent, it does not.
    */
   siteName?: (hostId: string) => string | undefined
+  /** The org's Lead status list, whose labels the Status column writes (AGL-3512); the standard ones without it. */
+  leadStatuses?: CrmPicklist
 }
 
 /**
@@ -612,7 +615,7 @@ export function leadCsvCells(
     lead.jobTitle ?? '',
     lead.phone ?? '',
     lead.website ?? '',
-    CRM_LEAD_STATUS_LABELS[crmLeadStatus(lead)],
+    crmLeadStatusLabel(lead, options.leadStatuses),
     lead.ownerUid ? (ownerEmail?.(lead.ownerUid) ?? lead.ownerUid) : '',
     ...(siteName ? [siteName(hostId) ?? hostId] : []),
     lead.leadSource ?? '',

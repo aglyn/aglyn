@@ -474,6 +474,7 @@ describe('GET /v1/leads', () => {
       email: 'ann@acme.com',
       name: 'Ann Lee',
       status: 'new',
+      statusLabel: 'New',
       ownerUid: null,
       notes: null,
       unqualifiedReason: null,
@@ -578,8 +579,9 @@ describe('PATCH /v1/leads/{id}', () => {
       status: expect.stringContaining('POST /v1/leads/{id}/convert'),
     })
     const unknown = await patch('lead-a', { status: 'hot', email: 'x@y.z' })
+    // Named by the org's labels (AGL-3512) — the standard ones here.
     expect((await json(unknown)).error.fields).toEqual({
-      status: 'Must be one of: new, nurturing, working, unqualified',
+      status: 'Lead status must be one of: New, Nurturing, Working, Unqualified.',
       email: 'Not writable on a lead',
     })
     expect(mockDocs.get(`${LEADS}/lead-a`)?.status).toBeUndefined()
@@ -590,6 +592,22 @@ describe('PATCH /v1/leads/{id}', () => {
     const moved = await json(await patch('lead-a', { status: 'nurturing' }))
     expect(moved).toMatchObject({ status: 'nurturing' })
     expect(mockDocs.get(`${LEADS}/lead-a`)?.status).toBe('nurturing')
+  })
+
+  it('takes one of the org’s own lead status values by its label, storing its meaning beside it (AGL-3512)', async () => {
+    mockDocs.set('orgs/org-1/crmPicklists/leadStatus', {
+      values: [
+        { id: 'contacted', label: 'Contacted', active: true, meaning: 'working' },
+        { id: 'won', label: 'Won', active: true, meaning: 'qualified' },
+      ],
+      defaultValueId: null,
+    })
+    const moved = await json(await patch('lead-a', { status: 'contacted' }))
+    expect(moved).toMatchObject({ status: 'working', statusLabel: 'Contacted' })
+    expect(mockDocs.get(`${LEADS}/lead-a`)).toMatchObject({ status: 'working', statusLabel: 'Contacted' })
+    // A Qualified value is a conversion's, by whatever name.
+    const won = await patch('lead-a', { status: 'Won' })
+    expect((await json(won)).error.fields.status).toContain('POST /v1/leads/{id}/convert')
   })
 
   it('writes the status and the notes, stamps updated, and clears a note with null', async () => {
