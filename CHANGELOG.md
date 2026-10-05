@@ -45,6 +45,7 @@ content on the marketing site and is written separately.
 - **notifications:** a workspace made by creating a first site is welcomed and announced to staff ([AGL-3491](https://linear.app/aglyn/issue/AGL-3491))
 - **mui:** accordion questions use the site's font, not the browser's button face ([AGL-3497](https://linear.app/aglyn/issue/AGL-3497))
 - **seo:** check each page as it publishes, and name keywords past five ([AGL-3501](https://linear.app/aglyn/issue/AGL-3501))
+- **tenant:** the self-hosted font route states its lockdown exemption ([AGL-3485](https://linear.app/aglyn/issue/AGL-3485))
 - **media:** published images size themselves from the composed tree, no re-save ([AGL-3485](https://linear.app/aglyn/issue/AGL-3485))
 - **commerce:** paid video and downloads served off the CDN count toward bandwidth ([AGL-3505](https://linear.app/aglyn/issue/AGL-3505))
 - **media:** a library file's Storage URL is served through the CDN ([AGL-3506](https://linear.app/aglyn/issue/AGL-3506))
