@@ -237,7 +237,7 @@
             "activityNoun": "service",
             "quotaKey": "servicesPerHost",
             "entitlement": "bookings",
-            "$comment": "`crmFollowUpTask` and `crmMeetingActivity` are the two CRM switches a service carries (AGL-2660): whether a booking files a meeting on the record, and whether it owes a follow-up task.",
+            "$comment": "`crmFollowUpTask` and `crmMeetingActivity` are the two CRM switches a service carries (AGL-2660): whether a booking files a meeting on the record, and whether it owes a follow-up task. `askPhone` and `askAddress` are what the booking widget asks the booker for beyond a name and an email (AGL-3493): off, optional or required.",
             "fields": [
               "name",
               "description",
@@ -246,7 +246,9 @@
               "timezone",
               "windows",
               "crmFollowUpTask",
-              "crmMeetingActivity"
+              "crmMeetingActivity",
+              "askPhone",
+              "askAddress"
             ]
           },
           "siteExport": {
@@ -259,7 +261,9 @@
               "timezone",
               "windows",
               "crmFollowUpTask",
-              "crmMeetingActivity"
+              "crmMeetingActivity",
+              "askPhone",
+              "askAddress"
             ]
           }
         },

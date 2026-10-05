@@ -24,6 +24,7 @@ import {
   type ContactSource,
 } from '@aglyn/aglyn/app-utils/contacts'
 import { formLeadSource } from '@aglyn/aglyn/app-utils/forms'
+import { normalizePhone } from '@aglyn/aglyn/foundation/definitions/contact.types'
 import {
   type CrmLeadFields,
   isCrmLeadOpen,
@@ -194,6 +195,7 @@ async function fileLead(request: PluginContactCaptureRequest): Promise<PluginCon
       source,
       ...(request.marketingConsent ? { marketingConsent: true } : {}),
       ...disclosureOf(request),
+      ...phoneFillOf(request),
     },
     ...(conversionTouchOf(request.detail).conversionTouch
       ? { touch: conversionTouchOf(request.detail).conversionTouch }
@@ -265,6 +267,9 @@ async function captureOnContact(
         ? { initialLifecycleStage: request.lifecycleFloor as never }
         : {}),
       ...(request.profile ? { facet: request.profile as never } : {}),
+      ...(phoneFillOf(request).phoneFill
+        ? { facetFill: { phone: phoneFillOf(request).phoneFill } }
+        : {}),
     })
     if ('refused' in verdict) {
       return { ok: false, reason: verdict.refused, error: refusalText(verdict.refused) }
@@ -305,6 +310,21 @@ function disclosureOf(
 ): { disclosedConsentGroup?: string } {
   const key = request.disclosedConsentGroup
   return typeof key === 'string' && key ? { disclosedConsentGroup: key } : {}
+}
+
+/**
+ * THE PHONE A CAPTURE LEARNED IN PASSING (AGL-3493), off `profileFill`.
+ *
+ * Normalized here so a lead and a contact written by one capture keep the
+ * same E.164 string, and dropped when it will not normalize: a fill is an
+ * enrichment, and a number in some other shape on the record is the
+ * "stored three ways" failure `normalizePhone` exists to end. Both writers
+ * put it only where the record holds no phone.
+ */
+function phoneFillOf(request: PluginContactCaptureRequest): { phoneFill?: string } {
+  const raw = request.profileFill?.['phone']
+  const phone = typeof raw === 'string' ? normalizePhone(raw) : null
+  return phone ? { phoneFill: phone } : {}
 }
 
 /**

@@ -348,6 +348,47 @@ describe('a lead surface', () => {
   })
 })
 
+/**
+ * THE PHONE A BOOKING FORM ASKED FOR (AGL-3493), handed over as a fill: onto
+ * whichever record the capture lands on, normalized, and only where that
+ * record holds no phone — the lead's own rule in the lead door, the facet's
+ * in the contact writer.
+ */
+describe('a phone fill', () => {
+  const booking = (phone: string, surface: 'lead' | 'relationship' = 'lead') =>
+    request({
+      surface,
+      interaction: { source: 'booking', refId: 'b-1' },
+      detail: {},
+      profileFill: { phone },
+    })
+
+  it('lands on a new lead, normalized', async () => {
+    await captureContactForCrm(booking('(512) 555-0107'))
+    expect(docs.get(leadPath())?.phone).toBe('+15125550107')
+  })
+
+  it('never replaces the phone a lead already has', async () => {
+    docs.set(leadPath(), { email: EMAIL, sources: ['form:form-1'], phone: '+15125550111' })
+    await captureContactForCrm(booking('512-555-0107'))
+    expect(docs.get(leadPath())?.phone).toBe('+15125550111')
+  })
+
+  it('is handed to the contact writer as a fill, never as the profile', async () => {
+    docs.set(`${CONTACTS}/c-9`, { email: EMAIL })
+    await captureContactForCrm(booking('512-555-0107'))
+    expect(contactCaptures[0]).toMatchObject({ facetFill: { phone: '+15125550107' } })
+    expect(contactCaptures[0]).not.toHaveProperty('facet')
+  })
+
+  it('drops a number that will not normalize', async () => {
+    await captureContactForCrm(booking('020 7946 0958'))
+    expect(docs.get(leadPath())).not.toHaveProperty('phone')
+    await captureContactForCrm(booking('020 7946 0958', 'relationship'))
+    expect(contactCaptures[0]).not.toHaveProperty('facetFill')
+  })
+})
+
 describe('a touch', () => {
   it('lands on the open lead the site holds, and files no contact', async () => {
     docs.set(leadPath(), { email: EMAIL, sources: ['form:form-1'], submissionCount: 1 })

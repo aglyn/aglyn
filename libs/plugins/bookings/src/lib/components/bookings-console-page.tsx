@@ -24,6 +24,11 @@ import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { describePaymentRisk, type PaymentRisk } from '@aglyn/aglyn/app-utils/payment-risk'
 import { type ConsolePluginPageProps } from '@aglyn/aglyn'
 import { type HostBookingService, isBookingReminderDue } from '../model'
+import {
+  BOOKING_FIELD_ASKS,
+  type BookingFieldAsk,
+  bookingContactAsks,
+} from '../model/booking-contact-fields'
 import { AppLink, CardDisplay, HelpTip, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import QuotaReadoutComponent from '@aglyn/shared-ui-jsx/components/quota-readout.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -36,6 +41,7 @@ import {
   DialogContent,
   DialogTitle,
   FormControlLabel,
+  MenuItem,
   Stack,
   Switch,
   TextField,
@@ -101,6 +107,16 @@ interface ServiceDraft {
   /** The service's two CRM switches (AGL-2660) — see `HostBookingService`. */
   crmMeetingActivity: boolean
   crmFollowUpTask: boolean
+  /** What the widget asks the booker for (AGL-3493). */
+  askPhone: BookingFieldAsk
+  askAddress: BookingFieldAsk
+}
+
+/** How each answer reads in the service dialog's two pickers. */
+const FIELD_ASK_LABELS: Record<BookingFieldAsk, string> = {
+  off: "Don't ask",
+  optional: 'Optional',
+  required: 'Required',
 }
 
 /** A fraud warning, review or chargeback on the booking's payment (AGL-3360). */
@@ -258,6 +274,9 @@ export function BookingsConsolePage(props: ConsolePluginPageProps) {
       // A booking is a meeting the record has; the follow-up is opt-in.
       crmMeetingActivity: true,
       crmFollowUpTask: false,
+      // Name and email only, until the service says otherwise.
+      askPhone: 'off',
+      askAddress: 'off',
     })
   }, [entitled, org, services.length, enqueueSnackbar])
 
@@ -285,6 +304,10 @@ export function BookingsConsolePage(props: ConsolePluginPageProps) {
       // an absent key exactly as it was.
       crmMeetingActivity: draft.crmMeetingActivity,
       crmFollowUpTask: draft.crmFollowUpTask,
+      // Written explicitly for the same reason: switching a field back off
+      // has to land `'off'` over the stored answer.
+      askPhone: draft.askPhone,
+      askAddress: draft.askAddress,
     }
     try {
       if (draft.id) {
@@ -516,6 +539,8 @@ export function BookingsConsolePage(props: ConsolePluginPageProps) {
                       // switches show what the service actually does.
                       crmMeetingActivity: service.crmMeetingActivity !== false,
                       crmFollowUpTask: service.crmFollowUpTask === true,
+                      askPhone: bookingContactAsks(service).phone,
+                      askAddress: bookingContactAsks(service).address,
                     })
                   }
                 >
@@ -615,7 +640,22 @@ export function BookingsConsolePage(props: ConsolePluginPageProps) {
                     {`${new Date(booking.startsAtMs).toLocaleString()} · ${
                       booking.email
                     }`}
+                    {typeof booking.phone === 'string' && booking.phone
+                      ? ` · ${booking.phone}`
+                      : ''}
                   </Typography>
+                  {/* Where the job is, when the service asked (AGL-3493).
+                      Wrapped rather than cut: an address read to its end is
+                      the one a crew can drive to. */}
+                  {typeof booking.address === 'string' && booking.address ? (
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      sx={{ whiteSpace: 'pre-line' }}
+                    >
+                      {booking.address}
+                    </Typography>
+                  ) : null}
                 </Stack>
                 <PaymentRiskChip risk={booking.paymentRisk} />
                 {contactHrefOf(booking.email) ? (
@@ -769,6 +809,43 @@ export function BookingsConsolePage(props: ConsolePluginPageProps) {
               size="small"
             />
           ))}
+          <Typography variant="overline" color="text.secondary">
+            {'Booking form'}
+          </Typography>
+          {/*
+            What the widget asks for beyond a name and an email (AGL-3493).
+            Off by default; an on-site service asks for both, required.
+          */}
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
+            {(
+              [
+                ['askPhone', 'Phone number'],
+                ['askAddress', 'Address'],
+              ] as const
+            ).map(([key, label]) => (
+              <TextField
+                key={key}
+                select
+                label={label}
+                value={draft?.[key] ?? 'off'}
+                onChange={(event) =>
+                  setDraft((prev) =>
+                    prev
+                      ? { ...prev, [key]: event.target.value as BookingFieldAsk }
+                      : prev,
+                  )
+                }
+                size="small"
+                fullWidth
+              >
+                {BOOKING_FIELD_ASKS.map((ask) => (
+                  <MenuItem key={ask} value={ask}>
+                    {FIELD_ASK_LABELS[ask]}
+                  </MenuItem>
+                ))}
+              </TextField>
+            ))}
+          </Stack>
           <Typography variant="overline" color="text.secondary">
             {'CRM'}
           </Typography>

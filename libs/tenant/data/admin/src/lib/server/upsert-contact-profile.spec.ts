@@ -345,6 +345,53 @@ describe('the profile on a merge', () => {
   })
 })
 
+/**
+ * A PHONE LEARNED IN PASSING (AGL-3493): the number a booking form asked
+ * for. It fills an empty phone and never replaces one — a number somebody
+ * typed on the record, or gave the business before, is the better one.
+ */
+describe('the profile fill', () => {
+  const capture = (fill: string, facetPhone?: string) =>
+    upsertHostContact({
+      hostId: 'h1',
+      email: 'jo@example.com',
+      source: 'booking',
+      interaction: { summary: 'Booked "Free on-site estimate"' },
+      facetFill: { phone: fill },
+      ...(facetPhone ? { facet: { phone: facetPhone } } : {}),
+    })
+
+  it('writes the phone on a new person, normalized and echoed up', async () => {
+    await capture('(512) 555-0107')
+    expect(added[0].data.facets.h1.phone).toBe('+15125550107')
+    expect(added[0].data.phone).toBe('+15125550107')
+  })
+
+  it("fills THIS holder's empty phone, whatever another holder keeps", async () => {
+    seedSharedContact()
+    await capture('512-555-0107')
+    expect(facet('c1').phone).toBe('+15125550107')
+    expect(facet('c1', 'h2').phone).toBe('+15125550199')
+  })
+
+  it('never replaces a phone the holder already has', async () => {
+    seedSharedContact()
+    contacts['c1'].facets.h1.phone = '+15125550111'
+    await capture('512-555-0107')
+    expect(facet('c1').phone).toBe('+15125550111')
+  })
+
+  it("leaves a key the door's own profile carries to the profile", async () => {
+    await capture('512-555-0107', '512-555-0122')
+    expect(added[0].data.facets.h1.phone).toBe('+15125550122')
+  })
+
+  it('drops a fill that will not normalize', async () => {
+    await capture('call me')
+    expect(added[0].data.facets.h1).not.toHaveProperty('phone')
+  })
+})
+
 describe('the order door and the lifecycle stage', () => {
   const purchase = (hostId: string) =>
     upsertHostContact({

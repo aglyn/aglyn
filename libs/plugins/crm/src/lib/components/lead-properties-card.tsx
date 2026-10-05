@@ -562,8 +562,9 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
         <Stack spacing={3}>
           {banner}
           {/*
-            Only when the capture carried one (AGL-2661): the sign-up and
-            booking doors write no phone, so a row for every lead would be a
+            Only when the capture carried one (AGL-2661): the sign-up door
+            writes no phone, and a booking only when its service asks for
+            one (AGL-3493), so a row for every lead would often be a
             permanent blank. A form that captures one fills this.
           */}
           {leadPhone ? (

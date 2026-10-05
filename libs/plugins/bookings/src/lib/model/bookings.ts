@@ -63,6 +63,13 @@ export interface HostBookingService {
    * has to opt out of saying so.
    */
   crmMeetingActivity?: boolean
+  /**
+   * Ask the booker for a phone number (AGL-3493): `optional` or `required`;
+   * absent is off. Read through `bookingFieldAsk`.
+   */
+  askPhone?: 'off' | 'optional' | 'required'
+  /** Ask the booker for the address the service is at (AGL-3493); as above. */
+  askAddress?: 'off' | 'optional' | 'required'
 }
 
 /** Booked interval as epoch-ms instants. */

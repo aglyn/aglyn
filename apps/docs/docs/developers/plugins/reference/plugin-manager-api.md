@@ -1500,6 +1500,13 @@ and what a new person sets off. The silo reports what it saw. Like
 `plugin-record-timeline`, the registry authenticates nobody: the silo has
 already decided the capture is the workspace's to record.
 
+**`profileFill` is `profile`'s shape, written only where the record holds
+nothing.** For what a door learns in passing — the phone a booking form asked
+for — which must not replace a value somebody typed on the record or gave the
+business before. A key `profile` also carries is `profile`'s to write. The CRM
+takes `phone` from it, normalized, onto the lead or the contact the capture
+lands on.
+
 **`containers` is what the capture SURFACE is filed under, by container
 kind** (`plugin-containers`, above) — `{ campaign: ids }` for a form its
 merchant filed under campaigns. It is true of everybody who

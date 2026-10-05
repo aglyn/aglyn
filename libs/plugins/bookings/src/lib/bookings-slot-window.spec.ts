@@ -40,6 +40,8 @@ let mockHorizonDays = 30
 /** The service the handler reads; no windows unless a case sets them. */
 const CONSULT = { name: 'Consult', durationMinutes: 30, priceUsd: 50 }
 let mockService: Record<string, unknown> = CONSULT
+/** The services the public directory lists. */
+let mockDirectory: Array<Record<string, unknown>> = []
 
 const mockRows: Array<{ id: string; data: Record<string, unknown> }> = []
 /** Constraints applied to the `bookings` query, in order. */
@@ -98,7 +100,15 @@ jest.mock('@aglyn/tenant-data-admin', () => {
                           get: () => undefined,
                         }),
                       }),
-                      limit: () => ({ get: async () => ({ docs: [] }) }),
+                      limit: () => ({
+                        get: async () => ({
+                          docs: mockDirectory.map((data, index) => ({
+                            id: `svc-${index}`,
+                            data: () => data,
+                            get: (field: string) => data[field],
+                          })),
+                        }),
+                      }),
                     },
             }),
           }),
@@ -344,6 +354,29 @@ describe('booking slot pages', () => {
     expect(fromMs).toBeNull()
     expect(pages).toBe(2)
     expect(last).toBeLessThanOrEqual(MONDAY + 20 * 24 * 60 * 60_000)
+  })
+})
+
+/**
+ * The public directory names what each service asks for beyond a name and an
+ * email (AGL-3493), so the widget renders the fields the route will hold the
+ * request to — read the same way the route reads them.
+ */
+describe('the public service directory', () => {
+  it('says what each service asks for, off unless it says otherwise', async () => {
+    mockDirectory = [
+      { ...CONSULT, askPhone: 'required', askAddress: 'optional' },
+      { ...CONSULT, askPhone: 'sometimes' },
+    ]
+    const { res, result } = makeResponse()
+    await slotsHandler(
+      { method: 'GET', query: { hostId: 'h1' }, body: {}, headers: {}, cookies: {}, socket: {} } as never,
+      res,
+    )
+    expect(result.body.services).toEqual([
+      expect.objectContaining({ $id: 'svc-0', askPhone: 'required', askAddress: 'optional' }),
+      expect.objectContaining({ $id: 'svc-1', askPhone: 'off', askAddress: 'off' }),
+    ])
   })
 })
 

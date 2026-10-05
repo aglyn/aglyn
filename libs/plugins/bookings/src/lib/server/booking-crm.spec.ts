@@ -143,6 +143,15 @@ describe('the meeting a booking files', () => {
     expect(tasks).toEqual([])
   })
 
+  it('names the phone and the job address the service asked for (AGL-3493)', async () => {
+    await file({ phone: '+15125550107', address: '12 Oak St\nAustin, TX 78701' })
+    expect(activities[0]?.body).toBe(
+      'Intro call — Tuesday, September 15, 2026 at 10:00 AM (America/Chicago)\n' +
+        'Phone: +15125550107\n' +
+        'Address: 12 Oak St, Austin, TX 78701',
+    )
+  })
+
   it('carries back the record the booking link named, beside the address', async () => {
     await file({ crmRef: 'deal:deal-7' })
     expect(activities[0]?.link).toEqual({

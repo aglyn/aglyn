@@ -677,6 +677,10 @@ const SEEDS: Array<{
       // them would flip both.
       crmFollowUpTask: true,
       crmMeetingActivity: false,
+      // What the widget asks the booker for (AGL-3493), seeded away from the
+      // absent `off` for the same reason.
+      askPhone: 'required',
+      askAddress: 'optional',
     },
   },
   {

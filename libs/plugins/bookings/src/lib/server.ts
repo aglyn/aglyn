@@ -36,7 +36,7 @@ import {
   renderLoadedHostEmailWithTokens,
   type LoadedHostEmailWithTokens,
 } from '@aglyn/tenant-data-admin/server/host-email-tokens'
-import { type BookedInterval, BOOKING_MAX_DAYS_AHEAD, bookingTimeZone, computeOpenSlotPage, formatBookingWhen, type HostBookingService, isBookingReminderDue, isSlotOpen, REMINDER_WINDOW_END_HOURS, REMINDER_WINDOW_START_HOURS } from './model'
+import { type BookedInterval, BOOKING_MAX_DAYS_AHEAD, bookingContactAsks, bookingContactLines, readBookingContactFields, bookingTimeZone, computeOpenSlotPage, formatBookingWhen, type HostBookingService, isBookingReminderDue, isSlotOpen, REMINDER_WINDOW_END_HOURS, REMINDER_WINDOW_START_HOURS } from './model'
 import { bookingTimeZoneFor } from './server/booking-time-zone'
 import {
   registerBillingWebhookHandler,
@@ -191,6 +191,11 @@ export const slotsHandler: PluginApiHandler = async (req, res) => {
             durationMinutes: Number(doc.get('durationMinutes') ?? 30),
             priceUsd: Number(doc.get('priceUsd') ?? 0),
             description: doc.get('description') ?? '',
+            // What the widget asks for beyond a name and an email (AGL-3493),
+            // as the booking route will hold it: the widget renders and
+            // checks the fields from these, the route checks them again.
+            askPhone: bookingContactAsks(doc.data()).phone,
+            askAddress: bookingContactAsks(doc.data()).address,
           })),
       })
     }
@@ -362,6 +367,18 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
     if (!service || (serviceSnapshot.get('deletedAt') as unknown)) {
       return res.status(404).json({ error: 'Unknown service' })
     }
+    // The phone and the address, held to what THIS service asks for
+    // (AGL-3493) and checked here whatever the widget already checked: this
+    // is a public door, and a request can be written by hand. A field the
+    // service does not ask for is dropped rather than stored.
+    const contact = readBookingContactFields(bookingContactAsks(service), {
+      phone: req.body?.phone,
+      address: req.body?.address,
+    })
+    if ('error' in contact) return res.status(400).json({ error: contact.error })
+    const { phone, address } = contact.fields
+    // `Phone: …`, `Address: …`, for the managers' notification below.
+    const contactLines = bookingContactLines(contact.fields)
 
     // Plan gate (dark-launch rule preserved). Plan/quota gates ride the
     // owning org's doc (AGL-238). Hoisted out of its block for AGL-2315:
@@ -570,6 +587,8 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
         serviceName: service.name ?? '',
         name,
         email,
+        ...(phone ? { phone } : {}),
+        ...(address ? { address } : {}),
         startsAtMs,
         endsAtMs,
         timezone,
@@ -642,6 +661,12 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
         summary: `Booked "${String(service.name ?? 'a service').slice(0, 60)}"`,
       },
       surface: 'lead',
+      // The phone the booker gave (AGL-3493), onto the person only where
+      // the record holds none: a number somebody typed on the record, or
+      // gave the business before, is not replaced by one typed into a
+      // booking form. The address is the JOB's, not the person's, and
+      // rides the meeting below instead.
+      ...(phone ? { profileFill: { phone } } : {}),
       ...(marketingConsent ? { marketingConsent: true } : {}),
       // Where the visitor ARRIVED from — a fact about this visit and not
       // about the person, which is what `detail` carries.
@@ -783,8 +808,8 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
           .catch(() => undefined)
         return res.status(502).json({ error: 'Payment setup failed' })
       }
-      // The lead landed above; the confirmation email + workflow event fire
-      // from the payment webhook.
+      // The lead landed above; the confirmation email and the managers'
+      // notification go out from the payment webhook.
       return res
         .status(200)
         .json({ bookingId, startsAtMs, endsAtMs, checkoutUrl: session.url })
@@ -792,13 +817,16 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
 
     // Event trigger (AGL-128/148/159).
     // In-app notification to the site's managers (AGL-259): who booked what,
-    // and when, in the booking's own zone and naming it (AGL-3432).
+    // and when, in the booking's own zone and naming it (AGL-3432), and the
+    // phone and address the service asked for (AGL-3493) — the two things
+    // an on-site service needs before it can do anything with the booking.
     void notifyHostManagers(hostId, {
       type: 'content.booking',
       title: 'New booking on {site}',
       body:
         `${name} (${email}) booked ${String(service.name ?? 'a service')} ` +
-        `on {site} for ${when} (${timezone}).`,
+        `on {site} for ${when} (${timezone}).` +
+        (contactLines.length ? ` ${contactLines.join('. ')}.` : ''),
       link: `/${hostId}/bookings`,
     })
     const { alerts } = await emitHostEvent(
@@ -869,6 +897,8 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
         serviceId,
         serviceName: service.name ?? '',
         email,
+        ...(phone ? { phone } : {}),
+        ...(address ? { address } : {}),
         startsAtMs,
         endsAtMs,
         ...(crmRef ? { crmRef: formatBookingRecordRef(crmRef) } : {}),

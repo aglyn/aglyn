@@ -232,6 +232,22 @@ function storableProfile(input: ContactProfileInput | undefined): {
 }
 
 /**
+ * A door's {@link UpsertHostContactOptions.facetFill}, folded into the
+ * profile it is about to write: each field only where neither the door's
+ * own profile nor the holder's stored facet holds one.
+ */
+function fillProfile(
+  profile: ReturnType<typeof storableProfile>,
+  fill: UpsertHostContactOptions['facetFill'],
+  stored: { phone?: unknown } | null,
+): void {
+  const given = storableProfile(fill)
+  if (given.phone && !profile.phone && !String(stored?.phone ?? '').trim()) {
+    profile.phone = given.phone
+  }
+}
+
+/**
  * The org's companies collection, beside its contacts one.
  *
  * Reached through the contacts reference's parent — the org document —
@@ -432,6 +448,13 @@ export interface UpsertHostContactOptions {
    * phone and nothing else does not blank the title somebody typed.
    */
   facet?: UpsertHostContactFacet
+  /**
+   * Profile fields written only where THIS holder's facet has none
+   * (AGL-3493) — what a door learned in passing, like the phone a booking
+   * form asked for, which must not replace a number somebody typed on the
+   * record. A key {@link facet} also carries is `facet`'s to write.
+   */
+  facetFill?: Pick<UpsertHostContactFacet, 'phone'>
   /**
    * The EARLIEST stage that describes what this capture was (AGL-2612).
    *
@@ -683,6 +706,7 @@ export async function upsertHostContact(
        * "no stage" rather than as a stage somebody picked.
        */
       const profile = storableProfile(options.facet)
+      fillProfile(profile, options.facetFill, facet)
       const advanced = advanceContactLifecycleStage(
         profile.lifecycleStage ?? facet.lifecycleStage,
         options.initialLifecycleStage,
@@ -920,6 +944,8 @@ export async function upsertHostContact(
      * written: there is nothing on a new document for it to clear.
      */
     const profile = storableProfile(options.facet)
+    // A new person holds nothing yet, so the fill is written whole.
+    fillProfile(profile, options.facetFill, null)
     const advanced = advanceContactLifecycleStage(
       profile.lifecycleStage,
       options.initialLifecycleStage,

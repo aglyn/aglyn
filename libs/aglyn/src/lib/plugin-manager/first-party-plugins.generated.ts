@@ -239,7 +239,9 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
         "timezone",
         "windows",
         "crmFollowUpTask",
-        "crmMeetingActivity"
+        "crmMeetingActivity",
+        "askPhone",
+        "askAddress"
       ]
     },
     "siteExport": {
@@ -252,7 +254,9 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
         "timezone",
         "windows",
         "crmFollowUpTask",
-        "crmMeetingActivity"
+        "crmMeetingActivity",
+        "askPhone",
+        "askAddress"
       ]
     }
   },

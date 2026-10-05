@@ -28,8 +28,9 @@ import { firebaseAdmin } from '@aglyn/tenant-data-admin/server/firebase-admin'
  *
  * A booking is the merchant's record of an appointment, kept as a record of
  * what was sold and when. So the person is taken OFF every booking they made
- * on a site of the workspace — their address, name and phone — and a stamp
- * says when; the booking itself, its service and its time stay.
+ * on a site of the workspace — their email, name and phone, and the street
+ * address a service asked them for (AGL-3493) — and a stamp says when; the
+ * booking itself, its service and its time stay.
  *
  * A DRY RUN counts the bookings and writes nothing.
  */
@@ -62,6 +63,7 @@ export function createBookingsPersonEraser(deps: BookingsPersonEraserDeps): Plug
           email: null,
           name: FieldValue.delete(),
           phone: FieldValue.delete(),
+          address: FieldValue.delete(),
           customerErasedAtMs: atMs,
         },
         LABEL,

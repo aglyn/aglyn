@@ -43,6 +43,35 @@ card on the Products hub; see [Commerce](../commerce/overview.md).
 2. Configure **availability** — the windows when slots are offered.
 3. Add the **booking widget** to a page as a canvas element.
 
+### Asking for a phone number and an address {#phone-and-address}
+
+The booking widget always asks for a name and an email. A service can also ask
+for a **phone number** and an **address** — the place the job is, for a service
+done on site. Set each one in the service's dialog under **Booking form**:
+
+- **Don't ask** (the default) — the field does not appear.
+- **Optional** — the field appears and the visitor may leave it empty.
+- **Required** — the visitor cannot confirm the booking without it.
+
+The booking is checked again when it arrives, so a required field cannot be
+skipped. A phone number has to look like one: a US or Canadian number is
+stored in international form (`+15125550107`), and a number written another
+country's way is kept as typed.
+
+What the visitor gives shows:
+
+- on the booking in **Upcoming bookings**;
+- in the **New booking** notification the site's managers get, by email too if
+  they have email notifications on — for paid bookings as well, once the
+  payment clears;
+- on the **meeting** the booking files in the CRM, under the slot.
+
+The phone number is also added to the person in the CRM — the lead or the
+contact the booking lands on — **only when that person has no phone yet**, so
+it never replaces a number you already have. The address stays on the booking
+and the meeting, not on the person: it is where this job is, which is often not
+where they live.
+
 ## Taking bookings
 
 - Visitors pick a slot through the booking widget; the **booking API** records it.

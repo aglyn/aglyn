@@ -116,7 +116,14 @@ beforeEach(() => {
   docs.set('hosts/h1', { orgId: ORG })
   docs.set('hosts/h2', { orgId: ORG })
   docs.set('hosts/other', { orgId: 'org2' })
-  docs.set('hosts/h2/bookings/b1', { email: EMAIL, name: 'Jane', phone: '+15125550107', serviceId: 's1' })
+  docs.set('hosts/h2/bookings/b1', {
+    email: EMAIL,
+    name: 'Jane',
+    phone: '+15125550107',
+    // The job address an on-site service asked for (AGL-3493).
+    address: '12 Oak St\nAustin, TX 78701',
+    serviceId: 's1',
+  })
   docs.set('hosts/h2/bookings/b2', { email: 'someone@else.com', name: 'Other', serviceId: 's1' })
   docs.set('hosts/other/bookings/b3', { email: EMAIL, name: 'Jane', serviceId: 's9' })
 })
@@ -128,6 +135,7 @@ describe('bookings’ person eraser', () => {
     expect(booking).toMatchObject({ email: null, serviceId: 's1', customerErasedAtMs: 777 })
     expect(booking).not.toHaveProperty('name')
     expect(booking).not.toHaveProperty('phone')
+    expect(booking).not.toHaveProperty('address')
     expect(docs.get('hosts/h2/bookings/b2')?.email).toBe('someone@else.com')
     expect(docs.get('hosts/other/bookings/b3')?.email).toBe(EMAIL)
   })

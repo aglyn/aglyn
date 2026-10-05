@@ -370,6 +370,12 @@ export interface HostLeadInput {
    * the same rule `upsertHostContact` applies.
    */
   disclosedConsentGroup?: string | null
+  /**
+   * A phone the capture learned (AGL-3493), E.164 as the door normalized
+   * it. Written only when the lead holds none: a number a rep typed on the
+   * lead, or an earlier capture brought, is not replaced by this one.
+   */
+  phoneFill?: string
 }
 
 /**
@@ -604,6 +610,10 @@ export async function addHostLeadOutcome(options: {
        * finds a lead nobody has touched — an absent field matches no query.
        */
       const stored = existing.data() ?? {}
+      const phoneFill =
+        lead.phoneFill && !String(stored['phone'] ?? '').trim()
+          ? { phone: lead.phoneFill }
+          : {}
       const storedScope = Array.isArray(stored['visibleTo']) ? (stored['visibleTo'] as unknown[]) : []
       const listFields = crmLeadListFields({
         ...stored,
@@ -616,6 +626,7 @@ export async function addHostLeadOutcome(options: {
         {
           email: lead.email,
           ...seen,
+          ...phoneFill,
           ...listFields,
           /*
            * WIDENED BY THE CAPTURE, NEVER BY THE LOOKUP (AGL-3275).

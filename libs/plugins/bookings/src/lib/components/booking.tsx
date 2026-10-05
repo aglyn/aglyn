@@ -49,6 +49,11 @@ import {
   formatBookingRecordRef,
   parseBookingRecordRef,
 } from '../model/booking-record'
+import {
+  bookingContactAsks,
+  readBookingContactFields,
+  readBookingPhone,
+} from '../model/booking-contact-fields'
 import { BOOKING_MAX_DAYS_AHEAD, BOOKING_SLOT_PAGE_DAYS } from '../model/bookings'
 import { generatePresetId } from '../utils/generate-preset-id'
 import { useBookingPurchaseEvent } from '../utils/use-booking-purchase-event'
@@ -68,6 +73,9 @@ interface ServiceOption {
   durationMinutes: number
   priceUsd: number
   description?: string
+  /** What the service asks for beyond a name and an email (AGL-3493). */
+  askPhone?: string
+  askAddress?: string
 }
 
 /**
@@ -211,6 +219,8 @@ const Booking = forwardRef<HTMLDivElement, BookingProps>((props, ref) => {
   const [slotMs, setSlotMs] = useState<number | null>(null)
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
+  const [phone, setPhone] = useState('')
+  const [address, setAddress] = useState('')
   const [marketingConsent, setMarketingConsent] = useState(false)
   const [status, setStatus] = useState<
     'idle' | 'loading' | 'booking' | 'booked' | 'error'
@@ -340,6 +350,16 @@ const Booking = forwardRef<HTMLDivElement, BookingProps>((props, ref) => {
     setSlotMs(null)
   }
 
+  // What the picked service asks for beyond a name and an email, and
+  // whether what was typed answers it (AGL-3493) — the route's own reading,
+  // so the button and the server cannot disagree about a required field.
+  const asks = bookingContactAsks(
+    (services ?? []).find((one) => one.$id === serviceId),
+  )
+  const contactCheck = readBookingContactFields(asks, { phone, address })
+  const phoneUnreadable =
+    asks.phone !== 'off' && Boolean(phone.trim()) && !readBookingPhone(phone)
+
   const handleBook = useCallback(async () => {
     if (!hostId || !serviceId || !slotMs || status === 'booking') return
     setStatus('booking')
@@ -359,6 +379,8 @@ const Booking = forwardRef<HTMLDivElement, BookingProps>((props, ref) => {
           startsAtMs: slotMs,
           name,
           email,
+          // Only what the service asks for: the route drops anything else.
+          ...(contactCheck.ok ? contactCheck.fields : {}),
           ...(recordRef ? { crmRef: formatBookingRecordRef(recordRef) } : {}),
           ...(marketingConsent ? { marketingConsent: true } : {}),
           // The campaign this visitor came from, when they came from one.
@@ -438,6 +460,7 @@ const Booking = forwardRef<HTMLDivElement, BookingProps>((props, ref) => {
     slotMs,
     name,
     email,
+    contactCheck,
     marketingConsent,
     status,
     siteFetch,
@@ -642,6 +665,33 @@ const Booking = forwardRef<HTMLDivElement, BookingProps>((props, ref) => {
             size="small"
             fullWidth
           />
+          {asks.phone !== 'off' ? (
+            <TextField
+              label="Phone"
+              type="tel"
+              autoComplete="tel"
+              required={asks.phone === 'required'}
+              value={phone}
+              onChange={(event) => setPhone(event.target.value)}
+              error={phoneUnreadable}
+              helperText={phoneUnreadable ? 'Enter a valid phone number' : undefined}
+              size="small"
+              fullWidth
+            />
+          ) : null}
+          {asks.address !== 'off' ? (
+            <TextField
+              label="Address"
+              autoComplete="street-address"
+              required={asks.address === 'required'}
+              value={address}
+              onChange={(event) => setAddress(event.target.value)}
+              size="small"
+              fullWidth
+              multiline
+              minRows={2}
+            />
+          ) : null}
           <FormControlLabel
             control={
               <Checkbox
@@ -658,7 +708,10 @@ const Booking = forwardRef<HTMLDivElement, BookingProps>((props, ref) => {
           <Button
             variant="contained"
             disabled={
-              !name.trim() || !email.trim() || status === 'booking'
+              !name.trim() ||
+              !email.trim() ||
+              !contactCheck.ok ||
+              status === 'booking'
             }
             onClick={handleBook}
             sx={{ alignSelf: 'flex-start' }}
