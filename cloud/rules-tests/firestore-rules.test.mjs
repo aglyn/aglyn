@@ -6527,6 +6527,32 @@ describe('an import job is the engine’s to write (AGL-3524)', () => {
 })
 
 /**
+ * Remembered export choices (AGL-3525): `users/{uid}/transferPrefs/{key}`
+ * holds one person's last export choice and saved presets for a resource.
+ * The export dialog writes it from the browser, so the owner reads and
+ * writes their own and nobody else touches it.
+ */
+describe('remembered export choices are their owner’s alone (AGL-3525)', () => {
+  const PREFS = { presets: [{ id: 'p1', label: 'Mine', fieldIds: ['id', 'email'] }] }
+  const prefs = (db, uid = OWNER) => doc(db, 'users', uid, 'transferPrefs', 'crm.contacts')
+
+  it('lets the owner read and write their own', async () => {
+    await mustAllow('the owner saving their choices', setDoc(prefs(authed(OWNER)), PREFS))
+    await mustAllow('the owner reading their choices', getDoc(prefs(authed(OWNER))))
+    await mustAllow('the owner clearing their choices', deleteDoc(prefs(authed(OWNER))))
+  })
+
+  it('lets nobody else read or write them', async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(prefs(context.firestore()), PREFS)
+    })
+    await mustDeny('another member reading them', getDoc(prefs(authed(OUTSIDER))))
+    await mustDeny('another member overwriting them', setDoc(prefs(authed(OUTSIDER), OWNER), PREFS))
+    await mustDeny('a visitor reading them', getDoc(prefs(anon())))
+  })
+})
+
+/**
  * The AGL-1501 lockdown surface (AGL-1507), live in ruleset 0370ace4.
  *
  * `lockdowns/{id}` holds the platform and per-user panic records. Reads are

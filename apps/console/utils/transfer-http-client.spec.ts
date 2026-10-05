@@ -25,6 +25,7 @@ import {
   TransferRequestError,
   createHttpTransferClient,
   splitTransferUpload,
+  type HttpTransferClientOptions,
 } from './transfer-http-client'
 
 /**
@@ -51,8 +52,8 @@ const copy = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T
 type Sent = { url: string; body: Record<string, unknown>; authorization: string | null }
 
 function harness(
-  answer: (sent: Sent, index: number) => { status?: number; body: unknown },
-  options: { hostId?: string | null; partBytes?: number } = {},
+  answer: (sent: Sent, index: number) => { status?: number; body: unknown; raw?: string; headers?: Record<string, string> },
+  options: { hostId?: string | null; partBytes?: number; savePrefs?: HttpTransferClientOptions['savePrefs'] } = {},
 ) {
   const sent: Sent[] = []
   const fetch = jest.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
@@ -62,9 +63,15 @@ function harness(
       authorization: (init?.headers as Record<string, string> | undefined)?.['Authorization'] ?? null,
     }
     sent.push(entry)
-    const { status = 200, body } = answer(entry, sent.length - 1)
-    // jsdom has no `Response`; the client reads only these three members.
-    return { ok: status >= 200 && status < 300, status, json: async () => copy(body) } as unknown as Response
+    const { status = 200, body, raw, headers = {} } = answer(entry, sent.length - 1)
+    // jsdom has no `Response`; the client reads only these members.
+    return {
+      ok: status >= 200 && status < 300,
+      status,
+      headers: { get: (name: string) => headers[name] ?? null },
+      json: async () => copy(body),
+      arrayBuffer: async () => new TextEncoder().encode(raw ?? '').buffer,
+    } as unknown as Response
   }) as unknown as typeof globalThis.fetch
   const client = createHttpTransferClient({
     orgId: 'org-1',
@@ -72,6 +79,7 @@ function harness(
     getIdToken: async () => 'token-1',
     fetch,
     ...(options.partBytes ? { partBytes: options.partBytes } : {}),
+    ...(options.savePrefs ? { savePrefs: options.savePrefs } : {}),
   })
   return { client, sent }
 }
@@ -255,5 +263,37 @@ describe('the HTTP transfer client', () => {
     const run = await client.undo({ jobId: 'job-1', mode: 'apply', decisions: { r0: 'revert' } })
     expect(sent.at(-1)?.body).toMatchObject({ action: 'apply', decisions: { r0: 'revert' }, otherwise: 'keep' })
     expect(run).toMatchObject({ done: true, counts: { restore: 2 } })
+  })
+
+  it('downloads an export whole, keeping the byte-order mark, and refuses one shorter than promised', async () => {
+    const csv = '\uFEFFName\r\nAda\r\nBo\r\n'
+    const { client, sent } = harness((_entry, index) => ({
+      body: null,
+      raw: index === 0 ? csv : 'Name\r\nAda\r\n',
+      headers: {
+        'X-Aglyn-Export-Rows': '2',
+        'Content-Disposition': 'attachment; filename="people-2026-10-05.csv"',
+      },
+    }))
+    const choice = { resource: 'people', fieldIds: ['name'], scope: { kind: 'all' as const }, format: 'csv' as const, bom: true }
+    const file = await client.export(choice)
+    expect(sent[0]).toMatchObject({ url: TRANSFER_API_ROUTES.export, body: { orgId: 'org-1', hostId: 'host-1', ...choice } })
+    expect(file.fileName).toBe('people-2026-10-05.csv')
+    expect(file.rowCount).toBe(2)
+    // Every byte sent, the three of the byte-order mark included.
+    expect(file.body.size).toBe(new TextEncoder().encode(csv).length)
+    await expect(client.export(choice)).rejects.toThrow('The export stopped after 1 of 2 rows. Try again.')
+  })
+
+  it('throws an export refusal with its code, and remembers choices only through the surface’s store', async () => {
+    const { client } = harness(() => ({ status: 413, body: { error: 'Select at most 10,000 records.', code: 'tooLarge' } }))
+    await expect(
+      client.export({ resource: 'people', fieldIds: ['id'], scope: { kind: 'all' }, format: 'json', bom: false }),
+    ).rejects.toMatchObject({ code: 'tooLarge', status: 413 })
+    await expect(client.savePrefs({ resource: 'people', prefs: { presets: [] } })).rejects.toMatchObject({ code: 'unavailable' })
+    const savePrefs = jest.fn(async () => ({ presets: [] }))
+    const stored = harness(() => ({ body: null }), { savePrefs })
+    await stored.client.savePrefs({ resource: 'people', prefs: { presets: [] } })
+    expect(savePrefs).toHaveBeenCalledWith('people', { presets: [] })
   })
 })

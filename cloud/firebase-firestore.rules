@@ -3987,6 +3987,11 @@ service cloud.firestore {
       match /aiUsage/{month} {
         allow read, write: if false;
       }
+
+      // Remembered export choices per resource (AGL-3525): owner only.
+      match /transferPrefs/{resourceKey} {
+        allow read, write: if isSignedIn() && request.auth.uid == userId;
+      }
     }
 
     // WebAuthn machinery (AGL-662): server-only, both of them. Challenges

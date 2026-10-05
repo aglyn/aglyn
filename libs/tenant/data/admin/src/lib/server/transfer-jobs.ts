@@ -365,7 +365,15 @@ export async function readTransferJob(
   return readJob(deps, input.orgId, input.jobId)
 }
 
-async function resolveResource(deps: TransferEngineDeps, key: string): Promise<ResolvedTransferResource> {
+/** A `records` resource, joined to its server half, or the refusal a route answers. */
+export async function resolveTransferRecordsResource(
+  deps: Pick<TransferEngineDeps, 'resolveResource'>,
+  key: string,
+): Promise<ResolvedTransferResource> {
+  return resolveResource(deps, key)
+}
+
+async function resolveResource(deps: Pick<TransferEngineDeps, 'resolveResource'>, key: string): Promise<ResolvedTransferResource> {
   try {
     const resource = await (deps.resolveResource ?? resolveTransferResource)(key)
     if (!resource.kinds.includes('records')) {
@@ -383,7 +391,7 @@ async function resolveResource(deps: TransferEngineDeps, key: string): Promise<R
 }
 
 /** The site a resource's records belong to: required for a `host` resource, `null` for an `org` one. */
-function hostIdFor(resource: ResolvedTransferResource, hostId: string | null | undefined): string | null {
+export function transferHostIdFor(resource: ResolvedTransferResource, hostId: string | null | undefined): string | null {
   const site = resource.scope === 'host' && typeof hostId === 'string' && hostId.trim() ? hostId.trim() : null
   if (resource.scope === 'host' && !site) {
     throw new TransferEngineError('invalid', 400, `${resource.label} belong to a site; name the site.`)
@@ -438,7 +446,7 @@ export async function readTransferResourceInfo(
   const ctx: TransferResourceContext = {
     resource: resource.key,
     orgId: input.orgId,
-    hostId: hostIdFor(resource, input.hostId),
+    hostId: transferHostIdFor(resource, input.hostId),
     actorUid: input.actorUid,
   }
   const hooks = transferRecordsHooks(resource)
@@ -523,7 +531,7 @@ export async function uploadTransferSource(
   input: TransferUploadInput,
 ): Promise<{ job: TransferJobRecord; complete: boolean }> {
   const resource = await resolveResource(deps, String(input.resource ?? '').trim())
-  const hostId = hostIdFor(resource, input.hostId)
+  const hostId = transferHostIdFor(resource, input.hostId)
   const fileName = String(input.fileName ?? '').trim().slice(0, 240) || 'import'
   const content = typeof input.content === 'string' ? input.content : ''
   const format = input.format ?? transferFormatFromFileName(fileName) ?? sniffTransferFormat(content)

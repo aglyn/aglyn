@@ -20,13 +20,15 @@
  *
  * The descriptor, every field and group, the match keys, the presets'
  * hints, the locked rules and the aliases — what the import wizard and the
- * export dialog open with — and the person's remembered choices. Body:
+ * export dialog open with — and the person's remembered choices
+ * (`users/{uid}/transferPrefs/{resourceKey}`). Body:
  * `TransferFieldsRequest`; answer: `TransferFieldsResponse`.
  */
 
 // lockdown-423: via apps/console/utils/server/transfer-gate.ts
 
 import type { TransferFieldsResponse } from '@aglyn/aglyn/data-transfer'
+import { readTransferPrefs } from '@aglyn/tenant-data-admin/server/transfer-export'
 import { readTransferResourceInfo } from '@aglyn/tenant-data-admin/server/transfer-jobs'
 import { transferErrorResponse, transferGate } from '../../../../utils/server/transfer-gate'
 
@@ -41,7 +43,8 @@ async function handler(request: Request): Promise<Response> {
       resource: String(body['resource'] ?? ''),
       hostId: typeof body['hostId'] === 'string' ? body['hostId'] : null,
     })
-    const answer: TransferFieldsResponse = { ok: true, ...info, prefs: { presets: [] } }
+    const prefs = await readTransferPrefs(caller.deps.firestore, caller.uid, info.resource.key)
+    const answer: TransferFieldsResponse = { ok: true, ...info, prefs }
     return Response.json(answer, { status: 200 })
   } catch (error) {
     return transferErrorResponse(error, 'fields')

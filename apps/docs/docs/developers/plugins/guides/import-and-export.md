@@ -110,6 +110,17 @@ server half returns with the fields. The Conflicts step shows the field
 disabled with your reason, and the Review step counts the values it held
 back.
 
+## What an export asks of your server half
+
+The export reads your records through your `readPage`, a page at a time,
+holding only the fields the person chose. Honor every option it passes:
+`ids` (the selection), `filter` (the list's filter, in your own terms) and
+`scopeTokens` — present when the reader is a collaborator scoped to some
+sites, and the only thing standing between them and the rest of the
+workspace, because the export reads past the rules. Register `count` too
+if you can: the file then carries its row count and the download is
+checked whole however large it is.
+
 ## Try it without a server
 
 The console's own specs drive the wizard with `createMemoryTransferClient`,

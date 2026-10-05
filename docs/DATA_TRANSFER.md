@@ -12,7 +12,7 @@ this document is the architecture.
 | Core: types and pure functions | `libs/aglyn/src/lib/data-transfer/` | AGL-3522 |
 | Extension point: a plugin declares what it can move | `libs/aglyn/src/lib/plugin-manager/plugin-transfer-resources.ts` | AGL-3523 |
 | Job engine: upload, analyze, plan, apply, status, undo | `libs/tenant/data/admin/src/lib/server/transfer-jobs.ts`; routes `apps/console/app/api/transfer/*`; the API's types in the core's `transfer-api.ts` | AGL-3524 |
-| Field-selectable export route | `apps/console/app/api/transfer/export` | AGL-3525 |
+| Field-selectable export route | `apps/console/app/api/transfer/export`; the engine half `libs/tenant/data/admin/src/lib/server/transfer-export.ts`; the file format in the core's `export-file.ts` | AGL-3525 |
 | UI kit: export dialog, import wizard | `libs/aglyn-transfer-ui` | AGL-3526 |
 | Console client and the core launcher plugins open the kit through | `apps/console/utils/transfer-http-client.ts`; `libs/aglyn/src/lib/app-utils/transfer-launcher-context.ts`; the shell's `transfer-launcher-provider.component.tsx` | AGL-3539 |
 | Each resource | the owning plugin's `src/lib/transfer/` | AGL-3527–3535 |
@@ -217,6 +217,17 @@ match keys), `TransferResourceInfo` and `TransferPrefs`, the review shapes
 (`TransferDerivationSummary`, `TransferMatchReview`, `TransferConflict`,
 `TransferAmbiguity`, `TransferLookupReview`) and the undo conflict.
 
+### `export-file.ts` — the export file
+
+`transferExportCsvHeader` (each field's label, so the file maps straight
+back in), `transferExportCsvLine` and `transferExportCellText` (a list as
+its items joined by `; `, an object as JSON, a blank as an empty cell),
+`transferExportRecord` (JSON and NDJSON rows keyed by field id),
+`transferExportFileName` (`<resource>-<day>.<ext>`),
+`countTransferExportRows` (what a download holds, per format, for the
+shortfall check) and `normalizeTransferPrefs` (a stored or sent
+`TransferPrefs`, dropping whatever is not its shape).
+
 ### `review.ts` — what the wizard shows about a whole file
 
 `summarizeTransferDerivations` counts each mapped field's derivations and
@@ -263,10 +274,10 @@ under its plugin enablement and release flags.
 ## The job engine
 
 `@aglyn/tenant-data-admin/server/transfer-jobs` runs an import as a durable
-job; the seven console routes are wiring over it, behind one gate
+job; the eight console routes are wiring over it, behind one gate
 (`apps/console/utils/server/transfer-gate.ts`): `POST`, a verified Bearer ID
 token, a per-member rate limit per route (`rate-limit-store`), the
-workspace's lockdown verdict (`status` and `fields` ask with a read intent), and
+workspace's lockdown verdict (`status`, `fields` and `export` ask with a read intent, so a read-only lock still lets a workspace take its data out), and
 `data.manage` — on the job's site for a site's records, on the workspace
 otherwise. Plan, apply and undo write an `adminAudit` row
 (`data.transfer.plan`, `data.transfer.apply` when a job starts or resumes,
@@ -276,6 +287,7 @@ otherwise. Plan, apply and undo write an `adminAudit` row
 
 | path | what |
 | -- | -- |
+| `users/{uid}/transferPrefs/{resourceKey}` | a person's `TransferPrefs` for a resource: the last export choice and saved presets. The owner reads and writes it from the export dialog (the only client-written path here); the `fields` route reads it |
 | `orgs/{orgId}/transferJobs/{jobId}` | the job, a `TransferJobRecord` (the core's `TransferJob` plus the upload state, the choices the plan was built from, warnings, the cursor, result counts, the lease and the undo state) |
 | `…/chunks/{n}` | the dry run, 200 planned rows a chunk, as JSON (split into `pieces/{k}` past 900,000 characters) |
 | `…/ledger/{jobId}:{row}` | one row's write, created the moment it lands; cleared once its chunk commits |
@@ -299,7 +311,8 @@ UI kit's client and the routes cannot disagree. Every refusal is a
 
 | route | does | request → response |
 | -- | -- | -- |
-| `fields` | what a resource offers: its descriptor, every field and group, its match keys (each a default, in order, and the presets' match-key hint), its locked rules and aliases, and the person's `TransferPrefs`. | `TransferFieldsRequest` → `TransferFieldsResponse` |
+| `fields` | what a resource offers: its descriptor, every field and group, its match keys (each a default, in order, and the presets' match-key hint), its locked rules and aliases, and the person's `TransferPrefs` from `users/{uid}/transferPrefs/{resourceKey}`. | `TransferFieldsRequest` → `TransferFieldsResponse` |
+| `export` | the chosen fields (checked against the catalog, in the person's order) of the selection (at most 10,000 ids), the list's filter or every record, read page by page through the resource's `readPage` and streamed as CSV (labels as the header, an optional byte-order mark), JSON or NDJSON. The rows are counted before the first byte — by the resource's `count` hook, or by reading ahead 5,000 rows — and sent as `X-Aglyn-Export-Rows`; a resource that cannot count and holds more goes without. An org-wide member reads everything; a collaborator scoped to some sites must reach a named site and is read through their `scopeTokens` (`memberScopeTokens`), which `readPage` must honor — the Admin SDK passes the rules. Audited as `data.transfer.export` with counts, never content. 20 a minute. | `TransferExportRequest` → the file, or `TransferErrorResponse` |
 | `upload` | stores a file whole, or one part of at most 3 MB (`part`, `parts`, then `jobId`), with the CSV `delimiter` and `headerRow` the person confirmed on the first part (kept as the job's `read`); inspects each part and the whole; refuses a format the resource does not take (415), more than 24 MB or the resource's `maxBytes` (413), more rows than its `maxRows` (default 50,000; 413). Makes the job, `draft`. | `TransferUploadRequest` → `TransferUploadResponse` |
 | `analyze` | header proposal (`matchHeaders` with the resource's aliases), 20 sample rows, the catalog, match keys, locked rules, and each mapped picklist column's values against the workspace's list (`picklists` hook) with a proposed choice per unmatched value. `mapping` re-reads the values under the person's mapping and adds every mapped field's `derivations` over the whole file, the rows `matches` against existing records under `matchKeys` (each key, by default) and `recordLabels`; `dateOrders` reads a field's dates in the order the person chose. → `analyzed`. | `TransferAnalyzeRequest` → `TransferAnalyzeResponse` |
 | `plan` | refuses a mapping `mappingProblems` blocks and any unmatched picklist value without a choice (`choicesNeeded`, by field); reads every row, resolves picklists into row notes, looks matches up in slices of 500 values, runs `matchRows` over the whole file (so an in-file duplicate is caught across chunks) and the resource's plan, fails the rows an invariant refuses, and stores the chunks. Writes no record. → `planned`. Answers the summary, the warnings, 50 rows of each verdict (`sample`), the first 500 `conflicts` (and `conflictCount`), the `ambiguous` rows and `recordLabels`; keeps `dateOrders` and the plugin steps' `extras` on the job. `action: 'rows'` pages the stored plan, by verdict. | `TransferPlanRequest` → `TransferPlanResponse`; `TransferPlanRowsRequest` → `TransferPlanRowsResponse` |
@@ -443,4 +456,8 @@ part; drops the locked rules from a plan request (the route applies the
 resource's own); throws a job that failed while applying, so the wizard
 stops and offers Resume; pages every undo conflict into the preview; and
 throws every refusal as a `TransferRequestError` with the route's `code`.
+Its `export` reads the file's bytes (keeping a byte-order mark) and refuses
+one holding fewer rows than `X-Aglyn-Export-Rows` promised; its `savePrefs`
+is the surface's `saveTransferPrefs` (`apps/console/utils/transfer-prefs-store.ts`),
+which merges over the stored document and writes it back normalized.
 

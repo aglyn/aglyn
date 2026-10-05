@@ -31,6 +31,11 @@
  *    offers Resume instead of calling again at once;
  *  - undo's preview pages every conflict in; its apply is one call, and the
  *    results step calls again until `done`;
+ *  - export downloads the file and counts its rows against the
+ *    `X-Aglyn-Export-Rows` the route promised, refusing a short file the way
+ *    every export download does (`exportShortfall`'s convention);
+ *  - remembered choices are written by the surface (`savePrefs`), to the
+ *    person's own `users/{uid}/transferPrefs/{resourceKey}`;
  *  - every refusal is thrown as a {@link TransferRequestError} carrying the
  *    route's `code` and `details`.
  *
@@ -40,9 +45,12 @@
 
 import {
   TRANSFER_API_ROUTES,
+  TRANSFER_EXPORT_ROWS_HEADER,
   TRANSFER_UNDO_PAGE_MAX,
   TRANSFER_UPLOAD_PART_MAX_BYTES,
+  countTransferExportRows,
   summarizeTransferResults,
+  transferContentType,
   type TransferAnalyzeResponse,
   type TransferApiRoute,
   type TransferApplyResponse,
@@ -50,6 +58,7 @@ import {
   type TransferErrorResponse,
   type TransferFieldsResponse,
   type TransferPlanResponse,
+  type TransferPrefs,
   type TransferStatusResponse,
   type TransferUndoApplyResponse,
   type TransferUndoConflict,
@@ -85,6 +94,14 @@ export interface HttpTransferClientOptions {
   fetch?: typeof fetch
   /** Bytes one upload request's file text may take once JSON-encoded; defaults to the route's part limit. */
   partBytes?: number
+  /** Stores the person's remembered choices for a resource and answers what is stored; absent, saving is refused. */
+  savePrefs?(resource: string, prefs: Partial<TransferPrefs>): Promise<TransferPrefs>
+}
+
+/** The file name a `Content-Disposition` header names, if any. */
+function dispositionFileName(header: string | null): string | null {
+  const match = /filename="?([^";]+)"?/i.exec(header ?? '')
+  return match?.[1] ?? null
 }
 
 /** What one character costs once `JSON.stringify` has encoded it, in UTF-8 bytes. */
@@ -130,23 +147,30 @@ export function createHttpTransferClient(options: HttpTransferClientOptions): Tr
   const run = options.fetch ?? ((input, init) => fetch(input, init))
   const hostId = options.hostId || null
 
-  async function post<T>(route: TransferApiRoute, body: Record<string, unknown>): Promise<T> {
+  async function send(route: TransferApiRoute, body: Record<string, unknown>): Promise<Response> {
     const token = await options.getIdToken()
-    const response = await run(TRANSFER_API_ROUTES[route], {
+    return run(TRANSFER_API_ROUTES[route], {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ orgId: options.orgId, ...body }),
     })
+  }
+
+  async function refusalOf(response: Response, payload?: unknown): Promise<TransferRequestError> {
+    const body = (payload === undefined ? await response.json().catch(() => null) : payload) as TransferErrorResponse | null
+    const refusal = body && typeof body === 'object' && 'code' in body ? body : null
+    return new TransferRequestError(
+      refusal?.error || 'The request failed. Try again.',
+      refusal?.code ?? 'failed',
+      response.status,
+      refusal?.details,
+    )
+  }
+
+  async function post<T>(route: TransferApiRoute, body: Record<string, unknown>): Promise<T> {
+    const response = await send(route, body)
     const payload = (await response.json().catch(() => null)) as (T & { ok?: true }) | TransferErrorResponse | null
-    if (!response.ok || !payload || !('ok' in payload)) {
-      const refusal = payload && 'code' in payload ? payload : null
-      throw new TransferRequestError(
-        refusal?.error || 'The request failed. Try again.',
-        refusal?.code ?? 'failed',
-        response.status,
-        refusal?.details,
-      )
-    }
+    if (!response.ok || !payload || !('ok' in payload)) throw await refusalOf(response, payload)
     return payload as T
   }
 
@@ -287,12 +311,37 @@ export function createHttpTransferClient(options: HttpTransferClientOptions): Tr
       return { job: last.job, counts: last.counts, conflicts, done: false }
     },
 
-    async export() {
-      throw new TransferRequestError('Exporting is not available here yet.', 'unavailable', 501)
+    async export(choice) {
+      const response = await send('export', { ...choice, hostId })
+      if (!response.ok) throw await refusalOf(response)
+      // The bytes as sent: `text()` would drop the byte-order mark the person asked for.
+      const bytes = await response.arrayBuffer()
+      const text = new TextDecoder('utf-8', { ignoreBOM: true }).decode(bytes)
+      const received = countTransferExportRows(text, choice.format)
+      const promised = response.headers.get(TRANSFER_EXPORT_ROWS_HEADER)
+      // A count that never arrived is not evidence of a short file; a lower count is.
+      if (received === null || (promised !== null && Number.isFinite(Number(promised)) && received < Number(promised))) {
+        throw new TransferRequestError(
+          received === null
+            ? 'The export did not arrive whole. Try again.'
+            : `The export stopped after ${received.toLocaleString()} of ${Number(promised).toLocaleString()} rows. Try again.`,
+          'failed',
+          response.status,
+          { promised: Number(promised), received },
+        )
+      }
+      return {
+        fileName: dispositionFileName(response.headers.get('Content-Disposition')) ?? `${choice.resource}.${choice.format}`,
+        rowCount: received,
+        body: new Blob([bytes], { type: transferContentType(choice.format) }),
+      }
     },
 
-    async savePrefs() {
-      throw new TransferRequestError('Saving export choices is not available here yet.', 'unavailable', 501)
+    async savePrefs({ resource, prefs }) {
+      if (!options.savePrefs) {
+        throw new TransferRequestError('Your choices could not be remembered here.', 'unavailable', 501)
+      }
+      return options.savePrefs(resource, prefs)
     },
   }
 }

@@ -1,8 +1,9 @@
 # Import and export everywhere
 
 Status: the core (AGL-3522), the extension point (AGL-3523), the job
-engine (AGL-3524), the UI kit (AGL-3526) and the console client with the
-core launcher (AGL-3539) are built; everything else in the build plan below
+engine (AGL-3524), the UI kit (AGL-3526), the console client with the
+core launcher (AGL-3539) and the field-selectable export (AGL-3525) are
+built; everything else in the build plan below
 is open. Linear project P-AGL-140.
 The architecture of the core, and how the rest plugs into it, is in
 [`docs/DATA_TRANSFER.md`](../DATA_TRANSFER.md).

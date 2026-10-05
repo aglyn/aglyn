@@ -19,7 +19,7 @@
  * THE TRANSFER API — what the import wizard sends the job engine, and what
  * it gets back.
  *
- * Seven console routes, all `POST` with a JSON body (`Content-Type:
+ * Eight console routes, all `POST` with a JSON body (`Content-Type:
  * application/json`) carrying `orgId`, and the caller's ID token as
  * `Authorization: Bearer …`:
  *
@@ -36,6 +36,8 @@
  *   undo    → `action: 'plan'` lists what undo would do and the records
  *             edited since; `action: 'apply'` carries it out with the
  *             person's decisions, called again until `done`
+ *   export  → the chosen fields of the chosen records, streamed as CSV,
+ *             JSON or NDJSON with the row count in a header
  *
  * Every refusal is a {@link TransferErrorResponse} with an HTTP status and a
  * {@link TransferErrorCode} a client can branch on. The job itself is also
@@ -86,6 +88,7 @@ export const TRANSFER_API_ROUTES = {
   apply: '/api/transfer/apply',
   status: '/api/transfer/status',
   undo: '/api/transfer/undo',
+  export: '/api/transfer/export',
 } as const
 
 export type TransferApiRoute = keyof typeof TRANSFER_API_ROUTES
@@ -320,6 +323,38 @@ export interface TransferAmbiguity {
 
 /** Which records an export reads. */
 export type TransferExportScopeKind = 'selection' | 'filter' | 'all'
+
+/** The records an export reads: the selected ids, the list's current filter, or every record. */
+export type TransferExportScope =
+  | { kind: 'selection'; ids: string[] }
+  | { kind: 'filter'; filter: unknown }
+  | { kind: 'all' }
+
+/** The fields, records and format the person chose to export. */
+export interface TransferExportChoice {
+  resource: string
+  /** Field ids, in the file's column order. */
+  fieldIds: string[]
+  scope: TransferExportScope
+  format: TransferFormat
+  /** A CSV starts with a byte-order mark, for spreadsheets. */
+  bom: boolean
+}
+
+/** Where a person's remembered choices live: `users/{uid}/transferPrefs/{resourceKey}`, a `TransferPrefs`. */
+export const TRANSFER_PREFS_COLLECTION = 'transferPrefs'
+
+/** The most selected ids one export reads. */
+export const TRANSFER_EXPORT_SELECTION_MAX = 10_000
+
+/** The rows an export asks the resource for per page. */
+export const TRANSFER_EXPORT_PAGE_ROWS = 500
+
+/**
+ * The rows an export reads ahead, before the first byte, to count a
+ * resource that cannot count itself: a file that fits is promised whole.
+ */
+export const TRANSFER_EXPORT_PREFETCH_ROWS = 5_000
 
 /** The export choice a person made last, remembered per person and resource. */
 export interface TransferExportPrefs {
@@ -639,6 +674,18 @@ export interface TransferUndoApplyResponse {
   job: TransferJobRecord
   undo: TransferUndoState
   done: boolean
+}
+
+/**
+ * `export`: the chosen fields of the chosen records, streamed. The answer is
+ * the file (`text/csv`, `application/json` or `application/x-ndjson`) with
+ * the rows it promises in {@link TRANSFER_EXPORT_ROWS_HEADER} whenever the
+ * resource could count them before the first byte, or a
+ * {@link TransferErrorResponse}.
+ */
+export interface TransferExportRequest extends TransferOrgRequest, TransferExportChoice {
+  /** The site, for a host-scoped resource. */
+  hostId?: string | null
 }
 
 /** Why a request was refused. */

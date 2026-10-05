@@ -197,6 +197,13 @@ export interface TransferReadOptions {
   ids?: readonly string[]
   /** The list's own filter, in the plugin's own terms ("the current filter"). */
   filter?: Readonly<Record<string, unknown>>
+  /**
+   * A collaborator scoped to some sites: read only records whose `visibleTo`
+   * holds one of these tokens (`memberScopeTokens`). Absent for a reader who
+   * sees the whole workspace. The export route reads through the Admin SDK,
+   * so this IS the enforcement.
+   */
+  scopeTokens?: readonly string[]
 }
 
 /** One page of an export: rows keyed by field id, and where the next page starts. */
@@ -276,6 +283,13 @@ export interface TransferRecordsHooks {
   matchKeys: readonly MatchKeySpec[]
   /** Other products' header spellings for these fields. */
   aliases?: readonly TransferAliasDictionary[]
+  /**
+   * How many records an export with these options reads, before its first
+   * page, so the file carries its row count and the download can be checked
+   * whole. Without it the route counts by reading ahead, and a file larger
+   * than that is sent without a count.
+   */
+  count?(ctx: TransferResourceContext, options: TransferReadOptions): Promise<number>
   /** One page of an export, holding only `fieldIds`. `cursor` is `null` for the first page. */
   readPage(
     ctx: TransferResourceContext,

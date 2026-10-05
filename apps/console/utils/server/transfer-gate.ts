@@ -47,9 +47,9 @@ import { FieldValue } from 'firebase-admin/firestore'
  *  1. `POST`, a JSON body naming `orgId`, and a Bearer ID token that
  *     verifies, from a verified address (or an impersonation session);
  *  2. the per-member rate limit for the route;
- *  3. the workspace exists, and the lockdown verdict (`status` and `fields`
- *     ask with a read intent, so a read-only lock still shows a job's
- *     progress);
+ *  3. the workspace exists, and the lockdown verdict (`status`, `fields`
+ *     and `export` ask with a read intent, so a read-only lock still shows a
+ *     job's progress and still lets the workspace take its data out);
  *  4. `data.manage` — on the job's site for a site's records (a collaborator
  *     holding it there qualifies), on the workspace otherwise. Staff pass.
  *
@@ -67,7 +67,11 @@ const RATE_LIMITS: Readonly<Record<TransferApiRoute, number>> = {
   apply: 120,
   status: 240,
   undo: 60,
+  export: 20,
 }
+
+/** The routes that only read, which a read-only lock still answers. */
+const READ_ROUTES: ReadonlySet<TransferApiRoute> = new Set<TransferApiRoute>(['status', 'fields', 'export'])
 
 /** A refusal in the shape every transfer route answers. */
 export function transferRefusal(
@@ -81,11 +85,16 @@ export function transferRefusal(
   return Response.json(body, { status, ...(headers ? { headers } : {}) })
 }
 
+/** A workspace member as `resolveOrgMembership` resolves one. */
+type CallerMember = NonNullable<Awaited<ReturnType<typeof resolveOrgMembership>>>['member']
+
 export interface TransferCaller {
   orgId: string
   uid: string
   email: string | null
   staff: boolean
+  /** The caller's membership of the workspace; `null` for staff who hold none. */
+  member: CallerMember | null
   body: Record<string, unknown>
   /** When the request arrived, for its time budget. */
   startedAt: number
@@ -170,13 +179,13 @@ export async function transferGate(
       uid: decoded.uid,
       org: org ?? undefined,
       host: host ?? undefined,
-      intent: route === 'status' || route === 'fields' ? 'read' : 'write',
+      intent: READ_ROUTES.has(route) ? 'read' : 'write',
     })
     if (locked) return locked
     if (!org) return transferRefusal(404, 'notFound', 'No such workspace')
 
+    const membership = await resolveOrgMembership(decoded.uid, orgId)
     if (!staff) {
-      const membership = await resolveOrgMembership(decoded.uid, orgId)
       const allowed = hostId
         ? await memberHasPermissionOnHost(orgId, hostId, membership?.member, 'data.manage')
         : await memberHasOrgPermission(orgId, membership?.member, 'data.manage')
@@ -188,6 +197,7 @@ export async function transferGate(
       uid: decoded.uid,
       email: decoded.email ?? null,
       staff,
+      member: membership?.member ?? null,
       body,
       startedAt,
       driver: `request:${randomUUID()}`,
@@ -214,6 +224,23 @@ export function transferErrorResponse(error: unknown, route: TransferApiRoute): 
   if (unauthenticated) return unauthenticated
   console.error(`[transfer/${route}] failed`, error)
   return transferRefusal(500, 'failed', 'The import step failed. Try again.')
+}
+
+/**
+ * The audit row for an export: what was taken out and how much, never the
+ * content — a copy of the records leaving the platform is worth a row; what
+ * was in it is not ours to log.
+ */
+export async function auditTransferExport(caller: TransferCaller, after: Record<string, unknown>): Promise<void> {
+  await addAdminAudit(caller.deps.firestore, {
+    actorUid: caller.uid,
+    actorEmail: caller.email,
+    action: 'data.transfer.export',
+    target: `orgs/${caller.orgId}/transfer/${String(after['resource'] ?? '')}`,
+    before: null,
+    after,
+    at: FieldValue.serverTimestamp(),
+  })
 }
 
 /** The audit row for a step that decides or changes data: plan, apply and undo. */

@@ -37,6 +37,8 @@ let mockLockdownResponse: Response | null = null
 let mockOrgPermission = true
 let mockHostPermission = true
 let mockRateAllowed = true
+let mockMember: Record<string, unknown> = { role: 'editor' }
+const mockExport = jest.fn()
 const mockVerifyIdToken = jest.fn()
 const mockAudit = jest.fn()
 const mockHostPermissionCall = jest.fn()
@@ -49,6 +51,8 @@ const mockEngine = {
 
 jest.mock('@aglyn/aglyn/server', () => ({
   __esModule: true,
+  ...jest.requireActual('@aglyn/aglyn/app-utils/organizations'),
+  ...jest.requireActual('@aglyn/aglyn/app-utils/scope-tokens'),
   pluginRequestFromWeb: async (request: Request) => ({
     method: request.method,
     body: request.method === 'POST' ? await request.json() : null,
@@ -87,7 +91,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     mockHostPermissionCall(...args)
     return mockHostPermission
   },
-  resolveOrgMembership: async () => ({ member: { role: 'editor' } }),
+  resolveOrgMembership: async () => ({ member: mockMember }),
 }))
 
 jest.mock('@aglyn/tenant-data-admin/server/admin-audit-write', () => ({
@@ -123,13 +127,20 @@ jest.mock('@aglyn/tenant-data-admin/server/transfer-jobs', () => {
   }
 })
 
+jest.mock('@aglyn/tenant-data-admin/server/transfer-export', () => ({
+  __esModule: true,
+  streamTransferExport: (...args: unknown[]) => mockExport(...args),
+}))
+
 jest.mock('firebase-admin/firestore', () => ({
   __esModule: true,
   FieldValue: { serverTimestamp: () => 'now' },
 }))
 
 import { TransferEngineError } from '@aglyn/tenant-data-admin/server/transfer-jobs'
+import { hostScopeToken } from '@aglyn/aglyn/app-utils/scope-tokens'
 import { POST as apply } from '../app/api/transfer/apply/route'
+import { POST as exportRoute } from '../app/api/transfer/export/route'
 import { POST as status } from '../app/api/transfer/status/route'
 import { POST as upload } from '../app/api/transfer/upload/route'
 
@@ -151,6 +162,15 @@ beforeEach(() => {
   mockOrgPermission = true
   mockHostPermission = true
   mockRateAllowed = true
+  mockMember = { role: 'editor' }
+  mockExport.mockReset().mockImplementation(async () => ({
+    stream: new Blob(['Name\r\nAda\r\n']).stream(),
+    rows: 1,
+    fileName: 'bottles-2026-10-05.csv',
+    contentType: 'text/csv',
+    fieldIds: ['name'],
+    label: 'Bottles',
+  }))
   mockVerifyIdToken.mockReset().mockResolvedValue({ uid: 'uid-1', email: 'a@b.test', email_verified: true })
   mockAudit.mockReset().mockResolvedValue(undefined)
   mockHostPermissionCall.mockReset()
@@ -260,3 +280,57 @@ describe('the routes', () => {
     expect(await file.text()).toBe('Name,Outcome\r\nAda,created\r\n')
   })
 })
+
+describe('the export (AGL-3525)', () => {
+  const BODY = { orgId: 'org-1', resource: 'bottles', fieldIds: ['name'], scope: { kind: 'all' }, format: 'csv', bom: false }
+
+  beforeEach(() => {
+    mockMember = { role: 'admin' }
+  })
+
+  it('streams the file with its row count, and audits what left without its content', async () => {
+    const response = await exportRoute(request('export', BODY))
+    expect(response.status).toBe(200)
+    expect(response.headers.get('Content-Type')).toBe('text/csv; charset=utf-8')
+    expect(response.headers.get('X-Aglyn-Export-Rows')).toBe('1')
+    expect(response.headers.get('Content-Disposition')).toBe('attachment; filename="bottles-2026-10-05.csv"')
+    expect(await response.text()).toBe('Name\r\nAda\r\n')
+    expect(mockExport.mock.calls[0]?.[1]).toMatchObject({ orgId: 'org-1', actorUid: 'uid-1', resource: 'bottles', hostId: null })
+    expect(mockExport.mock.calls[0]?.[1]).not.toHaveProperty('scopeTokens')
+    expect(mockAudit.mock.calls[0]?.[1]).toMatchObject({
+      action: 'data.transfer.export',
+      target: 'orgs/org-1/transfer/bottles',
+      after: { resource: 'bottles', fields: 1, scope: 'all', format: 'csv', rows: 1 },
+    })
+  })
+
+  it('sends no count it could not take, and answers an engine refusal with its code', async () => {
+    mockExport.mockImplementationOnce(async () => ({
+      stream: new Blob(['[]']).stream(), rows: null, fileName: 'b.json', contentType: 'application/json', fieldIds: ['id'], label: 'B',
+    }))
+    const uncounted = await exportRoute(request('export', { ...BODY, format: 'json' }))
+    expect(uncounted.headers.get('X-Aglyn-Export-Rows')).toBeNull()
+    mockExport.mockRejectedValueOnce(new TransferEngineError('tooLarge', 413, 'Select fewer.'))
+    const refused = await exportRoute(request('export', { ...BODY, scope: { kind: 'selection', ids: ['a'] } }))
+    expect(refused.status).toBe(413)
+    expect(await refused.json()).toEqual({ error: 'Select fewer.', code: 'tooLarge' })
+  })
+
+  it('reads a scoped collaborator through their own tokens, and only on a site they reach', async () => {
+    mockMember = { role: 'editor', allHosts: false, hostAccess: { 'host-a': 'editor' }, scopeTokens: [hostScopeToken('host-a')] }
+    await exportRoute(request('export', BODY))
+    expect(mockExport.mock.calls[0]?.[1]).toMatchObject({ scopeTokens: [hostScopeToken('host-a')] })
+
+    mockHosts['host-b'] = { orgId: 'org-1' }
+    const elsewhere = await exportRoute(request('export', { ...BODY, hostId: 'host-b' }))
+    expect(elsewhere.status).toBe(404)
+    expect(mockExport).toHaveBeenCalledTimes(1)
+  })
+
+  it('needs data.manage, as the CRM export does', async () => {
+    mockOrgPermission = false
+    expect((await exportRoute(request('export', BODY))).status).toBe(403)
+    expect(mockExport).not.toHaveBeenCalled()
+  })
+})
+

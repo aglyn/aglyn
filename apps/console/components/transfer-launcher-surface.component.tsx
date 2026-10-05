@@ -39,7 +39,9 @@ import {
   useTheme,
 } from '@mui/material'
 import { createElement, useCallback, useMemo, useState } from 'react'
+import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { createHttpTransferClient } from '../utils/transfer-http-client'
+import { saveTransferPrefs } from '../utils/transfer-prefs-store'
 import type { TransferLaunchState } from './transfer-launcher-provider.component'
 
 export interface TransferLauncherSurfaceProps {
@@ -92,9 +94,18 @@ export function TransferLauncherSurface({ state, orgId, getIdToken, onClose }: T
   const narrow = useMediaQuery(theme.breakpoints.down('sm'))
   const hostId = state.launch.hostId ?? null
   const resource = state.launch.resource
+  const firestore = useFirestore()
+  const { data: user } = useUser()
+  const uid = user?.uid ?? null
   const client = useMemo(
-    () => createHttpTransferClient({ orgId, hostId, getIdToken }),
-    [orgId, hostId, getIdToken],
+    () =>
+      createHttpTransferClient({
+        orgId,
+        hostId,
+        getIdToken,
+        ...(uid ? { savePrefs: (key: string, prefs) => saveTransferPrefs(firestore, uid, key, prefs) } : {}),
+      }),
+    [orgId, hostId, getIdToken, firestore, uid],
   )
   const ui = pluginTransferResourceUi(resource)
   const [complete, setCompleteState] = useState<Record<string, boolean>>({})

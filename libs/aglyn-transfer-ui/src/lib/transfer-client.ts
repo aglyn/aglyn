@@ -38,6 +38,7 @@ import type {
   TransferConflict,
   TransferCsvDelimiter,
   TransferDerivationSummary,
+  TransferExportChoice,
   TransferField,
   TransferFormat,
   TransferJob,
@@ -64,7 +65,9 @@ export type {
   TransferDateOrder,
   TransferDerivationCount,
   TransferDerivationSummary,
+  TransferExportChoice,
   TransferExportPrefs,
+  TransferExportScope,
   TransferExportScopeKind,
   TransferLookupChoice,
   TransferLookupReview,
@@ -214,20 +217,6 @@ export interface TransferUndoResponse {
 /*------------------------------------------
  * Export
  *-----------------------------------------*/
-
-export type TransferExportScope =
-  | { kind: 'selection'; ids: string[] }
-  | { kind: 'filter'; filter: unknown }
-  | { kind: 'all' }
-
-/** The fields, records and format the person chose. */
-export interface TransferExportChoice {
-  resource: string
-  fieldIds: string[]
-  scope: TransferExportScope
-  format: TransferFormat
-  bom: boolean
-}
 
 export interface TransferExportResponse {
   fileName: string

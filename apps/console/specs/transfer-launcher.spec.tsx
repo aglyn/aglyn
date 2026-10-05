@@ -58,7 +58,8 @@ jest.mock('../hooks/use-url-names-org', () => ({
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   __esModule: true,
-  useUser: () => ({ data: { getIdToken: async () => 'token-1' } }),
+  useUser: () => ({ data: { uid: 'uid-1', getIdToken: async () => 'token-1' } }),
+  useFirestore: () => ({}),
 }))
 
 jest.mock('@aglyn/aglyn/plugin-manager/plugin-transfer-resources', () => {
