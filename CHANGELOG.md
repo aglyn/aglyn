@@ -39,6 +39,7 @@ content on the marketing site and is written separately.
 
 ### Fixed
 
+- **tenant:** site search navigates with the client router instead of reloading ([AGL-3507](https://linear.app/aglyn/issue/AGL-3507))
 - **seo:** check each page as it publishes, and name keywords past five ([AGL-3501](https://linear.app/aglyn/issue/AGL-3501))
 - **media:** published images size themselves from the composed tree, no re-save ([AGL-3485](https://linear.app/aglyn/issue/AGL-3485))
 - **commerce:** paid video and downloads served off the CDN count toward bandwidth ([AGL-3505](https://linear.app/aglyn/issue/AGL-3505))
