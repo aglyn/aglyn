@@ -101,6 +101,14 @@ and its answer; what it passes to `setValue` is sent to the server with the
 dry run under the step's id in `extras`, where your server half checks it,
 and Next waits for `setComplete(true)`.
 
+The server half reads the answers as `ctx.extras`: in your `plan` hook,
+those sent with this dry run; in `apply` and after, those the plan was made
+with. They are what the person said in the browser, so check every value,
+and never let one say WHO said it — the email plugin's statement of
+permission records its attester from the session that made the dry run, on
+its own ledger, and every write reads it from there. `ctx.headers` holds the
+file's column names, mapped or not.
+
 ```tsx
 registerPluginTransferResourceUi('my-plugin.items', {
   label: 'Items',
@@ -119,6 +127,17 @@ function ConsentStep({ value, setValue, setComplete }: TransferWizardStepProps) 
   )
 }
 ```
+
+## Warn about what only you can see
+
+The core warns about what it can see — a guessed date, a value to be
+replaced, a row repeated. What only your records' rules can see — the email
+plugin's shared mailboxes and column names that read as a bought list — is
+the `screening` warning class: your `plan` hook adds it to the plan's
+warnings with a `detail` on each sample, and the person acknowledges it like
+every other class before Import enables. A sample about the whole file (a
+column's name) has the row `TRANSFER_FILE_SAMPLE_ROW` and is shown without
+one.
 
 ## Lock a rule
 

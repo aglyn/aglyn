@@ -196,6 +196,15 @@ export interface TransferResourceContext {
   actorUid: string | null
   /** The job, once one exists; absent for a catalog read or an export page. */
   jobId?: string
+  /**
+   * The answers of the plugin's own wizard steps, by step id: during the
+   * dry run those sent with it, afterwards those the plan was made with.
+   * What the person said in the browser — a hook checks every value it
+   * reads and enforces what it means; it never trusts one to name who said it.
+   */
+  extras?: Readonly<Record<string, unknown>>
+  /** The uploaded file's column names, once a job holds one. */
+  headers?: readonly string[]
 }
 
 /** Which records an export page reads. */

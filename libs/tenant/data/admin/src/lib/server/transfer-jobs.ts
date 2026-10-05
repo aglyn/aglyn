@@ -451,7 +451,15 @@ export function transferHostIdFor(resource: ResolvedTransferResource, hostId: st
 }
 
 function contextFor(job: TransferJobRecord, actorUid: string | null): TransferResourceContext {
-  return { resource: job.resource, orgId: job.orgId, hostId: job.hostId ?? null, actorUid, jobId: job.id }
+  return {
+    resource: job.resource,
+    orgId: job.orgId,
+    hostId: job.hostId ?? null,
+    actorUid,
+    jobId: job.id,
+    ...(job.extras ? { extras: job.extras } : {}),
+    ...(job.headers ? { headers: job.headers } : {}),
+  }
 }
 
 function moveJob(
@@ -1294,11 +1302,14 @@ export async function planTransferJob(
   if (job.status === 'draft') throw new TransferEngineError('state', 409, 'Analyze the file before planning it.')
   const resource = await resolveResource(deps, job.resource)
   const hooks = transferRecordsHooks(resource)
-  const ctx = contextFor(job, input.actorUid)
+  const choices = input.choices
+  // The plugin steps' answers as sent with this dry run, not the last one's.
+  const ctx: TransferResourceContext = { ...contextFor(job, input.actorUid) }
+  delete ctx.extras
+  if (choices.extras) ctx.extras = choices.extras
   const table = await loadTable(deps, job)
   const catalog = await transferResourceCatalog(resource, ctx)
   const byId = new Map(catalog.fields.map((field) => [field.id, field]))
-  const choices = input.choices
 
   const mapping = usableMapping(choices.mapping)
   const problems = mappingProblems(mapping, catalog.fields)

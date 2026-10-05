@@ -37,6 +37,15 @@ const mockDeclared: ResolvedTransferResourceDeclaration[] = [
   },
   {
     pluginId: 'cellar',
+    key: 'shelves',
+    label: 'Shelf bottles',
+    scope: 'org',
+    kinds: ['records'],
+    formats: ['csv'],
+    instances: true,
+  },
+  {
+    pluginId: 'cellar',
     key: 'wines',
     label: 'Wines',
     scope: 'org',
@@ -58,6 +67,7 @@ jest.mock('@aglyn/aglyn/plugin-manager/first-party-plugins.generated', () => {
 
 import {
   TRANSFER_DRAFT_RETENTION_MS,
+  buildTransferPlan,
   TRANSFER_UNDO_WINDOW_MS,
   buildMatchLookup,
   rankTransferLookupSuggestions,
@@ -1074,5 +1084,72 @@ describe('lookup columns (AGL-3541)', () => {
     expect(transferLookupNewName(wines.get('w4')?.['rack'])).toBe('Cellar door')
     expect(wines.get('w5')).toEqual({ name: 'Sherry', rack: 'rack-north-1' })
     expect(wines.has('w6')).toBe(false)
+  })
+})
+
+describe('what a resource’s hooks are handed (AGL-3529)', () => {
+  /** What the `shelves` resource's hooks were handed. */
+  const seen: Array<Record<string, unknown>> = []
+
+  beforeEach(() => {
+    seen.length = 0
+    registerPluginTransferResource(
+      'shelves',
+      {
+        ...RESOURCE,
+        plan: (ctx, input) => {
+          seen.push({ hook: 'plan', resource: ctx.resource, extras: ctx.extras, headers: ctx.headers })
+          return buildTransferPlan(input)
+        },
+        apply: (ctx, chunk, writer) => {
+          seen.push({ hook: 'apply', resource: ctx.resource, extras: ctx.extras })
+          return (RESOURCE.apply as NonNullable<typeof RESOURCE.apply>)(ctx, chunk, writer)
+        },
+      },
+      { pluginId: 'cellar' },
+    )
+  })
+
+  it('hands them the instance, the file’s columns and the dry run’s step answers', async () => {
+    const { job } = await uploadTransferSource(deps, {
+      orgId: ORG,
+      actorUid: ME,
+      resource: 'shelves:shelf-7',
+      fileName: 'shelf.csv',
+      content: csv(2),
+    })
+    const analysis = await analyzeTransferJob(deps, { orgId: ORG, jobId: job.id, actorUid: ME })
+    await planTransferJob(deps, {
+      orgId: ORG,
+      jobId: job.id,
+      actorUid: ME,
+      choices: { mapping: analysis.match.mapping, policy: {}, extras: { 'cellar-step': { ok: true } } },
+    })
+    await applyAll(job.id)
+    expect(seen).toEqual([
+      { hook: 'plan', resource: 'shelves:shelf-7', extras: { 'cellar-step': { ok: true } }, headers: ['Name', 'Email', 'Color'] },
+      { hook: 'apply', resource: 'shelves:shelf-7', extras: { 'cellar-step': { ok: true } } },
+    ])
+  })
+
+  it('sends a re-planned dry run only the answers sent with it', async () => {
+    const { job } = await uploadTransferSource(deps, {
+      orgId: ORG,
+      actorUid: ME,
+      resource: 'shelves:shelf-7',
+      fileName: 'shelf.csv',
+      content: csv(1),
+    })
+    const analysis = await analyzeTransferJob(deps, { orgId: ORG, jobId: job.id, actorUid: ME })
+    const plan = (extras?: Record<string, unknown>) =>
+      planTransferJob(deps, {
+        orgId: ORG,
+        jobId: job.id,
+        actorUid: ME,
+        choices: { mapping: analysis.match.mapping, policy: {}, ...(extras ? { extras } : {}) },
+      })
+    await plan({ 'cellar-step': { ok: true } })
+    await plan()
+    expect(seen.map((entry) => entry['extras'])).toEqual([{ 'cellar-step': { ok: true } }, undefined])
   })
 })

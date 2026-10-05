@@ -719,37 +719,74 @@ back to you rather than quietly dropped. Up to 100 at a time.
 
 ### Import a list you already have {#import-a-list}
 
-**Import**, on an audience's own page, takes a CSV or a pasted column of addresses.
-Every one of them goes through the checks above — the same ones, not similar ones — so
-nothing an import brings in could not have been added by hand.
+**Import**, at the top of an audience's own page, opens the import wizard on that list.
+Every address goes through the checks above — the same ones, not similar ones — so
+nothing an import brings in could not have been added by hand. On your organization's
+Emails page, choose the site to work the audience as first: the import enrolls as that
+site.
 
-Three steps, and the middle one is the point:
-
-1. **Choose the file.** A CSV with an email column, or one address per line. Columns
-   named `Name`, `Opt-in source` and `Opt-in date` are read when they are there.
-2. **Read what is in it.** How many addresses, how many repeats were collapsed, how many
-   lines are not addresses, and what the consent check says about a sample of them. Two
-   warnings appear here when they apply: addresses at **shared mailboxes** (`sales@`,
-   `info@`) and **column names that suggest a bought or appended list**. Neither refuses
-   anything — they are shown before you state you have permission, because that
-   statement is the part with weight.
-3. **Import.** Large files are added in batches, with a progress bar. You can close the
-   drawer: the import picks up where it stopped when you come back.
+1. **Upload** a CSV, JSON or NDJSON file — or paste the addresses, one per line. The
+   separator and whether the first line is a header are detected and can be changed.
+2. **Columns.** Each column is matched to a field: the **Email**, a **Name**, the
+   **Opt-in source** and **Opt-in date** your file declares, and the contact record's
+   **First name**, **Last name**, **Phone**, **Mobile phone**, **Job title**, **Company**
+   and **Department**. Exports from Mailchimp, Klaviyo and Constant Contact are
+   recognized by their own column names. Ignore any column you do not want.
+3. **Values** and **Matching** show what was read differently from how it was typed, and
+   which rows are new, which are people already on this list, and which repeat an
+   address earlier in the file (a repeat is skipped — the same person twice is one
+   member). A line that is not an address fails its row and is listed, never dropped.
+4. **People already on this list** — somebody already on the list stays on it exactly as
+   they are: the import never re-adds them or rewrites their membership. Choose whether
+   the file may update the contact details of people your workspace already holds;
+   otherwise its contact columns fill in only a contact the import creates.
+5. **Conflicts** — how a contact detail meets the one on record (fill blanks, overwrite,
+   keep), when you chose to update them. A blank cell never empties one.
+6. **Permission** — what the file holds, then the one question with weight. Two warnings
+   appear when they apply: addresses at **shared mailboxes** (`sales@`, `info@`) and
+   **column names that suggest a bought or appended list**. Neither refuses anything.
+   Beside them, what the consent check says about the first 100 new addresses: how many
+   already have an opt-in on record, how many have none, and how many can never be
+   added. Then choose: state that you have these people's permission, or add only the
+   people who already opted in.
+7. **Review** — the dry run: what will be created, what is unchanged, what fails and
+   why. Each kind of warning — the file's screening included — needs its own
+   acknowledgment before **Import** is enabled.
+8. **Import** and **Results.** Large files are added in batches with a progress bar; you
+   can close the wizard and resume where it stopped. Every row's outcome can be
+   downloaded, and for seven days **Undo** takes the people the import added off the
+   list again (a person who has since said no stays, so their refusal is kept).
 
 What is recorded: an address with a stored opt-in keeps that opt-in and its original
 date; an address with none is added on your statement, which is stored against your
-account together with whatever the file declared about where the address came from. It
-is never recorded as though the person opted in themselves. Addresses that unsubscribed,
-bounced or declined are refused, and no file can override that.
+account — the account that made the statement, even if a colleague resumes the import —
+together with whatever the file declared about where the address came from. It is never
+recorded as though the person opted in themselves. Addresses that unsubscribed, bounced,
+complained or declined are refused at the moment they would be added, and no file and no
+statement can override that.
 
-Up to 50,000 addresses per file. A larger list is split and imported in pieces —
-nothing already on the audience is affected either way.
+Contact columns go to the contact record through your workspace's CRM, which keeps its
+own rules; an import never touches the contact record when the file has no contact
+column. Undo leaves contact details as they are.
+
+Up to 50,000 rows per file. A larger list is split and imported in pieces — nothing
+already on the audience is affected either way.
 
 :::note
 Importing does not send a confirmation email, even on a site that
 [requires one](#double-opt-in) for signups. An import is your statement that you already
 have these people's permission.
 :::
+
+### Export a list {#export-a-list}
+
+**Export**, beside Import, downloads the people on this audience as CSV, JSON or NDJSON.
+Choose the fields — the address, name, how and when each person was added, their
+consent as the site you are working as reads it (**Consent**, **Consent basis** — an
+opt-in or your team's statement — **Consent recorded** and **Consent note**), and their
+contact details — or start from a preset; your choice is remembered. Export the whole
+list or, when the members table is filtered, just the people it shows. A file exported
+with the **Re-importable** preset imports straight back in.
 
 ### Removing someone is not an unsubscribe {#remove-from-a-list}
 
@@ -1383,6 +1420,23 @@ Two things it does not do, both on purpose:
 An address that is already on the list is left exactly as it is, with the
 reason and date it already had — so adding one by hand can never overwrite the
 record of a bounce or a spam report.
+
+#### Import and export suppressions {#import-export-suppressions}
+
+**Import**, at the top of the card, opens the import wizard on this site's list —
+for the unsubscribes a former email provider recorded, or a list of people who asked
+by phone. Map the **Email** column and, if you like, a **Note**. Exports from Mailchimp
+and Klaviyo are recognized by their own column names.
+
+An import only ever adds. Each address the list does not hold is added as **Added by
+hand**, with your account and the import recorded on it. An address that is already on
+the list is left exactly as it is — its reason and date are the record of why — and
+nothing an import does, its **Undo** included, removes one. Remove an entry by hand,
+below, when it was recorded by mistake.
+
+**Export** downloads the list — address, reason, date, note, and the site a copied
+entry came from — as CSV, JSON or NDJSON, the whole list or the entries the table's
+filters show.
 
 #### An address Aglyn is blocking too {#platform-suppressions}
 

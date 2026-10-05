@@ -180,7 +180,10 @@ from), the fields a locked rule held back, and its warnings. Warnings are
 typed, counted, and sampled: `derivation`, `ambiguousDate`,
 `unmatchedPicklist`, `newPicklistValue`, `unresolvedLookup`,
 `ambiguousMatch`, `duplicateInFile`, `lockedRule`, `droppedCell`,
-`overwriteNonBlank`, `clearValue`, `planLimit`. Every class but a plain
+`overwriteNonBlank`, `clearValue`, `planLimit`, and `screening` — what a
+resource's own `plan` found that only its rules can see (each sample's
+`detail` says what; a sample about the whole file, such as a column's name,
+has the row `TRANSFER_FILE_SAMPLE_ROW`). Every class but a plain
 `derivation` must be acknowledged; a `derivation` class holding a flagged
 guess must be too. `missingAcknowledgements` and `canApplyTransferPlan` gate
 Apply. Earlier wizard steps (picklists, lookups) pass what they decided as
@@ -280,7 +283,10 @@ the resource answers itself, such as the workspace's members, each with
 its own `lookup`, `suggest` and `matchKeys`), optional `plan`,
 `lockedRules` and `invariants`,
 `apply(ctx, chunk, writer)` through the plugin's own write paths, and
-`revert(ctx, snapshot, decisions)`; a package kind registers `items`,
+`revert(ctx, snapshot, decisions)`. Every hook's `ctx` names the
+organization, the site, the acting member and the job, and — from the job —
+the plugin steps' `extras` (in `plan`, those sent with this dry run;
+afterwards, those the plan was made with) and the file's `headers`. A package kind registers `items`,
 `dependencies`, `remapIds`, `readItems` and `writeItems`. Registration runs
 `transferResourceProblems` and refuses a kind whose hooks are missing. From
 its console registrar it registers the client half with
@@ -296,6 +302,19 @@ under its plugin enablement and release flags.
 
 **AGL-3539, the console client and the launcher.** See
 [Opening the kit](#opening-the-kit) below.
+
+## A plugin's own steps, and what reaches its hooks
+
+A plugin's wizard steps (`extraSteps`) answer in the browser; the answers
+ride to the dry run as `extras` and reach every hook as `ctx.extras`, by step
+id — in `plan`, those sent with that dry run, and from then on those the plan
+was made with. They are what the person said, so a hook checks every value
+and never takes one as WHO said it: the email plugin's `email.list-members`
+(AGL-3529) records the attester of its statement of permission from the
+session that made the dry run, on its own ledger, and every write reads it
+from there. `ctx.headers` is the file's column names, mapped or not — what
+its purchase-tell screen reads. What only a plugin's rules can see is the
+`screening` warning class its `plan` adds.
 
 ## The job engine
 

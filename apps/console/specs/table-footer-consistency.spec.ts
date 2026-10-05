@@ -1074,15 +1074,6 @@ const NOT_A_LIST: Array<[string, string]> = [
       'by `ceilingedWindow`, which discloses when it bit.',
   ],
   [
-    'libs/plugins/email/src/lib/components/list-import-drawer.tsx',
-    'The import drawer’s two tables are BOUNDED READOUTS of one act, not ' +
-      'windows onto a collection. The first shows at most ten of the sampled ' +
-      'addresses the server checked, beside the sample size and the file ' +
-      'total, so its length is a constant; the second is one row per refusal ' +
-      'REASON, and there are six reasons. Neither grows with the size of the ' +
-      'file, and a pager on either would offer to page a fixed list.',
-  ],
-  [
     'libs/plugins/email/src/lib/components/sending-sender-drawer.tsx',
     'A PICKER’s option list, which this file’s own prose puts out of scope: ' +
       'the roster read fills a select of teammates to fill a sender’s three ' +
@@ -1945,7 +1936,10 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     // 69 since Reports counts leads by lead source (AGL-3511), and this one
     // IS a new table: an aggregate by value over the Lead funnel's own
     // capped window, like the other report cards above it.
-    expect(NOT_A_LIST).toHaveLength(69)
+    //
+    // 68 since the email list import moved onto the transfer wizard
+    // (AGL-3529): its drawer, and the two bounded readouts it drew, are gone.
+    expect(NOT_A_LIST).toHaveLength(68)
   })
 })
 

@@ -972,6 +972,45 @@ export const PLUGIN_TRANSFER_RESOURCES_DECLARED: readonly ResolvedTransferResour
       "maxRows": 50000
     },
     "instances": true
+  },
+  {
+    "pluginId": "email",
+    "key": "email.list-members",
+    "label": "List members",
+    "singularLabel": "List member",
+    "scope": "host",
+    "kinds": [
+      "records"
+    ],
+    "formats": [
+      "csv",
+      "json",
+      "ndjson"
+    ],
+    "limits": {
+      "maxRows": 50000
+    },
+    "instances": true,
+    "description": "The people on one email list, with the consent each was added under."
+  },
+  {
+    "pluginId": "email",
+    "key": "email.suppressions",
+    "label": "Suppressions",
+    "singularLabel": "Suppression",
+    "scope": "host",
+    "kinds": [
+      "records"
+    ],
+    "formats": [
+      "csv",
+      "json",
+      "ndjson"
+    ],
+    "limits": {
+      "maxRows": 50000
+    },
+    "description": "The addresses a site's marketing email skips, and why."
   }
 ]
 

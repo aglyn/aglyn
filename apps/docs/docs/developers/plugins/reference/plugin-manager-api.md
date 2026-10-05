@@ -649,6 +649,8 @@ registerPluginTransferResource(
 )
 ```
 
+Every hook is handed `ctx`: `{ resource, orgId, hostId, actorUid, jobId?, extras?, headers? }` — the resource key (naming the instance for one declared with `instances`), the site for a `host` resource, the member moving the data, the job once one exists, the plugin's own wizard steps' answers by step id (in `plan`, those sent with this dry run; afterwards, those the plan was made with — what the browser said, to check and never to trust for who said it), and the uploaded file's column names.
+
 | Hook | Semantics |
 | --- | --- |
 | `fields(ctx)` | The field catalog as `TransferCatalogInput` — standard, the organization's custom fields, derived and system fields, and groups. `transferResourceCatalog` builds it with the core and refuses one `transferFieldProblems` rejects. |
@@ -659,7 +661,7 @@ registerPluginTransferResource(
 | `lookup(ctx, requests)` | The records holding each requested key value: `{ lookup: MatchLookup, records }`, with each found record's current values for the plan's before → after. Undo also asks it for records by id (`TRANSFER_ID_FIELD` with the `aglynId` normalizer) to read what each holds now, so it answers that key whether or not `matchKeys` names it. |
 | `picklists(ctx, picklistIds)` | Optional; the organization's list for each picklist the catalog names (`TransferField.picklistId`), as `{ [picklistId]: { spec, set } }`. Without it a picklist column is imported as typed. |
 | `addPicklistValues(ctx, picklistId, values)` | Optional; adds the values the person chose to add before the import's first write. Called again with the same values on a retry, so an id the list already holds is left as it is. |
-| `plan(ctx, input)` | Optional; the core's `buildTransferPlan` otherwise (`planTransferResourceRows`). |
+| `plan(ctx, input)` | Optional; the core's `buildTransferPlan` otherwise (`planTransferResourceRows`). A plugin's own checks of the file are the `screening` warning class, each sample carrying a `detail` (`TRANSFER_FILE_SAMPLE_ROW` as the row of one about the whole file), acknowledged like every other class. |
 | `lockedRules(ctx)` | Optional `TransferLockedRule[]`, shown locked in the wizard with their reasons. |
 | `invariants` | Optional rules a planned row must keep, each `{ id, label, check(row, before) }` answering why the row breaks it or `null`; `transferInvariantFailures` checks every writing row. |
 | `apply(ctx, chunk, writer)` | Writes one chunk of planned rows through the plugin's OWN write paths, so plan bands, consent rules and activity entries hold. Skips a row `writer.alreadyApplied(row)` answers for, calls `writer.markApplied(result, undo)` the moment each write lands, and stops at a row boundary when `writer.timeLeftMs()` runs short. Answers `{ results, undo }`. |

@@ -97,6 +97,11 @@ export const WARNING_CLASS_WORDS: Readonly<
     title: 'Rows past what your plan allows',
     description: 'These rows fail; the rest are imported.',
   },
+  screening: {
+    title: 'What this import’s own checks found',
+    description:
+      'The feature you are importing into checked the file for signs of trouble. Each item says what it found and what happens to it.',
+  },
 }
 
 export const VERDICT_WORDS: Readonly<Record<TransferRowVerdict, string>> = {

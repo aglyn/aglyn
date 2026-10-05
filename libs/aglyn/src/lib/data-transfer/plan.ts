@@ -82,6 +82,12 @@ export type TransferWarningClass =
   | 'overwriteNonBlank'
   | 'clearValue'
   | 'planLimit'
+  /**
+   * What the owning plugin's own checks found in the file — a column, an
+   * address, a count — named in each sample's `detail`. Raised by a
+   * resource's `plan`, never by the core.
+   */
+  | 'screening'
 
 export const TRANSFER_WARNING_CLASSES: readonly TransferWarningClass[] = [
   'derivation',
@@ -96,6 +102,7 @@ export const TRANSFER_WARNING_CLASSES: readonly TransferWarningClass[] = [
   'overwriteNonBlank',
   'clearValue',
   'planLimit',
+  'screening',
 ]
 
 /**
@@ -160,11 +167,15 @@ export interface PlannedTransferRow {
 
 /** One example of a warning. */
 export interface TransferWarningSample {
+  /** The row's index in the file; {@link TRANSFER_FILE_SAMPLE_ROW} for something about the whole file. */
   row: number
   fieldId?: string
   value?: string
   detail?: string
 }
+
+/** The `row` of a warning sample about the whole file rather than one row (a column's name). */
+export const TRANSFER_FILE_SAMPLE_ROW = -1
 
 /** One class of warning, counted. */
 export interface TransferWarning {

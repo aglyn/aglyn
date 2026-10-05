@@ -81,6 +81,12 @@ jest.mock('@aglyn/aglyn', () => ({
   pluginDocsHelp: () => undefined,
 }))
 
+/** The console shell's launcher; `null` outside the shell. */
+let mockLauncher: { openImport: jest.Mock; openExport: jest.Mock; close: jest.Mock } | null = null
+jest.mock('@aglyn/aglyn/app-utils/transfer-launcher-context', () => ({
+  useTransferLauncher: () => mockLauncher,
+}))
+
 jest.mock('firebase/firestore', () => ({
   collection: (...args: unknown[]) => ({ args, where: undefined }),
   query: (base: any, ...constraints: any[]) => ({
@@ -123,7 +129,12 @@ jest.mock('@aglyn/shared-ui-snackstack', () => ({
 const confirmation = { accepted: true, seen: [] as Array<Record<string, any>> }
 
 jest.mock('@aglyn/shared-ui-jsx', () => ({
-  CardDisplay: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  CardDisplay: ({ children, HeaderProps }: { children: ReactNode; HeaderProps?: { action?: ReactNode } }) => (
+    <div>
+      <div>{HeaderProps?.action}</div>
+      {children}
+    </div>
+  ),
   MdiIcon: () => null,
   useConfirmationContext: () => ({
     confirm: jest.fn((options: Record<string, any>) => {
@@ -199,6 +210,29 @@ beforeEach(() => {
       createdAt: { seconds: DAY - 86_400 },
     },
   ]
+})
+
+describe('importing and exporting the list (AGL-3529)', () => {
+  it('opens the console’s wizard and export dialog on this site’s list', () => {
+    mockLauncher = { openImport: jest.fn(), openExport: jest.fn(), close: jest.fn() }
+    render(<SuppressionsCard hostId="host-1" />)
+    fireEvent.click(screen.getByText('Import'))
+    expect(mockLauncher.openImport).toHaveBeenCalledWith(
+      expect.objectContaining({ resource: 'email.suppressions', scope: 'host', hostId: 'host-1' }),
+    )
+    fireEvent.click(screen.getByText('Export'))
+    expect(mockLauncher.openExport).toHaveBeenCalledWith(
+      expect.objectContaining({ resource: 'email.suppressions', hostId: 'host-1' }),
+    )
+    mockLauncher = null
+  })
+
+  it('offers neither outside the console shell', () => {
+    mockLauncher = null
+    render(<SuppressionsCard hostId="host-1" />)
+    expect(screen.queryByText('Import')).toBeNull()
+    expect(screen.queryByText('Export')).toBeNull()
+  })
 })
 
 describe('SuppressionsCard (AGL-2410)', () => {

@@ -3,8 +3,8 @@
 Status: the core (AGL-3522), the extension point (AGL-3523), the job
 engine (AGL-3524), the UI kit (AGL-3526), the console client with the
 core launcher (AGL-3539), the field-selectable export (AGL-3525), site
-packages (AGL-3533), the jobs' cleanup (AGL-3540) and datasets (AGL-3530) are
-built; everything
+packages (AGL-3533), the jobs' cleanup (AGL-3540), datasets (AGL-3530)
+and email lists and suppressions (AGL-3529) are built; everything
 else in the build plan below
 is open. Linear project P-AGL-140.
 The architecture of the core, and how the rest plugs into it, is in
@@ -61,8 +61,9 @@ matches · **Dry** = dry-run preview · **Undo**
 | CRM exports (five objects) | CSV | Fixed columns; contacts and companies add custom fields; streamed and audited | FS, an Aglyn ID column, JSON, every field |
 | CRM activities, notes, pipelines, views, field definitions, picklists, email templates | — | None | Everything |
 | CRM reports | CSV | Exports the table as shown | FS (minor) |
-| Email list members (import) | CSV or pasted | The most mature: preview → start (consent attestation) → run with a cursor → status; staged and resumable; flags role accounts and purchased-list columns; 50k cap; in-file dedupe; people already on the list unchanged | Map beyond email and opt-in, contact field updates, Undo |
-| Email list members (export), suppressions, topics | — | None | Everything |
+| Email list members | CSV, JSON, NDJSON both ways (since AGL-3529) | On the framework as `email.list-members:<listId>` (one list at a time), opened from the list: Map to the membership, the declared opt-in source and date, and the contact record's fields (written through the contact-capture door); the statement of permission is the plugin's own step, recorded with its attester on the list's import ledger; role accounts, purchased-list columns and a consent sample are a `screening` warning to acknowledge; people already on the list unchanged, their contact details changed only when chosen; 50k rows; in-file repeats skipped; field-selectable export of one list (the table's filter honored); Undo takes new members off again | — |
+| Email suppressions | CSV, JSON, NDJSON both ways (since AGL-3529) | `email.suppressions`: add-only — an address already suppressed is never relabeled, and neither the import nor its Undo removes one; field-selectable export with the card's filter | — |
+| Email topics | — | None: a handful of definitions edited in place, better carried by a package | Package kind (later) |
 | Datasets | CSV/JSON/NDJSON both ways | Since AGL-3530: `data.dataset:<datasetId>` on the framework. FS over every field with the record's ID and times; Map (by name, then the old id headers); options fields as picklists (add to the options); references by ID or name, an unresolved one refusing its row; Match on the ID, the page address and any text or number field; Conflict choices; Dry run held to the model and the record cap; server job; Undo that keeps references whole | — |
 | Products | CSV (a common storefront format) | Requires Handle and Title; a colliding slug gets a suffix (always creates); written from the browser | Match by handle or SKU, updates, Map, FS, server job |
 | Orders (export) | CSV | What the list query matches, up to 5,000 | FS, streaming past 5,000 |
@@ -183,7 +184,7 @@ matches · **Dry** = dry-run preview · **Undo**
 | AGL-3526 | UI kit: export dialog, eight-step wizard, warnings, results and undo | AGL-3522 |
 | AGL-3527 | CRM contacts and companies on the framework | AGL-3524–3526 and the CRM field work |
 | AGL-3528 | CRM leads, deals, tasks, activities and pipelines | AGL-3527 |
-| AGL-3529 | Email lists and suppressions | AGL-3524, AGL-3526 |
+| AGL-3529 | Email lists and suppressions (built) | AGL-3524, AGL-3526 |
 | AGL-3530 | Datasets (built) | AGL-3524–3526 |
 | AGL-3531 | Commerce | AGL-3524–3526 |
 | AGL-3532 | Form submissions, bookings, redirects, events, do-not-contact domains | AGL-3524–3526 |

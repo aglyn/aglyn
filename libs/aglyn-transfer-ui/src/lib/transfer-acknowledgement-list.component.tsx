@@ -27,7 +27,7 @@
  * package import its own.
  */
 
-import type { TransferWarning } from '@aglyn/aglyn/data-transfer'
+import { TRANSFER_FILE_SAMPLE_ROW, type TransferWarning } from '@aglyn/aglyn/data-transfer'
 import {
   Alert,
   AlertTitle,
@@ -140,7 +140,8 @@ export function transferWarningItems(
     required: warning.requiresAcknowledgement,
     samples: warning.samples.map((sample) =>
       [
-        `Row ${rowNumber(sample.row)}`,
+        // A sample about the whole file (a column's name) names no row.
+        sample.row === TRANSFER_FILE_SAMPLE_ROW ? null : `Row ${rowNumber(sample.row)}`,
         sample.fieldId ? fieldLabel(sample.fieldId) : null,
         sample.value ? `"${sample.value}"` : null,
         sample.detail ?? null,

@@ -1222,6 +1222,47 @@
       "apiPrefixes": [
         "email"
       ],
+      "transferResources": [
+        {
+          "$comment": "One list's members (AGL-3529): imported INTO a list and exported FROM one, one list at a time as email.list-members:<listId>, opened from the list's page. Every address goes through the gate a typed one does; the statement of permission is the plugin's own wizard step; 50,000 rows a file is LIST_IMPORT_MAX_ADDRESSES (list-import.ts).",
+          "key": "email.list-members",
+          "label": "List members",
+          "singularLabel": "List member",
+          "scope": "host",
+          "kinds": [
+            "records"
+          ],
+          "formats": [
+            "csv",
+            "json",
+            "ndjson"
+          ],
+          "limits": {
+            "maxRows": 50000
+          },
+          "instances": true,
+          "description": "The people on one email list, with the consent each was added under."
+        },
+        {
+          "$comment": "A site's suppression list (AGL-3529). An import only adds: an address already suppressed is left as it is, and nothing removes one.",
+          "key": "email.suppressions",
+          "label": "Suppressions",
+          "singularLabel": "Suppression",
+          "scope": "host",
+          "kinds": [
+            "records"
+          ],
+          "formats": [
+            "csv",
+            "json",
+            "ndjson"
+          ],
+          "limits": {
+            "maxRows": 50000
+          },
+          "description": "The addresses a site's marketing email skips, and why."
+        }
+      ],
       "catalog": {
         "order": 11,
         "label": "Email",
@@ -1268,7 +1309,8 @@
             "campaignDesignPreview",
             "campaignSenderEditor",
             "campaignTopicOptions",
-            "campaignTopicSelect"
+            "campaignTopicSelect",
+            "transferResources"
           ]
         }
       }
