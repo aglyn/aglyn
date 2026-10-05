@@ -199,8 +199,13 @@ async function handler(request: Request): Promise<Response> {
     // coupon reaches. Returned to the console beside the guardrail's rating
     // and recorded on the audit row; it refuses nothing, because a discount
     // that spends cost to close a deal is staff's call to make.
+    // The org as it bills, for both verdicts below: the subscription and
+    // add-ons live on the billing doc since AGL-1028, and a guardrail that
+    // read the org doc alone priced most orgs at $0 and rated every
+    // discount ok.
+    const billedOrg = { ...orgData, ...billing }
     const fullUseAssessment = orgDiscountFullUse(
-      { ...orgData, ...billing } as never,
+      billedOrg as never,
       { percentOff, amountOffUsd },
       {
         duration: typeof coupon.duration === 'string' ? coupon.duration : null,
@@ -224,7 +229,7 @@ async function handler(request: Request): Promise<Response> {
     // cannot do this: no org has been chosen yet.
     const measuredCogsUsd = await latestMeasuredCogsUsd(orgId)
     const rating = checkDiscountMargin(
-      orgData,
+      billedOrg,
       { percentOff, amountOffUsd },
       { measuredCogsUsd },
     )
