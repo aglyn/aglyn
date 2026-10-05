@@ -279,7 +279,13 @@ export function outreachAttestationsFrom(
 export interface OutreachEnrollmentDraft {
   id: string
   sequence: Pick<OutreachSequence, 'id' | 'hostId' | 'mailboxId' | 'steps' | 'settings' | 'campaignIds'>
+  /** The mailbox the enrollment sends from, whose calendar its steps are scheduled on. */
   mailbox: ScheduleMailbox
+  /**
+   * That mailbox's id when the sequence rotates (AGL-3489): one of its
+   * mailboxes, `engine/mailbox-rotation`'s pick. The sequence's own when absent.
+   */
+  mailboxId?: string | null
   /** The record the person is (AGL-3234); a contact when absent. */
   target?: OutreachEnrollmentTarget
   /** The contact's id; `''` for a lead. */
@@ -328,7 +334,7 @@ export function buildOutreachEnrollment(draft: OutreachEnrollmentDraft): Outreac
     contactName: String(draft.contactName ?? '').replace(/\s+/g, ' ').trim().slice(0, 200),
     email: String(draft.email ?? '').trim().toLowerCase(),
     hostId: draft.sequence.hostId,
-    mailboxId: draft.sequence.mailboxId,
+    mailboxId: draft.mailboxId || draft.sequence.mailboxId,
     stepIndex: start,
     nextDueAtMs: planOutreachFirstDue({
       sequence: draft.sequence,

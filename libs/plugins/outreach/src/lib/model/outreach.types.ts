@@ -714,6 +714,13 @@ export interface OutreachSequence extends OutreachTimestamps {
    * mailbox's own screens select sequences by it.
    */
   mailboxId: string
+  /**
+   * More mailboxes the sequence sends from in rotation (AGL-3489), after
+   * `mailboxId`: each person enrolled is given one, and all of their steps
+   * go from it (`engine/mailbox-rotation`). Absent when it sends from its
+   * own alone.
+   */
+  mailboxIds?: string[]
   steps: OutreachSequenceStep[]
   settings: OutreachSequenceSettings
   status: OutreachSequenceStatus

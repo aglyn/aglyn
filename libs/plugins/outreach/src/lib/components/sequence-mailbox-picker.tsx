@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { Alert, MenuItem, Stack, TextField, Typography } from '@mui/material'
+import { Alert, Checkbox, ListItemText, MenuItem, Stack, TextField, Typography } from '@mui/material'
 import { useEffect, useState } from 'react'
 import { OUTREACH_MAILBOX_STATUS_LABELS } from '../mailboxes/mailbox-settings'
 import type { OutreachMailbox } from '../model/outreach.types'
@@ -69,20 +69,12 @@ export function outreachOfferedMailboxes(
 }
 
 /**
- * The mailbox a sequence sends from (AGL-2980), chosen from the Mailboxes
- * section's own listener and route (AGL-2978).
- *
- * Whether the member may choose a colleague's mailbox is the mailbox
- * routes' answer (`availability().canManageAll`); until it arrives, or when
- * it cannot be had, the member is offered their own, which is always
- * allowed. A chosen mailbox that is paused or waiting to be reconnected can
- * hold a draft, and the field says what activating will need.
+ * Whether the member may choose a colleague's mailbox: the mailbox routes'
+ * `availability().canManageAll`, false until it arrives or when it cannot be had.
  */
-export function OutreachSequenceMailboxPicker(props: OutreachSequenceMailboxPickerProps) {
-  const { mailboxes, uid, value } = props
-  const api = useOutreachMailboxApi(props.orgId)
+function useCanManageAllMailboxes(orgId: string): boolean {
+  const api = useOutreachMailboxApi(orgId)
   const [canManageAll, setCanManageAll] = useState(false)
-
   useEffect(() => {
     let current = true
     api
@@ -95,6 +87,22 @@ export function OutreachSequenceMailboxPicker(props: OutreachSequenceMailboxPick
       current = false
     }
   }, [api])
+  return canManageAll
+}
+
+/**
+ * The mailbox a sequence sends from (AGL-2980), chosen from the Mailboxes
+ * section's own listener and route (AGL-2978).
+ *
+ * Whether the member may choose a colleague's mailbox is the mailbox
+ * routes' answer (`availability().canManageAll`); until it arrives, or when
+ * it cannot be had, the member is offered their own, which is always
+ * allowed. A chosen mailbox that is paused or waiting to be reconnected can
+ * hold a draft, and the field says what activating will need.
+ */
+export function OutreachSequenceMailboxPicker(props: OutreachSequenceMailboxPickerProps) {
+  const { mailboxes, uid, value } = props
+  const canManageAll = useCanManageAllMailboxes(props.orgId)
 
   if (mailboxes.status === 'loading') {
     return <TextField label="Mailbox" value="" disabled helperText="Loading mailboxes…" fullWidth />
@@ -155,5 +163,77 @@ export function OutreachSequenceMailboxPicker(props: OutreachSequenceMailboxPick
   )
 }
 OutreachSequenceMailboxPicker.displayName = 'OutreachSequenceMailboxPicker'
+
+export interface OutreachSequenceRotationPickerProps {
+  orgId: string
+  uid: string | null
+  mailboxes: OutreachMailboxesResult
+  /** The sequence's own mailbox, which is never offered here. */
+  mailboxId: string
+  value: readonly string[]
+  onChange(mailboxIds: string[]): void
+  error?: string
+  disabled?: boolean
+}
+
+/**
+ * The other mailboxes a sequence sends from in rotation (AGL-3489): each
+ * person enrolled is given one of them or the sequence's own, and all of
+ * their emails go from it. Offered once the sequence has a mailbox, from
+ * the same mailboxes the member may choose for it.
+ */
+export function OutreachSequenceRotationPicker(props: OutreachSequenceRotationPickerProps) {
+  const { mailboxes, uid, mailboxId } = props
+  const canManageAll = useCanManageAllMailboxes(props.orgId)
+  if (mailboxes.status !== 'ready' || !mailboxId) return null
+  const chosen = props.value.filter((id) => id !== mailboxId)
+  const offered = mailboxes.mailboxes.filter(
+    (mailbox) =>
+      mailbox.id !== mailboxId &&
+      (chosen.includes(mailbox.id) ||
+        (mailbox.status !== 'disconnected' &&
+          (canManageAll || (uid !== null && mailbox.connectedByUid === uid)))),
+  )
+  if (!offered.length && !chosen.length) return null
+  const labelOf = (id: string) => {
+    const mailbox = mailboxes.mailboxes.find((entry) => entry.id === id)
+    return mailbox ? mailbox.sendAs || mailbox.email : 'A mailbox no longer connected'
+  }
+  return (
+    <TextField
+      select
+      label="Also send from"
+      value={chosen}
+      onChange={(event) => {
+        const next = event.target.value as unknown
+        props.onChange((Array.isArray(next) ? next : String(next).split(',')).filter(Boolean))
+      }}
+      disabled={props.disabled}
+      error={Boolean(props.error)}
+      helperText={
+        props.error ??
+        'Each person enrolled is given one of these mailboxes or the one above, whichever has the fewest people waiting, and all of their emails go from it.'
+      }
+      slotProps={{
+        select: {
+          multiple: true,
+          displayEmpty: true,
+          renderValue: (selected) =>
+            (selected as string[]).length ? (selected as string[]).map(labelOf).join(', ') : 'No other mailboxes',
+        },
+        inputLabel: { shrink: true },
+      }}
+      fullWidth
+    >
+      {offered.map((mailbox) => (
+        <MenuItem key={mailbox.id} value={mailbox.id}>
+          <Checkbox size="small" checked={chosen.includes(mailbox.id)} />
+          <ListItemText primary={outreachMailboxOptionLabel(mailbox)} />
+        </MenuItem>
+      ))}
+    </TextField>
+  )
+}
+OutreachSequenceRotationPicker.displayName = 'OutreachSequenceRotationPicker'
 
 export default OutreachSequenceMailboxPicker

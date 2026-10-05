@@ -70,6 +70,7 @@ export function outreachSequenceDependencies(content: OutreachSequencePackageCon
   }
   add(TRANSFER_SITE_KIND, content.hostId)
   add(OUTREACH_MAILBOX_REFERENCE_KIND, content.mailboxId)
+  for (const mailboxId of content.mailboxIds ?? []) add(OUTREACH_MAILBOX_REFERENCE_KIND, mailboxId)
   for (const campaignId of content.campaignIds ?? []) add(OUTREACH_CAMPAIGN_REFERENCE_KIND, campaignId)
   for (const step of content.steps ?? []) {
     if (step.kind === 'email') add(OUTREACH_TEMPLATE_REFERENCE_KIND, step.templateId)
@@ -86,6 +87,13 @@ export function remapOutreachSequenceIds(
     ...content,
     hostId: remapPackageReference(idMap, TRANSFER_SITE_KIND, content.hostId) ?? '',
     mailboxId: remapPackageReference(idMap, OUTREACH_MAILBOX_REFERENCE_KIND, content.mailboxId) ?? '',
+    ...(content.mailboxIds?.length
+      ? {
+          mailboxIds: content.mailboxIds
+            .map((id) => remapPackageReference(idMap, OUTREACH_MAILBOX_REFERENCE_KIND, id))
+            .filter((id): id is string => Boolean(id)),
+        }
+      : {}),
     campaignIds: (content.campaignIds ?? [])
       .map((id) => remapPackageReference(idMap, OUTREACH_CAMPAIGN_REFERENCE_KIND, id))
       .filter((id): id is string => Boolean(id)),

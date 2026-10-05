@@ -19,6 +19,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { OutreachMailbox } from '../model/outreach.types'
 import {
   OutreachSequenceMailboxPicker,
+  OutreachSequenceRotationPicker,
   outreachMailboxOptionLabel,
   outreachOfferedMailboxes,
   type OutreachSequenceMailboxPickerProps,
@@ -193,5 +194,48 @@ describe('the mailbox picker: a chosen mailbox that cannot send (AGL-2980)', () 
     await waitFor(() => expect(mockAvailability).toHaveBeenCalled())
     expect(screen.getByText('Only the member who connected this mailbox can send from it.')).toBeTruthy()
     expect(screen.queryByText(/sending hours and timezone/)).toBeNull()
+  })
+})
+
+describe('the mailboxes a sequence also sends from (AGL-3489)', () => {
+  beforeEach(() => mockAvailability.mockResolvedValue({ configured: true, canManageAll: false }))
+
+  const COLD = mailbox({ id: 'mbx-cold', email: 'avery@getexample.com', sendAs: 'avery@getexample.com' })
+
+  it('offers the member’s other sending mailboxes, never the sequence’s own, and hands back the ones ticked', async () => {
+    const onChange = jest.fn()
+    render(
+      <OutreachSequenceRotationPicker
+        orgId="org-1"
+        uid="uid-rep"
+        mailboxes={ready([MINE, COLD, MINE_PAUSED, MINE_GONE, COLLEAGUE])}
+        mailboxId={MINE.id}
+        value={[]}
+        onChange={onChange}
+      />,
+    )
+    expect(screen.getByText('No other mailboxes')).toBeTruthy()
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Also send from' }))
+    const options = screen.getAllByRole('option').map((option) => option.textContent)
+    expect(options).toEqual([
+      outreachMailboxOptionLabel(COLD),
+      outreachMailboxOptionLabel(MINE_PAUSED),
+    ])
+    fireEvent.click(screen.getByRole('option', { name: outreachMailboxOptionLabel(COLD) }))
+    await waitFor(() => expect(onChange).toHaveBeenCalledWith(['mbx-cold']))
+  })
+
+  it('shows nothing until the sequence has a mailbox', () => {
+    const { container } = render(
+      <OutreachSequenceRotationPicker
+        orgId="org-1"
+        uid="uid-rep"
+        mailboxes={ready([MINE, COLD])}
+        mailboxId=""
+        value={[]}
+        onChange={jest.fn()}
+      />,
+    )
+    expect(container.textContent).toBe('')
   })
 })

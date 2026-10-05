@@ -402,6 +402,17 @@ every mailbox in the organization. A disconnected mailbox is never offered.
 When exactly one of your own mailboxes is active, a new sequence starts on it.
 With none, [connect one](#connect-a-mailbox) first.
 
+**Also send from** adds more mailboxes the sequence sends from in rotation —
+several inboxes set up for outreach, for example, each sending its own daily
+cap. Each person you enroll is given one of them, or the sequence's own
+mailbox: whichever is active and has the fewest people waiting on it, across
+every sequence. Every email that person gets comes from that one mailbox, so
+follow-ups stay in the same conversation, and their replies and bounces are
+read there. A mailbox that is paused or needs reconnecting is passed over for
+new people; the ones already on it wait for it as usual. You can add or
+remove mailboxes here at any time, even after people are enrolled — it only
+changes who sends to the people you enroll next.
+
 A sequence holds up to **eight steps**, of which up to **four** are emails:
 
 - **Email** — a subject and a body, or a CRM

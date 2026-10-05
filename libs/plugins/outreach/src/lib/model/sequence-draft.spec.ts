@@ -35,6 +35,15 @@ import {
  */
 
 describe('readOutreachSequenceDraft (AGL-2980)', () => {
+  it('reads the mailboxes a sequence rotates through without its own, and leaves the field off for none (AGL-3489)', () => {
+    expect(readOutreachSequenceDraft({ mailboxId: 'a', mailboxIds: ['b', 'a', 7, 'c', 'b'] }).mailboxIds).toEqual([
+      'b',
+      'c',
+    ])
+    expect(readOutreachSequenceDraft({ mailboxId: 'a', mailboxIds: ['a'] })).not.toHaveProperty('mailboxIds')
+    expect(readOutreachSequenceDraft({ mailboxId: 'a' })).not.toHaveProperty('mailboxIds')
+  })
+
   it('keeps what the model names, coerced, and leaves everything else behind', () => {
     const draft = readOutreachSequenceDraft({
       name: '  Second   locations ',
