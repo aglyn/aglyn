@@ -23,7 +23,7 @@ import type { OutreachMailboxDisconnectResponse } from './mailbox-api'
 import {
   countOtherCredentialsForAccount,
   openMailboxRefreshToken,
-  type OutreachGoogleMailboxCredentials,
+  type OutreachStoredMailboxCredentials,
 } from './mailbox-credentials'
 import type { OutreachGoogleConfigResult } from './outreach-config'
 
@@ -37,15 +37,20 @@ import type { OutreachGoogleConfigResult } from './outreach-config'
  * revocation ends the whole grant this client holds for the account, and
  * revoking it would silently break that other mailbox.
  *
+ * A Microsoft grant (AGL-3489) has no such endpoint: Microsoft offers no
+ * way for an app to revoke one refresh token, so the outcome is
+ * `unsupported`, and deleting the stored grant is what ends it here.
+ *
  * Never throws. A grant that cannot be revoked is still deleted by whoever
  * called this; the outcome says which happened.
  */
 
 /**
- * What became of a grant at Google: `revoked`, `already-invalid`,
+ * What became of a grant at the provider: `revoked`, `already-invalid`,
  * `kept-for-other-mailbox` while another credential still uses the account,
- * or `failed` when Google could not be told — the token would not open, the
- * deployment is not configured, or Google did not answer.
+ * `unsupported` for a provider with no revocation, or `failed` when Google
+ * could not be told — the token would not open, the deployment is not
+ * configured, or Google did not answer.
  */
 export type OutreachGrantRevocation = OutreachMailboxDisconnectResponse['revocation']
 
@@ -71,10 +76,11 @@ export interface RevokeMailboxGrantOptions {
 /** Revokes one stored grant at Google, unless it is still shared. Never throws. */
 export async function revokeMailboxGrant(
   firestore: FirebaseFirestore.Firestore,
-  credential: OutreachGoogleMailboxCredentials,
+  credential: OutreachStoredMailboxCredentials,
   deps: OutreachRevokeDeps,
   options: RevokeMailboxGrantOptions = {},
 ): Promise<OutreachGrantRevocation> {
+  if (credential.provider === 'microsoft') return 'unsupported'
   try {
     const others = await countOtherCredentialsForAccount(firestore, {
       providerAccountId: credential.providerAccountId,

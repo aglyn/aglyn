@@ -17,6 +17,7 @@
 
 import type { GmailApiMessage, GmailApiMessagePart } from '../../engine/thread-message'
 import type { GmailClient, GmailMessageMetadata } from '../../transport/gmail-client'
+import { bareMessageId, gmailSearchQuery, type OutreachMailSearch } from '../../transport/mail-client'
 
 /**
  * A MAILBOX IN MEMORY, for the runtime's specs (AGL-2981).
@@ -100,6 +101,7 @@ export interface FakeGmailOptions {
 }
 
 export class FakeGmail implements GmailClient {
+  readonly provider = 'google' as const
   readonly messages = new Map<string, Stored>()
   readonly sent: Array<{ raw: string; threadId: string | null; headers: Array<{ name: string; value: string }>; body: string }> = []
   readonly calls: string[] = []
@@ -277,6 +279,16 @@ export class FakeGmail implements GmailClient {
       .slice(0, options.maxResults ?? 100)
       .map((stored) => ({ id: stored.message.id, threadId: stored.message.threadId ?? '' }))
     return { messages: found, nextPageToken: null, resultSizeEstimate: found.length }
+  }
+
+  async searchMessages(search: OutreachMailSearch, page?: { maxResults?: number }) {
+    const list = await this.listMessages({ q: gmailSearchQuery(search), maxResults: page?.maxResults })
+    return { messages: list.messages, nextPageToken: list.nextPageToken }
+  }
+
+  async findMessageByMessageId(messageId: string) {
+    const list = await this.listMessages({ q: `rfc822msgid:${bareMessageId(messageId)}`, maxResults: 1 })
+    return list.messages[0] ?? null
   }
 
   async revoke(): Promise<'revoked'> {

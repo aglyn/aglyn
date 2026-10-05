@@ -29,6 +29,8 @@ import {
   GOOGLE_OAUTH_ENDPOINTS,
 } from '../transport/google-oauth'
 import { GMAIL_API_BASE } from '../transport/gmail-client'
+import { GRAPH_API_BASE } from '../transport/graph-client'
+import { microsoftOAuthEndpoints } from '../transport/microsoft-oauth'
 import { OUTREACH_MAIL_SERVICE_UNAVAILABLE_MESSAGE } from '../transport/gmail-errors'
 import { parseConnectReturnFragment } from './mailbox-api'
 import { refreshTokenSealContext } from './mailbox-credentials'
@@ -192,12 +194,72 @@ let consentNonce = ''
 const idTokenFor = (claims: Record<string, unknown>) =>
   ['h', Buffer.from(JSON.stringify(claims)).toString('base64url'), 's'].join('.')
 
+// ── Fake Microsoft (AGL-3489) ───────────────────────────────────────────────
+
+const MS_CLIENT_ID = '00000000-1111-2222-3333-444444444444'
+const MS_TENANT_ID = '9f8e7d6c-5b4a-4321-8765-0123456789ab'
+const MS_OID = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'
+const MS_REFRESH_TOKEN = 'ms-refresh-token-for-the-rep'
+const MS_TOKEN_URL = microsoftOAuthEndpoints('common').token
+const MS_GRANTED = 'https://graph.microsoft.com/Mail.ReadWrite https://graph.microsoft.com/Mail.Send https://graph.microsoft.com/User.Read openid profile email'
+
+interface MicrosoftScript {
+  tokenStatus: number
+  tokenBody: (form: URLSearchParams) => unknown
+  me: { id: string; mail: string | null; userPrincipalName: string; displayName: string }
+  draft: { id: string; conversationId: string; internetMessageId: string }
+  sendStatus: number
+}
+
+let microsoft: MicrosoftScript
+let microsoftConfigured: boolean
+
+const microsoftExchange = (overrides: Record<string, unknown> = {}, claims: Record<string, unknown> = {}) =>
+  (form: URLSearchParams) =>
+    form.get('grant_type') === 'refresh_token'
+      ? { access_token: 'ms-access-refreshed', expires_in: 3600, refresh_token: MS_REFRESH_TOKEN, scope: MS_GRANTED }
+      : {
+          access_token: 'ms-access-1',
+          expires_in: 3599,
+          refresh_token: MS_REFRESH_TOKEN,
+          scope: MS_GRANTED,
+          id_token: idTokenFor({
+            iss: `https://login.microsoftonline.com/${MS_TENANT_ID}/v2.0`,
+            aud: MS_CLIENT_ID,
+            tid: MS_TENANT_ID,
+            oid: MS_OID,
+            preferred_username: 'avery@getacme.example',
+            nonce: consentNonce,
+            exp: Math.floor(NOW / 1000) + 3600,
+            ...claims,
+          }),
+          ...overrides,
+        }
+
+function microsoftAnswer(url: string, init: RequestInit | undefined, json: (status: number, payload: unknown) => Response) {
+  const method = init?.method ?? 'GET'
+  if (url === MS_TOKEN_URL) return json(microsoft.tokenStatus, microsoft.tokenBody(new URLSearchParams(String(init?.body ?? ''))))
+  if (url.startsWith(`${GRAPH_API_BASE}/me?`)) return json(200, microsoft.me)
+  if (url === `${GRAPH_API_BASE}/me/messages` && method === 'POST') return json(201, microsoft.draft)
+  if (url === `${GRAPH_API_BASE}/me/messages/${microsoft.draft.id}/send`) {
+    return microsoft.sendStatus === 202
+      ? new Response(null, { status: 202 })
+      : json(microsoft.sendStatus, { error: { code: 'ErrorAccessDenied', message: 'Access is denied.' } })
+  }
+  if (url === `${GRAPH_API_BASE}/me/messages/${microsoft.draft.id}` && method === 'DELETE') {
+    return new Response(null, { status: 204 })
+  }
+  return null
+}
+
 const fakeFetch = (async (input: string | URL, init?: RequestInit) => {
   const url = String(input)
   const body = typeof init?.body === 'string' ? init.body : null
   googleCalls.push({ url, body })
   const json = (status: number, payload: unknown) =>
     new Response(JSON.stringify(payload), { status, headers: { 'content-type': 'application/json' } })
+  const fromMicrosoft = microsoftAnswer(url, init, json)
+  if (fromMicrosoft) return fromMicrosoft
   if (url === GOOGLE_OAUTH_ENDPOINTS.token) {
     return json(google.tokenStatus, google.tokenBody(new URLSearchParams(body ?? '')))
   }
@@ -296,6 +358,13 @@ function deps(): OutreachMailboxRouteDeps {
       configured
         ? { configured: true, config: { clientId: CLIENT_ID, clientSecret: 'client-secret', keyring: KEYRING } }
         : { configured: false, missing: ['OUTREACH_TOKEN_KEY'] },
+    readMicrosoftConfig: () =>
+      microsoftConfigured
+        ? {
+            configured: true,
+            config: { clientId: MS_CLIENT_ID, clientSecret: 'ms-client-secret', tenant: 'common', keyring: KEYRING },
+          }
+        : { configured: false, missing: ['MICROSOFT_OUTREACH_CLIENT_ID'] },
     stateSigningConfigured: () => true,
     redirectUri: () => 'https://app.example.com/api/outreach/mailboxes/oauth/callback',
     now: () => clock,
@@ -382,6 +451,14 @@ beforeEach(() => {
   docs.set(`orgs/${OTHER_ORG}`, { slug: 'other', name: 'Other' })
   clock = NOW
   configured = true
+  microsoftConfigured = true
+  microsoft = {
+    tokenStatus: 200,
+    tokenBody: microsoftExchange(),
+    me: { id: MS_OID, mail: 'Avery@GetAcme.example', userPrincipalName: 'avery@getacme.example', displayName: 'Avery Rep' },
+    draft: { id: 'ms-msg-1', conversationId: 'ms-conv-1', internetMessageId: '<draft@getacme.example>' },
+    sendStatus: 202,
+  }
   rateAllowed = true
   activity = []
   aliasCalls = []
@@ -432,18 +509,25 @@ describe('the member gate every authenticated mailbox route climbs (AGL-2978)', 
   it('answers whether the deployment is configured and whether the viewer manages every mailbox', async () => {
     expect((await run('availability', get(`outreach/mailboxes/availability?orgId=${ORG}`))).body).toEqual({
       configured: true,
+      providers: { google: true, microsoft: true },
       canManageAll: false,
     })
     expect((await run('availability', get(`outreach/mailboxes/availability?orgId=${ORG}`, 'token-admin'))).body).toEqual({
       configured: true,
+      providers: { google: true, microsoft: true },
       canManageAll: true,
     })
     configured = false
-    // Not configured names the gate, with the variables the Google gate wants.
+    microsoftConfigured = false
+    // Not configured names each gate, with the variables it wants.
     expect((await run('availability', get(`outreach/mailboxes/availability?orgId=${ORG}`))).body).toEqual({
       configured: false,
+      providers: { google: false, microsoft: false },
       canManageAll: false,
-      missing: [{ gate: 'google', missing: ['OUTREACH_TOKEN_KEY'] }],
+      missing: [
+        { gate: 'google', missing: ['OUTREACH_TOKEN_KEY'] },
+        { gate: 'microsoft', missing: ['MICROSOFT_OUTREACH_CLIENT_ID'] },
+      ],
     })
     const refused = await run('connect', post('outreach/mailboxes/connect', { orgId: ORG }))
     expect(refused.status).toBe(503)
@@ -1005,5 +1089,158 @@ describe('sender readiness (AGL-3328)', () => {
     ).toBe(403)
     expect((await run('readiness', post('outreach/mailboxes/readiness', { orgId: ORG, mailboxId: 'gone' }))).status).toBe(404)
     expect(readinessCalls).toEqual([])
+  })
+})
+
+// ── Microsoft 365 (AGL-3489) ────────────────────────────────────────────────
+
+/** `connect` with Microsoft → its consent screen → the callback → the page. */
+async function consentMicrosoft(token = 'token-rep') {
+  const connected = await run('connect', post('outreach/mailboxes/connect', { orgId: ORG, provider: 'microsoft' }, token))
+  expect(connected.status).toBe(200)
+  const url = new URL(connected.body.url)
+  consentNonce = url.searchParams.get('nonce') ?? ''
+  const state = url.searchParams.get('state') ?? ''
+  const back = await run('oauthCallback', get(`outreach/mailboxes/oauth/callback?code=ms-code-1&state=${encodeURIComponent(state)}`, null))
+  expect(back.status).toBe(303)
+  const location = back.headers.get('location') ?? ''
+  const fragment = parseConnectReturnFragment(location.slice(location.indexOf('#')))
+  if (!fragment || fragment.kind !== 'code') throw new Error(`no code in ${location}`)
+  return { state: fragment.state, code: fragment.code, url }
+}
+
+async function connectMicrosoftMailbox(token = 'token-rep') {
+  const { code, state } = await consentMicrosoft(token)
+  const done = await complete({ code, state }, token, { timezone: 'America/Chicago' })
+  expect(done.status).toBe(200)
+  return done.body.mailbox as { id: string } & Record<string, any>
+}
+
+describe('a Microsoft 365 mailbox (AGL-3489)', () => {
+  it('asks Microsoft for Mail.Send, Mail.ReadWrite and offline access, with PKCE, for a state naming the provider', async () => {
+    const { url } = await consentMicrosoft()
+    expect(`${url.origin}${url.pathname}`).toBe('https://login.microsoftonline.com/common/oauth2/v2.0/authorize')
+    expect(url.searchParams.get('client_id')).toBe(MS_CLIENT_ID)
+    expect(url.searchParams.get('scope')?.split(' ')).toEqual(
+      expect.arrayContaining([
+        'offline_access',
+        'https://graph.microsoft.com/Mail.Send',
+        'https://graph.microsoft.com/Mail.ReadWrite',
+      ]),
+    )
+    expect(url.searchParams.get('code_challenge_method')).toBe('S256')
+    expect(url.searchParams.get('redirect_uri')).toBe('https://app.example.com/api/outreach/mailboxes/oauth/callback')
+  })
+
+  it('connects the mailbox Graph names, sealing the grant, without spending a refresh on the connect', async () => {
+    const mailbox = await connectMicrosoftMailbox()
+    expect(mailbox).toMatchObject({
+      provider: 'microsoft',
+      email: 'avery@getacme.example',
+      sendAs: 'avery@getacme.example',
+      sendAsOptions: [{ email: 'avery@getacme.example', displayName: 'Avery Rep', isPrimary: true, isDefault: true }],
+      status: 'connected',
+      timezone: 'America/Chicago',
+    })
+    expect(mailbox.id).toMatch(/^ms_/)
+    const credential = docs.get(credentialPath(mailbox.id)) as Record<string, any>
+    expect(credential).toMatchObject({
+      provider: 'microsoft',
+      providerAccountId: `${MS_TENANT_ID}:${MS_OID}`,
+      email: 'avery@getacme.example',
+    })
+    expect(JSON.stringify(credential)).not.toContain(MS_REFRESH_TOKEN)
+    expect(
+      openSecret(credential.sealedRefreshToken, KEYRING, { context: refreshTokenSealContext(mailbox.id) }).plaintext,
+    ).toBe(MS_REFRESH_TOKEN)
+    const exchange = googleCalls.filter((call) => call.url === MS_TOKEN_URL)
+    expect(exchange).toHaveLength(1)
+    expect(new URLSearchParams(exchange[0].body ?? '').get('grant_type')).toBe('authorization_code')
+    expect(new URLSearchParams(exchange[0].body ?? '').get('code_verifier')).toMatch(/^[A-Za-z0-9_-]{43}$/)
+  })
+
+  it('refuses a grant missing Mail.Send, an ID token for another nonce, and a Graph account that is not the sign-in', async () => {
+    microsoft.tokenBody = microsoftExchange({ scope: 'https://graph.microsoft.com/Mail.ReadWrite openid' })
+    let attempt = await consentMicrosoft()
+    expect((await complete(attempt)).body.reason).toBe('scopes-missing')
+
+    microsoft.tokenBody = microsoftExchange({}, { nonce: 'someone-elses' })
+    attempt = await consentMicrosoft()
+    expect((await complete(attempt)).body.reason).toBe('identity-unverified')
+
+    microsoft.tokenBody = microsoftExchange()
+    microsoft.me = { ...microsoft.me, id: 'ffffffff-0000-0000-0000-000000000000' }
+    attempt = await consentMicrosoft()
+    expect((await complete(attempt)).body.reason).toBe('account-mismatch')
+    expect([...docs.keys()].some((key) => key.startsWith('outreachMailboxCredentials/'))).toBe(false)
+  })
+
+  it('refuses a Microsoft connect on a deployment with no app registration, and still connects Google', async () => {
+    microsoftConfigured = false
+    const refused = await run('connect', post('outreach/mailboxes/connect', { orgId: ORG, provider: 'microsoft' }))
+    expect(refused.status).toBe(503)
+    expect(refused.body).toEqual({
+      error: 'Connecting a Microsoft 365 mailbox is not configured on this deployment.',
+      reason: 'not-configured',
+    })
+    expect((await run('connect', post('outreach/mailboxes/connect', { orgId: ORG, provider: 'yahoo' }))).status).toBe(400)
+    expect((await connectMailbox()).provider).toBe('google')
+  })
+
+  it('carries a refusal on Microsoft’s consent screen back as Microsoft’s', async () => {
+    const connected = await run('connect', post('outreach/mailboxes/connect', { orgId: ORG, provider: 'microsoft' }))
+    const state = new URL(connected.body.url).searchParams.get('state') ?? ''
+    const back = await run(
+      'oauthCallback',
+      get(`outreach/mailboxes/oauth/callback?error=access_denied&state=${encodeURIComponent(state)}`, null),
+    )
+    const location = back.headers.get('location') ?? ''
+    expect(parseConnectReturnFragment(location.slice(location.indexOf('#')))).toEqual({
+      kind: 'error',
+      reason: 'access_denied',
+      provider: 'microsoft',
+    })
+  })
+
+  it('sends the test as a draft built from the message’s own MIME, then sends the draft', async () => {
+    const mailbox = await connectMicrosoftMailbox()
+    googleCalls = []
+    const sent = await run('test', post('outreach/mailboxes/test', { orgId: ORG, mailboxId: mailbox.id }))
+    expect(sent.status).toBe(200)
+    expect(sent.body).toMatchObject({ ok: true, sentTo: 'avery@getacme.example', gmailMessageId: 'ms-msg-1' })
+    const draft = googleCalls.find((call) => call.url === `${GRAPH_API_BASE}/me/messages`)
+    const mime = Buffer.from(draft?.body ?? '', 'base64').toString('utf8')
+    expect(mime).toMatch(/^From: .*avery@getacme\.example/m)
+    expect(mime).toMatch(/^Subject: Sequences test message/m)
+    expect(googleCalls.map((call) => call.url)).toContain(`${GRAPH_API_BASE}/me/messages/ms-msg-1/send`)
+  })
+
+  it('deletes the draft when Graph refuses to send it, and marks a refused grant for reconnecting', async () => {
+    const mailbox = await connectMicrosoftMailbox()
+    microsoft.sendStatus = 403
+    googleCalls = []
+    const refused = await run('test', post('outreach/mailboxes/test', { orgId: ORG, mailboxId: mailbox.id }))
+    expect(refused.body.reason).toBe('reconnect-required')
+    expect(refused.body.error).toBe('Microsoft refused this mailbox’s access. Connect it again.')
+    expect(googleCalls.map((call) => call.url)).toContain(`${GRAPH_API_BASE}/me/messages/ms-msg-1`)
+    expect(docs.get(mailboxPath(mailbox.id))?.['status']).toBe('reconnect_required')
+  })
+
+  it('disconnects by deleting the grant, and says Microsoft has no revocation to ask for', async () => {
+    const mailbox = await connectMicrosoftMailbox()
+    googleCalls = []
+    const done = await run('disconnect', post('outreach/mailboxes/disconnect', { orgId: ORG, mailboxId: mailbox.id }))
+    expect(done.body).toEqual({ ok: true, revocation: 'unsupported' })
+    expect(docs.has(mailboxPath(mailbox.id))).toBe(false)
+    expect(docs.has(credentialPath(mailbox.id))).toBe(false)
+    expect(googleCalls).toEqual([])
+  })
+
+  it('reads sender readiness through Exchange Online’s SPF include and selector1', async () => {
+    const mailbox = await connectMicrosoftMailbox()
+    await run('readiness', post('outreach/mailboxes/readiness', { orgId: ORG, mailboxId: mailbox.id }))
+    expect(readinessCalls).toEqual([
+      { fromDomain: 'getacme.example', dkimSelector: 'selector1', spfInclude: 'spf.protection.outlook.com', fresh: false },
+    ])
   })
 })

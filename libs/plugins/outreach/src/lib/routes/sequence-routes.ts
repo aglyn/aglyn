@@ -167,7 +167,8 @@ async function draftPlacementIssues(
   caller: OutreachRouteCaller,
   // A draft, or a stored sequence being activated, which may predate the
   // campaign field (AGL-3254).
-  draft: Pick<OutreachSequenceDraft, 'hostId' | 'mailboxId' | 'settings'> & Pick<OutreachSequence, 'campaignIds'>,
+  draft: Pick<OutreachSequenceDraft, 'hostId' | 'mailboxId' | 'mailboxIds' | 'settings'> &
+    Pick<OutreachSequence, 'campaignIds'>,
   options: { activating?: boolean } = {},
 ): Promise<OutreachSequenceIssue[]> {
   const issues: OutreachSequenceIssue[] = []
@@ -195,6 +196,13 @@ async function draftPlacementIssues(
     )
   }
   if (activation && !issues.some((entry) => entry.code === 'mailbox_not_yours')) issues.push(activation)
+  // The mailboxes it rotates through (AGL-3489) stand where its own does:
+  // connected here, and the caller's to send from. One that is paused or
+  // waiting to be reconnected is passed over at enroll time, not refused.
+  for (const rotationId of draft.mailboxIds ?? []) {
+    const rotation = await loadMailbox(firestore, caller.orgId, rotationId)
+    issues.push(...mailboxIssues(caller, rotation, 'mailboxIds'))
+  }
   const settings = await readOutreachComplianceSettingsDoc(firestore, caller.orgId)
   const outside = draft.settings.allowedCountries.filter(
     (code) => !settings.allowedCountries.includes(code),
@@ -250,14 +258,26 @@ async function loadMailbox(firestore: Firestore, orgId: string, mailboxId: strin
 }
 
 /** Whether the mailbox is connected here, and the caller may send from it. */
-function mailboxIssues(caller: OutreachRouteCaller, mailbox: OutreachMailbox | null): OutreachSequenceIssue[] {
+function mailboxIssues(
+  caller: OutreachRouteCaller,
+  mailbox: OutreachMailbox | null,
+  path: 'mailboxId' | 'mailboxIds' = 'mailboxId',
+): OutreachSequenceIssue[] {
   if (!mailbox || mailbox.status === 'disconnected') {
-    return [issue('mailboxId', 'mailbox_unknown', 'That mailbox is not connected to this organization.')]
+    return [
+      issue(
+        path,
+        'mailbox_unknown',
+        path === 'mailboxIds'
+          ? 'One of the mailboxes it rotates through is not connected to this organization. Remove it.'
+          : 'That mailbox is not connected to this organization.',
+      ),
+    ]
   }
   if (mailbox.connectedByUid !== caller.uid && !caller.isOrgAdmin) {
     return [
       issue(
-        'mailboxId',
+        path,
         'mailbox_not_yours',
         'Only the member who connected this mailbox, or an organization owner or admin, can send from it.',
       ),

@@ -416,6 +416,21 @@ describe('MailboxCard — test and disconnect (AGL-2978)', () => {
     )
   })
 
+  it('disconnects a Microsoft mailbox without promising a revocation Microsoft does not offer (AGL-3489)', async () => {
+    const { props } = renderCard({ mailbox: { provider: 'microsoft', status: 'reconnect_required' } })
+    expect(screen.getByText(/Microsoft stopped accepting this mailbox’s connection/)).toBeTruthy()
+    ;(props.api.disconnect as jest.Mock).mockResolvedValue({ ok: true, revocation: 'unsupported' })
+    fireEvent.click(button(MAILBOX_ACTION_LABELS.disconnect) as HTMLElement)
+    await waitFor(() => expect(props.api.disconnect).toHaveBeenCalled())
+    expect(mockConfirm).toHaveBeenCalledWith(
+      expect.objectContaining({ description: expect.not.stringContaining('Google') }),
+    )
+    expect(mockEnqueueSnackbar).toHaveBeenCalledWith(
+      expect.stringContaining('myapps.microsoft.com'),
+      expect.objectContaining({ variant: 'success' }),
+    )
+  })
+
   it('keeps the mailbox when the confirmation is declined', async () => {
     mockConfirm.mockRejectedValue(new Error('declined'))
     const { props } = renderCard()

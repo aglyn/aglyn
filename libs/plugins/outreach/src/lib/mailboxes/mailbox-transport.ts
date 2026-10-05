@@ -16,28 +16,36 @@
  */
 
 import { SecretBoxError } from '@aglyn/shared-util-tools/secret-box'
-import { createGmailClient, type GmailClient } from '../transport/gmail-client'
+import { createGmailClient } from '../transport/gmail-client'
+import { createGraphClient } from '../transport/graph-client'
 import type { TransportDeps } from '../transport/http'
+import type { OutreachMailClient } from '../transport/mail-client'
 import {
   mailboxCredentialsRef,
   mailboxRef,
   openMailboxRefreshToken,
   readMailboxCredentials,
   sealMailboxRefreshToken,
-  type OutreachGoogleMailboxCredentials,
+  type OutreachStoredMailboxCredentials,
 } from './mailbox-credentials'
 import {
   readOutreachGoogleConfig,
+  readOutreachMicrosoftConfig,
   type OutreachGoogleConfigResult,
+  type OutreachMicrosoftConfigResult,
 } from './outreach-config'
 
 /**
  * A CONNECTED MAILBOX, OPENED FOR SENDING (AGL-2978).
  *
  * The door the send and sync runtime, and the panel's test send, reach a
- * mailbox's Gmail through: the stored credential read, its refresh token
- * opened with the deployment's key, and a transport client built on it. The
- * token never leaves this function except inside the client.
+ * mailbox through: the stored credential read, its refresh token opened with
+ * the deployment's key, and the transport client for its provider — Gmail,
+ * or Microsoft Graph (AGL-3489) — built on it. The token never leaves this
+ * function except inside the client.
+ *
+ * Microsoft rotates refresh tokens; the Graph client hands a rotated one
+ * back, and it is sealed and stored in place of the one it replaced.
  *
  * A token opened under an older key of the keyring is sealed again under the
  * current one on the way through, so a key rotation completes itself as
@@ -45,11 +53,12 @@ import {
  */
 
 export type OpenedOutreachMailbox =
-  | { ok: true; client: GmailClient; credential: OutreachGoogleMailboxCredentials }
+  | { ok: true; client: OutreachMailClient; credential: OutreachStoredMailboxCredentials }
   | {
       ok: false
       /**
-       * - `not-configured` — this deployment has no Outreach client or key.
+       * - `not-configured` — this deployment has no Outreach client or key
+       *   for the mailbox's provider.
        * - `no-credential` — nothing is stored for the mailbox.
        * - `sealed-token-unreadable` — the stored token does not open with
        *   this deployment's key (rotated away, or altered). The mailbox needs
@@ -60,6 +69,7 @@ export type OpenedOutreachMailbox =
 
 export interface OpenMailboxDeps extends TransportDeps {
   readConfig?: () => OutreachGoogleConfigResult
+  readMicrosoftConfig?: () => OutreachMicrosoftConfigResult
 }
 
 export async function openOutreachMailboxClient(
@@ -67,13 +77,17 @@ export async function openOutreachMailboxClient(
   input: { mailboxId: string },
   deps: OpenMailboxDeps = {},
 ): Promise<OpenedOutreachMailbox> {
-  const config = (deps.readConfig ?? readOutreachGoogleConfig)()
-  if (!config.configured) return { ok: false, reason: 'not-configured' }
   const snapshot = await mailboxCredentialsRef(firestore, input.mailboxId).get()
   const credential = readMailboxCredentials(snapshot.exists ? snapshot.data() : null)
   if (!credential || credential.mailboxId !== input.mailboxId) {
-    return { ok: false, reason: 'no-credential' }
+    const anyConfigured =
+      (deps.readConfig ?? readOutreachGoogleConfig)().configured ||
+      (deps.readMicrosoftConfig ?? readOutreachMicrosoftConfig)().configured
+    return { ok: false, reason: anyConfigured ? 'no-credential' : 'not-configured' }
   }
+  const microsoft = credential.provider === 'microsoft' ? (deps.readMicrosoftConfig ?? readOutreachMicrosoftConfig)() : null
+  const config = microsoft ?? (deps.readConfig ?? readOutreachGoogleConfig)()
+  if (!config.configured) return { ok: false, reason: 'not-configured' }
   let opened: { refreshToken: string; needsReseal: boolean }
   try {
     opened = openMailboxRefreshToken(credential, config.config.keyring)
@@ -81,8 +95,27 @@ export async function openOutreachMailboxClient(
     if (error instanceof SecretBoxError) return { ok: false, reason: 'sealed-token-unreadable' }
     throw error
   }
-  if (opened.needsReseal) {
-    await resealMailboxRefreshToken(firestore, credential, opened.refreshToken, config.config.keyring, deps.now)
+  const resealed = opened.needsReseal
+    ? await resealMailboxRefreshToken(firestore, credential, opened.refreshToken, config.config.keyring, deps.now)
+    : null
+  if (microsoft?.configured) {
+    const keyring = microsoft.config.keyring
+    // The seal the stored document holds now: a rotation replaces it, and
+    // the next rotation is guarded against that one.
+    let stored = resealed ? { ...credential, ...resealed } : credential
+    const client = createGraphClient({
+      ...deps,
+      clientId: microsoft.config.clientId,
+      clientSecret: microsoft.config.clientSecret,
+      tenant: microsoft.config.tenant,
+      refreshToken: opened.refreshToken,
+      selfAddresses: [credential.email],
+      onRefreshTokenRotated: async (refreshToken) => {
+        const written = await resealMailboxRefreshToken(firestore, stored, refreshToken, keyring, deps.now)
+        if (written) stored = { ...stored, ...written }
+      },
+    })
+    return { ok: true, client, credential }
   }
   const client = createGmailClient({
     ...deps,
@@ -94,30 +127,31 @@ export async function openOutreachMailboxClient(
 }
 
 /**
- * Seals a token again under the current key, only if the stored value is
- * still the one that was opened: a reconnect that landed in between wrote a
- * newer grant, and that one wins. Best-effort — a failure leaves the old
- * seal, which still opens.
+ * Seals a token — the same one under the current key, or one the provider
+ * rotated in — only if the stored value is still the one that was opened: a
+ * reconnect that landed in between wrote a newer grant, and that one wins.
+ * Best-effort — a failure leaves the old seal, which still opens. Answers
+ * what it wrote, or `null` when it wrote nothing.
  */
 async function resealMailboxRefreshToken(
   firestore: FirebaseFirestore.Firestore,
-  credential: OutreachGoogleMailboxCredentials,
+  credential: Pick<OutreachStoredMailboxCredentials, 'mailboxId' | 'sealedRefreshToken'>,
   refreshToken: string,
   keyring: Parameters<typeof sealMailboxRefreshToken>[2],
   now: (() => number) | undefined,
-): Promise<void> {
+): Promise<{ sealedRefreshToken: string; tokenKeyId: string } | null> {
   const ref = mailboxCredentialsRef(firestore, credential.mailboxId)
   try {
-    await firestore.runTransaction(async (tx) => {
+    return await firestore.runTransaction(async (tx) => {
       const current = await tx.get(ref)
-      if (current.get('sealedRefreshToken') !== credential.sealedRefreshToken) return
-      tx.update(ref, {
-        ...sealMailboxRefreshToken(refreshToken, credential.mailboxId, keyring),
-        updatedAtMs: (now ?? Date.now)(),
-      })
+      if (current.get('sealedRefreshToken') !== credential.sealedRefreshToken) return null
+      const sealed = sealMailboxRefreshToken(refreshToken, credential.mailboxId, keyring)
+      tx.update(ref, { ...sealed, updatedAtMs: (now ?? Date.now)() })
+      return sealed
     })
   } catch (error) {
     console.error('[outreach] resealing a mailbox token failed', error)
+    return null
   }
 }
 

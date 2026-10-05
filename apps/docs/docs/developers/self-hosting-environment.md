@@ -670,7 +670,7 @@ forced-failure lever for proving the alert path works.
 | `EDGE_ADMISSION_ENABLED` | unset | Set to exactly `1` to have `/api/health/journeys` report `edgeAdmission` — how long since the metered page-view total last GREW, sampled by `tools/e2e/edge-admission.mjs`. This is the only check that can see the edge refusing real visitors: every other one carries the `x-aglyn-probe` bypass and would ride past a firewall that had started challenging everybody. It grades an OUTCOME rather than a probe, because a probe cannot answer the question — a non-JS client is challenged from a home connection too, and that is the healthy state. Left unset the check is absent from the body rather than green. |
 | `VERIFICATION_DELIVERY_MIN_ACCOUNTS` | `3` | Accounts created in the trailing day — password signups only, ignoring the last 15 minutes so the delivery feed has time — below which a missing verification delivery event is treated as too little data rather than an outage. Its forced-failure lever is `0`, like the drought check's: at zero any window is graded, so a quiet one reports red. The arm is skipped entirely when `RESEND_WEBHOOK_SECRET` is unset, because nothing records deliveries then. |
 
-### Sequences: a rep's own Google mailbox {#sequences}
+### Sequences: a rep's own Google or Microsoft 365 mailbox {#sequences}
 
 Sequences sends one-to-one email from each rep's **own** Google mailbox
 through the Gmail API — never through `RESEND_API_KEY` — so a rep connects
@@ -700,6 +700,38 @@ power to send mail as every rep who connected a mailbox.
 | `GOOGLE_OUTREACH_CLIENT_ID` | Feature | Runtime, **console only** | The OAuth client id, `…apps.googleusercontent.com`. Unset — or with either variable below unset — **Sequences → Mailboxes** says connecting a Google mailbox is not configured on this deployment, and every mailbox route answers `503` with reason `not-configured`. Mailboxes already connected stop being able to send, because no token can be refreshed. |
 | `GOOGLE_OUTREACH_CLIENT_SECRET` | Feature | Runtime, **console only** | That client's secret. Used to redeem the authorization code at connect, to refresh each mailbox's access token before a Gmail call, and to revoke a grant when a mailbox is disconnected or its organization is erased. A secret Google refuses surfaces as `client_misconfigured` on every send rather than as a disconnected mailbox. |
 | `OUTREACH_TOKEN_KEY` | Feature | Runtime, **console only** | **32 random bytes, base64** — `openssl rand -base64 32`. Seals every stored refresh token with AES-256-GCM; nothing else is encrypted with it. A value that is not exactly 32 bytes counts as unset. **To rotate**, put the new key first and keep the old one after a comma (`NEW,OLD`): the first key seals, every key listed opens, and a token opened under an old key is sealed again under the new one the next time its mailbox is used. Each credential records the id of the key that sealed it in `tokenKeyId`, so drop the old key once no credential names its id. **Losing the key loses every connected mailbox**: a token that no listed key opens cannot be recovered, and its mailbox moves to *Reconnect required* until the rep connects it again. |
+
+#### A rep's own Microsoft 365 mailbox {#sequences-microsoft}
+
+A rep can connect a Microsoft 365 (Exchange Online) mailbox instead, through
+Microsoft Graph. That needs an app registration of your own in Microsoft Entra
+(the Azure portal → **App registrations** → **New registration**):
+
+1. **Supported account types**: accounts in any organizational directory, or
+   your own tenant only. Set `MICROSOFT_OUTREACH_TENANT` to match.
+2. **Redirect URI**, platform **Web**: the same callback Google uses,
+   `{NEXT_PUBLIC_CONSOLE_URL}/api/outreach/mailboxes/oauth/callback`. Both
+   providers come back to the one route, and the signed `state` says which
+   one a connect went to.
+3. **API permissions** → **Microsoft Graph** → **Delegated permissions**:
+   `Mail.Send`, `Mail.ReadWrite`, `User.Read`, `offline_access`, `openid`,
+   `email` and `profile`. A tenant administrator can **Grant admin consent**
+   for the tenant; otherwise each rep consents on their first connect.
+4. **Certificates & secrets** → **New client secret**. Microsoft's secrets
+   expire, so note the date and rotate it before then.
+
+`Mail.Send` sends as the rep. `Mail.ReadWrite` reads the replies and bounces a
+sequence stops on, and creates the draft each step is sent from, which is what
+gives a send the conversation id the next step threads into. The grant is
+sealed with `OUTREACH_TOKEN_KEY`, like a Google one. Microsoft has no way for an
+app to revoke one refresh token, so disconnecting deletes the stored grant; the
+rep removes the app at `myapps.microsoft.com` to end it at Microsoft too.
+
+| Variable | Need | When | Value |
+| --- | --- | --- | --- |
+| `MICROSOFT_OUTREACH_CLIENT_ID` | Feature | Runtime, **console only** | The app registration's **Application (client) ID**. Unset — or with the secret or `OUTREACH_TOKEN_KEY` unset — **Connect with Microsoft** is disabled, Mailboxes says connecting a Microsoft 365 mailbox is not configured, and a Microsoft connect answers `503` with reason `not-configured`. Microsoft mailboxes already connected stop sending, because no token can be refreshed. Google mailboxes are unaffected. |
+| `MICROSOFT_OUTREACH_CLIENT_SECRET` | Feature | Runtime, **console only** | The client secret's **Value** (not its id). A secret Microsoft refuses — expired, or mistyped — surfaces as `client_misconfigured` on every send. |
+| `MICROSOFT_OUTREACH_TENANT` | Optional | Runtime, **console only** | Who may sign in: `common` (the default), `organizations`, or one tenant's id or domain. Anything else counts as unset. |
 
 #### Link domains {#sequences-link-domains}
 

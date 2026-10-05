@@ -35,6 +35,11 @@ import {
 import { outreachEnrollmentSearchTokens } from '../enrollment/enrollment-search'
 import type { OutreachGateLookups } from '../engine/gates'
 import {
+  createOutreachMailboxRotation,
+  outreachSequenceMailboxIds,
+  type OutreachRotationCandidate,
+} from '../engine/mailbox-rotation'
+import {
   decideOutreachEnrollment,
   previewOutreachPerson,
   readOutreachEnrollCandidates,
@@ -55,7 +60,7 @@ import {
   type OutreachEnrollResponse,
   type OutreachPersonRef,
 } from '../model/outreach-api'
-import type { OutreachSequence, OutreachStepOverrides } from '../model/outreach.types'
+import type { OutreachMailbox, OutreachSequence, OutreachStepOverrides } from '../model/outreach.types'
 import { readOutreachComplianceSettingsDoc } from '../storage/compliance-settings-store'
 import { type OutreachDomainIntelReadInput, outreachMailboxSendingDomain } from '../storage/domain-intel-store'
 import { fileOutreachNote } from '../runtime/timeline'
@@ -222,6 +227,55 @@ async function enrollContext(
  * from being enrolled beside the lead they were converted from: the lead's
  * enrollment followed them, under the lead's key, and still names them.
  */
+/**
+ * Who sends to each person this request enrolls (AGL-3489): the sequence's
+ * own mailbox, or — when it rotates through more — the next one
+ * `createOutreachMailboxRotation` picks, by the active enrollments each
+ * holds now. Answers a function the enroll loop calls once per person it
+ * enrolls. A sequence with one mailbox costs no extra reads.
+ */
+async function outreachEnrollRotation(
+  firestore: FirebaseFirestore.Firestore,
+  orgId: string,
+  sequence: OutreachSequence,
+  own: OutreachMailbox,
+  schedulable: (mailbox: OutreachMailbox) => boolean,
+): Promise<() => OutreachMailbox> {
+  const ids = outreachSequenceMailboxIds(sequence)
+  if (ids.length < 2) return () => own
+  const mailboxes = outreachOrgCollection(firestore, orgId, 'mailboxes')
+  const pool = (
+    await Promise.all(
+      ids.map(async (id) => {
+        if (id === own.id) return own
+        const snapshot = await mailboxes.doc(id).get()
+        return readStoredOutreachMailbox(id, snapshot.exists ? snapshot.data() : undefined)
+      }),
+    )
+  ).filter((mailbox): mailbox is OutreachMailbox => Boolean(mailbox))
+  const usable = pool.filter((mailbox) => mailbox.status === 'connected' && schedulable(mailbox))
+  if (usable.length < 2) return () => usable[0] ?? own
+  const enrollments = outreachOrgCollection(firestore, orgId, 'enrollments')
+  const candidates: OutreachRotationCandidate[] = await Promise.all(
+    usable.map(async (mailbox) => {
+      const active = await enrollments
+        .where('mailboxId', '==', mailbox.id)
+        .where('status', '==', 'active')
+        .count()
+        .get()
+      return {
+        id: mailbox.id,
+        status: mailbox.status,
+        activeEnrollments: Number(active.data().count) || 0,
+        schedulable: true,
+      }
+    }),
+  )
+  const next = createOutreachMailboxRotation(candidates)
+  const byId = new Map(usable.map((mailbox) => [mailbox.id, mailbox]))
+  return () => byId.get(next() ?? '') ?? own
+}
+
 /**
  * The domain the sequence's mailbox sends from (AGL-3328), whose gateway
  * ledger the Check-people chips read — or `null` when the mailbox cannot
@@ -551,6 +605,11 @@ export function createOutreachEnrollRoutes(deps: OutreachEnrollRouteDeps): Outre
       )
     }
 
+    const nextMailbox = await outreachEnrollRotation(firestore, caller.orgId, sequence, mailbox, (candidate) =>
+      planOutreachFirstDue({ sequence, mailbox: candidate, enrolledAtMs: nowMs, random: deps.random, startStepIndex }) !==
+      null,
+    )
+
     const context = await enrollContext(firestore, caller, sequence)
     const { candidates, enrolledHere, lookups } = await readPeople(
       firestore,
@@ -614,10 +673,13 @@ export function createOutreachEnrollRoutes(deps: OutreachEnrollRouteDeps): Outre
           return { ...named, email: candidate.email, outcome: 'blocked', blocks: decision.blocks }
         }
         const id = outreachEnrollmentId(sequence.id, candidate.personId)
+        // Taken before anything awaits, so a batch is shared out in order.
+        const assigned = nextMailbox()
         const enrollment = buildOutreachEnrollment({
           id,
           sequence,
-          mailbox,
+          mailbox: assigned,
+          mailboxId: assigned.id,
           target: candidate.target,
           contactId: candidate.contactId,
           leadId: candidate.leadId,

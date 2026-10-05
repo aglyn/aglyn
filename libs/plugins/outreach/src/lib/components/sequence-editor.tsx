@@ -65,7 +65,7 @@ import {
   type OutreachSequenceIssue,
 } from '../model/sequence-draft'
 import { OutreachSendWindowFields } from './send-window-fields'
-import { OutreachSequenceMailboxPicker } from './sequence-mailbox-picker'
+import { OutreachSequenceMailboxPicker, OutreachSequenceRotationPicker } from './sequence-mailbox-picker'
 import { OutreachSequencePreview } from './sequence-preview'
 import {
   OutreachStepCard,
@@ -208,6 +208,9 @@ const MemoTextField = memo(TextField) as typeof TextField
  * when what it shows changes (AGL-3423).
  */
 const MemoMailboxPicker = memo(OutreachSequenceMailboxPicker)
+const MemoRotationPicker = memo(OutreachSequenceRotationPicker)
+/** A stable empty rotation, so the picker's props hold still while there is none. */
+const NO_ROTATION: readonly string[] = []
 const MemoContainerPicker = memo(ContainerPicker)
 const MemoSendWindowFields = memo(OutreachSendWindowFields)
 const MemoSequencePreview = memo(OutreachSequencePreview)
@@ -291,6 +294,8 @@ interface SequenceCardProps {
   name: string
   hostId: string
   mailboxId: string
+  /** The mailboxes it rotates through beside its own (AGL-3489). */
+  mailboxIds: readonly string[]
   campaignIds: readonly string[]
   hosts: ConsolePluginOrgMount['hosts']
   mailboxes: OutreachMailboxesResult
@@ -301,6 +306,7 @@ interface SequenceCardProps {
   nameIssue?: string
   hostIssue?: string
   mailboxIssue?: string
+  rotationIssue?: string
   campaignsIssue?: string
   archived: boolean
   saving: boolean
@@ -310,6 +316,7 @@ interface SequenceCardProps {
   onName(event: FieldChange): void
   onHost(event: FieldChange): void
   onMailbox(mailboxId: string): void
+  onRotation(mailboxIds: string[]): void
   onCampaigns(campaignIds: string[]): void
 }
 
@@ -362,6 +369,16 @@ const SequenceCard = memo(function SequenceCard(props: SequenceCardProps) {
           value={props.mailboxId}
           onChange={props.onMailbox}
           error={props.mailboxIssue}
+          disabled={archived}
+        />
+        <MemoRotationPicker
+          orgId={props.orgId}
+          uid={props.uid}
+          mailboxes={props.mailboxes}
+          mailboxId={props.mailboxId}
+          value={props.mailboxIds}
+          onChange={props.onRotation}
+          error={props.rotationIssue}
           disabled={archived}
         />
         {/*
@@ -813,7 +830,18 @@ export function OutreachSequenceEditor(props: OutreachSequenceEditorProps) {
     [update],
   )
   const setMailbox = useCallback(
-    (mailboxId: string) => update({ mailboxId }),
+    (mailboxId: string) =>
+      update({
+        mailboxId,
+        // The sequence's own mailbox is never also one it rotates through.
+        mailboxIds: drawn.current.mailboxIds?.filter((id) => id !== mailboxId).length
+          ? drawn.current.mailboxIds.filter((id) => id !== mailboxId)
+          : undefined,
+      }),
+    [update],
+  )
+  const setRotation = useCallback(
+    (mailboxIds: string[]) => update({ mailboxIds: mailboxIds.length ? mailboxIds : undefined }),
     [update],
   )
   const setCampaigns = useCallback(
@@ -959,6 +987,7 @@ export function OutreachSequenceEditor(props: OutreachSequenceEditorProps) {
             name={draft.name}
             hostId={draft.hostId}
             mailboxId={draft.mailboxId}
+            mailboxIds={draft.mailboxIds ?? NO_ROTATION}
             campaignIds={draft.campaignIds}
             hosts={hosts}
             mailboxes={props.mailboxes}
@@ -968,6 +997,7 @@ export function OutreachSequenceEditor(props: OutreachSequenceEditorProps) {
             nameIssue={issueAt('name')}
             hostIssue={issueAt('hostId')}
             mailboxIssue={issueAt('mailboxId')}
+            rotationIssue={issueAt('mailboxIds')}
             campaignsIssue={issueAt('campaignIds')}
             archived={archived}
             saving={saving}
@@ -977,6 +1007,7 @@ export function OutreachSequenceEditor(props: OutreachSequenceEditorProps) {
             onName={setName}
             onHost={setHost}
             onMailbox={setMailbox}
+            onRotation={setRotation}
             onCampaigns={setCampaigns}
           />
 

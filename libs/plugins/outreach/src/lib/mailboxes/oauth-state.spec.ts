@@ -53,9 +53,30 @@ afterAll(() => {
 describe('the OAuth state signature (AGL-2978)', () => {
   it('verifies what it minted, naming the org, member, nonce and expiry', () => {
     const { state, claims } = mintOutreachOAuthState({ orgId: 'org-1', uid: 'uid-1', nowMs: NOW, nonce: 'n-1' })
-    expect(claims).toEqual({ orgId: 'org-1', uid: 'uid-1', nonce: 'n-1', exp: NOW + OUTREACH_OAUTH_STATE_TTL_MS })
+    expect(claims).toEqual({
+      orgId: 'org-1',
+      uid: 'uid-1',
+      nonce: 'n-1',
+      exp: NOW + OUTREACH_OAUTH_STATE_TTL_MS,
+      provider: 'google',
+    })
     expect(state).toMatch(/^os1\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/)
     expect(readOutreachOAuthState(state, NOW + 1)).toEqual({ ok: true, claims })
+  })
+
+  it('names the provider a Microsoft connect went to, and reads a state without one as Google’s (AGL-3489)', () => {
+    const microsoft = mintOutreachOAuthState({ orgId: 'org-1', uid: 'uid-1', nowMs: NOW, provider: 'microsoft' })
+    expect(readOutreachOAuthState(microsoft.state, NOW + 1)).toEqual({
+      ok: true,
+      claims: expect.objectContaining({ provider: 'microsoft' }),
+    })
+    const google = mintOutreachOAuthState({ orgId: 'org-1', uid: 'uid-1', nowMs: NOW })
+    const payload = JSON.parse(Buffer.from(google.state.split('.')[1], 'base64url').toString('utf8'))
+    expect(payload).not.toHaveProperty('p')
+    expect(readOutreachOAuthState(google.state, NOW + 1)).toEqual({
+      ok: true,
+      claims: expect.objectContaining({ provider: 'google' }),
+    })
   })
 
   it('gives every connect a fresh random nonce', () => {

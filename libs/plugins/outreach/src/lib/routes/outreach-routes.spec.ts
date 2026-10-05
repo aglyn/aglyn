@@ -182,6 +182,12 @@ function fakeFirestore(docs: Docs) {
       query(path, filters, { field, desc: direction === 'desc' }, max, after),
     limit: (count: number) => query(path, filters, order, count, after),
     startAfter: (last: { id: string }) => query(path, filters, order, max, last.id),
+    count: () => ({
+      get: async () => {
+        const all = await query(path, filters, order, max, after).get()
+        return { data: () => ({ count: all.size }) }
+      },
+    }),
     get: async () => {
       const keys = [...docs.keys()]
         .filter((key) => key.startsWith(`${path}/`) && !key.slice(path.length + 1).includes('/'))
@@ -698,7 +704,7 @@ describe('outreach/sequences/status (AGL-2980)', () => {
 
     setMailboxStatus('reconnect_required')
     expect((await activate()).body.error).toBe(
-      "Google stopped accepting this sequence's mailbox. Reconnect it in Mailboxes, then activate the sequence.",
+      "The provider stopped accepting this sequence's mailbox. Reconnect it in Mailboxes, then activate the sequence.",
     )
 
     setMailboxStatus('disconnected')
@@ -1331,6 +1337,64 @@ describe('outreach/enroll (AGL-2980)', () => {
     docs.set(org(`outreachMailboxes/${MAILBOX}`), { ...docs.get(org(`outreachMailboxes/${MAILBOX}`)), status: 'disconnected' })
     const gone = await post(enroll().confirm, REP, { sequenceId, people: [{ contactId: 'c-1' }] })
     expect(gone).toMatchObject({ status: 409, body: { reason: 'mailbox-unavailable' } })
+  })
+})
+
+describe('a sequence that sends from several mailboxes in rotation (AGL-3489)', () => {
+  const COLD = ['mbx-cold-1', 'mbx-cold-2', 'mbx-cold-3']
+  beforeEach(() => {
+    for (const [index, id] of COLD.entries()) {
+      docs.set(org(`outreachMailboxes/${id}`), {
+        email: `rep${index + 1}@getexample.com`,
+        sendAs: `rep${index + 1}@getexample.com`,
+        displayName: 'Avery Quinn',
+        status: 'connected',
+        timezone: 'America/Chicago',
+        window: OFFICE,
+        connectedByUid: REP,
+      })
+    }
+  })
+
+  it('stores the rotation without its own mailbox, and refuses a mailbox the member may not send from', async () => {
+    const saved = await post(sequences().save, REP, {
+      sequence: draft({ mailboxIds: [...COLD, MAILBOX, COLD[0], ''] }),
+    })
+    expect(saved.status).toBe(200)
+    expect(docs.get(org(`outreachSequences/${saved.body.sequence.id}`))?.['mailboxIds']).toEqual(COLD)
+
+    const theirs = await post(sequences().save, REP, { sequence: draft({ mailboxIds: [OWNER_MAILBOX] }) })
+    expect(theirs).toMatchObject({ status: 403, body: { reason: 'permission' } })
+    const gone = await post(sequences().save, REP, { sequence: draft({ mailboxIds: ['mbx-nowhere'] }) })
+    expect(gone.status).toBe(400)
+    expect(gone.body.issues).toContainEqual(expect.objectContaining({ path: 'mailboxIds', code: 'mailbox_unknown' }))
+  })
+
+  it('gives each person enrolled the mailbox with the fewest waiting, passing over one that is paused', async () => {
+    const sequenceId = await activeSequence({ mailboxIds: COLD })
+    // Two people already wait on the sequence's own mailbox, one on the first cold inbox.
+    for (const [index, mailboxId] of [MAILBOX, MAILBOX, COLD[0]].entries()) {
+      docs.set(org(`outreachEnrollments/elsewhere-${index}`), { mailboxId, status: 'active' })
+    }
+    docs.set(org(`outreachMailboxes/${COLD[2]}`), { ...docs.get(org(`outreachMailboxes/${COLD[2]}`)), status: 'paused' })
+    const people = ['c-1', 'c-2', 'c-3', 'c-4', 'c-5']
+    for (const [index, id] of people.entries()) warm(id, `Person ${index}`, `person${index}@example.com`)
+    const { body } = await post(enroll().confirm, REP, {
+      sequenceId,
+      people: people.map((contactId) => ({ contactId })),
+    })
+    expect(body.enrolled).toBe(5)
+    const assigned = people.map((id) => docs.get(org(`outreachEnrollments/${sequenceId}_${id}`))?.['mailboxId'])
+    // cold-2 starts empty and takes the first; each next goes to the fewest waiting, the earlier on a tie.
+    expect(assigned).toEqual([COLD[1], COLD[0], COLD[1], MAILBOX, COLD[0]])
+    expect(assigned).not.toContain(COLD[2])
+  })
+
+  it('enrolls on the sequence’s own mailbox when it names no rotation', async () => {
+    const sequenceId = await activeSequence()
+    warm('c-1', 'Casey Morgan', 'casey.morgan@example.com')
+    await post(enroll().confirm, REP, { sequenceId, people: [{ contactId: 'c-1' }] })
+    expect(docs.get(org(`outreachEnrollments/${sequenceId}_c-1`))?.['mailboxId']).toBe(MAILBOX)
   })
 })
 

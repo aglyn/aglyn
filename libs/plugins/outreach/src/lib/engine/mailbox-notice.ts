@@ -64,13 +64,20 @@ export function outreachMailboxNoticeName(mailbox: OutreachMailboxNotice['mailbo
   return sendAs && sendAs !== String(mailbox.email).trim().toLowerCase() ? `${own}, sending as ${sendAs}` : own
 }
 
-/** What the notice says when Google stopped accepting the mailbox's connection. */
-export function outreachReconnectRequiredSentence(errorCode: string | null | undefined): string {
+/**
+ * What the notice says when the provider stopped accepting the mailbox's
+ * connection: Google's, or Microsoft's for a Microsoft 365 mailbox (AGL-3489).
+ */
+export function outreachReconnectRequiredSentence(
+  errorCode: string | null | undefined,
+  provider: string | null | undefined = 'google',
+): string {
   const code = String(errorCode ?? '').trim()
+  const name = provider === 'microsoft' ? 'Microsoft' : 'Google'
   return (
-    'Google stopped accepting this mailbox’s connection' +
+    `${name} stopped accepting this mailbox’s connection` +
     (code ? ` (${code})` : '') +
-    ' — the password changed, access was removed from the Google account, or an administrator revoked it. ' +
+    ` — the password changed, access was removed from the ${name} account, or an administrator revoked it. ` +
     'Nothing sends from it until it is connected again.'
   )
 }

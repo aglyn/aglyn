@@ -254,6 +254,35 @@ export function googleMailboxSenderExpectation(address: string | null | undefine
   }
 }
 
+/** Microsoft's consumer domains, and the tenant domains it names itself. */
+const MICROSOFT_CONSUMER_DOMAINS: ReadonlySet<string> = new Set(['outlook.com', 'hotmail.com', 'live.com', 'msn.com'])
+
+/**
+ * A Microsoft 365 mailbox's expectation (AGL-3489): mail From the address's
+ * domain, sent through Exchange Online with the envelope on the same domain,
+ * SPF naming `spf.protection.outlook.com`, and the key under `selector1` —
+ * the CNAME Microsoft 365 publishes DKIM through, which a TXT lookup
+ * follows. `null` for a consumer Outlook address, an `onmicrosoft.com`
+ * tenant address, or an unreadable one: their records are Microsoft's own.
+ */
+export function microsoftMailboxSenderExpectation(
+  address: string | null | undefined,
+): SenderReadinessExpectation | null {
+  const raw = String(address ?? '').trim().toLowerCase()
+  const domain = normalizeSendingDomain(raw.slice(raw.lastIndexOf('@') + 1))
+  if (!raw.includes('@') || !domain || MICROSOFT_CONSUMER_DOMAINS.has(domain) || domain.endsWith('.onmicrosoft.com')) {
+    return null
+  }
+  return {
+    provider: 'Microsoft 365',
+    fromDomain: domain,
+    envelopeDomain: domain,
+    spfInclude: 'spf.protection.outlook.com',
+    dkimSelector: 'selector1',
+    dkimDomain: domain,
+  }
+}
+
 /** The TXT answers a readiness read needs; `null` for a lookup nobody answered. */
 export interface SenderReadinessObservation {
   spfTxt: readonly string[] | null

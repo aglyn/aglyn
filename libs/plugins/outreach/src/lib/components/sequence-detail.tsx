@@ -143,7 +143,7 @@ const NOT_SENDING: Record<Exclude<OutreachSequenceMailboxState, 'sending'>, stri
   gone: 'This sequence’s mailbox is no longer connected, so nothing is sent from it.',
   paused: 'This sequence’s mailbox is paused, so nothing is sent until it is resumed.',
   reconnect_required:
-    'Google stopped accepting this sequence’s mailbox, so nothing is sent until it is reconnected.',
+    'The provider stopped accepting this sequence’s mailbox, so nothing is sent until it is reconnected.',
 }
 
 /** One person's page (AGL-3332): `…/sequences/{id}/enrollments/{enrollmentId}`. */

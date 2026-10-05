@@ -72,4 +72,20 @@ describe('a sequence as a package item (AGL-3535)', () => {
     expect(moved.campaignIds).toEqual([])
     expect(moved.steps[0]).toMatchObject({ templateId: 'tpl-copy' })
   })
+
+  it('names and moves the mailboxes it rotates through, dropping one that was not carried (AGL-3489)', () => {
+    const rotating = outreachSequencePackageContent({ ...STORED, mailboxIds: ['mb-2', 'mb-3'] })
+    expect(outreachSequenceDependencies(rotating)).toEqual(
+      expect.arrayContaining([
+        { kind: OUTREACH_MAILBOX_REFERENCE_KIND, id: 'mb-2' },
+        { kind: OUTREACH_MAILBOX_REFERENCE_KIND, id: 'mb-3' },
+      ]),
+    )
+    const idMap = new Map([
+      [`${OUTREACH_MAILBOX_REFERENCE_KIND}/mb-1`, 'mb-1-copy'],
+      [`${OUTREACH_MAILBOX_REFERENCE_KIND}/mb-2`, 'mb-2-copy'],
+      [`${OUTREACH_MAILBOX_REFERENCE_KIND}/mb-3`, ''],
+    ])
+    expect(remapOutreachSequenceIds(rotating, idMap).mailboxIds).toEqual(['mb-2-copy'])
+  })
 })

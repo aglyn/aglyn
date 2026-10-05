@@ -118,12 +118,13 @@ export async function noteOutreachMailboxReconnectRequired(
     return false
   }
   if (!marked) return false
-  const message = outreachReconnectRequiredSentence(input.errorCode)
+  const message = outreachReconnectRequiredSentence(input.errorCode, marked.provider)
   try {
     await deps.logOrgActivity(
       input.orgId,
       { uid: null },
-      `A mailbox in Sequences needs reconnecting: Google stopped accepting its connection (${input.errorCode})`,
+      `A mailbox in Sequences needs reconnecting: ${marked.provider === 'microsoft' ? 'Microsoft' : 'Google'} ` +
+        `stopped accepting its connection (${input.errorCode})`,
       { type: MAILBOX_TARGET, id: marked.id, name: marked.email },
     )
   } catch (error) {

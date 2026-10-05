@@ -16,7 +16,7 @@
  */
 
 import type { SenderReadiness } from '@aglyn/shared-util-email'
-import type { OutreachMailbox, OutreachSendWindow } from '../model/outreach.types'
+import type { OutreachMailbox, OutreachMailboxProvider, OutreachSendWindow } from '../model/outreach.types'
 
 /**
  * THE MAILBOX ROUTES' CONTRACT (AGL-2978): what the Mailboxes panel sends,
@@ -67,17 +67,26 @@ export interface OutreachApiRefusal {
 /** A reason `GET outreach/mailboxes/availability` answers `configured: false`. */
 export type OutreachMailboxAvailabilityGate =
   | { gate: 'google'; missing: string[] }
+  | { gate: 'microsoft'; missing: string[] }
   | { gate: 'state' }
   | { gate: 'redirect' }
 
 /** `GET outreach/mailboxes/availability` */
 export interface OutreachMailboxAvailability {
+  /** Whether a Google mailbox can be connected: `providers.google`. */
   configured: boolean
   /**
-   * When not configured, which gates refused, so an operator reading the
-   * response knows what to set: the Google client (`google`, with the names
-   * of the missing variables), the state signing secret (`state`), or the
-   * console origin to register (`redirect`). Absent when configured.
+   * Whether each provider's mailboxes can be connected here (AGL-3489): its
+   * client configured, and the state secret and redirect every connect
+   * needs. Absent from an older deployment, which connects Google only.
+   */
+  providers?: Record<OutreachMailboxProvider, boolean>
+  /**
+   * Which gates refused, so an operator reading the response knows what to
+   * set: the Google client (`google`) or the Microsoft app registration
+   * (`microsoft`), each with the names of its missing variables, the state
+   * signing secret (`state`), or the console origin to register
+   * (`redirect`). Absent when every gate is open.
    */
   missing?: OutreachMailboxAvailabilityGate[]
   /**
@@ -91,9 +100,13 @@ export interface OutreachMailboxAvailability {
 /** `POST outreach/mailboxes/connect` */
 export interface OutreachConnectRequest {
   orgId: string
+  /** Whose consent screen the connect goes to; Google when omitted. */
+  provider?: OutreachMailboxProvider
+  /** The account to suggest on Microsoft's sign-in, such as a mailbox being reconnected. */
+  loginHint?: string
 }
 export interface OutreachConnectResponse {
-  /** Google's consent address; the browser goes there. */
+  /** The provider's consent address; the browser goes there. */
   url: string
 }
 
@@ -110,7 +123,7 @@ export interface OutreachConnectCompleteResponse {
   mailbox: OutreachMailbox
   /** False when an existing mailbox for the account was reconnected. */
   created: boolean
-  /** Pending addresses of the member's that Gmail's send-as list confirmed. */
+  /** Pending addresses of the member's that the provider's send-as list confirmed. */
   confirmedAliases: string[]
 }
 
@@ -159,12 +172,13 @@ export interface OutreachMailboxTestResponse {
 export interface OutreachMailboxDisconnectResponse {
   ok: true
   /**
-   * What became of the grant at Google: `revoked`, `already-invalid`,
+   * What became of the grant at the provider: `revoked`, `already-invalid`,
    * `kept-for-other-mailbox` when another mailbox still uses the account,
-   * or `failed` when Google could not be told — the stored grant is deleted
+   * `unsupported` for a Microsoft grant, which no app can revoke itself, or
+   * `failed` when Google could not be told — the stored grant is deleted
    * either way.
    */
-  revocation: 'revoked' | 'already-invalid' | 'kept-for-other-mailbox' | 'failed'
+  revocation: 'revoked' | 'already-invalid' | 'kept-for-other-mailbox' | 'unsupported' | 'failed'
 }
 
 /**
@@ -197,7 +211,8 @@ export type OutreachConnectReturnError = 'access_denied' | 'expired' | 'google_e
 
 export type OutreachConnectReturn =
   | { kind: 'code'; code: string; state: string }
-  | { kind: 'error'; reason: OutreachConnectReturnError }
+  /** `provider` names a Microsoft connect; an error without it was Google's. */
+  | { kind: 'error'; reason: OutreachConnectReturnError; provider?: OutreachMailboxProvider }
 
 /** The fragment for a connect's return, without the leading `#`. */
 export function buildConnectReturnFragment(value: OutreachConnectReturn): string {
@@ -209,6 +224,7 @@ export function buildConnectReturnFragment(value: OutreachConnectReturn): string
   } else {
     params.set(OUTREACH_CONNECT_FRAGMENT_KEY, 'error')
     params.set('reason', value.reason)
+    if (value.provider === 'microsoft') params.set('provider', value.provider)
   }
   return params.toString()
 }
@@ -226,7 +242,11 @@ export function parseConnectReturnFragment(hash: string | null | undefined): Out
   }
   if (kind === 'error') {
     const reason = params.get('reason') as OutreachConnectReturnError | null
-    return { kind: 'error', reason: reason && RETURN_ERRORS.includes(reason) ? reason : 'google_error' }
+    return {
+      kind: 'error',
+      reason: reason && RETURN_ERRORS.includes(reason) ? reason : 'google_error',
+      ...(params.get('provider') === 'microsoft' ? { provider: 'microsoft' as const } : {}),
+    }
   }
   return null
 }

@@ -46,7 +46,7 @@ import {
   readStoredOutreachMailbox,
   readStoredOutreachSequence,
 } from '../storage/outreach-records'
-import type { GmailClient } from '../transport/gmail-client'
+import type { OutreachMailClient, OutreachMailSearch, OutreachMailStub } from '../transport/mail-client'
 import { GmailTransportError, isReconnectRequired } from '../transport/gmail-errors'
 import { creditOutreachReply } from './campaign-credit'
 import { applyOutreachEvent, recordOutreachOptOut } from './enrollment-events'
@@ -96,7 +96,8 @@ import { outreachUnsubscribeMailbox } from './unsubscribe-link'
  * platform's stamp, and a bounce or a complaint lands on the send's own
  * timeline entry, so a member reading the record sees what the runtime saw.
  *
- * Four reads find those, each narrowed by Gmail rather than read in full:
+ * Four reads find those, each narrowed by the provider rather than read in
+ * full (`OutreachMailSearch`, AGL-3489):
  * the threads of this mailbox's enrollments that have new mail; delivery
  * reports outside those threads (a receiving server's own bounce), by
  * searching for the mail systems that send them; messages to the
@@ -153,7 +154,7 @@ interface SyncContext {
   firestore: Firestore
   orgId: string
   mailbox: OutreachMailbox
-  client: GmailClient
+  client: OutreachMailClient
   selfAddresses: string[]
   unsubscribeAddress: string | null
   sequences: Map<string, OutreachSequence | null>
@@ -216,14 +217,11 @@ export async function runOutreachSyncJob(
 }
 
 /** Every stub a search finds, a few pages deep. */
-async function search(
-  client: GmailClient,
-  q: string,
-): Promise<Array<{ id: string; threadId: string }>> {
-  const found: Array<{ id: string; threadId: string }> = []
+async function search(client: OutreachMailClient, criteria: OutreachMailSearch): Promise<OutreachMailStub[]> {
+  const found: OutreachMailStub[] = []
   let pageToken: string | null = null
   for (let page = 0; page < SEARCH_PAGES; page += 1) {
-    const list = await client.listMessages({ q, maxResults: 100, pageToken, includeSpamTrash: true })
+    const list = await client.searchMessages(criteria, { maxResults: 100, pageToken })
     found.push(...list.messages.filter((message) => message.id))
     pageToken = list.nextPageToken
     if (!pageToken) break
@@ -286,7 +284,6 @@ async function syncMailbox(
   }
 
   const sinceMs = Math.max(Number(mailbox.sync?.throughMs) || 0, nowMs - OUTREACH_SYNC_LOOKBACK_MS) - OUTREACH_SYNC_OVERLAP_MS
-  const after = `after:${Math.floor(sinceMs / 1000)}`
   // Every message this run or an earlier one handled outside an enrollment's
   // thread; one message is handled once however many searches find it.
   const handled = new Set(mailbox.sync?.handledMessageIds ?? [])
@@ -296,10 +293,10 @@ async function syncMailbox(
     handled.add(id)
     newlyHandled.push(id)
   }
-  const fresh = (stub: { id: string; threadId: string }) => !handled.has(stub.id) && !byThread.has(stub.threadId)
+  const fresh = (stub: OutreachMailStub) => !handled.has(stub.id) && !byThread.has(stub.threadId)
 
   // 1. The enrollments' own threads that have new mail.
-  const inbound = await search(context.client, `${after} -from:me`)
+  const inbound = await search(context.client, { afterMs: sinceMs, notFromSelf: true })
   for (const threadId of new Set(inbound.map((stub) => stub.threadId))) {
     const enrollment = byThread.get(threadId)
     if (!enrollment) continue
@@ -309,7 +306,7 @@ async function syncMailbox(
   }
 
   // 2. Delivery reports outside those threads: a receiving server's bounce.
-  for (const stub of await search(context.client, `${after} from:(mailer-daemon OR postmaster)`)) {
+  for (const stub of await search(context.client, { afterMs: sinceMs, from: ['mailer-daemon', 'postmaster'] })) {
     if (!fresh(stub)) continue
     const message = outreachThreadMessageFromGmail(await context.client.getFullMessage(stub.id))
     const delivery = readOutreachDeliveryReport(message)
@@ -324,7 +321,7 @@ async function syncMailbox(
 
   // 3. Messages to the unsubscribe address: whoever wrote asked to leave.
   if (unsubscribe) {
-    for (const stub of await search(context.client, `${after} to:${unsubscribe.address}`)) {
+    for (const stub of await search(context.client, { afterMs: sinceMs, to: unsubscribe.address })) {
       if (handled.has(stub.id)) continue
       const metadata = await context.client.getMessage(stub.id, { metadataHeaders: ['From'] })
       const from = emailAddressOf(metadata.headers.find((header) => header.name.toLowerCase() === 'from')?.value ?? '')
@@ -350,7 +347,7 @@ async function syncMailbox(
   const addresses = [...byAddress.keys()]
   for (let start = 0; start < addresses.length; start += FROM_CHUNK) {
     const chunk = addresses.slice(start, start + FROM_CHUNK)
-    for (const stub of await search(context.client, `${after} from:(${chunk.join(' OR ')})`)) {
+    for (const stub of await search(context.client, { afterMs: sinceMs, from: chunk })) {
       if (!fresh(stub)) continue
       const message = outreachThreadMessageFromGmail(await context.client.getFullMessage(stub.id))
       const enrollment = byAddress.get(normalizeContactEmail(emailAddressOf(message.from)) ?? '')
