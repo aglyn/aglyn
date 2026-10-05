@@ -21,6 +21,7 @@ import { resolveSiteTheme } from '@aglyn/aglyn/app-utils/site-theme'
 import { resolveMediaSrc } from '@aglyn/aglyn/app-utils/media-ref'
 import { searchEngineVerificationMeta } from '@aglyn/aglyn/app-utils/search-engine-verification'
 import { getGoogleFontsUrl } from '@aglyn/shared-ui-theme/util/host-theme'
+import { selfHostedThemeFonts } from '@aglyn/tenant-runtime/self-hosted-fonts'
 import { parseSchemeRouteSegment } from '@aglyn/shared-ui-theme/util/scheme-route-segment'
 import type { ReactNode } from 'react'
 import getSiteNav from '../../../utils/get-site-nav'
@@ -42,7 +43,7 @@ import { HostThemeProviders } from '../host-theme-providers'
 
 /**
  * Per-host layout (App Router): resolves the tenant host to apply its MUI
- * theme and preload its Google Fonts. This is the App Router home for the
+ * theme and serve its theme fonts. This is the App Router home for the
  * per-host theming the Pages Router `_app` did from `pageProps.data.host` —
  * it depends on the resolved host, so it lives under `[host]` rather than
  * the host-agnostic root layout. Wraps both the catch-all render route and
@@ -65,7 +66,18 @@ export default async function HostLayout({
   // default ⊕ marketplace theme ⊕ site overrides (AGL-1021). The default is
   // applied below by HostThemeProvider; these are the upper two layers.
   const hostTheme = resolveSiteTheme(hostRes.host)
-  const fontsHref = getGoogleFontsUrl(hostTheme?.fonts)
+  /**
+   * The theme's Google fonts, served from the site itself (AGL-3485): the
+   * `@font-face` rules inline in the head, every file on this origin, the one
+   * or two faces the first screen paints with preloaded. Linking Google's
+   * stylesheet blocked rendering for ~800 ms on the page Lighthouse measured.
+   * The link stays as the fallback for a render that could not read Google,
+   * so a theme never loses its typeface to a failed fetch.
+   */
+  const selfHostedFonts = await selfHostedThemeFonts(hostTheme)
+  const fontsHref = selfHostedFonts
+    ? undefined
+    : getGoogleFontsUrl(hostTheme?.fonts)
   // The navigation loader's logo is a THIRD reader of `logoUrl`, alongside the
   // manifest icon and the white-label badge, and it resolved none of the stored
   // forms (AGL-1407). Site-RELATIVE is correct here — unlike the manifest icon,
@@ -295,7 +307,25 @@ export default async function HostLayout({
       {verificationMetas.map(({ name, content }) => (
         <meta key={name} name={name} content={content} />
       ))}
-      {fontsHref ? (
+      {selfHostedFonts ? (
+        <>
+          {selfHostedFonts.preloads.map((href) => (
+            <link
+              key={href}
+              rel="preload"
+              as="font"
+              type="font/woff2"
+              href={href}
+              crossOrigin="anonymous"
+            />
+          ))}
+          {/* Hoisted into the head by React (`href` + `precedence`). The
+              rules are rebuilt from validated fields, never echoed. */}
+          <style href="aglyn-theme-fonts" precedence="default">
+            {selfHostedFonts.css}
+          </style>
+        </>
+      ) : fontsHref ? (
         <>
           <link
             rel="preconnect"
