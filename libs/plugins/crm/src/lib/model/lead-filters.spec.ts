@@ -183,6 +183,17 @@ describe('the Leads query plan', () => {
     ])
   })
 
+  it('serves Lead source direction by the direction its writer stores, beside the newest-seen order (AGL-3577)', () => {
+    const served = plan([
+      { field: 'leadSourceDirection', op: 'equals', value: 'inbound' },
+      { field: 'status', op: 'equals', value: 'open' },
+    ])
+    expect(served.refused).toEqual([])
+    expect(served.orderBy).toEqual({ path: 'lastSeenAtMs', direction: 'desc' })
+    expect(served.filters.map((filter) => filter.path).sort()).toEqual(['leadSourceDirection', 'status'])
+    expect(served.filters.find((filter) => filter.path === 'leadSourceDirection')?.value).toBe('inbound')
+  })
+
   it('serves Industry and Rating, each beside the newest-seen order (AGL-3513)', () => {
     for (const field of ['industry', 'rating']) {
       const served = plan([{ field, op: 'equals', value: 'hot' }])

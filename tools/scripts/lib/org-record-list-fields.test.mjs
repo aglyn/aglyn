@@ -25,33 +25,60 @@ import { test } from 'node:test'
 import {
   crmFieldListFields,
   crmFieldListFieldsBackfillPatch,
+  crmLeadSourceDirection,
+  crmLeadSourcePicklist,
   crmListFields,
   crmListFieldsBackfillPatch,
   crmNewRecordListFields,
+  LEAD_SOURCE_STANDARD_VALUES,
 } from './org-record-list-fields.mjs'
 
 const fixtures = JSON.parse(
   readFileSync(new URL('./org-record-list-fields.fixtures.json', import.meta.url), 'utf8'),
 )
 
+/** The org's lead source list a fixture names, when it names one (AGL-3577). */
+const contextOf = (entry) =>
+  'leadSources' in entry ? { leadSources: crmLeadSourcePicklist(entry.leadSources) } : {}
+
 test('list fields match the fixtures', () => {
-  for (const { collection, record, expected } of fixtures.records) {
-    assert.deepEqual(crmListFields(collection, record), expected)
+  for (const entry of fixtures.records) {
+    assert.deepEqual(crmListFields(entry.collection, entry.record, contextOf(entry)), entry.expected)
   }
 })
 
 test('a new record’s fields match the fixtures', () => {
-  for (const { collection, record, expected } of fixtures.newRecords) {
-    assert.deepEqual(crmNewRecordListFields(collection, record), expected)
+  for (const entry of fixtures.newRecords) {
+    assert.deepEqual(crmNewRecordListFields(entry.collection, entry.record, contextOf(entry)), entry.expected)
   }
 })
 
-test('a backfill patch writes what is wrong and nothing on a level record', () => {
-  for (const { collection, record } of fixtures.records) {
-    const patch = crmListFieldsBackfillPatch(collection, record)
-    assert.ok(Object.keys(patch).length > 0)
-    assert.deepEqual(crmListFieldsBackfillPatch(collection, { ...record, ...patch }), {})
+test('a lead source’s direction is its group in the org’s list, as the library reads it (AGL-3577)', () => {
+  assert.deepEqual(LEAD_SOURCE_STANDARD_VALUES, fixtures.leadSourceStandardValues)
+  assert.ok(fixtures.leadSourceDirections.length > 0)
+  for (const { leadSources, label, expected } of fixtures.leadSourceDirections) {
+    assert.equal(crmLeadSourceDirection(crmLeadSourcePicklist(leadSources), label), expected, label)
   }
+  // Without the org's list a held value's direction is left as stored; none at all is null.
+  assert.equal('leadSourceDirection' in crmListFields('leads', { leadSource: 'Web' }), false)
+  assert.equal(crmListFields('leads', {}).leadSourceDirection, null)
+})
+
+test('a backfill patch writes what is wrong and nothing on a level record', () => {
+  for (const entry of fixtures.records) {
+    const { collection, record } = entry
+    const patch = crmListFieldsBackfillPatch(collection, record, contextOf(entry))
+    assert.ok(Object.keys(patch).length > 0)
+    assert.deepEqual(crmListFieldsBackfillPatch(collection, { ...record, ...patch }, contextOf(entry)), {})
+  }
+  // A regrouped value restamps the direction alone.
+  const outbound = crmLeadSourcePicklist({
+    values: [{ id: 'web', label: 'Web', active: true, group: 'outbound' }],
+  })
+  const lead = { ...crmListFields('leads', { leadSource: 'Web' }, { leadSources: crmLeadSourcePicklist(null) }), leadSource: 'Web' }
+  assert.deepEqual(crmListFieldsBackfillPatch('leads', lead, { leadSources: outbound }), {
+    leadSourceDirection: 'outbound',
+  })
   // A scheduled record keeps its date; an absent one is stamped null.
   assert.equal(crmListFieldsBackfillPatch('deals', { title: 'x', nextTaskAtMs: 5 }).nextTaskAtMs, undefined)
   assert.equal(crmListFieldsBackfillPatch('deals', { title: 'x' }).nextTaskAtMs, null)

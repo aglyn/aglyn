@@ -194,7 +194,7 @@ group's heading, with values in no group last.
 | **Add value** | Adds your own value at the end of the list, in the group you pick. A value the list already holds, in any capitalization, is refused. |
 | **Drag**, or the arrows | Reorders the list. The order is the order every select offers. |
 | **Sort A–Z** | Puts the whole list in alphabetical order. |
-| **Group** | Files the value under a group, or none. |
+| **Group** | Files the value under a group, or none. On Lead source, every lead holding the value moves with it — the **Lead source direction** filter on the [leads list](./leads.md#filter-the-leads) finds it in its new group. |
 | **Rename** | Renames the value, and every record holding it — for lead source, every lead, contact, company and deal — is updated to the new name in the same step, so a report grouped by the field follows the rename. |
 | **Make default** | New records start with this value — in the **New lead** drawer, over the API, and from a CSV row that names none. On Lead status, the default is the label a lead of its meaning shows when it was given the meaning alone. **Clear default** removes it. |
 | **Deactivate** | Takes the value out of every select without touching the records that hold it. They show it as *(inactive)* and keep it until someone changes it. **Activate** brings it back. |

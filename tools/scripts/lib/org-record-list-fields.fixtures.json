@@ -265,6 +265,7 @@
         "scopedCampaignIds": [],
         "status": "working",
         "leadSourceKey": null,
+        "leadSourceDirection": null,
         "emailStatus": "bounced",
         "industryKey": null,
         "ratingKey": null
@@ -317,6 +318,7 @@
         "scopedCampaignIds": [],
         "status": "new",
         "leadSourceKey": null,
+        "leadSourceDirection": null,
         "emailStatus": "none",
         "industryKey": null,
         "ratingKey": null
@@ -1031,6 +1033,304 @@
         "searchTokens": [],
         "scopedSearchTokens": []
       }
+    },
+    {
+      "collection": "leads",
+      "leadSources": {
+        "values": [
+          {
+            "id": "outbound-apollo",
+            "label": "Outbound · Apollo",
+            "active": true,
+            "group": "outbound"
+          },
+          {
+            "id": "internal-test",
+            "label": "Internal test",
+            "active": true
+          },
+          {
+            "id": "webinar",
+            "label": "Webinar",
+            "active": false,
+            "group": "outbound"
+          },
+          {
+            "id": "my-web",
+            "label": "web",
+            "active": true
+          },
+          {
+            "id": "partner-referral",
+            "label": "Partner referral",
+            "active": true,
+            "group": null
+          },
+          {
+            "id": "x/y",
+            "label": "Slash id",
+            "active": true,
+            "group": "inbound"
+          },
+          {
+            "label": "Sideways",
+            "active": true,
+            "group": "sideways"
+          },
+          {
+            "id": "outbound-apollo",
+            "label": "Second Apollo",
+            "active": true,
+            "group": "inbound"
+          }
+        ],
+        "defaultValueId": null
+      },
+      "record": {
+        "email": "ines@outbound.test",
+        "visibleTo": [
+          "org"
+        ],
+        "leadSource": " outbound ·  APOLLO "
+      },
+      "expected": {
+        "searchTokens": [
+          "i",
+          "in",
+          "ine",
+          "ines",
+          "ines@",
+          "ines@o",
+          "ines@ou",
+          "ines@out",
+          "ines@outb",
+          "ines@outbo",
+          "ines@outbou",
+          "ines@outboun",
+          "o",
+          "ou",
+          "out",
+          "outb",
+          "outbo",
+          "outbou",
+          "outboun",
+          "outbound",
+          "t",
+          "te",
+          "tes",
+          "test"
+        ],
+        "scopedSearchTokens": [
+          "org~i",
+          "org~in",
+          "org~ine",
+          "org~ines",
+          "org~ines@",
+          "org~ines@o",
+          "org~ines@ou",
+          "org~ines@out",
+          "org~ines@outb",
+          "org~ines@outbo",
+          "org~ines@outbou",
+          "org~ines@outboun",
+          "org~o",
+          "org~ou",
+          "org~out",
+          "org~outb",
+          "org~outbo",
+          "org~outbou",
+          "org~outboun",
+          "org~outbound",
+          "org~t",
+          "org~te",
+          "org~tes",
+          "org~test"
+        ],
+        "scopedCampaignIds": [],
+        "status": "new",
+        "leadSourceKey": "outbound · apollo",
+        "leadSourceDirection": "outbound",
+        "emailStatus": "none",
+        "industryKey": null,
+        "ratingKey": null
+      }
+    },
+    {
+      "collection": "leads",
+      "leadSources": null,
+      "record": {
+        "email": "ola@inbound.test",
+        "visibleTo": [
+          "host:site-a"
+        ],
+        "leadSource": "Website form"
+      },
+      "expected": {
+        "searchTokens": [
+          "o",
+          "ol",
+          "ola",
+          "ola@",
+          "ola@i",
+          "ola@in",
+          "ola@inb",
+          "ola@inbo",
+          "ola@inbou",
+          "ola@inboun",
+          "ola@inbound",
+          "ola@inbound.",
+          "i",
+          "in",
+          "inb",
+          "inbo",
+          "inbou",
+          "inboun",
+          "inbound",
+          "t",
+          "te",
+          "tes",
+          "test"
+        ],
+        "scopedSearchTokens": [
+          "host:site-a~o",
+          "host:site-a~ol",
+          "host:site-a~ola",
+          "host:site-a~ola@",
+          "host:site-a~ola@i",
+          "host:site-a~ola@in",
+          "host:site-a~ola@inb",
+          "host:site-a~ola@inbo",
+          "host:site-a~ola@inbou",
+          "host:site-a~ola@inboun",
+          "host:site-a~ola@inbound",
+          "host:site-a~ola@inbound.",
+          "host:site-a~i",
+          "host:site-a~in",
+          "host:site-a~inb",
+          "host:site-a~inbo",
+          "host:site-a~inbou",
+          "host:site-a~inboun",
+          "host:site-a~inbound",
+          "host:site-a~t",
+          "host:site-a~te",
+          "host:site-a~tes",
+          "host:site-a~test"
+        ],
+        "scopedCampaignIds": [],
+        "status": "new",
+        "leadSourceKey": "website form",
+        "leadSourceDirection": "inbound",
+        "emailStatus": "none",
+        "industryKey": null,
+        "ratingKey": null
+      }
+    },
+    {
+      "collection": "leads",
+      "leadSources": {
+        "values": [
+          {
+            "id": "outbound-apollo",
+            "label": "Outbound · Apollo",
+            "active": true,
+            "group": "outbound"
+          },
+          {
+            "id": "internal-test",
+            "label": "Internal test",
+            "active": true
+          },
+          {
+            "id": "webinar",
+            "label": "Webinar",
+            "active": false,
+            "group": "outbound"
+          },
+          {
+            "id": "my-web",
+            "label": "web",
+            "active": true
+          },
+          {
+            "id": "partner-referral",
+            "label": "Partner referral",
+            "active": true,
+            "group": null
+          },
+          {
+            "id": "x/y",
+            "label": "Slash id",
+            "active": true,
+            "group": "inbound"
+          },
+          {
+            "label": "Sideways",
+            "active": true,
+            "group": "sideways"
+          },
+          {
+            "id": "outbound-apollo",
+            "label": "Second Apollo",
+            "active": true,
+            "group": "inbound"
+          }
+        ],
+        "defaultValueId": null
+      },
+      "record": {
+        "email": "wes@web.test",
+        "visibleTo": [
+          "org"
+        ],
+        "leadSource": "WEB"
+      },
+      "expected": {
+        "searchTokens": [
+          "w",
+          "we",
+          "wes",
+          "wes@",
+          "wes@w",
+          "wes@we",
+          "wes@web",
+          "wes@web.",
+          "wes@web.t",
+          "wes@web.te",
+          "wes@web.tes",
+          "wes@web.test",
+          "web",
+          "t",
+          "te",
+          "tes",
+          "test"
+        ],
+        "scopedSearchTokens": [
+          "org~w",
+          "org~we",
+          "org~wes",
+          "org~wes@",
+          "org~wes@w",
+          "org~wes@we",
+          "org~wes@web",
+          "org~wes@web.",
+          "org~wes@web.t",
+          "org~wes@web.te",
+          "org~wes@web.tes",
+          "org~wes@web.test",
+          "org~web",
+          "org~t",
+          "org~te",
+          "org~tes",
+          "org~test"
+        ],
+        "scopedCampaignIds": [],
+        "status": "new",
+        "leadSourceKey": "web",
+        "leadSourceDirection": null,
+        "emailStatus": "none",
+        "industryKey": null,
+        "ratingKey": null
+      }
     }
   ],
   "newRecords": [
@@ -1298,6 +1598,7 @@
         "scopedCampaignIds": [],
         "status": "working",
         "leadSourceKey": null,
+        "leadSourceDirection": null,
         "emailStatus": "bounced",
         "industryKey": null,
         "ratingKey": null
@@ -1350,6 +1651,7 @@
         "scopedCampaignIds": [],
         "status": "new",
         "leadSourceKey": null,
+        "leadSourceDirection": null,
         "emailStatus": "none",
         "industryKey": null,
         "ratingKey": null
@@ -1934,6 +2236,119 @@
         "scopedSearchTokens": [],
         "dueAtMs": null
       }
+    },
+    {
+      "collection": "leads",
+      "leadSources": {
+        "values": [
+          {
+            "id": "outbound-apollo",
+            "label": "Outbound · Apollo",
+            "active": true,
+            "group": "outbound"
+          },
+          {
+            "id": "internal-test",
+            "label": "Internal test",
+            "active": true
+          },
+          {
+            "id": "webinar",
+            "label": "Webinar",
+            "active": false,
+            "group": "outbound"
+          },
+          {
+            "id": "my-web",
+            "label": "web",
+            "active": true
+          },
+          {
+            "id": "partner-referral",
+            "label": "Partner referral",
+            "active": true,
+            "group": null
+          },
+          {
+            "id": "x/y",
+            "label": "Slash id",
+            "active": true,
+            "group": "inbound"
+          },
+          {
+            "label": "Sideways",
+            "active": true,
+            "group": "sideways"
+          },
+          {
+            "id": "outbound-apollo",
+            "label": "Second Apollo",
+            "active": true,
+            "group": "inbound"
+          }
+        ],
+        "defaultValueId": null
+      },
+      "record": {
+        "email": "pat@list.test",
+        "visibleTo": [
+          "org"
+        ],
+        "leadSource": "Purchased list"
+      },
+      "expected": {
+        "searchTokens": [
+          "p",
+          "pa",
+          "pat",
+          "pat@",
+          "pat@l",
+          "pat@li",
+          "pat@lis",
+          "pat@list",
+          "pat@list.",
+          "pat@list.t",
+          "pat@list.te",
+          "pat@list.tes",
+          "l",
+          "li",
+          "lis",
+          "list",
+          "t",
+          "te",
+          "tes",
+          "test"
+        ],
+        "scopedSearchTokens": [
+          "org~p",
+          "org~pa",
+          "org~pat",
+          "org~pat@",
+          "org~pat@l",
+          "org~pat@li",
+          "org~pat@lis",
+          "org~pat@list",
+          "org~pat@list.",
+          "org~pat@list.t",
+          "org~pat@list.te",
+          "org~pat@list.tes",
+          "org~l",
+          "org~li",
+          "org~lis",
+          "org~list",
+          "org~t",
+          "org~te",
+          "org~tes",
+          "org~test"
+        ],
+        "scopedCampaignIds": [],
+        "status": "new",
+        "leadSourceKey": "purchased list",
+        "leadSourceDirection": "outbound",
+        "emailStatus": "none",
+        "industryKey": null,
+        "ratingKey": null
+      }
     }
   ],
   "fieldDefinitions": [
@@ -2023,6 +2438,728 @@
           "date"
         ]
       }
+    }
+  ],
+  "leadSourceStandardValues": [
+    {
+      "id": "web",
+      "label": "Web",
+      "group": "inbound"
+    },
+    {
+      "id": "phone-inquiry",
+      "label": "Phone inquiry",
+      "group": "inbound"
+    },
+    {
+      "id": "email-inquiry",
+      "label": "Email inquiry",
+      "group": "inbound"
+    },
+    {
+      "id": "partner-referral",
+      "label": "Partner referral",
+      "group": "inbound"
+    },
+    {
+      "id": "employee-referral",
+      "label": "Employee referral",
+      "group": "inbound"
+    },
+    {
+      "id": "external-referral",
+      "label": "External referral",
+      "group": "inbound"
+    },
+    {
+      "id": "advertisement",
+      "label": "Advertisement",
+      "group": "inbound"
+    },
+    {
+      "id": "trade-show",
+      "label": "Trade show",
+      "group": "inbound"
+    },
+    {
+      "id": "webinar",
+      "label": "Webinar",
+      "group": "inbound"
+    },
+    {
+      "id": "word-of-mouth",
+      "label": "Word of mouth",
+      "group": "inbound"
+    },
+    {
+      "id": "website-form",
+      "label": "Website form",
+      "group": "inbound"
+    },
+    {
+      "id": "booking",
+      "label": "Booking",
+      "group": "inbound"
+    },
+    {
+      "id": "newsletter-sign-up",
+      "label": "Newsletter sign-up",
+      "group": "inbound"
+    },
+    {
+      "id": "site-member-sign-up",
+      "label": "Site member sign-up",
+      "group": "inbound"
+    },
+    {
+      "id": "online-purchase",
+      "label": "Online purchase",
+      "group": "inbound"
+    },
+    {
+      "id": "account-sign-up",
+      "label": "Account sign-up",
+      "group": "inbound"
+    },
+    {
+      "id": "purchased-list",
+      "label": "Purchased list",
+      "group": "outbound"
+    },
+    {
+      "id": "sequence",
+      "label": "Sequence",
+      "group": "outbound"
+    },
+    {
+      "id": "email-campaign",
+      "label": "Email campaign",
+      "group": "outbound"
+    },
+    {
+      "id": "other",
+      "label": "Other"
+    }
+  ],
+  "leadSourceDirections": [
+    {
+      "leadSources": null,
+      "label": "Web",
+      "expected": "inbound"
+    },
+    {
+      "leadSources": null,
+      "label": " purchased   LIST",
+      "expected": "outbound"
+    },
+    {
+      "leadSources": null,
+      "label": "Other",
+      "expected": null
+    },
+    {
+      "leadSources": null,
+      "label": "Referral",
+      "expected": null
+    },
+    {
+      "leadSources": null,
+      "label": "",
+      "expected": null
+    },
+    {
+      "leadSources": {
+        "values": [
+          {
+            "id": "outbound-apollo",
+            "label": "Outbound · Apollo",
+            "active": true,
+            "group": "outbound"
+          },
+          {
+            "id": "internal-test",
+            "label": "Internal test",
+            "active": true
+          },
+          {
+            "id": "webinar",
+            "label": "Webinar",
+            "active": false,
+            "group": "outbound"
+          },
+          {
+            "id": "my-web",
+            "label": "web",
+            "active": true
+          },
+          {
+            "id": "partner-referral",
+            "label": "Partner referral",
+            "active": true,
+            "group": null
+          },
+          {
+            "id": "x/y",
+            "label": "Slash id",
+            "active": true,
+            "group": "inbound"
+          },
+          {
+            "label": "Sideways",
+            "active": true,
+            "group": "sideways"
+          },
+          {
+            "id": "outbound-apollo",
+            "label": "Second Apollo",
+            "active": true,
+            "group": "inbound"
+          }
+        ],
+        "defaultValueId": null
+      },
+      "label": "outbound · apollo",
+      "expected": "outbound"
+    },
+    {
+      "leadSources": {
+        "values": [
+          {
+            "id": "outbound-apollo",
+            "label": "Outbound · Apollo",
+            "active": true,
+            "group": "outbound"
+          },
+          {
+            "id": "internal-test",
+            "label": "Internal test",
+            "active": true
+          },
+          {
+            "id": "webinar",
+            "label": "Webinar",
+            "active": false,
+            "group": "outbound"
+          },
+          {
+            "id": "my-web",
+            "label": "web",
+            "active": true
+          },
+          {
+            "id": "partner-referral",
+            "label": "Partner referral",
+            "active": true,
+            "group": null
+          },
+          {
+            "id": "x/y",
+            "label": "Slash id",
+            "active": true,
+            "group": "inbound"
+          },
+          {
+            "label": "Sideways",
+            "active": true,
+            "group": "sideways"
+          },
+          {
+            "id": "outbound-apollo",
+            "label": "Second Apollo",
+            "active": true,
+            "group": "inbound"
+          }
+        ],
+        "defaultValueId": null
+      },
+      "label": "Internal test",
+      "expected": null
+    },
+    {
+      "leadSources": {
+        "values": [
+          {
+            "id": "outbound-apollo",
+            "label": "Outbound · Apollo",
+            "active": true,
+            "group": "outbound"
+          },
+          {
+            "id": "internal-test",
+            "label": "Internal test",
+            "active": true
+          },
+          {
+            "id": "webinar",
+            "label": "Webinar",
+            "active": false,
+            "group": "outbound"
+          },
+          {
+            "id": "my-web",
+            "label": "web",
+            "active": true
+          },
+          {
+            "id": "partner-referral",
+            "label": "Partner referral",
+            "active": true,
+            "group": null
+          },
+          {
+            "id": "x/y",
+            "label": "Slash id",
+            "active": true,
+            "group": "inbound"
+          },
+          {
+            "label": "Sideways",
+            "active": true,
+            "group": "sideways"
+          },
+          {
+            "id": "outbound-apollo",
+            "label": "Second Apollo",
+            "active": true,
+            "group": "inbound"
+          }
+        ],
+        "defaultValueId": null
+      },
+      "label": "Webinar",
+      "expected": "outbound"
+    },
+    {
+      "leadSources": {
+        "values": [
+          {
+            "id": "outbound-apollo",
+            "label": "Outbound · Apollo",
+            "active": true,
+            "group": "outbound"
+          },
+          {
+            "id": "internal-test",
+            "label": "Internal test",
+            "active": true
+          },
+          {
+            "id": "webinar",
+            "label": "Webinar",
+            "active": false,
+            "group": "outbound"
+          },
+          {
+            "id": "my-web",
+            "label": "web",
+            "active": true
+          },
+          {
+            "id": "partner-referral",
+            "label": "Partner referral",
+            "active": true,
+            "group": null
+          },
+          {
+            "id": "x/y",
+            "label": "Slash id",
+            "active": true,
+            "group": "inbound"
+          },
+          {
+            "label": "Sideways",
+            "active": true,
+            "group": "sideways"
+          },
+          {
+            "id": "outbound-apollo",
+            "label": "Second Apollo",
+            "active": true,
+            "group": "inbound"
+          }
+        ],
+        "defaultValueId": null
+      },
+      "label": "WEB",
+      "expected": null
+    },
+    {
+      "leadSources": {
+        "values": [
+          {
+            "id": "outbound-apollo",
+            "label": "Outbound · Apollo",
+            "active": true,
+            "group": "outbound"
+          },
+          {
+            "id": "internal-test",
+            "label": "Internal test",
+            "active": true
+          },
+          {
+            "id": "webinar",
+            "label": "Webinar",
+            "active": false,
+            "group": "outbound"
+          },
+          {
+            "id": "my-web",
+            "label": "web",
+            "active": true
+          },
+          {
+            "id": "partner-referral",
+            "label": "Partner referral",
+            "active": true,
+            "group": null
+          },
+          {
+            "id": "x/y",
+            "label": "Slash id",
+            "active": true,
+            "group": "inbound"
+          },
+          {
+            "label": "Sideways",
+            "active": true,
+            "group": "sideways"
+          },
+          {
+            "id": "outbound-apollo",
+            "label": "Second Apollo",
+            "active": true,
+            "group": "inbound"
+          }
+        ],
+        "defaultValueId": null
+      },
+      "label": "Partner referral",
+      "expected": null
+    },
+    {
+      "leadSources": {
+        "values": [
+          {
+            "id": "outbound-apollo",
+            "label": "Outbound · Apollo",
+            "active": true,
+            "group": "outbound"
+          },
+          {
+            "id": "internal-test",
+            "label": "Internal test",
+            "active": true
+          },
+          {
+            "id": "webinar",
+            "label": "Webinar",
+            "active": false,
+            "group": "outbound"
+          },
+          {
+            "id": "my-web",
+            "label": "web",
+            "active": true
+          },
+          {
+            "id": "partner-referral",
+            "label": "Partner referral",
+            "active": true,
+            "group": null
+          },
+          {
+            "id": "x/y",
+            "label": "Slash id",
+            "active": true,
+            "group": "inbound"
+          },
+          {
+            "label": "Sideways",
+            "active": true,
+            "group": "sideways"
+          },
+          {
+            "id": "outbound-apollo",
+            "label": "Second Apollo",
+            "active": true,
+            "group": "inbound"
+          }
+        ],
+        "defaultValueId": null
+      },
+      "label": "Slash id",
+      "expected": "inbound"
+    },
+    {
+      "leadSources": {
+        "values": [
+          {
+            "id": "outbound-apollo",
+            "label": "Outbound · Apollo",
+            "active": true,
+            "group": "outbound"
+          },
+          {
+            "id": "internal-test",
+            "label": "Internal test",
+            "active": true
+          },
+          {
+            "id": "webinar",
+            "label": "Webinar",
+            "active": false,
+            "group": "outbound"
+          },
+          {
+            "id": "my-web",
+            "label": "web",
+            "active": true
+          },
+          {
+            "id": "partner-referral",
+            "label": "Partner referral",
+            "active": true,
+            "group": null
+          },
+          {
+            "id": "x/y",
+            "label": "Slash id",
+            "active": true,
+            "group": "inbound"
+          },
+          {
+            "label": "Sideways",
+            "active": true,
+            "group": "sideways"
+          },
+          {
+            "id": "outbound-apollo",
+            "label": "Second Apollo",
+            "active": true,
+            "group": "inbound"
+          }
+        ],
+        "defaultValueId": null
+      },
+      "label": "Sideways",
+      "expected": null
+    },
+    {
+      "leadSources": {
+        "values": [
+          {
+            "id": "outbound-apollo",
+            "label": "Outbound · Apollo",
+            "active": true,
+            "group": "outbound"
+          },
+          {
+            "id": "internal-test",
+            "label": "Internal test",
+            "active": true
+          },
+          {
+            "id": "webinar",
+            "label": "Webinar",
+            "active": false,
+            "group": "outbound"
+          },
+          {
+            "id": "my-web",
+            "label": "web",
+            "active": true
+          },
+          {
+            "id": "partner-referral",
+            "label": "Partner referral",
+            "active": true,
+            "group": null
+          },
+          {
+            "id": "x/y",
+            "label": "Slash id",
+            "active": true,
+            "group": "inbound"
+          },
+          {
+            "label": "Sideways",
+            "active": true,
+            "group": "sideways"
+          },
+          {
+            "id": "outbound-apollo",
+            "label": "Second Apollo",
+            "active": true,
+            "group": "inbound"
+          }
+        ],
+        "defaultValueId": null
+      },
+      "label": "Second Apollo",
+      "expected": "inbound"
+    },
+    {
+      "leadSources": {
+        "values": [
+          {
+            "id": "outbound-apollo",
+            "label": "Outbound · Apollo",
+            "active": true,
+            "group": "outbound"
+          },
+          {
+            "id": "internal-test",
+            "label": "Internal test",
+            "active": true
+          },
+          {
+            "id": "webinar",
+            "label": "Webinar",
+            "active": false,
+            "group": "outbound"
+          },
+          {
+            "id": "my-web",
+            "label": "web",
+            "active": true
+          },
+          {
+            "id": "partner-referral",
+            "label": "Partner referral",
+            "active": true,
+            "group": null
+          },
+          {
+            "id": "x/y",
+            "label": "Slash id",
+            "active": true,
+            "group": "inbound"
+          },
+          {
+            "label": "Sideways",
+            "active": true,
+            "group": "sideways"
+          },
+          {
+            "id": "outbound-apollo",
+            "label": "Second Apollo",
+            "active": true,
+            "group": "inbound"
+          }
+        ],
+        "defaultValueId": null
+      },
+      "label": "Trade show",
+      "expected": "inbound"
+    },
+    {
+      "leadSources": {
+        "values": [
+          {
+            "id": "outbound-apollo",
+            "label": "Outbound · Apollo",
+            "active": true,
+            "group": "outbound"
+          },
+          {
+            "id": "internal-test",
+            "label": "Internal test",
+            "active": true
+          },
+          {
+            "id": "webinar",
+            "label": "Webinar",
+            "active": false,
+            "group": "outbound"
+          },
+          {
+            "id": "my-web",
+            "label": "web",
+            "active": true
+          },
+          {
+            "id": "partner-referral",
+            "label": "Partner referral",
+            "active": true,
+            "group": null
+          },
+          {
+            "id": "x/y",
+            "label": "Slash id",
+            "active": true,
+            "group": "inbound"
+          },
+          {
+            "label": "Sideways",
+            "active": true,
+            "group": "sideways"
+          },
+          {
+            "id": "outbound-apollo",
+            "label": "Second Apollo",
+            "active": true,
+            "group": "inbound"
+          }
+        ],
+        "defaultValueId": null
+      },
+      "label": "Email campaign",
+      "expected": "outbound"
+    },
+    {
+      "leadSources": {
+        "values": [
+          {
+            "id": "outbound-apollo",
+            "label": "Outbound · Apollo",
+            "active": true,
+            "group": "outbound"
+          },
+          {
+            "id": "internal-test",
+            "label": "Internal test",
+            "active": true
+          },
+          {
+            "id": "webinar",
+            "label": "Webinar",
+            "active": false,
+            "group": "outbound"
+          },
+          {
+            "id": "my-web",
+            "label": "web",
+            "active": true
+          },
+          {
+            "id": "partner-referral",
+            "label": "Partner referral",
+            "active": true,
+            "group": null
+          },
+          {
+            "id": "x/y",
+            "label": "Slash id",
+            "active": true,
+            "group": "inbound"
+          },
+          {
+            "label": "Sideways",
+            "active": true,
+            "group": "sideways"
+          },
+          {
+            "id": "outbound-apollo",
+            "label": "Second Apollo",
+            "active": true,
+            "group": "inbound"
+          }
+        ],
+        "defaultValueId": null
+      },
+      "label": "Carrier pigeon",
+      "expected": null
     }
   ]
 }

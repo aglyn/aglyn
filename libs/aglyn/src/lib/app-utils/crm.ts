@@ -3558,6 +3558,12 @@ export interface CrmPicklistTarget {
   keyField?: string
   facet?: true
   arrayKey?: string
+  /**
+   * The field holding the GROUP of the value the record holds (AGL-3577) —
+   * a lead's `leadSourceDirection` — which every move that can change a
+   * label's group (a regroup, an add, a rename, a delete) rewrites.
+   */
+  groupField?: string
 }
 
 /** A standard picklist field of the CRM. */
@@ -3626,7 +3632,13 @@ const LEAD_SOURCE_DEFINITION = {
   ],
   targets: [
     // The key the Leads list filters by moves with the label (AGL-3321).
-    { object: 'lead', field: 'leadSource', keyField: 'leadSourceKey' },
+    // So is its direction, the value's group (AGL-3577).
+    {
+      object: 'lead',
+      field: 'leadSource',
+      keyField: 'leadSourceKey',
+      groupField: 'leadSourceDirection',
+    },
     // A contact's lead source is each holder's own, like the rest of its profile.
     { object: 'contact', field: 'leadSource', facet: true },
     // A company's Account Source is a lead source value (AGL-3514).
@@ -4981,9 +4993,11 @@ export function normalizeCrmMediaIds(value: unknown): string[] {
  *                         address (`none` when there is none) and a contact's
  *                         per-holder facet values (`facetKeys`).
  *
- * All of them are DERIVED: a pure function of the document, computed here
- * and nowhere else, and written by every path that writes one of its inputs
- * — see `CRM_LIST_FIELD_INPUTS` — so a record a list cannot find is a writer
+ * All of them are DERIVED: a pure function of the document — save a lead's
+ * `leadSourceDirection`, which is the document and the org's lead source
+ * list (see `crmLeadSourceDirection`) — computed here and nowhere else,
+ * and written by every path that writes one of its inputs — see
+ * `CRM_LIST_FIELD_INPUTS` — so a record a list cannot find is a writer
  * that forgot, never a second formula that disagrees. A server writer that
  * holds the whole document spreads `crmListFields`; one that patched a field
  * restamps the record from what was stored (`restampCrmListFields` in the
@@ -5093,6 +5107,67 @@ export function crmLeadSourceKey(value: unknown): string | null {
   return crmPicklistKey(value)
 }
 
+/*------------------------------------------
+ * A LEAD'S LEAD SOURCE DIRECTION (AGL-3577).
+ *
+ * The group of the Lead source picklist its value sits in — Inbound for a
+ * person who came to the organization, Outbound for one it went to — or
+ * `null` for no lead source, a value in no group, or a label the list does
+ * not hold. STORED on the lead as `leadSourceDirection`, so the Leads list
+ * asks `leadSourceDirection == inbound` — one equality, however many values
+ * the group holds. (It was asked as `leadSourceKey in [...]` over the
+ * group's values, and Inbound holds more than one `in` may.)
+ *
+ * The one list field that is not a function of the record alone: it is
+ * read off the org's list. So a writer passes that list
+ * ({@link CrmListFieldsContext}) or, without it, writes the direction only
+ * where it needs no list — `null` for a lead with no lead source — and
+ * leaves a held value's direction as stored. Every move of the list that
+ * can change a label's group rewrites the leads holding it (the
+ * `groupField` of the picklist's lead target).
+ *-----------------------------------------*/
+
+export const CRM_LEAD_SOURCE_DIRECTION_FIELD = 'leadSourceDirection'
+
+/** The directions a lead source can have: the Lead source picklist's groups. */
+export const CRM_LEAD_SOURCE_DIRECTIONS = ['inbound', 'outbound'] as const
+
+export type CrmLeadSourceDirection = (typeof CRM_LEAD_SOURCE_DIRECTIONS)[number]
+
+export function isCrmLeadSourceDirection(value: unknown): value is CrmLeadSourceDirection {
+  return (CRM_LEAD_SOURCE_DIRECTIONS as readonly unknown[]).includes(value)
+}
+
+/** The direction `label` has in the org's lead source list — `null` for none. */
+export function crmLeadSourceDirection(
+  leadSources: PicklistValueSet,
+  label: unknown,
+): CrmLeadSourceDirection | null {
+  const group = picklistValueByLabel(leadSources, label)?.group
+  return isCrmLeadSourceDirection(group) ? group : null
+}
+
+/** What a list-field writer knows beyond the record. */
+export interface CrmListFieldsContext {
+  /**
+   * The org's Lead source list as every reader takes it
+   * (`effectiveCrmLeadSourcePicklist`), which a lead's direction is read
+   * off. Without it a lead holding a lead source keeps the direction it has.
+   */
+  leadSources?: PicklistValueSet | null
+}
+
+/** A lead's direction field — see the block above. */
+function leadSourceDirectionField(
+  lead: Record<string, unknown>,
+  context: CrmListFieldsContext,
+): { leadSourceDirection?: CrmLeadSourceDirection | null } {
+  if (!crmLeadSourceKey(lead['leadSource'])) return { leadSourceDirection: null }
+  return context.leadSources
+    ? { leadSourceDirection: crmLeadSourceDirection(context.leadSources, lead['leadSource']) }
+    : {}
+}
+
 /** What a lead's search box reads (AGL-3246). */
 export const CRM_LEAD_SEARCH_SOURCES = ['name', 'email', 'company', 'jobTitle', 'tags'] as const
 
@@ -5118,12 +5193,17 @@ function leadCampaignIds(lead: Record<string, unknown>): string[] {
  * the status — `new` for a lead nobody has touched, written so `status in
  * [new, working]` finds it — the lead source key and the address verdict.
  */
-export function crmLeadListFields(record: object): {
+export function crmLeadListFields(
+  record: object,
+  context: CrmListFieldsContext = {},
+): {
   searchTokens: string[]
   scopedSearchTokens: string[]
   scopedCampaignIds: string[]
   status: CrmLeadStatus
   leadSourceKey: string | null
+  /** Absent when the lead holds a lead source and no list was given. */
+  leadSourceDirection?: CrmLeadSourceDirection | null
   emailStatus: string
   industryKey: string | null
   ratingKey: string | null
@@ -5137,6 +5217,8 @@ export function crmLeadListFields(record: object): {
     scopedCampaignIds: scopedSearchTokens(lead['visibleTo'], leadCampaignIds(lead)),
     status: crmLeadStatus(lead as Pick<CrmLeadFields, 'status'>),
     leadSourceKey: crmLeadSourceKey(lead['leadSource']),
+    // Its group in the org's list (AGL-3577).
+    ...leadSourceDirectionField(lead, context),
     emailStatus: crmEmailStatusKey(lead),
     // The Industry and Rating the Leads list filters by (AGL-3513).
     industryKey: crmPicklistKey(lead['industry']),
@@ -5412,14 +5494,18 @@ export const CRM_LIST_FIELD_INPUTS: Readonly<Record<CrmListCollection, readonly 
   crmTasks: ['visibleTo', 'title'],
 }
 
-/** Every list field of one record, from the record as stored. */
+/**
+ * Every list field of one record, from the record as stored — and, for a
+ * lead's direction, the org's lead source list when `context` holds it.
+ */
 export function crmListFields(
   collection: CrmListCollection,
   record: object,
+  context: CrmListFieldsContext = {},
 ): Record<string, unknown> {
   switch (collection) {
     case 'leads':
-      return crmLeadListFields(record)
+      return crmLeadListFields(record, context)
     case 'contacts':
       return crmContactListFields(record)
     case 'companies':
@@ -5445,8 +5531,9 @@ const sameValue = (a: unknown, b: unknown): boolean => {
 export function crmListFieldsPatch(
   collection: CrmListCollection,
   record: object,
+  context: CrmListFieldsContext = {},
 ): Record<string, unknown> {
-  const fields = crmListFields(collection, record)
+  const fields = crmListFields(collection, record, context)
   const stored = record as Record<string, unknown>
   const patch: Record<string, unknown> = {}
   for (const [field, value] of Object.entries(fields)) {
@@ -5480,8 +5567,9 @@ export const CRM_LIST_NULLABLE_FIELD: Readonly<Record<CrmListCollection, string 
 export function crmNewRecordListFields(
   collection: CrmListCollection,
   record: object,
+  context: CrmListFieldsContext = {},
 ): Record<string, unknown> {
-  const fields = crmListFields(collection, record)
+  const fields = crmListFields(collection, record, context)
   const nullable = CRM_LIST_NULLABLE_FIELD[collection]
   const stored = (record as Record<string, unknown>)[nullable ?? '']
   if (!nullable || (nullable in record && stored !== undefined)) return fields

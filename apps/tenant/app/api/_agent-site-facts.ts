@@ -16,10 +16,12 @@
  */
 
 import {
+  curateLlmsTxtPages,
   hostCollectionKind,
   statusPageScreenIds,
   screenRoutePathToUrl,
   type AglynHost,
+  type LlmsTxtScreenRecord,
 } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import {
@@ -57,7 +59,11 @@ export interface AgentSiteFacts {
    * agree about which exist.
    */
   pageGroups: Array<{ name: string; base: string; count: number; hasListing: boolean }>
-  /** Top-level pages worth naming in a curated list. */
+  /**
+   * The pages the `## Pages` list names, in site order — home, the top-level
+   * pages as the screens list arranges them, then their children — with
+   * every `noindex` page left out (AGL-3576). See `curateLlmsTxtPages`.
+   */
   pages: Array<{ path: string; title?: string }>
   /** Whether the site serves `/search`. */
   hasSearch: boolean
@@ -67,43 +73,13 @@ export interface AgentSiteFacts {
 const COLLECTION_SCAN_LIMIT = 50
 
 /**
- * How many pages the curated list names.
- *
- * `/llms.txt` is a guide, not an inventory — the sitemap index is the
- * inventory, and this file links to it. Twenty-five is enough to carry a
- * normal site's whole navigation and short enough that a large site's file
- * stays readable in an agent's context window.
+ * Screen documents read per sweep — the sitemap's own limit for the same
+ * collection, so the two files judge the same set.
  */
-const PAGE_LIST_LIMIT = 25
+const SCREEN_SCAN_LIMIT = 1000
 
 /** Cache window, matching the sitemap and robots routes. */
 const FACTS_TTL_SECONDS = 300
-
-/**
- * The pages a curated list should name.
- *
- * Top level only — depth is what the sitemap is for, and a nested page is
- * reachable from its parent. Gated and non-page screens are excluded through
- * the SHARED predicate the sitemap uses, so the two files cannot come to
- * disagree about which addresses exist.
- */
-function curatedPages(
-  host: AglynHost,
-  unrouted: ReadonlySet<string>,
-): AgentSiteFacts['pages'] {
-  const excluded = statusPageScreenIds(host as never)
-  const pages: AgentSiteFacts['pages'] = []
-  for (const [screenId, path] of Object.entries(host.screens ?? {})) {
-    if (excluded.has(screenId) || unrouted.has(screenId)) continue
-    const url = screenRoutePathToUrl(path)
-    // `/a/b` has one slash after the leading one; a top-level page has none.
-    if (url.replace(/^\//, '').includes('/')) continue
-    pages.push({ path: url })
-  }
-  return pages
-    .sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0))
-    .slice(0, PAGE_LIST_LIMIT)
-}
 
 /**
  * Read the site facts, cached under the same tag every publish busts.
@@ -120,6 +96,36 @@ export async function readAgentSiteFacts(host: AglynHost): Promise<AgentSiteFact
     tags: [tenantDataTag(host.$id)],
     read: async (): Promise<AgentSiteFacts> => {
       const hostRef = firebaseAdmin.app().firestore().collection('hosts').doc(host.$id)
+      /*
+        The screen documents behind the page list (AGL-3576): which routed
+        screens are pages an agent may read — not a group, not `noindex` — and
+        how the author arranged them. The projection is exactly the fields
+        `curateLlmsTxtPages` reads. Started here and collected after the
+        collections sweep, so the two reads overlap rather than queue.
+
+        FAILS OPEN to `undefined`, which keeps every routed screen rather than
+        none — the sitemap's choice for the same read, and for the same
+        reason: a page's own `noindex` still holds, while a list that vanished
+        would teach an agent the site has no pages.
+      */
+      const screensPromise: Promise<
+        Record<string, LlmsTxtScreenRecord> | undefined
+      > = hostRef
+        .collection('screens')
+        .select('displayName', 'visibility', 'order', 'kind')
+        .limit(SCREEN_SCAN_LIMIT)
+        .get()
+        .then((snapshot) => {
+          const screens: Record<string, LlmsTxtScreenRecord> = {}
+          for (const docSnapshot of snapshot.docs) {
+            screens[docSnapshot.id] = docSnapshot.data() as LlmsTxtScreenRecord
+          }
+          return screens
+        })
+        .catch((error: unknown) => {
+          console.error('llms.txt: the screens read failed', error)
+          return undefined
+        })
       let collections: AgentSiteFacts['collections']
       let listRoutes: Record<string, string> = {}
       let templateScreenIds: ReadonlySet<string> = new Set()
@@ -211,13 +217,26 @@ export async function readAgentSiteFacts(host: AglynHost): Promise<AgentSiteFact
         field anyway so a future per-site switch has one place to turn it off,
         and so neither file has to assume.
       */
+      /*
+        Not pages, so never listed: a template renders nowhere at its own slug,
+        a list route is a collection's listing rather than a screen, and a
+        status screen is a status. The first two come from the routing read
+        above; the third from the SHARED predicate the sitemap applies, so the
+        two files cannot disagree about which addresses exist.
+      */
+      const excluded = new Set<string>([
+        ...templateScreenIds,
+        ...Object.keys(listRoutes),
+        ...statusPageScreenIds(host as never),
+      ])
       return {
         collections,
         pageGroups,
-        pages: curatedPages(host, new Set([
-          ...templateScreenIds,
-          ...Object.keys(listRoutes),
-        ])),
+        pages: curateLlmsTxtPages({
+          routing: host.screens,
+          screens: await screensPromise,
+          excluded,
+        }),
         hasSearch: true,
       }
     },

@@ -241,8 +241,8 @@ by name, and **Lead source** to one of your lead source values — inactive
 ones included, marked — or to **No lead source**. **Lead source direction**
 keeps the leads whose lead source is in the **Inbound** or the **Outbound**
 group, as the [lead source values](./custom-fields.md#picklist-values) group
-them when you filter: move a value to another group and its leads move with
-it. **Industry** and **Rating** keep the leads holding one of your values — inactive
+them: move a value to another group and its leads move with it, however many
+values the group holds. **Industry** and **Rating** keep the leads holding one of your values — inactive
 ones included, marked. **Owner** keeps one teammate's leads. **Status**, **Email**, **Owner**,
 **Lead source** and **Lead source direction** each take one choice (**is**) or
 several (**is any of**); **Campaign** takes one.
@@ -272,8 +272,7 @@ email address, and a notice says so; the Campaign filter is not applied for
 them. **No lead source** cannot be picked beside a lead source value, and a
 filter whose choices, multiplied by the other filters' choices, come to more
 than 30 is not applied either (**Cannot be emailed** counts as every verdict
-it covers, and a **Lead source direction** as every lead source value in its
-group); the notice names both.
+it covers); the notice names both.
 
 ### Working a lead from the row
 

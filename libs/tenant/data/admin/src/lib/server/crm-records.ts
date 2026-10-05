@@ -32,7 +32,13 @@ import {
  * fixture barrel (see `upsert-contact.ts`), and the restamp is reached from
  * the door.
  */
-import { type CrmListCollection, crmListFieldsPatch } from '@aglyn/aglyn/app-utils/crm'
+import {
+  CRM_LEAD_SOURCE_PICKLIST,
+  type CrmListCollection,
+  type CrmListFieldsContext,
+  crmListFieldsPatch,
+  effectiveCrmLeadSourcePicklist,
+} from '@aglyn/aglyn/app-utils/crm'
 import {
   type EmailRampVerdict,
   rampedDailyAllowance,
@@ -352,7 +358,33 @@ export interface CrmListFieldsRestamp {
 }
 
 /**
- * Restamp one record's list fields from the record as stored.
+ * What a record's restamp reads beside it (AGL-3577): for a lead, the org's
+ * lead source list, which its `leadSourceDirection` is read off. `{}` for
+ * any other record, and for a lead whose org list cannot be read — the
+ * restamp then leaves a held value's direction as stored rather than guess.
+ */
+export async function crmListFieldsContextFor(
+  ref: FirebaseFirestore.DocumentReference,
+  collection: CrmListCollection,
+): Promise<CrmListFieldsContext> {
+  const org = collection === 'leads' ? ref.parent.parent : null
+  if (!org) return {}
+  try {
+    const list = await org
+      .collection(CRM_COLLECTIONS.picklists)
+      .doc(CRM_LEAD_SOURCE_PICKLIST)
+      .get()
+    return { leadSources: effectiveCrmLeadSourcePicklist(list.data()) }
+  } catch (error) {
+    console.error(`[crm] lead source list unreadable for ${org.path}`, error)
+    return {}
+  }
+}
+
+/**
+ * Restamp one record's list fields from the record as stored — and a lead's
+ * direction from its org's lead source list, read here unless `context`
+ * already holds it.
  *
  * Then tell the plugins a record was written (AGL-3336): every server writer
  * of an org record passes here after its write, so this is the one place a
@@ -363,13 +395,16 @@ export interface CrmListFieldsRestamp {
 export async function restampCrmListFieldsAt(
   ref: FirebaseFirestore.DocumentReference,
   collection: CrmListCollection,
+  context?: CrmListFieldsContext,
 ): Promise<'restamped' | 'current' | 'missing'> {
   let outcome: 'restamped' | 'current' | 'missing'
   try {
+    // Read outside the transaction: the list is the org's, not the record's.
+    const known = context ?? (await crmListFieldsContextFor(ref, collection))
     outcome = await ref.firestore.runTransaction(async (tx) => {
       const snapshot = await tx.get(ref)
       if (!snapshot.exists) return 'missing' as const
-      const patch = crmListFieldsPatch(collection, snapshot.data() ?? {})
+      const patch = crmListFieldsPatch(collection, snapshot.data() ?? {}, known)
       if (!Object.keys(patch).length) return 'current' as const
       tx.update(ref, patch)
       return 'restamped' as const
@@ -391,10 +426,21 @@ export async function restampCrmListFieldsOf(
 ): Promise<CrmListFieldsRestamp> {
   const result: CrmListFieldsRestamp = { restamped: 0, current: 0, missing: 0 }
   const queue = [...new Map(refs.map((ref) => [ref.path, ref])).values()]
+  // The org's lead source list, read once per org rather than per lead.
+  const contexts = new Map<string, Promise<CrmListFieldsContext>>()
+  const contextOf = (ref: FirebaseFirestore.DocumentReference) => {
+    const key = ref.parent.parent?.path ?? ''
+    let context = contexts.get(key)
+    if (!context) {
+      context = crmListFieldsContextFor(ref, collection)
+      contexts.set(key, context)
+    }
+    return context
+  }
   // Each is its own small transaction on its own record.
   const worker = async () => {
     for (let ref = queue.shift(); ref !== undefined; ref = queue.shift()) {
-      const outcome = await restampCrmListFieldsAt(ref, collection)
+      const outcome = await restampCrmListFieldsAt(ref, collection, await contextOf(ref))
       result[outcome] += 1
     }
   }

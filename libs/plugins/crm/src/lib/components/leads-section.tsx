@@ -309,14 +309,9 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
   const asked = useMemo(
     () =>
       crmAskClauses(clauses, (clause) =>
-        leadQueryClause(clause, {
-          scopeTokens,
-          foldsScope,
-          // A direction is expanded through the org's own groups (AGL-3511).
-          leadSources: leadSourceList.picklist,
-        }),
+        leadQueryClause(clause, { scopeTokens, foldsScope }),
       ),
-    [clauses, scopeTokens, foldsScope, leadSourceList.picklist],
+    [clauses, scopeTokens, foldsScope],
   )
   const searchKey = gridFilter.searchWords.join(' ')
   const paged = useCrmListQuery<Record<string, unknown> & CrmLeadFields & { $id: string }>({

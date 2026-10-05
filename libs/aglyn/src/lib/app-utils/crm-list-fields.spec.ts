@@ -36,8 +36,12 @@ import {
   crmPhoneSearchWords,
   crmEmailStatusKey,
   crmFacetKey,
+  CRM_LEAD_SOURCE_PICKLIST,
   crmLeadListFields,
+  crmLeadSourceDirection,
   crmLeadSourceKey,
+  crmPicklistDefinition,
+  effectiveCrmLeadSourcePicklist,
   crmListFields,
   crmListFieldsPatch,
   crmListFieldsTouched,
@@ -50,12 +54,20 @@ interface Fixture {
   collection: CrmListCollection
   record: Record<string, unknown>
   expected: Record<string, unknown>
+  /** The org's stored Lead source list, when the example reads one (AGL-3577). */
+  leadSources?: unknown
 }
 interface Fixtures {
   records: Fixture[]
   newRecords: Fixture[]
   fieldDefinitions: Array<Omit<Fixture, 'collection'>>
+  leadSourceStandardValues: unknown
+  leadSourceDirections: Array<{ leadSources: unknown; label: string; expected: string | null }>
 }
+
+/** The org's lead source list an example names, when it names one. */
+const contextOf = (entry: Fixture) =>
+  'leadSources' in entry ? { leadSources: effectiveCrmLeadSourcePicklist(entry.leadSources) } : {}
 
 const fixtures: Fixtures = JSON.parse(
   readFileSync(
@@ -117,6 +129,34 @@ describe('crmLeadListFields', () => {
     expect(fields.emailStatus).toBe('none')
     expect(fields.scopedSearchTokens).toContain('host:a~dana')
     expect(fields.scopedSearchTokens).toContain('host:a~acme')
+  })
+
+  it('stamps the lead source’s direction from the org’s list, and none without a source (AGL-3577)', () => {
+    const regrouped = effectiveCrmLeadSourcePicklist({
+      values: [{ id: 'web', label: 'Web', active: true, group: 'outbound' }],
+      defaultValueId: null,
+    })
+    expect(crmLeadListFields({ leadSource: ' web ' }, { leadSources: regrouped }).leadSourceDirection).toBe(
+      'outbound',
+    )
+    expect(
+      crmLeadListFields({ leadSource: 'Web' }, { leadSources: effectiveCrmLeadSourcePicklist(null) })
+        .leadSourceDirection,
+    ).toBe('inbound')
+    expect(
+      crmLeadListFields({ leadSource: 'Carrier pigeon' }, { leadSources: regrouped }).leadSourceDirection,
+    ).toBeNull()
+    // No source needs no list; a held one without the list is left as stored.
+    expect(crmLeadListFields({}).leadSourceDirection).toBeNull()
+    expect('leadSourceDirection' in crmLeadListFields({ leadSource: 'Web' })).toBe(false)
+    expect(crmListFieldsPatch('leads', { ...crmLeadListFields({ leadSource: 'Web' }), leadSource: 'Web', leadSourceDirection: 'inbound' })).toEqual({})
+    expect(
+      crmListFieldsPatch(
+        'leads',
+        { ...crmLeadListFields({ leadSource: 'Web' }), leadSource: 'Web', leadSourceDirection: 'inbound' },
+        { leadSources: regrouped },
+      ),
+    ).toEqual({ leadSourceDirection: 'outbound' })
   })
 
   it('keeps a worked status and names a verdict by its status', () => {
@@ -246,13 +286,28 @@ describe('the worked examples the backfill and the seeds share', () => {
   it.each(fixtures.records.map((entry, at) => [at, entry] as const))(
     'list fields #%i',
     (_at, entry) => {
-      expect(crmListFields(entry.collection, entry.record)).toEqual(entry.expected)
+      expect(crmListFields(entry.collection, entry.record, contextOf(entry))).toEqual(entry.expected)
     },
   )
   it.each(fixtures.newRecords.map((entry, at) => [at, entry] as const))(
     'a new record’s fields #%i',
     (_at, entry) => {
-      expect(crmNewRecordListFields(entry.collection, entry.record)).toEqual(entry.expected)
+      expect(crmNewRecordListFields(entry.collection, entry.record, contextOf(entry))).toEqual(
+        entry.expected,
+      )
+    },
+  )
+  it('pins the standard lead sources the script-side twin restates (AGL-3577)', () => {
+    expect(fixtures.leadSourceStandardValues).toEqual(
+      crmPicklistDefinition(CRM_LEAD_SOURCE_PICKLIST)?.standardValues,
+    )
+  })
+  it.each(fixtures.leadSourceDirections.map((entry, at) => [at, entry] as const))(
+    'a lead source’s direction #%i',
+    (_at, entry) => {
+      expect(
+        crmLeadSourceDirection(effectiveCrmLeadSourcePicklist(entry.leadSources), entry.label),
+      ).toBe(entry.expected)
     },
   )
 })
