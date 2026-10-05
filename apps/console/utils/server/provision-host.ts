@@ -22,7 +22,12 @@ import {
   suggestSubdomains,
 } from '@aglyn/aglyn/server'
 import { artifactCreateListKeys } from '@aglyn/aglyn/app-utils/artifact-list-keys'
-import { buildDefaultHomeScreen } from '@aglyn/aglyn/app-utils/starter-templates'
+import {
+  buildDefaultHomeScreen,
+  buildDefaultSiteLayout,
+  DEFAULT_SITE_THEME,
+  defaultSiteSeo,
+} from '@aglyn/aglyn/app-utils/default-site'
 import { encodeStoredNodes } from '@aglyn/aglyn/app-utils/stored-nodes'
 import {
   firebaseAdmin,
@@ -128,36 +133,52 @@ export interface ClaimHostResult {
 }
 
 /**
- * The home page a new site is created with (AGL-3408): the screen and its
- * first version, plus the path its routing entry claims.
+ * The site a new site is created as (AGL-3497, after AGL-3408): its home
+ * page — the screen and its first version, plus the path its routing entry
+ * claims — the shared header and footer layout that page renders inside, and
+ * the theme and SEO the host document starts with.
  *
  * Written inside the create transaction rather than after it, so no site ever
- * exists without one — a follow-up write that failed would hand the customer
- * the same 404 this exists to remove, under a success toast.
+ * exists without them — a follow-up write that failed would hand the customer
+ * the same 404 AGL-3408 removed, or a home page with no header, under a
+ * success toast.
  *
- * The same shape every other create door writes: the screen's list keys
- * (`deletedAt: null` among them, AGL-3321) from `artifactCreateListKeys`, and
- * the version's nodes msgpack at rest as `/api/hosts/versions` stores them.
- * `slug` and `publishedAt` are what `publishScreenRoute` stamps, so the
- * console lists the page as Published rather than as a draft that happens to
- * be served.
+ * The same shape every other create door writes: list keys (`deletedAt: null`
+ * among them, AGL-3321) from `artifactCreateListKeys`, and nodes msgpack at
+ * rest as `/api/hosts/versions` stores them. `slug` and `publishedAt` are what
+ * `publishScreenRoute` stamps, so the console lists the page as Published
+ * rather than as a draft that happens to be served. A layout has no publish
+ * stamp: its `versionId` IS the published pointer.
  */
-export function defaultHomeWrites(siteName: string): {
+export function defaultSiteWrites(siteName: string): {
   screenId: string
   versionId: string
   path: string
   screen: Record<string, unknown>
   version: Record<string, unknown>
+  layoutId: string
+  layoutVersionId: string
+  layout: Record<string, unknown>
+  layoutVersion: Record<string, unknown>
+  host: { theme: unknown; seo: Record<string, unknown> }
 } {
   const now = () => firebaseAdmin.firestore.FieldValue.serverTimestamp()
   const definition = buildDefaultHomeScreen(siteName)
   const screenId = createResourceUid()
   const versionId = createResourceUid()
+  const layoutId = createResourceUid()
+  const layoutVersionId = createResourceUid()
   const packed = encodeStoredNodes(definition.nodes)
   const fields = {
     displayName: definition.displayName,
     slug: definition.slug,
     versionId,
+  }
+  const layoutDefinition = buildDefaultSiteLayout(screenId)
+  const layoutPacked = encodeStoredNodes(layoutDefinition.nodes)
+  const layoutFields = {
+    displayName: layoutDefinition.displayName,
+    versionId: layoutVersionId,
   }
   return {
     screenId,
@@ -166,6 +187,8 @@ export function defaultHomeWrites(siteName: string): {
     screen: {
       ...fields,
       ...artifactCreateListKeys('screens', fields),
+      layoutId,
+      ...(definition.seo ? { seo: definition.seo } : {}),
       publishedAt: now(),
       createdAt: now(),
       updatedAt: now(),
@@ -177,6 +200,23 @@ export function defaultHomeWrites(siteName: string): {
       createdAt: now(),
       updatedAt: now(),
     },
+    layoutId,
+    layoutVersionId,
+    layout: {
+      ...layoutFields,
+      ...artifactCreateListKeys('layouts', layoutFields),
+      description: layoutDefinition.description,
+      createdAt: now(),
+      updatedAt: now(),
+    },
+    layoutVersion: {
+      layoutId,
+      displayName: 'Initial version',
+      nodes: layoutPacked ? Buffer.from(layoutPacked) : layoutDefinition.nodes,
+      createdAt: now(),
+      updatedAt: now(),
+    },
+    host: { theme: DEFAULT_SITE_THEME, seo: defaultSiteSeo(siteName) },
   }
 }
 
@@ -207,7 +247,7 @@ export async function claimHostForOrg(
   ).data().count
   const orgRef = firestore.collection('orgs').doc(orgId)
   const hostRef = firestore.collection('hosts').doc(hostId)
-  const home = defaultHomeWrites(displayName)
+  const home = defaultSiteWrites(displayName)
   // Annotated rather than inferred. The body has three exits and an inferred
   // union of object literals does not narrow reliably with `strictNullChecks`
   // off — the same reason `ClaimHostResult` is one interface with optional
@@ -263,6 +303,11 @@ export async function claimHostForOrg(
       // Cleared the moment a starter takes the root, or the owner publishes
       // this page themselves (AGL-3478).
       defaultHomeScreenId: home.screenId,
+      // Born themed and described (AGL-3497): the site's own theme, so the
+      // theme library files it as "Site theme", and the site-wide title,
+      // description and sharing image a search result or a shared link shows.
+      theme: home.host.theme,
+      seo: home.host.seo,
       /*
        * A new site starts with User Accounts ON. The catalog still marks
        * `accounts` default-off per site, so a host doc with no opt-in list —
@@ -286,6 +331,12 @@ export async function claimHostForOrg(
     const homeRef = hostRef.collection('screens').doc(home.screenId)
     tx.set(homeRef, home.screen)
     tx.set(homeRef.collection('versions').doc(home.versionId), home.version)
+    const layoutRef = hostRef.collection('layouts').doc(home.layoutId)
+    tx.set(layoutRef, home.layout)
+    tx.set(
+      layoutRef.collection('versions').doc(home.layoutVersionId),
+      { ...home.layoutVersion, hostId },
+    )
     // The claim itself. `set(…, { merge: true })` deep-merges the map, so this
     // adds one key without disturbing the org's other fields — and it is what
     // makes a concurrent create see this site on its retry. `registerOrgHost`
