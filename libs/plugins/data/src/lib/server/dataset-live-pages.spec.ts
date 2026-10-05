@@ -32,6 +32,15 @@
  *   neither is allowed to reach the caller.
  */
 
+const mockRecordPagePaths = jest.fn(async (_hostId: string, _datasetId: string) => ({
+  paths: [] as string[],
+  truncated: false,
+}))
+jest.mock('../record-pages/record-page-live-paths.server', () => ({
+  recordPagePathsForDataset: (hostId: string, datasetId: string) =>
+    mockRecordPagePaths(hostId, datasetId),
+}))
+
 import {
   registerLivePageDropper,
   type LivePageTarget,
@@ -326,6 +335,23 @@ describe('datasetLivePageScope', () => {
         truncated: false,
       },
     ])
+  })
+
+  it('names the dataset’s record pages too, which no routing-map entry names (AGL-3475)', async () => {
+    mockRecordPagePaths.mockResolvedValueOnce({
+      paths: ['/services/roofing', '/team'],
+      truncated: true,
+    })
+    const scope = await datasetLivePageScope({
+      firestore: fakeFirestore(ONE_SITE),
+      orgId: ORG_ID,
+      datasetId: DATASET_ID,
+    })
+    expect(mockRecordPagePaths).toHaveBeenCalledWith(HOST_ID, DATASET_ID)
+    expect(scope.targets[0]).toMatchObject({
+      paths: ['/team', '/services/roofing'],
+      truncated: true,
+    })
   })
 
   it('answers not-rendered — a success — when no page repeats over it', async () => {

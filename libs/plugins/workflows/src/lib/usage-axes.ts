@@ -45,6 +45,9 @@ export function workflowsUsageAxes(): PluginUsageAxesDeclaration {
         fields: ['workflowRuns'],
         entitlement: 'workflowRunsPerMonth',
         hostCounter: 'workflowRuns',
+        // The band is the workspace's: every run is counted on the org's
+        // counter too, and the run gates are held to it (`run-meter.ts`).
+        orgCounter: 'workflowRuns',
         // The runtime stops workflows silently at the monthly cap, so the
         // owner is warned approaching it and told on reaching it why their
         // automations went quiet.
@@ -66,6 +69,7 @@ export function workflowsUsageAxes(): PluginUsageAxesDeclaration {
         order: 110,
         fields: ['actionRuns'],
         entitlement: 'actionRunsPerMonth',
+        orgCounter: 'actionRuns',
       },
     ],
   }

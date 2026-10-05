@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { stampRecordOrigin } from '@aglyn/aglyn/plugin-manager/plugin-record-origin'
 import { normalizeContainerIds } from '@aglyn/aglyn/app-utils/container-membership'
 import { consentGroupForHost } from '@aglyn/aglyn/app-utils/consent-groups'
 import {
@@ -667,6 +668,15 @@ export function createOutreachEnrollRoutes(deps: OutreachEnrollRouteDeps): Outre
           }
         }
         await joinSequenceCampaigns(caller.orgId, sequence, candidate, nowMs)
+        // A person reached first by this sequence came from it (AGL-3519):
+        // the record system stamps its Sequence lead source on a record
+        // naming none, and leaves any other alone.
+        await stampRecordOrigin({
+          orgId: caller.orgId,
+          hostId: sequence.hostId,
+          email: decision.email,
+          origin: 'sequence',
+        })
         // The person's record says so (AGL-3274): "Enrolled in <sequence>",
         // with the campaigns it carried them into, once per enrollment.
         const entry = outreachEnrolledEntry({

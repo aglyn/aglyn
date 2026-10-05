@@ -1009,11 +1009,13 @@ function PopupOverlay(props: {
         {/* The popup image is a free-text console field rendered verbatim —
             one of AGL-1725's raw author sinks. Scheme rule only, never a
             host check: `http:` and unknown schemes render nothing;
-            https/relative (the media picker's forms) render as stored. */}
+            https/relative (the media picker's forms) render as stored,
+            except a library file's Storage URL, which the resolver routes
+            through the site's CDN like every other image (AGL-3506). */}
         {popup.imageUrl && !Aglyn.isRefusedAuthorImageSrc(popup.imageUrl) ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={popup.imageUrl}
+            src={Aglyn.siteRelativeMediaSrc(popup.imageUrl, { hostId })}
             // AGL-1896. This was a hardcoded `alt=""` with no field behind
             // it. Still empty when the author left it empty — a decorative
             // banner beside its own headline is the case `alt=""` exists for

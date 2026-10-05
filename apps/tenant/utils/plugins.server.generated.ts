@@ -30,6 +30,11 @@ export const TENANT_PLUGIN_SERVER_MANIFEST: PluginLoadManifest = [
     load: () => import('@aglyn/plugins-commerce/server'),
   },
   {
+    id: 'data',
+    register: {"tenantApi":"registerDataTenantApi"},
+    load: () => import('@aglyn/plugins-data/tenant-api'),
+  },
+  {
     id: 'email',
     apiPrefixes: ["email"],
     register: {"tenantApi":"registerEmailApi"},

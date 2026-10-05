@@ -34,6 +34,7 @@ Scopes and the site rule are shared with every CRM resource — see
   "dealId": "d_3c9a",
   "outcome": "Interested",
   "durationMinutes": 25,
+  "direction": "outbound",
   "siteId": "site_a1b2c3",
   "created": "2026-09-05T18:23:23.941Z",
   "updated": "2026-09-05T18:23:23.941Z"
@@ -51,6 +52,7 @@ Scopes and the site rule are shared with every CRM resource — see
 | `contactId`, `companyId`, `dealId` | string \| null | What it is about. **At least one is required**, and each must exist. |
 | `outcome` | string \| null | A short label, 120 characters. |
 | `durationMinutes` | integer \| null | A whole number, `0` or more. |
+| `direction` | string \| null | Which way it went: a `call` takes `outbound`, `inbound` or `internal` (Salesforce's Call Type), an `email` `outbound` or `inbound`. Any other kind takes none. Optional. |
 | `siteId` | string | The site the activity was logged from. **Read-only.** |
 | `created` / `updated` | string \| null | ISO 8601. |
 
@@ -114,7 +116,7 @@ Returns **`201`**, or **`200`** with the original when an `Idempotency-Key` repl
 
 | Status | `type` | When |
 | --- | --- | --- |
-| `400` | `bad_request` | `code: "validation_failed"` — a missing `body` or `consentSiteId`, no `contactId`, `companyId` or `dealId` at all (`fields.contactId` explains), a `kind` outside its list, an `at` that is not an ISO 8601 instant, a `byUid` who is not a member, a reference that does not exist, or a `durationMinutes` that is not a whole number `0` or more. On the list, a `?kind=` outside the list or a malformed `?updatedAfter=`. |
+| `400` | `bad_request` | `code: "validation_failed"` — a missing `body` or `consentSiteId`, no `contactId`, `companyId` or `dealId` at all (`fields.contactId` explains), a `kind` outside its list, an `at` that is not an ISO 8601 instant, a `byUid` who is not a member, a reference that does not exist, a `durationMinutes` that is not a whole number `0` or more, or a `direction` the kind does not take. On the list, a `?kind=` outside the list or a malformed `?updatedAfter=`. |
 | `403` | `insufficient_scope` | Key lacks `crm:read` / `crm:write`. |
 | `404` | `not_found` | `"No such activity"`. |
 | `405` | `method_not_allowed` | `Allow`: `GET, POST` on `/v1/activities`, `GET, DELETE` on one activity — a `PATCH` is refused here rather than with a `404` that would read as "no such activity". |

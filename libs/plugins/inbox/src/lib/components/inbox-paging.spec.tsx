@@ -253,11 +253,8 @@ jest.mock('firebase/firestore', () => ({
 }))
 
 jest.mock('@aglyn/aglyn', () => ({
-  formSpamCaughtNotice: () => null,
   FORMS_MAX_PER_HOST: 50,
-  formSubmissionsPausedNotice: () => null,
   pluginDocsHelp: () => undefined,
-  submissionMonthKey: () => '2026-08',
   visitorRecordRefusedCounterId: (kind: string) => `${kind}Refused`,
   visitorRecordsPausedNotice: () => null,
 }))

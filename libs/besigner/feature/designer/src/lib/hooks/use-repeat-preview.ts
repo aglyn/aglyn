@@ -44,9 +44,16 @@ export interface RepeatPreview {
   label: string
   /**
    * The records this element renders, in order, bounded exactly as the
-   * published page's composition bounds them.
+   * published page's composition bounds them. EMPTY when nothing matches: the
+   * published page then renders no copy at all (AGL-3496), while the canvas
+   * keeps the template on screen to be edited and the badge says so.
    */
   records: ReadonlyArray<Record<string, unknown>>
+  /**
+   * The key names nothing this site can read — a deleted or unshared dataset.
+   * `records` is empty, and the published page renders no copy.
+   */
+  missing?: boolean
   /** Which scope applies, so the canvas draws what the page will build. */
   scope: RepeatScope
   /** The repeated rows, for the token substitution's reference hops. */
@@ -62,8 +69,14 @@ export interface RepeatPreview {
  * The designer cannot read them itself — it renders inside a plugin sandbox,
  * and which documents hold them is the source's business — so this HOLDS the
  * request and reads back whatever the host app's reader filed. Without a
- * provider, or before an answer, it returns `undefined` and the element draws
- * its template once, the way the canvas always did.
+ * provider, before an answer, or after a failed read, it returns `undefined`
+ * and the element draws its template once with no badge: nothing is known.
+ *
+ * An answer of no rows — a filter that matches nothing, an empty dataset, a
+ * key that names nothing (`missing`) — IS known, and is returned with no
+ * records rather than as `undefined`: the published page renders that repeat
+ * zero times (AGL-3496), and an author looking at their template on the
+ * canvas has to be told so.
  *
  * The records are {@link repeatedRecords}, not a second reading of the same
  * props: the filter, the sort, the limit and `REPEAT_MAX_RECORDS` are applied
@@ -102,10 +115,17 @@ export function useRepeatPreview(node: unknown): RepeatPreview | undefined {
   return useMemo(() => {
     if (!source || !request) return undefined
     const answer = source.get(key)
+    if (answer?.status === 'missing') {
+      return {
+        label: request.label,
+        records: [],
+        scope: repeatScope(node),
+        missing: true,
+      }
+    }
     if (answer?.status !== 'ready') return undefined
     const dataset = answer.rowsByKey[request.key]
     const records = repeatedRecords({ props }, dataset)
-    if (!records.length) return undefined
     return {
       label: answer.label,
       records,

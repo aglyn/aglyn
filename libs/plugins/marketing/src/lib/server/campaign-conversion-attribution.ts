@@ -608,7 +608,7 @@ export async function attributeCampaignConversion(
 
 /**
  * The per-org collection of sequence rollups. Restated from the reader
- * (`campaign-report.ts` in the campaigns UI library) and asserted equal by
+ * (`model/campaign-report.ts`) and asserted equal by
  * the reader's spec.
  */
 export const CAMPAIGN_SEQUENCE_REPORTS_COLLECTION = 'campaignSequenceReports'

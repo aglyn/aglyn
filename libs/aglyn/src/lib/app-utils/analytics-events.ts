@@ -874,7 +874,8 @@ export function buildAddToCartParams(input: {
  * publish. The host's `defaultHomeScreenId` names that placeholder, and its
  * entry is not counted: the site "came alive" when its owner put something on
  * it, not when the platform did. Republishing the placeholder itself after
- * editing it counts, which is the same act.
+ * editing it counts, which is the same act: that publish is read against the
+ * map with the marker still set, and clears it in the same write (AGL-3478).
  */
 export function isFirstPublishedRoute(
   routing: Record<string, unknown> | null | undefined,

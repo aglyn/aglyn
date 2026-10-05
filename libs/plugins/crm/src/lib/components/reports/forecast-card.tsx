@@ -43,6 +43,8 @@ import {
 import { useWindowRead } from './use-aggregate-read'
 import {
   currencyOfDeals,
+  FORECAST_CATEGORY_ROWS,
+  forecastByCategory,
   forecastByCloseMonth,
   type ForecastCell,
   type PipelineForecast,
@@ -57,6 +59,12 @@ import {
  */
 const OPEN_DEAL_CEILING = 1000
 const PIPELINE_CEILING = 20
+/**
+ * The won deals of the period, read exactly as the closed-deals card reads
+ * them — the same query, ceiling and cache key — so the Closed row costs
+ * no read of its own.
+ */
+const CLOSED_DEAL_CEILING = 500
 
 type DealRow = Aglyn.CrmDeal & { $id: string }
 type PipelineRow = Aglyn.CrmPipeline & { $id: string }
@@ -75,6 +83,12 @@ function monthLabel(startMs: number): string {
  * month each deal is expected to close, for the next six, per pipeline,
  * at face value and weighted by the stage.
  *
+ * And by forecast category (AGL-3516), Salesforce's other way to read it:
+ * the open deals by the category each stands in — Pipeline, Best Case,
+ * Commit — and the deals won in the period as Closed, each at face value
+ * and weighted. A deal the team put in Omitted is counted beside the table
+ * rather than in it.
+ *
  * Not period-scoped, like the pipeline card and for the same reason: the
  * forecast is what is open NOW, looked at forward. Deals with no expected
  * close are their own row rather than a footnote — that row is the size
@@ -85,7 +99,7 @@ function monthLabel(startMs: number): string {
  */
 export function ForecastCard(props: ForecastCardProps) {
   const { report } = props
-  const { scope, tokens, nowMs } = report
+  const { scope, tokens, nowMs, range } = report
   const firestore = useFirestore()
 
   const dealWindow = useWindowRead<DealRow>(
@@ -112,10 +126,31 @@ export function ForecastCard(props: ForecastCardProps) {
     { cacheKey: reportCacheKey(report, 'pipeline:pipelines') },
   )
 
+  const wonWindow = useWindowRead<DealRow>(
+    () =>
+      query(
+        scopedCollection(firestore, scope, 'deals'),
+        ...visibleToClause(tokens),
+        where('status', '==', 'won'),
+        where('closedAtMs', '>=', range.from),
+        where('closedAtMs', '<', range.to),
+        orderBy('closedAtMs', 'desc'),
+        limit(CLOSED_DEAL_CEILING + 1),
+      ),
+    CLOSED_DEAL_CEILING,
+    [firestore, scope, tokens, range],
+    { cacheKey: reportCacheKey(report, 'closed:won') },
+  )
+
   const forecast = useMemo(
     () => forecastByCloseMonth(dealWindow.rows, pipelineWindow.rows, nowMs),
     [dealWindow.rows, pipelineWindow.rows, nowMs],
   )
+  const byCategory = useMemo(
+    () => forecastByCategory(dealWindow.rows, wonWindow.rows, pipelineWindow.rows),
+    [dealWindow.rows, wonWindow.rows, pipelineWindow.rows],
+  )
+  const categoriesRead = wonWindow.status === 'success'
   const currency = useMemo(() => currencyOfDeals(dealWindow.rows), [dealWindow.rows])
   const read = dealWindow.status === 'success' && pipelineWindow.status === 'success'
   const failed = dealWindow.status === 'error' || pipelineWindow.status === 'error'
@@ -177,7 +212,9 @@ export function ForecastCard(props: ForecastCardProps) {
         excerpt:
           'Every open deal by the month it is expected to close, for the ' +
           'next six months and per pipeline, at face value and weighted by ' +
-          'its stage. Deals with no expected close are their own row.',
+          'its stage. Deals with no expected close are their own row. Below, ' +
+          'the same deals by forecast category, with the deals won in the ' +
+          'period as Closed.',
       })}
       contentGutterX
       contentGutterY
@@ -244,6 +281,55 @@ export function ForecastCard(props: ForecastCardProps) {
             </ScrollTable>
           </Box>
         )}
+        {read && categoriesRead && byCategory.total.count + byCategory.omitted.count > 0 ? (
+          <Stack spacing={1}>
+            <Typography variant="subtitle2">{'By forecast category'}</Typography>
+            <Box>
+              <ScrollTable size="small" aria-label="Forecast by category">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>{'Forecast category'}</TableCell>
+                    <TableCell align="right">{'Deals'}</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {FORECAST_CATEGORY_ROWS.map((category) => (
+                    <TableRow key={category} data-forecast-category={category}>
+                      <TableCell>
+                        <Typography variant="body2">
+                          {category === 'closed'
+                            ? 'Closed (won in the period)'
+                            : Aglyn.CRM_FORECAST_CATEGORY_LABELS[category]}
+                        </Typography>
+                      </TableCell>
+                      <TableCell align="right">
+                        {cell(byCategory.rows[category], currency.currency)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  <TableRow>
+                    <TableCell>
+                      <Typography variant="subtitle2">{'Forecast'}</Typography>
+                    </TableCell>
+                    <TableCell align="right">{cell(byCategory.total, currency.currency)}</TableCell>
+                  </TableRow>
+                </TableBody>
+              </ScrollTable>
+            </Box>
+            {byCategory.omitted.count > 0 ? (
+              <Typography variant="caption" color="text.secondary">
+                {`${plural(byCategory.omitted.count, 'open deal')} worth ` +
+                  `${money(byCategory.omitted.amountCents, currency.currency)} ` +
+                  `${byCategory.omitted.count === 1 ? 'is' : 'are'} in Omitted and left out of the forecast.`}
+              </Typography>
+            ) : null}
+            {wonWindow.truncated ? (
+              <Typography variant="caption" color="text.secondary">
+                {`Closed counts the ${CLOSED_DEAL_CEILING.toLocaleString()} most recently won deals of the period.`}
+              </Typography>
+            ) : null}
+          </Stack>
+        ) : null}
         {read && currency.mixed ? (
           <Typography variant="caption" color="text.secondary">
             {`Deals are in more than one currency; the figures add them as numbers and show ${currency.currency.toUpperCase()}, the most common.`}

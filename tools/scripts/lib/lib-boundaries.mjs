@@ -422,6 +422,71 @@ export function compareToAllowlist(violations, allowlist) {
   }
 }
 
+/**
+ * The projects that import a library statically AND reach it through lazy
+ * `import()` edges, which `@nx/enforce-module-boundaries` answers with
+ * "Static imports of lazy-loaded libraries are forbidden" on every static
+ * import of it — in the lazy importer, and in every project that lazily loads
+ * the lazy importer. The console and the tenant reach every plugin through the
+ * generated manifests' `load()`, so one `import('@aglyn/…')` of a library in a
+ * plugin reds both apps' lint at every import of that library (AGL-3557:
+ * 1,021 errors across five projects, from three plugin files).
+ *
+ * The rule spares an import that resolves to one of the library's package
+ * entry points, which is why the rows of `LAZY_AND_STATIC_ALLOWED` lint green;
+ * a new pair is red here because whether it is spared depends on every
+ * import's resolution, which only the full lint sees — and no pre-push step
+ * runs that.
+ *
+ * Read from the project graph alone: `dependencies[source]` carries a project
+ * edge per type, so a project with both a `static` and a `dynamic` edge to a
+ * target has both. The lazy reach follows dynamic edges only, as the rule's
+ * own walk does.
+ *
+ * @returns {Array<{from: string, to: string, via: string[]}>} each pair once,
+ *   `via` the lazy chain from `from` to `to`
+ */
+export function lazyAndStaticPairs(document) {
+  const dependencies = document.graph.dependencies
+  const pairs = []
+  for (const from of Object.keys(document.graph.nodes)) {
+    const statics = new Set((dependencies[from] ?? []).filter((edge) => edge.type === 'static').map((edge) => edge.target))
+    // Breadth first over dynamic edges, keeping the first chain to each target.
+    const chains = new Map([[from, [from]]])
+    const queue = [from]
+    while (queue.length) {
+      const at = queue.shift()
+      for (const edge of dependencies[at] ?? []) {
+        if (edge.type !== 'dynamic' || chains.has(edge.target)) continue
+        chains.set(edge.target, [...chains.get(at), edge.target])
+        queue.push(edge.target)
+      }
+    }
+    for (const [to, via] of chains) {
+      if (to !== from && statics.has(to)) pairs.push({ from, to, via })
+    }
+  }
+  return pairs.sort((a, b) => `${a.from} -> ${a.to}`.localeCompare(`${b.from} -> ${b.to}`))
+}
+
+/**
+ * The lazy-and-static pairs that lint green, each with why. Compared the
+ * ratchet way (`compareToAllowlist`): a row the graph no longer has is red
+ * too. A new row is only for a pair whose `nx run <from>:lint` is clean.
+ */
+export const LAZY_AND_STATIC_ALLOWED = Object.freeze([
+  {
+    from: 'console',
+    to: 'besigner-feature-designer',
+    why: 'The designer pages load the canvas with next/dynamic; every static import is the package barrel or a ./* entry.',
+  },
+  {
+    from: 'console',
+    to: 'shared-ui-json-editor',
+    why: 'The designer pages load the JSON editor with next/dynamic; every static import is the package barrel.',
+  },
+])
+
 /** The text a source project's `eslint.config.mjs` spreads to take its overrides. */
 export const OVERRIDES_CALL = 'boundaryOverridesFor(import.meta.url)'
 

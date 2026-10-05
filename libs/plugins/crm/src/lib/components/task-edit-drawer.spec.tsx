@@ -28,6 +28,10 @@
  *
  * The record pickers and the snooze menu are stubbed: they are other
  * specs' subjects and each opens a listener of its own.
+ *
+ * TYPE, PRIORITY, STATUS AND SUBJECT (AGL-3517): the org's picklists, read
+ * through `useFirestoreDoc` from `picklistDocs` by path; none stored is the
+ * standard values.
  */
 
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
@@ -43,7 +47,13 @@ jest.mock('firebase/firestore', () => ({
 }))
 
 const USER = { uid: 'uid-me', getIdToken: async () => 'token' }
+/** The org's stored picklist documents, by path. */
+let picklistDocs: Record<string, unknown> = {}
 jest.mock('@aglyn/tenant-feature-instance', () => ({
+  useFirestoreDoc: (factory: () => { path: string } | null) => {
+    const ref = factory()
+    return { data: ref ? picklistDocs[ref.path] : undefined, status: 'success', fromCache: false }
+  },
   // The viewer's reach, which `useCrmScope` reads only for a site in a
   // declared consent group (AGL-3320); an org-wide member here.
   useScopeTokens: () => ({ tokens: ['org'], orgWide: true, loaded: true }),
@@ -67,7 +77,8 @@ jest.mock('@aglyn/shared-ui-snackstack', () => ({
   }),
 }))
 jest.mock('@aglyn/shared-ui-jsx', () => ({
-  useConfirmationContext: () => ({ confirm: () => Promise.resolve(true) }),
+  // The real contract: OK resolves with no value (AGL-3509).
+  useConfirmationContext: () => ({ confirm: () => Promise.resolve(undefined) }),
 }))
 jest.mock('../hooks/use-org-member-directory', () => ({
   useOrgMemberDirectory: () => ({
@@ -155,13 +166,14 @@ const pickSite = (option: string) => {
   fireEvent.click(within(screen.getByRole('listbox')).getByRole('option', { name: option }))
 }
 const create = (title: string) => {
-  fireEvent.change(screen.getByRole('textbox', { name: /^Title/ }), { target: { value: title } })
+  fireEvent.change(screen.getByRole('combobox', { name: /^Subject/ }), { target: { value: title } })
   fireEvent.click(screen.getByRole('button', { name: 'Create task' }))
 }
 
 beforeEach(() => {
   notices = []
   saves = []
+  picklistDocs = {}
   window.sessionStorage.clear()
 })
 
@@ -341,5 +353,75 @@ describe('an edit beneath the organization hub', () => {
       wrapper: underOrg([SITE_A]),
     })
     expect(screen.getByText('Filed from Site A.')).toBeTruthy()
+  })
+})
+
+describe('type, priority, status and subject (AGL-3517)', () => {
+  const select = (name: RegExp) => screen.getByRole('combobox', { name })
+  const pick = (name: RegExp, option: string) => {
+    fireEvent.mouseDown(select(name))
+    fireEvent.click(within(screen.getByRole('listbox')).getByRole('option', { name: option }))
+  }
+  const options = (name: RegExp) => {
+    fireEvent.mouseDown(select(name))
+    const listed = within(screen.getByRole('listbox'))
+      .getAllByRole('option')
+      .map((option) => option.textContent)
+    fireEvent.keyDown(screen.getByRole('listbox'), { key: 'Escape' })
+    return listed
+  }
+
+  it('opens a new task on the org’s defaults and sends each label with its meaning', async () => {
+    picklistDocs['orgs/org-1/crmPicklists/taskPriority'] = {
+      values: [{ id: 'high', label: 'High', active: true }],
+      defaultValueId: 'high',
+    }
+    open({ hostId: 'host-a' })
+    expect(select(/^Type/).textContent).toBe('To-do')
+    expect(select(/^Priority/).textContent).toBe('High')
+    expect(select(/^Status/).textContent).toBe('Not Started')
+    pick(/^Type/, 'Meeting')
+    create('Demo')
+    await waitFor(() => expect(saves).toHaveLength(1))
+    expect(saves[0]['task']).toMatchObject({
+      kind: 'meeting',
+      typeLabel: 'Meeting',
+      priorityLabel: 'High',
+      statusLabel: 'Not Started',
+    })
+  })
+
+  it('offers an open task only the open statuses — the tick is what completes it', () => {
+    open({ hostId: 'host-a', task: task({ hostId: 'host-a', statusLabel: 'In Progress' }) })
+    expect(select(/^Status/).textContent).toBe('In Progress')
+    expect(options(/^Status/)).toEqual([
+      'Not Started',
+      'In Progress',
+      'Waiting on someone else',
+      'Deferred',
+    ])
+  })
+
+  it('shows a label-less task the first active value of its meaning', () => {
+    open({
+      hostId: 'host-a',
+      task: task({ hostId: 'host-a', kind: 'call', priority: 'low', status: 'done' }),
+    })
+    expect(select(/^Type/).textContent).toBe('Call')
+    expect(select(/^Priority/).textContent).toBe('Low')
+    expect(select(/^Status/).textContent).toBe('Completed')
+  })
+
+  it('suggests the org’s subjects under a title that takes any text', async () => {
+    open({ hostId: 'host-a' })
+    const subject = select(/^Subject/)
+    fireEvent.change(subject, { target: { value: 'Send' } })
+    const suggested = within(screen.getByRole('listbox'))
+      .getAllByRole('option')
+      .map((option) => option.textContent)
+    expect(suggested).toEqual(['Send Letter', 'Send Quote'])
+    create('Send the revised deck')
+    await waitFor(() => expect(saves).toHaveLength(1))
+    expect(saves[0]['task']).toMatchObject({ title: 'Send the revised deck' })
   })
 })

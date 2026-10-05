@@ -28,6 +28,7 @@ import {
   WORKFLOWS_ORG_CONSOLE_SECTIONS,
 } from './components/workflows-console-sections'
 import { registerPluginZone } from '@aglyn/aglyn/plugin-manager/plugin-zones'
+import { registerPluginTransferResourceUi } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
 import {
   AUTOMATION_EDITOR_ZONE,
   AUTOMATION_RUN_ZONE,
@@ -59,6 +60,12 @@ const WorkflowsConsolePage = lazy(
  * them. Only what a reader sees carries the new name.
  */
 export function registerWorkflowsConsole(): void {
+  // How the Import & export hub names org automations in a workspace package (AGL-3535).
+  registerPluginTransferResourceUi(
+    'workflows.org-automations',
+    { label: 'Org automations', icon: { path: mdiSitemap.path } },
+    { pluginId: BUNDLE_ID },
+  )
   registerWorkflowsRecordRoutes()
   registerWorkflowsRecordLists()
   registerPluginZone(

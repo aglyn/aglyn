@@ -28,6 +28,7 @@ import {
   resolvePaidMediaDelivery,
 } from './paid-media-delivery'
 import { createHmac, timingSafeEqual } from 'crypto'
+import { countOffRouteServe } from './paid-media-serve-count'
 
 /**
  * Signing secret for commerce tokens (AGL-509). A dedicated env var with NO
@@ -246,7 +247,9 @@ export const downloadHandler: PluginApiHandler = async (req, res) => {
     // The link dies within the hour, so a refund, an expired receipt token or
     // a spent limit also ends what a forwarded `Location` can fetch: the next
     // download has to come back through this route and its checks.
-    return res.redirect(302, delivery.location)
+    res.redirect(302, delivery.location)
+    await countOffRouteServe(firestore, delivery)
+    return
   } catch (error) {
     console.error(error)
     return res.status(500).send('Download unavailable')

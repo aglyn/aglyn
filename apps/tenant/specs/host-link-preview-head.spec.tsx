@@ -67,6 +67,13 @@ jest.mock('../utils/get-site-nav', () => ({
   default: async () => [],
 }))
 
+/** The icon sources' type and hash (AGL-3484); none read unless a case says. */
+const mockIconFacts = jest.fn()
+jest.mock('@aglyn/tenant-runtime/get-site-icon-facts', () => ({
+  __esModule: true,
+  getSiteIconFacts: (...args: unknown[]) => mockIconFacts(...args),
+}))
+
 import HostLayout from '../app/[host]/[scheme]/layout'
 
 const HOST_ID = 'ZG22ootbN-'
@@ -92,6 +99,7 @@ const headFor = async (host: Record<string, unknown>) => {
     touchIcons: links
       .filter((link) => link.rel === 'apple-touch-icon')
       .map((link) => link.href),
+    touchIconLinks: links.filter((link) => link.rel === 'apple-touch-icon'),
     themeColors: metas
       .filter((meta) => meta.name === 'theme-color')
       .map(({ content, media }) => ({ content, media })),
@@ -106,7 +114,15 @@ const headFor = async (host: Record<string, unknown>) => {
 }
 
 describe('the layout’s apple-touch-icon (AGL-3382)', () => {
-  beforeEach(() => jest.clearAllMocks())
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockIconFacts.mockResolvedValue(new Map())
+  })
+
+  /** Every touch icon names this source, whatever size it is drawn at. */
+  const sourcesOf = (hrefs: string[]) => [
+    ...new Set(hrefs.map((href) => href.replace(/\?icon=.*$/, ''))),
+  ]
 
   it('links the site’s app icon', async () => {
     const { touchIcons } = await headFor({
@@ -115,7 +131,7 @@ describe('the layout’s apple-touch-icon (AGL-3382)', () => {
         appIcon: 'media:org:Ok7uFGMCC-/mKeulwfbL0',
       },
     })
-    expect(touchIcons).toEqual([
+    expect(sourcesOf(touchIcons)).toEqual([
       `/api/media/cdn/org:Ok7uFGMCC-:${HOST_ID}/mKeulwfbL0`,
     ])
   })
@@ -124,8 +140,38 @@ describe('the layout’s apple-touch-icon (AGL-3382)', () => {
     const { touchIcons } = await headFor({
       seo: { favicon: 'media:org:Ok7uFGMCC-/o0-uaWHCNA' },
     })
-    expect(touchIcons).toEqual([
+    expect(sourcesOf(touchIcons)).toEqual([
       `/api/media/cdn/org:Ok7uFGMCC-:${HOST_ID}/o0-uaWHCNA`,
+    ])
+  })
+
+  it('links each iOS size, flattened onto the site’s background (AGL-3484)', async () => {
+    const src = `/api/media/cdn/org:Ok7uFGMCC-:${HOST_ID}/mKeulwfbL0`
+    mockIconFacts.mockResolvedValue(
+      new Map([[src, { contentType: 'image/png', contentHash: 'h4sh' }]]),
+    )
+    const { touchIconLinks } = await headFor({
+      seo: { appIcon: 'media:org:Ok7uFGMCC-/mKeulwfbL0' },
+      theme: {
+        colorSchemes: { light: { background: { default: '#FFF8F0' } } },
+      },
+    })
+    expect(
+      touchIconLinks.map(({ href, sizes }) => ({ href, sizes })),
+    ).toEqual(
+      [180, 167, 152].map((size) => ({
+        href: `${src}?icon=flat-${size}&bg=fff8f0&v=h4sh`,
+        sizes: `${size}x${size}`,
+      })),
+    )
+  })
+
+  it('links a hotlinked icon as it is — there is no renderer behind it', async () => {
+    const { touchIconLinks } = await headFor({
+      seo: { appIcon: 'https://cdn.example.com/icon.png' },
+    })
+    expect(touchIconLinks).toEqual([
+      { rel: 'apple-touch-icon', href: 'https://cdn.example.com/icon.png' },
     ])
   })
 

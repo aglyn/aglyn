@@ -159,6 +159,16 @@ unused field, which counts the 23 unions reported, and the one with a variant
 per step type, which counts the 8,757 bytes that compiled to too large a
 grammar.
 
+A description costs no grammar — `aiToolSchemaCompiledBytes` drops it — so a
+field grows the schema only by its structure and its enums. AGL-3538 gave the
+create-task step a `priority` (`low`, `normal`, `high`) and the log-activity
+step a `direction` (`outbound`, `inbound`, `internal`, or empty for a kind that
+takes none), which with the schema as it was came to 3,964 bytes. They fit by compiling the host
+events' enum once: the trigger's `event` keeps it, and a `waitForEvent` step's
+`event` is a string described as one of the trigger events, which the reader
+holds to the list and refuses by naming every event. The draft is 3,769 bytes,
+38 under the proven 3,807, and `tool-schema-limits.spec.ts` pins both.
+
 ## Credits, per step
 
 `runAiJobStep` is the one place a step is claimed, metered, run and recorded,
@@ -1452,8 +1462,9 @@ is one thing to build and a plan over it would be a plan of one.
   - **The list** a campaign is for is suggested when the brief names one of
     the org's lists, and is set on nothing. It reaches the person as the
     output's `note`.
-  - **The send time** is `campaignSendTime` in `@aglyn/shared-ui-email-campaigns`
-    over that list's past sends on this site, and is said only in the note.
+  - **The send time** is the Marketing plugin's (`model/campaign-send-time.ts`),
+    asked for through `plugin-record-facts` (`listSendTime`) over that list's
+    past sends on this site, and is said only in the note.
 - **Outputs.** An `emailScreen` output for the design (which opens in the
   screen besigner, as the Emails page's Edit design does) and, for a campaign,
   a `campaign` output carrying the note. A campaign that could not be drafted
@@ -2134,7 +2145,7 @@ needs, and the machine does not start it with less.
   request's line is the same length either way, so no figure the Free page's
   arithmetic quotes moves.
 - **The ceiling does not move to make a section fit.** The balanced tier's
-  1,050 fits the Free page's wall with little to spare: past 1,060 tokens the
+  1,050 fits the Free page's wall with little to spare: past 1,055 tokens the
   first section pass costs 45 credits, and the Free page that builds its layout
   first leaves 45 of the 300 — no more than that pass, which is the room the
   arithmetic keeps for a re-asked section. That margin was 1,060 until the
@@ -2145,7 +2156,9 @@ needs, and the machine does not start it with less.
   (AGL-3433): the catalog stopped printing a name that only spells its id
   again (`image (Image)`, `searchBox (Search Box)`), which, with the copy that
   calls a screen a page (AGL-3430), brought the page's prefix to 4,601 and left
-  ten. A two-person introduction drawn
+  ten. Rule 4's record template (AGL-3475) put 13 back, 4,614, and left five;
+  the plan's record field rides only a job that may bind a dataset, so the
+  Free plan's request carries none of it. A two-person introduction drawn
   roomier, in the 20 elements an estimate-counted budget allowed, needs 1,114
   real tokens, so no ceiling the wall holds fits it; drawn in 15, it needs 834.
   A plan rule that splits a section cannot see how long its items' copy runs,
@@ -2796,15 +2809,33 @@ from the job, and the step writes no CRM record.
   org-wide at the organization level, or reaches the site under it; the member
   holds `data.manage`; the plan carries the CRM; and the record, with every
   activity, task and deal hanging off it, is visible to the site. It reports
-  the facts its builders list (`libs/plugins/crm/src/lib/model/record-facts.ts`),
-  which never include an email address, a phone number, a postal address,
-  consent, a custom field value, a team member or a record id. Text a person
-  wrote into the record (a name, a job title, a tag, notes, a logged activity,
-  a capture's summary, a task's or a deal's title, a reason) goes as written,
-  except that an email address or a phone number inside it is replaced by a
-  placeholder first (`crmFactProse`); a postal address typed into a note is
-  not recognized. The step writes into a prompt only the facts it names,
-  whatever else a reader reports.
+  the facts its builders list, and which builders depends on the
+  `release_crm_assist_whole_record` flag for the org (AGL-3520; off by default,
+  no staff preview). Off, the disclosed builders
+  (`libs/plugins/crm/src/lib/model/record-facts-disclosed.ts`) report what the
+  published Privacy Policy and Subprocessors row describe, which never include
+  an email address, a phone number, a postal address, consent, a custom field
+  value, a team member or a record id. Text a person wrote into the record (a
+  name, a job title, a tag, notes, a logged activity, a capture's summary, a
+  task's or a deal's title, a reason) goes as written, except that an email
+  address or a phone number inside it is replaced by a placeholder first
+  (`crmFactProse`); a postal address typed into a note is not recognized. The
+  step writes into a prompt only the facts `aiCrmDisclosedFactsLines` names,
+  whatever else a reader reports. On, the readers report the WHOLE record
+  (`libs/plugins/crm/src/lib/model/record-facts.ts`) — every standard field,
+  every email address, phone number and postal address, birthdate, assistant,
+  the reports-to contact, parent company and campaign by name, the owner and
+  task assignees by display name, the marketing consent, picklist labels and
+  custom field values under their labels — and mark it `wholeRecord: true`;
+  only then does the step write every fact (`aiCrmFactsLines`), fitting an
+  oversized record to `AI_CRM_FACTS_MAX_CHARS` by cutting its long texts,
+  never a field (`aiCrmFitFacts`). Still never reported either way: an
+  authentication token, an account identifier (a uid) or a record id other
+  than a pipeline stage's. The catalog's Anthropic row publishes the disclosed
+  wording; the open-ended wording waits in
+  `ANTHROPIC_CRM_ASSISTANCE_WHOLE_RECORD` until Privacy Policy section 2 and
+  the Subprocessors row are republished, which is the precondition for
+  turning the flag on.
 - **Why a seam, and not a contract in either plugin.** The package map forbids
   the AI plugin to import the CRM and the CRM to import the AI plugin, and keeps
   CRM shapes out of the core. `plugin-resource-drafts` is the seam a plugin

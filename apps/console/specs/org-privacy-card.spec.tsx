@@ -20,10 +20,11 @@
  *
  * Settings → Privacy hands over the contacts and leads a workspace holds and
  * files a person's erasure by address, on every plan. What must hold: each
- * file is asked of the CRM export route for this org and the resource named;
- * a file shorter than the route promised is refused rather than saved; the
- * erasure posts the org, the address and its second typing; and nothing is
- * filed while the two typings differ.
+ * file opens the console's export dialog on the CRM's transfer resource over
+ * the whole workspace (AGL-3552), offered to exactly whom the transfer gate
+ * admits — "Manage data", as the retired `/api/crm/export` asked — and on no
+ * plan's say-so; the erasure posts the org, the address and its second
+ * typing; and nothing is filed while the two typings differ.
  */
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
@@ -31,9 +32,15 @@ import type { ReactNode } from 'react'
 
 const mockAuthorizedFetch = jest.fn()
 const mockEnqueueSnackbar = jest.fn()
+const mockOpenExport = jest.fn()
+/** The launcher the shell hands down; `null` outside the shell. */
+let mockLauncher: { openExport: jest.Mock; can: (action: string, target: { resource: string }) => boolean } | null
 
 jest.mock('@aglyn/shared-util-http/authorized-token', () => ({
   authorizedFetch: (...args: unknown[]) => mockAuthorizedFetch(...args),
+}))
+jest.mock('@aglyn/aglyn/app-utils/transfer-launcher-context', () => ({
+  useTransferLauncher: () => mockLauncher,
 }))
 jest.mock('@aglyn/shared-ui-snackstack', () => ({
   useSnackbar: () => ({ enqueueSnackbar: mockEnqueueSnackbar }),
@@ -53,24 +60,9 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
   ),
 }))
 
+import { transferAccessPermissions } from '@aglyn/aglyn/data-transfer'
+import { PLUGIN_TRANSFER_RESOURCES_DECLARED } from '@aglyn/aglyn/plugin-manager/first-party-plugins.generated'
 import OrgPrivacyCard from '../components/settings/org-privacy-card.component'
-
-/** A CSV with a header and `rows` people. */
-const csv = (rows: number) =>
-  ['email,name', ...Array.from({ length: rows }, (_, index) => `p${index}@example.com,P${index}`)]
-    .join('\n')
-    .concat('\n')
-
-/** What `authorizedFetch` answers for a file: jsdom has no `Response`. */
-const file = (text: string, promised: number) => ({
-  ok: true,
-  status: 200,
-  text: async () => text,
-  json: async () => ({}),
-  headers: {
-    get: (name: string) => (name === 'X-Aglyn-Export-Rows' ? String(promised) : null),
-  },
-})
 
 /** A JSON answer with a status. */
 const answer = (status: number, body: Record<string, unknown>) => ({
@@ -81,60 +73,73 @@ const answer = (status: number, body: Record<string, unknown>) => ({
   headers: { get: () => null },
 })
 
-let saved: string[] = []
+/** The resources the transfer gate's `data.manage` holders may export, as the shell answers `can`. */
+let mockExportable = new Set(['crm.contacts', 'crm.leads'])
 
 beforeEach(() => {
   mockAuthorizedFetch.mockReset()
   mockEnqueueSnackbar.mockReset()
-  saved = []
-  Object.assign(URL, {
-    createObjectURL: jest.fn(() => 'blob:people'),
-    revokeObjectURL: jest.fn(),
-  })
-  jest
-    .spyOn(HTMLAnchorElement.prototype, 'click')
-    .mockImplementation(function (this: HTMLAnchorElement) {
-      saved.push(this.download)
-    })
-})
-
-afterEach(() => {
-  jest.restoreAllMocks()
+  mockOpenExport.mockReset()
+  mockExportable = new Set(['crm.contacts', 'crm.leads'])
+  mockLauncher = {
+    openExport: mockOpenExport,
+    can: (action, target) => action === 'export' && mockExportable.has(target.resource),
+  }
 })
 
 describe('the people files', () => {
-  it('asks the CRM export route for each file by org and resource, and saves it', async () => {
-    mockAuthorizedFetch.mockResolvedValue(file(csv(2), 2))
+  const exportButton = (name: string) => screen.getByRole('button', { name }) as HTMLButtonElement
+
+  it('opens the export dialog on every contact and every lead of the workspace', () => {
     render(<OrgPrivacyCard />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Export contacts' }))
-    await waitFor(() => expect(saved).toEqual(['contacts.csv']))
-    expect(mockAuthorizedFetch.mock.calls[0][1]).toBe(
-      '/api/crm/export?orgId=org-1&resource=contacts',
-    )
+    fireEvent.click(exportButton('Export contacts'))
+    expect(mockOpenExport).toHaveBeenLastCalledWith({
+      resource: 'crm.contacts',
+      scope: 'org',
+      title: 'Export every contact',
+    })
 
-    fireEvent.click(screen.getByRole('button', { name: 'Export leads' }))
-    await waitFor(() => expect(saved).toEqual(['contacts.csv', 'leads.csv']))
-    expect(mockAuthorizedFetch.mock.calls[1][1]).toBe('/api/crm/export?orgId=org-1&resource=leads')
+    fireEvent.click(exportButton('Export leads'))
+    expect(mockOpenExport).toHaveBeenLastCalledWith({
+      resource: 'crm.leads',
+      scope: 'org',
+      title: 'Export every lead',
+    })
+    // The dialog is the launcher's: the card itself fetches nothing.
+    expect(mockAuthorizedFetch).not.toHaveBeenCalled()
   })
 
-  it('refuses a file shorter than the route promised, saving nothing', async () => {
-    mockAuthorizedFetch.mockResolvedValue(file(csv(1), 3))
+  it('offers neither file to someone the export route would refuse', () => {
+    mockExportable = new Set()
     render(<OrgPrivacyCard />)
-    fireEvent.click(screen.getByRole('button', { name: 'Export contacts' }))
-    await waitFor(() => expect(mockEnqueueSnackbar).toHaveBeenCalled())
-    expect(String(mockEnqueueSnackbar.mock.calls[0][0])).toMatch(/^Export incomplete — 1 of 3 rows/)
-    expect(saved).toEqual([])
+    expect(exportButton('Export contacts').disabled).toBe(true)
+    expect(exportButton('Export leads').disabled).toBe(true)
+    fireEvent.click(exportButton('Export contacts'))
+    expect(mockOpenExport).not.toHaveBeenCalled()
   })
 
-  it('says what the route refused, in its words', async () => {
-    mockAuthorizedFetch.mockResolvedValue(answer(404, { error: 'Not found' }))
+  it('opens nothing outside the console shell, which holds no launcher', () => {
+    mockLauncher = null
     render(<OrgPrivacyCard />)
-    fireEvent.click(screen.getByRole('button', { name: 'Export leads' }))
-    await waitFor(() =>
-      expect(mockEnqueueSnackbar).toHaveBeenCalledWith('Not found', expect.anything()),
-    )
-    expect(saved).toEqual([])
+    expect(exportButton('Export contacts').disabled).toBe(true)
+    expect(exportButton('Export leads').disabled).toBe(true)
+  })
+
+  /*
+   * PARITY WITH THE RETIRED ROUTE. `/api/crm/export` admitted a member
+   * holding "Manage data" to the contacts and leads files and asked no plan
+   * and no release flag. The transfer gate asks what the resource declares,
+   * so the two resources must declare no narrower reader (which would hand
+   * the file to members the old route refused) and no other permission
+   * (which would take it from members it admitted).
+   */
+  it('asks "Manage data" of both files, exactly as the retired route did', () => {
+    for (const key of ['crm.contacts', 'crm.leads']) {
+      const declared = PLUGIN_TRANSFER_RESOURCES_DECLARED.find((resource) => resource.key === key)
+      expect(declared).toBeDefined()
+      expect(transferAccessPermissions('export', declared)).toEqual(['data.manage'])
+    }
   })
 })
 

@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { readClientIp } from '@aglyn/aglyn/app-utils/request-ip'
 import type { PluginWebApiHandler } from '@aglyn/aglyn/server'
 import { OUTREACH_COLLECTIONS } from '../model/outreach.types'
 import { recordOutreachSequenceTouch } from './campaign-credit'
@@ -177,6 +178,8 @@ async function answerOutreachOpen(
       target,
       method: request.method,
       userAgent: request.headers.get('user-agent'),
+      // Read for the network it belongs to (AGL-3488), and never stored.
+      address: readClientIp(request.headers),
     })
   } catch (error) {
     console.error('[outreach] an open could not be recorded', error)

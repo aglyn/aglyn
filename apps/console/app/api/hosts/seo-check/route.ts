@@ -32,6 +32,8 @@ import {
   resolveOrgIdForHost,
 } from '@aglyn/tenant-data-admin'
 import { getTemplateScreenIds } from '@aglyn/tenant-runtime/template-screens'
+// By path, never through a barrel: only a server composition asks it.
+import { readRepeatRows } from '@aglyn/aglyn/plugin-manager/repeat-rows'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 /**
@@ -46,9 +48,11 @@ import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
  *
  * It writes nothing and generates nothing. The findings are computed on
  * demand from the published pages — a person presses the button, and the
- * scan reads at most the checked pages' published versions and the shared
- * layouts (`seo-site-scan.ts` states the bound) — so nothing stored can go
- * stale behind an edit.
+ * scan reads at most the checked pages' published versions, the shared
+ * layouts, the components they place and the rows they repeat over
+ * (`seo-site-scan.ts` states the bound) — so nothing stored can go stale
+ * behind an edit. Each page is checked as it publishes: a heading a
+ * component renders is the page's heading (AGL-3501).
  *
  * GET `?hostId=…&keywords=…` — `keywords` is optional, one page a line
  * (`/pricing: plans, pricing`). Auth: Firebase ID token; a member of the
@@ -121,6 +125,7 @@ async function handler(request: Request): Promise<Response> {
     const scan = await scanSeoSite(firestore, hostId, host, {
       keywords,
       templateScreenIds: await getTemplateScreenIds({ hostId }),
+      readRepeatRows: (keys) => readRepeatRows({ hostId, keys }),
     })
     const report = seoAudit(scan.pages, seoAuditSiteOf(host), {
       skipped: scan.skipped,

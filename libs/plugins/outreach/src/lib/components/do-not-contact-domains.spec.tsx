@@ -22,6 +22,7 @@ import { outreachDomainSearchTokens } from '../model/do-not-contact-domain-list-
 import type { OutreachDoNotContactDomainEntry } from '../model/outreach.types'
 import {
   DO_NOT_CONTACT_DOMAIN_LABELS,
+  DO_NOT_CONTACT_EXPORT_FILTER_LABEL,
   OutreachDoNotContactDomainsCard,
 } from './do-not-contact-domains'
 import type { OutreachLoad } from './use-outreach-data'
@@ -76,12 +77,28 @@ jest.mock('@aglyn/shared-ui-snackstack', () => ({
   useSnackbar: () => ({ enqueueSnackbar: mockEnqueueSnackbar }),
 }))
 jest.mock('@aglyn/shared-ui-jsx', () => ({
-  CardDisplay: ({ children, header }: { children: ReactNode; header: ReactNode }) => (
-    <section aria-label={String(header)}>{children}</section>
+  CardDisplay: ({
+    children,
+    header,
+    HeaderProps,
+  }: {
+    children: ReactNode
+    header: ReactNode
+    HeaderProps?: { action?: ReactNode }
+  }) => (
+    <section aria-label={String(header)}>
+      {HeaderProps?.action}
+      {children}
+    </section>
   ),
   MdiIcon: () => null,
 }))
-jest.mock('@aglyn/aglyn', () => ({ pluginDocsHelp: () => undefined }))
+const mockLauncher = { openImport: jest.fn(), openExport: jest.fn(), close: jest.fn(), can: jest.fn((_action: string, _target: unknown) => true) }
+let mockLauncherPresent = true
+jest.mock('@aglyn/aglyn', () => ({
+  pluginDocsHelp: () => undefined,
+  useTransferLauncher: () => (mockLauncherPresent ? mockLauncher : null),
+}))
 
 const entry = (overrides: Partial<OutreachDoNotContactDomainEntry> = {}): OutreachDoNotContactDomainEntry => {
   const made: OutreachDoNotContactDomainEntry = {
@@ -102,6 +119,7 @@ const entry = (overrides: Partial<OutreachDoNotContactDomainEntry> = {}): Outrea
 beforeEach(() => {
   jest.clearAllMocks()
   mockListed = { status: 'ready', data: [] }
+  mockLauncherPresent = true
 })
 
 describe('Do not contact domains (AGL-3244)', () => {
@@ -203,5 +221,47 @@ describe('Do not contact domains (AGL-3244)', () => {
     mockListed = { status: 'refused', data: [] }
     render(<OutreachDoNotContactDomainsCard orgId="org-1" />)
     expect(screen.queryByRole('list', { name: 'Do not contact domains' })).toBeNull()
+  })
+
+  describe('Import and Export', () => {
+    it('opens the import wizard and the export dialog on the list from the card header', () => {
+      mockListed = { status: 'ready', data: [entry()] }
+      render(<OutreachDoNotContactDomainsCard orgId="org-1" />)
+      fireEvent.click(screen.getByRole('button', { name: DO_NOT_CONTACT_DOMAIN_LABELS.import }))
+      expect(mockLauncher.openImport).toHaveBeenCalledWith({ resource: 'outreach.do-not-contact', scope: 'org' })
+      fireEvent.click(screen.getByRole('button', { name: DO_NOT_CONTACT_DOMAIN_LABELS.export }))
+      // No search or filter: the whole list.
+      expect(mockLauncher.openExport).toHaveBeenCalledWith({ resource: 'outreach.do-not-contact', scope: 'org' })
+    })
+
+    it('hands the export the list’s search, which its query reads the same way', async () => {
+      mockListed = { status: 'ready', data: [entry(), entry({ domain: 'other.example', detail: null })] }
+      render(<OutreachDoNotContactDomainsCard orgId="org-1" />)
+      fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'other' } })
+      await waitFor(() =>
+        expect(screen.getByRole('grid', { name: 'Do not contact domains' }).textContent).not.toContain('kcorp.example'),
+      )
+      fireEvent.click(screen.getByRole('button', { name: DO_NOT_CONTACT_DOMAIN_LABELS.export }))
+      expect(mockLauncher.openExport).toHaveBeenCalledWith({
+        resource: 'outreach.do-not-contact',
+        scope: 'org',
+        filter: { label: DO_NOT_CONTACT_EXPORT_FILTER_LABEL, value: { clauses: [], search: ['other'] } },
+      })
+    })
+
+    it('offers a member who may only read the list Export alone', () => {
+      mockLauncher.can.mockImplementation((action: string) => action === 'export')
+      render(<OutreachDoNotContactDomainsCard orgId="org-1" />)
+      expect(screen.queryByRole('button', { name: DO_NOT_CONTACT_DOMAIN_LABELS.import })).toBeNull()
+      expect(screen.getByRole('button', { name: DO_NOT_CONTACT_DOMAIN_LABELS.export })).toBeTruthy()
+      mockLauncher.can.mockImplementation(() => true)
+    })
+
+    it('shows neither outside the console shell', () => {
+      mockLauncherPresent = false
+      render(<OutreachDoNotContactDomainsCard orgId="org-1" />)
+      expect(screen.queryByRole('button', { name: DO_NOT_CONTACT_DOMAIN_LABELS.import })).toBeNull()
+      expect(screen.queryByRole('button', { name: DO_NOT_CONTACT_DOMAIN_LABELS.export })).toBeNull()
+    })
   })
 })

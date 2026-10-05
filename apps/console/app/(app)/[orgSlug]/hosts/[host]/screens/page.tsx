@@ -1155,13 +1155,22 @@ function Screens(props) {
   // templates alike — beside who is in it.
   const { holds: pageHolds } = usePageHolds(hostId)
   const renderRowPresence = useCallback(
-    (row: { $id: string }) => (
+    (row: { $id: string; kind?: unknown }) => (
       <>
         <PageHoldChips holds={pageHolds} target={{ type: 'screen', id: row.$id }} />
         <DocumentPresenceChips people={peopleIn('screen', row.$id)} />
+        {/* What a plugin makes of the page (AGL-3475) — a record
+            template's base and record count, say. */}
+        <PluginWidgetSlot
+          slot="hostScreenRow"
+          hostId={hostId}
+          orgId={org?.$id}
+          screenId={row.$id}
+          screenKind={typeof row.kind === 'string' ? row.kind : undefined}
+        />
       </>
     ),
-    [peopleIn, pageHolds],
+    [peopleIn, pageHolds, hostId, org?.$id],
   )
 
   const handleRowOpen = useCallback(

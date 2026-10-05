@@ -6,9 +6,12 @@ description: How much traffic each plan includes, what happens when a site goes 
 
 # Bandwidth
 
-**Bandwidth** is how much traffic your published sites serve in a calendar month. Every
-plan includes an amount. What happens when you pass it is the part worth reading, because
-it is **not the same on Free as it is on a paid plan**.
+**Bandwidth** is how much traffic your published sites serve in a calendar month: their
+pages, and the video, audio and files they serve from your media library. Video, audio,
+file downloads and other media served from our servers count 1.6× toward bandwidth,
+because serving them costs more than serving pages. Every plan includes an amount. What
+happens when you pass it is the part worth reading, because it is **not the same on Free
+as it is on a paid plan**.
 
 :::info Plan availability
 Every plan has a bandwidth allowance. On a **paid** plan going past it is metered and
@@ -55,7 +58,8 @@ those messages say depends on your plan, and the difference is the point:
 ## What a paused Free site looks like {#paused}
 
 When a Free organization passes its band, its published sites stop serving pages and
-answer with a plain notice instead:
+answer with a plain notice instead, and the video, audio and files in its media library
+stop loading until the pause lifts:
 
 > **Over the monthly traffic limit**
 >
@@ -66,7 +70,10 @@ answer with a plain notice instead:
 Three things are true about that page and are worth knowing before you see it:
 
 - **Nothing is deleted.** Your pages, media, datasets and settings are untouched. The
-  console keeps working normally — only the *public* site is paused.
+  console keeps working normally — only the *public* site is paused, along with the
+  video, audio and files your media library serves. Those stop wherever they load from,
+  the media library's own previews included, because every play is delivered the same way;
+  images keep loading.
 - **It clears itself.** The pause is stamped with the month it belongs to. When the month
   turns over it stops applying, with no action from you and nothing to un-set.
 - **Upgrading lifts it within about a minute.** The check re-reads your plan every time,
@@ -78,9 +85,10 @@ rankings.
 
 ## Why a site can go over before it is paused {#timing}
 
-Usage is totalled where page views are already counted — the analytics beacon, on a
-sampled cadence — so a Free site can pass its band and keep serving for a few hundred
-more views before the pause takes hold. That is deliberate: the alternative is metering
+Usage is totalled where it is already counted — page views at the analytics beacon,
+and video and files where the media library serves them, each on a sampled cadence — so
+a Free site can pass its band and keep serving for a few hundred more views, or a few
+dozen more megabytes of video, before the pause takes hold. That is deliberate: the alternative is metering
 every single request, which would put a database read on every page of every site on the
 platform to answer a question only Free organizations can ever fail. The allowance is a
 monthly budget, not a per-second valve.
@@ -92,25 +100,34 @@ The reverse is much faster still: an upgrade releases within roughly a minute.
 
 ## Reducing bandwidth
 
-Your meter counts **page views**, not what a page weighs. Every counted view moves it by the
-same fixed amount (see [How usage is counted](#how-usage-is-counted)), so using less of the
-allowance means having fewer views counted.
+Your meter counts **page views**, not what a page weighs, plus the **video and files** your
+media library serves, by their size. Every counted view moves it by the same fixed amount,
+and every gigabyte of video moves it by 1.6 gigabytes (see
+[How usage is counted](#how-usage-is-counted)), so using less of the allowance means having
+fewer views counted and serving less video.
 
 - Check **Analytics → Traffic** for a page that is unexpectedly popular. Views of that page
   are what move the meter.
+- Check a video's or file's delivery figures in the media library for one that is played or
+  downloaded more than you expected — including from somewhere other than your site, since
+  its link works anywhere. A long video placed on a busy page is usually the largest single
+  use of the allowance.
 - Stop counting your own visits while you check your pages, with `?aglyn_internal=1` (see
   [Which views are counted](#which-views-are-counted)). Previews and the design canvas are
   never counted.
 - If the traffic is real and you need more room, the lever is a plan with a larger band.
 
-What a page contains does not change the meter:
+What a page's images weigh does not change the meter, but its video does:
 
 - **Images.** A 4 MB photograph costs your visitors load time, not allowance. Serving a
   smaller image through
   [CDN delivery](../../content-and-data/media/overview.md#deliver-over-cdn) makes the page
   faster; it does not stretch your band.
-- **Video.** Playing, pausing and seeking an embedded video are not page views, so plays do
-  not move the meter, however long the video is or however many times it is watched.
+- **Video, audio and files.** Every byte your media library sends of a video, an audio
+  file, a PDF or another document counts 1.6× toward the allowance, wherever it is played
+  or downloaded from. A seek counts the part the player asked for, not the whole file again.
+  A shorter clip, a smaller encoding, or a poster frame that loads before anyone presses
+  play all use less.
 
 ---
 
@@ -120,12 +137,30 @@ For developers and operators. None of this is needed to use the feature.
 
 ### How usage is counted
 
-Bandwidth is derived from page views rather than measured byte-for-byte at the edge. The
-platform uses a fixed accounting figure of **1,012.8 KB per page view** and converts in both
-directions, so the meter you read in GB and the counters the analytics pipeline writes are
-the same number expressed differently. On Free, 2 GB works out to roughly **2,070 page
-views** a month; on Starter, 20 GB is roughly **20,700**, and the same division gives every
-other band.
+Bandwidth from pages is derived from page views rather than measured byte-for-byte at the
+edge. The platform uses a fixed accounting figure of **1,012.8 KB per page view** and
+converts in both directions, so the meter you read in GB and the counters the analytics
+pipeline writes are the same number expressed differently. On Free, 2 GB works out to
+roughly **2,070 page views** a month; on Starter, 20 GB is roughly **20,700**, and the same
+division gives every other band.
+
+Video, audio and files are measured: the media library counts the bytes each request
+sends, and converts them through the same 1,012.8 KB at **1.6×**, so a gigabyte of video
+takes 1.6 GB of the band, and past the band those 1.6 GB are billed at the page-view rate.
+Video, audio, file downloads and other media served from our servers count 1.6× toward
+bandwidth, because serving them costs more than serving pages: pages are mostly answered
+from the CDN's cache, while video and files are sent from our servers and from storage on
+every request, so each gigabyte pays for both. The weight is the smallest that keeps video
+at cost plus 30%, after card fees, the same as everything else metered — both inside your
+allowance and past it. Storing a file is billed separately, as storage, and is not counted
+again here. A video the platform serves from a delivery partner rather than from its own
+servers counts the same way, at the file's size each time a viewer starts it, and so does
+a members-only video or a paid download from your store, each time a buyer opens its link.
+
+Public images are the exception — they are part of what a page weighs, which the 1,012.8 KB
+already includes, so counting them again would charge for them twice. A private image, which
+only a signed link opens (a paid download, say), is not on any page, so it counts like a file.
+Your own team previewing a private file in the console never counts.
 
 ### Which views are counted
 
@@ -163,8 +198,10 @@ stretch the allowance further, for the same reason: if you want more views, the 
 plan's band, not the page.
 
 Page views are read from the per-host `analytics/{YYYY-MM-DD}` documents that already
-exist for the Analytics pages — evaluating a cap adds no Firestore reads to the serving
-path.
+exist for the Analytics pages, and video and file bytes from the `mediaBandwidthBytes`
+field the media library adds to the same documents (and to the organization's own, for
+its shared library) in the write that records each delivery — evaluating a cap adds no
+Firestore reads to the serving path, and counting video adds no writes.
 
 ### The two mechanisms
 
@@ -175,9 +212,9 @@ mentions only one of them is incomplete.
 |---|---|---|
 | Applies to | Free organizations only | Any plan |
 | Trips at | 1× the plan's band | 3× the plan's band (minimum 100,000 page views) |
-| Decided by | The analytics beacon, sampled — plus the daily usage job organization-wide | The analytics beacon, sampled |
+| Decided by | The analytics beacon and the media library's delivery route, sampled — plus the daily usage job organization-wide | The analytics beacon, sampled |
 | Recorded on | `orgs/{orgId}.bandwidthCap` | `hosts/{hostId}.bandwidthCeiling` |
-| Enforced at | Edge middleware **and** the page loader | The page loader |
+| Enforced at | Edge middleware **and** the page loader; the media library's delivery route for video and files | The page loader; the media library's delivery route for video and files |
 | Latency | Minutes | Minutes |
 | Visitor sees | The "Over the monthly traffic limit" notice | The "This site is temporarily unavailable" notice, **on Free only** |
 
@@ -206,6 +243,10 @@ The page loader repeats the check as defense in depth and renders the same wordi
 200 with `robots: { index: false }`; that path exists for anything the middleware matcher
 does not cover.
 
+A video, audio file or document requested from the media library while either protection
+holds is answered `503 Service Unavailable` with `Retry-After: 3600` and
+`Cache-Control: no-store`. Images keep serving.
+
 ### Fail-open, on purpose
 
 Every layer of this check fails **open**. A thrown organization read, an unreachable
@@ -218,8 +259,9 @@ opposite.
 
 ### Self-hosting
 
-The cap is engaged by the analytics beacon at `/api/analytics/collect`, which needs no
-scheduled job and no secret — a deployment that serves pages caps them. The daily usage
+The cap is engaged by the analytics beacon at `/api/analytics/collect` and by the media
+route at `/api/media/cdn`, neither of which needs a scheduled job or a secret — a
+deployment that serves pages or video caps them. The daily usage
 job at `/api/billing/usage-alerts` (gated on `CRON_SECRET`) engages the same cap
 organization-wide and sends the usage emails; a deployment that never invokes it still
 caps, but loses the alerts and the multi-site total — see

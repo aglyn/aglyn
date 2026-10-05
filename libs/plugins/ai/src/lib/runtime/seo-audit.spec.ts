@@ -117,4 +117,27 @@ describe('the audit’s helpers', () => {
     expect(aiSeoHeadingDemotions(OFFER.facts)).toEqual([{ kind: 'h1-demote', nodeId: 'b' }])
     expect(aiSeoHeadingDemotions(ABOUT.facts)).toEqual([])
   })
+
+  it('keeps a first main heading a component renders, and demotes every editable one after it (AGL-3501)', () => {
+    const pageNodes = body({
+      hero: { componentId: 'reusableInstance', props: { refId: 'sectionHeading' } },
+      a: heading(1, 'Contact us'),
+      b: heading(1, 'Write to us'),
+    })
+    const composed = {
+      ...pageNodes,
+      hero: { componentId: 'muiBox', nodes: ['cmp__hero__t'] },
+      cmp__hero__t: heading(1, 'Book a free on-site estimate'),
+    }
+    const facts = seoPageFacts(composed as NodeMap, { rootId: 'root', pageNodes })
+    expect(facts.h1s.map((entry) => [entry.nodeId, entry.editable])).toEqual([
+      ['hero', false],
+      ['a', true],
+      ['b', true],
+    ])
+    expect(aiSeoHeadingDemotions(facts)).toEqual([
+      { kind: 'h1-demote', nodeId: 'a' },
+      { kind: 'h1-demote', nodeId: 'b' },
+    ])
+  })
 })

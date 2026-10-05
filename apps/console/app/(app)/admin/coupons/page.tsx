@@ -21,6 +21,12 @@ import {
   DISCOUNT_APPROVAL_THRESHOLD_PCT,
   MARGIN_SCOPE_NOTE,
 } from '@aglyn/aglyn'
+import {
+  couponCaseLabel,
+  deepestCouponPercentWithinFullUse,
+  describeDiscountFullUse,
+  rateCouponAgainstFullUse,
+} from '@aglyn/aglyn/app-utils/full-use-cost'
 import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
 import { CardDisplay, Container } from '@aglyn/shared-ui-jsx'
 import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
@@ -48,6 +54,7 @@ import {
   MenuItem,
   Stack,
   TextField,
+  Tooltip,
   Typography,
 } from '@mui/material'
 import { useCallback, useMemo, useState } from 'react'
@@ -111,6 +118,35 @@ interface PendingToggle {
   code: string
   activate: boolean
   percentOff: number | null
+  /** The rest of the owning coupon, for its full-use warning (AGL-3473). */
+  amountOffUsd: number | null
+  duration: string | null
+  durationInMonths: number | null
+}
+
+/** A coupon row's discount and duration, as the full-use verdict reads them. */
+function couponFullUse(
+  row: Pick<CouponRow, 'percentOff' | 'amountOffUsd' | 'duration' | 'durationInMonths'>,
+) {
+  return rateCouponAgainstFullUse(
+    row.percentOff != null
+      ? { percentOff: row.percentOff }
+      : row.amountOffUsd != null
+        ? { amountOffUsd: row.amountOffUsd }
+        : {},
+    { duration: row.duration, durationInMonths: row.durationInMonths },
+  )
+}
+
+/**
+ * What each duration takes the discount off, under the Duration picker —
+ * Stripe's three durations already say "first month", "first N months" and
+ * "the annual purchase", once it is said which charges they reach.
+ */
+const DURATION_HELP: Record<'once' | 'repeating' | 'forever', string> = {
+  once: 'The first charge: the first month, or the whole first year when billed annually.',
+  repeating: 'The charges in the first N months: N monthly charges, or the first annual charge.',
+  forever: 'Every charge, for as long as the subscription lasts.',
 }
 
 /**
@@ -177,6 +213,24 @@ const AdminCoupons: NextPageWithLayout<Record<string, never>> = () => {
     return checkDiscountMargin(REFERENCE_ORG as any, discount)
   }, [form.kind, form.percentOff, form.amountOffUsd])
 
+  // The full-use warning (AGL-3473), on every paid plan at both intervals,
+  // on the charges the chosen duration reaches. Unlike the rating above it
+  // does not depend on which org redeems the coupon — a code can be typed on
+  // any plan — and it refuses nothing: the route answers the same verdict
+  // with the created coupon.
+  const fullUse = useMemo(
+    () =>
+      couponFullUse({
+        percentOff: form.kind === 'percent' ? Number(form.percentOff) || 0 : null,
+        amountOffUsd: form.kind === 'amount' ? Number(form.amountOffUsd) || 0 : null,
+        duration: form.duration,
+        durationInMonths:
+          form.duration === 'repeating' ? Number(form.durationInMonths) || null : null,
+      }),
+    [form.kind, form.percentOff, form.amountOffUsd, form.duration, form.durationInMonths],
+  )
+  const deepestPercent = useMemo(() => deepestCouponPercentWithinFullUse(), [])
+
   const needsApproval =
     form.kind === 'percent' &&
     Number(form.percentOff) >= DISCOUNT_APPROVAL_THRESHOLD_PCT
@@ -209,6 +263,14 @@ const AdminCoupons: NextPageWithLayout<Record<string, never>> = () => {
         throw new Error(payload.error ?? `Create failed (${response.status})`)
       }
       enqueueSnackbar('Coupon created', { variant: 'success' })
+      // Created all the same; the server's account of what it spends stays
+      // up long enough to read.
+      if (payload.fullUse?.warning) {
+        enqueueSnackbar(`Under full-use cost. ${payload.fullUse.warning}`, {
+          variant: 'warning',
+          autoHideDuration: 15000,
+        })
+      }
       update({ code: '', name: '', confirmHighDiscount: false })
       refreshCoupons()
     } catch (error: any) {
@@ -231,6 +293,13 @@ const AdminCoupons: NextPageWithLayout<Record<string, never>> = () => {
     pendingToggle?.activate === true &&
     pendingToggle.percentOff != null &&
     pendingToggle.percentOff >= DISCOUNT_APPROVAL_THRESHOLD_PCT
+
+  // Turning a code on is minting it again, so the dialog carries the same
+  // full-use warning the creation form does.
+  const toggleFullUse = useMemo(
+    () => (pendingToggle?.activate ? couponFullUse(pendingToggle) : null),
+    [pendingToggle],
+  )
 
   const openToggle = useCallback((pending: PendingToggle) => {
     setPendingToggle(pending)
@@ -258,6 +327,12 @@ const AdminCoupons: NextPageWithLayout<Record<string, never>> = () => {
       enqueueSnackbar(`${code} ${activate ? 'activated' : 'deactivated'}`, {
         variant: 'success',
       })
+      if (payload.fullUse?.warning) {
+        enqueueSnackbar(`Under full-use cost. ${payload.fullUse.warning}`, {
+          variant: 'warning',
+          autoHideDuration: 15000,
+        })
+      }
       setPendingToggle(null)
       refreshCoupons()
     } catch (error: any) {
@@ -330,6 +405,37 @@ const AdminCoupons: NextPageWithLayout<Record<string, never>> = () => {
           : (row.duration ?? '—'),
     },
     {
+      // The full-use verdict (AGL-3473), worked out here from the row: the
+      // worst plan and billing combination the coupon could be redeemed on.
+      field: 'fullUse',
+      headerName: 'Full-use cost',
+      width: 170,
+      sortable: false,
+      filterable: false,
+      renderCell: ({ row }: { row: CouponListRow }) => {
+        const verdict = couponFullUse(row)
+        return (
+          <Tooltip
+            title={
+              verdict.warning ??
+              describeDiscountFullUse(verdict.worst, couponCaseLabel(verdict.worst))
+            }
+          >
+            <Chip
+              size="small"
+              variant={verdict.ok ? 'outlined' : 'filled'}
+              color={verdict.ok ? 'success' : 'warning'}
+              label={
+                verdict.ok
+                  ? 'Covers cost'
+                  : `Under · ${verdict.worst.coverage.toFixed(2)}×`
+              }
+            />
+          </Tooltip>
+        )
+      },
+    },
+    {
       field: 'codes',
       headerName: 'Codes',
       flex: 1.4,
@@ -368,6 +474,9 @@ const AdminCoupons: NextPageWithLayout<Record<string, never>> = () => {
                       code: code.code,
                       activate: !code.active,
                       percentOff: row.percentOff,
+                      amountOffUsd: row.amountOffUsd,
+                      duration: row.duration,
+                      durationInMonths: row.durationInMonths,
                     })
                   }
                 >
@@ -498,7 +607,8 @@ const AdminCoupons: NextPageWithLayout<Record<string, never>> = () => {
                         duration: event.target.value as typeof form.duration,
                       })
                     }
-                    sx={{ width: 160 }}
+                    helperText={DURATION_HELP[form.duration]}
+                    sx={{ flex: 1 }}
                   >
                     {COUPON_DURATIONS.map(({ value, label }) => (
                       <MenuItem key={value} value={value}>
@@ -604,6 +714,42 @@ const AdminCoupons: NextPageWithLayout<Record<string, never>> = () => {
                   </Stack>
                 </Alert>
 
+                {/* The full-use warning (AGL-3473). A warning, not a gate:
+                    a coupon that spends cost to close a deal is created all
+                    the same, and this is what it spends. */}
+                <Alert severity={fullUse.ok ? 'success' : 'warning'}>
+                  <Stack spacing={0.5}>
+                    <Typography variant="body2" sx={{ fontWeight: fullUse.ok ? undefined : 600 }}>
+                      {fullUse.ok
+                        ? 'Covers full-use cost on every paid plan.'
+                        : `Under full-use cost on ${fullUse.under.length} of ` +
+                          `${fullUse.cases.length} plan and billing combinations.`}
+                    </Typography>
+                    <Typography variant="body2">
+                      {`Worst case ${describeDiscountFullUse(
+                        fullUse.worst,
+                        couponCaseLabel(fullUse.worst),
+                      )}`}
+                    </Typography>
+                    {fullUse.ok ? null : (
+                      <Typography variant="caption" color="text.secondary">
+                        {`Under on: ${fullUse.under.join('; ')}.`}
+                      </Typography>
+                    )}
+                    <Typography variant="caption" color="text.secondary">
+                      {'A code can be redeemed on any paid plan, monthly or ' +
+                        'annual, by a customer using everything the plan ' +
+                        'includes. Judged on the charges the duration ' +
+                        'reaches, after Stripe’s fee. ' +
+                        (deepestPercent == null
+                          ? 'A plan is under its full-use cost at list price, ' +
+                            'so any discount spends cost on it.'
+                          : `Every plan carries up to ${deepestPercent}% off ` +
+                            'on every charge it reaches.')}
+                    </Typography>
+                  </Stack>
+                </Alert>
+
                 {needsApproval ? (
                   <FormControlLabel
                     control={
@@ -704,6 +850,19 @@ const AdminCoupons: NextPageWithLayout<Record<string, never>> = () => {
                     ? 'Customers will be able to redeem this code at checkout again.'
                     : 'Customers typing this code at checkout will be told it is not recognized. Existing discounts already applied to a subscription are unaffected.'}
                 </DialogContentText>
+                {toggleFullUse ? (
+                  <Alert
+                    severity={toggleFullUse.ok ? 'success' : 'warning'}
+                    sx={{ mt: 1 }}
+                  >
+                    {toggleFullUse.warning ??
+                      'Covers full-use cost on every paid plan. Worst case ' +
+                        describeDiscountFullUse(
+                          toggleFullUse.worst,
+                          couponCaseLabel(toggleFullUse.worst),
+                        )}
+                  </Alert>
+                ) : null}
                 {toggleNeedsApproval ? (
                   <FormControlLabel
                     sx={{ mt: 1 }}

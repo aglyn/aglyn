@@ -16,6 +16,8 @@
  */
 
 import type { CrmTask, CrmTaskKind, CrmTaskPriority } from '@aglyn/aglyn'
+// The pure module, not the barrel: the server routes import this file.
+import { normalizeCrmPicklistLabel } from '@aglyn/aglyn/app-utils/crm'
 
 /**
  * The contract between the tasks console and the plugin's two task routes
@@ -49,6 +51,19 @@ export interface CrmTaskFields {
   contactId: string | null
   companyId: string | null
   dealId: string | null
+  /**
+   * The org's labels for the kind, the priority and the status (AGL-3517)
+   * — values of the `taskType`, `taskPriority` and `taskStatus` picklists.
+   * A label wins over the meaning beside it: the route stores the meaning
+   * the label's value carries. ABSENT means the route picks the label for
+   * the meaning — the task's own when it still means that, else the one a
+   * new task of that meaning starts with. A status label may name only a
+   * value of the task's own status (open, or done); ticking and unticking
+   * are what move a task between the two.
+   */
+  typeLabel?: string
+  priorityLabel?: string
+  statusLabel?: string
   /**
    * When the assignee is reminded (AGL-2659): a time, `null` for none, or
    * ABSENT for "nothing said" — which the route answers with the rule in
@@ -244,6 +259,12 @@ export function readCrmTaskFields(
       return { ok: false, error: `The linked ${field.replace('Id', '')} could not be read.` }
     }
   }
+  // Judged against the org's lists by the route, which reads them.
+  const labels: Pick<CrmTaskFields, 'typeLabel' | 'priorityLabel' | 'statusLabel'> = {}
+  for (const key of ['typeLabel', 'priorityLabel', 'statusLabel'] as const) {
+    const label = normalizeCrmPicklistLabel(raw[key])
+    if (label) labels[key] = label
+  }
   return {
     ok: true,
     fields: {
@@ -254,6 +275,7 @@ export function readCrmTaskFields(
       assigneeUid: assigneeRaw || null,
       notes,
       ...ids,
+      ...labels,
       ...(remindAtMs !== undefined ? { remindAtMs } : {}),
     },
   }
@@ -276,6 +298,11 @@ export function crmTaskFieldsOf(task: Partial<CrmTask>): CrmTaskFields {
     contactId: task.contactId || null,
     companyId: task.companyId || null,
     dealId: task.dealId || null,
+    // The stored labels, so a save that changes none keeps them; a task
+    // from before the picklists carries none and shows its meaning's.
+    ...(task.typeLabel ? { typeLabel: task.typeLabel } : {}),
+    ...(task.priorityLabel ? { priorityLabel: task.priorityLabel } : {}),
+    ...(task.statusLabel ? { statusLabel: task.statusLabel } : {}),
     // A stored task from before reminders existed carries no field, and
     // reads as having no reminder — the same answer the route's rule gives.
     remindAtMs: typeof task.remindAtMs === 'number' ? task.remindAtMs : null,

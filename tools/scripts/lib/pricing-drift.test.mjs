@@ -231,6 +231,28 @@ test('publishedMeteredRates reproduces the figures on /pricing', () => {
   assert.equal(p.perThousandFormSubmissions, 0.065)
 })
 
+test('publishedMeteredRates grosses the markup up for the processor fee and rounds UP (AGL-3476)', () => {
+  const p = publishedMeteredRates(
+    {
+      storagePerGbMonth: 0.026,
+      perPageView: 0.00039902751,
+      perFormSubmission: 0.000061538462,
+    },
+    1.3,
+    0.00021635711,
+    0.029,
+  )
+  // 0.026 × 1.3 ÷ 0.971 = 0.034810, up to $0.0349; $0.615385 per 1,000 views
+  // and $0.061538 per 1,000 submissions × 1.3388 are $0.8239 and $0.08239, up
+  // to $0.83 and $0.083. Each keeps at least cost × 1.3 after 2.9% comes off.
+  assert.equal(p.storagePerGbMonth, 0.0349)
+  assert.equal(p.perThousandPageViews, 0.83)
+  assert.equal(p.perThousandFormSubmissions, 0.083)
+  assert.ok(p.storagePerGbMonth * 0.971 >= 0.026 * 1.3)
+  assert.ok(p.perThousandPageViews * 0.971 >= 0.61538462 * 1.3)
+  assert.ok(p.perThousandFormSubmissions * 0.971 >= 0.061538462 * 1.3)
+})
+
 test('publishedMeteredRates without the request term is the weight-only price, and NaN without either', () => {
   const rates = { storagePerGbMonth: 0.026, perPageView: 0.00016153846, perFormSubmission: 0.00005 }
   // The figure /pricing carried before the request term: what a caller that

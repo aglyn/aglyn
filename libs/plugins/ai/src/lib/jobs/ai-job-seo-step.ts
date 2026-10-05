@@ -24,7 +24,12 @@ import {
 } from '@aglyn/aglyn/app-utils/llms-txt'
 import { screenRoutePathToUrl } from '@aglyn/aglyn/app-utils/screen-route'
 import { SEO_FINDING_LABELS } from '@aglyn/aglyn/app-utils/seo-audit'
-import { seoKeywordCoverage, seoKeywordList } from '@aglyn/aglyn/app-utils/seo-keywords'
+import {
+  SEO_MAX_KEYWORDS,
+  seoKeywordCoverage,
+  seoKeywordSplit,
+  seoQuotedKeywords,
+} from '@aglyn/aglyn/app-utils/seo-keywords'
 import {
   SCREEN_SEO_LISTING_FIELDS,
   isSeoListingFieldKey,
@@ -35,7 +40,15 @@ import {
   seoPageFacts,
   type SeoPageFacts,
 } from '@aglyn/aglyn/app-utils/seo-page-facts'
-import { scanSeoSite, seoAuditSiteOf, type SeoSiteScan } from '@aglyn/aglyn/app-utils/seo-site-scan'
+import {
+  composeSeoPages,
+  scanSeoSite,
+  seoAuditSiteOf,
+  type SeoRepeatRowsReader,
+  type SeoSiteScan,
+} from '@aglyn/aglyn/app-utils/seo-site-scan'
+// By path, never through a barrel: only a server composition asks it.
+import { readRepeatRows } from '@aglyn/aglyn/plugin-manager/repeat-rows'
 import { decodeStoredNodes } from '@aglyn/aglyn/app-utils/stored-nodes'
 import { getTemplateScreenIds } from '@aglyn/tenant-runtime/template-screens'
 import type { AiJob, AiJobOutput } from '../model/ai-jobs.types'
@@ -261,6 +274,33 @@ async function loadSite(
   return { host }
 }
 
+/** The rows a site's repeats render, through the platform's repeat-rows contract. */
+const siteRepeatRows =
+  (hostId: string): SeoRepeatRowsReader =>
+  (keys) =>
+    readRepeatRows({ hostId, keys })
+
+/**
+ * Pages' facts as the SEO check reads them (AGL-3501): each version composed
+ * as it publishes — components grafted, repeats expanded — and read against
+ * the page's own map, so a fix is only ever offered for what the page holds.
+ */
+async function composedPageFacts(
+  firestore: Firestore,
+  hostId: string,
+  versions: readonly ({ nodes: Record<string, unknown>; rootId?: string } | null)[],
+): Promise<SeoPageFacts[]> {
+  const { composed } = await composeSeoPages(
+    firestore,
+    hostId,
+    versions.map((version) => version?.nodes ?? null),
+    { readRepeatRows: siteRepeatRows(hostId) },
+  )
+  return versions.map((version, index) =>
+    seoPageFacts(composed[index] as never, { rootId: version?.rootId, pageNodes: version?.nodes as never }),
+  )
+}
+
 /** A version's node map and root, or `null` when it cannot be read. */
 async function readVersionNodes(
   hostRef: DocumentReference,
@@ -300,6 +340,8 @@ function listingOutcome(
   subject: AiSeoFieldsProposal['subject'],
   context: {
     keywords: readonly string[]
+    /** Keywords past the limit, which the proposal did not aim for. */
+    unchecked: readonly string[]
     facts: SeoPageFacts | null
     fields: readonly SeoListingFieldKey[]
     hasImage: boolean
@@ -312,6 +354,11 @@ function listingOutcome(
   const notes: string[] = []
   if (context.fields.includes('imageAlt') && context.hasImage && !values.imageAlt) {
     notes.push('No image description was proposed: nothing on the page says what the picture shows.')
+  }
+  if (context.unchecked.length) {
+    notes.push(
+      `Only the first ${SEO_MAX_KEYWORDS} keywords were used, so ${seoQuotedKeywords(context.unchecked)} ${context.unchecked.length === 1 ? 'was' : 'were'} not.`,
+    )
   }
   const proposal: AiSeoFieldsProposal = {
     kind: 'fields',
@@ -351,7 +398,7 @@ async function runScreenListing(
 
   const versionId = str(job.inputs?.['versionId']) || str(screen.versionId)
   const version = await readVersionNodes(hostRef, screenId, versionId)
-  const facts = seoPageFacts(version?.nodes as never, { rootId: version?.rootId })
+  const [facts] = await composedPageFacts(firestore, job.hostId as string, [version])
   const fields = aiSeoRequestedFields(job.inputs?.['fields'], SCREEN_SEO_LISTING_FIELDS)
   const seo = screen.seo ?? {}
   const hasImage = Boolean(str(seo.image))
@@ -361,7 +408,7 @@ async function runScreenListing(
   const route = host.screens?.[screenId]
   const path = typeof route === 'string' ? screenRoutePathToUrl(route) : null
   const name = str(screen.displayName) || path || 'Untitled page'
-  const keywords = seoKeywordList(job.inputs?.['keywords'])
+  const { keywords, unchecked } = seoKeywordSplit(job.inputs?.['keywords'])
   const generation = await generateSeoFields({
     subject: { kind: 'screen', name, path },
     brand: brandOf(host),
@@ -382,6 +429,7 @@ async function runScreenListing(
   })
   return listingOutcome(generation, job, { kind: 'screen', id: screenId, name, path }, {
     keywords,
+    unchecked,
     facts,
     fields,
     hasImage,
@@ -397,7 +445,7 @@ async function runProductListing(
   const name = str(job.inputs?.['name']).slice(0, 200)
   if (!name) return { outputs: [], ...spentNothing(model), failure: AI_SEO_NO_PRODUCT_COPY }
   const fields = aiSeoRequestedFields(job.inputs?.['fields'], PRODUCT_LISTING_FIELDS)
-  const keywords = seoKeywordList(job.inputs?.['keywords'])
+  const { keywords, unchecked } = seoKeywordSplit(job.inputs?.['keywords'])
   const productId = str(job.inputs?.['productId']) || null
   const generation = await generateSeoFields({
     subject: { kind: 'product', name },
@@ -418,6 +466,7 @@ async function runProductListing(
   })
   return listingOutcome(generation, job, { kind: 'product', id: productId, name }, {
     keywords,
+    unchecked,
     facts: null,
     fields,
     hasImage: false,
@@ -442,6 +491,7 @@ async function scanSite(
   return scanSeoSite(firestore, hostId, host, {
     keywords,
     templateScreenIds: await getTemplateScreenIds({ hostId }),
+    readRepeatRows: siteRepeatRows(hostId),
   })
 }
 
@@ -704,25 +754,33 @@ async function proposeFixes(
   const reports = new Map(report.pages.map((page) => [page.screenId, page]))
   // Read now, not as audited: a page edited since keeps its edits, and one
   // deleted since is skipped.
-  const loaded = await Promise.all(
-    unit.screenIds.map(async (screenId): Promise<AiSeoBatchPage | null> => {
+  const read = await Promise.all(
+    unit.screenIds.map(async (screenId) => {
       const pageReport = reports.get(screenId)
       const snapshot = await hostRef.collection('screens').doc(screenId).get()
       const screen = snapshot.exists ? (snapshot.data() as SeoScreenDocument) : null
       if (!pageReport || !screen || screen.deletedAt) return null
       const version = await readVersionNodes(hostRef, screenId, str(screen.versionId))
-      return {
-        screenId,
-        path: pageReport.path,
-        name: pageReport.name,
-        codes: new Set(pageReport.findings.map((entry) => entry.code)),
-        keywords: pageReport.keywords.map((entry) => entry.keyword),
-        seo: screen.seo ?? {},
-        facts: seoPageFacts(version?.nodes as never, { rootId: version?.rootId }),
-      }
+      return { screenId, pageReport, screen, version }
     }),
   )
-  const pages = loaded.filter((page): page is AiSeoBatchPage => page !== null)
+  const live = read.filter((entry): entry is NonNullable<typeof entry> => entry !== null)
+  // Read as the audit read them, composed: a heading a component renders is
+  // the page's, and is never offered to a fix that would rewrite the page.
+  const facts = await composedPageFacts(
+    firestore,
+    job.hostId as string,
+    live.map((entry) => entry.version),
+  )
+  const pages: AiSeoBatchPage[] = live.map(({ screenId, pageReport, screen }, index) => ({
+    screenId,
+    path: pageReport.path,
+    name: pageReport.name,
+    codes: new Set(pageReport.findings.map((entry) => entry.code)),
+    keywords: pageReport.keywords.map((entry) => entry.keyword),
+    seo: screen.seo ?? {},
+    facts: facts[index],
+  }))
   const titlesElsewhere = await siteTitles(hostRef, new Set(pages.map((page) => page.screenId)))
 
   let spent = spentNothing(model)

@@ -216,8 +216,92 @@ them:
 
 The parity spec's gaps were folded back into single rows the same day.
 
-Still owed: the four Figma frames, which `build-pricing-tables.mts` declares
-stale until they are redrawn.
+The four Figma frames caught up on 2026-10-02, redrawn together with the
+AGL-3469 and AGL-3476 figures below and re-extracted into `copy-*.json`. Every
+`FRAME_STALE_CELLS`, `TIERS_STALE`, `USAGE_STALE` and `FRAME_STALE_METERED`
+entry those three issues had declared is deleted, and `check:pricing-tables` is
+clean again with zero declared divergences from the frames.
+
+### 2026-10-02, later — every plan covers its full-use cost plus 30% after card fees
+
+AGL-3469 cut the included bands so every paid plan covers its cost at 100% of
+every band plus 30%, after Stripe's fee — storage and form submissions per site
+first, then dataset storage, campaign email, CRM records, one-to-one email and
+Starter's and Pro's bandwidth — and cut the included collaborators, team seats
+and datasets so buying more is a real choice. AGL-3476 priced the three
+pass-through rates to keep 30% after the card fee: storage $0.0349 per GB-month,
+page views $0.83 and form submissions $0.083 per 1,000. Both were republished
+on 2026-10-02 BEFORE the promotion that bills them, and every page that quoted
+a moved figure moved with them:
+
+- `/pricing` went to version `qE5PwfZM-K` (88 edits on 86 nodes): the compare
+  table's storage, bandwidth, team seats, site collaborators, datasets, form
+  submissions, CRM records, one-to-one and campaign email rows, in the desktop
+  cells and all seven plan panels; the Starter, Pro and Business plan cards
+  ("25 pages · 2 collaborators", "3 sites · 3 collaborators" and "2,500
+  campaign emails/mo", "10 sites · 5 collaborators" and "15,000 campaign
+  emails/mo"); the Scale, Advanced and Agency strips ("5 collaborators", Scale
+  "25,000 campaign emails/mo"); and the metered section — the paragraph now says
+  "cost plus a 30% margin, after card fees", and the three rates. The SEO
+  description quotes no moved figure.
+- `/alternatives/webflow` → `k5VFgsxyYJ` (the metered rates and the seats
+  sentence); `/alternatives/squarespace` → `uZGvM7VkC5`, `/alternatives/wix`
+  → `rQPNNXkuJ3`, `/alternatives/shopify` → `cchHOzhEiC` and
+  `/alternatives/duda` → `fwSdslyYNw` (the seats row, "2 · 3 · 5 · 5 · 10 ·
+  10"); `/product` → `nQNoMt30-J` (plan-card collaborators);
+  `/campaign-landing-pages` → `sT72n37Dkg`, `/launch-day-email` →
+  `DWEf1r0vxn` and `/ai-campaign-email` → `qQVGriCbyd` (campaign and
+  one-to-one email bands); `/brand-assets-and-sites` → `SAxswMrffg` (storage
+  per site); `/resources/pricing-calculator` → `xE1HkWSogI` (its metered
+  sentence).
+- The calculator's site variables — `plan_rates` (0.83 / 0.083 / 0.0349) and
+  each `plan_<id>` with every moved band and its derived `views`,
+  `views_ceiling` and `forms_ceiling` — and the `estimate_plan` function's
+  dataset-storage label, which now prints Starter's 0.5 GB rather than rounding
+  it to 1.
+- The four Figma frames were redrawn the same night (201 text nodes, AGL-3444's
+  bands and rates included).
+
+Comparison pages that quoted the seat ladder are why the seat row is a pricing
+surface: a band quoted in prose is as live as a cell here. Prefer not to quote
+one.
+
+### 2026-10-02 — video, audio and file downloads count 1.6× (AGL-3474)
+
+Origin-served media counts against bandwidth at `ORIGIN_MEDIA_BANDWIDTH_WEIGHT`
+(1.6, derived), so it bills past the band at 1.6× the page-view rate. That is a
+price rise for anyone serving video, so the page went first: `/pricing` states
+the sentence on aglyn.com (read from the live page's text on 2026-10-04, before
+the promotion that bills it), and no page in the sitemap says media is exempt.
+
+- `/pricing`, in the metered section beside the page-view row: the sentence in
+  `tables.json` → `metered.mediaNote` (`ORIGIN_MEDIA_BANDWIDTH_SENTENCE`).
+  `check:pricing-tables` fails any breakpoint that states a different weight,
+  and reads nothing until one states it.
+- The four Figma frames state it directly under the metered paragraph (under
+  the sub-line on mobile), in a clone of that text node, and `copy-*.json` is
+  re-extracted. So `check:pricing-tables` now reads a stated weight on every
+  breakpoint, and a frame that drifts from 1.6× fails it.
+- The calculator converts a band to views and has no media input, so it moves
+  only if a video line is added to it.
+- The docs (`bandwidth.md`, `billing-and-plans/overview.md`,
+  `media/overview.md`) already state it; `media-bandwidth-weight-copy.spec.ts`
+  holds them to the code's sentence.
+
+### 2026-10-05 — "and other media served from our servers" (AGL-3518)
+
+Private images now count toward bandwidth like files, so the media sentence was
+broadened, general on purpose, before the code that counts them landed:
+"Video, audio, file downloads and other media served from our servers count
+1.6× toward bandwidth, because serving them costs more than serving pages."
+
+- `/pricing`: node `N-m49_NSMG` on screen `v0clP6xQl-`, version `1rNY19KoQ7`.
+- Figma: the four frames' sentence nodes `2253:2351` (desktop), `2253:2352`
+  (widescreen), `2253:2353` (tablet) and `2253:2354` (mobile), edited in place,
+  and the one string patched in each `copy-*.json` (the frames were otherwise
+  current, so nothing was re-extracted).
+- The weight still reads as `count 1.6× toward bandwidth`, the shape
+  `check:pricing-tables` parses.
 
 ## Enterprise has no price here, but it has bands
 

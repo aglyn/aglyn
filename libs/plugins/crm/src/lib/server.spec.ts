@@ -37,15 +37,15 @@
  */
 
 /*
- * The task routes (AGL-2599) and the import route (AGL-2602) pull the Admin
+ * The task routes (AGL-2599) pull the Admin
  * SDK, the workflow runner and the admin barrel into this module's import
  * graph. None loads under jsdom — `next/cache` extends a `Request` the
  * environment does not define — and none is what this suite is about, so
  * each is stubbed to the shape the routes import. Every assertion here is
  * about the WIRING: a route resolves and refuses the wrong method before it
  * reads a token, a body or a document, so nothing ever calls into a stub.
- * The routes' own behavior is `server/task-routes.spec.ts` and
- * `server/contacts-import.spec.ts`, each with a double shaped for it.
+ * The routes' own behavior is `server/task-routes.spec.ts` and the
+ * import resources' `transfer/*.spec.ts`, each with a double shaped for it.
  */
 jest.mock('firebase-admin/firestore', () => ({
   __esModule: true,
@@ -211,44 +211,11 @@ describe('the CRM server entry', () => {
     expect(status).toBe(401)
   })
 
-  /**
-   * The import route is REACHABLE through the same registration (AGL-2602).
-   *
-   * A GET is the cheapest request that proves the handler answered: it is
-   * refused before the route reads a body or a token, so the assertion is
-   * about the wiring and not about the import.
-   */
-  it('registers crm/contacts-import, which answers POST only', async () => {
-    registerCrmConsoleApi()
-    const { status, headers } = await call('crm/contacts-import', 'GET')
-    expect(status).toBe(405)
-    expect(headers['Allow']).toBe('POST')
-  })
-
   it('registers crm/email-send under the client-safe constant (AGL-2615)', () => {
     registerCrmConsoleApi()
     expect(CRM_API_ROUTES.emailSend).toBe('crm/email-send')
     expect(resolvePluginApiRoute(CRM_API_ROUTES.emailSend)).toBeDefined()
   })
-
-  /** The companies file's door (AGL-2621), proven the same way. */
-  it('registers crm/companies-import, which answers POST only', async () => {
-    registerCrmConsoleApi()
-    const { status, headers } = await call('crm/companies-import', 'GET')
-    expect(status).toBe(405)
-    expect(headers['Allow']).toBe('POST')
-  })
-
-  /** The deals and tasks files' doors (AGL-2662), proven the same way. */
-  it.each(['crm/deals-import', 'crm/tasks-import'])(
-    'registers %s, which answers POST only',
-    async (route) => {
-      registerCrmConsoleApi()
-      const { status, headers } = await call(route, 'GET')
-      expect(status).toBe(405)
-      expect(headers['Allow']).toBe('POST')
-    },
-  )
 
   it('registers crm/erase-person, which answers POST only (AGL-2623)', async () => {
     registerCrmConsoleApi()

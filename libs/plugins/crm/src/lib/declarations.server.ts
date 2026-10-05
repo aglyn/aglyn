@@ -33,6 +33,7 @@ import {
   type PluginRecordIndex,
 } from '@aglyn/aglyn/plugin-manager/plugin-record-index'
 import { registerPluginRecordEmailStateWriter } from '@aglyn/aglyn/plugin-manager/plugin-record-email-state'
+import { registerPluginRecordOriginWriter } from '@aglyn/aglyn/plugin-manager/plugin-record-origin'
 import {
   registerPluginRecordTimelineWriter,
   type PluginRecordTimelineWriter,
@@ -259,6 +260,19 @@ export function registerCrmServerDeclarations(): void {
   // through it (AGL-2660). Deferred like the rest; an API registration
   // replaces this one with the same writer, loaded eagerly.
   registerPluginRecordTimelineWriter(crmRecordTimelineWriter, { pluginId: BUNDLE_ID })
+  // Where a person came from (AGL-3519): a door the CRM does not run — the
+  // platform's account sign-up, a sequence enrolling someone — names its
+  // origin, and the CRM stamps the built-in Lead source on a record holding
+  // none. Deferred like the rest.
+  registerPluginRecordOriginWriter(
+    {
+      async stamp(request) {
+        const { crmRecordOriginWriter } = await import('./server/record-origin')
+        return crmRecordOriginWriter.stamp(request)
+      },
+    },
+    { pluginId: BUNDLE_ID },
+  )
   // Sharing rules (AGL-3336), re-evaluated after every server write of a
   // lead, a contact, a company or a deal: the core tells its record-written
   // listeners from the list-field restamp every such writer ends with, in

@@ -89,7 +89,8 @@ an email draft, AI is given:
   the day of the last one, when they were added, and when they last opened or clicked an email;
 - for a company, its domain, industry and how many people it has; for a deal, its pipeline and
   stages, stage, status, amount, expected close date, lost reason, the names of the person and
-  company it is with, and how many products it has; for a lead, its status, how it was captured
+  company it is with, up to 10 of its contacts by name with the role each plays and which is
+  Primary (a contact you cannot see is left out), and how many products it has; for a lead, its status, how it was captured
   and how many times, when it was first and last seen, whether it is assigned or converted, and
   why it was unqualified;
 - the record's notes (their first 600 characters);
@@ -117,5 +118,5 @@ has switched AI off, none of it appears on that site's pages.
 - [The contact record](../content-and-data/crm/contact-record.md)
 - [Deals](../content-and-data/crm/deals.md)
 - [Leads](../content-and-data/crm/leads.md)
-- [Import contacts from CSV](../content-and-data/crm/import.md)
+- [Import contacts and companies](../content-and-data/crm/import.md)
 - [How Aglyn AI builds](./how-aglyn-ai-builds.md)

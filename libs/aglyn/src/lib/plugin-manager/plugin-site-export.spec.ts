@@ -49,6 +49,10 @@ describe('declared site export collections', () => {
           const value = (entitlements as unknown as Record<string, unknown>)[declared.count.quotaKey]
           expect([declared.collection, plan, typeof value]).toEqual([declared.collection, plan, 'number'])
         }
+      } else if ('uncapped' in declared.count) {
+        // An uncapped collection says why, in a sentence a reviewer can
+        // disagree with.
+        expect([declared.collection, declared.count.uncapped.length > 20]).toEqual([declared.collection, true])
       } else {
         const cap = declared.count.max
         expect([declared.collection, Number.isInteger(cap) && (cap ?? 0) > 0]).toEqual([
@@ -70,13 +74,53 @@ describe('declared site export collections', () => {
   })
 })
 
+describe('each carried collection as site package items (AGL-3533)', () => {
+  it('names a kind, a label and a field an item is matched by', () => {
+    for (const declared of listPluginSiteExportCollections()) {
+      const pkg = declared.package
+      expect([declared.collection, typeof pkg.kind, pkg.label.length > 0]).toEqual([
+        declared.collection,
+        'string',
+        true,
+      ])
+      const matchedBy = pkg.slugField ?? pkg.nameField
+      expect([declared.collection, matchedBy !== undefined && declared.fields.includes(matchedBy)]).toEqual([
+        declared.collection,
+        true,
+      ])
+    }
+  })
+
+  it('gives every kind one owner', () => {
+    const kinds = listPluginSiteExportCollections().map((one) => one.package.kind)
+    expect(new Set(kinds).size).toBe(kinds.length)
+  })
+
+  it('names references only through fields a restore writes', () => {
+    for (const declared of listPluginSiteExportCollections()) {
+      for (const ref of declared.package.references ?? []) {
+        expect([declared.collection, ref.field, declared.fields.includes(ref.field)]).toEqual([
+          declared.collection,
+          ref.field,
+          true,
+        ])
+      }
+    }
+  })
+})
+
 describe('the runtime door', () => {
   afterEach(() => resetPluginServicesForTests())
 
   it('refuses a site export, which only the compiled declarations can carry', () => {
     expect(() =>
       registerPluginHostCollections(
-        [{ name: 'bottles', siteExport: { limit: 10, fields: ['name'] } }],
+        [
+          {
+            name: 'bottles',
+            siteExport: { limit: 10, fields: ['name'], package: { kind: 'bottle', label: 'Bottles', nameField: 'name' } },
+          },
+        ],
         { pluginId: 'cellar' },
       ),
     ).toThrow(/compiled declarations/)

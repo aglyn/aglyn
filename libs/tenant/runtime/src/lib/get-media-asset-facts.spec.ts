@@ -84,7 +84,17 @@ describe('getMediaAssetFacts (AGL-2807, AGL-2833)', () => {
     const call = mockGetAll.mock.calls[0]
     expect(pathsRead(call)).toEqual(['orgs/acme/media/film'])
     expect(call[call.length - 1]).toEqual({
-      fieldMask: ['width', 'height', 'video', 'poster', 'deletedAt', 'private', 'visibleTo'],
+      fieldMask: [
+        'width',
+        'height',
+        'video',
+        'poster',
+        // The version a placed image's URL names (AGL-3485).
+        'contentHash',
+        'deletedAt',
+        'private',
+        'visibleTo',
+      ],
     })
     // Every spelling that placed the film gets the one answer.
     expect(facts.get('org:acme/film')).toEqual(FILM)

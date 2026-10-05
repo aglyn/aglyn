@@ -128,6 +128,15 @@ const SUMMARY_LABEL_SX = {
 } as const
 
 /**
+ * The summary is a `<button>`, and a button takes the browser's own font
+ * rather than the page's — so every accordion question on a site rendered in
+ * the system face while the answer under it used the theme's (AGL-3497).
+ * Only the family is inherited: size and weight stay MUI's, and the node's own
+ * styles, applied after this, still win.
+ */
+const SUMMARY_FONT_SX = { fontFamily: 'inherit' } as const
+
+/**
  * The toggle keeps only its chevron: the label is a sibling now, so the
  * summary's own content slot would just add empty width.
  */
@@ -192,11 +201,14 @@ export const AccordionSummaryElement = forwardRef<
   const { href, suppressNavigation } = Aglyn.useScreenLink(screenId)
 
   if (!screenId) {
+    const { sx: plainSx, ...plainRest } = rest
+    const plainNodeSx = Array.isArray(plainSx) ? plainSx : plainSx ? [plainSx] : []
     return (
       <MuiAccordionSummary
         ref={ref}
         expandIcon={<MdiIcon path={mdiChevronDown.path} />}
-        {...withAuthorHtmlLabel(rest, html)}
+        {...withAuthorHtmlLabel(plainRest, html)}
+        sx={[SUMMARY_FONT_SX, ...plainNodeSx]}
       />
     )
   }

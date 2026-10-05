@@ -16,7 +16,17 @@
  */
 'use client'
 
-import { CRM_COLLECTIONS, findOrgMember, crmMemberPickerLabel } from '@aglyn/aglyn'
+import {
+  CRM_COLLECTIONS,
+  type CrmPicklist,
+  crmPicklistActiveValues,
+  crmPicklistDefaultLabel,
+  crmPicklistOptions,
+  crmPicklistShownLabel,
+  crmPicklistValueByLabel,
+  findOrgMember,
+  crmMemberPickerLabel,
+} from '@aglyn/aglyn'
 import { useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -25,6 +35,7 @@ import {
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
 import {
+  Autocomplete,
   Button,
   Drawer,
   MenuItem,
@@ -44,14 +55,9 @@ import {
   type CrmTaskFields,
   crmTaskFieldsOf,
 } from '../model/task-routes'
-import {
-  CRM_TASK_KIND_LABELS,
-  CRM_TASK_KINDS,
-  CRM_TASK_PRIORITIES,
-  CRM_TASK_PRIORITY_LABELS,
-  dueAtToLocalInput,
-  localInputToDueAt,
-} from '../model/task-views'
+import { dueAtToLocalInput, localInputToDueAt } from '../model/task-views'
+import { useCrmPicklist } from '../hooks/use-crm-picklist'
+import { useCrmTaskPicklists } from '../hooks/use-crm-task-picklists'
 import { useCrmOrgMount } from '../hooks/use-crm-org-mount'
 import { useCrmScope } from '../hooks/use-crm-scope'
 import { isOrgTask } from '../model/task-scope'
@@ -113,6 +119,62 @@ export function TaskEditDrawer(props: TaskEditDrawerProps) {
 }
 TaskEditDrawer.displayName = 'TaskEditDrawer'
 
+/**
+ * One of a task's semantic picklists as a select (AGL-3517): the org's
+ * active values in its order — narrowed by `include` when only some may be
+ * picked — and the task's own label when the list would not offer it, so
+ * the field shows what is stored. No "None": a task always has a status, a
+ * priority and a type.
+ */
+function TaskPicklistField(props: {
+  label: string
+  picklist: CrmPicklist
+  value: string
+  stored?: string
+  include?: (meaning: string | null | undefined) => boolean
+  onChange: (label: string, meaning: string | null) => void
+  disabled?: boolean
+  helperText?: string
+}) {
+  const { label, picklist, value, stored, include, onChange, disabled, helperText } = props
+  const options = crmPicklistOptions(picklist, stored || value).filter(
+    (option) =>
+      option.label === value ||
+      option.label === stored ||
+      !include ||
+      include(crmPicklistValueByLabel(picklist, option.label)?.meaning),
+  )
+  return (
+    <TextField
+      select
+      label={label}
+      value={options.some((option) => option.label === value) ? value : ''}
+      onChange={(event) => {
+        const next = String(event.target.value)
+        onChange(next, crmPicklistValueByLabel(picklist, next)?.meaning ?? null)
+      }}
+      size="small"
+      disabled={disabled}
+      helperText={helperText}
+      sx={{ flex: 1 }}
+    >
+      {options.map((option) => (
+        <MenuItem
+          key={option.label}
+          value={option.label}
+          disabled={(option.inactive || option.unlisted) && option.label !== (stored || value)}
+        >
+          {option.inactive
+            ? `${option.label} (inactive)`
+            : option.unlisted
+              ? `${option.label} (not in the list)`
+              : option.label}
+        </MenuItem>
+      ))}
+    </TextField>
+  )
+}
+
 function TaskForm(props: TaskEditDrawerProps) {
   const { onClose, hostId, org, orgId, scope, readTokens, task, prefill, seed, onSaved } =
     props
@@ -161,6 +223,36 @@ function TaskForm(props: TaskEditDrawerProps) {
   })
   const assignee = findOrgMember(directory.members, fields.assigneeUid)
   const [busy, setBusy] = useState(false)
+  /*
+   * TYPE, PRIORITY AND STATUS (AGL-3517) are the org's picklists, each value
+   * meaning one of the task's `kind`, `priority` or `status`. What a field
+   * shows is the task's own label, else — on a new task whose button named
+   * no meaning — the list's default, else the first active value of the
+   * meaning it holds. The save sends the label shown, and the route stores
+   * the meaning its value carries beside it.
+   */
+  const picklists = useCrmTaskPicklists(orgId)
+  const subjects = useCrmPicklist('taskSubject', orgId)
+  const isNew = !task
+  const shown = (
+    picklist: CrmPicklist,
+    label: string | undefined,
+    meaning: string,
+    prefilled: boolean,
+  ) =>
+    label ||
+    (isNew && !prefilled ? crmPicklistDefaultLabel(picklist) : null) ||
+    crmPicklistShownLabel(picklist, meaning, null)
+  const typeLabel = shown(picklists.type, fields.typeLabel, fields.kind, Boolean(prefill?.kind))
+  const priorityLabel = shown(
+    picklists.priority,
+    fields.priorityLabel,
+    fields.priority,
+    Boolean(prefill?.priority),
+  )
+  const status = task?.status === 'done' ? 'done' : 'open'
+  const statusLabel = shown(picklists.status, fields.statusLabel, status, false)
+  const subjectOptions = crmPicklistActiveValues(subjects.picklist).map((value) => value.label)
   const [error, setError] = useState<string | null>(null)
 
   const set = <K extends keyof CrmTaskFields>(key: K, value: CrmTaskFields[K]) =>
@@ -208,7 +300,13 @@ function TaskForm(props: TaskEditDrawerProps) {
         const result = await saveCrmTask(user, {
           ...routeScope,
           ...(task ? { taskId: task.$id } : {}),
-          task: { ...fields, title: fields.title.trim() },
+          task: {
+            ...fields,
+            title: fields.title.trim(),
+            typeLabel,
+            priorityLabel,
+            statusLabel,
+          },
         })
         enqueueSnackbar(
           task
@@ -257,6 +355,9 @@ function TaskForm(props: TaskEditDrawerProps) {
       confirmationText: 'Delete',
       confirmationButtonProps: { color: 'error' },
     })
+      // `confirm` resolves with no value and REJECTS on cancel (AGL-3509).
+      .then(() => true)
+      .catch(() => false)
     if (!confirmed) return
     setBusy(true)
     try {
@@ -309,47 +410,80 @@ function TaskForm(props: TaskEditDrawerProps) {
             : `Filed from ${mount.siteName(task.hostId as string)}.`}
         </Typography>
       ) : null}
-      <TextField
-        label="Title"
-        value={fields.title}
-        onChange={(event) => set('title', event.target.value)}
+      {/*
+        The subject (AGL-3517): Salesforce's Subject combobox — the org's
+        suggestions under a field that takes any text, so the title stays
+        the person's own words.
+      */}
+      <Autocomplete
+        freeSolo
         size="small"
-        autoFocus
-        required
-        slotProps={{ htmlInput: { maxLength: CRM_TASK_TITLE_MAX } }}
+        options={subjectOptions}
+        inputValue={fields.title}
+        onInputChange={(_event, value) => set('title', value)}
+        renderInput={(params) => (
+          <TextField
+            {...params}
+            label="Subject"
+            size="small"
+            autoFocus
+            required
+            slotProps={{
+              ...params.slotProps,
+              htmlInput: { ...params.slotProps.htmlInput, maxLength: CRM_TASK_TITLE_MAX },
+            }}
+          />
+        )}
       />
       <Stack direction="row" spacing={1}>
-        <TextField
-          select
-          label="Kind"
-          value={fields.kind}
-          onChange={(event) => set('kind', event.target.value as CrmTaskFields['kind'])}
-          size="small"
-          sx={{ flex: 1 }}
-        >
-          {CRM_TASK_KINDS.map((kind) => (
-            <MenuItem key={kind} value={kind}>
-              {CRM_TASK_KIND_LABELS[kind]}
-            </MenuItem>
-          ))}
-        </TextField>
-        <TextField
-          select
-          label="Priority"
-          value={fields.priority}
-          onChange={(event) =>
-            set('priority', event.target.value as CrmTaskFields['priority'])
+        <TaskPicklistField
+          label="Type"
+          picklist={picklists.type}
+          value={typeLabel}
+          stored={task?.typeLabel ?? undefined}
+          onChange={(label, meaning) =>
+            setFields((prev) => ({
+              ...prev,
+              typeLabel: label,
+              ...(meaning ? { kind: meaning as CrmTaskFields['kind'] } : {}),
+            }))
           }
-          size="small"
-          sx={{ flex: 1 }}
-        >
-          {CRM_TASK_PRIORITIES.map((priority) => (
-            <MenuItem key={priority} value={priority}>
-              {CRM_TASK_PRIORITY_LABELS[priority]}
-            </MenuItem>
-          ))}
-        </TextField>
+          disabled={busy}
+        />
+        <TaskPicklistField
+          label="Priority"
+          picklist={picklists.priority}
+          value={priorityLabel}
+          stored={task?.priorityLabel ?? undefined}
+          onChange={(label, meaning) =>
+            setFields((prev) => ({
+              ...prev,
+              priorityLabel: label,
+              ...(meaning ? { priority: meaning as CrmTaskFields['priority'] } : {}),
+            }))
+          }
+          disabled={busy}
+        />
       </Stack>
+      {/*
+        Only the values of the task's own status: ticking it done in the
+        list is what completes a task, because that is what runs the
+        site's automations.
+      */}
+      <TaskPicklistField
+        label="Status"
+        picklist={picklists.status}
+        value={statusLabel}
+        stored={task?.statusLabel ?? undefined}
+        include={(meaning) => meaning === status}
+        onChange={(label) => set('statusLabel', label)}
+        disabled={busy}
+        helperText={
+          status === 'done'
+            ? 'Untick the task in the list to reopen it.'
+            : 'Tick the task in the list to complete it.'
+        }
+      />
       <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start' }}>
         <TextField
           label="Due"

@@ -42,6 +42,15 @@ import {
  * write body lists its handler's own writable set. `api-v1-openapi.spec.ts`
  * holds the document to every endpoint the documentation promises.
  */
+/** How a company picklist field reads in the description (AGL-3514). */
+function companyPicklistNote(label: string, plural: string): string {
+  return (
+    `${label}: one of the organization's active ${plural} (CRM › Fields › Companies), matched ` +
+    'without regard to case. Any other value is refused with a 400 naming the values allowed; ' +
+    'the value a company already holds is kept even after it is deactivated.'
+  )
+}
+
 export const CRM_API_V1_DESCRIPTIONS: Readonly<Record<string, ApiV1ResourceDescription>> = {
   contacts: {
     tag: 'Contacts',
@@ -51,6 +60,10 @@ export const CRM_API_V1_DESCRIPTIONS: Readonly<Record<string, ApiV1ResourceDescr
     writable: [
       'email', 'name', 'tags', 'notes', 'marketingConsent', 'consentSiteId', 'consentGroupId', 'custom',
       'phone', 'jobTitle', 'companyId', 'address', 'ownerUid', 'lifecycleStage', 'mediaIds',
+      'leadSource',
+      // Salesforce's standard contact fields (AGL-3515).
+      'salutation', 'firstName', 'lastName', 'department', 'mobilePhone', 'homePhone', 'otherPhone',
+      'fax', 'birthdate', 'assistantName', 'assistantPhone', 'reportsToContactId', 'otherAddress', 'doNotCall',
     ],
     writeOnly: {
       consentSiteId: stringField('The site this write is made on behalf of: where the person opted in, and whose profile the profile fields land on.'),
@@ -75,6 +88,22 @@ export const CRM_API_V1_DESCRIPTIONS: Readonly<Record<string, ApiV1ResourceDescr
       address: postalAddressField(),
       ownerUid: nullableField(stringField('Owning user. Checked on the page, not the query.')),
       lifecycleStage: nullableField(stringField('CRM lifecycle stage.')),
+      leadSource: nullableField(stringField('Lead source: one of the organization’s Lead source values (CRM › Fields › Leads), stored on the named site’s profile. A value the list does not hold is a `400` naming the values it allows.')),
+      // Salesforce's standard contact fields (AGL-3515).
+      salutation: nullableField(stringField("One of the organization's salutation values (Mr., Ms., Mrs., Dr., Prof. and its own).")),
+      firstName: nullableField(stringField('First name. With `lastName`, it makes the name the named site shows.')),
+      lastName: nullableField(stringField('Last name.')),
+      department: nullableField(stringField('Department.')),
+      mobilePhone: nullableField(stringField('Mobile phone, E.164.')),
+      homePhone: nullableField(stringField('Home phone, E.164.')),
+      otherPhone: nullableField(stringField('Other phone, E.164.')),
+      fax: nullableField(stringField('Fax, E.164.')),
+      birthdate: nullableField(stringField('Birthdate, `YYYY-MM-DD`, never in the future.')),
+      assistantName: nullableField(stringField("Assistant's name.")),
+      assistantPhone: nullableField(stringField("Assistant's phone, E.164.")),
+      reportsToContactId: nullableField(stringField('The contact this person reports to. Never the contact itself, and never one that already reports to it.')),
+      otherAddress: nullableField(postalAddressField()),
+      doNotCall: booleanField('The person asked not to be phoned.'),
       companyIds: stringListField('Every company this contact belongs to.'),
       alternateEmails: stringListField('Other addresses that resolve to this contact.'),
       ...RECORD_STAMPS,
@@ -120,7 +149,12 @@ export const CRM_API_V1_DESCRIPTIONS: Readonly<Record<string, ApiV1ResourceDescr
     description: 'Organizations in the CRM.',
     schemaName: 'Company',
     required: ['id', 'object', 'name'],
-    writable: ['name', 'domain', 'website', 'phone', 'address', 'industry', 'ownerUid', 'notes', 'custom', 'mediaIds', 'consentSiteId'],
+    writable: [
+      'name', 'domain', 'website', 'phone', 'address', 'industry', 'ownerUid', 'notes', 'custom', 'mediaIds', 'consentSiteId',
+      // Salesforce's Account fields (AGL-3514).
+      'type', 'rating', 'ownership', 'accountSource', 'annualRevenueCents', 'currency', 'numberOfEmployees', 'fax',
+      'accountNumber', 'site', 'tickerSymbol', 'sicCode', 'shippingAddress', 'parentCompanyId',
+    ],
     writeOnly: {
       mediaIds: stringListField('Media library files attached to this company, by id, at most 20. An empty array clears them.'),
       consentSiteId: stringField('The site the company is created on behalf of.'),
@@ -133,8 +167,31 @@ export const CRM_API_V1_DESCRIPTIONS: Readonly<Record<string, ApiV1ResourceDescr
       domain: nullableField(stringField('Primary domain. Unique per organization.')),
       website: nullableField(stringField('Website URL.')),
       phone: nullableField(stringField('Telephone number.')),
-      address: postalAddressField(),
-      industry: nullableField(stringField('Industry label.')),
+      address: { ...postalAddressField(), description: 'Billing address. Members are optional and free-form.' },
+      industry: nullableField(stringField(companyPicklistNote('Industry', 'industries'))),
+      // Salesforce's Account fields (AGL-3514).
+      type: nullableField(stringField(companyPicklistNote('Account type', 'types'))),
+      rating: nullableField(stringField(companyPicklistNote('Rating', 'ratings'))),
+      ownership: nullableField(stringField(companyPicklistNote('Ownership', 'ownership values'))),
+      accountSource: nullableField(
+        stringField(
+          "Where the account came from: one of the organization's active lead source values " +
+            '(CRM › Fields › Leads), matched without regard to case. Any other value is refused ' +
+            'with a 400 naming the values allowed; the value a company already holds is kept.',
+        ),
+      ),
+      annualRevenueCents: nullableField(integerField('Annual revenue in the minor unit of `currency`, 0 or more.')),
+      currency: stringField('Lowercase ISO 4217 code of the annual revenue. `usd` when unset.'),
+      numberOfEmployees: nullableField(integerField('Number of employees, 0 to 99,999,999.')),
+      fax: nullableField(stringField('E.164 fax number.')),
+      accountNumber: nullableField(stringField('Account number, at most 40 characters.')),
+      site: nullableField(stringField('Which of the company’s locations this record is, at most 80 characters.')),
+      tickerSymbol: nullableField(stringField('Stock ticker symbol, at most 20 characters.')),
+      sicCode: nullableField(stringField('Standard Industrial Classification code, at most 20 characters.')),
+      shippingAddress: { ...postalAddressField(), description: 'Shipping address. Members are optional and free-form.' },
+      parentCompanyId: nullableField(
+        stringField('The company this one sits under. Never itself or a company below it; deleting the parent clears it.'),
+      ),
       ownerUid: nullableField(stringField('Owning user.')),
       notes: nullableField(stringField('Free-form notes.')),
       custom: openObjectField('Customer-defined fields.'),
@@ -167,7 +224,18 @@ export const CRM_API_V1_DESCRIPTIONS: Readonly<Record<string, ApiV1ResourceDescr
         description: 'Ordered stages. A deal’s `stageId` names one of these.',
         items: {
           type: 'object',
-          properties: { id: { type: 'string' }, name: { type: 'string' }, order: { type: 'integer' } },
+          properties: {
+            id: { type: 'string' },
+            name: { type: 'string' },
+            order: { type: 'integer' },
+            probability: { type: 'integer', description: 'Chance of closing from this stage, 0–100.' },
+            kind: { type: 'string', enum: ['open', 'won', 'lost'] },
+            forecastCategory: {
+              type: 'string',
+              enum: ['omitted', 'pipeline', 'bestCase', 'commit', 'closed'],
+              description: 'The forecast category a deal takes on landing in this stage.',
+            },
+          },
           additionalProperties: true,
         },
       },
@@ -184,12 +252,17 @@ export const CRM_API_V1_DESCRIPTIONS: Readonly<Record<string, ApiV1ResourceDescr
     description: 'Opportunities moving through a pipeline.',
     schemaName: 'Deal',
     required: ['id', 'object', 'title', 'pipelineId', 'stageId'],
-    writable: ['title', 'pipelineId', 'stageId', 'status', 'amountCents', 'currency', 'lineItems', 'expectedCloseAt', 'ownerUid', 'contactId', 'companyId', 'lostReason', 'notes', 'custom', 'mediaIds', 'consentSiteId'],
+    writable: ['title', 'pipelineId', 'stageId', 'status', 'amountCents', 'currency', 'lineItems', 'expectedCloseAt', 'ownerUid', 'contactId', 'companyId', 'lostReason', 'notes', 'custom', 'mediaIds', 'consentSiteId', 'type', 'leadSource', 'nextStep', 'probability', 'forecastCategory', 'campaignId', 'contactRoles'],
     writeOnly: {
       mediaIds: stringListField('Media library files attached to this deal, by id, at most 20. An empty array clears them.'),
       consentSiteId: stringField('The site the deal is created on behalf of.'),
     },
-    writeNote: '`pipelineId` and `consentSiteId` are accepted on create only; a `PATCH` that names either is a `400`.',
+    writeNote:
+      '`pipelineId` and `consentSiteId` are accepted on create only; a `PATCH` that names either is a `400`. ' +
+      '`type` and `leadSource` must be active values of the organization’s lists (a deal keeps the value it holds). ' +
+      'A stage move sets `forecastCategory` from the new stage and clears `probability`, unless the same body sets them. ' +
+      '`contactRoles` replaces the whole list: each contact once, at most 50, at most one `primary`, each `role` an active value of the organization’s contact roles. ' +
+      'The Primary is `contactId`: a body sending both must agree, and `contactId` alone makes that contact Primary.',
     fields: {
       id: stringField('Deal id.'),
       object: objectKindField('deal'),
@@ -204,17 +277,37 @@ export const CRM_API_V1_DESCRIPTIONS: Readonly<Record<string, ApiV1ResourceDescr
       closedAt: nullableField(isoField('When it was actually closed.')),
       stageChangedAt: nullableField(isoField('When the stage last moved.')),
       ownerUid: nullableField(stringField('Owning user.')),
-      contactId: nullableField(stringField('Associated contact.')),
+      contactId: nullableField(stringField('Associated contact — the Primary of `contactRoles`.')),
+      contactRoles: {
+        type: 'array',
+        description:
+          'Every contact on the deal and the part each plays (Salesforce’s Opportunity Contact Roles). At most one is `primary`, and it is `contactId`.',
+        items: {
+          type: 'object',
+          required: ['contactId', 'primary'],
+          properties: {
+            contactId: stringField('The contact.'),
+            role: nullableField(stringField('One of the organization’s contact roles (Decision Maker, Evaluator, …), or `null` for none.')),
+            primary: booleanField('Whether this is the deal’s Primary contact.'),
+          },
+        },
+      },
       companyId: nullableField(stringField('Associated company.')),
       lostReason: nullableField(stringField('Why it was lost.')),
       notes: nullableField(stringField('Free-form notes.')),
+      type: nullableField(stringField('Type — one of the organization’s deal types (New Business, Existing Business, …).')),
+      leadSource: nullableField(stringField('Lead source — one of the organization’s lead sources.')),
+      nextStep: nullableField(stringField('What happens next. At most 255 characters.')),
+      probability: nullableField(integerField('This deal’s own chance of closing, 0–100; `null` uses its stage’s. A stage move clears it.')),
+      forecastCategory: nullableField(stringField('`omitted`, `pipeline`, `bestCase`, `commit` or `closed`. Every stage move sets it from the new stage.')),
+      campaignId: nullableField(stringField('The campaign the deal is attributed to.')),
       custom: openObjectField('Customer-defined fields.'),
       nextTaskAt: nullableField(isoField('When the next open task on this deal is due.')),
       siteId: nullableField(stringField('Site the record originated on.')),
       ...RECORD_STAMPS,
     },
     ops: [
-      { path: '/v1/deals', method: 'get', operationId: 'listDeals', summary: 'List deals', list: true, returns: 'Deal', entitlement: 'crm', filters: [UPDATED_AFTER_PARAM, queryParam('pipelineId', 'Pipeline.'), queryParam('stageId', 'Stage.'), queryParam('status', 'Deal status.'), queryParam('ownerUid', 'Owning user.')] },
+      { path: '/v1/deals', method: 'get', operationId: 'listDeals', summary: 'List deals', list: true, returns: 'Deal', entitlement: 'crm', filters: [UPDATED_AFTER_PARAM, queryParam('pipelineId', 'Pipeline.'), queryParam('stageId', 'Stage.'), queryParam('status', 'Deal status.'), queryParam('ownerUid', 'Owning user.'), queryParam('type', 'Type, exactly as stored.'), queryParam('leadSource', 'Lead source, exactly as stored.'), queryParam('forecastCategory', 'Forecast category.'), queryParam('campaignId', 'Campaign.')] },
       { path: '/v1/deals', method: 'post', operationId: 'createDeal', summary: 'Create a deal', accepts: 'DealWrite', returns: 'Deal', entitlement: 'crm', creates: true },
       { path: '/v1/deals/{dealId}', method: 'get', operationId: 'getDeal', summary: 'Retrieve a deal', returns: 'Deal', entitlement: 'crm', pathParams: [{ name: 'dealId', description: 'Deal id.' }] },
       { path: '/v1/deals/{dealId}', method: 'patch', operationId: 'updateDeal', summary: 'Update a deal', accepts: 'DealWrite', returns: 'Deal', entitlement: 'crm', pathParams: [{ name: 'dealId', description: 'Deal id.' }] },
@@ -236,9 +329,12 @@ export const CRM_API_V1_DESCRIPTIONS: Readonly<Record<string, ApiV1ResourceDescr
       object: objectKindField('task'),
       title: stringField('Task title.'),
       notes: nullableField(stringField('Free-form notes.')),
-      kind: stringField('Task kind, e.g. `call` or `email`.'),
-      priority: stringField('Priority label.'),
-      status: stringField('`open` or `done`.'),
+      kind: stringField('Task type as its meaning: `call`, `email`, `meeting` or `todo`. A write takes the meaning or a label of the Type picklist.'),
+      typeLabel: stringField('The organization’s Type picklist label, e.g. `Call`. Read-only; set through `kind`.'),
+      priority: stringField('`low`, `normal` or `high`. A write takes the meaning or a label of the Priority picklist.'),
+      priorityLabel: stringField('The organization’s Priority picklist label, e.g. `High`. Read-only; set through `priority`.'),
+      status: stringField('`open` or `done`. A write takes the meaning or a label of the Status picklist, e.g. `In Progress`.'),
+      statusLabel: stringField('The organization’s Status picklist label, e.g. `Not Started`. Read-only; set through `status`.'),
       dueAt: nullableField(isoField('When the task is due.')),
       remindAt: nullableField(isoField('When a reminder is scheduled.')),
       reminderSentAt: nullableField(isoField('When the reminder was sent.')),
@@ -263,7 +359,7 @@ export const CRM_API_V1_DESCRIPTIONS: Readonly<Record<string, ApiV1ResourceDescr
     description: 'Logged interactions. Append-only: no PATCH.',
     schemaName: 'Activity',
     required: ['id', 'object', 'kind', 'at'],
-    writable: ['kind', 'body', 'at', 'byUid', 'contactId', 'companyId', 'dealId', 'outcome', 'durationMinutes', 'consentSiteId'],
+    writable: ['kind', 'body', 'at', 'byUid', 'contactId', 'companyId', 'dealId', 'outcome', 'durationMinutes', 'direction', 'consentSiteId'],
     writeOnly: {
       consentSiteId: stringField('The site the activity is logged on behalf of.'),
     },
@@ -280,6 +376,7 @@ export const CRM_API_V1_DESCRIPTIONS: Readonly<Record<string, ApiV1ResourceDescr
       dealId: nullableField(stringField('Associated deal.')),
       outcome: nullableField(stringField('Outcome label.')),
       durationMinutes: nullableField(integerField('Duration, for calls and meetings.')),
+      direction: nullableField(stringField('Which way it went: `inbound`, `outbound` or `internal` for a call, `inbound` or `outbound` for an email.')),
       siteId: nullableField(stringField('Site the record originated on.')),
       ...RECORD_STAMPS,
     },
@@ -295,12 +392,16 @@ export const CRM_API_V1_DESCRIPTIONS: Readonly<Record<string, ApiV1ResourceDescr
     description: 'Unqualified interest, before it becomes a contact. A lead is a record of its own: the person and their company as text, until converting makes the contact and the company.',
     schemaName: 'Lead',
     required: ['id', 'object', 'siteId'],
-    writable: ['siteId', 'email', 'name', 'status', 'ownerUid', 'ownerEmail', 'notes', 'unqualifiedReason', 'company', 'jobTitle', 'phone', 'website', 'address', 'tags', 'leadSource'],
-    writeNote: '`email` and `name` are taken on a create only; a `PATCH` cannot change the address, which is the lead’s identity within its site.',
+    writable: [
+      'siteId', 'email', 'name', 'status', 'ownerUid', 'ownerEmail', 'notes', 'unqualifiedReason', 'company', 'jobTitle', 'phone', 'website', 'address', 'tags', 'leadSource',
+      // Salesforce's standard lead fields (AGL-3513).
+      'salutation', 'firstName', 'lastName', 'mobilePhone', 'fax', 'doNotCall', 'industry', 'rating', 'annualRevenueCents', 'currency', 'numberOfEmployees',
+    ],
+    writeNote: '`email` and `name` are taken on a create only; a `PATCH` cannot change the address, which is the lead’s identity within its site. While `firstName` or `lastName` is set, `name` is their composition, "First Last", and follows them.',
     writeRequired: ['email'],
     writeOnly: {
       siteId: stringField('The site the lead belongs to, instead of the `siteId` query parameter.'),
-      status: stringField('`new`, `nurturing`, `working` or `unqualified` (`nurturing` and `unqualified` on a `PATCH` only). A lead becomes `qualified` by being converted.'),
+      status: stringField('One of the organization’s active lead status values by its label (CRM › Fields › Leads), or a meaning — `new`, `nurturing`, `working` or `unqualified` (`nurturing` and `unqualified` on a `PATCH` only). Stored as the meaning and the label together. A lead becomes `qualified` by being converted.'),
       ownerEmail: stringField('A member’s address, resolved against the organization’s roster. Not with `ownerUid` in the same request.'),
     },
     fields: {
@@ -309,7 +410,8 @@ export const CRM_API_V1_DESCRIPTIONS: Readonly<Record<string, ApiV1ResourceDescr
       siteId: stringField('Site the lead arrived on.'),
       email: nullableField(stringField('Email — the lead’s identity within its site.')),
       name: nullableField(stringField('Name, when supplied.')),
-      status: stringField('Lead status.'),
+      status: stringField('What the lead status means: `new`, `nurturing`, `working`, `qualified` or `unqualified`. What every filter and automation reads.'),
+      statusLabel: stringField('The organization’s label for the lead status value the lead holds — one of `status`’s meaning. Read-only; set it through `status`.'),
       ownerUid: nullableField(stringField('Owning user.')),
       notes: nullableField(stringField('Free-form notes.')),
       unqualifiedReason: nullableField(stringField('Why the lead was disqualified.')),
@@ -327,6 +429,18 @@ export const CRM_API_V1_DESCRIPTIONS: Readonly<Record<string, ApiV1ResourceDescr
             "after it is deactivated. A create that names none starts from the list's default.",
         ),
       ),
+      // Salesforce's standard lead fields (AGL-3513).
+      salutation: nullableField(stringField('Salutation: one of the organization’s active Salutation values (CRM › Fields › Contacts), matched without regard to case. Any other value is a `400` naming the values allowed; the value a lead already holds is kept.')),
+      firstName: nullableField(stringField('First name, at most 59 characters. While it or `lastName` is set, `name` is "First Last".')),
+      lastName: nullableField(stringField('Last name, at most 59 characters.')),
+      mobilePhone: nullableField(stringField('E.164 mobile phone number.')),
+      fax: nullableField(stringField('E.164 fax number.')),
+      doNotCall: booleanField('The person asked not to be phoned. A hint on every call control, never a block. `false` clears it.'),
+      industry: nullableField(stringField('Industry: one of the organization’s active Industry values (CRM › Fields › Companies) — the list companies keep, so converting carries it. Any other value is a `400` naming the values allowed; the value a lead already holds is kept.')),
+      rating: nullableField(stringField('Rating: one of the organization’s active Rating values (CRM › Fields › Companies). Any other value is a `400` naming the values allowed.')),
+      annualRevenueCents: nullableField(integerField('Annual revenue in the minor unit of `currency`, 0 or more.')),
+      currency: stringField('Lowercase ISO 4217 code of the annual revenue. `usd` when unset.'),
+      numberOfEmployees: nullableField(integerField('Number of employees, 0 to 99,999,999.')),
       sources: stringListField('The surfaces that captured the lead: `signup`, `booking`, `form:{formId}`, `import`, `manual`, `api`.'),
       submissionCount: integerField('How many form submissions this lead has made.'),
       firstSeen: isoField('First interaction.'),

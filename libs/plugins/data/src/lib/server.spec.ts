@@ -20,9 +20,9 @@
 /**
  * THE ORGANIZATION'S DATASETS API IS THE DATA PLUGIN'S, AT THE SAME ADDRESSES.
  *
- * `/api/orgs/datasets` and `/api/orgs/datasets/export` are served by the
- * console's plugin dispatcher from this registration. A registration that
- * lost a path would 404 the org Data page's every create and export, and one
+ * `/api/orgs/datasets` is served by the console's plugin dispatcher from this
+ * registration. A registration that lost the path would 404 the org Data
+ * page's every create, and one
  * that lost its subject would let the dispatcher's release gate read every
  * request as anonymous — refused under any partial rollout of the store.
  */
@@ -38,12 +38,13 @@ beforeAll(() => {
 })
 
 describe('the data plugin console API', () => {
-  it.each(['orgs/datasets', 'orgs/datasets/export'])(
-    'serves %s at the address the console always answered',
-    (path) => {
-      expect(resolvePluginApiMatch(path)).toBeTruthy()
-    },
-  )
+  it('serves orgs/datasets at the address the console always answered', () => {
+    expect(resolvePluginApiMatch('orgs/datasets')).toBeTruthy()
+  })
+
+  it('no longer serves the old export, which the transfer routes replaced (AGL-3530)', () => {
+    expect(resolvePluginApiMatch('orgs/datasets/export')).toBeUndefined()
+  })
 
   it('names the organization a write is for, from its body', async () => {
     const request = new Request('https://console.aglyn.com/api/orgs/datasets', {
@@ -56,21 +57,25 @@ describe('the data plugin console API', () => {
     ).resolves.toEqual({ orgId: 'org-1' })
   })
 
-  it('names the organization an export is for, from its query', async () => {
-    const request = new Request(
-      'https://console.aglyn.com/api/orgs/datasets/export?orgId=org-2&datasetId=d1',
-    )
+  it('names the organization from the query when the body has none', async () => {
+    const request = new Request('https://console.aglyn.com/api/orgs/datasets?orgId=org-2', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'announce-records' }),
+    })
     await expect(
-      resolvePluginApiRequestSubject('orgs/datasets/export', request),
+      resolvePluginApiRequestSubject('orgs/datasets', request),
     ).resolves.toEqual({ orgId: 'org-2' })
   })
 
   it('names nobody when the request names no organization', async () => {
-    const request = new Request(
-      'https://console.aglyn.com/api/orgs/datasets/export?datasetId=d1',
-    )
+    const request = new Request('https://console.aglyn.com/api/orgs/datasets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'create-dataset' }),
+    })
     await expect(
-      resolvePluginApiRequestSubject('orgs/datasets/export', request),
+      resolvePluginApiRequestSubject('orgs/datasets', request),
     ).resolves.toBeNull()
   })
 })

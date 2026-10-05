@@ -1474,6 +1474,10 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
         height: {
           type: 'string',
         },
+        sizes: {
+          type: 'string',
+          maxLength: 200,
+        },
         loading: {
           type: 'string',
           enum: ['lazy', 'eager'],
@@ -1492,6 +1496,7 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       src: 'media',
       alt: 'text',
       title: 'text',
+      sizes: 'text',
       screenId: 'screen',
       href: 'url',
     },
@@ -1503,6 +1508,7 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       objectFit: 'select',
       width: 'css-dimension',
       height: 'css-dimension',
+      sizes: 'text-field',
       loading: 'select',
       screenId: 'screen-select',
       href: 'text-field',
@@ -1510,6 +1516,7 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     textLimits: {
       alt: 200,
       title: 200,
+      sizes: 200,
     },
     presets: ['Image'],
   },

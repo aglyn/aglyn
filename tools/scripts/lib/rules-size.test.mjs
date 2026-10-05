@@ -33,6 +33,7 @@ import { fileURLToPath } from 'node:url'
 
 import {
   DATABASE_RULES_LIMIT_BYTES,
+  FIRESTORE_SOURCE_SANITY_CAP_BYTES,
   RULES_API_SOURCE_LIMIT_BYTES,
   RULES_SOURCES,
   WARN_MARGIN_BYTES,
@@ -44,7 +45,8 @@ import {
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..')
 const CLI = join(REPO_ROOT, 'tools', 'scripts', 'check-rules-size.mjs')
 
-const FIRESTORE = RULES_SOURCES.find((source) => source.path === 'cloud/firebase-firestore.rules')
+const FIRESTORE = RULES_SOURCES.find((source) => source.path === 'cloud/firebase-firestore.deploy.rules')
+const FIRESTORE_SOURCE = RULES_SOURCES.find((source) => source.path === 'cloud/firebase-firestore.rules')
 const DATABASE = RULES_SOURCES.find((source) => source.path === 'cloud/firebase-database.rules.json')
 
 /** The two sizes AGL-3027 measured against the live Rules API. */
@@ -56,8 +58,10 @@ test('each service keeps its own limit: 256 KiB for the Rules API, 10 MiB for th
   assert.equal(DATABASE_RULES_LIMIT_BYTES, 10_485_760)
   assert.equal(WARN_MARGIN_BYTES, 2_048)
   const limitOf = Object.fromEntries(RULES_SOURCES.map((source) => [source.path, source.limitBytes]))
+  assert.equal(FIRESTORE_SOURCE_SANITY_CAP_BYTES, 524_288)
   assert.deepEqual(limitOf, {
-    'cloud/firebase-firestore.rules': RULES_API_SOURCE_LIMIT_BYTES,
+    'cloud/firebase-firestore.deploy.rules': RULES_API_SOURCE_LIMIT_BYTES,
+    'cloud/firebase-firestore.rules': FIRESTORE_SOURCE_SANITY_CAP_BYTES,
     'cloud/firebase-storage.rules': RULES_API_SOURCE_LIMIT_BYTES,
     'cloud/firebase-database.rules.json': DATABASE_RULES_LIMIT_BYTES,
   })
@@ -65,13 +69,15 @@ test('each service keeps its own limit: 256 KiB for the Rules API, 10 MiB for th
 
 test('every source is a file this repo deploys, named by the script that deploys it', () => {
   // Anti-vacuity: a renamed rules file must fail here, not leave the guard
-  // measuring a path nothing reads.
+  // measuring a path nothing reads. The documented Firestore source deploys
+  // through the generator that strips it (AGL-3544).
   const deployScripts = {
-    'cloud/firebase-firestore.rules': 'tools/scripts/deploy-firestore-rules.mjs',
+    'cloud/firebase-firestore.deploy.rules': 'tools/scripts/deploy-firestore-rules.mjs',
+    'cloud/firebase-firestore.rules': 'tools/scripts/lib/rules-deploy-artifact.mjs',
     'cloud/firebase-storage.rules': 'tools/scripts/deploy-storage-rules.mjs',
     'cloud/firebase-database.rules.json': 'tools/scripts/deploy-database-rules.mjs',
   }
-  assert.equal(RULES_SOURCES.length, 3)
+  assert.equal(RULES_SOURCES.length, 4)
   for (const source of RULES_SOURCES) {
     assert.ok(existsSync(join(REPO_ROOT, source.path)), `${source.path} does not exist`)
     const script = deployScripts[source.path]
@@ -138,10 +144,11 @@ test('the OVER report names the file, the size, the overage and the silent refus
     FIRESTORE,
     judgeRulesSize({ bytes: REFUSED_BETA_125, limitBytes: FIRESTORE.limitBytes }),
   )
-  assert.match(lines[0], /^OVER {2}cloud\/firebase-firestore\.rules: 262,161 of 262,144 bytes, 17 over the limit$/)
+  assert.match(lines[0], /^OVER {2}cloud\/firebase-firestore\.deploy\.rules: 262,161 of 262,144 bytes, 17 over the limit$/)
   const text = lines.join('\n')
   assert.match(text, /400 INVALID_ARGUMENT/)
-  assert.match(text, /Comments count toward the limit/)
+  // The deployed file has no comments left to trim; the remedy says so.
+  assert.match(text, /trimming comments frees nothing/)
   assert.match(
     formatRulesSize(FIRESTORE, judgeRulesSize({ bytes: 262_144, limitBytes: 262_144 }))[0],
     /exactly at the limit$/,
@@ -153,7 +160,7 @@ test('the NEAR report states the bytes left', () => {
     FIRESTORE,
     judgeRulesSize({ bytes: ACCEPTED_LESS_ONE_COMMENT, limitBytes: FIRESTORE.limitBytes }),
   )
-  assert.match(lines[0], /^NEAR {2}cloud\/firebase-firestore\.rules: 262,087 of 262,144 bytes, only 57 left$/)
+  assert.match(lines[0], /^NEAR {2}cloud\/firebase-firestore\.deploy\.rules: 262,087 of 262,144 bytes, only 57 left$/)
 })
 
 test('the Realtime Database report does not tell anyone to trim comments out of JSON', () => {
@@ -190,22 +197,39 @@ function runCli(root, env = {}) {
   return { code: result.status, out: `${result.stdout}${result.stderr}` }
 }
 
-test('CLI: every source under its limit exits 0 and reports all three', (t) => {
+test('CLI: every source under its limit exits 0 and reports all four', (t) => {
   const root = checkout()
   t.after(() => rmSync(root, { recursive: true, force: true }))
   const { code, out } = runCli(root)
   assert.equal(code, 0, out)
   for (const source of RULES_SOURCES) assert.match(out, new RegExp(`ok {4}${source.path.replace(/\./g, '\\.')}: `))
-  assert.match(out, /all 3 rules sources are under their limits\.$/m)
+  assert.match(out, /all 4 rules sources are under their limits\.$/m)
 })
 
 test('CLI: the beta.125 size exits 1 and names the file', (t) => {
-  const root = checkout({ 'cloud/firebase-firestore.rules': REFUSED_BETA_125 })
+  const root = checkout({ 'cloud/firebase-firestore.deploy.rules': REFUSED_BETA_125 })
   t.after(() => rmSync(root, { recursive: true, force: true }))
   const { code, out } = runCli(root)
   assert.equal(code, 1, out)
-  assert.match(out, /OVER {2}cloud\/firebase-firestore\.rules: 262,161 of 262,144 bytes, 17 over the limit/)
-  assert.match(out, /1 of 3 rules source\(s\) at or over the limit/)
+  assert.match(out, /OVER {2}cloud\/firebase-firestore\.deploy\.rules: 262,161 of 262,144 bytes, 17 over the limit/)
+  assert.match(out, /1 of 4 rules source\(s\) at or over the limit/)
+})
+
+test('CLI: the documented source may pass 256 KiB, because the artifact is what deploys (AGL-3544)', (t) => {
+  const root = checkout({ 'cloud/firebase-firestore.rules': REFUSED_BETA_125 })
+  t.after(() => rmSync(root, { recursive: true, force: true }))
+  const { code, out } = runCli(root)
+  assert.equal(code, 0, out)
+  assert.match(out, /ok {4}cloud\/firebase-firestore\.rules: 262,161 of 524,288 bytes/)
+})
+
+test('CLI: the documented source at its sanity cap exits 1', (t) => {
+  const root = checkout({ 'cloud/firebase-firestore.rules': FIRESTORE_SOURCE.limitBytes })
+  t.after(() => rmSync(root, { recursive: true, force: true }))
+  const { code, out } = runCli(root)
+  assert.equal(code, 1, out)
+  assert.match(out, /OVER {2}cloud\/firebase-firestore\.rules: 524,288 of 524,288 bytes, exactly at the limit/)
+  assert.match(out, /pasted or duplicated block/)
 })
 
 test('CLI: a source near its limit warns and still exits 0', (t) => {
@@ -219,13 +243,13 @@ test('CLI: a source near its limit warns and still exits 0', (t) => {
 
 test('CLI: in GitHub Actions a verdict is also an annotation on the file', (t) => {
   const root = checkout({
-    'cloud/firebase-firestore.rules': REFUSED_BETA_125,
+    'cloud/firebase-firestore.deploy.rules': REFUSED_BETA_125,
     'cloud/firebase-storage.rules': RULES_API_SOURCE_LIMIT_BYTES - 100,
   })
   t.after(() => rmSync(root, { recursive: true, force: true }))
   const { code, out } = runCli(root, { GITHUB_ACTIONS: 'true' })
   assert.equal(code, 1, out)
-  assert.match(out, /^::error file=cloud\/firebase-firestore\.rules,title=[^:]+::OVER .*17 over the limit/m)
+  assert.match(out, /^::error file=cloud\/firebase-firestore\.deploy\.rules,title=[^:]+::OVER .*17 over the limit/m)
   assert.match(out, /^::warning file=cloud\/firebase-storage\.rules,title=[^:]+::NEAR .*only 100 left/m)
   // Outside Actions the same run writes no workflow commands.
   assert.doesNotMatch(runCli(root).out, /^::/m)

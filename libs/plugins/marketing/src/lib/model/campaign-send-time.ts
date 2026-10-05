@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { campaignRate } from '@aglyn/shared-ui-email-campaigns/model/campaign-report'
+import { sendRate } from '@aglyn/shared-ui-email-campaigns/model/send-report'
 
 /**
  * WHEN A LIST READS ITS MAIL: a suggested send time, taken from the sends that
@@ -153,7 +153,7 @@ export function suggestCampaignSendTime(
   if (measured < CAMPAIGN_SEND_TIME_MIN_SENDS) return null
   let best: CampaignSendTimeSuggestion | null = null
   for (const slot of slots.values()) {
-    const rate = campaignRate(slot.opens, slot.delivered, 'delivered')
+    const rate = sendRate(slot.opens, slot.delivered, 'delivered')
     if (!rate) continue
     const candidate: CampaignSendTimeSuggestion = {
       weekday: slot.weekday,

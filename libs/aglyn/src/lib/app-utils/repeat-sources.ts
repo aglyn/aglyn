@@ -37,7 +37,8 @@ import type { RepeatableDataset } from './expand-repeatables'
  *
  * - `loading` — no answer yet.
  * - `missing` — the key names nothing this site may use. The published page
- *   renders the element once, as written.
+ *   renders no copies of the element (AGL-3496); the canvas keeps the
+ *   template and flags it on the badge.
  * - `error` — the read failed. Nothing is known about the rows.
  * - `ready` — the rows, read and bounded exactly as the published page's
  *   composition reads them.

@@ -62,7 +62,9 @@ import {
 import { crmRoutes } from '../model/crm-routes'
 import type { LeadConvertRequest, LeadConvertResponse } from '../server/lead-convert'
 import type { OrgMemberOptions } from '../hooks/use-org-member-options'
+import { useCrmPicklist } from '../hooks/use-crm-picklist'
 import { LeadOwnerSelect } from './lead-owner-select'
+import { CrmPicklistSelect } from './picklist-select'
 
 /**
  * How many companies the picker loads. Ordered by name, so a bigger org sees
@@ -107,6 +109,10 @@ export interface LeadConvertDialogProps {
  *
  * Both reads open only while the dialog is — a converter who never opens it
  * pays for neither the company list nor the pipeline.
+ *
+ * The deal step (AGL-3516) names the deal's Type, opening on the org's
+ * default Type, and says that the lead's lead source travels onto the deal,
+ * as Salesforce's conversion carries it to the opportunity.
  */
 export function LeadConvertDialog(props: LeadConvertDialogProps) {
   const { open, onClose, hostId, orgId, org, leadId, lead, basePath, roster } = props
@@ -189,6 +195,11 @@ export function LeadConvertDialog(props: LeadConvertDialogProps) {
   const [dealAmount, setDealAmount] = useState('')
   const [dealCurrency, setDealCurrency] = useState('usd')
   const [dealStageId, setDealStageId] = useState('')
+  // The deal's Type (AGL-3516): the list's default until the converter picks.
+  const typeList = useCrmPicklist('opportunityType', open ? orgId : null)
+  const defaultType = typeList.ready ? (Aglyn.crmPicklistDefaultLabel(typeList.picklist) ?? '') : ''
+  const [dealType, setDealType] = useState<string | null>(null)
+  const leadSource = String(lead.leadSource ?? '').trim()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   // The labels' ids, so the two comboboxes are named "Company" and "Stage"
@@ -213,6 +224,7 @@ export function LeadConvertDialog(props: LeadConvertDialogProps) {
     setDealAmount('')
     setDealCurrency('usd')
     setDealStageId('')
+    setDealType(null)
     setError(null)
     setCompanyMode('none')
     setCompanyId('')
@@ -269,6 +281,7 @@ export function LeadConvertDialog(props: LeadConvertDialogProps) {
               ...(typeof amountCents === 'number' ? { amountCents } : {}),
               currency: dealCurrency.trim().toLowerCase() || 'usd',
               ...(dealStageId ? { stageId: dealStageId } : {}),
+              ...((dealType ?? defaultType) ? { type: dealType ?? defaultType } : {}),
             },
           }
         : {}),
@@ -451,6 +464,18 @@ export function LeadConvertDialog(props: LeadConvertDialogProps) {
                     ))}
                   </Select>
                 </FormControl>
+                <CrmPicklistSelect
+                  picklistId="opportunityType"
+                  picklist={typeList.picklist}
+                  value={dealType ?? defaultType}
+                  onChange={setDealType}
+                  disabled={busy}
+                  helperText={
+                    leadSource
+                      ? `The deal's lead source is the lead's: ${leadSource}.`
+                      : 'The lead has no lead source, so the deal has none.'
+                  }
+                />
                 {!pipeline ? (
                   <Typography variant="caption" color="text.secondary">
                     {'This workspace has no pipeline yet — a Sales pipeline ' +

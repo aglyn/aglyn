@@ -183,6 +183,14 @@ export interface PluginContactCaptureRequest {
    */
   profile?: Readonly<Record<string, unknown>>
   /**
+   * Profile fields written only where the record the person lands on holds
+   * none (AGL-3493), keyed as {@link profile} is. For what a door learned
+   * in passing — the phone a booking form asked for — and must not put over
+   * a value somebody typed on the record or gave the business before.
+   * A key also present in `profile` is `profile`'s to write.
+   */
+  profileFill?: Readonly<Record<string, unknown>>
+  /**
    * Facts about THIS CAPTURE that the owner models and the platform does not
    * (AGL-3080) — which form was filled in, which page it was on, where the
    * visitor arrived from.

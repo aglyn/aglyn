@@ -84,15 +84,15 @@ const db = getFirestore(process.env.FIRESTORE_DATABASE_ID)
 // mis-size the grandfathering set, which is the number the decision rests on.
 export const AUDIT_PLAN_COLLABORATOR_CAPS = {
   free: { membersPerHost: 1, maxMembersPerHost: 1 },
-  starter: { membersPerHost: 3, maxMembersPerHost: 10 },
-  pro: { membersPerHost: 10, maxMembersPerHost: 25 },
-  business: { membersPerHost: 50, maxMembersPerHost: 100 },
-  scale: { membersPerHost: 75, maxMembersPerHost: 150 },
-  advanced: { membersPerHost: 100, maxMembersPerHost: 250 },
-  agency: { membersPerHost: 250, maxMembersPerHost: 1000 },
+  starter: { membersPerHost: 2, maxMembersPerHost: 10 },
+  pro: { membersPerHost: 3, maxMembersPerHost: 25 },
+  business: { membersPerHost: 5, maxMembersPerHost: 100 },
+  scale: { membersPerHost: 5, maxMembersPerHost: 150 },
+  advanced: { membersPerHost: 5, maxMembersPerHost: 250 },
+  agency: { membersPerHost: 5, maxMembersPerHost: 1000 },
   // Twice Agency's bands — the finite Enterprise fallback since 2026-09-07; a
   // contracted per-org override on the org document still wins.
-  enterprise: { membersPerHost: 500, maxMembersPerHost: 2000 },
+  enterprise: { membersPerHost: 10, maxMembersPerHost: 2000 },
 }
 
 /**

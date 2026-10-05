@@ -78,6 +78,8 @@ import BillingAddonsCardComponent, {
   ADDON_LABELS,
   TOGGLE_ADDON_KINDS,
 } from '../../../../../components/billing/billing-addons-card.component'
+import { standingUpgradeProposal } from '@aglyn/aglyn/app-utils/upgrade-proposal'
+import OrgUpgradeProposalCard from '../../../../../components/org-upgrade-proposal-card.component'
 import BillingPlanCardsComponent, {
   PLAN_LABELS,
 } from '../../../../../components/billing/billing-plan-cards.component'
@@ -409,6 +411,15 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
    */
   const planWithoutSubscription =
     orgReady && orgBillingReady && plan !== 'free' && !subscriptionActive
+  // The plan staff proposed (AGL-3466), while no subscription is live. Held
+  // on both reads for the reason above: before the billing doc lands every
+  // paying org looks unsubscribed.
+  const upgradeProposal =
+    orgReady && orgBillingReady && !subscriptionActive
+      ? standingUpgradeProposal(org)
+      : null
+  const showUpgradeProposal =
+    !!upgradeProposal && permissionsLoaded && can('billing.manage')
   /**
    * Report a subscribe conversion whose checkout completed in a tab that is
    * gone (AGL-1152).
@@ -1400,6 +1411,11 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
           // occupy only the height it needs and the next one back-fill.
           masonry
           items={[
+            // The plan the platform team proposed (AGL-3466), above
+            // everything it is about, for the people who can buy it.
+            ...(showUpgradeProposal
+              ? [{ size: { xs: 12 }, children: <OrgUpgradeProposalCard /> }]
+              : []),
             {
               size: { xs: 12, md: 4 },
               children: (
@@ -1891,7 +1907,10 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                   org={org}
                   subscriptionActive={subscriptionActive}
                   planWithoutSubscription={planWithoutSubscription}
-                  highlight={planIntent?.plan}
+                  // The deep link's plan, else the plan the platform team
+                  // proposed (AGL-3466) — either may be the comped tier,
+                  // whose card then offers to start its subscription.
+                  highlight={planIntent?.plan ?? upgradeProposal?.plan}
                   onSelect={(tier) =>
                     permissions.editBilling
                       ? void handleUpgrade(tier)()

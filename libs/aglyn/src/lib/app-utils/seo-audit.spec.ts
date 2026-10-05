@@ -24,6 +24,7 @@
 
 import {
   parseSeoKeywordLines,
+  readSeoKeywordLines,
   seoAudit,
   seoAuditFindingCount,
   seoNormalizePath,
@@ -136,6 +137,40 @@ describe('seoAudit, page by page', () => {
     expect(offer?.findings.find((entry) => entry.code === 'h1-multiple')?.nodeIds).toEqual(['b'])
   })
 
+  it('does not judge a main heading made of a token by what it says', () => {
+    const bound = seoAudit([page('bound', '/bound', body({ t: heading(1, '{{item.name}}') }))], site)
+    expect(codes(bound, 'bound')).not.toContain('h1-thin')
+    expect(codes(bound, 'bound')).not.toContain('h1-missing')
+  })
+
+  it('names an element once when several of its copies are found (AGL-3501)', () => {
+    const facts = seoPageFacts(
+      {
+        root: { componentId: 'div', nodes: ['main'] },
+        main: { componentId: 'section', props: { component: 'main' }, nodes: ['a', 'rep__list__0__b', 'rep__list__1__b'] },
+        a: heading(1, 'Roofing in Ohio, done right'),
+        list: { componentId: 'muiStack', props: { repeatDataset: 'services' }, nodes: ['b'] },
+        b: heading(1, '{{item.name}}'),
+        rep__list__0__b: heading(1, 'Roof repair'),
+        rep__list__1__b: heading(1, 'Siding'),
+      } as NodeMap,
+      {
+        rootId: 'root',
+        pageNodes: {
+          root: { componentId: 'div', nodes: ['main'] },
+          main: { componentId: 'section', props: { component: 'main' }, nodes: ['a', 'list'] },
+          a: heading(1, 'Roofing in Ohio, done right'),
+          list: { componentId: 'muiStack', props: { repeatDataset: 'services' }, nodes: ['b'] },
+          b: heading(1, '{{item.name}}'),
+        },
+      },
+    )
+    const report = seoAudit([page('services', '/services', {}, { facts })], site)
+    const multiple = report.pages[0].findings.find((entry) => entry.code === 'h1-multiple')
+    expect(multiple?.message).toContain('3 main headings')
+    expect(multiple?.nodeIds).toEqual(['b'])
+  })
+
   it('finds images without a description, by node', () => {
     const lamps = report.pages.find((entry) => entry.screenId === 'lamps')
     expect(lamps?.findings.find((entry) => entry.code === 'image-alt-missing')?.nodeIds).toEqual(['img'])
@@ -204,5 +239,12 @@ describe('the check’s helpers', () => {
     })
     expect(seoNormalizePath('')).toBe('/')
     expect(seoNormalizePath('//a/b/')).toBe('/a/b')
+  })
+
+  it('holds a page to five keywords across its lines, and keeps the rest to name (AGL-3501)', () => {
+    expect(readSeoKeywordLines('/lamps: a, b, c\nlamps: c, d, e, f\n/about: acme')).toEqual({
+      keywords: { '/lamps': ['a', 'b', 'c', 'd', 'e'], '/about': ['acme'] },
+      unchecked: { '/lamps': ['f'] },
+    })
   })
 })

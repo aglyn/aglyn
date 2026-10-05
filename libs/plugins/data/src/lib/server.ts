@@ -19,13 +19,12 @@ import {
   registerPluginApiRoute,
   type PluginApiSubjectResolver,
 } from '@aglyn/aglyn/server'
-import { datasetsExportHandler } from './server/datasets-export-route'
 import { datasetsHandler } from './server/datasets-route'
+import { recordPagesHandler } from './record-pages/record-pages-route'
 
 /**
  * The organization a datasets request is for, read from the request the way
- * each handler reads it — the JSON body's `orgId` on a write, `?orgId=` on an
- * export. Datasets belong to the organization and name no site, so without
+ * the handler reads it — the JSON body's `orgId` (or `?orgId=`). Datasets belong to the organization and name no site, so without
  * this the dispatcher's release gate would read the request as anonymous and
  * refuse it under a partial rollout of the data store.
  */
@@ -43,17 +42,15 @@ const orgSubject: PluginApiSubjectResolver = async (request) => {
 
 /**
  * Console API: the organization's datasets — creating a dataset and its
- * records within the plan (`POST /api/orgs/datasets`), and the complete export
- * of one (`GET /api/orgs/datasets/export`). Served by the console's plugin
+ * records within the plan (`POST /api/orgs/datasets`) — and a site's record
+ * templates (`POST /api/hosts/record-pages`). A dataset's import and export
+ * run on the platform's transfer routes (`/api/transfer/*`, AGL-3530). Served by the console's plugin
  * dispatcher, at the addresses the console always answered them on.
  */
 export function registerDataConsoleApi(): void {
   registerPluginApiRoute('orgs/datasets', { web: datasetsHandler }, {
     subject: orgSubject,
   })
-  registerPluginApiRoute(
-    'orgs/datasets/export',
-    { web: datasetsExportHandler },
-    { subject: orgSubject },
-  )
+  // A site's record templates (AGL-3475): `POST /api/hosts/record-pages`.
+  registerPluginApiRoute('hosts/record-pages', { web: recordPagesHandler })
 }

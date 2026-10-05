@@ -134,7 +134,14 @@ export async function fileBookingOnCrm(
           kind: 'meeting',
           // When it HAPPENS, which is the slot — not when it was booked.
           atMs: startsAtMs,
-          body: bookingMeetingBody({ serviceName, startsAtMs, timezone }),
+          body: bookingMeetingBody({
+            serviceName,
+            startsAtMs,
+            timezone,
+            // What the service asked the booker for (AGL-3493).
+            phone: booking['phone'],
+            address: booking['address'],
+          }),
           byUid: '',
           dedupeKey: `booking:${bookingId}`,
         })

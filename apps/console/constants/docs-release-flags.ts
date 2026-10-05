@@ -321,7 +321,16 @@ export const FLAG_DOC_PAGES: Partial<
  * the spec checks that the flag's LABEL really is absent from the published
  * tree outside `docs/staff-console/` (where naming every flag is the point).
  */
-export const FLAGS_WITHOUT_DOCS: Partial<Record<ReleaseFlagKey, string>> = {}
+export const FLAGS_WITHOUT_DOCS: Partial<Record<ReleaseFlagKey, string>> = {
+  // AGL-3520. The flag widens what a door already documented sends; it opens
+  // no surface. While it is off the CRM by AI page, the AI overview and the
+  // trust and compliance pages describe exactly what is sent with it off, so
+  // there is nothing unreleased for them to disclose. The whole-record
+  // wording waits in docs/drafts/agl-3520-crm-assistance-whole-record-disclosure.md
+  // and goes into those pages in the change that turns the flag on.
+  release_crm_assist_whole_record:
+    'Widens what CRM assistance sends the model provider without opening any surface. The published pages describe the flag-off behavior, which is what production does; the whole-record wording is published only with the flip.',
+}
 
 /**
  * Where a published-ON verdict was read, and why it holds. Every field is

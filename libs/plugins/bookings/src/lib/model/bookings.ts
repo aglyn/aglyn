@@ -45,6 +45,12 @@ export interface HostBookingService {
   /** Optional price; 0/absent means free. */
   priceUsd?: number
   /**
+   * How the price is stated (AGL-3475): `fixed` (absent) charges `priceUsd`;
+   * `varies`, `estimate` and `contact` show their label and book with no
+   * charge. Read through `bookingPriceDisplay` / `bookingChargeUsd`.
+   */
+  priceDisplay?: 'fixed' | 'varies' | 'estimate' | 'contact'
+  /**
    * Weekly availability: `windows[weekday]` (0 = Sunday … 6 = Saturday)
    * lists open intervals in minutes since midnight, host-local.
    */
@@ -63,6 +69,13 @@ export interface HostBookingService {
    * has to opt out of saying so.
    */
   crmMeetingActivity?: boolean
+  /**
+   * Ask the booker for a phone number (AGL-3493): `optional` or `required`;
+   * absent is off. Read through `bookingFieldAsk`.
+   */
+  askPhone?: 'off' | 'optional' | 'required'
+  /** Ask the booker for the address the service is at (AGL-3493); as above. */
+  askAddress?: 'off' | 'optional' | 'required'
 }
 
 /** Booked interval as epoch-ms instants. */
@@ -122,19 +135,54 @@ export interface BookingSlot {
   endsAtMs: number
 }
 
+/** The walk's resolution: a slot may start on any quarter hour. */
+export const BOOKING_SLOT_STEP_MINUTES = 15
+
 /**
- * Enumerates open slots for a service between two instants: windows are
- * walked in the service timezone, quantized to the service duration, and
- * intervals overlapping `booked` (or starting before `fromMs`) drop out.
- * Bounded: at most `limit` slots, never beyond BOOKING_MAX_DAYS_AHEAD.
+ * The most starts one calendar day can hold at that resolution — 96. The
+ * per-day unit every bound on a slot listing is counted in.
  */
-export function computeOpenSlots(
+export const BOOKING_MAX_SLOTS_PER_DAY =
+  (24 * 60) / BOOKING_SLOT_STEP_MINUTES
+
+/**
+ * Days of open times one slot listing answers with, and the length of the
+ * Booking widget's day strip (AGL-3492). One constant, read by both halves:
+ * the listing is bounded in DAYS so every day the strip shows carries every
+ * open time it has. A flat slot count was the bound before, and at 15-minute
+ * steps 120 of them ran out three and a half days in — the widget then drew
+ * those days as the whole calendar and cut the fourth at lunch.
+ */
+export const BOOKING_SLOT_PAGE_DAYS = 14
+
+/**
+ * The hard ceiling on one listing: a page of days, every one of them open
+ * around the clock. Only a service that really is open that much reaches it,
+ * and the page then ends early with its next page named, never truncated
+ * silently.
+ */
+export const BOOKING_SLOT_PAGE_MAX_SLOTS =
+  BOOKING_SLOT_PAGE_DAYS * BOOKING_MAX_SLOTS_PER_DAY
+
+/**
+ * Walks the open slots of a service from `fromMs`, handing each to `take`
+ * with the service-local day it falls on, until `take` answers `false` or
+ * the walk reaches `toMs` (never more than BOOKING_MAX_DAYS_AHEAD past
+ * `fromMs`). Answers where it stopped: the first start it did not hand over
+ * — the slot `take` refused, or the first one past the walked range — and
+ * whether that was `toMs` itself, so nothing is left to walk.
+ *
+ * Windows are read in the service timezone, 15 minutes at a time —
+ * O(minutes/15) and immune to DST arithmetic because weekday and minutes
+ * come from Intl per instant. Intervals overlapping `booked` drop out.
+ */
+function walkOpenSlots(
   service: HostBookingService,
   fromMs: number,
   toMs: number,
-  booked: BookedInterval[] = [],
-  limit = 200,
-): BookingSlot[] {
+  booked: BookedInterval[],
+  take: (slot: BookingSlot, dayKey: string) => boolean,
+): { stoppedAtMs: number; reachedEnd: boolean } {
   const timezone = service.timezone || 'UTC'
   const duration = Math.min(
     Math.max(
@@ -148,18 +196,13 @@ export function computeOpenSlots(
     toMs,
     fromMs + BOOKING_MAX_DAYS_AHEAD * 24 * 60 * 60_000,
   )
-  const slots: BookingSlot[] = []
-  // Walk in 15-minute steps and keep instants that start a window-aligned
-  // slot — O(minutes/15) and immune to DST arithmetic because weekday and
-  // minutes come from Intl per instant.
-  const stepMs = 15 * 60_000
-  const alignedFrom = Math.ceil(fromMs / stepMs) * stepMs
-  for (
-    let atMs = alignedFrom;
-    atMs + durationMs <= horizonMs && slots.length < limit;
-    atMs += stepMs
-  ) {
-    const { weekday, hour, minute } = zonedDateTime(atMs, timezone)
+  const stepMs = BOOKING_SLOT_STEP_MINUTES * 60_000
+  let atMs = Math.ceil(fromMs / stepMs) * stepMs
+  for (; atMs + durationMs <= horizonMs; atMs += stepMs) {
+    const { year, month, day, weekday, hour, minute } = zonedDateTime(
+      atMs,
+      timezone,
+    )
     const minutes = hour * 60 + minute
     const windows = service.windows?.[weekday] ?? []
     const fitsWindow = windows.some(
@@ -173,9 +216,88 @@ export function computeOpenSlots(
         atMs < interval.endsAtMs && endMs > interval.startsAtMs,
     )
     if (collides) continue
-    slots.push({ startsAtMs: atMs, endsAtMs: endMs })
+    if (!take({ startsAtMs: atMs, endsAtMs: endMs }, `${year}-${month}-${day}`)) {
+      return { stoppedAtMs: atMs, reachedEnd: false }
+    }
   }
+  // The first start the walk did not try, not the horizon itself: a slot
+  // that starts before the cap and ends after it belongs to the next walk.
+  return { stoppedAtMs: atMs, reachedEnd: horizonMs >= toMs }
+}
+
+/**
+ * Enumerates open slots for a service between two instants. Bounded: at
+ * most `limit` slots, never beyond BOOKING_MAX_DAYS_AHEAD.
+ */
+export function computeOpenSlots(
+  service: HostBookingService,
+  fromMs: number,
+  toMs: number,
+  booked: BookedInterval[] = [],
+  limit = 200,
+): BookingSlot[] {
+  const slots: BookingSlot[] = []
+  if (limit <= 0) return slots
+  walkOpenSlots(service, fromMs, toMs, booked, (slot) => {
+    slots.push(slot)
+    return slots.length < limit
+  })
   return slots
+}
+
+/** One page of a slot listing (AGL-3492). */
+export interface BookingSlotPage {
+  /** Every open slot of the page's days, in order. */
+  slots: BookingSlot[]
+  /**
+   * Where the next page starts, or `null` once the page reached `toMs`.
+   * Every open slot before it is in `slots` — the guarantee a reader needs
+   * to tell a day it holds whole from one the page ended inside.
+   */
+  nextFromMs: number | null
+}
+
+/**
+ * The open slots of the next `days` service-local days that have any, from
+ * `fromMs` up to `toMs` — whole days, never a day cut part way through
+ * (AGL-3492). `maxSlots` is the ceiling for a service open around the clock;
+ * reaching it ends the page early with `nextFromMs` naming the first slot
+ * left out. A walk is also never longer than BOOKING_MAX_DAYS_AHEAD, so a
+ * horizon further out than that is answered a page at a time.
+ */
+export function computeOpenSlotPage(
+  service: HostBookingService,
+  fromMs: number,
+  toMs: number,
+  booked: BookedInterval[] = [],
+  {
+    days = BOOKING_SLOT_PAGE_DAYS,
+    maxSlots = BOOKING_SLOT_PAGE_MAX_SLOTS,
+  }: { days?: number; maxSlots?: number } = {},
+): BookingSlotPage {
+  const slots: BookingSlot[] = []
+  const dayKeys = new Set<string>()
+  const { stoppedAtMs, reachedEnd } = walkOpenSlots(
+    service,
+    fromMs,
+    toMs,
+    booked,
+    (slot, dayKey) => {
+      if (
+        slots.length >= maxSlots ||
+        (!dayKeys.has(dayKey) && dayKeys.size >= days)
+      ) {
+        return false
+      }
+      dayKeys.add(dayKey)
+      slots.push(slot)
+      return true
+    },
+  )
+  return {
+    slots,
+    nextFromMs: reachedEnd ? null : stoppedAtMs,
+  }
 }
 
 /** True when the exact slot is open for the service (booking API check). */

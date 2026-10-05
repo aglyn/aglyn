@@ -250,21 +250,28 @@ export async function applyDuePublishSchedule(options: {
   // The placeholder home page this publish takes `/` from, if it does
   // (AGL-3408) — its entry leaves the map in the same commit.
   let releasedPlaceholder: string | undefined
+  // This IS the placeholder home page, published by its owner (AGL-3478): a
+  // schedule is somebody's deliberate act, and the platform never writes one.
+  // From here it is their home page, so the marker goes in the same commit —
+  // a starter must not unpublish it — and the publish is an activation.
+  let publishesPlaceholder = false
   if (collectionName === 'screens') {
     try {
       const host = await hostRef.get()
       const routing = (host.get('screens') ?? {}) as Record<string, string>
+      const defaultHomeScreenId = host.get('defaultHomeScreenId')
+      publishesPlaceholder =
+        Boolean(defaultHomeScreenId) && defaultHomeScreenId === docId
       // An existing entry is the republish case: the route is already live,
       // this only swaps which version it serves, and there is nothing to
-      // register and no activation to report.
-      if (!routing[docId]) {
+      // register and no activation to report — except on the placeholder,
+      // whose live route the platform registered rather than its owner.
+      if (!routing[docId] || publishesPlaceholder) {
         // The same predicate the console's three publish surfaces use, so a
         // `first_publish` breakdown means one thing across all four senders.
-        firstPublish = isFirstPublishedRoute(
-          routing,
-          host.get('defaultHomeScreenId'),
-        )
-        const defaultHomeScreenId = host.get('defaultHomeScreenId')
+        firstPublish = isFirstPublishedRoute(routing, defaultHomeScreenId)
+      }
+      if (!routing[docId]) {
         const resolved = await resolveScheduledRoutePath({
           hostRef,
           screenId: docId,
@@ -311,7 +318,7 @@ export async function applyDuePublishSchedule(options: {
       versionId: schedule.versionId,
       'publishSchedule.status': 'applied',
     }
-    if (routePath) {
+    if (routePath || publishesPlaceholder) {
       // ONE atomic commit, and the order matters more than the write count:
       // a status of `applied` with no routing entry is permanent (nothing
       // retries a terminal status), so the entry and the status must land
@@ -319,7 +326,7 @@ export async function applyDuePublishSchedule(options: {
       // and the next beat runs it again.
       const batch = firestore.batch()
       batch.update(hostRef, {
-        [`screens.${docId}`]: routePath,
+        ...(routePath ? { [`screens.${docId}`]: routePath } : {}),
         // The first real home page replaces the placeholder (AGL-3408), in
         // the same commit, so `/` is never answered by two screens.
         ...(releasedPlaceholder
@@ -327,6 +334,9 @@ export async function applyDuePublishSchedule(options: {
               [`screens.${releasedPlaceholder}`]: FieldValue.delete(),
               defaultHomeScreenId: FieldValue.delete(),
             }
+          : {}),
+        ...(publishesPlaceholder
+          ? { defaultHomeScreenId: FieldValue.delete() }
           : {}),
       })
       if (releasedPlaceholder) {

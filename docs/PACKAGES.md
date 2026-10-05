@@ -78,6 +78,7 @@ lists.
 | -- | -- | -- | -- | -- | -- |
 | `aglyn` | `@aglyn/aglyn` | `libs/aglyn` | `scope:core` `type:data` `type:feature` | yes | `.`, `./server`, `./*` |
 | `aglyn-markdown-editor` | `@aglyn/aglyn-markdown-editor` | `libs/aglyn-markdown-editor` | `scope:core` `type:ui` | with the designer UI | `.`, `./*` |
+| `aglyn-transfer-ui` | `@aglyn/aglyn-transfer-ui` | `libs/aglyn-transfer-ui` | `scope:core` `type:ui` | yes — the import wizard and export dialog any plugin's surface renders | `.`, `./*` |
 | `aglyn-node-renderer` | `@aglyn/aglyn-node-renderer` | `libs/aglyn-node-renderer` | `scope:renderer` `type:feature` | yes | `.`, `./*` |
 | `cli` | `@aglyn/cli` | `libs/cli` | `scope:cli` `type:util` | yes — already on the registry at its own version | `.` |
 
@@ -160,7 +161,7 @@ marked where it sits.
 | `shared-data-types` | `@aglyn/shared-data-types` | `libs/shared/data/types` | `scope:shared` `type:data` | `.`, `./*` |
 | `shared-svg-icons-svg-icons` | `@aglyn/shared-svg-icons` | `libs/shared/svg-icons/svg-icons` | `scope:shared` `type:ui` | `.` (a Vite build with its own `exports`) |
 | `shared-ui-color-picker` | `@aglyn/shared-ui-color-picker` | `libs/shared/ui/color-picker` | `scope:shared` `type:ui` | `.`, `./*` |
-| `shared-ui-email-campaigns` | `@aglyn/shared-ui-email-campaigns` | `libs/shared/ui/email-campaigns` | `scope:shared` `type:ui` | `.`, `./*` — **a carried violation, not a shared library**: it holds the campaign domain model. See [Violations](#violations); the row goes when the lib is dissolved. |
+| `shared-ui-email-campaigns` | `@aglyn/shared-ui-email-campaigns` | `libs/shared/ui/email-campaigns` | `scope:shared` `type:ui` | `.`, `./*` — the bulk-send reporting math (`model/send-report`: a send's counters, a rate with its denominator named, the link rollup), divided by every plugin that mails in bulk. The campaign model it once held is the Marketing plugin's (AGL-3080); see [Violations](#violations). |
 | `shared-ui-json-editor` | `@aglyn/shared-ui-json-editor` | `libs/shared/ui/json-editor` | `scope:shared` `type:ui` | `.`, `./*` |
 | `shared-ui-jsx` | `@aglyn/shared-ui-jsx` | `libs/shared/ui/jsx` | `scope:shared` `type:ui` | `.`, `./*` — also the one list-table filter path every plugin's lists use: `./components/list-table.component`, `./const/list-filter`, `./const/list-grid-filter`, `./hooks/use-list-grid-filter`, `./const/list-query-plan`, `./components/list-query-notices.component`, `./components/list-filter-chips.component` (AGL-3317, AGL-3321) |
 | `shared-ui-jsx-forms` | `@aglyn/shared-ui-jsx-forms` | `libs/shared/ui/jsx-forms` | `scope:shared` `type:ui` | `.`, `./*` |
@@ -392,45 +393,26 @@ lives where both are reached: `apps/console/specs/mui-image-canvas-facts` and
 `mui-video-canvas-facts`, which take the element from the generated manifest.
 A plugin can be used without the designer UI, which is what the map asks.
 
-**A plugin domain on the generic floor: `@aglyn/shared-ui-email-campaigns`** (a
-finding, not an allowlist row). `libs/shared/ui/email-campaigns` holds the
-campaign domain model — `model/campaign-container.ts`, `campaign-report.ts`,
-`email-record.ts` — and `campaign-container.ts` opens by naming the Firestore
-path a send is stored at. Four plugins read it, and no app does. Three things
-have left it (AGL-3080). The send-time rule is the marketing plugin's, and the
-AI plugin asks for a list's send time through `plugin-record-facts`
-(`listSendTime`) instead of reading the sends. What a campaign caused and
-earned (`campaign-conversions.ts`, `campaign-revenue.ts`) is the marketing
-plugin's model too: no other plugin read either. The campaign picker is gone:
-a campaign is a container kind the marketing plugin declares
-(`plugins.config.json` → `containers`, compiled into core
-`plugin-manager/plugin-containers`), and every surface that files a record
-under one uses the core's generic `ContainerPicker` and
-`useSiteContainerOptions` / `useOrgContainerOptions`
-(`@aglyn/tenant-feature-instance`) with the membership helpers of
-`app-utils/container-membership`, naming the kind and never the plugin. The
-guard cannot see the rest: `plugin` → `shared` is a legal edge on the map, so
-there is no allowlist row and this document is the only place the finding can
-live.
+**A plugin domain on the generic floor: `@aglyn/shared-ui-email-campaigns`** —
+resolved (AGL-3080). The lib held the campaign domain model:
+`campaign-container.ts`, `campaign-report.ts` and `email-record.ts`. Two of
+them already had allowlist rows. All three are now the Marketing plugin's
+`model/`, together with the Email plugin's design report (`template-report.ts`),
+which summed a campaign's sends. Before that, the send-time rule, what a
+campaign caused and earned, and the campaign picker had gone the same way:
+the AI asks for a list's send time through `plugin-record-facts`
+(`listSendTime`), and a campaign is a container kind the Marketing plugin
+declares.
 
-It was not a mistake. It is what this section used to prescribe — a shared model
-rather than a sideways import — and five plugins sharing one model is strictly
-better than the edges above. What changed is the rule, not the file: `shared` is
-generic only, plugin domains included, so the prescription that put it there is
-gone and what that prescription produced is now a finding.
+The Email plugin's template page reads no send. It hosts an
+`emailTemplateReport` zone, and the Marketing plugin fills it with what the
+design's emails did.
 
-Fix: a campaign is a plugin-declared container kind (**present**, above).
-`report-figures.tsx` and the numbers behind it resolve through
-`registerPluginFigureReader` (**present**); `email-record.ts`'s field names
-become part of the declared kind rather than a shared type.
-
-Whatever replaces it keeps the split the package has now: `src/index.ts` exports
-only the model, with `components/report-figures` reached by its own `./*`
-subpath, so a server handler reading a stored field name never pulls a component
-graph — and MUI — behind it. Firestore rules name `orgs/{orgId}/campaigns`;
-rules are the last step, not the first. Dissolving the lib is its own AGL-3080
-child and not this section's commit, so the package keeps its map row above
-until that child lands.
+What is left in the lib is generic: the rate math and the link rollup that the
+campaign sender and the sequence runner both divide by, renamed for a send
+(`SendStats`, `sendRate`, `sendLinkReport`). The package name still says
+`email-campaigns`. That is a published name and is kept, and the map row above
+now describes it as the shared library it is.
 
 ## Rules
 

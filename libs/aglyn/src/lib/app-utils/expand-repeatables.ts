@@ -228,6 +228,70 @@ export function substituteRecordTokens<T>(
   return substituteValue(props, context) as T
 }
 
+/**
+ * The one record a whole page is rendered for (AGL-3475): a record template's
+ * routed record, in the shape a repeat hands each of its copies.
+ */
+export interface PageRecordScope {
+  record: Record<string, unknown>
+  /** The record's references (AGL-180). */
+  model?: RepeatRowsModel
+  /** Rows by key, for a one-hop reference (AGL-180). */
+  datasetsByKey?: Record<string, RepeatableDataset | undefined>
+}
+
+/**
+ * Every node's props with the page's record put into its `{{item.field}}`
+ * tokens — the substitution a repeat makes on each copy, made once over a
+ * page that renders one record (AGL-3475).
+ *
+ * Run AFTER {@link expandRepeatables}: a repeat inside the page has already
+ * spent its own `{{item.*}}` tokens on its own rows by then, so what is left
+ * is the page's. A token naming a field the record does not have stays as
+ * written, exactly as in a repeat. Returns the input when there is no record.
+ */
+export function substituteNodesRecordTokens<N>(
+  nodes: Record<NodeId, N>,
+  scope: PageRecordScope | null | undefined,
+): Record<NodeId, N> {
+  if (!scope) return nodes
+  const next: Record<NodeId, N> = {}
+  for (const [id, node] of Object.entries(nodes) as Array<[NodeId, N]>) {
+    const props = (node as { props?: unknown })?.props
+    next[id] = props
+      ? ({ ...node, props: substituteValue(props, scope) } as N)
+      : node
+  }
+  return next
+}
+
+/**
+ * The page's record put into each repeat's FILTER, before the repeats expand
+ * (AGL-3475): on a record template, `category == {{item.category}}` lists the
+ * other records in the routed record's category. Only `repeatFilter` is
+ * touched — everything else inside a repeat is its template, whose
+ * `{{item.*}}` belongs to its own rows. Returns the input when there is no
+ * record or no filter names one.
+ */
+export function substituteRepeatFilterRecordTokens<N>(
+  nodes: Record<NodeId, N>,
+  scope: PageRecordScope | null | undefined,
+): Record<NodeId, N> {
+  if (!scope) return nodes
+  let next: Record<NodeId, N> | null = null
+  for (const [id, node] of Object.entries(nodes) as Array<[NodeId, N]>) {
+    const props = (node as { props?: Record<string, unknown> })?.props
+    const filter = props?.['repeatFilter']
+    if (typeof filter !== 'string' || !filter.includes('{{')) continue
+    next ??= { ...nodes }
+    next[id] = {
+      ...node,
+      props: { ...props, repeatFilter: substituteValue(filter, scope) },
+    } as N
+  }
+  return next ?? nodes
+}
+
 /** The node minus its repeat directives, or the node itself when it has none. */
 export function withoutRepeatDirective<N>(node: N): N {
   const props = (node as { props?: Record<string, unknown> })?.props
@@ -270,7 +334,8 @@ export function repeatedRecords(
 }
 
 /**
- * Does this tree contain anything {@link expandRepeatables} would expand?
+ * Does this tree contain anything {@link expandRepeatables} would expand —
+ * or, with no rows, empty?
  *
  * The rows read is the largest on the render path — up to two pages of
  * {@link REPEAT_MAX_RECORDS} records for every key a page repeats over — and a
@@ -280,7 +345,8 @@ export function repeatedRecords(
  * which is why this and {@link repeatKeys} share the one predicate
  * `expandRepeatables` looks keys up with, {@link repeatKey}. A gate that is
  * even slightly stricter than the expansion is not a saving: it is a published
- * page that quietly renders one template row where the author put a list.
+ * page whose repeat never reaches the expansion at all, and so goes out as
+ * its raw template — `{{item.*}}` tokens and all — where the author put a list.
  */
 export function hasRepeatableNodes(
   nodes: Record<NodeId, unknown> | null | undefined,
@@ -334,17 +400,28 @@ export function repeatKeys(
  *   node this expands, and every copy it makes, comes out without them.
  * - Repeats do not nest. A repeat inside another repeat's template is copied
  *   with its directives consumed, so it renders once in each copy.
- * - An unknown dataset, no matching records, an empty template, or a
- *   self-scoped node its parent does not list (the document root, say) leave
- *   the node rendering once, as written (fail-open: a deleted dataset must
- *   never take a published screen down).
+ * - No rows renders ZERO copies (AGL-3496): a `children` repeat keeps its
+ *   element with an empty child list, a `self` repeat leaves its parent's
+ *   list. That covers a filter matching nothing, an empty dataset, and a key
+ *   the rows answer nothing under — a deleted or unshared dataset, or no rows
+ *   map at all — because the template drawn without a record is its literal
+ *   `{{item.*}}` tokens, printed to every visitor. Never a throw: a dataset
+ *   going away empties a list, it does not take the page down.
+ * - An empty template, or a self-scoped node its parent does not list (the
+ *   document root, say), has nothing to copy or nowhere to put copies, and is
+ *   left as written.
  * - Inputs are never mutated; templates stay in the map unreferenced.
+ *
+ * This is the PUBLISHED page's composition. The besigner's canvas keeps the
+ * template on screen whatever the rows say — it is what an author edits — and
+ * flags a repeat with no rows on its badge instead ({@link repeatedRecords}
+ * is the count both read).
  */
 export function expandRepeatables<N extends AglynNodeSchema = AglynNodeSchema>(
   nodes: Record<NodeId, N>,
   datasetsByKey: Record<string, RepeatableDataset | undefined> | undefined,
 ): Record<NodeId, N> {
-  if (!datasetsByKey) return nodes
+  const rowsByKey = datasetsByKey ?? {}
   const repeatIds = Object.entries(nodes).filter(
     ([, node]) => repeatKey(node) !== '',
   )
@@ -352,7 +429,7 @@ export function expandRepeatables<N extends AglynNodeSchema = AglynNodeSchema>(
 
   const next: Record<NodeId, N> = { ...nodes }
   for (const [repeatId, repeated] of repeatIds) {
-    const dataset = datasetsByKey[repeatKey(repeated)]
+    const dataset = rowsByKey[repeatKey(repeated)]
     const records = repeatedRecords(repeated, dataset)
     const self = repeatScope(repeated) === 'self'
     // The copies' parent: the node itself, or — for a self-scoped node — the
@@ -369,7 +446,19 @@ export function expandRepeatables<N extends AglynNodeSchema = AglynNodeSchema>(
         ? (repeated.nodes as NodeId[])
         : []
     next[repeatId] = withoutRepeatDirective(next[repeatId])
-    if (!records.length || !templateIds.length || (self && slot < 0)) continue
+    if (!templateIds.length || (self && slot < 0)) continue
+    if (!records.length) {
+      // Zero copies (AGL-3496). The template is a design, not content: drawn
+      // without a record it prints `{{item.name}}` to every visitor.
+      if (self) {
+        const listed = [...(next[parentId].nodes as NodeId[])]
+        listed.splice(slot, 1)
+        next[parentId] = { ...next[parentId], nodes: listed }
+      } else {
+        next[repeatId] = { ...next[repeatId], nodes: [] }
+      }
+      continue
+    }
 
     const copyIds: NodeId[] = []
     records.forEach((record, index) => {
@@ -388,7 +477,7 @@ export function expandRepeatables<N extends AglynNodeSchema = AglynNodeSchema>(
           props: substituteValue(node.props ?? {}, {
             record,
             model: dataset?.model,
-            datasetsByKey,
+            datasetsByKey: rowsByKey,
           }) as any,
           ...(clonedChildren && {
             nodes: clonedChildren.map((childId) => prefixId(childId)),

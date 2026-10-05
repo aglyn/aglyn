@@ -138,7 +138,7 @@ jest.mock('@aglyn/aglyn/server', () => ({
   // The REAL plan model. A stubbed resolver answers zero for every ceiling,
   // so every case below would refuse at the `max` check instead of the
   // capacity check — passing, loudly, for the wrong reason. Starter's real
-  // numbers are the fixture: hostLimit 1, datasetsPerOrg 3, managersPerOrg 2.
+  // numbers are the fixture: hostLimit 1, datasetsPerOrg 2, managersPerOrg 2.
   ...jest.requireActual('@aglyn/aglyn/app-utils/plan-entitlements'),
   // The REAL manager-seat counter, which is what decides that a site-scoped
   // collaborator is not a manager. A `members.length` stub here would count
@@ -251,16 +251,16 @@ beforeEach(() => {
   mockStripeCalls = []
   mockOrgWrites = []
   // A Starter org that bought all three gated capacities and then used them.
-  // Starter includes 1 site, 3 datasets and 2 manager seats.
+  // Starter includes 1 site, 2 datasets and 2 manager seats.
   mockOrg = {
     plan: 'starter',
     subscription: { status: 'active' },
     seatAddons: { hosts: 5, datasets: 4, managers: 3 },
   }
-  // 4 sites (3 past the included 1), 6 datasets (3 past 3), and a roster that
+  // 4 sites (3 past the included 1), 5 datasets (3 past 2), and a roster that
   // the real counter reads as 3 managers + 1 pending invite = 4 (2 past 2).
   mockSiteCount = 4
-  mockDatasetCount = 6
+  mockDatasetCount = 5
   mockMembers = [
     { role: 'owner' },
     { role: 'admin' },
@@ -360,7 +360,7 @@ describe('the fixture reaches the code under test', () => {
     // were stubbed they would all be 0 and the refusals would be coming from
     // the purchase-ceiling check instead.
     expect(PLAN_ENTITLEMENTS.starter.hostLimit).toBe(1)
-    expect(PLAN_ENTITLEMENTS.starter.datasetsPerOrg).toBe(3)
+    expect(PLAN_ENTITLEMENTS.starter.datasetsPerOrg).toBe(2)
     expect(PLAN_ENTITLEMENTS.starter.managersPerOrg).toBe(2)
   })
 })
@@ -390,9 +390,9 @@ describe('reducing org-wide capacity below what it carries is refused', () => {
     const response = await setQuantity('datasets', 2)
     expect(response.status).toBe(409)
     const payload = await response.json()
-    expect(payload).toMatchObject({ count: 6, included: 3, inUse: 3, release: 1 })
+    expect(payload).toMatchObject({ count: 5, included: 2, inUse: 3, release: 1 })
     expect(payload.error).toBe(
-      'You have 6 datasets. Your plan includes 3, so 3 of the extra datasets ' +
+      'You have 5 datasets. Your plan includes 2, so 3 of the extra datasets ' +
         'you bought are in use. Remove 1 dataset first, then reduce to 2.',
     )
   })

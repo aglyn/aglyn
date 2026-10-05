@@ -44,11 +44,11 @@ import {
 } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
+import { type SendLinkRollup } from '@aglyn/shared-ui-email-campaigns/model/send-report'
 import {
   campaignSequencesReport,
-  type CampaignLinkRollup,
   type CampaignSequencesRollup,
-} from '@aglyn/shared-ui-email-campaigns/model'
+} from '../model/campaign-report'
 import { EMAIL_ATTRIBUTION_WINDOW_DAYS } from '@aglyn/shared-util-email'
 import {
   CAMPAIGN_CONVERSION_KINDS,
@@ -706,7 +706,7 @@ export function CampaignDestinationsSection(props: CampaignReachProps) {
       let overflowClicks = 0
       let unattributedClicks = 0
       snapshots.forEach((snapshot) => {
-        const rollup = snapshot.data() as CampaignLinkRollup | undefined
+        const rollup = snapshot.data() as SendLinkRollup | undefined
         if (!rollup) return
         overflowClicks += Number(rollup.overflowClicks ?? 0)
         unattributedClicks += Number(rollup.unattributedClicks ?? 0)

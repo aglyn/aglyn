@@ -148,6 +148,9 @@ function mockMakeCollection(path: string): any {
   }
 }
 
+/** The org's billing document as `readOrgBilling` answers it. */
+let mockBilling: Record<string, unknown> = { stripeCustomerId: 'cus_test_1' }
+
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
   firebaseAdmin: {
@@ -170,7 +173,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   emailUnverifiedResponse: () =>
     Response.json({ error: 'Verify your email' }, { status: 403 }),
   memberHasOrgPermission: async () => true,
-  readOrgBilling: async () => ({ stripeCustomerId: 'cus_test_1' }),
+  readOrgBilling: async () => mockBilling,
   resolveOrgMembership: async () => ({ orgId: 'org-1', member: mockMember }),
   writeOrgBilling: async () => undefined,
   lockdownRefusal: async () => null,
@@ -288,6 +291,7 @@ function detailDocs(): Array<Record<string, unknown>> {
 }
 
 beforeEach(() => {
+  mockBilling = { stripeCustomerId: 'cus_test_1' }
   mockStoredDocs = new Map()
   mockAutoId = 0
   mockMember = { id: 'm-1' }
@@ -794,5 +798,54 @@ describe('cancel and delete record funnel completion or skip (AGL-1863)', () => 
     expect(
       retentionDocs().filter((doc) => doc.kind === 'delete_requested'),
     ).toHaveLength(0)
+  })
+})
+
+/**
+ * THE FULL-USE VERDICT IS RECORDED, NEVER ENFORCED (AGL-3473). Half price for
+ * two months spends cost on a fully used plan, and keeping the customer is
+ * what it is spent on: the winback is offered and applied as before, and the
+ * verdict — on the two discounted months, the first year beside them — is
+ * written on the applied winback for staff, never into the customer's
+ * response.
+ */
+describe('/api/billing/retention — the full-use verdict (AGL-3473)', () => {
+  const ROUTE = '../app/api/billing/retention/route'
+
+  it('offers the winback at the survey whatever its full-use verdict', async () => {
+    mockBilling = {
+      stripeCustomerId: 'cus_test_1',
+      subscription: { status: 'active', interval: 'month' },
+    }
+    const response = await call(loadRoute(ROUTE), {
+      action: 'survey',
+      surface: 'subscription_cancel',
+      reason: 'too_expensive',
+    })
+    expect(response.status).toBe(200)
+    expect((await response.json()).winbackAvailable).toBe(true)
+  })
+
+  it('applies the half-price winback and records the verdict for staff, not the customer', async () => {
+    // A light month: the measured guardrail approves it.
+    mockStoredDocs.set('orgs/org-1/usage/2026-08', { month: '2026-08', pageViews: 1_000 })
+    const response = await call(loadRoute(ROUTE), { action: 'winback', funnelId: 'f-1' })
+    expect(response.status).toBe(200)
+    expect(capturedCouponBody?.get('percent_off')).toBe('50')
+    const payload = await response.json()
+    expect(JSON.stringify(payload)).not.toMatch(/fullUse|coverage|cogs/i)
+    const winback = mockStoredDocs.get('orgs/org-1/retention/winback') as Record<string, unknown>
+    expect(winback).toMatchObject({
+      kind: 'winback_applied',
+      fullUseOk: expect.any(Boolean),
+      fullUseCoverage: expect.any(Number),
+      fullUseFirstYearCoverage: expect.any(Number),
+    })
+    // The verdict is about the discounted months: under cost on them is
+    // `fullUseOk: false`, and the year as a whole carries ten at list.
+    expect(winback.fullUseOk).toBe((winback.fullUseCoverage as number) >= 1)
+    expect(winback.fullUseFirstYearCoverage as number).toBeGreaterThan(
+      winback.fullUseCoverage as number,
+    )
   })
 })

@@ -44,6 +44,7 @@ import {
   PLATFORM_BRAND_NAME,
   PLATFORM_SUPPORT_URL,
 } from '@aglyn/aglyn/app-utils/platform-brand'
+import { PLAN_ENTITLEMENTS } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
@@ -673,7 +674,9 @@ describe('the Enterprise card in the comparison grid', () => {
     }
     // The rows those lines duplicated are each still on the card, exactly
     // once — this must read as de-duplication, never as a card losing rows.
-    expect(enterprise.getAllByText(/^200 (hosts|team seats)$/)).toHaveLength(2)
+    const { hostLimit, managersPerOrg } = PLAN_ENTITLEMENTS.enterprise
+    expect(enterprise.getAllByText(`${hostLimit} hosts`)).toHaveLength(1)
+    expect(enterprise.getAllByText(`${managersPerOrg} team seats`)).toHaveLength(1)
     expect(enterprise.getAllByText('Full white-label')).toHaveLength(1)
   })
 
@@ -1127,9 +1130,10 @@ describe('a plan the org did not buy explains itself', () => {
   it('and the grid says it once, on the same card', () => {
     renderGrid({ plan: 'starter', planWithoutSubscription: true })
     expect(screen.getAllByText(NOTICE)).toHaveLength(1)
+    // The current card, which now offers to start the plan (AGL-3466).
     expect(
       screen.getByText(NOTICE).closest('.MuiCard-root')?.textContent,
-    ).toMatch(/Your plan/)
+    ).toMatch(/Start your Starter subscription/)
   })
 
   it('the dead Free control stops wearing the prospect copy', () => {
@@ -1379,5 +1383,69 @@ describe('the ladder ends on a full row', () => {
     renderGrid({ plan: 'pro' })
     revealLowerTiers()
     expect([spanOf('Agency'), spanOf('Enterprise')]).toEqual(['6', '6'])
+  })
+})
+
+/**
+ * AGL-3466 — the comped tier can be bought as it stands.
+ *
+ * Staff comp a client's workspace to the tier being sold while the client
+ * evaluates it, then ask them to upgrade to that same tier. The card for a
+ * tier the org is on treated it as bought — "Current plan", a dead "Your
+ * plan" — so the client could not buy the plan they were comped on, though
+ * `/api/billing/checkout` would sell it to them.
+ */
+describe('a comped tier offers to start its subscription', () => {
+  const START = /Start your Starter subscription/
+
+  it('the focused view offers it on the current card, and it subscribes', () => {
+    const { onSelect } = renderCards({ plan: 'starter', planWithoutSubscription: true })
+    const start = screen.getByRole('button', { name: START })
+    expect((start as HTMLButtonElement).disabled).toBe(false)
+    expect(start.closest('.MuiCard-root')?.textContent).toMatch(/Current plan/)
+    fireEvent.click(start)
+    expect(onSelect).toHaveBeenCalledWith('starter')
+  })
+
+  it('stays quiet beside the step up unless the reader came for it', () => {
+    renderCards({ plan: 'starter', planWithoutSubscription: true })
+    expect(screen.getByRole('button', { name: START }).className).toMatch(/MuiButton-outlined/)
+    expect(
+      screen.getByRole('button', { name: 'Upgrade to Pro' }).className,
+    ).toMatch(/MuiButton-contained/)
+  })
+
+  it('is the one contained control when `?plan=` or the proposal names it', () => {
+    renderCards({ plan: 'starter', planWithoutSubscription: true, highlight: 'starter' })
+    expect(screen.getByRole('button', { name: START }).className).toMatch(/MuiButton-contained/)
+    expect(
+      screen.getByRole('button', { name: 'Upgrade to Pro' }).className,
+    ).toMatch(/MuiButton-outlined/)
+  })
+
+  it('the grid offers it on the current card too', () => {
+    const { onSelect } = renderGrid({ plan: 'starter', planWithoutSubscription: true })
+    const start = actionOn('Starter')
+    expect(start.textContent).toMatch(START)
+    fireEvent.click(start)
+    expect(onSelect).toHaveBeenCalledWith('starter')
+  })
+
+  it('NEGATIVE CONTROL: a subscriber is not offered the plan they pay for', () => {
+    renderGrid({ plan: 'starter', subscriptionActive: true })
+    expect(screen.queryByRole('button', { name: START })).toBeNull()
+    expect(actionOn('Starter').textContent).toBe('Your plan')
+  })
+
+  it('NEGATIVE CONTROL: the way down is unchanged', () => {
+    renderGrid({ plan: 'pro', planWithoutSubscription: true })
+    revealLowerTiers()
+    expect(actionOn('Starter').textContent).toBe('Contact us to change')
+    expect((actionOn('Starter') as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('NEGATIVE CONTROL: an Enterprise org is offered nothing to start', () => {
+    renderGrid({ plan: 'starter', planWithoutSubscription: true, enterprise: true })
+    expect(screen.queryByRole('button', { name: /Start your/ })).toBeNull()
   })
 })

@@ -17,6 +17,7 @@
 'use client'
 
 import BindingPickerProvider from '../../../../../../../../../../components/binding-picker-provider.component'
+import { useBindingTokenLookups } from '../../../../../../../../../../hooks/use-host-binding-docs'
 import EntityPickerProvider from '../../../../../../../../../../components/entity-picker-provider.component'
 import ReusableComponentsProvider from '../../../../../../../../../../components/reusable-components-provider.component'
 import type * as Aglyn from '@aglyn/aglyn'
@@ -306,6 +307,8 @@ function HostEmailBesignerPage() {
     notFound,
   } = useBesignerDocument({
     nodes,
+    // Every save converts a typed `{{name}}` to its id token (AGL-3481).
+    bindingLookups: useBindingTokenLookups(hostId),
     updatedAt: version?.updatedAt,
     pendingWrites: hasPendingWrites,
     status: editable ? status : 'success',

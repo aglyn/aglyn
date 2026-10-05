@@ -362,6 +362,9 @@ function queuedWrites() {
 
 export const mockFirestore = {
   collection: (name: string) => mockCollectionRef(name),
+  /** Keyed reads in one call, answered in the order asked. */
+  getAll: (...refs: Array<ReturnType<typeof mockDocRef>>) =>
+    Promise.all(refs.map((ref) => ref.get())),
   /** A batch: its writes land together on `commit`. */
   batch: () => {
     const writes = queuedWrites()

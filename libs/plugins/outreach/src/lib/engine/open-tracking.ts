@@ -16,6 +16,7 @@
  */
 
 import { OUTREACH_MACHINE_AGENTS, outreachBodyLinks } from './click-tracking'
+import type { OutreachOpenSource } from './open-source'
 
 /*==========================================
  * OPENS, WHEN A SEQUENCE ASKS FOR THEM (AGL-3395).
@@ -100,23 +101,37 @@ export function outreachOpenTrackedHtml(text: string, pixelUrl: string): string 
  * WHO OPENED: A PERSON, OR A MACHINE.
  *
  * The same judgement scanner clicks get (`./click-tracking.ts`), with the
- * machines that fetch images rather than links:
+ * machines that fetch images rather than links — told apart by what a fetch
+ * says it is AND where it came from (AGL-3488), because the agent alone
+ * cannot separate them:
  *
  * - **Apple Mail Privacy Protection** fetches every remote image of every
- *   message through Apple's proxy when the message arrives, whether or not
- *   anyone reads it. Its fetch names itself only as `Mozilla/5.0`.
+ *   message as it arrives, whether or not anyone reads it, naming itself
+ *   only as `Mozilla/5.0` — and from Apple's relay egress, never from
+ *   Google's or Microsoft's mail servers. The bare agent from anywhere else
+ *   is a scanner borrowing it, and is called one: a sequence mailing
+ *   Google Workspace addresses once read 128 such fetches as Apple's.
+ * - **Gmail's `GoogleImageProxy`** is NOT a machine here. Gmail fetches
+ *   through it when the reader opens the message, so outside the delivery
+ *   window its fetch is the reader's open, and setting it apart would leave
+ *   the rate blind to every Gmail and Workspace reader. The proxy caches the
+ *   image, so a reader's later opens may not arrive at all; the rate is
+ *   taken over first opens per person either way. Gmail's PREFETCH, which
+ *   fetches on delivery for some signed-in recipients, names a 2015 Edge
+ *   instead — no reader's browser — and is a scanner.
+ * - **Google's and Microsoft's mail scanning** fetches from their mail
+ *   networks with whatever agent it likes. Anything from Google's own
+ *   network that is not the image proxy is a scanner, and so is anything
+ *   from Exchange Online Protection, Microsoft's mail filter. The rest of
+ *   Microsoft's mail network is NOT judged by itself: Outlook on the web
+ *   loads images through it when the reader opens the message.
  * - **Yahoo's image proxy** fetches on the provider's behalf, and is set
  *   apart as a proxy.
+ * - **Gateways and scanners** that name themselves as the click scanners
+ *   do, or that arrive within seconds of delivery.
  *
- * Gmail's `GoogleImageProxy` is NOT a machine here. Gmail fetches through it
- * only when the reader opens the message — it does not prefetch on delivery
- * — so outside the delivery window its fetch is the reader's open, and
- * setting it apart would leave the rate blind to every Gmail and Workspace
- * reader. The proxy caches the image, so a reader's later opens may not
- * arrive at all; the rate is taken over first opens per person either way.
- * - **Gateways and scanners** that open the message to inspect it, which
- *   name themselves as the click scanners do, or arrive within seconds of
- *   delivery.
+ * Every fetch's agent and network are kept on its history row, so a
+ * judgement can be checked against what actually arrived.
  *
  * Counted apart, never dropped: `machineOpens` beside `opens`, as
  * `machineClicks` beside `clicks`.
@@ -141,14 +156,33 @@ const IMAGE_PROXY_AGENTS = ['yahoomailproxy']
 const GMAIL_PROXY_AGENTS = ['googleimageproxy', 'ggpht.com']
 
 /**
+ * Gmail's prefetch: Chrome 42 and Edge 12 in one agent, both from 2015,
+ * matched together so neither browser alone is ever read as a machine.
+ */
+const GMAIL_PREFETCH_AGENT_PARTS = ['chrome/42.0.2311.135', 'edge/12.246']
+
+/**
  * The agent Apple's Mail Privacy Protection proxy sends: the bare product
  * token, with no platform after it — which no browser or mail client that
  * shows an image to a person sends.
  */
-const APPLE_PRIVACY_AGENT = 'mozilla/5.0'
+const BARE_AGENT = 'mozilla/5.0'
 
-/** Why an open was read as a machine's. */
-export type OutreachOpenMachineReason = 'agent' | 'too_soon' | 'method' | 'image_proxy' | 'privacy_proxy'
+/** The longest agent kept on a history row: evidence, not a store for whatever a caller sends. */
+export const OUTREACH_OPEN_AGENT_MAX = 400
+
+/**
+ * Why an open was read as a machine's. `scanner` (AGL-3488) is a mail
+ * provider's or a security product's fetch, known by where it came from;
+ * `agent` is one known by what it called itself.
+ */
+export type OutreachOpenMachineReason =
+  | 'agent'
+  | 'too_soon'
+  | 'method'
+  | 'image_proxy'
+  | 'privacy_proxy'
+  | 'scanner'
 
 /** The reasons that are a mail provider's proxy rather than a scanner. */
 export const OUTREACH_PROXY_OPEN_REASONS: readonly OutreachOpenMachineReason[] = ['image_proxy', 'privacy_proxy']
@@ -161,6 +195,19 @@ export interface OutreachOpenJudgement {
   machineReason: OutreachOpenMachineReason | null
 }
 
+/** The agent as a history row keeps it: trimmed, on one line, and no longer than {@link OUTREACH_OPEN_AGENT_MAX}. */
+export function outreachOpenAgentEvidence(userAgent: string | null | undefined): string | null {
+  // Every control character, a line break included, read as a space.
+  const agent = Array.from(String(userAgent ?? ''), (character) => {
+    const code = character.charCodeAt(0)
+    return code < 0x20 || code === 0x7f ? ' ' : character
+  })
+    .join('')
+    .replace(/ {2,}/g, ' ')
+    .trim()
+  return agent ? agent.slice(0, OUTREACH_OPEN_AGENT_MAX) : null
+}
+
 /**
  * Whether one fetch of a tracking image is a person's open.
  *
@@ -169,23 +216,37 @@ export interface OutreachOpenJudgement {
  *
  * @param input.sinceSentMs Milliseconds between the send and this fetch, or
  *   `null` when the send it belongs to could not be found.
+ * @param input.source The network the fetch came from (`./open-source.ts`),
+ *   or `null` when no address was read — judged then by the agent alone,
+ *   as every fetch was before AGL-3488.
  */
 export function judgeOutreachOpen(input: {
   method: string
   userAgent: string | null | undefined
   sinceSentMs: number | null
+  source?: OutreachOpenSource | null
 }): OutreachOpenJudgement {
   const machine = (machineReason: OutreachOpenMachineReason): OutreachOpenJudgement => ({
     human: false,
     machineReason,
   })
+  const source = input.source ?? null
   if (String(input.method ?? '').toUpperCase() === 'HEAD') return machine('method')
   const agent = String(input.userAgent ?? '').trim().toLowerCase()
   if (!agent) return machine('agent')
-  if (IMAGE_PROXY_AGENTS.some((needle) => agent.includes(needle))) return machine('image_proxy')
-  if (agent === APPLE_PRIVACY_AGENT) return machine('privacy_proxy')
+  if (source === 'yahoo' || IMAGE_PROXY_AGENTS.some((needle) => agent.includes(needle))) return machine('image_proxy')
+  if (agent === BARE_AGENT) {
+    // Apple's agent from Apple's relay — or from nowhere we could read,
+    // which is how every such fetch was judged before the address was.
+    return machine(source === null || source === 'apple' ? 'privacy_proxy' : 'scanner')
+  }
+  if (GMAIL_PREFETCH_AGENT_PARTS.every((part) => agent.includes(part))) return machine('scanner')
   const gmail = GMAIL_PROXY_AGENTS.some((needle) => agent.includes(needle))
+  // Gmail's proxy fetches from Google's network; the same words from any
+  // other network that could be read are someone else's.
+  if (gmail && source !== null && source !== 'google') return machine('agent')
   if (!gmail && OUTREACH_MACHINE_AGENTS.some((needle) => agent.includes(needle))) return machine('agent')
+  if (!gmail && (source === 'google' || source === 'microsoft_filter')) return machine('scanner')
   // A fetch before its send is two clocks disagreeing, and read as a person's.
   if (input.sinceSentMs !== null && input.sinceSentMs >= 0 && input.sinceSentMs < OUTREACH_OPEN_HUMAN_DELAY_MS) {
     return machine('too_soon')

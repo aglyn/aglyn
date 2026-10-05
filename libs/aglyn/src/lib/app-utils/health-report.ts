@@ -2591,6 +2591,18 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
       'Places the security hold the page screen asks for when it holds a phishing page from a workspace in its first two weeks: the workspace, the site (as a takedown) and the publishing account are locked as security, and staff are alerted (AGL-3450). If it stops, the page itself stays held, but the account that published it keeps working — it can publish the next page and send mail — until somebody locks it by hand.',
   },
   {
+    id: 'transfer-jobs',
+    label: 'Import sweep',
+    // The tenth route on the `consoleFastCrons` job (AGL-3524): the browser
+    // drives an import's Apply, and this finishes one whose tab closed.
+    cron: '*/15 * * * *',
+    runner: 'cloud-scheduler',
+    target: 'consoleFastCrons \u2192 console /api/admin/transfer-jobs',
+    graceMinutes: 45,
+    drives:
+      'Resumes every import a closed tab left part-written: the rows not yet written are written, chunk by chunk, under the ledger that keeps a row from being written twice (AGL-3524). If it stops, an import someone started and walked away from stays half applied until they open it again and press Resume.',
+  },
+  {
     id: 'ai-jobs-beat',
     label: 'AI jobs beat',
     // Its own Cloud Scheduler job, every minute (AGL-3026): the console route

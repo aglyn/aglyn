@@ -42,6 +42,12 @@ export interface StaffSiteRow {
      * leaving notice (epoch ms), or null when they do not (AGL-3452).
      */
     leavingNoticeUntil?: number | null
+    /**
+     * The plan staff asked the workspace to buy, and its subscription
+     * status, for the site page's "Ask to upgrade" (AGL-3466).
+     */
+    upgradeProposal?: { plan: string; proposedBy: string; proposedAt: number; note?: string } | null
+    billingStatus?: string | null
   } | null
   owner: { uid: string; email: string | null; displayName: string | null } | null
   publishedPages: number

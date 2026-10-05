@@ -145,6 +145,14 @@ export interface Props {
   memberAuthRoutes?: boolean
   /** Membership form route (AGL-109/552): 'signin' | 'signup' | 'recover'. */
   membershipPage?: string
+  /**
+   * The address a plugin page resolver served this page at, in the routing
+   * map's form (`services/roofing`), when the screen behind it is a template
+   * with no address of its own (AGL-3475). The head names it — canonical,
+   * `og:url`, the Markdown alternate and the breadcrumb — in place of the
+   * template's routing-map entry, which serves nothing.
+   */
+  routePath?: string
   /** Rendered as the custom not-found screen (noindex, AGL-87). */
   notFoundFallback?: boolean
   /** Maintenance mode (AGL-131): 503 screen or the built-in notice. */

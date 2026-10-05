@@ -16,7 +16,13 @@
  */
 'use client'
 
-import { CRM_COLLECTIONS, type CrmDealStage } from '@aglyn/aglyn'
+import {
+  CRM_COLLECTIONS,
+  CRM_FORECAST_CATEGORIES,
+  CRM_FORECAST_CATEGORY_LABELS,
+  type CrmDealStage,
+  dealStageForecastCategory,
+} from '@aglyn/aglyn'
 import {
   mdiArrowDown,
   mdiArrowUp,
@@ -33,6 +39,7 @@ import {
   DialogContent,
   DialogTitle,
   IconButton,
+  MenuItem,
   Stack,
   TextField,
   Tooltip,
@@ -54,6 +61,7 @@ import {
   type PipelineDoc,
   removeStage,
   renameStage,
+  setStageForecastCategory,
   setStageProbability,
   sortedStages,
   stageRemovalRefusal,
@@ -97,6 +105,13 @@ export interface PipelineStagesDialogProps {
  *
  * Won and Lost cannot be removed or reordered; their probabilities are
  * fixed by what they mean.
+ *
+ * ## The forecast category (AGL-3516)
+ *
+ * Each open stage names the forecast category a deal takes on landing in
+ * it — Salesforce's fixed set, Pipeline unless chosen. Won is Closed and
+ * Lost is Omitted by definition. A change here applies to the deals that
+ * move into the stage from now on; a deal already in it keeps its own.
  */
 export function PipelineStagesDialog(props: PipelineStagesDialogProps) {
   const { open, onClose, orgId, pipeline, fromCache, unreadable, visibleToTokens } =
@@ -190,7 +205,8 @@ export function PipelineStagesDialog(props: PipelineStagesDialogProps) {
           <Typography variant="body2" color="text.secondary">
             {'The probability is the chance a deal in that stage closes, which ' +
               'is what the weighted value multiplies by. Won is always 100% and ' +
-              'Lost always 0%.'}
+              'Lost always 0%. The forecast category is where a deal moved into ' +
+              'the stage is forecast; Won is always Closed and Lost always Omitted.'}
           </Typography>
           {stages.map((stage, index) => {
             const isOpen = stage.kind === 'open'
@@ -232,6 +248,25 @@ export function PipelineStagesDialog(props: PipelineStagesDialogProps) {
                     input: { endAdornment: '%' },
                   }}
                 />
+                <TextField
+                  select
+                  size="small"
+                  label="Forecast"
+                  value={dealStageForecastCategory(stage)}
+                  disabled={!isOpen}
+                  onChange={(event) =>
+                    setStages((current) =>
+                      setStageForecastCategory(current, stage.id, event.target.value),
+                    )
+                  }
+                  sx={{ width: 140 }}
+                >
+                  {CRM_FORECAST_CATEGORIES.map((category) => (
+                    <MenuItem key={category} value={category}>
+                      {CRM_FORECAST_CATEGORY_LABELS[category]}
+                    </MenuItem>
+                  ))}
+                </TextField>
                 {isOpen ? (
                   <>
                     <Tooltip title="Move up">

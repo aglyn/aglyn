@@ -221,6 +221,41 @@ describe('the canvas preview is bounded exactly as the runtime is', () => {
     expect(badge(baseElement)).toBeNull()
   })
 
+  /**
+   * AGL-3496: the published page renders a repeat with no rows ZERO times.
+   * The canvas keeps the template — it is what the author edits — and says
+   * on the badge that the live site shows none of it.
+   */
+  it('keeps the template and flags it when the filter matches nothing', () => {
+    const nodes = listNodes({ repeatDataset: 'Team', repeatFilter: 'role == Pilot' })
+    canvasJson = withCanvas(nodes)
+    const { baseElement } = renderList(answered(READY()), nodes)
+    expect(copies(baseElement)).toBeNull()
+    expect(baseElement.textContent).toContain('{{item.name}}')
+    const chip = badge(baseElement)
+    expect(chip?.textContent).toContain('no matching records')
+    expect(chip?.textContent).toContain('hidden on the live site')
+    expect(chip?.hasAttribute('data-aglyn-repeat-empty')).toBe(true)
+  })
+
+  it('keeps the template and flags it when the dataset is not found', () => {
+    const nodes = listNodes({ repeatDataset: 'Team' })
+    canvasJson = withCanvas(nodes)
+    const { baseElement } = renderList(answered({ status: 'missing' }), nodes)
+    expect(copies(baseElement)).toBeNull()
+    expect(baseElement.textContent).toContain('{{item.name}}')
+    // The source's own label: a missing answer carries none of its own.
+    expect(badge(baseElement)?.textContent).toContain('Rows not found')
+    expect(badge(baseElement)?.textContent).toContain('hidden on the live site')
+  })
+
+  it('draws no badge when the read failed — nothing is known', () => {
+    const nodes = listNodes({ repeatDataset: 'Team' })
+    canvasJson = withCanvas(nodes)
+    const { baseElement } = renderList(answered({ status: 'error' }), nodes)
+    expect(badge(baseElement)).toBeNull()
+  })
+
   it('holds nothing for an element that repeats over nothing', () => {
     const nodes = listNodes({})
     canvasJson = withCanvas(nodes)

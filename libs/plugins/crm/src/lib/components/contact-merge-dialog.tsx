@@ -21,11 +21,13 @@ import {
   contactDisplayName,
   nameSearchKey,
   normalizeContactEmail,
+  readContactFacet,
 } from '@aglyn/aglyn'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import { type ContactMergePreviewRow, contactMergePreview } from '../model/contact-merge'
+import { useCrmRecordNames } from '../hooks/use-crm-record-names'
 import {
   Alert,
   Button,
@@ -59,7 +61,7 @@ import {
   startAt,
   where,
 } from 'firebase/firestore'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useCrmOrgMount } from '../hooks/use-crm-org-mount'
 import { crmVisibleToClause } from '../hooks/use-crm-scope'
 import { useCrmApi } from './use-crm-api'
@@ -250,13 +252,29 @@ export function ContactMergeDialog(props: ContactMergeDialogProps) {
 
   const survivor = keep === 'current' ? current : other
   const merged = keep === 'current' ? other : current
-  const rows: ContactMergePreviewRow[] = useMemo(
-    () =>
-      survivor && merged
-        ? contactMergePreview(survivor.doc, merged.doc, groupId, { memberName })
-        : [],
-    [survivor, merged, groupId, memberName],
-  )
+  /*
+   * The managers the two records name, by name (AGL-3537): read through the
+   * viewing holder, as the preview reads every other field.
+   */
+  const managerIds = [survivor, merged].flatMap((pick) => {
+    const id = pick ? readContactFacet(pick.doc, groupId).reportsToContactId : null
+    return id ? [{ kind: 'contact' as const, id }] : []
+  })
+  const nameOf = useCrmRecordNames({
+    orgId: scope[1],
+    groupId: groupId || null,
+    records: managerIds,
+  })
+  // Built each render, so a name that lands is a name the preview shows.
+  const rows: ContactMergePreviewRow[] =
+    survivor && merged
+      ? contactMergePreview(survivor.doc, merged.doc, groupId, {
+          memberName,
+          // The rule the write applies to a reports-to (AGL-3537).
+          ids: { survivorId: survivor.id, mergedId: merged.id },
+          contactName: (id) => nameOf('contact', id) || id,
+        })
+      : []
 
   const submit = useCallback(async () => {
     if (!survivor || !merged || busy || !canMerge) return
@@ -361,7 +379,9 @@ export function ContactMergeDialog(props: ContactMergeDialogProps) {
               <Typography variant="body2" color="text.secondary">
                 {'The kept record keeps every value it has; empty fields fill from the ' +
                   'other record. Tags, filings and the timeline are combined, and the ' +
-                  "other record's deals, tasks, activities and leads move across. Its " +
+                  "other record's deals, tasks, activities and leads move across. " +
+                  'Contacts that report to the other record report to the kept one, and ' +
+                  'a reports-to naming either record becomes nobody. Its ' +
                   'address becomes an alternate on the kept record, so a later capture ' +
                   'on it lands here — and the other record is deleted.'}
               </Typography>

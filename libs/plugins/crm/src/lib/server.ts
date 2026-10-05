@@ -38,8 +38,9 @@
  * can only be emitted by a server path that performed the write, so a record
  * page that moved the stage client-direct would move the person and tell no
  * automation; the task routes (AGL-2599) carry an assignee's notification and
- * the `taskCompleted` event; `crm/contacts-import` (AGL-2602) pushes one chunk
- * of a file through the same capture door every other server door uses.
+ * the `taskCompleted` event. Every CRM file is imported through the
+ * transfer framework (AGL-3527, AGL-3528, `transfer/`), whose writes go
+ * through the same doors every other server path uses.
  * `crm/deal-stage` (AGL-2598) is the one writer of a deal's stage, won and lost,
  * because a stage change is what automations listen for (`server-deal-stage.ts`).
  * `crm/contacts-create` (AGL-2596) is a person typed into the console by a
@@ -56,10 +57,13 @@
 import {
   CONTACT_ERASED_MESSAGE,
   contactFacetPath,
+  composeContactName,
   CRM_COLLECTIONS,
+  CRM_SALUTATION_PICKLIST,
   crmReadTokens,
   isContactLifecycleStage,
   isOrgWideMember,
+  judgeCrmPicklistValue,
   normalizeAddress,
   normalizeContactEmail,
   normalizePhone,
@@ -89,19 +93,14 @@ import { registerCrmServerDeclarations } from './declarations.server'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { CRM_NEXT_ACTIVITY_ROUTE } from './model/next-activity'
 import { CRM_LIST_FIELDS_ROUTE } from './model/list-fields'
-import { CRM_LEAD_SOURCE_VALUES_ROUTE } from './model/lead-source-values'
+import { CRM_LEAD_SOURCE_VALUES_ROUTE, CRM_PICKLIST_VALUES_ROUTE } from './model/picklist-values'
 import { CRM_TASK_ROUTES } from './model/task-routes'
 import { crmNextActivityHandler } from './server/next-activity-routes'
 import { crmListFieldsHandler } from './server/list-fields-routes'
-import { crmLeadSourceValuesHandler } from './server/lead-source-values'
+import { crmLeadSourceValuesHandler, crmPicklistValuesHandler } from './server/picklist-values'
 import { registerCrmRecordEmailStateWriter } from './server/record-email-state'
 import { registerCrmRecordTimelineWriter } from './server/record-timeline'
 import { crmTaskCompleteHandler, crmTaskSaveHandler } from './server/task-routes'
-import { crmCompaniesImportHandler } from './server/companies-import'
-import { crmContactsImportHandler } from './server/contacts-import'
-import { crmDealsImportHandler } from './server/deals-import'
-import { crmLeadsImportHandler } from './server/leads-import'
-import { crmTasksImportHandler } from './server/tasks-import'
 import { crmDealStageHandler } from './server-deal-stage'
 import { crmEmailSendHandler } from './server/email-send'
 import { CRM_EMAIL_CHECK_ROUTE, crmEmailCheckHandler } from './server/email-check'
@@ -119,7 +118,8 @@ import { crmCompanyDeleteHandler } from './server/company-delete'
 import { crmSharingHandler } from './server/crm-sharing'
 import { CRM_SHARING_ROUTE } from './model/crm-sharing'
 import { CONTACT_PHONE_REFUSAL, normalizeTags, typed } from './server/contact-profile'
-import { crmContactUpdateHandler } from './server/contact-update'
+import { crmContactUpdateHandler, readContactCreateProfile } from './server/contact-update'
+import { readCrmPicklist } from './server/read-picklist'
 import { crmContactRemoveHandler } from './server/contact-remove'
 import {
   CRM_EMAIL_TEMPLATE_DUPLICATE_ROUTE,
@@ -333,7 +333,11 @@ export const CONTACT_BAND_FULL_MESSAGE =
  *
  * Body: `{ hostId, email, name?, phone?, jobTitle?, companyName?,
  * companyId?, address?, ownerUid?, lifecycleStage?, tags?,
- * marketingConsent?, disclosedConsentGroup? }`. Answers
+ * marketingConsent?, disclosedConsentGroup? }`, plus any of Salesforce's
+ * standard contact fields `crm/contact-update` reads but the reports-to
+ * (`CONTACT_CREATE_PROFILE_FIELDS`, AGL-3515) — read by the same rules, the
+ * salutation judged against the org's list, and the holder's name composed
+ * from a first and last name when either is given. Answers
  * `{ contactId, created }`: `created` is
  * false when the address already belonged to somebody, in which case what
  * was typed MERGES into the existing row — the dedupe the shared address
@@ -409,6 +413,12 @@ export const crmContactsCreateHandler: PluginApiHandler = async (req, res) => {
     res.status(400).json({ error: 'Unknown lifecycle stage.' })
     return
   }
+  const profile = readContactCreateProfile(body)
+  if (profile.ok === false) {
+    res.status(400).json({ error: profile.error })
+    return
+  }
+  const extras = profile.fields
   const name = typed(body['name'], 120)
   const jobTitle = typed(body['jobTitle'], 120)
   let companyName = typed(body['companyName'], 120)
@@ -467,6 +477,25 @@ export const crmContactsCreateHandler: PluginApiHandler = async (req, res) => {
       return
     }
 
+    // The salutation, judged against the org's list (AGL-3515).
+    let salutation = ''
+    if (extras.salutation) {
+      const judged = judgeCrmPicklistValue(
+        CRM_SALUTATION_PICKLIST,
+        await readCrmPicklist(
+          firebaseAdmin.app().firestore(),
+          resolved.orgId,
+          CRM_SALUTATION_PICKLIST,
+        ),
+        extras.salutation,
+      )
+      if (judged.ok === false) {
+        res.status(400).json({ error: judged.error })
+        return
+      }
+      salutation = judged.value ?? ''
+    }
+
     if (companyId) {
       const group = await consentGroupForSite(
         hostId,
@@ -511,6 +540,16 @@ export const crmContactsCreateHandler: PluginApiHandler = async (req, res) => {
       facet: {
         ...(phone ? { phone } : {}),
         ...(jobTitle ? { jobTitle } : {}),
+        // Salesforce's standard fields (AGL-3515); the capture composes the
+        // holder's name from the first and last names.
+        ...Object.fromEntries(
+          Object.entries({ ...extras, salutation }).filter(
+            ([key, value]) =>
+              key !== 'doNotCall' && key !== 'otherAddress' && typeof value === 'string' && value,
+          ),
+        ),
+        ...(extras.otherAddress ? { otherAddress: extras.otherAddress } : {}),
+        ...(extras.doNotCall ? { doNotCall: true } : {}),
         ...(companyId ? { companyId } : {}),
         ...(address ? { address } : {}),
         ...(ownerUid ? { ownerUid } : {}),
@@ -579,7 +618,11 @@ export const crmContactsCreateHandler: PluginApiHandler = async (req, res) => {
       hostId,
       { uid: decoded.uid, email: decoded.email ?? null },
       result.created ? 'Added contact' : 'Updated contact',
-      { type: 'contact', id: result.contactId, name: name || email },
+      {
+        type: 'contact',
+        id: result.contactId,
+        name: name || composeContactName(extras.firstName, extras.lastName) || email,
+      },
     )
 
     res
@@ -622,25 +665,11 @@ export function registerCrmConsoleApi(): void {
   // unshare, the org's sharing rules and their recompute, and the rules'
   // re-evaluation a client-direct write owes.
   registerPluginApiRoute(CRM_SHARING_ROUTE, crmSharingHandler)
-  // A lead source value renamed or deleted (AGL-3298): the list and every
-  // lead and contact holding the old label, in one request.
+  // A picklist value renamed or deleted (AGL-3298, AGL-3510): the list and
+  // every record holding the old label, in one request. The lead source's
+  // own address stays registered for a request that names no picklist.
+  registerPluginApiRoute(CRM_PICKLIST_VALUES_ROUTE, crmPicklistValuesHandler)
   registerPluginApiRoute(CRM_LEAD_SOURCE_VALUES_ROUTE, crmLeadSourceValuesHandler)
-  // One chunk of a contact file (AGL-2602), judged and written through the
-  // same door every capture uses.
-  registerPluginApiRoute('crm/contacts-import', crmContactsImportHandler)
-  // One chunk of a companies file (AGL-2621), matched by domain then name
-  // and written with the stamp every CRM creator writes.
-  registerPluginApiRoute('crm/companies-import', crmCompaniesImportHandler)
-  // One chunk of a deals file and one of a tasks file (AGL-2662): the
-  // pipeline, the stage and the assignee resolved by name, a row refused
-  // when the org has no such name.
-  registerPluginApiRoute('crm/deals-import', crmDealsImportHandler)
-  registerPluginApiRoute('crm/tasks-import', crmTasksImportHandler)
-  // One chunk of a leads file (AGL-2701), written through `addHostLead` —
-  // the same door a sign-up, a booking and a form submission file a lead
-  // through, so an imported row is keyed, bounded and unconsented exactly
-  // as a captured one is.
-  registerPluginApiRoute('crm/leads-import', crmLeadsImportHandler)
   // The one writer of a deal's stage, won and lost (AGL-2598): the browser
   // could write the field, but only a server can emit the event an
   // automation listens for.
@@ -719,20 +748,6 @@ export function registerCrmConsoleApi(): void {
       web: async (request) => (await import('./server/inbound-route')).crmInboundRoute(request),
     },
     { machine: true },
-  )
-  /*
-   * The whole-collection export (AGL-2662). A portability route: the people
-   * files — contacts and leads — are what a workspace is owed on every plan
-   * and whether or not the CRM is switched on for it, so the dispatcher
-   * leaves its release and enablement gates to the route, which asks both
-   * of the CRM's own records. Loaded with the first export.
-   */
-  registerPluginApiRoute(
-    CRM_API_ROUTES.export,
-    {
-      web: async (request) => (await import('./server/export-route')).crmExportRoute(request),
-    },
-    { portability: true },
   )
   registerPluginApiRoute(
     CRM_EMAIL_TEMPLATE_DUPLICATE_ROUTE,

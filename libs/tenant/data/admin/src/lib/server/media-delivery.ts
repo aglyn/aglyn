@@ -299,6 +299,8 @@ export interface MediaDeliveryRedirect {
   location: string
   expiresAtMs: number
   key: string
+  /** The copy's size, which the bandwidth meter counts a sitting at. */
+  sizeBytes: number
 }
 
 /**
@@ -363,7 +365,7 @@ export async function mediaDeliveryRedirect(input: {
       expiresAtMs,
       claims: { ...input.claims, orgId },
     })
-    return { location, expiresAtMs, key: copy.key }
+    return { location, expiresAtMs, key: copy.key, sizeBytes: copy.sizeBytes }
   } catch (error) {
     console.error(
       '[media-delivery] could not mint a delivery URL',

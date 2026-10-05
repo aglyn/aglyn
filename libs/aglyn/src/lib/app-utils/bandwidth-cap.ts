@@ -98,7 +98,7 @@ import {
 
 /**
  * The month key the marker is stamped with: UTC `YYYY-MM`, the same shape as
- * `submissionMonthKey` and the `orgs/{id}/usage/{month}` document id, and the
+ * `utcMonthKey` and the `orgs/{id}/usage/{month}` document id, and the
  * same key `usage-alerts` dedupes its own guards by. One month boundary
  * across the platform — a cap that reset on a different day from the counter
  * it is derived from would engage against last month's traffic.
@@ -182,6 +182,26 @@ export function bandwidthCapShouldEngage(options: {
     return false
   }
   return usedBandwidthGb > includedBandwidthGb
+}
+
+/**
+ * Could this org's traffic EVER engage the cap — is it on a plan that stops
+ * at its band rather than billing past it (AGL-3474)?
+ *
+ * {@link bandwidthCapShouldEngage} with the usage left out, for a writer that
+ * has to decide whether measuring is worth its reads at all: the media CDN
+ * totals an org's month only when this is true, so a paying org's video costs
+ * no read to meter. Answered by the same predicate rather than restated, so
+ * the two cannot disagree about which plans the cap is for.
+ */
+export function bandwidthCapApplies(
+  org: Partial<AglynOrgBilling> | null | undefined,
+): boolean {
+  return bandwidthCapShouldEngage({
+    org,
+    usedBandwidthGb: Number.POSITIVE_INFINITY,
+    includedBandwidthGb: resolveOrgEntitlements(org).bandwidthGb,
+  })
 }
 
 /** What a visitor sees on a capped site. */

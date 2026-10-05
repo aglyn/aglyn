@@ -307,11 +307,12 @@ const STEP_FIELDS: Record<
   createCrmTask: {
     title: 200,
     kind: 64,
+    priority: 16,
     dueInDays: 'number',
     assigneeUid: 128,
     assigneeEmail: 320,
   },
-  logCrmActivity: { kind: 64, body: 2000 },
+  logCrmActivity: { kind: 64, body: 2000, direction: 16 },
   customEvent: { eventName: 64 },
   wait: { delayMinutes: 'number' },
   waitForEvent: { eventName: 64, timeoutMinutes: 'number' },

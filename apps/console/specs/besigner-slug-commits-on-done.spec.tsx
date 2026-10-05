@@ -663,6 +663,8 @@ describe('Screen Properties ▸ Slug · the seed (AGL-2572)', () => {
       // The announcer (AGL-2573). A rename changes which address serves the
       // page, so the seam drops both the old one and the new one.
       expect.objectContaining({ user: expect.anything() }),
+      // The screen this Publish puts on the site (AGL-3478).
+      { published: 'screen-1' },
     )
   })
 })

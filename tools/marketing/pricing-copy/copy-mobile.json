@@ -5,7 +5,7 @@
   "frameName": "Pricing — Mobile",
   "frameSize": {
     "width": 375,
-    "height": 11030
+    "height": 11220
   },
   "notes": "Extracted verbatim from the Figma frame by tools/marketing/extract-pricing-copy.mjs (AGL-1278). `kind` and `notes` are left null for a human pass — the frame does not name its own section types. THE CODE WINS OVER THE FRAME: this file is a record of the design, not of the truth. Prices here have been caught drifting from libs/aglyn/src/lib/app-utils/plan-entitlements.ts twice; that file is the source of truth for every number.",
   "sections": [
@@ -171,7 +171,7 @@
               "name": "fl",
               "cells": [
                 "Everything in Free, plus:",
-                "25 pages · 3 collaborators",
+                "25 pages · 2 collaborators",
                 "Custom domain & SSL",
                 "Remove Aglyn branding",
                 "Commerce · 100 products",
@@ -221,12 +221,12 @@
               "name": "fl",
               "cells": [
                 "Everything in Starter, plus:",
-                "3 sites · 10 collaborators",
+                "3 sites · 3 collaborators",
                 "Versioning & AI assist",
                 "Video, POS & marketplace",
                 "Site export & analytics",
                 "2,500 products / site",
-                "5,000 campaign emails/mo"
+                "2,500 campaign emails/mo"
               ]
             }
           ]
@@ -270,12 +270,12 @@
               "name": "fl",
               "cells": [
                 "Everything in Pro, plus:",
-                "10 sites · 50 collaborators",
-                "API access · 100k req/mo",
+                "10 sites · 5 collaborators",
+                "API access · 1.5k req/mo",
                 "A/B testing & webhooks",
                 "Multilingual & scheduling",
                 "Full commerce + POS",
-                "25,000 campaign emails/mo"
+                "15,000 campaign emails/mo"
               ]
             }
           ]
@@ -305,7 +305,7 @@
               "name": "Frame",
               "cells": [
                 "For high-growth stores and multi-site teams that have outgrown Business.",
-                "15 sites · 75 collaborators · 1% commerce fees · 300k API requests/mo · 25,000 products per site · 290 GB bandwidth · 40,000 campaign emails/mo"
+                "15 sites · 5 collaborators · 1% commerce fees · 5k API requests/mo · 25,000 products per site · 70 GB bandwidth · 25,000 campaign emails/mo"
               ]
             },
             {
@@ -328,7 +328,7 @@
               "name": "Frame",
               "cells": [
                 "For high-volume organizations that need headroom on every limit.",
-                "25 sites · 100 collaborators · 0% commerce fees · 1M API requests/mo · unlimited products · priority scale & limits · 65,000 campaign emails/mo"
+                "25 sites · 5 collaborators · 0% commerce fees · 17k API requests/mo · unlimited products · priority scale & limits · 65,000 campaign emails/mo"
               ]
             },
             {
@@ -351,7 +351,7 @@
               "name": "Frame",
               "cells": [
                 "For agencies and resellers running whole client portfolios under one roof.",
-                "100 sites · 250 collaborators · full white-label incl. custom console domain · 5M API requests/mo · unlimited records & variables · 20 POS registers per site · 130,000 campaign emails/mo"
+                "100 sites · 5 collaborators · full white-label incl. custom console domain · 85k API requests/mo · unlimited records & variables · 20 POS registers per site · 130,000 campaign emails/mo"
               ]
             },
             {
@@ -489,7 +489,7 @@
               "name": "row",
               "cells": [
                 "Storage per site",
-                "10 GB"
+                "5 GB"
               ]
             },
             {
@@ -497,7 +497,7 @@
               "name": "row",
               "cells": [
                 "Bandwidth / mo",
-                "125 GB"
+                "25 GB"
               ]
             },
             {
@@ -576,7 +576,7 @@
               "name": "row",
               "cells": [
                 "Team seats",
-                "5 · max 20"
+                "3 · max 20"
               ]
             },
             {
@@ -584,7 +584,7 @@
               "name": "row",
               "cells": [
                 "Site collaborators",
-                "10 · max 25"
+                "3 · max 25"
               ]
             },
             {
@@ -623,7 +623,7 @@
               "name": "row",
               "cells": [
                 "Datasets",
-                "15 · max 50"
+                "5 · max 50"
               ]
             },
             {
@@ -719,7 +719,7 @@
               "name": "row",
               "cells": [
                 "Campaign emails / mo",
-                "5,000"
+                "2,500"
               ]
             },
             {
@@ -946,7 +946,7 @@
       "name": "Usage pricing",
       "order": 3,
       "widthPx": 375,
-      "heightPx": 1277,
+      "heightPx": 1317,
       "groups": [
         {
           "figmaNodeId": "268:2170",
@@ -980,7 +980,14 @@
               "figmaNodeId": "268:2268",
               "name": null,
               "cells": [
-                "Pass-through cost + 30%. No markup games."
+                "Pass-through at cost + 30%, after card fees."
+              ]
+            },
+            {
+              "figmaNodeId": "2253:2354",
+              "name": null,
+              "cells": [
+                "Video, audio, file downloads and other media served from our servers count 1.6× toward bandwidth, because serving them costs more than serving pages."
               ]
             },
             {
@@ -1003,7 +1010,7 @@
               "name": "youpay",
               "cells": [
                 "You pay",
-                "$0.0338 / GB-mo"
+                "$0.0349 / GB-mo"
               ]
             },
             {
@@ -1018,7 +1025,7 @@
               "name": "ourcost",
               "cells": [
                 "Our cost",
-                "$0.161538 / 1k views"
+                "$0.615385 / 1k views"
               ]
             },
             {
@@ -1026,7 +1033,7 @@
               "name": "youpay",
               "cells": [
                 "You pay",
-                "$0.21 / 1k views"
+                "$0.83 / 1k views"
               ]
             },
             {
@@ -1041,7 +1048,7 @@
               "name": "ourcost",
               "cells": [
                 "Our cost",
-                "$0.05 / 1k"
+                "$0.061538 / 1k"
               ]
             },
             {
@@ -1049,7 +1056,7 @@
               "name": "youpay",
               "cells": [
                 "You pay",
-                "$0.065 / 1k"
+                "$0.083 / 1k"
               ]
             }
           ]

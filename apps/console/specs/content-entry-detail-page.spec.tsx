@@ -58,8 +58,13 @@ const mockUseListQueryDouble = useListQueryDouble
 const mockUpdateDoc = jest.fn().mockResolvedValue(undefined)
 const mockSetDoc = jest.fn().mockResolvedValue(undefined)
 const mockEnqueueSnackbar = jest.fn()
-/** Resolved value of the confirmation dialog — per test. */
-const mockConfirm = jest.fn().mockResolvedValue(true)
+/**
+ * The confirmation dialog, per test. The real one resolves with NO value on
+ * OK and REJECTS on Cancel (AGL-3509): a mock resolving `true`/`false` is how
+ * a caller reading the resolved value as a boolean passed here while OK did
+ * nothing in the console.
+ */
+const mockConfirm = jest.fn().mockResolvedValue(undefined)
 
 const PUBLISHED_AT_SECONDS = 1_600_000_000
 
@@ -466,7 +471,8 @@ const Detail = () => (
 
 beforeEach(() => {
   jest.clearAllMocks()
-  mockConfirm.mockResolvedValue(true)
+  mockConfirm.mockReset()
+  mockConfirm.mockResolvedValue(undefined)
   mockEntries.status = 'success'
   mockEntries.fromCache = false
   mockEntries.data = [
@@ -640,7 +646,7 @@ describe('the entry detail is its OWN route (AGL-2498)', () => {
   })
 
   it('asks before dropping unsaved edits, and NO keeps them', async () => {
-    mockConfirm.mockResolvedValue(false)
+    mockConfirm.mockRejectedValue(undefined)
     at('/acme/hosts/shop/content/blog/entries/entry-1')
     render(<Detail />)
     fireEvent.change(screen.getByLabelText('Title'), {
@@ -656,6 +662,21 @@ describe('the entry detail is its OWN route (AGL-2498)', () => {
       'Hello world, rewritten',
     )
     expect(mockNav.pushed).toEqual([])
+  })
+
+  it('asks before dropping unsaved edits, and OK leaves (AGL-3509)', async () => {
+    // OK resolves with no value. A guard that read that as "no" asked, was
+    // agreed with, and stayed — the bug the mock's old `true` hid.
+    at('/acme/hosts/shop/content/blog/entries/entry-1')
+    render(<Detail />)
+    fireEvent.change(screen.getByLabelText('Title'), {
+      target: { value: 'Hello world, rewritten' },
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /Back to entries/ }))
+
+    await waitFor(() => expect(lastPushed()).toBe('/acme/hosts/shop/content/blog'))
+    expect(mockConfirm).toHaveBeenCalledTimes(1)
   })
 
   it('treats a SAVED entry as clean, and returns to its COLLECTION', async () => {

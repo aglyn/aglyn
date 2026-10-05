@@ -22,6 +22,7 @@ import {
   removeMediaDeliveryCopies,
   withoutMediaDeliveryCopies,
 } from './media-delivery'
+import { mediaDerivedObjectPaths } from './media-variants'
 
 /**
  * What a DAM delete has to leave behind for an undo to be possible at all
@@ -293,10 +294,9 @@ export async function deleteMediaWithTombstone(options: {
     return { deleted: false }
   }
 
-  const variantWidths: number[] = snapshot.get('variants') ?? []
-  const variantPaths = variantWidths.map(
-    (width) => `${objectPath}__w${width}.webp`,
-  )
+  // Every derived object, not only the variants (AGL-3486): a display copy,
+  // a film's poster and its renditions are kept and restored with the rest.
+  const variantPaths = mediaDerivedObjectPaths(objectPath, snapshot)
   // BEFORE the delete — the whole point. See `captureObjectGenerations`.
   const objects = await captureObjectGenerations(bucket, [
     objectPath,

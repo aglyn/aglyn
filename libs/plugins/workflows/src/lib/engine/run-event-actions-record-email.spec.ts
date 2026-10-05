@@ -109,7 +109,21 @@ const collectionHandle = (path: string): any => {
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
   firebaseAdmin: {
-    app: () => ({ firestore: () => ({ collection: (name: string) => collectionHandle(name) }) }),
+    app: () => ({
+      firestore: () => ({
+        collection: (name: string) => collectionHandle(name),
+        // The run meter's write and its seed (AGL-3472), sunk like the
+        // counter writes always were here.
+        batch: () => ({ set: () => undefined, commit: async () => undefined }),
+        runTransaction: async (body: (transaction: any) => Promise<any>) =>
+          await body({
+            get: async (ref: any) => await ref.get(),
+            getAll: async (...refs: any[]) =>
+              await Promise.all(refs.map((ref) => ref.get())),
+            set: () => undefined,
+          }),
+      }),
+    }),
   },
   getOrgForHost: async () => (mockOwned ? { orgId: ORG_ID, org: mockOrg } : { orgId: null, org: mockOrg }),
   resolveOrgIdForHost: async () => (mockOwned ? ORG_ID : null),

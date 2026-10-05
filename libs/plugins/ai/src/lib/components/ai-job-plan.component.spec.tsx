@@ -43,6 +43,7 @@ const PLAN = {
       slug: 'home',
       layout: 'new:Frame',
       template: null,
+      record: null,
       duplicateOf: null,
       nav: true,
       seoTitle: 'Home',

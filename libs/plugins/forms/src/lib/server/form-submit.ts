@@ -49,6 +49,8 @@ import { writeFormRecordTarget } from '@aglyn/aglyn/plugin-manager/submission-re
 import { pluginRecordPageLink } from '@aglyn/aglyn/plugin-manager/plugin-record-pages'
 import { FieldValue } from 'firebase-admin/firestore'
 import { isCredentialFieldName } from '@aglyn/shared-util-email/hosted-page-screen'
+import { FORMS_OFF_FOR_SITE_REFUSAL, formSubmissionDoorPlugin } from '../model/form-door'
+import { FORM_ABUSE_CEILING_CODE } from '../model/form-unavailable'
 import { incrementFormStats } from './increment-form-stats'
 import {
   NO_CLIENT_ADDRESS_BUCKET,
@@ -141,7 +143,7 @@ async function recordAbuseCeilingTrip(
       // toward the bill, and the counter is month-keyed, so forms accept
       // again at the UTC month boundary — the same date the inbox notice
       // prints. `{site}` is the site's name, filled by `notifyHostManagers`.
-      const reopens = Aglyn.formCeilingResetAt().toLocaleDateString('en-US', {
+      const reopens = Aglyn.nextUtcMonthStart().toLocaleDateString('en-US', {
         month: 'long',
         day: 'numeric',
         timeZone: 'UTC',
@@ -213,7 +215,7 @@ async function recordHoneypotHit(hostId: unknown): Promise<void> {
       .doc('formSubmissionsSpam')
       .set(
         {
-          [Aglyn.submissionMonthKey()]: FieldValue.increment(1),
+          [Aglyn.utcMonthKey()]: FieldValue.increment(1),
           lastSpamAtMs: Date.now(),
         },
         { merge: true },
@@ -398,15 +400,15 @@ export async function POST(request: Request): Promise<Response> {
       !Aglyn.isHostPluginEnabled(
         orgBilling as never,
         hostSnapshot.data() as never,
-        Aglyn.formSubmissionDoorPlugin(payload),
+        formSubmissionDoorPlugin(payload),
       )
     ) {
-      return json({ error: Aglyn.FORMS_OFF_FOR_SITE_REFUSAL }, 404)
+      return json({ error: FORMS_OFF_FOR_SITE_REFUSAL }, 404)
     }
     // Shared with the console surface that reads these counters back
     // (AGL-1666) — a differently-derived key there would read 0 refusals on
     // exactly the sites being refused.
-    const monthKey = Aglyn.submissionMonthKey()
+    const monthKey = Aglyn.utcMonthKey()
     const counterRef = hostRef.collection('counters').doc('formSubmissions')
     {
       // Plan-less orgs resolve as free (AGL-247) — the cap always runs.
@@ -445,7 +447,7 @@ export async function POST(request: Request): Promise<Response> {
             error: 'Submissions are paused for this site',
             // Machine-readable so a client can tell containment apart from
             // the plan wall it shares a status with.
-            code: Aglyn.FORM_ABUSE_CEILING_CODE,
+            code: FORM_ABUSE_CEILING_CODE,
             // The site's own published support address, when it has one
             // (AGL-1666). NOT the ceiling, the count or the plan: this body
             // is read by a stranger to the site, and the reason a site

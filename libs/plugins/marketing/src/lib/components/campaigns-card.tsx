@@ -77,7 +77,7 @@ import {
   type CampaignListRow,
   type CampaignSend,
   type EmailCampaign,
-} from '@aglyn/shared-ui-email-campaigns/model'
+} from '../model/campaign-container'
 import { CreateArtifactDrawer } from '@aglyn/shared-ui-jsx-forms'
 import {
   CAMPAIGN_SITE_SEARCH_NOTICE,

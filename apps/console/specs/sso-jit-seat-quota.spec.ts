@@ -242,11 +242,11 @@ beforeEach(() => {
 describe('the premise', () => {
   it('enterprise is the only plan that reaches this route, and its band is far above every case', () => {
     // So a refusal below can never be enterprise's own ceiling — the plan's
-    // fallback is 200 seats (twice Agency's, since 2026-09-07) and every case
-    // here sets a staff override under ten, which is the shape a seat-capped
-    // enterprise contract actually has.
+    // fallback is 20 seats (twice Agency's) and every case here sets a staff
+    // override under ten, which is the shape a seat-capped enterprise
+    // contract actually has.
     expect(PLAN_ENTITLEMENTS.enterprise.features.ssoEnabled).toBe(true)
-    expect(PLAN_ENTITLEMENTS.enterprise.managersPerOrg).toBe(200)
+    expect(PLAN_ENTITLEMENTS.enterprise.managersPerOrg).toBe(20)
   })
 })
 

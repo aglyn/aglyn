@@ -76,6 +76,8 @@ const CONSOLE_ALIASES = {
   // kept the old `…/screens-and-layouts/overview` URL alive derives
   // `screensAndLayouts` from its parent directory.
   team: '/workspace-and-billing/teams-and-roles/overview',
+  // The workspace's Import & export hub (AGL-3535); `importAndExport` stays the plugin guide's.
+  transferHub: '/workspace-and-billing/import-and-export',
   workflows: '/marketing-and-automation/workflows-and-actions/overview',
 }
 

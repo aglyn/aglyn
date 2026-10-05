@@ -121,7 +121,13 @@ below the cards, **Emails sent** across its sites, then the
 [Email campaigns](#staff-org-email) and [Organization
 automations](#staff-automations) cards when those plugins are installed.
 **Transfer organization ownership** is under **Edit organization**, and asks
-for a confirmation before it hands the organization over.
+for a confirmation before it hands the organization over. Beside it, **Hand off
+to a new owner** invites an address to take the organization over, and **Ask to
+upgrade** proposes a plan to its owner; see
+[Build a site for a client](#build-for-a-client). The **Members** card marks a
+staff member's row **staff · no seat**, and the seat usage in **Effective
+entitlements** counts managers the way the seat gates do, never staff and never
+site collaborators.
 
 #### Organization email campaigns {#staff-org-email}
 
@@ -269,10 +275,14 @@ A comp **bills nothing**, capped or uncapped:
 - **Old purchases don't come back.** Add-ons bought on the subscription that
   ended still don't count.
 
-A comp lasts until it is removed. If the organization later subscribes, the
-live subscription outranks the comp, which then shows as **dormant**. If that
-subscription ends, the comp applies again, so remove a comp when it should end.
-Only **Remove the comp on save** removes one. A save that doesn't mention the
+A comp lasts until it is removed, with one exception. A comp granted with the
+reason **Sales trial or proof of concept** is removed by the platform the moment
+the organization's subscription goes live, with an audit row
+(`org.subscriptionStarted.settle`) and an activity entry that say why, so a trial
+cannot hand the tier back for free if the customer later cancels. Any other comp
+stays: the live subscription outranks it, it shows as **dormant**, and if that
+subscription ends the comp applies again, so remove it when it should end. Only
+**Remove the comp on save** removes one by hand. A save that doesn't mention the
 comp, such as a quota edit or an older console tab, leaves it exactly as stored.
 The success message quotes the server's account of what took effect, for
 example *"Pro comp granted. Effective plan: Free → Pro."* or *"Uncapped
@@ -285,6 +295,41 @@ plan, a **stored:** chip when it differs from the stored plan, and a **comp:**
 chip that says **uncapped** and **dormant** where they apply. The override
 dialog's comp chip does the same, and the organization's AI card says when an
 uncapped comp is why the workspace has no AI credit band.
+
+### Build a site for a client {#build-for-a-client}
+
+How staff build a site for a prospect and hand it over. No seat override is needed
+at any step: staff take none of a workspace's seats.
+
+1. **Create the workspace and comp it.** Sign in with your staff account and create
+   a workspace for the client from the workspace chooser. Staff are not held to the
+   [free workspace limit](#free-workspace-limit), and your owner row is marked
+   **staff · no seat**, so the workspace's one Free team seat stays free. In the
+   [entitlement editor](#plan-comps), comp it to the tier you are selling with the
+   reason **Sales trial or proof of concept**.
+2. **Build the site.**
+3. **Hand it over.** On the organization's page (or the site's **Ownership** card),
+   choose **Hand off to a new owner**, enter the client's email, and choose whether
+   you **Stay on as an admin after the handoff** or **Leave after the handoff**. The
+   client is emailed. The invitation reserves no seat, and when the client accepts
+   they own the workspace and land on its home. Nothing asks them to upgrade.
+4. **The client evaluates** with the full tier the comp gives them.
+5. **Ask to upgrade.** When the evaluation is done, choose **Ask to upgrade**, pick
+   the plan, and add a note if you like. The owner gets an email, and the
+   workspace's billing managers see a card on the workspace's home and on Billing
+   with the plan preselected. **Withdraw proposal** takes it back.
+6. **The owner subscribes from Billing.** The comped tier's card offers **Start your
+   *plan* subscription** even though it shows as their current plan, and it runs the
+   ordinary checkout.
+7. **It cleans up after itself.** When the subscription goes live, the proposal and
+   the sales-trial comp are removed, each with an audit row. A comp granted for any
+   other reason stays dormant until you remove it.
+
+A non-staff owner on a plan with no free team seat cannot hand off and stay on: the
+handoff is refused when it is sent and points them to **Leave after the handoff**,
+because staying would add a second manager the plan does not include. Revoking
+someone's staff role takes the **no seat** mark off their rows and pending invites,
+so they take a seat like anyone else from then on.
 
 ### Site management {#sites-admin}
 
@@ -350,6 +395,9 @@ transfer the owner makes from Settings › Ownership: the new owner takes over
 billing and every site of the organization, and the previous owner stays on as
 an admin. A transfer that would lock the organization out of its own single
 sign-on is refused, with the reason shown.
+
+The same card carries **Hand off to a new owner** and **Ask to upgrade**, the
+two steps of [Build a site for a client](#build-for-a-client).
 
 #### Move a site to another organization {#site-transfer}
 
@@ -883,16 +931,68 @@ type — **Percent off** or **Fixed amount off** — a **Duration** of *Once*, *
 redemptions** cap and an expiry date. A coupon with no code is applied by staff to a
 subscription; a coupon with one can be typed by the customer at checkout.
 
-Before you commit, the form shows a **net-margin rating** for the discount — what is
-left after Stripe's fees and the plan's own cost. It is illustrative only: the binding
-check runs on the server when the discount is actually applied, so a rating that looks
-survivable is not permission.
+The three durations cover the usual deal terms:
+
+| To offer | Choose | What it comes off |
+|---|---|---|
+| The first month off | *Once* | The first charge — the first month on monthly billing |
+| Off the annual purchase | *Once* | The first charge — on annual billing, the whole first year |
+| The first two (or N) months off | *Repeating*, 2 (or N) months | The charges in those months — on annual billing, the first annual charge |
+| A standing discount | *Forever* | Every charge |
+
+A fixed amount comes off each charge it reaches, so $100 off an annual purchase is $100
+off the year, not $100 a month.
+
+Before you commit, the form shows two readings. Neither stops you creating the coupon,
+apart from the sign-off a discount of 40% or more asks for.
+
+The **full-use cost** warning says what the discount spends. A code can be redeemed on
+any paid plan, monthly or annual, so the form prices the discount on every one of them as
+if the customer used everything the plan includes — every band at 100%, at the
+platform's own cost rates — on the charges the chosen duration reaches, after Stripe's
+fee. A discount that only spends the margin a plan carries above that cost is marked as
+covering it. One that reaches into the cost is shown as a warning: how many plan and
+billing combinations it is under on, and for the worst one, what each discounted charge
+keeps against what it costs, how far under that is, how many of the first twelve months
+it touches, and how the first year covers its cost as a whole. A first-month coupon
+can be under cost on its one charge and still leave the year well covered, and the
+warning says so. The form also shows the deepest percentage every plan carries on every
+charge. The coupon is created either way, and the server returns the same warning with it.
+Turning a code back on shows and returns the warning too, and a code a customer types at
+checkout is always applied — its verdict is recorded on the subscription in Stripe
+(`full_use_ok`, `full_use_coverage`, `full_use_first_year_coverage`) for staff to read,
+never shown to the customer.
+
+The **net-margin rating** is what is left after Stripe's fees and the cost of serving a
+typical customer. It is illustrative only: the binding check runs on the server when the
+discount is actually applied, so a rating that looks survivable is not permission.
 
 That percentage is a **contribution margin**: net revenue less infrastructure COGS, and
 nothing else. Support, customer acquisition and overhead are not in the figure anywhere,
 so treat it as a ceiling rather than a profit. The infrastructure number behind it is a
 per-site floor for almost every organization — measured usage only replaces it once it
 costs more than the floor, which no organization's usage does yet.
+
+#### Applying a coupon and quoting a custom price {#discount-floors}
+
+A coupon applied from an organization's page is judged on **that** organization: its
+plan, its entitlement overrides, the sites and seats it bought, the price it actually pays
+and its billing interval, on the charges the coupon's duration reaches. The card shows the
+full-use warning beside the net-margin rating, and the apply route returns it with its
+answer. It does not stop the discount: only the net-margin rating's **block** asks for
+**Override the margin floor**, exactly as before.
+
+The cancel flow's winback discount (50% off for two months) is offered and applied as
+before. Its full-use verdict on this organization is recorded on the applied winback for
+staff, never shown to the customer.
+
+The **Enterprise custom billing** card is the one place the full-use cost is a hard
+limit. A negotiated price is held to a higher bar: after
+Stripe's fee it must cover **1.3×** what the organization would cost using every band
+the deal's base plan, its overrides and its add-ons include. The card shows the figure as
+you type, and provisioning is refused below it, with the floor and the figures in the
+message. A band that is unlimited cannot be costed, so a deal on one cannot be
+provisioned until an entitlement override bounds it.
 
 #### Existing coupons {#existing-coupons}
 
@@ -920,8 +1020,10 @@ that is active, so a deactivated code is reported to the customer as one we do n
 recognize — deactivating is how a code is pulled mid-campaign, and activating is how a
 code that was turned off is put back. Both directions ask for confirmation first and are
 recorded in the staff audit log; turning a code back on for a discount of 40% or more
-also asks for the same sign-off creating it would. A discount already applied to a
-subscription is unaffected either way.
+also asks for the same sign-off creating it would, and shows the code's full-use warning.
+A discount already applied to a subscription is unaffected either way. The list's
+**Full-use cost** column marks each coupon as covering its cost or under it, with the
+worst plan's coverage; hover it for the figures.
 
 ### Do not contact {#contact-suppressions}
 

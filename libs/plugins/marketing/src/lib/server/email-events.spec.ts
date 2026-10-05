@@ -517,9 +517,7 @@ import { emailEventsHandler } from './email-events'
 // The REAL cap, not a local copy: a spec that retyped it would go on passing
 // after the value it asserts moved. (`suppressionId` is imported further
 // down, beside the block that explains why it is not recomputed here.)
-import {
-  CAMPAIGN_LINK_ROLLUP_MAX,
-} from '@aglyn/shared-ui-email-campaigns/model'
+import { SEND_LINK_ROLLUP_MAX } from '@aglyn/shared-ui-email-campaigns/model/send-report'
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -1909,19 +1907,19 @@ describe('the per-campaign link rollup', () => {
    */
   it('counts a click past the cap as overflow rather than dropping it', async () => {
     docs.set(CAMPAIGN_PATH, { ...REAL_CAMPAIGN })
-    for (let index = 0; index < CAMPAIGN_LINK_ROLLUP_MAX; index += 1) {
+    for (let index = 0; index < SEND_LINK_ROLLUP_MAX; index += 1) {
       await deliver(clickOn(`https://shop.example/p/${index}`))
     }
 
     await deliver(clickOn('https://shop.example/one-too-many'))
 
-    expect(linkRows()).toHaveLength(CAMPAIGN_LINK_ROLLUP_MAX)
+    expect(linkRows()).toHaveLength(SEND_LINK_ROLLUP_MAX)
     expect((docs.get(LINKS_PATH) as any).overflowClicks).toBe(1)
   })
 
   it('still counts a repeat of a link already in the map once the cap is full', async () => {
     docs.set(CAMPAIGN_PATH, { ...REAL_CAMPAIGN })
-    for (let index = 0; index < CAMPAIGN_LINK_ROLLUP_MAX; index += 1) {
+    for (let index = 0; index < SEND_LINK_ROLLUP_MAX; index += 1) {
       await deliver(clickOn(`https://shop.example/p/${index}`))
     }
 

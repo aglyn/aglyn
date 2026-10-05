@@ -77,9 +77,11 @@ See [Org automations](org-automations.md).
 ## Run history and the run allowance {#run-history}
 
 The **Workflows** and **Actions** tabs each open with a line reading
-`1,284 action runs this month · 50,000 included` — the metered run allowance this site is
-spending. When a site reaches the month's limit, triggered automations stop running
-rather than queueing or billing on.
+`1,284 action runs this month · 50,000 included` — the metered run allowance your
+workspace is spending. The allowance is the workspace's, not each site's: every site's
+runs count against it, and the organization's **Automation** page shows the same line.
+When the workspace reaches the month's limit, triggered automations stop running on every
+site rather than queueing or billing on.
 
 Each row has a **Runs** button opening a five-column table — **Time**, **Trigger**,
 **Who**, **Result**, **What happened** — with **Succeeded**, **Failed** and **Skipped** chips. The

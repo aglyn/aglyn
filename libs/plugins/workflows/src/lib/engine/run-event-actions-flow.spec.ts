@@ -140,9 +140,23 @@ const collectionHandle = (path: string): any => ({
 
 const firestore: any = {
   collection: (name: string) => collectionHandle(name),
+  // The run meter's one write: the site's counter and the workspace's.
+  batch: () => {
+    const writes: Array<() => Promise<void>> = []
+    return {
+      set: (ref: any, data: any, options?: { merge?: boolean }) => {
+        writes.push(() => ref.set(data, options))
+      },
+      commit: async () => {
+        for (const write of writes) await write()
+      },
+    }
+  },
   runTransaction: async (body: (transaction: any) => Promise<any>) =>
     await body({
       get: async (ref: any) => await ref.get(),
+      getAll: async (...refs: any[]) =>
+        await Promise.all(refs.map((ref) => ref.get())),
       set: async (ref: any, data: any) => {
         await ref.set(data)
       },
@@ -343,6 +357,11 @@ describe('the rest of the flow runs when the wait ends', () => {
     expect(mockCounters[`hosts/${HOST_ID}/counters/actionRuns`][month]).toEqual(
       { __increment: 1 },
     )
+    // The workspace's counter too (AGL-3472): a resume spends the band it
+    // is never refused by.
+    expect(mockCounters['orgs/org-1/counters/actionRuns'][month]).toEqual({
+      __increment: 1,
+    })
   })
 
   it('waits again at a second wait step', async () => {

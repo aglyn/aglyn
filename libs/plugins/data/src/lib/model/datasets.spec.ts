@@ -306,6 +306,29 @@ describe('datasets', () => {
       })
     })
 
+    it('takes a JSON array or a real array for a list, as a workflow step or form sends one (AGL-3496)', () => {
+      // An automation payload carries a list as the JSON it was serialized
+      // to, or as the array itself. Split on commas it was stored as
+      // `["[\"red\"", "\"blue\"]"]`.
+      for (const input of [
+        { tags: '["red","blue"]', reviewers: '["p1","p2"]' },
+        { tags: ['red', ' blue '], reviewers: ['p1', 'p2', ''] },
+      ]) {
+        const accepted = write(input)
+        expect(accepted.errors).toEqual({})
+        expect(accepted.values).toEqual({
+          tags: ['red', 'blue'],
+          reviewers: ['p1', 'p2'],
+        })
+      }
+      // The update leg merges through the same coercion.
+      const merged = prepareDatasetRecordWrite({ model: typed }, { tags: '["green"]' }, {
+        existing: { name: 'Ada', tags: ['red'] },
+      })
+      expect(merged.values).toEqual({ name: 'Ada', tags: ['green'] })
+      expect(write({ tags: 7 }).errors['tags']).toMatch(/must be a list/)
+    })
+
     it('stores a number or boolean sent to a text field as its text', () => {
       const accepted = write({ name: 42, tier: 'Gold' })
       expect(accepted.values['name']).toBe('42')

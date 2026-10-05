@@ -36,7 +36,7 @@ import {
   campaignListUnsubscribe,
   campaignSiteIds,
   campaignUtmLabels,
-} from '@aglyn/shared-ui-email-campaigns/model/campaign-container'
+} from '../model/campaign-container'
 
 /** One option in the list or topic picker. */
 export interface CampaignEditOption {

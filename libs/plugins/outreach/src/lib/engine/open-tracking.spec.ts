@@ -18,9 +18,12 @@
 import {
   escapeOutreachHtml,
   judgeOutreachOpen,
+  OUTREACH_OPEN_AGENT_MAX,
   OUTREACH_OPEN_HUMAN_DELAY_MS,
+  outreachOpenAgentEvidence,
   outreachOpenTrackedHtml,
 } from './open-tracking'
+import { outreachOpenSourceOf, type OutreachOpenSource } from './open-source'
 
 const PIXEL = 'https://links.acme.io/Ab3dE9xK2q'
 const CHROME =
@@ -85,5 +88,65 @@ describe('who opened: a person, or a machine (AGL-3395)', () => {
     expect(judge(CHROME, OUTREACH_OPEN_HUMAN_DELAY_MS).human).toBe(true)
     // A clock a second behind is a person, not a time traveller.
     expect(judge(CHROME, -1_000).human).toBe(true)
+  })
+})
+
+describe('who opened, by where the fetch came from (AGL-3488)', () => {
+  const GMAIL = 'Mozilla/5.0 (Windows NT 5.1; rv:11.0) Gecko Firefox/11.0 (via ggpht.com GoogleImageProxy)'
+  const PREFETCH =
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/42.0.2311.135 Safari/537.36 Edge/12.246'
+  const judge = (userAgent: string | null, source: OutreachOpenSource | null, sinceSentMs = 3_600_000) =>
+    judgeOutreachOpen({ method: 'GET', userAgent, sinceSentMs, source })
+
+  it('reads the network from the address, and says unknown rather than other when there is none', () => {
+    expect(outreachOpenSourceOf('66.249.84.10')).toBe('google')
+    expect(outreachOpenSourceOf('2a00:1450:4864:20::12b')).toBe('google')
+    // Google Cloud customer space is somebody's VM, not Google's mail.
+    expect(outreachOpenSourceOf('34.120.1.1')).toBe('other')
+    expect(outreachOpenSourceOf('40.107.22.5')).toBe('microsoft_filter')
+    expect(outreachOpenSourceOf('2a01:111:f403:c200::1')).toBe('microsoft_filter')
+    expect(outreachOpenSourceOf('52.97.1.1')).toBe('microsoft')
+    expect(outreachOpenSourceOf('172.225.9.1')).toBe('apple')
+    expect(outreachOpenSourceOf('2a09:bac3:1::1')).toBe('apple')
+    expect(outreachOpenSourceOf('17.58.1.1')).toBe('apple')
+    expect(outreachOpenSourceOf('98.139.1.1')).toBe('yahoo')
+    expect(outreachOpenSourceOf('::ffff:66.249.84.10')).toBe('google')
+    expect(outreachOpenSourceOf('203.0.113.9')).toBe('other')
+    expect(outreachOpenSourceOf(null)).toBeNull()
+    expect(outreachOpenSourceOf('not an address')).toBe('other')
+  })
+
+  it('reads the bare Mozilla/5.0 as Apple only from Apple’s relay, and as a scanner from a mail network', () => {
+    expect(judge('Mozilla/5.0', 'apple').machineReason).toBe('privacy_proxy')
+    expect(judge('Mozilla/5.0', 'google').machineReason).toBe('scanner')
+    expect(judge('Mozilla/5.0', 'microsoft_filter').machineReason).toBe('scanner')
+    expect(judge('Mozilla/5.0', 'microsoft').machineReason).toBe('scanner')
+    expect(judge('Mozilla/5.0', 'other').machineReason).toBe('scanner')
+    // No address, no evidence against Apple: judged as it always was.
+    expect(judge('Mozilla/5.0', null).machineReason).toBe('privacy_proxy')
+  })
+
+  it('keeps Gmail’s image proxy the reader’s open from Google, and sets apart its prefetch', () => {
+    expect(judge(GMAIL, 'google')).toEqual({ human: true, machineReason: null })
+    expect(judge(GMAIL, null)).toEqual({ human: true, machineReason: null })
+    expect(judge(GMAIL, 'other').machineReason).toBe('agent')
+    expect(judge(PREFETCH, 'google').machineReason).toBe('scanner')
+    expect(judge(PREFETCH, null).machineReason).toBe('scanner')
+  })
+
+  it('sets apart anything else from Google’s network or Microsoft’s mail filter, whatever it calls itself', () => {
+    expect(judge(CHROME, 'google').machineReason).toBe('scanner')
+    expect(judge(CHROME, 'microsoft_filter').machineReason).toBe('scanner')
+    // Outlook on the web loads a reader's images through Microsoft's network.
+    expect(judge(CHROME, 'microsoft')).toEqual({ human: true, machineReason: null })
+    expect(judge(CHROME, 'other')).toEqual({ human: true, machineReason: null })
+    expect(judge(CHROME, 'yahoo').machineReason).toBe('image_proxy')
+  })
+
+  it('keeps the agent as evidence: one line, trimmed, bounded', () => {
+    expect(outreachOpenAgentEvidence('  Mozilla/5.0\r\nX: y ')).toBe('Mozilla/5.0 X: y')
+    expect(outreachOpenAgentEvidence('')).toBeNull()
+    expect(outreachOpenAgentEvidence(null)).toBeNull()
+    expect(outreachOpenAgentEvidence('a'.repeat(1000))).toHaveLength(OUTREACH_OPEN_AGENT_MAX)
   })
 })

@@ -155,7 +155,7 @@ describe('collaborator seat allocation (AGL-2439)', () => {
       expect(resolveHostCollaboratorCap(enterprise, 'host-unallocated')).toBe(
         UNLIMITED,
       )
-      expect(resolveHostCollaboratorCap({ plan: 'enterprise' } as any, 'host-a')).toBe(500)
+      expect(resolveHostCollaboratorCap({ plan: 'enterprise' } as any, 'host-a')).toBe(10)
     })
   })
 
@@ -177,11 +177,11 @@ describe('collaborator seat allocation (AGL-2439)', () => {
   })
 
   describe('THE GRANDFATHER: the cap binds allocation, never access', () => {
-    /** Pro site holding 14 collaborators against a corrected cap of 10. */
+    /** Pro site holding 7 collaborators against a corrected cap of 3. */
     const overCap = { plan: 'pro' } as any
 
     it('refuses the NEXT collaborator', () => {
-      const quota = checkHostCollaboratorQuota(overCap, 'host-a', 14)
+      const quota = checkHostCollaboratorQuota(overCap, 'host-a', 7)
       expect(quota.allowed).toBe(false)
       expect(quota.limit).toBe(PRO_CAP)
       expect(quota.remaining).toBe(0)
@@ -191,27 +191,27 @@ describe('collaborator seat allocation (AGL-2439)', () => {
       // Dropping the `Math.max(0, currentUsage - limit)` and returning a bare
       // difference reds the under-cap case below; hardcoding 0 reds this one.
       expect(
-        checkHostCollaboratorQuota(overCap, 'host-a', 14).retainedOverCap,
+        checkHostCollaboratorQuota(overCap, 'host-a', 7).retainedOverCap,
       ).toBe(4)
     })
 
     it('reports zero retention for a site UNDER its cap', () => {
       // A negative here would be headroom a caller could add and spend.
       expect(
-        checkHostCollaboratorQuota(overCap, 'host-a', 3).retainedOverCap,
+        checkHostCollaboratorQuota(overCap, 'host-a', 2).retainedOverCap,
       ).toBe(0)
-      expect(checkHostCollaboratorQuota(overCap, 'host-a', 3).allowed).toBe(true)
+      expect(checkHostCollaboratorQuota(overCap, 'host-a', 2).allowed).toBe(true)
     })
 
     it('lapses on its own when the plan or the allocation changes', () => {
       // The retention is DERIVED, not stored — this is what makes "until they
       // next change plan or seat count" automatic rather than a migration.
-      const upgraded = { plan: 'business' } as any
-      expect(checkHostCollaboratorQuota(upgraded, 'host-a', 14).allowed).toBe(
+      const upgraded = { plan: 'enterprise' } as any
+      expect(checkHostCollaboratorQuota(upgraded, 'host-a', 7).allowed).toBe(
         true,
       )
       expect(
-        checkHostCollaboratorQuota(upgraded, 'host-a', 14).retainedOverCap,
+        checkHostCollaboratorQuota(upgraded, 'host-a', 7).retainedOverCap,
       ).toBe(0)
 
       const assigned = {
@@ -219,11 +219,11 @@ describe('collaborator seat allocation (AGL-2439)', () => {
         seatAddons: { members: 5 },
         collaboratorAllocations: { 'host-a': 5 },
       } as any
-      expect(checkHostCollaboratorQuota(assigned, 'host-a', 14).allowed).toBe(
+      expect(checkHostCollaboratorQuota(assigned, 'host-a', 7).allowed).toBe(
         true,
       )
       expect(
-        checkHostCollaboratorQuota(assigned, 'host-a', 14).retainedOverCap,
+        checkHostCollaboratorQuota(assigned, 'host-a', 7).retainedOverCap,
       ).toBe(0)
     })
 

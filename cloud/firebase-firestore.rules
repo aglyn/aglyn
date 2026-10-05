@@ -1,7 +1,8 @@
 rules_version = '2';
-// SIZE: this source must stay under 256 KiB (262,144 bytes), COMMENTS INCLUDED.
-// The Rules API refuses a larger one at deploy with a bare 400, and nothing
-// that compiles it checks the limit; `npm run check:rules-size` does (AGL-3027).
+// DEPLOYS AS firebase-firestore.deploy.rules: this file without its comments,
+// line for line (AGL-3544). After an edit run `npm run generate:rules-deploy`
+// and commit both. The Rules API's 256 KiB limit applies to that artifact, and
+// `npm run check:rules-size` measures it (AGL-3027); comments here are free.
 service cloud.firestore {
   match /databases/{database}/documents {
     function isSignedIn() { return request.auth != null; }
@@ -207,6 +208,11 @@ service cloud.firestore {
      * the asset it sits on; freezing it here keeps a client from writing one
      * at all.
      *
+     * `display` (AGL-3486) records a display copy, and the CDN serves the
+     * object it names under the type it records; `variantEncoderVersion` and
+     * `variantRegeneration` decide when the CDN regenerates. All three are
+     * written by the server alone.
+     *
      * The rest — `cdnPath`, `contentHash`, `createdAt`, `sizeBytes`,
      * `svgSanitized`, `uploadedBy`, `url`, `variants`, `variantsError` — are
      * lower stakes individually, and are frozen for the AGL-1367 reason:
@@ -234,7 +240,8 @@ service cloud.firestore {
         'contentHash', 'contentSha256', 'sizeBytes', 'variants',
         'variantsError', 'svgSanitized', 'uploadedBy', 'createdAt',
         'video', 'poster', 'posterError', 'videoRenditions',
-        'deliveryCopies', 'embeddedMetadata']);
+        'deliveryCopies', 'embeddedMetadata', 'variantEncoderVersion',
+        'display', 'variantRegeneration']);
     }
     function mediaObjectFieldsUnchanged() {
       return !request.resource.data.diff(resource.data).affectedKeys().hasAny([
@@ -242,7 +249,8 @@ service cloud.firestore {
         'contentHash', 'contentSha256', 'sizeBytes', 'variants',
         'variantsError', 'svgSanitized', 'uploadedBy', 'createdAt',
         'video', 'poster', 'posterError', 'videoRenditions',
-        'deliveryCopies', 'embeddedMetadata']);
+        'deliveryCopies', 'embeddedMetadata', 'variantEncoderVersion',
+        'display', 'variantRegeneration']);
     }
 
     /**
@@ -620,7 +628,7 @@ service cloud.firestore {
              'suspendedMessage', 'suspendedUntilMs', 'suspendedMode',
              'suspendedEnforcement', 'suspended', 'crmInbound', 'acquisition',
              'consentGroups', 'consentGroupsAwaitConfirmation', 'consentGroupsChange',
-             'marketingConsentPolicy'])) ||
+             'marketingConsentPolicy', 'upgradeProposal'])) ||
         (isBillingStaff() &&
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(
             ['slug', 'ownerUid', 'createdByUid', 'hosts', 'enabledPlugins',
@@ -635,7 +643,7 @@ service cloud.firestore {
              'suspendedEnforcement', 'suspended',
              'erasureRequestedAt', 'crmInbound', 'acquisition',
              'consentGroups', 'consentGroupsAwaitConfirmation', 'consentGroupsChange',
-             'marketingConsentPolicy'])) ||
+             'marketingConsentPolicy', 'upgradeProposal'])) ||
         // `isVerified()` here rather than inside `canManageOrg()` (AGL-2589):
         // that helper is a READ gate too — `billing/stripe` and the member
         // roster ask it — and folding verification in would refuse those.
@@ -698,7 +706,12 @@ service cloud.firestore {
              'marketingConsentPolicy',
              // AGL-3320. The lock a consent group change holds; only the
              // Admin-SDK executor sets and clears it.
-             'consentGroupsChange']));
+             'consentGroupsChange',
+             // AGL-3466. The plan staff asked the workspace to buy. Written
+             // only by /api/admin/org-upgrade-proposal and the Stripe webhook,
+             // both Admin SDK and audited; on all three lists, because the
+             // proposal is the platform's statement to the customer.
+             'upgradeProposal']));
 
       /**
        * The commercial keys, moved off the org doc so a scoped site
@@ -1215,6 +1228,12 @@ service cloud.firestore {
       function canWriteOrgDatasets() {
         return canWriteOrgData() && memberResolves('data.manage');
       }
+      // The org-wide members `/api/transfer/*` admits (AGL-3524).
+      function canReadTransferJobs() {
+        return isOrgWideMember() && isVerified() &&
+          ((orgMember().role in ['owner', 'admin', 'editor'] && memberResolves('data.manage')) ||
+           memberStamps('data.manage'));
+      }
       /**
        * Write access to the org-wide records a site collaborator cannot read
        * (AGL-1026). Without this, an org role of `editor` scoped to one site
@@ -1490,9 +1509,11 @@ service cloud.firestore {
        * list key `emailStatus` (AGL-3321) stay closed: the senders' verdict
        * is not a member's to clear.
        *
-       * DELETE IS SOLE-HOLDER ONLY, as on a contact: one brand removing a
-       * lead must not destroy the sibling brand's record. Every other case
-       * is an update that drops this site's token.
+       * DELETE IS SOLE-HOLDER ONLY for a scoped member, as on a contact:
+       * one brand removing a lead must not destroy the sibling brand's
+       * record. Every other case is an update that drops this site's token.
+       * An org-wide member already holds every brand, so they may delete any
+       * lead in the org.
        */
       match /leads/{leadId} {
         allow read: if isStaff() || canReadScopedPeople();
@@ -1504,8 +1525,9 @@ service cloud.firestore {
            !request.resource.data.diff(resource.data).affectedKeys().hasAny(['emailState', 'emailStatus']));
         allow delete: if isStaff() ||
           (canWriteScopedCrm() &&
-           crmHeldScope().hasOnly(
-             orgMember().get('scopeTokens', ['org'])));
+           (isOrgWideMember() ||
+            crmHeldScope().hasOnly(
+              orgMember().get('scopeTokens', ['org']))));
       }
       // Segments are saved filters over the contacts above and are stamped
       // org-wide at creation, so they follow the same predicate: a segment
@@ -2083,6 +2105,14 @@ service cloud.firestore {
         allow read: if isStaff() || canManageOrg() ||
           (isOrgWideMember() && memberStamps('org.settings') &&
            memberStamps('data.manage'));
+        allow write: if false;
+      }
+
+      // An import's job (AGL-3524): written by the job engine behind
+      // `/api/transfer/*` alone, read by the members it admits. Its chunks,
+      // ledger, results and undo match no rule: the routes serve them.
+      match /transferJobs/{jobId} {
+        allow read: if isStaff() || canReadTransferJobs();
         allow write: if false;
       }
 
@@ -3310,7 +3340,7 @@ service cloud.firestore {
         // by accident.
         allow read: if subcollection != 'siteMemberCredentials' &&
           (isStaff() || (isHostMember(hostId) &&
-            !(subcollection in ['webhooks', 'orders', 'mediaTombstones'])));
+            !(subcollection in ['webhooks', 'orders', 'mediaTombstones', 'packageImports'])));
         // THE EXCLUSION LISTS ARE THE MECHANISM. Sibling match blocks are OR'd
         // and the LOOSER one wins, so a dedicated deny (or a tighter dedicated
         // block) beside this catch-all decides nothing until the name is also
@@ -3411,6 +3441,11 @@ service cloud.firestore {
         //    path. A write forges someone else's preference, a delete puts an
         //    address back into a stream it left, and the Admin-SDK preference
         //    page is the only writer.
+        //  - `packageImports`, all three and READ (AGL-3533): a site package
+        //    import's record and undo snapshot (each replaced item's prior
+        //    content, the paths written). A read browses overwritten content;
+        //    a write forges what undo writes back past every allow-list.
+        //    Only the import route reads or writes it.
         //  - `siteMembers`, all three (AGL-3308): its block below re-grants
         //    the suspend flag and a delete that strands no credential.
         //    `siteMemberCredentials` holds the password hashes; the `!=` that
@@ -3422,7 +3457,7 @@ service cloud.firestore {
               'locations', 'products', 'components', 'registers', 'installs',
               'templates', 'collections', 'datasets', 'webhooks', 'orders',
               'counters', 'analytics', 'screenAnalytics', 'pageReviews', 'members',
-              'media', 'mediaTombstones', 'formSubmissions', 'forms', 'actions',
+              'media', 'mediaTombstones', 'packageImports', 'formSubmissions', 'forms', 'actions',
               'authors', 'carts', 'memberPosts', 'pluginSettings',
               'checkouts', 'giftCards', 'stripeTaxRates', 'restockAlerts',
               'inventoryReconciliation', 'stockHolds', 'themeHistory',
@@ -3430,13 +3465,19 @@ service cloud.firestore {
               'emailAttributions', 'campaignAttributions',
               'campaignSequenceReports',
               'flowEnrollments', 'leads', 'siteMembers',
-              'siteMemberCredentials']) &&
+              'siteMemberCredentials', 'recordPages']) &&
             // The org Inbox's collection-group read (AGL-3303) lists EVERY
             // `formSubmissions` collection, at any depth, filed under the org
             // a row names, so none may be minted beneath another name here.
             !string(document).matches('.*/formSubmissions/[^/]+')));
         // More names on all THREE lists, each server-written with no client
         // writer to break:
+        //
+        //  - `recordPages` (AGL-3475): a site's record templates. A binding
+        //    decides which page serves `/{base}/…` for every record of a
+        //    dataset, so the record-pages route writes it on the Admin SDK
+        //    after checking the dataset is shared with the site, the base is
+        //    free and the page is a template. Read stays with the catch-all.
         //
         //  - `campaigns`: one document per email SEND. `campaign-send.ts`
         //    stamps the audience and the consent and suppression populations,
@@ -3534,7 +3575,7 @@ service cloud.firestore {
               'webhooks', 'memberPosts', 'redirects', 'pluginSettings', 'forms',
               'formSubmissions',
               'counters', 'analytics', 'screenAnalytics', 'pageReviews', 'members',
-              'media', 'mediaTombstones', 'inventoryAdjustments', 'carts',
+              'media', 'mediaTombstones', 'packageImports', 'inventoryAdjustments', 'carts',
               'checkouts',
               'giftCards', 'stripeTaxRates', 'restockAlerts',
               'inventoryReconciliation', 'stockHolds', 'themeHistory',
@@ -3542,7 +3583,7 @@ service cloud.firestore {
               'emailAttributions', 'campaignAttributions',
               'campaignSequenceReports',
               'flowEnrollments', 'leads', 'siteMembers',
-              'siteMemberCredentials'])));
+              'siteMemberCredentials', 'recordPages'])));
         // `collections` joins the delete exclusion (AGL-947): a collection
         // owns `entries`, Firestore doesn't cascade, and a client delete
         // orphaned them — /api/resources/erase recursiveDeletes instead.
@@ -3585,13 +3626,15 @@ service cloud.firestore {
               'collections', 'datasets', 'orders', 'registers', 'webhooks',
               'counters', 'memberPosts', 'redirects', 'pluginSettings', 'forms',
               'analytics', 'screenAnalytics', 'pageReviews', 'members', 'mediaTombstones',
+              'packageImports',
               'inventoryAdjustments', 'carts', 'checkouts', 'giftCards',
               'stripeTaxRates', 'restockAlerts',
               'inventoryReconciliation', 'stockHolds', 'themeHistory',
               'topicOptOuts', 'emailFrequency', 'campaigns', 'emailCampaigns',
               'emailAttributions', 'campaignAttributions',
               'campaignSequenceReports',
-              'flowEnrollments', 'siteMembers', 'siteMemberCredentials'])));
+              'flowEnrollments', 'siteMembers', 'siteMemberCredentials',
+              'recordPages'])));
       }
       // Members-only posts (AGL-2372). Create and update are denied outright
       // by the exclusions above — /api/commerce/member-post is the only
@@ -3962,6 +4005,11 @@ service cloud.firestore {
       // Admin SDK, and shown to the owner only through the billing routes.
       match /aiUsage/{month} {
         allow read, write: if false;
+      }
+
+      // Remembered export choices per resource (AGL-3525): owner only.
+      match /transferPrefs/{resourceKey} {
+        allow read, write: if isSignedIn() && request.auth.uid == userId;
       }
     }
 

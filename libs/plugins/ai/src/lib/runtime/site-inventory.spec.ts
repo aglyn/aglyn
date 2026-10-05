@@ -262,7 +262,7 @@ describe('readSiteInventory — what is listed', () => {
       templates: [{ id: 'tpl-1', name: 'Service page', kind: 'page' }],
       forms: [{ id: 'frm-live', name: 'contact', fields: ['email', 'message'] }],
       // A v1 dataset's model is derived by the core reader, which names the fields for display.
-      datasets: [{ id: 'ds-team', name: 'Team', fields: ['Name', 'Role'] }],
+      datasets: [{ id: 'ds-team', name: 'Team', fields: ['Name', 'Role'], fieldIds: ['name', 'role'] }],
       collections: [{ id: 'col-blog', name: 'Blog', slug: 'blog' }],
       screens: [
         { id: 'scr-entry', name: 'Post', slug: 'post', layoutId: null, template: true },

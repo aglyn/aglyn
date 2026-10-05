@@ -17,19 +17,33 @@
 
 import { pipeline } from 'node:stream/promises'
 import {
+  type AglynOrgBilling,
+  BANDWIDTH_CAP_RETRY_AFTER_SECONDS,
+  bandwidthCapApplies,
+  bandwidthCapEngaged,
+  bandwidthCeilingDegradesHost,
+  bandwidthCeilingMonthKey,
   isLockdownActive,
   type LockdownState,
+  MEDIA_BANDWIDTH_DAY_FIELD,
   MEDIA_CDN_POSTER_PARAM,
   MEDIA_CDN_RENDITION_AUTO,
   MEDIA_CDN_RENDITION_PARAM,
   MEDIA_CDN_ROUTE,
+  MEDIA_CDN_VERSION_PARAM,
   MEDIA_POSTER_OBJECT_SUFFIX,
+  MEDIA_VARIANT_ENCODER_VERSION,
+  MEDIA_VARIANT_ENCODER_VERSION_FIELD,
+  type MediaCdnVersion,
   isSecurityClassLockdownReason,
+  mediaDisplayObjectPath,
   mediaPosterObjectPath,
+  mediaVariantEncoderVersionOf,
   mediaRenditionObjectPath,
   type MediaVideoRendition,
   normalizeHostLockdown,
   normalizeOrgLockdown,
+  parseMediaCdnVersionToken,
   parseMediaRenditions,
 } from '@aglyn/aglyn/server'
 // By path, and out of every barrel: see the module note in `media-cdn-scope`.
@@ -40,15 +54,31 @@ import {
   parseMediaCdnScope,
 } from '@aglyn/aglyn/app-utils/media-cdn-scope'
 import { mediaDeliveryProvider } from '@aglyn/aglyn/plugin-manager/media-delivery-provider'
+import {
+  parseSiteIconSpec,
+  SITE_ICON_BACKGROUND_PARAM,
+  SITE_ICON_PARAM,
+  SITE_ICON_VERSION_PARAM,
+} from '@aglyn/aglyn/app-utils/site-icon-set'
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { analyticsDayExpiresAt } from './analytics-retention'
 import { firebaseAdmin } from './firebase-admin'
+import { recordMediaServe } from './media-serve-count'
 import { getPlatformLockdown } from './lockdown'
+import {
+  engageMediaBandwidthCap,
+  mediaBandwidthEvaluationDue,
+} from './media-bandwidth-cap'
 import { mediaCdnRateLimitRefusal } from './media-cdn-rate-limit'
 import { mediaDeliveryOrgIdFor, mediaDeliveryRedirect } from './media-delivery'
+import {
+  mediaDeliveryCopiesStale,
+  regenerateMediaDeliveryCopies,
+} from './media-delivery-regeneration'
 import { getMediaQuarantine } from './media-quarantine'
 import { verifyMediaAccess } from './media-signing'
 import { mediaStoragePathInScope } from './media-storage-path'
+import { serveMediaCdnIcon } from './media-cdn-icon'
 
 /**
  * Variant widths generated at upload (AGL-175).
@@ -102,7 +132,20 @@ export function mediaCdnForwardedQuery(query: NextApiRequest['query']): string {
   // redirect must name the SAME representation the caller asked for, or a
   // stale content pin on a poster URL lands the browser on the master video
   // (AGL-2743).
-  for (const key of ['w', 'poster', 'r', 'download', 'exp', 'sig'] as const) {
+  // `icon`, `bg` and `v` for the same reason: a site icon (AGL-3484) behind a
+  // stale content pin must stay the icon, not become the full-size original.
+  for (const key of [
+    'w',
+    'poster',
+    'r',
+    'download',
+    SITE_ICON_PARAM,
+    SITE_ICON_BACKGROUND_PARAM,
+    SITE_ICON_VERSION_PARAM,
+    'exp',
+    'sig',
+    'aud',
+  ] as const) {
     const raw = query[key]
     const value = Array.isArray(raw) ? raw[0] : raw
     if (value !== undefined && value !== '') params.set(key, String(value))
@@ -175,6 +218,81 @@ export const MEDIA_CDN_STABLE_CACHE_CONTROL =
  */
 export const MEDIA_CDN_STABLE_EDGE_BYPASS_CACHE_CONTROL =
   'private, max-age=60'
+
+/**
+ * The VERSIONED stable URL's policy (AGL-3485): `?v={contentHash}.{encoder}`
+ * on the stable path, answered while the token names the asset's current
+ * bytes and current variants.
+ *
+ * The browser keeps it for a year, `immutable`, which is the whole point: the
+ * 60-second window above made every repeat view of every published image a
+ * conditional request, and Lighthouse reports that policy against each one.
+ * It is safe for the reason the content-hashed form never was in a page
+ * (AGL-2798): the page names this URL only while the token is current, the
+ * composition reads the token off the media document on every render, and a
+ * replace or a regeneration therefore moves the page to a new URL instead of
+ * leaving it on a pinned copy of the old bytes.
+ *
+ * The EDGE keeps the stable URL's hour and its revalidation, deliberately not
+ * a year: the edge is the copy a takedown or a lockdown has to outrun for
+ * every new visitor (`media-takedown-reach.ts`), and an hour is the bound the
+ * product states for it. Other visitors still get the edge's copy within that
+ * hour, which is what `s-maxage` is for. Images only — every other type keeps
+ * the stable policy, for the AGL-1515 reasons above.
+ */
+export const MEDIA_CDN_VERSIONED_CACHE_CONTROL =
+  'public, max-age=31536000, s-maxage=3600, stale-while-revalidate=86400, immutable'
+
+/**
+ * Whether a versioned request may be answered with
+ * {@link MEDIA_CDN_VERSIONED_CACHE_CONTROL} (AGL-3485).
+ *
+ * Only when everything the token promises is true of what is being served:
+ *
+ * - the token's content hash is the document's CURRENT one. A stale token is
+ *   served the current bytes under the stable URL's short policy — a stale
+ *   page shows the new picture, and nothing pins it;
+ * - the representation is the original or a `?w=` variant. A poster or a
+ *   rendition keeps its own policy;
+ * - for a `?w=` request, the variant itself is what is served. A width the
+ *   asset has no variant for falls back to another representation, and a
+ *   fallback is not something to keep for a year: the variant may be
+ *   generated later;
+ * - and the asset's delivery copies were made by the encoder generation the
+ *   token names, which is the one this code runs. The media document records
+ *   which generation made them (`MEDIA_VARIANT_ENCODER_VERSION_FIELD`, absent
+ *   meaning the first). A page rendered after the encoder moved on names the
+ *   new generation before the asset has been regenerated; answering that
+ *   request with the old encode for a year would hide the regeneration behind
+ *   the very URL that was minted to reach it. Asked of every request, not
+ *   only `?w=`, because the encoder makes what the bare URL serves too.
+ */
+export function mediaCdnVersionIsCurrent(options: {
+  token: MediaCdnVersion | null
+  currentHash: string
+  /** A `?w=` was asked for. */
+  widthRequested: boolean
+  /** The `?w=` variant itself is what will be served. */
+  variantServed: boolean
+  /** A poster or a rendition was selected instead of the image. */
+  otherRepresentation: boolean
+  /** The document's {@link MEDIA_VARIANT_ENCODER_VERSION_FIELD}. */
+  documentEncoderVersion: unknown
+}): boolean {
+  const { token, currentHash } = options
+  if (!token || !currentHash || token.contentHash !== currentHash) return false
+  if (options.otherRepresentation) return false
+  if (options.widthRequested && !options.variantServed) return false
+  const recorded = options.documentEncoderVersion
+  const generation =
+    typeof recorded === 'number' && Number.isInteger(recorded) && recorded > 0
+      ? recorded
+      : 1
+  return (
+    token.encoderVersion === MEDIA_VARIANT_ENCODER_VERSION &&
+    generation === token.encoderVersion
+  )
+}
 
 /** The immutable content-hashed URL's policy for edge-cacheable (image) types. */
 export const MEDIA_CDN_IMMUTABLE_CACHE_CONTROL =
@@ -387,16 +505,22 @@ export function lockdownStopsMediaDelivery(
  *
  * That lookup is one BatchGetDocuments at org scope, and two at host scope
  * — `hosts` and `hostIndex` batched together, then the owning org, whose id
- * is what `hostIndex` returns and so cannot join the batch. Every one of
- * them is projected to {@link SUSPENSION_FIELDS}: the verdict needs three
- * fields, and the host document is the largest in the product. Measured
- * against production, projecting the three reads and batching two of them
- * took the host branch from 3 round trips and 2,964 B to 2 and 34 B.
+ * is what `hostIndex` returns and so cannot join the batch. The host and
+ * index reads are projected to {@link SUSPENSION_FIELDS} plus the two fields
+ * the bandwidth verdict needs off them: the host document is the largest in
+ * the product. Measured against production, projecting the three reads and
+ * batching two of them took the host branch from 3 round trips and 2,964 B to
+ * 2 and 34 B. The ORG read is whole since AGL-3474, because the bandwidth
+ * verdict asks the org's plan, and the plan is resolved from more fields than
+ * a projection could promise to keep in step with — a mask missing one would
+ * read a paying org as Free and pause its video. Still one read per scope
+ * per TTL.
  *
  * **Staleness bound, stated rather than hidden:** a warm origin refuses
  * within ≤15s of the org-doc write (the platform panic number). What the
  * origin cannot reach: browsers hold the stable URL up to 60s
- * (`max-age=60`); Vercel's edge holds image responses up to `s-maxage=3600`
+ * (`max-age=60`), and a versioned image URL a published page names for a
+ * year in a browser that already fetched it (AGL-3485); Vercel's edge holds image responses up to `s-maxage=3600`
  * (+ one stale serve while revalidating) — so an already-edge-cached image
  * URL can serve up to ~1h into a lock; non-image types are `private`
  * (AGL-1515) and never edge-held. The immutable content-hashed form is
@@ -419,8 +543,39 @@ export function lockdownStopsMediaDelivery(
  */
 const MEDIA_CDN_LOCK_TTL_MS = 15_000
 
-const lockCache = new Map<string, { at: number; blocked: boolean }>()
-const lockPending = new Map<string, Promise<boolean>>()
+/**
+ * Everything the scope documents say about serving, read once per scope per
+ * {@link MEDIA_CDN_LOCK_TTL_MS}: the lockdown verdict and, off the same
+ * documents, the bandwidth one (AGL-3474).
+ */
+interface MediaCdnScopeVerdict {
+  /** A lockdown stops every byte (AGL-1520). */
+  locked: boolean
+  /**
+   * The bandwidth band stops video and files: the owning org's Free cap is
+   * engaged this month, or the site's abuse ceiling degrades it. The same two
+   * predicates the site's own pages are paused by, so a paused site's media
+   * stops with it — and only its counted media: images are inside the page
+   * weight the band already measures, and a paused site serves no page that
+   * could ask for one.
+   */
+  bandwidthPaused: boolean
+  /** The owning org is on a plan the cap stops rather than bills. */
+  capApplies: boolean
+  /** The org that owns the scope, when it is known. */
+  orgId: string | null
+}
+
+/** The verdict when nothing could be read: serve, the lockdown core's posture. */
+const OPEN_SCOPE_VERDICT: MediaCdnScopeVerdict = {
+  locked: false,
+  bandwidthPaused: false,
+  capApplies: false,
+  orgId: null,
+}
+
+const lockCache = new Map<string, { at: number; verdict: MediaCdnScopeVerdict }>()
+const lockPending = new Map<string, Promise<MediaCdnScopeVerdict>>()
 
 /**
  * Drop the per-scope lock cache. Tests need it between cases; production
@@ -457,6 +612,9 @@ const SUSPENSION_FIELDS = [
 /** Which host owns the asset's scope — the only field read off `hostIndex`. */
 const HOST_INDEX_ORG_FIELD = 'orgId'
 
+/** The site's abuse-ceiling stamp (AGL-2155), read beside its lockdown. */
+const HOST_BANDWIDTH_CEILING_FIELD = 'bandwidthCeiling'
+
 /** The `suspended*` field family off a snapshot, for the normalizers. */
 const suspensionCarrier = (snapshot: {
   get: (field: string) => unknown
@@ -469,37 +627,71 @@ const suspensionCarrier = (snapshot: {
     SUSPENSION_FIELDS.map((field) => [field, snapshot.get(field)]),
   )
 
-/** TTL-cached: does any lockdown covering `scope` stop delivery? */
-async function mediaCdnScopeLocked(scope: MediaCdnScope): Promise<boolean> {
+/**
+ * The verdict an org document gives: its lockdown and, when it is not locked,
+ * whether its bandwidth stops video and files. `host` is the site's projected
+ * document for a host-library scope, whose abuse ceiling (AGL-2155) pauses the
+ * site's own media as it pauses the site's pages; an org library belongs to
+ * no site, so only the org-wide cap reaches it.
+ */
+function orgScopeVerdict(
+  org: { get: (field: string) => unknown; data: () => unknown },
+  orgId: string,
+  host: { get: (field: string) => unknown } | null,
+  nowMs: number,
+): MediaCdnScopeVerdict {
+  if (lockdownStopsMediaDelivery(normalizeOrgLockdown(suspensionCarrier(org)), nowMs)) {
+    return { ...OPEN_SCOPE_VERDICT, locked: true, orgId }
+  }
+  const billing = (org.data() ?? null) as Partial<AglynOrgBilling> | null
+  const now = new Date(nowMs)
+  return {
+    locked: false,
+    bandwidthPaused:
+      bandwidthCapEngaged(billing, now) ||
+      (host !== null &&
+        bandwidthCeilingDegradesHost(
+          { [HOST_BANDWIDTH_CEILING_FIELD]: host.get(HOST_BANDWIDTH_CEILING_FIELD) },
+          bandwidthCeilingMonthKey(now),
+          billing,
+        )),
+    // A missing org document resolves as Free, but there is no org to total
+    // or to stamp, so nothing is evaluated for it.
+    capApplies: billing !== null && bandwidthCapApplies(billing),
+    orgId,
+  }
+}
+
+/** TTL-cached: what the documents covering `scope` say about serving it. */
+async function mediaCdnScopeVerdict(
+  scope: MediaCdnScope,
+): Promise<MediaCdnScopeVerdict> {
   const key = `${scope.isOrg ? 'org' : 'host'}:${scope.scopeId}`
   const cached = lockCache.get(key)
   if (cached && Date.now() - cached.at < MEDIA_CDN_LOCK_TTL_MS) {
-    return cached.blocked
+    return cached.verdict
   }
   let pending = lockPending.get(key)
   if (!pending) {
     pending = (async () => {
-      let blocked: boolean
+      let verdict: MediaCdnScopeVerdict = OPEN_SCOPE_VERDICT
       try {
         const nowMs = Date.now()
         // Platform first: cached, and a platform security lock is the panic
         // button — asset delivery is part of what it stops.
-        blocked = lockdownStopsMediaDelivery(await getPlatformLockdown(), nowMs)
-        const firestore = firebaseAdmin.app().firestore()
-        if (!blocked && scope.isOrg) {
+        if (lockdownStopsMediaDelivery(await getPlatformLockdown(), nowMs)) {
+          verdict = { ...OPEN_SCOPE_VERDICT, locked: true }
+        } else if (scope.isOrg) {
+          const firestore = firebaseAdmin.app().firestore()
           // Org forms (`org:{orgId}` and `org:{orgId}:{hostId}`): the org
           // doc governs. The context host's own lock is not consulted — a
           // suspended HOST's pages 503 already, and which sites may USE an
           // org asset is `visibleTo`'s question, not the lock's.
           const [org] = await firestore.getAll(
             firestore.collection('orgs').doc(scope.scopeId),
-            { fieldMask: [...SUSPENSION_FIELDS] },
           )
-          blocked = lockdownStopsMediaDelivery(
-            normalizeOrgLockdown(suspensionCarrier(org)),
-            nowMs,
-          )
-        } else if (!blocked) {
+          verdict = orgScopeVerdict(org, scope.scopeId, null, nowMs)
+        } else {
           // Host-library form: the host's own lock, and the OWNING org's —
           // an org lock never stamps host docs (AGL-1506), so a host-only
           // read would silently miss the very lock this issue is about.
@@ -509,40 +701,52 @@ async function mediaCdnScopeLocked(scope: MediaCdnScope): Promise<boolean> {
           // BatchGetDocuments round trips where the batch is one. The org
           // read below cannot join them — its id is what `hostIndex`
           // returns — so two is the floor for this branch, not three.
+          const firestore = firebaseAdmin.app().firestore()
           const [host, hostIndex] = await firestore.getAll(
             firestore.collection('hosts').doc(scope.scopeId),
             firestore.collection('hostIndex').doc(scope.scopeId),
-            { fieldMask: [...SUSPENSION_FIELDS, HOST_INDEX_ORG_FIELD] },
-          )
-          blocked = lockdownStopsMediaDelivery(
-            normalizeHostLockdown(suspensionCarrier(host)),
-            nowMs,
+            {
+              fieldMask: [
+                ...SUSPENSION_FIELDS,
+                HOST_INDEX_ORG_FIELD,
+                HOST_BANDWIDTH_CEILING_FIELD,
+              ],
+            },
           )
           const orgId = hostIndex.get(HOST_INDEX_ORG_FIELD)
-          if (!blocked && typeof orgId === 'string' && orgId) {
-            const [org] = await firestore.getAll(
-              firestore.collection('orgs').doc(orgId),
-              { fieldMask: [...SUSPENSION_FIELDS] },
-            )
-            blocked = lockdownStopsMediaDelivery(
-              normalizeOrgLockdown(suspensionCarrier(org)),
+          if (
+            lockdownStopsMediaDelivery(
+              normalizeHostLockdown(suspensionCarrier(host)),
               nowMs,
             )
+          ) {
+            verdict = { ...OPEN_SCOPE_VERDICT, locked: true }
+          } else if (typeof orgId === 'string' && orgId) {
+            const [org] = await firestore.getAll(
+              firestore.collection('orgs').doc(orgId),
+            )
+            verdict = orgScopeVerdict(org, orgId, host, nowMs)
           }
         }
       } catch {
         // Fail open — the lockdown core's posture (see lockdown.ts): an
-        // unreachable Firestore is an outage, not a lockdown.
-        blocked = false
+        // unreachable Firestore is an outage, not a lockdown, and it is not a
+        // spent band either.
+        verdict = OPEN_SCOPE_VERDICT
       }
-      lockCache.set(key, { at: Date.now(), blocked })
-      return blocked
+      lockCache.set(key, { at: Date.now(), verdict })
+      return verdict
     })().finally(() => {
       lockPending.delete(key)
     })
     lockPending.set(key, pending)
   }
   return pending
+}
+
+/** TTL-cached: does any lockdown covering `scope` stop delivery? */
+async function mediaCdnScopeLocked(scope: MediaCdnScope): Promise<boolean> {
+  return (await mediaCdnScopeVerdict(scope)).locked
 }
 
 /**
@@ -616,6 +820,47 @@ export function wantsMediaDownload(value: unknown): boolean {
   const raw = Array.isArray(value) ? value[0] : value
   const normalized = String(raw ?? '').toLowerCase()
   return normalized === '1' || normalized === 'true'
+}
+
+/**
+ * The display copy a media document records (AGL-3486), or null when it has
+ * none. Only the type is needed to serve it — the object path is derived — and
+ * a record whose type is not an image is treated as no record: the display
+ * copy is always an image, and serving its object under another type would be
+ * a document field choosing a response's `Content-Type`.
+ */
+export function mediaCdnDisplayCopy(
+  value: unknown,
+): { contentType: string } | null {
+  if (!value || typeof value !== 'object') return null
+  const contentType = (value as { contentType?: unknown }).contentType
+  if (typeof contentType !== 'string' || !/^image\/[a-z0-9.+-]+$/.test(contentType)) {
+    return null
+  }
+  return { contentType }
+}
+
+/**
+ * Runs `task` once the response has been sent, through Next's `after()`.
+ * Required when first asked for rather than imported, for the reason
+ * `capture-email-check.ts` gives; false where there is no request to run
+ * after — a spec, a script — and the task is then not run at all.
+ */
+function scheduleAfterResponse(task: () => Promise<void>): boolean {
+  try {
+    const loaded = require('next/server') as {
+      after?: (task: () => Promise<void>) => void
+    }
+    if (typeof loaded?.after !== 'function') return false
+    loaded.after(() =>
+      task().catch((error) => {
+        console.error('[media-cdn] after-response task failed', error)
+      }),
+    )
+    return true
+  } catch {
+    return false
+  }
 }
 
 /**
@@ -893,6 +1138,25 @@ function clearMediaCdnRepresentation(res: NextApiResponse): void {
 }
 
 /**
+ * Note `bytes` of counted media against the scope's org on this instance, and
+ * when that makes it due, total the org's month and engage the Free cap
+ * (AGL-3474; see `media-bandwidth-cap.ts`).
+ *
+ * Only for an org whose plan the cap stops and that is not already paused,
+ * both read off the cached scope verdict, so a paying org's delivery reads
+ * nothing for it. Never rejects.
+ */
+async function mediaCdnBandwidthEvaluation(
+  scope: MediaCdnScope,
+  bytes: number,
+): Promise<void> {
+  const verdict = await mediaCdnScopeVerdict(scope)
+  if (!verdict.capApplies || verdict.bandwidthPaused || !verdict.orgId) return
+  if (!mediaBandwidthEvaluationDue(verdict.orgId, bytes)) return
+  await engageMediaBandwidthCap(verdict.orgId)
+}
+
+/**
  * CDN media delivery (AGL-175 / AGL-829). Two URL shapes resolve the same
  * asset by `mediaId`, so delivery never depends on the object's storage
  * location (folder moves don't change the URL):
@@ -1102,6 +1366,7 @@ export async function serveMediaCdn(
       const signed = verifyMediaAccess(scopeSegment, mediaId, {
         exp: Number(req.query['exp'] ?? 0),
         sig: String(req.query['sig'] ?? ''),
+        aud: req.query['aud'] === 'team' ? 'team' : undefined,
       })
       setCacheControl('private, no-store')
       if (!signed) {
@@ -1109,6 +1374,21 @@ export async function serveMediaCdn(
         return
       }
     }
+    /*
+     * WHAT COUNTS TOWARD THE BANDWIDTH BAND (AGL-3474).
+     *
+     * Every type the edge never holds, because each such response leaves from
+     * origin. A public image is the exception: it is inside the page weight
+     * the band already measures, and the edge serves most of it. A PRIVATE
+     * image is not — it cannot be placed on a page, and `no-store` sends every
+     * request to origin — so it counts like a file. The one serve that never
+     * counts is the workspace previewing its own private library in the
+     * console: its signature names the team (`aud=team`, inside the HMAC, so
+     * a visitor's link cannot claim it).
+     */
+    const teamPreview = isPrivate && req.query['aud'] === 'team'
+    const countsTowardBand = (type: unknown) =>
+      !teamPreview && (isPrivate || !mediaCdnEdgeCacheable(type))
     /**
      * A stale hash on the immutable form REDIRECTS to the stable URL
      * (AGL-2685). It used to 404.
@@ -1149,6 +1429,50 @@ export async function serveMediaCdn(
         `${MEDIA_CDN_ROUTE}/${scopeSegment}/${mediaId}${mediaCdnForwardedQuery(req.query)}`,
       )
       res.status(302).end()
+      return
+    }
+
+    /*
+     * A site icon (AGL-3484): one size of the favicon, touch icon or manifest
+     * set, drawn from this asset's bytes. Past every gate above and ahead of
+     * every other representation, which it excludes — see `media-cdn-icon.ts`.
+     */
+    const iconSpec = parseSiteIconSpec(req.query[SITE_ICON_PARAM])
+    if (iconSpec) {
+      const iconBase = `${isOrg ? 'orgs' : 'hosts'}/${scopeId}`
+      const iconFile = firebaseAdmin
+        .app()
+        .storage()
+        .bucket(process.env['NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET'])
+        .file(
+          mediaStoragePathInScope({
+            storagePath: snapshot.get('storagePath'),
+            base: iconBase,
+            mediaId,
+          }),
+        )
+      await serveMediaCdnIcon({
+        req,
+        res,
+        spec: iconSpec,
+        source: {
+          contentType: snapshot.get('contentType'),
+          contentHash: currentHash,
+          stablePath: `${MEDIA_CDN_ROUTE}/${scopeSegment}/${mediaId}`,
+          file: iconFile as never,
+        },
+        setCacheControl,
+        cacheControl: {
+          stable: MEDIA_CDN_STABLE_CACHE_CONTROL,
+          immutable: MEDIA_CDN_IMMUTABLE_CACHE_CONTROL,
+        },
+        rateLimit: () =>
+          mediaCdnRateLimitRefusal({
+            headers: req.headers,
+            remoteAddress: req.socket?.remoteAddress,
+            rateClass: 'image',
+          }),
+      })
       return
     }
 
@@ -1239,6 +1563,35 @@ export async function serveMediaCdn(
     }
     const useVariant =
       !usePoster && !rendition && Boolean(width) && variants.includes(width)
+    // Read only here, past every gate — a refusal above returns before the
+    // parameter is ever looked at, so `?download=1` can never be the reason
+    // a response happens (AGL-1411).
+    const download = wantsMediaDownload(req.query['download'])
+    /*
+     * THE DISPLAY COPY (AGL-3486).
+     *
+     * An image whose original is larger than the delivery edge, carries EXIF,
+     * XMP or IPTC, or leans on an EXIF orientation has a display copy: the
+     * same format, downscaled, upright and stripped. It answers every INLINE
+     * request that is not a variant — the bare URL, and a `?w=` the asset has
+     * no variant for, which used to fall back to the original. That is the
+     * request a link preview, an email client and a CSS background make, and
+     * it used to hand them a 6 MB photo with the GPS position it was taken at.
+     *
+     * `?download=1` still serves the ORIGINAL, byte for byte: Download file is
+     * a promise the library makes, and it is the one request that asks for the
+     * file rather than for a picture of it.
+     */
+    const display = mediaCdnDisplayCopy(snapshot.get('display'))
+    const useDisplay =
+      !usePoster && !rendition && !useVariant && !download && display !== null
+    // The generation that made the variant or display copy, in its validator:
+    // a regeneration changes the bytes behind the same URL, and a browser
+    // revalidating the old encode must be sent the new one, not a 304.
+    const encoderVersion = mediaVariantEncoderVersionOf(
+      snapshot.get(MEDIA_VARIANT_ENCODER_VERSION_FIELD),
+    )
+    const encoderTag = encoderVersion > 1 ? `-e${encoderVersion}` : ''
     /**
      * The ETag's representation tag, and the cache key's conscience.
      *
@@ -1254,12 +1607,10 @@ export async function serveMediaCdn(
       : rendition
         ? `-r${rendition.key}`
         : useVariant
-          ? `-w${width}`
-          : ''
-    // Read only here, past every gate — a refusal above returns before the
-    // parameter is ever looked at, so `?download=1` can never be the reason
-    // a response happens (AGL-1411).
-    const download = wantsMediaDownload(req.query['download'])
+          ? `-w${width}${encoderTag}`
+          : useDisplay
+            ? `-d${encoderTag}`
+            : ''
 
     // Stable URL: revalidate against an ETag so a replaced asset is picked
     // up (a conditional GET returns 304 while the content is unchanged).
@@ -1279,9 +1630,28 @@ export async function serveMediaCdn(
     // type (a variant serve is always `image/webp`) because the 304 exit
     // below runs before the Storage metadata read; re-derived from the
     // authoritative served type once metadata is in hand.
+    //
+    // A VERSIONED request (AGL-3485) whose token is current is the one image
+    // response a browser may keep for a year; see
+    // `MEDIA_CDN_VERSIONED_CACHE_CONTROL`. The hashed path form keeps its own
+    // policy below, so a `?v=` on it is inert.
+    const versionCurrent =
+      !hashed &&
+      mediaCdnVersionIsCurrent({
+        token: parseMediaCdnVersionToken(req.query[MEDIA_CDN_VERSION_PARAM]),
+        currentHash,
+        widthRequested: Boolean(width),
+        variantServed: useVariant,
+        otherRepresentation: usePoster || Boolean(rendition),
+        documentEncoderVersion: snapshot.get(
+          MEDIA_VARIANT_ENCODER_VERSION_FIELD,
+        ),
+      })
     const stableCacheControlFor = (type: unknown) =>
       mediaCdnEdgeCacheable(type)
-        ? MEDIA_CDN_STABLE_CACHE_CONTROL
+        ? versionCurrent
+          ? MEDIA_CDN_VERSIONED_CACHE_CONTROL
+          : MEDIA_CDN_STABLE_CACHE_CONTROL
         : MEDIA_CDN_STABLE_EDGE_BYPASS_CACHE_CONTROL
     // A poster is `image/webp` and therefore edge-cacheable through the rule
     // that already exists — which is the whole delivery argument for it
@@ -1297,7 +1667,40 @@ export async function serveMediaCdn(
         ? 'image/webp'
         : rendition
           ? rendition.contentType
-          : snapshot.get('contentType')
+          : useDisplay
+            ? display.contentType
+            : snapshot.get('contentType')
+    /*
+     * THE BANDWIDTH BAND (AGL-3474).
+     *
+     * Video and files count against the org's bandwidth allowance (see
+     * `media-bandwidth.ts`), so they stop where the band stops: when the Free
+     * cap is engaged for the owning org, or the site's abuse ceiling degrades
+     * it — the same two predicates that pause the site's pages, read off the
+     * scope documents the lockdown verdict above already holds. No read is
+     * added.
+     *
+     * Public images keep serving. They are not counted here, a paused site
+     * serves no page that asks for one, and the ones the edge holds would
+     * keep serving from it whatever this said. A private image counts, so it
+     * stops with the band like a file; the console's own preview does not.
+     *
+     * Before the provider redirect, which would otherwise hand a paused org's
+     * film to the provider, and before the 304, which would renew a browser's
+     * copy for another minute. `503` with `Retry-After` and `no-store`, the
+     * shape the paused site's pages answer with: the pause lifts on an
+     * upgrade or at the month's end, and nothing may keep the refusal past
+     * either.
+     */
+    if (
+      countsTowardBand(docServedType) &&
+      (await mediaCdnScopeVerdict(scope)).bandwidthPaused
+    ) {
+      res.setHeader('Cache-Control', 'no-store')
+      res.setHeader('Retry-After', String(BANDWIDTH_CAP_RETRY_AFTER_SECONDS))
+      res.status(503).json({ error: 'Over the monthly traffic limit' })
+      return
+    }
     /*
      * VIDEO FROM THE DELIVERY PROVIDER (AGL-2824).
      *
@@ -1321,7 +1724,9 @@ export async function serveMediaCdn(
      * guards the bytes this route sends; a redirect sends none.
      */
     const deliveryProvider =
-      usePoster || useVariant || download ? null : mediaDeliveryProvider('deliver')
+      usePoster || useVariant || useDisplay || download
+        ? null
+        : mediaDeliveryProvider('deliver')
     if (deliveryProvider) {
       const delivery = await mediaDeliveryRedirect({
         provider: deliveryProvider,
@@ -1346,32 +1751,77 @@ export async function serveMediaCdn(
         res.setHeader('Cache-Control', 'private, no-store')
         res.setHeader('Location', delivery.location)
         // A play starts here, so it is counted here. `redirects` says how many
-        // of the serves left through the provider; the bytes are the
-        // provider's to measure, because none leave from this route.
+        // of the serves left through the provider; the per-asset `bytes` stay
+        // the provider's to measure, because none leave from this route.
+        //
+        // The bandwidth band is not the provider's (AGL-3474): moving a film
+        // off origin must not move it off the meter. A player sends every
+        // range of a sitting to the URL it was redirected to, so this request
+        // is the only one of the sitting that reaches us, and it is counted
+        // at the copy's full size — the most one sitting sends, whatever range
+        // a player opens with.
+        let evaluation: Promise<void> | null = null
+        let recorded: Promise<unknown> | null = null
         if (req.method === 'GET') {
-          const day = new Date().toISOString().slice(0, 10)
-          void firestore
-            .collection(isOrg ? 'orgs' : 'hosts')
-            .doc(scopeId)
-            .collection('analytics')
-            .doc(day)
-            .set(
-              {
-                expiresAt: analyticsDayExpiresAt(day),
-                media: {
-                  [mediaId]: {
-                    serves: firebaseAdmin.firestore.FieldValue.increment(1),
-                    redirects: firebaseAdmin.firestore.FieldValue.increment(1),
-                  },
-                },
-              },
-              { merge: true },
-            )
-            .catch(() => undefined)
+          const bandwidthBytes = teamPreview ? 0 : delivery.sizeBytes
+          recorded = recordMediaServe({
+            firestore,
+            collection: isOrg ? 'orgs' : 'hosts',
+            scopeId,
+            mediaId,
+            bandwidthBytes,
+            redirect: true,
+          })
+          evaluation = mediaCdnBandwidthEvaluation(scope, bandwidthBytes)
         }
         res.status(302).end()
+        // Awaited after the response, as the evaluation is, so the function
+        // lives until the count is written rather than being frozen with it
+        // in flight.
+        await Promise.all([recorded, evaluation])
         return
       }
+    }
+    /*
+     * LAZY REGENERATION (AGL-3486) — see `media-delivery-regeneration.ts`.
+     *
+     * An asset whose delivery copies an older encoder made is answered from
+     * what exists, and regenerated once the response has gone. Scheduled
+     * before the 304 exit, because a browser revalidating its copy is a view
+     * of the asset as much as a download is.
+     */
+    if (
+      req.method === 'GET' &&
+      mediaDeliveryCopiesStale({
+        contentType: snapshot.get('contentType'),
+        cdnPath: snapshot.get('cdnPath'),
+        sizeBytes: snapshot.get('sizeBytes'),
+        width: snapshot.get('width'),
+        [MEDIA_VARIANT_ENCODER_VERSION_FIELD]: snapshot.get(
+          MEDIA_VARIANT_ENCODER_VERSION_FIELD,
+        ),
+        variantRegeneration: snapshot.get('variantRegeneration'),
+      })
+    ) {
+      scheduleAfterResponse(async () => {
+        const regenerationPath = mediaStoragePathInScope({
+          storagePath: snapshot.get('storagePath'),
+          base: `${isOrg ? 'orgs' : 'hosts'}/${scopeId}`,
+          mediaId,
+          onRefused: () => undefined,
+        })
+        const outcome = await regenerateMediaDeliveryCopies({
+          docRef: snapshot.ref,
+          bucket: firebaseAdmin
+            .app()
+            .storage()
+            .bucket(process.env['NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET']),
+          basePath: regenerationPath,
+        })
+        if (outcome === 'failed') {
+          console.error('[media-cdn] delivery copies could not be regenerated', scopeSegment, mediaId)
+        }
+      })
     }
     if (!hashed) {
       setCacheControl(stableCacheControlFor(docServedType))
@@ -1421,8 +1871,10 @@ export async function serveMediaCdn(
         ? mediaRenditionObjectPath(basePath, rendition)
         : useVariant
           ? `${basePath}__w${width}.webp`
-          : basePath
-    const file = bucket.file(objectPath)
+          : useDisplay
+            ? mediaDisplayObjectPath(basePath)
+            : basePath
+    let file = bucket.file(objectPath)
     // The caller's count (AGL-2812), asked here and nowhere earlier: past every
     // gate and the 304 exit, where the Storage reads begin. It starts before the
     // metadata read and is awaited after it, so the two run together. It never
@@ -1435,7 +1887,16 @@ export async function serveMediaCdn(
             rateClass: mediaCdnEdgeCacheable(docServedType) ? 'image' : 'non-image',
           })
         : null
-    const [metadata] = await file.getMetadata().catch(() => [null as any])
+    let [metadata] = await file.getMetadata().catch(() => [null as any])
+    // A display copy the document names but Storage does not hold degrades
+    // to the original — what this URL served before display copies existed —
+    // rather than to a 404 on a live page.
+    let servesDisplay = useDisplay
+    if (!metadata && useDisplay) {
+      servesDisplay = false
+      file = bucket.file(basePath)
+      ;[metadata] = await file.getMetadata().catch(() => [null as any])
+    }
     if (!metadata) {
       res.status(404).json({ error: 'Not found' })
       return
@@ -1457,11 +1918,13 @@ export async function serveMediaCdn(
         ? 'image/webp'
         : rendition
           ? rendition.contentType
-          : String(
-              metadata.contentType ??
-                snapshot.get('contentType') ??
-                'application/octet-stream',
-            )
+          : servesDisplay && display
+            ? display.contentType
+            : String(
+                metadata.contentType ??
+                  snapshot.get('contentType') ??
+                  'application/octet-stream',
+              )
     res.setHeader('Content-Type', servedType)
     // AGL-1474: an SVG (or anything else a browser treats as a document) gets
     // the sandboxing policy. Everything else keeps the base one set above —
@@ -1576,17 +2039,23 @@ export async function serveMediaCdn(
     }
 
     // Delivery volume (AGL-176): per-asset serves/bytes on the AGL-82
-    // analytics day-doc, fire-and-forget. Only cache MISSES reach this
+    // analytics day-doc, awaited after the body rather than ahead of it.
+    // Only cache MISSES reach this
     // code — edge-cached responses aren't counted, so these are origin
-    // serves, not user-facing totals (billing accuracy is AGL-41's job).
+    // serves, not user-facing totals.
     // Hot-doc note: a single day-doc caps at ~1 write/sec sustained;
     // acceptable at current traffic, shard or sample if an asset gets hot.
     //
     // Written before the first byte, so `bytes` is what this request asked
     // the origin to send. A client that abandons the stream receives less;
     // the figure is the ceiling on what left, not a count of what arrived.
+    //
+    // The same bytes count against the org's bandwidth band when
+    // `countsTowardBand` says so (above). In this write, so counting costs no
+    // write of its own.
+    const countedBytes = countsTowardBand(servedType) ? servedBytes : 0
     const day = new Date().toISOString().slice(0, 10)
-    void firestore
+    const recorded = firestore
       .collection(isOrg ? 'orgs' : 'hosts')
       .doc(scopeId)
       .collection('analytics')
@@ -1596,6 +2065,12 @@ export async function serveMediaCdn(
           // Retention (AGL-1844): every writer of a day doc stamps the
           // day-anchored expiry the TTL policy sweeps on.
           expiresAt: analyticsDayExpiresAt(day),
+          ...(countedBytes > 0
+            ? {
+                [MEDIA_BANDWIDTH_DAY_FIELD]:
+                  firebaseAdmin.firestore.FieldValue.increment(countedBytes),
+              }
+            : {}),
           media: {
             [mediaId]: {
               serves: firebaseAdmin.firestore.FieldValue.increment(1),
@@ -1609,7 +2084,12 @@ export async function serveMediaCdn(
         },
         { merge: true },
       )
-      .catch(() => undefined)
+      .catch((error: unknown) => logUncountedServe(scopeSegment, mediaId, error))
+    // Totalled beside the stream rather than ahead of it, and awaited — with
+    // the count above — once the stream ends, so the function lives until
+    // both are done.
+    const evaluation =
+      countedBytes > 0 ? mediaCdnBandwidthEvaluation(scope, countedBytes) : null
     if (partial) res.status(206)
     // `start`/`end` are inclusive in `createReadStream`, matching the parsed
     // range — GCS is asked for exactly the requested bytes and nothing is
@@ -1621,10 +2101,14 @@ export async function serveMediaCdn(
     // rather than `pipe` because streaming needs teardown in both directions,
     // which `pipe` does not give — a failed Storage read must fail the
     // response, and a client that stops reading must stop the Storage read.
-    await pipeline(
-      file.createReadStream(partial ? { start: range.start, end: range.end } : {}),
-      res,
-    )
+    try {
+      await pipeline(
+        file.createReadStream(partial ? { start: range.start, end: range.end } : {}),
+        res,
+      )
+    } finally {
+      await Promise.all([recorded, evaluation])
+    }
   } catch (error) {
     if (mediaCdnClientWentAway(error, res)) return
     console.error('serveMediaCdn failed', scopeSegment, mediaId, error)
@@ -1638,4 +2122,13 @@ export async function serveMediaCdn(
       res.destroy(error instanceof Error ? error : new Error(String(error)))
     }
   }
+}
+
+/**
+ * A serve the day doc did not take. The response has already gone, so the
+ * failure is the log's to report rather than the visitor's — but reported,
+ * because a dropped count is bandwidth the band and the invoice never see.
+ */
+function logUncountedServe(scopeSegment: string, mediaId: string, error: unknown): void {
+  console.error('[media-cdn] serve not counted', scopeSegment, mediaId, error)
 }

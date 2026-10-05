@@ -17,6 +17,10 @@
 
 import { setRegisteringPluginId } from '../app-utils/registering-plugin'
 import {
+  registerPluginDeclarationsRepair,
+  resetPluginDeclarationsRepairForTests,
+} from './plugin-declarations-repair'
+import {
   listPluginOrgErasers,
   PLUGIN_ORG_KEYED_COLLECTIONS,
   PLUGIN_REQUIRED_ORG_ERASERS,
@@ -175,5 +179,55 @@ describe('plugin collections keyed by the organization (AGL-3080)', () => {
         { pluginId: 'outreach', name: 'outreachLinks', orgField: 'orgId' },
       ]),
     )
+  })
+})
+
+describe('one org eraser list per process (AGL-3464)', () => {
+  it('an eraser registered in one copy of the module runs from another', async () => {
+    // The shape of Next's boot file and the route that runs the erasure: two
+    // evaluations of this module in one process. What boot registers, the
+    // route must run — a required eraser registered at boot included.
+    type Erasers = typeof import('./plugin-org-erasure')
+    let boot!: Erasers
+    let route!: Erasers
+    jest.isolateModules(() => {
+      boot = jest.requireActual('./plugin-org-erasure')
+    })
+    jest.isolateModules(() => {
+      route = jest.requireActual('./plugin-org-erasure')
+    })
+    expect(route).not.toBe(boot)
+    boot.registerPluginOrgEraser(async () => ({ removed: 1 }), { pluginId: 'listings' })
+    expect(await route.runPluginOrgErasers(REQUEST, ['listings'])).toEqual({ listings: { removed: 1 } })
+    route.resetPluginOrgErasersForTests()
+    expect(boot.listPluginOrgErasers()).toEqual([])
+  })
+})
+
+describe('a required org eraser missing at first (AGL-3464)', () => {
+  afterEach(() => resetPluginDeclarationsRepairForTests())
+
+  it("runs the app's boot step once, and erases when the boot registers it", async () => {
+    const repair = jest.fn(async (): Promise<void> => {
+      registerPluginOrgEraser(async () => ({ removed: 2 }), { pluginId: 'listings' })
+    })
+    registerPluginDeclarationsRepair(repair)
+    expect(await runPluginOrgErasers(REQUEST, ['listings'])).toEqual({ listings: { removed: 2 } })
+    expect(repair).toHaveBeenCalledTimes(1)
+  })
+
+  it('still refuses when the boot step leaves it unregistered', async () => {
+    const repair = jest.fn(async (): Promise<void> => undefined)
+    registerPluginDeclarationsRepair(repair)
+    await expect(runPluginOrgErasers(REQUEST, ['listings'])).rejects.toThrow(/listings/)
+    expect(repair).toHaveBeenCalledTimes(1)
+  })
+
+  it('runs no boot step when every required eraser is registered', async () => {
+    const repair = jest.fn(async (): Promise<void> => undefined)
+    registerPluginDeclarationsRepair(repair)
+    registerPluginOrgEraser(async () => ({ removed: 1 }), { pluginId: 'listings' })
+    await runPluginOrgErasers(REQUEST, ['listings'])
+    expect(repair).not.toHaveBeenCalled()
   })
 })

@@ -22,7 +22,6 @@ import {
   defaultScopeForNewResource,
   describeScope,
   folderDepth,
-  formatQuotaLimit,
   hostScopeToken,
   isOrgWideScope,
   isSiblingNameTaken,
@@ -145,7 +144,6 @@ import {
 import { useOrgMemberOptions } from '@aglyn/tenant-feature-instance/hooks/use-org-member-options'
 import { listQueryConstraints } from '@aglyn/tenant-feature-instance/hooks/use-list-query'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
-import { checkOrgQuota } from '../../constants/entitlements'
 import useCurrentOrg from '../../hooks/use-current-org'
 import useFirestoreCollection from '../../hooks/use-firestore-collection'
 import useFirestoreDoc from '../../hooks/use-firestore-doc'
@@ -153,6 +151,7 @@ import useHostActivityLogger from '../../hooks/use-host-activity-logger'
 import useOrgHosts from '../../hooks/use-org-hosts'
 import firestoreOneShotRetry from '../../utils/firestore-one-shot-retry'
 import { mediaSrc, mediaThumbnailSrc } from '@aglyn/aglyn/app-utils/media-src'
+import { mediaOriginalSrc } from '@aglyn/aglyn/app-utils/media-ref'
 import { probeVideoFile } from '../../utils/video-probe'
 import { MediaFileInfo } from './media-file-info.component'
 import {
@@ -192,6 +191,14 @@ import {
 } from './media-delete-copy'
 import { MediaFolderCard } from './media-folder-card.component'
 import { MediaFolderRail } from './media-folder-rail.component'
+import { MediaLibraryUsage } from './media-library-usage.component'
+import {
+  formatMediaBytes,
+  type MediaFilesPlace,
+  mediaStorageLimitMessage,
+  mediaUploadStorageVerdict,
+} from './media-storage-copy'
+import { useMediaStorageBand } from './use-media-storage-band'
 import {
   movedMediaMessage,
   moveFailureMessage,
@@ -384,10 +391,7 @@ const refKindLabel = (reference: MediaUsageRef): string =>
     : REF_KIND_LABEL[reference.kind]
 
 
-const formatBytes = (bytes: number) =>
-  bytes >= 1024 * 1024
-    ? `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-    : `${bytes === 0 ? 0 : Math.max(1, Math.round(bytes / 1024))} KB`
+const formatBytes = formatMediaBytes
 
 /**
  * Drag wrapper for an asset card (AGL-172): drag id `media:{mediaId}`.
@@ -966,6 +970,15 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
   )
   const usedBytes = Number(mediaCounter?.['bytes'] ?? 0)
   const totalCount = Number(mediaCounter?.['count'] ?? 0)
+  /**
+   * The org's storage band (AGL-3470): one allowance across every site's
+   * library and the org's shared one, read once per library from the
+   * function the upload gate itself uses. Held back until the org resolves,
+   * so a cold console never writes a cap — least of all Free's — beside a
+   * paying workspace's files.
+   */
+  const fetchedStorageBand = useMediaStorageBand({ orgId, hostId, user })
+  const storageBand = orgReady ? fetchedStorageBand : null
 
   // Public origin for absolute Copy-URL (AGL-831): a host's own site domain
   // (custom cname or `{subdomain}.aglyn.app`), else the current console
@@ -3084,12 +3097,10 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
         )
         return 0
       }
-      const usedMb = (usedBytes + addedBytes + file.size) / (1024 * 1024)
-      // AGL-1422. `checkOrgQuota(undefined, …)` is the FREE tier's storage
-      // allowance, not "unknown" — and the library is one of the first
-      // things opened on a cold console, so a drop-in during that window was
-      // refused with "Storage limit reached (N MB)" against a limit the
-      // workspace does not have. Pending declines and says only that.
+      // AGL-1422. An unresolved org checks as the FREE tier, not as
+      // "unknown" — and the library is one of the first things opened on a
+      // cold console, so a drop-in during that window was refused against a
+      // plan the workspace is not on. Pending declines and says only that.
       if (!orgReady) {
         enqueueSnackbar('Checking your plan — try again in a moment', {
           variant: 'info',
@@ -3118,18 +3129,23 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
         )
         return 0
       }
-      const quota = checkOrgQuota(org, 'storagePerHostMb', usedMb - 1)
-      if (!quota.allowed) {
-        enqueueSnackbar(
-          // `formatQuotaLimit`, not the raw number: `UNLIMITED` is
-          // `Number.POSITIVE_INFINITY`, so an uncapped plan that ever reached
-          // this branch would read "Storage limit reached (Infinity MB)".
-          `Storage limit reached (${formatQuotaLimit(
-            quota.limit,
-            'MB',
-          )}) — see Billing to upgrade`,
-          { variant: 'warning', persist: false, allowDuplicate: true },
-        )
+      // The pooled band (AGL-3470), not this library against one site's
+      // share of it: the server refuses on every library the org owns,
+      // summed, against `hostLimit × storagePerHostMb` (AGL-2075). This only
+      // ever refuses where the server would — a hard band, past its cap — so
+      // a paid upload the server accepts and bills is never turned away here,
+      // and with no band to hand the server decides alone.
+      const storage = mediaUploadStorageVerdict({
+        band: storageBand,
+        scopeBytes: usedBytes,
+        incomingBytes: addedBytes + file.size,
+      })
+      if (!storage.allowed) {
+        enqueueSnackbar(mediaStorageLimitMessage(storage.limitMb), {
+          variant: 'warning',
+          persist: false,
+          allowDuplicate: true,
+        })
         return 0
       }
       // Uploads land in the currently open folder (AGL-172).
@@ -3302,6 +3318,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
       org,
       orgReady,
       usedBytes,
+      storageBand,
       currentFolder,
       enqueueSnackbar,
       logActivity,
@@ -3513,6 +3530,9 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           href = mediaSrc(media)
         }
         if (!href) return
+        // The ORIGINAL, not the display copy the bare CDN url serves for an
+        // oversized or metadata-carrying image (AGL-3486).
+        href = mediaOriginalSrc(href)
         const bytes = await fetch(href)
         if (!bytes.ok) throw new Error(String(bytes.status))
         const blob = await bytes.blob()
@@ -3965,6 +3985,29 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
     typeof currentFolder === 'string' && currentFolder !== 'all'
       ? folderNameById[currentFolder]
       : null
+  /**
+   * Where the grid is, for the toolbar's files line (AGL-3470) — counted by
+   * the rail's server-side totals, never by the cards loaded so far. `null`
+   * (the library total alone) with no folder open, and while a count the
+   * line would quote has not arrived.
+   */
+  const usagePlace = ((): MediaFilesPlace | null => {
+    if (currentFolder === 'all') return null
+    if (currentFolder === null) {
+      const count = folderCounts['root']
+      return typeof count === 'number' ? { kind: 'root', count } : null
+    }
+    const counts = folderIdList.map((id) => folderCounts[id])
+    if (!currentFolderName || counts.some((count) => typeof count !== 'number')) {
+      return null
+    }
+    return {
+      kind: 'folder',
+      name: currentFolderName,
+      count: counts.reduce<number>((sum, count) => sum + (count ?? 0), 0),
+      withSubfolders: folderIdList.length > 1,
+    }
+  })()
 
   return (
     <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
@@ -4014,9 +4057,12 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
             {'New folder'}
           </Button>
         )}
-        <Typography variant="body2" color="text.secondary">
-          {`${items.length}${totalCount > items.length ? ` of ${totalCount}` : ''} file${totalCount === 1 ? '' : 's'} · ${formatBytes(usedBytes)} used`}
-        </Typography>
+        <MediaLibraryUsage
+          libraryCount={totalCount}
+          place={usagePlace}
+          scopeBytes={usedBytes}
+          band={storageBand}
+        />
         {/* Media entitlement state (AGL-2081). Neither of these had ANY
             console affordance — no toggle, no state, no locked branch — while
             both changed what the library actually does. Stated as fact, not
@@ -5264,8 +5310,12 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
       <ImageEditorDialog
         open={imageEditorOpen}
         // Load via the same-origin cdnPath (AGL-832) so the editor canvas
-        // stays untainted/exportable — the raw storage URL lacks CORS.
-        src={editor?.media?.cdnPath ?? editor?.media?.url ?? ''}
+        // stays untainted/exportable — the raw storage URL lacks CORS. The
+        // ORIGINAL form of it (AGL-3486): "Replace original" must not save
+        // the downscaled display copy back over the file.
+        src={mediaOriginalSrc(
+          editor?.media?.cdnPath ?? editor?.media?.url ?? '',
+        )}
         fileName={editor?.fileName || editor?.media?.fileName || 'image'}
         onClose={() => setImageEditorOpen(false)}
         onSave={async (result) => {

@@ -19,6 +19,7 @@ import type { Firestore } from 'firebase/firestore'
 import type * as Aglyn from '@aglyn/aglyn'
 import {
   canvas,
+  clearRecordedRenderedWidths,
   ConcurrentEditError,
   ensureCanvasRoot,
   formatBytes,
@@ -41,9 +42,16 @@ import {
   writeServerDraft,
 } from '../drafts/besigner-server-draft'
 import {
+  type CanvasBindingLookups,
+  normalizeCanvasBindingTokens,
+} from '../utils/normalize-canvas-binding-tokens'
+import { recordCanvasRenderedWidths } from '../utils/record-canvas-rendered-widths'
+import {
   type BesignerDraftState,
   useBesignerDraft,
 } from './use-besigner-draft'
+
+export type { CanvasBindingLookups } from '../utils/normalize-canvas-binding-tokens'
 
 /**
  * How the host application surfaces a message. Deliberately a plain
@@ -125,9 +133,9 @@ export interface BesignerDocumentSource<TData = unknown> {
 export interface UseBesignerDocumentOptions<TData = unknown>
   extends BesignerDocumentSource<TData> {
   /**
-   * The word used in user-facing copy — 'screen', 'layout', 'component',
+   * The word used in user-facing copy — 'page', 'layout', 'component',
    * 'template', 'email'. Keeps each editor's messages accurate without
-   * forking the logic.
+   * forking the logic, and is published to the canvas as `documentNoun`.
    */
   noun: string
   /** Canvas view type; reset to SCREEN on unmount. */
@@ -215,6 +223,19 @@ export interface UseBesignerDocumentOptions<TData = unknown>
   fromCanvasNodes?: (
     canvasNodes: Record<string, unknown>,
   ) => { nodes: Record<string, unknown> } | { error: string }
+  /**
+   * The site's variables and functions, which every save converts a typed
+   * `{{name}}` against to its rename-safe id form (AGL-3481) — see
+   * `normalizeCanvasBindingTokens`. A published page resolves only the id
+   * form, so this is what makes a token written through Raw JSON, Edit JSON
+   * or the canvas itself render on the live page.
+   *
+   * Required, so an editor cannot be added that skips it by omission: `null`
+   * says the document has no site whose variables it could name (a platform
+   * email), and a site whose lookups are still loading passes `null` too —
+   * that save keeps the tokens as typed, and the next one converts them.
+   */
+  bindingLookups: CanvasBindingLookups | null
 }
 
 /** Who a shared working draft records as its last writer. */
@@ -391,6 +412,7 @@ export function useBesignerDocument<TData = unknown>(
     savedMessage,
     toCanvasNodes,
     fromCanvasNodes,
+    bindingLookups,
   } = options
 
   const saveAvailable = !canvas.isInitialSame
@@ -417,6 +439,10 @@ export function useBesignerDocument<TData = unknown>(
     return () => {
       canvas.reset()
       Besigner.focus.clearFocusStatus()
+      // The widths the canvas measured belong to this document (AGL-3485);
+      // the next one starts with none, so a node id two documents share
+      // cannot carry a measurement across.
+      clearRecordedRenderedWidths()
     }
   }, [documentKey])
 
@@ -435,6 +461,21 @@ export function useBesignerDocument<TData = unknown>(
       })
     }
   }, [viewType])
+
+  // The noun reaches the canvas too, so its own copy (the empty-document
+  // slot) names the document being edited rather than calling everything a
+  // page. Cleared on leave for the same reason the view type is reset.
+  useEffect(() => {
+    if (!Besigner.doesBesignerAppExist()) return undefined
+    const app = Besigner.getBesignerApp()
+    Besigner.setBesignerFlag(app, { flag: 'documentNoun', value: () => noun })
+    return () => {
+      Besigner.setBesignerFlag(app, {
+        flag: 'documentNoun',
+        value: () => undefined,
+      })
+    }
+  }, [noun])
 
   useEffect(() => {
     if (status === 'loading') return queueLoading()
@@ -649,6 +690,16 @@ export function useBesignerDocument<TData = unknown>(
       onSaveRefused?.()
       return undefined
     }
+    // Typed names become id tokens ON THE CANVAS before anything reads it
+    // (AGL-3481), so the tree written is the tree on screen and the editor
+    // reads clean afterwards. Before "Already saved", too: a document stored
+    // with a name token is clean on load, and this click is what converts it.
+    normalizeCanvasBindingTokens(canvas, bindingLookups)
+    // And the widths the canvas measured become part of the document
+    // (AGL-3485), the same way and for the same reason: written to the
+    // canvas, so the tree saved is the tree on screen. This is what lets a
+    // published image say how big it will be without anyone typing `sizes`.
+    recordCanvasRenderedWidths(canvas)
     const canvasNodes = canvas.toJSON().nodes as Record<string, unknown>
     const prepared = fromCanvasNodes
       ? fromCanvasNodes(canvasNodes)
@@ -793,6 +844,7 @@ export function useBesignerDocument<TData = unknown>(
     refuseOverUnopenedDraft,
     options.firestore,
     draft.sharedDraftUnopened,
+    bindingLookups,
   ])
 
   // See `UseBesignerDocumentResult.saveWorkingDraft` for why the stamp is

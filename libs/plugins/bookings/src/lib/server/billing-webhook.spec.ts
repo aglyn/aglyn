@@ -102,6 +102,8 @@ const fakeFirestore = {
 
 let contactUpserts: PluginContactCaptureRequest[] = []
 const sentEmails: any[] = []
+/** The managers' notifications the handler sent: `[hostId, payload]`. */
+const mockNotified: Array<[string, any]> = []
 const meteredHosts: string[] = []
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
@@ -140,6 +142,9 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   }),
   meterHostEmail: async (hostId: string) => {
     meteredHosts.push(hostId)
+  },
+  notifyHostManagers: async (hostId: string, payload: unknown) => {
+    mockNotified.push([hostId, payload])
   },
   /*
    * The site's built-in copy, rendered for real (AGL-3432). Stubbed to `null`
@@ -265,6 +270,7 @@ beforeEach(() => {
   contactUpserts = standInRecordSystem({ reset: false })
   sentEmails.length = 0
   meteredHosts.length = 0
+  mockNotified.length = 0
   fetchMock.mockClear()
 
   docs.set('hosts/host-1/bookings/booking-1', { ...BOOKING })
@@ -660,5 +666,47 @@ describe('a booking records its tax regime (AGL-2028)', () => {
     const booking = storedBooking()
     expect(booking.taxMode).toBe('manual')
     expect(booking.taxCents).toBe(570)
+  })
+})
+
+/**
+ * A PAID booking reaches the site's managers too (AGL-3500).
+ *
+ * The free path notifies them the moment the request lands; a paid one is a
+ * booking only once this event clears the charge, and nothing here told them
+ * at all — so an on-site service that took a deposit learned of the job from
+ * Stripe, without the phone or the address it had asked the booker for.
+ */
+describe('the managers hear of a paid booking (AGL-3500)', () => {
+  it('names who, what, when and what was paid, with the phone and address given', async () => {
+    docs.set('hosts/host-1/bookings/booking-1', {
+      ...BOOKING,
+      phone: '+15125550107',
+      address: '12 Oak St\nAustin, TX 78701',
+    })
+    await deliver(BOOKING_SESSION)
+
+    expect(mockNotified).toHaveLength(1)
+    const [hostId, payload] = mockNotified[0]
+    expect(hostId).toBe('host-1')
+    expect(payload.type).toBe('content.booking')
+    expect(payload.body).toContain('Rhea Salt (rhea@example.com) booked Deep tissue massage')
+    expect(payload.body).toContain('$95.00 was paid.')
+    expect(payload.body).toContain('Phone: +15125550107.')
+    expect(payload.body).toContain('Address: 12 Oak St, Austin, TX 78701.')
+    // The phone, onto the contact only where it holds none.
+    expect(contactUpserts[0].profileFill).toEqual({ phone: '+15125550107' })
+  })
+
+  it('says nothing of a phone or an address the service never asked for', async () => {
+    await deliver(BOOKING_SESSION)
+    expect(mockNotified[0][1].body).not.toMatch(/Phone|Address/)
+    expect(contactUpserts[0]).not.toHaveProperty('profileFill')
+  })
+
+  it('tells them once, however often the event is redelivered', async () => {
+    await deliver(BOOKING_SESSION)
+    await deliver(BOOKING_SESSION)
+    expect(mockNotified).toHaveLength(1)
   })
 })

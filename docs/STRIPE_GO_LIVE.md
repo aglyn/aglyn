@@ -482,7 +482,14 @@ subscription product, Stripe records them and charges no one.
      with more than one site: uploads are enforced per scope against
      `storagePerHostMb`, the check compared a summed total to
      `hostLimit × storagePerHostMb`, and on Pro a *full* library reads as 33%
-     of the band. An alert that cannot fire reads as coverage.
+     of the band. An alert that cannot fire reads as coverage. *(Superseded:
+     since AGL-2075 uploads are enforced against the pooled band, so that
+     check could warn a workspace well inside its band. Since AGL-3482 there is
+     one storage alert — `mediaStorage`, every library against
+     `Math.max(1, hostLimit) × storagePerHostMb`, the band ingress refuses at
+     and the invoice subtracts — whose body names the library's share.
+     `usageAlerts.orgLibraryStorage` guards left on org docs are read by
+     nothing.)*
    - Thresholds are a fixed ladder — 75, 80, 90 and 100% (AGL-3431), the
      highest step reached sent once; `USAGE_ALERT_APPROACH_PCT` is gone.
    - **Overage protection is ALERTS plus an OPTIONAL customer cap** — see the
@@ -492,7 +499,9 @@ subscription product, Stripe records them and charges no one.
      written only by `/api/billing/storage-overage`), and only then are
      uploads refused, citing their own number. Free still hard-bands.
    - The Billing card shows the library's usage **against its own allowance**,
-     before any invoice.
+     before any invoice. *(Superseded: since AGL-2075 the library has no
+     allowance of its own — it shares the org-wide band — and since AGL-3479
+     the card names its bytes as a share of that band.)*
    - The rollup records `orgLibraryBilledFrom` verbatim beside
      `orgLibraryBilled`, so a month's audit document says why it billed.
 

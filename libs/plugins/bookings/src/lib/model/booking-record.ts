@@ -29,6 +29,7 @@
  * words and the day of what is filed — is this plugin's own.
  */
 
+import { bookingContactLines } from './booking-contact-fields'
 import {
   isValidTimeZone,
   zonedDateTime,
@@ -116,15 +117,25 @@ function formatSlot(startsAtMs: number, timezone: string): string {
  * in the service's own timezone, with the zone named so a rep in another
  * one is not misled. The body, not the subject: `subject` is the field a
  * sent email carries, and the timeline draws it as one.
+ *
+ * Then the phone and the address the booker gave, a line each, when the
+ * service asked for them (AGL-3493). The address lives HERE rather than on
+ * the person: it is where this job is, which is often not where the person
+ * lives, and the next booking may be somewhere else.
  */
 export function bookingMeetingBody(input: {
   serviceName: string
   startsAtMs: number
   timezone?: string | null
+  phone?: unknown
+  address?: unknown
 }): string {
   const timezone = input.timezone || 'UTC'
   const service = String(input.serviceName ?? '').trim() || 'Booking'
-  return `${service} — ${formatSlot(input.startsAtMs, timezone)} (${timezone})`
+  return [
+    `${service} — ${formatSlot(input.startsAtMs, timezone)} (${timezone})`,
+    ...bookingContactLines(input),
+  ].join('\n')
 }
 
 /** The title of the task a service files when it asks for a follow-up. */

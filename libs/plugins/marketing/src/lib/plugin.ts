@@ -37,6 +37,7 @@ import {
   MARKETING_CONSOLE_SECTIONS,
   MARKETING_ORG_CONSOLE_SECTIONS,
 } from './components/marketing-console-sections'
+import { registerPluginTransferResourceUi } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { StaffOrgEmailCard } from './components/staff-org-email-card.component'
 import { registerMarketingRecordLists } from './model/overlay-record-list'
@@ -65,6 +66,11 @@ const EmailMessagesWidget = lazy(
   () => import('./components/email-messages-widget'),
 )
 
+/** What the sends built from one template did, on the template's page. */
+const EmailTemplateReportCard = lazy(
+  () => import('./components/email-template-report-card'),
+)
+
 /** Who received the sends built from one template, on the template's page. */
 const EmailRecipientsCard = lazy(
   () => import('./components/email-recipients-card'),
@@ -90,6 +96,8 @@ const BesignerSectionExperiments = lazy(
  * uses the shell's media browser via `useMediaPicker`.
  */
 export function registerMarketingConsole(): void {
+  // How the Import & export hub names campaigns in a workspace package (AGL-3535).
+  registerPluginTransferResourceUi('marketing.campaigns', { label: 'Campaigns' }, { pluginId: BUNDLE_ID })
   /*
    * The two positions the A/B testing card hosts (AGL-2914), declared before
    * the extension that draws the card. An id another plugin has already taken
@@ -201,6 +209,14 @@ export function registerMarketingConsole(): void {
         widgetId: 'marketing-email-messages',
         title: 'Messages',
         Component: EmailMessagesWidget,
+      },
+      // A template's page: what the sends built from it did, then who
+      // received them. The template is the Email plugin's; the sends are ours.
+      {
+        slot: 'emailTemplateReport',
+        widgetId: 'marketing-email-template-report',
+        title: 'Sent from this template',
+        Component: EmailTemplateReportCard,
       },
       {
         slot: 'emailTemplateRecipients',

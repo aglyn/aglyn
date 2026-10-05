@@ -105,7 +105,10 @@ describe('collection entry fallback cover (AGL-1407)', () => {
       const raw =
         'https://firebasestorage.googleapis.com/v0/b/aglyn-main.appspot.com/' +
         'o/orgs%2FjWmGooWE3L%2Fmedia%2Fbrand%2Fcover?alt=media'
-      expect(coverUrl(build(raw, 'DXnRbPH4CQ'))).toBe(raw)
+      // Through the site's CDN (AGL-3506), qualified for it.
+      expect(coverUrl(build(raw, 'DXnRbPH4CQ'))).toBe(
+        '/api/media/cdn/org:jWmGooWE3L:DXnRbPH4CQ/cover',
+      )
     })
 
     it('the AGL-175 relative CDN path written by the first pass', () => {

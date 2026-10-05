@@ -44,6 +44,7 @@ import {
   WINBACK_PERCENT_OFF,
 } from '../../_lib/retention'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
+import { orgDiscountFullUse } from '@aglyn/aglyn/app-utils/full-use-cost'
 
 // lockdown-423: exempt — the retention funnel is part of the LEAVE path
 // (survey → downsell → winback → cancel); a billing lockdown must not trap
@@ -222,7 +223,8 @@ async function handler(request: Request): Promise<Response> {
     if (!secretKey) {
       return Response.json({ error: 'Billing is not configured' }, { status: 501 })
     }
-    const customerId = (await readOrgBilling(orgId)).stripeCustomerId
+    const billing = await readOrgBilling(orgId)
+    const customerId = billing.stripeCustomerId
     if (!customerId) {
       return Response.json({ error: 'No billing account yet' }, { status: 409 })
     }
@@ -355,6 +357,35 @@ async function handler(request: Request): Promise<Response> {
       )
     }
 
+    // The full-use verdict, for staff reporting (AGL-3473): the org using
+    // every band it bought, on the months the winback discounts, on the same
+    // Stripe-truth subscription the guardrail read. Recorded on the applied
+    // winback, never enforced and never in the customer's response — and
+    // worked out before anything is minted, so a fault in it cannot strand
+    // an applied coupon behind a released reservation.
+    let fullUse: Record<string, unknown> | null = null
+    try {
+      const assessed = orgDiscountFullUse(
+        {
+          ...orgForMargin,
+          ...billing,
+          subscription: {
+            ...((billing.subscription ?? {}) as Record<string, unknown>),
+            ...orgForMargin.subscription,
+          },
+        } as never,
+        { percentOff: WINBACK_PERCENT_OFF },
+        { duration: 'repeating', durationInMonths: WINBACK_DURATION_MONTHS },
+      )
+      fullUse = {
+        fullUseOk: assessed.ok,
+        fullUseCoverage: Math.round(assessed.coverage * 1000) / 1000,
+        fullUseFirstYearCoverage: Math.round(assessed.firstYearCoverage * 1000) / 1000,
+      }
+    } catch (error) {
+      console.error('[billing/retention] full-use verdict unavailable', error)
+    }
+
     const funnelId = typeof body?.funnelId === 'string' ? body.funnelId : null
     // One winback per org, EVER — reserved by `create()` on a fixed doc id,
     // which is atomic at the database: two racing requests cannot both win,
@@ -415,6 +446,7 @@ async function handler(request: Request): Promise<Response> {
           couponId: String(coupon.id),
           percentOff: WINBACK_PERCENT_OFF,
           durationMonths: WINBACK_DURATION_MONTHS,
+          ...(fullUse ?? {}),
           appliedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
         },
         { merge: true },

@@ -818,8 +818,12 @@ describe('Markdown body images are delivered at the size they render (AGL-3149)'
       <Markdown content={doc} intrinsicSizes={{ [REF]: { width: 1200, height: 630 } }} />,
     )
     const el = img(container)
+    // Up to the asset's own 1200 pixels, described truthfully (AGL-3486).
     expect(el.getAttribute('srcset')).toBe(
-      [320, 640, 1280, 1920].map((w) => `${CDN}?w=${w} ${w}w`).join(', '),
+      [160, 320, 480, 640, 768, 960]
+        .map((w) => `${CDN}?w=${w} ${w}w`)
+        .concat(`${CDN}?w=1280 1200w`)
+        .join(', '),
     )
     // Derived from the image, not from the column: an asset narrower than the
     // prose renders at its own width, so describing the column would fetch a

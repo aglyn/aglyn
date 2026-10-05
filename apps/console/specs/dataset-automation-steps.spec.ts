@@ -139,7 +139,41 @@ function mockCollectionRef(path: string): any {
   }
 }
 
-const mockFirestore: any = { collection: (name: string) => mockCollectionRef(name) }
+const mockFirestore: any = {
+  collection: (name: string) => mockCollectionRef(name),
+  /*
+   * The run meter (AGL-3472) seeds the workspace's run counter in a
+   * transaction and counts each run on the site's and the workspace's
+   * counters in one batch — both over this same store, with their writes
+   * applied at commit, as Firestore applies them.
+   */
+  runTransaction: async (body: (transaction: any) => Promise<unknown>) => {
+    const writes: Array<() => Promise<void>> = []
+    const result = await body({
+      get: (ref: any) => ref.get(),
+      getAll: (...refs: any[]) => Promise.all(refs.map((ref) => ref.get())),
+      set: (ref: any, data: Record<string, any>, options?: { merge?: boolean }) => {
+        writes.push(() => ref.set(data, options))
+      },
+      update: (ref: any, data: Record<string, any>) => {
+        writes.push(() => ref.update(data))
+      },
+    })
+    for (const write of writes) await write()
+    return result
+  },
+  batch: () => {
+    const writes: Array<() => Promise<void>> = []
+    return {
+      set: (ref: any, data: Record<string, any>, options?: { merge?: boolean }) => {
+        writes.push(() => ref.set(data, options))
+      },
+      commit: async () => {
+        for (const write of writes) await write()
+      },
+    }
+  },
+}
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,

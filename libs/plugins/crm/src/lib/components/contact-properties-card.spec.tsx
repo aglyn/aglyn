@@ -50,6 +50,31 @@ jest.mock('../hooks/use-lead-source-picklist', () => {
   }
 })
 
+// The org's salutations (AGL-3515), read as the standard values.
+jest.mock('../hooks/use-crm-picklist', () => {
+  const { effectiveCrmPicklist } = jest.requireActual('@aglyn/aglyn/app-utils/crm')
+  return {
+    useCrmPicklist: (id: string) => ({
+      picklist: effectiveCrmPicklist(id, null),
+      stored: false,
+      ready: true,
+      fromCache: false,
+    }),
+  }
+})
+
+/*
+ * The reports-to picker keeps a listen of its own; here it is a button that
+ * picks one contact, so the save is the only traffic.
+ */
+jest.mock('./contact-reports-to-field', () => ({
+  ContactReportsToField: (props: { value: string; onChange: (id: string) => void }) => (
+    <button type="button" onClick={() => props.onChange('manager-1')}>
+      {`Reports to: ${props.value || 'nobody'}`}
+    </button>
+  ),
+}))
+
 jest.mock('firebase/firestore', () => ({
   doc: (_db: unknown, ...segments: string[]) => ({ path: segments.join('/') }),
   deleteField: () => ({ op: 'delete' }),
@@ -141,6 +166,8 @@ jest.mock('@aglyn/shared-ui-snackstack', () => ({
 }))
 
 jest.mock('@aglyn/shared-ui-jsx', () => ({
+  // The call link's icon, drawn beside a number a dialer can take.
+  MdiIcon: () => null,
   CardDisplay: ({
     children,
     HeaderProps,
@@ -446,5 +473,86 @@ describe('the custom fields', () => {
     expect(definitionsFor).toHaveBeenLastCalledWith(null)
     expect(screen.queryByText('More fields')).toBeNull()
     expect(screen.queryByLabelText('Tier')).toBeNull()
+  })
+})
+
+/**
+ * Salesforce's standard contact fields (AGL-3515): grouped as Salesforce
+ * groups them, saved in the one request, the name made of the parts, and
+ * the judged fields sent only when they move.
+ */
+describe("Salesforce's standard fields", () => {
+  it('composes the name from the first and last names, and sends the parts rather than a name', async () => {
+    renderCard()
+    fireEvent.change(screen.getByLabelText('First name'), { target: { value: 'Maya' } })
+    fireEvent.change(screen.getByLabelText('Last name'), { target: { value: 'Delgado Ruiz' } })
+    const name = screen.getByLabelText('Name') as HTMLInputElement
+    expect(name.value).toBe('Maya Delgado Ruiz')
+    expect(name.readOnly).toBe(true)
+    save()
+    await waitFor(() => expect(profileSaves()).toHaveLength(1))
+    const set = profileSaves()[0].payload['set']
+    expect(set).toMatchObject({ firstName: 'Maya', lastName: 'Delgado Ruiz' })
+    expect(set).not.toHaveProperty('name')
+  })
+
+  it('sends every phone as E.164, the department, the birthdate and the other address', async () => {
+    renderCard()
+    fireEvent.change(screen.getByLabelText('Mobile phone'), { target: { value: '(512) 555-0101' } })
+    fireEvent.change(screen.getByLabelText('Fax'), { target: { value: '512 555 0109' } })
+    fireEvent.change(screen.getByLabelText('Department'), { target: { value: 'Wholesale' } })
+    fireEvent.change(screen.getByLabelText('Birthdate'), { target: { value: '1984-07-21' } })
+    save()
+    await waitFor(() => expect(profileSaves()).toHaveLength(1))
+    expect(profileSaves()[0].payload['set']).toMatchObject({
+      phone: '',
+      mobilePhone: '+15125550101',
+      homePhone: '',
+      fax: '+15125550109',
+      assistantPhone: '',
+      department: 'Wholesale',
+      birthdate: '1984-07-21',
+      otherAddress: { line1: '', line2: '', city: '', state: '', postalCode: '', country: '' },
+    })
+  })
+
+  it('refuses a phone it cannot read under its own field, and sends nothing', () => {
+    renderCard()
+    fireEvent.change(screen.getByLabelText('Home phone'), { target: { value: 'ext 12' } })
+    save()
+    expect(screen.getByText('Enter it with its country code, like +1 512 555 0107.')).toBeTruthy()
+    expect(profileSaves()).toHaveLength(0)
+  })
+
+  it('sends the salutation, the reports-to and do not call only when they move', async () => {
+    renderCard()
+    typeJobTitle('Head roaster')
+    save()
+    await waitFor(() => expect(profileSaves()).toHaveLength(1))
+    const untouched = profileSaves()[0].payload['set']
+    expect(untouched).not.toHaveProperty('salutation')
+    expect(untouched).not.toHaveProperty('reportsToContactId')
+    expect(untouched).not.toHaveProperty('doNotCall')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reports to: nobody' }))
+    fireEvent.click(screen.getByLabelText('Do not call'))
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Salutation' }))
+    fireEvent.click(screen.getByRole('option', { name: 'Dr.' }))
+    save()
+    await waitFor(() => expect(profileSaves()).toHaveLength(2))
+    expect(profileSaves()[1].payload['set']).toMatchObject({
+      salutation: 'Dr.',
+      reportsToContactId: 'manager-1',
+      doNotCall: true,
+    })
+  })
+
+  it('labels the address the mailing address, beside the other address', () => {
+    renderCard()
+    expect(screen.getByText('Mailing address')).toBeTruthy()
+    expect(screen.getByText('Other address')).toBeTruthy()
+    for (const section of ['Contact information', 'Phones', 'Addresses', 'Additional information']) {
+      expect(screen.getByText(section)).toBeTruthy()
+    }
   })
 })

@@ -39,9 +39,15 @@
 
 import {
   checkFormSubmissionQuota,
-  FORM_ABUSE_CEILING_CODE,
   FORM_ABUSE_CEILING_FLOOR,
 } from '@aglyn/aglyn/server'
+
+/**
+ * The refusal code the form element recognises a flooded site by, as the
+ * door publishes it — spelled out, because the wire value is the contract
+ * between the door and every form already on a published page.
+ */
+const FORM_ABUSE_CEILING_CODE = 'form-abuse-ceiling'
 
 const HOST_ID = 'site-1'
 const MONTH = new Date().toISOString().slice(0, 7)

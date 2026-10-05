@@ -37,6 +37,13 @@ describe('csvCell', () => {
     expect(csvCell('old\r\nmac')).toBe('"old\r\nmac"')
   })
 
+  it('writes a text cell a spreadsheet would run as a formula as text, a negative number as a number (AGL-3548)', () => {
+    expect(csvCell('=HYPERLINK("http://x","y")')).toBe('"\'=HYPERLINK(""http://x"",""y"")"')
+    expect(csvCell('@SUM(A1)')).toBe("'@SUM(A1)")
+    expect(csvCell('-5')).toBe("'-5")
+    expect(csvCell(-5)).toBe('-5')
+  })
+
   it('writes an absent cell as nothing and a number as its digits', () => {
     expect(csvCell(null)).toBe('')
     expect(csvCell(undefined)).toBe('')

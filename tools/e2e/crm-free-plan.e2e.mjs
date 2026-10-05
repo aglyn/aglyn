@@ -35,18 +35,17 @@
 // 3. The organization's hub draws the same.
 // 4. A `crm/*` read (`crm/contact-email-history`) and `crm/*` writes
 //    (`crm/contacts-create`, `crm/lead-convert`) answer 403 `plan_required` /
-//    `crm` to the owner — the create to staff too — and write nothing, and
-//    `/api/crm/export` refuses the companies file the same way.
+//    `crm` to the owner — the create to staff too — and write nothing.
 // 5. The rules refuse a lead's status change and a company's create and
 //    update, and still serve both reads.
 // 6. THE COMPLIANCE DOOR. Settings → Privacy downloads every contact and
-//    every lead, and files an erasure by address for a contact who has no
-//    lead.
+//    every lead through the export dialog (AGL-3552), and files an erasure by
+//    address for a contact who has no lead.
 // 7. THE CONTROL. The same workspace moved to Starter admits the same acts:
 //    `/crm` lands on Contacts with the rail open, Leads lists its people, the
-//    read and the writes answer, the rules admit the writes, and the companies
-//    file downloads. A refusal above that this step does not turn into an
-//    admission is not the plan's refusal.
+//    read and the writes answer, and the rules admit the writes. A refusal
+//    above that this step does not turn into an admission is not the plan's
+//    refusal.
 //
 // Prerequisites (docs/E2E_LOCAL.md): the Auth and Firestore emulators and a
 // console dev server (E2E_BASE_URL). The spec writes its own workspace before
@@ -126,22 +125,6 @@ const contactsAt = async (email) =>
 const refusedForPlan = (answer) =>
   answer.status === 403 && answer.body?.reason === 'plan_required' && answer.body?.code === 'crm'
 
-/** `GET /api/crm/export` as a user: the status, and the body as JSON when it is JSON. */
-async function exportAs(uid, resource) {
-  const response = await fetch(
-    `${BASE_URL}/api/crm/export?orgId=${encodeURIComponent(FREE.orgId)}&resource=${resource}`,
-    { headers: { Authorization: `Bearer ${await idTokenFor(uid)}` } },
-  )
-  const text = await response.text()
-  let body = {}
-  try {
-    body = JSON.parse(text)
-  } catch {
-    // A CSV file.
-  }
-  return { status: response.status, body }
-}
-
 /*==========================================
  * CLIENT-DIRECT WRITES
  *
@@ -153,7 +136,8 @@ async function exportAs(uid, resource) {
  *=========================================*/
 
 const companiesPath = `orgs/${FREE.orgId}/companies`
-const leadsPath = `hosts/${FREE.hostId}/leads`
+// Leads are the organization's, beside its contacts and companies.
+const leadsPath = `orgs/${FREE.orgId}/leads`
 
 /** One Firestore REST call as the Free owner; answers the status and the error's name. */
 async function asOwner(method, path, body) {
@@ -332,7 +316,6 @@ await step(tally, page, 'a crm/* read and crm/* writes answer 403 plan_required,
     hostId: FREE.hostId,
     leadId: priyaLeadId,
   })
-  const companiesFile = await exportAs(FREE.ownerUid, 'companies')
   const rows = (await contactsAt(email)) + (await contactsAt(staffEmail))
   // The same read, for an address that IS on file, so "no rows" cannot be a
   // query that matches nothing.
@@ -345,12 +328,11 @@ await step(tally, page, 'a crm/* read and crm/* writes answer 403 plan_required,
       refusedForPlan(create) &&
       refusedForPlan(staffCreate) &&
       refusedForPlan(convert) &&
-      refusedForPlan(companiesFile) &&
       rows === 0 &&
       seeded === 1 &&
       !converted,
     `contact-email-history ${refusal(read)} · contacts-create ${refusal(create)} · staff ${refusal(staffCreate)} · ` +
-      `lead-convert ${refusal(convert)} · export companies ${refusal(companiesFile)} · rows ${rows} (seeded address ${seeded})`,
+      `lead-convert ${refusal(convert)} · rows ${rows} (seeded address ${seeded})`,
   )
 })
 
@@ -376,11 +358,19 @@ await step(tally, page, "the rules refuse a lead's status change and a company's
 
 await step(tally, page, 'Settings → Privacy downloads every contact and every lead, and erases a contact with no lead by address', async () => {
   await goto(orgUrl('/settings/privacy'))
+  // Each button opens the export dialog over the whole workspace (AGL-3552);
+  // its default preset leads with the address, and its primary action names
+  // how many fields it writes.
   const downloadOf = async (label) => {
+    await button(label).click({ timeout: TIMEOUT_MS })
+    const dialog = page.getByRole('dialog')
+    const exportFields = dialog.getByRole('button', { name: /^Export \d+ fields?$/ })
+    await exportFields.waitFor({ timeout: TIMEOUT_MS })
     const [download] = await Promise.all([
       page.waitForEvent('download', { timeout: TIMEOUT_MS }),
-      button(label).click({ timeout: TIMEOUT_MS }),
+      exportFields.click({ timeout: TIMEOUT_MS }),
     ])
+    await dialog.waitFor({ state: 'hidden', timeout: TIMEOUT_MS })
     return { name: download.suggestedFilename(), csv: readFileSync(await download.path(), 'utf8') }
   }
   const contactsFile = await downloadOf('Export contacts')
@@ -451,7 +441,6 @@ await step(tally, page, 'control: on Starter the same acts are admitted, and the
     async () => (await leadsRef.doc(priyaLeadId).get()).get('convertedContactId'),
     Boolean,
   )
-  const companiesFile = await exportAs(FREE.ownerUid, 'companies')
   await goto(siteUrl('/crm'))
   await page.waitForURL((url) => url.pathname === sitePath('/crm/contacts'), { timeout: TIMEOUT_MS })
   const { locked, open } = await readRail({ expectLocks: false })
@@ -475,7 +464,6 @@ await step(tally, page, 'control: on Starter the same acts are admitted, and the
       rows === 1 &&
       convert.status === 200 &&
       Boolean(converted) &&
-      companiesFile.status === 200 &&
       locked.length === 0 &&
       open.length === CRM_SECTIONS.length &&
       Boolean(newContactOpen) &&
@@ -483,7 +471,7 @@ await step(tally, page, 'control: on Starter the same acts are admitted, and the
       removal === '200',
     `lead status ${status} · company create ${create} · update ${update} · contact-email-history ${read.status} · ` +
       `contacts-create ${answer.status} rows ${rows} · lead-convert ${convert.status} (contact ${converted}) · ` +
-      `export companies ${companiesFile.status} · /crm → /crm/contacts, open ${open.length}, locked ${locked.length}, ` +
+      `/crm → /crm/contacts, open ${open.length}, locked ${locked.length}, ` +
       `New contact enabled ${newContactOpen} · Leads notices ${notices} · lead delete ${removal}`,
   )
 })

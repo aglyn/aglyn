@@ -16,14 +16,31 @@
  */
 'use client'
 
-import { checkQuota, pluginDocsHelp } from '@aglyn/aglyn'
+import { checkQuota, pluginDocsHelp, useTransferLauncher } from '@aglyn/aglyn'
 import { normalizeContactEmail } from '@aglyn/aglyn'
 import { pluginRecordByEmailHref } from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
 import { BOOKINGS_BOOKER_PARAM } from '../model/bookings-record-routes'
+import {
+  BOOKINGS_TRANSFER_RESOURCE,
+  bookerBookingsFilterValue,
+  upcomingBookingsFilterValue,
+} from '../transfer/bookings-transfer-common'
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { describePaymentRisk, type PaymentRisk } from '@aglyn/aglyn/app-utils/payment-risk'
 import { type ConsolePluginPageProps } from '@aglyn/aglyn'
 import { type HostBookingService, isBookingReminderDue } from '../model'
+import {
+  BOOKING_FIELD_ASKS,
+  type BookingFieldAsk,
+  bookingContactAsks,
+} from '../model/booking-contact-fields'
+import {
+  BOOKING_PRICE_DISPLAYS,
+  BOOKING_PRICE_LABELS,
+  type BookingPriceDisplay,
+  bookingPriceDisplay,
+  bookingPriceText,
+} from '../model/booking-price'
 import { AppLink, CardDisplay, HelpTip, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import QuotaReadoutComponent from '@aglyn/shared-ui-jsx/components/quota-readout.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -36,6 +53,7 @@ import {
   DialogContent,
   DialogTitle,
   FormControlLabel,
+  MenuItem,
   Stack,
   Switch,
   TextField,
@@ -101,6 +119,24 @@ interface ServiceDraft {
   /** The service's two CRM switches (AGL-2660) — see `HostBookingService`. */
   crmMeetingActivity: boolean
   crmFollowUpTask: boolean
+  /** What the widget asks the booker for (AGL-3493). */
+  askPhone: BookingFieldAsk
+  askAddress: BookingFieldAsk
+  /** How the price is stated (AGL-3475); a label books with no charge. */
+  priceDisplay: BookingPriceDisplay
+}
+
+/** How each way of stating the price reads in the service dialog's picker. */
+const PRICE_DISPLAY_LABELS: Record<BookingPriceDisplay, string> = {
+  fixed: 'The price',
+  ...BOOKING_PRICE_LABELS,
+}
+
+/** How each answer reads in the service dialog's two pickers. */
+const FIELD_ASK_LABELS: Record<BookingFieldAsk, string> = {
+  off: "Don't ask",
+  optional: 'Optional',
+  required: 'Required',
 }
 
 /** A fraud warning, review or chargeback on the booking's payment (AGL-3360). */
@@ -156,6 +192,23 @@ export function BookingsConsolePage(props: ConsolePluginPageProps) {
   const searchParams = useSearchParams()
   const bookerFilter = normalizeContactEmail(searchParams?.get(BOOKINGS_BOOKER_PARAM))
   const { basePath } = props
+  /*
+   * Export, opened on the list as it stands: one booker's bookings when the
+   * page is narrowed to them, otherwise the upcoming ones from this moment.
+   * `null` outside the console shell, where there is nothing to export into.
+   * No Import: a booking is only ever made on the booking page.
+   */
+  const transferLauncher = useTransferLauncher()
+  const handleExport = useCallback(() => {
+    transferLauncher?.openExport({
+      resource: BOOKINGS_TRANSFER_RESOURCE,
+      scope: 'host',
+      hostId,
+      filter: bookerFilter
+        ? { label: `Bookings for ${bookerFilter}`, value: bookerBookingsFilterValue(bookerFilter) }
+        : { label: 'Upcoming bookings', value: upcomingBookingsFilterValue(Date.now()) },
+    })
+  }, [transferLauncher, hostId, bookerFilter])
 
   const {
     data: serviceDocs,
@@ -258,6 +311,10 @@ export function BookingsConsolePage(props: ConsolePluginPageProps) {
       // A booking is a meeting the record has; the follow-up is opt-in.
       crmMeetingActivity: true,
       crmFollowUpTask: false,
+      // Name and email only, until the service says otherwise.
+      askPhone: 'off',
+      askAddress: 'off',
+      priceDisplay: 'fixed',
     })
   }, [entitled, org, services.length, enqueueSnackbar])
 
@@ -285,6 +342,11 @@ export function BookingsConsolePage(props: ConsolePluginPageProps) {
       // an absent key exactly as it was.
       crmMeetingActivity: draft.crmMeetingActivity,
       crmFollowUpTask: draft.crmFollowUpTask,
+      // Written explicitly for the same reason: switching a field back off
+      // has to land `'off'` over the stored answer.
+      askPhone: draft.askPhone,
+      askAddress: draft.askAddress,
+      priceDisplay: draft.priceDisplay,
     }
     try {
       if (draft.id) {
@@ -491,10 +553,7 @@ export function BookingsConsolePage(props: ConsolePluginPageProps) {
                     {service.name}
                   </Typography>
                   <Typography variant="caption" color="text.secondary" noWrap>
-                    {`${service.durationMinutes} min` +
-                      (Number(service.priceUsd) > 0
-                        ? ` · $${service.priceUsd}`
-                        : ' · free') +
+                    {`${service.durationMinutes} min · ${bookingPriceText(service).replace(/^Free$/, 'free')}` +
                       ` · ${service.timezone ?? 'UTC'}`}
                   </Typography>
                 </Stack>
@@ -516,6 +575,9 @@ export function BookingsConsolePage(props: ConsolePluginPageProps) {
                       // switches show what the service actually does.
                       crmMeetingActivity: service.crmMeetingActivity !== false,
                       crmFollowUpTask: service.crmFollowUpTask === true,
+                      askPhone: bookingContactAsks(service).phone,
+                      askAddress: bookingContactAsks(service).address,
+                      priceDisplay: bookingPriceDisplay(service.priceDisplay),
                     })
                   }
                 >
@@ -561,6 +623,13 @@ export function BookingsConsolePage(props: ConsolePluginPageProps) {
       })}
         contentGutterX
         contentGutterY
+        HeaderProps={{
+          action: transferLauncher?.can('export', { resource: BOOKINGS_TRANSFER_RESOURCE, scope: 'host', hostId }) ? (
+            <Button size="small" color="primary" onClick={handleExport}>
+              {'Export'}
+            </Button>
+          ) : undefined,
+        }}
       >
         {bookerFilter ? (
           <Typography
@@ -615,7 +684,22 @@ export function BookingsConsolePage(props: ConsolePluginPageProps) {
                     {`${new Date(booking.startsAtMs).toLocaleString()} · ${
                       booking.email
                     }`}
+                    {typeof booking.phone === 'string' && booking.phone
+                      ? ` · ${booking.phone}`
+                      : ''}
                   </Typography>
+                  {/* Where the job is, when the service asked (AGL-3493).
+                      Wrapped rather than cut: an address read to its end is
+                      the one a crew can drive to. */}
+                  {typeof booking.address === 'string' && booking.address ? (
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      sx={{ whiteSpace: 'pre-line' }}
+                    >
+                      {booking.address}
+                    </Typography>
+                  ) : null}
                 </Stack>
                 <PaymentRiskChip risk={booking.paymentRisk} />
                 {contactHrefOf(booking.email) ? (
@@ -707,7 +791,11 @@ export function BookingsConsolePage(props: ConsolePluginPageProps) {
               // the same line `describeOrderTaxMode` holds. Who owes which
               // authority what attaches by operation of law and is counsel's
               // call (AGL-1904/AGL-1956).
-              helperText={`${PLATFORM_BRAND_NAME} charges this price as typed — no tax is added. Your Commerce tax settings are a goods sales rate and do not apply to bookings.`}
+              helperText={
+                draft && draft.priceDisplay !== 'fixed'
+                  ? `Not charged: this service shows “${BOOKING_PRICE_LABELS[draft.priceDisplay]}” and books with no charge.`
+                  : `${PLATFORM_BRAND_NAME} charges this price as typed — no tax is added. Your Commerce tax settings are a goods sales rate and do not apply to bookings.`
+              }
               value={draft?.priceUsd ?? ''}
               onChange={(event) =>
                 setDraft((prev) =>
@@ -721,6 +809,32 @@ export function BookingsConsolePage(props: ConsolePluginPageProps) {
               }
               size="small"
             />
+            {/*
+              A contractor who quotes at the job states the price as a label
+              instead (AGL-3475). Any label books with no charge, like an
+              estimate appointment, and the stored price is neither shown nor
+              charged.
+            */}
+            <TextField
+              select
+              label="Show the price as"
+              value={draft?.priceDisplay ?? 'fixed'}
+              onChange={(event) =>
+                setDraft((prev) =>
+                  prev
+                    ? { ...prev, priceDisplay: bookingPriceDisplay(event.target.value) }
+                    : prev,
+                )
+              }
+              size="small"
+              sx={{ minWidth: 180 }}
+            >
+              {BOOKING_PRICE_DISPLAYS.map((display) => (
+                <MenuItem key={display} value={display}>
+                  {PRICE_DISPLAY_LABELS[display]}
+                </MenuItem>
+              ))}
+            </TextField>
             <TextField
               label="Timezone"
               value={draft?.timezone ?? ''}
@@ -769,6 +883,43 @@ export function BookingsConsolePage(props: ConsolePluginPageProps) {
               size="small"
             />
           ))}
+          <Typography variant="overline" color="text.secondary">
+            {'Booking form'}
+          </Typography>
+          {/*
+            What the widget asks for beyond a name and an email (AGL-3493).
+            Off by default; an on-site service asks for both, required.
+          */}
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
+            {(
+              [
+                ['askPhone', 'Phone number'],
+                ['askAddress', 'Address'],
+              ] as const
+            ).map(([key, label]) => (
+              <TextField
+                key={key}
+                select
+                label={label}
+                value={draft?.[key] ?? 'off'}
+                onChange={(event) =>
+                  setDraft((prev) =>
+                    prev
+                      ? { ...prev, [key]: event.target.value as BookingFieldAsk }
+                      : prev,
+                  )
+                }
+                size="small"
+                fullWidth
+              >
+                {BOOKING_FIELD_ASKS.map((ask) => (
+                  <MenuItem key={ask} value={ask}>
+                    {FIELD_ASK_LABELS[ask]}
+                  </MenuItem>
+                ))}
+              </TextField>
+            ))}
+          </Stack>
           <Typography variant="overline" color="text.secondary">
             {'CRM'}
           </Typography>

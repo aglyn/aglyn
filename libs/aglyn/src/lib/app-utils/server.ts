@@ -68,6 +68,10 @@ export * from './contacts'
 // A lead's or a contact's email state (AGL-3245): the last verdict on its
 // address, in words a person can act on, mirrored from the senders' lists.
 export * from './email-state'
+// A field whose choices an admin keeps (AGL-3510): standard values built in,
+// the organization's own beside them, and the judge every write asks. Pure,
+// and named for no plugin — a plugin's registry of picklists sits on top.
+export * from './picklists'
 // The records that sit beside a contact — companies, pipelines, deals, tasks,
 // activities, field definitions (AGL-2595). Pure like `contacts`, and beside
 // it because `ContactFacet` names its lifecycle stage and custom-value types;
@@ -179,6 +183,9 @@ export * from './host-permissions'
 export * from './password-policy'
 export * from './idp-profile'
 export * from './onboarding-deep-link'
+// The platform team's ask that a workspace buy a plan (AGL-3466), beside the
+// plan intent its button carries into Billing.
+export * from './upgrade-proposal'
 // Where an account came from (AGL-1731). Beside the plan intent because
 // they are the same hop — the marketing CTA's query string — and both are
 // remembered on `users/{uid}` across the verification wall.
@@ -203,7 +210,10 @@ export * from './plan-entitlements'
 // The free plan's bandwidth hard cap (AGL-1967/2070/2155). After
 // `plan-entitlements`, which owns the predicate it keys off.
 export * from './bandwidth-cap'
-export * from './form-abuse-ceiling'
+// Video and file delivery as bandwidth (AGL-3474), in the band's own units.
+export * from './media-bandwidth'
+// The month every monthly counter is keyed by, and the boundary it lifts on.
+export * from './utc-month'
 export * from './forms'
 // What a form's DESIGN must still satisfy for its submissions to arrive.
 // After `forms`, whose field walk it reads the drawn fields with.
@@ -289,6 +299,7 @@ export * from './sanitize-svg'
 export * from './media-folders'
 export * from './media-metadata'
 export * from './media-ref'
+export * from './rendered-widths'
 // After `media-ref`, whose reference grammar it reads stored URLs with.
 export * from './paid-media-source'
 export * from './author-css'

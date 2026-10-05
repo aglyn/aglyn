@@ -120,25 +120,116 @@ export const MEDIA_CDN_ROUTE = '/api/media/cdn'
  * literal in `libs/plugins/mui/.../image.tsx`, so a width added to the
  * generator never reached the markup.
  *
- * ⚠️ 1920 EXISTS SO THE LARGEST CANDIDATE IS STILL A VARIANT (2026-08-26).
+ * ## Why ten steps, and not four (AGL-3486)
+ *
+ * The ladder used to be 320 / 640 / 1280 / 1920. A browser picks the smallest
+ * candidate at least as wide as the slot times the device pixel ratio, so a
+ * 378px slot on a DPR 2 phone needs 756 pixels and the next step was 1280 —
+ * 2.9x the pixels it could use. Lighthouse measured exactly that on a customer
+ * home page: four images delivered at `?w=1280` into slots a third that size.
+ * The steps are now close enough that the overshoot is at most ~1.33x, and
+ * 2560 covers a full-bleed hero on a retina laptop. A source is never
+ * enlarged: {@link mediaCdnSrcSet} caps the list at the source's own width,
+ * and the generator skips every width above it.
+ *
+ * 160 serves thumbnails, avatars and logos in a card. Every step is a real
+ * object per asset, so a width earns its place by being the one a common slot
+ * would otherwise overshoot.
+ *
+ * ## The largest candidate is still a variant (2026-08-26)
  *
  * The srcSet used to top out with the BARE url labelled `1920w` — the only
- * candidate that is never WebP. With `sizes="100vw"` any retina desktop needs
- * more effective pixels than 1280w offers, so that bare candidate is the one
- * most desktop visitors actually download. Measured on aglyn.com's own
- * assets: 335 KB / 305 KB / 164 KB PNG originals against 4 KB / 4 KB / 5 KB
- * WebP at `?w=320` — and ~94% of a media serve is bandwidth (AGL-1442).
+ * candidate that is never WebP — and with `sizes="100vw"` that is the one a
+ * retina desktop downloads. Measured on aglyn.com's own assets: 335 KB PNG
+ * originals against 4 KB WebP at `?w=320`, and ~94% of a media serve is
+ * bandwidth (AGL-1442).
  *
  * `mediaVariantWidthsFor` names every width below the source, and for a JPEG
  * or PNG the rest as WebP at the source's own width; `serveMediaCdn` serves
- * the original for a width an asset does not have, so a missing variant
- * degrades to exactly the bytes it served before.
+ * the delivery copy for a width an asset does not have, so a missing variant
+ * degrades to exactly the bytes the bare URL serves.
  *
- * ⛔ EXISTING ASSETS KEEP THE VARIANTS THEY WERE UPLOADED WITH until a backfill
- * runs — no regression, and no saving on them either. The backfill is a
- * `sharp` pass over the corpus, a script and not a patch (AGL-1442 S7).
+ * Existing assets reach a new ladder or a new encoder without a backfill: the
+ * CDN regenerates an asset whose {@link MEDIA_VARIANT_ENCODER_VERSION_FIELD}
+ * is older than {@link MEDIA_VARIANT_ENCODER_VERSION} after serving the
+ * request that found it stale.
  */
-export const MEDIA_CDN_VARIANT_WIDTHS = [320, 640, 1280, 1920] as const
+export const MEDIA_CDN_VARIANT_WIDTHS = [
+  160, 320, 480, 640, 768, 960, 1280, 1600, 1920, 2560,
+] as const
+
+/**
+ * The generation of the encoder that produced an asset's delivery copies —
+ * its `?w=` WebP variants and its display copy (AGL-3486).
+ *
+ * Bump it whenever the encoder's output would change: its quality, effort or
+ * format, the ladder above, or the display copy's rules. Two things key on it:
+ *
+ * 1. **Lazy regeneration.** `serveMediaCdn` compares it with the asset's
+ *    {@link MEDIA_VARIANT_ENCODER_VERSION_FIELD}; an older one is served as it
+ *    is and regenerated after the response, so every existing asset converges
+ *    on its next request and no backfill script is needed.
+ * 2. **Validators and versioned URLs.** The ETag of a variant or display copy
+ *    names the generation, so a browser revalidating an old encode is sent
+ *    the new bytes rather than a 304. It is also half of the versioned URL a
+ *    page names (AGL-3485, {@link mediaCdnVersionToken}), so regenerated
+ *    copies are fetched under a new URL instead of hiding behind a year-long
+ *    copy of the old encode.
+ *
+ * Generation 1 is every variant made before the field existed: WebP quality
+ * 80, effort 4, not auto-oriented, on the 320 / 640 / 1280 / 1920 ladder.
+ * Generation 2: quality 72, effort 5, auto-oriented, metadata stripped, the
+ * ten-step ladder, never a variant larger than its source, and the display
+ * copy.
+ */
+export const MEDIA_VARIANT_ENCODER_VERSION = 2
+
+/**
+ * The media document field that records which encoder generation made the
+ * asset's current delivery copies. Absent means generation 1: every variant
+ * made before the field existed.
+ */
+export const MEDIA_VARIANT_ENCODER_VERSION_FIELD = 'variantEncoderVersion'
+
+/**
+ * The encoder generation a media document's delivery copies were made by.
+ * Absent, or anything that is not a positive integer, is generation 1.
+ */
+export function mediaVariantEncoderVersionOf(value: unknown): number {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0
+    ? value
+    : 1
+}
+
+/**
+ * The longest edge the CDN delivers an image at (AGL-3486).
+ *
+ * A phone photo is 4000-8000 pixels on its long edge and several megabytes,
+ * and no page slot paints more than a retina full-bleed hero — the 2560 that
+ * tops {@link MEDIA_CDN_VARIANT_WIDTHS}. Above it the bare URL serves the
+ * display copy instead of the original: the same format, downscaled to fit.
+ * The original stays exactly as uploaded, for Download file and `?download=1`.
+ */
+export const MEDIA_DELIVERY_MAX_EDGE = 2560
+
+/**
+ * Suffix of an image's DISPLAY COPY in Storage (AGL-3486):
+ * `{objectPath}__display`.
+ *
+ * The display copy is what the bare inline URL serves for a JPEG, PNG or WebP
+ * whose original should not leave as it is: one larger than
+ * {@link MEDIA_DELIVERY_MAX_EDGE}, one carrying EXIF, XMP or IPTC (a phone
+ * photo's GPS position), or one that relies on an EXIF orientation. It keeps
+ * the original's format, so an email client or a link preview that cannot
+ * read WebP still can read it. `__display` cannot collide with the
+ * `__w{n}`, `__poster` and `__r{key}` suffixes.
+ */
+export const MEDIA_DISPLAY_OBJECT_SUFFIX = '__display'
+
+/** Where an image's display copy lives, given the original's object path. */
+export function mediaDisplayObjectPath(objectPath: string): string {
+  return `${objectPath}${MEDIA_DISPLAY_OBJECT_SUFFIX}`
+}
 
 /**
  * The variant width a surface asks for when it can only ask for ONE.
@@ -147,10 +238,66 @@ export const MEDIA_CDN_VARIANT_WIDTHS = [320, 640, 1280, 1920] as const
  * choose. A `<video poster>` attribute and a `thumbnailUrl` in structured data
  * each take a single url, so they have to name a width — and it has to be the
  * SAME width, or a crawler fetching the thumbnail gets different bytes from
- * the visitor looking at the poster. 1280 is the widest variant below a 1920
- * original's own width.
+ * the visitor looking at the poster. 1280 fills a 640px player at DPR 2 and
+ * sits below a 1920 still's own width, so it is always a real variant.
  */
 export const MEDIA_CDN_POSTER_WIDTH = 1280
+
+/**
+ * The query parameter that makes a CDN URL a VERSIONED one (AGL-3485).
+ *
+ * A page that knows the bytes it is naming asks for them as
+ * `/api/media/cdn/{scope}/{mediaId}?v={contentHash}.{encoder}`, and the CDN
+ * answers that request with a year-long `immutable` policy while the token
+ * still names the current bytes and the current variants. A replace changes
+ * the content hash, a variant regeneration changes the encoder generation,
+ * and either one changes the URL the next composition of the page renders.
+ *
+ * It is a parameter on the stable path rather than the content-hashed third
+ * segment, for the reason the module note gives about that segment: the
+ * request still reaches the same handler, and a token that no longer names
+ * the current bytes is served the CURRENT bytes under the stable URL's short
+ * policy rather than anything pinned. A stale page therefore shows the new
+ * picture, never a year of the old one; only a request whose token matches
+ * the document is ever told to keep its copy.
+ */
+export const MEDIA_CDN_VERSION_PARAM = 'v'
+
+/** What a versioned URL's token says about the bytes it names. */
+export interface MediaCdnVersion {
+  contentHash: string
+  encoderVersion: number
+}
+
+/**
+ * The `?v=` token for an asset whose current content hash is `contentHash`,
+ * or `undefined` when there is no usable hash to name: an asset with no
+ * recorded hash renders the unversioned URL, exactly as before.
+ */
+export function mediaCdnVersionToken(
+  contentHash: unknown,
+): string | undefined {
+  if (typeof contentHash !== 'string' || !SEGMENT.test(contentHash)) {
+    return undefined
+  }
+  return `${contentHash}.${MEDIA_VARIANT_ENCODER_VERSION}`
+}
+
+/** Reads a `?v=` token apart; null for anything that is not one. */
+export function parseMediaCdnVersionToken(
+  value: unknown,
+): MediaCdnVersion | null {
+  const raw = Array.isArray(value) ? value[0] : value
+  if (typeof raw !== 'string') return null
+  const dot = raw.lastIndexOf('.')
+  if (dot <= 0) return null
+  const contentHash = raw.slice(0, dot)
+  const encoder = raw.slice(dot + 1)
+  if (!SEGMENT.test(contentHash) || !/^[1-9]\d{0,5}$/.test(encoder)) {
+    return null
+  }
+  return { contentHash, encoderVersion: Number(encoder) }
+}
 
 /**
  * Scheme of a stored media reference. Chosen so `startsWith` is a decision:
@@ -326,6 +473,14 @@ export interface ResolveMediaSrcOptions {
    * scope (see {@link mediaNodeSrc}).
    */
   hostId?: string | null
+  /**
+   * The asset's current content hash, when the caller has read it off the
+   * media document (AGL-3485) — the composition's asset facts lay it on an
+   * Image node as `mediaVersion`. A reference then resolves to the VERSIONED
+   * URL ({@link MEDIA_CDN_VERSION_PARAM}), which the CDN lets every cache keep
+   * for a year. Absent, or not a hash, resolves the stable URL as before.
+   */
+  version?: string | null
 }
 
 /**
@@ -333,13 +488,22 @@ export interface ResolveMediaSrcOptions {
  *
  * 1. a **media reference** → the CDN URL for it, host-qualified if we know
  *    which site is asking;
- * 2. any other non-empty string → **itself, untouched**. That is the whole
- *    back-compat story and it needs no migration to be correct: nodes
- *    holding a raw `https://firebasestorage.googleapis.com/…` URL, nodes
- *    holding an `/api/media/cdn/…` path written by the first pass,
- *    and an author-typed external URL for a hotlinked image are all just
- *    passed through;
- * 3. empty/absent → undefined, so the caller shows its placeholder.
+ * 2. a **Storage download URL for a library object** → the same CDN URL,
+ *    exactly as if the reference had been stored (AGL-3506). See
+ *    {@link mediaRefFromStorageUrl};
+ * 3. any other non-empty string → **itself, untouched**. Nodes holding an
+ *    `/api/media/cdn/…` path written by the first pass and an author-typed
+ *    external URL for a hotlinked image are passed through;
+ * 4. empty/absent → undefined, so the caller shows its placeholder.
+ *
+ * Branch 2 is what routes every library byte through the CDN. A download
+ * URL goes from Google's edge straight to the visitor, so no code of ours
+ * runs on it: the bandwidth band never counts it (AGL-3474), and a lockdown,
+ * a quarantine or a takedown cannot refuse it (`media-download-tokens.ts`).
+ * Every upload still stores one on the media document's `url`, and older
+ * nodes, products and popups hold it verbatim. Resolving it here covers
+ * every one of them with no migration, and an image keeps the stable URL's
+ * edge caching.
  *
  * A value that opens with `media:` but does not parse resolves to undefined
  * rather than reaching an `<img src>`. There is no correct URL to emit for
@@ -351,14 +515,27 @@ export function resolveMediaSrc(
   options?: ResolveMediaSrcOptions,
 ): string | undefined {
   if (!value) return undefined
-  if (!isMediaRef(value)) return value
-  const ref = parseMediaRef(value)
+  const stored = isMediaRef(value) ? value : mediaRefFromStorageUrl(value)
+  if (!stored) {
+    // A legacy stored CDN path names the same asset on the same route, so it
+    // takes the version as a reference does (AGL-3485).
+    const token = isMediaCdnPath(value)
+      ? mediaCdnVersionToken(options?.version)
+      : undefined
+    return token ? `${value}?${MEDIA_CDN_VERSION_PARAM}=${token}` : value
+  }
+  const ref = parseMediaRef(stored)
   if (!ref) return undefined
   const scope = hostQualifiedScope(ref.scope, options?.hostId)
   // The stable URL, pinned or not (AGL-2798). The content-hashed form is held
   // for a year by the edge and by every browser that fetched it, where no
   // replace can reach — see the module note.
-  return `${MEDIA_CDN_ROUTE}/${scope}/${ref.mediaId}`
+  const stable = `${MEDIA_CDN_ROUTE}/${scope}/${ref.mediaId}`
+  // The version comes from the asset's document at composition, never from
+  // the reference's pin: a pin records which bytes an author placed, and the
+  // page must name the bytes the asset holds NOW.
+  const token = mediaCdnVersionToken(options?.version)
+  return token ? `${stable}?${MEDIA_CDN_VERSION_PARAM}=${token}` : stable
 }
 
 /**
@@ -458,8 +635,12 @@ export function siteRelativeMediaSrc(
  * relative URL — the rule the canonical and the RSS feed already follow
  * (AGL-1160/AGL-1272): never interpolate an unknown origin, and never emit a
  * URL that is well-formed but wrong. An absolute value is unaffected, so the
- * author-typed external URL and the raw storage URL never depend on knowing
- * the origin at all.
+ * author-typed external URL never depends on knowing the origin at all.
+ *
+ * A Storage download URL resolves to the CDN path (AGL-3506), so with an
+ * origin it leaves as the CDN URL. Without one it leaves as itself: it was
+ * already absolute and fetchable, and a reader with no origin is better
+ * served by the uncounted link it had than by no image at all.
  *
  * A protocol-relative `//host/x.png` only lacks a scheme; it is given `https:`
  * rather than an origin, which would corrupt it.
@@ -473,7 +654,7 @@ export function absoluteMediaSrc(
   if (/^[a-z][a-z0-9+.-]*:/i.test(resolved)) return resolved
   if (resolved.startsWith('//')) return `https:${resolved}`
   const origin = options?.origin
-  if (!origin) return undefined
+  if (!origin) return value && mediaRefFromStorageUrl(value) ? value : undefined
   return resolved.startsWith('/')
     ? `${origin}${resolved}`
     : `${origin}/${resolved}`
@@ -488,6 +669,25 @@ export function absoluteMediaSrc(
  */
 export function isMediaCdnUrl(url: string | undefined | null): boolean {
   return Boolean(url && url.includes(`${MEDIA_CDN_ROUTE}/`))
+}
+
+/**
+ * The URL of an asset's ORIGINAL bytes (AGL-3486): the CDN url with
+ * `?download=1`, or the url unchanged when it is not a CDN one.
+ *
+ * Since display copies, the bare CDN url is not the upload: an oversized or
+ * metadata-carrying image is served as an upright, stripped copy no larger
+ * than the delivery edge. That is right for a page and wrong for the two
+ * console actions that promise the file itself — Download file, and the
+ * image editor's "Replace original", which would otherwise save a downscaled
+ * copy over the original. `?download=1` is the one form the CDN answers with
+ * the original byte for byte, and a `fetch` or an `<img>` ignores the
+ * attachment disposition it comes with.
+ */
+export function mediaOriginalSrc(src: string): string {
+  return isMediaCdnUrl(src) && !/[?&]download=1(?:&|$)/.test(src)
+    ? withMediaCdnQuery(src, [['download', '1']])
+    : src
 }
 
 /**
@@ -559,11 +759,57 @@ export function mediaVariantSrc(
  */
 export function mediaCdnSrcSet(
   src: string | undefined | null,
+  options: {
+    /**
+     * The asset's own pixel width, when the caller knows it. The list then
+     * stops at the source (AGL-3486), see {@link mediaCdnSrcSetWidths}.
+     */
+    sourceWidth?: number | null
+  } = {},
 ): string | undefined {
   if (!isMediaCdnUrl(src)) return undefined
-  return MEDIA_CDN_VARIANT_WIDTHS.map(
-    (width) => `${mediaVariantSrc(src, { width })} ${width}w`,
-  ).join(', ')
+  return mediaCdnSrcSetWidths(options.sourceWidth)
+    .map(
+      ({ request, descriptor }) =>
+        `${mediaVariantSrc(src, { width: request })} ${descriptor}w`,
+    )
+    .join(', ')
+}
+
+/**
+ * The `srcSet` candidates for a source of the given width (AGL-3486): which
+ * `?w=` each one asks for, and the width it truthfully describes.
+ *
+ * Every ladder width below the source, then ONE candidate at the source's own
+ * width — requested as the smallest ladder width at or above it, which is the
+ * key the CDN serves a source-width copy under, and described as the source
+ * width because that is how many pixels arrive. Advertising `1920w` for a
+ * 1000px photo told the browser it could get more detail than exists, so a
+ * retina desktop always chose it and was handed the same 1000 pixels.
+ *
+ * A source wider than the ladder ends at the top step: nothing above
+ * {@link MEDIA_DELIVERY_MAX_EDGE} is delivered. An unknown width gets the whole
+ * ladder, exactly as before — the CDN never enlarges, so an overstated
+ * candidate costs a wasted choice, never a wrong picture.
+ */
+export function mediaCdnSrcSetWidths(
+  sourceWidth?: number | null,
+): { request: number; descriptor: number }[] {
+  const ladder = MEDIA_CDN_VARIANT_WIDTHS.map((width) => ({
+    request: width,
+    descriptor: width,
+  }))
+  if (
+    typeof sourceWidth !== 'number' ||
+    !Number.isFinite(sourceWidth) ||
+    sourceWidth <= 0
+  ) {
+    return ladder
+  }
+  const own = Math.round(sourceWidth)
+  const below = ladder.filter(({ request }) => request < own)
+  const cap = MEDIA_CDN_VARIANT_WIDTHS.find((width) => width >= own)
+  return cap === undefined ? below : [...below, { request: cap, descriptor: own }]
 }
 
 /**
@@ -597,8 +843,11 @@ export function mediaBodyImageAttributes(options: {
   /** The target as the body wrote it: a `media:` reference or a plain url. */
   src: unknown
   hostId?: string
-  /** The asset's pixel pair, when the composition could read one. */
-  size?: { width: number; height: number } | undefined
+  /**
+   * The asset's pixel pair, when the composition could read one, and its
+   * current content hash, which makes the URL a versioned one (AGL-3485).
+   */
+  size?: { width: number; height: number; version?: string } | undefined
 }): {
   src: string | undefined
   srcSet?: string
@@ -608,11 +857,11 @@ export function mediaBodyImageAttributes(options: {
 } {
   const src = resolveMediaSrc(
     typeof options.src === 'string' ? options.src : undefined,
-    { hostId: options.hostId },
+    { hostId: options.hostId, version: options.size?.version },
   )
   const { size } = options
   if (!size) return { src }
-  const srcSet = mediaCdnSrcSet(src)
+  const srcSet = mediaCdnSrcSet(src, { sourceWidth: size.width })
   return {
     src,
     width: size.width,
@@ -769,6 +1018,98 @@ export function isFirstPartyMediaSrc(value: unknown): value is string {
   }
 }
 
+/** Firebase Storage's download host — where every upload's `url` points. */
+const STORAGE_DOWNLOAD_HOST = 'firebasestorage.googleapis.com'
+
+/**
+ * The Storage emulator's `host:port`, whose download URLs have the same shape
+ * as production's. Read per call so a test can set it; empty in a browser.
+ */
+function storageEmulatorHost(): string {
+  const env =
+    typeof process === 'undefined'
+      ? undefined
+      : process.env?.['FIREBASE_STORAGE_EMULATOR_HOST']
+  return String(env ?? '')
+    .trim()
+    .toLowerCase()
+}
+
+/**
+ * The library asset a Storage object key belongs to, or null.
+ *
+ * Every writer keys an asset's object as `{base}/media/[folders/]{mediaId}`,
+ * with `base` either `hosts/{hostId}` or `orgs/{orgId}`. So a key in that
+ * shape whose last segment is id-shaped IS that asset, wherever a folder move
+ * has since put it. Derived objects are no asset's key: a variant or a
+ * rendition carries a dot (`…__w640.webp`, `…__r720p.mp4`), and a poster
+ * ends in {@link MEDIA_POSTER_OBJECT_SUFFIX}, which is id-shaped and has to
+ * be refused by name.
+ *
+ * This names the asset and decides nothing about access.
+ */
+export function mediaAssetOfObjectKey(
+  objectPath: string,
+): { scope: string; mediaId: string } | null {
+  const segments = String(objectPath ?? '').split('/')
+  if (segments.length < 4 || segments[2] !== 'media') return null
+  if (segments.some((segment) => !segment || segment === '..')) return null
+  const [root, scopeId] = segments
+  const scope =
+    root === 'hosts' ? scopeId : root === 'orgs' ? `org:${scopeId}` : null
+  if (!scope) return null
+  const leaf = segments[segments.length - 1]
+  if (leaf.endsWith(MEDIA_POSTER_OBJECT_SUFFIX)) return null
+  const ref = parseMediaRef(`${MEDIA_REF_PREFIX}${scope}/${leaf}`)
+  return ref ? { scope: ref.scope, mediaId: ref.mediaId } : null
+}
+
+/**
+ * The `media:` reference a Storage DOWNLOAD URL names, or undefined when it
+ * names no library asset (AGL-3506).
+ *
+ * `https://firebasestorage.googleapis.com/v0/b/{bucket}/o/{key}?alt=media&token=…`
+ * is what every upload route stores on the media document's `url`, and the
+ * key alone says which asset it is ({@link mediaAssetOfObjectKey}). The
+ * bucket is not checked: this runs in the browser, where the bucket name is
+ * not reliably configured, and nothing is widened by skipping it — the CDN
+ * serves by scope and id to anyone who asks, under its own scope check, so a
+ * reference minted from a foreign bucket's URL reaches nothing a typed
+ * `media:` reference could not.
+ *
+ * The token is not needed and not kept. The CDN reads the object with the
+ * Admin SDK, so a token rotated by a lockdown, or a URL left stale by a
+ * folder move, still resolves to the asset's current bytes.
+ */
+export function mediaRefFromStorageUrl(value: unknown): string | undefined {
+  // Cheap reject before constructing a URL: this runs on every rendered image.
+  if (typeof value !== 'string' || !value.includes('/v0/b/')) return undefined
+  let url: URL
+  try {
+    url = new URL(value)
+  } catch {
+    return undefined
+  }
+  const emulator = storageEmulatorHost()
+  if (
+    url.hostname.toLowerCase() !== STORAGE_DOWNLOAD_HOST &&
+    !(emulator && url.host.toLowerCase() === emulator)
+  ) {
+    return undefined
+  }
+  // `/v0/b/{bucket}/o/{key}`, the key percent-encoded as one segment.
+  const match = /^\/v0\/b\/[^/]+\/o\/([^/]+)$/.exec(url.pathname)
+  if (!match) return undefined
+  let objectPath: string
+  try {
+    objectPath = decodeURIComponent(match[1])
+  } catch {
+    return undefined
+  }
+  const asset = mediaAssetOfObjectKey(objectPath)
+  return asset ? formatMediaRef(asset.scope, asset.mediaId) : undefined
+}
+
 /**
  * Reads a reference back out of a CDN path — how the picker mints one from
  * the `cdnPath` the server already wrote on the media doc, so nothing new
@@ -834,14 +1175,12 @@ export function mediaRefPattern(mediaId: string): RegExp {
 /**
  * What the media picker writes into a node prop.
  *
- * The reference is derived from `cdnPath`, and that is load-bearing rather
- * than convenient: `cdnPath` is only minted for orgs entitled to `mediaCdn`
- * and is deleted for private assets (`mediaCdnPathUpdate`). Since the CDN
- * handler itself checks neither, minting a reference from an id we happen to
- * know would hand every free-tier org paid delivery. Deriving it means the
- * entitlement gate keeps working with no second copy of the rule — and a
- * free-tier org degrades to the raw storage URL, which is exactly what it
- * got before the CDN-path pass.
+ * The reference is derived from `cdnPath`, which `mediaCdnPathUpdate`
+ * deletes for a private asset. An asset with no `cdnPath` that is NOT private
+ * — uploaded before the CDN reached every plan (AGL-1152) — has its
+ * reference read off the Storage download URL instead (AGL-3506), so the
+ * picker stops writing a URL that bypasses the CDN. A private asset keeps
+ * the old fallback: no reference to it would render on a page anyway.
  *
  * `media.cdnPath` is expected to be already host-qualified by the picker
  * dialog (AGL-1043). That qualification is preserved in the stored scope so
@@ -860,8 +1199,14 @@ export function mediaNodeSrc(media: {
   url?: string | null
   cdnPath?: string | null
   contentHash?: string | null
+  private?: boolean | null
 }): string | undefined {
-  return mediaRefFromCdnPath(media.cdnPath) ?? media.url ?? undefined
+  return (
+    mediaRefFromCdnPath(media.cdnPath) ??
+    (media.private ? undefined : mediaRefFromStorageUrl(media.url)) ??
+    media.url ??
+    undefined
+  )
 }
 
 /**

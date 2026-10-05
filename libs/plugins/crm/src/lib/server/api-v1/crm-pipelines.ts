@@ -26,6 +26,11 @@
  * pipeline gets a default one built from `DEFAULT_DEAL_STAGES` — the same
  * set a console would seed — stamped for the site that deal names.
  *
+ * Each stage carries its `forecastCategory` (AGL-3516) — the one a deal
+ * landing in it takes — read as its kind's (won → `closed`, lost →
+ * `omitted`, open → `pipeline`) on a stage saved before stages had one.
+ * A pipeline seeded here gets Salesforce's standard Opportunity stages.
+ *
  * An ARCHIVED pipeline (AGL-2620) is still read — the deals it closed name
  * it — but it takes no new deal: a create that names one is refused, and
  * the default is picked among the active ones.
@@ -38,6 +43,7 @@ import {
   consentGroupForHost,
   crmScopeTokens,
   DEFAULT_DEAL_STAGES,
+  dealStageForecastCategory,
   isPipelineArchived,
 } from '@aglyn/aglyn/server'
 import { apiJson, ApiErrors } from '@aglyn/tenant-data-admin'
@@ -69,6 +75,7 @@ export function pipelineView(doc: FirebaseFirestore.DocumentSnapshot) {
       order: stage.order,
       probability: stage.probability,
       kind: stage.kind,
+      forecastCategory: dealStageForecastCategory(stage),
     })),
     siteId: data.hostId ?? null,
     ...crmTimes(data as FirebaseFirestore.DocumentData),

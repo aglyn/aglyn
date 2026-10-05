@@ -23,15 +23,15 @@ import {
   type PluginFigureRow,
 } from '@aglyn/aglyn/plugin-manager/plugin-figures'
 import {
-  campaignReport,
-  type CampaignRate,
-  type CampaignStats,
-} from '@aglyn/shared-ui-email-campaigns/model/campaign-report'
+  type SendRate,
+  type SendStats,
+} from '@aglyn/shared-ui-email-campaigns/model/send-report'
+import { campaignReport } from '../model/campaign-report'
 import {
   EMAIL_CREATED_AT_FIELD,
   emailSendTimeMs,
-} from '@aglyn/shared-ui-email-campaigns/model/email-record'
-import { CAMPAIGN_SEND_HOST_FIELD } from '@aglyn/shared-ui-email-campaigns/model/campaign-container'
+} from '../model/email-record'
+import { CAMPAIGN_SEND_HOST_FIELD } from '../model/campaign-container'
 import { orgCampaignSends } from './campaign-org-refs'
 import { compareVariants, summarizeVariantStats, type HostExperiment } from '../model/experiments'
 
@@ -59,12 +59,12 @@ export const EXPERIMENT_FIGURES_READ_LIMIT = 20
 
 const WINDOWS: readonly number[] = [7, 14, 30, 90]
 
-const percent = (rate: CampaignRate | null): number | null =>
+const percent = (rate: SendRate | null): number | null =>
   rate ? Math.round(rate.value * 1_000) / 10 : null
 
 /** Rates pooled across sends: every numerator over every denominator, never an average of rates. */
-function pooled(rates: ReadonlyArray<CampaignRate | null>): number | null {
-  const known = rates.filter((rate): rate is CampaignRate => rate !== null)
+function pooled(rates: ReadonlyArray<SendRate | null>): number | null {
+  const known = rates.filter((rate): rate is SendRate => rate !== null)
   const denominator = known.reduce((sum, rate) => sum + rate.denominator, 0)
   if (!denominator) return null
   return Math.round((known.reduce((sum, rate) => sum + rate.numerator, 0) / denominator) * 1_000) / 10
@@ -104,7 +104,7 @@ export function marketingFigureReaders(firestore: () => Firestore): PluginFigure
           })
           .map((record) => ({
             subject: String(record['subject'] ?? '').trim() || 'A campaign with no subject',
-            report: campaignReport(record['stats'] as CampaignStats | undefined),
+            report: campaignReport(record['stats'] as SendStats | undefined),
           }))
         const rows: PluginFigureRow[] = [
           {

@@ -27,12 +27,15 @@ import {
   CONTACT_LIFECYCLE_STAGE_LABELS,
   CONTACT_LIFECYCLE_STAGES,
   CONTACT_TAG_MAX_LENGTH,
+  CRM_ACTIVITY_DIRECTIONS,
   CRM_ACTIVITY_KINDS,
   CRM_TASK_KINDS,
   CRM_TASK_MAX_DUE_DAYS,
   type ContactLifecycleStage,
+  type CrmActivityDirection,
   type CrmActivityKind,
   type CrmTaskKind,
+  type CrmTaskPriority,
 } from '@aglyn/aglyn/app-utils/crm'
 import {
   HOST_EVENT_PAYLOAD_KEYS,
@@ -94,8 +97,15 @@ import { HOSTILE_TEXT } from '../runtime/ai-node-tree'
  *  - a variant serves every step type that carries the same fields, named for
  *    what they hold: the six steps that name a record share `reference`, and
  *    the three that carry one line share `text`;
- *  - every field stays required and every vocabulary stays an enum, so the
- *    model is still decoded into the Actions editor's words.
+ *  - every field stays required and every vocabulary but one stays an enum,
+ *    so the model is still decoded into the Actions editor's words. The one
+ *    is the event a waitForEvent step waits for: the trigger's `event` already
+ *    compiles the host events' enum, and a second copy of it is what a task's
+ *    priority and a logged call's direction cost (AGL-3538). It is a string
+ *    described as one of the trigger events, and the reader refuses any
+ *    other naming every event, so the one re-ask can fix it;
+ *  - a description is free: a compiler drops it (`aiToolSchemaCompiledBytes`),
+ *    so the words a field needs go there and never into the grammar.
  *
  * Ten variants carry all seventeen step types, and the reader below maps the
  * shared fields back onto the step's own key.
@@ -136,6 +146,18 @@ export const AI_WORKFLOW_LINE_MAX_CHARS = 300
 
 const SEVERITIES = ['info', 'success', 'warning', 'error'] as const
 type Severity = (typeof SEVERITIES)[number]
+
+/** A task's priorities, by meaning — the runner stores the org's label for each (AGL-3517). */
+const TASK_PRIORITIES = ['low', 'normal', 'high'] as const satisfies readonly CrmTaskPriority[]
+
+/** Every direction any activity takes, and `''` for a kind that takes none (AGL-3538). */
+const ACTIVITY_DIRECTIONS = [
+  '',
+  ...new Set(Object.values(CRM_ACTIVITY_DIRECTIONS).flatMap((directions) => [...(directions ?? [])])),
+] as const
+
+/** The events a waitForEvent step may wait for, as its refusal names them. */
+const WAITABLE_EVENTS = HOST_EVENT_TYPES.join(', ')
 
 type Schema = Record<string, unknown>
 
@@ -267,7 +289,8 @@ export const AI_AUTOMATION_STEP_VARIANTS: readonly Schema[] = [
   }),
   stepVariant(['wait'], { minutes: minutes('How long to wait') }),
   stepVariant(['waitForEvent'], {
-    event: { $ref: '#/$defs/event' },
+    // A string, not the events' enum again — see the header.
+    event: { type: 'string', description: 'One of the trigger events.' },
     minutes: minutes('When to give up'),
   }),
   stepVariant(['exitFlow'], {}),
@@ -275,6 +298,7 @@ export const AI_AUTOMATION_STEP_VARIANTS: readonly Schema[] = [
   stepVariant(['createCrmTask'], {
     text: { type: 'string', description: 'The task.' },
     taskKind: { type: 'string', enum: [...CRM_TASK_KINDS] },
+    priority: { type: 'string', enum: [...TASK_PRIORITIES] },
     dueInDays: {
       type: 'integer',
       description: `Days from the run, 0 for today, at most ${CRM_TASK_MAX_DUE_DAYS}.`,
@@ -282,6 +306,11 @@ export const AI_AUTOMATION_STEP_VARIANTS: readonly Schema[] = [
   }),
   stepVariant(['logCrmActivity'], {
     activityKind: { type: 'string', enum: [...CRM_ACTIVITY_KINDS] },
+    direction: {
+      type: 'string',
+      enum: [...ACTIVITY_DIRECTIONS],
+      description: 'A call: outbound, inbound or internal. An email: outbound or inbound. Else empty.',
+    },
     text: { type: 'string', description: 'What happened.' },
   }),
 ]
@@ -404,8 +433,12 @@ export interface AiAutomationAnswerStep {
   tag: string | null
   owner: string | null
   taskKind: CrmTaskKind | null
+  /** A created task's priority, by meaning (AGL-3538). */
+  priority: CrmTaskPriority | null
   dueInDays: number | null
   activityKind: CrmActivityKind | null
+  /** Which way a logged call or email went (AGL-3538); `null` for every other kind. */
+  direction: CrmActivityDirection | null
 }
 
 export interface AiAutomationAnswer {
@@ -645,8 +678,10 @@ function readStep(
     tag: null,
     owner: null,
     taskKind: null,
+    priority: null,
     dueInDays: null,
     activityKind: null,
+    direction: null,
   }
   // A step's `when` is a list of at most one condition; a lone condition, or
   // none, reads as the list it stands for.
@@ -717,7 +752,13 @@ function readStep(
       if (stepType === 'waitForEvent') {
         const waited = fields['event']
         if (!(HOST_EVENT_TYPES as readonly unknown[]).includes(waited)) {
-          refuse(reader, 'automation-step-field', `${what} needs the event it waits for.`, path, fields)
+          refuse(
+            reader,
+            'automation-step-field',
+            `${what} needs the event it waits for, one of: ${WAITABLE_EVENTS}.`,
+            path,
+            fields,
+          )
         } else {
           step.event = waited as HostEventType
         }
@@ -762,6 +803,13 @@ function readStep(
       } else {
         step.taskKind = kind as CrmTaskKind
       }
+      // Absent reads as normal, which the runner writes when none is named.
+      const priority = fields['priority']
+      if (priority !== undefined && !(TASK_PRIORITIES as readonly unknown[]).includes(priority)) {
+        refuse(reader, 'automation-step-field', `${what} needs priority: low, normal or high.`, path, fields)
+      } else if (priority !== undefined) {
+        step.priority = priority as CrmTaskPriority
+      }
       if (due === null || due < 0 || due > CRM_TASK_MAX_DUE_DAYS) {
         refuse(reader, 'automation-step-field', `${what} needs dueInDays, from 0 to ${CRM_TASK_MAX_DUE_DAYS}.`, path, fields)
       } else {
@@ -775,6 +823,28 @@ function readStep(
         refuse(reader, 'automation-step-field', `${what} needs activityKind.`, path, fields)
       } else {
         step.activityKind = kind as CrmActivityKind
+        /*
+         * The direction is the kind's own: a call goes outbound, inbound or
+         * internal, an email outbound or inbound, and every other kind
+         * carries none (AGL-3538).
+         */
+        const allowed: readonly string[] = CRM_ACTIVITY_DIRECTIONS[kind as CrmActivityKind] ?? []
+        // Absent reads as empty: no direction.
+        const raw = fields['direction'] ?? ''
+        const direction = typeof raw === 'string' ? raw : null
+        if (direction === null || (direction ? !allowed.includes(direction) : false)) {
+          refuse(
+            reader,
+            'automation-step-field',
+            allowed.length
+              ? `${what} needs direction: ${allowed.join(', ')}, or empty.`
+              : `${what} takes no direction: leave it empty for a ${String(kind)}.`,
+            path,
+            fields,
+          )
+        } else if (direction) {
+          step.direction = direction as CrmActivityDirection
+        }
       }
       step.body = requireText(reader, text, 'text', AI_AUTOMATION_TEXT_MAX_CHARS, path, what)
       break

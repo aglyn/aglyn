@@ -97,7 +97,7 @@ const ALLOWLIST = join(ROOT, 'tools/scripts/plugin-domain-in-core-allowlist.json
 
 /** Every tree that is not a plugin. `libs/plugins/**` is where a domain belongs. */
 const GUARDED =
-  /^(?:libs\/(?:aglyn|aglyn-node-renderer|aglyn-markdown-editor|besigner|cli|shared|tenant)\/|apps\/(?:console|tenant)\/|cloud\/|tools\/)/
+  /^(?:libs\/(?:aglyn|aglyn-node-renderer|aglyn-markdown-editor|aglyn-transfer-ui|besigner|cli|shared|tenant)\/|apps\/(?:console|tenant)\/|cloud\/|tools\/)/
 
 /** The one place a guarded tree may name a plugin package: the generated manifests. */
 const MANIFEST = /^apps\/[^/]+\/(?:constants|utils)\/plugins\.[a-z.]*generated\.ts$/

@@ -101,6 +101,8 @@ describe('Storage cap · a plan with UNLIMITED storage (AGL-2404)', () => {
     render(<BillingStorageOverageCard orgId="org-1" canManage />)
     await waitFor(() => expect(copy()).toMatch(/uploads stop at/i))
     expect(copy()).not.toMatch(/includes unlimited storage/i)
+    // Free's wall is the workspace's, not each site's (AGL-3479).
+    expect(copy()).toMatch(/shared by every site and the organization library/)
   })
 
   it('does not claim storage bills on a plan that never bills for it', async () => {

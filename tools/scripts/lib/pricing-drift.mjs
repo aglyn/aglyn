@@ -295,20 +295,28 @@ export function compareUnitRateTables(metered, cogs) {
 }
 
 /**
- * What `/pricing` publishes for the three meters: unit cost × markup, scaled
- * to the unit the page quotes.
+ * What `/pricing` publishes for the three meters: unit cost × markup, grossed
+ * up for the processor's percentage fee so the markup is what is KEPT
+ * (AGL-3476), rounded UP at the precision the page quotes each in — storage
+ * to the hundredth of a cent per GB-month, page views to the cent and form
+ * submissions to the tenth of a cent per 1,000. The same arithmetic as
+ * `publishedMeteredPrice` in `plan-entitlements.ts`.
  *
  * A billed page view costs its weight (`perPageView`) AND the CDN requests
  * behind it (`PAGE_VIEW_CDN_REQUEST_COST_USD`, AGL-1879), so the page-view
  * figure takes both. Required rather than defaulted: a caller that forgot it
  * would reproduce the weight-only price and call it published.
  */
-export function publishedMeteredRates(rates, markup, pageViewCdnRequestCostUsd) {
+export function publishedMeteredRates(rates, markup, pageViewCdnRequestCostUsd, feePct = 0) {
+  const multiple = markup / (1 - feePct)
+  const up = (cost, decimals) => {
+    const scale = 10 ** decimals
+    return Math.ceil(Number((cost * multiple * scale).toFixed(6))) / scale
+  }
   return {
-    storagePerGbMonth: cents(rates.storagePerGbMonth * markup * 10000) / 10000,
-    perThousandPageViews:
-      cents((rates.perPageView + pageViewCdnRequestCostUsd) * markup * 1000 * 10000) / 10000,
-    perThousandFormSubmissions: cents(rates.perFormSubmission * markup * 1000 * 10000) / 10000,
+    storagePerGbMonth: up(rates.storagePerGbMonth, 4),
+    perThousandPageViews: up((rates.perPageView + pageViewCdnRequestCostUsd) * 1000, 2),
+    perThousandFormSubmissions: up(rates.perFormSubmission * 1000, 3),
   }
 }
 
