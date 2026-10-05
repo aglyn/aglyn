@@ -26,6 +26,10 @@ import { continueParam, useContinueUrl } from '@aglyn/shared-util-next'
 import { Stack } from '@mui/material'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useEffect } from 'react'
+import {
+  isSignUpLandingHeld,
+  useSignUpLandingHeld,
+} from '../../utils/sign-up-landing-hold'
 import { useAuth, useSigninCheck } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { VisitorConsentPill } from '../visitor-consent.component'
@@ -61,11 +65,20 @@ function AuthenticatingLayout(props: AuthenticatingLayoutProps) {
   const emailVerified = signInCheckResult?.user?.emailVerified
   const [, continueUrl, pushContinued] = useContinueUrl()
   const searchParams = useSearchParams()
+  // A sign-up still landing on this tab (AGL-3578). Read as state so the
+  // effect re-runs on release, and live inside it because the sign-up page
+  // raises the hold in an effect of its own, which runs before this one in
+  // the same commit, after this render read the state.
+  const signUpLanding = useSignUpLandingHeld()
 
   useEffect(() => {
     // A one-shot code is being redeemed on this URL — no redirect may fire
     // until the page resolves it (AGL-1524).
     if (holdRedirects) return void 0
+    // A sign-up door is still recording the account and creating its
+    // workspace, and ends in its own navigation into it (AGL-3578). Pushing
+    // to `/` now is what tore a phone sign-up down before it got there.
+    if (signUpLanding || isSignUpLandingHeld()) return void 0
     if (authLoading) return void 0
     if (signedIn && signingOut) return void 0
     if (!signedIn && !signingOut) return void 0
@@ -147,6 +160,7 @@ function AuthenticatingLayout(props: AuthenticatingLayoutProps) {
     continueUrl,
     emailVerified,
     holdRedirects,
+    signUpLanding,
     signingOut,
     pushContinued,
     requireEmailVerification,

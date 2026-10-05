@@ -87,6 +87,7 @@ import { authSignInHost } from '../../../utils/auth-delegation'
 import {
   clearLegalConsent,
   consumeLegalConsent,
+  hasPendingLegalConsent,
   isNewAccount,
   markLegalConsent,
   postLegalAcceptance,
@@ -107,6 +108,10 @@ import { rememberOnboardingPlanIntent } from '../../../utils/onboarding-plan-int
 import { rememberSignUpCampaign } from '../../../utils/signup-campaign'
 import { rememberAccountAcquisition } from '../../../utils/account-acquisition'
 import { consumeConsentBounce } from '../../../utils/consent-bounce'
+import {
+  holdSignUpLanding,
+  releaseSignUpLanding,
+} from '../../../utils/sign-up-landing-hold'
 import isMobileBrowser from '../../../utils/is-mobile-browser'
 import { createGoogleOAuthProvider } from '../../../utils/oauth-providers'
 import { aimAuthAtPool } from '../../../utils/pooled-custom-token'
@@ -265,6 +270,15 @@ function derivePersonalOrgName(user: UserCredential['user']): string {
     user.displayName?.trim() || user.email?.split('@')[0]?.trim() || ''
   )
 }
+
+/**
+ * The holds this page raises on the auth layout's redirect while a sign-up
+ * lands (AGL-3578): one for a Google redirect returning to a fresh page, one
+ * for a door clicked on this page. Separate keys so neither door's release
+ * can drop the other's hold.
+ */
+const REDIRECT_LANDING_HOLD = 'signup:redirect'
+const DOOR_LANDING_HOLD = 'signup:door'
 
 /**
  * The ONE landing routine every sign-up door goes through (AGL-1942).
@@ -464,6 +478,25 @@ function SignUp() {
     },
     [firestore, planIntent, campaign],
   )
+  // A Google redirect that is coming back to this page holds the auth
+  // layout until the sign-up has landed (AGL-3578). The layout pushes a
+  // signed-in visitor to `/` the moment the credential lands, and on a phone
+  // that push turned into a full reload to /signin before the handler above
+  // reached the acquisition record or the workspace. The consent marker is
+  // what says a sign-up redirect is in flight: it is set only after the
+  // consent gate, the moment before the browser leaves for Google.
+  //
+  // Not on a delegating host, whose redirect hook is disabled and so would
+  // never release it.
+  useEffect(() => {
+    if (delegation !== 'off' || !hasPendingLegalConsent()) return void 0
+    holdSignUpLanding(REDIRECT_LANDING_HOLD)
+    return () => releaseSignUpLanding(REDIRECT_LANDING_HOLD)
+  }, [delegation])
+  const releaseRedirectLanding = useCallback(
+    () => releaseSignUpLanding(REDIRECT_LANDING_HOLD),
+    [],
+  )
   useGoogleRedirectResult(
     'sign_up',
     setError,
@@ -473,6 +506,11 @@ function SignUp() {
     // that started the flow is gone by then — so the campaign has to be
     // handed across rather than read there (AGL-1731).
     utmParams,
+    // Released however the round trip ends. A landing that succeeded has
+    // already navigated into its workspace; one that fell through (an
+    // existing account, a refused create) hands the visitor back to the
+    // layout's ordinary redirect.
+    releaseRedirectLanding,
   )
   // Hold the loading splash during the post-auth redirect window instead of
   // flashing the form back at the user (AGL-476).
@@ -493,6 +531,10 @@ function SignUp() {
         return
       }
       if (error) setError(null)
+      // The same race as the redirect door (AGL-3578): the credential below
+      // signs the visitor in, the layout would push them to `/`, and the
+      // workspace this door creates afterwards would be racing a navigation.
+      holdSignUpLanding(DOOR_LANDING_HOLD)
       const dequeueLoading = queueLoading()
       // Popup flows can wedge the overlay if the popup handle is severed
       // and the SDK never rejects — see guardPopupLoading (AGL-459).
@@ -706,6 +748,7 @@ function SignUp() {
         .finally(() => {
           releaseGuard?.()
           dequeueLoading()
+          releaseSignUpLanding(DOOR_LANDING_HOLD)
         })
     },
     [
