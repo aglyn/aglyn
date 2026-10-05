@@ -16,6 +16,7 @@
  */
 'use client'
 
+import { TransferResumeImport } from '@aglyn/aglyn/app-utils/transfer-resume-import'
 import { pluginDocsHelp } from '@aglyn/aglyn'
 import { useTransferLauncher } from '@aglyn/aglyn/app-utils/transfer-launcher-context'
 import { ICON_VARIANT_CLOSE } from '@aglyn/shared-data-enums'
@@ -573,6 +574,11 @@ export function SuppressionsCard(props: SuppressionsCardProps) {
                 {'Export'}
               </Button>
             ) : null}
+            {/* An import left unfinished, reopened where it stopped (AGL-3549). */}
+            <TransferResumeImport
+              target={{ resource: SUPPRESSIONS_RESOURCE, scope: 'host', hostId }}
+              onFinished={() => setTotalsEpoch((epoch) => epoch + 1)}
+            />
             {transfer?.can('import', { resource: SUPPRESSIONS_RESOURCE, scope: 'host', hostId }) ? (
               <Button
                 size="small"

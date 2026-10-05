@@ -31,15 +31,18 @@ import {
 } from '@aglyn/aglyn'
 import {
   parseTransferResourceKey,
+  TRANSFER_API_ROUTES,
   transferAccessAllowed,
   transferPlanFeature,
   transferWorkspaceRole,
   type TransferImportRole,
   type TransferMemberAxis,
+  type TransferUnfinishedImportSummary,
+  type TransferUnfinishedImportsResponse,
 } from '@aglyn/aglyn/data-transfer'
 import { PLUGIN_TRANSFER_RESOURCES_DECLARED } from '@aglyn/aglyn/plugin-manager/first-party-plugins.generated'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
-import { resolveIdToken } from '@aglyn/shared-util-http/authorized-token'
+import { authorizedFetch, resolveIdToken } from '@aglyn/shared-util-http/authorized-token'
 import { doc, getDoc } from 'firebase/firestore'
 import dynamic from 'next/dynamic'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -196,6 +199,55 @@ export function TransferLauncherProvider({ children }: { children?: JSX.Children
     .sort()
     .join(',')
 
+  // The person's own unfinished imports (AGL-3549), read once the first
+  // surface asks — only for whom the jobs route answers, a holder of
+  // "Manage data" on the workspace — and again whenever the wizard closes.
+  const mayList = permissionsLoaded && granted.split(',').includes('data.manage')
+  const [unfinished, setUnfinished] = useState<{ orgId: string; jobs: TransferUnfinishedImportSummary[] } | null>(null)
+  const [wanted, setWanted] = useState(false)
+  const [reread, setReread] = useState(0)
+  const asked = useRef(false)
+  useEffect(() => {
+    if (!wanted || !mayList || !orgId) return undefined
+    let active = true
+    authorizedFetch(userRef.current, TRANSFER_API_ROUTES.jobs, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ orgId, unfinished: true }),
+    })
+      .then(async (response) => (response.ok ? ((await response.json()) as TransferUnfinishedImportsResponse) : null))
+      .then((answer) => active && answer && setUnfinished({ orgId, jobs: answer.unfinished }))
+      // Nothing to resume is what a failed read shows; Import still works.
+      .catch(() => undefined)
+    return () => {
+      active = false
+    }
+  }, [wanted, mayList, orgId, reread])
+  const unfinishedJobs = unfinished && unfinished.orgId === orgId ? unfinished.jobs : null
+  const discard = useCallback(
+    async (jobId: string) => {
+      if (!orgId) return
+      const response = await authorizedFetch(userRef.current, TRANSFER_API_ROUTES.jobs, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orgId, action: 'discard', jobId }),
+      })
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => ({}))) as { error?: string }
+        throw new Error(payload.error || 'The import could not be discarded. Try again.')
+      }
+      setUnfinished((current) =>
+        current ? { ...current, jobs: current.jobs.filter((job) => job.jobId !== jobId) } : current,
+      )
+    },
+    [orgId],
+  )
+  const close = useCallback(() => {
+    setOpen(null)
+    // What was left unfinished may have moved on in the wizard.
+    if (asked.current) setReread((count) => count + 1)
+  }, [])
+
   const launcher = useMemo<TransferLauncher>(() => {
     const held = new Set(granted ? granted.split(',') : [])
     const entitled = new Set(entitledFeatures ? entitledFeatures.split(',') : [])
@@ -212,7 +264,21 @@ export function TransferLauncherProvider({ children }: { children?: JSX.Children
     return {
       openImport: (launch) => setOpen({ kind: 'import', launch }),
       openExport: (launch) => setOpen({ kind: 'export', launch }),
-      close: () => setOpen(null),
+      close,
+      unfinished: (target) => {
+        if (!asked.current) {
+          asked.current = true
+          // Asked while a surface renders: the read starts after it.
+          queueMicrotask(() => setWanted(true))
+        }
+        const jobs = unfinishedJobs ?? []
+        if (!target) return jobs
+        // On the surface's site when it names one; a workspace surface (the
+        // CRM's) lists its imports filed under any site.
+        const site = target.hostId?.trim() || null
+        return jobs.filter((job) => job.resource === target.resource && (!site || job.hostId === site))
+      },
+      discard,
       can: (action, target) => {
         const key = [action, target.resource, target.scope, target.hostId ?? ''].join('\u0000')
         let answer = answers.get(key)
@@ -223,7 +289,7 @@ export function TransferLauncherProvider({ children }: { children?: JSX.Children
         return answer
       },
     }
-  }, [permissionsLoaded, granted, orgWide, orgRole, member, entitledFeatures])
+  }, [permissionsLoaded, granted, orgWide, orgRole, member, entitledFeatures, unfinishedJobs, discard, close])
 
   return (
     <TransferLauncherContext.Provider value={launcher}>
@@ -233,7 +299,7 @@ export function TransferLauncherProvider({ children }: { children?: JSX.Children
           state={open}
           orgId={orgId}
           getIdToken={getIdToken}
-          onClose={launcher.close}
+          onClose={close}
         />
       ) : null}
     </TransferLauncherContext.Provider>

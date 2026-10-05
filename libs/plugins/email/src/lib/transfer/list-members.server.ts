@@ -80,8 +80,10 @@ import {
   readContactFacet,
 } from '@aglyn/aglyn/app-utils/contacts'
 import {
+  TRANSFER_DRAFT_RETENTION_MS,
   TRANSFER_FILE_SAMPLE_ROW,
   TRANSFER_ID_FIELD,
+  TRANSFER_UNDO_WINDOW_MS,
   TRANSFER_WARNING_CLASSES,
   buildTransferPlan,
   matchLookupKey,
@@ -117,7 +119,7 @@ import {
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
 import { TransferEngineError } from '@aglyn/tenant-data-admin/server/transfer-jobs'
-import { FieldValue } from 'firebase-admin/firestore'
+import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import {
   importedBasisReason,
   isRoleAccount,
@@ -147,6 +149,21 @@ export const CONSOLE_IMPORT_SOURCE = 'console:list-import'
 
 /** A list's import ledger: `orgs/{orgId}/lists/{listId}/imports/{jobId}`. */
 export const LIST_IMPORTS_SUBCOLLECTION = 'imports'
+
+/**
+ * How long a list's import ledger is kept (AGL-3549): it holds sample
+ * shared-mailbox addresses and who stated permission, and is read only
+ * while its job can still write — the longest a planned import may wait
+ * to be applied (`TRANSFER_DRAFT_RETENTION_MS`, after which the job itself
+ * expires), its undo window, and a day. The Firestore TTL policy on
+ * `imports.expiresAt` deletes it; nothing else does.
+ */
+export const LIST_IMPORT_LEDGER_RETENTION_MS = TRANSFER_DRAFT_RETENTION_MS + TRANSFER_UNDO_WINDOW_MS + 24 * 60 * 60 * 1000
+
+/** The `expiresAt` of a list import ledger written at `nowMs`. */
+export function listImportLedgerExpiry(nowMs: number): Timestamp {
+  return Timestamp.fromMillis(nowMs + LIST_IMPORT_LEDGER_RETENTION_MS)
+}
 
 /** Role accounts kept verbatim on the ledger, so the step names some of them. */
 const ROLE_ACCOUNT_SAMPLE_MAX = 25
@@ -557,6 +574,8 @@ export async function planListMembers(
         attestedAtMs: attested ? Date.now() : null,
         plannedByUid: ctx.actorUid,
         updatedAt: FieldValue.serverTimestamp(),
+        // Re-stamped by every dry run, so the latest one sets the clock.
+        expiresAt: listImportLedgerExpiry(Date.now()),
       },
       { merge: true },
     )

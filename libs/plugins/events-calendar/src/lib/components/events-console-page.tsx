@@ -16,6 +16,7 @@
  */
 'use client'
 
+import { TransferResumeImport } from '@aglyn/aglyn/app-utils/transfer-resume-import'
 import {
   createResourceUid,
   MEDIA_ALT_MAX_LENGTH,
@@ -241,6 +242,8 @@ export function EventsConsolePage(props: ConsolePluginPageProps) {
   const transferActions =
     transfer && (canImport || canExport) ? (
       <Stack direction="row" spacing={1}>
+        {/* An import left unfinished, reopened where it stopped (AGL-3549). */}
+        <TransferResumeImport target={transferTarget} />
         {canImport && (
           <Button size="small" onClick={() => transfer.openImport(transferTarget)}>
             {'Import'}

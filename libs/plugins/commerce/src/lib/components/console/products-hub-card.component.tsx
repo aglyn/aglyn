@@ -16,6 +16,7 @@
  */
 'use client'
 
+import { TransferResumeImport } from '@aglyn/aglyn/app-utils/transfer-resume-import'
 import * as Aglyn from '@aglyn/aglyn'
 import * as CommerceModel from '../../model'
 import {
@@ -834,7 +835,12 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
           >
             {'Add product'}
           </Button>
-          {/* Each only for whom the route takes it (AGL-3554). */}
+          {/* Each only for whom the route takes it (AGL-3554); an import
+              left unfinished, reopened where it stopped (AGL-3549). */}
+          <TransferResumeImport
+            target={{ resource: COMMERCE_PRODUCTS_TRANSFER, scope: 'host', hostId }}
+            onFinished={() => setProductCountEpoch((epoch) => epoch + 1)}
+          />
           {transfer?.can('import', { resource: COMMERCE_PRODUCTS_TRANSFER, scope: 'host', hostId }) ? (
             <Button size="small" disabled={!planReady} onClick={openImport}>
               {'Import'}

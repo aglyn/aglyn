@@ -165,4 +165,13 @@ export const TTL_POLICIES = Object.freeze([
     // AGL-3543 — the paths a package import wrote, for undo to delete.
     why: 'site package written-path lists, 8 days',
   },
+  {
+    collection: 'imports',
+    field: 'expiresAt',
+    // AGL-3549 — an email list import's ledger under
+    // `orgs/{orgId}/lists/{listId}/imports/{jobId}`: sample shared-mailbox
+    // addresses and who stated permission. Kept while its job can write
+    // (`LIST_IMPORT_LEDGER_RETENTION_MS`).
+    why: 'email list import ledgers (sample addresses), 15 days',
+  },
 ])

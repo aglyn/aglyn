@@ -104,6 +104,7 @@ running the deploy, which is the one action that can destroy them.
 | `packageImports` | `expiresAt` | A site package import's record (AGL-3533, AGL-3543) at `hosts/{hostId}/packageImports/{importId}`: who imported what, each item's decision and target. **8 days** — the 7-day undo window and a day (`PACKAGE_LEDGER_RETENTION_MS` in `apps/console/app/api/_lib/site-package-ledger.ts`); the import route stamps `packageLedgerExpiry(...)` when it files the record and again when the import applies. Undo itself closes at 7 days in code (`packageImportUndoable`). **OWED: not yet enabled** — run the command below after the index deploy that carries the declaration. |
 | `snapshots` | `expiresAt` | The undo snapshot beneath a package import (AGL-3543), `packageImports/{importId}/snapshots/{n}`: every replaced or merged item's previous content **verbatim**, as JSON pieces of up to 900,000 characters — a whole-site restore into itself snapshots the whole site. Same 8 days; `writeLedgerPieces` stamps each piece, since TTL does not cascade from the record. The collection-group name is the generic `snapshots`; nothing else in the schema writes a subcollection by that name. **OWED: not yet enabled.** |
 | `writtenPaths` | `expiresAt` | The document paths a package import wrote per item (AGL-3543), `packageImports/{importId}/writtenPaths/{n}`, which undo deletes. Same 8 days, same writer. **OWED: not yet enabled.** |
+| `imports` | `expiresAt` | An email list's import ledger (AGL-3529, AGL-3549) at `orgs/{orgId}/lists/{listId}/imports/{jobId}`: up to 25 sample shared-mailbox addresses **verbatim**, the column names that read as a bought list, the consent sample's counts, and who stated permission (`attestedByUid`). **15 days** — the 7 days a planned import may wait to be applied, its 7-day undo window, and a day (`LIST_IMPORT_LEDGER_RETENTION_MS` in `libs/plugins/email/src/lib/transfer/list-members.server.ts`); every dry run re-stamps `listImportLedgerExpiry(Date.now())`. The collection-group name is the generic `imports`; nothing else in the schema writes a subcollection by that name. **OWED: not yet enabled** — run the command below after the index deploy that carries the declaration. |
 
 Not TTL targets (deliberately): `apiKeys.expiresAt` (validity field — keep expired
 keys as records), `orgSlugs.movedTo` tombstones (intentional persistent
@@ -156,6 +157,9 @@ gcloud firestore fields ttls update expiresAt \
   --collection-group=months --enable-ttl \
   --project=aglyn-main --database='(default)'
 # AGL-3543 — OWED, run after the index deploy that declares them:
+gcloud firestore fields ttls update expiresAt \
+  --collection-group=imports --enable-ttl \
+  --project=aglyn-main --database='(default)'
 gcloud firestore fields ttls update expiresAt \
   --collection-group=packageImports --enable-ttl \
   --project=aglyn-main --database='(default)'

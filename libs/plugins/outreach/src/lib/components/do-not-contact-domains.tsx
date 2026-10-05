@@ -16,6 +16,7 @@
  */
 'use client'
 
+import { TransferResumeImport } from '@aglyn/aglyn/app-utils/transfer-resume-import'
 import { pluginDocsHelp, useTransferLauncher } from '@aglyn/aglyn'
 import { mdiTrashCanOutline } from '@aglyn/shared-data-mdi'
 import { CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
@@ -216,6 +217,8 @@ export function OutreachDoNotContactDomainsCard(props: OutreachDoNotContactDomai
   const transferActions =
     transfer && (canImport || canExport) ? (
       <Stack direction="row" spacing={1}>
+        {/* An import left unfinished, reopened where it stopped (AGL-3549). */}
+        <TransferResumeImport target={transferTarget} />
         {canImport && (
           <Button size="small" onClick={() => transfer.openImport(transferTarget)}>
             {DO_NOT_CONTACT_DOMAIN_LABELS.import}

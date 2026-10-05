@@ -31,7 +31,7 @@
  */
 
 import { useTransferLauncher, type TransferAccessTarget, type TransferLauncher } from '@aglyn/aglyn'
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 
 const mockKit: Array<{ component: string; props: Record<string, unknown> }> = []
 
@@ -122,6 +122,20 @@ jest.mock('@aglyn/aglyn/plugin-manager/plugin-transfer-resources', () => {
         : null,
   }
 })
+
+/** What the jobs route answers, and every request sent to it (AGL-3549). */
+const mockJobsRequests: Array<Record<string, unknown>> = []
+let mockUnfinishedJobs: Array<Record<string, unknown>> = []
+jest.mock('@aglyn/shared-util-http/authorized-token', () => ({
+  __esModule: true,
+  resolveIdToken: async () => 'token-1',
+  authorizedFetch: async (_user: unknown, _url: string, init: { body: string }) => {
+    const body = JSON.parse(init.body) as Record<string, unknown>
+    mockJobsRequests.push(body)
+    const answer = body['action'] === 'discard' ? { ok: true } : { ok: true, unfinished: mockUnfinishedJobs }
+    return { ok: true, status: 200, json: async () => answer }
+  },
+}))
 
 import TransferLauncherProvider from '../components/transfer-launcher-provider.component'
 
@@ -386,5 +400,60 @@ describe('the transfer launcher', () => {
     )
     act(() => launcher?.openImport({ resource: 'crm.contacts', scope: 'org' }))
     expect(screen.queryByTestId('import-wizard')).toBeNull()
+  })
+})
+
+/*
+ * UNFINISHED IMPORTS (AGL-3549): the launcher reads the person's own once a
+ * surface first asks, answers each surface for its resource and site, and
+ * drops one the person discards.
+ */
+describe('unfinished imports', () => {
+  const JOB = { jobId: 'job-1', resource: 'email.suppressions', hostId: 'host-a', fileName: 'a.csv', status: 'planned', updatedAt: 1, label: 'Suppressions' }
+
+  beforeEach(() => {
+    mockJobsRequests.length = 0
+    mockUnfinishedJobs = [JOB, { ...JOB, jobId: 'job-2', resource: 'crm.contacts' }]
+  })
+
+  it('reads them once asked, and answers each surface for its own resource and site', async () => {
+    let seen: unknown[] = []
+    function Surface() {
+      launcher = useTransferLauncher()
+      seen = [...(launcher?.unfinished?.({ resource: 'email.suppressions', scope: 'host', hostId: 'host-a' }) ?? [])]
+      return null
+    }
+    render(
+      <TransferLauncherProvider>
+        <Surface />
+      </TransferLauncherProvider>,
+    )
+    expect(seen).toEqual([])
+    await waitFor(() => expect(seen).toEqual([JOB]))
+    expect(mockJobsRequests).toEqual([{ orgId: 'org-1', unfinished: true }])
+    expect(launcher?.unfinished?.({ resource: 'email.suppressions', scope: 'host', hostId: 'host-b' })).toEqual([])
+    expect(launcher?.unfinished?.()).toHaveLength(2)
+
+    await act(async () => {
+      await launcher?.discard?.('job-1')
+    })
+    expect(mockJobsRequests[1]).toEqual({ orgId: 'org-1', action: 'discard', jobId: 'job-1' })
+    expect(seen).toEqual([])
+  })
+
+  it('reads nothing for a person who may not import into the workspace', async () => {
+    mockGranted = new Set()
+    function Surface() {
+      launcher = useTransferLauncher()
+      launcher?.unfinished?.()
+      return null
+    }
+    render(
+      <TransferLauncherProvider>
+        <Surface />
+      </TransferLauncherProvider>,
+    )
+    await act(async () => {})
+    expect(mockJobsRequests).toEqual([])
   })
 })

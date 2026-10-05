@@ -16,6 +16,7 @@
  */
 'use client'
 
+import { TransferResumeImport } from '@aglyn/aglyn/app-utils/transfer-resume-import'
 import {
   type AglynOrgBilling,
   checkDatasetQuota,
@@ -1243,6 +1244,14 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
             <Button size="small" onClick={() => setSchemaOpen(true)}>
               {'Schema'}
             </Button>
+            {/* An import left unfinished, reopened where it stopped (AGL-3549). */}
+            {transferTarget ? (
+              <TransferResumeImport
+                target={transferTarget}
+                {...(selected ? { title: `Import into ${datasetDisplayName(selected)}` } : {})}
+                onFinished={() => setRecordCountEpoch((epoch) => epoch + 1)}
+              />
+            ) : null}
             {canImport ? (
               <Button size="small" onClick={handleImport}>
                 {'Import'}

@@ -132,9 +132,11 @@ import {
   isBlankTransferValue,
   isTransferLookupField,
   TRANSFER_UNDO_WINDOW_MS,
+  TRANSFER_UNFINISHED_IMPORTS_MAX,
   TRANSFER_JOBS_PAGE_MAX,
   parseTransferResourceKey,
   type TransferJobSummary,
+  type TransferUnfinishedImportSummary,
   type MatchKeySpec,
   type MatchLookupRequest,
   type PicklistResolution,
@@ -2020,6 +2022,69 @@ export async function listTransferJobs(
   }))
   const last = page[page.length - 1]
   return { jobs, next: snapshot.docs.length > limit && last ? last.createdAt : null }
+}
+
+/*==========================================
+ * UNFINISHED IMPORTS (AGL-3549)
+ *
+ * An import the person left before it wrote anything — a tab closed
+ * mid-wizard — is a job whose retention is `expire`: the cleanup deletes it
+ * seven days after it was last touched. Until then the surface that started
+ * it, and the hub, offer it back (`openImport({ jobId })` reopens the
+ * wizard on its step) or throw it away now. Only its own creator's: a
+ * colleague's half-made import is theirs to finish, and a statement of
+ * permission made in it is theirs alone.
+ *=========================================*/
+
+const UNFINISHED_STATUSES = new Set(['draft', 'analyzed', 'planned', 'failed'])
+
+/**
+ * The caller's unfinished imports of records, newest first — a Firestore
+ * query on `(createdBy, retention, updatedAt ↓)`, never a page of the
+ * history filtered.
+ */
+export async function listUnfinishedTransferJobs(
+  deps: TransferEngineDeps,
+  input: { orgId: string; actorUid: string; labels?: Readonly<Record<string, string>> },
+): Promise<TransferUnfinishedImportSummary[]> {
+  const snapshot = await transferJobsCollection(deps.firestore, input.orgId)
+    .where('createdBy', '==', input.actorUid)
+    .where('retention', '==', 'expire')
+    .orderBy('updatedAt', 'desc')
+    .limit(TRANSFER_UNFINISHED_IMPORTS_MAX)
+    .get()
+  return snapshot.docs
+    .map((doc) => ({ ...(doc.data() as TransferJobRecord), id: doc.id }))
+    .filter((job) => job.kind !== 'package' && UNFINISHED_STATUSES.has(job.status))
+    .map((job) => ({
+      jobId: job.id,
+      resource: job.resource,
+      hostId: job.hostId ?? null,
+      fileName: job.fileName ?? null,
+      status: job.status as TransferUnfinishedImportSummary['status'],
+      updatedAt: job.updatedAt,
+      label:
+        input.labels?.[job.resource] ?? input.labels?.[parseTransferResourceKey(job.resource).key] ?? job.resource,
+    }))
+}
+
+/**
+ * Throws one of the caller's unfinished imports away now: its job, its
+ * pieces and its file, as the cleanup would a week on. Refused for someone
+ * else's import, and for one that has written anything — that is undone.
+ */
+export async function discardTransferJob(
+  deps: TransferEngineDeps,
+  input: { orgId: string; jobId: string; actorUid: string },
+): Promise<void> {
+  const job = await readJob(deps, input.orgId, input.jobId)
+  if (job.createdBy !== input.actorUid) {
+    throw new TransferEngineError('forbidden', 403, 'Only the person who started an import can discard it.')
+  }
+  if (transferJobRetention(job)?.retention !== 'expire') {
+    throw new TransferEngineError('state', 409, 'This import has written records; undo it instead of discarding it.')
+  }
+  await expireTransferJob(deps, job)
 }
 
 /*==========================================

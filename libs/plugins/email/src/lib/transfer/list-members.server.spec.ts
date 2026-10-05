@@ -47,6 +47,7 @@ jest.mock('firebase-admin/firestore', () => ({
     serverTimestamp: () => '__serverTimestamp',
     increment: (by: number) => ({ __increment: by }),
   },
+  Timestamp: { fromMillis: (ms: number) => ({ __millis: ms }) },
 }))
 
 jest.mock('@aglyn/aglyn/server', () => ({
@@ -344,6 +345,15 @@ describe('the dry run', () => {
     expect(memberRows()).toEqual([])
     expect(store[LEDGER_PATH]).toMatchObject({ attested: true, attestedByUid: 'editor-uid', listName: 'Newsletter' })
     expect(store[LEDGER_PATH]?.['screening']?.sample).toMatchObject({ size: 1, needAttestation: 1 })
+  })
+
+  it('stamps the ledger to expire once its job can no longer write: 7 days to apply, 7 to undo, and a day (AGL-3549)', async () => {
+    const before = Date.now()
+    await dryRun([{ email: UNKNOWN }], context(attest(true)))
+    const at = (store[LEDGER_PATH]?.['expiresAt'] as { __millis: number }).__millis
+    const DAY = 24 * 60 * 60 * 1000
+    expect(at).toBeGreaterThanOrEqual(before + 15 * DAY)
+    expect(at).toBeLessThanOrEqual(Date.now() + 15 * DAY)
   })
 
   it('records no attester when nobody stated permission', async () => {

@@ -113,7 +113,13 @@ when it answers `false`. The routes stay the enforcement: `can` only keeps
 you from offering a button they would refuse.
 
 - `jobId` on `openImport` resumes an import where the person left it; the
-  draft of every choice is saved per job.
+  draft of every choice is saved per job. Put `TransferResumeImport` (from
+  `@aglyn/aglyn/app-utils/transfer-resume-import`) beside your Import
+  button with the same target, title and `onFinished`: it shows
+  **Resume import** only when the person has an import of that resource
+  they left before anything was written, and lets them reopen or discard
+  it. The launcher's `unfinished(target)` and `discard(jobId)` are what it
+  reads, if you need them directly.
 - `mappingZone` draws the `importMapping` zone under the Columns step, so an
   assistant plugin can propose a mapping from the headers and the shape of
   each column. It never sees a cell.

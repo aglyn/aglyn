@@ -62,7 +62,7 @@ import { FieldValue } from 'firebase-admin/firestore'
  *     verifies, from a verified address (or an impersonation session);
  *  2. the per-member rate limit for the route;
  *  3. the workspace exists, and the lockdown verdict (`status`, `fields`,
- *     `export`, `jobs` and the package route's `list` and `export` ask with
+ *     `export`, `jobs` (but its discard) and the package route's `list` and `export` ask with
  *     a read intent, so a read-only lock still shows a job's progress and
  *     still lets the workspace take its data out);
  *  4. the member's access for the route's intent (`data-transfer/access.ts`,
@@ -107,7 +107,7 @@ const RATE_LIMITS: Readonly<Record<TransferApiRoute, number>> = {
 }
 
 /** The routes that only read, which a read-only lock still answers. */
-const READ_ROUTES: ReadonlySet<TransferApiRoute> = new Set<TransferApiRoute>(['status', 'fields', 'export', 'jobs'])
+const READ_ROUTES: ReadonlySet<TransferApiRoute> = new Set<TransferApiRoute>(['status', 'fields', 'export'])
 
 /** A refusal in the shape every transfer route answers. */
 export function transferRefusal(

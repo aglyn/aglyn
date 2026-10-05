@@ -251,6 +251,17 @@ called and what it promises, but not who chose it or who left it.
 Each choice re-plans the package on the server, so what you review is
 exactly what is written.
 
+## Resume an import you left
+
+If you close the tab or leave the page partway through an import, before
+anything is written, the import is kept for seven days after you last
+worked on it. **Resume import** appears beside **Import** wherever you
+started it, such as an email list, a dataset or the products list, and
+reopens the wizard on the step you left, with every choice you made. The
+**Unfinished imports** list on **Settings → Import & export** shows all of
+yours in one place. Choose **Discard** to throw one away now. Only you see
+the imports you started.
+
 ## Undo an import
 
 Every import can be undone for seven days, from its results or from

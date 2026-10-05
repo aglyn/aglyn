@@ -16,6 +16,7 @@
  */
 'use client'
 
+import { TransferResumeImport } from '@aglyn/aglyn/app-utils/transfer-resume-import'
 import { checkQuota, pluginDocsHelp, useTransferLauncher } from '@aglyn/aglyn'
 import { type ConsolePluginPageProps } from '@aglyn/aglyn'
 import { TENANT_APEX } from '@aglyn/aglyn/app-utils/tenant-apex'
@@ -630,6 +631,8 @@ export function RedirectsConsolePage(props: ConsolePluginPageProps) {
   const transferActions =
     transfer && (canImport || canExport) ? (
       <Stack direction="row" spacing={1}>
+        {/* An import left unfinished, reopened where it stopped (AGL-3549). */}
+        <TransferResumeImport target={transferTarget} />
         {canImport && (
           <Button size="small" onClick={() => transfer.openImport(transferTarget)}>
             {'Import'}

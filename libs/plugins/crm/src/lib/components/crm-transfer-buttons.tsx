@@ -32,6 +32,7 @@
  * create.
  *=========================================*/
 
+import { TransferResumeImport } from '@aglyn/aglyn/app-utils/transfer-resume-import'
 import { useTransferLauncher } from '@aglyn/aglyn/app-utils/transfer-launcher-context'
 import type { ListQueryPlan } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import {
@@ -83,6 +84,8 @@ export function CrmImportButton(props: CrmImportButtonProps) {
   const site = hostId ?? mount?.createHostId ?? null
   return (
     <>
+      {/* An import left unfinished, reopened where it stopped (AGL-3549). */}
+      <TransferResumeImport target={{ resource, scope: 'org', hostId }} />
       <Button
         size="small"
         onClick={() => {

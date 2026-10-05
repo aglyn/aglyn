@@ -550,7 +550,7 @@ site's captures — after the gate has checked `data.manage` on that site
 | `apply` | the first call needs `canApplyTransferPlan` (`acknowledgementsMissing` lists the rest); refuses while another job of the same resource is `applying` or another driver holds this one's lease (`busy`). Adds the chosen picklist values (`addPicklistValues`), then writes chunks for 45 seconds and answers the progress and the `results` of the chunks it wrote; called until `done`. A plugin `apply` that throws fails the job naming the chunk; calling again resumes it. | `TransferApplyRequest` → `TransferApplyResponse` |
 | `status` | the job, `TransferProgress`, and whether undo is open; `include: 'results'` adds every written row's result; `download: 'results'` answers the result file (the file's own columns, then `Outcome`, `Reason`, `Record ID`) as CSV with `X-Aglyn-Export-Rows`. | `TransferStatusRequest` → `TransferStatusResponse` or `text/csv` |
 | `package` | workspace packages (AGL-3535): `list`, `export` (both read; export audited as `data.transfer.export`, counts only), `plan`, `apply`, `undoPlan`, `undo` — see [Workspace packages](#workspace-packages). Only the package resources of plugins the workspace runs (`listTransferResourcesFor`). | `TransferPackage*Request` → `TransferPackage*Response` |
-| `jobs` | the workspace's imports, newest first, a page at a time (`createdAt` cursor), each a `TransferJobSummary`: its label, status, counts, who (`createdByEmail`, from Auth), when, whether its result file and undo are open. With `sitePackages` on the first page, each site's latest `hosts/{hostId}/packageImports` too. Read. | `TransferJobsRequest` → `TransferJobsResponse` |
+| `jobs` | the workspace's imports, newest first, a page at a time (`createdAt` cursor), each a `TransferJobSummary`: its label, status, counts, who (`createdByEmail`, from Auth), when, whether its result file and undo are open. With `sitePackages` on the first page, each site's latest `hosts/{hostId}/packageImports` too. Read. With `unfinished: true` instead, the caller's own records imports that have written nothing (`retention: 'expire'`), newest first — a query on `(createdBy, retention, updatedAt ↓)` — for Resume (AGL-3549), read; with `action: 'discard'` and a `jobId`, one of those thrown away now (`discardTransferJob`: the caller's own, never one that wrote), a write. | `TransferJobsRequest` → `TransferJobsResponse` \| `TransferUnfinishedImportsResponse` |
 | `undo` | for seven days after `applied`. `action: 'plan'` reads every touched record through `lookup` by id and runs `planTransferUndo`: counts of restore, delete, conflict and nothing, and the conflicts (what the record holds now, what undo would restore), paged; writes nothing. `action: 'apply'` reverts chunk by chunk through `revert`, each record with the person's `decisions[recordId]` or `otherwise`; called until `done`, then `undone`. | `TransferUndoPlanRequest` → `TransferUndoPlanResponse`; `TransferUndoApplyRequest` → `TransferUndoApplyResponse` |
 
 ### Lookup columns (AGL-3541)
@@ -660,6 +660,30 @@ writes it (`emailTopicDocument`, the document `writeEmailTopic` stores) and
 nothing else — no opt-out, no confirmation, nothing under a site — and undo
 retires a topic the import added rather than deleting it, because an
 unsubscribe link sent under it must go on naming it.
+
+### Resuming an import (AGL-3549)
+
+A person who closes the tab mid-wizard, before Apply, comes back to the
+job from where they started it: every import surface draws the core's
+`TransferResumeImport` beside its Import button with the same target, and
+the hub lists every one of theirs under **Unfinished imports**. Both read
+the launcher's `unfinished(target?)` — the jobs route's `unfinished`
+answer, read once the first surface asks and again whenever the wizard
+closes, only for a holder of `data.manage` — and Resume is
+`openImport({ jobId })`, which reopens the wizard on the job's step with
+every choice saved on it. **Discard** is `discard(jobId)`. A colleague's
+unfinished import is never listed, and never resumable from a surface: a
+statement of permission made in it is theirs.
+
+Plugin-side records an import leaves expire with it. The email plugin's
+list import ledger (`orgs/{orgId}/lists/{listId}/imports/{jobId}`: sample
+shared-mailbox addresses and who stated permission) is stamped
+`expiresAt: listImportLedgerExpiry(...)` by every dry run — 15 days, the 7
+a planned import may wait, its 7-day undo window and a day — under a
+Firestore TTL policy on the `imports` collection group
+(`docs/FIRESTORE_MANUAL_CONFIG.md`, `docs/DATA_RETENTION.md`). No other
+plugin keeps a per-import record: the rest stamp the job's id on the
+records they write.
 
 ## The hub
 

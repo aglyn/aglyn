@@ -40,12 +40,13 @@
  */
 
 import {
+  parseTransferResourceKey,
   transferPlanFeature,
   transferResourceImports,
   transferResourceInstanceKey,
   type TransferAccessIntent,
 } from '@aglyn/aglyn/data-transfer'
-import { listTransferResourcesFor, pluginTransferResourceUi, TRANSFER_RESOURCES_LOAD_POINT, type ResolvedTransferResourceDeclaration } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
+import { listDeclaredTransferResources, listTransferResourcesFor, pluginTransferResourceUi, TRANSFER_RESOURCES_LOAD_POINT, type ResolvedTransferResourceDeclaration } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
 import { pluginRecordListQuery, pluginRecordsFromRows } from '@aglyn/aglyn/plugin-manager/plugin-record-lists'
 import { useTransferLauncher, type TransferLauncher } from '@aglyn/aglyn/app-utils/transfer-launcher-context'
 import { planLabelGrantingFeature } from '@aglyn/aglyn'
@@ -167,6 +168,77 @@ function InstanceRows(props: {
         )
       })}
     </Stack>
+  )
+}
+
+/**
+ * The person's imports left before they wrote anything (AGL-3549) — a tab
+ * closed mid-wizard, on any surface — each reopened on the step it was
+ * left at, or thrown away. Nothing when there are none.
+ */
+function UnfinishedImports(props: { launcher: TransferLauncher; onImported?(): void }) {
+  const { launcher, onImported } = props
+  const [busy, setBusy] = useState<string | null>(null)
+  const [failed, setFailed] = useState<string | null>(null)
+  const jobs = launcher.unfinished?.() ?? []
+  if (!jobs.length) return null
+  const scopeOf = (resource: string) =>
+    listDeclaredTransferResources().find((one) => one.key === parseTransferResourceKey(resource).key)?.scope ?? 'org'
+  return (
+    <Box>
+      <Typography variant="subtitle1">{'Unfinished imports'}</Typography>
+      <Typography variant="caption" color="text.secondary">
+        {'Imports you left before anything was written. Each is kept for seven days after you last worked on it.'}
+      </Typography>
+      {failed ? <Alert severity="error">{failed}</Alert> : null}
+      {jobs.map((job) => (
+        <Stack
+          key={job.jobId}
+          direction={{ xs: 'column', sm: 'row' }}
+          spacing={1}
+          sx={{ py: 1, alignItems: { sm: 'center' }, justifyContent: 'space-between' }}
+        >
+          <Box>
+            <Typography variant="body2">{job.fileName ? `${job.label}: ${job.fileName}` : job.label}</Typography>
+            <Typography variant="caption" color="text.secondary">
+              {`Left ${new Date(job.updatedAt).toLocaleString()}`}
+            </Typography>
+          </Box>
+          <Stack direction="row" spacing={1}>
+            <Button
+              size="small"
+              disabled={busy === job.jobId}
+              onClick={() =>
+                launcher.openImport({
+                  resource: job.resource,
+                  scope: scopeOf(job.resource),
+                  ...(job.hostId ? { hostId: job.hostId } : {}),
+                  jobId: job.jobId,
+                  ...(onImported ? { onFinished: onImported } : {}),
+                })
+              }
+            >
+              {'Resume'}
+            </Button>
+            <Button
+              size="small"
+              color="error"
+              disabled={busy === job.jobId}
+              onClick={() => {
+                setBusy(job.jobId)
+                setFailed(null)
+                void launcher
+                  .discard?.(job.jobId)
+                  .catch((error: unknown) => setFailed(error instanceof Error ? error.message : String(error)))
+                  .finally(() => setBusy(null))
+              }}
+            >
+              {'Discard'}
+            </Button>
+          </Stack>
+        </Stack>
+      ))}
+    </Box>
   )
 }
 
@@ -351,6 +423,7 @@ export function OrgDataTransferCard(props: { onImported?(): void }) {
         <Typography variant="body2" color="text.secondary">
           {'Every import shows what it would do before it writes anything, asks how to handle each conflict, and can be undone for seven days.'}
         </Typography>
+        {launcher ? <UnfinishedImports launcher={launcher} onImported={props.onImported} /> : null}
         <Box>
           <Typography variant="subtitle1">{'The workspace'}</Typography>
           {orgResources.length ? listing(orgResources, null) : (

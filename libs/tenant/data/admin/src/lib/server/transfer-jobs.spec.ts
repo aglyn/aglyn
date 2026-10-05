@@ -106,6 +106,8 @@ import {
   analyzeTransferJob,
   applyTransferJob,
   applyTransferJobUndo,
+  discardTransferJob,
+  listUnfinishedTransferJobs,
   planTransferJob,
   planTransferJobUndo,
   readTransferJobStatus,
@@ -1010,6 +1012,44 @@ describe('cleaning up after a job (AGL-3540)', () => {
     expect([...bottles.keys()].sort()).toEqual(['b-old', 'b2'])
     expect(bottles.get('b-old')?.values['name']).toBe('Old')
     expect(bottles.get('b2')?.values['name']).toBe('Edited later')
+  })
+})
+
+/*
+ * UNFINISHED IMPORTS (AGL-3549): an import its person left before it wrote
+ * anything is listed back to them — never to anybody else — newest first,
+ * and can be thrown away now, with its file; one that wrote is undone, not
+ * discarded.
+ */
+describe('unfinished imports (AGL-3549)', () => {
+  const jobDoc = (jobId: string) => docs.get(`orgs/${ORG}/transferJobs/${jobId}`)
+
+  it('lists the person’s own imports that wrote nothing, newest first', async () => {
+    const older = await uploaded(csv(2), 'first.csv')
+    clock.now += 1_000
+    const newer = await planned(csv(3))
+    clock.now += 1_000
+    const written = await planned(csv(1))
+    await applyAll(written.id)
+    const listed = await listUnfinishedTransferJobs(deps, { orgId: ORG, actorUid: ME, labels: { bottles: 'Bottles' } })
+    expect(listed.map((job) => job.jobId)).toEqual([newer.id, older.id])
+    expect(listed[1]).toMatchObject({ resource: 'bottles', status: 'draft', fileName: 'first.csv', label: 'Bottles', hostId: null })
+    expect(listed[0]?.status).toBe('planned')
+    expect(await listUnfinishedTransferJobs(deps, { orgId: ORG, actorUid: 'uid-colleague' })).toEqual([])
+  })
+
+  it('discards one now, with its file, and refuses a colleague’s or one that wrote', async () => {
+    const left = await planned(csv(2))
+    expect(files.has(`orgs/${ORG}/transfers/${left.id}/source`)).toBe(true)
+    expect((await refusal(discardTransferJob(deps, { orgId: ORG, jobId: left.id, actorUid: 'uid-colleague' }))).code).toBe('forbidden')
+    await discardTransferJob(deps, { orgId: ORG, jobId: left.id, actorUid: ME })
+    expect(jobDoc(left.id)).toBeUndefined()
+    expect(files.has(`orgs/${ORG}/transfers/${left.id}/source`)).toBe(false)
+
+    const written = await planned(csv(1))
+    await applyAll(written.id)
+    expect((await refusal(discardTransferJob(deps, { orgId: ORG, jobId: written.id, actorUid: ME }))).code).toBe('state')
+    expect(jobDoc(written.id)).toBeDefined()
   })
 })
 

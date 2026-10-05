@@ -914,7 +914,7 @@ export const DOCS_HELP_ANCHORS = {
   themeAssist: ['#change-what-you-describe-or-design-a-new-theme', '#match-your-brand', '#review-the-proposal', '#save-it-or-dont', '#who-can-use-it', '#related'],
   themeBuilder: ['#edit-your-theme', '#related'],
   themeStyles: ['#why-a-name-beats-a-number', '#text-style-sets-everything-at-once', '#what-your-theme-offers', '#colors-spacing-and-shadows', '#checking-a-page-you-already-built'],
-  transferHub: ['#what-you-can-move', '#export-records', '#import-records', '#1-upload', '#2-columns', '#3-values', '#4-matching', '#5-conflicts', '#6-dry-run', '#7-import', '#8-results', '#export-a-package', '#import-a-package', '#undo-an-import', '#history'],
+  transferHub: ['#what-you-can-move', '#export-records', '#import-records', '#1-upload', '#2-columns', '#3-values', '#4-matching', '#5-conflicts', '#6-dry-run', '#7-import', '#8-results', '#export-a-package', '#import-a-package', '#resume-an-import-you-left', '#undo-an-import', '#history'],
   troubleshooting: ['#checklist', '#verified-but-not-serving', '#the-site-loads-for-some-people-and-not-others', '#still-stuck', '#related'],
   uptimeAndStatus: ['#the-status-page', '#there-is-no-committed-uptime-percentage', '#where-the-platform-runs', '#reporting-an-outage'],
   versionsAndPublishing: ['#the-versions-dialog', '#publish--roll-back', '#scheduled-publishing', '#plan-requirements', '#related'],

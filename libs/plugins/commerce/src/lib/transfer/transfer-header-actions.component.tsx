@@ -17,6 +17,7 @@
 
 'use client'
 
+import { TransferResumeImport } from '@aglyn/aglyn/app-utils/transfer-resume-import'
 import { useTransferLauncher } from '@aglyn/aglyn/app-utils/transfer-launcher-context'
 import { Button, Stack } from '@mui/material'
 import { COMMERCE_IMPORTABLE_TRANSFERS } from './transfer-keys'
@@ -51,6 +52,8 @@ export function TransferHeaderActions(props: TransferHeaderActionsProps) {
   const suffix = noun ? ` ${noun}` : ''
   return (
     <Stack direction="row" spacing={1}>
+      {/* An import left unfinished, reopened where it stopped (AGL-3549). */}
+      {canImport ? <TransferResumeImport target={target} {...(onImported ? { onFinished: onImported } : {})} /> : null}
       {canImport ? (
         <Button
           size="small"

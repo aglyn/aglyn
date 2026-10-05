@@ -28,6 +28,11 @@
  * job document (undo's window, whether the file was cleared) and the people
  * behind each job are read from Auth. Body: `TransferJobsRequest`; answer:
  * `TransferJobsResponse`.
+ *
+ * With `unfinished: true`, instead, the caller's own imports that have
+ * written nothing yet, for Resume (AGL-3549): `TransferUnfinishedImportsResponse`.
+ * With `action: 'discard'` and a `jobId`, one of those thrown away now —
+ * the one write this route makes, asked under a write intent.
  */
 
 // lockdown-423: via apps/console/utils/server/transfer-gate.ts
@@ -37,10 +42,15 @@ import {
   TRANSFER_SITE_PACKAGE_IMPORTS_PER_SITE,
   type TransferJobsResponse,
   type TransferSitePackageImportSummary,
+  type TransferUnfinishedImportsResponse,
 } from '@aglyn/aglyn/data-transfer'
 import { listDeclaredTransferResources } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
-import { listTransferJobs } from '@aglyn/tenant-data-admin/server/transfer-jobs'
+import {
+  discardTransferJob,
+  listTransferJobs,
+  listUnfinishedTransferJobs,
+} from '@aglyn/tenant-data-admin/server/transfer-jobs'
 import { transferErrorResponse, transferGate, type TransferCaller } from '../../../../utils/server/transfer-gate'
 import {
   PACKAGE_IMPORTS_COLLECTION,
@@ -104,12 +114,25 @@ async function sitePackageImports(caller: TransferCaller): Promise<TransferSiteP
 }
 
 async function handler(request: Request): Promise<Response> {
-  const caller = await transferGate(request, 'jobs')
+  // Discarding writes; listing only reads, which a read-only lock still answers.
+  const caller = await transferGate(request, 'jobs', { readsOnly: (body) => body['action'] !== 'discard' })
   if (caller instanceof Response) return caller
   const { body } = caller
   try {
     const labels: Record<string, string> = { [TRANSFER_PACKAGE_RESOURCE]: 'Package' }
     for (const one of listDeclaredTransferResources()) labels[one.key] = one.label
+    // The caller's own unfinished imports, and throwing one away (AGL-3549).
+    if (body['action'] === 'discard') {
+      await discardTransferJob(caller.deps, { orgId: caller.orgId, jobId: String(body['jobId'] ?? ''), actorUid: caller.uid })
+      return Response.json({ ok: true }, { status: 200 })
+    }
+    if (body['unfinished'] === true) {
+      const answer: TransferUnfinishedImportsResponse = {
+        ok: true,
+        unfinished: await listUnfinishedTransferJobs(caller.deps, { orgId: caller.orgId, actorUid: caller.uid, labels }),
+      }
+      return Response.json(answer, { status: 200 })
+    }
     const page = await listTransferJobs(caller.deps, {
       orgId: caller.orgId,
       limit: Number(body['limit'] ?? 20),

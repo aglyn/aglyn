@@ -947,6 +947,39 @@ export interface TransferJobsRequest extends TransferOrgRequest {
   after?: number | null
   /** Also each site's package imports (`hosts/{hostId}/packageImports`), on the first page. */
   sitePackages?: boolean
+  /**
+   * Instead of the history, the caller's own unfinished imports of records
+   * (AGL-3549): every job they started that has not written anything, the
+   * ones the cleanup would expire — answered as `unfinished`.
+   */
+  unfinished?: boolean
+  /** Throw away one unfinished import of the caller's (`jobId`) now; answered `{ ok: true }`. */
+  action?: 'discard'
+  jobId?: string
+}
+
+/** The most unfinished imports one answer lists. */
+export const TRANSFER_UNFINISHED_IMPORTS_MAX = 50
+
+/** One of the caller's unfinished imports (AGL-3549), as Resume lists it. */
+export interface TransferUnfinishedImportSummary {
+  jobId: string
+  /** The resource key, naming the instance for one declared with `instances`. */
+  resource: string
+  hostId: string | null
+  fileName: string | null
+  /** Where it stopped: before the dry run, after it, or failed before writing. */
+  status: 'draft' | 'analyzed' | 'planned' | 'failed'
+  /** When the person last worked on it, epoch ms. */
+  updatedAt: number
+  /** What the resource is called. */
+  label: string
+}
+
+/** The answer to `{ unfinished: true }`. */
+export interface TransferUnfinishedImportsResponse {
+  ok: true
+  unfinished: TransferUnfinishedImportSummary[]
 }
 
 /** The most package imports listed per site. */

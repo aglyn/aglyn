@@ -28,19 +28,25 @@
  */
 
 import { checkEntitlement } from '@aglyn/aglyn/app-utils/plan-entitlements'
-import { render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 
 let mockOrg: Record<string, unknown> = { plan: 'free', enabledPlugins: ['crm'] }
 /** Whether the person holds "Manage data" (AGL-3554). */
 let mockManages = true
+/** The person's unfinished imports, and what was opened or discarded (AGL-3549). */
+let mockUnfinished: Array<Record<string, unknown>> = []
+const mockOpenImport = jest.fn()
+const mockDiscard = jest.fn(async (): Promise<void> => undefined)
 
 jest.mock('@aglyn/aglyn/app-utils/transfer-launcher-context', () => {
   const { transferAccessVerdict } = jest.requireActual('../components/transfer-launcher-provider.component')
   const plans = jest.requireActual('@aglyn/aglyn/app-utils/plan-entitlements')
   return {
     useTransferLauncher: () => ({
-      openImport: jest.fn(),
+      openImport: mockOpenImport,
+      unfinished: () => mockUnfinished,
+      discard: mockDiscard,
       openExport: jest.fn(),
       close: jest.fn(),
       can: (action: string, target: unknown) =>
@@ -100,6 +106,9 @@ function buttonsOf(label: string): string[] {
 beforeEach(() => {
   mockOrg = { plan: 'free', enabledPlugins: ['crm'] }
   mockManages = true
+  mockUnfinished = []
+  mockOpenImport.mockReset()
+  mockDiscard.mockClear()
 })
 
 describe('the hub on Free', () => {
@@ -144,5 +153,32 @@ describe('the hub for a member without Manage data (AGL-3554)', () => {
     }
     expect(screen.queryByText('Export package')).toBeNull()
     expect(screen.queryByText('Import package')).toBeNull()
+  })
+})
+
+/*
+ * The hub lists the person's unfinished imports from every surface
+ * (AGL-3549), each reopened on its job or discarded.
+ */
+describe('the hub’s unfinished imports (AGL-3549)', () => {
+  it('reopens one on its job, or discards it', async () => {
+    mockOrg = { plan: 'starter', enabledPlugins: ['crm'] }
+    mockUnfinished = [
+      { jobId: 'job-1', resource: 'crm.contacts', hostId: 'host-a', fileName: 'people.csv', status: 'planned', updatedAt: 1, label: 'Contacts' },
+    ]
+    render(<OrgDataTransferCard />)
+    expect(screen.getByText('Unfinished imports')).toBeTruthy()
+    expect(screen.getByText('Contacts: people.csv')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Resume' }))
+    expect(mockOpenImport).toHaveBeenCalledWith({ resource: 'crm.contacts', scope: 'org', hostId: 'host-a', jobId: 'job-1' })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Discard' }))
+    })
+    expect(mockDiscard).toHaveBeenCalledWith('job-1')
+  })
+
+  it('says nothing when there is nothing to resume', () => {
+    render(<OrgDataTransferCard />)
+    expect(screen.queryByText('Unfinished imports')).toBeNull()
   })
 })

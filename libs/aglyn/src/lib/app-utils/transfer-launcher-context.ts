@@ -16,6 +16,7 @@
  */
 
 import { createContext, useContext } from 'react'
+import type { TransferUnfinishedImportSummary } from '../data-transfer/transfer-api'
 
 /**
  * The console shell's import wizard and export dialog, for a plugin to open.
@@ -98,6 +99,13 @@ export interface TransferAccessTarget {
   hostId?: string | null
 }
 
+/**
+ * An import the person started and left before it wrote anything
+ * (AGL-3549) — a tab closed mid-wizard — which `openImport({ jobId })`
+ * reopens on the step it was left at.
+ */
+export type TransferUnfinishedImport = TransferUnfinishedImportSummary
+
 /** What the shell offers: open the wizard or the dialog, or close whichever is open. */
 export interface TransferLauncher {
   openImport(launch: TransferImportLaunch): void
@@ -113,6 +121,22 @@ export interface TransferLauncher {
    * declares a `readPermission`. The routes stay the enforcement.
    */
   can(action: TransferAction, target: TransferAccessTarget): boolean
+  /**
+   * The person's own unfinished imports (AGL-3549), newest first: of the
+   * target's resource — the exact key, so one dataset's are not another's —
+   * on the target's site when it names one, when a target is given; every
+   * one otherwise. Empty
+   * until the shell has read them; the first ask starts the read, and the
+   * list is read again whenever the wizard closes. Only for a person who may
+   * import into the workspace.
+   */
+  unfinished?(target?: TransferAccessTarget): readonly TransferUnfinishedImport[]
+  /**
+   * Throws an unfinished import away now — its job, its file and its saved
+   * choices — instead of leaving it to expire. Refused for an import that
+   * has written anything, which is undone instead.
+   */
+  discard?(jobId: string): Promise<void>
 }
 
 export const TransferLauncherContext = createContext<TransferLauncher | null>(null)

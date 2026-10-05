@@ -214,6 +214,13 @@ const POLICIES: Array<{
     writers: ['apps/console/app/api/_lib/site-package-ledger.ts'],
     stamp: 'expiresAt: packageLedgerExpiry(',
   },
+  // AGL-3549: an email list import's ledger — sample shared-mailbox
+  // addresses and who stated permission — kept while its job can write.
+  {
+    collectionGroup: 'imports',
+    writers: ['libs/plugins/email/src/lib/transfer/list-members.server.ts'],
+    stamp: 'expiresAt: listImportLedgerExpiry(',
+  },
 ]
 
 describe('Firestore TTL policies are declared, documented and written', () => {

@@ -53,6 +53,7 @@
  * answer: a consent column for no site would be a column about nobody.
  */
 
+import { TransferResumeImport } from '@aglyn/aglyn/app-utils/transfer-resume-import'
 import {
   consentGroupForHost,
   normalizeDynamicListRule,
@@ -237,6 +238,14 @@ export function ListDetailCard(props: ListDetailCardProps) {
         >
           {'Export'}
         </Button>
+      ) : null}
+      {/* An import left unfinished, reopened where it stopped (AGL-3549). */}
+      {transfer && enrollHostId ? (
+        <TransferResumeImport
+          target={transferTarget}
+          {...(listName ? { title: `Import into ${listName}` } : {})}
+          onFinished={onMembershipChanged}
+        />
       ) : null}
       {transfer && canImportMembers ? (
         <Button

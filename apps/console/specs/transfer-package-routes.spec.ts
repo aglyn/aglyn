@@ -44,6 +44,8 @@ const mockPackages = {
   applyTransferPackageUndo: jest.fn(),
 }
 const mockListJobs = jest.fn()
+const mockUnfinished = jest.fn()
+const mockDiscard = jest.fn()
 let mockSiteImports: Array<{ hostId: string; id: string; data: Record<string, unknown> }> = []
 
 jest.mock('@aglyn/aglyn/server', () => ({
@@ -136,6 +138,8 @@ jest.mock('@aglyn/tenant-data-admin/server/transfer-jobs', () => ({
   __esModule: true,
   TransferEngineError: class extends Error {},
   listTransferJobs: (...args: unknown[]) => mockListJobs(...args),
+  listUnfinishedTransferJobs: (...args: unknown[]) => mockUnfinished(...args),
+  discardTransferJob: (...args: unknown[]) => mockDiscard(...args),
 }))
 
 jest.mock('@aglyn/tenant-data-admin/server/transfer-packages', () => ({
@@ -288,5 +292,30 @@ describe('the history route', () => {
     ])
     const later = await (await jobsRoute(request('jobs', { orgId: 'org-1', sitePackages: true, after: 5 }))).json()
     expect(later.sitePackageImports).toBeUndefined()
+  })
+})
+
+/*
+ * RESUME (AGL-3549): the same route answers the caller's own unfinished
+ * imports, under a read intent, and throws one away under a write intent —
+ * never anybody else's, which the engine refuses.
+ */
+describe('the unfinished imports', () => {
+  it('lists the caller’s own, under a read intent', async () => {
+    const job = { jobId: 'job-9', resource: 'crm.contacts', hostId: null, fileName: 'a.csv', status: 'planned', updatedAt: 1, label: 'Contacts' }
+    mockUnfinished.mockReset().mockResolvedValue([job])
+    const answer = await (await jobsRoute(request('jobs', { orgId: 'org-1', unfinished: true }))).json()
+    expect(answer).toEqual({ ok: true, unfinished: [job] })
+    expect(mockUnfinished.mock.calls[0][1]).toMatchObject({ orgId: 'org-1', actorUid: 'uid-1' })
+    expect(mockIntents).toEqual(['read'])
+    expect(mockListJobs).not.toHaveBeenCalled()
+  })
+
+  it('discards one, under a write intent, as the caller', async () => {
+    mockDiscard.mockReset().mockResolvedValue(undefined)
+    const answer = await jobsRoute(request('jobs', { orgId: 'org-1', action: 'discard', jobId: 'job-9' }))
+    expect(answer.status).toBe(200)
+    expect(mockDiscard.mock.calls[0][1]).toEqual({ orgId: 'org-1', jobId: 'job-9', actorUid: 'uid-1' })
+    expect(mockIntents).toEqual(['write'])
   })
 })
