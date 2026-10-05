@@ -689,6 +689,14 @@ async function ownerRecipients(
 }
 
 /**
+ * How long a caller on a page render's path waits on a notice before it
+ * carries on without the answer (AGL-3565). The notice is not canceled; it
+ * finishes behind the page. A held page or redirect is held either way —
+ * what is bounded is how long the visitor waits to be told so.
+ */
+export const RISK_NOTICE_RENDER_DEADLINE_MS = 8_000
+
+/**
  * Tell the right people about one risk event. See the module header.
  * Never throws.
  */

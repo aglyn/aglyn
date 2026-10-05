@@ -73,10 +73,16 @@ import {
   type SendingWorkspace,
   setOutboundScreenGate,
 } from '@aglyn/shared-util-email/outbound-screen-gate'
+import { boundedAwait } from '@aglyn/shared-util-http/bounded-await'
 import { FieldValue } from 'firebase-admin/firestore'
 import { orgAgeDays } from './org-age'
 import firebaseAdmin from './firebase-admin'
-import { notifyRiskEvent, type RiskEventInput, type RiskEventItem } from './risk-notice'
+import {
+  notifyRiskEvent,
+  RISK_NOTICE_RENDER_DEADLINE_MS,
+  type RiskEventInput,
+  type RiskEventItem,
+} from './risk-notice'
 import { installLinkReputationLookup } from './web-risk'
 
 /** A workspace younger than this many days has the soft rules applied. */
@@ -396,32 +402,39 @@ export async function fileOutboundHold(
   if (first && state === 'held') {
     // The owners learn what was held and how to ask for a review; staff get
     // the alert with the evidence and a link to this row. One seam, once.
-    await notifyRiskEvent({
-      kind:
-        filing.heldSend.kind === 'page'
-          ? 'page-held'
-          : filing.heldSend.kind === 'listing'
-            ? 'listing-held'
-            : 'email-held',
-      orgId: filing.heldSend.orgId,
-      hostId: filing.heldSend.hostId,
-      reviewId: filing.reviewId,
-      reference,
-      occurredAtMs: filing.heldSend.heldAtMs,
-      item:
-        filing.item ??
-        heldSendItem({
-          kind: filing.heldSend.kind,
-          path: filing.heldSend.path,
-          hostId: filing.heldSend.hostId,
-          subject: filing.heldSend.subject,
-        }),
-      page: filing.page ?? null,
-      staffEvidence: [
-        filing.alertBody,
-        ...describePhishingScreenSignals(filing.heldSend.signals),
-      ].join(' '),
-    })
+    // A page or redirect review files its hold inside a page render:
+    // bounded, so a mail or webhook outage cannot hold the page (AGL-3565).
+    await boundedAwait(
+      notifyRiskEvent({
+        kind:
+          filing.heldSend.kind === 'page'
+            ? 'page-held'
+            : filing.heldSend.kind === 'listing'
+              ? 'listing-held'
+              : 'email-held',
+        orgId: filing.heldSend.orgId,
+        hostId: filing.heldSend.hostId,
+        reviewId: filing.reviewId,
+        reference,
+        occurredAtMs: filing.heldSend.heldAtMs,
+        item:
+          filing.item ??
+          heldSendItem({
+            kind: filing.heldSend.kind,
+            path: filing.heldSend.path,
+            hostId: filing.heldSend.hostId,
+            subject: filing.heldSend.subject,
+          }),
+        page: filing.page ?? null,
+        staffEvidence: [
+          filing.alertBody,
+          ...describePhishingScreenSignals(filing.heldSend.signals),
+        ].join(' '),
+      }),
+      RISK_NOTICE_RENDER_DEADLINE_MS,
+      null,
+      'risk-notice.held',
+    )
   }
   return state
 }
