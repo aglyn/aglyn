@@ -25,6 +25,10 @@
 
 import { mediaSrc, mediaThumbnailSrc } from './media-src'
 
+const STORAGE_URL =
+  'https://firebasestorage.googleapis.com/v0/b/aglyn.appspot.com/o/' +
+  'orgs%2Facme%2Fmedia%2Fphotos%2Fm1?alt=media&token=abc'
+
 describe('mediaThumbnailSrc — grid tiles must not fetch full-size originals', () => {
   // `mediaSrc` absolutizes against `window.location.origin` when there is a
   // window, so these assert the shape rather than an exact string — under
@@ -38,11 +42,23 @@ describe('mediaThumbnailSrc — grid tiles must not fetch full-size originals', 
     expect(src).not.toContain('raw')
   })
 
-  it('falls back to the raw URL when there is no cdnPath', () => {
-    // Free-tier and private assets carry no `cdnPath` (AGL-1051), and a
-    // width parameter on a raw storage URL means nothing — appending one
-    // would only fork the browser cache for identical bytes.
+  it('falls back to the raw URL when there is no CDN path', () => {
+    // A private asset carries no `cdnPath` (AGL-1051), and a width parameter
+    // on a raw storage URL means nothing — appending one would only fork the
+    // browser cache for identical bytes.
     expect(mediaThumbnailSrc({ url: 'https://raw/x' }, 320)).toBe('https://raw/x')
+    expect(
+      mediaThumbnailSrc({ url: STORAGE_URL, private: true }, 320),
+    ).toBe(STORAGE_URL)
+  })
+
+  it('reads the CDN path off a library storage URL with no cdnPath (AGL-3506)', () => {
+    // An upload from before the CDN reached every plan: its tile and the URL
+    // a picker persists both go through the CDN, never Google's edge.
+    const thumb = mediaThumbnailSrc({ url: STORAGE_URL }, 320)
+    expect(thumb).toContain('/api/media/cdn/org:acme/m1?w=320')
+    expect(thumb).not.toContain('firebasestorage')
+    expect(mediaSrc({ url: STORAGE_URL })).toMatch(/\/api\/media\/cdn\/org:acme\/m1$/)
   })
 
   it('leaves a cdnPath that already carries a query alone', () => {

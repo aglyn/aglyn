@@ -87,9 +87,8 @@ These are not two spellings of one thing.
   whoever holds it the ability to fetch the file. It is the right choice for a
   server-side pipeline; it is the wrong thing to paste into a public page.
 - **`cdnUrl`** is the cached public URL, served from your Aglyn origin. It is what
-  belongs in an `<img src>`. It is **`null`** in two cases:
-  - your plan doesn't include the media CDN, or
-  - the file is `private`.
+  belongs in an `<img src>`, and every file has one except a `private` file, where it
+  is **`null`**.
 
 So `cdnUrl === null` is information, not an omission — it tells you the file has no
 publicly cacheable address. Never fall back from `cdnUrl` to `url` to fill an `src`:
@@ -100,8 +99,8 @@ meant to be public.
 // Right: absence is a decision, not a gap.
 const src = file.cdnUrl
 if (!src) {
-  // Private, or a plan without the CDN. Link through your own authenticated
-  // handler, or skip it — don't reach for `file.url`.
+  // Private. Link through your own authenticated handler, or skip it — don't
+  // reach for `file.url`.
 }
 ```
 

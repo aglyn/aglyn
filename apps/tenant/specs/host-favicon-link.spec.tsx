@@ -219,7 +219,10 @@ describe('tenant `<link rel="icon">` (AGL-1421)', () => {
       const raw =
         'https://firebasestorage.googleapis.com/v0/b/aglyn-main.appspot.com/' +
         'o/orgs%2FjWmGooWE3L%2Fmedia%2F19G8Ipyfb1?alt=media&token=abc'
-      expect(await iconHref(raw)).toBe(raw)
+      // Served through the site's own CDN (AGL-3506), qualified for it.
+      expect(await iconHref(raw)).toBe(
+        '/api/media/cdn/org:jWmGooWE3L:DXnRbPH4CQ/19G8Ipyfb1',
+      )
     })
 
     it('the AGL-175 relative CDN path', async () => {
