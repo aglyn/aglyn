@@ -27,6 +27,7 @@ content on the marketing site and is written separately.
 - **outreach:** the Microsoft disconnect notice names no product ([AGL-3489](https://linear.app/aglyn/issue/AGL-3489))
 - **tenant:** llms.txt lists indexable pages in site order, each paragraph once ([AGL-3576](https://linear.app/aglyn/issue/AGL-3576))
 - **crm:** the Lead source direction filter works for every org ([AGL-3577](https://linear.app/aglyn/issue/AGL-3577))
+- **signup:** a phone Google sign-up lands before the auth layout moves it ([AGL-3578](https://linear.app/aglyn/issue/AGL-3578))
 
 <details>
 <summary>Also in this release: 1 test</summary>
