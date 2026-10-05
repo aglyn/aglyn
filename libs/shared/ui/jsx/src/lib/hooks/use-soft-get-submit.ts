@@ -17,8 +17,8 @@
 
 'use client'
 
-import { useRouter } from 'next/navigation'
-import { type FormEvent, useCallback } from 'react'
+import { AppRouterContext } from 'next/dist/shared/lib/app-router-context.shared-runtime'
+import { type FormEvent, useCallback, useContext } from 'react'
 
 /**
  * The URL a `method="get"` form would load, or `null` when the submit should
@@ -55,12 +55,17 @@ export const softGetSubmitHref = (
  * The form keeps its `action` and `method`, so it still works before
  * hydration and with scripting off — this only takes over once React is
  * listening, the same progressive enhancement `AppLink` gives an `<a>`.
+ *
+ * The router is read from its context rather than through `useRouter`,
+ * which throws when no App Router is mounted. Site elements render in
+ * places that have none (component specs, axe sweeps, server-rendered
+ * previews), and there the submit stays the browser's.
  */
 export const useSoftGetSubmit = () => {
-  const router = useRouter()
+  const router = useContext(AppRouterContext)
   return useCallback(
     (event: FormEvent<HTMLFormElement>) => {
-      if (event.defaultPrevented) return
+      if (!router || event.defaultPrevented) return
       const submitter = (event.nativeEvent as SubmitEvent).submitter
       const href = softGetSubmitHref(event.currentTarget, submitter)
       if (!href) return

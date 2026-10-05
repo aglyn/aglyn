@@ -15,7 +15,9 @@
  * limitations under the License.
  */
 
-import { softGetSubmitHref } from './use-soft-get-submit'
+import { renderHook } from '@testing-library/react'
+import type { FormEvent } from 'react'
+import { softGetSubmitHref, useSoftGetSubmit } from './use-soft-get-submit'
 
 const form = (html: string) => {
   document.body.innerHTML = html
@@ -56,5 +58,18 @@ describe('softGetSubmitHref', () => {
     expect(softGetSubmitHref(form('<form action="/search"></form>'))).toBe(
       '/search',
     )
+  })
+
+  it('leaves the submit to the browser when no App Router is mounted', () => {
+    const el = form('<form action="/search"><input name="q" value="x"></form>')
+    const { result } = renderHook(() => useSoftGetSubmit())
+    const preventDefault = jest.fn()
+    result.current({
+      currentTarget: el,
+      defaultPrevented: false,
+      preventDefault,
+      nativeEvent: {},
+    } as unknown as FormEvent<HTMLFormElement>)
+    expect(preventDefault).not.toHaveBeenCalled()
   })
 })
