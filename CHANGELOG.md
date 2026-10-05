@@ -15,6 +15,7 @@ content on the marketing site and is written separately.
 
 ### Added
 
+- **marketing:** a campaign gets credit for visits and conversions without UTMs, its page opens on what it caused, and Inbox and alert links name the campaign ([AGL-3461](https://linear.app/aglyn/issue/AGL-3461))
 - **ops:** a five-minute render monitor fetches uncached pages from the console ([AGL-3568](https://linear.app/aglyn/issue/AGL-3568))
 - **console:** the production canary raises an operator alert on a failed deploy ([AGL-3567](https://linear.app/aglyn/issue/AGL-3567))
 - **ci:** a production canary reads production after every tenant/console deploy and rolls back a red one ([AGL-3567](https://linear.app/aglyn/issue/AGL-3567))
