@@ -25,6 +25,7 @@ import {
   type CrmPicklistDefinition,
   type CrmPicklistId,
   type CrmPicklistObject,
+  type CrmPicklistTarget,
   crmContactFacetKeys,
   crmPicklistDefinition,
   crmPicklistKey,
@@ -98,6 +99,73 @@ async function replaceEverywhere(
     await batch.commit()
     written += page.size
     if (page.size < BATCH_SIZE) return written
+  }
+}
+
+/**
+ * Rewrite an ARRAY target (AGL-3521): every record whose `keyField` lists
+ * the old label's key has each entry of `field` holding `from` at
+ * `arrayKey` moved to `to` — or the entry's label removed, for `null` —
+ * and its `keyField` restamped from the entries as moved. Answers how many
+ * records were written.
+ *
+ * Paged by document id rather than re-run, because a rename that changes
+ * only the label's case keeps its key, so a written record can stay in the
+ * query's answer.
+ */
+async function replaceInArrayEverywhere(
+  firestore: FirebaseFirestore.Firestore,
+  records: FirebaseFirestore.CollectionReference,
+  target: CrmPicklistTarget & { arrayKey: string; keyField: string },
+  from: string,
+  to: string | null,
+): Promise<number> {
+  const fromKey = crmPicklistKey(from)
+  if (!fromKey) return 0
+  const query = records
+    .where(target.keyField, 'array-contains', fromKey)
+    .orderBy(FieldPath.documentId())
+    .limit(BATCH_SIZE)
+  let written = 0
+  let after: FirebaseFirestore.QueryDocumentSnapshot | null = null
+  for (;;) {
+    const page: FirebaseFirestore.QuerySnapshot = await (after ? query.startAfter(after) : query).get()
+    if (page.empty) return written
+    const batch = firestore.batch()
+    let changed = 0
+    for (const snapshot of page.docs) {
+      const entries = snapshot.get(target.field)
+      if (!Array.isArray(entries)) continue
+      let moved = false
+      const next = entries.map((entry: unknown) => {
+        if (!entry || typeof entry !== 'object') return entry
+        const row = entry as Record<string, unknown>
+        if (row[target.arrayKey] !== from) return entry
+        moved = true
+        const rest = { ...row }
+        delete rest[target.arrayKey]
+        return to === null ? rest : { ...rest, [target.arrayKey]: to }
+      })
+      if (!moved) continue
+      const keys = new Set<string>()
+      for (const entry of next) {
+        const key =
+          entry && typeof entry === 'object'
+            ? crmPicklistKey((entry as Record<string, unknown>)[target.arrayKey])
+            : null
+        if (key) keys.add(key)
+      }
+      batch.update(snapshot.ref, {
+        [target.field]: next,
+        [target.keyField]: [...keys],
+        updatedAt: FieldValue.serverTimestamp(),
+      })
+      changed += 1
+    }
+    if (changed) await batch.commit()
+    written += changed
+    if (page.size < BATCH_SIZE) return written
+    after = page.docs[page.docs.length - 1] ?? null
   }
 }
 
@@ -244,8 +312,10 @@ function picklistValuesHandler(fixed?: CrmPicklistId): PluginApiHandler {
 
       /*
        * THE RECORDS, target by target: a record's own field, with its query
-       * key moved beside it; or, for a facet target, each holder's facet on
-       * a contact — one query per consent group the org's sites belong to.
+       * key moved beside it; for an array target, each entry of a record's
+       * list (a deal's contact roles); or, for a facet target, each holder's
+       * facet on a contact — one query per consent group the org's sites
+       * belong to.
        * A rename to the same label moves nothing, and says so.
        */
       const updated: PicklistValuesResponse['updated'] = {}
@@ -254,6 +324,18 @@ function picklistValuesHandler(fixed?: CrmPicklistId): PluginApiHandler {
         updated[target.object] ??= 0
         if (moved.from === moved.to) continue
         const records = orgRef.collection(TARGET_COLLECTIONS[target.object])
+        if (target.arrayKey && target.keyField) {
+          updated[target.object] =
+            (updated[target.object] ?? 0) +
+            (await replaceInArrayEverywhere(
+              firestore,
+              records,
+              { ...target, arrayKey: target.arrayKey, keyField: target.keyField },
+              moved.from,
+              moved.to,
+            ))
+          continue
+        }
         if (target.facet) {
           if (!groupIds) {
             const hostIds = await orgHostIds(firestore, writer.orgId)

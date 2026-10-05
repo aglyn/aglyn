@@ -92,13 +92,18 @@ function docRef(path: string): any {
 }
 
 function collectionRef(path: string): any {
-  const make = (filters: Array<[string, unknown]>, max?: number): any => ({
-    where: (field: string, _op: string, value: unknown) => make([...filters, [field, value]], max),
+  const make = (filters: Array<[string, string, unknown]>, max?: number): any => ({
+    where: (field: string, op: string, value: unknown) => make([...filters, [field, op, value]], max),
     limit: (n: number) => make(filters, n),
     get: async () => {
       const hits = childPaths(path)
         .map(snapshot)
-        .filter((snap) => filters.every(([field, value]) => valueAt(snap.data(), field) === value))
+        .filter((snap) =>
+          filters.every(([field, op, value]) => {
+            const stored = valueAt(snap.data(), field)
+            return op === 'array-contains' ? Array.isArray(stored) && stored.includes(value) : stored === value
+          }),
+        )
         .slice(0, max ?? Number.POSITIVE_INFINITY)
       return { empty: hits.length === 0, size: hits.length, docs: hits }
     },
@@ -232,6 +237,41 @@ describe('erase', () => {
     expect(docs.has(`orgs/${ORG}/crmActivities/a1`)).toBe(false)
     expect(docs.has(`orgs/${ORG}/crmActivities/a2`)).toBe(false)
     expect(report).toMatchObject({ deals: 1, tasks: 1, activities: 2 })
+  })
+
+  it('takes the person off every deal’s contact roles, and its Primary with them (AGL-3521)', async () => {
+    docs.set(`orgs/${ORG}/deals/d3`, {
+      title: 'Committee',
+      contactId: 'c9',
+      contactRoles: [
+        { contactId: 'c9', role: 'Economic Buyer', primary: true },
+        { contactId: 'c1', role: 'Evaluator', primary: false },
+      ],
+      contactRoleContactIds: ['c9', 'c1'],
+      contactRoleKeys: ['economic buyer', 'evaluator'],
+    })
+    docs.set(`orgs/${ORG}/deals/d4`, {
+      title: 'Led by them',
+      contactId: 'c1',
+      contactRoles: [
+        { contactId: 'c1', role: 'Decision Maker', primary: true },
+        { contactId: 'c9', primary: false },
+      ],
+      contactRoleContactIds: ['c1', 'c9'],
+    })
+    const report = await erase()
+    expect(docs.get(`orgs/${ORG}/deals/d3`)).toMatchObject({
+      contactId: 'c9',
+      contactRoles: [{ contactId: 'c9', role: 'Economic Buyer', primary: true }],
+      contactRoleContactIds: ['c9'],
+      contactRoleKeys: ['economic buyer'],
+    })
+    expect(docs.get(`orgs/${ORG}/deals/d4`)).toMatchObject({
+      contactRoles: [{ contactId: 'c9', primary: false }],
+      contactRoleContactIds: ['c9'],
+    })
+    expect(docs.get(`orgs/${ORG}/deals/d4`)).not.toHaveProperty('contactId')
+    expect(report).toMatchObject({ deals: 3 })
   })
 
   it('deletes the org’s lead and every legacy row on its sites, and no other workspace’s', async () => {

@@ -43,6 +43,10 @@ contacts and companies against the plan's records band, and on a plan that hard-
   "stageChangedAt": "2026-09-05T18:23:23.941Z",
   "ownerUid": "u_9f1c",
   "contactId": "k7d2b9f104",
+  "contactRoles": [
+    { "contactId": "k7d2b9f104", "role": "Decision Maker", "primary": true },
+    { "contactId": "m2a8c4e771", "role": "Evaluator", "primary": false }
+  ],
   "companyId": "c_1a2b",
   "lostReason": null,
   "notes": null,
@@ -75,7 +79,8 @@ contacts and companies against the plan's records band, and on a plan that hard-
 | `closedAt` | string \| null | When the deal was won or lost. Set by a move into a closed stage and cleared by a move back to an open one. **Read-only.** |
 | `stageChangedAt` | string \| null | When the deal last moved — what "stuck in stage" reports read. **Read-only.** |
 | `ownerUid` | string \| null | The member responsible. Must be a member of your organization. Writable. |
-| `contactId` | string \| null | The [contact](contacts.md) the deal is with. Must exist. Writable. |
+| `contactId` | string \| null | The [contact](contacts.md) the deal is with — the **Primary** of `contactRoles`. Must exist. Writable: setting it makes that contact Primary, adding them to `contactRoles` with no role when the deal did not name them; `null` leaves the deal with no Primary. |
+| `contactRoles` | array | Every contact on the deal and the part each plays — Salesforce's Opportunity Contact Roles — each `{ contactId, role, primary }`. See [contact roles](#contact-roles). A deal written before roles reads as its `contactId`, Primary, with `role: null`. Writable. |
 | `companyId` | string \| null | The [company](companies.md) the deal is with. Must exist. Writable. |
 | `lostReason` | string \| null | Free text, 5,000 characters. Writable. |
 | `notes` | string \| null | Free text, 5,000 characters. Writable. |
@@ -183,6 +188,36 @@ customer, and a later stage (`evangelist`, `other`) is never lowered. Read it
 back on [the contact](contacts.md) — the deal's own representation does not
 change. There is no flag to turn this off; a won deal is a customer by
 definition.
+
+#### Contact roles {#contact-roles}
+
+`contactRoles` is the whole list, replaced as sent:
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `contactId` | string | A [contact](contacts.md) of the organization. Each contact once. |
+| `role` | string \| null | One of the organization's contact roles — Salesforce's *Business User*, *Decision Maker*, *Economic Buyer*, *Economic Decision Maker*, *Evaluator*, *Executive Sponsor*, *Influencer*, *Technical Buyer*, *Other*, or its own ([picklist](/content-and-data/crm/custom-fields#picklist-values)). Judged like `type`; a contact keeps the role it already holds on the deal after the value is deactivated. `null` or omitted for none. |
+| `primary` | boolean | At most one entry. Omitted is `false`. |
+
+At most fifty contacts. **The Primary is `contactId`**: the deal stores the
+Primary's id there, and a list with no Primary clears it. A body that sends
+both must agree — `contactId` naming the Primary, or `null` beside a list with
+none — or it is a `400` naming `contactId`. A body that sends `contactId`
+alone keeps the list and makes that contact Primary. A refusal is named under
+`fields.contactRoles`: `"At most one contact may be Primary"`,
+`"Entry 1: c_9 is on the list twice"`, `"No such contact in this organization: c_9"`,
+or the roles the list allows.
+
+```bash
+curl -X PATCH "https://app.aglyn.com/api/v1/deals/d_3c9a" \
+  -H "Authorization: Bearer aglyn_sk_…" \
+  -H "Content-Type: application/json" \
+  -d '{"contactRoles":[{"contactId":"k7d2b9f104","role":"Decision Maker","primary":true},{"contactId":"m2a8c4e771","role":"Evaluator"}]}'
+```
+
+Deleting or erasing a contact takes them off every deal's `contactRoles` (and
+clears `contactId` where they were the Primary); [merging](contacts.md) moves
+them to the surviving contact.
 
 #### Line items {#line-items}
 

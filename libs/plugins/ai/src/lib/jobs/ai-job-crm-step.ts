@@ -428,6 +428,16 @@ export function aiCrmFactsLines(kind: AiCrmRecordKind, facts: Facts): string[] {
       ...line('Lost reason', facts['lostReason']),
       ...line('With', withWhom),
       ...line('Owner', facts['owner']),
+      // Every contact on the deal and the part each plays (AGL-3521).
+      ...line(
+        'Contact roles',
+        list(facts['contactRoles'])
+          .map((row) => {
+            const part = [text(row['role']), row['primary'] === true ? 'Primary' : ''].filter(Boolean).join(', ')
+            return part ? `${text(row['name'])} (${part})` : text(row['name'])
+          })
+          .join('; '),
+      ),
       ...(products.length
         ? [
             'Products:',

@@ -321,6 +321,23 @@ describe('the CRM’s readers on the record-facts seam (AGL-2917)', () => {
     expect(await read('crm.lead', { id: 'lead-9' })).toMatchObject({ ok: false, status: 404 })
   })
 
+  it('names the contacts on a deal the site may see, and leaves the rest out (AGL-3521)', async () => {
+    mockDocs.set('orgs/org-1/deals/d-1', {
+      ...(mockDocs.get('orgs/org-1/deals/d-1') as Record<string, unknown>),
+      contactRoles: [
+        { contactId: 'contact-1', role: 'Decision Maker', primary: true },
+        // Another site's person: not this site's to name.
+        { contactId: 'contact-2', role: 'Evaluator', primary: false },
+      ],
+    })
+    const answer = await read('crm.deal', { id: 'd-1' })
+    expect(answer).toMatchObject({
+      ok: true,
+      facts: { contactRoles: [{ name: 'Jane Doe', role: 'Decision Maker', primary: true }] },
+    })
+    expect(JSON.stringify(answer)).not.toContain('Kim Lee')
+  })
+
   it('lists an import’s fields with the custom fields the site may see', async () => {
     const result = await read('crm.import', { id: 'contacts' })
     expect(result.ok).toBe(true)

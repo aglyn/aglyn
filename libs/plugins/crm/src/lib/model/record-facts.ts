@@ -27,6 +27,7 @@ import {
   crmActivityDirection,
   customImportTarget,
   DEAL_NEXT_STEP_MAX,
+  dealContactRolesOf,
   dealForecastCategory,
   dealProbability,
   dealStageById,
@@ -294,6 +295,18 @@ export interface CrmStageFact {
   forecastCategory: string
 }
 
+/** One contact on a deal, as the facts name them (AGL-3521). */
+export interface CrmContactRoleFact {
+  /** The person's name, or `''` where it could not be read. */
+  name: string
+  /** The role's label, or `''` for none. */
+  role: string
+  primary: boolean
+}
+
+/** The contacts a deal's facts name — the committee, not the whole list. */
+export const CRM_FACTS_CONTACT_ROLES_MAX = 10
+
 export interface CrmDealFacts {
   record: 'deal'
   title: string
@@ -320,6 +333,12 @@ export interface CrmDealFacts {
   campaign: string
   /** The name of the person the deal is with, as the deal copied it. */
   contact: string
+  /**
+   * Every contact on the deal and the part each plays (AGL-3521), the
+   * Primary first — named as the reader resolved them, at most
+   * {@link CRM_FACTS_CONTACT_ROLES_MAX}.
+   */
+  contactRoles: CrmContactRoleFact[]
   company: string
   owner: string
   products: CrmProductFact[]
@@ -761,6 +780,8 @@ export function companyFacts(input: CompanyFactsInput): CrmCompanyFacts {
 
 export interface DealFactsInput {
   deal: Partial<CrmDeal> & { contactName?: unknown; companyName?: unknown }
+  /** The names of the deal's contacts, by id, as the reader may see them (AGL-3521). */
+  contactNames?: ReadonlyMap<string, string>
   pipeline: CrmPipeline | null
   activities: ReadonlyArray<Partial<CrmActivity>>
   tasks: ReadonlyArray<Partial<CrmTask>>
@@ -809,6 +830,7 @@ export function dealFacts(input: DealFactsInput): CrmDealFacts {
     forecastCategory: CRM_FORECAST_CATEGORY_LABELS[dealForecastCategory(deal, stage)],
     campaign: label(input.campaignName),
     contact: label(deal.contactName),
+    contactRoles: dealContactRoleFacts(deal, input.contactNames),
     company: label(deal.companyName),
     owner: memberName(names, deal.ownerUid),
     products,
@@ -820,6 +842,26 @@ export function dealFacts(input: DealFactsInput): CrmDealFacts {
     ),
     openTasks: crmOpenTaskFacts(input.tasks, input.nowMs, names),
   }
+}
+
+/**
+ * A deal's contact roles as facts (AGL-3521): the Primary first, each by the
+ * name the reader resolved — a contact the reader may not see, or could
+ * not read, is left out rather than named by id.
+ */
+export function dealContactRoleFacts(
+  deal: { contactId?: unknown; contactRoles?: unknown },
+  names: ReadonlyMap<string, string> = new Map(),
+): CrmContactRoleFact[] {
+  return dealContactRolesOf(deal)
+    .sort((a, b) => Number(b.primary) - Number(a.primary))
+    .filter((row) => names.has(row.contactId))
+    .slice(0, CRM_FACTS_CONTACT_ROLES_MAX)
+    .map((row) => ({
+      name: label(names.get(row.contactId)),
+      role: crmFactText(row.role, CRM_FACTS_LABEL_MAX),
+      primary: row.primary,
+    }))
 }
 
 /** What a lead's capture surfaces are called, the lead history card's words. */

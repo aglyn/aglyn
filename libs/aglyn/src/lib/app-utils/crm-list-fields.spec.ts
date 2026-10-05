@@ -195,7 +195,11 @@ describe('restamping', () => {
     const record = { title: 'Acme renewal', visibleTo: ['org'] }
     const patch = crmListFieldsPatch('deals', record)
     expect(Object.keys(patch).sort()).toEqual([
+      // The contact role arrays (AGL-3521), empty on a deal with no contact.
+      'contactRoleContactIds',
+      'contactRoleKeys',
       'leadSourceKey',
+      'scopedContactRoleContactIds',
       'scopedSearchTokens',
       'searchTokens',
       'titleLower',
@@ -215,6 +219,9 @@ describe('restamping', () => {
     expect(crmListFieldsTouched('deals', { type: 'Existing Business' })).toBe(true)
     expect(crmListFieldsTouched('deals', { leadSource: null })).toBe(true)
     expect(crmListFieldsTouched('deals', { nextStep: 'Call' })).toBe(false)
+    // A deal's contacts are found by the arrays its roles stamp (AGL-3521).
+    expect(crmListFieldsTouched('deals', { contactRoles: [] })).toBe(true)
+    expect(crmListFieldsTouched('deals', { contactId: 'c1' })).toBe(true)
   })
 
   it('starts a new contact, company or deal with nothing scheduled', () => {

@@ -132,6 +132,10 @@ const DEAL_FACTS = {
   type: 'New Business',
   leadSource: 'Web',
   nextStep: 'Send the revised quote',
+  contactRoles: [
+    { name: 'Dana Ortiz', role: 'Decision Maker', primary: true },
+    { name: 'Lee Park', role: '', primary: false },
+  ],
   timeline: [{ on: '2026-09-12', kind: 'Call', text: 'Asked for a discount.' }],
   openTasks: [],
 }
@@ -315,6 +319,8 @@ describe('a record (AGL-2917)', () => {
       'Type: New Business',
       'Lead source: Web',
       'Next step: Send the revised quote',
+      // The people on the deal (AGL-3521).
+      'Contact roles: Dana Ortiz (Decision Maker, Primary); Lee Park',
     ]) {
       expect(sent()[0].messages[0].content).toContain(fact)
     }

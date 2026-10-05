@@ -1065,6 +1065,95 @@ describe('/v1/deals', () => {
     expect(stageOf()).toBe('customer')
   })
 
+  /*
+   * Opportunity Contact Roles (AGL-3521): the whole list replaced as sent,
+   * each role judged against the org's list, and the Primary in step with
+   * `contactId` whichever of the two a body names.
+   */
+  it('reads and writes contact roles, keeping the Primary and contactId as one', async () => {
+    mockDocs.set(`${ORG}/contacts/c-2`, { email: 'blake@example.com' })
+    mockDocs.set(`${ORG}/contacts/c-3`, { email: 'casey@example.com' })
+    const created = await json(
+      await call('POST', 'deals', {
+        title: 'Committee',
+        consentSiteId: 'host-1',
+        contactRoles: [
+          { contactId: 'c-1', role: 'decision maker', primary: true },
+          { contactId: 'c-2', role: 'Evaluator' },
+        ],
+      }),
+    )
+    expect(created).toMatchObject({
+      contactId: 'c-1',
+      contactRoles: [
+        { contactId: 'c-1', role: 'Decision Maker', primary: true },
+        { contactId: 'c-2', role: 'Evaluator', primary: false },
+      ],
+    })
+    expect(mockDocs.get(`${DEALS}/${created.id}`)).toMatchObject({
+      contactRoleContactIds: ['c-1', 'c-2'],
+      contactRoleKeys: ['decision maker', 'evaluator'],
+    })
+
+    // `contactId` alone makes that contact Primary, added with no role.
+    const moved = await json(await call('PATCH', `deals/${created.id}`, { contactId: 'c-3' }))
+    expect(moved).toMatchObject({
+      contactId: 'c-3',
+      contactRoles: [
+        { contactId: 'c-3', role: null, primary: true },
+        { contactId: 'c-1', role: 'Decision Maker', primary: false },
+        { contactId: 'c-2', role: 'Evaluator', primary: false },
+      ],
+    })
+    // A list without a Primary clears `contactId`.
+    const none = await json(
+      await call('PATCH', `deals/${created.id}`, {
+        contactRoles: [{ contactId: 'c-2', role: 'Evaluator', primary: false }],
+      }),
+    )
+    expect(none).toMatchObject({ contactId: null, contactRoles: [{ contactId: 'c-2', primary: false }] })
+    expect(mockDocs.get(`${DEALS}/${created.id}`)).not.toHaveProperty('contactId')
+    expect(mockDocs.get(`${DEALS}/${created.id}`)).toMatchObject({ contactRoleContactIds: ['c-2'] })
+
+    // Refusals: a role off the list, two Primaries, a contact twice, a
+    // contact that does not exist, and a contactId that disagrees.
+    const role = await json(
+      await call('PATCH', `deals/${created.id}`, { contactRoles: [{ contactId: 'c-1', role: 'Coach' }] }),
+    )
+    expect(role.error.fields.contactRoles).toMatch(/^Contact role must be one of: Business User/)
+    const two = await json(
+      await call('PATCH', `deals/${created.id}`, {
+        contactRoles: [
+          { contactId: 'c-1', primary: true },
+          { contactId: 'c-2', primary: true },
+        ],
+      }),
+    )
+    expect(two.error.fields.contactRoles).toBe('At most one contact may be Primary')
+    const twice = await json(
+      await call('PATCH', `deals/${created.id}`, {
+        contactRoles: [{ contactId: 'c-1' }, { contactId: 'c-1' }],
+      }),
+    )
+    expect(twice.error.fields.contactRoles).toMatch(/twice/)
+    const ghost = await json(
+      await call('PATCH', `deals/${created.id}`, { contactRoles: [{ contactId: 'c-ghost' }] }),
+    )
+    expect(ghost.error.fields.contactRoles).toBe('No such contact in this organization: c-ghost')
+    const disagree = await json(
+      await call('PATCH', `deals/${created.id}`, {
+        contactId: 'c-1',
+        contactRoles: [{ contactId: 'c-2', primary: true }],
+      }),
+    )
+    expect(disagree.error.fields.contactId).toBe('Must name the Primary in contactRoles, or be left out')
+
+    // A deal written before roles reads as its one contact, Primary.
+    mockDocs.set(`${DEALS}/d-legacy`, { title: 'Old', pipelineId: 'p', stageId: 's', status: 'open', contactId: 'c-1' })
+    const legacy = await json(await call('GET', 'deals/d-legacy'))
+    expect(legacy.contactRoles).toEqual([{ contactId: 'c-1', role: null, primary: true }])
+  })
+
   it('validates a status filter and sends the most selective id as the clause', async () => {
     const bad = await call('GET', 'deals?status=closed')
     expect(bad.status).toBe(400)

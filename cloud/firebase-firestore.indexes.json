@@ -5839,6 +5839,34 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
+          "fieldPath": "contactRoleContactIds",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "updatedAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "deals",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "scopedContactRoleContactIds",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "updatedAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "deals",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
           "fieldPath": "visibleTo",
           "arrayConfig": "CONTAINS"
         },

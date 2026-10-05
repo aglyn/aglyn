@@ -77,6 +77,8 @@ import {
   crmTaskPicklistLabels,
   effectiveCrmTaskPicklists,
 } from '@aglyn/aglyn/app-utils/crm'
+// A deal's contact roles (AGL-3521).
+import { dealContactRolesOf } from '@aglyn/aglyn/app-utils/crm'
 
 /*==========================================
  * CELLS EVERY FILE SHARES
@@ -466,6 +468,9 @@ export interface DealCsvRow {
   probability?: number | null
   forecastCategory?: string
   campaignId?: string
+  /* Opportunity Contact Roles (AGL-3521), read with `contactId` as their Primary. */
+  contactId?: string
+  contactRoles?: unknown
 }
 
 export interface DealCsvOptions {
@@ -477,6 +482,8 @@ export interface DealCsvOptions {
   ownerEmail?: (uid: string) => string
   /** The campaign's name for a stored id; absent, the id is written. */
   campaignName?: (campaignId: string) => string | undefined
+  /** A contact's name for a stored id, for the contact roles; absent, the id is written. */
+  contactName?: (contactId: string) => string | undefined
 }
 
 export const DEAL_CSV_COLUMNS = [
@@ -501,14 +508,35 @@ export const DEAL_CSV_COLUMNS = [
   'Probability',
   'Forecast category',
   'Campaign',
+  // Opportunity Contact Roles (AGL-3521); a link is made on the record,
+  // so the import reads past it.
+  'Contact roles',
 ] as const
+
+/**
+ * A deal's contact roles as one cell (AGL-3521): each person by name, with
+ * the part they play and Primary in brackets when there is either —
+ * `Jane Doe (Decision Maker, Primary); Sam Lee (Evaluator); Ana Ruiz`.
+ */
+export function dealContactRolesCell(
+  deal: Pick<DealCsvRow, 'contactId' | 'contactRoles'>,
+  contactName?: (contactId: string) => string | undefined,
+): string {
+  return dealContactRolesOf(deal)
+    .map((row) => {
+      const name = contactName?.(row.contactId) || row.contactId
+      const parts = [row.role, row.primary ? 'Primary' : null].filter(Boolean)
+      return parts.length ? `${name} (${parts.join(', ')})` : name
+    })
+    .join('; ')
+}
 
 /** One deal's cells, in the header's order. */
 export function dealCsvCells(
   deal: DealCsvRow,
   options: DealCsvOptions = {},
 ): unknown[] {
-  const { pipelineName, stageName, ownerEmail, campaignName } = options
+  const { pipelineName, stageName, ownerEmail, campaignName, contactName } = options
   const pipelineId = deal.pipelineId ?? ''
   const stageId = deal.stageId ?? ''
   return [
@@ -537,6 +565,7 @@ export function dealCsvCells(
       ? CRM_FORECAST_CATEGORY_LABELS[deal.forecastCategory]
       : '',
     deal.campaignId ? (campaignName?.(deal.campaignId) ?? deal.campaignId) : '',
+    dealContactRolesCell(deal, contactName),
   ]
 }
 

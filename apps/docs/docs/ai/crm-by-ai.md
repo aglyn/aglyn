@@ -89,9 +89,10 @@ an email draft, AI is given **the whole record as the CRM shows it to you**:
   who they report to, mailing and other address, lifecycle stage, lead source and **Do not
   call**; for a company its domain, website, phone, fax, account fields, billing and shipping
   address and parent company; for a deal its pipeline and stages, stage, amount, products,
-  type, lead source, campaign, next step, probability, forecast category and the person and
-  company it is with; for a lead its contact details, address, account fields, status and
-  campaigns;
+  type, lead source, campaign, next step, probability, forecast category, the person and
+  company it is with, and up to 10 of its contacts by name with the role each plays and which
+  is Primary (a contact you cannot see is left out); for a lead its contact details, address,
+  account fields, status and campaigns;
 - your picklists' labels as the record holds them, and your **custom fields**, each under its
   label;
 - the person's **marketing consent** — opted in and since when, declined, or none recorded;

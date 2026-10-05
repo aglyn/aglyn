@@ -840,7 +840,10 @@
         ],
         "titleLower": "acme renewal — q3",
         "typeKey": null,
-        "leadSourceKey": null
+        "leadSourceKey": null,
+        "contactRoleContactIds": [],
+        "scopedContactRoleContactIds": [],
+        "contactRoleKeys": []
       }
     },
     {
@@ -870,7 +873,113 @@
         ],
         "titleLower": "pilot",
         "typeKey": "new business",
-        "leadSourceKey": "trade show"
+        "leadSourceKey": "trade show",
+        "contactRoleContactIds": [],
+        "scopedContactRoleContactIds": [],
+        "contactRoleKeys": []
+      }
+    },
+    {
+      "collection": "deals",
+      "record": {
+        "title": "Buying committee",
+        "visibleTo": [
+          "host:site-a",
+          "host:site-b"
+        ],
+        "contactId": "c-ana",
+        "contactRoles": [
+          {
+            "contactId": "c-ben",
+            "role": "Decision  Maker",
+            "primary": true
+          },
+          {
+            "contactId": "c-ana",
+            "role": "Evaluator",
+            "primary": false
+          },
+          {
+            "contactId": "c-ben",
+            "role": "Other",
+            "primary": false
+          },
+          {
+            "contactId": "c-cy",
+            "primary": false
+          }
+        ]
+      },
+      "expected": {
+        "searchTokens": [
+          "b",
+          "bu",
+          "buy",
+          "buyi",
+          "buyin",
+          "buying",
+          "c",
+          "co",
+          "com",
+          "comm",
+          "commi",
+          "commit",
+          "committ",
+          "committe",
+          "committee"
+        ],
+        "scopedSearchTokens": [
+          "host:site-a~b",
+          "host:site-a~bu",
+          "host:site-a~buy",
+          "host:site-a~buyi",
+          "host:site-a~buyin",
+          "host:site-a~buying",
+          "host:site-a~c",
+          "host:site-a~co",
+          "host:site-a~com",
+          "host:site-a~comm",
+          "host:site-a~commi",
+          "host:site-a~commit",
+          "host:site-a~committ",
+          "host:site-a~committe",
+          "host:site-a~committee",
+          "host:site-b~b",
+          "host:site-b~bu",
+          "host:site-b~buy",
+          "host:site-b~buyi",
+          "host:site-b~buyin",
+          "host:site-b~buying",
+          "host:site-b~c",
+          "host:site-b~co",
+          "host:site-b~com",
+          "host:site-b~comm",
+          "host:site-b~commi",
+          "host:site-b~commit",
+          "host:site-b~committ",
+          "host:site-b~committe",
+          "host:site-b~committee"
+        ],
+        "titleLower": "buying committee",
+        "typeKey": null,
+        "leadSourceKey": null,
+        "contactRoleContactIds": [
+          "c-ben",
+          "c-ana",
+          "c-cy"
+        ],
+        "scopedContactRoleContactIds": [
+          "host:site-a~c-ben",
+          "host:site-a~c-ana",
+          "host:site-a~c-cy",
+          "host:site-b~c-ben",
+          "host:site-b~c-ana",
+          "host:site-b~c-cy"
+        ],
+        "contactRoleKeys": [
+          "decision maker",
+          "evaluator"
+        ]
       }
     },
     {
@@ -1766,9 +1875,12 @@
           "org~q3"
         ],
         "titleLower": "acme renewal — q3",
-        "nextTaskAtMs": null,
         "typeKey": null,
-        "leadSourceKey": null
+        "leadSourceKey": null,
+        "contactRoleContactIds": [],
+        "scopedContactRoleContactIds": [],
+        "contactRoleKeys": [],
+        "nextTaskAtMs": null
       }
     },
     {

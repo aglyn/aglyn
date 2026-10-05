@@ -91,6 +91,11 @@ export interface DealsBulkBarProps {
   api: DealStageApi
   /** How the export names the pipeline, the stage and the owner — the table's own. */
   csv?: DealCsvOptions
+  /**
+   * The export's options for the rows it writes, read when the file is
+   * asked for — the contact roles' names (AGL-3521). Absent, {@link csv}.
+   */
+  resolveCsv?: (rows: readonly DealDoc[]) => Promise<DealCsvOptions>
 }
 
 const NOUN: CrmBulkNoun = { singular: 'deal', plural: 'deals' }
@@ -112,7 +117,7 @@ export function DealsBulkBar(props: DealsBulkBarProps) {
 DealsBulkBar.displayName = 'DealsBulkBar'
 
 function DealsBulkBarBody(props: DealsBulkBarProps) {
-  const { hostId, scope, rows, selected, onSelectedChange, pipelineById, roster, api, csv } =
+  const { hostId, scope, rows, selected, onSelectedChange, pipelineById, roster, api, csv, resolveCsv } =
     props
   const firestore = useFirestore()
   const { confirm } = useConfirmationContext()
@@ -226,9 +231,10 @@ function DealsBulkBarBody(props: DealsBulkBarProps) {
     [api, runCalls],
   )
 
-  const handleExport = useCallback(() => {
-    downloadTextFile('deals-selected.csv', 'text/csv', dealsCsv(selectedRows, csv))
-  }, [selectedRows, csv])
+  const handleExport = useCallback(async () => {
+    const options = resolveCsv ? await resolveCsv(selectedRows) : csv
+    downloadTextFile('deals-selected.csv', 'text/csv', dealsCsv(selectedRows, options))
+  }, [selectedRows, csv, resolveCsv])
 
   const handleDelete = useCallback(async () => {
     if (!scope || !selectedRows.length) return
@@ -350,7 +356,7 @@ function DealsBulkBarBody(props: DealsBulkBarProps) {
       <Button size="small" disabled={busy || !scope} onClick={() => setLosing(true)}>
         {'Mark lost'}
       </Button>
-      <Button size="small" disabled={busy} onClick={handleExport}>
+      <Button size="small" disabled={busy} onClick={() => void handleExport()}>
         {'Export CSV'}
       </Button>
       {/*

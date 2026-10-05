@@ -22,6 +22,7 @@ import {
   CRM_LEAD_STATUS_PICKLIST,
   CRM_TASK_PICKLIST_IDS,
   csvCell,
+  dealContactRolesOf,
   effectiveCrmTaskPicklists,
   hostScopeToken,
   isOrgWideMember,
@@ -337,6 +338,10 @@ export async function crmExportRoute(request: Request): Promise<Response> {
         recordNames.set(`${entry.kind}:${entry.id}`, name || entry.id)
       })
     }
+    if (resource === 'deals') {
+      // The Contact roles column names each person (AGL-3521).
+      options.contactName = (id) => recordNames.get(`contact:${id}`)
+    }
     if (resource === 'tasks') {
       options.recordName = (kind, id) => recordNames.get(`${kind}:${id}`)
       // The org's Status, Priority and Type lists, which name a task that
@@ -493,6 +498,16 @@ export async function crmExportRoute(request: Request): Promise<Response> {
                 $id: entry.id,
                 ...(source.hostId ? { hostId: source.hostId } : {}),
               }))
+              if (resource === 'deals') {
+                await resolveNames(
+                  documents.flatMap((document) =>
+                    dealContactRolesOf(document as Record<string, unknown>).map((row) => ({
+                      kind: 'contact' as const,
+                      id: row.contactId,
+                    })),
+                  ),
+                )
+              }
               if (resource === 'tasks') {
                 await resolveNames(
                   documents.flatMap((document) =>

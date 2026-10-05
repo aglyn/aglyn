@@ -89,7 +89,11 @@ import {
 import { CrmCustomFieldControl } from './crm-custom-field-control'
 import { CrmPicklistSelect } from './picklist-select'
 import { CrmSitePicker } from './crm-site-picker'
-import { CRM_CLIENT_SEARCH_FIELDS, crmClientListFields } from '../model/crm-list-query'
+import {
+  CRM_CLIENT_SEARCH_FIELDS,
+  CRM_DEAL_CONTACT_ROLE_LIST_FIELDS,
+  crmClientListFields,
+} from '../model/crm-list-query'
 import {
   DEAL_CURRENCIES,
   type DealDoc,
@@ -123,7 +127,13 @@ const CONTACT_WINDOW = 300
 const COMPANY_MATCHES = 8
 
 /** The list fields an edit restamps: the title's search words, the two picklist keys. */
-const DEAL_CLIENT_LIST_FIELDS = [...CRM_CLIENT_SEARCH_FIELDS, 'typeKey', 'leadSourceKey'] as const
+const DEAL_CLIENT_LIST_FIELDS = [
+  ...CRM_CLIENT_SEARCH_FIELDS,
+  'typeKey',
+  'leadSourceKey',
+  // The arrays a deal's contact roles are found by (AGL-3521).
+  ...CRM_DEAL_CONTACT_ROLE_LIST_FIELDS,
+] as const
 
 /** A company as the picker offers it. */
 interface CompanyChoice {
@@ -414,6 +424,7 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
             const { set, clear } = dealPatchFromForm(saved, nowMs, {
               amountDerived,
               stage: currentStage,
+              current: deal,
             })
             await updateDoc(
               doc(firestore, 'orgs', orgId, CRM_COLLECTIONS.deals, deal.$id),

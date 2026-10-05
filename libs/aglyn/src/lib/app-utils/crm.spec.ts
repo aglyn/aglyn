@@ -150,6 +150,18 @@ import {
   effectiveCrmTaskPicklists,
   resolveCrmSemanticPicklistWrite,
 } from './crm'
+// A deal's contact roles (AGL-3521).
+import {
+  crmDealListFields,
+  DEAL_CONTACT_ROLES_MAX,
+  dealContactRoleFields,
+  dealContactRolesOf,
+  dealContactRolesRepointed,
+  dealContactRolesWithout,
+  dealContactRolesWithPrimary,
+  judgeDealContactRoles,
+  readDealContactRoles,
+} from './crm'
 
 describe('CRM collections', () => {
   it('names nine org subcollections, five of them prefixed', () => {
@@ -2158,5 +2170,119 @@ describe('a door’s built-in lead source (AGL-3519)', () => {
     expect(crm.crmLeadSourceForOrigin(list, 'form')).toBe('Web form')
     expect(crm.crmLeadSourceForOrigin(list, 'booking')).toBeNull()
     expect(crm.crmLeadSourceForOrigin(list, 'sequence')).toBe('Sequence')
+  })
+})
+
+describe("a deal's contact roles (AGL-3521)", () => {
+  const roles = [
+    { contactId: 'c1', role: 'Decision Maker', primary: true },
+    { contactId: 'c2', role: 'Evaluator', primary: false },
+  ]
+
+  it("registers Salesforce's Opportunity Contact Role on the Deals tab, with an array target", () => {
+    expect(crmPicklistDefinitionsFor('deal').map((definition) => definition.id)).toContain(
+      'opportunityContactRole',
+    )
+    expect(crmPicklistDefinition('opportunityContactRole')?.targets).toEqual([
+      { object: 'deal', field: 'contactRoles', arrayKey: 'role', keyField: 'contactRoleKeys' },
+    ])
+    expect(effectiveCrmPicklist('opportunityContactRole', undefined).values.map((value) => value.label)).toEqual([
+      'Business User',
+      'Decision Maker',
+      'Economic Buyer',
+      'Economic Decision Maker',
+      'Evaluator',
+      'Executive Sponsor',
+      'Influencer',
+      'Technical Buyer',
+      'Other',
+    ])
+    // Every array target names the key list a query finds its records by.
+    for (const definition of CRM_PICKLIST_DEFINITIONS) {
+      for (const target of definition.targets as readonly { arrayKey?: string; keyField?: string }[]) {
+        if (target.arrayKey) expect(target.keyField).toBeTruthy()
+      }
+    }
+  })
+
+  it('reads stored roles defensively: one row per contact, one Primary, capped', () => {
+    expect(
+      readDealContactRoles([
+        { contactId: ' c1 ', role: '  Decision  Maker ', primary: true },
+        { contactId: 'c1', role: 'Other', primary: false },
+        { contactId: 'c2', primary: true },
+        { contactId: 'a/b' },
+        { role: 'Evaluator' },
+        'c3',
+        { contactId: 'c4', role: 7 },
+      ]),
+    ).toEqual([
+      { contactId: 'c1', role: 'Decision Maker', primary: true },
+      { contactId: 'c2', primary: false },
+      { contactId: 'c4', primary: false },
+    ])
+    const many = Array.from({ length: DEAL_CONTACT_ROLES_MAX + 5 }, (_, at) => ({ contactId: `c${at}` }))
+    expect(readDealContactRoles(many)).toHaveLength(DEAL_CONTACT_ROLES_MAX)
+    expect(readDealContactRoles('nope')).toEqual([])
+  })
+
+  it('keeps the Primary in step with contactId, and reads a deal written before roles as its one contact', () => {
+    expect(dealContactRolesOf({ contactId: 'c9' })).toEqual([{ contactId: 'c9', primary: true }])
+    expect(dealContactRolesOf({})).toEqual([])
+    // `contactId` wins where the two disagree.
+    expect(dealContactRolesOf({ contactId: 'c2', contactRoles: roles })).toEqual([
+      { contactId: 'c1', role: 'Decision Maker', primary: false },
+      { contactId: 'c2', role: 'Evaluator', primary: true },
+    ])
+    expect(dealContactRolesOf({ contactRoles: roles }).some((row) => row.primary)).toBe(false)
+    expect(dealContactRolesWithPrimary(roles, 'c3')[0]).toEqual({ contactId: 'c3', primary: true })
+    expect(dealContactRoleFields(dealContactRolesWithPrimary(roles, null))).toMatchObject({ contactId: null })
+    expect(dealContactRoleFields(roles)).toEqual({ contactRoles: roles, contactId: 'c1' })
+  })
+
+  it('takes a contact off, and folds a merged contact into the survivor', () => {
+    expect(dealContactRolesWithout(roles, 'c1')).toEqual([roles[1]])
+    expect(dealContactRolesRepointed(roles, 'c2', 'c5')).toEqual([
+      roles[0],
+      { contactId: 'c5', role: 'Evaluator', primary: false },
+    ])
+    // Both on the deal: the survivor keeps its row, with the merged role and Primary.
+    expect(
+      dealContactRolesRepointed(
+        [
+          { contactId: 'c1', role: 'Decision Maker', primary: true },
+          { contactId: 'c2', primary: false },
+        ],
+        'c1',
+        'c2',
+      ),
+    ).toEqual([{ contactId: 'c2', role: 'Decision Maker', primary: true }])
+  })
+
+  it("judges each role against the org's list, keeping a contact's current role", () => {
+    const list = effectiveCrmPicklist('opportunityContactRole', {
+      values: [{ id: 'coach', label: 'Coach', active: false }],
+    })
+    expect(judgeDealContactRoles(list, [{ contactId: 'c1', role: 'evaluator', primary: true }])).toEqual({
+      ok: true,
+      roles: [{ contactId: 'c1', role: 'Evaluator', primary: true }],
+    })
+    const refused = judgeDealContactRoles(list, [{ contactId: 'c1', role: 'Coach', primary: false }])
+    expect(refused.ok).toBe(false)
+    expect(
+      judgeDealContactRoles(list, [{ contactId: 'c1', role: 'Coach', primary: false }], [
+        { contactId: 'c1', role: 'Coach', primary: false },
+      ]),
+    ).toEqual({ ok: true, roles: [{ contactId: 'c1', role: 'Coach', primary: false }] })
+  })
+
+  it('stamps the arrays a contact page and a role rename find the deal by', () => {
+    expect(
+      crmDealListFields({ title: 'X', visibleTo: ['org', 'host:a'], contactId: 'c1', contactRoles: roles }),
+    ).toMatchObject({
+      contactRoleContactIds: ['c1', 'c2'],
+      scopedContactRoleContactIds: ['org~c1', 'org~c2', 'host:a~c1', 'host:a~c2'],
+      contactRoleKeys: ['decision maker', 'evaluator'],
+    })
   })
 })

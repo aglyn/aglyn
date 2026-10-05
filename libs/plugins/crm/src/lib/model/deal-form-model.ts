@@ -32,6 +32,8 @@ import {
   type CrmPicklist,
   crmPicklistDefaultLabel,
   DEAL_NEXT_STEP_MAX,
+  dealContactRolesOf,
+  dealContactRolesWithPrimary,
   dealStageForecastCategory,
   isCrmForecastCategory,
   judgeCrmPicklistValue,
@@ -274,12 +276,15 @@ export function dealDocumentFromForm(
   const title = values.title.trim().slice(0, DEAL_TITLE_MAX)
   const { set } = optionalFields(values)
   const forecastCategory = forecastCategoryFor(values, context.stage)
+  const contactId = values.contactId.trim()
   return {
     title,
     titleLower: nameSearchKey(title),
     pipelineId: values.pipelineId,
     stageId: values.stageId,
     status: 'open' satisfies CrmDeal['status'],
+    // The contact picked is the deal's Primary contact role (AGL-3521).
+    ...(contactId ? { contactRoles: [{ contactId, primary: true }] } : {}),
     currency: String(values.currency || DEFAULT_DEAL_CURRENCY).toLowerCase(),
     stageChangedAtMs: context.nowMs,
     ...(forecastCategory ? { forecastCategory } : {}),
@@ -306,10 +311,27 @@ export function dealDocumentFromForm(
 export function dealPatchFromForm(
   values: DealFormValues,
   nowMs: number,
-  options: { amountDerived?: boolean; stage?: DealWriteContext['stage'] } = {},
+  options: {
+    amountDerived?: boolean
+    stage?: DealWriteContext['stage']
+    /**
+     * The deal as stored, whose contact roles a changed contact moves
+     * (AGL-3521): the contact picked becomes the Primary — added with no
+     * role when the deal did not name them — and a cleared contact leaves
+     * the deal with no Primary. An unchanged contact writes no roles, so a
+     * role edited on the deal's page meanwhile is not overwritten.
+     */
+    current?: Pick<CrmDeal, 'contactId' | 'contactRoles'> | null
+  } = {},
 ): { set: Record<string, unknown>; clear: string[] } {
   const title = values.title.trim().slice(0, DEAL_TITLE_MAX)
-  const { set, clear } = optionalFields(values)
+  const optional = optionalFields(values)
+  const set: Record<string, unknown> = optional.set
+  const { clear } = optional
+  const contactId = values.contactId.trim()
+  if (options.current && contactId !== (options.current.contactId ?? '')) {
+    set['contactRoles'] = dealContactRolesWithPrimary(dealContactRolesOf(options.current), contactId || null)
+  }
   // The category picked, else the stage's again; with neither, the field
   // goes and every reader derives it from the stage.
   const forecastCategory = forecastCategoryFor(values, options.stage)

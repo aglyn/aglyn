@@ -63,6 +63,7 @@
 
 import {
   consentGroupForHost,
+  CRM_COLLECTIONS,
   crmReadTokens,
   heldScopeTokens,
   isOrgWideMember,
@@ -87,6 +88,7 @@ import { readCrmRouteScope } from './org-caller'
 import { crmSuiteRefusal } from './suite-gate'
 import { authorizeCrmWriter, canReach, type Writer } from './task-routes'
 import { contactPrimaryGroup } from '../model/contact-holder'
+import { sweepDealContactRoles } from './deal-contact-roles'
 
 /** What the suite gate names for a detach on a plan without the CRM. */
 export const CONTACT_DETACH_SUITE_ACT = 'Removing a contact from one site'
@@ -226,6 +228,14 @@ export const crmContactRemoveHandler: PluginApiHandler = async (req, res) => {
               outcomes.set(contactId, { contactId, ok: true, removed: 'detached' })
             } else {
               outcomes.set(contactId, { contactId, ok: true, removed: 'deleted' })
+              // A deleted person leaves every deal's contact roles (AGL-3521).
+              await sweepDealContactRoles(
+                firestore,
+                firestore.collection('orgs').doc(writer.orgId).collection(CRM_COLLECTIONS.deals),
+                contactId,
+                null,
+                '[crm] contact-remove',
+              )
             }
           } catch (error) {
             console.error('[crm] contact-remove could not remove a contact', contactId, error)

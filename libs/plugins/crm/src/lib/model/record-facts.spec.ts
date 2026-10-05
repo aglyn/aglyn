@@ -378,6 +378,8 @@ describe('a company’s, a deal’s and a lead’s facts', () => {
       forecastCategory: 'Pipeline',
       campaign: '',
       contact: 'Jane Doe',
+      // The deal's one contact, its Primary, unnamed by a reader that read no names.
+      contactRoles: [],
       company: 'Acme Roofing Supply',
       owner: 'Sam Rep',
       products: [{ name: 'Membrane', quantity: 1, unitAmount: 'EUR 9900.00' }],
@@ -422,6 +424,42 @@ describe('a company’s, a deal’s and a lead’s facts', () => {
     })
     // The campaign is named by its name, never by its id.
     expect(JSON.stringify(facts)).not.toContain('"spring"')
+  })
+
+  it('names the contacts on a deal and the part each plays, the Primary first (AGL-3521)', () => {
+    const facts = dealFacts({
+      deal: {
+        title: 'Warehouse re-roof',
+        pipelineId: 'p-1',
+        stageId: 'qualified',
+        status: 'open',
+        visibleTo: ['org'],
+        hostId: 'host-1',
+        contactId: 'c-2',
+        contactRoles: [
+          { contactId: 'c-1', role: 'Evaluator', primary: false },
+          { contactId: 'c-2', role: 'Economic Buyer', primary: true },
+          { contactId: 'c-3', primary: false },
+          // Not one the reader may see: left out, never named by id.
+          { contactId: 'c-hidden', role: 'Influencer', primary: false },
+        ],
+      },
+      contactNames: new Map([
+        ['c-1', 'Sam Lee'],
+        ['c-2', 'Jane Doe'],
+        ['c-3', 'Ana Ruiz'],
+      ]),
+      pipeline: PIPELINE,
+      activities: [],
+      tasks: [],
+      nowMs: NOW,
+    })
+    expect(facts.contactRoles).toEqual([
+      { name: 'Jane Doe', role: 'Economic Buyer', primary: true },
+      { name: 'Sam Lee', role: 'Evaluator', primary: false },
+      { name: 'Ana Ruiz', role: '', primary: false },
+    ])
+    expect(JSON.stringify(facts)).not.toContain('c-hidden')
   })
 
   it('reports a lead whole: how to reach them, its account fields, owner, campaigns and custom values (AGL-3520)', () => {

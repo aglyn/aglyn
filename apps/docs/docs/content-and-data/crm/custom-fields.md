@@ -146,7 +146,7 @@ to, below that tab's custom fields, under its own **values** card:
 | **Leads** | **Lead source**, [**Lead status**](./leads.md#lead-statuses) |
 | **Contacts** | **Salutation** |
 | **Companies** | **Type**, **Industry**, **Rating**, **Ownership** |
-| **Deals** | **Type** |
+| **Deals** | **Type**, **Contact role** |
 | **Tasks** | **Status**, **Priority**, **Type**, **Subject** |
 
 Lead source is the one picklist several records share: a lead's and a contact's lead
@@ -220,6 +220,14 @@ standard *Existing Business* and *New Business*, enforced the same way on the de
 a [deals import](./deals.md#import-from-csv) and [`/v1/deals`](/api/resources/deals). A
 deal's lead source is held to the Lead source list, and a rename or delete there moves
 the deals that hold the value too. See [Type and lead source](./deals.md#type-and-lead-source).
+
+**Contact role** is the deals' second picklist, under **Contact role values**: the part a
+contact plays on a deal — Salesforce's standard *Business User*, *Decision Maker*,
+*Economic Buyer*, *Economic Decision Maker*, *Evaluator*, *Executive Sponsor*,
+*Influencer*, *Technical Buyer* and *Other*. Enforced on the deal page's **Contact roles**
+card and on [`/v1/deals`](/api/resources/deals); a rename or delete rewrites the role on
+every deal that holds it, and a delete with nothing to move to leaves those contacts on
+their deals with no role. See [Contact roles](./deals.md#contact-roles).
 
 **Salutation** is the **Contacts** tab's picklist, under **Salutation values**:
 Salesforce's standard **Mr.**, **Ms.**, **Mrs.**, **Dr.** and **Prof.**, in no group,

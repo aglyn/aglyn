@@ -110,8 +110,10 @@ of the record:
   the record it names — **Open submission**, **Open order**, and the Bookings
   and Users pages for a booking and a sign-up — see
   [Activities & the timeline](./activities.md#reading-the-timeline).
-- **Deals** — the deals the person is named on, with a **New deal** shortcut
-  that starts one already linked to them — see [Deals pipeline](./deals.md).
+- **Deals** — the deals the person is named on, as the Primary or in any
+  other [contact role](./deals.md#contact-roles), with the role beside each,
+  and a **New deal** shortcut that starts one already linked to them — see
+  [Deals pipeline](./deals.md).
 - **Tasks** — the open tasks about this person, each with a checkbox to
   complete it, and a **New task** shortcut — see
   [Tasks & follow-ups](./tasks.md).
@@ -170,6 +172,12 @@ keep their own records, and the person's form submissions, orders, bookings
 and membership records are separate and are deleted from their own pages. It
 is a housekeeping act, and it is not a privacy erasure.
 
+When no other site holds the person, the record itself is deleted, and what
+pointed at it is tidied in the same act: the person is taken off every deal's
+[contact roles](./deals.md#contact-roles), and a deal whose Primary they were
+is left with none. The same happens for a contact deleted over the
+[REST API](/api/resources/contacts).
+
 Deleting a contact does not forget that they turned down your marketing email.
 If the person said no to email from a site, that answer is kept after the
 record is gone, and adding their address to an email list is still refused,
@@ -193,7 +201,7 @@ type the person's email address back before it files anything:
 | | |
 | --- | --- |
 | **Removed across the workspace** | The contact record on every site — profile (birthdate, phones and addresses included), notes, tags, timeline and custom fields; any other contact's **Reports to** that named the person; every lead for the address on every site; the tasks and logged activities filed against the person; the person on any email audience list; the campaign delivery log for the address, with its opens and clicks. |
-| **Kept, with the person taken off** | Orders and bookings stay as financial and appointment records with the name, email, phone and addresses removed. Deals stay on the pipeline, unlinked from the person. Companies stay, with their contact count reduced. |
+| **Kept, with the person taken off** | Orders and bookings stay as financial and appointment records with the name, email, phone and addresses removed. Deals stay on the pipeline, unlinked from the person and taken off their contact roles. Companies stay, with their contact count reduced. |
 | **Not reached — finish these by hand** | Form submissions, which keep the address inside the answers under whatever the form called the field — delete them from the Inbox. A site member account, which is the person's own login — close it from the site's Members page. |
 
 Two things follow the click at once, before anything is deleted. The address
@@ -274,7 +282,7 @@ the same for every field:
 | Timeline | Combined and ordered, newest first. The other record's calls, notes and logged activities move across too. |
 | Notes | The other record's notes are added below the kept record's. |
 | Orders and lifetime value | Added together — two records of one person's purchases are one person's purchases. |
-| Deals, tasks, activities, and a converted [lead](./leads.md) | Repointed at the kept record. |
+| Deals, tasks, activities, and a converted [lead](./leads.md) | Repointed at the kept record — on a deal, its [contact roles](./deals.md#contact-roles) too, one row for the kept record where the deal named both. |
 | Contacts that report to the other record | Report to the kept record. |
 | Companies | The kept record is filed under every company either record named. |
 | Marketing email | A site's opt-in on either record stands on the kept one. A recorded **opt-out** on either record stands too: the merge says these are one person, and that person said no. |

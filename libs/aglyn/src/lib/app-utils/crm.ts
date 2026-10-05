@@ -706,6 +706,12 @@ export interface CrmDeal extends CrmScoped {
    */
   campaignId?: string
   /**
+   * Salesforce's Opportunity Contact Roles (AGL-3521): the people on the
+   * deal and the part each plays, at most one of them Primary — the one
+   * `contactId` names. See {@link dealContactRolesOf}.
+   */
+  contactRoles?: CrmDealContactRole[]
+  /**
    * Custom field values, keyed by the key of a definition whose `object`
    * is `deal` — see {@link fieldDefinitionObject} (AGL-2661).
    */
@@ -726,6 +732,143 @@ export interface CrmDeal extends CrmScoped {
   nextTaskAtMs?: number | null
   /** Org-library files attached to the deal (AGL-2662) — see {@link CRM_MEDIA_IDS_MAX}. */
   mediaIds?: string[]
+}
+
+/*------------------------------------------
+ * OPPORTUNITY CONTACT ROLES (AGL-3521).
+ *
+ * A deal names any number of contacts, each with the part they play — a
+ * label of the org's `opportunityContactRole` picklist, or none — and at
+ * most one of them Primary. The Primary is `contactId`, which every reader
+ * that existed before roles keeps reading: the won-deal customer floor, the
+ * send-email button, the CSV's Contact column, the REST filter. So the two
+ * are written together by every door — setting a Primary sets `contactId`,
+ * and a door that sets `contactId` the old way makes that contact Primary,
+ * adding them without a role when the deal did not name them.
+ *
+ * A deal written before roles holds `contactId` alone, which reads as one
+ * Primary row with no role; its first write through any door stores it.
+ * Where the two disagree — a write from a door that knows only
+ * `contactId` — `contactId` wins, because it is what every older reader
+ * already acted on.
+ *-----------------------------------------*/
+
+/** The most contacts one deal names — a buying committee, not a mailing list. */
+export const DEAL_CONTACT_ROLES_MAX = 50
+
+/** One contact on a deal. */
+export interface CrmDealContactRole {
+  contactId: string
+  /** The `opportunityContactRole` label, absent for a contact with no role yet. */
+  role?: string
+  primary: boolean
+}
+
+/**
+ * Stored or sent roles, read defensively: a row without a usable contact
+ * id is dropped, a contact named twice keeps its first row, only the first
+ * Primary stays Primary, and the list stops at {@link DEAL_CONTACT_ROLES_MAX}.
+ */
+export function readDealContactRoles(raw: unknown): CrmDealContactRole[] {
+  if (!Array.isArray(raw)) return []
+  const roles: CrmDealContactRole[] = []
+  const seen = new Set<string>()
+  let primaryTaken = false
+  for (const entry of raw) {
+    if (!entry || typeof entry !== 'object') continue
+    const row = entry as Record<string, unknown>
+    const contactId = typeof row['contactId'] === 'string' ? row['contactId'].trim() : ''
+    if (!contactId || contactId.length > 200 || contactId.includes('/') || seen.has(contactId)) {
+      continue
+    }
+    seen.add(contactId)
+    const role = typeof row['role'] === 'string' ? normalizePicklistLabel(row['role']) : ''
+    const primary = row['primary'] === true && !primaryTaken
+    if (primary) primaryTaken = true
+    roles.push({ contactId, ...(role ? { role } : {}), primary })
+    if (roles.length >= DEAL_CONTACT_ROLES_MAX) break
+  }
+  return roles
+}
+
+/**
+ * `roles` with `contactId` as the one Primary — added first, with no role,
+ * when the list does not name them — or, for `null`, with no Primary.
+ */
+export function dealContactRolesWithPrimary(
+  roles: readonly CrmDealContactRole[],
+  contactId: string | null | undefined,
+): CrmDealContactRole[] {
+  const id = typeof contactId === 'string' ? contactId.trim() : ''
+  const next = roles.map((row) => ({ ...row, primary: Boolean(id) && row.contactId === id }))
+  if (id && !next.some((row) => row.contactId === id)) next.unshift({ contactId: id, primary: true })
+  return next.slice(0, DEAL_CONTACT_ROLES_MAX)
+}
+
+/**
+ * The roles a deal holds, in step with its `contactId`: the stored list
+ * with the contact `contactId` names as its Primary — so a deal written
+ * before roles reads as its one contact, Primary, with no role.
+ */
+export function dealContactRolesOf(deal: {
+  contactId?: unknown
+  contactRoles?: unknown
+}): CrmDealContactRole[] {
+  const contactId = typeof deal.contactId === 'string' ? deal.contactId : null
+  return dealContactRolesWithPrimary(readDealContactRoles(deal.contactRoles), contactId)
+}
+
+/** The Primary's contact id, or `null` for a deal with none. */
+export function dealPrimaryContactId(roles: readonly CrmDealContactRole[]): string | null {
+  return roles.find((row) => row.primary)?.contactId ?? null
+}
+
+/** `roles` without one contact — a delete or an erasure of that person. */
+export function dealContactRolesWithout(
+  roles: readonly CrmDealContactRole[],
+  contactId: string,
+): CrmDealContactRole[] {
+  return roles.filter((row) => row.contactId !== contactId)
+}
+
+/**
+ * `roles` with every row naming `from` moved to `to` — a contact merge.
+ * When both are on the deal the survivor keeps its own row, taking the
+ * merged row's role where it has none and its Primary where it was.
+ */
+export function dealContactRolesRepointed(
+  roles: readonly CrmDealContactRole[],
+  from: string,
+  to: string,
+): CrmDealContactRole[] {
+  const merged = roles.find((row) => row.contactId === from)
+  if (!merged || from === to) return [...roles]
+  if (!roles.some((row) => row.contactId === to)) {
+    return roles.map((row) => (row.contactId === from ? { ...row, contactId: to } : row))
+  }
+  return roles
+    .filter((row) => row.contactId !== from)
+    .map((row) =>
+      row.contactId === to
+        ? {
+            ...row,
+            ...(!row.role && merged.role ? { role: merged.role } : {}),
+            primary: row.primary || merged.primary,
+          }
+        : row,
+    )
+}
+
+/**
+ * What a deal stores for a list of roles: the list, and the `contactId`
+ * its Primary names — `null` for none, which a writer turns into a delete.
+ */
+export function dealContactRoleFields(roles: readonly CrmDealContactRole[]): {
+  contactRoles: CrmDealContactRole[]
+  contactId: string | null
+} {
+  const contactRoles = readDealContactRoles(roles)
+  return { contactRoles, contactId: dealPrimaryContactId(contactRoles) }
 }
 
 export const CRM_TASK_KIND_LABELS: Record<CrmTaskKind, string> = {
@@ -3403,12 +3546,18 @@ export function isCrmPicklistObject(value: unknown): value is CrmPicklistObject 
  * field; `keyField`, when set, is the query key written beside it
  * ({@link crmPicklistKey}); `facet` means the label lives in each holder's
  * facet on a contact rather than on the record itself.
+ *
+ * `arrayKey` (AGL-3521) means `field` is a LIST of objects and the label is
+ * each entry's `arrayKey` — a deal's contact roles, `{ contactId, role }`.
+ * Such a target always names a `keyField`, which is then the list of the
+ * keys its entries hold: the one array a query can find the records by.
  */
 export interface CrmPicklistTarget {
   object: CrmPicklistObject
   field: string
   keyField?: string
   facet?: true
+  arrayKey?: string
 }
 
 /** A standard picklist field of the CRM. */
@@ -3686,6 +3835,32 @@ const OPPORTUNITY_TYPE_DEFINITION = {
   targets: [{ object: 'deal', field: 'type', keyField: 'typeKey' }],
 } as const satisfies CrmPicklistDefinition
 
+/**
+ * Salesforce's Opportunity Contact Role (AGL-3521): the part a contact
+ * plays on a deal. Plain; the label sits in each entry of the deal's
+ * `contactRoles`, and `contactRoleKeys` lists their keys, which is how a
+ * rename or a delete finds the deals to rewrite.
+ */
+const OPPORTUNITY_CONTACT_ROLE_DEFINITION = {
+  id: 'opportunityContactRole',
+  label: 'Contact role',
+  plural: 'contact roles',
+  object: 'deal',
+  restricted: true,
+  standardValues: [
+    { id: 'business-user', label: 'Business User' },
+    { id: 'decision-maker', label: 'Decision Maker' },
+    { id: 'economic-buyer', label: 'Economic Buyer' },
+    { id: 'economic-decision-maker', label: 'Economic Decision Maker' },
+    { id: 'evaluator', label: 'Evaluator' },
+    { id: 'executive-sponsor', label: 'Executive Sponsor' },
+    { id: 'influencer', label: 'Influencer' },
+    { id: 'technical-buyer', label: 'Technical Buyer' },
+    { id: 'other', label: 'Other' },
+  ],
+  targets: [{ object: 'deal', field: 'contactRoles', arrayKey: 'role', keyField: 'contactRoleKeys' }],
+} as const satisfies CrmPicklistDefinition
+
 /*
  * TASKS (AGL-3517) — Salesforce's Task Status, Priority, Type and Subject.
  *
@@ -3780,6 +3955,8 @@ export const CRM_PICKLIST_DEFINITIONS = [
   SALUTATION_DEFINITION,
   // Deals (AGL-3516).
   OPPORTUNITY_TYPE_DEFINITION,
+  // Deal contact roles (AGL-3521).
+  OPPORTUNITY_CONTACT_ROLE_DEFINITION,
   // Tasks (AGL-3517).
   TASK_STATUS_DEFINITION,
   TASK_PRIORITY_DEFINITION,
@@ -3801,6 +3978,8 @@ export const CRM_LEAD_SOURCE_PICKLIST: CrmPicklistId = 'leadSource'
 export const CRM_SALUTATION_PICKLIST: CrmPicklistId = 'salutation'
 /** A deal's Type value set's document id (AGL-3516). */
 export const CRM_OPPORTUNITY_TYPE_PICKLIST: CrmPicklistId = 'opportunityType'
+/** A deal contact's role value set's document id (AGL-3521). */
+export const CRM_OPPORTUNITY_CONTACT_ROLE_PICKLIST: CrmPicklistId = 'opportunityContactRole'
 
 /**
  * The built-in Lead source value each first-party door stamps (AGL-3519), by
@@ -3958,6 +4137,37 @@ export function judgeCrmPicklistValue(
     current,
     refusal: () => crmPicklistRefusal(id, picklist),
   })
+}
+
+/**
+ * A deal's contact roles with each role judged against the org's
+ * `opportunityContactRole` list (AGL-3521): an active value stored as the
+ * list spells it, a blank cleared, and the role a contact already holds on
+ * the deal (`current`) kept — or the first refusal, naming what the list
+ * allows.
+ */
+export function judgeDealContactRoles(
+  picklist: CrmPicklist,
+  roles: readonly CrmDealContactRole[],
+  current: readonly CrmDealContactRole[] = [],
+): { ok: true; roles: CrmDealContactRole[] } | { ok: false; error: string } {
+  const judged: CrmDealContactRole[] = []
+  for (const row of roles) {
+    const held = current.find((entry) => entry.contactId === row.contactId)?.role
+    const verdict = judgeCrmPicklistValue(
+      'opportunityContactRole',
+      picklist,
+      row.role ?? '',
+      held,
+    )
+    if (verdict.ok === false) return verdict
+    judged.push({
+      contactId: row.contactId,
+      ...(verdict.value ? { role: verdict.value } : {}),
+      primary: row.primary,
+    })
+  }
+  return { ok: true, roles: judged }
 }
 
 /** {@link judgeCrmPicklistValue} for the lead source. */
@@ -4976,6 +5186,9 @@ export function crmDealListFields(record: object): {
   titleLower: string
   typeKey: string | null
   leadSourceKey: string | null
+  contactRoleContactIds: string[]
+  scopedContactRoleContactIds: string[]
+  contactRoleKeys: string[]
 } {
   const deal = record as Record<string, unknown>
   return {
@@ -4983,6 +5196,34 @@ export function crmDealListFields(record: object): {
     titleLower: SEARCH_KEY(typeof deal['title'] === 'string' ? deal['title'] : ''),
     typeKey: crmPicklistKey(deal['type']),
     leadSourceKey: crmPicklistKey(deal['leadSource']),
+    ...crmDealContactRoleListFields(deal),
+  }
+}
+
+/**
+ * The arrays a deal's contact roles are found by (AGL-3521): every contact
+ * on it — `contactRoleContactIds`, which a contact's page asks
+ * `array-contains` at the organization level, and the same ids behind each
+ * scope token (`scopedContactRoleContactIds`, `host:x~contactId`), which it
+ * asks under a site in the one array clause a query has — and the keys of
+ * the roles they hold, which a rename of a role finds the deals by.
+ */
+export function crmDealContactRoleListFields(deal: Record<string, unknown>): {
+  contactRoleContactIds: string[]
+  scopedContactRoleContactIds: string[]
+  contactRoleKeys: string[]
+} {
+  const roles = dealContactRolesOf(deal)
+  const contactRoleContactIds = roles.map((row) => row.contactId)
+  const keys = new Set<string>()
+  for (const row of roles) {
+    const key = crmPicklistKey(row.role)
+    if (key) keys.add(key)
+  }
+  return {
+    contactRoleContactIds,
+    scopedContactRoleContactIds: scopedSearchTokens(deal['visibleTo'], contactRoleContactIds),
+    contactRoleKeys: [...keys],
   }
 }
 
@@ -5167,7 +5408,7 @@ export const CRM_LIST_FIELD_INPUTS: Readonly<Record<CrmListCollection, readonly 
   ],
   contacts: ['visibleTo', ...CRM_CONTACT_SEARCH_SOURCES, 'phone', CONTACT_FACETS_FIELD, 'emailState'],
   companies: ['visibleTo', ...CRM_COMPANY_SEARCH_SOURCES, 'type', 'industry', 'rating', 'accountSource'],
-  deals: ['visibleTo', 'title', 'type', 'leadSource'],
+  deals: ['visibleTo', 'title', 'type', 'leadSource', 'contactRoles', 'contactId'],
   crmTasks: ['visibleTo', 'title'],
 }
 

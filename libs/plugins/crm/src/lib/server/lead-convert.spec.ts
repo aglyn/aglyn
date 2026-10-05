@@ -732,6 +732,9 @@ describe('converting a lead', () => {
       currency: 'usd',
       ownerUid: CALLER,
       contactId: contact.id,
+      // The converted person is the Primary contact role (AGL-3521).
+      contactRoles: [{ contactId: contact.id, primary: true }],
+      contactRoleContactIds: [contact.id],
       companyId: company.id,
       visibleTo: ['host:h1'],
       hostId: HOST,

@@ -68,11 +68,23 @@
  * stage's `forecastCategory` and clears the `probability` override — a
  * body that sets either beside the move wins. `campaignId` names one of the
  * org's live campaigns.
+ *
+ * ## Contact roles (AGL-3521)
+ *
+ * `contactRoles` is the whole list of the deal's contacts — `{ contactId,
+ * role, primary }` — replaced as sent. Each contact must exist, none twice,
+ * at most one Primary, and each `role` is judged against the org's
+ * `opportunityContactRole` list (a contact's current role kept). The
+ * Primary IS `contactId`: a body that sends both must agree, and a body
+ * that sends `contactId` alone makes that contact Primary — added with no
+ * role when the deal did not name them — so an integration written before
+ * roles keeps meaning what it meant.
  */
 import {
   CRM_COLLECTIONS,
   CRM_MEDIA_IDS_MAX,
   type CrmDeal,
+  type CrmDealContactRole,
   type CrmDealLineItem,
   type CrmDealStage,
   type CrmDealStatus,
@@ -81,15 +93,21 @@ import {
   type CrmPicklistId,
   crmListFieldsTouched,
   crmNewRecordListFields,
+  DEAL_CONTACT_ROLES_MAX,
   DEAL_NEXT_STEP_MAX,
+  dealContactRoleFields,
+  dealContactRolesOf,
+  dealContactRolesWithPrimary,
+  dealPrimaryContactId,
   dealStageById,
+  judgeDealContactRoles,
   dealStageMoveFields,
   lineItemsTotalCents,
   normalizeCrmMediaIds,
   readDealLineItems,
 } from '@aglyn/aglyn/server'
 import { apiJson, ApiErrors, restampCrmListFieldsAt } from '@aglyn/tenant-data-admin'
-import { Timestamp } from 'firebase-admin/firestore'
+import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import {
   type ApiV1Context,
   claimWrite,
@@ -160,6 +178,13 @@ function dealView(doc: FirebaseFirestore.DocumentSnapshot) {
     stageChangedAt: isoFromMs(data.stageChangedAtMs),
     ownerUid: data.ownerUid ?? null,
     contactId: data.contactId ?? null,
+    // Every contact on the deal and the part each plays (AGL-3521); the
+    // Primary is `contactId`.
+    contactRoles: dealContactRolesOf(data).map((row) => ({
+      contactId: row.contactId,
+      role: row.role ?? null,
+      primary: row.primary,
+    })),
     companyId: data.companyId ?? null,
     lostReason: data.lostReason ?? null,
     notes: data.notes ?? null,
@@ -202,7 +227,11 @@ const DEAL_WRITABLE = new Set([
   'probability',
   'forecastCategory',
   'campaignId',
+  'contactRoles',
 ])
+
+/** The keys one contact role takes. */
+const CONTACT_ROLE_KEYS = new Set(['contactId', 'role', 'primary'])
 
 interface DealInput {
   title?: string
@@ -232,6 +261,73 @@ interface DealInput {
   probability?: Clearable<number>
   forecastCategory?: (typeof CRM_FORECAST_CATEGORIES)[number]
   campaignId?: Clearable<string>
+  /** The whole list as sent, shape-checked; roles judged by the writer, which pays the read. */
+  contactRoles?: CrmDealContactRole[]
+}
+
+/**
+ * `contactRoles` as sent, shape-checked: a list of at most
+ * {@link DEAL_CONTACT_ROLES_MAX} entries, each naming a contact once, and
+ * at most one of them Primary. `null` is the empty list.
+ */
+function readContactRolesBody(
+  raw: unknown,
+  errors: Record<string, string>,
+): CrmDealContactRole[] | undefined {
+  if (raw === undefined) return undefined
+  if (raw === null) return []
+  if (!Array.isArray(raw)) {
+    errors.contactRoles = 'Must be a list of { contactId, role, primary }'
+    return undefined
+  }
+  if (raw.length > DEAL_CONTACT_ROLES_MAX) {
+    errors.contactRoles = `At most ${DEAL_CONTACT_ROLES_MAX} contacts per deal`
+    return undefined
+  }
+  const seen = new Set<string>()
+  let primaries = 0
+  for (const [at, entry] of raw.entries()) {
+    const row = entry && typeof entry === 'object' && !Array.isArray(entry) ? (entry as Record<string, unknown>) : null
+    const contactId = typeof row?.['contactId'] === 'string' ? row['contactId'].trim() : ''
+    const unknownKey = row ? Object.keys(row).find((key) => !CONTACT_ROLE_KEYS.has(key)) : undefined
+    if (!row || unknownKey) {
+      errors.contactRoles = unknownKey
+        ? `Entry ${at}: unknown field ${unknownKey}`
+        : `Entry ${at}: must be { contactId, role, primary }`
+      return undefined
+    }
+    if (!contactId || contactId.length > 200 || contactId.includes('/')) {
+      errors.contactRoles = `Entry ${at}: contactId must be a contact id`
+      return undefined
+    }
+    if (seen.has(contactId)) {
+      errors.contactRoles = `Entry ${at}: ${contactId} is on the list twice`
+      return undefined
+    }
+    seen.add(contactId)
+    if (row['role'] !== undefined && row['role'] !== null && typeof row['role'] !== 'string') {
+      errors.contactRoles = `Entry ${at}: role must be a contact role, or null`
+      return undefined
+    }
+    if (row['primary'] !== undefined && typeof row['primary'] !== 'boolean') {
+      errors.contactRoles = `Entry ${at}: primary must be true or false`
+      return undefined
+    }
+    if (row['primary'] === true) primaries += 1
+  }
+  if (primaries > 1) {
+    errors.contactRoles = 'At most one contact may be Primary'
+    return undefined
+  }
+  return raw.map((entry) => {
+    const row = entry as Record<string, unknown>
+    const role = typeof row['role'] === 'string' ? row['role'].trim() : ''
+    return {
+      contactId: String(row['contactId']).trim(),
+      ...(role ? { role } : {}),
+      primary: row['primary'] === true,
+    }
+  })
 }
 
 /**
@@ -373,6 +469,14 @@ function readDealInput(
   if (forecastCategory) values.forecastCategory = forecastCategory
   const campaignId = readRefId(body, 'campaignId', errors)
   if (campaignId !== undefined) values.campaignId = campaignId
+  const contactRoles = readContactRolesBody(body.contactRoles, errors)
+  if (contactRoles !== undefined) {
+    values.contactRoles = contactRoles
+    // The Primary IS `contactId`, so a body naming both says one thing twice.
+    if (values.contactId !== undefined && values.contactId !== dealPrimaryContactId(contactRoles)) {
+      errors.contactId = 'Must name the Primary in contactRoles, or be left out'
+    }
+  }
 
   // `custom` is shape-checked here and judged against the org's
   // definitions by the writers, which is where the read is paid.
@@ -493,7 +597,7 @@ async function dealRefErrors(
   stored?: Partial<CrmDeal> | null,
 ): Promise<Record<string, string>> {
   const campaignId = values.campaignId ?? undefined
-  const [owner, refs, campaign] = await Promise.all([
+  const [owner, refs, campaign, roles] = await Promise.all([
     memberError(ctx, 'ownerUid', values.ownerUid),
     crmRefErrors(ctx, {
       contactId: values.contactId ?? undefined,
@@ -505,8 +609,56 @@ async function dealRefErrors(
             record?.live ? {} : { campaignId: 'No such campaign in this organization' },
         )
       : Promise.resolve({}),
+    contactRoleRefErrors(ctx, values.contactRoles, stored),
   ])
-  return { ...owner, ...refs, ...campaign }
+  return { ...owner, ...refs, ...campaign, ...roles }
+}
+
+/**
+ * Every contact a sent `contactRoles` adds to the deal must exist; one the
+ * deal already names is kept as it is, as a campaign is.
+ */
+async function contactRoleRefErrors(
+  ctx: ApiV1Context,
+  roles: readonly CrmDealContactRole[] | undefined,
+  stored?: Partial<CrmDeal> | null,
+): Promise<Record<string, string>> {
+  const held = new Set(stored ? dealContactRolesOf(stored).map((row) => row.contactId) : [])
+  const added = (roles ?? []).map((row) => row.contactId).filter((id) => !held.has(id))
+  if (!added.length) return {}
+  const contacts = ctx.firestore.collection('orgs').doc(ctx.orgId).collection('contacts')
+  const snapshots = await ctx.firestore.getAll(...added.map((id) => contacts.doc(id)))
+  const missing = snapshots.find((snapshot) => !snapshot.exists)
+  return missing ? { contactRoles: `No such contact in this organization: ${missing.id}` } : {}
+}
+
+/**
+ * What a write stores for the deal's contacts (AGL-3521): `contactRoles`
+ * judged and `contactId` beside its Primary when the body sent the list;
+ * when it sent `contactId` alone, the stored roles with that contact as the
+ * Primary. Nothing, when it sent neither.
+ */
+async function dealContactRoleWrites(
+  ctx: ApiV1Context,
+  values: Pick<DealInput, 'contactRoles' | 'contactId'>,
+  stored: Partial<CrmDeal> | null,
+): Promise<
+  { values: { contactRoles?: CrmDealContactRole[]; contactId?: string | null } } | { errors: Record<string, string> }
+> {
+  const current = stored ? dealContactRolesOf(stored) : []
+  if (values.contactRoles !== undefined) {
+    const judged = judgeDealContactRoles(
+      await readCrmPicklist(ctx.firestore, ctx.orgId, 'opportunityContactRole'),
+      values.contactRoles,
+      current,
+    )
+    if (judged.ok === false) return { errors: { contactRoles: judged.error } }
+    return { values: dealContactRoleFields(judged.roles) }
+  }
+  if (values.contactId !== undefined) {
+    return { values: dealContactRoleFields(dealContactRolesWithPrimary(current, values.contactId)) }
+  }
+  return { values: {} }
 }
 
 /**
@@ -561,6 +713,8 @@ async function createDeal(request: Request, ctx: ApiV1Context): Promise<Response
   // And against the org's picklists (AGL-3516), above the claim too.
   const picklists = await dealPicklistWrites(ctx, parsed.values, null)
   if ('errors' in picklists) return crmValidationFailed(ctx, 'deal', picklists.errors)
+  const roles = await dealContactRoleWrites(ctx, parsed.values, null)
+  if ('errors' in roles) return crmValidationFailed(ctx, 'deal', roles.errors)
 
   const collection = crmCollection(ctx, CRM_COLLECTIONS.deals)
   const claimed = await claimWrite(
@@ -615,6 +769,8 @@ async function createDeal(request: Request, ctx: ApiV1Context): Promise<Response
       ...createPayload({
         ...rest,
         ...picklists.values,
+        // The roles as judged, and `contactId` as their Primary (AGL-3521).
+        ...roles.values,
         ...placedLines.fields,
         ...stageMove(stage, stamp.createdAt.toMillis()),
         // What the body set beside the stage wins over what the stage stamps.
@@ -630,7 +786,10 @@ async function createDeal(request: Request, ctx: ApiV1Context): Promise<Response
     await collection.doc(id).create({ ...record, ...crmNewRecordListFields('deals', record) })
     // A deal created won is a won deal: its contact is a customer from birth.
     if (stage.kind === 'won') {
-      await floorWonDealContact(ctx, { contactId: rest.contactId, hostId: site.siteId })
+      await floorWonDealContact(ctx, {
+        contactId: roles.values.contactId ?? rest.contactId,
+        hostId: site.siteId,
+      })
     }
     const view = dealView(await collection.doc(id).get())
     await claim.record(200, view)
@@ -661,6 +820,8 @@ async function updateDeal(
   if (custom && 'errors' in custom) return crmValidationFailed(ctx, 'deal', custom.errors)
   const picklists = await dealPicklistWrites(ctx, parsed.values, stored)
   if ('errors' in picklists) return crmValidationFailed(ctx, 'deal', picklists.errors)
+  const roles = await dealContactRoleWrites(ctx, parsed.values, stored)
+  if ('errors' in roles) return crmValidationFailed(ctx, 'deal', roles.errors)
 
   const { title, stageId, status, lineItems, probability, forecastCategory, ...rest } = parsed.values
   const storedLines = Array.isArray(stored.lineItems) && stored.lineItems.length > 0
@@ -679,8 +840,12 @@ async function updateDeal(
   if ('errors' in placedLines) return crmValidationFailed(ctx, 'deal', placedLines.errors)
   const update: Record<string, unknown> = {
     ...(title !== undefined ? { title, titleLower: title.toLowerCase() } : {}),
-    ...updatePayload({ ...rest, ...picklists.values, ...placedLines.fields }),
+    ...updatePayload({ ...rest, ...picklists.values, ...roles.values, ...placedLines.fields }),
     ...(custom && 'values' in custom ? crmCustomUpdate(custom.values) : {}),
+    // The name the console copied beside a Primary that is no longer it.
+    ...(roles.values.contactId !== undefined && roles.values.contactId !== (stored.contactId ?? null)
+      ? { contactName: FieldValue.delete() }
+      : {}),
   }
   // The write's one instant: `updatedAt`, and the stage move if there is one,
   // so a deal closed at T reads updated at T.
@@ -717,7 +882,7 @@ async function updateDeal(
   }
   if (won) {
     await floorWonDealContact(ctx, {
-      contactId: rest.contactId !== undefined ? rest.contactId : stored.contactId,
+      contactId: roles.values.contactId !== undefined ? roles.values.contactId : stored.contactId,
       hostId: stored.hostId,
     })
   }

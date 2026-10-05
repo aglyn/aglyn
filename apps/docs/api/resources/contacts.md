@@ -403,7 +403,9 @@ original `200` receipt is replayed. Send a key whenever a deletion runs from a s
 which is most of them: an erasure request on somebody else's deadline is exactly the
 case where a response lost to a timeout must not read as a failure.
 
-This removes the contact record. It does not remove the
+This removes the contact record, and takes the person off every
+[deal's `contactRoles`](deals.md#contact-roles) — clearing a deal's `contactId`
+where they were its Primary. It does not remove the
 [form submissions](form-submissions.md), orders, or bookings that person left behind —
 those are separate records with their own endpoints.
 

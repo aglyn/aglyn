@@ -27,6 +27,7 @@ import {
   contactDisplayName,
   crmReadTokens,
   readContactFacet,
+  dealContactRolesOf,
   isOrgWideMember,
   type ConsentGroup,
   type ContactFieldDefinition,
@@ -50,6 +51,7 @@ import { readContainerIds } from '@aglyn/aglyn/app-utils/container-membership'
 import { readOrgContainers } from '@aglyn/tenant-data-admin/server/org-containers'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import {
+  CRM_FACTS_CONTACT_ROLES_MAX,
   CRM_IMPORT_FACTS_RESOURCE,
   CRM_RECORD_FACTS_RESOURCES,
   companyFacts,
@@ -343,12 +345,13 @@ export const crmDealFactsReader = reader(async (scope, request) => {
   const deal = (await visibleDoc(scope, CRM_COLLECTIONS.deals, id)) as (Partial<CrmDeal> & Data) | null
   if (!deal) return refused('deal')
   const naming = { field: 'dealId', id }
-  const [activities, tasks, pipelines, names, campaign] = await Promise.all([
+  const [activities, tasks, pipelines, names, campaign, contactNames] = await Promise.all([
     rowsNaming<CrmActivity>(scope, { ...naming, collection: CRM_COLLECTIONS.activities, orderBy: 'atMs', direction: 'desc', limit: CRM_FACTS_ACTIVITIES_READ }),
     rowsNaming<CrmTask>(scope, { ...naming, collection: CRM_COLLECTIONS.tasks, orderBy: 'dueAtMs', direction: 'asc', limit: CRM_FACTS_TASKS_READ }),
     pipelinesFor(scope, [deal]),
     factsNames(scope),
     campaignNames(scope, typeof deal.campaignId === 'string' && deal.campaignId ? [deal.campaignId] : []),
+    dealContactNames(scope, deal),
   ])
   return {
     ok: true,
@@ -358,6 +361,7 @@ export const crmDealFactsReader = reader(async (scope, request) => {
         pipeline: pipelines.get(String(deal.pipelineId ?? '')) ?? null,
         activities,
         tasks,
+        contactNames,
         nowMs: request.now.getTime(),
         names,
         ...(campaign[0] ? { campaignName: campaign[0] } : {}),
@@ -365,6 +369,28 @@ export const crmDealFactsReader = reader(async (scope, request) => {
     },
   }
 })
+
+/**
+ * The names of a deal's contacts the reader may see (AGL-3521), the Primary
+ * first and at most {@link CRM_FACTS_CONTACT_ROLES_MAX}: each read through
+ * the viewing holder, or its own primary holder at the organization level.
+ */
+async function dealContactNames(scope: CrmFactsScope, deal: Data): Promise<Map<string, string>> {
+  const roles = dealContactRolesOf(deal)
+    .sort((a, b) => Number(b.primary) - Number(a.primary))
+    .slice(0, CRM_FACTS_CONTACT_ROLES_MAX)
+  const names = new Map<string, string>()
+  await Promise.all(
+    roles.map(async (row) => {
+      const contact = await visibleDoc(scope, CONTACTS_COLLECTION, row.contactId)
+      if (!contact) return
+      const group = scope.group ?? contactPrimaryGroup(contact, scope.org)
+      const name = contactDisplayName(contact, group.groupId) || String(contact['email'] ?? '')
+      if (name) names.set(row.contactId, name)
+    }),
+  )
+  return names
+}
 
 export const crmLeadFactsReader = reader(async (scope, request) => {
   if (!scope.hostId) return { ok: false, status: 400, error: CRM_FACTS_LEAD_NEEDS_SITE }

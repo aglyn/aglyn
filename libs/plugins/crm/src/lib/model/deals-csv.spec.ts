@@ -65,8 +65,8 @@ describe('the deals CSV', () => {
     )
     expect(csv.split('\n')).toEqual([
       DEAL_CSV_COLUMNS.join(','),
-      `"Acme, renewal",Sales,Negotiation,1250.00,USD,owner@example.com,${dateInputValue(closeMs)},Open,Ada,Acme,,,Q4,,,,,,`,
-      'Globex,other,lost,,,,,Lost,,,2026-01-02T00:00:00.000Z,Went with a competitor,,,,,,,',
+      `"Acme, renewal",Sales,Negotiation,1250.00,USD,owner@example.com,${dateInputValue(closeMs)},Open,Ada,Acme,,,Q4,,,,,,,`,
+      'Globex,other,lost,,,,,Lost,,,2026-01-02T00:00:00.000Z,Went with a competitor,,,,,,,,',
     ])
   })
 
@@ -83,8 +83,31 @@ describe('the deals CSV', () => {
       campaignName: (id) => (id === 'spring' ? 'Spring launch' : undefined),
     })
     expect(csv.split('\n').slice(1)).toEqual([
-      'Pilot,,,,,,,,,,,,,New Business,Trade show,Send the quote,35,Best Case,Spring launch',
-      'Pilot,,,,,,,,,,,,,New Business,Trade show,Send the quote,,Best Case,gone',
+      'Pilot,,,,,,,,,,,,,New Business,Trade show,Send the quote,35,Best Case,Spring launch,',
+      'Pilot,,,,,,,,,,,,,New Business,Trade show,Send the quote,,Best Case,gone,',
     ])
+  })
+
+  it('writes every contact on the deal by name, with the role and Primary beside it (AGL-3521)', () => {
+    const csv = dealsCsv(
+      [
+        {
+          title: 'Committee',
+          contactId: 'c1',
+          contactRoles: [
+            { contactId: 'c1', role: 'Decision Maker', primary: true },
+            { contactId: 'c2', role: 'Evaluator', primary: false },
+            { contactId: 'c3', primary: false },
+          ],
+        },
+        // A deal written before roles: its one contact, Primary.
+        { title: 'Old', contactId: 'c2' },
+      ],
+      { contactName: (id) => ({ c1: 'Jane Doe', c2: 'Sam Lee' })[id] },
+    )
+    const cells = csv.split('\n').slice(1).map((line) => line.split(',').slice(DEAL_CSV_COLUMNS.length - 1).join(','))
+    expect(DEAL_CSV_COLUMNS[DEAL_CSV_COLUMNS.length - 1]).toBe('Contact roles')
+    // Quoted, as any cell holding a comma is.
+    expect(cells).toEqual(['"Jane Doe (Decision Maker, Primary); Sam Lee (Evaluator); c3"', 'Sam Lee (Primary)'])
   })
 })

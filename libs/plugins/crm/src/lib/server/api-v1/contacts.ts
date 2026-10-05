@@ -87,6 +87,7 @@ import {
 } from '@aglyn/tenant-data-admin/server/retained-refusals'
 import { FieldPath, Timestamp } from 'firebase-admin/firestore'
 import { mergeContactRoute } from './contacts-merge'
+import { sweepDealContactRoles } from '../deal-contact-roles'
 import {
   cachedContactReader,
   CONTACT_REPORTS_TO_LOOP_REFUSAL,
@@ -1357,6 +1358,14 @@ async function deleteContact(
         headers: ctx.headers,
       })
     }
+    // A deleted person leaves every deal's contact roles (AGL-3521).
+    await sweepDealContactRoles(
+      ctx.firestore,
+      ctx.firestore.collection('orgs').doc(ctx.orgId).collection(CRM_COLLECTIONS.deals),
+      contactRef.id,
+      null,
+      '[api-v1] contacts delete',
+    )
     const view = { id: contactRef.id, object: 'contact', deleted: true }
     await claim.record(200, view)
     return apiJson(view, { headers: ctx.headers })

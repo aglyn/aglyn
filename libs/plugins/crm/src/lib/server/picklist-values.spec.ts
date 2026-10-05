@@ -76,19 +76,32 @@ function docRef(path: string) {
   }
 }
 
+type Filter = { field: unknown; op: string; value: unknown }
+
+const matches = (stored: unknown, { op, value }: Filter) =>
+  op === 'array-contains' ? Array.isArray(stored) && stored.includes(value) : stored === value
+
 function collectionRef(path: string) {
-  const query = (filters: { field: unknown; value: unknown }[], max = Infinity) => ({
-    where: (field: unknown, _op: string, value: unknown) =>
-      query([...filters, { field, value }], max),
-    limit: (n: number) => query(filters, n),
+  const query = (filters: Filter[], max = Infinity, after: string | null = null) => ({
+    where: (field: unknown, op: string, value: unknown) =>
+      query([...filters, { field, op, value }], max, after),
+    // Every answer is in path order already, which is document id order.
+    orderBy: () => query(filters, max, after),
+    startAfter: (snapshot: { ref: { path: string } }) => query(filters, max, snapshot.ref.path),
+    limit: (n: number) => query(filters, n, after),
     get: async () => {
       const docs = Object.keys(store)
         .filter((key) => key.startsWith(`${path}/`) && !key.slice(path.length + 1).includes('/'))
-        .filter((key) =>
-          filters.every(({ field, value }) => read(store[key], pathOf(field)) === value),
-        )
+        .sort()
+        .filter((key) => after === null || key > after)
+        .filter((key) => filters.every((filter) => matches(read(store[key], pathOf(filter.field)), filter)))
         .slice(0, max)
-        .map((key) => ({ id: key.split('/').pop(), ref: docRef(key), data: () => store[key] }))
+        .map((key) => ({
+          id: key.split('/').pop(),
+          ref: docRef(key),
+          data: () => store[key],
+          get: (field: string) => store[key]?.[field],
+        }))
       return { empty: docs.length === 0, size: docs.length, docs }
     },
   })
@@ -100,7 +113,12 @@ const firestoreHandle = {
   batch: () => {
     const pending: [string, unknown[]][] = []
     return {
-      update: (ref: { path: string }, ...pairs: unknown[]) => void pending.push([ref.path, pairs]),
+      update: (ref: { path: string }, ...args: unknown[]) =>
+        void pending.push([
+          ref.path,
+          // `update(ref, { field: value })` as well as `update(ref, field, value, …)`.
+          args.length === 1 ? Object.entries(args[0] as Record<string, unknown>).flat() : args,
+        ]),
       commit: async () => {
         for (const [path, pairs] of pending) {
           for (let i = 0; i < pairs.length; i += 2) write(path, pairs[i], pairs[i + 1])
@@ -122,6 +140,7 @@ jest.mock('firebase-admin/firestore', () => ({
   __esModule: true,
   FieldValue: { serverTimestamp: () => '__serverTimestamp', delete: () => '__delete' },
   FieldPath: class {
+    static documentId = () => '__name__'
     segments: string[]
     constructor(...segments: string[]) {
       this.segments = segments
@@ -356,5 +375,69 @@ describe('crm/picklist-values on a task’s lists (AGL-3517)', () => {
     expect(store[`${TASKS}/t2`]).toMatchObject({ title: 'Send Quote' })
     const values = store[`orgs/${ORG}/crmPicklists/taskSubject`]['values'] as { label: string }[]
     expect(values.map((value) => value.label)).toContain('Send a quote')
+  })
+})
+
+/*
+ * A DEAL'S CONTACT ROLES (AGL-3521): the label sits in each entry of the
+ * deal's `contactRoles`, found by the keys `contactRoleKeys` lists. A
+ * rename rewrites the entries that hold the old label and restamps the
+ * keys; a delete with no replacement leaves the contact on the deal with
+ * no role.
+ */
+describe('crm/picklist-values on a deal’s contact roles (AGL-3521)', () => {
+  const DEALS = `orgs/${ORG}/deals`
+  const route = (body: Record<string, unknown>) =>
+    call({ orgId: ORG, picklistId: 'opportunityContactRole', ...body }, crmPicklistValuesHandler)
+
+  beforeEach(() => {
+    store[`orgs/${ORG}/crmPicklists/opportunityContactRole`] = {
+      values: [{ id: 'champion', label: 'Champion', active: true }],
+      defaultValueId: null,
+    }
+    store[`${DEALS}/d1`] = {
+      contactId: 'c1',
+      contactRoles: [
+        { contactId: 'c1', role: 'Champion', primary: true },
+        { contactId: 'c2', role: 'Evaluator', primary: false },
+      ],
+      contactRoleKeys: ['champion', 'evaluator'],
+    }
+    store[`${DEALS}/d2`] = {
+      contactRoles: [{ contactId: 'c3', role: 'Evaluator', primary: false }],
+      contactRoleKeys: ['evaluator'],
+    }
+  })
+
+  it('renames a role in every entry holding it and restamps the keys', async () => {
+    const out = await route({ action: 'rename', valueId: 'champion', label: 'Internal champion' })
+    expect(out.payload).toEqual({ ok: true, updated: { deal: 1 } })
+    expect(store[`${DEALS}/d1`]).toMatchObject({
+      contactId: 'c1',
+      contactRoles: [
+        { contactId: 'c1', role: 'Internal champion', primary: true },
+        { contactId: 'c2', role: 'Evaluator', primary: false },
+      ],
+      contactRoleKeys: ['internal champion', 'evaluator'],
+    })
+    expect(store[`${DEALS}/d2`]).toMatchObject({ contactRoleKeys: ['evaluator'] })
+  })
+
+  it('a case-only rename rewrites each deal once and ends', async () => {
+    const out = await route({ action: 'rename', valueId: 'champion', label: 'CHAMPION' })
+    expect(out.payload).toEqual({ ok: true, updated: { deal: 1 } })
+    expect(store[`${DEALS}/d1`]).toMatchObject({ contactRoleKeys: ['champion', 'evaluator'] })
+  })
+
+  it('a delete without a replacement keeps the contact on the deal, with no role', async () => {
+    const out = await route({ action: 'delete', valueId: 'champion', replaceWith: null })
+    expect(out.payload).toEqual({ ok: true, updated: { deal: 1 } })
+    expect(store[`${DEALS}/d1`]).toMatchObject({
+      contactRoles: [
+        { contactId: 'c1', primary: true },
+        { contactId: 'c2', role: 'Evaluator', primary: false },
+      ],
+      contactRoleKeys: ['evaluator'],
+    })
   })
 })

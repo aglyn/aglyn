@@ -24,11 +24,11 @@ import type {
   PluginPersonRecordsEraser,
 } from '@aglyn/aglyn/plugin-manager/plugin-person-erasure'
 import { companyContactsCountFields } from '@aglyn/tenant-data-admin/server/contact-company-link'
-import { deleteWhereEquals, updateWhereEquals } from '@aglyn/tenant-data-admin/server/paged-sweeps'
+import { deleteWhereEquals } from '@aglyn/tenant-data-admin/server/paged-sweeps'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin/server/firebase-admin'
 import { CONTACT_FACETS_FIELD } from '@aglyn/aglyn/app-utils/contacts'
-import { FieldValue } from 'firebase-admin/firestore'
 import { repointContactReportsTo } from './contact-reports-to'
+import { sweepDealContactRoles } from './deal-contact-roles'
 
 /**
  * THE CRM'S SHARE OF A PERSON ERASURE (AGL-2623, AGL-3080): the records
@@ -40,7 +40,7 @@ import { repointContactReportsTo } from './contact-reports-to'
  *
  *  1. each contact and its satellites — each linked company's contact count
  *     moved down once, deals unlinked (a deal is the team's own pipeline
- *     record and stays), tasks and activities deleted, every other contact's
+ *     record and stays; the person leaves its contact roles, AGL-3521), tasks and activities deleted, every other contact's
  *     reports-to that named the person cleared (AGL-3515) — then the contact
  *     document itself, WHOLE. Not the CRM's delete, which is a detach that
  *     leaves the row for the other holders: every site's facet, every consent
@@ -126,12 +126,12 @@ export function createCrmPersonEraser(deps: CrmPersonEraserDeps): PluginPersonRe
           console.error(`${LABEL}: company count could not move for ${companyId}`, error)
         }
       }
-      report.deals += await updateWhereEquals(
+      // Off every deal: its contact role, and its Primary with `contactId` (AGL-3521).
+      report.deals += await sweepDealContactRoles(
         db,
         orgRef.collection(CRM_COLLECTIONS.deals),
-        'contactId',
         contactId,
-        { contactId: FieldValue.delete(), updatedAt: FieldValue.serverTimestamp() },
+        null,
         LABEL,
       )
       report.tasks += await deleteWhereEquals(db, orgRef.collection(CRM_COLLECTIONS.tasks), 'contactId', contactId, LABEL)

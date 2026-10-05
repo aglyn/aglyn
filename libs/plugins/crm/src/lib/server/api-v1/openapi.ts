@@ -252,7 +252,7 @@ export const CRM_API_V1_DESCRIPTIONS: Readonly<Record<string, ApiV1ResourceDescr
     description: 'Opportunities moving through a pipeline.',
     schemaName: 'Deal',
     required: ['id', 'object', 'title', 'pipelineId', 'stageId'],
-    writable: ['title', 'pipelineId', 'stageId', 'status', 'amountCents', 'currency', 'lineItems', 'expectedCloseAt', 'ownerUid', 'contactId', 'companyId', 'lostReason', 'notes', 'custom', 'mediaIds', 'consentSiteId', 'type', 'leadSource', 'nextStep', 'probability', 'forecastCategory', 'campaignId'],
+    writable: ['title', 'pipelineId', 'stageId', 'status', 'amountCents', 'currency', 'lineItems', 'expectedCloseAt', 'ownerUid', 'contactId', 'companyId', 'lostReason', 'notes', 'custom', 'mediaIds', 'consentSiteId', 'type', 'leadSource', 'nextStep', 'probability', 'forecastCategory', 'campaignId', 'contactRoles'],
     writeOnly: {
       mediaIds: stringListField('Media library files attached to this deal, by id, at most 20. An empty array clears them.'),
       consentSiteId: stringField('The site the deal is created on behalf of.'),
@@ -260,7 +260,9 @@ export const CRM_API_V1_DESCRIPTIONS: Readonly<Record<string, ApiV1ResourceDescr
     writeNote:
       '`pipelineId` and `consentSiteId` are accepted on create only; a `PATCH` that names either is a `400`. ' +
       '`type` and `leadSource` must be active values of the organization’s lists (a deal keeps the value it holds). ' +
-      'A stage move sets `forecastCategory` from the new stage and clears `probability`, unless the same body sets them.',
+      'A stage move sets `forecastCategory` from the new stage and clears `probability`, unless the same body sets them. ' +
+      '`contactRoles` replaces the whole list: each contact once, at most 50, at most one `primary`, each `role` an active value of the organization’s contact roles. ' +
+      'The Primary is `contactId`: a body sending both must agree, and `contactId` alone makes that contact Primary.',
     fields: {
       id: stringField('Deal id.'),
       object: objectKindField('deal'),
@@ -275,7 +277,21 @@ export const CRM_API_V1_DESCRIPTIONS: Readonly<Record<string, ApiV1ResourceDescr
       closedAt: nullableField(isoField('When it was actually closed.')),
       stageChangedAt: nullableField(isoField('When the stage last moved.')),
       ownerUid: nullableField(stringField('Owning user.')),
-      contactId: nullableField(stringField('Associated contact.')),
+      contactId: nullableField(stringField('Associated contact — the Primary of `contactRoles`.')),
+      contactRoles: {
+        type: 'array',
+        description:
+          'Every contact on the deal and the part each plays (Salesforce’s Opportunity Contact Roles). At most one is `primary`, and it is `contactId`.',
+        items: {
+          type: 'object',
+          required: ['contactId', 'primary'],
+          properties: {
+            contactId: stringField('The contact.'),
+            role: nullableField(stringField('One of the organization’s contact roles (Decision Maker, Evaluator, …), or `null` for none.')),
+            primary: booleanField('Whether this is the deal’s Primary contact.'),
+          },
+        },
+      },
       companyId: nullableField(stringField('Associated company.')),
       lostReason: nullableField(stringField('Why it was lost.')),
       notes: nullableField(stringField('Free-form notes.')),

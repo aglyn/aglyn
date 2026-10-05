@@ -196,7 +196,7 @@ optional:
 | **Amount and currency** | What the deal is worth. Currency defaults to US dollars; the amount is stored in minor units, so `1,250.00` is exact. On a deal with [line items](#line-items) the amount is their sum and is read-only here. |
 | **Expected close** | The date you expect to close it — what a forecast by month reads. |
 | **Owner** | The teammate responsible. Picked from your workspace's members. |
-| **Contact** | The person the deal is with, searched by name or email from your contacts. |
+| **Contact** | The person the deal is with, searched by name or email from your contacts — the deal's Primary [contact role](#contact-roles). Picking another makes them Primary. |
 | **Company** | The organization, searched by name from your [companies](./companies.md). |
 | **Type** | Salesforce's Type: *New Business*, *Existing Business*, or one of your own — see [Type and lead source](#type-and-lead-source). A new deal with none takes the list's default, when it has one. |
 | **Lead source** | Where the deal came from — the same list a [lead's](./leads.md) lead source is picked from. |
@@ -223,6 +223,54 @@ is deactivated.
 When a lead is [converted](./leads.md#converting-a-lead) with a deal, the
 deal takes the lead's lead source, and the Type the convert dialog shows —
 the list's default until you pick another.
+
+## Contact roles {#contact-roles}
+
+A deal can name more than one person: Salesforce's Opportunity Contact Roles.
+The **Contact roles** card on a deal's page lists every contact on the deal,
+the part each plays, and which one is **Primary**:
+
+- **Add contact** (in the card's header) opens a dialog: pick a contact, a
+  role, and whether they are the Primary. The first contact on a deal is
+  always its Primary.
+- Each row's **Role** select changes the part they play; **Make primary**
+  moves the Primary to them; the remove button takes them off the deal.
+
+A deal names up to **50** contacts, each once, and at most one is Primary.
+
+**The Primary is the deal's contact.** The **Contact** field of the deal
+drawer, the email button on the deal's page, the CSV's **Contact** column, the
+[won-deal customer floor](#a-won-deal-makes-its-contact-a-customer) and the
+REST `contactId` all read the Primary. Picking a contact in the drawer makes
+them Primary — adding them with no role when the deal did not name them — and
+clearing it leaves the deal with no Primary. A deal created before contact
+roles reads as its one contact, Primary, with no role.
+
+The roles are a picklist with Salesforce's standard values: *Business User*,
+*Decision Maker*, *Economic Buyer*, *Economic Decision Maker*, *Evaluator*,
+*Executive Sponsor*, *Influencer*, *Technical Buyer* and *Other*. Add your own,
+rename, reorder or deactivate them on the **Deals** tab of
+[Custom fields](./custom-fields.md#picklist-values); a rename moves every deal
+that holds the role, and a contact keeps a role after it is deactivated.
+
+Where else contact roles appear:
+
+- **A contact's page** lists the deals the person is on in any role, with the
+  role beside each. A teammate whose access is limited to some sites sees the
+  deals that name the person as Primary.
+- **[Converting a lead](./leads.md#converting-a-lead)** with a deal makes the
+  converted contact the deal's Primary, with no role yet.
+- **Merging two contacts** moves the merged person's roles to the survivor; on
+  a deal that named both, the survivor keeps one row, taking the merged
+  record's role where it had none and its Primary where it was.
+- **Deleting or erasing a contact** takes them off every deal; a deal whose
+  Primary they were is left with none.
+- The deals **CSV** has a **Contact roles** column —
+  `Jane Doe (Decision Maker, Primary); Sam Lee (Evaluator)` — which an import
+  reads past: a contact is put on a deal from its page.
+- The [REST API](/api/resources/deals) reads and writes the list as
+  `contactRoles`, and [CRM by AI](../../ai/crm-by-ai.md) reads them as part of
+  the deal.
 
 ## Line items
 
@@ -309,13 +357,16 @@ Opening a deal shows:
   owner, links to the contact and the company, the campaign, the notes, and one row per
   [custom field](./custom-fields.md) defined on the **Deals** tab of the Fields
   section; **Edit** carries a control for each.
+- **Contact roles** — every person on the deal, the part each plays, and the
+  Primary; see [Contact roles](#contact-roles).
 - **Products** — the [line items](#line-items) behind the amount, with the
   door to add one from the catalog or by hand.
 - **Tasks** and **Activity** — what is owed on this deal and what has happened
   on it.
 
-A deal also appears on the pages of the contact and the company it names, each
-with a **New deal** shortcut that starts a deal already linked to them.
+A deal also appears on the pages of the contact and the company it names — on
+a contact's page, for every [role](#contact-roles) the person holds on it —
+each with a **New deal** shortcut that starts a deal already linked to them.
 
 ## Files
 

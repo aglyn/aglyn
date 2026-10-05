@@ -752,6 +752,9 @@ export async function convertHostLead(
       ...(campaignId ? { campaignId } : {}),
       ...(ownerUid ? { ownerUid } : {}),
       contactId,
+      // The converted person is the deal's Primary contact role, with no
+      // role yet, as Salesforce's conversion makes them (AGL-3521).
+      contactRoles: [{ contactId, primary: true }],
       ...(companyId ? { companyId } : {}),
       visibleTo,
       hostId,

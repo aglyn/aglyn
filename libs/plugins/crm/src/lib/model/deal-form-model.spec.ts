@@ -256,6 +256,50 @@ describe("the deal form's Opportunity fields (AGL-3516)", () => {
   })
 })
 
+describe("the deal form's contact keeps the Primary contact role (AGL-3521)", () => {
+  const form = { ...emptyDealForm(pipeline), title: 'Committee' }
+
+  it('creates a deal with its contact as the Primary role, and none without one', () => {
+    expect(dealDocumentFromForm({ ...form, contactId: 'c1' }, context)).toMatchObject({
+      contactId: 'c1',
+      contactRoles: [{ contactId: 'c1', primary: true }],
+    })
+    expect(dealDocumentFromForm(form, context)).not.toHaveProperty('contactRoles')
+  })
+
+  it('moves the Primary with a changed contact, and writes no roles when it is unchanged', () => {
+    const current = {
+      contactId: 'c1',
+      contactRoles: [
+        { contactId: 'c1', role: 'Decision Maker', primary: true },
+        { contactId: 'c2', role: 'Evaluator', primary: false },
+      ],
+    }
+    const nowMs = context.nowMs
+    expect(dealPatchFromForm({ ...form, contactId: 'c2' }, nowMs, { current }).set).toMatchObject({
+      contactId: 'c2',
+      contactRoles: [
+        { contactId: 'c1', role: 'Decision Maker', primary: false },
+        { contactId: 'c2', role: 'Evaluator', primary: true },
+      ],
+    })
+    expect(dealPatchFromForm({ ...form, contactId: 'c3' }, nowMs, { current }).set['contactRoles']).toEqual([
+      { contactId: 'c3', primary: true },
+      { contactId: 'c1', role: 'Decision Maker', primary: false },
+      { contactId: 'c2', role: 'Evaluator', primary: false },
+    ])
+    const cleared = dealPatchFromForm(form, nowMs, { current })
+    expect(cleared.clear).toContain('contactId')
+    expect(cleared.set['contactRoles']).toEqual([
+      { contactId: 'c1', role: 'Decision Maker', primary: false },
+      { contactId: 'c2', role: 'Evaluator', primary: false },
+    ])
+    expect(dealPatchFromForm({ ...form, contactId: 'c1' }, nowMs, { current }).set).not.toHaveProperty(
+      'contactRoles',
+    )
+  })
+})
+
 describe('the contact picker match', () => {
   const rows = [
     { $id: 'c1', email: 'ada@example.com', name: 'Ada Lovelace', nameTokens: ['a', 'ad', 'ada', 'l', 'lo', 'lov'] },

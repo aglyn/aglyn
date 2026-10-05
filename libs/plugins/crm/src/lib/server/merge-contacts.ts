@@ -27,8 +27,9 @@
  * ## The order is the crash-safety argument
  *
  *  1. Every deal, task and activity naming the merged contact is repointed
- *     at the survivor, and every lead converted into it — and every contact
- *     that reports to it (AGL-3515), in each holder's facet. Batched,
+ *     at the survivor — on a deal, its contact roles too (AGL-3521) — and
+ *     every lead converted into it, and every contact that reports to it
+ *     (AGL-3515), in each holder's facet. Batched,
  *     bounded, idempotent: a re-run finds nothing left to move.
  *  2. Then, in ONE transaction: the survivor takes the plan, every address
  *     it now answers to is indexed at it, and the merged document is
@@ -59,6 +60,7 @@ import {
 import type { HostActivityActor } from '@aglyn/aglyn/app-utils/activity-presenter'
 import { planContactMerge } from '../model/contact-merge'
 import { repointContactReportsTo } from './contact-reports-to'
+import { sweepDealContactRoles } from './deal-contact-roles'
 import { CRM_COLLECTIONS } from '@aglyn/aglyn/app-utils/crm'
 import { personKey } from '@aglyn/aglyn/app-utils/person-key'
 import { FieldValue } from 'firebase-admin/firestore'
@@ -215,7 +217,15 @@ export async function mergeContacts(
    * 1. THE CHILDREN — before the parent, for the reason the header gives.
    *=========================================*/
   const [deals, tasks, activities] = await Promise.all([
-    repointContactId(firestore, orgRef.collection(CRM_COLLECTIONS.deals), mergedId, survivorId),
+    // A deal names the merged record as a contact role or as its Primary
+    // (AGL-3521); both move, and a deal naming both records keeps one row.
+    sweepDealContactRoles(
+      firestore,
+      orgRef.collection(CRM_COLLECTIONS.deals),
+      mergedId,
+      survivorId,
+      'contact merge',
+    ),
     repointContactId(firestore, orgRef.collection(CRM_COLLECTIONS.tasks), mergedId, survivorId),
     repointContactId(
       firestore,

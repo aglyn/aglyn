@@ -22,6 +22,7 @@ import {
   type CrmPicklist,
   CRM_COLLECTIONS,
   crmPicklistRank,
+  dealContactRolesOf,
   dealStageById,
   findOrgMember,
   ORG_SCOPE_TOKEN,
@@ -85,6 +86,8 @@ import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useContactFieldDefinitions } from '../hooks/use-contact-field-definitions'
 import { useCrmScope } from '../hooks/use-crm-scope'
+import { readCrmRecordNames } from '../hooks/use-crm-record-names'
+import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { useDealStageApi } from '../hooks/use-deal-stage-api'
 import {
   BOARD_CLOSED_LIMIT,
@@ -364,10 +367,32 @@ export function DealsSection(props: ConsolePluginPageProps) {
     }),
     [pipelineState, roster.members, campaigns.options],
   )
+  /*
+   * The file's options for some rows: the table's own, and the names of the
+   * contacts on them for the Contact roles column (AGL-3521) — read when a
+   * file is asked for, never per page shown. A name that cannot be read is
+   * written as the id.
+   */
+  const firestore = useFirestore()
+  const resolveCsv = useCallback(
+    async (rows: readonly DealDoc[]): Promise<DealCsvOptions> => {
+      if (!scope.orgId) return csvOptions
+      const nameOf = await readCrmRecordNames(firestore, {
+        orgId: scope.orgId,
+        groupId: scope.consentGroup?.groupId ?? null,
+        org: (org ?? null) as Record<string, unknown> | null,
+        records: rows.flatMap((row) =>
+          dealContactRolesOf(row).map((role) => ({ kind: 'contact' as const, id: role.contactId })),
+        ),
+      })
+      return { ...csvOptions, contactName: (id) => nameOf('contact', id) }
+    },
+    [csvOptions, firestore, scope.orgId, scope.consentGroup, org],
+  )
   // The page on screen; Export all on the bulk bar takes the whole list.
-  const handleExport = useCallback(() => {
-    downloadTextFile('deals.csv', 'text/csv', dealsCsv(paged.rows, csvOptions))
-  }, [paged.rows, csvOptions])
+  const handleExport = useCallback(async () => {
+    downloadTextFile('deals.csv', 'text/csv', dealsCsv(paged.rows, await resolveCsv(paged.rows)))
+  }, [paged.rows, resolveCsv])
 
   const columns: GridColDef[] = useMemo(
     () => [
@@ -541,7 +566,7 @@ export function DealsSection(props: ConsolePluginPageProps) {
               {view === 'table' ? (
                 <Button
                   size="small"
-                  onClick={handleExport}
+                  onClick={() => void handleExport()}
                   disabled={!paged.rows.length}
                 >
                   {'Export CSV'}
@@ -702,6 +727,7 @@ export function DealsSection(props: ConsolePluginPageProps) {
                     roster={roster}
                     api={api}
                     csv={csvOptions}
+                    resolveCsv={resolveCsv}
                   />
                   <CrmColumnOrderProvider value={grid.columnOrder}>
                     <ListTable
