@@ -91,8 +91,8 @@ alerts.
 | Billing | Billing webhook failing its signature check; a delivery that moved nothing | Must |
 | Data protection | A person's erasure failed; a workspace's erasure failed; the database export failed | Must |
 | Legal | DMCA counter-notice; a DMCA takedown, impersonation or illegal-content report | Must |
-| Operations | A health check went degraded | Must |
-| Operations | A health check recovered; a reaper stuck; a plugin job, consent group change, publish outbox or sending-domain provisioning failing; the bandwidth ceiling reached | Should |
+| Operations | A health check went degraded; a published site not rendering pages | Must |
+| Operations | A health check recovered; a published site rendering again; a reaper stuck; a plugin job, consent group change, publish outbox or sending-domain provisioning failing; the bandwidth ceiling reached | Should |
 | Billing | Automatic billing lock; an invoice voided or uncollectible; a connected account's payout or transfer failed; a workspace's payment failed | Should |
 | Security | Staff access granted or a role raised; a plugin verifier regression | Should |
 | Support | A ticket past its response time; new tickets and replies (digest) | Should |
@@ -128,9 +128,42 @@ the other safety net: a channel that normally hears something every day and goes
 quiet is a signal too.
 :::
 
+## The render monitor {#render-monitor}
+
+A published site can look up while it renders nothing new. Pages a visitor has
+already loaded come out of a cache, so the home page keeps answering while every
+page that has to be drawn fresh fails or hangs. Health checks don't catch that
+either: they answer from inside the runtime and never draw a page.
+
+The **render monitor** (`/api/admin/render-monitor`, every 5 minutes) asks each
+site it watches for two pages no cache can hold, over the internet, from the
+console:
+
+- **`/search`**, which every site has and which is drawn on every request, inside
+  the site's full layout.
+- **A path nobody has asked for before**, which the site answers with its own
+  "page not found" page, drawn in the same layout as every published page.
+
+A run passes when both come back as complete pages within 25 seconds. When a site
+fails two runs in a row, **Published site not rendering pages** goes out once,
+naming what failed (a timeout, an error status, an unfinished page). The first
+passing run after that sends **Published site rendering again**. Each watched site
+is listed among the health checks on this page with its state and since when.
+
+It watches your demonstration site by default. Add your own sites, or your
+marketing site, with `RENDER_MONITOR_ORIGINS`; see
+[Self-hosting environment](../developers/self-hosting-environment.md).
+
+:::note A GET only looks
+A `GET` to the route fetches and grades the pages and records nothing, so you can
+ask what the monitor would see right now without moving its state. The scheduled
+`POST` records and alerts.
+:::
+
 ## Self-hosting {#self-hosting}
 
 Nothing here is specific to Aglyn's cloud. The environment variables are listed in
 [Self-hosting environment](../developers/self-hosting-environment.md). Schedule
-`/api/admin/operator-alerts/tick` every 15 minutes with the rest of your
+`/api/admin/operator-alerts/tick` every 15 minutes and
+`/api/admin/render-monitor` every 5 minutes with the rest of your
 [scheduled jobs](../developers/self-hosting-environment.md#cron).

@@ -36,8 +36,16 @@
  * same fifty-one-hour blindness in a different method.
  */
 import { HEALTH_NO_STORE, renderHealth } from '@aglyn/aglyn/server'
+import { createElement } from 'react'
 
 const LOADER = '../app/[host]/[scheme]/[[...slug]]/load-page-data'
+const STAGES = '../app/api/health/render/document-stages'
+
+/** Document stages that come together: an element from the layout, a head. */
+const PASSING_STAGES = {
+  runSiteLayout: async () => createElement('div'),
+  runSiteHead: async () => ({ title: 'Home' }),
+}
 
 /** A composed page: host resolved, non-empty node tree. */
 const RENDERED = {
@@ -53,9 +61,11 @@ const RENDERED = {
 async function routeWith(
   which: 'marketing' | 'site',
   loader: () => Promise<unknown>,
+  stages: Record<string, unknown> = PASSING_STAGES,
 ) {
   jest.resetModules()
   jest.doMock(LOADER, () => ({ loadPageData: loader }))
+  jest.doMock(STAGES, () => stages)
   return (await import(`../app/api/health/render/${which}/route`)) as {
     GET: () => Promise<Response>
     HEAD: () => Promise<Response>
@@ -79,6 +89,7 @@ afterEach(() => {
   delete process.env['AGLYN_TENANT_DEMO']
   jest.resetModules()
   jest.dontMock(LOADER)
+  jest.dontMock(STAGES)
 })
 
 describe.each(['marketing', 'site'] as const)(
@@ -92,6 +103,48 @@ describe.each(['marketing', 'site'] as const)(
       expect(body.status).toBe('ok')
       expect(body.checks.render.ok).toBe(true)
       expect(body.checks.render.nodeCount).toBe(3)
+      expect(body.checks.document.ok).toBe(true)
+    })
+
+    /**
+     * The document around the page (AGL-3568). On 2026-10-05 the loader
+     * answered and the site LAYOUT hung, so the loader-only canary was green
+     * for the whole outage. Each of these is a document that does not come
+     * together while the loader is fine.
+     */
+    it.each([
+      [
+        'the layout throws',
+        {
+          ...PASSING_STAGES,
+          runSiteLayout: async () => {
+            throw new Error('theme fonts unavailable')
+          },
+        },
+        'layout-threw',
+      ],
+      [
+        'the layout resolves to no element',
+        { ...PASSING_STAGES, runSiteLayout: async () => undefined },
+        'layout-empty',
+      ],
+      [
+        'the head throws',
+        {
+          ...PASSING_STAGES,
+          runSiteHead: async () => {
+            throw new Error('metadata failed')
+          },
+        },
+        'head-threw',
+      ],
+    ])('goes RED when %s, though the loader renders', async (_label, stages, code) => {
+      const route = await routeWith(which, async () => RENDERED, stages)
+      const response = await route.GET()
+      expect(response.status).toBe(503)
+      const body = await response.json()
+      expect(body.checks.render.ok).toBe(true)
+      expect(body.checks.document).toMatchObject({ ok: false, code })
     })
 
     /**
@@ -185,6 +238,7 @@ describe('host resolution', () => {
   const canary = async () => {
     jest.resetModules()
     jest.doMock(LOADER, () => ({ loadPageData: async () => RENDERED }))
+    jest.doMock(STAGES, () => PASSING_STAGES)
     return import('../app/api/health/render/canary')
   }
 
@@ -229,6 +283,7 @@ describe('host resolution', () => {
     delete process.env['AGLYN_CANARY_MARKETING_HOST']
     jest.resetModules()
     jest.doMock(LOADER, () => ({ loadPageData: async () => RENDERED }))
+    jest.doMock(STAGES, () => PASSING_STAGES)
     const route =
       (await import('../app/api/health/render/marketing/route')) as {
         GET: () => Promise<Response>
@@ -238,6 +293,48 @@ describe('host resolution', () => {
     expect(response.status).toBe(503)
     expect((await response.json()).checks.render.code).toBe('not-configured')
     expect((await route.HEAD()).status).toBe(503)
+  })
+})
+
+/**
+ * The budget is a real timer (AGL-3568): a stage that never settles is the
+ * outage's own shape, and a canary that waited on it would hang to the
+ * platform's limit exactly like the page did.
+ */
+describe('probeDocument budget', () => {
+  const canary = async (stages: Record<string, unknown>) => {
+    jest.resetModules()
+    jest.doMock(LOADER, () => ({ loadPageData: async () => RENDERED }))
+    jest.doMock(STAGES, () => stages)
+    return import('../app/api/health/render/canary')
+  }
+
+  it('reports a layout that never settles as layout-timeout, inside the budget', async () => {
+    const { probeDocument } = await canary({
+      ...PASSING_STAGES,
+      runSiteLayout: () => new Promise(() => undefined),
+    })
+    const startedAt = Date.now()
+    const check = await probeDocument('demo-site', 50)
+    expect(check).toMatchObject({ ok: false, code: 'layout-timeout', host: 'demo-site' })
+    expect(Date.now() - startedAt).toBeLessThan(2_000)
+  })
+
+  it('names the head when it is the stage that hangs', async () => {
+    const { probeDocument } = await canary({
+      ...PASSING_STAGES,
+      runSiteHead: () => new Promise(() => undefined),
+    })
+    expect(await probeDocument('demo-site', 50)).toMatchObject({
+      ok: false,
+      code: 'head-timeout',
+    })
+  })
+
+  it('passes a document that comes together, and is red with nothing configured', async () => {
+    const { probeDocument } = await canary(PASSING_STAGES)
+    expect(await probeDocument('demo-site', 1_000)).toMatchObject({ ok: true })
+    expect(await probeDocument(null)).toMatchObject({ ok: false, code: 'not-configured' })
   })
 })
 

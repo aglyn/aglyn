@@ -426,6 +426,42 @@ export const CORE_OPERATOR_ALERTS: readonly OperatorAlertDefinition[] = [
     dedupeWindowMinutes: 60,
     defaultEnabled: true,
   },
+  {
+    // The render monitor (AGL-3568): a published site fetched over HTTP, on
+    // pages no cache can answer, failed several runs in a row. Red, not the
+    // amber of a degraded check: every visitor without a cached copy is
+    // getting an error page or a timeout right now.
+    type: 'system.siteRenderFailing',
+    label: 'Published site not rendering pages',
+    description:
+      'The render monitor asked a published site for pages no cache can answer, several runs in a row, and got no complete page back. Visitors to cached pages may still see them, so the site can look up while every other page fails. Check the latest site runtime deployment first and roll it back if it just shipped.',
+    tier: 'must',
+    category: 'ops',
+    title: 'Pages are not rendering on {{site}}',
+    body:
+      '{{site}} failed {{failures}} render checks in a row, over {{since}}. {{detail}} Cached pages may still load, so the site can look up while new renders fail.',
+    link: '/admin/health',
+    delivery: 'immediate',
+    // Told once per outage: the monitor raises it on the edge, and the
+    // window only covers a site flapping across the line.
+    dedupeWindowMinutes: 30,
+    defaultEnabled: true,
+  },
+  {
+    type: 'system.siteRenderRecovered',
+    label: 'Published site rendering again',
+    description:
+      'A published site the render monitor had reported as not rendering serves fresh pages again.',
+    tier: 'should',
+    category: 'ops',
+    title: '{{site}} is rendering pages again',
+    body: 'Fresh page renders on {{site}} pass again after {{duration}}.',
+    link: '/admin/health',
+    delivery: 'immediate',
+    level: 'success',
+    dedupeWindowMinutes: 30,
+    defaultEnabled: true,
+  },
 
   // ── SHOULD: billing ─────────────────────────────────────────────────────
   {

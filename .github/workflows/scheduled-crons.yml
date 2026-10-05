@@ -282,6 +282,12 @@ on:
           # POST works it. Safe by hand — every alert it raises is deduped and
           # the digest is claimed once per day.
           - /api/admin/operator-alerts/tick
+          # The render monitor (AGL-3568), the same as the five-minute
+          # `consoleRenderMonitor` job: fetches pages no cache can answer
+          # from each watched site. A GET fetches and grades and records
+          # nothing; the POST records each site's state and raises the edge.
+          # Safe by hand — an alert goes out once per outage.
+          - /api/admin/render-monitor
           # The automatic security holds (AGL-3450), the same as the
           # fifteen-minute `consoleFastCrons` tick: places every hold the page
           # screen asked for. A GET reports the pending holds and places

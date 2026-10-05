@@ -21,6 +21,23 @@ name: Uptime probe
 #
 # The run history IS the record. A failed run is where an incident starts.
 #
+# ⛔ THIS IS NOT THE MONITOR'S CADENCE (AGL-3568). The `*/15` below is a
+# request, and GitHub treats it as one: on 2026-10-05 it ran this workflow
+# four times (00:00, 05:29, 12:29Z), none of them during the 28 minutes every
+# uncached tenant page hung. The cadence that alerts is the console's render
+# monitor — `/api/admin/render-monitor`, every five minutes on Cloud Scheduler
+# (`consoleRenderMonitor` in cloud/functions/src/index.ts) — which renders
+# uncached pages on each watched site and raises an operator alert. This
+# workflow is the second opinion from outside our infrastructure, and the
+# way to ask by hand.
+#
+# UNCACHED RENDERS TOO (AGL-3568). The front-door rows below fetch `/`, which
+# the ISR cache answers — a HIT can't prove a render, and cached pages stayed
+# green through that outage. Each front door now also gets two `render/*`
+# rows that no cache can answer: `/search` (rendered per request) and a
+# never-requested path under the catch-all (graded as the site's own 404
+# document). So even one manual run proves pages render right now.
+#
 # IT NOW FETCHES PAGES, NOT ONLY HEALTH ROUTES (AGL-2709). Every row here was a
 # JSON health contract until 2026-09-09, when every tenant page answered 500 for
 # ten minutes and both page-shaped monitors reported 100.000% with no downtime

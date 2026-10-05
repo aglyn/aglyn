@@ -2616,6 +2616,19 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
       'Runs the AI generation steps the doors leave queued: every plan, every page pass, the passes of a site scaffold, and any step an inline door’s budget handed back (AGL-3026). It runs on the console because only the console holds the AI provider key. If it stops, a generation job that plans never gets its plan and a page is never built — the job sits queued, spending nothing, and never finishes.',
   },
   {
+    id: 'render-monitor',
+    label: 'Render monitor',
+    // Its own Cloud Scheduler job, every five minutes (AGL-3568): fifteen
+    // minutes is the cadence that missed the outage it exists for. The grace
+    // is the floor the fast jobs keep, six missed fires at this cadence.
+    cron: '*/5 * * * *',
+    runner: 'cloud-scheduler',
+    target: 'consoleRenderMonitor → console /api/admin/render-monitor',
+    graceMinutes: 30,
+    drives:
+      'Fetches pages no cache can answer from each watched published site, over HTTP from outside the site runtime, and alerts the operator when one stops rendering two runs in a row (AGL-3568). If it stops, a site runtime that renders nothing new goes unnoticed for as long as its cached pages keep the front door green.',
+  },
+  {
     id: 'plugin-jobs-beat',
     label: 'Plugin job beat',
     // Cloud Scheduler says `every 1 minutes`; the equivalent five-field
