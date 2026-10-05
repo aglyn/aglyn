@@ -195,6 +195,25 @@ const POLICIES: Array<{
     ],
     stamp: 'apiIdempotencyExpiry()',
   },
+  // AGL-3543: a site package import's ledger — the record, the verbatim
+  // previous content of what it replaced, and the paths it wrote — kept the
+  // undo window and a day. TTL does not cascade, so the pieces are stamped by
+  // the helper that writes them and the record by the route.
+  {
+    collectionGroup: 'packageImports',
+    writers: ['apps/console/app/api/hosts/import/route.ts'],
+    stamp: 'expiresAt: packageLedgerExpiry(',
+  },
+  {
+    collectionGroup: 'snapshots',
+    writers: ['apps/console/app/api/_lib/site-package-ledger.ts'],
+    stamp: 'expiresAt: packageLedgerExpiry(',
+  },
+  {
+    collectionGroup: 'writtenPaths',
+    writers: ['apps/console/app/api/_lib/site-package-ledger.ts'],
+    stamp: 'expiresAt: packageLedgerExpiry(',
+  },
 ]
 
 describe('Firestore TTL policies are declared, documented and written', () => {

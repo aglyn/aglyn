@@ -94,6 +94,7 @@ import {
   PACKAGE_IMPORTS_COLLECTION,
   PACKAGE_UNDO_WINDOW_MS,
   packageImportRef,
+  packageLedgerExpiry,
   packageImportUndoable,
   readLedgerPieces,
   writeLedgerPieces,
@@ -1778,6 +1779,7 @@ async function handler(request: Request): Promise<Response> {
         const opening = firestore.batch()
         opening.set(recordRef, {
           ...record,
+          expiresAt: packageLedgerExpiry(record.startedAtMs),
           createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
           updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
         })
@@ -1815,6 +1817,7 @@ async function handler(request: Request): Promise<Response> {
       status: 'applied',
       appliedAtMs,
       expiresAtMs: appliedAtMs + PACKAGE_UNDO_WINDOW_MS,
+      expiresAt: packageLedgerExpiry(appliedAtMs),
       writtenPieces,
       updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
     }, { merge: true })

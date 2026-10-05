@@ -35,7 +35,8 @@ import { TRANSFER_UNDO_WINDOW_MS } from '@aglyn/aglyn/data-transfer'
  * Written by the import route on the Admin SDK only. The rules name
  * `packageImports` in the host catch-all's read and write exclusions, so no
  * client reads a previous copy of a site's content or forges what an undo
- * would write back.
+ * would write back. Every document of it expires
+ * {@link PACKAGE_LEDGER_RETENTION_MS} after it is written.
  */
 
 /** The host subcollection the ledger lives in. */
@@ -50,6 +51,19 @@ export const LEDGER_PIECE_CHARS = 900_000
 
 /** How long an import can be undone. */
 export const PACKAGE_UNDO_WINDOW_MS = TRANSFER_UNDO_WINDOW_MS
+
+/**
+ * How long the ledger is kept (AGL-3543): the undo window and a day, so the
+ * pieces filed while an import applied outlive its window too. A TTL policy
+ * on `expiresAt` deletes the record and every piece; TTL does not cascade,
+ * so each carries its own stamp.
+ */
+export const PACKAGE_LEDGER_RETENTION_MS = PACKAGE_UNDO_WINDOW_MS + 24 * 60 * 60 * 1000
+
+/** The `expiresAt` of a ledger document written at `nowMs`. */
+export function packageLedgerExpiry(nowMs: number): Date {
+  return new Date(nowMs + PACKAGE_LEDGER_RETENTION_MS)
+}
 
 /** What happened to an import. */
 export type PackageImportStatus = 'applying' | 'applied' | 'refused' | 'failed' | 'undone'
@@ -128,7 +142,7 @@ export async function writeLedgerPieces(
   const pieces = splitLedgerJson(value)
   for (const [n, json] of pieces.entries()) {
     const batch = firestore.batch()
-    batch.set(recordRef.collection(collection).doc(String(n)), { n, json })
+    batch.set(recordRef.collection(collection).doc(String(n)), { n, json, expiresAt: packageLedgerExpiry(Date.now()) })
     await batch.commit()
   }
   return pieces.length

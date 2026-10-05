@@ -576,7 +576,10 @@ item's decision and target, and the window; `snapshots/{n}` holds every
 replaced or merged item's previous content and `writtenPaths/{n}` every path
 written per item, as JSON pieces of at most 900,000 characters. Admin SDK
 only: the rules name `packageImports` in the host catch-all's read and write
-exclusions.
+exclusions. Every document of it — the record and each piece, since TTL does
+not cascade — carries an `expiresAt` the undo window and a day after it was
+written (`packageLedgerExpiry`, AGL-3543), and TTL policies on
+`packageImports`, `snapshots` and `writtenPaths` delete it.
 
 A package is a site's items rather than rows of a file, and its writes are the
 restore's: the allow-lists, the atomic screens leg (AGL-2370), the plugin
