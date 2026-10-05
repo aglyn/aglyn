@@ -30,6 +30,7 @@ jest.mock('./first-party-plugins.generated', () => {
   }
 })
 
+import { transferPlanFeature } from '../data-transfer/access'
 import { transferResourceProblems } from '../data-transfer/resource'
 import type { PlannedTransferRow } from '../data-transfer/plan'
 import { createTransferPolicy } from '../data-transfer/policy'
@@ -58,8 +59,11 @@ import {
   transferResourceCatalog,
   transferResourceMatchKeys,
   TransferResourceUnavailableError,
+  transferPlanRefusal,
+  transferPlanRequired,
   transferWizardSteps,
   type PluginTransferResource,
+  type TransferPlanSubject,
   type TransferResourceContext,
 } from './plugin-transfer-resources'
 
@@ -342,6 +346,97 @@ describe('a resource moved one instance at a time', () => {
   it('finds the client half under the declared key', () => {
     registerPluginTransferResourceUi('casks', { label: 'Cask contents' }, { pluginId: 'cellar' })
     expect(pluginTransferResourceUi('casks:c-42')).toMatchObject({ label: 'Cask contents', pluginId: 'cellar' })
+  })
+})
+
+/*
+ * A RESOURCE ON A PLAN (AGL-3555): the declaration decides which intents
+ * ask for its `featureFlag`; the route asks after the member, with the
+ * plugin's own refusal when it registers a `planGate`, else the core's.
+ */
+describe('a resource moved only on a plan that carries it', () => {
+  const VINTAGES: ResolvedTransferResourceDeclaration = {
+    pluginId: 'cellar',
+    key: 'vintages',
+    label: 'Vintages',
+    scope: 'org',
+    kinds: ['records'],
+    formats: ['csv'],
+    featureFlag: 'crm',
+  }
+  const LABELS: ResolvedTransferResourceDeclaration = { ...VINTAGES, key: 'labels', label: 'Labels', featureFlagExempt: ['export'] }
+  const FREE = { plan: 'free' }
+  const STARTER = { plan: 'starter' }
+  const subject = (resource: string, org: Record<string, unknown>): TransferPlanSubject => ({ resource, orgId: 'o1', hostId: null, org })
+
+  beforeEach(() => {
+    mockDeclared = [BOTTLES, VINTAGES, LABELS]
+  })
+
+  it('names the feature an intent needs, but an exempt one', () => {
+    expect(transferPlanFeature('import', VINTAGES)).toBe('crm')
+    expect(transferPlanFeature('export', VINTAGES)).toBe('crm')
+    expect(transferPlanFeature('import', LABELS)).toBe('crm')
+    expect(transferPlanFeature('export', LABELS)).toBeNull()
+    expect(transferPlanFeature('import', BOTTLES)).toBeNull()
+  })
+
+  it('checks the declaration: a feature named, an exemption only of one, of import or export', () => {
+    expect(transferResourceProblems({ ...VINTAGES, featureFlag: ' ' })).toEqual(['vintages names an empty plan feature.'])
+    expect(transferResourceProblems({ ...BOTTLES, featureFlagExempt: ['export'] })).toEqual([
+      'bottles exempts intents from a plan feature it does not name.',
+    ])
+    expect(transferResourceProblems({ ...VINTAGES, featureFlagExempt: ['delete' as never] })).toEqual([
+      'vintages exempts something other than import or export from its plan feature.',
+    ])
+  })
+
+  it('refuses a plan gate on a resource that names no feature, which nothing would ask', () => {
+    expect(() => registerPluginTransferResource('bottles', { ...RECORDS, planGate: () => null }, { pluginId: 'cellar' })).toThrow(
+      /registers a "planGate" and declares no "featureFlag"/,
+    )
+  })
+
+  it('answers the core’s refusal without a plan gate: 403, plan_required, the feature as code', async () => {
+    registerPluginTransferResource('vintages', RECORDS, { pluginId: 'cellar' })
+    expect(await transferPlanRefusal(subject('vintages', FREE), 'export')).toEqual({
+      status: 403,
+      body: {
+        error: 'Exporting vintages is not included in your current plan. Manage your plan and add-ons from Billing. Included from Starter.',
+        reason: 'plan_required',
+        code: 'crm',
+      },
+    })
+    expect(await transferPlanRefusal(subject('vintages', STARTER), 'import')).toBeNull()
+    expect(transferPlanRequired('crm', 'CRM records', 'import').body.error).toMatch(/^Importing CRM records is not included/)
+  })
+
+  it('answers the plugin’s own refusal when it registers one, and only for an intent that asks', async () => {
+    const asked: string[] = []
+    const refusal = { status: 403 as const, body: { error: 'Labels are the cellar’s.', reason: 'plan_required' as const, code: 'crm' } }
+    registerPluginTransferResource(
+      'labels',
+      {
+        ...RECORDS,
+        planGate: async (_subject, intent) => {
+          asked.push(intent)
+          return refusal
+        },
+      },
+      { pluginId: 'cellar' },
+    )
+    expect(await transferPlanRefusal(subject('labels', FREE), 'import')).toBe(refusal)
+    expect(await transferPlanRefusal(subject('labels', FREE), 'export')).toBeNull()
+    expect(asked).toEqual(['import'])
+  })
+
+  it('asks nothing of a resource with no feature, or a key nobody declared', async () => {
+    expect(await transferPlanRefusal(subject('bottles', FREE), 'import')).toBeNull()
+    expect(await transferPlanRefusal(subject('nobody', FREE), 'import')).toBeNull()
+  })
+
+  it('still asks the plan when the server half cannot be reached', async () => {
+    expect(await transferPlanRefusal(subject('vintages', FREE), 'import')).toMatchObject({ status: 403, body: { code: 'crm' } })
   })
 })
 

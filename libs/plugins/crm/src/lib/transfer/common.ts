@@ -29,15 +29,17 @@
  *
  * ## Refusals are the routes' refusals
  *
- * The transfer routes check `data.manage`; what is particular to the CRM —
- * its suite on the plan, a site to file new records under — is checked here
- * and thrown as the engine's own `TransferEngineError`, so the wizard shows
- * the sentence a CRM route would have answered.
+ * The transfer routes check `data.manage`, and the CRM's suite on the plan
+ * through each resource's `planGate` (AGL-3555). What is particular to the
+ * CRM — the suite again where a hook reads or writes, a site to file new
+ * records under — is checked here and thrown as the engine's own errors
+ * (`TransferPlanRefusedError` carrying `suite-gate.ts`'s answer, else
+ * `TransferEngineError`), so the wizard shows the sentence a CRM route
+ * would have answered.
  *=========================================*/
 
 import {
   checkCrmRecordsQuota,
-  checkEntitlement,
   consentGroupForHost,
   type ConsentGroup,
   type ContactCustomValue,
@@ -53,7 +55,6 @@ import {
   newResourceScopeFields,
   normalizeCrmPicklist,
   ORG_SCOPE_TOKEN,
-  planLabelGrantingFeature,
   readCrmCustomInput,
   visibleToTokens,
 } from '@aglyn/aglyn/server'
@@ -88,7 +89,7 @@ import type {
 } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
 import { crmRecordsQuotaForOrg, firebaseAdmin, listOrgMembers } from '@aglyn/tenant-data-admin'
 import { applyListQuery } from '@aglyn/tenant-data-admin/server/list-query'
-import { TransferEngineError } from '@aglyn/tenant-data-admin/server/transfer-jobs'
+import { TransferEngineError, TransferPlanRefusedError } from '@aglyn/tenant-data-admin/server/transfer-jobs'
 import { FieldPath, FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { crmSuiteRefusal } from '../server/suite-gate'
 import {
@@ -148,10 +149,15 @@ export async function crmTransferEnv(ctx: TransferResourceContext): Promise<CrmT
   }
 }
 
-/** Refuses an act the organization's plan does not include — the CRM routes' own sentence. */
+/**
+ * Refuses an act the organization's plan does not include, in the CRM
+ * routes' own answer (`suite-gate.ts`). The transfer gate already asked
+ * (AGL-3555, each resource's `planGate`); a hook asks again where it reads
+ * or writes, so a caller that reaches it without the gate is refused alike.
+ */
 export function requireCrmSuite(env: CrmTransferEnv, act: string): void {
   const refusal = crmSuiteRefusal(env.org, act)
-  if (refusal) throw new TransferEngineError('forbidden', 403, refusal.body.error, { reason: refusal.body.reason })
+  if (refusal) throw new TransferPlanRefusedError(refusal)
 }
 
 /**
@@ -159,15 +165,7 @@ export function requireCrmSuite(env: CrmTransferEnv, act: string): void {
  * without the CRM: the export route's rule since AGL-2839.
  */
 export function requireCrmRecords(env: CrmTransferEnv, what: string): void {
-  if (checkEntitlement(env.org as never, 'crm')) return
-  const plan = planLabelGrantingFeature('crm')
-  throw new TransferEngineError(
-    'forbidden',
-    403,
-    `Exporting ${what} is part of the CRM, which is not included in your current plan.` +
-      (plan ? ` Included from ${plan}.` : ''),
-    { reason: 'plan_required' },
-  )
+  requireCrmSuite(env, `Exporting ${what}`)
 }
 
 /**

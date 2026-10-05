@@ -29,7 +29,7 @@ import {
 import { registerPluginPersonRecordsEraser } from '@aglyn/aglyn/plugin-manager/plugin-person-erasure'
 import { registerPluginTransferResource } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
 import { BUNDLE_ID } from './constants/bundle-common'
-import { registerCrmTransferResources } from './transfer/register'
+import { crmTransferPlanGate, registerCrmTransferResources } from './transfer/register'
 import {
   CRM_EMAIL_TEMPLATE_PACKAGE_RULES,
   CRM_EMAIL_TEMPLATES_TRANSFER_KEY,
@@ -116,6 +116,7 @@ export function registerCrmConsoleServerDeclarations(): void {
       revertItems: async (ctx, steps) => (await templatesPackage()).revertItems(ctx, steps as never),
       problems: async (ctx, write) => (await templatesPackage()).problems(ctx, write as never),
       rules: CRM_EMAIL_TEMPLATE_PACKAGE_RULES,
+      planGate: crmTransferPlanGate('email templates'),
     },
     { pluginId: BUNDLE_ID },
   )

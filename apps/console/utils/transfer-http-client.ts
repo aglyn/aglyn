@@ -49,6 +49,7 @@ import {
   TRANSFER_UNDO_PAGE_MAX,
   TRANSFER_UPLOAD_PART_MAX_BYTES,
   countTransferExportRows,
+  isTransferPlanRequired,
   summarizeTransferResults,
   transferContentType,
   type TransferAnalyzeResponse,
@@ -159,6 +160,10 @@ export function createHttpTransferClient(options: HttpTransferClientOptions): Tr
   async function refusalOf(response: Response, payload?: unknown): Promise<TransferRequestError> {
     const body = (payload === undefined ? await response.json().catch(() => null) : payload) as TransferErrorResponse | null
     const refusal = body && typeof body === 'object' && 'code' in body ? body : null
+    // A refusal for the plan is the owning plugin's body; its `code` names the feature.
+    if (isTransferPlanRequired(refusal)) {
+      return new TransferRequestError(refusal.error, 'planRequired', response.status, refusal)
+    }
     return new TransferRequestError(
       refusal?.error || 'The request failed. Try again.',
       refusal?.code ?? 'failed',

@@ -29,12 +29,23 @@
  *    resources' items, and every reference between them is moved together.
  *  - A site's own package — its pages, emails, forms and theme — is its
  *    Backup & restore, linked per site.
+ *
+ * Each button is offered only when the route would take it: records ask the
+ * launcher's `can`, which answers the person's access and the workspace's
+ * plan; packages ask the plan. A resource whose plan carries none of it
+ * (the CRM's on Free, AGL-3555) says so instead, naming the plan that does.
  */
 
-import { transferResourceImports, transferResourceInstanceKey } from '@aglyn/aglyn/data-transfer'
+import {
+  transferPlanFeature,
+  transferResourceImports,
+  transferResourceInstanceKey,
+  type TransferAccessIntent,
+} from '@aglyn/aglyn/data-transfer'
 import { listTransferResourcesFor, pluginTransferResourceUi, TRANSFER_RESOURCES_LOAD_POINT, type ResolvedTransferResourceDeclaration } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
 import { pluginRecordListQuery, pluginRecordsFromRows } from '@aglyn/aglyn/plugin-manager/plugin-record-lists'
 import { useTransferLauncher, type TransferLauncher } from '@aglyn/aglyn/app-utils/transfer-launcher-context'
+import { planLabelGrantingFeature } from '@aglyn/aglyn'
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
@@ -48,6 +59,7 @@ import { useConsoleSlotPlugins } from '../../hooks/use-console-plugins'
 import useCurrentOrg from '../../hooks/use-current-org'
 import { useOrgHosts } from '../../hooks/use-org-hosts'
 import { useOrgSlug } from '../../hooks/use-org-scope'
+import { resolveExtensionEntitlement } from '../../utils/extension-entitlement'
 import { createTransferHubClient } from '../../utils/transfer-hub-client'
 import { HubDialog } from '../transfer-hub/hub-dialog.component'
 import OrgPackageExport from '../transfer-hub/org-package-export.component'
@@ -178,36 +190,58 @@ export function OrgDataTransferCard(props: { onImported?(): void }) {
     [org, ready, site],
   )
 
+  /** Whether the workspace's plan lets it `intent` the resource; `false` until the plan has answered. */
+  const planAllows = (resource: ResolvedTransferResourceDeclaration, intent: TransferAccessIntent) => {
+    const feature = transferPlanFeature(intent, resource)
+    return !feature || resolveExtensionEntitlement(feature as never, org, ready) === 'entitled'
+  }
+
   const actions = (resource: ResolvedTransferResourceDeclaration, siteId: string | null) => {
     // One instance at a time: its instances are listed under it instead.
     if (resource.instances) return null
     const scope = resource.scope
     const base = { resource: resource.key, scope, ...(siteId ? { hostId: siteId } : {}) }
+    const records = resource.kinds.includes('records') && launcher
+    const packages = resource.kinds.includes('package') && client
+    const offers = {
+      // A resource only exported (a log, a setup) takes no file (AGL-3528).
+      recordsImport: Boolean(records && transferResourceImports(resource) && launcher.can('import', base)),
+      recordsExport: Boolean(records && launcher.can('export', base)),
+      packageImport: Boolean(packages && planAllows(resource, 'import')),
+      packageExport: Boolean(packages && planAllows(resource, 'export')),
+    }
+    // The plan carries none of it: say so, and which plan does.
+    const feature = transferPlanFeature('import', resource) ?? transferPlanFeature('export', resource)
+    if (ready && feature && !planAllows(resource, 'import') && !planAllows(resource, 'export')) {
+      const plan = planLabelGrantingFeature(feature as never)
+      return (
+        <Typography variant="caption" color="text.secondary">
+          {'Not included in your current plan.' + (plan ? ` Included from ${plan}.` : '')}
+        </Typography>
+      )
+    }
     return (
       <Stack direction="row" spacing={1}>
-        {resource.kinds.includes('records') && launcher && (
-          <>
-            {/* A resource only exported (a log, a setup) takes no file (AGL-3528). */}
-            {transferResourceImports(resource) ? (
-              <Button size="small" onClick={() => launcher.openImport(base)}>
-                {'Import'}
-              </Button>
-            ) : null}
-            <Button size="small" onClick={() => launcher.openExport(base)}>
-              {'Export'}
-            </Button>
-          </>
-        )}
-        {resource.kinds.includes('package') && client && (
-          <>
-            <Button size="small" onClick={() => setOpen({ kind: 'packageImport' })}>
-              {'Import'}
-            </Button>
-            <Button size="small" onClick={() => setOpen({ kind: 'packageExport', resources: [resource.key] })}>
-              {'Export'}
-            </Button>
-          </>
-        )}
+        {offers.recordsImport && launcher ? (
+          <Button size="small" onClick={() => launcher.openImport(base)}>
+            {'Import'}
+          </Button>
+        ) : null}
+        {offers.recordsExport && launcher ? (
+          <Button size="small" onClick={() => launcher.openExport(base)}>
+            {'Export'}
+          </Button>
+        ) : null}
+        {offers.packageImport ? (
+          <Button size="small" onClick={() => setOpen({ kind: 'packageImport' })}>
+            {'Import'}
+          </Button>
+        ) : null}
+        {offers.packageExport ? (
+          <Button size="small" onClick={() => setOpen({ kind: 'packageExport', resources: [resource.key] })}>
+            {'Export'}
+          </Button>
+        ) : null}
       </Stack>
     )
   }

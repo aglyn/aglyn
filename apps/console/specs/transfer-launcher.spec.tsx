@@ -26,7 +26,8 @@
  * launch asked for, with the resource, site, selection and filter it named.
  * The launcher's `can` (AGL-3546) answers by the transfer gate's own rule,
  * so a plugin offers Import only to a member who may import and Export to
- * any member who may read.
+ * any member who may read — and only on a plan that carries the resource's
+ * `featureFlag` (AGL-3555: the CRM's on Free, but its people files' export).
  */
 
 import { useTransferLauncher, type TransferAccessTarget, type TransferLauncher } from '@aglyn/aglyn'
@@ -68,6 +69,14 @@ jest.mock('../hooks/use-org-permissions', () => ({
     permissions: {},
     can: (permission: string) => mockGranted.has(permission),
   }),
+}))
+
+/** The workspace document the shell judges the plan from. */
+let mockBilling: { org: Record<string, unknown> | undefined; ready: boolean } = { org: { plan: 'starter' }, ready: true }
+
+jest.mock('../hooks/use-current-org', () => ({
+  __esModule: true,
+  default: () => ({ org: mockBilling.org, orgId: 'org-1', ready: mockBilling.ready, entitlementsFromCache: false }),
 }))
 
 jest.mock('../utils/firestore-one-shot-retry', () => ({
@@ -135,6 +144,7 @@ beforeEach(() => {
   mockGranted = new Set(['data.manage'])
   mockPermissionsLoaded = true
   mockMemberDoc = null
+  mockBilling = { org: { plan: 'starter' }, ready: true }
   launcher = null
   access = null
   accessTarget = { resource: 'data.dataset:ds-1', scope: 'org' }
@@ -263,6 +273,56 @@ describe('the transfer launcher', () => {
       </TransferLauncherProvider>,
     )
     expect(access).toEqual({ import: false, export: false })
+  })
+
+  it('offers no CRM button on Free but the people files’ export, every one on Starter (AGL-3555)', () => {
+    const answers = () => {
+      const out: Record<string, { import: boolean; export: boolean }> = {}
+      for (const resource of ['crm.contacts', 'crm.leads', 'crm.companies', 'crm.deals', 'crm.tasks', 'crm.activities', 'crm.pipelines', 'crm.fields', 'data.dataset:ds-1']) {
+        const target = { resource, scope: 'org' as const }
+        out[resource] = { import: Boolean(launcher?.can('import', target)), export: Boolean(launcher?.can('export', target)) }
+      }
+      return out
+    }
+    mockBilling = { org: { plan: 'free' }, ready: true }
+    const view = render(
+      <TransferLauncherProvider>
+        <PluginList />
+      </TransferLauncherProvider>,
+    )
+    expect(answers()).toEqual({
+      'crm.contacts': { import: false, export: true },
+      'crm.leads': { import: false, export: true },
+      'crm.companies': { import: false, export: false },
+      'crm.deals': { import: false, export: false },
+      'crm.tasks': { import: false, export: false },
+      'crm.activities': { import: false, export: false },
+      'crm.pipelines': { import: false, export: false },
+      'crm.fields': { import: false, export: false },
+      'data.dataset:ds-1': { import: true, export: true },
+    })
+
+    mockBilling = { org: { plan: 'starter' }, ready: true }
+    view.rerender(
+      <TransferLauncherProvider>
+        <PluginList />
+      </TransferLauncherProvider>,
+    )
+    for (const [resource, answer] of Object.entries(answers())) {
+      expect([resource, answer.export]).toEqual([resource, true])
+    }
+    expect(answers()['crm.companies']).toEqual({ import: true, export: true })
+
+    // Until the workspace document answers, a plan-gated button is held back.
+    mockBilling = { org: undefined, ready: false }
+    view.rerender(
+      <TransferLauncherProvider>
+        <PluginList />
+      </TransferLauncherProvider>,
+    )
+    expect(answers()['crm.companies']).toEqual({ import: false, export: false })
+    expect(answers()['crm.contacts']).toEqual({ import: false, export: true })
+    expect(answers()['data.dataset:ds-1']).toEqual({ import: true, export: true })
   })
 
   it('keeps one launcher while the answers stand, so a list is not re-rendered for nothing', () => {

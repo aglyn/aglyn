@@ -34,6 +34,13 @@ Some records belong to the whole workspace and others to one site. To work
 with a site's records, pick the site first. The site's own plugins decide
 what is listed for it.
 
+Some data also depends on your plan. The CRM is included from Starter, so on
+Free its companies, deals, tasks, activities, pipelines, custom fields and
+email templates are listed with the plan that includes them instead of
+Import and Export, and contacts and leads can't be imported. Exporting your
+contacts and leads works on every plan, here and in
+**Settings → Privacy**.
+
 ## Export records
 
 1. Click **Export** beside the records.

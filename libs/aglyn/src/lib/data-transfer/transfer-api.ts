@@ -43,10 +43,13 @@
  *   jobs    → the workspace's imports, newest first, for the hub's history
  *
  * Every refusal is a {@link TransferErrorResponse} with an HTTP status and a
- * {@link TransferErrorCode} a client can branch on. The job itself is also
- * readable from Firestore at `orgs/{orgId}/transferJobs/{jobId}` (as a
- * {@link TransferJobRecord}) by the members the routes admit, so a progress
- * panel can listen instead of polling.
+ * {@link TransferErrorCode} a client can branch on — except a refusal for
+ * the workspace's plan, which is the plugin routes' own
+ * {@link TransferPlanRequiredResponse} and reads as `planRequired`. The job
+ * itself is also readable from Firestore at
+ * `orgs/{orgId}/transferJobs/{jobId}` (as a {@link TransferJobRecord}) by the
+ * members the routes admit, so a progress panel can listen instead of
+ * polling.
  *
  * These are types and constants only, and the one definition of every
  * shape that crosses the wire: the engine is the console's
@@ -1010,6 +1013,12 @@ export type TransferErrorCode =
   | 'rateLimited'
   | 'unavailable'
   | 'failed'
+  /**
+   * The workspace's plan does not carry the resource's feature. Never on
+   * the wire: the route answers a {@link TransferPlanRequiredResponse}, and
+   * a client reads it as this code.
+   */
+  | 'planRequired'
 
 /** Every refusal's body. */
 export interface TransferErrorResponse {
@@ -1017,4 +1026,21 @@ export interface TransferErrorResponse {
   code: TransferErrorCode
   /** What the client needs to fix it: the missing acknowledgements, the mapping problems, the open picklist values. */
   details?: unknown
+}
+
+/** The `reason` of a refusal for the workspace's plan — the REST API's `error.type`. */
+export const TRANSFER_PLAN_REQUIRED = 'plan_required'
+
+/**
+ * The body of a refusal for the workspace's plan (AGL-3555), answered with
+ * 403: the flat shape every plan-gated console route answers (the CRM's
+ * `suite-gate.ts`), so a transfer route refuses a plan exactly as the
+ * owning plugin's own routes do. `code` is the plan feature
+ * (`TransferResourceDescriptor.featureFlag`, the REST `error.code`);
+ * `error` the sentence a client relays unchanged.
+ */
+export interface TransferPlanRequiredResponse {
+  error: string
+  reason: typeof TRANSFER_PLAN_REQUIRED
+  code: string
 }

@@ -25,6 +25,7 @@
  *=========================================*/
 
 import {
+  isTransferPlanRequired,
   TRANSFER_API_ROUTES,
   type PackageItemDecision,
   type TransferErrorResponse,
@@ -74,6 +75,10 @@ export interface TransferHubClient {
 async function answered<T>(response: Response): Promise<T> {
   const payload = (await response.json().catch(() => ({}))) as Partial<TransferErrorResponse> & T
   if (!response.ok) {
+    // A refusal for the plan is the owning plugin's body; its `code` names the feature.
+    if (isTransferPlanRequired(payload)) {
+      throw new TransferRequestError(payload.error, 'planRequired', response.status, payload)
+    }
     throw new TransferRequestError(
       typeof payload.error === 'string' ? payload.error : 'The request failed. Try again.',
       payload.code ?? 'failed',

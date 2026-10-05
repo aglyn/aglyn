@@ -368,7 +368,12 @@ describe('who and where', () => {
     const free = await uploaded(SALESFORCE_FILE)
     await analyzeTransferJob(deps, { orgId: ORG, jobId: free.id, actorUid: ME })
     const refused = await refusal(planTransferJob(deps, { orgId: ORG, jobId: free.id, actorUid: ME, choices }))
-    expect(refused.code).toBe('forbidden')
+    // The CRM routes' own answer (`suite-gate.ts`), as the transfer gate gives it (AGL-3555) —
+    // here from the company lookup, the first part of the import that reaches the CRM.
+    expect(refused.code).toBe('planRequired')
+    expect(refused.status).toBe(403)
+    expect(refused.details).toMatchObject({ reason: 'plan_required', code: 'crm' })
+    expect(refused.message).toMatch(/is part of the CRM, which is not included in your current plan\./)
   })
 })
 

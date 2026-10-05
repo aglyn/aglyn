@@ -32,6 +32,7 @@ import {
 import {
   parseTransferResourceKey,
   transferAccessAllowed,
+  transferPlanFeature,
   type TransferMemberAxis,
 } from '@aglyn/aglyn/data-transfer'
 import { PLUGIN_TRANSFER_RESOURCES_DECLARED } from '@aglyn/aglyn/plugin-manager/first-party-plugins.generated'
@@ -40,8 +41,10 @@ import { resolveIdToken } from '@aglyn/shared-util-http/authorized-token'
 import { doc, getDoc } from 'firebase/firestore'
 import dynamic from 'next/dynamic'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import useCurrentOrg from '../hooks/use-current-org'
 import useOrgPermissions from '../hooks/use-org-permissions'
 import { useUrlNamedOrg } from '../hooks/use-url-names-org'
+import { resolveExtensionEntitlement } from '../utils/extension-entitlement'
 import firestoreOneShotRetry from '../utils/firestore-one-shot-retry'
 
 /** What the launcher has open. */
@@ -60,6 +63,13 @@ const TransferLauncherSurface = dynamic(
   { ssr: false },
 )
 
+/** Every plan feature a declared resource is moved under, sorted. */
+const PLAN_FEATURES: readonly string[] = [
+  ...new Set(
+    PLUGIN_TRANSFER_RESOURCES_DECLARED.map((one) => one.featureFlag).filter((feature): feature is string => Boolean(feature)),
+  ),
+].sort()
+
 /** What the person's permissions are, as {@link transferAccessVerdict} reads them. */
 export interface TransferAccessInputs {
   /** Whether the workspace permissions have answered for this person. */
@@ -70,14 +80,21 @@ export interface TransferAccessInputs {
   orgWide: boolean
   /** A collaborator's member document; `undefined` while it is read, `null` when it could not be. */
   member: Partial<AglynOrgMember> | null | undefined
+  /**
+   * Whether the workspace's plan carries a feature — the verdict the shell
+   * locks a plugin's surfaces with (`resolveExtensionEntitlement`), `false`
+   * until the workspace document has answered.
+   */
+  entitled(feature: string): boolean
 }
 
 /**
  * Whether the person may `action` the target's records — the transfer
  * gate's own rule (`data-transfer/access.ts`, AGL-3546), on the axis the
  * gate decides it: the workspace, or the named site, where a collaborator is
- * decided by what they hold there. `false` until every read the answer needs
- * is in.
+ * decided by what they hold there — on a workspace whose plan carries the
+ * resource's `featureFlag` for that action (AGL-3555). `false` until every
+ * read the answer needs is in.
  */
 export function transferAccessVerdict(
   inputs: TransferAccessInputs,
@@ -87,6 +104,10 @@ export function transferAccessVerdict(
   if (!inputs.permissionsLoaded) return false
   const resourceKey = parseTransferResourceKey(target.resource).key
   const declared = PLUGIN_TRANSFER_RESOURCES_DECLARED.find((one) => one.key === resourceKey) ?? null
+  // The workspace's plan first (AGL-3555): no button the route would refuse
+  // for the plan, whatever the person holds.
+  const feature = transferPlanFeature(action, declared)
+  if (feature && !inputs.entitled(feature)) return false
   const hostId = target.hostId?.trim() || null
   let axis: TransferMemberAxis
   if (inputs.orgWide || !hostId) {
@@ -146,6 +167,13 @@ export function TransferLauncherProvider({ children }: { children?: JSX.Children
   // Who may import and export what (AGL-3546): read from the permissions
   // the shell already holds, so `can` costs a button nothing.
   const permissions = useOrgPermissions()
+  // The plan, from the one document the shell judges entitlements from — as
+  // the features it carries, so the launcher moves only when one does.
+  const billing = useCurrentOrg()
+  const planReady = billing.ready && Boolean(orgId) && billing.orgId === orgId
+  const entitledFeatures = planReady
+    ? PLAN_FEATURES.filter((feature) => resolveExtensionEntitlement(feature as never, billing.org, true) === 'entitled').join(',')
+    : null
   const orgWide = isOrgWideMembership(org)
   const member = useCollaboratorMember(orgId, user?.uid, Boolean(org) && !orgWide)
   const permissionsLoaded = Boolean(orgId) && permissions.loaded && permissions.orgId === orgId
@@ -160,7 +188,14 @@ export function TransferLauncherProvider({ children }: { children?: JSX.Children
 
   const launcher = useMemo<TransferLauncher>(() => {
     const held = new Set(granted ? granted.split(',') : [])
-    const inputs: TransferAccessInputs = { permissionsLoaded, can: (key) => held.has(key), orgWide, member }
+    const entitled = new Set(entitledFeatures ? entitledFeatures.split(',') : [])
+    const inputs: TransferAccessInputs = {
+      permissionsLoaded,
+      can: (key) => held.has(key),
+      orgWide,
+      member,
+      entitled: (feature) => entitled.has(feature),
+    }
     // One verdict per action and target for as long as the answers stand.
     const answers = new Map<string, boolean>()
     return {
@@ -177,7 +212,7 @@ export function TransferLauncherProvider({ children }: { children?: JSX.Children
         return answer
       },
     }
-  }, [permissionsLoaded, granted, orgWide, member])
+  }, [permissionsLoaded, granted, orgWide, member, entitledFeatures])
 
   return (
     <TransferLauncherContext.Provider value={launcher}>

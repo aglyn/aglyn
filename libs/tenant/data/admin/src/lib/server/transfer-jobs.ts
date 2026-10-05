@@ -116,6 +116,7 @@ import {
   transferMatchReview,
   transferMatchedRecordIds,
   transferPlanConflicts,
+  transferPlanFeature,
   transferPlanSample,
   transferPolicyProblems,
   transferRowLabel,
@@ -191,8 +192,10 @@ import {
   transferResourceLockedRules,
   transferResourceMatchKeys,
   TransferResourceUnavailableError,
+  transferPlanRefusal,
   type ResolvedTransferResource,
   type TransferApplyWriter,
+  type TransferPlanRefusal,
   type TransferLookupTargetHooks,
   type TransferPicklistList,
   type TransferRecordsHooks,
@@ -237,6 +240,20 @@ export class TransferEngineError extends Error {
   ) {
     super(message)
     this.name = 'TransferEngineError'
+  }
+}
+
+/**
+ * A refusal for the workspace's plan (AGL-3555): a route answers its
+ * `refusal` as it stands — the owning plugin's flat 403 body, with
+ * `reason: 'plan_required'` and the plan feature as `code` — rather than
+ * as `{ error, code, details }`. Its own `code` is `planRequired`, what a
+ * client reads that body as.
+ */
+export class TransferPlanRefusedError extends TransferEngineError {
+  constructor(readonly refusal: TransferPlanRefusal) {
+    super('planRequired', refusal.status, refusal.body.error, refusal.body)
+    this.name = 'TransferPlanRefusedError'
   }
 }
 
@@ -964,6 +981,17 @@ async function lookupTargetFor(
   if (own) return { hooks: own, ctx }
   const target = await resolveResource(deps, key)
   const targetCtx = { ...ctx, resource: target.key }
+  // Linking rows to another resource's records is part of the import, so
+  // it asks that resource's plan as an import does (AGL-3555): a workspace
+  // without the feature cannot reach those records through a lookup either.
+  if (transferPlanFeature('import', target)) {
+    const org = await deps.firestore.collection('orgs').doc(ctx.orgId).get()
+    const refusal = await transferPlanRefusal(
+      { resource: target.key, orgId: ctx.orgId, hostId: ctx.hostId, org: (org.data() ?? {}) as Record<string, unknown> },
+      'import',
+    )
+    if (refusal) throw new TransferPlanRefusedError(refusal)
+  }
   // The target's keys as they stand for it — read for the context when
   // they depend on it (one dataset's own fields).
   const { keys } = await transferResourceMatchKeys(target, targetCtx)

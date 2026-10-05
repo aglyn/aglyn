@@ -249,7 +249,9 @@ describe('the export', () => {
     mockMemory.seed(`orgs/${ORG}`, { plan: 'free' })
     const hooks = transferRecordsHooks(await resolveTransferResource('crm.companies'))
     await expect(hooks.readPage({ resource: 'crm.companies', orgId: ORG, hostId: SITE, actorUid: ME }, null, ['name'], {})).rejects.toMatchObject({
-      code: 'forbidden',
+      code: 'planRequired',
+      status: 403,
+      details: { reason: 'plan_required', code: 'crm' },
     })
   })
 })

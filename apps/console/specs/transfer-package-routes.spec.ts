@@ -63,6 +63,8 @@ jest.mock('@aglyn/aglyn/plugin-manager/plugin-transfer-resources', () => ({
       { pluginId: 'crm', key: 'crm.email-templates', label: 'Email templates', scope: 'org', kinds: ['package'], formats: ['json'] },
     ].filter((one) => subject.org.enabledPlugins?.includes(one.pluginId)),
   listDeclaredTransferResources: () => [{ pluginId: 'crm', key: 'crm.contacts', label: 'Contacts' }],
+  // The real plan question, over the real declarations (AGL-3555).
+  transferPlanRefusal: jest.requireActual('@aglyn/aglyn/plugin-manager/plugin-transfer-resources').transferPlanRefusal,
 }))
 
 const hostDoc = (hostId: string) => ({
@@ -161,7 +163,7 @@ const JOB = { id: 'job-1', resource: 'package', kind: 'package', fileName: 'p.js
 const PLAN = { items: [], references: [], unknownKinds: [], summary: { create: 1 }, blocking: [], acknowledgementsRequired: [] }
 
 beforeEach(() => {
-  mockOrg = { $id: 'org-1', name: 'Acme', enabledPlugins: ['outreach', 'crm'] }
+  mockOrg = { $id: 'org-1', name: 'Acme', plan: 'starter', enabledPlugins: ['outreach', 'crm'] }
   mockIntents.length = 0
   mockSiteImports = []
   mockVerifyIdToken.mockReset().mockResolvedValue({ uid: 'uid-1', email: 'a@b.test', email_verified: true })
@@ -172,12 +174,22 @@ beforeEach(() => {
 
 describe('the package route', () => {
   it('offers only the package resources of plugins the workspace runs, and lists under a read intent', async () => {
-    mockOrg = { $id: 'org-1', enabledPlugins: ['crm'] }
+    mockOrg = { $id: 'org-1', plan: 'starter', enabledPlugins: ['crm'] }
     mockPackages.listTransferPackageItems.mockResolvedValue([])
     const answer = await packageRoute(request('package', { orgId: 'org-1', action: 'list' }))
     expect(answer.status).toBe(200)
     expect(mockPackages.listTransferPackageItems.mock.calls[0][1]).toMatchObject({ allowed: ['crm.email-templates'] })
     expect(mockIntents).toEqual(['read'])
+  })
+
+  it('leaves the CRM’s email templates out of a Free workspace’s packages, both ways (AGL-3555)', async () => {
+    mockOrg = { $id: 'org-1', plan: 'free', enabledPlugins: ['outreach', 'crm'] }
+    mockPackages.listTransferPackageItems.mockResolvedValue([])
+    mockPackages.planTransferPackageImport.mockResolvedValue({ job: JOB, plan: PLAN, resources: {}, created: true })
+    await packageRoute(request('package', { orgId: 'org-1', action: 'list' }))
+    await packageRoute(request('package', { orgId: 'org-1', action: 'plan', package: { manifest: {} }, fileName: 'p.json' }))
+    expect(mockPackages.listTransferPackageItems.mock.calls[0][1]).toMatchObject({ allowed: ['outreach.sequences'] })
+    expect(mockPackages.planTransferPackageImport.mock.calls[0][1]).toMatchObject({ allowed: ['outreach.sequences'] })
   })
 
   it('exports under a read intent and audits counts, never content', async () => {

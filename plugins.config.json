@@ -1076,8 +1076,10 @@
       ],
       "transferResources": [
         {
-          "$comment": "AGL-3527. Workspace records; opened under a site, a transfer reads that site's view and an import files new people under it.",
+          "$comment": "AGL-3527. Workspace records; opened under a site, a transfer reads that site's view and an import files new people under it. AGL-3555: like every CRM resource it moves only on a plan with the CRM (featureFlag), except that the contacts and leads EXPORTS stay on every plan, the people files of Settings → Privacy.",
           "key": "crm.contacts",
+          "featureFlag": "crm",
+          "featureFlagExempt": ["export"],
           "label": "Contacts",
           "singularLabel": "Contact",
           "scope": "org",
@@ -1088,6 +1090,7 @@
         },
         {
           "key": "crm.companies",
+          "featureFlag": "crm",
           "label": "Companies",
           "singularLabel": "Company",
           "scope": "org",
@@ -1098,6 +1101,7 @@
         },
         {
           "key": "crm.email-templates",
+          "featureFlag": "crm",
           "label": "Email templates",
           "singularLabel": "Email template",
           "scope": "org",
@@ -1114,6 +1118,8 @@
         },
         {
           "key": "crm.leads",
+          "featureFlag": "crm",
+          "featureFlagExempt": ["export"],
           "label": "Leads",
           "singularLabel": "Lead",
           "scope": "org",
@@ -1125,6 +1131,7 @@
         {
           "$comment": "AGL-3528. Matched by Aglyn ID or the external id another CRM gave the deal, so a file imported twice updates rather than duplicates.",
           "key": "crm.deals",
+          "featureFlag": "crm",
           "label": "Deals",
           "singularLabel": "Deal",
           "scope": "org",
@@ -1135,6 +1142,7 @@
         },
         {
           "key": "crm.tasks",
+          "featureFlag": "crm",
           "label": "Tasks",
           "singularLabel": "Task",
           "scope": "org",
@@ -1145,6 +1153,7 @@
         },
         {
           "key": "crm.activities",
+          "featureFlag": "crm",
           "label": "Activities",
           "singularLabel": "Activity",
           "scope": "org",
@@ -1155,6 +1164,7 @@
         },
         {
           "key": "crm.pipelines",
+          "featureFlag": "crm",
           "label": "Pipelines and stages",
           "singularLabel": "Stage",
           "scope": "org",
@@ -1165,6 +1175,7 @@
         },
         {
           "key": "crm.fields",
+          "featureFlag": "crm",
           "label": "Custom fields",
           "singularLabel": "Custom field",
           "scope": "org",

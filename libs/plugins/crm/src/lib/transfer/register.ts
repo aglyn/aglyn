@@ -22,12 +22,14 @@
  * CRM, registered at the console's boot from its console-server
  * declarations. Boot pays for the match keys and the header dictionaries —
  * data — and nothing else: each hook loads its resource's module with the
- * first transfer that asks, and keeps it.
+ * first transfer that asks, and keeps it; the plan gate loads the CRM's
+ * `suite-gate.ts` the same way.
  *=========================================*/
 
 import type {
   PluginTransferResource,
   TransferLookupTargetHooks,
+  TransferPlanGateHooks,
   TransferRecordsHooks,
 } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
 import { registerPluginTransferResource } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
@@ -48,6 +50,8 @@ import {
 /** What a resource is registered with before its module loads. */
 interface LazyResource {
   key: string
+  /** What the records are called inside a refusal's sentence ("Exporting companies"). */
+  noun: string
   matchKeys: readonly MatchKeySpec[]
   aliases?: readonly TransferAliasDictionary[]
   /** Lookup targets the resource answers itself, by key. */
@@ -81,12 +85,27 @@ const HOOKS = [
   'revert',
 ] as const
 
+/**
+ * The CRM's plan question for a transfer (AGL-3555), in the words of every
+ * other CRM route: `suite-gate.ts`'s refusal, 403 `plan_required` / `crm`.
+ * The declaration (`featureFlag: "crm"`) decides which intents ask — every
+ * one, but the contacts and leads exports — and this answers them.
+ */
+export function crmTransferPlanGate(noun: string): NonNullable<TransferPlanGateHooks['planGate']> {
+  return async (subject, intent) =>
+    (await import('../server/suite-gate')).crmSuiteRefusal(
+      subject.org,
+      `${intent === 'export' ? 'Exporting' : 'Importing'} ${noun}`,
+    )
+}
+
 /** A resource whose hooks load its module with the first call, once. */
 export function lazyCrmTransferResource(resource: LazyResource): PluginTransferResource {
   let loaded: Promise<Partial<TransferRecordsHooks>> | null = null
   const hooks = () => (loaded ??= resource.load())
   const impl: Record<string, unknown> = {
     matchKeys: resource.matchKeys,
+    planGate: crmTransferPlanGate(resource.noun),
     ...(resource.aliases ? { aliases: resource.aliases } : {}),
   }
   for (const name of resource.hooks ?? HOOKS) {
@@ -122,6 +141,7 @@ export function lazyCrmTransferResource(resource: LazyResource): PluginTransferR
 export const CRM_TRANSFER_RESOURCES: readonly LazyResource[] = [
   {
     key: CRM_CONTACTS_RESOURCE,
+    noun: 'contacts',
     matchKeys: [
       { fieldId: 'id', normalizer: 'aglynId' },
       { fieldId: 'email', normalizer: 'email' },
@@ -132,6 +152,7 @@ export const CRM_TRANSFER_RESOURCES: readonly LazyResource[] = [
   },
   {
     key: CRM_COMPANIES_RESOURCE,
+    noun: 'companies',
     matchKeys: [
       { fieldId: 'id', normalizer: 'aglynId' },
       { fieldId: 'domain', normalizer: 'domain' },
@@ -143,6 +164,7 @@ export const CRM_TRANSFER_RESOURCES: readonly LazyResource[] = [
   },
   {
     key: CRM_LEADS_RESOURCE,
+    noun: 'leads',
     matchKeys: [
       { fieldId: 'id', normalizer: 'aglynId' },
       { fieldId: 'email', normalizer: 'email' },
@@ -154,6 +176,7 @@ export const CRM_TRANSFER_RESOURCES: readonly LazyResource[] = [
   },
   {
     key: CRM_DEALS_RESOURCE,
+    noun: 'deals',
     matchKeys: [
       { fieldId: 'id', normalizer: 'aglynId' },
       { fieldId: 'externalId', normalizer: 'externalId' },
@@ -164,6 +187,7 @@ export const CRM_TRANSFER_RESOURCES: readonly LazyResource[] = [
   },
   {
     key: CRM_TASKS_RESOURCE,
+    noun: 'tasks',
     matchKeys: [
       { fieldId: 'id', normalizer: 'aglynId' },
       { fieldId: 'externalId', normalizer: 'externalId' },
@@ -175,18 +199,21 @@ export const CRM_TRANSFER_RESOURCES: readonly LazyResource[] = [
   },
   {
     key: CRM_ACTIVITIES_RESOURCE,
+    noun: 'activities',
     matchKeys: [{ fieldId: 'id', normalizer: 'aglynId' }],
     hooks: EXPORT_HOOKS,
     load: async () => (await import('./activities')).activitiesTransferResource(),
   },
   {
     key: CRM_PIPELINES_RESOURCE,
+    noun: 'pipelines and stages',
     matchKeys: [{ fieldId: 'id', normalizer: 'aglynId' }],
     hooks: EXPORT_HOOKS,
     load: async () => (await import('./pipelines')).pipelinesTransferResource(),
   },
   {
     key: CRM_FIELDS_RESOURCE,
+    noun: 'custom fields',
     matchKeys: [{ fieldId: 'id', normalizer: 'aglynId' }],
     hooks: EXPORT_HOOKS,
     load: async () => (await import('./pipelines')).fieldDefinitionsTransferResource(),

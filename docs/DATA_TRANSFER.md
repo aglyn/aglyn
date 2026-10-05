@@ -402,8 +402,16 @@ member, or a collaborator who reaches the named site (datasets); a
 `readPermission` admits its holders and `data.manage`; a resource that
 declares neither keeps `data.manage`. The export route passes a
 collaborator's `scopeTokens`, and each resource's `readPage` and `count`
-read only what they reach. The
-console's launcher answers the same rule synchronously as
+read only what they reach. Last, the workspace's plan (AGL-3555): a
+resource that declares a `featureFlag` is refused on a plan without that
+feature — the route's resource is the body's, or the job's — for every
+intent its `featureFlagExempt` does not list, with 403 `{ error, reason:
+'plan_required', code: <feature> }` (the plugin's own `planGate` answer, else
+`transferPlanRequired`), staff included. A lookup column into such a
+resource asks the same question as an import, and a workspace package
+leaves out a package resource its plan does not carry. The CRM declares
+`crm` on every resource and exempts only the contacts and leads exports. The
+console's launcher answers the same rules synchronously as
 `can('import' | 'export', target)`, so a list offers only what the route
 will do. Plan, apply and undo write an `adminAudit` row
 (`data.transfer.plan`, `data.transfer.apply` when a job starts or resumes,

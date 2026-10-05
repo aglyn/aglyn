@@ -85,6 +85,13 @@ flickering away.
     plugin declared, say) may export, beside **Manage data**.
   - Neither — **Manage data**, the same as importing. This is the default
     because a resource's records may be ones only managers read.
+- **The plan** comes before either, when your resource declares a
+  `"featureFlag"` (the flag your console surfaces are gated by): on a plan
+  without it, `can` answers `false` for every intent your resource doesn't
+  list in `"featureFlagExempt"`, and the routes refuse with 403
+  `plan_required`. Register `planGate` with the server half so the refusal
+  is in your plugin's own words. The CRM declares `"featureFlag": "crm"` on
+  every resource and exempts only the contacts and leads exports.
 
 The routes stay the enforcement: `can` only keeps you from offering a
 button they would refuse.

@@ -16,7 +16,7 @@
  */
 
 import type { TransferResourceDescriptor } from './resource'
-import type { TransferApiRoute } from './transfer-api'
+import { TRANSFER_PLAN_REQUIRED, type TransferApiRoute, type TransferPlanRequiredResponse } from './transfer-api'
 
 /*==========================================
  * WHO MAY MOVE A RESOURCE'S RECORDS (AGL-3546)
@@ -37,10 +37,21 @@ import type { TransferApiRoute } from './transfer-api'
  *    `data.manage` always admits. Which records a reader then sees is the
  *    resource's own business: `readPage` and `count` honor the reader's
  *    `scopeTokens`, as every other door onto the records does.
+ *
+ * And one question of the WORKSPACE, asked after the member's (AGL-3555):
+ * a resource that declares a `featureFlag` is moved only by a workspace
+ * whose plan carries that feature, for every intent but the ones it lists
+ * in `featureFlagExempt`. {@link transferPlanFeature} names the feature an
+ * intent needs; the gate refuses without it (403 `plan_required`, the
+ * feature as `code`), staff included, and the console's `can` answers
+ * `false`, so neither button is offered on a plan the route refuses.
  *==========================================*/
 
 /** What a resource declares about who may read its records. */
 export type TransferReadDeclaration = Pick<TransferResourceDescriptor, 'readPermission' | 'readableByMembers'>
+
+/** What a resource declares about the plan that moves its records. */
+export type TransferPlanDeclaration = Pick<TransferResourceDescriptor, 'featureFlag' | 'featureFlagExempt'>
 
 /** What a member is doing with a resource's records. */
 export type TransferAccessIntent = 'import' | 'export'
@@ -89,4 +100,24 @@ export function transferAccessAllowed(
   if (!axis.reachesSite) return false
   const needed = transferAccessPermissions(intent, descriptor)
   return !needed.length || needed.some((permission) => axis.holds(permission))
+}
+
+/**
+ * The plan feature a workspace needs to `intent` a resource's records, or
+ * `null` when every plan may — no `featureFlag`, or an intent the resource
+ * exempts. The entitlement itself is the caller's to resolve
+ * (`checkEntitlement`), from the workspace document it already holds.
+ */
+export function transferPlanFeature(
+  intent: TransferAccessIntent,
+  descriptor: TransferPlanDeclaration | null | undefined,
+): string | null {
+  const feature = descriptor?.featureFlag?.trim()
+  if (!feature) return null
+  return descriptor?.featureFlagExempt?.includes(intent) ? null : feature
+}
+
+/** Whether a refusal's body is one for the workspace's plan. */
+export function isTransferPlanRequired(body: unknown): body is TransferPlanRequiredResponse {
+  return Boolean(body && typeof body === 'object' && (body as { reason?: unknown }).reason === TRANSFER_PLAN_REQUIRED)
 }

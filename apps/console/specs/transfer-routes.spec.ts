@@ -24,7 +24,9 @@
  * the lockdown, the workspace's existence, then the member's access for the
  * route's intent (AGL-3546): `data.manage` to import (on the job's site for
  * a site's records); to export, what the resource declares — any member,
- * a `readPermission`, or `data.manage` by default. Past it a route only hands the body to the engine,
+ * a `readPermission`, or `data.manage` by default — and last the
+ * workspace's plan, for a resource that declares a `featureFlag` (AGL-3555).
+ * Past it a route only hands the body to the engine,
  * so what is asserted is that the engine's refusals come back with their
  * status, code and details, that Apply is audited only when a job starts,
  * and that the result file is CSV with its row count.
@@ -58,6 +60,8 @@ const mockEngine = {
 
 jest.mock('@aglyn/aglyn/server', () => ({
   __esModule: true,
+  // The plan tables the CRM's `suite-gate.ts` answers from.
+  ...jest.requireActual('@aglyn/aglyn/app-utils/plan-entitlements'),
   ...jest.requireActual('@aglyn/aglyn/app-utils/organizations'),
   ...jest.requireActual('@aglyn/aglyn/app-utils/scope-tokens'),
   pluginRequestFromWeb: async (request: Request) => ({
@@ -129,9 +133,17 @@ jest.mock('@aglyn/tenant-data-admin/server/transfer-jobs', () => {
       this.details = details
     }
   }
+  class TransferPlanRefusedError extends TransferEngineError {
+    refusal: { status: number; body: { error: string } }
+    constructor(refusal: { status: number; body: { error: string } }) {
+      super('planRequired', refusal.status, refusal.body.error, refusal.body)
+      this.refusal = refusal
+    }
+  }
   return {
     __esModule: true,
     TransferEngineError,
+    TransferPlanRefusedError,
     uploadTransferSource: (...args: unknown[]) => mockEngine.uploadTransferSource(...args),
     applyTransferJob: (...args: unknown[]) => mockEngine.applyTransferJob(...args),
     readTransferJobStatus: (...args: unknown[]) => mockEngine.readTransferJobStatus(...args),
@@ -142,26 +154,22 @@ jest.mock('@aglyn/tenant-data-admin/server/transfer-jobs', () => {
 
 // Every member reads bottles (as every member reads a dataset); ledgers
 // declare the permission they read with; kegs declare nothing, so they
-// export for Manage data alone. The CRM's people files are the real
-// declarations, for Settings → Privacy (AGL-3552).
+// export for Manage data alone. Every other key is a real declaration —
+// the CRM's, for Settings → Privacy (AGL-3552) and its plan (AGL-3555).
 jest.mock('@aglyn/aglyn/plugin-manager/plugin-transfer-resources', () => {
-  const { PLUGIN_TRANSFER_RESOURCES_DECLARED } = jest.requireActual(
-    '@aglyn/aglyn/plugin-manager/first-party-plugins.generated',
-  ) as { PLUGIN_TRANSFER_RESOURCES_DECLARED: ReadonlyArray<{ key: string }> }
-  const people = Object.fromEntries(
-    PLUGIN_TRANSFER_RESOURCES_DECLARED.filter((one) => one.key === 'crm.contacts' || one.key === 'crm.leads').map(
-      (one) => [one.key, one],
-    ),
-  )
+  const actual = jest.requireActual('@aglyn/aglyn/plugin-manager/plugin-transfer-resources') as Record<
+    string,
+    (key: string) => unknown
+  >
+  const fixtures: Record<string, unknown> = {
+    bottles: { key: 'bottles', scope: 'org', pluginId: 'cellar', readableByMembers: true },
+    ledgers: { key: 'ledgers', scope: 'org', pluginId: 'books', readPermission: 'books.read' },
+    kegs: { key: 'kegs', scope: 'org', pluginId: 'cellar' },
+  }
   return {
+    ...actual,
     __esModule: true,
-    declaredTransferResource: (key: string) =>
-      ({
-        bottles: { key: 'bottles', scope: 'org', pluginId: 'cellar', readableByMembers: true },
-        ledgers: { key: 'ledgers', scope: 'org', pluginId: 'books', readPermission: 'books.read' },
-        kegs: { key: 'kegs', scope: 'org', pluginId: 'cellar' },
-        ...people,
-      } as Record<string, unknown>)[key] ?? null,
+    declaredTransferResource: (key: string) => fixtures[key] ?? actual['declaredTransferResource']?.(key),
   }
 })
 
@@ -176,12 +184,15 @@ jest.mock('firebase-admin/firestore', () => ({
   FieldValue: { serverTimestamp: () => 'now' },
 }))
 
-import { TransferEngineError } from '@aglyn/tenant-data-admin/server/transfer-jobs'
+import { TransferEngineError, TransferPlanRefusedError } from '@aglyn/tenant-data-admin/server/transfer-jobs'
 import { hostScopeToken } from '@aglyn/aglyn/app-utils/scope-tokens'
+import { POST as analyze } from '../app/api/transfer/analyze/route'
 import { POST as apply } from '../app/api/transfer/apply/route'
 import { POST as exportRoute } from '../app/api/transfer/export/route'
 import { POST as fields } from '../app/api/transfer/fields/route'
+import { POST as plan } from '../app/api/transfer/plan/route'
 import { POST as status } from '../app/api/transfer/status/route'
+import { POST as undo } from '../app/api/transfer/undo/route'
 import { POST as upload } from '../app/api/transfer/upload/route'
 
 const request = (route: string, body: Record<string, unknown>, headers: Record<string, string> = { authorization: 'Bearer token' }) =>
@@ -514,3 +525,98 @@ describe('the people files, on every plan (AGL-3552)', () => {
   })
 })
 
+
+/*
+ * THE CRM IS PAID-ONLY (AGL-3555, the 2026-09-11 decision): every CRM
+ * resource refuses on a workspace without the CRM, on every transfer route
+ * that names it — fields, export, upload, and the job's analyze, plan,
+ * apply, status and undo — with the CRM routes' own answer (`suite-gate.ts`:
+ * 403, `reason: 'plan_required'`, `code: 'crm'`), staff included. Only the
+ * contacts and leads EXPORTS stay on every plan. Starter moves all of it.
+ * The resources are the CRM's real declarations and registrations.
+ */
+describe('the CRM’s plan (AGL-3555)', () => {
+  const CRM = ['crm.contacts', 'crm.companies', 'crm.leads', 'crm.deals', 'crm.tasks', 'crm.activities', 'crm.pipelines', 'crm.fields']
+  const PEOPLE = new Set(['crm.contacts', 'crm.leads'])
+  const IMPORTED = CRM.filter((key) => !['crm.activities', 'crm.pipelines', 'crm.fields'].includes(key))
+  const exportBody = (resource: string) => ({ orgId: 'org-1', resource, fieldIds: ['id'], scope: { kind: 'all' }, format: 'csv' })
+  const planRequired = async (response: Response) => {
+    expect(response.status).toBe(403)
+    const body = await response.json()
+    expect(body).toEqual({ error: expect.stringMatching(/ is part of the CRM, which is not included in your current plan\./), reason: 'plan_required', code: 'crm' })
+    return body as { error: string }
+  }
+
+  beforeAll(() => {
+    ;(
+      jest.requireActual('../../../libs/plugins/crm/src/lib/transfer/register') as {
+        registerCrmTransferResources(pluginId: string): void
+      }
+    ).registerCrmTransferResources('crm')
+  })
+
+  beforeEach(() => {
+    mockOrg = { $id: 'org-1', plan: 'free' }
+    mockMember = { role: 'admin' }
+    mockEngine.readTransferResourceInfo.mockResolvedValue({ resource: { key: 'crm.contacts', label: 'Contacts' } })
+    mockEngine.uploadTransferSource.mockResolvedValue({ job: JOB, preview: {} })
+  })
+
+  it.each(CRM)('refuses exporting %s on Free unless it is a people file', async (resource) => {
+    const exported = await exportRoute(request('export', exportBody(resource)))
+    const opened = await fields(request('fields', { orgId: 'org-1', resource }))
+    if (PEOPLE.has(resource)) {
+      expect(exported.status).toBe(200)
+      expect(opened.status).toBe(200)
+      return
+    }
+    const body = await planRequired(exported)
+    expect(body.error).toMatch(/^Exporting /)
+    await planRequired(opened)
+  })
+
+  it.each(IMPORTED)('refuses importing %s on Free, the people files too, at every step', async (resource) => {
+    const uploaded = await upload(request('upload', { orgId: 'org-1', resource, hostId: 'host-a', fileName: 'x.csv', content: 'a\n1' }))
+    expect((await planRequired(uploaded)).error).toMatch(/^Importing /)
+    mockJobs['job-crm'] = { resource, hostId: 'host-a' }
+    for (const route of [analyze, plan, apply, status, undo]) {
+      await planRequired(await route(request('step', { orgId: 'org-1', jobId: 'job-crm' })))
+    }
+    expect(mockEngine.uploadTransferSource).not.toHaveBeenCalled()
+    expect(mockEngine.applyTransferJob).not.toHaveBeenCalled()
+    expect(mockEngine.readTransferJobStatus).not.toHaveBeenCalled()
+  })
+
+  it('refuses staff too: the plan is the workspace’s', async () => {
+    mockVerifyIdToken.mockResolvedValue({ uid: 'uid-staff', email: 's@aglyn.test', email_verified: true, staff: true })
+    await planRequired(await exportRoute(request('export', exportBody('crm.deals'))))
+    expect((await exportRoute(request('export', exportBody('crm.contacts')))).status).toBe(200)
+  })
+
+  it('asks after the member, so a caller without access learns nothing of the plan', async () => {
+    mockOrgPermissions.clear()
+    mockHostPermission = false
+    const refused = await upload(request('upload', { orgId: 'org-1', resource: 'crm.deals', hostId: 'host-a', fileName: 'x.csv', content: 'a\n1' }))
+    expect(refused.status).toBe(403)
+    expect((await refused.json()).code).toBe('forbidden')
+  })
+
+  it('answers a refusal the engine raises for the plan as that same body', async () => {
+    mockOrg = { $id: 'org-1', plan: 'starter' }
+    const body = { error: 'Importing companies is part of the CRM.', reason: 'plan_required', code: 'crm' }
+    mockEngine.applyTransferJob.mockRejectedValue(new TransferPlanRefusedError({ status: 403, body } as never))
+    const refused = await apply(request('apply', { orgId: 'org-1', jobId: 'job-1' }))
+    expect(refused.status).toBe(403)
+    expect(await refused.json()).toEqual(body)
+  })
+
+  it.each(CRM)('moves %s both ways on Starter', async (resource) => {
+    mockOrg = { $id: 'org-1', plan: 'starter' }
+    expect((await exportRoute(request('export', exportBody(resource)))).status).toBe(200)
+    expect((await fields(request('fields', { orgId: 'org-1', resource }))).status).toBe(200)
+    if (!IMPORTED.includes(resource)) return
+    expect((await upload(request('upload', { orgId: 'org-1', resource, hostId: 'host-a', fileName: 'x.csv', content: 'a\n1' }))).status).toBe(200)
+    mockJobs['job-crm'] = { resource, hostId: 'host-a' }
+    expect((await apply(request('apply', { orgId: 'org-1', jobId: 'job-crm' }))).status).toBe(200)
+  })
+})

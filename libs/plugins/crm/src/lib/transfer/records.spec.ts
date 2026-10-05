@@ -83,6 +83,7 @@ import { personKey } from '@aglyn/aglyn/app-utils/person-key'
 import {
   resetTransferResourcesForTests,
   resolveTransferResource,
+  transferPlanRefusal,
   transferRecordsHooks,
 } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
 import {
@@ -90,12 +91,14 @@ import {
   applyTransferJob,
   planTransferJob,
   TransferEngineError,
+  TransferPlanRefusedError,
   uploadTransferSource,
   type TransferBucket,
   type TransferEngineDeps,
 } from '@aglyn/tenant-data-admin/server/transfer-jobs'
 import { streamTransferExport } from '@aglyn/tenant-data-admin/server/transfer-export'
-import { registerCrmTransferResources } from './register'
+import { crmSuiteRefusal } from '../server/suite-gate'
+import { CRM_TRANSFER_RESOURCES, crmTransferPlanGate, registerCrmTransferResources } from './register'
 
 const ORG = 'org-1'
 const SITE = 'site-1'
@@ -302,10 +305,82 @@ describe('what is only exported', () => {
 })
 
 /*
+ * THE CRM'S PLAN, AS EVERY TRANSFER ROUTE ASKS IT (AGL-3555). Free reaches
+ * no part of the CRM: every resource refuses every intent there with the CRM
+ * routes' own answer (`suite-gate.ts`, 403 `plan_required` / `crm`), but
+ * the contacts and leads EXPORTS — Settings → Privacy's people files.
+ * Starter moves all of it.
+ */
+describe('the CRM’s plan', () => {
+  const FREE = { plan: 'free' }
+  const NOUNS: Readonly<Record<string, string>> = {
+    'crm.contacts': 'contacts',
+    'crm.companies': 'companies',
+    'crm.leads': 'leads',
+    'crm.deals': 'deals',
+    'crm.tasks': 'tasks',
+    'crm.activities': 'activities',
+    'crm.pipelines': 'pipelines and stages',
+    'crm.fields': 'custom fields',
+  }
+  const asked = (resource: string, org: Record<string, unknown>, intent: 'import' | 'export') =>
+    transferPlanRefusal({ resource, orgId: ORG, hostId: null, org }, intent)
+
+  it('covers every CRM records resource', () => {
+    expect(CRM_TRANSFER_RESOURCES.map((resource) => resource.key).sort()).toEqual(Object.keys(NOUNS).sort())
+  })
+
+  it.each(Object.keys(NOUNS))('refuses %s on Free with the CRM routes’ own answer, but the people files’ export', async (resource) => {
+    expect(await asked(resource, FREE, 'import')).toEqual(crmSuiteRefusal(FREE, `Importing ${NOUNS[resource]}`))
+    const exporting = await asked(resource, FREE, 'export')
+    if (resource === 'crm.contacts' || resource === 'crm.leads') {
+      expect(exporting).toBeNull()
+    } else {
+      expect(exporting).toEqual(crmSuiteRefusal(FREE, `Exporting ${NOUNS[resource]}`))
+      expect(exporting).toMatchObject({ status: 403, body: { reason: 'plan_required', code: 'crm' } })
+    }
+  })
+
+  it.each(Object.keys(NOUNS))('moves %s both ways on Starter', async (resource) => {
+    expect(await asked(resource, { plan: 'starter' }, 'import')).toBeNull()
+    expect(await asked(resource, { plan: 'starter' }, 'export')).toBeNull()
+  })
+
+  it('answers the email templates package the same way', async () => {
+    const gate = crmTransferPlanGate('email templates')
+    const subject = { resource: 'crm.email-templates', orgId: ORG, hostId: null, org: FREE }
+    expect(await gate(subject, 'export')).toEqual(crmSuiteRefusal(FREE, 'Exporting email templates'))
+    expect(await gate({ ...subject, org: { plan: 'starter' } }, 'import')).toBeNull()
+  })
+
+  it('refuses a lookup into a CRM resource on Free, as the import it is part of', async () => {
+    mockMemory.seed(`orgs/${ORG}`, FREE)
+    // A contacts file whose company column looks companies up.
+    const { job } = await uploadTransferSource(deps, {
+      orgId: ORG,
+      actorUid: ME,
+      resource: 'crm.contacts',
+      hostId: SITE,
+      fileName: 'people.csv',
+      content: 'Email,Account Name\nbo@globex.test,Globex',
+    })
+    const { match } = await analyzeTransferJob(deps, { orgId: ORG, jobId: job.id, actorUid: ME })
+    const refused = await planTransferJob(deps, {
+      orgId: ORG,
+      jobId: job.id,
+      actorUid: ME,
+      choices: { mapping: match.mapping },
+    }).catch((error: unknown) => error)
+    expect(refused).toBeInstanceOf(TransferPlanRefusedError)
+    expect((refused as TransferPlanRefusedError).refusal.body).toMatchObject({ reason: 'plan_required', code: 'crm' })
+  })
+})
+
+/*
  * SETTINGS → PRIVACY'S PEOPLE FILES (AGL-3552). Every contact and every lead
  * a workspace holds is exported on every plan, Free included: the plan is
- * asked of an import (`requireCrmSuite`), never of the export, which reads
- * the whole workspace for a reader who sees all of it.
+ * asked of an import, never of the export, which reads the whole workspace
+ * for a reader who sees all of it (AGL-3555: `featureFlagExempt`).
  */
 describe('the people files, on Free', () => {
   // The export streams through web streams, which this suite's DOM environment lacks.

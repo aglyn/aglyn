@@ -1101,6 +1101,10 @@ export const PLUGIN_TRANSFER_RESOURCES_DECLARED: readonly ResolvedTransferResour
   {
     "pluginId": "crm",
     "key": "crm.contacts",
+    "featureFlag": "crm",
+    "featureFlagExempt": [
+      "export"
+    ],
     "label": "Contacts",
     "singularLabel": "Contact",
     "scope": "org",
@@ -1120,6 +1124,7 @@ export const PLUGIN_TRANSFER_RESOURCES_DECLARED: readonly ResolvedTransferResour
   {
     "pluginId": "crm",
     "key": "crm.companies",
+    "featureFlag": "crm",
     "label": "Companies",
     "singularLabel": "Company",
     "scope": "org",
@@ -1139,6 +1144,7 @@ export const PLUGIN_TRANSFER_RESOURCES_DECLARED: readonly ResolvedTransferResour
   {
     "pluginId": "crm",
     "key": "crm.email-templates",
+    "featureFlag": "crm",
     "label": "Email templates",
     "singularLabel": "Email template",
     "scope": "org",
@@ -1156,6 +1162,10 @@ export const PLUGIN_TRANSFER_RESOURCES_DECLARED: readonly ResolvedTransferResour
   {
     "pluginId": "crm",
     "key": "crm.leads",
+    "featureFlag": "crm",
+    "featureFlagExempt": [
+      "export"
+    ],
     "label": "Leads",
     "singularLabel": "Lead",
     "scope": "org",
@@ -1175,6 +1185,7 @@ export const PLUGIN_TRANSFER_RESOURCES_DECLARED: readonly ResolvedTransferResour
   {
     "pluginId": "crm",
     "key": "crm.deals",
+    "featureFlag": "crm",
     "label": "Deals",
     "singularLabel": "Deal",
     "scope": "org",
@@ -1194,6 +1205,7 @@ export const PLUGIN_TRANSFER_RESOURCES_DECLARED: readonly ResolvedTransferResour
   {
     "pluginId": "crm",
     "key": "crm.tasks",
+    "featureFlag": "crm",
     "label": "Tasks",
     "singularLabel": "Task",
     "scope": "org",
@@ -1213,6 +1225,7 @@ export const PLUGIN_TRANSFER_RESOURCES_DECLARED: readonly ResolvedTransferResour
   {
     "pluginId": "crm",
     "key": "crm.activities",
+    "featureFlag": "crm",
     "label": "Activities",
     "singularLabel": "Activity",
     "scope": "org",
@@ -1230,6 +1243,7 @@ export const PLUGIN_TRANSFER_RESOURCES_DECLARED: readonly ResolvedTransferResour
   {
     "pluginId": "crm",
     "key": "crm.pipelines",
+    "featureFlag": "crm",
     "label": "Pipelines and stages",
     "singularLabel": "Stage",
     "scope": "org",
@@ -1247,6 +1261,7 @@ export const PLUGIN_TRANSFER_RESOURCES_DECLARED: readonly ResolvedTransferResour
   {
     "pluginId": "crm",
     "key": "crm.fields",
+    "featureFlag": "crm",
     "label": "Custom fields",
     "singularLabel": "Custom field",
     "scope": "org",

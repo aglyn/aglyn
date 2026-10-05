@@ -105,6 +105,21 @@ export interface TransferResourceDescriptor {
    * offers only Export (AGL-3528).
    */
   exportOnly?: boolean
+  /**
+   * The plan feature (an `OrgFeatureFlags` key, `crm`) a workspace's plan
+   * must carry to move these records — the flag the owning plugin's console
+   * surfaces are gated by. Without it every route of every intent refuses
+   * with 403 `plan_required` and the feature as `code`, staff included, and
+   * the console offers neither button (AGL-3555). See `data-transfer/access.ts`.
+   */
+  featureFlag?: string
+  /**
+   * The intents that stay open on every plan despite `featureFlag` — an
+   * obligation rather than a feature: the CRM's people files are exported
+   * on Free, because taking out the people a workspace holds is every
+   * plan's right, while importing them is the CRM.
+   */
+  featureFlagExempt?: readonly ('import' | 'export')[]
 }
 
 /** Whether a file may be imported into the resource. */
@@ -276,6 +291,18 @@ export function transferResourceProblems(descriptor: TransferResourceDescriptor)
   }
   if (descriptor.exportOnly !== undefined && typeof descriptor.exportOnly !== 'boolean') {
     problems.push(`${descriptor.key} says "exportOnly" with something other than true or false.`)
+  }
+  if (descriptor.featureFlag !== undefined && !String(descriptor.featureFlag).trim()) {
+    problems.push(`${descriptor.key} names an empty plan feature.`)
+  }
+  if (descriptor.featureFlagExempt !== undefined) {
+    const exempt = descriptor.featureFlagExempt
+    if (descriptor.featureFlag === undefined) {
+      problems.push(`${descriptor.key} exempts intents from a plan feature it does not name.`)
+    }
+    if (!Array.isArray(exempt) || !exempt.length || exempt.some((intent) => intent !== 'import' && intent !== 'export')) {
+      problems.push(`${descriptor.key} exempts something other than import or export from its plan feature.`)
+    }
   }
   return problems
 }

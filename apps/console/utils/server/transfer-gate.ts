@@ -25,7 +25,7 @@ import {
   type TransferErrorCode,
   type TransferErrorResponse,
 } from '@aglyn/aglyn/data-transfer'
-import { declaredTransferResource } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
+import { declaredTransferResource, transferPlanRefusal } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
 import {
   consumeRateLimit,
   emailUnverifiedResponse,
@@ -42,6 +42,7 @@ import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write
 import { invalidIdTokenResponse } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 import {
   TransferEngineError,
+  TransferPlanRefusedError,
   type TransferEngineDeps,
 } from '@aglyn/tenant-data-admin/server/transfer-jobs'
 import { FieldValue } from 'firebase-admin/firestore'
@@ -69,6 +70,11 @@ import { FieldValue } from 'firebase-admin/firestore'
  *     named site), a `readPermission` admits its holders, and otherwise
  *     `data.manage` stays the key. The route and the resource's `readPage`
  *     then read only what the member's scope sees. Staff pass.
+ *  5. the workspace's plan (AGL-3555), for a resource that declares a
+ *     `featureFlag`: the route's resource — the body's, or the job's — is
+ *     refused on a plan without the feature, for every intent the resource
+ *     does not exempt, with the owning plugin's own 403 (`planGate`, else
+ *     the core's `plan_required`). Staff are refused too.
  *
  * The route then hands the body to the engine
  * (`@aglyn/tenant-data-admin/server/transfer-jobs`) and maps what it throws
@@ -133,12 +139,12 @@ export function transferEngineDeps(): TransferEngineDeps {
   }
 }
 
-/** The site a request concerns: the body's for an upload, the job's afterwards. */
-async function requestHostId(
+/** The site and the resource a request concerns: the body's for an upload, the job's afterwards. */
+async function requestSubject(
   deps: TransferEngineDeps,
   orgId: string,
   body: Record<string, unknown>,
-): Promise<string | null> {
+): Promise<{ hostId: string | null; resource: string | null }> {
   if (typeof body['jobId'] === 'string' && body['jobId']) {
     const snapshot = await deps.firestore
       .collection('orgs')
@@ -146,11 +152,15 @@ async function requestHostId(
       .collection('transferJobs')
       .doc(body['jobId'])
       .get()
-    const hostId = snapshot.exists ? (snapshot.data() as { hostId?: string }).hostId : undefined
-    return typeof hostId === 'string' && hostId ? hostId : null
+    const job = snapshot.exists ? (snapshot.data() as { hostId?: string; resource?: string }) : {}
+    return {
+      hostId: typeof job.hostId === 'string' && job.hostId ? job.hostId : null,
+      resource: typeof job.resource === 'string' && job.resource ? job.resource : null,
+    }
   }
   const hostId = typeof body['hostId'] === 'string' ? body['hostId'].trim() : ''
-  return hostId || null
+  const resource = typeof body['resource'] === 'string' ? body['resource'].trim() : ''
+  return { hostId: hostId || null, resource: resource || null }
 }
 
 /**
@@ -233,7 +243,7 @@ export async function transferGate(
 
     const deps = transferEngineDeps()
     const org = await getOrgDoc(orgId)
-    const hostId = await requestHostId(deps, orgId, body)
+    const { hostId, resource } = await requestSubject(deps, orgId, body)
     const host = hostId ? await getHostDocAdmin(hostId) : null
     if (hostId && (!host || host['orgId'] !== orgId)) return transferRefusal(404, 'notFound', 'No such site')
     const locked = await lockdownRefusal({
@@ -251,6 +261,15 @@ export async function transferGate(
     if (!staff) {
       const refusal = await accessRefusal(route, orgId, hostId, membership?.member ?? null, body)
       if (refusal) return refusal
+    }
+    // The workspace's plan, once the caller is admitted — staff too: the
+    // plan is a fact about the workspace, not about who asks (AGL-3555).
+    if (resource) {
+      const planRefusal = await transferPlanRefusal(
+        { resource, orgId, hostId, org: org as Record<string, unknown> },
+        transferRouteIntent(route),
+      )
+      if (planRefusal) return Response.json(planRefusal.body, { status: planRefusal.status })
     }
 
     return {
@@ -274,11 +293,15 @@ export async function transferGate(
 }
 
 /**
- * What a transfer route answers for a throw: the engine's refusal as its
- * status and code, a refused credential as 401, and anything else as a 500
- * that names nothing internal.
+ * What a transfer route answers for a throw: a refusal for the plan as the
+ * owning plugin's body, the engine's refusal as its status and code, a
+ * refused credential as 401, and anything else as a 500 that names nothing
+ * internal.
  */
 export function transferErrorResponse(error: unknown, route: TransferApiRoute): Response {
+  if (error instanceof TransferPlanRefusedError) {
+    return Response.json(error.refusal.body, { status: error.refusal.status })
+  }
   if (error instanceof TransferEngineError) {
     return transferRefusal(error.status, error.code, error.message, error.details)
   }

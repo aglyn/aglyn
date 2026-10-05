@@ -21,7 +21,8 @@
  * A workspace's sequences, campaigns, automations and email templates as
  * one `aglyn-package` file, each item owned by the plugin whose `package`
  * transfer resource its kind names. Only the resources of plugins the
- * workspace runs are offered. One body, five actions:
+ * workspace runs, and that its plan carries (AGL-3555: no CRM email
+ * templates on Free), are offered. One body, five actions:
  *
  *  - `list` — each resource and its items, with what each names (read);
  *  - `export` — the file, the chosen items and, when asked, what they need
@@ -50,7 +51,7 @@ import {
   type TransferPackageWarningClass,
   type TransferUndoDecision,
 } from '@aglyn/aglyn/data-transfer'
-import { listTransferResourcesFor } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
+import { listTransferResourcesFor, transferPlanRefusal } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
 import {
   applyTransferPackage,
   applyTransferPackageUndo,
@@ -86,10 +87,15 @@ async function handler(request: Request): Promise<Response> {
   const { body } = caller
   const action = String(body['action'] ?? '')
   const jobId = String(body['jobId'] ?? '')
-  // The workspace's own plugins decide what it can move.
-  const allowed = listTransferResourcesFor({ scope: 'org', org: caller.org as { enabledPlugins?: string[] } })
-    .filter((one) => one.kinds.includes('package'))
-    .map((one) => one.key)
+  // The workspace's own plugins decide what it can move, and its plan: a
+  // resource its plan does not carry is not in its packages (AGL-3555).
+  const intent = READ_ACTIONS.has(action) ? 'export' : 'import'
+  const allowed: string[] = []
+  for (const one of listTransferResourcesFor({ scope: 'org', org: caller.org as { enabledPlugins?: string[] } })) {
+    if (!one.kinds.includes('package')) continue
+    const refused = await transferPlanRefusal({ resource: one.key, orgId: caller.orgId, hostId: null, org: caller.org }, intent)
+    if (!refused) allowed.push(one.key)
+  }
   const base = { orgId: caller.orgId, actorUid: caller.uid, allowed }
   try {
     if (action === 'list') {

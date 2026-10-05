@@ -16,6 +16,7 @@
  */
 
 import type { ComponentType } from 'react'
+import { checkEntitlement, planLabelGrantingFeature } from '../app-utils/plan-entitlements'
 import type { PicklistSpec, PicklistValue, PicklistValueSet } from '../app-utils/picklists'
 import { getRegisteringPluginId } from '../app-utils/registering-plugin'
 import {
@@ -25,6 +26,7 @@ import {
   type TransferFieldCatalog,
   type TransferResourcePreset,
 } from '../data-transfer/field-catalog'
+import { transferPlanFeature, type TransferAccessIntent } from '../data-transfer/access'
 import type { TransferAliasDictionary } from '../data-transfer/header-match'
 import type { MatchKeySpec, MatchLookup, MatchLookupRequest } from '../data-transfer/match'
 import type { TransferLookupSuggestion } from '../data-transfer/lookup'
@@ -56,6 +58,8 @@ import {
   type TransferKind,
   type TransferResourceDescriptor,
 } from '../data-transfer/resource'
+import { TRANSFER_PLAN_REQUIRED, type TransferPlanRequiredResponse } from '../data-transfer/transfer-api'
+import type { AglynOrgBilling, OrgFeatureFlags } from '../foundation'
 import type { MdiIconProps } from '../types/nodes'
 import {
   filterPluginsByReleaseFlags,
@@ -574,7 +578,111 @@ export interface TransferPackageHooks<T = unknown> {
  * {@link TransferPackageHooks} member — checked against the declaration at
  * registration.
  */
-export type PluginTransferResource = Partial<TransferRecordsHooks> & Partial<TransferPackageHooks>
+export type PluginTransferResource = Partial<TransferRecordsHooks> &
+  Partial<TransferPackageHooks> &
+  TransferPlanGateHooks
+
+/*==========================================
+ * THE PLAN (AGL-3555)
+ *
+ * A resource that declares a `featureFlag` is moved only by a workspace
+ * whose plan carries it, for every intent but the ones `featureFlagExempt`
+ * lists (`data-transfer/access.ts`). The declaration decides WHICH intents
+ * ask — so the console's `can` answers the same rule without a request —
+ * and the route asks {@link transferPlanRefusal} after the member is
+ * admitted, staff included. A resource whose plugin answers the same plan
+ * question on its own routes registers {@link TransferPlanGateHooks.planGate}
+ * so a transfer refuses in exactly that plugin's words; one that does not
+ * gets {@link transferPlanRequired}, from the plan tables.
+ *=========================================*/
+
+/** The workspace a plan question is asked about, as the gate read it. */
+export interface TransferPlanSubject {
+  /** The resource key, naming the instance for one declared with `instances`. */
+  resource: string
+  orgId: string
+  hostId: string | null
+  /** The workspace document: its plan, subscription and per-org grants. */
+  org: Readonly<Record<string, unknown>>
+}
+
+/** A refusal for the workspace's plan: 403, in the flat body every plan-gated console route answers. */
+export interface TransferPlanRefusal {
+  status: 403
+  body: TransferPlanRequiredResponse
+}
+
+/** The plan hook a resource may answer with, beside its kind's. */
+export interface TransferPlanGateHooks {
+  /**
+   * The refusal for a workspace whose plan does not carry the resource's
+   * `featureFlag`, or `null` when it does — the plugin's own answer, so a
+   * transfer refuses in the words of the plugin's other routes. Asked only
+   * for an intent the declaration gates, and only after the member is
+   * admitted. It reads `subject.org`, never the database; it may load the
+   * module that answers with its first call.
+   */
+  planGate?(
+    subject: TransferPlanSubject,
+    intent: TransferAccessIntent,
+  ): Promise<TransferPlanRefusal | null> | TransferPlanRefusal | null
+}
+
+/** "Companies" → "companies", "CRM fields" unchanged: the label inside a sentence. */
+function inSentence(label: string): string {
+  return /^[A-Z][a-z]/.test(label) ? label.charAt(0).toLowerCase() + label.slice(1) : label
+}
+
+/**
+ * The refusal a resource with no `planGate` gets: its plan feature as
+ * `code`, and a sentence naming the plan that includes it, from the same
+ * ladder the console's upgrade notices walk.
+ */
+export function transferPlanRequired(
+  feature: string,
+  label: string,
+  intent: TransferAccessIntent,
+): TransferPlanRefusal {
+  const plan = planLabelGrantingFeature(feature as keyof OrgFeatureFlags)
+  return {
+    status: 403,
+    body: {
+      error:
+        `${intent === 'export' ? 'Exporting' : 'Importing'} ${inSentence(label)} is not included in your ` +
+        'current plan. Manage your plan and add-ons from Billing.' +
+        (plan ? ` Included from ${plan}.` : ''),
+      reason: TRANSFER_PLAN_REQUIRED,
+      code: feature,
+    },
+  }
+}
+
+/**
+ * The refusal for moving `subject.resource` with `intent` on the
+ * workspace's plan, or `null` when the plan may: no `featureFlag`, an
+ * exempt intent, or a plan that carries it. A key no plugin declares is
+ * `null` here — the route answers it as it answers any unknown resource.
+ */
+export async function transferPlanRefusal(
+  subject: TransferPlanSubject,
+  intent: TransferAccessIntent,
+): Promise<TransferPlanRefusal | null> {
+  const declared = declaredTransferResource(parseTransferResourceKey(String(subject.resource ?? '')).key)
+  const feature = transferPlanFeature(intent, declared)
+  if (!declared || !feature) return null
+  let gate: TransferPlanGateHooks['planGate']
+  try {
+    gate = (await resolveTransferResource(subject.resource)).impl.planGate
+  } catch {
+    // A server half that cannot be reached is answered by the route that
+    // needs it; the plan is still asked, from the declaration.
+    gate = undefined
+  }
+  if (gate) return gate(subject, intent)
+  return checkEntitlement(subject.org as Partial<AglynOrgBilling>, feature)
+    ? null
+    : transferPlanRequired(feature, declared.label, intent)
+}
 
 const RECORDS_HOOKS = ['fields', 'matchKeys', 'readPage', 'lookup'] as const
 /** What only an importable records resource answers: its writes and their undo. */
@@ -583,7 +691,7 @@ const PACKAGE_HOOKS = ['items', 'dependencies', 'remapIds', 'readItems', 'writeI
 
 /** What is missing from `impl` for the kinds a resource declares, as sentences. */
 export function pluginTransferResourceProblems(
-  declared: Pick<TransferResourceDescriptor, 'key' | 'kinds' | 'exportOnly'>,
+  declared: Pick<TransferResourceDescriptor, 'key' | 'kinds' | 'exportOnly' | 'featureFlag'>,
   impl: PluginTransferResource,
 ): string[] {
   const problems: string[] = []
@@ -598,6 +706,9 @@ export function pluginTransferResourceProblems(
   need('records', RECORDS_HOOKS)
   if (declared.exportOnly !== true) need('records', IMPORT_HOOKS)
   need('package', PACKAGE_HOOKS)
+  if (impl.planGate !== undefined && !declared.featureFlag) {
+    problems.push(`${declared.key} registers a "planGate" and declares no "featureFlag", so nothing would ask it.`)
+  }
   if (Array.isArray(impl.matchKeys) && !impl.matchKeys.length && declared.kinds.includes('records')) {
     problems.push(`${declared.key} names no match key, so no row could find its record.`)
   }
