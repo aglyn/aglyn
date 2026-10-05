@@ -16,13 +16,17 @@
  */
 
 /**
- * THE IMPORT SWEEP (AGL-3524), every fifteen minutes.
+ * THE IMPORT SWEEP (AGL-3524, AGL-3540), every fifteen minutes.
  *
- * The import wizard drives Apply from the browser, one budgeted request
- * after another; a tab that closes leaves the job `applying` with the cursor
- * where it stopped. This resumes every such job nobody has touched for two
- * minutes, under its own lease, through the same engine — the ledger makes a
- * returning browser harmless. A GET lists them and resumes nothing.
+ * The import wizard drives Apply and Undo from the browser, one budgeted
+ * request after another; a tab that closes leaves the job `applying` (or
+ * its undo running) with the cursor where it stopped. This resumes every
+ * such job nobody has touched for two minutes, under its own lease, through
+ * the same engine — the ledger makes a returning browser harmless — and
+ * cleans up after the rest: a job that never wrote is deleted with its file
+ * seven days after it was last touched, and a job that wrote is cleared to
+ * itself and its per-row results once its seven-day undo window closes. A
+ * GET lists what it would do and does nothing.
  */
 
 // lockdown-423: exempt — server-internal cron (x-cron-secret), no user caller; it only resumes

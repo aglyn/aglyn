@@ -41,6 +41,7 @@ jest.mock('@aglyn/aglyn/plugin-manager/first-party-plugins.generated', () => {
 })
 
 import {
+  TRANSFER_DRAFT_RETENTION_MS,
   TRANSFER_UNDO_WINDOW_MS,
   buildMatchLookup,
   planTransferUndo,
@@ -65,6 +66,7 @@ import {
   readTransferPlanRows,
   readTransferResourceInfo,
   sweepAbandonedTransferJobs,
+  transferJobRetention,
   transferResultFile,
   uploadTransferSource,
   TransferEngineError,
@@ -91,6 +93,11 @@ const docs = new Map<string, Data>()
 
 function copy<T>(value: T): T {
   return value === undefined ? value : (JSON.parse(JSON.stringify(value)) as T)
+}
+
+/** A field by its dotted path, as Firestore reads `undo.status`. */
+function at(data: Data, path: string): unknown {
+  return path.split('.').reduce<unknown>((value, key) => (value as Data | undefined)?.[key], data)
 }
 
 function compare(a: unknown, b: unknown): number {
@@ -162,7 +169,7 @@ class Query {
     let found = [...docs.entries()].filter(([path, data]) =>
       this.match(path) &&
       this.filters.every(({ field, op, value }) => {
-        const stored = data[field]
+        const stored = at(data, field)
         if (op === '==') return stored === value
         if (op === '<=') return stored !== undefined && compare(stored, value) <= 0
         return stored !== undefined && compare(stored, value) < 0
@@ -170,7 +177,7 @@ class Query {
     )
     if (this.order) {
       const { field, dir } = this.order
-      found.sort(([, a], [, b]) => compare(a[field], b[field]) * (dir === 'desc' ? -1 : 1))
+      found.sort(([, a], [, b]) => compare(at(a, field), at(b, field)) * (dir === 'desc' ? -1 : 1))
     }
     if (this.max !== null) found = found.slice(0, this.max)
     const snapshots = found.map(([path]) => new Snapshot(new DocRef(path)))
@@ -752,3 +759,94 @@ describe('the sweep', () => {
     expect(bottles.size).toBe(450)
   })
 })
+
+describe('cleaning up after a job (AGL-3540)', () => {
+  const jobDoc = (jobId: string) => docs.get(`orgs/${ORG}/transferJobs/${jobId}`) as unknown as TransferJobRecord | undefined
+  const under = (jobId: string, name: string) =>
+    [...docs.keys()].filter((path) => path.startsWith(`orgs/${ORG}/transferJobs/${jobId}/${name}/`))
+  const sweep = () => sweepAbandonedTransferJobs(deps, { deadlineMs: clock.now + 60_000 })
+
+  it('stamps when a job may be cleaned up: a draft a week after its last touch, a written job when undo closes, a running one never', async () => {
+    const draft = await uploaded(csv(2))
+    expect(jobDoc(draft.id)).toMatchObject({ retention: 'expire', retainUntil: draft.updatedAt + TRANSFER_DRAFT_RETENTION_MS })
+    const job = await planned(csv(450))
+    behavior.costMs = 3_000
+    await applyTransferJob(deps, { orgId: ORG, jobId: job.id, actorUid: ME, deadlineMs: clock.now + 5_000, driver: 'tab' })
+    behavior.costMs = 0
+    expect(jobDoc(job.id)?.status).toBe('applying')
+    expect(jobDoc(job.id)).not.toHaveProperty('retention')
+    const applied = await applyAll(job.id)
+    expect(jobDoc(job.id)).toMatchObject({
+      retention: 'trim',
+      retainUntil: (applied.job.appliedAt as number) + TRANSFER_UNDO_WINDOW_MS,
+    })
+    expect(transferJobRetention({ ...applied.job, trimmedAt: 1 })).toBeNull()
+  })
+
+  it('deletes a job that never wrote, with its file, a week after it was last touched', async () => {
+    const stale = await planned(csv(3))
+    expect(files.has(`orgs/${ORG}/transfers/${stale.id}/source`)).toBe(true)
+    expect(under(stale.id, 'chunks')).toHaveLength(1)
+    clock.now += TRANSFER_DRAFT_RETENTION_MS - 1
+    const fresh = await uploaded(csv(1))
+    expect((await sweep()).expired).toEqual([])
+
+    clock.now += 2
+    const dry = await sweepAbandonedTransferJobs(deps, { deadlineMs: clock.now + 60_000, dryRun: true })
+    expect(dry.expired).toEqual([])
+    expect(jobDoc(stale.id)).toBeDefined()
+
+    expect((await sweep()).expired).toEqual([{ orgId: ORG, jobId: stale.id }])
+    expect(jobDoc(stale.id)).toBeUndefined()
+    expect(under(stale.id, 'chunks')).toEqual([])
+    expect(files.has(`orgs/${ORG}/transfers/${stale.id}/source`)).toBe(false)
+    expect(jobDoc(fresh.id)).toBeDefined()
+  })
+
+  it('clears an applied job to itself and its results once its undo window closes, and never again', async () => {
+    const job = await planned(csv(3))
+    await applyAll(job.id)
+    clock.now += TRANSFER_UNDO_WINDOW_MS - 1
+    expect((await sweep()).trimmed).toEqual([])
+
+    clock.now += 2
+    expect((await sweep()).trimmed).toEqual([{ orgId: ORG, jobId: job.id }])
+    expect(under(job.id, 'chunks')).toEqual([])
+    expect(under(job.id, 'undo')).toEqual([])
+    expect(under(job.id, 'results')).toHaveLength(1)
+    expect(files.has(`orgs/${ORG}/transfers/${job.id}/source`)).toBe(false)
+    expect(jobDoc(job.id)).toMatchObject({ status: 'applied', trimmedAt: clock.now })
+    expect(jobDoc(job.id)).not.toHaveProperty('retention')
+    expect(jobDoc(job.id)).not.toHaveProperty('sourcePath')
+
+    const status = await readTransferJobStatus(deps, { orgId: ORG, jobId: job.id, include: 'results' })
+    expect(status.rows).toHaveLength(3)
+    expect((await refusal(transferResultFile(deps, { orgId: ORG, jobId: job.id }))).code).toBe('state')
+    clock.now += TRANSFER_UNDO_WINDOW_MS
+    expect((await sweep()).trimmed).toEqual([])
+  })
+
+  it('finishes an undo a closed tab left running, with the decisions the person made', async () => {
+    bottles.set('b-old', { id: 'b-old', values: { name: 'Old', email: 'bottle0@cellar.test' } })
+    const job = await planned(csv(3), { fieldDefault: { mode: 'overwrite', blank: 'leave' } })
+    await applyAll(job.id, ['overwriteNonBlank'] as never[])
+    ;(bottles.get('b2') as Bottle).values['name'] = 'Edited later'
+
+    // The tab asks once, with no time left to revert a chunk, and closes.
+    const started = await applyTransferJobUndo(deps, {
+      orgId: ORG, jobId: job.id, actorUid: ME, decisions: { b2: 'keep' }, otherwise: 'revert', deadlineMs: clock.now, driver: 'tab',
+    })
+    expect(started.done).toBe(false)
+    expect(jobDoc(job.id)?.undo).toMatchObject({ status: 'running', chunk: 0, decisions: { b2: 'keep' } })
+    expect(jobDoc(job.id)).not.toHaveProperty('retention')
+
+    expect((await sweep()).undone).toEqual([])
+    clock.now += 5 * 60 * 1000
+    expect((await sweep()).undone).toEqual([{ orgId: ORG, jobId: job.id, done: true }])
+    expect(jobDoc(job.id)?.status).toBe('undone')
+    expect([...bottles.keys()].sort()).toEqual(['b-old', 'b2'])
+    expect(bottles.get('b-old')?.values['name']).toBe('Old')
+    expect(bottles.get('b2')?.values['name']).toBe('Edited later')
+  })
+})
+

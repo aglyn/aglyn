@@ -150,8 +150,21 @@ export interface TransferUndoState {
   startedBy: string
   /** What happens to an edited record the decisions do not name. */
   otherwise: TransferUndoDecision
+  /** The person's decision per record id, kept so the sweep can finish an undo the browser left. */
+  decisions?: Record<string, TransferUndoDecision>
   counts: TransferUndoCounts
 }
+
+/**
+ * What the sweep does to a job once `retainUntil` passes: `expire` deletes
+ * a job that never wrote (and its file); `trim` clears an applied job's
+ * dry run, undo snapshots and file once its undo window has closed, keeping
+ * the job and its per-row results.
+ */
+export type TransferJobRetention = 'expire' | 'trim'
+
+/** How long a job that never wrote is kept after it was last touched. */
+export const TRANSFER_DRAFT_RETENTION_MS = 7 * 24 * 60 * 60 * 1000
 
 /** Undo's steps, counted. */
 export type TransferUndoCounts = Record<'restore' | 'delete' | 'conflict' | 'nothing', number>
@@ -203,6 +216,11 @@ export interface TransferJobRecord extends TransferJob {
   results?: TransferResultSummary
   lease?: TransferJobLease | null
   undo?: TransferUndoState
+  /** What the sweep does once `retainUntil` passes; absent while the job is running, and once trimmed. */
+  retention?: TransferJobRetention
+  retainUntil?: number
+  /** When the sweep cleared the dry run, undo snapshots and file of an applied job. */
+  trimmedAt?: number
 }
 
 /*------------------------------------------

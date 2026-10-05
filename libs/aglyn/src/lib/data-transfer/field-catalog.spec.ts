@@ -135,6 +135,12 @@ describe('presets', () => {
     ])
   })
 
+  it('lists the id once when the match keys name it too (AGL-3540)', () => {
+    const hints = { matchKeyFieldIds: ['id', 'email', 'email'] }
+    expect(resolveTransferPreset(catalog, 'reimportable', hints).fieldIds.slice(0, 3)).toEqual(['id', 'email', 'firstName'])
+    expect(resolveTransferPreset(catalog, 'minimal', hints).fieldIds).toEqual(['id', 'email', 'firstName'])
+  })
+
   it('keeps the minimal preset to keys, required fields and the named minimum', () => {
     expect(
       resolveTransferPreset(catalog, 'minimal', { matchKeyFieldIds: ['email'], minimalFieldIds: ['stage', 'gone'] }),

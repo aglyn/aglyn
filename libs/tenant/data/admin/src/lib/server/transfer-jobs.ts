@@ -72,6 +72,7 @@
 
 import {
   TRANSFER_DEFAULT_MAX_ROWS,
+  TRANSFER_DRAFT_RETENTION_MS,
   TRANSFER_ID_FIELD,
   TRANSFER_PLAN_CONFLICTS_MAX,
   TRANSFER_PLAN_PAGE_MAX,
@@ -121,6 +122,7 @@ import {
   transferUndoAvailable,
   transferUndoExpiresAt,
   transitionTransferJob,
+  TRANSFER_UNDO_WINDOW_MS,
   type MatchKeySpec,
   type MatchLookupRequest,
   type PicklistResolution,
@@ -135,6 +137,7 @@ import {
   type TransferField,
   type TransferFormat,
   type TransferJobRecord,
+  type TransferJobRetention,
   type TransferPicklistAnalysis,
   type TransferPlanChoices,
   type TransferPlanInvariantFailure,
@@ -361,8 +364,31 @@ async function readJob(deps: TransferEngineDeps, orgId: string, jobId: string): 
   return { ...(snapshot.data() as TransferJobRecord), id: jobId }
 }
 
+/**
+ * When the sweep may clean a job up, and how (see the sweep below): never
+ * while it runs or undoes, nor once trimmed; a job that never wrote expires
+ * {@link TRANSFER_DRAFT_RETENTION_MS} after it was last touched; one that
+ * wrote is trimmed once its undo window has closed.
+ */
+export function transferJobRetention(
+  job: TransferJobRecord,
+): { retention: TransferJobRetention; retainUntil: number } | null {
+  if (job.trimmedAt !== undefined || job.status === 'applying' || job.undo?.status === 'running') return null
+  const wrote = job.applyStartedAt !== undefined || job.status === 'applied' || job.status === 'undone'
+  if (!wrote) return { retention: 'expire', retainUntil: job.updatedAt + TRANSFER_DRAFT_RETENTION_MS }
+  return { retention: 'trim', retainUntil: (job.appliedAt ?? job.updatedAt) + TRANSFER_UNDO_WINDOW_MS }
+}
+
+/** A job as it is stored: Firestore-safe, with its retention stamped for the sweep's query. */
+function storedJob(job: TransferJobRecord): TransferJobRecord {
+  const rest: TransferJobRecord = { ...job }
+  delete rest.retention
+  delete rest.retainUntil
+  return stored({ ...rest, ...(transferJobRetention(job) ?? {}) })
+}
+
 async function saveJob(deps: TransferEngineDeps, job: TransferJobRecord): Promise<void> {
-  await transferJobsCollection(deps.firestore, job.orgId).doc(job.id).set(stored(job))
+  await transferJobsCollection(deps.firestore, job.orgId).doc(job.id).set(storedJob(job))
 }
 
 /** The job as a route returns it. */
@@ -622,7 +648,7 @@ export async function uploadTransferSource(
           bytes: upload.received.includes(part) ? upload.bytes : upload.bytes + bytes.length,
         },
       }
-      transaction.set(ref, stored(next))
+      transaction.set(ref, storedJob(next))
       return next
     })
     job = received
@@ -1243,7 +1269,7 @@ async function takeLease(
       })
     }
     const next = { ...enter(current, now), lease: { owner: driver, expiresAt } }
-    transaction.set(ref, stored(next))
+    transaction.set(ref, storedJob(next))
     return next
   })
 }
@@ -1405,7 +1431,7 @@ async function applyChunk(
   if (undoJson.length <= JSON_PIECE_CHARS) {
     batch.set(jobRef.collection('undo').doc(String(index)), { jobId: job.id, chunk: index, json: undoJson })
   }
-  batch.set(jobRef, stored(next))
+  batch.set(jobRef, storedJob(next))
   if (undoJson.length > JSON_PIECE_CHARS) {
     // Too large for the batch: the undo snapshot is written whole first, so
     // the cursor never moves past a chunk whose undo is missing.
@@ -1478,6 +1504,13 @@ export async function transferResultFile(
 ): Promise<{ csv: string; rows: number; fileName: string }> {
   const job = await readJob(deps, input.orgId, input.jobId)
   if (job.applyStartedAt === undefined) throw new TransferEngineError('state', 409, 'Nothing has been written yet.')
+  if (job.trimmedAt !== undefined) {
+    throw new TransferEngineError(
+      'state',
+      409,
+      'The file behind this import was cleared once its undo window closed; its results are still counted.',
+    )
+  }
   const table = await loadTable(deps, job)
   const results = await readResults(transferJobsCollection(deps.firestore, job.orgId).doc(job.id))
   const lines = [[...table.headers, ...TRANSFER_RESULT_COLUMNS].map(csvCell).join(',')]
@@ -1606,20 +1639,36 @@ export async function applyTransferJobUndo(
   const resource = await resolveResource(deps, job.resource)
   const hooks = transferRecordsHooks(resource)
   const ctx = contextFor(job, input.actorUid)
-  const decisions = { ...(input.decisions ?? {}) }
+  const decisions: Record<string, TransferUndoDecision> = { ...(input.decisions ?? {}) }
   let started = false
   job = await takeLease(deps, job, input.driver, input.deadlineMs + TRANSFER_LEASE_GRACE_MS, (current, now) => {
-    if (current.undo) return { ...current, undo: { ...current.undo, otherwise: input.otherwise }, updatedAt: now }
+    if (current.undo) {
+      return {
+        ...current,
+        undo: { ...current.undo, otherwise: input.otherwise, decisions: { ...current.undo.decisions, ...decisions } },
+        updatedAt: now,
+      }
+    }
     started = true
     return {
       ...current,
       updatedAt: now,
-      undo: { status: 'running', chunk: 0, startedAt: now, startedBy: input.actorUid, otherwise: input.otherwise, counts: emptyUndoCounts() },
+      undo: {
+        status: 'running',
+        chunk: 0,
+        startedAt: now,
+        startedBy: input.actorUid,
+        otherwise: input.otherwise,
+        decisions,
+        counts: emptyUndoCounts(),
+      },
     }
   })
   const jobRef = transferJobsCollection(deps.firestore, job.orgId).doc(job.id)
   const chunkCount = job.chunkCount ?? 0
   let undo = job.undo as TransferUndoState
+  // The person's decisions, this call's and every earlier call's: a resumed undo decides the same way.
+  Object.assign(decisions, undo.decisions ?? {}, input.decisions ?? {})
   try {
     while (undo.chunk < chunkCount && input.deadlineMs - clock(deps) > TRANSFER_MIN_CHUNK_BUDGET_MS) {
       const [snapshot] = await readUndoSnapshots(jobRef, undo.chunk + 1, undo.chunk)
@@ -1654,8 +1703,25 @@ export async function applyTransferJobUndo(
 }
 
 /*==========================================
- * THE SWEEP — imports a closed tab left behind
+ * THE SWEEP — what a closed tab left behind, and what has outlived its use
+ *
+ *  - an import left `applying`, or an undo left running, untouched for
+ *    {@link TRANSFER_STALE_MS}: resumed through the same engine, under the
+ *    sweep's lease (undo with the person's stored decisions);
+ *  - a job that never wrote, untouched for seven days
+ *    (`TRANSFER_DRAFT_RETENTION_MS`): deleted with its subcollections and
+ *    its file;
+ *  - a job that wrote, once its seven-day undo window has closed: its dry
+ *    run, undo snapshots, ledger and file are cleared, and the job and its
+ *    per-row results kept (`trimmedAt`).
+ *
+ * The last two are found by the `retention` and `retainUntil` every job
+ * write stamps (`transferJobRetention`), so a trimmed job never matches
+ * again.
  *=========================================*/
+
+/** The most jobs one sweep expires or trims. */
+const CLEANUP_LIMIT = 50
 
 export interface TransferSweepOutcome {
   /** Jobs found applying and untouched past the stale window. */
@@ -1663,36 +1729,82 @@ export interface TransferSweepOutcome {
   resumed: Array<{ orgId: string; jobId: string; status: TransferJobRecord['status']; done: boolean }>
   /** Jobs that could not be resumed this time (held by a driver, or failed). */
   skipped: Array<{ orgId: string; jobId: string; reason: string }>
+  /** Undos found running and untouched, and what resuming each did. */
+  undone: Array<{ orgId: string; jobId: string; done: boolean }>
+  /** Jobs that never wrote, deleted with their file. */
+  expired: Array<{ orgId: string; jobId: string }>
+  /** Jobs past their undo window, cleared to the job and its results. */
+  trimmed: Array<{ orgId: string; jobId: string }>
+}
+
+/** Deletes a Storage object, if it is there. */
+async function deleteObject(deps: TransferEngineDeps, path: string): Promise<void> {
+  await deps.bucket.file(path).delete({ ignoreNotFound: true })
+}
+
+/** The job's stored file and any parts still waiting for the rest. */
+async function deleteSourceFiles(deps: TransferEngineDeps, job: TransferJobRecord): Promise<void> {
+  await deleteObject(deps, transferSourcePath(job.orgId, job.id))
+  const parts = job.upload?.parts ?? 0
+  await eachLimited(
+    Array.from({ length: parts > 1 ? parts : 0 }, (_unused, index) => index),
+    TRANSFER_WRITE_CONCURRENCY,
+    async (index) => deleteObject(deps, transferPartPath(job.orgId, job.id, index)),
+  )
+}
+
+/** A job that never wrote, gone: its subcollections, its file, then the job. */
+export async function expireTransferJob(deps: TransferEngineDeps, job: TransferJobRecord): Promise<void> {
+  const jobRef = transferJobsCollection(deps.firestore, job.orgId).doc(job.id)
+  for (const name of ['chunks', 'ledger', 'results', 'undo']) await clearCollection(jobRef.collection(name))
+  await deleteSourceFiles(deps, job)
+  await jobRef.delete()
+}
+
+/** A job past its undo window, kept as the job and its results: the dry run, undo snapshots, ledger and file cleared. */
+export async function trimTransferJob(deps: TransferEngineDeps, job: TransferJobRecord): Promise<TransferJobRecord> {
+  const jobRef = transferJobsCollection(deps.firestore, job.orgId).doc(job.id)
+  for (const name of ['chunks', 'ledger', 'undo']) await clearCollection(jobRef.collection(name))
+  await deleteSourceFiles(deps, job)
+  const trimmed: TransferJobRecord = { ...job, trimmedAt: clock(deps) }
+  delete trimmed.sourcePath
+  await saveJob(deps, trimmed)
+  return trimmed
+}
+
+function jobOf(doc: FirebaseFirestore.QueryDocumentSnapshot): { orgId: string; job: TransferJobRecord } {
+  const job = { ...(doc.data() as TransferJobRecord), id: doc.id }
+  return { orgId: doc.ref.parent.parent?.id ?? job.orgId, job: { ...job, orgId: doc.ref.parent.parent?.id ?? job.orgId } }
 }
 
 /**
- * Resumes every `applying` job nobody has touched for {@link TRANSFER_STALE_MS}:
- * the browser that drove it closed, or its request died mid-chunk and the
- * lease has lapsed. Each runs under the sweep's lease until the budget is
- * spent; the ledger makes overlapping with a returning browser harmless.
- * `dryRun` lists them and resumes nothing.
+ * The sweep (see the block header). Each resume runs under the sweep's
+ * lease until the budget is spent; the ledger makes overlapping with a
+ * returning browser harmless. `dryRun` lists what it would do and does
+ * nothing.
  */
 export async function sweepAbandonedTransferJobs(
   deps: TransferEngineDeps,
   input: { deadlineMs: number; dryRun?: boolean; limit?: number; staleMs?: number },
 ): Promise<TransferSweepOutcome> {
   const now = clock(deps)
-  const snapshot = await deps.firestore
-    .collectionGroup(TRANSFER_JOBS_COLLECTION)
+  const stale = now - (input.staleMs ?? TRANSFER_STALE_MS)
+  const jobs = deps.firestore.collectionGroup(TRANSFER_JOBS_COLLECTION)
+  const budgetLeft = () => input.deadlineMs - clock(deps) > TRANSFER_MIN_CHUNK_BUDGET_MS
+  const snapshot = await jobs
     .where('status', '==', 'applying')
-    .where('updatedAt', '<=', now - (input.staleMs ?? TRANSFER_STALE_MS))
+    .where('updatedAt', '<=', stale)
     .orderBy('updatedAt', 'asc')
     .limit(input.limit ?? 10)
     .get()
-  const outcome: TransferSweepOutcome = { found: snapshot.docs.length, resumed: [], skipped: [] }
+  const outcome: TransferSweepOutcome = { found: snapshot.docs.length, resumed: [], skipped: [], undone: [], expired: [], trimmed: [] }
   for (const doc of snapshot.docs) {
-    const job = doc.data() as TransferJobRecord
-    const orgId = doc.ref.parent.parent?.id ?? job.orgId
+    const { orgId, job } = jobOf(doc)
     if (input.dryRun) {
       outcome.skipped.push({ orgId, jobId: doc.id, reason: 'dryRun' })
       continue
     }
-    if (input.deadlineMs - clock(deps) <= TRANSFER_MIN_CHUNK_BUDGET_MS) {
+    if (!budgetLeft()) {
       outcome.skipped.push({ orgId, jobId: doc.id, reason: 'budget' })
       continue
     }
@@ -1707,6 +1819,67 @@ export async function sweepAbandonedTransferJobs(
       outcome.resumed.push({ orgId, jobId: doc.id, status: applied.job.status, done: applied.done })
     } catch (error) {
       outcome.skipped.push({ orgId, jobId: doc.id, reason: error instanceof Error ? error.message : String(error) })
+    }
+  }
+
+  // An undo the browser left part-way, finished with the person's own decisions.
+  const undoing = await jobs
+    .where('undo.status', '==', 'running')
+    .where('updatedAt', '<=', stale)
+    .orderBy('updatedAt', 'asc')
+    .limit(input.limit ?? 10)
+    .get()
+  for (const doc of undoing.docs) {
+    const { orgId, job } = jobOf(doc)
+    if (input.dryRun || !budgetLeft() || !job.undo) {
+      outcome.skipped.push({ orgId, jobId: doc.id, reason: input.dryRun ? 'dryRun' : 'budget' })
+      continue
+    }
+    try {
+      const undone = await applyTransferJobUndo(deps, {
+        orgId,
+        jobId: doc.id,
+        actorUid: job.undo.startedBy,
+        decisions: job.undo.decisions ?? {},
+        otherwise: job.undo.otherwise,
+        deadlineMs: input.deadlineMs,
+        driver: `sweep-undo:${doc.id}`,
+      })
+      outcome.undone.push({ orgId, jobId: doc.id, done: undone.done })
+    } catch (error) {
+      outcome.skipped.push({ orgId, jobId: doc.id, reason: error instanceof Error ? error.message : String(error) })
+    }
+  }
+
+  // What has outlived its use: drafts that never wrote, and applied jobs past their undo window.
+  for (const retention of ['expire', 'trim'] as const) {
+    const due = await jobs
+      .where('retention', '==', retention)
+      .where('retainUntil', '<=', now)
+      .orderBy('retainUntil', 'asc')
+      .limit(CLEANUP_LIMIT)
+      .get()
+    for (const doc of due.docs) {
+      const { orgId } = jobOf(doc)
+      if (input.dryRun || !budgetLeft()) {
+        outcome.skipped.push({ orgId, jobId: doc.id, reason: input.dryRun ? 'dryRun' : 'budget' })
+        continue
+      }
+      // Read again: the job may have moved on since the query, and is decided as it is now.
+      const current = await readJob(deps, orgId, doc.id).catch(() => null)
+      const verdict = current ? transferJobRetention(current) : null
+      if (!current || !verdict || verdict.retention !== retention || verdict.retainUntil > clock(deps)) continue
+      try {
+        if (retention === 'expire') {
+          await expireTransferJob(deps, current)
+          outcome.expired.push({ orgId, jobId: doc.id })
+        } else {
+          await trimTransferJob(deps, current)
+          outcome.trimmed.push({ orgId, jobId: doc.id })
+        }
+      } catch (error) {
+        outcome.skipped.push({ orgId, jobId: doc.id, reason: error instanceof Error ? error.message : String(error) })
+      }
     }
   }
   return outcome

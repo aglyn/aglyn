@@ -263,7 +263,8 @@ export function resolveTransferPreset(
   preset: TransferPresetId | TransferSavedPreset,
   hints: TransferPresetHints = {},
 ): TransferFieldSelection {
-  const keys = [TRANSFER_ID_FIELD, ...(hints.matchKeyFieldIds ?? [])].filter((id) => catalog.byId.has(id))
+  // The id leads once, whether or not the match keys name it too.
+  const keys = [...new Set([TRANSFER_ID_FIELD, ...(hints.matchKeyFieldIds ?? [])])].filter((id) => catalog.byId.has(id))
   const lead = (ids: Iterable<string>): string[] => {
     const rest = new Set(ids)
     for (const key of keys) rest.delete(key)

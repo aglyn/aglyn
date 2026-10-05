@@ -62,7 +62,8 @@ mapped on import to find a record, and is never written either.
 returns every field in picker order, adding the Aglyn ID when absent. A
 custom field's id is `custom:<key>`, the same target `csv-import.ts` uses.
 `resolveTransferPreset` computes `everything`, `reimportable` (the export
-default: the id and match keys first, then every writable field) and
+default: the id and match keys first — the id once, even when a match key
+names it — then every writable field) and
 `minimal`, or resolves a saved preset and reports the field ids that no
 longer exist. `groupTransferFields`, `searchTransferFields` and
 `moveTransferField` back the picker.
@@ -302,7 +303,8 @@ when their role writes data and `data.manage` is not revoked, or when a
 custom role stamps it; nobody writes. The subcollections match no rule, so
 no client reads them — the routes serve the plan, the results and undo. Storage under `orgs/{orgId}/transfers/` is closed to clients. The
 indexes are `transferJobs (resource ↑, createdAt ↓)` for a workspace's
-list and the collection-group `(status ↑, updatedAt ↑)` the sweep asks.
+list and the collection-group `(status ↑, updatedAt ↑)`, `(undo.status ↑,
+updatedAt ↑)` and `(retention ↑, retainUntil ↑)` the sweep asks.
 
 ### The routes
 
@@ -341,7 +343,24 @@ for its budget plus 30 seconds and releases it when it answers.
 `consoleFastCrons` tick; `transfer-jobs` in `SCHEDULED_JOBS`) resumes every
 `applying` job untouched for two minutes — a tab that closed between
 requests, or a request that died and whose lease has lapsed — through the
-same engine. A GET lists them and resumes nothing.
+same engine, and every undo left running for two minutes, with the
+person's own decisions (each `undo` apply call stores them on
+`undo.decisions`; anything they did not name follows `otherwise`).
+
+It also cleans up (AGL-3540). Every job write stamps `retention` and
+`retainUntil` (`transferJobRetention`):
+
+| the job | `retention` | `retainUntil` | when it is due |
+| -- | -- | -- | -- |
+| never wrote (`draft`, `analyzed`, `planned`, or `failed` before its first write) | `expire` | last touched + 7 days (`TRANSFER_DRAFT_RETENTION_MS`) | the job, its subcollections and its file (and any parts) are deleted |
+| wrote (`applied`, `undone`, or `failed` after writing) | `trim` | applied + 7 days, when undo closes (`TRANSFER_UNDO_WINDOW_MS`) | its dry run, undo snapshots, ledger and file are cleared; the job and its per-row results stay, with `trimmedAt`, and the result file is refused from then on |
+| `applying`, or undoing | — | — | resumed above, never cleaned |
+
+A trimmed job carries no `retention`, so it never matches again. The
+sweep reads each due job again before acting on it, and handles at most 50
+of each kind per run. A GET lists what it would do and does nothing. The
+indexes are `(undo.status ↑, updatedAt ↑)` and `(retention ↑,
+retainUntil ↑)`, collection group.
 
 ## The UI kit
 

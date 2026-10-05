@@ -31,7 +31,6 @@
 
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import {
-  TRANSFER_ID_FIELD,
   TRANSFER_PRESET_IDS,
   buildTransferFieldCatalog,
   resolveTransferFieldSelection,
@@ -115,20 +114,13 @@ export interface TransferExportDialogProps {
   onExported?(result: TransferExportResponse): void
 }
 
-/**
- * The resource's preset hints; without its own, its match keys lead. The
- * Aglyn ID always leads a preset, so it is not repeated among the keys.
- */
+/** The resource's preset hints; without its own, its match keys lead (the Aglyn ID always leads first). */
 function presetHintsOf(info: TransferResourceInfo): TransferPresetHints {
-  const hints = info.presetHints ?? {
-    matchKeyFieldIds: info.matchKeys.map((key) => key.fieldId),
-  }
-  return {
-    ...hints,
-    matchKeyFieldIds: [...new Set(hints.matchKeyFieldIds ?? [])].filter(
-      (id) => id !== TRANSFER_ID_FIELD,
-    ),
-  }
+  return (
+    info.presetHints ?? {
+      matchKeyFieldIds: info.matchKeys.map((key) => key.fieldId),
+    }
+  )
 }
 
 /** A file handed to the browser as a download. */
