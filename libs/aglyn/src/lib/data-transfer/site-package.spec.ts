@@ -403,6 +403,32 @@ describe('decisions into writes', () => {
     expect(mergeSiteFields(undefined, 1)).toBe(1)
   })
 
+  it('merges the keys the person names their way, and the rest as a merge does', async () => {
+    const { writes } = await resolve(
+      [{ kind: 'settings', id: 'settings', content: { displayName: 'New', seo: { title: 'T' }, favicon: 'f' } }],
+      [{ kind: 'settings', id: 'settings', content: { displayName: 'Old', seo: { title: 'Mine' }, locale: 'en' } }],
+      {
+        decisions: { 'settings/settings': 'merge' },
+        mergeChoices: { 'settings/settings': { displayName: 'package', seo: 'site' } },
+      },
+    )
+    expect(writes[0]?.content).toEqual({ displayName: 'New', seo: { title: 'Mine' }, locale: 'en', favicon: 'f' })
+  })
+
+  it('refuses key choices for an item that is not merged, or a choice that is neither side', async () => {
+    const items: SitePackageItem[] = [{ kind: 'settings', id: 'settings', content: { displayName: 'New' } }]
+    const site: SitePackageItem[] = [{ kind: 'settings', id: 'settings', content: { displayName: 'Old' } }]
+    await expect(
+      resolve(items, site, { mergeChoices: { 'settings/settings': { displayName: 'package' } } }),
+    ).rejects.toThrow('settings/settings is not merged')
+    await expect(
+      resolve(items, site, {
+        decisions: { 'settings/settings': 'merge' },
+        mergeChoices: { 'settings/settings': { displayName: 'both' as never } },
+      }),
+    ).rejects.toThrow('cannot take "both"')
+  })
+
   it('refuses a decision an item may not take, naming each', async () => {
     await expect(
       resolve([{ kind: 'settings', id: 'settings', content: { displayName: 'New' } }], [

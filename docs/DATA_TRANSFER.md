@@ -589,7 +589,7 @@ does not carry. The file is v2 only.
 ### Import — `POST /api/hosts/import`
 
 `{ hostId, action, package | bundle, mode?, decisions?, dependencyChoices?,
-importId?, otherwise? }`. A v1 `aglyn-site-export` backup is converted in
+mergeChoices?, keys?, importId?, otherwise? }`. A v1 `aglyn-site-export` backup is converted in
 memory. An item of a kind this site does not read (a plugin it lacks) is set
 aside and named in `unknownKinds`; a site email under a key the platform does
 not send is named in `notSent`.
@@ -597,7 +597,8 @@ not send is named in `notSent`.
 | action | does |
 | -- | -- |
 | `plan` | Reads the site the same way the export does, hashes both sides, and answers `planSitePackageImport`: each item matched by id, then slug, then name, within its kind; `new`, `identical`, `differs` or `missingDependency`; the proposed decision (create new, skip everything else) and the decisions it may take. With the person's decisions it also answers `capRefusal`: the sentence an apply would be refused with, counting only what the import adds. Writes nothing. |
-| `apply` | `mode: 'decide'` (default with an action): each item's decision — `create`, `replace`, `keepBoth`, `skip`, `merge` (settings and theme) — or the proposed one; `dependencyChoices[<kind>/<id>]` is `import` (the package's copy of a skipped new item), `{ mapTo }`, `drop` or `keep`. `mode: 'restore'`, and a request with no `action` at all: every item under its own id, as a v1 restore wrote. Then the restore's write path: pre-checks, the undo snapshot, the screens leg in one transaction, every other collection on batches, the plugin sections item by item, whole-host revalidation, an activity entry and an `adminAudit` row (`site.package.apply`). |
+| `compare` | Writes nothing either. For each of `keys` (one to ten item keys), the file's item and the site item it was matched to, each through `siteItemProjection` — what an import would write: `{ items: [{ key, kind, id, incoming, existing: { id, content } \| null }] }`. The package wizard asks for one item at a time, when the person opens it, to diff it and render both sides (AGL-3534). |
+| `apply` | `mode: 'decide'` (default with an action): each item's decision — `create`, `replace`, `keepBoth`, `skip`, `merge` (settings and theme) — or the proposed one; `dependencyChoices[<kind>/<id>]` is `import` (the package's copy of a skipped new item), `{ mapTo }`, `drop` or `keep`; `mergeChoices[<item key>][<key>]` is `site` or `package`, for a merged item's top-level keys. `mode: 'restore'`, and a request with no `action` at all: every item under its own id, as a v1 restore wrote. Then the restore's write path: pre-checks, the undo snapshot, the screens leg in one transaction, every other collection on batches, the plugin sections item by item, whole-host revalidation, an activity entry and an `adminAudit` row (`site.package.apply`). |
 | `undoPlan` / `undo` | For seven days: what undo would do (`restore`, `delete`, `conflict`), then do it — write each replaced item back through the same writers, and delete every document the import wrote that the undo did not write back. An item with a document updated after the import finished is a conflict, reverted only when `decisions[key]` or `otherwise` says `revert`. Audited as `site.package.undo`. |
 
 `resolveSitePackageImport` turns decisions into writes. Keep both gives the
@@ -607,8 +608,32 @@ of an item matched by slug or name points incoming references at the site's
 item. A replace of a page, layout or site email writes the incoming design as a
 NEW version when the site holds that version id with a different design, so no
 version the site has is overwritten and the one it published stays in its
-history. Merge fills what the site has not set and keeps every value it has.
+history. Merge fills what the site has not set and keeps every value it has, except
+the keys `mergeChoices` names: `package` takes the file's value, `site` keeps
+the site's.
 A media item kept as a copy keeps its own stored file's address.
+
+### The wizard — `PackageImportWizard` (AGL-3534)
+
+The kit (`@aglyn/aglyn-transfer-ui`) holds the screens; the console's backup
+card opens them. They talk to the routes above through a `SitePackageClient`
+the surface hands them (`site-package-client.ts`; the console's is
+`apps/console/utils/site-package-http-client.ts`). Upload → Items (grouped by
+kind; a decision per item from its own choice, then the default for its kind
+of change, then the plan's proposal; every item's decision is sent) → Missing
+items (`packageDependencyPrompts`: a dependency of a written item that the
+file carries but is skipped, or that neither side holds) → Changes (`compare`,
+rendered side by side through `previewHref` and diffed value by value; a merge
+key by key) → Review (re-planned with every decision; `capRefusal` blocks;
+each warning class acknowledged) → Import, with undo (`PackageImportUndo`,
+each edited-since conflict asked about). `PackageExportDialog` picks items by
+kind and shows `packageDependencyClosure` before the file downloads.
+
+The rendered diff uses the console's document preview route: each side is
+written as a preview snapshot under its own version id (`package-site`,
+`package-file`), never a real version's, and the route renders the snapshot
+(`apps/console/utils/site-package-preview.ts`). Both sides are drawn without
+a page's layout chain.
 
 ### The ledger — why these routes and not the job engine
 

@@ -84,6 +84,7 @@ import {
   readableNodes,
   readSiteAsPackage,
   sectionPackageHooks,
+  siteItemProjection,
   sitePackageContract,
   sitePackageOf,
   siteVersionHash,
@@ -774,8 +775,15 @@ async function hostCapRefusal(options: {
   return null
 }
 
-/** What the route does with a request: show the plan, apply it, or undo an import. */
-const IMPORT_ACTIONS = ['plan', 'apply', 'undoPlan', 'undo'] as const
+/** What the route does with a request: show the plan, compare items, apply it, or undo an import. */
+const IMPORT_ACTIONS = ['plan', 'compare', 'apply', 'undoPlan', 'undo'] as const
+
+/**
+ * How many items one `compare` answers. An item is compared when the person
+ * opens it, so a handful is plenty, and a page's design is the largest thing
+ * a package holds.
+ */
+const COMPARE_MAX_ITEMS = 10
 type ImportAction = (typeof IMPORT_ACTIONS)[number]
 
 /**
@@ -802,20 +810,26 @@ function wireMillis(value: unknown): number | null {
  * only.
  *
  * Body: `{ hostId, action?, package | bundle, mode?, decisions?,
- * dependencyChoices?, importId?, otherwise? }`.
+ * dependencyChoices?, mergeChoices?, keys?, importId?, otherwise? }`.
  *
  * - `plan` writes nothing. Each item is matched by id, then slug, then name,
  *   within its kind, and is `new`, `identical` (same content hash),
  *   `differs` or `missingDependency`, with the decision proposed and the
  *   decisions it may take; the plan says too whether the import would cross
  *   a plan cap, counting only what it would add.
+ * - `compare` writes nothing either: for each of `keys` (at most
+ *   {@link COMPARE_MAX_ITEMS}), the file's item and the site item it was
+ *   matched to, each as an import would write it (`siteItemProjection`) —
+ *   what the import screen diffs and renders side by side (AGL-3534).
  * - `apply` writes. `mode: 'decide'` (the default with an `action`) takes the
  *   person's `decisions` by item key — create, replace (a page, layout or
  *   email as a NEW version), keep both (a new id and slug, every reference to
  *   it rewritten), skip, merge (settings and theme, key by key) — and the
  *   proposed one for the rest, plus a choice per missing dependency:
  *   `import` it from the package, `{ mapTo }` an item the site holds, `drop`
- *   the reference, or `keep` it as it is. `mode: 'restore'` — and a request
+ *   the reference, or `keep` it as it is; and, for a merged item,
+ *   `mergeChoices[key][field]` — `site` or `package` — key by key.
+ *   `mode: 'restore'` — and a request
  *   with no `action` at all, the backup's own restore — writes every item
  *   under its own id, as a v1 restore did. Either way the content each
  *   replaced item had is kept first, for undo.
@@ -1648,6 +1662,30 @@ async function handler(request: Request): Promise<Response> {
       alsoKnown: site.items,
     })
     const plan = planSitePackageImport(incoming, site.existing, kinds)
+    if (action === 'compare') {
+      const keys: string[] = Array.isArray(body?.keys) ? body.keys.map(String) : []
+      if (!keys.length || keys.length > COMPARE_MAX_ITEMS) {
+        return Response.json({ error: `Compare between 1 and ${COMPARE_MAX_ITEMS} items at a time` }, { status: 400 })
+      }
+      const compared = keys.flatMap((key) => {
+        const planned = plan.items.find((one) => one.key === key)
+        if (!planned) return []
+        const kind = kinds.get(planned.kind)
+        const matched = planned.existing
+          ? site.existing.find((one) => one.kind === planned.kind && one.id === planned.existing?.id)
+          : undefined
+        return [{
+          key,
+          kind: planned.kind,
+          id: planned.id,
+          incoming: siteItemProjection({ kind: planned.kind, id: planned.id, content: incoming.items[key] ?? {} }, kind),
+          existing: matched
+            ? { id: matched.id, content: siteItemProjection({ kind: matched.kind, id: matched.id, content: matched.content }, kind) }
+            : null,
+        }]
+      })
+      return Response.json({ items: compared })
+    }
     // A request with no action is a backup restored the way it always was.
     const mode = body?.mode === 'restore' || body?.action === undefined ? 'restore' : 'decide'
     let resolved: ResolvedSitePackageImport
@@ -1658,6 +1696,7 @@ async function handler(request: Request): Promise<Response> {
         mode,
         decisions: body?.decisions ?? {},
         dependencyChoices: body?.dependencyChoices ?? {},
+        mergeChoices: body?.mergeChoices ?? {},
         existing: site.existing,
         newId: createResourceUid,
         kinds,

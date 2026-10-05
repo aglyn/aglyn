@@ -35,6 +35,13 @@ Components:
   acknowledgement before Import enables; applying pauses and resumes; an
   applied import can be undone while its window is open. The draft is
   saved per job, so a reload with the job id resumes.
+- `PackageImportWizard` walks a site package through Upload, Items, Missing
+  items, Changes, Review and Import: items grouped by kind with their status,
+  a decision per item with defaults per kind of change, a choice for each
+  dependency the import would leave pointing at nothing, each changed item
+  rendered side by side and diffed value by value (a merge key by key), and
+  undo. `PackageExportDialog` exports the items picked, with what they need.
+  Both take a `SitePackageClient`.
 - `TransferDiffTable`, `TransferAcknowledgementList`, `TransferChoiceSelect`,
   `TransferFieldPicker` and `TransferWizardNav` are the shared pieces, for a
   surface (a package import) that lays out its own steps.

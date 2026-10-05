@@ -358,6 +358,29 @@ describe('the plan writes nothing and tells new from identical from changed', ()
   })
 })
 
+describe('compare answers both sides of an item, writing nothing (AGL-3534)', () => {
+  it('gives the file’s item and the site item it matched, each as an import would write it', async () => {
+    const pkg = await exportSite('&items=page/page-about')
+    pkg.items['page/page-about'].version.nodes.text.props.children = 'About us, rewritten'
+    const { status, body } = await call({ action: 'compare', package: pkg, keys: ['page/page-about', 'page/nowhere'] })
+    expect(status).toBe(200)
+    expect(body.items).toHaveLength(1)
+    const [about] = body.items
+    expect(about).toMatchObject({ key: 'page/page-about', kind: 'page', id: 'page-about', existing: { id: 'page-about' } })
+    expect(about.incoming.version.nodes.text.props.children).toBe('About us, rewritten')
+    expect(about.existing.content.version.nodes.text.props.children).toBe('About us')
+    expect(about.existing.content.route).toBe('/about')
+    expect(writes).toEqual([])
+  })
+
+  it('asks for at least one item and at most ten', async () => {
+    const pkg = await exportSite('&items=page/page-about')
+    expect((await call({ action: 'compare', package: pkg, keys: [] })).status).toBe(400)
+    const many = Array.from({ length: 11 }, (_unused, n) => `page/p-${n}`)
+    expect((await call({ action: 'compare', package: pkg, keys: many })).status).toBe(400)
+  })
+})
+
 describe('applying decisions', () => {
   it('keeps both: a copy under a new id and slug, routed beside the original, references moved', async () => {
     const pkg = await exportSite()
@@ -419,6 +442,20 @@ describe('applying decisions', () => {
     })
     expect(body.warnings.map((one: any) => one.code)).toEqual(['mappedReference'])
     expect(read('hosts/host-1/screens/page-about')!['layoutId']).toBe('layout-chrome')
+  })
+
+  it('merges settings key by key the way the person chose', async () => {
+    const pkg = await exportSite('&items=settings/settings')
+    pkg.items['settings/settings'] = { displayName: 'Acme Two', locale: 'fr' }
+    seed('hosts', 'host-1', { ...read('hosts/host-1'), locale: 'en' })
+    const { status } = await call({
+      action: 'apply',
+      package: pkg,
+      decisions: { 'settings/settings': 'merge' },
+      mergeChoices: { 'settings/settings': { displayName: 'package' } },
+    })
+    expect(status).toBe(200)
+    expect(read('hosts/host-1')).toMatchObject({ displayName: 'Acme Two', locale: 'en' })
   })
 
   it('stamps the importing admin as the approver of an off-site redirect', async () => {

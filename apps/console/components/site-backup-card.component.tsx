@@ -17,65 +17,94 @@
 
 'use client'
 
-import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import {
+  PackageExportDialog,
+  PackageImportUndo,
+  PackageImportWizard,
+  type SitePackageClient,
+} from '@aglyn/aglyn-transfer-ui'
+import { ICON_VARIANT_CLOSE } from '@aglyn/shared-data-enums'
+import { CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import { Alert, Button, Stack, Typography } from '@mui/material'
-import { type ChangeEvent, useCallback, useRef, useState } from 'react'
-import { useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
+import { useUser } from '@aglyn/tenant-feature-instance'
+import {
+  Button,
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  IconButton,
+  Stack,
+  Typography,
+  useMediaQuery,
+  useTheme,
+} from '@mui/material'
+import { useParams } from 'next/navigation'
+import { type ReactNode, useCallback, useMemo, useState } from 'react'
 import { docsHelp } from '../constants/docs-links'
 import { hasEntitlement } from '../constants/entitlements'
 import useCurrentOrg from '../hooks/use-current-org'
+import { createSitePackageHttpClient } from '../utils/site-package-http-client'
+import { sitePackagePreviewHref } from '../utils/site-package-preview'
 
-/** One item of the import plan, as the route answers it. */
-interface PlanItem {
-  key: string
-  status: 'new' | 'identical' | 'differs' | 'missingDependency'
-  comparison: 'new' | 'identical' | 'differs'
-  choices: string[]
+/** Which of the card's dialogs is open. */
+type Open = 'import' | 'export' | 'undo' | null
+
+function CardDialog(props: { title: string; id: string; onClose(): void; children: ReactNode }) {
+  const theme = useTheme()
+  const narrow = useMediaQuery(theme.breakpoints.down('sm'))
+  return (
+    <Dialog open onClose={props.onClose} fullWidth maxWidth="lg" fullScreen={narrow} aria-labelledby={props.id}>
+      <DialogTitle id={props.id}>
+        <Stack direction="row" spacing={1} sx={{ alignItems: 'center', justifyContent: 'space-between' }}>
+          <Typography variant="h6" component="span">
+            {props.title}
+          </Typography>
+          <IconButton aria-label="Close" onClick={props.onClose} edge="end">
+            <MdiIcon path={ICON_VARIANT_CLOSE.path} />
+          </IconButton>
+        </Stack>
+      </DialogTitle>
+      <DialogContent dividers>{props.children}</DialogContent>
+    </Dialog>
+  )
 }
-
-/** The import route's plan answer, as far as this card reads it. */
-interface PlanAnswer {
-  plan: {
-    items: PlanItem[]
-    counts: Record<PlanItem['status'], number>
-  }
-  capRefusal: string | null
-  warningsTotal: number
-  unknownKinds: string[]
-  notSent: string[]
-}
-
-/** A plan waiting on the person: the file it came from, and what it says. */
-interface PendingImport {
-  file: unknown
-  fileName: string
-  answer: PlanAnswer
-}
-
-const plural = (count: number, one: string, many = `${one}s`) => `${count} ${count === 1 ? one : many}`
 
 /**
- * Site backup (AGL-163, AGL-3533): download everything designable as one
- * site package, and import one into this site. An import is planned before
- * it is written: the card shows how many items are new, unchanged and
- * changed, and imports the new ones — or, when asked, replaces the changed
- * ones too, each as a new version where it has versions. The import can be
- * undone from here for as long as the card is open (the import route keeps
- * it undoable for seven days). Choosing item by item is the import wizard's
- * (AGL-3534). Pro+ (`siteExport` flag).
+ * Site backup and packages (AGL-163, AGL-3533, AGL-3534): download
+ * everything designable as one site package, export the items you pick with
+ * what they need, and import a package through the kit's package wizard —
+ * each item shown against this site's copy, rendered side by side and value
+ * by value, with a choice for every changed item and every missing
+ * dependency. The last import can be undone from here for as long as the
+ * card is open; the route keeps it undoable for seven days. Pro+
+ * (`siteExport` flag).
  */
 export function SiteBackupCard(props: { hostId: string }) {
   const { hostId } = props
+  const { orgSlug = '', host = '' } = useParams<{ orgSlug?: string; host?: string }>() ?? {}
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
-  const { confirm } = useConfirmationContext()
   const { org, ready: orgReady } = useCurrentOrg()
-  const inputRef = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
-  const [pending, setPending] = useState<PendingImport | null>(null)
+  const [open, setOpen] = useState<Open>(null)
   const [lastImportId, setLastImportId] = useState<string | null>(null)
+  // The import the undo dialog is about, held while it is open so the
+  // dialog can say what undo did after the card stops offering it.
+  const [undoing, setUndoing] = useState<string | null>(null)
+
+  const client: SitePackageClient = useMemo(
+    () =>
+      createSitePackageHttpClient({
+        hostId,
+        fetch: (input, init) => authorizedFetch(user, input, init),
+      }),
+    [hostId, user],
+  )
+  const previewHref = useMemo(
+    () => (orgSlug && host ? sitePackagePreviewHref({ orgSlug, host, hostId }) : undefined),
+    [orgSlug, host, hostId],
+  )
 
   const gate = useCallback(() => {
     // AGL-1380: an undefined `org` — in flight, or a failed read — checks as
@@ -97,158 +126,37 @@ export function SiteBackupCard(props: { hostId: string }) {
     return false
   }, [org, orgReady, enqueueSnackbar])
 
-  const failed = useCallback(
-    (error: unknown) => {
-      console.error(error)
-      enqueueSnackbar(error instanceof SyntaxError ? 'That file is not a valid backup' : 'An error has occurred', {
-        variant: 'error',
-        allowDuplicate: true,
-      })
-    },
-    [enqueueSnackbar],
-  )
-
-  const post = useCallback(
-    async (body: Record<string, unknown>) => {
-      const response = await authorizedFetch(user, '/api/hosts/import', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ hostId, ...body }),
-      })
-      const payload = await response.json().catch(() => ({}))
-      if (!response.ok) {
-        enqueueSnackbar(payload?.error ?? 'Import failed', { variant: 'warning', allowDuplicate: true })
-        return null
-      }
-      return payload
-    },
-    [user, hostId, enqueueSnackbar],
-  )
-
-  const handleExport = useCallback(async () => {
+  const handleBackup = useCallback(async () => {
     if (!gate() || busy) return
     setBusy(true)
     try {
-      const response = await authorizedFetch(user, `/api/hosts/export?hostId=${encodeURIComponent(hostId)}`)
-      if (!response.ok) {
-        const payload = await response.json().catch(() => ({}))
-        return void enqueueSnackbar(payload?.error ?? 'Export failed', {
-          variant: 'warning',
-          allowDuplicate: true,
-        })
-      }
-      const blob = await response.blob()
-      const url = URL.createObjectURL(blob)
+      const file = await client.exportPackage({})
+      const url = URL.createObjectURL(file.body)
       const anchor = document.createElement('a')
       anchor.href = url
-      anchor.download = `aglyn-${hostId}-${new Date().toISOString().slice(0, 10)}.json`
+      anchor.download = file.fileName
       anchor.click()
       URL.revokeObjectURL(url)
       enqueueSnackbar('Backup downloaded', { variant: 'success', persist: false })
     } catch (error) {
-      failed(error)
+      console.error(error)
+      enqueueSnackbar(error instanceof Error && error.message ? error.message : 'Export failed', {
+        variant: 'warning',
+        allowDuplicate: true,
+      })
     } finally {
       setBusy(false)
     }
-  }, [gate, busy, user, hostId, enqueueSnackbar, failed])
+  }, [gate, busy, client, enqueueSnackbar])
 
-  const handleImportFile = useCallback(
-    async (event: ChangeEvent<HTMLInputElement>) => {
-      const file = event.target.files?.[0]
-      event.target.value = ''
-      if (!file || busy) return
-      setBusy(true)
-      try {
-        const parsed = JSON.parse(await file.text())
-        const answer = (await post({ action: 'plan', package: parsed })) as PlanAnswer | null
-        if (answer) setPending({ file: parsed, fileName: file.name, answer })
-      } catch (error) {
-        failed(error)
-      } finally {
-        setBusy(false)
-      }
-    },
-    [busy, post, failed],
-  )
-
-  /** Applies the plan: the proposed decisions, or with every changed item replaced. */
-  const handleApply = useCallback(
-    async (replaceChanged: boolean) => {
-      if (!pending || busy) return
-      if (replaceChanged) {
-        const confirmed = await confirm({
-          title: 'Replace the changed items?',
-          description:
-            'Each item that differs from this site’s copy is replaced by the ' +
-            'file’s. Pages, layouts and emails keep the version they had in ' +
-            'their history. You can undo the import afterwards.',
-          confirmationText: 'Replace',
-          confirmationButtonProps: { color: 'warning' },
-        })
-          .then(() => true)
-          .catch(() => false)
-        if (!confirmed) return
-      }
-      const decisions = replaceChanged
-        ? Object.fromEntries(
-            pending.answer.plan.items
-              .filter((item) => item.comparison === 'differs' && item.choices.includes('replace'))
-              .map((item) => [item.key, 'replace']),
-          )
-        : {}
-      setBusy(true)
-      try {
-        const result = await post({ action: 'apply', package: pending.file, decisions })
-        if (!result) return
-        setPending(null)
-        setLastImportId(result.importId ?? null)
-        enqueueSnackbar(`Imported ${plural(result.written ?? 0, 'document')}`, {
-          variant: 'success',
-          persist: false,
-        })
-      } catch (error) {
-        failed(error)
-      } finally {
-        setBusy(false)
-      }
-    },
-    [pending, busy, confirm, post, enqueueSnackbar, failed],
-  )
-
-  const handleUndo = useCallback(async () => {
-    if (!lastImportId || busy) return
-    setBusy(true)
-    try {
-      const plan = await post({ action: 'undoPlan', importId: lastImportId })
-      if (!plan) return
-      const conflicts: number = plan.counts?.conflict ?? 0
-      const confirmed = await confirm({
-        title: 'Undo this import?',
-        description:
-          `Items the import replaced are put back and items it added are ` +
-          `removed.${conflicts ? ` ${plural(conflicts, 'item has', 'items have')} been edited since and will be left as they are.` : ''}`,
-        confirmationText: 'Undo import',
-        confirmationButtonProps: { color: 'warning' },
-      })
-        .then(() => true)
-        .catch(() => false)
-      if (!confirmed) return
-      const result = await post({ action: 'undo', importId: lastImportId })
-      if (!result) return
-      setLastImportId(null)
-      enqueueSnackbar(`Undid the import (${plural(result.reverted ?? 0, 'item')})`, {
-        variant: 'success',
-        persist: false,
-      })
-    } catch (error) {
-      failed(error)
-    } finally {
-      setBusy(false)
-    }
-  }, [lastImportId, busy, post, confirm, enqueueSnackbar, failed])
-
-  const counts = pending?.answer.plan.counts
-  const changed = counts ? counts.differs : 0
+  const close = useCallback(() => {
+    setOpen(null)
+    setUndoing(null)
+  }, [])
+  const openIfAllowed = (which: Exclude<Open, null>) => {
+    if (which === 'undo') setUndoing(lastImportId)
+    if (which === 'undo' || gate()) setOpen(which)
+  }
 
   return (
     <CardDisplay
@@ -260,85 +168,55 @@ export function SiteBackupCard(props: { hostId: string }) {
       })}
       HeaderProps={{
         action: (
-          <Stack direction="row" spacing={1}>
-            {pending ? (
-              <>
-                <Button size="small" disabled={busy} onClick={() => setPending(null)}>
-                  {'Cancel'}
-                </Button>
-                {changed > 0 && (
-                  <Button size="small" color="warning" disabled={busy || Boolean(pending.answer.capRefusal)} onClick={() => handleApply(true)}>
-                    {'Replace changed too'}
-                  </Button>
-                )}
-                <Button
-                  variant="contained"
-                  size="small"
-                  disabled={busy || Boolean(pending.answer.capRefusal)}
-                  onClick={() => handleApply(false)}
-                >
-                  {busy ? 'Working…' : 'Import new items'}
-                </Button>
-              </>
-            ) : (
-              <>
-                {lastImportId && (
-                  <Button size="small" color="warning" disabled={busy} onClick={handleUndo}>
-                    {'Undo import'}
-                  </Button>
-                )}
-                <Button size="small" disabled={busy} onClick={() => gate() && inputRef.current?.click()}>
-                  {'Import from file'}
-                </Button>
-                <Button variant="contained" size="small" disabled={busy} onClick={handleExport}>
-                  {busy ? 'Working…' : 'Download backup'}
-                </Button>
-              </>
+          <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            {lastImportId && (
+              <Button size="small" color="warning" disabled={busy} onClick={() => openIfAllowed('undo')}>
+                {'Undo import'}
+              </Button>
             )}
+            <Button size="small" disabled={busy} onClick={() => openIfAllowed('import')}>
+              {'Import package'}
+            </Button>
+            <Button size="small" disabled={busy} onClick={() => openIfAllowed('export')}>
+              {'Export items'}
+            </Button>
+            <Button variant="contained" size="small" disabled={busy} onClick={handleBackup}>
+              {busy ? 'Working…' : 'Download backup'}
+            </Button>
           </Stack>
         ),
       }}
       contentGutterX
       contentGutterY
     >
-      <Stack spacing={1.5}>
-        {pending && counts ? (
-          <>
-            <Typography variant="body2">
-              {`${pending.fileName}: ${plural(counts.new, 'new item')}, ` +
-                `${plural(counts.identical, 'item')} already on this site unchanged, ` +
-                `${plural(counts.differs, 'item')} that differ from this site’s copy` +
-                (counts.missingDependency
-                  ? `, and ${plural(counts.missingDependency, 'item')} that need something neither the file nor this site holds.`
-                  : '.')}
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              {changed
-                ? 'Import new items adds what this site lacks and leaves the changed items as they are; replace them too to take the file’s versions.'
-                : 'Import new items adds what this site lacks.'}
-            </Typography>
-            {pending.answer.capRefusal && <Alert severity="warning">{pending.answer.capRefusal}</Alert>}
-            {pending.answer.warningsTotal > 0 && (
-              <Alert severity="info">
-                {`${plural(pending.answer.warningsTotal, 'reference')} will point at something this site does not hold until it does.`}
-              </Alert>
-            )}
-            {pending.answer.unknownKinds.length > 0 && (
-              <Alert severity="info">
-                {`This site cannot read ${pending.answer.unknownKinds.join(', ')} items — switch on the plugin that keeps them to import them.`}
-              </Alert>
-            )}
-          </>
-        ) : (
-          <Typography variant="body2" color="text.secondary">
-            {'Download everything designable — pages, layouts, emails, forms, ' +
-              'theme, content, data, automations — as one file, and import it ' +
-              'here or into another of your sites. An import shows what is new ' +
-              'and what has changed before it writes anything.'}
-          </Typography>
-        )}
-        <input ref={inputRef} type="file" accept="application/json" hidden onChange={handleImportFile} />
-      </Stack>
+      <Typography variant="body2" color="text.secondary">
+        {'Download everything designable — pages, layouts, emails, forms, ' +
+          'theme, content, data, automations — as one file, or export the items ' +
+          'you pick with what they need, and import it here or into another of ' +
+          'your sites. An import shows each item against this site’s copy and ' +
+          'asks how to handle it before it writes anything.'}
+      </Typography>
+      {open === 'import' && (
+        <CardDialog title="Import a site package" id="site-package-import-title" onClose={close}>
+          <PackageImportWizard
+            client={client}
+            {...(previewHref ? { previewHref } : {})}
+            onImported={(answer) => setLastImportId(answer.importId)}
+            onUndone={() => setLastImportId(null)}
+            onDone={close}
+          />
+        </CardDialog>
+      )}
+      {open === 'undo' && undoing && (
+        <CardDialog title="Undo the import" id="site-package-undo-title" onClose={close}>
+          <PackageImportUndo
+            client={client}
+            importId={undoing}
+            onUndone={() => setLastImportId(null)}
+          />
+        </CardDialog>
+      )}
+      <PackageExportDialog open={open === 'export'} onClose={close} client={client} />
     </CardDisplay>
   )
 }

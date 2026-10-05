@@ -992,6 +992,9 @@ export function planSitePackageImport(
  */
 export type SitePackageDependencyChoice = 'import' | 'keep' | 'drop' | { mapTo: string }
 
+/** Whose value one key of a merged item takes. */
+export type SitePackageMergeChoice = 'site' | 'package'
+
 /** How the import decides. */
 export type SitePackageImportMode =
   /**
@@ -1014,6 +1017,12 @@ export interface ResolveSitePackageInput {
   decisions?: Readonly<Record<string, PackageItemDecision>>
   /** The person's choice per dependency key (`<kind>/<id>`). */
   dependencyChoices?: Readonly<Record<string, SitePackageDependencyChoice>>
+  /**
+   * For a merged item, whose value each top-level key takes, by item key
+   * then key: `site` keeps the site's, `package` takes the file's. A key
+   * not named merges as {@link mergeSiteFields} does.
+   */
+  mergeChoices?: Readonly<Record<string, Readonly<Record<string, SitePackageMergeChoice>>>>
   /** The site's items: their content (for merge) and slugs (for keep both). */
   existing: readonly (SiteExistingItem & { content?: Doc })[]
   /** A new id for an item kept beside an existing one. */
@@ -1085,6 +1094,17 @@ export function resolveSitePackageImport(input: ResolveSitePackageInput): Resolv
   }
   for (const key of Object.keys(input.decisions ?? {})) {
     if (!planByKey.has(key)) problems.push(`${key} is not in the package.`)
+  }
+  for (const [key, choices] of Object.entries(input.mergeChoices ?? {})) {
+    if (decided.get(key) !== 'merge') {
+      problems.push(`${key} is not merged, so its keys cannot be chosen.`)
+      continue
+    }
+    for (const [field, choice] of Object.entries(choices ?? {})) {
+      if (choice !== 'site' && choice !== 'package') {
+        problems.push(`${key} key "${field}" cannot take "${String(choice)}"; it may take site or package.`)
+      }
+    }
   }
 
   // A dependency the person asked to import from the package is created
@@ -1226,8 +1246,14 @@ export function resolveSitePackageImport(input: ResolveSitePackageInput): Resolv
       existingKey = `${item.kind}/${targetId}`
     }
     if (decision === 'merge') {
-      const current = existingByKey.get(existingKey as string)?.content
-      content = mergeSiteFields(current ?? {}, content) as Doc
+      const current = asDoc(existingByKey.get(existingKey as string)?.content)
+      const incomingContent = content
+      content = mergeSiteFields(current, incomingContent) as Doc
+      for (const [field, choice] of Object.entries(input.mergeChoices?.[item.key] ?? {})) {
+        const value = choice === 'package' ? incomingContent[field] : current[field]
+        if (value === undefined) delete content[field]
+        else content[field] = value
+      }
     }
     writes.push({
       key: item.key,

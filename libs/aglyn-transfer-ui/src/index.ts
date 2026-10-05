@@ -17,9 +17,10 @@
 
 /**
  * The import and export UI kit (AGL-3526): the export dialog, the eight-step
- * import wizard, and the pieces both are built from — the diff table, the
- * warning acknowledgements and the choice controls — over the domain-neutral
- * core in `@aglyn/aglyn/data-transfer`.
+ * import wizard, the site package import wizard and export picker (AGL-3534),
+ * and the pieces they are built from — the diff table, the warning
+ * acknowledgements and the choice controls — over the domain-neutral core in
+ * `@aglyn/aglyn/data-transfer`.
  *
  * The kit talks to the server only through a `TransferClient` the surface
  * hands it; `createMemoryTransferClient` runs the core in memory for specs,
@@ -77,3 +78,25 @@ export {
   type TransferImportWizardController,
   type UseTransferImportWizardOptions,
 } from './lib/use-transfer-import-wizard'
+export * from './lib/site-package-client'
+export * from './lib/site-package-import-state'
+export {
+  PackageImportWizard,
+  type PackageImportStep,
+  type PackageImportWizardProps,
+} from './lib/package-import-wizard.component'
+export {
+  PackageItemDiff,
+  type PackageItemDiffProps,
+  type PackagePreviewHref,
+  type PackagePreviewInput,
+} from './lib/package-item-diff.component'
+export {
+  PackageImportUndo,
+  type PackageImportUndoProps,
+} from './lib/package-import-undo.component'
+export {
+  PackageExportDialog,
+  SITE_PACKAGE_SELECTION_MAX,
+  type PackageExportDialogProps,
+} from './lib/package-export-dialog.component'

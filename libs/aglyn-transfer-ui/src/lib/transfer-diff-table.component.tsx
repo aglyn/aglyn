@@ -93,6 +93,8 @@ export interface TransferDiffTableProps {
   filters?: readonly TransferDiffFilter[]
   pageSize?: number
   emptyText?: string
+  /** Column headings, for a table of items rather than rows ("Item", "On this site", "In the file"). */
+  headings?: { row?: string; field?: string; before?: string; after?: string }
 }
 
 export function TransferDiffTable({
@@ -101,6 +103,7 @@ export function TransferDiffTable({
   filters = [],
   pageSize = 25,
   emptyText = 'Nothing to show.',
+  headings = {},
 }: TransferDiffTableProps) {
   const [filter, setFilter] = useState('all')
   const [page, setPage] = useState(0)
@@ -135,11 +138,11 @@ export function TransferDiffTable({
       <ScrollTable size="small" aria-label={label}>
         <TableHead>
           <TableRow>
-            <TableCell>Row</TableCell>
+            <TableCell>{headings.row ?? 'Row'}</TableCell>
             <TableCell>Outcome</TableCell>
-            <TableCell>Field</TableCell>
-            <TableCell>Before</TableCell>
-            <TableCell>After</TableCell>
+            <TableCell>{headings.field ?? 'Field'}</TableCell>
+            <TableCell>{headings.before ?? 'Before'}</TableCell>
+            <TableCell>{headings.after ?? 'After'}</TableCell>
           </TableRow>
         </TableHead>
         <TableBody>
