@@ -402,7 +402,12 @@ export function resolveRenderMonitorTargets(
 
 /** The state document id for one origin. */
 export function renderMonitorCheckId(origin: string): string {
-  return `${RENDER_MONITOR_CHECK_PREFIX}${new URL(origin).host}`
+  return renderMonitorHostCheckId(new URL(origin).host)
+}
+
+/** The state document id for one host, as {@link renderMonitorCheckId} names it. */
+export function renderMonitorHostCheckId(host: string): string {
+  return `${RENDER_MONITOR_CHECK_PREFIX}${host}`
 }
 
 /** One render monitor state document. */
@@ -908,7 +913,7 @@ export function renderPagesHealth(
       checks[host] = { ...blank, ok: false, code: 'state-unavailable' }
       continue
     }
-    const state = states.get(`${RENDER_MONITOR_CHECK_PREFIX}${host}`)
+    const state = states.get(renderMonitorHostCheckId(host))
     if (!state) {
       checks[host] = { ...blank, ok: true, code: 'awaiting-first-run' }
       continue
@@ -939,7 +944,7 @@ export async function readRenderMonitorStates(
     const { default: firebaseAdmin } = await import('./firebase-admin')
     const db = firebaseAdmin.app().firestore()
     const refs = hosts.map((host) =>
-      db.collection(RENDER_MONITOR_COLLECTION).doc(`${RENDER_MONITOR_CHECK_PREFIX}${host}`),
+      db.collection(RENDER_MONITOR_COLLECTION).doc(renderMonitorHostCheckId(host)),
     )
     const snapshots = refs.length ? await db.getAll(...refs) : []
     const states = new Map<string, Partial<RenderMonitorStateDoc>>()

@@ -1,6 +1,6 @@
 # AGL-3520 — CRM assistance sends the whole record: what the legal pages owe before it ships
 
-**Status: draft. Nothing here is published or sent.** Google Docs are the source of truth
+**Status: published 2026-10-05 as legal v10 (Privacy §2, Subprocessors Anthropic row and change log). The owner notice in §5 was not sent.** Google Docs are the source of truth
 for legal wording; this file records the finding and the proposed text.
 
 ## 1. The change
