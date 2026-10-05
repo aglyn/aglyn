@@ -157,6 +157,11 @@ on:
       - 'cloud/**'
       - 'docs/**'
       - '.claude/**'
+      # AGL-3553: check:json-duplicate-keys reads every tracked JSON file, and
+      # the one it exists for — plugins.config.json — sits at the root beside
+      # nx.json, tsconfig.base.json and vercel.json.
+      - '*.json'
+      - 'examples/**'
   # THE TRIGGER THIS FILE ALREADY CLAIMED TO HAVE (AGL-2505).
   #
   # The push comment above ends "the promotion PR still runs `pull_request`
@@ -871,6 +876,17 @@ jobs:
 
       - run: npm run check:rules-size
 
+      # AGL-3544. What deploys is cloud/firebase-firestore.deploy.rules, the
+      # documented source with its comments stripped, line for line, so the
+      # comments stop counting toward the limit above. Every emulator, rules
+      # suite and deploy loads the artifact, so one left stale after a rules
+      # edit would test and ship the OLD rules while the source reads as the
+      # new ones. The check regenerates it in memory and fails on any byte of
+      # difference; `npm run generate:rules-deploy` is the fix.
+      - run: npm run test:rules-deploy
+
+      - run: npm run check:rules-deploy
+
       # AGL-2486. `compiler.reactRemoveProperties` deletes JSX props from the
       # BROWSER build only, and jest's transform keeps them — so a prop being
       # erased in production still renders under test and its spec passes.
@@ -1090,6 +1106,12 @@ jobs:
       # the one that happened, and which of two enrollments on one folded
       # record is kept.
       - run: npm run test:org-lead-backfill
+
+      # AGL-3511. The CRM picklists backfill's decisions — that a stored
+      # standard id stays an override, which held labels become the org's own
+      # values, which direction an org-added lead source is filed under, and
+      # that the registry it reads out of crm.ts still says what it assumes.
+      - run: npm run test:crm-picklists-backfill
 
       # AGL-3273. The org-campaign move's decisions — that ids never change,
       # which scope a moved container is stamped with, that the org copy wins
@@ -1381,6 +1403,18 @@ jobs:
       - run: npm run test:nul-bytes
 
       - run: npm run check:nul-bytes
+
+      # AGL-3553. `JSON.parse` keeps the LAST of two equal keys in one object
+      # and says nothing, so a key written twice deletes the first copy from
+      # every reader. Two lanes each added `transferResources` to the same
+      # plugin entry in plugins.config.json and git merged both without a
+      # conflict: one lane's resources would have vanished from the manifest.
+      # This reads every tracked .json/.jsonc as TEXT and fails on any key
+      # repeated at any depth (and on a file that does not read as JSON). The
+      # self-test rebuilds that merge first.
+      - run: npm run test:json-duplicate-keys
+
+      - run: npm run check:json-duplicate-keys
 
       # AGL-2480 — eslint over `tools/` itself. There is no `tools/project.json`,
       # so `tools/` is in NO nx project and `nx affected -t lint` has never

@@ -485,3 +485,60 @@ describe('a library image named by a markdown body (AGL-3149)', () => {
     })
   })
 })
+
+describe('a placed image names its asset version (AGL-3485)', () => {
+  it('lays the content hash on as mediaVersion, beside the pair', () => {
+    expect(
+      shipped(PICKED, answered({ ...REPLACED, contentHash: 'h4sh' })),
+    ).toMatchObject({
+      mediaVersion: 'h4sh',
+      intrinsicWidth: 480,
+      intrinsicHeight: 480,
+    })
+  })
+
+  it('lays the version on even when the pair already matches', () => {
+    const sized = { ...PICKED, intrinsicWidth: 480, intrinsicHeight: 480 }
+    expect(shipped(sized, answered({ ...REPLACED, contentHash: 'h4sh' }))).toEqual(
+      { ...sized, mediaVersion: 'h4sh' },
+    )
+  })
+
+  it('names no version for a hash a URL cannot carry', () => {
+    expect(
+      shipped(PICKED, answered({ ...REPLACED, contentHash: 'not a/hash' })),
+    ).not.toHaveProperty('mediaVersion')
+  })
+
+  it('reads the hash off the document it was handed', () => {
+    expect(
+      mediaAssetFactsFromDocument(
+        { width: 10, height: 10, contentHash: 'h4sh', visibleTo: ['org'] },
+        { scope: 'site1' },
+        'site1',
+      ),
+    ).toMatchObject({ contentHash: 'h4sh' })
+  })
+})
+
+describe('a placement made before references existed (AGL-3485)', () => {
+  it('reads the asset a legacy CDN path names, and lays its pair on', () => {
+    const legacy = { src: '/api/media/cdn/site1/photo', alt: 'old' }
+    expect(mediaAssetRefs(page(legacy))).toEqual([
+      { scope: 'site1', mediaId: 'photo' },
+    ])
+    expect(
+      shipped(legacy, answered({ ...REPLACED, contentHash: 'h4sh' })),
+    ).toMatchObject({
+      intrinsicWidth: 480,
+      intrinsicHeight: 480,
+      mediaVersion: 'h4sh',
+    })
+  })
+
+  it('reads nothing off a hotlink that only contains our route', () => {
+    expect(
+      mediaAssetRefs(page({ src: 'https://example.com/x/api/media/cdn/site1/photo' })),
+    ).toEqual([])
+  })
+})

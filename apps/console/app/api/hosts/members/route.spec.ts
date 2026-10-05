@@ -82,6 +82,9 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   emailUnverifiedResponse: () =>
     Response.json({ error: 'Verify your email' }, { status: 403 }),
   findUserByEmailAcrossPools: (...args: unknown[]) => mockFindUserByEmail(...args),
+  // The real predicate (AGL-3466): a record holding `staff: true` takes no seat.
+  claimsHoldStaff: (record?: { customClaims?: Record<string, unknown> } | null) =>
+    record?.customClaims?.['staff'] === true,
   grantHostAccess: (...args: unknown[]) => mockGrantHostAccess(...args),
   revokeHostAccess: (...args: unknown[]) => mockRevokeHostAccess(...args),
   collaboratorSeatRefusal: (...args: unknown[]) =>

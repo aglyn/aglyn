@@ -164,7 +164,11 @@ beforeAll(async () => {
   await registerPluginServerDeclarations()
 })
 
-import { FORMS_OFF_FOR_SITE_REFUSAL } from '@aglyn/aglyn/server'
+/**
+ * What the door answers a site with Forms off — spelled out, because a
+ * visitor reads it and every published form shows it as written.
+ */
+const FORMS_OFF_FOR_SITE_REFUSAL = 'This site is not accepting form submissions'
 // The door as the tenant serves it: the forms plugin's route, through the
 // plugin API dispatcher, with the forms plugin's surface loaded (AGL-3080).
 jest.mock('../utils/server-plugin-loader', () => ({

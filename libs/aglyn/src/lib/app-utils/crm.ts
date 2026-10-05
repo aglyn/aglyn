@@ -56,6 +56,7 @@ import {
   CONTACT_LIFECYCLE_STAGES,
   type ContactLifecycleStage,
   type CrmActivityKind,
+  CRM_TASK_KINDS,
   type CrmTaskKind,
   isContactLifecycleStage,
 } from './crm-kinds'
@@ -66,6 +67,7 @@ import {
   type ContactInteraction,
   type ContactSegment,
   type ContactSource,
+  composeContactName,
   normalizeContactEmail,
   readContactFacet,
 } from './contacts'
@@ -77,6 +79,27 @@ import {
   SCOPED_SEARCH_JOIN,
   scopedSearchTokens,
 } from './name-search'
+import {
+  effectivePicklistValueSet,
+  isStandardPicklistValueId,
+  judgePicklistValue,
+  mintPicklistValueId,
+  normalizePicklistLabel,
+  normalizePicklistValueSet,
+  PICKLIST_VALUES_MAX,
+  picklistActiveValues,
+  picklistDefaultLabel,
+  picklistFromLabels,
+  type PicklistJudgement,
+  picklistOptions,
+  type PicklistOption,
+  picklistRank,
+  picklistRefusalSentence,
+  type PicklistSpec,
+  type PicklistValue,
+  picklistValueByLabel,
+  type PicklistValueSet,
+} from './picklists'
 import { MAX_SCOPE_HOSTS, ORG_SCOPE_TOKEN, type ScopeToken } from './scope-tokens'
 
 // The fixed vocabularies and their guards live in a leaf module; every name
@@ -316,10 +339,43 @@ export interface CrmCompany extends CrmScoped {
   website?: string
   /** E.164 — `normalizePhone` before writing. */
   phone?: string
+  /** The billing address — Salesforce's Billing Address, under its original name. */
   address?: AglynPostalAddress | null
+  /**
+   * Salesforce's Industry: a label of the `industry` picklist (AGL-3514).
+   * A record written while it was free text keeps its text.
+   */
   industry?: string
   ownerUid?: string
   notes?: string
+  /*
+   * SALESFORCE'S ACCOUNT FIELDS (AGL-3514) — see the company account block.
+   * The picklist fields hold the value's LABEL, with the list's key beside
+   * the ones the Companies list filters by.
+   */
+  /** Account Type: a label of the `accountType` picklist. */
+  type?: string | null
+  /** Rating: a label of the `rating` picklist. */
+  rating?: string | null
+  /** Ownership: a label of the `ownership` picklist. */
+  ownership?: string | null
+  /** Account Source: a label of the `leadSource` picklist. */
+  accountSource?: string | null
+  /** Annual revenue in the minor unit of {@link CrmCompany.currency}. */
+  annualRevenueCents?: number | null
+  /** Lowercase ISO 4217, the deals' convention; `'usd'` when absent. */
+  currency?: string
+  numberOfEmployees?: number | null
+  /** E.164 — `normalizePhone`, like `phone`. */
+  fax?: string | null
+  accountNumber?: string | null
+  /** Salesforce's Account Site: which of the company's locations this record is. */
+  site?: string | null
+  tickerSymbol?: string | null
+  sicCode?: string | null
+  shippingAddress?: AglynPostalAddress | null
+  /** Another company of the same scope this one sits under; never itself or a descendant. */
+  parentCompanyId?: string | null
   /**
    * Lowercased, deduplicated, capped at twenty — the same shape a contact's
    * tags take, so a bulk "Add tag" over companies and one over contacts
@@ -361,6 +417,133 @@ export interface CrmDealStage {
    * between.
    */
   kind: 'open' | 'won' | 'lost'
+  /**
+   * The forecast category a deal takes on landing here (AGL-3516) — see
+   * {@link CrmForecastCategory}. Absent on a stage written before the field
+   * existed, which reads as its kind's: Closed for won, Omitted for lost,
+   * Pipeline for open ({@link dealStageForecastCategory}).
+   */
+  forecastCategory?: CrmForecastCategory
+}
+
+/*==========================================
+ * FORECAST CATEGORIES (AGL-3516).
+ *
+ * Salesforce's Opportunity forecast categories, a FIXED set — not a
+ * picklist an org edits, as in Salesforce, because a forecast rolls up by
+ * them and a renamed or added category would be one no forecast knows. A
+ * stage names the category a deal takes on landing in it; the deal stores
+ * its own copy, stamped at every stage move, which the deal page may then
+ * change for that deal alone.
+ *=========================================*/
+
+export const CRM_FORECAST_CATEGORIES = [
+  'omitted',
+  'pipeline',
+  'bestCase',
+  'commit',
+  'closed',
+] as const
+
+export type CrmForecastCategory = (typeof CRM_FORECAST_CATEGORIES)[number]
+
+export const CRM_FORECAST_CATEGORY_LABELS: Record<CrmForecastCategory, string> = {
+  omitted: 'Omitted',
+  pipeline: 'Pipeline',
+  bestCase: 'Best Case',
+  commit: 'Commit',
+  closed: 'Closed',
+}
+
+export function isCrmForecastCategory(value: unknown): value is CrmForecastCategory {
+  return typeof value === 'string' && (CRM_FORECAST_CATEGORIES as readonly string[]).includes(value)
+}
+
+/**
+ * A category as typed — the stored key or its label in any case and
+ * spacing ("Best Case", "best case", `bestCase`) — or `null`.
+ */
+export function readCrmForecastCategory(value: unknown): CrmForecastCategory | null {
+  if (isCrmForecastCategory(value)) return value
+  const key = String(value ?? '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .toLowerCase()
+  if (!key) return null
+  return (
+    CRM_FORECAST_CATEGORIES.find(
+      (category) =>
+        category.toLowerCase() === key ||
+        CRM_FORECAST_CATEGORY_LABELS[category].toLowerCase() === key,
+    ) ?? null
+  )
+}
+
+/** The category a stage stamps: its own, else its kind's. */
+export function dealStageForecastCategory(
+  stage: Pick<CrmDealStage, 'kind' | 'forecastCategory'>,
+): CrmForecastCategory {
+  if (isCrmForecastCategory(stage.forecastCategory)) return stage.forecastCategory
+  return stage.kind === 'won' ? 'closed' : stage.kind === 'lost' ? 'omitted' : 'pipeline'
+}
+
+/**
+ * A deal's forecast category as every reader takes it: the deal's own,
+ * else its stage's, else its status's — a deal written before the field
+ * existed forecasts where its stage puts it.
+ */
+export function dealForecastCategory(
+  deal: Partial<Pick<CrmDeal, 'forecastCategory' | 'status'>>,
+  stage: Pick<CrmDealStage, 'kind' | 'forecastCategory'> | null | undefined,
+): CrmForecastCategory {
+  if (isCrmForecastCategory(deal.forecastCategory)) return deal.forecastCategory
+  if (stage) return dealStageForecastCategory(stage)
+  return deal.status === 'won' ? 'closed' : deal.status === 'lost' ? 'omitted' : 'pipeline'
+}
+
+/** The longest Next step a deal keeps — Salesforce's own 255. */
+export const DEAL_NEXT_STEP_MAX = 255
+
+/**
+ * A probability override as stored: a whole number 0–100, or `null` for
+ * none (the stage's applies). Anything that is not a number in range is
+ * `undefined` — unreadable, for the writer to refuse.
+ */
+export function readDealProbability(value: unknown): number | null | undefined {
+  if (value === null || value === undefined) return null
+  if (typeof value === 'string' && !value.trim()) return null
+  const number = typeof value === 'number' ? value : Number(String(value).trim().replace(/%$/, ''))
+  if (!Number.isFinite(number) || !Number.isInteger(number) || number < 0 || number > 100) {
+    return undefined
+  }
+  return number
+}
+
+/**
+ * A deal's probability: its own override when it holds one, else its
+ * stage's, else `null` for a stage the pipeline no longer has.
+ */
+export function dealProbability(
+  deal: Partial<Pick<CrmDeal, 'probability'>>,
+  stage: Pick<CrmDealStage, 'probability'> | null | undefined,
+): number | null {
+  const own = readDealProbability(deal.probability)
+  if (typeof own === 'number') return own
+  if (!stage) return null
+  return Math.min(100, Math.max(0, Number(stage.probability) || 0))
+}
+
+/**
+ * What a stage move writes besides the stage, the status and the clocks:
+ * the new stage's forecast category, and the probability override CLEARED
+ * — Salesforce re-defaults a probability when the stage changes, so an
+ * override typed for the last stage does not follow the deal into the next.
+ * A write that sets either field itself, in the same request, wins.
+ */
+export function dealStageMoveFields(
+  stage: Pick<CrmDealStage, 'kind' | 'forecastCategory'>,
+): { forecastCategory: CrmForecastCategory; probability: null } {
+  return { forecastCategory: dealStageForecastCategory(stage), probability: null }
 }
 
 /** `orgs/{orgId}/pipelines/{pipelineId}`. */
@@ -386,19 +569,30 @@ export function isPipelineArchived(
 }
 
 /**
- * The stages a fresh pipeline starts with.
+ * The stages a fresh pipeline starts with: Salesforce's standard
+ * Opportunity stages, with its probabilities and forecast categories
+ * (AGL-3516). A pipeline seeded before them keeps the stages it was seeded
+ * with — nothing migrates a stored pipeline.
+ *
+ * The closing stages keep the ids `won` and `lost` every pipeline has had,
+ * so an automation filter naming them reads the same on old pipelines and
+ * new ones.
  *
  * Readonly on purpose: a pipeline document stores its own COPY (`[...]`), so
  * a merchant editing their stages must not be editing the module's default,
  * and a second pipeline seeded later must start from the original set.
  */
 export const DEFAULT_DEAL_STAGES: readonly CrmDealStage[] = [
-  { id: 'qualified', name: 'Qualified', order: 0, probability: 10, kind: 'open' },
-  { id: 'contact-made', name: 'Contact made', order: 1, probability: 20, kind: 'open' },
-  { id: 'proposal-sent', name: 'Proposal sent', order: 2, probability: 40, kind: 'open' },
-  { id: 'negotiation', name: 'Negotiation', order: 3, probability: 60, kind: 'open' },
-  { id: 'won', name: 'Won', order: 4, probability: 100, kind: 'won' },
-  { id: 'lost', name: 'Lost', order: 5, probability: 0, kind: 'lost' },
+  { id: 'prospecting', name: 'Prospecting', order: 0, probability: 10, kind: 'open', forecastCategory: 'pipeline' },
+  { id: 'qualification', name: 'Qualification', order: 1, probability: 10, kind: 'open', forecastCategory: 'pipeline' },
+  { id: 'needs-analysis', name: 'Needs Analysis', order: 2, probability: 20, kind: 'open', forecastCategory: 'pipeline' },
+  { id: 'value-proposition', name: 'Value Proposition', order: 3, probability: 50, kind: 'open', forecastCategory: 'pipeline' },
+  { id: 'id-decision-makers', name: 'Id. Decision Makers', order: 4, probability: 60, kind: 'open', forecastCategory: 'pipeline' },
+  { id: 'perception-analysis', name: 'Perception Analysis', order: 5, probability: 70, kind: 'open', forecastCategory: 'pipeline' },
+  { id: 'proposal-price-quote', name: 'Proposal/Price Quote', order: 6, probability: 75, kind: 'open', forecastCategory: 'bestCase' },
+  { id: 'negotiation-review', name: 'Negotiation/Review', order: 7, probability: 90, kind: 'open', forecastCategory: 'commit' },
+  { id: 'won', name: 'Closed Won', order: 8, probability: 100, kind: 'won', forecastCategory: 'closed' },
+  { id: 'lost', name: 'Closed Lost', order: 9, probability: 0, kind: 'lost', forecastCategory: 'omitted' },
 ]
 
 export type CrmDealStatus = 'open' | 'won' | 'lost'
@@ -478,6 +672,45 @@ export interface CrmDeal extends CrmScoped {
   lostReason?: string
   notes?: string
   createdByUid?: string
+  /*
+   * SALESFORCE'S OPPORTUNITY FIELDS (AGL-3516).
+   */
+  /**
+   * Salesforce's Type — the LABEL of one of the org's `opportunityType`
+   * values (New Business, Existing Business, …); `typeKey` beside it is
+   * what the Deals list filters by.
+   */
+  type?: string
+  /**
+   * Salesforce's Lead Source — the LABEL of one of the org's `leadSource`
+   * values, the picklist a lead's own lead source is; stamped from the
+   * lead a conversion opens the deal for. `leadSourceKey` beside it.
+   */
+  leadSource?: string
+  /** What happens next, at most {@link DEAL_NEXT_STEP_MAX} characters. */
+  nextStep?: string
+  /**
+   * This deal's own chance of closing, a whole number 0–100, overriding
+   * its stage's; `null` or absent means the stage's applies. Cleared by
+   * every stage move ({@link dealStageMoveFields}).
+   */
+  probability?: number | null
+  /**
+   * Where the deal is forecast — stamped from the stage at every stage move
+   * and changeable for this deal afterwards. See {@link dealForecastCategory}.
+   */
+  forecastCategory?: CrmForecastCategory
+  /**
+   * Salesforce's Primary Campaign Source: ONE of the org's campaigns (the
+   * Marketing plugin's containers, which a lead's `campaignIds` name).
+   */
+  campaignId?: string
+  /**
+   * Salesforce's Opportunity Contact Roles (AGL-3521): the people on the
+   * deal and the part each plays, at most one of them Primary — the one
+   * `contactId` names. See {@link dealContactRolesOf}.
+   */
+  contactRoles?: CrmDealContactRole[]
   /**
    * Custom field values, keyed by the key of a definition whose `object`
    * is `deal` — see {@link fieldDefinitionObject} (AGL-2661).
@@ -499,6 +732,143 @@ export interface CrmDeal extends CrmScoped {
   nextTaskAtMs?: number | null
   /** Org-library files attached to the deal (AGL-2662) — see {@link CRM_MEDIA_IDS_MAX}. */
   mediaIds?: string[]
+}
+
+/*------------------------------------------
+ * OPPORTUNITY CONTACT ROLES (AGL-3521).
+ *
+ * A deal names any number of contacts, each with the part they play — a
+ * label of the org's `opportunityContactRole` picklist, or none — and at
+ * most one of them Primary. The Primary is `contactId`, which every reader
+ * that existed before roles keeps reading: the won-deal customer floor, the
+ * send-email button, the CSV's Contact column, the REST filter. So the two
+ * are written together by every door — setting a Primary sets `contactId`,
+ * and a door that sets `contactId` the old way makes that contact Primary,
+ * adding them without a role when the deal did not name them.
+ *
+ * A deal written before roles holds `contactId` alone, which reads as one
+ * Primary row with no role; its first write through any door stores it.
+ * Where the two disagree — a write from a door that knows only
+ * `contactId` — `contactId` wins, because it is what every older reader
+ * already acted on.
+ *-----------------------------------------*/
+
+/** The most contacts one deal names — a buying committee, not a mailing list. */
+export const DEAL_CONTACT_ROLES_MAX = 50
+
+/** One contact on a deal. */
+export interface CrmDealContactRole {
+  contactId: string
+  /** The `opportunityContactRole` label, absent for a contact with no role yet. */
+  role?: string
+  primary: boolean
+}
+
+/**
+ * Stored or sent roles, read defensively: a row without a usable contact
+ * id is dropped, a contact named twice keeps its first row, only the first
+ * Primary stays Primary, and the list stops at {@link DEAL_CONTACT_ROLES_MAX}.
+ */
+export function readDealContactRoles(raw: unknown): CrmDealContactRole[] {
+  if (!Array.isArray(raw)) return []
+  const roles: CrmDealContactRole[] = []
+  const seen = new Set<string>()
+  let primaryTaken = false
+  for (const entry of raw) {
+    if (!entry || typeof entry !== 'object') continue
+    const row = entry as Record<string, unknown>
+    const contactId = typeof row['contactId'] === 'string' ? row['contactId'].trim() : ''
+    if (!contactId || contactId.length > 200 || contactId.includes('/') || seen.has(contactId)) {
+      continue
+    }
+    seen.add(contactId)
+    const role = typeof row['role'] === 'string' ? normalizePicklistLabel(row['role']) : ''
+    const primary = row['primary'] === true && !primaryTaken
+    if (primary) primaryTaken = true
+    roles.push({ contactId, ...(role ? { role } : {}), primary })
+    if (roles.length >= DEAL_CONTACT_ROLES_MAX) break
+  }
+  return roles
+}
+
+/**
+ * `roles` with `contactId` as the one Primary — added first, with no role,
+ * when the list does not name them — or, for `null`, with no Primary.
+ */
+export function dealContactRolesWithPrimary(
+  roles: readonly CrmDealContactRole[],
+  contactId: string | null | undefined,
+): CrmDealContactRole[] {
+  const id = typeof contactId === 'string' ? contactId.trim() : ''
+  const next = roles.map((row) => ({ ...row, primary: Boolean(id) && row.contactId === id }))
+  if (id && !next.some((row) => row.contactId === id)) next.unshift({ contactId: id, primary: true })
+  return next.slice(0, DEAL_CONTACT_ROLES_MAX)
+}
+
+/**
+ * The roles a deal holds, in step with its `contactId`: the stored list
+ * with the contact `contactId` names as its Primary — so a deal written
+ * before roles reads as its one contact, Primary, with no role.
+ */
+export function dealContactRolesOf(deal: {
+  contactId?: unknown
+  contactRoles?: unknown
+}): CrmDealContactRole[] {
+  const contactId = typeof deal.contactId === 'string' ? deal.contactId : null
+  return dealContactRolesWithPrimary(readDealContactRoles(deal.contactRoles), contactId)
+}
+
+/** The Primary's contact id, or `null` for a deal with none. */
+export function dealPrimaryContactId(roles: readonly CrmDealContactRole[]): string | null {
+  return roles.find((row) => row.primary)?.contactId ?? null
+}
+
+/** `roles` without one contact — a delete or an erasure of that person. */
+export function dealContactRolesWithout(
+  roles: readonly CrmDealContactRole[],
+  contactId: string,
+): CrmDealContactRole[] {
+  return roles.filter((row) => row.contactId !== contactId)
+}
+
+/**
+ * `roles` with every row naming `from` moved to `to` — a contact merge.
+ * When both are on the deal the survivor keeps its own row, taking the
+ * merged row's role where it has none and its Primary where it was.
+ */
+export function dealContactRolesRepointed(
+  roles: readonly CrmDealContactRole[],
+  from: string,
+  to: string,
+): CrmDealContactRole[] {
+  const merged = roles.find((row) => row.contactId === from)
+  if (!merged || from === to) return [...roles]
+  if (!roles.some((row) => row.contactId === to)) {
+    return roles.map((row) => (row.contactId === from ? { ...row, contactId: to } : row))
+  }
+  return roles
+    .filter((row) => row.contactId !== from)
+    .map((row) =>
+      row.contactId === to
+        ? {
+            ...row,
+            ...(!row.role && merged.role ? { role: merged.role } : {}),
+            primary: row.primary || merged.primary,
+          }
+        : row,
+    )
+}
+
+/**
+ * What a deal stores for a list of roles: the list, and the `contactId`
+ * its Primary names — `null` for none, which a writer turns into a delete.
+ */
+export function dealContactRoleFields(roles: readonly CrmDealContactRole[]): {
+  contactRoles: CrmDealContactRole[]
+  contactId: string | null
+} {
+  const contactRoles = readDealContactRoles(roles)
+  return { contactRoles, contactId: dealPrimaryContactId(contactRoles) }
 }
 
 export const CRM_TASK_KIND_LABELS: Record<CrmTaskKind, string> = {
@@ -529,6 +899,15 @@ export interface CrmTask extends Omit<CrmScoped, 'hostId'> {
   kind: CrmTaskKind
   priority: CrmTaskPriority
   status: CrmTaskStatus
+  /**
+   * The org's labels for `status`, `priority` and `kind` (AGL-3517) — a
+   * value of the `taskStatus`, `taskPriority` and `taskType` picklists,
+   * whose meaning is the field beside it. Absent or `null` shows the first
+   * active value of that meaning; see `crmTaskPicklistLabels`.
+   */
+  statusLabel?: string | null
+  priorityLabel?: string | null
+  typeLabel?: string | null
   dueAtMs?: number | null
   completedAtMs?: number | null
   /**
@@ -744,6 +1123,45 @@ export function crmEmailDeliveryTags(input: {
 export type CrmEmailDirection = 'outbound' | 'inbound'
 
 /**
+ * Which way a call went (AGL-3517) — Salesforce's Call Type: `inbound` for
+ * one the contact placed, `outbound` for one the team placed, `internal`
+ * for one between teammates about the record.
+ */
+export type CrmCallDirection = CrmEmailDirection | 'internal'
+
+/** An activity's direction: a call's three, of which an email takes the first two. */
+export type CrmActivityDirection = CrmCallDirection
+
+/** The directions each kind takes, in the order a select lists them; none for the rest. */
+export const CRM_ACTIVITY_DIRECTIONS: Readonly<Partial<Record<CrmActivityKind, readonly CrmActivityDirection[]>>> = {
+  call: ['outbound', 'inbound', 'internal'],
+  email: ['outbound', 'inbound'],
+}
+
+export const CRM_ACTIVITY_DIRECTION_LABELS: Record<CrmActivityDirection, string> = {
+  outbound: 'Outbound',
+  inbound: 'Inbound',
+  internal: 'Internal',
+}
+
+/** `value` when `kind` takes it as a direction, else `null`. */
+export function crmActivityDirection(
+  kind: unknown,
+  value: unknown,
+): CrmActivityDirection | null {
+  const allowed = CRM_ACTIVITY_DIRECTIONS[kind as CrmActivityKind] ?? []
+  const text = String(value ?? '').trim().toLowerCase()
+  return (allowed as readonly string[]).includes(text) ? (text as CrmActivityDirection) : null
+}
+
+/** "Inbound call", "Outbound email", "Internal call" — or the kind alone with no direction. */
+export function crmActivityKindTitle(kind: CrmActivityKind, direction?: unknown): string {
+  const known = crmActivityDirection(kind, direction)
+  const noun = CRM_ACTIVITY_KIND_LABELS[kind] ?? String(kind)
+  return known ? `${CRM_ACTIVITY_DIRECTION_LABELS[known]} ${noun.toLowerCase()}` : noun
+}
+
+/**
  * `orgs/{orgId}/crmActivities/{activityId}` — one thing that happened.
  *
  * Distinct from a contact's `interactions`: those are what the PLATFORM
@@ -802,10 +1220,12 @@ export interface CrmActivity extends CrmScoped {
   /** The address the message left for. */
   to?: string
   /**
-   * `outbound` for a message the platform sent or a teammate copied to the
-   * capture address; `inbound` for one a correspondent wrote (AGL-2657).
+   * On an email: `outbound` for a message the platform sent or a teammate
+   * copied to the capture address; `inbound` for one a correspondent wrote
+   * (AGL-2657). On a call: inbound, outbound or internal (AGL-3517). See
+   * {@link CRM_ACTIVITY_DIRECTIONS}.
    */
-  direction?: CrmEmailDirection
+  direction?: CrmActivityDirection
   /** See {@link CrmEmailDeliveryState}; advanced by the delivery webhook. */
   deliveryState?: CrmEmailDeliveryState
   /** When the delivery state last moved, epoch ms. */
@@ -1274,15 +1694,18 @@ export function dealStageById(
  * of itself. An open deal with no resolvable stage is worth nothing rather
  * than everything: the pipeline lost the stage, and a forecast that filled
  * the gap with 100% would be the most optimistic number available.
+ *
+ * An open deal's own probability override (AGL-3516) replaces its stage's
+ * — see {@link dealProbability}.
  */
 export function weightedDealAmountCents(
-  deal: Pick<CrmDeal, 'amountCents' | 'status'>,
+  deal: Pick<CrmDeal, 'amountCents' | 'status'> & Partial<Pick<CrmDeal, 'probability'>>,
   stage: Pick<CrmDealStage, 'probability'> | null | undefined,
 ): number {
   const amount = Math.max(0, Math.round(Number(deal.amountCents ?? 0) || 0))
   if (deal.status === 'won') return amount
   if (deal.status === 'lost' || !stage) return 0
-  const probability = Math.min(100, Math.max(0, Number(stage.probability) || 0))
+  const probability = dealProbability(deal, stage) ?? 0
   return Math.round((amount * probability) / 100)
 }
 
@@ -1466,6 +1889,233 @@ export function normalizeCompanyWebsite(input: unknown): string | null {
   } catch {
     return null
   }
+}
+
+/*==========================================
+ * A COMPANY'S ACCOUNT FIELDS (AGL-3514).
+ *
+ * Salesforce's Account carries more than a name and a domain: a Type, an
+ * Industry, a Rating, an Ownership and an Account Source, each a picklist;
+ * an annual revenue and a head count; a fax, an account number, a site, a
+ * ticker symbol and an SIC code; a shipping address beside the billing one;
+ * and a parent account. Every door that writes a company — the drawer, the
+ * REST resource, the import, a lead's conversion — reads them through this
+ * block, so a value one door refuses is refused by all of them.
+ *
+ * ## Each field's three answers
+ *
+ * A door reads what a request said about a field: not named (`undefined`)
+ * leaves the record alone, `null` or a blank clears it, and anything else
+ * is normalized or refused by name. A picklist field stores the value's
+ * LABEL, judged against the org's list with the record's current value
+ * kept (see the picklist block); the Companies list filters by the key of
+ * Type, Industry and Rating, which `crmCompanyListFields` writes beside
+ * the label.
+ *=========================================*/
+
+/** Each company picklist field: the list it holds a value of, and the key the list filters by. */
+export const CRM_COMPANY_PICKLIST_FIELDS = [
+  { field: 'type', picklistId: 'accountType', keyField: 'typeKey' },
+  { field: 'industry', picklistId: 'industry', keyField: 'industryKey' },
+  { field: 'rating', picklistId: 'rating', keyField: 'ratingKey' },
+  { field: 'ownership', picklistId: 'ownership' },
+  { field: 'accountSource', picklistId: 'leadSource', keyField: 'accountSourceKey' },
+] as const
+
+export type CrmCompanyPicklistField = (typeof CRM_COMPANY_PICKLIST_FIELDS)[number]['field']
+
+/** The short text fields, each capped at Salesforce's own length. */
+export const CRM_COMPANY_TEXT_MAX = {
+  accountNumber: 40,
+  site: 80,
+  tickerSymbol: 20,
+  sicCode: 20,
+} as const
+
+export type CrmCompanyTextField = keyof typeof CRM_COMPANY_TEXT_MAX
+
+/** The most employees a company records — Salesforce's eight digits. */
+export const CRM_COMPANY_EMPLOYEES_MAX = 99_999_999
+
+/** The account fields that are not picklists, as every door names them. */
+export const CRM_COMPANY_ACCOUNT_FIELDS = [
+  'annualRevenueCents',
+  'currency',
+  'numberOfEmployees',
+  'fax',
+  'accountNumber',
+  'site',
+  'tickerSymbol',
+  'sicCode',
+  'shippingAddress',
+] as const
+
+export type CrmCompanyAccountField = (typeof CRM_COMPANY_ACCOUNT_FIELDS)[number]
+
+/** A short text field as stored: trimmed, single-spaced. */
+export function normalizeCompanyText(value: unknown): string {
+  return String(value ?? '')
+    .trim()
+    .replace(/\s+/g, ' ')
+}
+
+const blank = (value: unknown): boolean =>
+  value === null || (typeof value === 'string' && value.trim() === '')
+
+/**
+ * The account fields a request names, normalized, or the refusal of each
+ * one that cannot be stored — see the block above. A value the door has
+ * already parsed from text (the drawer's revenue, a file's head count)
+ * arrives here as the number it parsed.
+ */
+export function readCrmCompanyAccountFields(input: Readonly<Record<string, unknown>>): {
+  values: Partial<Pick<CrmCompany, CrmCompanyAccountField>>
+  errors: Record<string, string>
+} {
+  const values: Record<string, unknown> = {}
+  const errors: Record<string, string> = {}
+  for (const field of CRM_COMPANY_ACCOUNT_FIELDS) {
+    const raw = input[field]
+    if (raw === undefined) continue
+    if (blank(raw)) {
+      values[field] = null
+      continue
+    }
+    switch (field) {
+      case 'annualRevenueCents':
+        if (typeof raw === 'number' && Number.isSafeInteger(raw) && raw >= 0) values[field] = raw
+        else errors[field] = 'Must be a whole number of cents, 0 or more'
+        break
+      case 'currency': {
+        const code = typeof raw === 'string' ? raw.trim().toLowerCase() : ''
+        if (/^[a-z]{3}$/.test(code)) values[field] = code
+        else errors[field] = 'Must be a three-letter ISO 4217 code, like usd'
+        break
+      }
+      case 'numberOfEmployees':
+        if (typeof raw === 'number' && Number.isInteger(raw) && raw >= 0 && raw <= CRM_COMPANY_EMPLOYEES_MAX) {
+          values[field] = raw
+        } else {
+          errors[field] = `Must be a whole number from 0 to ${CRM_COMPANY_EMPLOYEES_MAX}`
+        }
+        break
+      case 'fax': {
+        const fax = typeof raw === 'string' ? normalizePhone(raw) : null
+        if (fax) values[field] = fax
+        else errors[field] = 'Must be a phone number with a country code, like +15125550123'
+        break
+      }
+      case 'shippingAddress':
+        if (typeof raw === 'object' && !Array.isArray(raw)) {
+          values[field] = normalizeAddress(raw as AglynPostalAddress)
+        } else {
+          errors[field] = 'Must be an address object'
+        }
+        break
+      default: {
+        const max = CRM_COMPANY_TEXT_MAX[field]
+        if (typeof raw !== 'string' && typeof raw !== 'number') {
+          errors[field] = 'Must be text'
+          break
+        }
+        const text = normalizeCompanyText(raw)
+        if (text.length > max) errors[field] = `Must be at most ${max} characters`
+        else values[field] = text
+      }
+    }
+  }
+  return { values: values as Partial<Pick<CrmCompany, CrmCompanyAccountField>>, errors }
+}
+
+/**
+ * The picklist fields a request names, judged against the org's lists —
+ * `lists` holds each list the caller read, and a list it did not read is
+ * judged as the standard values alone. `current` is the record as stored:
+ * its value is kept even when the list no longer offers it, which is how
+ * a company whose industry was typed before Industry became a picklist
+ * keeps it. On a create (`created`), a field not named starts from its
+ * list's default when the org set one.
+ */
+export function judgeCrmCompanyPicklists(
+  lists: Readonly<Partial<Record<CrmPicklistId, CrmPicklist>>>,
+  requested: Readonly<Partial<Record<string, unknown>>>,
+  options: { current?: Readonly<Partial<Record<string, unknown>>>; created?: boolean } = {},
+): {
+  values: Partial<Record<CrmCompanyPicklistField, string | null>>
+  errors: Record<string, string>
+} {
+  const values: Partial<Record<CrmCompanyPicklistField, string | null>> = {}
+  const errors: Record<string, string> = {}
+  for (const { field, picklistId } of CRM_COMPANY_PICKLIST_FIELDS) {
+    const list = lists[picklistId] ?? effectiveCrmPicklist(picklistId, undefined)
+    const raw = requested[field]
+    if (raw === undefined) {
+      const fallback = options.created ? picklistDefaultLabel(list) : null
+      if (fallback) values[field] = fallback
+      continue
+    }
+    if (blank(raw)) {
+      values[field] = null
+      continue
+    }
+    if (typeof raw !== 'string') {
+      errors[field] = 'Must be text'
+      continue
+    }
+    const judged = judgeCrmPicklistValue(picklistId, list, raw, options.current?.[field])
+    if (judged.ok === false) errors[field] = judged.error
+    else values[field] = judged.value
+  }
+  return { values, errors }
+}
+
+/** How deep a chain of parent companies may run. */
+export const CRM_COMPANY_PARENT_DEPTH_MAX = 25
+
+/**
+ * What a parent lookup answers for one company id: its own parent, or
+ * `null` when there is no such company the writer may see.
+ */
+export type CrmCompanyParentReader = (
+  companyId: string,
+) => Promise<{ parentCompanyId: string | null } | null>
+
+/**
+ * Why `parentId` cannot be the parent of `companyId` (`null` for a company
+ * not yet created), or `null` when it can: a company is never its own
+ * parent, the parent must be a company the writer can see, and a company
+ * already UNDER this one cannot be put above it — the cycle Salesforce
+ * refuses too. Walks up from the parent through `read`, at most
+ * {@link CRM_COMPANY_PARENT_DEPTH_MAX} steps.
+ */
+export async function crmCompanyParentRefusal(
+  companyId: string | null,
+  parentId: string,
+  read: CrmCompanyParentReader,
+): Promise<string | null> {
+  if (companyId && parentId === companyId) return 'A company cannot be its own parent.'
+  const parent = await read(parentId)
+  if (!parent) return 'There is no such parent company.'
+  const seen = new Set<string>([parentId])
+  let cursor = parent.parentCompanyId
+  for (let depth = 1; cursor; depth += 1) {
+    if (companyId && cursor === companyId) {
+      return 'That company sits under this one, so it cannot be its parent.'
+    }
+    // A loop above that does not pass through this company is not this write's.
+    if (seen.has(cursor)) return null
+    if (depth >= CRM_COMPANY_PARENT_DEPTH_MAX) {
+      return `A company can sit at most ${CRM_COMPANY_PARENT_DEPTH_MAX} levels under another.`
+    }
+    seen.add(cursor)
+    cursor = (await read(cursor))?.parentCompanyId ?? null
+  }
+  return null
+}
+
+/** A stored parent id as a reader takes it, `null` for none. */
+export function crmCompanyParentId(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() !== '' ? value : null
 }
 
 /**
@@ -2433,6 +3083,12 @@ export function isCrmLeadStatus(value: unknown): value is CrmLeadStatus {
  */
 export interface CrmLeadFields extends CrmLeadProfile {
   status?: CrmLeadStatus
+  /**
+   * Which of the org's Lead status values of `status`'s meaning the lead
+   * holds (AGL-3512); absent, the lead shows its meaning's default label —
+   * see `crmLeadStatusLabel`.
+   */
+  statusLabel?: string
   /** The team member working the lead. */
   ownerUid?: string
   notes?: string
@@ -2509,8 +3165,8 @@ export interface CrmLeadFields extends CrmLeadProfile {
  * `sources` is the capture door's record of which SURFACES met the person
  * — `signup`, `booking`, `form:{id}`, `import` — and no file may rewrite
  * it. `leadSource` is what Salesforce calls Lead Source: one of the org's
- * own picklist values ("Trade show", "Referral" — see LEAD SOURCE IS A
- * PICKLIST below), reported on and filtered by, and never derived. Two
+ * own picklist values ("Trade show", "Webinar" — see THE CRM'S PICKLISTS
+ * below), reported on and filtered by, and never derived. Two
  * fields because they answer two questions, and a file that could write
  * the first would be rewriting the site's own history.
  *=========================================*/
@@ -2538,17 +3194,63 @@ export interface CrmLeadProfile {
    * of the org's lead source values (see {@link CrmPicklist}).
    */
   leadSource?: string
+  /*
+   * SALESFORCE'S STANDARD LEAD FIELDS (AGL-3513), in the shapes the contact
+   * and the company keep them, so a conversion copies values rather than
+   * translating them.
+   */
+  /** One of the org's salutation values, by label (`Mr.`, `Dr.` …) — the contact's list. */
+  salutation?: string
+  /**
+   * The person's given and family names. While either is set, the lead's
+   * `name` is their composition ({@link crmLeadComposedName}), so the name
+   * the list shows and searches is the person the structured fields name. A
+   * lead holding only `name` keeps it as captured: nothing splits a stored
+   * name into parts after the fact.
+   */
+  firstName?: string
+  lastName?: string
+  /** E.164, like {@link phone}. */
+  mobilePhone?: string
+  /** E.164. */
+  fax?: string
+  /** A label of the `industry` picklist — the list companies keep (AGL-3514). */
+  industry?: string
+  /** A label of the `rating` picklist — the list companies keep. */
+  rating?: string
+  /** Annual revenue in the minor unit of {@link currency}, the company's convention. */
+  annualRevenueCents?: number
+  /** Lowercase ISO 4217 of the revenue; `'usd'` when absent. */
+  currency?: string
+  numberOfEmployees?: number
+  /**
+   * The person asked not to be phoned. Stored only as `true`; absent is
+   * "may be called". A hint beside every number and on the Call button,
+   * never a block — the contact's rule.
+   */
+  doNotCall?: boolean
 }
 
 /** The profile's keys, in the order a card lists them. */
 export const CRM_LEAD_PROFILE_KEYS = [
+  'salutation',
+  'firstName',
+  'lastName',
   'company',
   'jobTitle',
   'phone',
+  'mobilePhone',
+  'fax',
+  'doNotCall',
   'website',
   'address',
   'tags',
   'leadSource',
+  'industry',
+  'rating',
+  'annualRevenueCents',
+  'currency',
+  'numberOfEmployees',
 ] as const satisfies readonly (keyof CrmLeadProfile)[]
 
 export type CrmLeadProfileKey = (typeof CRM_LEAD_PROFILE_KEYS)[number]
@@ -2615,7 +3317,9 @@ export function normalizeCrmLeadProfile(
   const body = input ?? {}
   const patch: CrmLeadProfilePatch = {}
   const errors: CrmLeadProfileErrors = {}
-  const text = (key: 'company' | 'jobTitle' | 'leadSource') => {
+  const text = (
+    key: 'company' | 'jobTitle' | 'leadSource' | 'salutation' | 'industry' | 'rating',
+  ) => {
     if (!(key in body)) return
     const value = String(body[key] ?? '')
       .trim()
@@ -2626,13 +3330,49 @@ export function normalizeCrmLeadProfile(
   text('company')
   text('jobTitle')
   text('leadSource')
-  if ('phone' in body) {
-    const raw = String(body['phone'] ?? '').trim()
-    if (!raw) patch.phone = null
+  text('salutation')
+  text('industry')
+  text('rating')
+  // A name part as the contact's facet keeps one — see `composeContactName`.
+  for (const key of ['firstName', 'lastName'] as const) {
+    if (!(key in body)) continue
+    const value = composeContactName(body[key], '')
+    patch[key] = value || null
+  }
+  for (const key of ['phone', 'mobilePhone', 'fax'] as const) {
+    if (!(key in body)) continue
+    const raw = String(body[key] ?? '').trim()
+    if (!raw) patch[key] = null
     else {
       const phone = normalizePhone(raw)
-      if (phone) patch.phone = phone
-      else errors.phone = CRM_LEAD_PHONE_REFUSAL
+      if (phone) patch[key] = phone
+      else errors[key] = CRM_LEAD_PHONE_REFUSAL
+    }
+  }
+  if ('doNotCall' in body) {
+    // Stored only as `true`: anything else is "may be called", a clear.
+    patch.doNotCall = body['doNotCall'] === true ? true : null
+  }
+  /*
+   * The revenue, its currency and the head count, read by the company's
+   * own reader so a value one record refuses the other refuses in the same
+   * words. A head count typed as digits is read as the number it spells.
+   */
+  const account: Record<string, unknown> = {}
+  if ('annualRevenueCents' in body) account['annualRevenueCents'] = body['annualRevenueCents'] ?? null
+  if ('currency' in body) account['currency'] = body['currency'] ?? null
+  if ('numberOfEmployees' in body) {
+    const raw = body['numberOfEmployees']
+    const digits = typeof raw === 'string' ? raw.replace(/[\s,]/g, '') : null
+    account['numberOfEmployees'] =
+      digits === null ? (raw ?? null) : digits === '' ? null : /^\d+$/.test(digits) ? Number(digits) : raw
+  }
+  if (Object.keys(account).length) {
+    const read = readCrmCompanyAccountFields(account)
+    const into = patch as Record<string, unknown>
+    for (const key of ['annualRevenueCents', 'currency', 'numberOfEmployees'] as const) {
+      if (read.errors[key]) errors[key] = read.errors[key]
+      else if (key in read.values) into[key] = read.values[key] ?? null
     }
   }
   if ('website' in body) {
@@ -2658,14 +3398,92 @@ export function normalizeCrmLeadProfile(
   return { patch, errors }
 }
 
+/**
+ * The `name` a write must store beside a lead's first and last names
+ * (AGL-3513), the contact's rule: while either part is set the name is
+ * their composition, written whenever either moves. `undefined` when the
+ * write names neither part, or when it leaves both blank — a name-only
+ * lead keeps its name, and clearing both parts leaves the name as it
+ * stands.
+ */
+export function crmLeadComposedName(
+  stored: Readonly<Record<string, unknown>> | null | undefined,
+  patch: Readonly<Pick<CrmLeadProfilePatch, 'firstName' | 'lastName'>>,
+): string | undefined {
+  if (patch.firstName === undefined && patch.lastName === undefined) return undefined
+  const part = (key: 'firstName' | 'lastName') =>
+    patch[key] === undefined ? stored?.[key] : (patch[key] ?? '')
+  return composeContactName(part('firstName'), part('lastName')) || undefined
+}
+
+/**
+ * Each lead picklist field beside the lead source (AGL-3513): the list it
+ * holds a value of, and the key the Leads list filters by. The lists are
+ * the contact's and the company's own — one Salutation, one Industry, one
+ * Rating per org — so a lead converts into the same values.
+ */
+export const CRM_LEAD_PICKLIST_FIELDS = [
+  { field: 'salutation', picklistId: 'salutation' },
+  { field: 'industry', picklistId: 'industry', keyField: 'industryKey' },
+  { field: 'rating', picklistId: 'rating', keyField: 'ratingKey' },
+] as const
+
+export type CrmLeadPicklistField = (typeof CRM_LEAD_PICKLIST_FIELDS)[number]['field']
+
+/**
+ * The lead picklist fields a write names, judged against the org's lists
+ * — the company's {@link judgeCrmCompanyPicklists} over the lead's fields:
+ * `lists` holds each list the caller read (a list it did not read is
+ * judged as the standard values alone), the lead's `current` value is kept
+ * even when the list no longer offers it, and on a create a field not
+ * named starts from its list's default.
+ */
+export function judgeCrmLeadPicklists(
+  lists: Readonly<Partial<Record<CrmPicklistId, CrmPicklist>>>,
+  requested: Readonly<Partial<Record<string, unknown>>>,
+  options: { current?: Readonly<Partial<Record<string, unknown>>> | null; created?: boolean } = {},
+): {
+  values: Partial<Record<CrmLeadPicklistField, string | null>>
+  errors: Partial<Record<CrmLeadPicklistField, string>>
+} {
+  const values: Partial<Record<CrmLeadPicklistField, string | null>> = {}
+  const errors: Partial<Record<CrmLeadPicklistField, string>> = {}
+  for (const { field, picklistId } of CRM_LEAD_PICKLIST_FIELDS) {
+    const list = lists[picklistId] ?? effectiveCrmPicklist(picklistId, undefined)
+    const raw = requested[field]
+    if (raw === undefined) {
+      const fallback = options.created ? picklistDefaultLabel(list) : null
+      if (fallback) values[field] = fallback
+      continue
+    }
+    if (raw === null || (typeof raw === 'string' && !raw.trim())) {
+      values[field] = null
+      continue
+    }
+    if (typeof raw !== 'string') {
+      errors[field] = 'Must be text'
+      continue
+    }
+    const judged = judgeCrmPicklistValue(picklistId, list, raw, options.current?.[field])
+    if (judged.ok === false) errors[field] = judged.error
+    else values[field] = judged.value
+  }
+  return { values, errors }
+}
+
 /*==========================================
- * LEAD SOURCE IS A PICKLIST (AGL-3298).
+ * THE CRM'S PICKLISTS (AGL-3298, AGL-3510).
  *
- * Salesforce's Lead Source is a restricted picklist: an admin keeps the
- * list of values, a rep picks one, and an import or an API write naming
- * anything else is refused. Here the list is one org document,
- * `orgs/{orgId}/crmPicklists/leadSource`, holding the values in order as
- * `{ id, label, active }` and an optional default for new records.
+ * Salesforce gives every object standard picklist fields — Lead Source,
+ * Lead Status, Industry, Stage — each shipping a STANDARD set of values
+ * every org has, to which an admin adds the org's own. Here each such field
+ * is one {@link CrmPicklistDefinition} in {@link CRM_PICKLIST_DEFINITIONS},
+ * and the org's list for it is one document,
+ * `orgs/{orgId}/crmPicklists/{picklistId}`, holding the values in order as
+ * `{ id, label, active, group?, meaning? }` and an optional default for new
+ * records. The engine under it — the merge with the standard values, the
+ * judge, the options — is the platform's `picklists` module; this block is
+ * the CRM's registry and the names every CRM reader already uses.
  *
  * ## Records store the LABEL
  *
@@ -2674,57 +3492,548 @@ export function normalizeCrmLeadProfile(
  * record facts, a saved view's filter, a report grouped by the field —
  * reads the text and keeps working, and a file exported from here
  * re-imports as is. What an id would have bought is a free rename; here a
- * rename (and a delete) REPLACES the old label on every record in the same
- * operation, the way Salesforce's own Replace does, so a report grouped
- * by the field follows the rename rather than splitting in two. The value's
- * `id` is what the list itself is keyed by — the default, a reorder, the
- * manage page's rows — and it never changes.
+ * rename (and a delete) REPLACES the old label on every record the
+ * definition's `targets` name in the same operation, the way Salesforce's
+ * own Replace does, so a report grouped by the field follows the rename
+ * rather than splitting in two. The value's `id` is what the list itself is
+ * keyed by — the default, a reorder, the manage page's rows — and it never
+ * changes.
+ *
+ * ## Standard values, and the org's own
+ *
+ * A standard value is in every org's effective list whether or not the org
+ * stored one; the org may relabel, reorder, regroup, deactivate or default
+ * it — stored under the standard id — but not delete it. A stored value
+ * whose id is a standard id is that standard value overridden, which is why
+ * a list written down from the earlier starter set (whose slugs `web`,
+ * `phone-inquiry`, `purchased-list`, `trade-show` and `other` are standard
+ * ids) needs no record rewritten. Its `referral` and `partner` are not
+ * standard, and stay as the org's own values. An org with NO document reads
+ * the standard values only, so a record such an org holds as "Referral" or
+ * "Partner" shows as not in the list until that value is written down as
+ * the org's own.
  *
  * ## Inactive, not gone
  *
  * A deactivated value leaves every picker but stays on the records that
  * hold it, shown with an "(inactive)" hint, and a write that keeps a
- * record's current value is never refused for it. A value is removed only
- * by Delete, which names the value its records move to.
- *
- * ## An org that never edited the list
- *
- * Has no document, and reads {@link CRM_LEAD_SOURCE_STARTER_LABELS} — a
- * small Salesforce-like set. The first edit on the manage page writes that
- * set down as the org's own, so a new org starts with a usable list and no
- * org-creation step has to seed it.
+ * record's current value is never refused for it. An added value is
+ * removed only by Delete, which names the value its records move to — of
+ * the same meaning, on a definition with meanings.
  *=========================================*/
 
-/** The picklists an org keeps, by document id — one per standard field. */
-export const CRM_PICKLIST_IDS = ['leadSource'] as const
+/** The CRM objects a picklist's values are kept on. */
+export type CrmPicklistObject = CrmFieldObject | 'task'
 
-export type CrmPicklistId = (typeof CRM_PICKLIST_IDS)[number]
+/**
+ * The Fields tabs, in order: every object with custom fields, then Tasks,
+ * which has standard picklists and no custom fields (AGL-3517).
+ */
+export const CRM_PICKLIST_OBJECTS: readonly CrmPicklistObject[] = [...CRM_FIELD_OBJECTS, 'task']
+
+/** How each object reads on the Fields tabs and in a refusal. */
+export const CRM_PICKLIST_OBJECT_LABELS: Record<CrmPicklistObject, string> = {
+  ...CRM_FIELD_OBJECT_LABELS,
+  task: 'Tasks',
+}
+
+export function isCrmPicklistObject(value: unknown): value is CrmPicklistObject {
+  return typeof value === 'string' && (CRM_PICKLIST_OBJECTS as readonly string[]).includes(value)
+}
+
+/**
+ * One place records hold a picklist's label. `field` is the record's own
+ * field; `keyField`, when set, is the query key written beside it
+ * ({@link crmPicklistKey}); `facet` means the label lives in each holder's
+ * facet on a contact rather than on the record itself.
+ *
+ * `arrayKey` (AGL-3521) means `field` is a LIST of objects and the label is
+ * each entry's `arrayKey` — a deal's contact roles, `{ contactId, role }`.
+ * Such a target always names a `keyField`, which is then the list of the
+ * keys its entries hold: the one array a query can find the records by.
+ */
+export interface CrmPicklistTarget {
+  object: CrmPicklistObject
+  field: string
+  keyField?: string
+  facet?: true
+  arrayKey?: string
+}
+
+/** A standard picklist field of the CRM. */
+export interface CrmPicklistDefinition extends PicklistSpec {
+  /** The document id under `crmPicklists`, and the field's name in code. */
+  id: string
+  /** The field's name in a sentence's subject: "Lead source must be one of: …". */
+  label: string
+  /** The values in a sentence: "no active lead sources". */
+  plural: string
+  /** The Fields tab its values are managed on. */
+  object: CrmPicklistObject
+  /** Every place records hold its label — what a rename and a delete rewrite. */
+  targets: readonly CrmPicklistTarget[]
+  /** How each of `meanings` reads on screen — the Fields page's Means column (AGL-3512). */
+  meaningLabels?: Readonly<Record<string, string>>
+  /**
+   * Meanings only the platform sets, which an org-added value may not take
+   * (AGL-3512): a lead is Qualified by its conversion alone.
+   */
+  reservedMeanings?: readonly string[]
+}
+
+/**
+ * Lead Source, with Salesforce's standard values and Aglyn's own (AGL-3519).
+ * Each carries the group a report splits pipeline by: Inbound for a lead
+ * who came to the org, Outbound for one the org went to, and Other in
+ * neither. Aglyn's are the doors and the outreach the platform runs itself
+ * — a website form, a booking, a sequence — stamped on a record the door
+ * met first ({@link CRM_LEAD_SOURCE_ORIGINS}); a vendor the platform does
+ * not run (a data provider, a sending tool) is an org's own value.
+ */
+const LEAD_SOURCE_DEFINITION = {
+  id: 'leadSource',
+  label: 'Lead source',
+  plural: 'lead sources',
+  object: 'lead',
+  restricted: true,
+  groups: [
+    { id: 'inbound', label: 'Inbound' },
+    { id: 'outbound', label: 'Outbound' },
+  ],
+  standardValues: [
+    { id: 'web', label: 'Web', group: 'inbound' },
+    { id: 'phone-inquiry', label: 'Phone inquiry', group: 'inbound' },
+    { id: 'email-inquiry', label: 'Email inquiry', group: 'inbound' },
+    { id: 'partner-referral', label: 'Partner referral', group: 'inbound' },
+    { id: 'employee-referral', label: 'Employee referral', group: 'inbound' },
+    { id: 'external-referral', label: 'External referral', group: 'inbound' },
+    { id: 'advertisement', label: 'Advertisement', group: 'inbound' },
+    { id: 'trade-show', label: 'Trade show', group: 'inbound' },
+    { id: 'webinar', label: 'Webinar', group: 'inbound' },
+    { id: 'word-of-mouth', label: 'Word of mouth', group: 'inbound' },
+    // Aglyn's own doors (AGL-3519), each stamped by the door that met the person.
+    { id: 'website-form', label: 'Website form', group: 'inbound' },
+    { id: 'booking', label: 'Booking', group: 'inbound' },
+    { id: 'newsletter-sign-up', label: 'Newsletter sign-up', group: 'inbound' },
+    { id: 'site-member-sign-up', label: 'Site member sign-up', group: 'inbound' },
+    { id: 'online-purchase', label: 'Online purchase', group: 'inbound' },
+    { id: 'account-sign-up', label: 'Account sign-up', group: 'inbound' },
+    { id: 'purchased-list', label: 'Purchased list', group: 'outbound' },
+    // Aglyn's own outreach (AGL-3519).
+    { id: 'sequence', label: 'Sequence', group: 'outbound' },
+    { id: 'email-campaign', label: 'Email campaign', group: 'outbound' },
+    { id: 'other', label: 'Other' },
+  ],
+  targets: [
+    // The key the Leads list filters by moves with the label (AGL-3321).
+    { object: 'lead', field: 'leadSource', keyField: 'leadSourceKey' },
+    // A contact's lead source is each holder's own, like the rest of its profile.
+    { object: 'contact', field: 'leadSource', facet: true },
+    // A company's Account Source is a lead source value (AGL-3514).
+    { object: 'company', field: 'accountSource', keyField: 'accountSourceKey' },
+    // A deal's, stamped by the conversion that opened it (AGL-3516).
+    { object: 'deal', field: 'leadSource', keyField: 'leadSourceKey' },
+  ],
+} as const satisfies CrmPicklistDefinition
+
+/*------------------------------------------
+ * LEAD STATUS (AGL-3512) — a SEMANTIC picklist.
+ *
+ * Every value MEANS one of {@link CRM_LEAD_STATUSES}, and the meaning stays
+ * on the lead as `status`, which every query, count, index, automation and
+ * rule reads exactly as before. The value's label sits beside it as
+ * `statusLabel` — see {@link crmLeadStatusLabel}. Salesforce ships one
+ * standard value per meaning; an org adds its own ("Contacted", "Meeting
+ * set") under a meaning, never under Qualified, which only a conversion
+ * sets.
+ *-----------------------------------------*/
+const LEAD_STATUS_DEFINITION = {
+  id: 'leadStatus',
+  label: 'Lead status',
+  plural: 'lead statuses',
+  object: 'lead',
+  restricted: true,
+  meanings: CRM_LEAD_STATUSES,
+  meaningLabels: CRM_LEAD_STATUS_LABELS,
+  reservedMeanings: ['qualified'],
+  standardValues: [
+    { id: 'new', label: CRM_LEAD_STATUS_LABELS.new, meaning: 'new' },
+    { id: 'nurturing', label: CRM_LEAD_STATUS_LABELS.nurturing, meaning: 'nurturing' },
+    { id: 'working', label: CRM_LEAD_STATUS_LABELS.working, meaning: 'working' },
+    { id: 'qualified', label: CRM_LEAD_STATUS_LABELS.qualified, meaning: 'qualified' },
+    { id: 'unqualified', label: CRM_LEAD_STATUS_LABELS.unqualified, meaning: 'unqualified' },
+  ],
+  targets: [{ object: 'lead', field: 'statusLabel' }],
+} as const satisfies CrmPicklistDefinition
+
+/*------------------------------------------
+ * THE COMPANY PICKLISTS (AGL-3514).
+ *
+ * Salesforce's Account Type, Industry, Rating and Ownership, each kept on
+ * the Companies tab. Industry and Rating are shared with leads, whose
+ * targets join these definitions rather than repeating them. Account
+ * Source is not a list of its own: it holds a lead source value, so it is
+ * a target of the lead source definition above.
+ *-----------------------------------------*/
+
+/** Salesforce's Account Type. */
+const ACCOUNT_TYPE_DEFINITION = {
+  id: 'accountType',
+  label: 'Type',
+  plural: 'account types',
+  object: 'company',
+  restricted: true,
+  standardValues: [
+    { id: 'analyst', label: 'Analyst' },
+    { id: 'press', label: 'Press' },
+    { id: 'competitor', label: 'Competitor' },
+    { id: 'prospect', label: 'Prospect' },
+    { id: 'customer', label: 'Customer' },
+    { id: 'reseller', label: 'Reseller' },
+    { id: 'integrator', label: 'Integrator' },
+    { id: 'investor', label: 'Investor' },
+    { id: 'partner', label: 'Partner' },
+    { id: 'consulting', label: 'Consulting' },
+    { id: 'other', label: 'Other' },
+  ],
+  targets: [{ object: 'company', field: 'type', keyField: 'typeKey' }],
+} as const satisfies CrmPicklistDefinition
+
+/**
+ * Salesforce's Industry. A company written while the field was free text
+ * keeps its text; a write that keeps it is never refused.
+ */
+const INDUSTRY_DEFINITION = {
+  id: 'industry',
+  label: 'Industry',
+  plural: 'industries',
+  object: 'company',
+  restricted: true,
+  standardValues: [
+    { id: 'agriculture', label: 'Agriculture' },
+    { id: 'apparel', label: 'Apparel' },
+    { id: 'banking', label: 'Banking' },
+    { id: 'biotechnology', label: 'Biotechnology' },
+    { id: 'chemicals', label: 'Chemicals' },
+    { id: 'communications', label: 'Communications' },
+    { id: 'construction', label: 'Construction' },
+    { id: 'consulting', label: 'Consulting' },
+    { id: 'education', label: 'Education' },
+    { id: 'electronics', label: 'Electronics' },
+    { id: 'energy', label: 'Energy' },
+    { id: 'engineering', label: 'Engineering' },
+    { id: 'entertainment', label: 'Entertainment' },
+    { id: 'environmental', label: 'Environmental' },
+    { id: 'finance', label: 'Finance' },
+    { id: 'food-and-beverage', label: 'Food & Beverage' },
+    { id: 'government', label: 'Government' },
+    { id: 'healthcare', label: 'Healthcare' },
+    { id: 'hospitality', label: 'Hospitality' },
+    { id: 'insurance', label: 'Insurance' },
+    { id: 'machinery', label: 'Machinery' },
+    { id: 'manufacturing', label: 'Manufacturing' },
+    { id: 'media', label: 'Media' },
+    { id: 'not-for-profit', label: 'Not For Profit' },
+    { id: 'recreation', label: 'Recreation' },
+    { id: 'retail', label: 'Retail' },
+    { id: 'shipping', label: 'Shipping' },
+    { id: 'technology', label: 'Technology' },
+    { id: 'telecommunications', label: 'Telecommunications' },
+    { id: 'transportation', label: 'Transportation' },
+    { id: 'utilities', label: 'Utilities' },
+    { id: 'other', label: 'Other' },
+  ],
+  targets: [
+    { object: 'company', field: 'industry', keyField: 'industryKey' },
+    // Leads (AGL-3513): the same list, so a lead converts into its value.
+    { object: 'lead', field: 'industry', keyField: 'industryKey' },
+  ],
+} as const satisfies CrmPicklistDefinition
+
+/** Salesforce's Rating. */
+const RATING_DEFINITION = {
+  id: 'rating',
+  label: 'Rating',
+  plural: 'ratings',
+  object: 'company',
+  restricted: true,
+  standardValues: [
+    { id: 'hot', label: 'Hot' },
+    { id: 'warm', label: 'Warm' },
+    { id: 'cold', label: 'Cold' },
+  ],
+  targets: [
+    { object: 'company', field: 'rating', keyField: 'ratingKey' },
+    // Leads (AGL-3513).
+    { object: 'lead', field: 'rating', keyField: 'ratingKey' },
+  ],
+} as const satisfies CrmPicklistDefinition
+
+/** Salesforce's Ownership. */
+const OWNERSHIP_DEFINITION = {
+  id: 'ownership',
+  label: 'Ownership',
+  plural: 'ownership values',
+  object: 'company',
+  restricted: true,
+  standardValues: [
+    { id: 'public', label: 'Public' },
+    { id: 'private', label: 'Private' },
+    { id: 'subsidiary', label: 'Subsidiary' },
+    { id: 'other', label: 'Other' },
+  ],
+  targets: [{ object: 'company', field: 'ownership' }],
+} as const satisfies CrmPicklistDefinition
+
+/*------------------------------------------
+ * CONTACT picklists (AGL-3515).
+ *-----------------------------------------*/
+
+/**
+ * Salutation, with Salesforce's standard values. Shared by every object
+ * that addresses a person: defined here with the contact target, where the
+ * label lives in each holder's facet like the rest of the profile.
+ */
+const SALUTATION_DEFINITION = {
+  id: 'salutation',
+  label: 'Salutation',
+  plural: 'salutations',
+  object: 'contact',
+  restricted: true,
+  standardValues: [
+    { id: 'mr', label: 'Mr.' },
+    { id: 'ms', label: 'Ms.' },
+    { id: 'mrs', label: 'Mrs.' },
+    { id: 'dr', label: 'Dr.' },
+    { id: 'prof', label: 'Prof.' },
+  ],
+  targets: [
+    { object: 'contact', field: 'salutation', facet: true },
+    // Leads (AGL-3513): on the lead itself, carried to the facet on convert.
+    { object: 'lead', field: 'salutation' },
+  ],
+} as const satisfies CrmPicklistDefinition
+
+/*------------------------------------------
+ * DEALS (AGL-3516).
+ *-----------------------------------------*/
+
+/**
+ * Salesforce's Opportunity Type. Plain: the deal stores the label, and
+ * `typeKey` beside it for the Deals list's filter.
+ */
+const OPPORTUNITY_TYPE_DEFINITION = {
+  id: 'opportunityType',
+  label: 'Type',
+  plural: 'deal types',
+  object: 'deal',
+  restricted: true,
+  standardValues: [
+    { id: 'existing-business', label: 'Existing Business' },
+    { id: 'new-business', label: 'New Business' },
+  ],
+  targets: [{ object: 'deal', field: 'type', keyField: 'typeKey' }],
+} as const satisfies CrmPicklistDefinition
+
+/**
+ * Salesforce's Opportunity Contact Role (AGL-3521): the part a contact
+ * plays on a deal. Plain; the label sits in each entry of the deal's
+ * `contactRoles`, and `contactRoleKeys` lists their keys, which is how a
+ * rename or a delete finds the deals to rewrite.
+ */
+const OPPORTUNITY_CONTACT_ROLE_DEFINITION = {
+  id: 'opportunityContactRole',
+  label: 'Contact role',
+  plural: 'contact roles',
+  object: 'deal',
+  restricted: true,
+  standardValues: [
+    { id: 'business-user', label: 'Business User' },
+    { id: 'decision-maker', label: 'Decision Maker' },
+    { id: 'economic-buyer', label: 'Economic Buyer' },
+    { id: 'economic-decision-maker', label: 'Economic Decision Maker' },
+    { id: 'evaluator', label: 'Evaluator' },
+    { id: 'executive-sponsor', label: 'Executive Sponsor' },
+    { id: 'influencer', label: 'Influencer' },
+    { id: 'technical-buyer', label: 'Technical Buyer' },
+    { id: 'other', label: 'Other' },
+  ],
+  targets: [{ object: 'deal', field: 'contactRoles', arrayKey: 'role', keyField: 'contactRoleKeys' }],
+} as const satisfies CrmPicklistDefinition
+
+/*
+ * TASKS (AGL-3517) — Salesforce's Task Status, Priority, Type and Subject.
+ *
+ * Status, Priority and Type are SEMANTIC: each value means one of the
+ * task's existing `status`, `priority` or `kind` values, which stay on the
+ * document untouched for every query, reminder, due state, digest and
+ * automation. The value's LABEL sits beside it in `statusLabel`,
+ * `priorityLabel` or `typeLabel`; a task with no label shows the first
+ * active value of its meaning (see `crmTaskPicklistLabel`). Subject is an
+ * unrestricted combobox over the title: its values are suggestions, the
+ * title stays free text, and no record holds a subject "value", so a
+ * rename or a delete rewrites nothing.
+ */
+const TASK_STATUS_DEFINITION = {
+  id: 'taskStatus',
+  label: 'Status',
+  plural: 'task statuses',
+  object: 'task',
+  restricted: true,
+  meanings: ['open', 'done'],
+  standardValues: [
+    { id: 'not-started', label: 'Not Started', meaning: 'open' },
+    { id: 'in-progress', label: 'In Progress', meaning: 'open' },
+    { id: 'waiting', label: 'Waiting on someone else', meaning: 'open' },
+    { id: 'deferred', label: 'Deferred', meaning: 'open' },
+    { id: 'completed', label: 'Completed', meaning: 'done' },
+  ],
+  defaultValueId: 'not-started',
+  targets: [{ object: 'task', field: 'statusLabel' }],
+} as const satisfies CrmPicklistDefinition
+
+const TASK_PRIORITY_DEFINITION = {
+  id: 'taskPriority',
+  label: 'Priority',
+  plural: 'task priorities',
+  object: 'task',
+  restricted: true,
+  meanings: ['low', 'normal', 'high'],
+  standardValues: [
+    { id: 'high', label: 'High', meaning: 'high' },
+    { id: 'normal', label: 'Normal', meaning: 'normal' },
+    { id: 'low', label: 'Low', meaning: 'low' },
+  ],
+  defaultValueId: 'normal',
+  targets: [{ object: 'task', field: 'priorityLabel' }],
+} as const satisfies CrmPicklistDefinition
+
+const TASK_TYPE_DEFINITION = {
+  id: 'taskType',
+  label: 'Type',
+  plural: 'task types',
+  object: 'task',
+  restricted: true,
+  meanings: CRM_TASK_KINDS,
+  standardValues: [
+    { id: 'call', label: 'Call', meaning: 'call' },
+    { id: 'email', label: 'Email', meaning: 'email' },
+    { id: 'meeting', label: 'Meeting', meaning: 'meeting' },
+    // Salesforce's "Other": a task that is none of the three conversations.
+    { id: 'todo', label: 'To-do', meaning: 'todo' },
+  ],
+  defaultValueId: 'todo',
+  targets: [{ object: 'task', field: 'typeLabel' }],
+} as const satisfies CrmPicklistDefinition
+
+const TASK_SUBJECT_DEFINITION = {
+  id: 'taskSubject',
+  label: 'Subject',
+  plural: 'task subjects',
+  object: 'task',
+  restricted: false,
+  standardValues: [
+    { id: 'call', label: 'Call' },
+    { id: 'send-letter', label: 'Send Letter' },
+    { id: 'send-quote', label: 'Send Quote' },
+    { id: 'other', label: 'Other' },
+  ],
+  // Suggestions for a free-text title: nothing holds them, nothing moves.
+  targets: [],
+} as const satisfies CrmPicklistDefinition
+
+/** Every standard picklist field the CRM keeps, one document each. */
+export const CRM_PICKLIST_DEFINITIONS = [
+  LEAD_SOURCE_DEFINITION,
+  LEAD_STATUS_DEFINITION,
+  // Companies (AGL-3514).
+  ACCOUNT_TYPE_DEFINITION,
+  INDUSTRY_DEFINITION,
+  RATING_DEFINITION,
+  OWNERSHIP_DEFINITION,
+  // Contacts (AGL-3515).
+  SALUTATION_DEFINITION,
+  // Deals (AGL-3516).
+  OPPORTUNITY_TYPE_DEFINITION,
+  // Deal contact roles (AGL-3521).
+  OPPORTUNITY_CONTACT_ROLE_DEFINITION,
+  // Tasks (AGL-3517).
+  TASK_STATUS_DEFINITION,
+  TASK_PRIORITY_DEFINITION,
+  TASK_TYPE_DEFINITION,
+  TASK_SUBJECT_DEFINITION,
+] as const satisfies readonly CrmPicklistDefinition[]
+
+export type CrmPicklistId = (typeof CRM_PICKLIST_DEFINITIONS)[number]['id']
+
+/** The picklists an org keeps, by document id. */
+export const CRM_PICKLIST_IDS: readonly CrmPicklistId[] = CRM_PICKLIST_DEFINITIONS.map(
+  (definition) => definition.id,
+)
 
 /** The lead source value set's document id. */
 export const CRM_LEAD_SOURCE_PICKLIST: CrmPicklistId = 'leadSource'
 
-/** The most values one picklist holds — a menu, not a table. */
-export const CRM_PICKLIST_VALUES_MAX = 200
-
-/** One value of a picklist. `id` never changes; `label` is what records store. */
-export interface CrmPicklistValue {
-  id: string
-  label: string
-  active: boolean
-}
-
-/** A picklist as stored and as every reader takes it. */
-export interface CrmPicklist {
-  /** In the order every picker lists them. */
-  values: CrmPicklistValue[]
-  /** The value a new record starts with, by id — `null` for none. */
-  defaultValueId: string | null
-}
+/** The salutation value set's document id (AGL-3515). */
+export const CRM_SALUTATION_PICKLIST: CrmPicklistId = 'salutation'
+/** A deal's Type value set's document id (AGL-3516). */
+export const CRM_OPPORTUNITY_TYPE_PICKLIST: CrmPicklistId = 'opportunityType'
+/** A deal contact's role value set's document id (AGL-3521). */
+export const CRM_OPPORTUNITY_CONTACT_ROLE_PICKLIST: CrmPicklistId = 'opportunityContactRole'
 
 /**
- * The values an org that has never edited its list reads — see the block
- * header. Salesforce's own standard set, trimmed to what a small team
- * recognizes.
+ * The built-in Lead source value each first-party door stamps (AGL-3519), by
+ * the door's word for how it met a person — a capture's source, or the
+ * outreach that reached them. `api`, `import` and `manual` are ways a record
+ * was ADDED, not where a person came from, and stamp nothing.
+ */
+export const CRM_LEAD_SOURCE_ORIGINS: Readonly<Record<string, string>> = {
+  form: 'website-form',
+  booking: 'booking',
+  newsletter: 'newsletter-sign-up',
+  member: 'site-member-sign-up',
+  order: 'online-purchase',
+  account: 'account-sign-up',
+  sequence: 'sequence',
+  emailCampaign: 'email-campaign',
+}
+
+export function isCrmPicklistId(value: unknown): value is CrmPicklistId {
+  return typeof value === 'string' && (CRM_PICKLIST_IDS as readonly string[]).includes(value)
+}
+
+/** The definition an id names, or `null` for one the registry does not hold. */
+export function crmPicklistDefinition(id: unknown): CrmPicklistDefinition | null {
+  return CRM_PICKLIST_DEFINITIONS.find((definition) => definition.id === id) ?? null
+}
+
+/** The definitions whose values are managed on one Fields tab, in registry order. */
+export function crmPicklistDefinitionsFor(object: CrmPicklistObject): CrmPicklistDefinition[] {
+  return CRM_PICKLIST_DEFINITIONS.filter((definition) => definition.object === object)
+}
+
+/** The definition behind a registered id — total, because the id is typed. */
+function definitionOf(id: CrmPicklistId): CrmPicklistDefinition {
+  return crmPicklistDefinition(id) as CrmPicklistDefinition
+}
+
+/** The most values one picklist holds — a menu, not a table. */
+export const CRM_PICKLIST_VALUES_MAX = PICKLIST_VALUES_MAX
+
+/** One value of a picklist. `id` never changes; `label` is what records store. */
+export type CrmPicklistValue = PicklistValue
+
+/** A picklist as stored and as every reader takes it. */
+export type CrmPicklist = PicklistValueSet
+
+/** One option of a picklist select. */
+export type CrmPicklistOption = PicklistOption
+
+/**
+ * The values an org without a lead source document offered before the
+ * standard set was built in. "Referral" and "Partner" are not standard: a
+ * record holding one, in an org that never stored its list, reads as not in
+ * the list until the value is written down as the org's own.
  */
 export const CRM_LEAD_SOURCE_STARTER_LABELS: readonly string[] = [
   'Web',
@@ -2737,157 +4046,137 @@ export const CRM_LEAD_SOURCE_STARTER_LABELS: readonly string[] = [
 ]
 
 /** A label as a picklist stores it: trimmed, single-spaced, capped. */
-export function normalizeCrmPicklistLabel(value: unknown): string {
-  return String(value ?? '')
-    .trim()
-    .replace(/\s+/g, ' ')
-    .slice(0, CRM_LEAD_TEXT_MAX)
-}
+export const normalizeCrmPicklistLabel = normalizePicklistLabel
 
-/** The key two labels are compared by: case and spacing do not make a new value. */
-function picklistKey(label: string): string {
-  return normalizeCrmPicklistLabel(label).toLowerCase()
-}
-
-/**
- * A new value's id: the label as a slug, suffixed until it is not one of
- * `taken`. Derived rather than random so a seeded list reads the same in
- * every org, and never reused, because a default names a value by it.
- */
-export function crmPicklistValueId(label: string, taken: Iterable<string>): string {
-  const used = new Set(taken)
-  const base =
-    normalizeCrmPicklistLabel(label)
-      .toLowerCase()
-      .normalize('NFKD')
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '')
-      .slice(0, 40) || 'value'
-  let id = base
-  for (let n = 2; used.has(id); n += 1) id = `${base}-${n}`
-  return id
-}
+/** A new value's id — see `mintPicklistValueId`. */
+export const crmPicklistValueId = mintPicklistValueId
 
 /** A picklist of active values from labels, in order, with no default. */
-export function crmPicklistFromLabels(labels: readonly string[]): CrmPicklist {
-  const values: CrmPicklistValue[] = []
-  const seen = new Set<string>()
-  for (const raw of labels) {
-    const label = normalizeCrmPicklistLabel(raw)
-    if (!label || seen.has(picklistKey(label))) continue
-    seen.add(picklistKey(label))
-    values.push({ id: crmPicklistValueId(label, values.map((value) => value.id)), label, active: true })
-  }
-  return { values: values.slice(0, CRM_PICKLIST_VALUES_MAX), defaultValueId: null }
+export const crmPicklistFromLabels = picklistFromLabels
+
+/**
+ * A stored document as a picklist, or `null` for one that holds none —
+ * tolerant, as `normalizePicklistValueSet` reads it, and without the
+ * standard values merged in. {@link effectiveCrmPicklist} is what a reader
+ * judges against.
+ */
+export function normalizeCrmPicklist(raw: unknown): CrmPicklist | null {
+  return normalizePicklistValueSet(raw)
+}
+
+/** An org's list for one picklist as every reader should take it — see the block header. */
+export function effectiveCrmPicklist(id: CrmPicklistId, raw: unknown): CrmPicklist {
+  return effectivePicklistValueSet(definitionOf(id), raw)
+}
+
+/** The org's lead source list as every reader should take it. */
+export function effectiveCrmLeadSourcePicklist(raw: unknown): CrmPicklist {
+  return effectiveCrmPicklist(CRM_LEAD_SOURCE_PICKLIST, raw)
 }
 
 /**
- * A stored document as a picklist, or `null` for one that holds none.
- *
- * Tolerant, because the document is client-written: a value with no label
- * is dropped, a second value with the same label (in any case) or the same
- * id is dropped, `active` is true unless it is `false`, and a default that
- * names no value is no default.
+ * The label a door stamps for `origin` (AGL-3519): its built-in value as the
+ * org spells it, while that value is ACTIVE — an org that deactivated it has
+ * said not to file people under it — else `null`, as for a word with none.
  */
-export function normalizeCrmPicklist(raw: unknown): CrmPicklist | null {
-  if (!raw || typeof raw !== 'object') return null
-  const stored = raw as Record<string, unknown>
-  if (!Array.isArray(stored['values'])) return null
-  const values: CrmPicklistValue[] = []
-  const labels = new Set<string>()
-  const ids = new Set<string>()
-  for (const entry of stored['values']) {
-    if (!entry || typeof entry !== 'object') continue
-    const value = entry as Record<string, unknown>
-    const label = normalizeCrmPicklistLabel(value['label'])
-    if (!label || labels.has(picklistKey(label))) continue
-    let id = String(value['id'] ?? '').trim().slice(0, 64)
-    if (!id || id.includes('/') || ids.has(id)) id = crmPicklistValueId(label, ids)
-    labels.add(picklistKey(label))
-    ids.add(id)
-    values.push({ id, label, active: value['active'] !== false })
-    if (values.length >= CRM_PICKLIST_VALUES_MAX) break
-  }
-  const defaultId = String(stored['defaultValueId'] ?? '')
-  return {
-    values,
-    defaultValueId: ids.has(defaultId) ? defaultId : null,
-  }
-}
-
-/** The org's lead source list as every reader should take it — see the block header. */
-export function effectiveCrmLeadSourcePicklist(raw: unknown): CrmPicklist {
-  return normalizeCrmPicklist(raw) ?? crmPicklistFromLabels(CRM_LEAD_SOURCE_STARTER_LABELS)
-}
-
-/** The value a label names, in any case or spacing — `null` for none. */
-export function crmPicklistValueByLabel(
-  picklist: CrmPicklist,
-  label: unknown,
-): CrmPicklistValue | null {
-  const key = picklistKey(String(label ?? ''))
-  if (!key) return null
-  return picklist.values.find((value) => picklistKey(value.label) === key) ?? null
-}
-
-/** The values a picker offers. */
-export function crmPicklistActiveValues(picklist: CrmPicklist): CrmPicklistValue[] {
-  return picklist.values.filter((value) => value.active)
-}
-
-/** The label a new record starts with — only while the default value is active. */
-export function crmPicklistDefaultLabel(picklist: CrmPicklist): string | null {
-  const value = picklist.values.find((entry) => entry.id === picklist.defaultValueId)
+export function crmLeadSourceForOrigin(picklist: CrmPicklist, origin: unknown): string | null {
+  const id = typeof origin === 'string' ? CRM_LEAD_SOURCE_ORIGINS[origin] : undefined
+  if (!id || !Object.hasOwn(CRM_LEAD_SOURCE_ORIGINS, origin as string)) return null
+  const value = picklist.values.find((entry) => entry.id === id)
   return value?.active ? value.label : null
 }
 
+/** Whether a value is one of a picklist's standard values — computed from its id, never stored. */
+export function isStandardCrmPicklistValue(id: CrmPicklistId, valueId: string): boolean {
+  return isStandardPicklistValueId(definitionOf(id), valueId)
+}
+
+/** The value a label names, in any case or spacing — `null` for none. */
+export const crmPicklistValueByLabel = picklistValueByLabel
+
+/** The values a picker offers. */
+export const crmPicklistActiveValues = picklistActiveValues
+
+/** The label a new record starts with — only while the default value is active. */
+export const crmPicklistDefaultLabel = picklistDefaultLabel
+
 /**
- * The sentence a lead source outside the list is refused with, naming what
- * the list allows. A long list is cut at twenty names so the sentence stays
- * one a person can read.
+ * The sentence a value outside a restricted picklist is refused with,
+ * naming what the list allows, and where to add one when it allows none.
  */
+export function crmPicklistRefusal(id: CrmPicklistId, picklist: CrmPicklist): string {
+  const definition = definitionOf(id)
+  return picklistRefusalSentence(picklist, {
+    field: definition.label,
+    empty:
+      `This organization has no active ${definition.plural}. Add one under ` +
+      `CRM › Fields › ${CRM_PICKLIST_OBJECT_LABELS[definition.object]}.`,
+  })
+}
+
+/** The sentence a lead source outside the list is refused with. */
 export function crmLeadSourceRefusal(picklist: CrmPicklist): string {
-  const active = crmPicklistActiveValues(picklist).map((value) => value.label)
-  if (!active.length) {
-    return 'This organization has no active lead sources. Add one under CRM › Fields › Leads.'
-  }
-  const shown = active.slice(0, 20).join(', ')
-  const more = active.length > 20 ? `, and ${active.length - 20} more` : ''
-  return `Lead source must be one of: ${shown}${more}.`
+  return crmPicklistRefusal(CRM_LEAD_SOURCE_PICKLIST, picklist)
 }
 
 /**
- * Whether a write may store `value` as a record's lead source, and the
- * label it stores.
- *
- *  - Blank or `null` clears the field — lead source is never required.
- *  - An ACTIVE value, in any case or spacing, stores that value's label.
- *  - The record's `current` value is kept even when it is inactive or no
- *    longer listed: re-saving a record must never be refused for a value
- *    somebody else deactivated.
- *  - Anything else is refused with {@link crmLeadSourceRefusal}.
+ * Whether a write may store `value` as a record's value of picklist `id`,
+ * and the label it stores — `judgePicklistValue` under the definition's
+ * restriction: blank clears, an active value stores the list's spelling,
+ * the record's `current` value is always kept, and on a restricted
+ * picklist anything else is refused with {@link crmPicklistRefusal}.
  */
+export function judgeCrmPicklistValue(
+  id: CrmPicklistId,
+  picklist: CrmPicklist,
+  value: unknown,
+  current?: unknown,
+): PicklistJudgement {
+  return judgePicklistValue(picklist, value, {
+    restricted: definitionOf(id).restricted,
+    current,
+    refusal: () => crmPicklistRefusal(id, picklist),
+  })
+}
+
+/**
+ * A deal's contact roles with each role judged against the org's
+ * `opportunityContactRole` list (AGL-3521): an active value stored as the
+ * list spells it, a blank cleared, and the role a contact already holds on
+ * the deal (`current`) kept — or the first refusal, naming what the list
+ * allows.
+ */
+export function judgeDealContactRoles(
+  picklist: CrmPicklist,
+  roles: readonly CrmDealContactRole[],
+  current: readonly CrmDealContactRole[] = [],
+): { ok: true; roles: CrmDealContactRole[] } | { ok: false; error: string } {
+  const judged: CrmDealContactRole[] = []
+  for (const row of roles) {
+    const held = current.find((entry) => entry.contactId === row.contactId)?.role
+    const verdict = judgeCrmPicklistValue(
+      'opportunityContactRole',
+      picklist,
+      row.role ?? '',
+      held,
+    )
+    if (verdict.ok === false) return verdict
+    judged.push({
+      contactId: row.contactId,
+      ...(verdict.value ? { role: verdict.value } : {}),
+      primary: row.primary,
+    })
+  }
+  return { ok: true, roles: judged }
+}
+
+/** {@link judgeCrmPicklistValue} for the lead source. */
 export function judgeCrmLeadSource(
   picklist: CrmPicklist,
   value: unknown,
   current?: unknown,
-): { ok: true; value: string | null } | { ok: false; error: string } {
-  const label = normalizeCrmPicklistLabel(value)
-  if (!label) return { ok: true, value: null }
-  const held = normalizeCrmPicklistLabel(current)
-  if (held && picklistKey(held) === picklistKey(label)) return { ok: true, value: held }
-  const match = crmPicklistValueByLabel(picklist, label)
-  if (match?.active) return { ok: true, value: match.label }
-  return { ok: false, error: crmLeadSourceRefusal(picklist) }
-}
-
-/** One option of a lead source select. */
-export interface CrmPicklistOption {
-  label: string
-  /** Listed but deactivated — shown with an "(inactive)" hint. */
-  inactive: boolean
-  /** Not in the list at all — a value written before the list existed. */
-  unlisted: boolean
+): PicklistJudgement {
+  return judgeCrmPicklistValue(CRM_LEAD_SOURCE_PICKLIST, picklist, value, current)
 }
 
 /**
@@ -2895,33 +4184,300 @@ export interface CrmPicklistOption {
  * in order, then the record's own value when the list would not otherwise
  * show it, so the select keeps what the record holds until it is changed.
  */
-export function crmPicklistOptions(
-  picklist: CrmPicklist,
-  current?: unknown,
-): CrmPicklistOption[] {
-  const options: CrmPicklistOption[] = crmPicklistActiveValues(picklist).map((value) => ({
-    label: value.label,
-    inactive: false,
-    unlisted: false,
-  }))
-  const held = normalizeCrmPicklistLabel(current)
-  if (held && !options.some((option) => picklistKey(option.label) === picklistKey(held))) {
-    const listed = crmPicklistValueByLabel(picklist, held)
-    options.push({ label: held, inactive: Boolean(listed), unlisted: !listed })
-  }
-  return options
-}
+export const crmPicklistOptions = picklistOptions
 
 /**
  * Where a label sorts: its value's position in the list, unlisted values
  * after every listed one, and a record with none last. The order the admin
  * chose is the order a sort by the field reads in, as Salesforce's does.
  */
-export function crmPicklistRank(picklist: CrmPicklist, label: unknown): number {
-  const text = normalizeCrmPicklistLabel(label)
-  if (!text) return Number.MAX_SAFE_INTEGER
-  const at = picklist.values.findIndex((value) => picklistKey(value.label) === picklistKey(text))
-  return at < 0 ? CRM_PICKLIST_VALUES_MAX : at
+export const crmPicklistRank = picklistRank
+
+/*------------------------------------------
+ * A LEAD'S STATUS LABEL (AGL-3512).
+ *
+ * `status` is the meaning and stays the truth: a writer that knows only the
+ * meaning — an automation, an inbox reply, a rule — sets `status` alone and
+ * the lead still reads right. `statusLabel` names which of the org's values
+ * of that meaning the lead holds, and is believed only while it IS one of
+ * that meaning; otherwise, or when absent, the lead shows the default value
+ * when it is active and of that meaning, else the first active value of
+ * that meaning, else the standard label.
+ *-----------------------------------------*/
+
+/** The lead status value set's document id. */
+export const CRM_LEAD_STATUS_PICKLIST: CrmPicklistId = 'leadStatus'
+
+/** The field a lead's status label is stored in, beside `status`. */
+export const CRM_LEAD_STATUS_LABEL_FIELD = 'statusLabel'
+
+/** The org's lead status list as every reader should take it. */
+export function effectiveCrmLeadStatusPicklist(raw: unknown): CrmPicklist {
+  return effectiveCrmPicklist(CRM_LEAD_STATUS_PICKLIST, raw)
+}
+
+/** The standard lead statuses alone — what a reader answers before the org's list is read. */
+export const STANDARD_CRM_LEAD_STATUS_PICKLIST: CrmPicklist = effectiveCrmLeadStatusPicklist(null)
+
+/**
+ * The value a lead with `status` shows when it names none of its own: the
+ * default when active and of that meaning, else the first active value of
+ * that meaning, else the first of that meaning at all.
+ */
+export function crmLeadStatusValueFor(
+  picklist: CrmPicklist,
+  status: CrmLeadStatus,
+): CrmPicklistValue | null {
+  const ofMeaning = picklist.values.filter((value) => value.meaning === status)
+  const preferred = ofMeaning.find((value) => value.id === picklist.defaultValueId && value.active)
+  return preferred ?? ofMeaning.find((value) => value.active) ?? ofMeaning[0] ?? null
+}
+
+/** The label a writer stamps beside `status` when it sets a meaning and names no value. */
+export function crmLeadStatusLabelFor(picklist: CrmPicklist, status: CrmLeadStatus): string {
+  return crmLeadStatusValueFor(picklist, status)?.label ?? CRM_LEAD_STATUS_LABELS[status]
+}
+
+/**
+ * How a lead's status reads: its own `statusLabel` while that is a value of
+ * its `status`'s meaning (as the list spells it), else the meaning's label
+ * by {@link crmLeadStatusLabelFor}. A label the list no longer holds is shown
+ * as stored while nothing contradicts it — a value deleted without moving
+ * every lead off it reads as what the lead was given.
+ */
+export function crmLeadStatusLabel(
+  lead: Pick<CrmLeadFields, 'status' | 'statusLabel'> | null | undefined,
+  picklist: CrmPicklist = STANDARD_CRM_LEAD_STATUS_PICKLIST,
+): string {
+  const status = crmLeadStatus(lead)
+  const held = normalizeCrmPicklistLabel(lead?.statusLabel)
+  if (held) {
+    const value = picklistValueByLabel(picklist, held)
+    if (value?.meaning === status) return value.label
+    if (!value) return held
+  }
+  return crmLeadStatusLabelFor(picklist, status)
+}
+
+/** A status write, as both fields a lead stores — or why it is refused. */
+export type CrmLeadStatusWrite =
+  | { ok: true; status: CrmLeadStatus; statusLabel: string }
+  | { ok: false; error: string }
+
+/**
+ * What a write naming a lead status stores (AGL-3512): an ACTIVE value's
+ * label, in any case or spacing, stores its meaning and its label; one of
+ * the meanings themselves (`working`) stores that meaning and the label
+ * {@link crmLeadStatusLabelFor} gives it; the lead's `current` label is
+ * kept even when inactive. `allowed` narrows the meanings this door may
+ * set — every door but a conversion leaves Qualified out — and anything
+ * else is refused naming what the door accepts.
+ */
+export function resolveCrmLeadStatusWrite(
+  picklist: CrmPicklist,
+  requested: unknown,
+  options: {
+    allowed?: readonly CrmLeadStatus[]
+    current?: Pick<CrmLeadFields, 'status' | 'statusLabel'> | null
+  } = {},
+): CrmLeadStatusWrite {
+  const allowed = options.allowed ?? CRM_LEAD_STATUSES
+  const text = normalizeCrmPicklistLabel(requested)
+  const refuse = (): CrmLeadStatusWrite => {
+    const labels = picklist.values
+      .filter((value) => value.active && allowed.includes(value.meaning as CrmLeadStatus))
+      .map((value) => value.label)
+    return { ok: false, error: `Lead status must be one of: ${labels.join(', ')}.` }
+  }
+  if (!text) return refuse()
+  const value = picklistValueByLabel(picklist, text)
+  const current = options.current ? normalizeCrmPicklistLabel(options.current.statusLabel) : ''
+  const keeps = Boolean(value && current && picklistLabelKeyOf(current) === picklistLabelKeyOf(value.label))
+  if (value && isCrmLeadStatus(value.meaning) && (value.active || keeps)) {
+    return allowed.includes(value.meaning)
+      ? { ok: true, status: value.meaning, statusLabel: value.label }
+      : refuse()
+  }
+  const meaning = text.toLowerCase()
+  if (isCrmLeadStatus(meaning) && allowed.includes(meaning)) {
+    return { ok: true, status: meaning, statusLabel: crmLeadStatusLabelFor(picklist, meaning) }
+  }
+  return refuse()
+}
+
+const picklistLabelKeyOf = (label: string): string => normalizeCrmPicklistLabel(label).toLowerCase()
+
+/**
+ * The values a lead status select offers for a lead holding `current`:
+ * every active value whose meaning `allowed` admits, in the list's order,
+ * then the lead's own value when the list would not otherwise show it.
+ */
+export function crmLeadStatusOptions(
+  picklist: CrmPicklist,
+  allowed: readonly CrmLeadStatus[] = CRM_LEAD_STATUSES,
+  current?: Pick<CrmLeadFields, 'status' | 'statusLabel'> | null,
+): Array<{ label: string; status: CrmLeadStatus; inactive: boolean }> {
+  const options = picklist.values
+    .filter((value) => value.active && allowed.includes(value.meaning as CrmLeadStatus))
+    .map((value) => ({ label: value.label, status: value.meaning as CrmLeadStatus, inactive: false }))
+  if (current) {
+    const label = crmLeadStatusLabel(current, picklist)
+    if (!options.some((option) => option.label === label)) {
+      options.push({ label, status: crmLeadStatus(current), inactive: true })
+    }
+  }
+  return options
+}
+
+/*==========================================
+ * SEMANTIC PICKLISTS ON A TASK (AGL-3517).
+ *
+ * Status, Priority and Type keep the task's own `status`, `priority` and
+ * `kind` as the MEANING every query, reminder and automation reads, and
+ * store the org's label beside it. These helpers are the two directions:
+ * what a task shows for its meaning and label, and what a write stores for
+ * a label or a meaning a person, a file or an API caller named.
+ *=========================================*/
+
+/** The label a value of `meaning` reads as: the first active one, else the first at all. */
+export function crmPicklistMeaningLabel(picklist: CrmPicklist, meaning: unknown): string | null {
+  if (typeof meaning !== 'string' || !meaning) return null
+  const held = picklist.values.filter((value) => value.meaning === meaning)
+  return (held.find((value) => value.active) ?? held[0])?.label ?? null
+}
+
+/**
+ * What a record shows for a semantic field: its own label when it holds
+ * one, else the first active value of its meaning, else the meaning itself.
+ */
+export function crmPicklistShownLabel(
+  picklist: CrmPicklist,
+  meaning: unknown,
+  label: unknown,
+): string {
+  const own = normalizeCrmPicklistLabel(label)
+  if (own) return own
+  return crmPicklistMeaningLabel(picklist, meaning) ?? String(meaning ?? '')
+}
+
+/**
+ * The label a NEW record of `meaning` starts with: the list's default when
+ * it means that, else the first active value that does.
+ */
+export function crmPicklistLabelForNew(picklist: CrmPicklist, meaning: unknown): string | null {
+  const fallback = crmPicklistDefaultLabel(picklist)
+  const value = fallback ? crmPicklistValueByLabel(picklist, fallback) : null
+  return value && value.meaning === meaning ? value.label : crmPicklistMeaningLabel(picklist, meaning)
+}
+
+/** What a semantic write stores: the meaning and the label beside it. */
+export type CrmSemanticPicklistWrite =
+  | { ok: true; meaning: string; label: string | null }
+  | { ok: false; error: string }
+
+/**
+ * A label OR a meaning, as a write names it, resolved against picklist `id`:
+ *
+ *  - an active value's label (any case or spacing) stores that value's
+ *    label and its meaning;
+ *  - the record's `current` label is kept, with its value's meaning, even
+ *    when the value has since been deactivated;
+ *  - one of the definition's meanings (`high`, `done`, `call`) stores that
+ *    meaning with the first active value's label — or the record's current
+ *    label when that already means it;
+ *  - anything else is refused naming the values the list allows.
+ *
+ * `null` answers a blank input: the caller keeps its own default.
+ */
+export function resolveCrmSemanticPicklistWrite(
+  id: CrmPicklistId,
+  picklist: CrmPicklist,
+  input: unknown,
+  current?: unknown,
+): CrmSemanticPicklistWrite | null {
+  const text = normalizeCrmPicklistLabel(input)
+  if (!text) return null
+  const definition = definitionOf(id)
+  const meanings = (definition.meanings ?? []) as readonly string[]
+  const held = normalizeCrmPicklistLabel(current)
+  const byLabel = crmPicklistValueByLabel(picklist, text)
+  const keeps = held && held.toLowerCase() === text.toLowerCase()
+  if (byLabel?.meaning && (byLabel.active || keeps)) {
+    return { ok: true, meaning: byLabel.meaning, label: keeps ? held : byLabel.label }
+  }
+  const meaning = meanings.find((entry) => entry === text.toLowerCase())
+  if (meaning) {
+    const heldValue = held ? crmPicklistValueByLabel(picklist, held) : null
+    return {
+      ok: true,
+      meaning,
+      label: heldValue?.meaning === meaning ? held : crmPicklistMeaningLabel(picklist, meaning),
+    }
+  }
+  return { ok: false, error: crmPicklistRefusal(id, picklist) }
+}
+
+/** A task's three semantic picklists, as every task surface reads them. */
+export interface CrmTaskPicklists {
+  status: CrmPicklist
+  priority: CrmPicklist
+  type: CrmPicklist
+}
+
+/** The picklist id behind each of a task's semantic fields. */
+export const CRM_TASK_PICKLIST_IDS = {
+  status: 'taskStatus',
+  priority: 'taskPriority',
+  type: 'taskType',
+} as const satisfies Record<keyof CrmTaskPicklists, CrmPicklistId>
+
+/** The org's three task lists from their stored documents — standard values alone for none. */
+export function effectiveCrmTaskPicklists(
+  raw: Partial<Record<keyof CrmTaskPicklists, unknown>> = {},
+): CrmTaskPicklists {
+  return {
+    status: effectiveCrmPicklist(CRM_TASK_PICKLIST_IDS.status, raw.status),
+    priority: effectiveCrmPicklist(CRM_TASK_PICKLIST_IDS.priority, raw.priority),
+    type: effectiveCrmPicklist(CRM_TASK_PICKLIST_IDS.type, raw.type),
+  }
+}
+
+/** What a task shows for its status, priority and type — see `crmPicklistShownLabel`. */
+export function crmTaskPicklistLabels(
+  task: Partial<Pick<CrmTask, 'status' | 'statusLabel' | 'priority' | 'priorityLabel' | 'kind' | 'typeLabel'>>,
+  picklists: CrmTaskPicklists,
+): { status: string; priority: string; type: string } {
+  return {
+    status: crmPicklistShownLabel(picklists.status, task.status ?? 'open', task.statusLabel),
+    priority: crmPicklistShownLabel(picklists.priority, task.priority ?? 'normal', task.priorityLabel),
+    type: crmPicklistShownLabel(picklists.type, task.kind ?? 'todo', task.typeLabel),
+  }
+}
+
+/**
+ * The status a tick or an untick writes: done with the first active done
+ * value's label ("Completed"), or open with the label a new task starts
+ * with ("Not Started").
+ */
+export function crmTaskStatusWrite(
+  picklist: CrmPicklist,
+  done: boolean,
+): { status: CrmTaskStatus; statusLabel: string | null } {
+  return done
+    ? { status: 'done', statusLabel: crmPicklistMeaningLabel(picklist, 'done') }
+    : { status: 'open', statusLabel: crmPicklistLabelForNew(picklist, 'open') }
+}
+
+/** The labels a new task of these meanings starts with. */
+export function crmTaskLabelsForNew(
+  picklists: CrmTaskPicklists,
+  meanings: Pick<CrmTask, 'kind' | 'priority'> & { status?: CrmTaskStatus },
+): { statusLabel: string | null; priorityLabel: string | null; typeLabel: string | null } {
+  return {
+    statusLabel: crmPicklistLabelForNew(picklists.status, meanings.status ?? 'open'),
+    priorityLabel: crmPicklistLabelForNew(picklists.priority, meanings.priority),
+    typeLabel: crmPicklistLabelForNew(picklists.type, meanings.kind),
+  }
 }
 
 /** The name a lead is listed under: the name it carries, else its address. */
@@ -3521,12 +5077,20 @@ export function crmEmailStatusKey(record: Record<string, unknown> | null | undef
   return isEmailStateStatus(status) ? status : CRM_EMAIL_STATUS_NONE
 }
 
+/**
+ * A picklist label as a list query compares it — the key a target's
+ * `keyField` holds beside the label — `null` for none.
+ */
+export function crmPicklistKey(value: unknown): string | null {
+  const key = SEARCH_KEY(normalizeCrmPicklistLabel(value))
+  return key || null
+}
+
 /** A lead's lead source as the list compares it: the picklist's key, `null` for none. */
 export const CRM_LEAD_SOURCE_KEY_FIELD = 'leadSourceKey'
 
 export function crmLeadSourceKey(value: unknown): string | null {
-  const key = SEARCH_KEY(normalizeCrmPicklistLabel(value))
-  return key || null
+  return crmPicklistKey(value)
 }
 
 /** What a lead's search box reads (AGL-3246). */
@@ -3561,6 +5125,8 @@ export function crmLeadListFields(record: object): {
   status: CrmLeadStatus
   leadSourceKey: string | null
   emailStatus: string
+  industryKey: string | null
+  ratingKey: string | null
 } {
   const lead = record as Record<string, unknown>
   return {
@@ -3572,37 +5138,92 @@ export function crmLeadListFields(record: object): {
     status: crmLeadStatus(lead as Pick<CrmLeadFields, 'status'>),
     leadSourceKey: crmLeadSourceKey(lead['leadSource']),
     emailStatus: crmEmailStatusKey(lead),
+    // The Industry and Rating the Leads list filters by (AGL-3513).
+    industryKey: crmPicklistKey(lead['industry']),
+    ratingKey: crmPicklistKey(lead['rating']),
   }
 }
 
 /** What a company's search box reads: its name and its domain. */
 export const CRM_COMPANY_SEARCH_SOURCES = ['name', 'domain'] as const
 
+/**
+ * Every field the Companies list queries by: the search tokens, and the
+ * key of each picklist field that names one (AGL-3514) — `null` for none,
+ * so "no value" is a value a query can ask for.
+ */
 export function crmCompanyListFields(record: object): {
   searchTokens: string[]
   scopedSearchTokens: string[]
+  typeKey: string | null
+  industryKey: string | null
+  ratingKey: string | null
+  accountSourceKey: string | null
 } {
   const company = record as Record<string, unknown>
-  return crmSearchFields(
-    company['visibleTo'],
-    CRM_COMPANY_SEARCH_SOURCES.map((field) => company[field]),
-  )
+  return {
+    ...crmSearchFields(
+      company['visibleTo'],
+      CRM_COMPANY_SEARCH_SOURCES.map((field) => company[field]),
+    ),
+    typeKey: crmPicklistKey(company['type']),
+    industryKey: crmPicklistKey(company['industry']),
+    ratingKey: crmPicklistKey(company['rating']),
+    accountSourceKey: crmPicklistKey(company['accountSource']),
+  }
 }
 
 /**
  * What a deal's search box reads: its title (AGL-3315) — as word prefixes,
  * and as `titleLower`, the whole title's key, which a reader whose access
- * is some sites searches by its start.
+ * is some sites searches by its start. And the keys the Deals list filters
+ * its Type and Lead source by (AGL-3516): each label as the picklist
+ * compares it, `null` for none.
  */
 export function crmDealListFields(record: object): {
   searchTokens: string[]
   scopedSearchTokens: string[]
   titleLower: string
+  typeKey: string | null
+  leadSourceKey: string | null
+  contactRoleContactIds: string[]
+  scopedContactRoleContactIds: string[]
+  contactRoleKeys: string[]
 } {
   const deal = record as Record<string, unknown>
   return {
     ...crmSearchFields(deal['visibleTo'], [deal['title']]),
     titleLower: SEARCH_KEY(typeof deal['title'] === 'string' ? deal['title'] : ''),
+    typeKey: crmPicklistKey(deal['type']),
+    leadSourceKey: crmPicklistKey(deal['leadSource']),
+    ...crmDealContactRoleListFields(deal),
+  }
+}
+
+/**
+ * The arrays a deal's contact roles are found by (AGL-3521): every contact
+ * on it — `contactRoleContactIds`, which a contact's page asks
+ * `array-contains` at the organization level, and the same ids behind each
+ * scope token (`scopedContactRoleContactIds`, `host:x~contactId`), which it
+ * asks under a site in the one array clause a query has — and the keys of
+ * the roles they hold, which a rename of a role finds the deals by.
+ */
+export function crmDealContactRoleListFields(deal: Record<string, unknown>): {
+  contactRoleContactIds: string[]
+  scopedContactRoleContactIds: string[]
+  contactRoleKeys: string[]
+} {
+  const roles = dealContactRolesOf(deal)
+  const contactRoleContactIds = roles.map((row) => row.contactId)
+  const keys = new Set<string>()
+  for (const row of roles) {
+    const key = crmPicklistKey(row.role)
+    if (key) keys.add(key)
+  }
+  return {
+    contactRoleContactIds,
+    scopedContactRoleContactIds: scopedSearchTokens(deal['visibleTo'], contactRoleContactIds),
+    contactRoleKeys: [...keys],
   }
 }
 
@@ -3627,8 +5248,8 @@ export function crmTaskListFields(record: object): {
  *   `{groupId}:{field}`           this holder has one (for "is set")
  *   `*:{field}={value}`, `*:{field}`   any holder's, for the organization level
  *
- * `field` is `owner`, `stage`, `source`, `company`, `tag` or `custom.{key}`,
- * plus two presence-only fields: `orders` for a holder the person has bought
+ * `field` is `owner`, `stage`, `source`, `company`, `tag`, `custom.{key}` or
+ * `leadSource` (AGL-3511), plus two presence-only fields: `orders` for a holder the person has bought
  * from, and `ltv` for one they are worth something to — the per-holder
  * figures a range cannot reach, asked only whether there are any.
  * A text value is keyed lower-cased and single-spaced; a number or a flag
@@ -3652,6 +5273,8 @@ export type CrmFacetKeyField =
   | 'orders'
   | 'ltv'
   | `custom.${string}`
+  // A holder's lead source, by its label (AGL-3511).
+  | 'leadSource'
 
 /** A facet value as its key spells it, or `null` for a value a key cannot hold. */
 export function crmFacetKeyValue(value: unknown): string | null {
@@ -3700,6 +5323,8 @@ function facetKeysOf(group: string, facet: Record<string, unknown>, into: Set<st
       if (/^[A-Za-z0-9_-]{1,64}$/.test(key)) add(`custom.${key}`, value)
     }
   }
+  // Keyed as `crmPicklistKey` compares a label, so a rename's rewrite restamps it.
+  add('leadSource', facet['leadSource'])
 }
 
 /** Every facet key a contact carries — see the block above. */
@@ -3770,10 +5395,20 @@ export function crmContactListFields(record: object): {
  * {@link crmListFields} over the document it wrote.
  */
 export const CRM_LIST_FIELD_INPUTS: Readonly<Record<CrmListCollection, readonly string[]>> = {
-  leads: ['visibleTo', ...CRM_LEAD_SEARCH_SOURCES, 'status', 'leadSource', 'emailState', 'campaignIds'],
+  leads: [
+    'visibleTo',
+    ...CRM_LEAD_SEARCH_SOURCES,
+    'status',
+    'leadSource',
+    'emailState',
+    'campaignIds',
+    // AGL-3513.
+    'industry',
+    'rating',
+  ],
   contacts: ['visibleTo', ...CRM_CONTACT_SEARCH_SOURCES, 'phone', CONTACT_FACETS_FIELD, 'emailState'],
-  companies: ['visibleTo', ...CRM_COMPANY_SEARCH_SOURCES],
-  deals: ['visibleTo', 'title'],
+  companies: ['visibleTo', ...CRM_COMPANY_SEARCH_SOURCES, 'type', 'industry', 'rating', 'accountSource'],
+  deals: ['visibleTo', 'title', 'type', 'leadSource', 'contactRoles', 'contactId'],
   crmTasks: ['visibleTo', 'title'],
 }
 

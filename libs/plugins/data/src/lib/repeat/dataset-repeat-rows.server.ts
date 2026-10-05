@@ -34,6 +34,11 @@ import { repeatRecordsFromPages } from './repeat-record-pages'
 import { FieldPath } from 'firebase-admin/firestore'
 import { effectiveDatasetModel, repeatRowsModelOf } from '../model/dataset-models'
 import type { HostDataset, HostDatasetRecord } from '../model/datasets'
+import { readSiteRecordPageBindings } from '../record-pages/record-page-read.server'
+import {
+  type DatasetRecordPageBinding,
+  withRecordPageUrls,
+} from '../record-pages/record-pages'
 
 /**
  * The render path's largest read (AGL-1302): up to two pages of records per
@@ -61,7 +66,7 @@ const DATASETS_TTL_SECONDS = PUBLISHED_SITE_DATA_TTL_SECONDS
  * template once with nothing to say why.
  *
  * Fail-open, per key: a key that cannot be read is left out, and its
- * repeatable renders its template untouched, without costing the others.
+ * repeatable renders no copies (AGL-3496), without costing the others.
  *
  * Scoped to what THIS host may see (AGL-1039): a display name resolves inside
  * the host's scope, and an id outside it resolves to nothing. The Admin SDK
@@ -75,25 +80,33 @@ export async function readPublishedDatasetRows(
     ...new Set(options.keys.map((key) => key.trim()).filter(Boolean)),
   ].sort()
   if (!keys.length) return {}
+  // The site's record templates (AGL-3475), read through their own cache: a
+  // row of a dataset that has one carries its page as `url`.
+  const bindings = await readSiteRecordPageBindings(options.hostId).catch(
+    (error: unknown) => {
+      console.error(error)
+      return [] as DatasetRecordPageBinding[]
+    },
+  )
   try {
     return await withRenderCache({
-      // `rows-v2`: the cached answer carries the rows' references
-      // (`repeatRowsModelOf`) rather than the whole model (AGL-3080), so an
-      // answer cached before that shape is never read as this one.
-      key: ['tenant-datasets', 'rows-v2', options.hostId, ...keys],
+      // `rows-v3`: rows carry their record page's `url` (AGL-3475); `v2`
+      // carried the rows' references rather than the whole model (AGL-3080).
+      key: ['tenant-datasets', 'rows-v3', options.hostId, ...keys],
       revalidate: DATASETS_TTL_SECONDS,
       tags: [tenantDataTag(options.hostId)],
-      read: () => readDatasets(options.hostId, keys),
+      read: () => readDatasets(options.hostId, keys, bindings),
     })
   } catch (error) {
     console.error(error)
-    return readDatasets(options.hostId, keys)
+    return readDatasets(options.hostId, keys, bindings)
   }
 }
 
 async function readDatasets(
   hostId: string,
   keys: readonly string[],
+  bindings: readonly DatasetRecordPageBinding[] = [],
 ): Promise<Record<string, RepeatableDataset>> {
   const datasets: Record<string, RepeatableDataset> = {}
   try {
@@ -110,9 +123,11 @@ async function readDatasets(
     const load = (snapshot: FirebaseFirestore.DocumentSnapshot) => {
       let dataset = loads.get(snapshot.id)
       if (!dataset) {
+        const model = effectiveDatasetModel(snapshot.data() as HostDataset)
+        const binding = bindings.find((one) => one.datasetId === snapshot.id)
         dataset = readRepeatRecords(snapshot.ref).then((records) => ({
-          records,
-          model: repeatRowsModelOf(effectiveDatasetModel(snapshot.data() as HostDataset)),
+          records: withRecordPageUrls(records, binding, model),
+          model: repeatRowsModelOf(model),
         }))
         loads.set(snapshot.id, dataset)
       }

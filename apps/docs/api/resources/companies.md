@@ -63,7 +63,21 @@ after creation; a record that belongs somewhere else is deleted and recreated th
   "website": "https://acme.com/",
   "phone": "+15125550123",
   "address": { "line1": "1 Main St", "city": "Austin", "state": "TX", "postalCode": "78701", "country": "US" },
-  "industry": "Coffee roasting",
+  "industry": "Food & Beverage",
+  "type": "Customer",
+  "rating": "Hot",
+  "ownership": "Private",
+  "accountSource": "Trade show",
+  "annualRevenueCents": 125000000,
+  "currency": "usd",
+  "numberOfEmployees": 42,
+  "fax": "+15125550124",
+  "accountNumber": "ACME-001",
+  "site": "Headquarters",
+  "tickerSymbol": null,
+  "sicCode": "5149",
+  "shippingAddress": { "line1": "9 Dock Rd", "city": "Austin", "state": "TX", "country": "US" },
+  "parentCompanyId": null,
   "ownerUid": "u_9f1c",
   "notes": "Renews in March.",
   "custom": { "tier": "gold", "seats": 12 },
@@ -82,8 +96,16 @@ after creation; a record that belongs somewhere else is deleted and recreated th
 | `domain` | string \| null | The bare lowercase hostname — `acme.com`, never `https://www.acme.com/`. Normalized before storing, and **unique** within the organization. Writable. |
 | `website` | string \| null | A web address. A bare `acme.com` is stored with `https://`. Writable. |
 | `phone` | string \| null | E.164 (`+15125550123`). Normalized before storing; a number that cannot be normalized confidently is a `400`, never a half-cleaned string. Writable. |
-| `address` | object \| null | `line1`, `line2`, `city`, `state`, `postalCode`, `country` (two-letter ISO code). Blank parts are dropped; an address with nothing in it is stored as `null`. Writable. |
-| `industry` | string \| null | Free text, 120 characters. Writable. |
+| `address` | object \| null | The **billing** address: `line1`, `line2`, `city`, `state`, `postalCode`, `country` (two-letter ISO code). Blank parts are dropped; an address with nothing in it is stored as `null`. Writable. |
+| `shippingAddress` | object \| null | The shipping address, read the same way as `address`. Writable. |
+| `type`, `industry`, `rating`, `ownership` | string \| null | Salesforce's Account Type, Industry, Rating and Ownership: each one of the organization's active values for that list — kept on the **Companies** tab of [Fields](/content-and-data/crm/custom-fields#picklist-values) — matched without regard to case and stored as the list spells it. Any other value is a `400` naming the values allowed. A company keeps the value it already holds even after the value is deactivated — including an `industry` written before Industry was a list. A create that names none starts from the list's default, when one is set. Writable. |
+| `accountSource` | string \| null | Where the account came from: one of the organization's active [lead source](leads.md) values, judged the same way. Writable. |
+| `annualRevenueCents` | integer \| null | Annual revenue in the minor unit of `currency` (cents, for USD), 0 or more. Writable. |
+| `currency` | string | Lowercase ISO 4217 code of `annualRevenueCents`; `usd` when unset, as a [deal](deals.md)'s is. Writable. |
+| `numberOfEmployees` | integer \| null | 0 to 99,999,999. Writable. |
+| `fax` | string \| null | E.164, normalized like `phone`. Writable. |
+| `accountNumber`, `site`, `tickerSymbol`, `sicCode` | string \| null | Trimmed text of at most 40, 80, 20 and 20 characters; longer is a `400`. `site` is which of the company's locations this record is. Writable. |
+| `parentCompanyId` | string \| null | The company this one sits under. Must be another company of the organization, never this one or one already under it. Deleting the parent clears it. Writable. |
 | `ownerUid` | string \| null | The team member responsible for the account. Must be a member of your organization. Writable. |
 | `notes` | string \| null | Free text, 5,000 characters. Writable. |
 | `custom` | object | The organization's [company custom fields](/content-and-data/crm/custom-fields#over-the-api), keyed by field key; `{}` when the company has none. Judged against the **company** definitions: a key that is not one, a retired field, or a value the type cannot hold is a `400` naming `custom.<key>`. A `PATCH` merges the keys it sends; `null` clears one. Writable. |
@@ -188,7 +210,7 @@ it.** A body of `{}` is a no-op that returns the current company.
 curl -X PATCH "https://app.aglyn.com/api/v1/companies/k7d2b9f104" \
   -H "Authorization: Bearer aglyn_sk_…" \
   -H "Content-Type: application/json" \
-  -d '{"industry":"Coffee roasting","notes":null}'
+  -d '{"industry":"Food & Beverage","notes":null}'
 ```
 
 Changing `domain` to one another company already holds is the same
@@ -208,7 +230,8 @@ is created.
 **The company alone is removed.** The deals, tasks and activities filed against it
 keep their `companyId`, and the contacts that worked there keep theirs — they are
 records of their own, and a delete that cascaded through them would erase a sales
-history because somebody removed a duplicate account. Deleting a company that isn't
+history because somebody removed a duplicate account. The companies under it keep
+everything but their `parentCompanyId`, which is cleared. Deleting a company that isn't
 there returns `404 not_found`, unless the call carries the key of the delete that
 removed it, in which case the original receipt is replayed.
 
@@ -216,7 +239,7 @@ removed it, in which case the original receipt is replayed.
 
 | Status | `type` | When |
 | --- | --- | --- |
-| `400` | `bad_request` | `code: "validation_failed"` — a missing `name` or `consentSiteId` (or one naming a site the organization does not own), a `domain` or `phone` that does not normalize, a `website` that is not a web address, an `ownerUid` who is not a member, a `custom` entry that is not a company field or does not fit its type (named as `custom.<key>`), or a key that is not writable. On the list, a `?domain=` that is not a domain or a malformed `?updatedAfter=`. `fields` names each offending key. |
+| `400` | `bad_request` | `code: "validation_failed"` — a missing `name` or `consentSiteId` (or one naming a site the organization does not own), a `domain` or `phone` that does not normalize, a `website` that is not a web address, an `ownerUid` who is not a member, a `type`, `industry`, `rating`, `ownership` or `accountSource` outside the organization's list (the message names the values allowed), an account field that does not fit (`annualRevenueCents`, `numberOfEmployees`, `fax`, `currency`, a text field past its length), a `parentCompanyId` that is the company itself, one below it or none at all, a `custom` entry that is not a company field or does not fit its type (named as `custom.<key>`), or a key that is not writable. On the list, a `?domain=` that is not a domain or a malformed `?updatedAfter=`. `fields` names each offending key. |
 | `403` | `plan_required` | `code: "crm"` — the plan doesn't include the CRM suite. `code: "crm_records_quota"` — the CRM records band is full on a plan that doesn't meter the overage. |
 | `403` | `insufficient_scope` | Key lacks `crm:read` / `crm:write`. Checked before the method. |
 | `404` | `not_found` | `"No such company"`. |

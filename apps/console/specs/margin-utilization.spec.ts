@@ -379,7 +379,7 @@ describe('the bands are real, and the plan is what selects them', () => {
       hosts: { one: true },
     }
     expect(orgIncludedBands(canceled as never).contactsCount).toBe(100)
-    expect(orgIncludedBands(orgOn('business') as never).contactsCount).toBe(50000)
+    expect(orgIncludedBands(orgOn('business') as never).contactsCount).toBe(30000)
   })
 
   it('applies a purchased host add-on to the per-host bands', () => {
@@ -488,12 +488,12 @@ describe('the cost model here is the cost model the margin floor uses', () => {
     }
   })
 
-  it('reproduces the metered part of Agency’s pinned $1,017.45 at full utilization', () => {
-    // `tier-margin-floor.spec.ts` pins Agency at $1,017.45 a month with every
-    // band at 100%. $828.97 of that is the eight metered axes this module
-    // prices; the $188.48 between them is what the rollup has no meter for
+  it('reproduces the metered part of Agency’s pinned $782.75 at full utilization', () => {
+    // `tier-margin-floor.spec.ts` pins Agency at $782.75 a month with every
+    // band at 100%. $578.67 of that is the eight metered axes this module
+    // prices; the $204.08 between them is what the rollup has no meter for
     // here — the assist band ($58), the two CRM decision terms, a seat a
-    // month per collaborator and the one-to-one email cap ($42), and the
+    // month for each of 510 people and the one-to-one email cap ($57.60), and the
     // requests behind the included page views past the hosting plan's
     // allowance, at the dearest region ($88.48). Reaching the metered part
     // through this module's band table and `orgMonthlyCogsUsd` is what says
@@ -507,7 +507,7 @@ describe('the cost model here is the cost model the margin floor uses', () => {
     // its transfer at Vercel's dearest region and its reads at nam5, which is
     // $0.41312 a gigabyte and $163.18 of the total.
     const cogs = orgMonthlyCogsUsd(rollupAt('agency', 1) as never, PLAN_ENTITLEMENTS.agency.hostLimit)
-    expect(cogs.cogsUsd).toBeCloseTo(828.97, 2)
+    expect(cogs.cogsUsd).toBeCloseTo(578.67, 2)
     expect(cogs.basis).toBe('measured')
   })
 
@@ -598,11 +598,11 @@ describe('the realised margin', () => {
     const ladder = [0.03, 0.25, 0.5, 1].map(at)
     expect(ladder).toEqual([...ladder].sort((a, b) => b - a))
     // …and it really does fall to a thin number, so the surface can find
-    // one. 66% on Pro at the monthly price, over the metered axes alone,
+    // one. 71% on Pro at the monthly price, over the metered axes alone,
     // which price a page view at its weight; the whole-plan figure at the
     // annual price, with the CRM terms and the CDN requests counted, is about
-    // 1% (`tier-margin-floor.spec.ts`).
-    expect(at(1)).toBeLessThan(0.7)
+    // 23% (`tier-margin-floor.spec.ts`).
+    expect(at(1)).toBeLessThan(0.75)
     expect(at(0.03)).toBeGreaterThan(0.9)
   })
 

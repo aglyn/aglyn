@@ -26,7 +26,21 @@ import {
   listPluginMembershipDetachers,
   registerPluginMembershipDetacher,
 } from '@aglyn/aglyn/plugin-manager/plugin-membership-detach'
+import { registerPluginPersonRecordsEraser } from '@aglyn/aglyn/plugin-manager/plugin-person-erasure'
+import { registerPluginTransferResource } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
 import { BUNDLE_ID } from './constants/bundle-common'
+import { crmTransferPlanGate, registerCrmTransferResources } from './transfer/register'
+import {
+  CRM_EMAIL_TEMPLATE_PACKAGE_RULES,
+  CRM_EMAIL_TEMPLATES_TRANSFER_KEY,
+  crmEmailTemplateDependencies,
+  remapCrmEmailTemplateIds,
+  type CrmEmailTemplatePackageContent,
+} from './transfer/email-templates-package'
+
+/** The email templates package's server half (AGL-3535), loaded when an import or export first asks. */
+const templatesPackage = async () =>
+  (await import('./transfer/email-templates-package.server')).createCrmEmailTemplatesPackage()
 
 /**
  * The plan feature every CRM resource of `/v1` needs, and the sentence its
@@ -76,6 +90,9 @@ const CRM_API_V1_RESOURCES: ReadonlyArray<readonly [string, ApiV1ResourceHandler
  * records band and collection sizes join `GET /v1/usage`. The API is the
  * console's alone, so the tenant runtime does not register them.
  *
+ * It registers the server half of the CRM's import and export resources
+ * (`transfer/register.ts`).
+ *
  * It also clears a removed container off the CRM's records: a campaign is
  * deleted from the console, and its owner asks every plugin's membership
  * detacher first (`server/container-detach.ts`).
@@ -87,6 +104,33 @@ const CRM_API_V1_RESOURCES: ReadonlyArray<readonly [string, ApiV1ResourceHandler
  * hot reload, a spec) is harmless.
  */
 export function registerCrmConsoleServerDeclarations(): void {
+  // Email templates in a workspace package (AGL-3535).
+  registerPluginTransferResource(
+    CRM_EMAIL_TEMPLATES_TRANSFER_KEY,
+    {
+      items: async (ctx) => (await templatesPackage()).items(ctx),
+      dependencies: (item) => crmEmailTemplateDependencies(item as CrmEmailTemplatePackageContent),
+      remapIds: (item, idMap) => remapCrmEmailTemplateIds(item as CrmEmailTemplatePackageContent, idMap),
+      readItems: async (ctx, ids) => (await templatesPackage()).readItems(ctx, ids),
+      writeItems: async (ctx, items, writer) => (await templatesPackage()).writeItems(ctx, items as never, writer),
+      revertItems: async (ctx, steps) => (await templatesPackage()).revertItems(ctx, steps as never),
+      problems: async (ctx, write) => (await templatesPackage()).problems(ctx, write as never),
+      rules: CRM_EMAIL_TEMPLATE_PACKAGE_RULES,
+      planGate: crmTransferPlanGate('email templates'),
+    },
+    { pluginId: BUNDLE_ID },
+  )
+  // The record system's share of a person erasure (AGL-2623, AGL-3080): it
+  // names the person's contacts before anybody erases, and erases them, their
+  // satellites and their lead after everybody else. Required, and loaded with
+  // the first erasure.
+  registerPluginPersonRecordsEraser(
+    {
+      locate: async (target) => (await import('./server/person-eraser')).crmPersonEraser().locate(target),
+      erase: async (request) => (await import('./server/person-eraser')).crmPersonEraser().erase(request),
+    },
+    { pluginId: BUNDLE_ID },
+  )
   for (const [resource, handle] of CRM_API_V1_RESOURCES) {
     registerApiV1Resource(
       resource,
@@ -103,6 +147,9 @@ export function registerCrmConsoleServerDeclarations(): void {
     async (ctx) => (await import('./server/api-v1/usage')).crmUsageFigures(ctx),
     { pluginId: BUNDLE_ID },
   )
+  // What the CRM imports and exports (AGL-3527): each resource's module
+  // loads with the first transfer that asks for it.
+  registerCrmTransferResources(BUNDLE_ID)
   // A removed container — a deleted campaign — comes off every lead and every
   // contact facet naming it, before its owner removes it (AGL-3080).
   if (!listPluginMembershipDetachers().includes(BUNDLE_ID)) {

@@ -64,14 +64,16 @@ describe('sharp module-shape resolution (AGL-1468)', () => {
     jest.resetModules()
     const toBuffer = jest.fn(async () => Buffer.from('RIFF____WEBPtiny'))
     const factory = jest.fn(() => ({
-      resize: () => ({ webp: () => ({ toBuffer }) }),
+      rotate: () => ({ resize: () => ({ webp: () => ({ toBuffer }) }) }),
     }))
     // The CommonJS shape: `module.exports = sharp`, no `default`.
     jest.doMock('sharp', () => factory)
     const { generateMediaVariants } = await import('./media-variants')
 
     const outcome = await generateMediaVariants({
-      buffer: Buffer.alloc(16),
+      // Larger than the mocked encode: a variant is only kept when it is
+      // smaller than what it stands in for (AGL-3486).
+      buffer: Buffer.alloc(64),
       contentType: 'image/png',
       sourceWidth: 1200,
       objectPath: 'hosts/site-a/media/asset',
@@ -79,6 +81,8 @@ describe('sharp module-shape resolution (AGL-1468)', () => {
     })
 
     expect(outcome.error).toBeUndefined()
-    expect(outcome.variants).toEqual([320, 640, 1280, 1920])
+    expect(outcome.variants).toEqual([
+      160, 320, 480, 640, 768, 960, 1280, 1600, 1920, 2560,
+    ])
   })
 })

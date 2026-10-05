@@ -103,7 +103,7 @@ describe('the collaborator audit script tracks PLAN_ENTITLEMENTS (AGL-2439)', ()
     const table = auditTable()
     expect(Object.keys(table).length).toBeGreaterThanOrEqual(8)
     expect(table['free'].membersPerHost).toBe(1)
-    expect(table['enterprise'].membersPerHost).toBe(500)
+    expect(table['enterprise'].membersPerHost).toBe(10)
     // The sentinel is still parsed where a transcription carries one.
     expect(UNLIMITED).toBe(Number.POSITIVE_INFINITY)
   })

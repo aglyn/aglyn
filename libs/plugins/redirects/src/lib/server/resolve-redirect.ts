@@ -21,6 +21,7 @@ import {
   isExternalRedirectDestination,
   matchRedirect,
   normalizeRedirectSource,
+  redirectHitKey,
 } from '../model/redirects'
 import {
   analyticsDayExpiresAt,
@@ -75,8 +76,6 @@ export interface ResolvedRedirect {
   statusCode: 301 | 302 | 307 | 308
 }
 
-/** Firestore map keys: strip characters that complicate field paths. */
-const idKey = (value: string) => value.replace(/[.$#[\]/]/g, '_')
 
 /**
  * Redirect enforcement (AGL-155), Option A per the issue: rules apply in
@@ -168,7 +167,7 @@ export async function resolveRedirect(
       .doc(day)
       .set(
         {
-          redirects: { [idKey(matchId)]: FieldValue.increment(1) },
+          redirects: { [redirectHitKey(matchId)]: FieldValue.increment(1) },
           // Retention (AGL-1844): every writer of a day doc stamps the
           // day-anchored expiry the TTL policy sweeps on.
           expiresAt: analyticsDayExpiresAt(day),

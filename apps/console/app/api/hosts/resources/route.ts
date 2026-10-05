@@ -66,28 +66,7 @@ import {
 } from './count-billable-screens'
 import { announceLivePaths } from '../../../../utils/server/announce-live-paths'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
-
-/**
- * Is a destination a path on the site itself? (AGL-1881.)
- *
- * The question behind a declared `externalDestination`: a value that is not
- * plainly a site path is one that sends traffic off the platform, and takes
- * the approver stamp. Written to answer FALSE for anything that is not plainly
- * a path, including `undefined`, so a create that omits the field is treated
- * as external and takes the stamp rather than skipping it. `strictNullChecks`
- * is off, so the `typeof` test is what keeps a missing value out of
- * `.startsWith`.
- *
- * The redirects plugin's `isExternalRedirectDestination` is the same predicate
- * negated, for the one kind that declares a destination today; the two must
- * agree, and the direction of any disagreement is a rule that does not fire,
- * never one that fires unapproved.
- */
-function isSitePath(destination: unknown): boolean {
-  if (typeof destination !== 'string') return false
-  const value = destination.trim()
-  return value.startsWith('/') && !value.startsWith('//')
-}
+import { isSitePath } from '../../_lib/external-destination'
 
 /**
  * The one plan quota billed as a per-site ALLOCATION of an org pool rather

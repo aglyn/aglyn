@@ -409,12 +409,12 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     sharedLayoutsPerHost: 3,
     templatesPerHost: 50,
     storagePerHostMb: 2048,
-    membersPerHost: 3,
+    membersPerHost: 2,
     managersPerOrg: 2,
     maxManagersPerOrg: 5,
     maxMembersPerHost: 10,
     // Sized by the same annual-price invariant as Pro's — see that band.
-    bandwidthGb: 20,
+    bandwidthGb: 15,
     formsPerHost: FORMS_PER_HOST_CEILING,
     variablesPerHost: 25,
     functionsPerHost: 10,
@@ -444,10 +444,10 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     emailSendsPerMonth: 0,
     actionRunsPerMonth: 0,
     apiRequestsPerMonth: 0,
-    datasetsPerOrg: 3,
+    datasetsPerOrg: 2,
     maxDatasetsPerOrg: 10,
     recordsPerDataset: 1000,
-    dataStorageMbPerOrg: 1024,
+    dataStorageMbPerOrg: 512,
     productsPerHost: 100,
     inventoryLocations: 1,
     posRegisters: 0,
@@ -513,9 +513,9 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     screensPerHost: 100,
     sharedLayoutsPerHost: UNLIMITED,
     templatesPerHost: UNLIMITED,
-    storagePerHostMb: 10240,
-    membersPerHost: 10,
-    managersPerOrg: 5,
+    storagePerHostMb: 5120,
+    membersPerHost: 3,
+    managersPerOrg: 3,
     maxManagersPerOrg: 20,
     maxMembersPerHost: 25,
     // Page views are the largest term of this tier's modeled COGS. One GB is
@@ -531,13 +531,15 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     // The invariant the band is sized against is the ANNUAL price ($39 a
     // month) net of Stripe's fee, with every band at 100% and the CRM seat
     // and one-to-one email terms counted — the 2026-09-07 pricing decision —
-    // at that all-in gigabyte (AGL-3444). 30 GB is what it carries; every
-    // paid band on the ladder is sized the same way.
+    // at that all-in gigabyte (AGL-3444), and it must cover that cost plus
+    // 30%, the same markup the metered overages carry (AGL-3469). 25 GB is
+    // what it carries beside the storage and campaign bands it now sits
+    // with; every paid band on the ladder is sized the same way.
     // `tier-margin-floor.spec.ts` holds the model and pins the figure.
     //
     // `meteredInfraPassThrough` is true here, so traffic past the band BILLS
     // at the page-view pass-through rather than being refused or absorbed.
-    bandwidthGb: 30,
+    bandwidthGb: 25,
     formsPerHost: FORMS_PER_HOST_CEILING,
     variablesPerHost: 100,
     functionsPerHost: 50,
@@ -545,13 +547,13 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     servicesPerHost: UNLIMITED,
     redirectsPerHost: 100,
     contactsPerHost: 10000,
-    emailSendsPerMonth: 5000,
+    emailSendsPerMonth: 2500,
     actionRunsPerMonth: 5000,
     apiRequestsPerMonth: 0,
-    datasetsPerOrg: 15,
+    datasetsPerOrg: 5,
     maxDatasetsPerOrg: 50,
     recordsPerDataset: 10000,
-    dataStorageMbPerOrg: 5120,
+    dataStorageMbPerOrg: 2048,
     productsPerHost: 2500,
     inventoryLocations: 2,
     posRegisters: 1,
@@ -623,9 +625,9 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     screensPerHost: UNLIMITED,
     sharedLayoutsPerHost: UNLIMITED,
     templatesPerHost: UNLIMITED,
-    storagePerHostMb: 20480,
-    membersPerHost: 50,
-    managersPerOrg: 15,
+    storagePerHostMb: 10240,
+    membersPerHost: 5,
+    managersPerOrg: 5,
     maxManagersPerOrg: 100,
     maxMembersPerHost: 100,
     // Sized by the same annual-price invariant as Pro's — see that band.
@@ -636,14 +638,14 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     workflowsPerHost: 100,
     servicesPerHost: UNLIMITED,
     redirectsPerHost: UNLIMITED,
-    contactsPerHost: 50000,
-    emailSendsPerMonth: 25000,
+    contactsPerHost: 30000,
+    emailSendsPerMonth: 15000,
     actionRunsPerMonth: 50000,
     apiRequestsPerMonth: 1_500,
-    datasetsPerOrg: 100,
+    datasetsPerOrg: 10,
     maxDatasetsPerOrg: 250,
     recordsPerDataset: 100000,
-    dataStorageMbPerOrg: 25600,
+    dataStorageMbPerOrg: 10240,
     productsPerHost: 10000,
     inventoryLocations: 4,
     posRegisters: 2,
@@ -695,9 +697,9 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     screensPerHost: UNLIMITED,
     sharedLayoutsPerHost: UNLIMITED,
     templatesPerHost: UNLIMITED,
-    storagePerHostMb: 30720,
-    membersPerHost: 75,
-    managersPerOrg: 25,
+    storagePerHostMb: 15360,
+    membersPerHost: 5,
+    managersPerOrg: 5,
     maxManagersPerOrg: 150,
     maxMembersPerHost: 150,
     // Sized by the same annual-price invariant as Pro's — see that band.
@@ -709,13 +711,13 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     servicesPerHost: UNLIMITED,
     redirectsPerHost: UNLIMITED,
     contactsPerHost: 100000,
-    emailSendsPerMonth: 40000,
+    emailSendsPerMonth: 25000,
     actionRunsPerMonth: 100000,
     apiRequestsPerMonth: 5_000,
-    datasetsPerOrg: 250,
+    datasetsPerOrg: 15,
     maxDatasetsPerOrg: 500,
     recordsPerDataset: 500000,
-    dataStorageMbPerOrg: 51200,
+    dataStorageMbPerOrg: 25600,
     productsPerHost: 25000,
     inventoryLocations: 6,
     posRegisters: 3,
@@ -764,9 +766,9 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     screensPerHost: UNLIMITED,
     sharedLayoutsPerHost: UNLIMITED,
     templatesPerHost: UNLIMITED,
-    storagePerHostMb: 40960,
-    membersPerHost: 100,
-    managersPerOrg: 50,
+    storagePerHostMb: 20480,
+    membersPerHost: 5,
+    managersPerOrg: 10,
     maxManagersPerOrg: 250,
     maxMembersPerHost: 250,
     // Sized by the same annual-price invariant as Pro's — see that band.
@@ -781,10 +783,10 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     emailSendsPerMonth: 65000,
     actionRunsPerMonth: 250000,
     apiRequestsPerMonth: 17_000,
-    datasetsPerOrg: 500,
+    datasetsPerOrg: 25,
     maxDatasetsPerOrg: 1000,
     recordsPerDataset: 1000000,
-    dataStorageMbPerOrg: 102400,
+    dataStorageMbPerOrg: 51200,
     productsPerHost: UNLIMITED,
     inventoryLocations: 10,
     posRegisters: 5,
@@ -837,9 +839,9 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     screensPerHost: UNLIMITED,
     sharedLayoutsPerHost: UNLIMITED,
     templatesPerHost: UNLIMITED,
-    storagePerHostMb: 61440,
-    membersPerHost: 250,
-    managersPerOrg: 100,
+    storagePerHostMb: 20480,
+    membersPerHost: 5,
+    managersPerOrg: 10,
     maxManagersPerOrg: 500,
     maxMembersPerHost: 1000,
     // Sized by the same annual-price invariant as Pro's — see that band.
@@ -854,10 +856,10 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     emailSendsPerMonth: 130000,
     actionRunsPerMonth: 1000000,
     apiRequestsPerMonth: 85_000,
-    datasetsPerOrg: 2000,
+    datasetsPerOrg: 50,
     maxDatasetsPerOrg: 5000,
     recordsPerDataset: UNLIMITED,
-    dataStorageMbPerOrg: 512000,
+    dataStorageMbPerOrg: 204800,
     productsPerHost: UNLIMITED,
     inventoryLocations: 50,
     posRegisters: 20,
@@ -947,9 +949,9 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     screensPerHost: UNLIMITED,
     sharedLayoutsPerHost: UNLIMITED,
     templatesPerHost: UNLIMITED,
-    storagePerHostMb: 122_880,
-    membersPerHost: 500,
-    managersPerOrg: 200,
+    storagePerHostMb: 40_960,
+    membersPerHost: 10,
+    managersPerOrg: 20,
     maxManagersPerOrg: 1_000,
     maxMembersPerHost: 2_000,
     bandwidthGb: 790,
@@ -963,10 +965,10 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     emailSendsPerMonth: ENTERPRISE_EMAIL_SENDS_PER_MONTH,
     actionRunsPerMonth: 2_000_000,
     apiRequestsPerMonth: 170_000,
-    datasetsPerOrg: 4_000,
+    datasetsPerOrg: 100,
     maxDatasetsPerOrg: 10_000,
     recordsPerDataset: UNLIMITED,
-    dataStorageMbPerOrg: 1_024_000,
+    dataStorageMbPerOrg: 409_600,
     productsPerHost: UNLIMITED,
     inventoryLocations: 100,
     posRegisters: 40,
@@ -2395,8 +2397,37 @@ export const INFRA_COGS_PER_SITE_USD = 2
  * where the page's generator can read it.
  *
  * The console keeps importing it from `usage-metering` unchanged.
+ *
+ * It is the margin KEPT: cost + 30% after Stripe's processor fee, not before
+ * it (AGL-3476). A price of cost × 1.3 kept cost × 1.26 once 2.9% came off,
+ * so the published rates are set by {@link METERED_PRICE_MULTIPLE}, and this
+ * stays the figure every full-utilization rule is held to.
  */
 export const METERED_MARKUP = 1.3
+
+/**
+ * What a passed-through cost is multiplied by to reach its price, so that
+ * cost + 30% survives Stripe's percentage fee: 1.3 ÷ 0.971 ≈ 1.3388
+ * (AGL-3476). The fixed 30¢ is paid by the subscription charge the overage
+ * rides on, so only the percentage is grossed up.
+ */
+export const METERED_PRICE_MULTIPLE = METERED_MARKUP / (1 - STRIPE_PROCESSOR_FEE_PCT)
+
+/**
+ * A published overage price: `costPerQuotedUnitUsd` × {@link
+ * METERED_PRICE_MULTIPLE}, rounded UP at the `decimals` it is quoted in, so
+ * the price the page prints and the invoice bills is the same round figure
+ * and never less than the rule. The product is settled to six places before
+ * the ceiling so a figure that is exact in decimal — or a pinned cost carried
+ * to eleven places, like the page-view pair — is not lifted a step by its
+ * tail.
+ */
+export function publishedMeteredPrice(costPerQuotedUnitUsd: number, decimals: number): number {
+  const scale = 10 ** decimals
+  return (
+    Math.ceil(Number((costPerQuotedUnitUsd * METERED_PRICE_MULTIPLE * scale).toFixed(6))) / scale
+  )
+}
 
 /**
  * What the REQUESTS behind ONE page view cost once the platform is past its
@@ -5136,6 +5167,168 @@ export function bandwidthGbFromPageViews(pageViews: number): number {
     (1024 * 1024 * 1024)
   )
 }
+
+/** The decimal GB Vercel bills transfer in (AGL-3444). */
+const DECIMAL_GB_BYTES = 1_000_000_000
+
+/** The binary GB `bandwidthGb` and GCS egress are counted in. */
+const BINARY_GB_BYTES = 1024 * 1024 * 1024
+
+/**
+ * How long one decimal GB keeps a streaming function open: a viewer draws a
+ * 720p film at about 5 Mbit/s, and the media route reads Storage only as fast
+ * as the viewer takes the bytes (AGL-2810), so the function lives for the
+ * film, not for the transfer — 1,600 seconds a GB.
+ */
+const ORIGIN_MEDIA_STREAM_SECONDS_PER_GB = (DECIMAL_GB_BYTES * 8) / 5_000_000
+
+/**
+ * The range requests one decimal GB arrives in: a player asks for a film a
+ * slice at a time, and a slice of about a megabyte is the small end of what
+ * players ask for, so per-request costs are counted a thousand times a GB.
+ */
+const ORIGIN_MEDIA_REQUESTS_PER_GB = 1_000
+
+/**
+ * What ONE DECIMAL GB of video, audio or a file costs to SERVE FROM ORIGIN, by
+ * term, at the dearest region every Vercel term is billed in (AGL-3474).
+ *
+ * The media CDN serves every type the edge must never hold (AGL-1515) on
+ * every request, from origin, so a GB of it pays both of Vercel's transfer
+ * meters and Storage's egress — where a page's GB is mostly answered by the
+ * edge. This is the basis {@link ORIGIN_MEDIA_BANDWIDTH_WEIGHT} is derived
+ * from, and the figure the published "at cost + 30%" has to be true of.
+ *
+ * | term | basis | per decimal GB |
+ * |---|---|---|
+ * | `fastDataTransfer` | Vercel Fast Data Transfer, dearest region, decimal GB | $0.35 |
+ * | `fastOriginTransfer` | Vercel Fast Origin Transfer, dearest region, decimal GB | $0.43 |
+ * | `storageEgress` | GCS internet egress at list, $0.12 per GiB (0–1 TiB) | $0.111759 |
+ * | `streamingMemory` | 2 GB (the function default) at $0.0183/GB-hour, held 1,600 s | $0.016267 |
+ * | `streamingCpu` | 60 s of active CPU at $0.221/hour — an allowance, see below | $0.003683 |
+ * | `requests` | 1,000 range requests × $0.0000070 | $0.007 |
+ * | **total** | | **$0.918709** |
+ *
+ * Each request is a CDN request ($3.20 per million), a function invocation
+ * ($0.60 per million), the media document's read ($0.0000006 at `nam5`), the
+ * day document's counter write ($0.0000018) and two Storage Class B
+ * operations, the metadata read and the object read ($0.0000004 each). The
+ * lockdown, quarantine and rate-limit reads are cached across requests and
+ * cost nothing a request.
+ *
+ * `streamingCpu` is the one unmeasured term. The bytes are copied, not
+ * computed — piping a GB through Node is a few seconds of CPU — and the
+ * minute allowed here is chosen to err high, as every other basis in this
+ * file does.
+ *
+ * ## Storing the bytes is NOT here
+ *
+ * A file in the library is already metered as storage (`storagePerGbMonth`)
+ * and billed past the plan's storage at cost + 30% after card fees; serving
+ * it does not store it again. Adding storage here would charge for the same
+ * bytes twice.
+ */
+export const ORIGIN_MEDIA_SERVE_COST_USD_PER_GB = {
+  fastDataTransfer: 0.35,
+  fastOriginTransfer: 0.43,
+  storageEgress: (0.12 * DECIMAL_GB_BYTES) / BINARY_GB_BYTES,
+  streamingMemory: (2 * 0.0183 * ORIGIN_MEDIA_STREAM_SECONDS_PER_GB) / 3600,
+  streamingCpu: (60 * 0.221) / 3600,
+  requests:
+    ORIGIN_MEDIA_REQUESTS_PER_GB *
+    (3.2 / 1_000_000 + 0.6 / 1_000_000 + 0.0000006 + 0.0000018 + 2 * 0.0000004),
+} as const
+
+/** {@link ORIGIN_MEDIA_SERVE_COST_USD_PER_GB}, summed: about $0.9187 a decimal GB. */
+export const ORIGIN_MEDIA_COST_USD_PER_GB = Object.values(
+  ORIGIN_MEDIA_SERVE_COST_USD_PER_GB,
+).reduce((sum, term) => sum + term, 0)
+
+/**
+ * The published page-view overage, per view: what a billed view costs us
+ * (`perPageView` and the request term) at {@link METERED_PRICE_MULTIPLE},
+ * rounded up to the cent per 1,000 it is quoted in — $0.83 per 1,000. The
+ * same expression as the console's `METERED_BILLED_RATES_USD.perPageView`,
+ * computed here because the weight below is, and a spec holds the two equal.
+ */
+export const PAGE_VIEW_PUBLISHED_PRICE_USD =
+  publishedMeteredPrice(
+    (ORG_COGS_UNIT_RATES_USD.perPageView + PAGE_VIEW_CDN_REQUEST_COST_USD) * 1000,
+    2,
+  ) / 1000
+
+/**
+ * (a) THE OVERAGE: does counting origin media at `weight` bill a GB of it past
+ * the band at cost + 30%, kept after Stripe's percentage fee?
+ *
+ * A counted GB is `weight` GB of page views at {@link PAGE_VIEW_PUBLISHED_PRICE_USD}.
+ */
+export function originMediaOverageHolds(weight: number): boolean {
+  const billedPerGbUsd =
+    weight * PAGE_VIEW_PUBLISHED_PRICE_USD * (DECIMAL_GB_BYTES / ESTIMATED_PAGE_TRANSFER_BYTES)
+  return (
+    billedPerGbUsd * (1 - STRIPE_PROCESSOR_FEE_PCT) >=
+    METERED_MARKUP * ORIGIN_MEDIA_COST_USD_PER_GB
+  )
+}
+
+/**
+ * (b) THE BAND: does counting origin media at `weight` keep a plan that spends
+ * its whole bandwidth band on it inside what the band was sized on?
+ *
+ * Every `bandwidthGb` band is sized at the cost of the views one GiB buys —
+ * their weight (`perPageView`) and their requests
+ * (`PAGE_VIEW_CDN_REQUEST_COST_USD`), $0.63712 a GiB — and
+ * `tier-margin-floor.spec.ts` holds every tier at 1.3× its full-use cost on
+ * that figure. A GiB of origin media spends `weight` GiB of the band, so the
+ * band holds while `weight` GiB of band costs at least one GiB of media.
+ */
+export function originMediaBandHolds(weight: number): boolean {
+  const bandCostPerGibUsd =
+    (ORG_COGS_UNIT_RATES_USD.perPageView + PAGE_VIEW_CDN_REQUEST_COST_USD) *
+    pageViewsFromBandwidthGb(1)
+  const originCostPerGibUsd =
+    (ORIGIN_MEDIA_COST_USD_PER_GB * BINARY_GB_BYTES) / DECIMAL_GB_BYTES
+  return weight * bandCostPerGibUsd >= originCostPerGibUsd
+}
+
+/**
+ * How many GB of bandwidth one GB of video, audio or a file served from origin
+ * counts as (AGL-3474, decided by the account owner 2026-10-02): the smallest
+ * weight, in tenths and never below 1, that satisfies BOTH
+ * {@link originMediaOverageHolds} and {@link originMediaBandHolds}.
+ *
+ * One weight rather than a second meter or a second rate, because it moves
+ * the band and the overage together: the Free wall, the abuse ceiling, the
+ * meters, the alerts and the invoice all read media through
+ * `pageViewsFromMediaBytes`, which applies it. At today's bases the overage
+ * needs 1.54 and the band 1.55, so it is 1.6 — the published sentence names
+ * it, and the docs and `/pricing` have to change before it does.
+ *
+ * Derived, never written down: a rate or a band basis that moves re-derives
+ * it, and `media-bandwidth.spec.ts` pins the figure so that a move is a
+ * decision with a red test attached rather than a silent re-price.
+ */
+export const ORIGIN_MEDIA_BANDWIDTH_WEIGHT = ((): number => {
+  for (let tenths = 10; tenths <= 1000; tenths += 1) {
+    const weight = tenths / 10
+    if (originMediaOverageHolds(weight) && originMediaBandHolds(weight)) return weight
+  }
+  throw new Error('no origin-media weight up to 100 covers its cost')
+})()
+
+/**
+ * The sentence every customer surface states the weight in — `/pricing`
+ * beside the metered rates (`tools/marketing/build-pricing-tables.mts`), and
+ * the bandwidth, billing and media docs, which
+ * `media-bandwidth-weight-copy.spec.ts` holds to this exact text. Built from
+ * the derived figure, so a weight that moves turns those red before it can
+ * bill anyone.
+ */
+export const ORIGIN_MEDIA_BANDWIDTH_SENTENCE =
+  'Video, audio, file downloads and other media served from our servers count ' +
+  `${ORIGIN_MEDIA_BANDWIDTH_WEIGHT}× toward bandwidth, because serving them ` +
+  'costs more than serving pages.'
 
 /**
  * How far past a plan's own included bandwidth the abuse ceiling sits

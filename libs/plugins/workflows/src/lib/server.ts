@@ -34,6 +34,12 @@ import { runSummaryFields } from './model/run-history'
 import { type HostWorkflow, runWorkflow } from './model/workflows'
 import type { HostWebhook } from './model/webhooks'
 import { eventRunSuspension } from './engine/site-suspension'
+import {
+  recordRuns,
+  type RunMeterScope,
+  runMonthKey,
+  runsUsedThisMonth,
+} from './engine/run-meter'
 import { BUNDLE_ID as WORKFLOWS_BUNDLE_ID } from './constants/bundle-common'
 import { registerWorkflowsServerDeclarations } from './declarations.server'
 import {
@@ -115,9 +121,9 @@ function secretsMatch(expected: string, provided: string): boolean {
  * `x-aglyn-secret`; a valid call enrolls the configured workflow with the
  * payload's top-level primitives in scope. Business tier (`webhooks`
  * flag); runs bill against the workflow-runs meter like any other run —
- * `workflowRunsPerMonth` is checked before the run and
- * `hosts/{id}/counters/workflowRuns` is incremented after it (AGL-2228).
- * That sentence was here before either half of it was true.
+ * `workflowRunsPerMonth` is checked against the workspace's runs before the
+ * run, and the site's and the workspace's counters are incremented after it
+ * (AGL-2228, AGL-3472).
  */
 const inboundHookHandler: PluginApiHandler = async (req, res) => {
   if (req.method !== 'POST') {
@@ -198,13 +204,20 @@ const inboundHookHandler: PluginApiHandler = async (req, res) => {
      * atomic means a transaction around the whole run and is the same trade
      * `runEventWorkflows` declined.
      */
-    const monthKey = new Date().toISOString().slice(0, 7)
-    const runCounterRef = hostRef.collection('counters').doc('workflowRuns')
+    // The band is the WORKSPACE's (AGL-3472), so the count it is held to is
+    // every site's runs, off the org's counter — see `run-meter.ts`.
+    const meter: RunMeterScope = {
+      firestore,
+      hostRef,
+      orgId: owner?.orgId,
+      counter: 'workflowRuns',
+      month: runMonthKey(),
+    }
     const runLimit = resolveOrgEntitlements(org as any).workflowRunsPerMonth
-    const runsUsed = Number((await runCounterRef.get()).get(monthKey) ?? 0)
+    const runsUsed = await runsUsedThisMonth(meter)
     if (!(runsUsed + 1 <= runLimit)) {
       return res.status(402).json({
-        error: `This site has used its ${runLimit} workflow runs for the month`,
+        error: `This workspace has used its ${runLimit} workflow runs for the month`,
       })
     }
 
@@ -341,9 +354,7 @@ const inboundHookHandler: PluginApiHandler = async (req, res) => {
     // `runEventWorkflows` counts its failures. A run that executed and threw
     // spent the same compute as one that returned a value; only a run that
     // never started (the cap above, a missing workflow) must not count.
-    await runCounterRef
-      .set({ [monthKey]: FieldValue.increment(1) }, { merge: true })
-      .catch(() => undefined)
+    await recordRuns({ ...meter, count: 1 })
 
     if (failed) return res.status(422).json({ error: outcome.error })
     return res.status(200).json({ ok: true, value: outcome.value })

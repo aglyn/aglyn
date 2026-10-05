@@ -41,7 +41,7 @@ import {
   campaignHeldForReviewNotice,
   campaignPlacedOnHost,
   campaignSendHeldForReview,
-} from '@aglyn/shared-ui-email-campaigns/model'
+} from '../model/campaign-container'
 import { readPluginRecordCard } from '@aglyn/aglyn/plugin-manager/plugin-record-cards'
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import { hostPublicOrigin } from '@aglyn/aglyn/server'

@@ -116,17 +116,9 @@ const okSweep = async () => ({
   ok: true as const,
   hosts: 1,
   hostsSuppressed: 1,
-  contacts: 1,
-  companyLinks: 0,
-  deals: 0,
-  tasks: 0,
-  activities: 0,
-  leads: 1,
-  listMemberships: 0,
-  orders: 0,
-  bookings: 0,
+  records: 1,
   emailDeliveries: 2,
-  plugins: {},
+  plugins: { crm: { contacts: 1, leads: 1 } },
 })
 
 beforeEach(() => {
@@ -153,7 +145,7 @@ describe('runPersonErasures', () => {
     expect(done).toMatchObject({
       status: 'erased',
       erasedAtMs: 100,
-      result: { contacts: 1, leads: 1, emailDeliveries: 2 },
+      result: { records: 1, emailDeliveries: 2, plugins: { crm: { contacts: 1, leads: 1 } } },
     })
     expect(done).not.toHaveProperty('email')
     expect(done).not.toHaveProperty('pendingSinceMs')

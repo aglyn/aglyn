@@ -39,6 +39,7 @@ import { ContactsMixCard } from './reports/contacts-mix-card'
 import { ContactsTrendCard } from './reports/contacts-trend-card'
 import { ForecastCard } from './reports/forecast-card'
 import { LeadFunnelCard } from './reports/lead-funnel-card'
+import { LeadSourceCard } from './reports/lead-source-card'
 import { PipelineCard } from './reports/pipeline-card'
 import { SourceConversionCard } from './reports/source-conversion-card'
 import { WonLostByOwnerCard } from './reports/won-lost-by-owner-card'
@@ -236,6 +237,7 @@ export function ContactsReportsSection(props: ConsolePluginPageProps) {
               },
               { key: 'source-conversion', children: <SourceConversionCard report={report} /> },
               { key: 'lead-funnel', children: <LeadFunnelCard report={report} hostId={hostId} /> },
+              { key: 'lead-sources', children: <LeadSourceCard report={report} hostId={hostId} /> },
               { key: 'pipeline', children: <PipelineCard report={report} /> },
               {
                 key: 'closed',

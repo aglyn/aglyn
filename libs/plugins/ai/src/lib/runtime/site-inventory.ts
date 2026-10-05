@@ -163,13 +163,17 @@ async function readIndexedDatasets(
   if (!datasets) return { rows: [], truncated: false }
   const { records, truncated } = await datasets.index.list({ orgId, hostId, limit: cap })
   return {
-    rows: records.map((record) => ({
-      id: record.id,
-      name: record.name,
-      fields: (Array.isArray(record.facts['fields']) ? (record.facts['fields'] as Data[]) : [])
-        .map((field) => text(field?.['name']) || text(field?.['id']))
-        .filter(Boolean),
-    })),
+    rows: records.map((record) => {
+      const fields = (Array.isArray(record.facts['fields']) ? (record.facts['fields'] as Data[]) : [])
+        .map((field) => ({ id: text(field?.['id']), name: text(field?.['name']) || text(field?.['id']) }))
+        .filter((field) => field.name)
+      return {
+        id: record.id,
+        name: record.name,
+        fields: fields.map((field) => field.name),
+        fieldIds: fields.map((field) => field.id || field.name),
+      }
+    }),
     truncated,
   }
 }

@@ -163,17 +163,24 @@ function docRef(path: string): any {
 }
 
 function collectionRef(path: string): any {
-  const make = (filters: Array<[string, unknown]>, max?: number): any => ({
+  const make = (filters: Array<[string, string, unknown]>, max?: number): any => ({
     path,
     where: (field: string, op: string, value: unknown) => {
-      if (op !== '==') throw new Error(`unsupported op ${op}`)
-      return make([...filters, [field, value]], max)
+      if (op !== '==' && op !== 'array-contains') throw new Error(`unsupported op ${op}`)
+      return make([...filters, [field, op, value]], max)
     },
     limit: (n: number) => make(filters, n),
     get: async () => {
       const hits = childPaths(path)
         .map(snapshot)
-        .filter((snap) => filters.every(([field, value]) => snap.data()?.[field] === value))
+        .filter((snap) =>
+          filters.every(([field, op, value]) => {
+            const stored = snap.data()?.[field]
+            return op === 'array-contains'
+              ? Array.isArray(stored) && stored.includes(value)
+              : stored === value
+          }),
+        )
         .slice(0, max ?? Number.POSITIVE_INFINITY)
       return { empty: hits.length === 0, size: hits.length, docs: hits }
     },
@@ -351,6 +358,49 @@ describe('mergeContacts', () => {
     expect(docs.get(`${ORG}/leads/${personKey('jane@gmail.com')}`)?.convertedContactId).toBe('c-keep')
     expect(docs.get(`${ORG}/leads/${personKey('jd@example.org')}`)?.convertedContactId).toBe('c-keep')
     expect(docs.get(`${ORG}/leads/${personKey('jo@example.net')}`)?.convertedContactId).toBe('c-other')
+  })
+
+  it('moves the merged record’s contact roles, keeping one row on a deal that named both (AGL-3521)', async () => {
+    docs.set(`${ORG}/deals/d-roles`, {
+      title: 'Committee',
+      contactId: 'c-gone',
+      visibleTo: ['host:h1'],
+      contactRoles: [
+        { contactId: 'c-gone', role: 'Decision Maker', primary: true },
+        { contactId: 'c-keep', primary: false },
+        { contactId: 'c-other', role: 'Evaluator', primary: false },
+      ],
+      contactRoleContactIds: ['c-gone', 'c-keep', 'c-other'],
+    })
+    docs.set(`${ORG}/deals/d-role-only`, {
+      title: 'Influenced',
+      contactId: 'c-other',
+      visibleTo: ['host:h1'],
+      contactRoles: [
+        { contactId: 'c-other', primary: true },
+        { contactId: 'c-gone', role: 'Influencer', primary: false },
+      ],
+      contactRoleContactIds: ['c-other', 'c-gone'],
+    })
+    const result = await merge()
+    expect(result.ok && result.repointed.deals).toBe(3)
+    expect(docs.get(`${ORG}/deals/d-roles`)).toMatchObject({
+      contactId: 'c-keep',
+      contactRoles: [
+        { contactId: 'c-keep', role: 'Decision Maker', primary: true },
+        { contactId: 'c-other', role: 'Evaluator', primary: false },
+      ],
+      contactRoleContactIds: ['c-keep', 'c-other'],
+      scopedContactRoleContactIds: ['host:h1~c-keep', 'host:h1~c-other'],
+    })
+    expect(docs.get(`${ORG}/deals/d-role-only`)).toMatchObject({
+      contactId: 'c-other',
+      contactRoles: [
+        { contactId: 'c-other', primary: true },
+        { contactId: 'c-keep', role: 'Influencer', primary: false },
+      ],
+      contactRoleContactIds: ['c-other', 'c-keep'],
+    })
   })
 
   it('indexes every address the survivor answers to at the survivor', async () => {

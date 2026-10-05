@@ -27,9 +27,15 @@
 # ⚠️ They resolve `cloud/firebase-firestore.rules` relative to the REPO ROOT,
 # not to cloud/ — hence the `cd` back out. Run from cloud/ they die on ENOENT
 # before asserting anything, which is a red that says nothing about the rules.
+#
+# AGL-3544 — every Firestore suite here loads cloud/firebase-firestore.deploy.rules,
+# the comment-stripped artifact that deploys, not the documented source. A
+# stale artifact would test the OLD rules and pass, so its freshness is
+# checked first, before an emulator boots: `npm run generate:rules-deploy`.
 set -euo pipefail
 NODE_BIN="$(command -v node)"
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+"$NODE_BIN" "$REPO_ROOT/tools/scripts/generate-rules-deploy-artifact.mjs" --check
 cd "$REPO_ROOT/cloud"
 npx firebase emulators:exec --only firestore,database --project demo-rules-check \
   "'$NODE_BIN' --test rules-tests/firestore-rules.test.mjs rules-tests/database-rules.test.mjs \

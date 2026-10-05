@@ -131,6 +131,10 @@ async function handler(request: Request): Promise<Response> {
             // the leaving notice (AGL-3452), or null when they never do —
             // from the same rule the published site applies.
             leavingNoticeUntil: leavingNoticeEndsAt(snap.data(), nowMs),
+            // The site page's "Ask to upgrade" reads the standing proposal
+            // (AGL-3466).
+            upgradeProposal: snap.get('upgradeProposal') ?? null,
+            billingStatus: snap.get('billingStatus') ?? null,
           },
         ]),
     )

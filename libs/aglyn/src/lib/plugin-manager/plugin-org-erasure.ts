@@ -75,6 +75,7 @@
  */
 
 import { getRegisteringPluginId } from '../app-utils/registering-plugin'
+import { runPluginDeclarationsRepair } from './plugin-declarations-repair'
 import {
   PLUGIN_ORG_KEYED_COLLECTIONS,
   PLUGIN_REQUIRED_ORG_ERASERS,
@@ -122,7 +123,20 @@ interface Registration {
   eraser: PluginOrgEraser
 }
 
-const registrations: Registration[] = []
+/**
+ * One list per process, on `globalThis` (AGL-3464): the app registers its
+ * plugins' erasers from `instrumentation.ts`, which Next compiles apart from
+ * the route that runs the erasure, and a module-scoped list is filled in one
+ * copy and read empty in the other — the AGL-3412 shape.
+ */
+const ERASERS_KEY = Symbol.for('@aglyn/aglyn:plugin-org-erasers')
+
+const globalScope = globalThis as typeof globalThis & {
+  [ERASERS_KEY]?: Registration[]
+}
+
+const registrations: Registration[] =
+  globalScope[ERASERS_KEY] ?? (globalScope[ERASERS_KEY] = [])
 
 /**
  * Registers a plugin's workspace eraser. Owner = the loader's marker inside a
@@ -153,15 +167,15 @@ export function registerPluginOrgEraser(
  *
  * Throws in exactly two cases, both about a REQUIRED eraser (`required`,
  * the compiled {@link PLUGIN_REQUIRED_ORG_ERASERS} unless a spec passes its
- * own): before running anything, when one is not registered; and after
- * running every eraser, when one threw.
+ * own): before running anything, when one is not registered even after the
+ * app's boot step has run once more; and after running every eraser, when
+ * one threw.
  */
 export async function runPluginOrgErasers(
   request: PluginOrgErasureRequest,
   required: readonly string[] = PLUGIN_REQUIRED_ORG_ERASERS,
 ): Promise<Record<string, PluginOrgErasureReport | null>> {
-  const registered = new Set(registrations.map((entry) => entry.pluginId))
-  const missing = required.filter((pluginId) => !registered.has(pluginId))
+  const missing = await missingAfterRepair(required)
   if (missing.length) {
     throw new Error(
       `[plugins] erasing org ${request.orgId} refused: ${missing.join(', ')} ` +
@@ -186,6 +200,24 @@ export async function runPluginOrgErasers(
     )
   }
   return reports
+}
+
+/**
+ * The required erasers not registered in this process, after running the
+ * app's boot step once when any is missing (AGL-3464): a boot whose
+ * declarations failed looks the same from here as one that never declared
+ * the eraser, and only the second is a reason to refuse.
+ */
+async function missingAfterRepair(required: readonly string[]): Promise<string[]> {
+  const missing = () => {
+    const registered = new Set(registrations.map((entry) => entry.pluginId))
+    return required.filter((pluginId) => !registered.has(pluginId))
+  }
+  if (!missing().length) return []
+  await runPluginDeclarationsRepair().catch((error: unknown) => {
+    console.error('[plugins] the declarations repair failed before an org erasure', error)
+  })
+  return missing()
 }
 
 /** The plugins with a workspace eraser, in the order they run. */

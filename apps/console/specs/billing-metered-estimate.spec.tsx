@@ -48,6 +48,10 @@
 
 import { render, screen, waitFor } from '@testing-library/react'
 import {
+  PLAN_ENTITLEMENTS,
+  resolveOrgEntitlements,
+} from '@aglyn/aglyn/app-utils/plan-entitlements'
+import {
   estimateMonthlyUsageCost,
   meteredIncludedAllowance,
   METERED_BILLED_RATES_USD,
@@ -228,25 +232,6 @@ describe('org-library bytes reach the card (the AGL-1473 console half)', () => {
     expect(screen.getByText(/measured but not yet billed/i)).toBeTruthy()
   })
 
-  it('names the org library share AGAINST ITS OWN ALLOWANCE (AGL-1886)', async () => {
-    // The split was legible from AGL-1473; the allowance is what AGL-1886
-    // added, and it is a different number from the org-wide band in the row
-    // above. Uploads are enforced PER SCOPE against `storagePerHostMb`, so
-    // the org library refuses at ITS cap while the org-wide total is still a
-    // fraction of the band the card otherwise shows. A customer told only the
-    // second is refused at a third of the number they were given.
-    mockUsageConfig({ orgLibraryBilledFrom: MONTH })
-    seed({ hostMediaBytes: 1 * GB, orgLibraryBytes: Math.round(0.5 * GB) })
-    render(<BillingMeteredEstimateComponent org={ORG} hosts={HOSTS} />)
-    await waitFor(() => {
-      expect(
-        screen.getByText(/0\.50 of .* GB in your organization library/i),
-      ).toBeTruthy()
-    })
-    // And it says what the allowance MEANS — that uploads stop there.
-    expect(screen.getByText(/new uploads there stop at it/i)).toBeTruthy()
-  })
-
   it('never publishes a low number when the org counter read fails', async () => {
     // The billing-usage posture: a partial sum is the same defect in a
     // smaller size. A denied org-counter read must hold the loading state
@@ -260,6 +245,109 @@ describe('org-library bytes reach the card (the AGL-1473 console half)', () => {
       expect(screen.getByText('Calculating…')).toBeTruthy()
     })
     expect(screen.queryByText('$0.00')).toBeNull()
+  })
+})
+
+/**
+ * The org library has no allowance of its own (AGL-3479).
+ *
+ * Since AGL-2075 ingress measures every site's library and the org's against
+ * ONE band — `resolveOrgMediaBand`, `hostLimit × storagePerHostMb`, the same
+ * arithmetic `meteredIncludedAllowance` sizes the invoice's allowance with.
+ * The caption used to state the library's bytes "of" the per-site figure and
+ * promise that uploads there stop at it: a cap ingress does not enforce, and
+ * on a metered plan a stop that does not happen, because past the band the
+ * upload is accepted and billed.
+ *
+ * No plan figure is written here: the multi-site plan is found in
+ * `PLAN_ENTITLEMENTS`, and every band is read through
+ * `meteredIncludedAllowance`.
+ */
+describe('the org library shares the workspace allowance (AGL-3479)', () => {
+  /** The library caption, wherever it renders. */
+  const libraryCaption = () =>
+    screen.getByText(/in your organization library/i).textContent ?? ''
+
+  it('names the library as a share of the one allowance, on a metered plan', async () => {
+    mockUsageConfig({ orgLibraryBilledFrom: MONTH })
+    seed({ hostMediaBytes: 1 * GB, orgLibraryBytes: Math.round(0.5 * GB) })
+    render(<BillingMeteredEstimateComponent org={ORG} hosts={HOSTS} />)
+    await waitFor(() => {
+      expect(libraryCaption()).toBe(
+        'Includes 0.50 GB in your organization library, which shares this ' +
+          'allowance with your sites.',
+      )
+    })
+    // Metered: past the band an upload bills, so nothing may say it stops —
+    // and the library's bytes are written "of" nothing.
+    expect(meteredIncludedAllowance(ORG).metered).toBe(true)
+    expect(libraryCaption()).not.toMatch(/stop/i)
+    expect(libraryCaption()).not.toMatch(/own allowance/i)
+    expect(libraryCaption()).not.toMatch(/ of /)
+  })
+
+  it('says uploads into it stop only while its storage is not billed', async () => {
+    // `scopeBillsStorageOverage('orgs')` is false until the switch names a
+    // month, and the gate then refuses org-library bytes past the band — no
+    // price to attach. Said, because it is the one metered-plan stop.
+    mockUsageConfig({ orgLibraryBilledFrom: null })
+    seed({ hostMediaBytes: 1 * GB, orgLibraryBytes: Math.round(0.5 * GB) })
+    render(<BillingMeteredEstimateComponent org={ORG} hosts={HOSTS} />)
+    await waitFor(() => {
+      expect(libraryCaption()).toMatch(/measured but not yet billed/i)
+    })
+    expect(libraryCaption()).toMatch(/uploads into it stop at the allowance/i)
+  })
+
+  it('on Free, says uploads stop when the WORKSPACE reaches the allowance', async () => {
+    const freeOrg = { $id: 'org-1', plan: 'free' } as any
+    expect(meteredIncludedAllowance(freeOrg).metered).toBe(false)
+    mockUsageConfig({ orgLibraryBilledFrom: MONTH })
+    seed({ orgLibraryBytes: Math.round(0.1 * GB) })
+    render(<BillingMeteredEstimateComponent org={freeOrg} hosts={HOSTS} />)
+    await waitFor(() => {
+      expect(libraryCaption()).toMatch(
+        /shares this allowance with your sites\. New uploads stop when your workspace reaches it\.$/,
+      )
+    })
+    expect(libraryCaption()).not.toMatch(/bill/i)
+  })
+
+  it('reads every site and the library against the pooled band on a multi-site plan', async () => {
+    // A metered plan with room for more than one site, from the plan table.
+    const plan = (Object.keys(PLAN_ENTITLEMENTS) as Array<keyof typeof PLAN_ENTITLEMENTS>).find(
+      (key) => {
+        const org = { $id: 'org-1', plan: key } as any
+        const included = meteredIncludedAllowance(org)
+        return (
+          resolveOrgEntitlements(org).hostLimit > 1 &&
+          included.metered &&
+          Number.isFinite(included.storageGb)
+        )
+      },
+    )
+    expect(plan).toBeDefined()
+    const org = { $id: 'org-1', plan } as any
+    const included = meteredIncludedAllowance(org)
+    const perSiteGb = resolveOrgEntitlements(org).storagePerHostMb / 1024
+    // Non-vacuous: the pooled band is not the per-site figure.
+    expect(included.storageGb).toBeGreaterThan(perSiteGb)
+
+    mockUsageConfig({ orgLibraryBilledFrom: MONTH })
+    seed({ hostMediaBytes: Math.round(0.25 * GB), orgLibraryBytes: Math.round(0.5 * GB) })
+    mockCounters['hosts/host-b/counters/media'] = { bytes: Math.round(0.75 * GB) }
+    const hosts = [...HOSTS, { $id: 'host-b', displayName: 'Site B' }]
+    render(<BillingMeteredEstimateComponent org={org} hosts={hosts} />)
+    // 0.25 + 0.75 across the sites, 0.50 in the library: one pool.
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          `Storage: 1.50 of ${included.storageGb.toFixed(2)} GB`,
+          { exact: false },
+        ),
+      ).toBeTruthy()
+    })
+    expect(libraryCaption()).not.toContain(perSiteGb.toFixed(2))
   })
 })
 
@@ -367,9 +455,9 @@ describe('a loading state is not an answer', () => {
  *
  * Two properties, and the second is the one that could go quietly wrong:
  *
- *  1. The published rate is the one that is CHARGED — our cost × the markup —
- *     not the cost table. They are 30% apart, and printing the input would be
- *     quoting a number no invoice uses.
+ *  1. The published rate is the one that is CHARGED — our cost + 30% kept
+ *     after the card fee, rounded up (AGL-3476) — not the cost table. Printing
+ *     the input would be quoting a number no invoice uses.
  *  2. The per-dimension charges are the same three products `billedCents` is
  *     rounded from. They are asserted to SUM to it, so a second cost model in
  *     the component (or in the split) diverges here exactly as it would
@@ -382,37 +470,36 @@ describe('each metered dimension names its overage rate', () => {
     mockUsageConfig({ orgLibraryBilledFrom: MONTH })
     seed({ hostMediaBytes: 1 * GB })
     render(<BillingMeteredEstimateComponent org={ORG} hosts={HOSTS} />)
-    // $0.026 × 1.30 = $0.0338. Both halves asserted: the charged rate is
-    // present, and the raw cost — which differs only in the third decimal —
-    // is not, so a component that printed `METERED_UNIT_RATES_USD` fails.
+    // $0.026 × 1.3 ÷ 0.971, rounded up, is $0.0349. Both halves asserted: the
+    // charged rate is present, and the raw cost — which differs only in the
+    // third decimal — is not, so a component that printed
+    // `METERED_UNIT_RATES_USD` fails.
     await waitFor(() => {
-      expect(screen.getByText(/\$0\.0338\/GB-month/)).toBeTruthy()
+      expect(screen.getByText(/\$0\.0349\/GB-month/)).toBeTruthy()
     })
-    expect(METERED_BILLED_RATES_USD.storagePerGbMonth).toBeCloseTo(
+    expect(METERED_BILLED_RATES_USD.storagePerGbMonth * 0.971).toBeGreaterThanOrEqual(
       METERED_UNIT_RATES_USD.storagePerGbMonth * METERED_MARKUP,
-      10,
     )
     expect(screen.queryByText(/\$0\.026\/GB-month/)).toBeNull()
   })
 
   it('quotes page views and form submissions PER 1,000', async () => {
-    // Per unit these are $0.0008 and $0.00008, which read as zero at any
+    // Per unit these are $0.00083 and $0.000083, which read as zero at any
     // precision a customer would trust — the reason the unit is 1,000 here
     // and a GB-month for storage.
     //
     // The page-view figure is also where `rateText` earns its trailing-zero
-    // strip, and its floor at the cent: a billed view's cost x 1.3 is
-    // $0.800000006 per 1,000, which four decimals round to $0.8000 and the
-    // strip renders as the $0.80 the published page states — never $0.8.
+    // strip, and its floor at the cent: $0.83 per 1,000 renders as $0.83,
+    // never $0.8300, and the form figure keeps its third place as $0.083.
     mockUsageConfig({ orgLibraryBilledFrom: MONTH })
     seed({ hostMonthViews: 10, hostFormSubmissions: 3 })
     render(<BillingMeteredEstimateComponent org={ORG} hosts={HOSTS} />)
     await waitFor(() => {
-      expect(screen.getByText(/\$0\.80 per 1,000/)).toBeTruthy()
+      expect(screen.getByText(/\$0\.83 per 1,000/)).toBeTruthy()
     })
-    expect(screen.queryByText(/\$0\.8 per 1,000/)).toBeNull()
-    expect(screen.queryByText(/\$0\.70 per 1,000/)).toBeNull()
-    expect(screen.getByText(/\$0\.08 per 1,000/)).toBeTruthy()
+    expect(screen.queryByText(/\$0\.80 per 1,000/)).toBeNull()
+    expect(screen.queryByText(/\$0\.8300 per 1,000/)).toBeNull()
+    expect(screen.getByText(/\$0\.083 per 1,000/)).toBeTruthy()
     // The forms plugin's band is drawn under the label it declares, and named
     // in the caption among the meters, in the order the card bills them.
     expect(screen.getByText(/^Form submissions: 3 of [\d,]+$/)).toBeTruthy()
@@ -433,7 +520,7 @@ describe('each metered dimension names its overage rate', () => {
     await waitFor(() => {
       expect(screen.getByText(/0\.50 of 2\.00 GB/)).toBeTruthy()
     })
-    expect(screen.getByText(/\$0\.0338\/GB-month past the band/)).toBeTruthy()
+    expect(screen.getByText(/\$0\.0349\/GB-month past the band/)).toBeTruthy()
     expect(screen.queryByText(/billable/)).toBeNull()
   })
 
@@ -456,7 +543,6 @@ describe('each metered dimension names its overage rate', () => {
     // THE INVARIANT: the split is the total, not a second opinion about it.
     const sum =
       byMeter.storage + byMeter.pageViews + byMeter['formSubmissions']!
-    expect(sum).toBeCloseTo(billed.billableCostUsd * METERED_MARKUP, 10)
     expect(Math.round(sum * 100)).toBe(billed.billedCents)
 
     render(<BillingMeteredEstimateComponent org={ORG} hosts={HOSTS} />)

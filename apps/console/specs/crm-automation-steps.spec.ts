@@ -179,7 +179,41 @@ function mockCollectionRef(path: string): any {
   }
 }
 
-const mockFirestore: any = { collection: (name: string) => mockCollectionRef(name) }
+const mockFirestore: any = {
+  collection: (name: string) => mockCollectionRef(name),
+  /*
+   * The run meter (AGL-3472) seeds the workspace's run counter in a
+   * transaction and counts each run on the site's and the workspace's
+   * counters in one batch — both over this same store, with their writes
+   * applied at commit, as Firestore applies them.
+   */
+  runTransaction: async (body: (transaction: any) => Promise<unknown>) => {
+    const writes: Array<() => Promise<void>> = []
+    const result = await body({
+      get: (ref: any) => ref.get(),
+      getAll: (...refs: any[]) => Promise.all(refs.map((ref) => ref.get())),
+      set: (ref: any, data: Record<string, any>, options?: { merge?: boolean }) => {
+        writes.push(() => ref.set(data, options))
+      },
+      update: (ref: any, data: Record<string, any>) => {
+        writes.push(() => ref.update(data))
+      },
+    })
+    for (const write of writes) await write()
+    return result
+  },
+  batch: () => {
+    const writes: Array<() => Promise<void>> = []
+    return {
+      set: (ref: any, data: Record<string, any>, options?: { merge?: boolean }) => {
+        writes.push(() => ref.set(data, options))
+      },
+      commit: async () => {
+        for (const write of writes) await write()
+      },
+    }
+  },
+}
 
 const mockRecomputeNextActivity = jest.fn(async () => ({ records: 0, missing: 0 }))
 
@@ -541,6 +575,30 @@ describe('records beside the contact (claim 3)', () => {
     expect(mockRecomputeNextActivity).toHaveBeenCalledWith(expect.anything(), MOCK_ORG_ID, [
       { contactId: 'contact-1', companyId: 'company-1' },
     ])
+  })
+
+  it('files the task’s priority, with the org’s label beside each meaning (AGL-3517)', async () => {
+    seedActions({ type: 'createCrmTask', title: 'Walk the site', kind: 'meeting', priority: 'high', dueInDays: 1 })
+    await run({ email: 'ada@example.com' })
+    expect(orgRows('crmTasks')[0]).toMatchObject({
+      kind: 'meeting',
+      typeLabel: 'Meeting',
+      priority: 'high',
+      priorityLabel: 'High',
+      status: 'open',
+      statusLabel: 'Not Started',
+    })
+  })
+
+  it('logs which way a call went, and no direction on a kind that takes none (AGL-3517)', async () => {
+    seedActions({ type: 'logCrmActivity', kind: 'call', body: 'They rang in', direction: 'inbound' })
+    await run({ email: 'ada@example.com' })
+    expect(orgRows('crmActivities')[0]).toMatchObject({ kind: 'call', direction: 'inbound' })
+    seedActions({ type: 'logCrmActivity', kind: 'note', body: 'Noted', direction: 'inbound' })
+    await run({ email: 'ada@example.com' })
+    const note = orgRows('crmActivities').find((row) => row.kind === 'note')
+    expect(note).toBeTruthy()
+    expect(note).not.toHaveProperty('direction')
   })
 
   it('prefers the assignee the step names', async () => {

@@ -53,8 +53,8 @@ No contact, lead, deal, form submission or list member is read for any of them.
 These jobs need the **Generate with AI** permission, on a site whose Automation plugin is on.
 See [who can use Aglyn AI](overview.md#who-can-use-it). A site that has
 [switched AI off](overview.md#switch-ai-off-for-one-site) shows none of these controls. Each
-job spends AI credits; an automation's own runs count against your site's action runs, never
-your AI credits.
+job spends AI credits; an automation's own runs count against your workspace's action runs,
+never your AI credits.
 
 ## Related
 

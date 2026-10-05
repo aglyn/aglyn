@@ -80,6 +80,12 @@ interface Draft {
   outcome: string
   /** Free text until save, so a half-typed number does not snap to zero. */
   durationMinutes: string
+  /**
+   * Which way a call or an email went (AGL-3517) — Salesforce's Call Type
+   * for a call — or `''` for not said. Kept across a kind change and
+   * written only when the kind takes it.
+   */
+  direction: string
 }
 
 /** The kind a new activity opens on when the caller names none. */
@@ -91,6 +97,8 @@ const freshDraft = (kind: CrmActivityKind = DEFAULT_KIND): Draft => ({
   at: toLocalInput(Date.now()),
   outcome: '',
   durationMinutes: '',
+  // Most logged calls and emails are the team's own.
+  direction: 'outbound',
 })
 
 const draftFrom = (activity: CrmActivityRow): Draft => ({
@@ -102,6 +110,7 @@ const draftFrom = (activity: CrmActivityRow): Draft => ({
     typeof activity.durationMinutes === 'number'
       ? String(activity.durationMinutes)
       : '',
+  direction: Aglyn.crmActivityDirection(activity.kind, activity.direction) ?? '',
 })
 
 export interface LogActivityDialogProps {
@@ -178,6 +187,8 @@ export function LogActivityDialog(props: LogActivityDialogProps) {
   }, [open, activity, presetKind])
 
   const hasOutcome = Aglyn.activityKindHasOutcome(draft.kind)
+  const directions = Aglyn.CRM_ACTIVITY_DIRECTIONS[draft.kind] ?? []
+  const direction = Aglyn.crmActivityDirection(draft.kind, draft.direction)
   const atMs = fromLocalInput(draft.at)
   const body = draft.body.trim()
   const duration = draft.durationMinutes.trim()
@@ -230,6 +241,7 @@ export function LogActivityDialog(props: LogActivityDialogProps) {
             // Cleared rather than left: a call turned into a note must not
             // keep the call's outcome, and Firestore refuses `undefined`.
             outcome: outcome ? outcome : deleteField(),
+            direction: direction ?? deleteField(),
             durationMinutes:
               durationMinutes !== null ? durationMinutes : deleteField(),
             updatedAt: new Date(),
@@ -280,6 +292,7 @@ export function LogActivityDialog(props: LogActivityDialogProps) {
             ...said,
             ...(outcome ? { outcome } : {}),
             ...(durationMinutes !== null ? { durationMinutes } : {}),
+            ...(direction ? { direction } : {}),
             // Only the link the caller fixed. A key with no value is
             // `undefined`, which Firestore refuses, so each is spread in
             // rather than written blank.
@@ -318,6 +331,7 @@ export function LogActivityDialog(props: LogActivityDialogProps) {
     durationValid,
     draft.kind,
     draft.outcome,
+    direction,
     hasOutcome,
     duration,
     activity,
@@ -365,6 +379,26 @@ export function LogActivityDialog(props: LogActivityDialogProps) {
               </MenuItem>
             ))}
           </TextField>
+          {directions.length ? (
+            <TextField
+              select
+              size="small"
+              label="Direction"
+              value={direction ?? ''}
+              onChange={(event) =>
+                setDraft((prev) => ({ ...prev, direction: String(event.target.value) }))
+              }
+              slotProps={{ select: { displayEmpty: true }, inputLabel: { shrink: true } }}
+              sx={{ minWidth: 130 }}
+            >
+              <MenuItem value="">{'Not said'}</MenuItem>
+              {directions.map((entry) => (
+                <MenuItem key={entry} value={entry}>
+                  {Aglyn.CRM_ACTIVITY_DIRECTION_LABELS[entry]}
+                </MenuItem>
+              ))}
+            </TextField>
+          ) : null}
           <TextField
             size="small"
             label="When"

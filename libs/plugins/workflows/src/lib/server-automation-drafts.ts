@@ -138,8 +138,8 @@ export const AUTOMATION_STEP_FIELDS: Readonly<Record<HostActionStepType, readonl
   setContactStage: ['lifecycleStage'],
   addContactTag: ['tag'],
   assignContactOwner: ['ownerUid', 'ownerEmail', 'roundRobin'],
-  createCrmTask: ['title', 'kind', 'dueInDays', 'assigneeUid', 'assigneeEmail'],
-  logCrmActivity: ['kind', 'body'],
+  createCrmTask: ['title', 'kind', 'priority', 'dueInDays', 'assigneeUid', 'assigneeEmail'],
+  logCrmActivity: ['kind', 'body', 'direction'],
 }
 
 /** The trigger keys an automation stores. */

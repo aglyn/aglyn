@@ -16,27 +16,14 @@
  */
 
 /**
- * The email-campaign document model: the stored shapes and the pure
- * arithmetic over them.
+ * The bulk-send reporting math: a send's stored counters, the rate a figure
+ * is taken as (always with its denominator named), and the link rollup.
  *
- * Nothing here imports React or MUI, so a server handler that needs a field
- * name or a rate can take this barrel without dragging a component graph
- * into its bundle. The renderers live one directory over, behind
+ * Generic to every plugin that mails in bulk — the campaign sender, the
+ * sequence runner — and owned by none of them (AGL-3080). Nothing here
+ * imports React or MUI, so a server handler that needs a rate can take this
+ * barrel without dragging a component graph into its bundle. The renderers
+ * live one directory over, behind
  * `@aglyn/shared-ui-jsx/components/measured-figures.component`.
  */
-
-/**
- * Campaign reporting: the rate math, the populations the send recorded, and
- * the link rollup — pure, so every denominator is named once and provable
- * rather than chosen in JSX.
- */
-export * from './campaign-report'
-
-/** Reading one message record — its state, and when it went out. */
-export * from './email-record'
-
-/**
- * The campaign CONTAINER — its window, its lists, and the arithmetic that
- * rolls its sends into one set of figures.
- */
-export * from './campaign-container'
+export * from './send-report'

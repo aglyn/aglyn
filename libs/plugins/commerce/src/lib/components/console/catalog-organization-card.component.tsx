@@ -58,6 +58,8 @@ import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.
 import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import { pluginDocsHelp } from '@aglyn/aglyn'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
+import TransferHeaderActions from '../../transfer/transfer-header-actions.component'
+import { COMMERCE_CATEGORIES_TRANSFER } from '../../transfer/transfer-keys'
 
 /**
  * How many category documents the card reads.
@@ -1401,6 +1403,15 @@ export function CatalogOrganizationCard(props: CatalogOrganizationCardProps) {
   return (
     <CardDisplay
       header={'Categories & collections'}
+      HeaderProps={{
+        action: (
+          <TransferHeaderActions
+            resource={COMMERCE_CATEGORIES_TRANSFER}
+            hostId={hostId}
+            noun="categories"
+          />
+        ),
+      }}
       help={pluginDocsHelp('catalog', { anchor: '#categories-and-tags' })}
       contentGutterX
       contentGutterY

@@ -167,6 +167,14 @@ const storageFile = () => ({
 })
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
+  // The REAL document fields and derived paths (AGL-3486): pure helpers the
+  // routes spread into the media document and drop objects by.
+  mediaVariantDocFields: jest.requireActual(
+    '../../../libs/tenant/data/admin/src/lib/server/media-variants',
+  ).mediaVariantDocFields,
+  mediaDerivedObjectPaths: jest.requireActual(
+    '../../../libs/tenant/data/admin/src/lib/server/media-variants',
+  ).mediaDerivedObjectPaths,
   // The REAL resolver, not a pass-through (AGL-1881). `mediaObjectPath` calls
   // it to decide whether a document's recorded `storagePath` is inside its own
   // scope, and a double that echoed the input would make every media route

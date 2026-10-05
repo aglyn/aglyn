@@ -157,6 +157,9 @@ describe('BookingsConsolePage (AGL-1358)', () => {
     await waitFor(() => expect(setDoc).toHaveBeenCalledTimes(1))
     const [, payload] = (setDoc as jest.Mock).mock.calls[0]
     expect(payload.priceUsd).toBe(120)
+    // Written explicitly (AGL-3475): switching a label back to the price has
+    // to land `fixed` over the stored label, which `merge: true` would keep.
+    expect(payload.priceDisplay).toBe('fixed')
     // The whole availability map is rebuilt into the payload every time.
     expect(payload.windows[1]).toEqual([{ start: 540, end: 1020 }])
   })

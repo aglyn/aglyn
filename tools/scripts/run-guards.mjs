@@ -172,6 +172,9 @@ const REPO_WIDE = new Set([
   // Firestore rules 17 bytes over was green in every project-shaped check, and
   // this one costs milliseconds, so `npm run precheck` runs it too.
   'check:rules-size',
+  // Compares the committed Firestore deploy artifact against the documented
+  // source it is generated from (AGL-3544); both live in `cloud/`.
+  'check:rules-deploy',
 ])
 
 /** Reads the guard names out of the CI workflows. Never hand-maintained. */

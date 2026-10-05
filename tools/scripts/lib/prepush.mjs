@@ -126,7 +126,9 @@ export const CHECKS = Object.freeze([
   },
   {
     // The package map (AGL-2941): a source change can add a project edge,
-    // and the rest are the map's own files. `nx graph` is a few seconds.
+    // or a lazy `import()` of a library something imports statically, which
+    // only CI's full lint would otherwise see (AGL-3557); the rest are the
+    // map's own files. `nx graph` is a few seconds.
     name: 'check:lib-boundaries',
     script: 'tools/scripts/check-lib-boundaries.mjs',
     scoped: false,

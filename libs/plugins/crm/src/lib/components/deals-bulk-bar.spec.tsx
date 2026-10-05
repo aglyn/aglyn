@@ -69,10 +69,15 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
   useConfirmationContext: () => ({ confirm: () => Promise.resolve() }),
 }))
 
-const downloads: Array<{ name: string; body: string }> = []
-jest.mock('../model/contacts-csv', () => ({
-  downloadTextFile: (name: string, _type: string, body: string) =>
-    void downloads.push({ name, body }),
+/** The console's launcher, recording what the bar opened (AGL-3528). */
+const mockExports: unknown[] = []
+jest.mock('@aglyn/aglyn/app-utils/transfer-launcher-context', () => ({
+  useTransferLauncher: () => ({
+    openImport: () => undefined,
+    openExport: (launch: unknown) => void mockExports.push(launch),
+    can: () => true,
+    close: () => undefined,
+  }),
 }))
 
 const SCOPE = ['orgs', 'org-1'] as const
@@ -141,7 +146,6 @@ function mount(selected: string[], onSelectedChange = jest.fn()) {
       pipelineById={pipelineById}
       roster={roster}
       api={api}
-      csv={{ pipelineName: (id) => pipelineById(id)?.name }}
     />,
   )
   return { onSelectedChange }
@@ -155,7 +159,7 @@ beforeEach(() => {
   notices = []
   calls = []
   refuseIds = new Set()
-  downloads.length = 0
+  mockExports.length = 0
 })
 
 describe('the bar and its selection', () => {
@@ -175,7 +179,7 @@ describe('the bar and its selection', () => {
     expect(container.innerHTML).toBe('')
     mount(['d1', 'd2'])
     expect(screen.getByText('2 selected')).toBeTruthy()
-    for (const name of ['Set stage', 'Set owner', 'Mark lost', 'Export CSV', 'Delete', 'Clear']) {
+    for (const name of ['Set stage', 'Set owner', 'Mark lost', 'Export…', 'Delete', 'Clear']) {
       expect(screen.getByRole('button', { name })).toBeTruthy()
     }
   })
@@ -251,14 +255,14 @@ describe('the owner and the delete, as document writes', () => {
   })
 })
 
+const ALL_IDS = rows.map((row) => row.$id)
+
 describe('the file', () => {
-  it('exports the selection with the pipeline by name', () => {
-    mount(['d1'])
-    fireEvent.click(screen.getByRole('button', { name: 'Export CSV' }))
-    expect(downloads).toHaveLength(1)
-    expect(downloads[0].name).toBe('deals-selected.csv')
-    const [header, line] = downloads[0].body.split('\n')
-    expect(header.startsWith('Title,Pipeline,Stage')).toBe(true)
-    expect(line.startsWith('Acme renewal,Sales,qualified')).toBe(true)
+  it('opens the export dialog on the selection (AGL-3528)', () => {
+    mount(ALL_IDS)
+    fireEvent.click(screen.getByRole('button', { name: 'Export…' }))
+    expect(mockExports).toEqual([
+      { resource: 'crm.deals', scope: 'org', hostId: 'host-1', selection: ALL_IDS },
+    ])
   })
 })

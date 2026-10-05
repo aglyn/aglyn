@@ -260,6 +260,114 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
       source: 'apps/console/app/api/orgs/invites/route.ts',
     },
     {
+      key: 'org-owner-handoff',
+      name: 'Workspace handoff',
+      description:
+        'Sent when the owner of a workspace, or the platform team, invites ' +
+        'someone to take the workspace over as its new owner.',
+      deliveredBy: 'resend',
+      defaultSubject: '{{org.name}} is being handed to you on {{brand.productName}}',
+      mergeTokens: [
+        {
+          name: 'org.name',
+          description: 'Name of the workspace being handed over',
+          sample: 'Test Org',
+        },
+        {
+          name: 'handoff.previousOwner',
+          description:
+            'What happens to the current owner once the handoff is accepted',
+          sample: 'The current owner stays on as an admin.',
+        },
+        {
+          name: 'signInUrl',
+          description: 'Console URL to sign in and accept',
+          sample: SAMPLE_CONSOLE_ORIGIN,
+        },
+      ],
+      // Mirrors the fallback text in invites/route.ts.
+      defaultBody: [
+        {
+          block: 'text',
+          text: '{{org.name}} is being handed to you',
+          variant: 'heading',
+        },
+        {
+          block: 'text',
+          text:
+            "You've been invited to take over {{org.name}} as its owner. " +
+            'Accepting makes you the owner of the workspace and every site ' +
+            'in it. {{handoff.previousOwner}}',
+          variant: 'body',
+        },
+        {
+          block: 'text',
+          text:
+            'Sign in with this email address and accept the invitation ' +
+            'from your dashboard. Nothing changes until you accept.',
+          variant: 'body',
+        },
+        { block: 'button', label: 'Sign in', href: '{{signInUrl}}' },
+      ],
+      footerReason:
+        'You’re receiving this because someone invited you to take over ' +
+        '{{org.name}} on {{brand.productName}}.',
+      source: 'apps/console/app/api/orgs/invites/route.ts',
+    },
+    {
+      key: 'org-upgrade-proposal',
+      name: 'Upgrade proposal',
+      description:
+        "Sent to a workspace's owner when the platform team proposes a paid " +
+        'plan for it, after the workspace has been evaluated.',
+      deliveredBy: 'resend',
+      defaultSubject: 'Your {{brand.productName}} team proposed the {{plan.name}} plan for {{org.name}}',
+      mergeTokens: [
+        {
+          name: 'org.name',
+          description: 'Name of the workspace the plan is proposed for',
+          sample: 'Test Org',
+        },
+        {
+          name: 'plan.name',
+          description: 'The proposed plan',
+          sample: 'Starter',
+        },
+        {
+          name: 'proposal.note',
+          description: 'A line from the team, or nothing when none was written',
+          sample: 'As we discussed on Tuesday.',
+        },
+        {
+          name: 'billingUrl',
+          description: 'Billing page with the proposed plan preselected',
+          sample: `${SAMPLE_CONSOLE_ORIGIN}/test-org/billing?plan=starter`,
+        },
+      ],
+      // Mirrors the fallback text in /api/admin/org-upgrade-proposal.
+      defaultBody: [
+        {
+          block: 'text',
+          text: 'The {{plan.name}} plan, proposed for {{org.name}}',
+          variant: 'heading',
+        },
+        {
+          block: 'text',
+          text:
+            'Your {{brand.productName}} team proposed moving {{org.name}} to ' +
+            'the {{plan.name}} plan. When you are ready, start the ' +
+            'subscription from Billing, where the plan is already selected.',
+          variant: 'body',
+        },
+        { block: 'text', text: '{{proposal.note}}', variant: 'body' },
+        { block: 'button', label: 'Review the plan', href: '{{billingUrl}}' },
+      ],
+      footerReason:
+        'You’re receiving this because you own {{org.name}} on ' +
+        '{{brand.productName}} and its team proposed a plan for it.',
+      source: 'apps/console/app/api/admin/org-upgrade-proposal/route.ts',
+    },
+    {
       key: 'usage-summary',
       name: 'Monthly usage summary',
       description:

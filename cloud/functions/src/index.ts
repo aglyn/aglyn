@@ -376,6 +376,13 @@ const CONSOLE_FAST_CRON_ROUTES: readonly string[] = [
    * keep working before it is locked; the page itself is already held.
    */
   '/api/admin/security-holds',
+  /*
+   * The import sweep (AGL-3524). The import wizard drives Apply from the
+   * browser, a budgeted request at a time; a tab that closes leaves the job
+   * `applying` where it stopped. This resumes it, so an import someone
+   * started finishes whether or not they stayed on the page.
+   */
+  '/api/admin/transfer-jobs',
 ]
 
 /** What one POST to a cron route settled as. */

@@ -43,6 +43,12 @@ describe('the placeholder home page a new site is created with (AGL-3408)', () =
     expect(hostIsBlankSite({ screens: { mine: '/' } })).toBe(false)
     expect(hostIsBlankSite({ screens: {} })).toBe(true)
   })
+
+  it('stops reading as blank once its owner publishes the placeholder (AGL-3478)', () => {
+    // Publishing it clears the marker in the same write, so its route counts.
+    expect(hostIsBlankSite({ screens: { ph: '/' } })).toBe(false)
+    expect(describeHostStatus({ screens: { ph: '/' } }).label).toBe('Live')
+  })
 })
 
 describe('describeHostStatus', () => {

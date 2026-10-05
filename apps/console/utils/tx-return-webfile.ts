@@ -52,6 +52,7 @@
  * renders what it returns; the spec feeds it fixtures.
  */
 
+import { escapeCsvCell } from '@aglyn/aglyn/app-utils/csv'
 import { centsToDollars } from '@aglyn/aglyn/app-utils/tax-jurisdiction-figures'
 import type {
   TaxReturnFinding,
@@ -1181,9 +1182,14 @@ export function taxReturnJurisdictionRows(
     .map(({ sortKey: _sortKey, ...row }) => row)
 }
 
+/**
+ * A working-paper cell through the one escaper. The figures are written as
+ * text (`centsToDollars`), so any cell that reads as a plain number is let
+ * through as one; anything else a spreadsheet would run as a formula — a
+ * buyer's name, a finding — is written as text.
+ */
 function csvCell(value: unknown): string {
-  const text = String(value ?? '')
-  return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text
+  return escapeCsvCell(String(value ?? ''), { numeric: true })
 }
 
 /**

@@ -491,6 +491,14 @@ export function aiSiteUnitJob(
         layout: aiSiteResolvedRef(screen.layout, built),
         template: aiSiteResolvedRef(screen.template, built),
         duplicateOf: aiSiteResolvedRef(screen.duplicateOf, built),
+        // A dataset the plan creates and the site has not built yet keeps its
+        // name, which the page's draft still binds by (AGL-3475).
+        record: screen.record
+          ? {
+              ...screen.record,
+              dataset: aiSiteResolvedRef(screen.record.dataset, built) ?? screen.record.dataset,
+            }
+          : null,
         sections: screen.sections.map((section) => ({
           ...section,
           uses: section.uses

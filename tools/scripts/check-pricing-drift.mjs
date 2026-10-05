@@ -94,11 +94,12 @@ const LOCKED = {
     advanced: { digital: 0, physical: 0 },
     agency: { digital: 0, physical: 0 },
   },
-  // What `/pricing` publishes: unit cost × 1.30, in the units the page quotes.
+  // What `/pricing` publishes: unit cost + 30% kept after Stripe's fee, rounded
+  // up, in the units the page quotes (AGL-3476).
   publishedMetered: {
-    storagePerGbMonth: 0.0338,
-    perThousandPageViews: 0.8,
-    perThousandFormSubmissions: 0.08,
+    storagePerGbMonth: 0.0349,
+    perThousandPageViews: 0.83,
+    perThousandFormSubmissions: 0.083,
   },
 }
 
@@ -273,11 +274,13 @@ const markupMatch = entitlementsSrc.match(/export const METERED_MARKUP\s*=\s*([\
 const cdnMatch = entitlementsSrc.match(
   /export const PAGE_VIEW_CDN_REQUEST_COST_USD\s*=\s*([\d.]+)/,
 )
-if (metered && markupMatch && cdnMatch) {
+const feeMatch = entitlementsSrc.match(/export const STRIPE_PROCESSOR_FEE_PCT\s*=\s*([\d.]+)/)
+if (metered && markupMatch && cdnMatch && feeMatch) {
   const published = publishedMeteredRates(
     metered,
     Number(markupMatch[1]),
     Number(cdnMatch[1]),
+    Number(feeMatch[1]),
   )
   for (const [key, want] of Object.entries(LOCKED.publishedMetered)) {
     if (published[key] === want) note('in-sync', `published:${key}`, `$${want}`)
@@ -287,7 +290,7 @@ if (metered && markupMatch && cdnMatch) {
   note(
     'unreadable',
     'published:metered',
-    'METERED_MARKUP, PAGE_VIEW_CDN_REQUEST_COST_USD or the unit rates could not be parsed',
+    'METERED_MARKUP, STRIPE_PROCESSOR_FEE_PCT, PAGE_VIEW_CDN_REQUEST_COST_USD or the unit rates could not be parsed',
   )
 }
 

@@ -29,7 +29,7 @@
  * an HTML part. Giving cold one-to-one email a multipart HTML body is the
  * deliverability posture this plugin was built to avoid, so opens are not
  * measured at all — and the report SAYS SO rather than rendering 0%, exactly
- * as `campaign-report.ts` withholds a rate whose denominator was never
+ * as `send-report.ts` withholds a rate whose denominator was never
  * recorded. A zero that could only ever have been zero measures our sending
  * code, not the recipient.
  *

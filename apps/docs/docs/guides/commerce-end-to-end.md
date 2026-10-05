@@ -212,16 +212,17 @@ The **Products** hub's **Orders** tab lists every sale, newest first. Its
 email or an item's name, and **Filters** narrows it by order number, product,
 date, status, channel, customer and dispute — across every order in the store,
 not only the page on screen (see [The Orders page](../commerce-and-bookings/commerce/overview.md#orders-screen)
-for what combines). Beside it sit **Export CSV** and **Draft order** (build an
+for what combines). Beside it sit **Export orders** and **Draft order** (build an
 order by hand and send a payment link).
 
-**Export CSV** writes every order the filters and the search match, up to
-5,000, as
-`orders.csv`, one row per order: `date`, `product`, `amountUsd`, `feeUsd`,
-`customerEmail`, `coupon`, `orderId`, `status`, `channel`, `refundedUsd`,
-`netUsd`. `amountUsd` is the gross charge, so subtract `refundedUsd` (or read
-`netUsd`) when reconciling against a Stripe payout. Orders with several line
-items name the first and count the rest, e.g. `Blue Mug +2 more`.
+**Export orders** writes every order the filters and the search match, however
+many there are, one row per order, with the fields you pick: the order number
+and date, status and channel, the customer and addresses, the items, and the
+money — items subtotal, shipping, tax, discount, `Total` (the gross charge),
+fee, `Refunded` and `Net`. Reconcile against a Stripe payout with `Net`, or
+`Total` less `Refunded`. An order with several line items names the first and
+counts the rest in `Product`, e.g. `Blue Mug +2 more`, and lists every line in
+`Items`. See [Import and export store data](../commerce-and-bookings/commerce/store-import-and-export.md).
 
 ![The Orders tab with seeded orders showing order numbers, status chips, totals, and filters](/img/guides/commerce-orders-tab.png)
 

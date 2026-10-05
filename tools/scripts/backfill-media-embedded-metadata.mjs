@@ -69,7 +69,7 @@ const firestore = getFirestore(process.env.FIRESTORE_DATABASE_ID)
 const bucket = getStorage().bucket(bucketName)
 
 // Workspace source through jiti, aliases from tsconfig.base.json — the same
-// loader `backfill-media-variants.mjs` uses, for the same reasons.
+// loader `generate-video-renditions.mjs` uses, for the same reasons.
 const { default: createJiti } = await import('jiti')
 const repoRoot = resolvePath(dirname(fileURLToPath(import.meta.url)), '../..')
 const tsPaths =

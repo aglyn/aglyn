@@ -123,6 +123,16 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     app: () => ({
       firestore: () => ({
         collection: (name: string) => collectionHandle(name),
+        // The run meter's write and its seed (AGL-3472), sunk like the
+        // counter writes always were here.
+        batch: () => ({ set: () => undefined, commit: async () => undefined }),
+        runTransaction: async (body: (transaction: any) => Promise<any>) =>
+          await body({
+            get: async (ref: any) => await ref.get(),
+            getAll: async (...refs: any[]) =>
+              await Promise.all(refs.map((ref) => ref.get())),
+            set: () => undefined,
+          }),
       }),
     }),
   },

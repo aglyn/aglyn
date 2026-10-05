@@ -44,10 +44,12 @@
 
 import {
   CRM_LEAD_OPEN_STATUSES,
-  CRM_LEAD_STATUS_LABELS,
   type CrmLeadFields,
   type CrmLeadStatus,
   crmLeadStatus,
+  crmLeadStatusLabel,
+  crmLeadStatusLabelFor,
+  crmLeadStatusOptions,
   isCrmLeadOpen,
   readContainerIds,
 } from '@aglyn/aglyn'
@@ -58,9 +60,9 @@ import { arrayUnion, deleteField, doc, serverTimestamp } from 'firebase/firestor
 import { useCallback, useMemo, useState } from 'react'
 import { useCampaignFilingLog } from '../hooks/use-campaign-filing-log'
 import { useCrmBulkApply } from '../hooks/use-crm-bulk-apply'
+import { useLeadStatusPicklist } from '../hooks/use-lead-status-picklist'
 import { useCrmCampaigns } from '../hooks/use-crm-campaigns'
 import type { OrgMemberOptions } from '../hooks/use-org-member-options'
-import { downloadTextFile } from '../model/contacts-csv'
 import { crmClientListFields } from '../model/crm-list-query'
 import {
   type CrmBulkPlan,
@@ -69,14 +71,14 @@ import {
   crmBulkWriters,
   runCrmBulkWrites,
 } from '../model/crm-bulk-writes'
-import { type LeadCsvOptions, leadsCsv } from '../model/leads-csv'
 import {
   type CrmBulkNoun,
   CrmBulkBarFrame,
   CrmBulkValueDialog,
   countNoun,
 } from './crm-bulk-bar-frame'
-import CrmExportAllButton from './crm-export-all-button'
+import { CrmExportButton } from './crm-transfer-buttons'
+import { CRM_LEADS_RESOURCE } from '../transfer/fields'
 import { CrmBulkShareButton } from './record-sharing-card'
 import { LeadOwnerSelect } from './lead-owner-select'
 import { UNQUALIFY_REASON_MAX } from './lead-unqualify-dialog'
@@ -96,8 +98,6 @@ export interface LeadsBulkBarProps {
   onSelectedChange: (ids: string[]) => void
   /** The section's roster — already read for the Owner column. */
   roster: OrgMemberOptions
-  /** How the export names the owner and, at the org level, the site — the list's own. */
-  csv?: LeadCsvOptions
   /** The organization these leads belong to; null while it is unresolved. */
   orgId?: string | null
   /**
@@ -138,10 +138,17 @@ export function LeadsBulkBar(props: LeadsBulkBarProps) {
 LeadsBulkBar.displayName = 'LeadsBulkBar'
 
 function LeadsBulkBarBody(props: LeadsBulkBarProps) {
-  const { rows, selected, onSelectedChange, roster, csv } = props
+  const { rows, selected, onSelectedChange, roster } = props
   const orgId = props.orgId ?? null
   const hostId = props.hostId ?? null
   const followUpSharing = useCrmSharingFollowUp(hostId, orgId)
+  // The org's lead status values (AGL-3512): Set status picks a value by its
+  // label, and every write stamps the meaning and the label together.
+  const statuses = useLeadStatusPicklist(orgId)
+  const statusChoices = useMemo(
+    () => crmLeadStatusOptions(statuses.picklist, SETTABLE_STATUSES),
+    [statuses.picklist],
+  )
   const firestore = useFirestore()
   const { busy, report, apply, dismissReport } = useCrmBulkApply({ recordKind: 'lead' })
 
@@ -273,15 +280,17 @@ function LeadsBulkBarBody(props: LeadsBulkBarProps) {
       return
     }
     if (action === 'status') {
-      const status = value as CrmLeadStatus
+      const choice = statusChoices.find((entry) => entry.label === value)
+      if (!choice) return
+      const status = choice.status
       for (const lead of selectedRows) {
         const current = crmLeadStatus(lead)
         if (lead.convertedContactId) {
           skipped.push({ label: labelOf(lead), reason: 'was converted' })
-        } else if (current === status) {
+        } else if (current === status && crmLeadStatusLabel(lead, statuses.picklist) === choice.label) {
           skipped.push({
             label: labelOf(lead),
-            reason: `already ${CRM_LEAD_STATUS_LABELS[status]}`,
+            reason: `already ${choice.label}`,
           })
         } else {
           writes.push({
@@ -290,6 +299,7 @@ function LeadsBulkBarBody(props: LeadsBulkBarProps) {
             kind: 'update',
             data: {
               status,
+              statusLabel: choice.label,
               // Reopening an unqualified lead clears its reason, as the row does.
               ...(current === 'unqualified' ? { unqualifiedReason: deleteField() } : {}),
               updatedAt: serverTimestamp(),
@@ -316,6 +326,7 @@ function LeadsBulkBarBody(props: LeadsBulkBarProps) {
           kind: 'update',
           data: {
             status: 'unqualified' satisfies CrmLeadStatus,
+            statusLabel: crmLeadStatusLabelFor(statuses.picklist, 'unqualified'),
             unqualifiedReason: reason,
             updatedAt: serverTimestamp(),
           },
@@ -326,11 +337,7 @@ function LeadsBulkBarBody(props: LeadsBulkBarProps) {
       { writes, skipped },
       (count) => `Marked ${countNoun(count, NOUN)} unqualified`,
     )
-  }, [pending, value, campaignIds, campaigns.options, selectedRows, runPlan, logFiling, hostId, props.org])
-
-  const handleExport = useCallback(() => {
-    downloadTextFile('leads-selected.csv', 'text/csv', leadsCsv(selectedRows, csv))
-  }, [selectedRows, csv])
+  }, [pending, value, campaignIds, campaigns.options, selectedRows, runPlan, logFiling, hostId, props.org, statusChoices, statuses.picklist])
 
   const canApply =
     pending === 'owner' ||
@@ -371,9 +378,9 @@ function LeadsBulkBarBody(props: LeadsBulkBarProps) {
               onChange={(event) => setValue(event.target.value)}
               helperText="Closing a lead goes through Unqualify, which asks why."
             >
-              {SETTABLE_STATUSES.map((status) => (
-                <MenuItem key={status} value={status}>
-                  {CRM_LEAD_STATUS_LABELS[status]}
+              {statusChoices.map((choice) => (
+                <MenuItem key={choice.label} value={choice.label}>
+                  {choice.label}
                 </MenuItem>
               ))}
             </TextField>
@@ -425,17 +432,11 @@ function LeadsBulkBarBody(props: LeadsBulkBarProps) {
         orgId={orgId}
         disabled={busy}
       />
-      <Button size="small" disabled={busy} onClick={handleExport}>
-        {'Export CSV'}
-      </Button>
-      {/*
-        The selection's file is the rows on screen; this one is the whole
-        collection, streamed by the server (AGL-2662).
-      */}
-      <CrmExportAllButton
-        resource="leads"
-        orgId={orgId}
+      {/* The selection through the export dialog: every field, chosen (AGL-3528). */}
+      <CrmExportButton
+        resource={CRM_LEADS_RESOURCE}
         hostId={hostId}
+        selection={selectedRows.map((row) => row.$id)}
         disabled={busy}
       />
     </CrmBulkBarFrame>

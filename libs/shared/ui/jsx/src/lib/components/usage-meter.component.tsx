@@ -39,6 +39,25 @@ export interface UsageMeterProps {
   upgradeHref?: string
 }
 
+/** The share of a limit at which a meter turns amber and offers the upgrade. */
+export const USAGE_METER_WARNING_PCT = 80
+
+/** A meter's bar color: the plan's own, amber once it nears the limit, red at it. */
+export type UsageMeterTone = 'primary' | 'warning' | 'error'
+
+/**
+ * The tone a meter at `percent` of its limit is drawn in.
+ *
+ * Exported so a readout drawn somewhere other than this row warns at the same
+ * point as every meter on the Billing page, rather than at a threshold of its
+ * own.
+ */
+export function usageMeterTone(percent: number): UsageMeterTone {
+  if (!Number.isFinite(percent)) return 'primary'
+  if (percent >= 100) return 'error'
+  return percent >= USAGE_METER_WARNING_PCT ? 'warning' : 'primary'
+}
+
 function formatLimit(limit: number, unit: string | undefined, unlimited: boolean): string {
   if (unlimited) return 'Unlimited'
   return unit ? `${limit} ${unit}` : String(limit)
@@ -58,7 +77,7 @@ export function UsageMeter(props: UsageMeterProps) {
   const unmetered = used == null
   const pct =
     unlimited || unmetered || limit <= 0 ? 0 : Math.min(100, (used / limit) * 100)
-  const warning = !unlimited && !unmetered && pct >= 80
+  const warning = !unlimited && !unmetered && pct >= USAGE_METER_WARNING_PCT
   return (
     <Stack spacing={0.5} sx={{ mb: 2 }}>
       <Stack direction="row" sx={{ justifyContent: 'space-between' }}>
@@ -90,7 +109,7 @@ export function UsageMeter(props: UsageMeterProps) {
         <LinearProgress
           variant="determinate"
           value={pct}
-          color={pct >= 100 ? 'error' : warning ? 'warning' : 'primary'}
+          color={usageMeterTone(pct)}
         />
       )}
     </Stack>

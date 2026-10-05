@@ -35,7 +35,14 @@ import { useConsoleWidgetSlot } from '@aglyn/aglyn/app-utils/console-widget-slot
 // page. The same import the Inbox makes for the same reason.
 import { pluginRecordFilteredHref } from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
 import { ICON_VARIANT_BESIGNER } from '@aglyn/shared-data-enums'
-import { AppLink, CardDisplay, GridItems, MdiIcon, useLoading } from '@aglyn/shared-ui-jsx'
+import {
+  AppLink,
+  CardDisplay,
+  GridItems,
+  MdiIcon,
+  useConfirmationContext,
+  useLoading,
+} from '@aglyn/shared-ui-jsx'
 import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
@@ -66,7 +73,7 @@ import {
 import ContainerPicker from '@aglyn/tenant-feature-instance/components/container-picker'
 import { collection, doc, limit, query, updateDoc } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { FORM_CONTACT_FIELDS_ZONE } from './form-zones'
 import { FORMS_DOCUMENT_SEGMENT } from '../constants/bundle-common'
 import FormDesignPreview from './form-design-preview.component'
@@ -152,6 +159,7 @@ export function FormDetailCard(props: FormDetailCardProps) {
   const router = useRouter()
   const { enqueueSnackbar } = useSnackbar()
   const { queueLoading } = useLoading()
+  const { confirm } = useConfirmationContext()
 
   const { data: form, status } = useFirestoreDoc<any>(
     () => doc(firestore, 'hosts', hostId, 'forms', formId),
@@ -290,8 +298,24 @@ export function FormDetailCard(props: FormDetailCardProps) {
     [form, formId, effectiveLead, effectiveConsent],
   )
 
-  const handleSave = useCallback(async () => {
+  /**
+   * WHICH CARD IS WRITING, or null.
+   *
+   * Each card saves what it shows and nothing else (AGL-3508). One handler
+   * used to write the name, the campaigns, the lead switch and the consent
+   * field together from a button in Details, so a routing change made in its
+   * own card sat unsaved until somebody pressed Save somewhere else — and was
+   * dropped without a word when they left instead.
+   */
+  const [saving, setSaving] = useState<FormDetailSection | null>(null)
+
+  /**
+   * Details: the name and the campaigns. Never `routing` or the consent
+   * field, so saving a rename cannot also commit a half-made routing change.
+   */
+  const handleSaveDetails = useCallback(async () => {
     const dequeue = queueLoading()
+    setSaving('details')
     try {
       await updateDoc(doc(firestore, 'hosts', hostId, 'forms', formId), {
         // A rename carries the keys the Forms list searches by (AGL-3330), or
@@ -306,10 +330,6 @@ export function FormDetailCard(props: FormDetailCardProps) {
               }),
             }
           : {}),
-        ...(lead != null ? { routing: { ...(form?.routing ?? {}), lead } } : {}),
-        ...(consentField != null
-          ? { consentFieldName: consentField.trim() }
-          : {}),
         // An empty selection is stored as an empty array rather than removing
         // the field: one shape for "in no campaign", which is what keeps this
         // writer and the campaign's own detach agreeing. `inCampaign` rides
@@ -319,10 +339,48 @@ export function FormDetailCard(props: FormDetailCardProps) {
         updatedAt: Timestamp.now(),
       })
       setName(null)
+      setCampaignIds(null)
+      enqueueSnackbar('Details saved', { variant: 'success', persist: false })
+    } catch (error) {
+      console.error(error)
+      enqueueSnackbar('An error has occurred', {
+        variant: 'error',
+        allowDuplicate: true,
+      })
+    } finally {
+      setSaving(null)
+      dequeue()
+    }
+  }, [
+    firestore,
+    hostId,
+    formId,
+    form,
+    name,
+    campaignIds,
+    queueLoading,
+    enqueueSnackbar,
+  ])
+
+  /**
+   * CRM routing: the lead switch and the consent field, together, because
+   * the contract judges them together — a lead surface with no opt-in field
+   * is one of the breaks the warning in this card names.
+   */
+  const handleSaveRouting = useCallback(async () => {
+    const dequeue = queueLoading()
+    setSaving('routing')
+    try {
+      await updateDoc(doc(firestore, 'hosts', hostId, 'forms', formId), {
+        ...(lead != null ? { routing: { ...(form?.routing ?? {}), lead } } : {}),
+        ...(consentField != null
+          ? { consentFieldName: consentField.trim() }
+          : {}),
+        updatedAt: Timestamp.now(),
+      })
       setLead(null)
       setConsentField(null)
-      setCampaignIds(null)
-      enqueueSnackbar('Form saved', { variant: 'success', persist: false })
+      enqueueSnackbar('CRM routing saved', { variant: 'success', persist: false })
       /*
        * A form that routes leads holds `0` of them until its first, and one
        * that does not holds none (AGL-3330). The counters are the server's
@@ -338,6 +396,7 @@ export function FormDetailCard(props: FormDetailCardProps) {
         allowDuplicate: true,
       })
     } finally {
+      setSaving(null)
       dequeue()
     }
   }, [
@@ -345,14 +404,70 @@ export function FormDetailCard(props: FormDetailCardProps) {
     hostId,
     formId,
     form,
-    name,
     lead,
     consentField,
-    campaignIds,
     queueLoading,
     enqueueSnackbar,
     recountFormStats,
   ])
+
+  /*
+   * Whether each card holds a change, measured against what is stored rather
+   * than against "was touched": flipping the switch and flipping it back is
+   * no change, and a Save that writes nothing should not be offered.
+   */
+  const detailsDirty =
+    (name != null && name.trim() !== String(form?.displayName ?? '')) ||
+    (campaignIds != null &&
+      !Aglyn.containerMembershipUnchanged(storedCampaigns, campaignIds))
+  const routingDirty =
+    (lead != null && lead !== (form?.routing?.lead === true)) ||
+    (consentField != null &&
+      consentField.trim() !== String(form?.consentFieldName ?? ''))
+  const dirty = detailsDirty || routingDirty
+  /**
+   * Read from inside handlers that must not re-subscribe on every keystroke:
+   * `beforeunload` and the besigner buttons need the CURRENT answer.
+   */
+  const dirtyRef = useRef(false)
+  dirtyRef.current = dirty
+
+  /**
+   * The exits a router cannot mediate: reload, tab close, or a link out of
+   * the console. Registered only while a card holds a change, so a clean page
+   * never nags — the same guard a content entry's editor keeps. The App
+   * Router has no navigation-blocking hook, so an in-console link is guarded
+   * only where this surface makes the move itself (the besigner buttons,
+   * below); everywhere else the enabled Save and Discard in each card's
+   * header are what say a change is waiting.
+   */
+  useEffect(() => {
+    if (!dirty) return
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [dirty])
+
+  /**
+   * Asked before this surface navigates away on its own — opening the
+   * besigner — while a card holds a change. `confirm` resolves with no value
+   * and REJECTS on cancel.
+   */
+  const confirmLeave = useCallback(async () => {
+    if (!dirtyRef.current) return true
+    return confirm({
+      title: 'Discard unsaved changes?',
+      description:
+        'This form has changes that have not been saved yet. Opening the ' +
+        'besigner now discards them.',
+      confirmationText: 'Discard and open',
+    })
+      .then(() => true)
+      .catch(() => false)
+  }, [confirm])
 
   /**
    * Makes one version the version the live sites serve.
@@ -416,6 +531,7 @@ export function FormDetailCard(props: FormDetailCardProps) {
   const handleOpen = useCallback(
     (targetVersionId?: string) => async () => {
       if (opening) return
+      if (!(await confirmLeave())) return
       setOpening(true)
       try {
         let versionId = targetVersionId ?? publishedVersionId ?? versions[0]?.$id
@@ -481,6 +597,7 @@ export function FormDetailCard(props: FormDetailCardProps) {
     },
     [
       opening,
+      confirmLeave,
       createHostVersion,
       publishedVersionId,
       versions,
@@ -495,12 +612,6 @@ export function FormDetailCard(props: FormDetailCardProps) {
     ],
   )
 
-  const dirty =
-    name != null ||
-    lead != null ||
-    consentField != null ||
-    (campaignIds != null &&
-      !Aglyn.containerMembershipUnchanged(storedCampaigns, campaignIds))
   // Named before it is used on every row, so a role denial reads as a reason
   // rather than as a control that does nothing.
   const publishBlock = hostRoleLoaded
@@ -547,6 +658,20 @@ export function FormDetailCard(props: FormDetailCardProps) {
                   'The id is what every submission is filed under, so ' +
                   'renaming a form never splits its history.',
               })}
+              HeaderProps={{
+                action: (
+                  <FormDetailCardActions
+                    section="details"
+                    dirty={detailsDirty}
+                    saving={saving}
+                    onDiscard={() => {
+                      setName(null)
+                      setCampaignIds(null)
+                    }}
+                    onSave={handleSaveDetails}
+                  />
+                ),
+              }}
               contentGutterX
               contentGutterY
             >
@@ -582,17 +707,6 @@ export function FormDetailCard(props: FormDetailCardProps) {
                   helperText="The campaigns this form is part of. It does not change who a campaign mails."
                   empty={siteCampaigns.ready && !siteCampaigns.options.length}
                 />
-                <Stack direction="row" spacing={1}>
-                  <Button
-                    variant="contained"
-                    color="primary"
-                    size="small"
-                    disabled={!dirty}
-                    onClick={handleSave}
-                  >
-                    {'Save'}
-                  </Button>
-                </Stack>
               </Stack>
             </CardDisplay>
           ),
@@ -609,6 +723,20 @@ export function FormDetailCard(props: FormDetailCardProps) {
                   'contact. Lead routing and the consent field decide ' +
                   'what else happens to it.',
               })}
+              HeaderProps={{
+                action: (
+                  <FormDetailCardActions
+                    section="routing"
+                    dirty={routingDirty}
+                    saving={saving}
+                    onDiscard={() => {
+                      setLead(null)
+                      setConsentField(null)
+                    }}
+                    onSave={handleSaveRouting}
+                  />
+                ),
+              }}
               contentGutterX
               contentGutterY
             >
@@ -868,7 +996,13 @@ export function FormDetailCard(props: FormDetailCardProps) {
             and this is read a row at a time.
            */
           size: { xs: 12 },
-          children: <FormSubmissionsCard hostId={hostId} formId={formId} />,
+          children: (
+            <FormSubmissionsCard
+              hostId={hostId}
+              formId={formId}
+              formName={form?.displayName}
+            />
+          ),
         },
         {
           // Full width: the frame is a document, and a document in a
@@ -939,6 +1073,47 @@ export function FormDetailCard(props: FormDetailCardProps) {
   )
 }
 FormDetailCard.displayName = 'FormDetailCard'
+
+/** The cards on this page that hold an edit of their own. */
+type FormDetailSection = 'details' | 'routing'
+
+/**
+ * One card's Discard and Save, in that card's header (AGL-3508).
+ *
+ * Each is disabled until its card holds a change, and both while either card
+ * is writing: the two saves touch one document, and a second write landing
+ * mid-flight would be judged against a form the first is still changing.
+ */
+function FormDetailCardActions(props: {
+  section: FormDetailSection
+  dirty: boolean
+  saving: FormDetailSection | null
+  onDiscard(): void
+  onSave(): void
+}) {
+  const { section, dirty, saving, onDiscard, onSave } = props
+  return (
+    <Stack direction="row" spacing={1}>
+      <Button
+        size="small"
+        variant="text"
+        disabled={!dirty || saving !== null}
+        onClick={onDiscard}
+      >
+        {'Discard changes'}
+      </Button>
+      <Button
+        size="small"
+        variant="contained"
+        color="primary"
+        disabled={!dirty || saving !== null}
+        onClick={() => void onSave()}
+      >
+        {saving === section ? 'Saving…' : 'Save'}
+      </Button>
+    </Stack>
+  )
+}
 
 /**
  * The `form` node inside a published design.

@@ -35,7 +35,13 @@
  */
 
 /** Booking horizon the mocked plugin config reports, in days. */
-const mockHorizonDays = 30
+let mockHorizonDays = 30
+
+/** The service the handler reads; no windows unless a case sets them. */
+const CONSULT = { name: 'Consult', durationMinutes: 30, priceUsd: 50 }
+let mockService: Record<string, unknown> = CONSULT
+/** The services the public directory lists. */
+let mockDirectory: Array<Record<string, unknown>> = []
 
 const mockRows: Array<{ id: string; data: Record<string, unknown> }> = []
 /** Constraints applied to the `bookings` query, in order. */
@@ -90,15 +96,19 @@ jest.mock('@aglyn/tenant-data-admin', () => {
                   : {
                       doc: () => ({
                         get: async () => ({
-                          data: () => ({
-                            name: 'Consult',
-                            durationMinutes: 30,
-                            priceUsd: 50,
-                          }),
+                          data: () => mockService,
                           get: () => undefined,
                         }),
                       }),
-                      limit: () => ({ get: async () => ({ docs: [] }) }),
+                      limit: () => ({
+                        get: async () => ({
+                          docs: mockDirectory.map((data, index) => ({
+                            id: `svc-${index}`,
+                            data: () => data,
+                            get: (field: string) => data[field],
+                          })),
+                        }),
+                      }),
                     },
             }),
           }),
@@ -132,6 +142,7 @@ jest.mock('@aglyn/shared-util-email', () => ({
   sendEmail: async () => undefined,
 }))
 
+import { BOOKING_SLOT_PAGE_DAYS } from './model'
 import { slotsHandler } from './server'
 
 const DAY = 24 * 60 * 60_000
@@ -172,12 +183,12 @@ function makeResponse() {
   return { res, result }
 }
 
-const run = async () => {
+const run = async (query: Record<string, string> = {}) => {
   const { res, result } = makeResponse()
   await slotsHandler(
     {
       method: 'GET',
-      query: { hostId: 'h1', serviceId: 's1' },
+      query: { hostId: 'h1', serviceId: 's1', ...query },
       body: {},
       headers: {},
       cookies: {},
@@ -193,6 +204,8 @@ describe('booking slot window', () => {
     mockRows.length = 0
     mockBookingConstraints = []
     mockBookingDocsRead = 0
+    mockHorizonDays = 30
+    mockService = CONSULT
   })
 
   /**
@@ -250,3 +263,120 @@ describe('booking slot window', () => {
     expect(mockBookingDocsRead).toBe(1)
   })
 })
+
+/**
+ * The listing is a page of whole DAYS, not a flat count of slots (AGL-3492).
+ *
+ * Found live: a 60-minute estimate open 8 to 5 on weekdays and 8 to noon on
+ * Saturday answered exactly 120 slots — Monday, Tuesday and Wednesday whole,
+ * Thursday cut at 1 PM, nothing after, under a 60-day horizon. At 15-minute
+ * steps 120 slots is three and a half days.
+ */
+describe('booking slot pages', () => {
+  const MONDAY = Date.UTC(2026, 9, 5, 5) // Monday 00:00 in Chicago.
+  const weekday = [{ start: 8 * 60, end: 17 * 60 }]
+  const ESTIMATE = {
+    name: 'Free on-site estimate',
+    durationMinutes: 60,
+    priceUsd: 0,
+    timezone: 'America/Chicago',
+    windows: {
+      1: weekday,
+      2: weekday,
+      3: weekday,
+      4: weekday,
+      5: weekday,
+      6: [{ start: 8 * 60, end: 12 * 60 }],
+    },
+  }
+  const chicagoDay = (ms: number) =>
+    new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Chicago' }).format(ms)
+
+  beforeEach(() => {
+    mockRows.length = 0
+    mockService = ESTIMATE
+    mockHorizonDays = 60
+    jest.spyOn(Date, 'now').mockReturnValue(MONDAY)
+  })
+  afterEach(() => {
+    jest.restoreAllMocks()
+  })
+
+  /** Forced red by restoring `computeOpenSlots(…, 120)`: 120 slots, 4 days. */
+  it('answers every open time of the strip of days, past the old 120', async () => {
+    const result = await run()
+
+    expect(result.status).toBe(200)
+    const slots = result.body.slots as Array<{ startsAtMs: number }>
+    const days = new Set(slots.map((slot) => chicagoDay(slot.startsAtMs)))
+    expect(days.size).toBe(BOOKING_SLOT_PAGE_DAYS)
+    expect(slots.length).toBe(12 * 33 + 2 * 13)
+    expect(typeof result.body.nextFromMs).toBe('number')
+    // The configured horizon rides along for the widget's empty state.
+    expect(result.body.horizonDays).toBe(60)
+  })
+
+  it('answers the next page from `from`, starting where the last one stopped', async () => {
+    const first = await run()
+    const second = await run({ from: String(first.body.nextFromMs) })
+
+    expect(second.status).toBe(200)
+    const firstStarts = first.body.slots.map((slot: { startsAtMs: number }) => slot.startsAtMs)
+    const secondStarts = second.body.slots.map((slot: { startsAtMs: number }) => slot.startsAtMs)
+    expect(secondStarts[0]).toBe(first.body.nextFromMs)
+    expect(Math.min(...secondStarts)).toBeGreaterThan(Math.max(...firstStarts))
+  })
+
+  it('never lists a passed time for a `from` in the past, nor past the horizon', async () => {
+    const stale = await run({ from: String(MONDAY - 10 * 24 * 60 * 60_000) })
+    expect(stale.body.slots[0].startsAtMs).toBeGreaterThanOrEqual(MONDAY)
+
+    const beyond = await run({ from: String(MONDAY + 400 * 24 * 60 * 60_000) })
+    expect(beyond.body.slots).toEqual([])
+    expect(beyond.body.nextFromMs).toBeNull()
+
+    const junk = await run({ from: 'tomorrow' })
+    expect(junk.body.slots[0].startsAtMs).toBeGreaterThanOrEqual(MONDAY)
+  })
+
+  it('pages to the horizon and then says there is no more', async () => {
+    mockHorizonDays = 20
+    let fromMs: number | null = null
+    let pages = 0
+    let last = 0
+    do {
+      const page = await run(fromMs === null ? {} : { from: String(fromMs) })
+      for (const slot of page.body.slots) last = Math.max(last, slot.startsAtMs)
+      fromMs = page.body.nextFromMs
+      pages += 1
+    } while (fromMs !== null && pages < 10)
+
+    expect(fromMs).toBeNull()
+    expect(pages).toBe(2)
+    expect(last).toBeLessThanOrEqual(MONDAY + 20 * 24 * 60 * 60_000)
+  })
+})
+
+/**
+ * The public directory names what each service asks for beyond a name and an
+ * email (AGL-3493), so the widget renders the fields the route will hold the
+ * request to — read the same way the route reads them.
+ */
+describe('the public service directory', () => {
+  it('says what each service asks for, off unless it says otherwise', async () => {
+    mockDirectory = [
+      { ...CONSULT, askPhone: 'required', askAddress: 'optional' },
+      { ...CONSULT, askPhone: 'sometimes' },
+    ]
+    const { res, result } = makeResponse()
+    await slotsHandler(
+      { method: 'GET', query: { hostId: 'h1' }, body: {}, headers: {}, cookies: {}, socket: {} } as never,
+      res,
+    )
+    expect(result.body.services).toEqual([
+      expect.objectContaining({ $id: 'svc-0', askPhone: 'required', askAddress: 'optional' }),
+      expect.objectContaining({ $id: 'svc-1', askPhone: 'off', askAddress: 'off' }),
+    ])
+  })
+})
+

@@ -22,13 +22,17 @@ import {
   CONSOLE_USER_TYPE_LABELS,
   consoleUserType,
   countManagerSeats,
+  isOrgWideMember,
   ORG_PERMISSIONS,
   resolveOrgPermissions,
   type AglynOrgCustomRole,
   type AglynOrgMember,
   type HostAccessRole,
   type OrgRole,
+  type OwnerHandoffPreviousOwner,
 } from '@aglyn/aglyn'
+import { isStaffSeat } from '@aglyn/aglyn/app-utils/organizations'
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import {
   AppLink,
   CardDisplay,
@@ -68,6 +72,7 @@ import { checkOrgSeatQuota } from '../constants/entitlements'
 import { buildRoute, Route } from '../constants/route-links'
 import useBranding from '../hooks/use-branding'
 import useCurrentOrg from '../hooks/use-current-org'
+import useIsStaff from '../hooks/use-is-staff'
 import { useOrgHosts } from '../hooks/use-org-hosts'
 import { useOrgScope, useOrgSlug } from '../hooks/use-org-scope'
 import {
@@ -78,6 +83,11 @@ import {
 } from '../utils/org-member-list-query'
 import MemberAvatar from './member-avatar.component'
 import {
+  OWNER_HANDOFF_HINT,
+  OwnerHandoffPreviousOwnerField,
+  sendOwnerHandoff,
+} from './org-owner-handoff.component'
+import {
   pluginGridColumns,
   useStablePluginColumns,
 } from './plugin-grid-columns.component'
@@ -87,6 +97,12 @@ import {
 } from './plugin-list-columns.component'
 
 const ASSIGNABLE_ROLES: OrgRole[] = ['admin', 'editor', 'viewer']
+
+/** The invite row's role choice: a role, or handing the workspace over. */
+type InviteRole = OrgRole | 'handoff'
+
+/** The no-seat chip on a staff row (AGL-3466). */
+const STAFF_SEAT_LABEL = `${PLATFORM_BRAND_NAME} staff · no seat`
 /**
  * Per-site access options, weakest first. `author` (AGL-2334) sits between
  * viewer and editor: it edits every content document on the site and cannot
@@ -161,7 +177,10 @@ export function OrgMembersCard() {
   // Custom roles (AGL-243): named permission sets assignable per member.
   const [roles, setRoles] = useState<Array<{ $id: string; name?: string }>>([])
   const [email, setEmail] = useState('')
-  const [role, setRole] = useState<OrgRole>('editor')
+  const [role, setRole] = useState<InviteRole>('editor')
+  // An owner handoff's one extra choice (AGL-3466).
+  const [previousOwner, setPreviousOwner] =
+    useState<OwnerHandoffPreviousOwner>('stay')
   const [allHosts, setAllHosts] = useState(true)
   const [busy, setBusy] = useState(false)
   const [accessDraft, setAccessDraft] = useState<AccessDraft | null>(null)
@@ -171,6 +190,10 @@ export function OrgMembersCard() {
   )
   const orgId = currentOrg?.$id
   const canManage = canManageOrg(currentOrg?.role)
+  // Handing the workspace over is the owner's call, or staff's (AGL-3466) —
+  // an admin invites members, and does not give the workspace away.
+  const isStaff = useIsStaff() === true
+  const canHandOff = currentOrg?.role === 'owner' || isStaff
   // Columns a plugin contributes to this table (AGL-2940), drawn between
   // Access and the actions.
   const { columns: pluginColumns } = usePluginListColumns('orgMembersListColumn')
@@ -185,6 +208,14 @@ export function OrgMembersCard() {
   // literal (AGL-2319): a white-label org's admins see their own brand.
   const { branding } = useBranding()
   const managerSeatsUsed = useMemo(() => countManagerSeats(members), [members])
+  // Platform staff hold no seat of either kind (AGL-3466), so they are left
+  // out of the seat line rather than counted as collaborators.
+  const collaboratorCount = useMemo(
+    () =>
+      members.filter((member) => !isStaffSeat(member) && !isOrgWideMember(member))
+        .length,
+    [members],
+  )
 
   /**
    * The roster in the order a plugin column asked for (AGL-2939), otherwise
@@ -363,6 +394,29 @@ export function OrgMembersCard() {
     if (!target || !orgId || busy) return
     setBusy(true)
     try {
+      // An owner handoff is always an invitation (AGL-3466): it moves the
+      // workspace, so the person it names has to accept it, account or not.
+      if (role === 'handoff') {
+        const sent = await sendOwnerHandoff(user, {
+          orgId,
+          email: target,
+          previousOwner,
+        })
+        if (!sent.ok) {
+          enqueueSnackbar(sent.error, { variant: 'warning', persist: false })
+          return
+        }
+        enqueueSnackbar(
+          sent.emailed
+            ? `Handoff sent to ${target} — email sent`
+            : `Handoff sent to ${target} — they'll see it when they sign in`,
+          { variant: 'success' },
+        )
+        setEmail('')
+        setRole('editor')
+        await refresh()
+        return
+      }
       // Try a direct add when the account already exists. This is a silent
       // probe: a 404 means "no Aglyn account yet", which is the normal path
       // into an invite — not an error worth a toast. Any OTHER failure (seat
@@ -413,6 +467,8 @@ export function OrgMembersCard() {
     orgId,
     busy,
     role,
+    previousOwner,
+    user,
     allHosts,
     rawRequest,
     request,
@@ -673,6 +729,11 @@ export function OrgMembersCard() {
                   : `${Object.keys(member.hostAccess ?? {}).length} site(s)`}
               </Typography>
             )}
+            {isStaffSeat(member) ? (
+              <Tooltip title="Platform staff helping with this workspace. They take none of your seats.">
+                <Chip size="small" variant="outlined" label={STAFF_SEAT_LABEL} />
+              </Tooltip>
+            ) : null}
             {(() => {
               const kind = consoleUserType(member)
               return (
@@ -772,9 +833,9 @@ export function OrgMembersCard() {
         {orgReady && Number.isFinite(seatQuota.limit) ? (
           <Typography variant="caption" color="text.secondary">
             {`${managerSeatsUsed} of ${seatQuota.limit} manager seats used`}
-            {members.length > managerSeatsUsed
-              ? ` · ${members.length - managerSeatsUsed} site collaborator${
-                  members.length - managerSeatsUsed === 1 ? '' : 's'
+            {collaboratorCount > 0
+              ? ` · ${collaboratorCount} site collaborator${
+                  collaboratorCount === 1 ? '' : 's'
                 } (metered per site)`
               : ''}
             {seatQuota.upgradeRequired ? (
@@ -817,25 +878,38 @@ export function OrgMembersCard() {
                 select
                 label="Role"
                 value={role}
-                onChange={(event) => setRole(event.target.value as OrgRole)}
-                sx={{ width: 120 }}
+                onChange={(event) => setRole(event.target.value as InviteRole)}
+                sx={{ width: role === 'handoff' ? 260 : 120 }}
               >
                 {ASSIGNABLE_ROLES.map((value) => (
                   <MenuItem key={value} value={value}>
                     {value}
                   </MenuItem>
                 ))}
+                {canHandOff ? (
+                  <MenuItem value="handoff">
+                    {'Owner (hand off this workspace)'}
+                  </MenuItem>
+                ) : null}
               </TextField>
-              <FormControlLabel
-                control={
-                  <Checkbox
-                    checked={allHosts}
-                    onChange={(event) => setAllHosts(event.target.checked)}
-                  />
-                }
-                label="All sites"
-                sx={{ mt: 0.5 }}
-              />
+              {role === 'handoff' ? (
+                <OwnerHandoffPreviousOwnerField
+                  value={previousOwner}
+                  onChange={setPreviousOwner}
+                  disabled={busy}
+                />
+              ) : (
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={allHosts}
+                      onChange={(event) => setAllHosts(event.target.checked)}
+                    />
+                  }
+                  label="All sites"
+                  sx={{ mt: 0.5 }}
+                />
+              )}
               <Button
                 variant="contained"
                 size="small"
@@ -843,13 +917,15 @@ export function OrgMembersCard() {
                 onClick={() => void handleAdd()}
                 sx={{ mt: 0.5 }}
               >
-                {'Add or invite'}
+                {role === 'handoff' ? 'Send handoff' : 'Add or invite'}
               </Button>
             </Stack>
             <Typography variant="caption" color="text.secondary">
-              {`Already on ${branding.productName}? They join right away. ` +
-                `New to ${branding.productName}? We email them an invite they ` +
-                'accept when they first sign in.'}
+              {role === 'handoff'
+                ? OWNER_HANDOFF_HINT
+                : `Already on ${branding.productName}? They join right away. ` +
+                  `New to ${branding.productName}? We email them an invite they ` +
+                  'accept when they first sign in.'}
             </Typography>
           </Stack>
         ) : null}
@@ -908,23 +984,39 @@ export function OrgMembersCard() {
                     it is labelled with the same vocabulary as the roster —
                     otherwise the only way to tell a pending manager from a
                     pending collaborator was to revoke and re-send it. */}
-                <Tooltip
-                  title={CONSOLE_USER_TYPE_HINTS[consoleUserType(invite)]}
-                >
+                {/* Two invites reserve nothing (AGL-3466): a handoff moves
+                    the owner seat, and staff take no seat. Labelled as such,
+                    so a full workspace can see why they still went out. */}
+                {invite.handoff || isStaffSeat(invite) ? (
                   <Chip
                     size="small"
                     variant="outlined"
-                    color={
-                      consoleUserType(invite) === 'manager'
-                        ? 'secondary'
-                        : 'default'
-                    }
                     label={
-                      CONSOLE_USER_TYPE_LABELS[consoleUserType(invite)]
+                      invite.handoff ? 'Handoff · no seat reserved' : STAFF_SEAT_LABEL
                     }
                   />
-                </Tooltip>
-                <Chip label={invite.role} size="small" />
+                ) : (
+                  <Tooltip
+                    title={CONSOLE_USER_TYPE_HINTS[consoleUserType(invite)]}
+                  >
+                    <Chip
+                      size="small"
+                      variant="outlined"
+                      color={
+                        consoleUserType(invite) === 'manager'
+                          ? 'secondary'
+                          : 'default'
+                      }
+                      label={
+                        CONSOLE_USER_TYPE_LABELS[consoleUserType(invite)]
+                      }
+                    />
+                  </Tooltip>
+                )}
+                <Chip
+                  label={invite.handoff ? 'new owner (handoff)' : invite.role}
+                  size="small"
+                />
                 <Typography variant="body2">{invite.email}</Typography>
                 <Button
                   size="small"

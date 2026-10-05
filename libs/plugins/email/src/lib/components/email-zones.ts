@@ -48,6 +48,24 @@ export const EMAIL_MESSAGES_ZONE =
   definePluginZone<EmailMessagesZoneProps>('emailMessages')
 
 /**
+ * What the messages sent from one template did, on the template's page.
+ *
+ * The template is this plugin's; the messages sent from it are the sends of
+ * the plugin that owns campaigns, so the figures, the audiences and the table
+ * of those messages are that plugin's to read and draw. Handed the site, the
+ * template, and this page's base path, which every message link hangs beneath.
+ */
+export interface EmailTemplateReportZoneProps {
+  hostId: string
+  screenId: string
+  /** The Emails page's own path, under the site. */
+  basePath: string
+}
+
+export const EMAIL_TEMPLATE_REPORT_ZONE =
+  definePluginZone<EmailTemplateReportZoneProps>('emailTemplateReport')
+
+/**
  * Who received the messages built from one template, under its report.
  *
  * The template is this plugin's; the recipients of a send are read through

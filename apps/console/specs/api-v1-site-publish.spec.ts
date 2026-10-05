@@ -163,6 +163,7 @@ jest.mock('firebase-admin/firestore', () => {
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { GET, POST } from '../app/api/v1/[[...route]]/route'
+import { registerPluginLivePaths } from '@aglyn/aglyn/plugin-manager/plugin-live-paths'
 
 /**
  * Read as SOURCE, not imported. `@aglyn/tenant-data-admin` is wholesale-mocked
@@ -244,6 +245,24 @@ describe('POST /v1/sites/{siteId}/publish (AGL-2462)', () => {
     // 250-path no-op that still reports success.
     expect(call.body.hostId).toBe('host-1')
     expect(call.body.paths).toEqual(expect.arrayContaining(['/', '/menu']))
+  })
+
+  it('drops the pages plugins serve from the site’s screens too (AGL-3475)', async () => {
+    // A record template's pages have no routing-map entry of their own; the
+    // plugin that serves them names them on the live-paths seam.
+    const unregister = registerPluginLivePaths(
+      async ({ hostId, screenIds }) =>
+        hostId === 'host-1' && !screenIds ? ['/services/roofing'] : [],
+      { pluginId: 'data' },
+    )
+    try {
+      await publish()
+      expect(mockTenantCalls[0].body.paths).toEqual(
+        expect.arrayContaining(['/', '/menu', '/services/roofing']),
+      )
+    } finally {
+      unregister()
+    }
   })
 
   it('refuses a key without sites:publish, and sites:read is not enough', async () => {

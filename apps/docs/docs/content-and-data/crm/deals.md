@@ -20,20 +20,36 @@ companies against your plan's records band — see
 
 ```mermaid
 flowchart LR
-  Q[Qualified] --> C[Contact made] --> P[Proposal sent] --> N[Negotiation]
-  N --> W[Won]
-  N --> L[Lost]
+  P[Prospecting] --> Q[Qualification] --> NA[Needs Analysis] --> V[Value Proposition]
+  V --> D[Id. Decision Makers] --> PA[Perception Analysis] --> PQ[Proposal/Price Quote] --> N[Negotiation/Review]
+  N --> W[Closed Won]
+  N --> L[Closed Lost]
 ```
 
-![The Deals section of the CRM: the pipeline board with Qualified, Contact made, Proposal sent and Negotiation columns, the open deals, pipeline value and weighted value above them, and the Pipeline picker beside the Board and Table toggle](/img/contacts/crm-deals-board.png)
+![The Deals section of the CRM: Import, Export…, Pipelines and New deal in the card's header, the open deals, pipeline value and weighted value above the board, the Pipeline picker beside the Board and Table toggle, and the board's first columns, Prospecting, Qualification, Needs Analysis and Value Proposition, with the rest of the open stages to the right](/img/contacts/crm-deals-board.png)
 
 ## Pipelines
 
-Every workspace on a plan with the CRM starts with one pipeline, **Sales**, and
-a default set of stages: *Qualified*, *Contact made*, *Proposal sent*,
-*Negotiation*, then *Won* and *Lost*. The pipeline is created the first time
-somebody opens the Deals section, so there is nothing to set up before the
-first deal.
+Every workspace on a plan with the CRM starts with one pipeline, **Sales**. A
+new pipeline starts with Salesforce's standard Opportunity stages:
+
+| Stage | Probability | Forecast category |
+| --- | --- | --- |
+| Prospecting | 10% | Pipeline |
+| Qualification | 10% | Pipeline |
+| Needs Analysis | 20% | Pipeline |
+| Value Proposition | 50% | Pipeline |
+| Id. Decision Makers | 60% | Pipeline |
+| Perception Analysis | 70% | Pipeline |
+| Proposal/Price Quote | 75% | Best Case |
+| Negotiation/Review | 90% | Commit |
+| Closed Won | 100% | Closed |
+| Closed Lost | 0% | Omitted |
+
+The pipeline is created the first time somebody opens the Deals section, so
+there is nothing to set up before the first deal. A pipeline created before
+these stages became the default keeps the stages it has; nothing is changed
+for you.
 
 A business that sells more than one way — new accounts and renewals, retail
 and wholesale — can run more than one pipeline, each with its own stages and
@@ -57,12 +73,18 @@ and the New deal drawer all follow it.
 ### Stages
 
 Each stage carries a **probability** — the chance a deal in that stage closes —
-which is what the weighted forecast multiplies by. Won is always 100%, Lost is
-always 0%, and the stages in between are yours to set.
+which is what the weighted forecast multiplies by — and a **forecast
+category**: where a deal that lands in the stage is forecast. The categories
+are Salesforce's fixed set — **Omitted**, **Pipeline**, **Best Case**,
+**Commit** and **Closed** — and cannot be renamed or added to, because a
+forecast rolls up by them. Won is always 100% and Closed, Lost is always 0% and
+Omitted, and the stages in between are yours to set; a stage that never had a
+category reads as **Pipeline**.
 
 **Edit stages** on a pipeline lets you:
 
-- **Rename** a stage or change its probability.
+- **Rename** a stage or change its probability or its forecast category. A
+  new category applies to the deals that move into the stage from then on.
 - **Reorder** the open stages with the up and down arrows.
 - **Add** a stage. New stages are open stages; every pipeline keeps exactly one
   Won and one Lost.
@@ -73,23 +95,28 @@ always 0%, and the stages in between are yours to set.
 ## The board and the table
 
 The section opens as a **board** of the chosen pipeline: one column per open
-stage, with Won and Lost folded away at the end until you expand them. Each card shows the deal's title,
+stage, with Won and Lost folded away at the end until you expand them; a board wider than the window
+scrolls sideways. Each card shows the deal's title,
 amount, the contact and company it is with, its owner, and how many days it has
 sat in its current stage. **Drag a card** between columns to move it, or use the
 card's menu to move it, mark it won, or mark it lost from the keyboard.
 
 Above the board, three figures summarize what is open: the **open count**, the
 **pipeline value** (every open deal's amount, per currency) and the **weighted
-value** (each amount multiplied by its stage's probability).
+value** (each amount multiplied by its probability — the deal's own when it
+has one, otherwise its stage's).
 
 Switch to the **table** for a paged list with the title, stage, amount, owner,
 expected close date, status and [**next activity**](./tasks.md#next-activity)
 of every deal in the chosen pipeline, including the closed ones, most recently
-changed first. The table's **Filters** panel narrows it by **Status** (open,
-won or lost — one, or any of them), and **Next activity** › **is empty** keeps
-only the deals with no open task scheduled against them — the ones the
-reports page counts as [stuck](./reports.md#pipeline). **Search** finds a deal
-by any word of its title.
+changed first. **Type** and **Lead source** are optional columns: turn them on
+from the column menu. The table's **Filters** panel narrows it by **Status**
+(open, won or lost — one, or any of them), by **Type** and by **Lead source**
+(one value, any of several, or *No type* / *No lead source*), and
+**Next activity** › **is empty** keeps only the deals with no open task
+scheduled against them — the ones the reports page counts as
+[stuck](./reports.md#pipeline). **Search** finds a deal by any word of its
+title.
 
 Every filter and the search are answered by the table's query, so they reach
 every deal in the pipeline, a page at a time, not only the page on screen, and
@@ -106,50 +133,53 @@ the table's own order. The board has no filters.
 
 The table's rows have checkboxes: tick some and a [bulk bar](./bulk-actions.md#deals)
 appears above it to set their stage, set their owner, mark them lost with one
-reason, export them or delete them. **Export CSV** in the card's header, shown
-with the table, downloads the deals on screen as `deals.csv` — title, pipeline and stage by
-name, the amount in major units beside its currency, the owner by email
-address, the expected close date, status, the contact and the company, when
-it closed, the lost reason and notes; the bar's **Export CSV** writes the same
-file over the selection.
+reason, export them or delete them. **Export…** in the card's header opens the
+[export dialog](./export.md) on the list's current filter or every deal, and
+the bar's on the selection: every field, your deal [custom fields](./custom-fields.md)
+included — the pipeline, stage, contact (by email), company and campaign by
+name, the contact roles as `email (Role)`, the owner by email — as CSV, JSON
+or NDJSON. **Export pipelines…** in the [Pipelines](#pipelines) dialog writes
+each pipeline with its stages in order.
 
-## Import from CSV
+## Import and export {#import-from-csv}
 
-**Import CSV** in the card's header takes a spreadsheet of deals —
-an export from another CRM, a forecast sheet — and files each row as a new
-deal. A deal has no key the way a contact has an address, so nothing is
-merged: importing a file twice files it twice. Importing needs the same
-**Manage data** permission as creating a deal.
+**Import** in the card's header takes a file of deals — a Salesforce
+opportunities report, a HubSpot or Pipedrive export, a forecast sheet —
+through the [import wizard](./import.md): every column matched to a field,
+a dry run that shows what each row will do, a choice for every conflict, and
+undo for seven days. Importing needs the same **Manage data** permission as
+creating a deal.
 
-The three steps are the ones the [contacts import](./import.md) walks: choose
-the file (up to 5,000 rows), match its columns — Aglyn proposes a match from
-the header names and shows the first row's value beside each — check the
-ten-row preview, then import in batches of 200 with a progress bar and a
-result that says how many were **added** and **skipped**, with the skipped
-rows downloadable as a CSV that says why. **Download template** hands you the
-export's own header over no rows, so a sheet filled in against it maps itself.
+A row finds its deal by **Aglyn ID** or by its **External ID** — the id the
+deal had in the product it came from (Salesforce's *Opportunity ID*,
+HubSpot's *Record ID*) — so importing the same file again **updates** those
+deals rather than filing them twice.
 
 | Field | What is read |
 | --- | --- |
-| **Title** | Required. A row without one is skipped. |
-| **Pipeline** | By **name**, as it appears in [Pipelines](#pipelines), spelled either way. Left empty, the row lands in the default pipeline. A name your workspace has no pipeline for skips the row as *No pipeline by that name*. |
-| **Stage** | By name within that pipeline. Left empty, the pipeline's first open stage. A name the pipeline has no stage for skips the row as *No stage by that name in that pipeline*. A row filed into **Won** or **Lost** is closed on arrival; no `dealWon` or `dealLost` event fires for it. |
-| **Amount** | In major units (`1250.00`, `$1,250`); the currency symbol and separators are ignored. A cell that is not a number is dropped and reported. |
-| **Currency** | A three-letter code (`USD`, `EUR`); `USD` when empty. Anything else is dropped and reported. |
-| **Owner** | The email address of a member of your organization. An address that matches nobody leaves the deal without an owner, and the result names those addresses. |
-| **Expected close** | A calendar day (`2026-12-01`) or a timestamp. Anything else is dropped and reported. |
-| **Notes** | Free text. |
+| **Deal name** | Required for a new deal. |
+| **External ID** | Kept on the deal; what a later import finds it by. |
+| **Pipeline**, **Stage** | By name. Empty, the default pipeline and its first open stage. A name the workspace has no pipeline or stage for fails that row, named in the results. A new deal filed into **Won** or **Lost** is closed on arrival. A matched deal's pipeline and stage are never moved by a file: a stage moves on the [board](#moving-winning-and-losing), where the move tells your automations. |
+| **Amount** | An amount with its currency (`$1,250`, `1250 EUR`); US dollars when none is named. |
+| **Expected close** | A calendar day. |
+| **Contact** | A contact by email — the deal's Primary [contact role](#contact-roles). |
+| **Company** | A company by its domain or name; one your CRM does not hold can be created. |
+| **Contact roles** | Each contact by email with their role in parentheses, the Primary first: `ana@acme.com (Decision Maker); bo@acme.com`. |
+| **Owner** | A member of your workspace, by email or name. |
+| **Type**, **Lead source** | Your organization's values, by label; a new deal with no Type takes the list's default. |
+| **Next step**, **Lost reason**, **Notes** | Text. |
+| **Probability**, **Forecast category** | A percent from 0 to 100; *Omitted*, *Pipeline*, *Best Case*, *Commit* or *Closed*. Empty, the stage's. |
+| **Campaign** | A campaign by name. |
+| **Custom fields** | Every deal field you defined under [Fields](./custom-fields.md). |
 
-The export's **Status**, **Contact**, **Company**, **Closed** and **Lost
-reason** columns are proposed as **Do not import**: the stage decides the
-status, and a deal is linked to its contact and company on its own page. A
-new deal counts against your plan's [records band](../../workspace-and-billing/billing-and-plans/overview.md#crm-records);
-on a plan whose band is a hard limit, rows past it are skipped as **CRM
-records limit reached**.
+A contact, company or owner the file names that your CRM does not hold, and
+a list value your organization lacks, are listed on the wizard's **Values**
+step with a choice for each. **Status** and **Closed** are exported and never
+imported: the stage decides them. A new deal counts against your plan's
+[records band](../../workspace-and-billing/billing-and-plans/overview.md#crm-records).
 
-At the [organization level](./overview.md#at-the-organization-level) the
-drawer first asks which site the deals are filed under, because a deal is
-some site's record and the site decides which of your sites may see it.
+At the [organization level](./overview.md#at-the-organization-level),
+**Import** first asks which site the deals are filed under.
 
 ## Creating a deal
 
@@ -162,12 +192,81 @@ optional:
 | **Amount and currency** | What the deal is worth. Currency defaults to US dollars; the amount is stored in minor units, so `1,250.00` is exact. On a deal with [line items](#line-items) the amount is their sum and is read-only here. |
 | **Expected close** | The date you expect to close it — what a forecast by month reads. |
 | **Owner** | The teammate responsible. Picked from your workspace's members. |
-| **Contact** | The person the deal is with, searched by name or email from your contacts. |
+| **Contact** | The person the deal is with, searched by name or email from your contacts — the deal's Primary [contact role](#contact-roles). Picking another makes them Primary. |
 | **Company** | The organization, searched by name from your [companies](./companies.md). |
+| **Type** | Salesforce's Type: *New Business*, *Existing Business*, or one of your own — see [Type and lead source](#type-and-lead-source). A new deal with none takes the list's default, when it has one. |
+| **Lead source** | Where the deal came from — the same list a [lead's](./leads.md) lead source is picked from. |
+| **Next step** | What happens next, up to 255 characters. |
+| **Probability** | This deal's own chance of closing, a whole percent. Leave it blank to use the stage's, which the field shows as *From stage: N%*. |
+| **Forecast category** | Where the deal is forecast. *From the stage* uses the stage's category. |
+| **Campaign** | The campaign the deal is attributed to — Salesforce's Primary Campaign Source — one of the campaigns your leads are filed under. |
 | **Notes** | Anything the card cannot carry. |
 
 A deal is visible to the same sites as a contact captured on this site would
 be, so a site that cannot see the person cannot see the deal.
+
+### Type and lead source {#type-and-lead-source}
+
+A deal's **Type** and **Lead source** are picklists, as in Salesforce. Type
+ships with Salesforce's standard values, *Existing Business* and *New
+Business*; add your own, rename, reorder, deactivate them or set a default on
+the **Deals** tab of [Custom fields](./custom-fields.md#picklist-values). Lead
+source is the list a lead's own lead source comes from, managed on the
+**Leads** tab; renaming or deleting a value there moves every lead, contact
+and deal that holds it. A deal keeps a value it already holds after the value
+is deactivated.
+
+When a lead is [converted](./leads.md#converting-a-lead) with a deal, the
+deal takes the lead's lead source, and the Type the convert dialog shows —
+the list's default until you pick another.
+
+## Contact roles {#contact-roles}
+
+A deal can name more than one person: Salesforce's Opportunity Contact Roles.
+The **Contact roles** card on a deal's page lists every contact on the deal,
+the part each plays, and which one is **Primary**:
+
+- **Add contact** (in the card's header) opens a dialog: pick a contact, a
+  role, and whether they are the Primary. The first contact on a deal is
+  always its Primary.
+- Each row's **Role** select changes the part they play; **Make primary**
+  moves the Primary to them; the remove button takes them off the deal.
+
+A deal names up to **50** contacts, each once, and at most one is Primary.
+
+**The Primary is the deal's contact.** The **Contact** field of the deal
+drawer, the email button on the deal's page, the CSV's **Contact** column, the
+[won-deal customer floor](#a-won-deal-makes-its-contact-a-customer) and the
+REST `contactId` all read the Primary. Picking a contact in the drawer makes
+them Primary — adding them with no role when the deal did not name them — and
+clearing it leaves the deal with no Primary. A deal created before contact
+roles reads as its one contact, Primary, with no role.
+
+The roles are a picklist with Salesforce's standard values: *Business User*,
+*Decision Maker*, *Economic Buyer*, *Economic Decision Maker*, *Evaluator*,
+*Executive Sponsor*, *Influencer*, *Technical Buyer* and *Other*. Add your own,
+rename, reorder or deactivate them on the **Deals** tab of
+[Custom fields](./custom-fields.md#picklist-values); a rename moves every deal
+that holds the role, and a contact keeps a role after it is deactivated.
+
+Where else contact roles appear:
+
+- **A contact's page** lists the deals the person is on in any role, with the
+  role beside each. A teammate whose access is limited to some sites sees the
+  deals that name the person as Primary.
+- **[Converting a lead](./leads.md#converting-a-lead)** with a deal makes the
+  converted contact the deal's Primary, with no role yet.
+- **Merging two contacts** moves the merged person's roles to the survivor; on
+  a deal that named both, the survivor keeps one row, taking the merged
+  record's role where it had none and its Primary where it was.
+- **Deleting or erasing a contact** takes them off every deal; a deal whose
+  Primary they were is left with none.
+- The deals **CSV** has a **Contact roles** column —
+  `Jane Doe (Decision Maker, Primary); Sam Lee (Evaluator)` — which an import
+  reads past: a contact is put on a deal from its page.
+- The [REST API](/api/resources/deals) reads and writes the list as
+  `contactRoles`, and [CRM by AI](../../ai/crm-by-ai.md) reads them as part of
+  the deal.
 
 ## Line items
 
@@ -207,6 +306,11 @@ that automations can hear them. Three events fire, and each can trigger a
 | `dealWon` | A deal is marked won. |
 | `dealLost` | A deal is marked lost. Marking a deal lost asks for a reason, which is kept on the deal. |
 
+Every move also gives the deal the new stage's **forecast category** and clears
+its own **probability**, so it forecasts at the new stage's odds — as
+Salesforce re-defaults a probability when the stage changes. Edit the deal
+afterwards to set either again.
+
 Every event carries the deal's id, title, amount and currency, its new and
 previous stage, and the owner, contact and company ids, so a workflow can
 notify the owner, file a task, or act on the person.
@@ -240,18 +344,25 @@ Opening a deal shows:
   pipeline and stage under its kind, its status, amount and owner as chips,
   **Back to deals**, **Edit**, and a menu (⋮) carrying **Delete deal**.
 - **Stage** — a stepper across the open stages, with **Won** and **Lost**
-  buttons and, on a closed deal, the way to reopen it.
-- **Properties** — the amount and its weighted value, the expected close, the
-  owner, links to the contact and the company, the notes, and one row per
+  buttons and, on a closed deal, the way to reopen it. The line under it says
+  how long the deal has sat in its stage, its probability and its forecast
+  category.
+- **Properties** — the amount and its weighted value, the probability (the
+  deal's own beside its stage's, *40% · from stage: 75%*), the forecast
+  category, the expected close, the type, lead source and next step, the
+  owner, links to the contact and the company, the campaign, the notes, and one row per
   [custom field](./custom-fields.md) defined on the **Deals** tab of the Fields
   section; **Edit** carries a control for each.
+- **Contact roles** — every person on the deal, the part each plays, and the
+  Primary; see [Contact roles](#contact-roles).
 - **Products** — the [line items](#line-items) behind the amount, with the
   door to add one from the catalog or by hand.
 - **Tasks** and **Activity** — what is owed on this deal and what has happened
   on it.
 
-A deal also appears on the pages of the contact and the company it names, each
-with a **New deal** shortcut that starts a deal already linked to them.
+A deal also appears on the pages of the contact and the company it names — on
+a contact's page, for every [role](#contact-roles) the person holds on it —
+each with a **New deal** shortcut that starts a deal already linked to them.
 
 ## Files
 
@@ -282,7 +393,7 @@ Attachments are readable and writable through the
 - [Companies](./companies.md) and [the contact record](./contact-record.md) — the two records a deal is with
 - [Tasks & follow-ups](./tasks.md) and [Activities & the timeline](./activities.md) — what is owed on a deal and what has happened on it
 - [Bulk actions](./bulk-actions.md#deals) — stage, owner, loss, export and delete over a selection
-- [Import contacts from CSV](./import.md) — the same three steps the deals import walks
+- [Import contacts and companies](./import.md)
 - [Reports](./reports.md) — the open pipeline, its weighted forecast, and won against lost
 - [Automations for the CRM](./automations.md) — the three deal events, and what a won deal does on its own
 - [Workflows & actions](../../marketing-and-automation/workflows-and-actions/overview.md)

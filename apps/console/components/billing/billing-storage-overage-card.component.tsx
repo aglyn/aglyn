@@ -337,18 +337,23 @@ export default function BillingStorageOverageCardComponent({
           overage for a cap to bound and nothing to configure here.
         </Alert>
       ) : nothingToCap ? (
+        // One allowance for the workspace (AGL-2075, AGL-3479): the figure
+        // is per site the plan allows, and every library draws on the sum.
         <Alert severity="info">
-          Your plan gives each site a fixed{' '}
-          {Math.round(includedStoragePerSiteMb)} MB of storage. Uploads stop at
-          that limit and you are <strong>never charged</strong> for storage, so
-          there is no overage to cap. Upgrade above to store more.
+          Your plan includes a fixed {Math.round(includedStoragePerSiteMb)} MB
+          of storage for each site it allows, shared by every site and the
+          organization library. Uploads stop at that shared allowance and you
+          are <strong>never charged</strong> for storage, so there is no
+          overage to cap. Upgrade above to store more.
         </Alert>
       ) : !capSet ? (
         <>
           <Typography variant="body2" color="text.secondary">
-            Each site includes {Math.round(includedStoragePerSiteMb)} MB. Past
-            that, uploads <strong>keep working</strong> and the extra storage
-            is billed at about ${pricePerGbUsd.toFixed(3)} per GB a month. We
+            Your plan includes {Math.round(includedStoragePerSiteMb)} MB of
+            storage for each site it allows, shared by every site and the
+            organization library. Past that allowance, uploads{' '}
+            <strong>keep working</strong> and the extra storage is billed at
+            about ${pricePerGbUsd.toFixed(3)} per GB a month. We
             alert you as you approach your included storage and again when you
             cross it, so nothing arrives as a surprise.
           </Typography>
@@ -384,9 +389,9 @@ export default function BillingStorageOverageCardComponent({
         <>
           <Typography variant="body2" color="text.secondary">
             {metered
-              ? `Uploads past your included ${Math.round(
+              ? `Uploads past your workspace's included storage (${Math.round(
                   includedStoragePerSiteMb,
-                )} MB per site are billed at about $${pricePerGbUsd.toFixed(
+                )} MB for each site your plan allows) are billed at about $${pricePerGbUsd.toFixed(
                   3,
                 )} per GB a month — until your storage overage reaches $${(
                   monthlyCapUsd ?? 0

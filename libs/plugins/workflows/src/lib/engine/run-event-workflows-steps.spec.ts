@@ -171,10 +171,24 @@ const collectionRef = (
 
 const firestoreHandle: any = {
   collection: (name: string) => collectionRef(name),
+  // The run meter's one write: the site's counter and the workspace's.
+  batch: () => {
+    const writes: Array<() => Promise<void>> = []
+    return {
+      set: (ref: any, data: any, options?: { merge?: boolean }) => {
+        writes.push(() => ref.set(data, options))
+      },
+      commit: async () => {
+        for (const write of writes) await write()
+      },
+    }
+  },
   runTransaction: async (work: (transaction: any) => Promise<unknown>) =>
     work({
       get: (ref: any) => ref.get(),
-      set: (ref: any, data: Record<string, any>) => ref.set(data),
+      getAll: (...refs: any[]) => Promise.all(refs.map((ref) => ref.get())),
+      set: (ref: any, data: Record<string, any>, options?: { merge?: boolean }) =>
+        ref.set(data, options),
       update: (ref: any, data: Record<string, any>) => ref.update(data),
     }),
 }
@@ -272,6 +286,10 @@ const history = () =>
 
 const counter = (name: 'workflowRuns' | 'actionRuns') =>
   store[`${hostPath}/counters/${name}`]?.[MONTH]
+
+/** The workspace's counter, which the band is enforced against (AGL-3472). */
+const workspaceCounter = (name: 'workflowRuns' | 'actionRuns') =>
+  store[`orgs/${ORG_ID}/counters/${name}`]?.[MONTH]
 
 /** The records written under the Leads dataset. */
 const leadRecords = () =>
@@ -516,6 +534,8 @@ describe('one run, metered once', () => {
 
     expect(counter('workflowRuns')).toBe(1)
     expect(counter('actionRuns')).toBeUndefined()
+    expect(workspaceCounter('workflowRuns')).toBe(1)
+    expect(workspaceCounter('actionRuns')).toBeUndefined()
   })
 
   it('counts an action whose step runs such a workflow once, on the action meter', async () => {
@@ -541,6 +561,8 @@ describe('one run, metered once', () => {
     // …which is the one run on the one meter.
     expect(counter('actionRuns')).toBe(1)
     expect(counter('workflowRuns')).toBeUndefined()
+    expect(workspaceCounter('actionRuns')).toBe(1)
+    expect(workspaceCounter('workflowRuns')).toBeUndefined()
   })
 })
 

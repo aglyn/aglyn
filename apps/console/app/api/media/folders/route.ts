@@ -26,6 +26,7 @@ import {
   emailUnverifiedResponse,
   firebaseAdmin,
   isImpersonationSession,
+  mediaDerivedObjectPaths,
   rotateDownloadTokenForObject,
 } from '@aglyn/tenant-data-admin'
 import { randomUUID } from 'crypto'
@@ -156,18 +157,23 @@ async function handler(request: Request): Promise<Response> {
         `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/` +
         `${encodeURIComponent(expectedPath)}` +
         `?alt=media&token=${token}`
-      const variants: number[] = mediaSnapshot.get('variants') ?? []
+      // Every derived object moves with the original (AGL-3486) — the display
+      // copy, and a film's poster and renditions, which this used to leave at
+      // the old prefix where the CDN no longer looks.
+      const derivedTo = mediaDerivedObjectPaths(expectedPath, mediaSnapshot)
       await Promise.all(
-        variants.map(async (width) => {
-          await bucket
-            .file(`${currentPath}__w${width}.webp`)
-            .copy(bucket.file(`${expectedPath}__w${width}.webp`))
-            .catch(() => undefined)
-          await bucket
-            .file(`${currentPath}__w${width}.webp`)
-            .delete()
-            .catch(() => undefined)
-        }),
+        mediaDerivedObjectPaths(currentPath, mediaSnapshot).map(
+          async (from, index) => {
+            await bucket
+              .file(from)
+              .copy(bucket.file(derivedTo[index]))
+              .catch(() => undefined)
+            await bucket
+              .file(from)
+              .delete()
+              .catch(() => undefined)
+          },
+        ),
       )
       await source.delete().catch(() => undefined)
       await mediaSnapshot.ref.set(

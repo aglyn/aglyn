@@ -15,12 +15,15 @@
  * limitations under the License.
  */
 
-import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import { isOrgWideMember, pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import { analyticsBandwidthReading } from '@aglyn/aglyn/app-utils/media-bandwidth'
 import { bandwidthGbFromPageViews } from '../../../../utils/usage-metering'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
   isImpersonationSession,
+  memberHasOrgPermission,
+  resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
@@ -36,6 +39,14 @@ import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
  * Authorization is per-site membership, which is why this endpoint stayed
  * per-site while the arithmetic moved up to the org.
  *
+ * Since AGL-3474 the reading includes the video and file bytes the media CDN
+ * counted on the same day documents, in page views — the figure the invoice
+ * and the cap measure. With `?orgId=` instead of `?hostId=` it answers for
+ * the ORG LIBRARY, whose deliveries are counted on the org's own day
+ * documents and so are in no site's reading. That figure is about the whole
+ * organization, so it takes what the org-wide billing figures take: an
+ * org-wide member with `billing.view`, or staff.
+ *
  * It used to return `siteSizeBytes` too — a live per-site sweep of every
  * published version payload, ~250 document reads per site per page load. That
  * had exactly one reader, the site-size meter, and that meter now reads the
@@ -49,7 +60,10 @@ async function handler(request: Request): Promise<Response> {
     return Response.json({ error: 'Method not allowed' }, { status: 405 })
   }
   const hostId = String(query['hostId'] ?? '')
-  if (!hostId) return Response.json({ error: 'Missing hostId' }, { status: 400 })
+  const orgId = hostId ? '' : String(query['orgId'] ?? '')
+  if (!hostId && !orgId) {
+    return Response.json({ error: 'Missing hostId' }, { status: 400 })
+  }
 
   const authorization = headers.authorization ?? ''
   const idToken = authorization.startsWith('Bearer ')
@@ -63,30 +77,44 @@ async function handler(request: Request): Promise<Response> {
       return emailUnverifiedResponse()
     }
     const firestore = firebaseAdmin.app().firestore()
-    const hostRef = firestore.collection('hosts').doc(hostId)
-    const hostSnapshot = await hostRef.get()
-    if (!hostSnapshot.exists) {
-      return Response.json({ error: 'Unknown site' }, { status: 404 })
-    }
-    const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
-    if (!memberRole) {
-      return Response.json({ error: 'Not a site admin' }, { status: 403 })
+    let scopeRef: FirebaseFirestore.DocumentReference
+    if (hostId) {
+      scopeRef = firestore.collection('hosts').doc(hostId)
+      const hostSnapshot = await scopeRef.get()
+      if (!hostSnapshot.exists) {
+        return Response.json({ error: 'Unknown site' }, { status: 404 })
+      }
+      const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
+      if (!memberRole) {
+        return Response.json({ error: 'Not a site admin' }, { status: 403 })
+      }
+    } else {
+      const actor = await resolveOrgMembership(decoded.uid, orgId)
+      if (
+        decoded['staff'] !== true &&
+        (!isOrgWideMember(actor?.member) ||
+          !(await memberHasOrgPermission(orgId, actor?.member, 'billing.view')))
+      ) {
+        return Response.json({ error: 'billing.view required' }, { status: 403 })
+      }
+      scopeRef = firestore.collection('orgs').doc(orgId)
     }
 
     const month = new Date().toISOString().slice(0, 7)
-    const analytics = await hostRef
+    const analytics = await scopeRef
       .collection('analytics')
       .where(firebaseAdmin.firestore.FieldPath.documentId(), '>=', `${month}-01`)
       .where(firebaseAdmin.firestore.FieldPath.documentId(), '<=', `${month}-31`)
       .get()
 
-    const monthPageViews = analytics.docs.reduce(
-      (sum, day) => sum + Number(day.get('total') ?? 0),
-      0,
-    )
+    const reading = analyticsBandwidthReading(analytics.docs)
+    const monthPageViews = reading.meteredPageViews
     return Response.json(
       {
         monthPageViews,
+        // The video and file bytes inside `monthPageViews`, for a caller that
+        // wants to say how much of the band was media.
+        monthMediaBandwidthBytes: reading.mediaBytes,
         // Per-site GB, for a caller that wants one site's share. The METER
         // does not use it — it sums `monthPageViews` org-wide and converts
         // once, so rounding cannot accumulate per site (AGL-1371).

@@ -20,9 +20,11 @@
 /**
  * WHAT REACHES THE SCREEN, AND WHAT IT IS ALLOWED TO DO THERE.
  *
- * `template-report.spec.ts` proves the arithmetic; this file proves the
- * arithmetic is what a reader sees, and that the preview beside it cannot
- * reach the console it is drawn in.
+ * What the template's emails did is the campaign owner's card, drawn in the
+ * zone this page hosts (`email-template-report-card.spec.tsx` in the
+ * Marketing plugin holds it); this file proves the page hands that zone what
+ * it needs and reads no send itself, and that the preview cannot reach the
+ * console it is drawn in.
  *
  * The sandbox assertion is the one worth stating plainly. The preview renders
  * markup written outside this console — by a site's own editors, or by a
@@ -36,12 +38,8 @@
 
 import { ConsoleWidgetSlotContext } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
 import { displayNameSearchFields } from '@aglyn/aglyn/app-utils/name-search'
-import { registerPluginRecordRoute } from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
-import type {
-  CampaignStats,
-} from '@aglyn/shared-ui-email-campaigns/model/campaign-report'
 
 /** What each `useFirestoreDoc` call answers, keyed by document path. */
 const mockDocs = new Map<string, unknown>()
@@ -108,8 +106,6 @@ jest.mock('next/navigation', () => ({
 
 const SCREEN_PATH = 'hosts/site1/screens/scr_1'
 const VERSION_PATH = 'hosts/site1/screens/scr_1/versions/ver_1'
-/** The org's sends — each one sent as a single site. */
-const CAMPAIGNS_PATH = 'orgs/org1/campaigns'
 
 /**
  * A besigner node map, rooted at `_@_` — the id the besigner really writes.
@@ -124,41 +120,9 @@ const NODES = {
   t2: { componentId: 'emailText', props: { children: 'Hi {{contact.name}}' } },
 }
 
-/**
- * Measured: 100 sent, 90 delivered. The two differ, so an assertion reading a
- * denominator off the screen can tell which one was divided by.
- */
-const MEASURED: CampaignStats = {
-  recipients: 100,
-  sent: 100,
-  delivered: 90,
-  opens: 60,
-  uniqueOpens: 45,
-  clicks: 12,
-  uniqueClicks: 9,
-  bounced: 10,
-  clickTracked: true,
-}
-
-/** From before the delivery webhook: real opens, no delivery denominator. */
-const UNMEASURED: CampaignStats = { recipients: 200, sent: 200, opens: 30 }
-
-/**
- * The MESSAGES table, found by its own first column.
- *
- * The page draws two: the audiences breakdown comes first, and an index into
- * `document.querySelectorAll('table')` would silently move to it the next time
- * a section is added above.
- */
-const messagesTable = (): HTMLTableElement =>
-  Array.from(document.querySelectorAll('table')).find((table) =>
-    table.querySelector('thead')?.textContent?.startsWith('Subject'),
-  ) as HTMLTableElement
-
 async function renderDetail(options?: {
   screen?: Record<string, unknown>
   version?: Record<string, unknown> | null
-  messages?: Record<string, unknown>[]
 }): Promise<void> {
   mockDocs.clear()
   mockCollections.clear()
@@ -174,21 +138,6 @@ async function renderDetail(options?: {
   if (options?.version !== null) {
     mockDocs.set(VERSION_PATH, options?.version ?? { nodes: NODES })
   }
-  mockCollections.set(
-    CAMPAIGNS_PATH,
-    options?.messages ?? [
-      {
-        $id: 'msg_1',
-        subject: 'Spring sale',
-        status: 'sent',
-        audience: 'list',
-        listId: 'list_1',
-        listName: 'Newsletter',
-        sentAt: { toMillis: () => 1_700_000_000_000 },
-        stats: MEASURED,
-      },
-    ],
-  )
   const { EmailTemplateDetail } = await import('./email-template-detail')
   render(
     (
@@ -204,44 +153,38 @@ async function renderDetail(options?: {
 }
 
 /**
- * The plugin that owns campaigns, reduced to the two things this page asks of
- * it. It publishes where a `campaign` is read, which is how the row menu's
- * link is built without this plugin spelling another's nav slug; and it draws
- * the recipients table in the zone this page hosts, which the stand-in marks
- * so the page's ORDER can be measured.
+ * The plugin that owns campaigns, reduced to what this page asks of it: it
+ * draws what the template's emails did, and who received them, in the zones
+ * this page hosts. The stand-in marks each so the page's ORDER can be
+ * measured, and keeps what each was handed.
  */
+let reportZone: Record<string, unknown> | null = null
 let recipientsZone: Record<string, unknown> | null = null
 function ZoneRenderer(props: { slot: string } & Record<string, unknown>) {
+  if (props.slot === 'emailTemplateReport') {
+    reportZone = props
+    return <div>{'Sent from this template'}</div>
+  }
   if (props.slot !== 'emailTemplateRecipients') return null
   recipientsZone = props
   return <div>{'Recipients'}</div>
 }
-beforeAll(() => {
-  registerPluginRecordRoute(
-    'campaign',
-    {
-      list: () => null,
-      record: (context, id) =>
-        context.host
-          ? `/${context.orgSlug}/hosts/${context.host}/marketing/campaigns/${id}`
-          : null,
-    },
-    { pluginId: 'campaign-owner-stand-in' },
-  )
-})
 
-describe('the sends it reports on', () => {
-  it("reads the org's sends of this design that were sent as this site", async () => {
+describe('what the template’s emails did is the campaign owner’s', () => {
+  it('hosts the report zone, handing it the template and the page’s base path', async () => {
+    reportZone = null
     await renderDetail()
-    // The site clause is what keeps a sibling site's sends out and makes the
-    // list provable for a collaborator scoped to this site.
-    expect(mockWheres).toEqual(
-      expect.arrayContaining([
-        ['visibleTo', 'array-contains-any', ['host:site1']],
-        ['templateScreenId', '==', 'scr_1'],
-      ]),
-    )
-    expect(messagesTable().textContent).toContain('Spring sale')
+    expect(reportZone).toMatchObject({
+      hostId: 'site1',
+      screenId: 'scr_1',
+      basePath: '/acme/hosts/site/emails',
+    })
+  })
+
+  it('reads no send itself: the sends are the plugin’s that sent them', async () => {
+    await renderDetail()
+    expect(mockWheres).toEqual([])
+    expect(screen.queryByText('Delivery')).toBeNull()
   })
 })
 
@@ -312,152 +255,6 @@ describe('the template header carries the way into the besigner', () => {
   })
 })
 
-describe('the template report names its denominators on screen', () => {
-  it('renders the open rate beside the campaigns it covers', async () => {
-    await renderDetail({
-      messages: [
-        { $id: 'a', status: 'sent', audience: 'leads', sentAt: { toMillis: () => 2 }, stats: MEASURED },
-        { $id: 'b', status: 'sent', audience: 'leads', sentAt: { toMillis: () => 1 }, stats: UNMEASURED },
-      ],
-    })
-    expect(screen.getByText('Open rate')).toBeTruthy()
-    // The subset is on the screen, not only in the model: 45 of 90 taken over
-    // the one campaign that recorded a delivery, out of the two that exist.
-    expect(
-      screen.getByText('45 of 90 delivered across 1 of 2 campaigns'),
-    ).toBeTruthy()
-  })
-
-  it('shows an unrecorded delivered count as a dash, never as zero', async () => {
-    await renderDetail({
-      messages: [
-        { $id: 'b', status: 'sent', audience: 'leads', sentAt: { toMillis: () => 1 }, stats: UNMEASURED },
-      ],
-    })
-    expect(screen.getByText('Delivered')).toBeTruthy()
-    expect(screen.getAllByText('—').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('not recorded').length).toBeGreaterThan(0)
-  })
-
-  it('names the list a message went to as the send recorded it', async () => {
-    await renderDetail()
-    expect(screen.getByText('Newsletter')).toBeTruthy()
-  })
-
-  it('links each message to its own page', async () => {
-    await renderDetail()
-    const link = screen.getByText('Spring sale').closest('a')
-    expect(link?.getAttribute('href')).toBe('/acme/hosts/site/emails/messages/msg_1')
-  })
-
-  it('the message ROW opens it too, and the link does not double-push', async () => {
-    pushed.length = 0
-    await renderDetail()
-
-    fireEvent.click(messagesTable().querySelectorAll('tbody tr')[0])
-    expect(pushed).toContain('/acme/hosts/site/emails/messages/msg_1')
-
-    // The row's own handler would fire again and push the same route twice —
-    // one history entry per back press.
-    pushed.length = 0
-    fireEvent.click(screen.getByText('Spring sale').closest('a') as Element)
-    expect(pushed).toEqual([])
-  })
-
-  it('the message’s other destinations are in the overflow menu', async () => {
-    pushed.length = 0
-    await renderDetail({
-      messages: [
-        {
-          $id: 'msg_1',
-          subject: 'Spring sale',
-          status: 'sent',
-          emailCampaignId: 'camp_7',
-          sentAt: { toMillis: () => 1_700_000_000_000 },
-          stats: MEASURED,
-        },
-      ],
-    })
-
-    fireEvent.click(
-      screen.getByRole('button', { name: 'More actions for Spring sale' }),
-    )
-    // Opening the menu must not open the message underneath it.
-    expect(pushed).toEqual([])
-    const campaign = screen.getByRole('menuitem', {
-      name: 'Open its campaign',
-    })
-    expect(campaign.tagName).toBe('A')
-    // Not under this surface's own base path: a campaign's page is another
-    // plugin's, and the address is the one its owner publishes.
-    expect(campaign.getAttribute('href')).toBe(
-      '/acme/hosts/site/marketing/campaigns/camp_7',
-    )
-  })
-
-  it('clicking the actions column does not open the message', async () => {
-    /*
-     * The menu BUTTON guards itself, so an assertion that only opened the menu
-     * would pass with or without the cell's own guard — and the cell is bigger
-     * than the button. A press landing on the padding around it is a press
-     * inside a row whose handler opens the message.
-     */
-    pushed.length = 0
-    await renderDetail()
-
-    const cells = messagesTable()
-      .querySelectorAll('tbody tr')[0]
-      .querySelectorAll('td')
-    fireEvent.click(cells[cells.length - 1])
-    expect(pushed).toEqual([])
-  })
-
-  it('a message that belongs to NO campaign says so rather than guessing', async () => {
-    // Every message written before campaigns grouped their emails names no
-    // container. Defaulting to the message's own id would give the row a menu
-    // item that navigates to the page the reader is already on.
-    await renderDetail({
-      messages: [
-        {
-          $id: 'msg_1',
-          subject: 'Spring sale',
-          status: 'sent',
-          sentAt: { toMillis: () => 1_700_000_000_000 },
-          stats: MEASURED,
-        },
-      ],
-    })
-
-    fireEvent.click(
-      screen.getByRole('button', { name: 'More actions for Spring sale' }),
-    )
-    const campaign = screen.getByRole('menuitem', {
-      name: 'Open its campaign',
-    })
-    expect(campaign.getAttribute('aria-disabled')).toBe('true')
-    expect(campaign.tagName).not.toBe('A')
-  })
-
-  it('the numeric columns are right-aligned in the head AND the body', async () => {
-    // A header aligned one way over cells aligned another is exactly the
-    // defect this surface's tables were reported for.
-    await renderDetail()
-    const messages = messagesTable()
-    const headers = Array.from(messages.querySelectorAll('thead th'))
-    const cells = Array.from(
-      messages.querySelectorAll('tbody tr')[0].querySelectorAll('td'),
-    )
-    for (const index of [3, 4, 5]) {
-      expect(headers[index].className).toMatch(/alignRight/)
-      expect(cells[index].className).toMatch(/alignRight/)
-    }
-    // THE CONTROL: the text columns are not right-aligned, so the assertion
-    // above is about alignment rather than about every cell in the table.
-    expect(headers[0].className).not.toMatch(/alignRight/)
-    expect(cells[0].className).not.toMatch(/alignRight/)
-  })
-})
-
 describe('a template installed from a marketplace listing', () => {
   it('says so, and says its standing has not been checked', async () => {
     await renderDetail({
@@ -489,15 +286,15 @@ describe('the template preview sits at the bottom of the page', () => {
    * Held on both pages so the two cannot drift into disagreeing about what
    * they are for.
    *=========================================*/
-  it('renders the preview frame AFTER the delivery figures', async () => {
+  it('renders the preview frame AFTER the report of what its emails did', async () => {
     await renderDetail()
     const preview = document.querySelector('iframe[title="Email preview"]')
-    const delivery = screen.getByText('Delivery')
+    const report = screen.getByText('Sent from this template')
     expect(preview).toBeTruthy()
     // DOM order, not mere presence: both are on the page whichever way round
     // they sit, so presence alone would pass with nothing moved.
     expect(
-      delivery.compareDocumentPosition(preview as Node) &
+      report.compareDocumentPosition(preview as Node) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy()
   })

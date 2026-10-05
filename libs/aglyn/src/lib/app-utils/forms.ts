@@ -32,7 +32,6 @@
  */
 
 import type { AglynNodeSchema, NodeId } from '../foundation/definitions/components.types'
-import { FORMS_PLUGIN_ID } from '../plugin-manager/enabled-plugins'
 import { containerMembershipValue } from './container-membership'
 import type { PlacementKind } from './compose-reusable-components'
 import { utcMonthKey } from './utc-month'
@@ -58,36 +57,57 @@ export const FORM_FIELD_COMPONENT_ID = 'formField'
 export const FORM_ID_PROP = 'formId'
 
 /**
- * What `/api/forms/submit` answers a submission to a site that switched Forms
- * off (AGL-3029). A visitor reads it, so it names no plugin and no setting.
+ * The settings a saved form's own root carries for every page that places it
+ * (AGL-3494): its caption, where its answers go, its button, its message and
+ * what a successful submit does.
+ *
+ * A placement renders the form's values for each of these unless it sets its
+ * own (`placementPropsOverRoot`), so a value a page's form node merely STARTED
+ * with — a preset's "Send message", a caption typed before the form was picked
+ * — would silently pin that page to it. {@link formPropsOnBind} is what keeps
+ * those starting values from becoming overrides.
  */
-export const FORMS_OFF_FOR_SITE_REFUSAL = 'This site is not accepting form submissions'
+export const FORM_ENTITY_OWNED_PROPS: readonly string[] = [
+  'formName',
+  'datasetId',
+  'datasetName',
+  'submitLabel',
+  'successMessage',
+  'afterSubmit',
+  'redirectScreenId',
+  'redirectUrl',
+  'revealNodeId',
+]
 
 /**
- * The marketing plugin's id, as the submission door below names it. Core
- * holds no import of the plugin; the catalog is where the string is defined.
- */
-const MARKETING_PLUGIN_ID = 'marketing'
-
-/**
- * The plugin whose door a submission to `/api/forms/submit` came through
- * (AGL-3029) — the plugin that must run on the site for it to be accepted.
+ * A form node's props as they are saved when the author PICKS a saved form for
+ * it (AGL-3494): the form's own settings ({@link FORM_ENTITY_OWNED_PROPS}) are
+ * dropped from the page's copy, so the placement shows the saved form's.
  *
- * The endpoint is shared. A form element posts to it, and so does a Marketing
- * popup's email capture, which is a Marketing element rather than a form: a
- * site that switched Forms off and still shows its popup must not silently
- * lose every address the popup collects. The popup names its door in the
- * body; everything else is a form's.
+ * Picking a form is the moment the node stops being the page's own form and
+ * becomes a placement of that one: its fields are already replaced by the
+ * form's, and its label and message follow. Anything the page wrote before
+ * that moment was written for the node it used to be — the Contact Section
+ * preset seeds "Send message" and a thank-you line, the Contact Form preset a
+ * caption — and kept, each would read as a deliberate per-page override and
+ * mask the form's value forever. A label set AFTER the form is picked is
+ * written on the placement and wins, which is the per-page change the merge
+ * honors.
  *
- * A body that names a form ENTITY or a dataset binding is a form's, whatever
- * door it claims. Those are what a form element sends and a popup never does,
- * so the popup door cannot be used to file rows under a form, or into a
- * dataset, on a site that switched Forms off.
+ * Only a change of form clears anything. Re-saving a placement of the same
+ * form, editing any other attribute, or unpicking the form leaves the props
+ * exactly as given — an existing placement keeps every value it carries.
  */
-export function formSubmissionDoorPlugin(body: Record<string, unknown> | null | undefined): string {
-  const namesFormData =
-    Boolean(String(body?.['formId'] ?? '').trim()) || Boolean(body?.['datasetBinding'])
-  return body?.['door'] === 'popup' && !namesFormData ? MARKETING_PLUGIN_ID : FORMS_PLUGIN_ID
+export function formPropsOnBind(
+  previousProps: Record<string, unknown> | undefined | null,
+  nextProps: Record<string, unknown>,
+): Record<string, unknown> {
+  const nextFormId = nextProps[FORM_ID_PROP]
+  if (typeof nextFormId !== 'string' || !nextFormId.trim()) return nextProps
+  if (previousProps?.[FORM_ID_PROP] === nextFormId) return nextProps
+  const bound = { ...nextProps }
+  for (const key of FORM_ENTITY_OWNED_PROPS) delete bound[key]
+  return bound
 }
 
 /**

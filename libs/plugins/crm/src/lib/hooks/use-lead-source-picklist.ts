@@ -16,56 +16,20 @@
  */
 'use client'
 
-import {
-  CRM_COLLECTIONS,
-  CRM_LEAD_SOURCE_PICKLIST,
-  type CrmPicklist,
-  effectiveCrmLeadSourcePicklist,
-  normalizeCrmPicklist,
-} from '@aglyn/aglyn'
-import { useFirestore, useFirestoreDoc } from '@aglyn/tenant-feature-instance'
-import { doc } from 'firebase/firestore'
+import { CRM_LEAD_SOURCE_PICKLIST } from '@aglyn/aglyn'
 import { useMemo } from 'react'
+import { type CrmPicklistResult, useCrmPicklist } from './use-crm-picklist'
 
-export interface LeadSourcePicklistResult {
-  /** The list every picker offers — the org's own, or the starter set. */
-  picklist: CrmPicklist
-  /** The org has written its own list; false while it reads the starter set. */
-  stored: boolean
-  /** The server has answered, so the list is the org's and not a placeholder. */
-  ready: boolean
-  /** The document has not been confirmed by the server — `writeGuardedBySeed`'s input. */
-  fromCache: boolean
-}
+export type LeadSourcePicklistResult = Omit<CrmPicklistResult, 'definition'>
 
 /**
- * The org's lead source values (AGL-3298), for every surface that offers
- * or manages them: the lead page's select, the New lead drawer, the
- * contact's card, the leads list's filter and the Fields page.
- *
- * One document listen, shared by the Firestore SDK across every mount that
- * asks for the same org, so a page with the list and a drawer open pays
- * for it once. `orgId` null issues no read and answers the starter set,
- * unready.
+ * The org's lead source values (AGL-3298) — {@link useCrmPicklist} for the
+ * lead source: the lead page's select, the New lead drawer, the contact's
+ * card, the leads list's filter and the import drawer.
  */
 export function useLeadSourcePicklist(orgId: string | null | undefined): LeadSourcePicklistResult {
-  const firestore = useFirestore()
-  const { data, status, fromCache } = useFirestoreDoc<Record<string, unknown>>(
-    () =>
-      orgId
-        ? doc(firestore, 'orgs', orgId, CRM_COLLECTIONS.picklists, CRM_LEAD_SOURCE_PICKLIST)
-        : null,
-    [firestore, orgId],
-  )
-  return useMemo(
-    () => ({
-      picklist: effectiveCrmLeadSourcePicklist(data),
-      stored: normalizeCrmPicklist(data) !== null,
-      ready: Boolean(orgId) && status !== 'loading',
-      fromCache,
-    }),
-    [data, orgId, status, fromCache],
-  )
+  const { picklist, stored, ready, fromCache } = useCrmPicklist(CRM_LEAD_SOURCE_PICKLIST, orgId)
+  return useMemo(() => ({ picklist, stored, ready, fromCache }), [picklist, stored, ready, fromCache])
 }
 
 export default useLeadSourcePicklist

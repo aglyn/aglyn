@@ -79,6 +79,26 @@ export interface ContactRecord {
   jobTitle: string
   /** This holder's lead source label (AGL-3298), `''` for none. */
   leadSource: string
+  /*
+   * Salesforce's standard contact fields (AGL-3515), this holder's, each
+   * `''` (or `null`, `false`) for none — see `ContactFacet`.
+   */
+  salutation: string
+  firstName: string
+  lastName: string
+  department: string
+  mobilePhone: string
+  homePhone: string
+  otherPhone: string
+  fax: string
+  /** `YYYY-MM-DD`. */
+  birthdate: string
+  assistantName: string
+  assistantPhone: string
+  /** The contact this person reports to, by id. */
+  reportsToContactId: string
+  otherAddress: AglynPostalAddress | null
+  doNotCall: boolean
   companyName: string
   companyId: string
   /**
@@ -89,6 +109,7 @@ export interface ContactRecord {
    * already holds, and nothing renders it.
    */
   companyLink: Aglyn.ContactCompanyLinkState
+  /** The mailing address. */
   address: AglynPostalAddress | null
   /** This holder's custom field values, keyed by definition key (AGL-2601). */
   custom?: Record<string, Aglyn.ContactCustomValue>
@@ -161,6 +182,20 @@ export function contactRecordFromDoc(
     phone: facet.phone ?? '',
     jobTitle: facet.jobTitle ?? '',
     leadSource: facet.leadSource ?? '',
+    salutation: facet.salutation ?? '',
+    firstName: facet.firstName ?? '',
+    lastName: facet.lastName ?? '',
+    department: facet.department ?? '',
+    mobilePhone: facet.mobilePhone ?? '',
+    homePhone: facet.homePhone ?? '',
+    otherPhone: facet.otherPhone ?? '',
+    fax: facet.fax ?? '',
+    birthdate: facet.birthdate ?? '',
+    assistantName: facet.assistantName ?? '',
+    assistantPhone: facet.assistantPhone ?? '',
+    reportsToContactId: facet.reportsToContactId ?? '',
+    otherAddress: facet.otherAddress ?? null,
+    doNotCall: facet.doNotCall === true,
     companyName: facet.companyName ?? '',
     companyId: facet.companyId ?? '',
     companyLink: Aglyn.readContactCompanyLink(row, group.groupId),

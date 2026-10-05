@@ -34,6 +34,7 @@ import { createHmac, timingSafeEqual } from 'crypto'
 import { requireActiveMember } from './membership'
 import { checkMemberEntitlement } from './gate'
 import { tokenSigningSecret } from './download'
+import { countOffRouteServe } from './paid-media-serve-count'
 
 const TTL_MS = 15 * 60 * 1000
 
@@ -224,7 +225,9 @@ export const streamHandler: PluginApiHandler = async (req, res) => {
      * `Location`, and saying so is correct even under `no-store`.
      */
     if (delivery.via === 'delivery') res.setHeader('Vary', 'Accept')
-    return res.redirect(302, delivery.location)
+    res.redirect(302, delivery.location)
+    await countOffRouteServe(app.firestore(), delivery)
+    return
   } catch (error) {
     console.error(error)
     return res.status(500).json({ error: 'Stream unavailable' })

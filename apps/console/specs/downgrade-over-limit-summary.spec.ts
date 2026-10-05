@@ -34,8 +34,8 @@
  */
 
 const PLAN = {
-  starter: { datasetsPerOrg: 3, maxDatasetsPerOrg: 10 },
-  pro: { datasetsPerOrg: 15, maxDatasetsPerOrg: 50 },
+  starter: { datasetsPerOrg: 2, maxDatasetsPerOrg: 10 },
+  pro: { datasetsPerOrg: 5, maxDatasetsPerOrg: 50 },
 }
 
 let mockDatasetCount: number | null = 0
@@ -93,13 +93,13 @@ describe('the bounds this file measures against', () => {
 describe('the datasets row', () => {
   it('warns for a count over what the plan INCLUDES', async () => {
     // 8 datasets moving to Starter. Measured against the ceiling of 10 this
-    // said nothing at all, and the org landed 5 over its included 3.
+    // said nothing at all, and the org landed 6 over its included 2.
     mockDatasetCount = 8
 
     const over = await summarize('starter')
 
     expect(over).toHaveLength(1)
-    expect(over[0]).toBe('8 datasets (starter includes 3)')
+    expect(over[0]).toBe('8 datasets (starter includes 2)')
   })
 
   it('quotes the included count, not the purchase ceiling', async () => {
@@ -109,14 +109,14 @@ describe('the datasets row', () => {
 
     const over = await summarize('pro')
 
-    expect(over[0]).toContain('pro includes 15')
+    expect(over[0]).toContain('pro includes 5')
     expect(over[0]).not.toContain('50')
   })
 
   it('stays silent when the org is genuinely under', async () => {
     // The control that stops the fix from warning everybody. A row that
     // always fires is as useless as one that never does.
-    mockDatasetCount = 3
+    mockDatasetCount = 2
 
     expect(await summarize('starter')).toEqual([])
   })
@@ -127,7 +127,7 @@ describe('the datasets row', () => {
     const over = await summarize('starter')
 
     expect(over).toHaveLength(1)
-    expect(over[0]).toBe('datasets — could not be checked (starter includes 3)')
+    expect(over[0]).toBe('datasets — could not be checked (starter includes 2)')
   })
 })
 

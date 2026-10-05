@@ -100,6 +100,14 @@ import {
   normalizeContactFieldKey,
   taskDueState,
   weightedDealAmountCents,
+  CRM_FORECAST_CATEGORIES,
+  CRM_FORECAST_CATEGORY_LABELS,
+  dealForecastCategory,
+  dealProbability,
+  dealStageForecastCategory,
+  dealStageMoveFields,
+  readCrmForecastCategory,
+  readDealProbability,
   DEAL_LINE_ITEMS_MAX,
   dealHasLineItems,
   isPipelineArchived,
@@ -108,8 +116,17 @@ import {
   normalizeCrmMediaIds,
   readDealLineItems,
   CRM_LEAD_SOURCE_STARTER_LABELS,
+  CRM_PICKLIST_DEFINITIONS,
+  CRM_PICKLIST_IDS,
   type CrmPicklist,
   crmLeadSourceRefusal,
+  crmPicklistDefinition,
+  crmPicklistDefinitionsFor,
+  crmPicklistKey,
+  crmPicklistRefusal,
+  effectiveCrmPicklist,
+  isStandardCrmPicklistValue,
+  judgeCrmPicklistValue,
   crmPicklistDefaultLabel,
   crmPicklistOptions,
   crmPicklistRank,
@@ -118,6 +135,32 @@ import {
   judgeCrmLeadSource,
   normalizeCrmPicklist,
   openLeadsFromCounts,
+} from './crm'
+// The task picklists and a call's direction (AGL-3517).
+import {
+  CRM_PICKLIST_OBJECT_LABELS,
+  crmActivityDirection,
+  crmActivityKindTitle,
+  crmPicklistLabelForNew,
+  crmPicklistMeaningLabel,
+  crmPicklistShownLabel,
+  crmTaskLabelsForNew,
+  crmTaskPicklistLabels,
+  crmTaskStatusWrite,
+  effectiveCrmTaskPicklists,
+  resolveCrmSemanticPicklistWrite,
+} from './crm'
+// A deal's contact roles (AGL-3521).
+import {
+  crmDealListFields,
+  DEAL_CONTACT_ROLES_MAX,
+  dealContactRoleFields,
+  dealContactRolesOf,
+  dealContactRolesRepointed,
+  dealContactRolesWithout,
+  dealContactRolesWithPrimary,
+  judgeDealContactRoles,
+  readDealContactRoles,
 } from './crm'
 
 describe('CRM collections', () => {
@@ -555,32 +598,114 @@ describe('normalizeContactFieldKey', () => {
 })
 
 describe('deal stages', () => {
-  it('ships the default pipeline in order, one won and one lost', () => {
-    expect(DEFAULT_DEAL_STAGES.map((stage) => stage.id)).toEqual([
-      'qualified',
-      'contact-made',
-      'proposal-sent',
-      'negotiation',
-      'won',
-      'lost',
+  it("ships Salesforce's Opportunity stages in order, one won and one lost (AGL-3516)", () => {
+    expect(DEFAULT_DEAL_STAGES.map((stage) => [stage.name, stage.probability, stage.kind])).toEqual([
+      ['Prospecting', 10, 'open'],
+      ['Qualification', 10, 'open'],
+      ['Needs Analysis', 20, 'open'],
+      ['Value Proposition', 50, 'open'],
+      ['Id. Decision Makers', 60, 'open'],
+      ['Perception Analysis', 70, 'open'],
+      ['Proposal/Price Quote', 75, 'open'],
+      ['Negotiation/Review', 90, 'open'],
+      ['Closed Won', 100, 'won'],
+      ['Closed Lost', 0, 'lost'],
     ])
-    expect(DEFAULT_DEAL_STAGES.map((stage) => stage.probability)).toEqual([
-      10, 20, 40, 60, 100, 0,
+    expect(DEFAULT_DEAL_STAGES.map((stage) => stage.forecastCategory)).toEqual([
+      'pipeline',
+      'pipeline',
+      'pipeline',
+      'pipeline',
+      'pipeline',
+      'pipeline',
+      'bestCase',
+      'commit',
+      'closed',
+      'omitted',
     ])
+    // The closing stages keep the ids every pipeline has had.
+    expect(DEFAULT_DEAL_STAGES.find((s) => s.kind === 'won')?.id).toBe('won')
+    expect(DEFAULT_DEAL_STAGES.find((s) => s.kind === 'lost')?.id).toBe('lost')
     expect(DEFAULT_DEAL_STAGES.filter((s) => s.kind === 'won')).toHaveLength(1)
     expect(DEFAULT_DEAL_STAGES.filter((s) => s.kind === 'lost')).toHaveLength(1)
     // Ascending and unique, so a sort on `order` is the pipeline's order.
     const orders = DEFAULT_DEAL_STAGES.map((stage) => stage.order)
     expect(orders).toEqual([...orders].sort((a, b) => a - b))
     expect(new Set(orders).size).toBe(orders.length)
+    expect(new Set(DEFAULT_DEAL_STAGES.map((stage) => stage.id)).size).toBe(orders.length)
   })
 
   it('finds a stage by id and answers null for one the pipeline lost', () => {
     const pipeline = { stages: [...DEFAULT_DEAL_STAGES] }
-    expect(dealStageById(pipeline, 'negotiation')?.probability).toBe(60)
+    expect(dealStageById(pipeline, 'negotiation-review')?.probability).toBe(90)
     expect(dealStageById(pipeline, 'gone')).toBeNull()
     expect(dealStageById(null, 'won')).toBeNull()
     expect(dealStageById({ stages: undefined as never }, 'won')).toBeNull()
+  })
+})
+
+describe('forecast categories (AGL-3516)', () => {
+  it('reads a stage without one as its kind’s', () => {
+    expect(dealStageForecastCategory({ kind: 'open' })).toBe('pipeline')
+    expect(dealStageForecastCategory({ kind: 'won' })).toBe('closed')
+    expect(dealStageForecastCategory({ kind: 'lost' })).toBe('omitted')
+    expect(dealStageForecastCategory({ kind: 'open', forecastCategory: 'commit' })).toBe('commit')
+    expect(dealStageForecastCategory({ kind: 'open', forecastCategory: 'nope' as never })).toBe('pipeline')
+  })
+
+  it("reads a deal's own category, else its stage's, else its status's", () => {
+    const stage = { kind: 'open' as const, forecastCategory: 'bestCase' as const }
+    expect(dealForecastCategory({ forecastCategory: 'commit', status: 'open' }, stage)).toBe('commit')
+    expect(dealForecastCategory({ status: 'open' }, stage)).toBe('bestCase')
+    expect(dealForecastCategory({ status: 'won' }, null)).toBe('closed')
+    expect(dealForecastCategory({ status: 'lost' }, null)).toBe('omitted')
+    expect(dealForecastCategory({ status: 'open' }, null)).toBe('pipeline')
+  })
+
+  it('reads a typed category by key or label, in any case', () => {
+    expect(readCrmForecastCategory('bestCase')).toBe('bestCase')
+    expect(readCrmForecastCategory(' best  case ')).toBe('bestCase')
+    expect(readCrmForecastCategory('COMMIT')).toBe('commit')
+    expect(readCrmForecastCategory('Upside')).toBeNull()
+    expect(readCrmForecastCategory('')).toBeNull()
+    expect(CRM_FORECAST_CATEGORIES.map((key) => CRM_FORECAST_CATEGORY_LABELS[key])).toEqual([
+      'Omitted',
+      'Pipeline',
+      'Best Case',
+      'Commit',
+      'Closed',
+    ])
+  })
+
+  it('stamps the stage’s category and clears the override on a move', () => {
+    expect(dealStageMoveFields({ kind: 'open', forecastCategory: 'commit' })).toEqual({
+      forecastCategory: 'commit',
+      probability: null,
+    })
+    expect(dealStageMoveFields({ kind: 'won' })).toEqual({ forecastCategory: 'closed', probability: null })
+  })
+})
+
+describe('deal probability (AGL-3516)', () => {
+  it('reads an override as a whole number 0–100, blank as none, anything else as unreadable', () => {
+    expect(readDealProbability(35)).toBe(35)
+    expect(readDealProbability('35')).toBe(35)
+    expect(readDealProbability('35%')).toBe(35)
+    expect(readDealProbability(0)).toBe(0)
+    expect(readDealProbability('')).toBeNull()
+    expect(readDealProbability(null)).toBeNull()
+    expect(readDealProbability(undefined)).toBeNull()
+    expect(readDealProbability(101)).toBeUndefined()
+    expect(readDealProbability(-1)).toBeUndefined()
+    expect(readDealProbability(12.5)).toBeUndefined()
+    expect(readDealProbability('lots')).toBeUndefined()
+  })
+
+  it("answers the deal's override, else the stage's, else null", () => {
+    expect(dealProbability({ probability: 35 }, { probability: 10 })).toBe(35)
+    expect(dealProbability({ probability: null }, { probability: 10 })).toBe(10)
+    expect(dealProbability({}, { probability: 10 })).toBe(10)
+    expect(dealProbability({}, null)).toBeNull()
   })
 })
 
@@ -591,6 +716,15 @@ describe('weightedDealAmountCents', () => {
     expect(weightedDealAmountCents({ status: 'open', amountCents: 10_000 }, stage)).toBe(4_000)
     // Rounded to a whole cent.
     expect(weightedDealAmountCents({ status: 'open', amountCents: 1_001 }, stage)).toBe(400)
+  })
+
+  it("weights by the deal's own probability when it overrides the stage's (AGL-3516)", () => {
+    expect(weightedDealAmountCents({ status: 'open', amountCents: 10_000, probability: 75 }, stage)).toBe(7_500)
+    expect(weightedDealAmountCents({ status: 'open', amountCents: 10_000, probability: 0 }, stage)).toBe(0)
+    expect(weightedDealAmountCents({ status: 'open', amountCents: 10_000, probability: null }, stage)).toBe(4_000)
+    // The status still wins, and a lost stage is still worth nothing.
+    expect(weightedDealAmountCents({ status: 'won', amountCents: 10_000, probability: 10 }, stage)).toBe(10_000)
+    expect(weightedDealAmountCents({ status: 'open', amountCents: 10_000, probability: 75 }, null)).toBe(0)
   })
 
   it('lets the status win over the stage', () => {
@@ -1585,20 +1719,108 @@ describe('the lead source picklist', () => {
     })
   })
 
-  it('answers the starter list for an org that never wrote one, with stable slug ids', () => {
-    const starter = effectiveCrmLeadSourcePicklist(undefined)
-    expect(starter.values.map((value) => value.label)).toEqual([...CRM_LEAD_SOURCE_STARTER_LABELS])
-    expect(starter.values.map((value) => value.id)).toEqual([
+  it('answers the standard values for an org that never wrote a list, with stable slug ids', () => {
+    const standard = effectiveCrmLeadSourcePicklist(undefined)
+    expect(standard.values.map((value) => value.id)).toEqual([
       'web',
       'phone-inquiry',
-      'referral',
-      'partner',
-      'purchased-list',
+      'email-inquiry',
+      'partner-referral',
+      'employee-referral',
+      'external-referral',
+      'advertisement',
       'trade-show',
+      'webinar',
+      'word-of-mouth',
+      // Aglyn's own doors and outreach (AGL-3519).
+      'website-form',
+      'booking',
+      'newsletter-sign-up',
+      'site-member-sign-up',
+      'online-purchase',
+      'account-sign-up',
+      'purchased-list',
+      'sequence',
+      'email-campaign',
       'other',
     ])
-    expect(starter.defaultValueId).toBeNull()
+    expect(standard.values.every((value) => value.active)).toBe(true)
+    expect(standard.defaultValueId).toBeNull()
     expect(crmPicklistValueId('Web', ['web', 'web-2'])).toBe('web-3')
+  })
+
+  it('carries each standard value’s Inbound / Outbound group, and Other in neither', () => {
+    const standard = effectiveCrmLeadSourcePicklist(null)
+    const group = (id: string) => standard.values.find((value) => value.id === id)?.group
+    expect(group('web')).toBe('inbound')
+    expect(group('word-of-mouth')).toBe('inbound')
+    expect(group('purchased-list')).toBe('outbound')
+    expect(group('other')).toBeNull()
+  })
+
+  it('reads a list written from the earlier starter set as overrides, keeping Referral and Partner as the org’s own', () => {
+    const stored = {
+      values: [
+        ...CRM_LEAD_SOURCE_STARTER_LABELS.map((label, index) => ({
+          id: crmPicklistValueId(label, []),
+          label: index === 0 ? 'Website' : label,
+          active: label !== 'Partner',
+        })),
+      ],
+      defaultValueId: 'trade-show',
+    }
+    const list = effectiveCrmLeadSourcePicklist(stored)
+    // Stored order first, the standard values it lacks appended after it.
+    expect(list.values.slice(0, 7).map((value) => value.label)).toEqual([
+      'Website',
+      'Phone inquiry',
+      'Referral',
+      'Partner',
+      'Purchased list',
+      'Trade show',
+      'Other',
+    ])
+    expect(list.values.slice(7).map((value) => value.id)).toEqual([
+      'email-inquiry',
+      'partner-referral',
+      'employee-referral',
+      'external-referral',
+      'advertisement',
+      'webinar',
+      'word-of-mouth',
+      'website-form',
+      'booking',
+      'newsletter-sign-up',
+      'site-member-sign-up',
+      'online-purchase',
+      'account-sign-up',
+      'sequence',
+      'email-campaign',
+    ])
+    expect(list.defaultValueId).toBe('trade-show')
+    expect(isStandardCrmPicklistValue('leadSource', 'web')).toBe(true)
+    expect(isStandardCrmPicklistValue('leadSource', 'referral')).toBe(false)
+    expect(list.values.find((value) => value.id === 'referral')?.group).toBeNull()
+    expect(list.values.find((value) => value.id === 'partner')?.active).toBe(false)
+  })
+
+  it('registers lead source on the Leads tab, rewriting leads, contact facets, company account sources and deals', () => {
+    // Lead source first; every other picklist registers beside it (AGL-3512 on).
+    expect(CRM_PICKLIST_IDS[0]).toBe('leadSource')
+    expect(CRM_PICKLIST_DEFINITIONS).toHaveLength(CRM_PICKLIST_IDS.length)
+    expect(CRM_PICKLIST_DEFINITIONS.filter((definition) => definition.id === 'leadSource')).toHaveLength(1)
+    expect(crmPicklistDefinition('nope')).toBeNull()
+    expect(crmPicklistDefinitionsFor('lead').map((definition) => definition.id)).toEqual(
+      expect.arrayContaining(['leadSource', 'leadStatus']),
+    )
+    expect(crmPicklistDefinition('leadSource')?.targets).toEqual([
+      { object: 'lead', field: 'leadSource', keyField: 'leadSourceKey' },
+      { object: 'contact', field: 'leadSource', facet: true },
+      { object: 'company', field: 'accountSource', keyField: 'accountSourceKey' },
+      { object: 'deal', field: 'leadSource', keyField: 'leadSourceKey' },
+    ])
+    expect(crmPicklistKey('  Trade  SHOW ')).toBe(crmPicklistKey('trade show'))
+    expect(crmPicklistKey('')).toBeNull()
   })
 
   it('stores an active value as the list spells it, clears on blank, and refuses the rest naming what is allowed', () => {
@@ -1618,7 +1840,12 @@ describe('the lead source picklist', () => {
       ok: true,
       value: 'Sales Navigator',
     })
-    expect(crmLeadSourceRefusal({ values: [], defaultValueId: null })).toMatch(/no active lead sources/)
+    expect(crmLeadSourceRefusal({ values: [], defaultValueId: null })).toBe(
+      'This organization has no active lead sources. Add one under CRM › Fields › Leads.',
+    )
+    expect(crmPicklistRefusal('leadSource', list)).toBe(refusal.error)
+    expect(judgeCrmPicklistValue('leadSource', list, 'Sales Navigator')).toEqual(refusal)
+    expect(effectiveCrmPicklist('leadSource', null)).toEqual(effectiveCrmLeadSourcePicklist(null))
   })
 
   it('offers the active values, then the record’s own value marked, and ranks by the list order', () => {
@@ -1644,10 +1871,418 @@ describe('the lead source picklist', () => {
   })
 })
 
+describe("a deal's Type picklist (AGL-3516)", () => {
+  it("registers Salesforce's Opportunity Type on the Deals tab, keyed for the list", () => {
+    expect(crmPicklistDefinitionsFor('deal').map((definition) => definition.id)).toContain(
+      'opportunityType',
+    )
+    expect(crmPicklistDefinition('opportunityType')?.targets).toEqual([
+      { object: 'deal', field: 'type', keyField: 'typeKey' },
+    ])
+    const standard = effectiveCrmPicklist('opportunityType', undefined)
+    expect(standard.values.map((value) => value.label)).toEqual([
+      'Existing Business',
+      'New Business',
+    ])
+    expect(standard.defaultValueId).toBeNull()
+    expect(isStandardCrmPicklistValue('opportunityType', 'new-business')).toBe(true)
+  })
+
+  it('stores a listed type as the list spells it and refuses the rest', () => {
+    const standard = effectiveCrmPicklist('opportunityType', undefined)
+    expect(judgeCrmPicklistValue('opportunityType', standard, 'new business')).toEqual({
+      ok: true,
+      value: 'New Business',
+    })
+    expect(judgeCrmPicklistValue('opportunityType', standard, 'Upsell')).toEqual({
+      ok: false,
+      error: 'Type must be one of: Existing Business, New Business.',
+    })
+  })
+})
+
 describe('openLeadsFromCounts', () => {
   it('is the total less the closed, never below zero', () => {
     expect(openLeadsFromCounts(12, 5)).toBe(7)
     expect(openLeadsFromCounts(3, 5)).toBe(0)
     expect(openLeadsFromCounts(Number.NaN, 2)).toBe(0)
+  })
+})
+
+describe('the lead status picklist (AGL-3512)', () => {
+  const crm = jest.requireActual('./crm') as typeof import('./crm')
+  const list = crm.effectiveCrmLeadStatusPicklist({
+    values: [
+      { id: 'working', label: 'In progress', active: true },
+      { id: 'contacted', label: 'Contacted', active: true, meaning: 'working' },
+      { id: 'parked', label: 'Parked', active: false, meaning: 'unqualified' },
+    ],
+    defaultValueId: null,
+  })
+
+  it('ships one standard value per meaning, Qualified reserved to conversion', () => {
+    const definition = crm.crmPicklistDefinition('leadStatus')
+    expect(definition?.meanings).toEqual(crm.CRM_LEAD_STATUSES)
+    expect(definition?.standardValues.map((value) => [value.id, value.label, value.meaning])).toEqual(
+      crm.CRM_LEAD_STATUSES.map((status) => [status, crm.CRM_LEAD_STATUS_LABELS[status], status]),
+    )
+    expect(definition?.reservedMeanings).toEqual(['qualified'])
+    expect(definition?.targets).toEqual([{ object: 'lead', field: 'statusLabel' }])
+  })
+
+  it('labels a lead by its own value of its meaning, else the meaning’s first active value', () => {
+    expect(crm.crmLeadStatusLabel({ status: 'working', statusLabel: 'contacted' }, list)).toBe('Contacted')
+    expect(crm.crmLeadStatusLabel({ status: 'working' }, list)).toBe('In progress')
+    // A label of another meaning is stale — a writer moved the meaning alone.
+    expect(crm.crmLeadStatusLabel({ status: 'new', statusLabel: 'Contacted' }, list)).toBe('New')
+    // A label the list no longer holds reads as given.
+    expect(crm.crmLeadStatusLabel({ status: 'working', statusLabel: 'Gone' }, list)).toBe('Gone')
+    expect(crm.crmLeadStatusLabel({}, list)).toBe('New')
+    expect(crm.crmLeadStatusLabel({ status: 'qualified' })).toBe('Qualified')
+  })
+
+  it('judges a write by label or by meaning, within the meanings a door may set', () => {
+    expect(crm.resolveCrmLeadStatusWrite(list, ' CONTACTED ')).toEqual({
+      ok: true,
+      status: 'working',
+      statusLabel: 'Contacted',
+    })
+    expect(crm.resolveCrmLeadStatusWrite(list, 'working')).toEqual({
+      ok: true,
+      status: 'working',
+      statusLabel: 'In progress',
+    })
+    expect(crm.resolveCrmLeadStatusWrite(list, 'Qualified', { allowed: ['new', 'working'] }).ok).toBe(false)
+    // An inactive value is refused, unless it is the lead's own.
+    expect(crm.resolveCrmLeadStatusWrite(list, 'Parked').ok).toBe(false)
+    expect(
+      crm.resolveCrmLeadStatusWrite(list, 'parked', {
+        current: { status: 'unqualified', statusLabel: 'Parked' },
+      }),
+    ).toEqual({ ok: true, status: 'unqualified', statusLabel: 'Parked' })
+    const refused = crm.resolveCrmLeadStatusWrite(list, 'Banana', { allowed: ['new', 'working'] })
+    expect(refused).toEqual({ ok: false, error: 'Lead status must be one of: In progress, Contacted, New.' })
+  })
+
+  it('offers a select the active values of the allowed meanings, and the lead’s own', () => {
+    expect(
+      crm.crmLeadStatusOptions(list, ['working', 'unqualified'], { status: 'unqualified', statusLabel: 'Parked' }),
+    ).toEqual([
+      { label: 'In progress', status: 'working', inactive: false },
+      { label: 'Contacted', status: 'working', inactive: false },
+      { label: 'Unqualified', status: 'unqualified', inactive: false },
+      { label: 'Parked', status: 'unqualified', inactive: true },
+    ])
+  })
+})
+
+/**
+ * Salutation (AGL-3515): Salesforce's standard values, restricted, on the
+ * Contacts tab, kept in each holder's facet — the target a rename rewrites.
+ */
+describe('the salutation picklist', () => {
+  it('ships Mr., Ms., Mrs., Dr. and Prof. on the Contacts tab, kept in each holder facet', () => {
+    expect(CRM_PICKLIST_IDS).toContain('salutation')
+    expect(crmPicklistDefinitionsFor('contact').map((definition) => definition.id)).toContain(
+      'salutation',
+    )
+    expect(crmPicklistDefinition('salutation')?.targets).toEqual([
+      { object: 'contact', field: 'salutation', facet: true },
+      // A lead's own salutation, on the lead (AGL-3513).
+      { object: 'lead', field: 'salutation' },
+    ])
+    expect(effectiveCrmPicklist('salutation', null).values.map((value) => value.label)).toEqual([
+      'Mr.',
+      'Ms.',
+      'Mrs.',
+      'Dr.',
+      'Prof.',
+    ])
+    expect(isStandardCrmPicklistValue('salutation', 'dr')).toBe(true)
+  })
+
+  it('stores the list spelling, keeps a held value, and refuses the rest naming what is allowed', () => {
+    const list = effectiveCrmPicklist('salutation', null)
+    expect(judgeCrmPicklistValue('salutation', list, ' dr. ')).toEqual({ ok: true, value: 'Dr.' })
+    expect(judgeCrmPicklistValue('salutation', list, 'Sir')).toEqual({
+      ok: false,
+      error: 'Salutation must be one of: Mr., Ms., Mrs., Dr., Prof..',
+    })
+    expect(judgeCrmPicklistValue('salutation', list, 'Sir', 'Sir')).toEqual({ ok: true, value: 'Sir' })
+  })
+})
+
+/**
+ * TASKS USE SALESFORCE'S STATUS, PRIORITY, TYPE AND SUBJECT (AGL-3517).
+ * Semantic picklists keep the meaning fields every query reads and store
+ * the org's label beside them; Subject is suggestions under a free title.
+ */
+describe('the task picklists', () => {
+  const standard = effectiveCrmTaskPicklists()
+
+  it('registers Status, Priority, Type and Subject on the Tasks tab with Salesforce’s values', () => {
+    expect(crmPicklistDefinitionsFor('task').map((definition) => definition.id)).toEqual([
+      'taskStatus',
+      'taskPriority',
+      'taskType',
+      'taskSubject',
+    ])
+    expect(CRM_PICKLIST_OBJECT_LABELS.task).toBe('Tasks')
+    expect(standard.status.values.map((value) => [value.label, value.meaning])).toEqual([
+      ['Not Started', 'open'],
+      ['In Progress', 'open'],
+      ['Waiting on someone else', 'open'],
+      ['Deferred', 'open'],
+      ['Completed', 'done'],
+    ])
+    expect(standard.status.defaultValueId).toBe('not-started')
+    expect(standard.priority.values.map((value) => value.label)).toEqual(['High', 'Normal', 'Low'])
+    expect(standard.type.values.map((value) => [value.label, value.meaning])).toEqual([
+      ['Call', 'call'],
+      ['Email', 'email'],
+      ['Meeting', 'meeting'],
+      ['To-do', 'todo'],
+    ])
+    const subject = crmPicklistDefinition('taskSubject')
+    expect(subject?.restricted).toBe(false)
+    // Suggestions only: a rename or a delete rewrites no task's title.
+    expect(subject?.targets).toEqual([])
+    expect(effectiveCrmPicklist('taskSubject', undefined).values.map((value) => value.label)).toEqual([
+      'Call',
+      'Send Letter',
+      'Send Quote',
+      'Other',
+    ])
+    expect(crmPicklistDefinition('taskStatus')?.targets).toEqual([
+      { object: 'task', field: 'statusLabel' },
+    ])
+  })
+
+  it('shows a task’s own label, else the first active value of its meaning', () => {
+    const status = effectiveCrmPicklist('taskStatus', {
+      values: [{ id: 'not-started', label: 'Not Started', active: false }],
+      defaultValueId: null,
+    })
+    expect(crmPicklistMeaningLabel(status, 'open')).toBe('In Progress')
+    expect(crmPicklistShownLabel(status, 'open', '  Deferred ')).toBe('Deferred')
+    expect(crmPicklistShownLabel(status, 'done', null)).toBe('Completed')
+    expect(crmTaskPicklistLabels({ kind: 'call', priority: 'high', status: 'open' }, standard)).toEqual({
+      type: 'Call',
+      priority: 'High',
+      status: 'Not Started',
+    })
+  })
+
+  it('starts a new task on the default when it means the same, else the first of the meaning', () => {
+    expect(crmPicklistLabelForNew(standard.status, 'open')).toBe('Not Started')
+    expect(crmPicklistLabelForNew(standard.status, 'done')).toBe('Completed')
+    expect(crmPicklistLabelForNew(standard.priority, 'high')).toBe('High')
+    expect(crmTaskLabelsForNew(standard, { kind: 'meeting', priority: 'low' })).toEqual({
+      statusLabel: 'Not Started',
+      priorityLabel: 'Low',
+      typeLabel: 'Meeting',
+    })
+  })
+
+  it('ticks done to the first active done value and unticks to a new task’s status', () => {
+    expect(crmTaskStatusWrite(standard.status, true)).toEqual({ status: 'done', statusLabel: 'Completed' })
+    expect(crmTaskStatusWrite(standard.status, false)).toEqual({ status: 'open', statusLabel: 'Not Started' })
+  })
+
+  it('resolves a write naming a label or a meaning, keeps the held label, and refuses the rest', () => {
+    const status = effectiveCrmPicklist('taskStatus', {
+      values: [{ id: 'deferred', label: 'Deferred', active: false }],
+      defaultValueId: null,
+    })
+    expect(resolveCrmSemanticPicklistWrite('taskStatus', status, 'in progress')).toEqual({
+      ok: true,
+      meaning: 'open',
+      label: 'In Progress',
+    })
+    expect(resolveCrmSemanticPicklistWrite('taskStatus', status, 'DONE')).toEqual({
+      ok: true,
+      meaning: 'done',
+      label: 'Completed',
+    })
+    // A meaning keeps the record's own label when that already means it.
+    expect(resolveCrmSemanticPicklistWrite('taskStatus', status, 'open', 'In Progress')).toEqual({
+      ok: true,
+      meaning: 'open',
+      label: 'In Progress',
+    })
+    // An inactive value is kept on the record that holds it, and on no other.
+    expect(resolveCrmSemanticPicklistWrite('taskStatus', status, 'deferred', 'Deferred')).toEqual({
+      ok: true,
+      meaning: 'open',
+      label: 'Deferred',
+    })
+    expect(resolveCrmSemanticPicklistWrite('taskStatus', status, 'Deferred')).toEqual({
+      ok: false,
+      error: 'Status must be one of: Not Started, In Progress, Waiting on someone else, Completed.',
+    })
+    expect(resolveCrmSemanticPicklistWrite('taskStatus', status, '  ')).toBeNull()
+  })
+})
+
+describe('an activity’s direction (AGL-3517)', () => {
+  it('takes inbound, outbound or internal on a call, inbound or outbound on an email, and none elsewhere', () => {
+    expect(crmActivityDirection('call', 'Internal')).toBe('internal')
+    expect(crmActivityDirection('email', 'inbound')).toBe('inbound')
+    expect(crmActivityDirection('email', 'internal')).toBeNull()
+    expect(crmActivityDirection('note', 'outbound')).toBeNull()
+  })
+
+  it('names a call or an email by its direction', () => {
+    expect(crmActivityKindTitle('call', 'inbound')).toBe('Inbound call')
+    expect(crmActivityKindTitle('email', 'outbound')).toBe('Outbound email')
+    expect(crmActivityKindTitle('call', 'internal')).toBe('Internal call')
+    expect(crmActivityKindTitle('call')).toBe('Call')
+    expect(crmActivityKindTitle('meeting', 'inbound')).toBe('Meeting')
+  })
+})
+
+describe('a door’s built-in lead source (AGL-3519)', () => {
+  const crm = jest.requireActual('./crm') as typeof import('./crm')
+
+  it('names a built-in, grouped value for every first-party door and outreach', () => {
+    const standard = crm.crmPicklistDefinition('leadSource')?.standardValues ?? []
+    for (const [origin, id] of Object.entries(crm.CRM_LEAD_SOURCE_ORIGINS)) {
+      const value = standard.find((entry) => entry.id === id)
+      expect([origin, value?.group]).toEqual([
+        origin,
+        origin === 'sequence' || origin === 'emailCampaign' ? 'outbound' : 'inbound',
+      ])
+    }
+    // A way a record was added is not where a person came from.
+    for (const word of ['api', 'import', 'manual', 'toString']) {
+      expect(crm.crmLeadSourceForOrigin(crm.effectiveCrmLeadSourcePicklist(null), word)).toBeNull()
+    }
+  })
+
+  it('stamps the org’s spelling, and nothing for a value the org deactivated', () => {
+    const list = crm.effectiveCrmLeadSourcePicklist({
+      values: [
+        { id: 'website-form', label: 'Web form', active: true, group: 'inbound' },
+        { id: 'booking', label: 'Booking', active: false, group: 'inbound' },
+      ],
+      defaultValueId: null,
+    })
+    expect(crm.crmLeadSourceForOrigin(list, 'form')).toBe('Web form')
+    expect(crm.crmLeadSourceForOrigin(list, 'booking')).toBeNull()
+    expect(crm.crmLeadSourceForOrigin(list, 'sequence')).toBe('Sequence')
+  })
+})
+
+describe("a deal's contact roles (AGL-3521)", () => {
+  const roles = [
+    { contactId: 'c1', role: 'Decision Maker', primary: true },
+    { contactId: 'c2', role: 'Evaluator', primary: false },
+  ]
+
+  it("registers Salesforce's Opportunity Contact Role on the Deals tab, with an array target", () => {
+    expect(crmPicklistDefinitionsFor('deal').map((definition) => definition.id)).toContain(
+      'opportunityContactRole',
+    )
+    expect(crmPicklistDefinition('opportunityContactRole')?.targets).toEqual([
+      { object: 'deal', field: 'contactRoles', arrayKey: 'role', keyField: 'contactRoleKeys' },
+    ])
+    expect(effectiveCrmPicklist('opportunityContactRole', undefined).values.map((value) => value.label)).toEqual([
+      'Business User',
+      'Decision Maker',
+      'Economic Buyer',
+      'Economic Decision Maker',
+      'Evaluator',
+      'Executive Sponsor',
+      'Influencer',
+      'Technical Buyer',
+      'Other',
+    ])
+    // Every array target names the key list a query finds its records by.
+    for (const definition of CRM_PICKLIST_DEFINITIONS) {
+      for (const target of definition.targets as readonly { arrayKey?: string; keyField?: string }[]) {
+        if (target.arrayKey) expect(target.keyField).toBeTruthy()
+      }
+    }
+  })
+
+  it('reads stored roles defensively: one row per contact, one Primary, capped', () => {
+    expect(
+      readDealContactRoles([
+        { contactId: ' c1 ', role: '  Decision  Maker ', primary: true },
+        { contactId: 'c1', role: 'Other', primary: false },
+        { contactId: 'c2', primary: true },
+        { contactId: 'a/b' },
+        { role: 'Evaluator' },
+        'c3',
+        { contactId: 'c4', role: 7 },
+      ]),
+    ).toEqual([
+      { contactId: 'c1', role: 'Decision Maker', primary: true },
+      { contactId: 'c2', primary: false },
+      { contactId: 'c4', primary: false },
+    ])
+    const many = Array.from({ length: DEAL_CONTACT_ROLES_MAX + 5 }, (_, at) => ({ contactId: `c${at}` }))
+    expect(readDealContactRoles(many)).toHaveLength(DEAL_CONTACT_ROLES_MAX)
+    expect(readDealContactRoles('nope')).toEqual([])
+  })
+
+  it('keeps the Primary in step with contactId, and reads a deal written before roles as its one contact', () => {
+    expect(dealContactRolesOf({ contactId: 'c9' })).toEqual([{ contactId: 'c9', primary: true }])
+    expect(dealContactRolesOf({})).toEqual([])
+    // `contactId` wins where the two disagree.
+    expect(dealContactRolesOf({ contactId: 'c2', contactRoles: roles })).toEqual([
+      { contactId: 'c1', role: 'Decision Maker', primary: false },
+      { contactId: 'c2', role: 'Evaluator', primary: true },
+    ])
+    expect(dealContactRolesOf({ contactRoles: roles }).some((row) => row.primary)).toBe(false)
+    expect(dealContactRolesWithPrimary(roles, 'c3')[0]).toEqual({ contactId: 'c3', primary: true })
+    expect(dealContactRoleFields(dealContactRolesWithPrimary(roles, null))).toMatchObject({ contactId: null })
+    expect(dealContactRoleFields(roles)).toEqual({ contactRoles: roles, contactId: 'c1' })
+  })
+
+  it('takes a contact off, and folds a merged contact into the survivor', () => {
+    expect(dealContactRolesWithout(roles, 'c1')).toEqual([roles[1]])
+    expect(dealContactRolesRepointed(roles, 'c2', 'c5')).toEqual([
+      roles[0],
+      { contactId: 'c5', role: 'Evaluator', primary: false },
+    ])
+    // Both on the deal: the survivor keeps its row, with the merged role and Primary.
+    expect(
+      dealContactRolesRepointed(
+        [
+          { contactId: 'c1', role: 'Decision Maker', primary: true },
+          { contactId: 'c2', primary: false },
+        ],
+        'c1',
+        'c2',
+      ),
+    ).toEqual([{ contactId: 'c2', role: 'Decision Maker', primary: true }])
+  })
+
+  it("judges each role against the org's list, keeping a contact's current role", () => {
+    const list = effectiveCrmPicklist('opportunityContactRole', {
+      values: [{ id: 'coach', label: 'Coach', active: false }],
+    })
+    expect(judgeDealContactRoles(list, [{ contactId: 'c1', role: 'evaluator', primary: true }])).toEqual({
+      ok: true,
+      roles: [{ contactId: 'c1', role: 'Evaluator', primary: true }],
+    })
+    const refused = judgeDealContactRoles(list, [{ contactId: 'c1', role: 'Coach', primary: false }])
+    expect(refused.ok).toBe(false)
+    expect(
+      judgeDealContactRoles(list, [{ contactId: 'c1', role: 'Coach', primary: false }], [
+        { contactId: 'c1', role: 'Coach', primary: false },
+      ]),
+    ).toEqual({ ok: true, roles: [{ contactId: 'c1', role: 'Coach', primary: false }] })
+  })
+
+  it('stamps the arrays a contact page and a role rename find the deal by', () => {
+    expect(
+      crmDealListFields({ title: 'X', visibleTo: ['org', 'host:a'], contactId: 'c1', contactRoles: roles }),
+    ).toMatchObject({
+      contactRoleContactIds: ['c1', 'c2'],
+      scopedContactRoleContactIds: ['org~c1', 'org~c2', 'host:a~c1', 'host:a~c2'],
+      contactRoleKeys: ['decision maker', 'evaluator'],
+    })
   })
 })

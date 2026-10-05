@@ -56,6 +56,27 @@
 // with the other console billing route specs' identical globals under `tsc`.
 export {}
 
+import {
+  FULL_USE_QUOTE_MULTIPLE,
+  fullUseMonthlyCogsUsd,
+} from '@aglyn/aglyn/app-utils/full-use-cost'
+import {
+  PLAN_ENTITLEMENTS,
+  netOfProcessorFee,
+} from '@aglyn/aglyn/app-utils/plan-entitlements'
+
+/**
+ * What the Enterprise plan's bands cost at 100%, and the monthly quote the
+ * floor asks for on it (AGL-3473): cost + 30% net of Stripe. Read off the
+ * real function rather than written down, so a band change cannot leave
+ * these tests provisioning a deal the route would refuse.
+ */
+const ENTERPRISE_FULL_USE_USD = fullUseMonthlyCogsUsd(PLAN_ENTITLEMENTS.enterprise)
+/** A whole-dollar monthly quote that clears the floor, with room. */
+const CLEARING_QUOTE_USD = Math.ceil(
+  (FULL_USE_QUOTE_MULTIPLE * ENTERPRISE_FULL_USE_USD + 1) / 0.97,
+)
+
 const mockVerifyIdToken = jest.fn()
 const mockReadOrgBilling = jest.fn()
 const mockWriteOrgBilling = jest.fn()
@@ -208,7 +229,7 @@ function provision(
     key = 'attempt-1',
     mode = 'invoice',
     plan = 'enterprise',
-    amountMonthlyUsd = 4000,
+    amountMonthlyUsd = CLEARING_QUOTE_USD,
   } = options
   return post(
     new Request('https://app.aglyn.com/api/admin/enterprise-billing', {
@@ -480,5 +501,53 @@ describe('claim-release semantics (AGL-1714)', () => {
     expect(calls).toHaveLength(0)
     // Same key still works once the input is fixed.
     expect((await provision(post)).status).toBe(200)
+  })
+})
+
+/**
+ * THE QUOTE FLOOR (AGL-3473): a quote must clear cost + 30% after Stripe's
+ * fee, with the customer using every band the deal sells. The route refuses
+ * under it — not only the card — before anything is claimed or created, and
+ * names the floor and the figures so staff can re-quote.
+ */
+describe('the enterprise quote floor (AGL-3473)', () => {
+  it('refuses a quote under cost + 30% at full use, before the claim and before Stripe', async () => {
+    // The largest whole-dollar quote whose net misses the floor.
+    let under = Math.floor((FULL_USE_QUOTE_MULTIPLE * ENTERPRISE_FULL_USE_USD) / 0.971)
+    while (netOfProcessorFee(under) >= FULL_USE_QUOTE_MULTIPLE * ENTERPRISE_FULL_USE_USD) {
+      under -= 1
+    }
+    const post = loadRoute()
+    const refused = await provision(post, { amountMonthlyUsd: under })
+    expect(refused.status).toBe(400)
+    const payload = await refused.json()
+    expect(payload.code).toBe('quote_floor')
+    expect(payload.error).toContain('1.30×')
+    expect(payload.error).toContain(`$${ENTERPRISE_FULL_USE_USD.toFixed(2)}`)
+    expect(payload.fullUse.ok).toBe(false)
+    expect(claimDocs()).toHaveLength(0)
+    expect(calls).toHaveLength(0)
+    expect(mockWriteOrgBilling).not.toHaveBeenCalled()
+  })
+
+  it('POSITIVE CONTROL — the same key provisions once the quote clears the floor', async () => {
+    const post = loadRoute()
+    expect((await provision(post, { amountMonthlyUsd: 1 })).status).toBe(400)
+    expect((await provision(post)).status).toBe(200)
+    expect(callsTo('/subscriptions')).toHaveLength(1)
+  })
+
+  it('prices the deal on the plan it provisions, not the plan the org is on', async () => {
+    // A Starter-scoped deal at the same amount clears with far more room than
+    // the Enterprise one: the floor follows the request's plan.
+    const post = loadRoute()
+    const starter = await provision(post, {
+      plan: 'starter',
+      amountMonthlyUsd: Math.ceil(
+        (FULL_USE_QUOTE_MULTIPLE * fullUseMonthlyCogsUsd(PLAN_ENTITLEMENTS.starter) + 1) /
+          0.97,
+      ),
+    })
+    expect(starter.status).toBe(200)
   })
 })

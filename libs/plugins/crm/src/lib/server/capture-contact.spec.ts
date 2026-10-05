@@ -167,6 +167,17 @@ jest.mock('./capture-host-contact', () => ({
     return { contactId: id, created: true }
   },
 }))
+// Where the person came from (AGL-3519), recorded after the filing.
+const origins: Array<Record<string, unknown>> = []
+jest.mock('./record-origin', () => ({
+  __esModule: true,
+  crmRecordOriginWriter: {
+    stamp: async (input: Record<string, unknown>) => {
+      origins.push(input)
+      return { records: 1 }
+    },
+  },
+}))
 jest.mock('./convert-open-lead', () => ({
   __esModule: true,
   convertOpenLeadOntoContact: async (input: Record<string, unknown>) => {
@@ -265,6 +276,7 @@ beforeEach(() => {
   contactCaptures.length = 0
   events.length = 0
   conversions.length = 0
+  origins.length = 0
   mockConsentGroups = null
 })
 
@@ -292,6 +304,10 @@ describe('a lead surface', () => {
     )
     expect(contactCaptures).toEqual([])
     expect(childPaths(CONTACTS)).toEqual([])
+    // Its origin, as the door's word, on the record the capture started (AGL-3519).
+    expect(origins).toEqual([
+      { hostId: HOST, email: EMAIL, origin: 'form', firstTouchOnly: true },
+    ])
     // A NEW lead announces itself, by the id it was filed under — and, as a
     // new contact does, by the site and the form that filed it (AGL-3458).
     expect(events).toEqual([
@@ -405,6 +421,47 @@ describe('a lead surface', () => {
   })
 })
 
+/**
+ * THE PHONE A BOOKING FORM ASKED FOR (AGL-3493), handed over as a fill: onto
+ * whichever record the capture lands on, normalized, and only where that
+ * record holds no phone — the lead's own rule in the lead door, the facet's
+ * in the contact writer.
+ */
+describe('a phone fill', () => {
+  const booking = (phone: string, surface: 'lead' | 'relationship' = 'lead') =>
+    request({
+      surface,
+      interaction: { source: 'booking', refId: 'b-1' },
+      detail: {},
+      profileFill: { phone },
+    })
+
+  it('lands on a new lead, normalized', async () => {
+    await captureContactForCrm(booking('(512) 555-0107'))
+    expect(docs.get(leadPath())?.phone).toBe('+15125550107')
+  })
+
+  it('never replaces the phone a lead already has', async () => {
+    docs.set(leadPath(), { email: EMAIL, sources: ['form:form-1'], phone: '+15125550111' })
+    await captureContactForCrm(booking('512-555-0107'))
+    expect(docs.get(leadPath())?.phone).toBe('+15125550111')
+  })
+
+  it('is handed to the contact writer as a fill, never as the profile', async () => {
+    docs.set(`${CONTACTS}/c-9`, { email: EMAIL })
+    await captureContactForCrm(booking('512-555-0107'))
+    expect(contactCaptures[0]).toMatchObject({ facetFill: { phone: '+15125550107' } })
+    expect(contactCaptures[0]).not.toHaveProperty('facet')
+  })
+
+  it('drops a number that will not normalize', async () => {
+    await captureContactForCrm(booking('020 7946 0958'))
+    expect(docs.get(leadPath())).not.toHaveProperty('phone')
+    await captureContactForCrm(booking('020 7946 0958', 'relationship'))
+    expect(contactCaptures[0]).not.toHaveProperty('facetFill')
+  })
+})
+
 describe('a touch', () => {
   it('lands on the open lead the site holds, and files no contact', async () => {
     docs.set(leadPath(), { email: EMAIL, sources: ['form:form-1'], submissionCount: 1 })
@@ -498,6 +555,11 @@ describe('a relationship', () => {
 })
 
 describe('what every surface refuses', () => {
+  it('records no origin for a capture it refused', async () => {
+    await captureContactForCrm(request({ identity: { email: 'not an address' } }))
+    expect(origins).toEqual([])
+  })
+
   it('answers an unreadable address as invalid-email, and writes nothing', async () => {
     for (const surface of ['lead', 'touch', 'relationship'] as const) {
       const verdict = await captureContactForCrm(

@@ -799,9 +799,25 @@ function ScreenDetails() {
   )
 
   // --- Version publish-now ----------------------------------------------
+  // The placeholder home page a site is created with (AGL-3408) becomes the
+  // owner's the first time they make one of their versions live (AGL-3478):
+  // it publishes through the route seam, which moves the pointer and clears
+  // `defaultHomeScreenId` in one write, so a starter applied later never
+  // unpublishes it and the site stops reading as blank.
   const handlePublishVersion = useCallback(
     (id: string) => async () => {
-      await updateDoc(screenRef, { versionId: id, updatedAt: Timestamp.now() })
+      const publishesPlaceholder =
+        Boolean(publishedPath) && screenId === hostData?.defaultHomeScreenId
+      await (
+        publishesPlaceholder
+          ? publishScreenRoute(
+              firestore,
+              { hostId, screenId, versionId: id, user },
+              screen?.slug ?? publishedPath,
+              publishedPath,
+            )
+          : updateDoc(screenRef, { versionId: id, updatedAt: Timestamp.now() })
+      )
         .then(() => {
           enqueueSnackbar('Version is now live', {
             variant: 'success',
@@ -818,7 +834,20 @@ function ScreenDetails() {
           enqueueSnackbar('An error has occurred', { variant: 'error' }),
         )
     },
-    [screenRef, enqueueSnackbar, displayName, logActivity, screenId, revalidateLivePage],
+    [
+      screenRef,
+      enqueueSnackbar,
+      displayName,
+      logActivity,
+      screenId,
+      revalidateLivePage,
+      publishedPath,
+      hostData?.defaultHomeScreenId,
+      firestore,
+      hostId,
+      user,
+      screen?.slug,
+    ],
   )
 
   // --- Schedule publish / unpublish (AGL-113; Business tier like AGL-61) --

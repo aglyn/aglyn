@@ -97,7 +97,7 @@ Drafting an automation from a description is **not** part of this release — se
   [bulk actions](content-and-data/crm/bulk-actions.md) and a
   [timeline](content-and-data/crm/activities.md) of logged calls and meetings;
   every section's table selects, acts and exports as a CSV that re-imports, and
-  [companies import](content-and-data/crm/companies.md#import-from-csv) too; and
+  [companies import](content-and-data/crm/companies.md#import) too; and
   automations gain [CRM events and steps](content-and-data/crm/automations.md).
   Links to the older `/contacts` address still open the hub.
 - **[Email templates and snippets](content-and-data/crm/email-templates.md)** — the

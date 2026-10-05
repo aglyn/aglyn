@@ -73,16 +73,24 @@ import {
   checkVisitorRecordCeiling,
   CRM_LEAD_STATUSES,
   type CrmLeadFields,
+  crmLeadComposedName,
   type CrmLeadProfilePatch,
   type CrmLeadStatus,
+  CRM_COLLECTIONS,
+  type CrmPicklist,
   crmLeadStatus,
+  crmLeadStatusLabel,
+  CRM_LEAD_STATUS_PICKLIST,
   crmMemberOption,
+  effectiveCrmLeadStatusPicklist,
+  resolveCrmLeadStatusWrite,
   findOrgMember,
   LEADS_MAX_PER_HOST,
   normalizeCompanyDomain,
   normalizeContactEmail,
   crmPicklistDefaultLabel,
   judgeCrmLeadSource,
+  judgeCrmPicklistValue,
   normalizeCrmLeadProfile,
   personKey,
   readMarketingBasis,
@@ -105,6 +113,8 @@ import {
   type ConvertHostLeadRefusal,
   convertHostLead,
 } from '../convert-host-lead'
+import { readCrmPicklist } from '../read-picklist'
+import { judgeLeadPicklistPatch, namesLeadPicklist, readLeadPicklists } from '../lead-picklists'
 import { FieldPath, FieldValue, Timestamp } from 'firebase-admin/firestore'
 import {
   type ApiV1Context,
@@ -151,7 +161,11 @@ const LEAD_PATCH_STATUSES = [
 // ── The view ────────────────────────────────────────────────────────────────
 
 /** The lead object as published. Every writable field appears here. */
-function leadView(siteId: string, doc: FirebaseFirestore.DocumentSnapshot) {
+function leadView(
+  siteId: string,
+  doc: FirebaseFirestore.DocumentSnapshot,
+  statuses?: CrmPicklist,
+) {
   const data = (doc.data() ?? {}) as Record<string, unknown> & CrmLeadFields
   // The lead's own silo — a group of one, however the org pools its
   // contacts — which is where `addHostLead` recorded the basis.
@@ -163,6 +177,8 @@ function leadView(siteId: string, doc: FirebaseFirestore.DocumentSnapshot) {
     email: typeof data['email'] === 'string' ? data['email'] : null,
     name: typeof data['name'] === 'string' ? data['name'] : null,
     status: crmLeadStatus(data),
+    // The org's label for the value the lead holds, of `status`'s meaning (AGL-3512).
+    statusLabel: crmLeadStatusLabel(data, statuses),
     ownerUid: data.ownerUid ?? null,
     notes: data.notes ?? null,
     unqualifiedReason: data.unqualifiedReason ?? null,
@@ -174,6 +190,19 @@ function leadView(siteId: string, doc: FirebaseFirestore.DocumentSnapshot) {
     address: data.address ?? null,
     tags: Array.isArray(data.tags) ? data.tags.map(String) : [],
     leadSource: data.leadSource ?? null,
+    // Salesforce's standard lead fields (AGL-3513).
+    salutation: data.salutation ?? null,
+    firstName: data.firstName ?? null,
+    lastName: data.lastName ?? null,
+    mobilePhone: data.mobilePhone ?? null,
+    fax: data.fax ?? null,
+    doNotCall: data.doNotCall === true,
+    industry: data.industry ?? null,
+    rating: data.rating ?? null,
+    annualRevenueCents:
+      typeof data.annualRevenueCents === 'number' ? data.annualRevenueCents : null,
+    currency: typeof data.currency === 'string' && data.currency ? data.currency : 'usd',
+    numberOfEmployees: typeof data.numberOfEmployees === 'number' ? data.numberOfEmployees : null,
     sources: Array.isArray(data['sources']) ? data['sources'].map(String) : [],
     submissionCount:
       typeof data['submissionCount'] === 'number' ? data['submissionCount'] : 0,
@@ -282,7 +311,7 @@ async function readOwner(
 
 // ── PATCH ───────────────────────────────────────────────────────────────────
 
-/** The lead's own fields, writable on a create and a PATCH alike (AGL-3231). */
+/** The lead's own fields, writable on a create and a PATCH alike (AGL-3231, AGL-3513). */
 const LEAD_PROFILE_KEYS = [
   'company',
   'jobTitle',
@@ -291,6 +320,17 @@ const LEAD_PROFILE_KEYS = [
   'address',
   'tags',
   'leadSource',
+  'salutation',
+  'firstName',
+  'lastName',
+  'mobilePhone',
+  'fax',
+  'doNotCall',
+  'industry',
+  'rating',
+  'annualRevenueCents',
+  'currency',
+  'numberOfEmployees',
 ] as const
 
 const LEAD_WRITABLE = new Set([
@@ -309,7 +349,8 @@ const LEAD_WRITABLE = new Set([
 ])
 
 interface LeadInput {
-  status?: Exclude<CrmLeadStatus, 'qualified'>
+  /** A Lead status label or meaning as sent — judged against the org's list by the writer (AGL-3512). */
+  status?: string
   notes?: Clearable<string>
   unqualifiedReason?: Clearable<string>
   /** The profile as the model read it: a key present and `null` clears. */
@@ -340,19 +381,14 @@ function readLeadInput(
   const profile = normalizeCrmLeadProfile(profileBody)
   Object.assign(errors, profile.errors)
   values.profile = profile.patch
+  // A flag, sent as one: a string would otherwise read as a clear.
+  if (body.doNotCall !== undefined && body.doNotCall !== null && typeof body.doNotCall !== 'boolean') {
+    errors.doNotCall = 'Must be true or false'
+  }
 
   if (body.status !== undefined) {
-    if (body.status === 'qualified') {
-      errors.status =
-        'Not settable — a lead is qualified by converting it: POST /v1/leads/{id}/convert'
-    } else if (
-      typeof body.status === 'string' &&
-      (LEAD_PATCH_STATUSES as readonly string[]).includes(body.status)
-    ) {
-      values.status = body.status as LeadInput['status']
-    } else {
-      errors.status = `Must be one of: ${LEAD_PATCH_STATUSES.join(', ')}`
-    }
+    if (typeof body.status === 'string' && body.status.trim()) values.status = body.status
+    else errors.status = 'Must be one of the organization’s lead status values, or a meaning'
   }
   const notes = readOptionalText(body, 'notes', CRM_TEXT_MAX, errors)
   if (notes !== undefined) values.notes = notes
@@ -371,7 +407,17 @@ async function updateLead(
 ): Promise<Response> {
   const body = await readJsonBody(request)
   const parsed = readLeadInput(body)
-  if ('errors' in parsed) return crmValidationFailed(ctx, 'lead', parsed.errors)
+  if ('errors' in parsed) {
+    // A status is judged against the org's list, so a body refused for
+    // another key still hears about its status in the same answer.
+    if (typeof body.status === 'string' && !parsed.errors.status) {
+      const judged = resolveCrmLeadStatusWrite(await readOrgLeadStatusPicklist(ctx), body.status, {
+        allowed: LEAD_PATCH_STATUSES,
+      })
+      if (judged.ok === false) parsed.errors.status = judged.error
+    }
+    return crmValidationFailed(ctx, 'lead', parsed.errors)
+  }
   const site = readLeadSite(ctx, url, body)
   if ('response' in site) return site.response
   const ref = leadsCollection(ctx, site.siteId).doc(leadId)
@@ -393,7 +439,21 @@ async function updateLead(
   const ownerUid = await readOwner(ctx, body, errors)
   if (ownerUid) Object.assign(errors, await memberError(ctx, 'ownerUid', ownerUid))
   const current = crmLeadStatus(stored)
-  const next = status ?? current
+  /*
+   * THE ORG'S LEAD STATUSES (AGL-3512): a label or a meaning, stored as
+   * the meaning and the org's label together. Qualified is a conversion's.
+   */
+  const statuses = await readOrgLeadStatusPicklist(ctx)
+  const judgedStatus =
+    status === undefined
+      ? null
+      : resolveCrmLeadStatusWrite(statuses, status, { allowed: LEAD_PATCH_STATUSES, current: stored })
+  if (judgedStatus?.ok === false) {
+    errors.status = resolveCrmLeadStatusWrite(statuses, status).ok
+      ? 'Not settable — a lead is qualified by converting it: POST /v1/leads/{id}/convert'
+      : judgedStatus.error
+  }
+  const next = judgedStatus?.ok ? judgedStatus.status : current
   /*
    * A reason travels with the closed state and only with it. Sent beside
    * `status: "unqualified"` it is required; sent on its own it changes the
@@ -424,7 +484,18 @@ async function updateLead(
     if (judged.ok === false) errors.leadSource = judged.error
     else profile.leadSource = judged.value
   }
+  // Salutation, Industry and Rating (AGL-3513), the lead keeping its current value.
+  if (namesLeadPicklist(profile)) {
+    Object.assign(
+      errors,
+      judgeLeadPicklistPatch(await readLeadPicklists(ctx.firestore, ctx.orgId), profile, {
+        current: stored,
+      }),
+    )
+  }
   if (Object.keys(errors).length) return crmValidationFailed(ctx, 'lead', errors)
+  // While a first or last name is set, the name is theirs (AGL-3513).
+  const composedName = crmLeadComposedName(stored, profile)
   // The org's own lead fields (AGL-3272), judged against the definitions
   // whose object is `lead` — a contact field of the same key is a
   // different field with a possibly different type.
@@ -434,10 +505,14 @@ async function updateLead(
   const update: Record<string, unknown> = {
     ...updatePayload({ ...rest, ownerUid }),
     ...profileUpdate(profile),
+    ...(composedName && composedName !== stored['name'] ? { name: composedName } : {}),
     // One dotted path per key, so the map is merged rather than replaced.
     ...(custom && 'values' in custom ? crmCustomUpdate(custom.values) : {}),
   }
-  if (status !== undefined && status !== current) update.status = status
+  if (judgedStatus?.ok) {
+    if (judgedStatus.status !== current) update.status = judgedStatus.status
+    if (judgedStatus.statusLabel !== stored.statusLabel) update.statusLabel = judgedStatus.statusLabel
+  }
   if (next === 'unqualified') {
     if (unqualifiedReason !== undefined) update.unqualifiedReason = unqualifiedReason
   } else if (stored.unqualifiedReason !== undefined) {
@@ -449,12 +524,23 @@ async function updateLead(
     // What the console's Leads list searches and filters by (AGL-3321).
     await restampCrmListFieldsAt(ref, 'leads')
   }
-  return apiJson(leadView(site.siteId, await ref.get()), { headers: ctx.headers })
+  return apiJson(leadView(site.siteId, await ref.get(), statuses), { headers: ctx.headers })
+}
+
+/** The org's Lead status list (AGL-3512) — what a status write is judged against and a view labels by. */
+async function readOrgLeadStatusPicklist(ctx: ApiV1Context): Promise<CrmPicklist> {
+  const snapshot = await ctx.firestore
+    .collection('orgs')
+    .doc(ctx.orgId)
+    .collection(CRM_COLLECTIONS.picklists)
+    .doc(CRM_LEAD_STATUS_PICKLIST)
+    .get()
+  return effectiveCrmLeadStatusPicklist(snapshot.data())
 }
 
 // ── Create ──────────────────────────────────────────────────────────────────
 
-const LEAD_CREATE_STATUSES = ['new', 'working'] as const
+const LEAD_CREATE_STATUSES: readonly CrmLeadStatus[] = ['new', 'working']
 const LEAD_NAME_MAX = 120
 
 /** The surface a lead created over the API names, beside `signup`, `booking`, `form:{id}`, `import` and `manual`. */
@@ -478,16 +564,13 @@ async function createLead(request: Request, ctx: ApiV1Context, url: URL): Promis
   if (!email) errors.email = 'Required — an email address'
   const name = readOptionalText(body, 'name', LEAD_NAME_MAX, errors)
   const notes = readOptionalText(body, 'notes', CRM_TEXT_MAX, errors)
-  let status: (typeof LEAD_CREATE_STATUSES)[number] | undefined
+  // A label or a meaning of New or Working, stored as both (AGL-3512).
+  const statuses = await readOrgLeadStatusPicklist(ctx)
+  let status: { status: CrmLeadStatus; statusLabel: string } | undefined
   if (body.status !== undefined && body.status !== null) {
-    if (
-      typeof body.status === 'string' &&
-      (LEAD_CREATE_STATUSES as readonly string[]).includes(body.status)
-    ) {
-      status = body.status as (typeof LEAD_CREATE_STATUSES)[number]
-    } else {
-      errors.status = `Must be one of: ${LEAD_CREATE_STATUSES.join(', ')}`
-    }
+    const judged = resolveCrmLeadStatusWrite(statuses, body.status, { allowed: LEAD_CREATE_STATUSES })
+    if (judged.ok === false) errors.status = judged.error
+    else status = { status: judged.status, statusLabel: judged.statusLabel }
   }
   if (body.unqualifiedReason !== undefined) {
     errors.unqualifiedReason = 'Not settable on a create — unqualify with a PATCH'
@@ -498,6 +581,9 @@ async function createLead(request: Request, ctx: ApiV1Context, url: URL): Promis
   }
   const profile = normalizeCrmLeadProfile(profileBody)
   Object.assign(errors, profile.errors)
+  if (body.doNotCall !== undefined && body.doNotCall !== null && typeof body.doNotCall !== 'boolean') {
+    errors.doNotCall = 'Must be true or false'
+  }
   const site = readLeadSite(ctx, url, body)
   if ('response' in site) {
     if (Object.keys(errors).length) {
@@ -555,6 +641,18 @@ async function createLead(request: Request, ctx: ApiV1Context, url: URL): Promis
       const fallback = crmPicklistDefaultLabel(leadSources)
       if (fallback) profile.patch.leadSource = fallback
     }
+    // Salutation, Industry and Rating (AGL-3513): a new lead starts from each list's default.
+    const picklistErrors = judgeLeadPicklistPatch(
+      await readLeadPicklists(ctx.firestore, ctx.orgId),
+      profile.patch,
+      { current: existing.data() ?? null, created },
+    )
+    if (Object.keys(picklistErrors).length) {
+      await claim.release()
+      return crmValidationFailed(ctx, 'lead', picklistErrors)
+    }
+    // While a first or last name is set, the name is theirs (AGL-3513).
+    const composedName = crmLeadComposedName(existing.data() ?? null, profile.patch)
     if (created) {
       // What the SITE may see (AGL-3275), matching `addHostLead`'s own count:
       // an unscoped count would charge one site for a sibling's leads.
@@ -575,7 +673,7 @@ async function createLead(request: Request, ctx: ApiV1Context, url: URL): Promis
       hostId: site.siteId,
       lead: {
         email: email as string,
-        ...(name ? { name } : {}),
+        ...(composedName || name ? { name: composedName || name } : {}),
         source: LEAD_API_SOURCE,
       },
     })
@@ -589,7 +687,8 @@ async function createLead(request: Request, ctx: ApiV1Context, url: URL): Promis
     }
     const working: Record<string, unknown> = {
       ...profileUpdate(profile.patch),
-      ...(status ? { status } : {}),
+      ...(composedName ? { name: composedName } : {}),
+      ...(status ? { status: status.status, statusLabel: status.statusLabel } : {}),
       ...(ownerUid ? { ownerUid } : {}),
       ...(notes ? { notes } : {}),
       /*
@@ -609,7 +708,7 @@ async function createLead(request: Request, ctx: ApiV1Context, url: URL): Promis
       // What the console's Leads list searches and filters by (AGL-3321).
       await restampCrmListFieldsAt(ref, 'leads')
     }
-    const view = leadView(site.siteId, await ref.get())
+    const view = leadView(site.siteId, await ref.get(), statuses)
     await claim.record(created ? 201 : 200, view)
     return apiJson(view, { status: created ? 201 : 200, headers: ctx.headers })
   } catch (error) {
@@ -687,7 +786,7 @@ function readConvertInput(
     } else {
       const deal = body.deal
       for (const key of Object.keys(deal)) {
-        if (!['title', 'amountCents', 'currency', 'stageId'].includes(key)) {
+        if (!['title', 'amountCents', 'currency', 'stageId', 'type'].includes(key)) {
           errors[`deal.${key}`] = 'Not writable on a deal opened here'
         }
       }
@@ -721,7 +820,20 @@ function readConvertInput(
           stageId = deal.stageId.trim().slice(0, CRM_ID_MAX)
         }
       }
-      if (title) plan.deal = { title, amountCents, currency, ...(stageId ? { stageId } : {}) }
+      let type: string | undefined
+      if (deal.type !== undefined && deal.type !== null) {
+        if (typeof deal.type !== 'string') errors['deal.type'] = 'Must be a string'
+        else type = deal.type.trim().slice(0, CRM_TITLE_MAX) || undefined
+      }
+      if (title) {
+        plan.deal = {
+          title,
+          amountCents,
+          currency,
+          ...(stageId ? { stageId } : {}),
+          ...(type ? { type } : {}),
+        }
+      }
     }
   }
 
@@ -743,6 +855,16 @@ async function convertLead(
   const errors: Record<string, string> = {}
   const ownerUid = await readOwner(ctx, body, errors)
   if (ownerUid) Object.assign(errors, await memberError(ctx, 'ownerUid', ownerUid))
+  // The deal's Type against the org's list (AGL-3516), the deal resource's rule.
+  if (parsed.plan.deal?.type) {
+    const judged = judgeCrmPicklistValue(
+      'opportunityType',
+      await readCrmPicklist(ctx.firestore, ctx.orgId, 'opportunityType'),
+      parsed.plan.deal.type,
+    )
+    if (judged.ok === false) errors['deal.type'] = judged.error
+    else parsed.plan.deal.type = judged.value ?? undefined
+  }
   if (Object.keys(errors).length) return crmValidationFailed(ctx, 'conversion', errors)
 
   const ref = leadsCollection(ctx, site.siteId).doc(leadId)
@@ -787,7 +909,7 @@ async function convertLead(
       companyId: result.companyId ?? null,
       dealId: result.dealId ?? null,
       alreadyConverted: result.alreadyConverted,
-      lead: leadView(site.siteId, await ref.get()),
+      lead: leadView(site.siteId, await ref.get(), await readOrgLeadStatusPicklist(ctx)),
     }
     await claim.record(200, receipt)
     return apiJson(receipt, {
@@ -902,8 +1024,9 @@ async function listLeads(ctx: ApiV1Context, url: URL): Promise<Response> {
     if (ownerUid && data.ownerUid !== ownerUid) return false
     return true
   })
+  const statuses = await readOrgLeadStatusPicklist(ctx)
   return listResponse(
-    page.map((doc) => leadView(site.siteId, doc)),
+    page.map((doc) => leadView(site.siteId, doc, statuses)),
     nextCursor,
     ctx.headers,
   )
@@ -961,7 +1084,9 @@ export async function handleLeads(
     if (!snap.exists) {
       return ApiErrors.notFound({ message: 'No such lead', headers: ctx.headers })
     }
-    return apiJson(leadView(site.siteId, snap), { headers: ctx.headers })
+    return apiJson(leadView(site.siteId, snap, await readOrgLeadStatusPicklist(ctx)), {
+      headers: ctx.headers,
+    })
   }
   if (request.method === 'PATCH') {
     const denied = requireScope(ctx, 'crm:write')

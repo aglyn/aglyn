@@ -660,7 +660,10 @@ function buildMetadata(props: Props): Metadata {
   // Shared with the client twin and the email renderer (AGL-1224) — three
   // copies of "which name does this site answer to" would drift.
   const canonicalBase = Aglyn.hostPublicOrigin(host)
-  const screenPath = screen?.$id ? host?.screens?.[screen.$id] : undefined
+  // A resolver's routed address first (AGL-3475): a record page is drawn by a
+  // template whose own routing-map entry is an address that serves nothing.
+  const screenPath =
+    props.routePath ?? (screen?.$id ? host?.screens?.[screen.$id] : undefined)
   const canonical =
     canonicalBase && screenPath != null
       ? `${canonicalBase}${Aglyn.screenRoutePathToUrl(screenPath)}`
@@ -1346,7 +1349,9 @@ function buildJsonLd(props: Props): string[] {
     )
   }
 
-  const screenPath = screen?.$id ? host?.screens?.[screen.$id] : undefined
+  // As in the head: a resolver's routed address names the page (AGL-3475).
+  const screenPath =
+    props.routePath ?? (screen?.$id ? host?.screens?.[screen.$id] : undefined)
   const segments =
     typeof screenPath === 'string' ? screenPath.split('/').filter(Boolean) : []
   if (canonicalBase && segments.length > 1) {

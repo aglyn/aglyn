@@ -330,6 +330,34 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
     assert.match(run.stderr, /\$9\.99 \/ 1k/)
   })
 
+  it('fails when the page states an origin-media weight the code does not count (AGL-3474)', () => {
+    resetFixtures()
+    const data = readFrame()
+    passThrough(data).records.push({
+      cells: [
+        'Video, audio and file downloads count 1.4× toward bandwidth, because ' +
+          'serving them costs more than serving pages.',
+      ],
+    })
+    writeFrame(data)
+
+    const run = check()
+    assert.equal(run.status, 1)
+    assert.match(run.stderr, /published origin-media weight disagrees/)
+    assert.match(run.stderr, /states 1\.4×/)
+  })
+
+  it('…and passes a page that states the weight the code counts', () => {
+    resetFixtures()
+    const tables = JSON.parse(readFileSync(TABLES, 'utf8'))
+    const data = readFrame()
+    passThrough(data).records.push({ cells: [tables.metered.mediaNote] })
+    writeFrame(data)
+
+    const run = check()
+    assert.doesNotMatch(run.stderr, /origin-media weight/)
+  })
+
   it('fails when a DECLARED-stale row drifts to a third value', () => {
     // The failure mode a plain "these two are known-wrong" exemption would
     // miss entirely: the page is edited, lands on neither the code's figure
@@ -362,7 +390,7 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
       (r) => r.cells[0] === 'Media & file storage',
     )
     row.cells[1] = '$0.026 / GB-mo'
-    row.cells[2] = '$0.0338 / GB-mo'
+    row.cells[2] = '$0.0349 / GB-mo'
     writeFrame(data)
 
     const run = check([
@@ -396,7 +424,9 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
     // $0.07/1k — once every Vercel-billed input was priced at the dearest
     // region (AGL-3444), then $0.80 and $0.08 once Vercel's GB was read as
     // decimal, Firestore priced at nam5 and the analytics beacon and the
-    // submission's CDN request counted. Asserted on the generator's OUTPUT
+    // submission's CDN request counted, then $0.0349, $0.83 and $0.083 once the
+    // 30% was kept after Stripe's fee rather than before it and each price
+    // rounded up (AGL-3476). Asserted on the generator's OUTPUT
     // rather than on the constants, because two-decimal formatting would
     // round the cost and the +30% columns into agreement and publish a table
     // that looks internally consistent while stating neither figure.
@@ -404,7 +434,7 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
     // The page-view and form rows are where that formatting earns its keep.
     // Their costs are $0.615385 and $0.061538 / 1k — pinned so the PRICE is
     // round, which leaves the cost a long decimal — and the prices beside
-    // them must still read $0.80 and $0.08, computed from the unrounded cost
+    // them must still read $0.83 and $0.083, computed from the unrounded cost
     // rather than from the six-decimal figure printed beside it.
     resetFixtures()
     const run = check()
@@ -413,13 +443,13 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
     assert.deepEqual(
       tables.metered.rows.map((r) => [r.label, r.ourCost, r.youPay]),
       [
-        ['Media & file storage', '$0.026 / GB-mo', '$0.0338 / GB-mo'],
+        ['Media & file storage', '$0.026 / GB-mo', '$0.0349 / GB-mo'],
         [
           'Page views (bandwidth + reads)',
           '$0.615385 / 1k views',
-          '$0.80 / 1k views',
+          '$0.83 / 1k views',
         ],
-        ['Form submissions', '$0.061538 / 1k', '$0.08 / 1k'],
+        ['Form submissions', '$0.061538 / 1k', '$0.083 / 1k'],
       ],
     )
   })
@@ -476,19 +506,13 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
     editWide('Plans', 'scale-strip', (strip) => {
       const scale = strip.records.find((r) => r.cells[1]?.includes('bandwidth'))
       assert.ok(scale, 'fixture no longer carries the Scale spec line')
-      scale.cells[1] = scale.cells[1].replace('290 GB bandwidth', '9 TB bandwidth')
+      scale.cells[1] = scale.cells[1].replace('70 GB bandwidth', '9 TB bandwidth')
     })
 
     const run = check()
     assert.equal(run.status, 1)
     assert.match(run.stderr, /scale strip: CODE-vs-FRAME disagreements/)
-    // The cell is declared stale at 290 GB until the frames are redrawn
-    // (AGL-3444); a frame that drifts to a THIRD value is not that
-    // declaration, and the report names the value it was excused at.
-    assert.match(
-      run.stderr,
-      /Scale · spec 6 .*code=70 GB bandwidth {2}frame=9 TB bandwidth {2}\(declared stale value was 290 GB bandwidth\)/,
-    )
+    assert.match(run.stderr, /Scale · spec 6 .*code=70 GB bandwidth {2}frame=9 TB bandwidth/)
   })
 
   it('fails when an ADD-ON CAPACITY rate disagrees with the code', () => {

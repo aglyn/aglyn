@@ -1,0 +1,398 @@
+---
+sidebar_position: 6
+title: "Guide: import and export screens"
+description: Render the field-picking export dialog and the eight-step import wizard for your plugin's records, with your own steps and locked rules.
+---
+
+# Import and export screens
+
+`@aglyn/aglyn-transfer-ui` is the import wizard and the export dialog every
+surface uses. Your plugin brings what is particular to its records — the
+fields, the keys that find an existing record, the rules a file may not
+break — and the kit does the rest the same way for every resource.
+
+## What a person sees
+
+- **Export** offers every field, grouped and searchable. Presets fill the
+  picker: Re-importable (the default — the Aglyn ID and your match keys
+  first, so the file comes back in and finds its records), Everything,
+  Minimal, and presets the person saves. They choose the records (the
+  selection, the current filter, or all), the format (CSV, JSON, NDJSON)
+  and the column order; the choice is remembered.
+- **Import** is eight steps: Upload, Columns, Values, Matching, Conflicts,
+  Review, Import and Results. Each column, unknown list value, unresolved
+  reference, match and conflict is shown with a choice. The Review step is
+  a dry run: counts, a before → after table, and every class of warning,
+  each needing its own "I understand" before Import enables. Importing
+  pauses and resumes; an applied import can be undone for seven days, and a
+  record edited since is asked about rather than overwritten.
+
+## Open it
+
+Your plugin never renders the screens itself: the console does, and hands
+your plugin a launcher. Ask for it with `useTransferLauncher()` from
+`@aglyn/aglyn` and open the wizard or the dialog on the resource you
+declared in `transferResources`:
+
+```tsx
+import { useTransferLauncher } from '@aglyn/aglyn'
+
+function ItemsHeaderActions({ hostId, selectedIds, currentFilter }) {
+  const transfer = useTransferLauncher()
+  // Outside the console there is no launcher: show no Import or Export.
+  if (!transfer) return null
+  const target = { resource: 'my-plugin.items', scope: 'host', hostId } as const
+  return (
+    <>
+      {transfer.can('import', target) ? (
+        <Button onClick={() => transfer.openImport({ ...target, mappingZone: 'items' })}>Import</Button>
+      ) : null}
+      {transfer.can('export', target) ? (
+        <Button
+          onClick={() =>
+            transfer.openExport({
+              ...target,
+              selection: selectedIds,
+              filter: { label: 'Status is open', value: currentFilter },
+            })
+          }
+        >
+          Export
+        </Button>
+      ) : null}
+    </>
+  )
+}
+```
+
+### Show only what the person may do
+
+`transfer.can('import' | 'export', { resource, scope, hostId? })` answers
+what the transfer routes would: synchronously, from the permissions the
+console already holds, with no request per button. It reads `false` until
+those permissions have loaded, so a button appears once rather than
+flickering away.
+
+- **Import** needs the **Manage data** permission — on the named site for a
+  site's records, on the workspace otherwise.
+- **Export** asks what your resource declares beside its key in
+  `transferResources`:
+  - `"readableByMembers": true` — every member may read these records (the
+    rules let them), so any member may export what they can see, and a site
+    collaborator only on a site they reach. Your `readPage` and `count` keep
+    a scoped reader to their own records through `scopeTokens`.
+  - `"readPermission": "<key>"` — whoever holds that permission (a key your
+    plugin declared, say) may export, beside **Manage data**.
+  - Neither — **Manage data**, the same as importing. This is the default
+    because a resource's records may be ones only managers read.
+- **The plan** comes before either, when your resource declares a
+  `"featureFlag"` (the flag your console surfaces are gated by): on a plan
+  without it, `can` answers `false` for every intent your resource doesn't
+  list in `"featureFlagExempt"`, and the routes refuse with 403
+  `plan_required`. Register `planGate` with the server half so the refusal
+  is in your plugin's own words. The CRM declares `"featureFlag": "crm"` on
+  every resource and exempts only the contacts and leads exports. Declare
+  the same flag your console extension (or the section that holds the
+  surface) is gated by, so a transfer refuses exactly what your pages
+  refuse. Without a `planGate`, a feature no plan carries is refused as the
+  add-on it is.
+- **Your plugin must run** where the records are: switched on for the
+  workspace, or for the site a site resource names, and released to the
+  workspace. Otherwise every route answers 404, as your own routes do
+  behind the plugin dispatcher — except an export your resource keeps open
+  on every plan (`"featureFlagExempt": ["export"]`), which a workspace is
+  owed whether or not your plugin is on.
+
+- **A role**, when your resource is stricter than **Manage data**: declare
+  `"importRoles"` (say `["admin"]`) and only a member in one of those roles
+  where the records are may import them. Don't check the role in your own
+  hook for the button — `can('import')` already answers it.
+
+Ask `can` for every Import and Export button you draw, and draw neither
+when it answers `false`. The routes stay the enforcement: `can` only keeps
+you from offering a button they would refuse.
+
+- `jobId` on `openImport` resumes an import where the person left it; the
+  draft of every choice is saved per job. Put `TransferResumeImport` (from
+  `@aglyn/aglyn/app-utils/transfer-resume-import`) beside your Import
+  button with the same target, title and `onFinished`: it shows
+  **Resume import** only when the person has an import of that resource
+  they left before anything was written, and lets them reopen or discard
+  it. The launcher's `unfinished(target)` and `discard(jobId)` are what it
+  reads, if you need them directly.
+- `mappingZone` draws the `importMapping` zone under the Columns step, so an
+  assistant plugin can propose a mapping from the headers and the shape of
+  each column. It never sees a cell.
+- `onFinished` is called when the person leaves the wizard from its results.
+- `title` names what is being moved ("Import into Products") where the
+  resource's label alone would not.
+
+### One instance at a time
+
+A resource whose records come in separate sets — a dataset's records, one
+dataset at a time — is declared once with `instances: true` and opened on
+the key that names the set, `<key>:<instance>`:
+
+```tsx
+transfer.openImport({ resource: `data.dataset:${datasetId}`, scope: 'org', title: `Import into ${name}` })
+```
+
+The job, the person's remembered export fields and the one-running-import
+rule are then each kept per set. Your server half reads which set from
+`transferResourceInstanceOf(ctx)` and answers its fields and match keys for
+it: `matchKeys(ctx)` may return `{ keys, defaults }`, the keys that set
+offers and the ones a person starts with.
+
+## Add a step of your own
+
+A step goes after any step before Review. Register it with your resource's
+client half, from your console registrar. Its component is handed the job
+and its answer; what it passes to `setValue` is sent to the server with the
+dry run under the step's id in `extras`, where your server half checks it,
+and Next waits for `setComplete(true)`.
+
+The server half reads the answers as `ctx.extras`: in your `plan` hook,
+those sent with this dry run; in `apply` and after, those the plan was made
+with. They are what the person said in the browser, so check every value,
+and never let one say WHO said it — the email plugin's statement of
+permission records its attester from the session that made the dry run, on
+its own ledger, and every write reads it from there. `ctx.headers` holds the
+file's column names, mapped or not.
+
+```tsx
+registerPluginTransferResourceUi('my-plugin.items', {
+  label: 'Items',
+  extraSteps: [{ id: 'consent', label: 'Consent', after: 'conflicts', component: ConsentStep }],
+})
+
+function ConsentStep({ value, setValue, setComplete }: TransferWizardStepProps) {
+  return (
+    <Checkbox
+      checked={value === true}
+      onChange={(event) => {
+        setValue(event.target.checked)
+        setComplete(event.target.checked)
+      }}
+    />
+  )
+}
+```
+
+## Warn about what only you can see
+
+The core warns about what it can see — a guessed date, a value to be
+replaced, a row repeated. What only your records' rules can see — the email
+plugin's shared mailboxes and column names that read as a bought list — is
+the `screening` warning class: your `plan` hook adds it to the plan's
+warnings with a `detail` on each sample, and the person acknowledges it like
+every other class before Import enables. A sample about the whole file (a
+column's name) has the row `TRANSFER_FILE_SAMPLE_ROW` and is shown without
+one.
+
+## Lock a rule
+
+A rule your records keep whatever a file says — a stage never moves
+backward, consent is never set from a file — is a `TransferLockedRule` your
+server half returns with the fields. The Conflicts step shows the field
+disabled with your reason, and the Review step counts the values it held
+back.
+
+## Resolve a column that names another record
+
+A field of type `lookup` names a record of another resource — a contact's
+company, a deal's contact, a task's owner — through `lookup: { resource,
+by, creatable }`. The import resolves each distinct value the file holds
+through the TARGET's `lookup` hook: first by Aglyn ID when the cell could
+be one, then by each `by` field in order, using the target's match-key
+normalizer for that field. A value that names exactly one record becomes
+that record's id. The rest are listed on the Values step with the records
+they may mean — the records a value named several of, then whatever the
+target's optional `suggest(ctx, { by, values })` hook offers — and the
+person chooses for each: create it (only when `creatable`), use one of
+them, leave the field blank (nothing is written; a blank chosen here never
+clears a value), or refuse the rows.
+
+A field of type `list` with the same `lookup` holds several records — a
+dataset's multi-reference is one. Each item is resolved and decided on its
+own; your `apply` receives the list of ids, with an item left blank dropped
+and a `transferLookupNewValue(name)` for each item to create.
+
+What your `apply` receives for the field is the record id, or — for a value
+the person chose to create — `transferLookupNewValue(name)`, which
+`transferLookupNewName` reads back. Create that record on your own write
+path, once however many rows name it, and find the one an earlier attempt
+created when a chunk is retried.
+
+A target no resource moves — the workspace's members an owner column names
+— is answered by the resource itself: list it under `lookupTargets` with
+its own `lookup` (and `suggest`, and the `matchKeys` its fields compare
+with), keyed by the name the field's `lookup.resource` uses.
+
+A resource of the WORKSPACE (`scope: 'org'`) may still be opened with a
+`hostId`: the job keeps that site, your hooks get it as `ctx.hostId`, and
+the transfer routes check the person's permission on that site — how a
+workspace's records are read through one site's view and imported as that
+site's captures.
+
+## Offer another product's layout
+
+A preset of your own is listed in the export dialog after the built-in ones.
+Return `presets` with your server half: an `id` that is not a built-in
+preset's, a `label`, the `fieldIds` in order and, for a layout another
+product imports, `headers` — that product's column name for each field. The
+CSV is then written under those names while the preset is chosen as it
+stands. Put the same names in an `aliases` dictionary with that product as
+its `source`, so its own export maps column for column on import.
+
+```ts
+registerPluginTransferResource('my-plugin.items', {
+  // fields, matchKeys, readPage, lookup, apply, revert…
+  aliases: [{ source: 'Other Shop', aliases: { title: ['Item Title'], sku: ['Item SKU'] } }],
+  presets: [
+    {
+      id: 'other-shop',
+      label: 'Other Shop',
+      description: 'The CSV Other Shop imports.',
+      fieldIds: ['title', 'sku'],
+      headers: { title: 'Item Title', sku: 'Item SKU' },
+    },
+  ],
+})
+```
+
+The commerce plugin's products resource offers a Shopify preset this way.
+
+## When a record is several rows
+
+A file can describe one record over several rows. A storefront export writes
+a row per product variant, for example. Give your server half a `plan` of its
+own: it receives every row of the file at once, so it can fold the rows that
+share a key into one record and still give each row its own verdict and diff.
+Anything the apply needs beyond the diff can ride on the planned row, because
+the stored dry run keeps it. The commerce products resource folds rows by
+handle this way, and matches each row's variant by SKU, then by its option
+values.
+
+## A resource that only exports
+
+Declare it with `kinds: ['records']` like any other. Make every field
+`readOnly`, and return an `invariants` entry that refuses any row that would
+write. The dry run then fails such a row with your reason. Leave the Import
+button off your surface; the commerce orders resource works this way.
+
+A record that must come into being through your own path, never as a written
+value, imports by calling that path once per row. The commerce gift card
+import, for example, issues each card through the plugin's issue function.
+Its `plan` decides each row's card and stamps it on the row, an `invariants`
+entry fails the rows it refuses, and a wizard step of its own reads back the
+total for the server to check from `ctx.extras` at both the dry run and Apply.
+
+## A resource that is only exported
+
+Declare `"exportOnly": true` beside the resource in `transferResources` for
+records a file never writes — a log of work done, a setup edited on its own
+page. Register only the reads (`fields`, `readPage`, `lookup`, and `count`);
+the upload refuses the resource, and your surface offers Export alone.
+
+## What an export asks of your server half
+
+The export reads your records through your `readPage`, a page at a time,
+holding only the fields the person chose. Honor every option it passes:
+`ids` (the selection), `filter` (the list's filter, in your own terms) and
+`scopeTokens` — present when the reader is a collaborator scoped to some
+sites, and the only thing standing between them and the rest of the
+workspace, because the export reads past the rules. Register `count` too
+if you can: the file then carries its row count and the download is
+checked whole however large it is.
+
+## Move things a person builds as a package
+
+Records are rows. What a person *builds* — a sequence, a campaign, an
+automation, an email template — moves as a workspace package instead: one
+JSON file that can carry several resources' items, imported from
+**Settings → Import & export**. Declare the resource with
+`"kinds": ["package"]` and `"formats": ["json"]`, and register the package
+hooks (see the
+[plugin manager API](../reference/plugin-manager-api.md)). An item's kind
+is your resource key.
+
+```ts
+registerPluginTransferResource('acme.playbooks', {
+  items: async (ctx) => existingPackageItemsOf('acme.playbooks', await readAll(ctx)),
+  readItems: async (ctx, ids) => readAll(ctx, ids),
+  dependencies: (item) => [{ kind: 'site', id: item.hostId }, { kind: 'crm.email-templates', id: item.templateId }],
+  remapIds: (item, idMap) => ({
+    ...item,
+    hostId: remapPackageReference(idMap, 'site', item.hostId),
+    templateId: remapPackageReference(idMap, 'crm.email-templates', item.templateId),
+  }),
+  problems: async (ctx, write) => validate(write.content),
+  writeItems: async (ctx, items, writer) => writeThroughYourOwnSave(ctx, items, writer),
+  revertItems: async (ctx, steps) => deleteOrRestoreThroughYourOwnPaths(ctx, steps),
+  rules: [{ id: 'draft', label: 'Imports arrive as drafts', reason: 'Nothing runs until someone turns it on.' }],
+}, { pluginId: 'acme' })
+```
+
+- **Hash what you export.** `items` hashes the same content `readItems`
+  answers, through `existingPackageItemsOf`. Leave out what an import
+  never writes — status, counters, who and when — or every round trip
+  reads as changed.
+- **Name every reference.** Another package item is resolved by its
+  resource. A `site` is resolved by the engine. For any other kind (a
+  mailbox, a list), answer `referenceTargets` with what the workspace holds,
+  so the person can map a missing one. A reference the person drops reaches
+  `remapIds` as `''`, and `remapPackageReference` turns it into `null`.
+- **Write through your own save**, under the `targetId` you are handed: the
+  package's id for a new item, yours for a replace, a fresh one for a
+  kept-both copy (which also carries `rename`). Mark every item with
+  `writer.markApplied`, a failed one too. The engine keeps the ledger and
+  takes the undo snapshot before the first write.
+- **Never start anything.** An imported item that could act on its own —
+  send, run, publish — lands off, and you say so in `rules`.
+
+## Columns that follow the records
+
+When the columns depend on which records are read — one form's questions —
+your `fields` hook is handed the filter the export dialog was opened on as
+`ctx.filter`, and answers for it. Form submissions, which are only exported
+(`"exportOnly": true`), open on one form with that form's questions.
+
+## Flag rows with your own rules
+
+Some rules are about a whole row, or about other rows: a redirect that loops
+back through another, a destination off the site, a value your write path
+refuses. Answer them from a `plan` hook: build the plan, then fold your
+findings in. Each one is shown in the review with its sentence and must be
+acknowledged before Import enables; `refuse` fails the row instead of only
+flagging it.
+
+```ts
+import { buildTransferPlan, withTransferResourceFindings } from '@aglyn/aglyn/data-transfer'
+
+plan(ctx, input) {
+  const findings = input.rows.flatMap((row) =>
+    isLoop(row.values) ? [{ row: row.index, detail: 'Loops back to itself', refuse: true }] : [],
+  )
+  return withTransferResourceFindings(buildTransferPlan(input), findings)
+}
+```
+
+## Match on two fields at once
+
+A match key can be made of several fields: a calendar event is found by its
+title and its start together, so a weekly class is several events rather
+than one. Name the other fields in `with`; `instant` compares moments to the
+minute whether the file holds text and the record milliseconds:
+
+```ts
+matchKeys: [
+  { fieldId: 'id', normalizer: 'aglynId' },
+  { fieldId: 'title', normalizer: 'name', with: [{ fieldId: 'startsAt', normalizer: 'instant' }] },
+]
+```
+
+## Try it without a server
+
+The console's own specs drive the wizard with `createMemoryTransferClient`,
+which runs the whole job in memory over the records it is given, so every
+step can be walked before a resource's server half exists.

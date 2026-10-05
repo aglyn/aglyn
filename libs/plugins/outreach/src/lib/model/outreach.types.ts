@@ -38,6 +38,7 @@
 
 import type { OutreachClickMachineReason } from '../engine/click-tracking'
 import type { OutreachOpenMachineReason } from '../engine/open-tracking'
+import type { OutreachOpenSource } from '../engine/open-source'
 import type { OutreachGatewayDayCounts, OutreachMailGateway } from '../engine/mail-gateway'
 
 /**
@@ -499,7 +500,7 @@ export interface OutreachSequenceSettings {
  * loaded would report the first page's numbers as the sequence's.
  *
  * Every field is optional and every absence means "not recorded", never
- * zero. The distinction is the whole of `campaign-report.ts`'s honesty and
+ * zero. The distinction is the whole of `send-report.ts`'s honesty and
  * it is kept here for the same reason: a sequence that ran before this
  * existed has no counters, and reporting its click rate as 0% would publish
  * a fact about our schema as a fact about its recipients.
@@ -583,13 +584,13 @@ export interface OutreachEnrollmentEngagement {
   /** The first, which is what makes them one of the sequence's `uniqueClicks`. */
   firstClickAtMs: number | null
   lastClickAtMs: number | null
-  /** The destination they followed last, as `campaignLinkKey` reduces it. */
+  /** The destination they followed last, as `sendLinkKey` reduces it. */
   lastClickUrl: string | null
   /** Clicks on this person's links that were a machine's. */
   machineClicks: number
   /**
    * Every distinct destination this person followed since the per-click
-   * history began (AGL-3332), as `campaignLinkKey` reduces it, oldest first
+   * history began (AGL-3332), as `sendLinkKey` reduces it, oldest first
    * and at most {@link OUTREACH_ENGAGEMENT_LINKS_MAX}. What the table counts
    * as "links" and filters "followed this link" by, without a read of the
    * history. A click from before the history kept only `lastClickUrl`.
@@ -654,7 +655,7 @@ export interface OutreachClickHistoryEntry {
   id: string
   kind: 'click'
   atMs: number
-  /** The destination as `campaignLinkKey` reduces it — the link rollup's key; `null` when unreadable. */
+  /** The destination as `sendLinkKey` reduces it — the link rollup's key; `null` when unreadable. */
   url: string | null
   /** The step whose email carried the link. */
   stepIndex: number
@@ -686,6 +687,10 @@ export interface OutreachOpenHistoryEntry {
   human: boolean
   /** Why it was read as a machine's; `null` for a person's. */
   machineReason: OutreachOpenMachineReason | null
+  /** The agent the fetch sent (AGL-3488); `null` on rows from before it was kept. */
+  userAgent?: string | null
+  /** The network the fetch came from (AGL-3488); `null` when unknown or not kept. */
+  source?: OutreachOpenSource | null
 }
 
 export type OutreachEnrollmentHistoryEntry =
@@ -1213,10 +1218,25 @@ export const OUTREACH_DO_NOT_CONTACT_REASONS = [
 export type OutreachDoNotContactReason =
   (typeof OUTREACH_DO_NOT_CONTACT_REASONS)[number]
 
+/** Why an entry is on the list, as the Compliance page and an export say it. */
+export const OUTREACH_DO_NOT_CONTACT_REASON_LABELS: Record<OutreachDoNotContactReason, string> = {
+  manual: 'Added by a member',
+  opt_out_reply: 'A reply asked not to be emailed',
+  unsubscribe: 'Unsubscribed',
+  hard_bounce: 'Mail bounced',
+  gateway_block: 'Its mail gateway blocked the sender',
+}
+
 /** What put an address on the list: a member, or the sending runtime. */
 export const OUTREACH_DO_NOT_CONTACT_SOURCES = ['member', 'runtime'] as const
 export type OutreachDoNotContactSource =
   (typeof OUTREACH_DO_NOT_CONTACT_SOURCES)[number]
+
+/** Who added an entry, as an export says it. */
+export const OUTREACH_DO_NOT_CONTACT_SOURCE_LABELS: Record<OutreachDoNotContactSource, string> = {
+  member: 'A member',
+  runtime: 'Sequences, automatically',
+}
 
 /** One address on the list (`orgs/{orgId}/outreachDoNotContact/{key}`). */
 export interface OutreachDoNotContactEntry {

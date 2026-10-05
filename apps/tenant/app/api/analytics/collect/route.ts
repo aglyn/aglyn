@@ -629,9 +629,13 @@ async function evaluateBandwidthLimits(hostId: string): Promise<void> {
         .get(),
       getOrgForHost(hostId),
     ])
-    const pageViews = days.docs.reduce(
-      (sum, day) => sum + Number(day.get('total') ?? 0),
-      0,
+    // Page views AND the site's counted video and file bytes, in views
+    // (AGL-3474): the figure the invoice prices, so the band and the ceiling
+    // stop at the same traffic the bill counts. The org library's media is
+    // the CDN's own writer's to total; this sums one site. Whole views, as
+    // every notice below prints them.
+    const pageViews = Math.round(
+      Aglyn.analyticsBandwidthReading(days.docs).meteredPageViews,
     )
     const org = orgForHost?.org ?? null
     // THE PLAN BAND FIRST (AGL-2413), because it is the lower of the two by an

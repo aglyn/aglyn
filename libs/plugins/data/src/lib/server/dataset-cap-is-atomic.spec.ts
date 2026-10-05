@@ -373,7 +373,7 @@ describe('the premise', () => {
     // write would succeed and every assertion would still pass.
     expect(STARTER_RECORDS).toBe(1000)
     expect(Number.isFinite(STARTER_RECORDS)).toBe(true)
-    expect(STARTER_DATASETS).toBe(3)
+    expect(STARTER_DATASETS).toBe(2)
     expect(PLAN_ENTITLEMENTS.enterprise.recordsPerDataset).toBe(
       Number.POSITIVE_INFINITY,
     )
@@ -613,11 +613,11 @@ describe('CONCURRENTLY: datasetsPerOrg cannot be laundered', () => {
   })
 
   it('a plan whose band dwarfs the attempts lands all of them', async () => {
-    // Enterprise's fallback is 4,000 datasets (twice Agency's, since
-    // 2026-09-07) — two hundred times the attempts here, so the cap never
-    // enters the race and every write must land.
+    // Enterprise's fallback is 100 datasets (twice Agency's) — five times the
+    // attempts here, so the cap never enters the race and every write must
+    // land.
     mockState.org = { plan: 'enterprise' }
-    expect(PLAN_ENTITLEMENTS.enterprise.datasetsPerOrg).toBe(4_000)
+    expect(PLAN_ENTITLEMENTS.enterprise.datasetsPerOrg).toBe(100)
     const attempts = 20
     seedDatasets(0)
     const responses = await Promise.all(

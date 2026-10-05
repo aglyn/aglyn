@@ -15,48 +15,77 @@
  * limitations under the License.
  */
 
-import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import { checkEntitlement, pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import { resolveSiteBundleSections } from '@aglyn/aglyn/plugin-manager/plugin-site-bundle'
-import { checkEntitlement, decodeStoredNodes } from '@aglyn/aglyn/server'
+import {
+  selectSitePackage,
+  siteBundleItems,
+} from '@aglyn/aglyn/data-transfer/site-package'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
   getOrgForHost,
   isImpersonationSession,
   lockdownRefusal,
-  scopedToHost,
 } from '@aglyn/tenant-data-admin'
-// Shared bundle contract lives in _lib: route.ts may only export handlers.
-import {
-  EXPORT_COLLECTION_LIMITS,
-  EXPORTABLE_HOST_FIELDS,
-  PLUGIN_SITE_EXPORT_COLLECTIONS,
-  SITE_EXPORT_FORMAT,
-  SITE_EXPORT_VERSION,
-} from '../../_lib/site-export'
 import { encodeBundleTimestamps } from '../../_lib/bundle-timestamps'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
+import {
+  consoleSitePackageKinds,
+  readSiteBundle,
+  sectionPackageHooks,
+  sitePackageContract,
+  sitePackageOf,
+} from '../../_lib/site-package-read'
+
+/** The most item keys one export names; a selection past it is "everything". */
+const MAX_SELECTED_ITEMS = 5000
 
 /**
- * Whole-site export (AGL-163): one JSON bundle of everything designable —
- * host settings, screens/layouts with their PUBLISHED versions, reusable
- * components, authors, content collections + entries, a media manifest
- * (metadata + URLs; bytes stay in storage), every host collection a plugin
- * declares for the bundle (a site's variables, functions, workflows,
- * interactions and services), each under its own name, and every section a
- * plugin answers for itself (a site's datasets, with their records). Never
- * includes admins, tenant linkage, domain, bookings/leads/submissions (PII),
- * or secrets (webhooks are declared out). HubSpot famously has no site
- * backup — this is the differentiator. Pro+ (`siteExport` flag).
+ * Site package export (AGL-163, AGL-3533): everything designable on a site
+ * as one `aglyn-package` v2 file — a manifest listing each item (kind, id,
+ * slug or name, content hash, the items it depends on) and each item's
+ * content. Settings and theme, pages and email designs with their PUBLISHED
+ * versions, the site's emails, layouts, reusable components, authors,
+ * content collections and their entries, the theme library, a media
+ * manifest (metadata and URLs; bytes stay in storage), every host collection
+ * a plugin declares for the backup (a site's forms, redirects, events,
+ * experiments, bars and popups, variables, functions, workflows,
+ * interactions and booking services) and every section a plugin answers for
+ * itself (a site's datasets, with their records). Never admins, tenant
+ * linkage, domain, submissions, bookings or leads (personal data), or
+ * secrets. Pro+ (`siteExport` flag).
+ *
+ * The whole-site backup is the everything preset: no `items`. A selection
+ * names item keys (`<kind>/<id>`); with `dependencies` it carries what they
+ * need too. `list` answers the manifest alone, for the picker. GET takes the
+ * same as query parameters (`items` comma-separated, `dependencies=1`,
+ * `list=1`); POST as a JSON body, for a selection too long for a URL.
+ *
+ * The file is written as v2 only. The import still reads a v1
+ * `aglyn-site-export` bundle, converting it in memory, so every backup ever
+ * downloaded restores.
  */
 async function handler(request: Request): Promise<Response> {
-  const { method, query, headers: rawHeaders } = await pluginRequestFromWeb(request)
+  const { method, query, body, headers: rawHeaders } = await pluginRequestFromWeb(request)
   const headers = rawHeaders as Partial<Record<string, string>>
-  if (method !== 'GET') {
+  if (method !== 'GET' && method !== 'POST') {
     return Response.json({ error: 'Method not allowed' }, { status: 405 })
   }
-  const hostId = String(query['hostId'] ?? '')
+  const input: Record<string, unknown> = method === 'POST' ? (body ?? {}) : (query ?? {})
+  const hostId = String(input['hostId'] ?? '')
   if (!hostId) return Response.json({ error: 'Missing hostId' }, { status: 400 })
+  const selected = Array.isArray(input['items'])
+    ? input['items'].map(String)
+    : typeof input['items'] === 'string' && input['items']
+      ? input['items'].split(',')
+      : null
+  if (selected && selected.length > MAX_SELECTED_ITEMS) {
+    return Response.json({ error: `Choose at most ${MAX_SELECTED_ITEMS} items, or export everything` }, { status: 400 })
+  }
+  const flag = (value: unknown) => value === true || value === '1' || value === 'true'
+  const includeDependencies = flag(input['dependencies'])
+  const listOnly = flag(input['list'])
 
   const authorization = headers.authorization ?? ''
   const idToken = authorization.startsWith('Bearer ')
@@ -102,288 +131,37 @@ async function handler(request: Request): Promise<Response> {
     }
 
     const hostData = hostSnapshot.data() ?? {}
-    const host: Record<string, unknown> = {}
-    for (const field of EXPORTABLE_HOST_FIELDS) {
-      if (hostData[field] !== undefined) host[field] = hostData[field]
-    }
-
     /**
-     * A version's `nodes`, decoded to the map a bundle can actually carry
-     * (AGL-1391).
-     *
-     * `nodes` is stored in TWO live forms — a plain Firestore map, and msgpack
-     * `Bytes` — and the besigner writes the compressed one, so it is the
-     * majority of live screens and layouts. This route reads `version.data()`
-     * RAW, with no converter, so the Admin SDK hands back a Node `Buffer`, and
-     * `JSON.stringify` turns that into `{"type":"Buffer","data":[…]}`. The
-     * import wrote that object straight back. Every besigner-saved page in
-     * every bundle therefore restored EMPTY — silently, exactly as AGL-1223
-     * failed: nothing in the envelope has a `componentId`, so nothing throws.
-     *
-     * Decoding here rather than re-encoding on the way in is the deliberate
-     * choice. A backup whose content nobody can read is most of the way to no
-     * backup: a bundle is a JSON file customers diff, grep and hand-edit, and
-     * it is the only artefact that survives losing the account. It is also
-     * SMALLER — `JSON.stringify` of a Buffer emits a decimal array at ~4
-     * characters per byte, which is roughly 3x the plain map it encodes, so
-     * "compressed" was never compact once it left Firestore.
-     *
-     * `elements` gets the same treatment. It is the legacy alias migrated
-     * inside `screenVersionConverter`, so it only exists on documents written
-     * before compression and is always a plain map — which passes through
-     * unchanged. Covering it costs nothing and means one rule, not two.
-     *
-     * A decode failure keeps the RAW value rather than dropping to null: the
-     * bytes are the only copy of that page, so shipping them opaque leaves a
-     * recovery possible, and the import re-encodes an envelope losslessly.
-     */
-    const readableNodes = (data: Record<string, any>) => {
-      const readable: Record<string, unknown> = {}
-      for (const key of ['nodes', 'elements']) {
-        // Only rewrite a field the document actually has — writing an explicit
-        // `null` over an absent key would restore as a cleared tree.
-        if (data[key] === undefined) continue
-        readable[key] = decodeStoredNodes(data[key]) ?? data[key]
-      }
-      return readable
-    }
-
-    /**
-     * Every exported document, with any node tree made readable.
-     *
-     * `readableNodes` runs on the DOCUMENT here, not only on the published
-     * versions below, because a document can carry a tree of its own:
-     * components and forms hold their published design on the parent, and
-     * both are compressed at rest (AGL-1151). Without this a bundle ships
-     * `{"type":"Buffer","data":[…]}` for every component and the import
-     * writes that envelope straight back — the AGL-1391 failure exactly, one
-     * collection over.
-     *
-     * Applied to every collection rather than a named few, so a collection
-     * that gains a `nodes` field is covered the day it does. The helper is a
-     * no-op on a document that has neither key.
-     */
-    const exportCollection = async (name: string) => {
-      const snapshot = await hostRef
-        .collection(name)
-        .limit(EXPORT_COLLECTION_LIMITS[name] ?? 100)
-        .get()
-      return snapshot.docs
-        .filter((doc) => !doc.get('deletedAt'))
-        .map((doc) => {
-          const data = doc.data()
-          return { $id: doc.id, ...data, ...readableNodes(data) }
-        })
-    }
-
-    // Screens/layouts carry only their published version's nodes.
-    const withPublishedVersion = async (name: 'screens' | 'layouts') => {
-      const docs = await exportCollection(name)
-      return Promise.all(
-        docs.map(async (item: any) => {
-          if (!item.versionId) return item
-          const version = await hostRef
-            .collection(name)
-            .doc(item.$id)
-            .collection('versions')
-            .doc(String(item.versionId))
-            .get()
-          if (!version.exists) return item
-          const data = version.data() ?? {}
-          return {
-            ...item,
-            version: { $id: version.id, ...data, ...readableNodes(data) },
-          }
-        }),
-      )
-    }
-
-    const withEntries = async () => {
-      const collections = await exportCollection('collections')
-      return Promise.all(
-        collections.map(async (item: any) => ({
-          ...item,
-          entries: (
-            await hostRef
-              .collection('collections')
-              .doc(item.$id)
-              .collection('entries')
-              .limit(200)
-              .get()
-          ).docs.map((doc) => ({ $id: doc.id, ...doc.data() })),
-        })),
-      )
-    }
-
-    /**
-     * Media is ORG-owned (AGL-237) and narrowed to what this host may see
-     * (AGL-1046). It used to be read off `hosts/{hostId}/…`, which AGL-237
-     * emptied and AGL-1050 confirmed holds nothing in production — so a
-     * "whole-site backup" had been silently shipping an empty media manifest
-     * for every org-wired site. Fixing
-     * the path and applying the scope are the same edit: an agency's export
-     * of a client site must contain that client's data and no other's.
-     *
-     * `visibleTo` itself is stripped on the way out. Its `host:` tokens name
-     * hosts of THIS org, so they are noise at best and a dangling reference
-     * at worst once the bundle is restored somewhere else; the import side
-     * assigns a fresh scope instead.
-     */
-    const scopeless = (doc: FirebaseFirestore.QueryDocumentSnapshot) => {
-      const { visibleTo: _visibleTo, ...data } = doc.data()
-      return { $id: doc.id, ...data }
-    }
-    const exportOrgCollection = async (
-      name: 'media' | 'mediaFolders',
-      cap: number,
-    ) => {
-      // A host with no owning org genuinely has no org data — that is a
-      // known-empty answer, not a failure, and `orgId` already tells us.
-      //
-      // Everything else THROWS. A catch-all here would rebuild the exact
-      // bug this route was fixing one level down: a missing index or a
-      // transient read would produce a silently empty, still-200 "backup"
-      // that nobody discovers until they try to restore it. An export that
-      // fails loudly is recoverable; one that lies is not.
-      if (!orgId) return []
-      const ref = firestore.collection('orgs').doc(orgId).collection(name)
-      const snapshot = await scopedToHost(ref, hostId).limit(cap).get()
-      return snapshot.docs.filter((doc) => !doc.get('deletedAt')).map(scopeless)
-    }
-
-    /**
-     * The SITE's own media library — `hosts/{hostId}/media` and
-     * `hosts/{hostId}/mediaFolders` (AGL-1392, second pass).
-     *
-     * A separate reader from `exportOrgCollection` for the one reason that
-     * matters: no scope filter. `scopedToHost` deliberately no-ops on a host
-     * ref precisely because these documents carry no `visibleTo` — a host
-     * library is private by construction and the member check on this route is
-     * the whole gate — so running the org query here would match NOTHING and
-     * ship an empty library that reads as an honest empty one.
-     *
-     * It is not a hypothetical path: `resolveMediaScope` serves the site
-     * library as a first-class scope, the console's media library addresses it
-     * (`scopeCollection = orgId ? 'orgs' : 'hosts'`), and production carries 63
-     * assets and 5 folders across three sites there — none of which any bundle
-     * has ever contained. `visibleTo` is stripped like everywhere else, so a
-     * document that acquired one cannot smuggle a foreign token into a restore.
-     */
-    const exportHostLibrary = async (
-      name: 'media' | 'mediaFolders',
-      cap: number,
-    ) => {
-      const snapshot = await hostRef.collection(name).limit(cap).get()
-      return snapshot.docs.filter((doc) => !doc.get('deletedAt')).map(scopeless)
-    }
-
-    /**
-     * The sections plugins answer for themselves — organization data narrowed
-     * to this site, with what it carries beneath it. Resolved before anything
+     * The sections plugins answer for themselves. Resolved before anything
      * is read: a section declared and not registered THROWS here, and the
      * export fails out loud rather than shipping a backup without it.
      */
-    const bundleSections = await resolveSiteBundleSections()
-
-    const [
-      screens,
-      layouts,
-      components,
-      authors,
-      collections,
-      media,
-      mediaFolders,
-      hostMedia,
-      hostMediaFolders,
-      declared,
-      sections,
-    ] = await Promise.all([
-      withPublishedVersion('screens'),
-      withPublishedVersion('layouts'),
-      exportCollection('components'),
-      // The bylines `entries.authorId` points at (AGL-2486). A referenced
-      // collection nobody added to the manifest is the AGL-1046/1050/1392
-      // shape, and here it would restore every post's author as a dangling id.
-      exportCollection('authors'),
-      withEntries(),
-      // Media manifest only — bytes stay in storage; URLs keep working
-      // because download tokens are stable. Org-owned and scope-filtered
-      // (AGL-1046). The cap reads from the
-      // shared table rather than a literal: this side said 500 and the
-      // import side fell through to its `?? 100` default, so every manifest
-      // over 100 assets restored short and silently (AGL-1382).
-      exportOrgCollection('media', EXPORT_COLLECTION_LIMITS['media']),
-      // The tree the manifest points into (AGL-1392). Org-owned and
-      // scope-filtered exactly like the assets: without it every restored
-      // asset's `folderId` named a folder the bundle did not contain, and a
-      // dangling `folderId` HIDES an asset rather than merely misfiling it —
-      // the DAM's root view filters out anything with a truthy `folderId`.
-      exportOrgCollection(
-        'mediaFolders',
-        EXPORT_COLLECTION_LIMITS['mediaFolders'],
-      ),
-      // And the same pair from the SITE's own library, which no version of
-      // this route has ever read (AGL-1392, second pass). The org folders
-      // above closed one scope of "a referenced collection nobody added to the
-      // manifest"; this is the other, and it is the larger half — 58 of the
-      // 246 foldered assets in production are filed in a host library.
-      exportHostLibrary('media', EXPORT_COLLECTION_LIMITS['hostMedia']),
-      exportHostLibrary(
-        'mediaFolders',
-        EXPORT_COLLECTION_LIMITS['hostMediaFolders'],
-      ),
-      // The collections plugins declare for the bundle, read exactly like the
-      // platform's plain ones: capped, live documents only, trees readable.
-      Promise.all(
-        PLUGIN_SITE_EXPORT_COLLECTIONS.map((one) => exportCollection(one.collection)),
-      ),
-      Promise.all(
-        bundleSections.map((one) =>
-          one.section.export({ hostId, orgId: orgId ?? null, limit: one.limit }),
-        ),
-      ),
-    ])
-
-    const bundle = {
-      format: SITE_EXPORT_FORMAT,
-      version: SITE_EXPORT_VERSION,
-      exportedAt: new Date().toISOString(),
-      sourceHostId: hostId,
-      host,
-      screens,
-      layouts,
-      components,
-      ...Object.fromEntries(
-        PLUGIN_SITE_EXPORT_COLLECTIONS.map((one, index) => [one.collection, declared[index]]),
-      ),
-      authors,
-      collections,
-      ...Object.fromEntries(
-        bundleSections.map((one, index) => [one.key, sections[index]]),
-      ),
-      media,
-      mediaFolders,
-      // Two libraries, two arrays: the scope is where the document LIVES, not
-      // a property of it, and merging them would restore a site's private
-      // files into the shared org DAM (AGL-1392).
-      hostMedia,
-      hostMediaFolders,
-    }
+    const sections = await resolveSiteBundleSections()
+    const kinds = consoleSitePackageKinds()
     /**
      * Dates leave as a TAGGED wire form, not as the Admin SDK's private
-     * `{_seconds, _nanoseconds}` (AGL-1392).
-     *
-     * `JSON.stringify` on a `Timestamp` emits those private fields, so every
-     * date in every bundle restored as a plain MAP — and
-     * `publishSchedule.publishAt <= now` is a range query, which a map cannot
-     * satisfy at any value because Firestore orders by type first. Restored
-     * sites looked correct and silently stopped publishing.
-     *
-     * One call on the whole bundle rather than a list of date fields: they nest
-     * (`publishSchedule.publishAt`, `installedFrom.installedAt`), and an
-     * enumeration is what the next feature forgets.
+     * `{_seconds, _nanoseconds}` (AGL-1392): every date in every bundle used to
+     * restore as a plain MAP, and `publishSchedule.publishAt <= now` is a range
+     * query a map cannot satisfy — restored sites silently stopped publishing.
+     * Encoded before hashing, so the hash is of what the file holds.
      */
-    return new Response(JSON.stringify(encodeBundleTimestamps(bundle)), {
+    const bundle = encodeBundleTimestamps(
+      await readSiteBundle({ firestore, hostRef, hostId, orgId, hostData, sections }),
+    )
+    const everything = await sitePackageOf(siteBundleItems(bundle, sitePackageContract(), [...kinds.values()]), {
+      kinds,
+      sections: sectionPackageHooks(sections),
+      createdAt: Date.now(),
+      source: String(hostData['displayName'] ?? hostData['subdomain'] ?? hostId),
+    })
+    if (listOnly) {
+      return Response.json({
+        manifest: everything.manifest,
+        kinds: [...kinds.values()].map((one) => ({ kind: one.kind, label: one.label })),
+      })
+    }
+    const pkg = selected ? selectSitePackage(everything, selected, includeDependencies) : everything
+    return new Response(JSON.stringify(pkg), {
       status: 200,
       headers: {
         'Content-Type': 'application/json',
@@ -403,4 +181,4 @@ async function handler(request: Request): Promise<Response> {
 }
 
 export const dynamic = 'force-dynamic'
-export { handler as GET }
+export { handler as GET, handler as POST }

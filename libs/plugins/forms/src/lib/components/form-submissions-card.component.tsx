@@ -16,16 +16,19 @@
  */
 'use client'
 
-import { listConsoleWidgets, pluginDocsHelp } from '@aglyn/aglyn'
+import { listConsoleWidgets, pluginDocsHelp, useTransferLauncher } from '@aglyn/aglyn'
 import { useConsoleWidgetSlot } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { Button, Stack, Typography } from '@mui/material'
 import { useState } from 'react'
+import { FORM_SUBMISSIONS_TRANSFER_KEY } from '../transfer/form-submissions-transfer-key'
 import { FORM_SUBMISSIONS_ZONE } from './form-zones'
 
 export interface FormSubmissionsCardProps {
   hostId: string
   formId: string
+  /** The form's name, for the export dialog's "Form: …" filter; the id stands in until it is read. */
+  formName?: string
 }
 
 /**
@@ -58,10 +61,21 @@ export interface FormSubmissionsCardProps {
  *
  * A workspace with no such plugin loaded has nothing to read them with, and
  * the card says so rather than offering a button that opens an empty space.
+ *
+ * ## Export, in the header
+ *
+ * The console's export dialog, opened on this form's submissions
+ * (`forms.submissions`, filtered to `{ formId }`): the person picks this
+ * form's questions and the submission's details as columns. It needs no
+ * reader plugin — the export reads the collection on the server — so it is
+ * offered whether or not the Inbox is on. Export only: a submission is what a
+ * visitor sent, so there is no Import beside it. Outside the console shell
+ * there is no launcher and no button.
  */
 export function FormSubmissionsCard(props: FormSubmissionsCardProps) {
-  const { hostId, formId } = props
+  const { hostId, formId, formName } = props
   const [asked, setAsked] = useState(false)
+  const transfer = useTransferLauncher()
   const Zone = useConsoleWidgetSlot()
   // Read at render, after the shell has loaded its plugins: whether anything
   // in this workspace registered a reader for one form's submissions.
@@ -83,6 +97,27 @@ export function FormSubmissionsCard(props: FormSubmissionsCardProps) {
           'The same table the Inbox shows, narrowed to this form, and loaded ' +
           'when you ask rather than on every visit to this page.',
       })}
+      HeaderProps={
+        transfer?.can('export', { resource: FORM_SUBMISSIONS_TRANSFER_KEY, scope: 'host', hostId })
+          ? {
+              action: (
+                <Button
+                  size="small"
+                  onClick={() =>
+                    transfer?.openExport({
+                      resource: FORM_SUBMISSIONS_TRANSFER_KEY,
+                      scope: 'host',
+                      hostId,
+                      filter: { label: `Form: ${formName?.trim() || formId}`, value: { formId } },
+                    })
+                  }
+                >
+                  {'Export'}
+                </Button>
+              ),
+            }
+          : undefined
+      }
       contentGutterX
       contentGutterY
     >

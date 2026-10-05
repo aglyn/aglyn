@@ -319,3 +319,40 @@ describe('every ingress door measures the pool (AGL-2075)', () => {
     }
   })
 })
+
+describe('the band says which library holds what (AGL-3470)', () => {
+  it('splits the pool by library, from the same single read', async () => {
+    // The media library's toolbar writes ONE library's bytes beside the
+    // pooled total; the parts must be the parts of that very total.
+    counters['hosts/host-1/counters/media'] = 3 * MB
+    counters['hosts/host-2/counters/media'] = 5 * MB
+    counters['orgs/org-1/counters/media'] = 7 * MB
+    const pool = await band(freeOrg({ 'host-1': true, 'host-2': true }))
+    expect(pool.byScope).toEqual({
+      'hosts/host-1': 3 * MB,
+      'hosts/host-2': 5 * MB,
+      'orgs/org-1': 7 * MB,
+    })
+    const parts = Object.values(pool.byScope).reduce((sum, bytes) => sum + bytes, 0)
+    expect(parts).toBe(pool.usedBytes)
+    expect(getAllCalls).toBe(1)
+  })
+
+  it('counts a corrupt counter as nothing in its share too', async () => {
+    counters['hosts/host-1/counters/media'] = -40 * MB
+    counters['orgs/org-1/counters/media'] = 2 * MB
+    const pool = await band(freeOrg())
+    expect(pool.byScope['hosts/host-1']).toBe(0)
+    expect(pool.usedBytes).toBe(2 * MB)
+  })
+
+  it('reads no shares on an unlimited band', async () => {
+    const pool = await band({
+      plan: 'free',
+      hosts: { 'host-1': true },
+      entitlements: { storagePerHostMb: Number.POSITIVE_INFINITY },
+    })
+    expect(pool.byScope).toEqual({})
+    expect(getAllCalls).toBe(0)
+  })
+})

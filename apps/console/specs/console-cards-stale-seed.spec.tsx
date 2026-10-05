@@ -171,9 +171,11 @@ jest.mock('../hooks/use-firestore-collection', () => ({
 // plan claim until the billing doc has answered, and a mock that omits the
 // flag is an org that never resolves — every save would stop at "checking
 // your plan" before reaching the stale-seed guard these cases are about.
+/** Mutable so a spec can render the card for a plan without `multilingual`. */
+const mockCurrentOrg = { plan: 'business' }
 jest.mock('../hooks/use-current-org', () => ({
   __esModule: true,
-  default: () => ({ org: { plan: 'business' }, orgId: 'org1', ready: true }),
+  default: () => ({ org: mockCurrentOrg, orgId: 'org1', ready: true }),
 }))
 jest.mock('../hooks/use-org-scope', () => ({
   useOrgSlug: () => 'acme',
@@ -380,6 +382,41 @@ describe('LanguagesCard (AGL-1358)', () => {
     expect(payload.locales).toEqual(['en', 'es', 'fr'])
     // The default rides along off the same seed.
     expect(payload.defaultLocale).toBe('en')
+  })
+})
+
+describe('LanguagesCard on a plan without multilingual (AGL-3502)', () => {
+  beforeEach(() => {
+    mockCurrentOrg.plan = 'starter'
+  })
+  afterEach(() => {
+    mockCurrentOrg.plan = 'business'
+  })
+
+  const save = (value: string) => {
+    fireEvent.change(screen.getByLabelText('Languages'), { target: { value } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save languages' }))
+  }
+
+  it('SAVES the one language the site publishes in', async () => {
+    render(<LanguagesCard hostId="host-1" />)
+
+    save('es')
+
+    await waitFor(() => expect(updateDoc).toHaveBeenCalledTimes(1))
+    const [, payload] = (updateDoc as jest.Mock).mock.calls[0]
+    expect(payload.locales).toEqual(['es'])
+  })
+
+  it('REFUSES a second language, naming the plan that has it', async () => {
+    render(<LanguagesCard hostId="host-1" />)
+
+    save('en, es')
+
+    await waitFor(() => expect(mockEnqueueSnackbar).toHaveBeenCalled())
+    expect(updateDoc).not.toHaveBeenCalled()
+    const [message] = mockEnqueueSnackbar.mock.calls[0]
+    expect(message).toEqual(expect.stringContaining('Business plan'))
   })
 })
 

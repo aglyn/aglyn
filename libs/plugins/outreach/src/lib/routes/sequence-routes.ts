@@ -48,6 +48,7 @@ import {
 } from '../storage/outreach-records'
 import { OUTREACH_SEQUENCE_ACTIVITY_TARGET, type OutreachRouteDeps } from './route-deps'
 import { outreachRouteGate, type OutreachRouteCaller } from './route-gate'
+import type { OutreachRouteRefusalReason } from '../model/outreach-api'
 import {
   outreachMethodNotAllowed,
   outreachOk,
@@ -276,6 +277,123 @@ function distinctIssues(issues: readonly OutreachSequenceIssue[]): OutreachSeque
   })
 }
 
+/** What saving a sequence came to: the stored sequence, or the refusal the route answers with. */
+export type OutreachSequenceSaveOutcome =
+  | { ok: true; sequence: OutreachSequence; created: boolean; warnings: OutreachSequenceIssue[] }
+  | { ok: false; status: number; code: OutreachRouteRefusalReason; message: string; issues?: OutreachSequenceIssue[] }
+
+/**
+ * Saves a sequence the way the editor's Save does (see "Saving" above):
+ * the editor's validator, the organization's placement rules and — once
+ * anyone is enrolled — the fixed steps, site and mailbox. A new sequence is
+ * a draft; an edit keeps its status. The save route and the package import
+ * (AGL-3535) both write through here. `newId` names a new sequence's id
+ * (an import keeps the package's); `judgeOnly` answers the verdict without
+ * writing, for an import's dry run.
+ */
+export async function saveOutreachSequence(
+  deps: Pick<OutreachRouteDeps, 'firestore' | 'now' | 'logOrgActivity'>,
+  caller: OutreachRouteCaller,
+  input: { sequenceId: string | null; draft: OutreachSequenceDraft; newId?: string; judgeOnly?: boolean },
+): Promise<OutreachSequenceSaveOutcome> {
+  const firestore = deps.firestore()
+  const { sequenceId, draft } = input
+  const existing = sequenceId ? await loadSequence(firestore, caller.orgId, sequenceId) : null
+  if (sequenceId && !existing && !input.newId) {
+    return { ok: false, status: 404, code: 'sequence-not-found', message: 'That sequence no longer exists.' }
+  }
+  if (existing?.status === 'archived') {
+    return { ok: false, status: 409, code: 'sequence-archived', message: "An archived sequence can't be edited." }
+  }
+  // A sequence sends as its mailbox's member, so it is theirs (or an
+  // admin's) to change — the stored mailbox as well as a new one: moving
+  // a colleague's sequence onto your own mailbox is still changing theirs.
+  if (existing?.mailboxId && existing.mailboxId !== draft.mailboxId) {
+    const stored = mailboxIssues(caller, await loadMailbox(firestore, caller.orgId, existing.mailboxId))
+    const refused = stored.find((entry) => entry.code === 'mailbox_not_yours')
+    if (refused) return { ok: false, status: 403, code: 'permission', message: refused.message }
+  }
+  const judged: OutreachSequenceIssue[] = [
+    ...validateOutreachSequence(draft),
+    ...(await draftPlacementIssues(firestore, caller, draft)),
+  ]
+  const ownership = judged.find((entry) => entry.code === 'mailbox_not_yours')
+  if (ownership) return { ok: false, status: 403, code: 'permission', message: ownership.message }
+  if (existing && (await hasEnrollments(firestore, caller.orgId, existing.id))) {
+    judged.push(...outreachEnrolledSequenceIssues(existing, draft))
+  }
+  const errors = judged.filter((entry) => entry.severity === 'error')
+  if (errors.length) {
+    return { ok: false, status: 400, code: 'invalid-sequence', message: errors[0].message, issues: judged }
+  }
+
+  const nowMs = deps.now()
+  const ref = outreachOrgCollection(firestore, caller.orgId, 'sequences').doc(
+    existing?.id ?? input.newId ?? createResourceUid(),
+  )
+  const sequence: OutreachSequence = {
+    id: ref.id,
+    ...draft,
+    status: existing?.status ?? 'draft',
+    /*
+     * Carried through explicitly, because the write below REPLACES the
+     * document (AGL-3239). The counters are the runtime's and the click
+     * route's, never the editor's, and a member renaming a sequence must
+     * not reset what it measured.
+     */
+    ...(existing?.stats ? { stats: existing.stats } : {}),
+    createdAtMs: existing?.createdAtMs || nowMs,
+    updatedAtMs: nowMs,
+  }
+  const warnings = judged.filter((entry) => entry.severity === 'warning')
+  if (input.judgeOnly) return { ok: true, sequence, created: !existing, warnings }
+  /*
+   * The list's search fields ride with every write of the name (AGL-3321):
+   * the sequences list asks Firestore for them, and a sequence missing
+   * them would list normally and never be found.
+   */
+  await ref.set({ ...sequence, ...nameSearchFields(sequence.name) })
+  if (!existing) {
+    await deps.logOrgActivity(caller.orgId, { uid: caller.uid, email: caller.email }, OUTREACH_SEQUENCE_ACTIVITY.create, {
+      type: OUTREACH_SEQUENCE_ACTIVITY_TARGET,
+      id: sequence.id,
+      name: sequence.name,
+    })
+  }
+  return { ok: true, sequence, created: !existing, warnings }
+}
+
+/**
+ * Deletes a draft nobody was ever enrolled in — the only sequence that may
+ * be deleted: what people were sent, and why they stopped, is the record of
+ * what the organization did. The delete route and a package import's undo
+ * (AGL-3535) both delete through here.
+ */
+export async function removeOutreachSequence(
+  deps: Pick<OutreachRouteDeps, 'firestore' | 'logOrgActivity'>,
+  caller: Pick<OutreachRouteCaller, 'orgId' | 'uid' | 'email'>,
+  sequenceId: string,
+): Promise<{ ok: true } | { ok: false; status: number; code: OutreachRouteRefusalReason; message: string }> {
+  const firestore = deps.firestore()
+  const sequence = await loadSequence(firestore, caller.orgId, sequenceId)
+  if (!sequence) return { ok: false, status: 404, code: 'sequence-not-found', message: 'That sequence no longer exists.' }
+  if (sequence.status !== 'draft' || (await hasEnrollments(firestore, caller.orgId, sequence.id))) {
+    return {
+      ok: false,
+      status: 409,
+      code: 'delete-refused',
+      message: 'Only a draft nobody was enrolled in can be deleted. Archive this sequence instead.',
+    }
+  }
+  await outreachOrgCollection(firestore, caller.orgId, 'sequences').doc(sequence.id).delete()
+  await deps.logOrgActivity(caller.orgId, { uid: caller.uid, email: caller.email }, OUTREACH_SEQUENCE_ACTIVITY.delete, {
+    type: OUTREACH_SEQUENCE_ACTIVITY_TARGET,
+    id: sequence.id,
+    name: sequence.name,
+  })
+  return { ok: true }
+}
+
 export function createOutreachSequenceRoutes(deps: OutreachRouteDeps): OutreachSequenceRoutes {
   const activity = (caller: OutreachRouteCaller, action: string, sequence: Pick<OutreachSequence, 'id' | 'name'>) =>
     deps.logOrgActivity(caller.orgId, { uid: caller.uid, email: caller.email }, action, {
@@ -289,72 +407,22 @@ export function createOutreachSequenceRoutes(deps: OutreachRouteDeps): OutreachS
     const body = await readOutreachJsonBody(request)
     const caller = await outreachRouteGate(request, body['orgId'], deps.gate)
     if (caller instanceof Response) return caller
-    const firestore = deps.firestore()
 
     const rawId = body['sequenceId']
     const sequenceId = rawId === undefined || rawId === null || rawId === '' ? null : readOutreachDocumentId(rawId)
     if (rawId && !sequenceId) return outreachRefusal(400, 'invalid-request', 'Name the sequence to save.')
-    const existing = sequenceId ? await loadSequence(firestore, caller.orgId, sequenceId) : null
-    if (sequenceId && !existing) {
-      return outreachRefusal(404, 'sequence-not-found', 'That sequence no longer exists.')
+    const outcome = await saveOutreachSequence(deps, caller, {
+      sequenceId,
+      draft: readOutreachSequenceDraft(body['sequence']),
+    })
+    if (outcome.ok === false) {
+      return outreachRefusal(outcome.status, outcome.code, outcome.message, outcome.issues ? { issues: outcome.issues } : undefined)
     }
-    if (existing?.status === 'archived') {
-      return outreachRefusal(409, 'sequence-archived', "An archived sequence can't be edited.")
-    }
-
-    const draft = readOutreachSequenceDraft(body['sequence'])
-    // A sequence sends as its mailbox's member, so it is theirs (or an
-    // admin's) to change — the stored mailbox as well as a new one: moving
-    // a colleague's sequence onto your own mailbox is still changing theirs.
-    if (existing?.mailboxId && existing.mailboxId !== draft.mailboxId) {
-      const stored = mailboxIssues(caller, await loadMailbox(firestore, caller.orgId, existing.mailboxId))
-      const refused = stored.find((entry) => entry.code === 'mailbox_not_yours')
-      if (refused) return outreachRefusal(403, 'permission', refused.message)
-    }
-    const judged: OutreachSequenceIssue[] = [
-      ...validateOutreachSequence(draft),
-      ...(await draftPlacementIssues(firestore, caller, draft)),
-    ]
-    const ownership = judged.find((entry) => entry.code === 'mailbox_not_yours')
-    if (ownership) return outreachRefusal(403, 'permission', ownership.message)
-    if (existing && (await hasEnrollments(firestore, caller.orgId, existing.id))) {
-      judged.push(...outreachEnrolledSequenceIssues(existing, draft))
-    }
-    const errors = judged.filter((entry) => entry.severity === 'error')
-    if (errors.length) {
-      return outreachRefusal(400, 'invalid-sequence', errors[0].message, { issues: judged })
-    }
-
-    const nowMs = deps.now()
-    const ref = existing
-      ? outreachOrgCollection(firestore, caller.orgId, 'sequences').doc(existing.id)
-      : outreachOrgCollection(firestore, caller.orgId, 'sequences').doc(createResourceUid())
-    const sequence: OutreachSequence = {
-      id: ref.id,
-      ...draft,
-      status: existing?.status ?? 'draft',
-      /*
-       * Carried through explicitly, because the write below REPLACES the
-       * document (AGL-3239). The counters are the runtime's and the click
-       * route's, never the editor's, and a member renaming a sequence must
-       * not reset what it measured.
-       */
-      ...(existing?.stats ? { stats: existing.stats } : {}),
-      createdAtMs: existing?.createdAtMs || nowMs,
-      updatedAtMs: nowMs,
-    }
-    /*
-     * The list's search fields ride with every write of the name (AGL-3321):
-     * the sequences list asks Firestore for them, and a sequence missing
-     * them would list normally and never be found.
-     */
-    await ref.set({ ...sequence, ...nameSearchFields(sequence.name) })
-    if (!existing) await activity(caller, OUTREACH_SEQUENCE_ACTIVITY.create, sequence)
     return outreachOk({
       ok: true,
-      sequence,
-      created: !existing,
-      warnings: judged.filter((entry) => entry.severity === 'warning'),
+      sequence: outcome.sequence,
+      created: outcome.created,
+      warnings: outcome.warnings,
     } satisfies OutreachSequenceSaveResponse)
   }
 
@@ -411,20 +479,8 @@ export function createOutreachSequenceRoutes(deps: OutreachRouteDeps): OutreachS
     if (caller instanceof Response) return caller
     const sequenceId = readOutreachDocumentId(body['sequenceId'])
     if (!sequenceId) return outreachRefusal(400, 'invalid-request', 'Name the sequence to delete.')
-    const firestore = deps.firestore()
-    const sequence = await loadSequence(firestore, caller.orgId, sequenceId)
-    if (!sequence) return outreachRefusal(404, 'sequence-not-found', 'That sequence no longer exists.')
-    if (sequence.status !== 'draft' || (await hasEnrollments(firestore, caller.orgId, sequence.id))) {
-      // What people were sent, and why they stopped, is the record of what
-      // this organization did; only a draft nobody was enrolled in has none.
-      return outreachRefusal(
-        409,
-        'delete-refused',
-        'Only a draft nobody was enrolled in can be deleted. Archive this sequence instead.',
-      )
-    }
-    await outreachOrgCollection(firestore, caller.orgId, 'sequences').doc(sequence.id).delete()
-    await activity(caller, OUTREACH_SEQUENCE_ACTIVITY.delete, sequence)
+    const outcome = await removeOutreachSequence(deps, caller, sequenceId)
+    if (outcome.ok === false) return outreachRefusal(outcome.status, outcome.code, outcome.message)
     return outreachOk({ ok: true })
   }
 

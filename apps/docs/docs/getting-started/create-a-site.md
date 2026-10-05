@@ -17,13 +17,28 @@ settings. Everything you build lives under a site, and you can own several.
 2. Open the **site switcher** in the app bar (top-left) and choose **Create site**.
 3. Give it a name. Aglyn generates a working subdomain immediately, so the site has a
    real address from the first moment — you can attach a
-   [custom domain](../building-sites/custom-domains/overview.md) later. Every new site
-   starts with a published **Home** page at the site root — your site's name over a
-   short welcome line — so the address shows a real page from the first visit. Open
-   it from **Pages** to make it your own. Or replace it: the first page you publish
-   at the site root — one you build, one the AI drafts for you, or a
+   [custom domain](../building-sites/custom-domains/overview.md) later.
+
+   Every new site starts as a complete website, published and open to search
+   engines from the first visit:
+
+   - a **Home** page at the site root with the sections an ordinary business site
+     has — a hero with your site's name, what you offer, an about section, a photo
+     gallery, testimonials, frequently asked questions, a call to action and a
+     working contact form. Each section says how to make it yours, and the photos
+     are placeholders to swap for your own under **Media**;
+   - a shared **header and footer** layout every page you add renders inside, with
+     your site's name, search, a light/dark switch and a Contact button. It is the
+     site's one shared layout on the Free plan;
+   - a **theme** (colors and fonts) under **Setup → Theme**, and a title,
+     description and sharing image under **Setup → SEO**.
+
+   Open the Home page from **Pages** to make it your own: once you publish your
+   changes it is your home page like any other, and a starter applied later adds
+   its pages beside it instead of replacing it. Or replace it: the first page you
+   publish at the site root — one you build, one the AI drafts for you, or a
    [starter template](../building-sites/site-templates/overview.md)'s home page —
-   takes over `/`, and the placeholder Home page is kept as an unpublished draft.
+   takes over `/`, and the starting Home page is kept as an unpublished draft.
 4. You land on the new site's **Setup** page (titled *Host Setup*), with tabs for
    Basic details, SEO, Tracking, Theme, and Emails; the custom domain and the
    activity log are under **Admin**. To start building

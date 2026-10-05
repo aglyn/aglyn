@@ -16,7 +16,7 @@ page (next to Media in the organization tabs), or from any site's Data page; bot
 the same data. Dataset limits, storage, and add-ons are billed at the organization
 level.
 
-![The Data page in the Aglyn console: an organization-shared dataset's records table under the grid's Columns, Filters, Export and Search controls, below the Add record, Schema, Import, CSV and JSON actions](/img/datasets/data-page.png)
+![The Data page in the Aglyn console: an organization-shared dataset's records table under the grid's Columns, Filters, Export and Search controls, below the Add record, Schema, Import and Export actions](/img/datasets/data-page.png)
 
 ```mermaid
 flowchart LR
@@ -138,6 +138,29 @@ records however high the limit is set.
 
 See [Repeat over data](../../building-sites/besigner/repeat.md) for the full walkthrough.
 
+## Record pages {#record-pages}
+
+A dataset can also give **every record a page of its own** — a page per service, per
+location or per team member, each at its own address such as
+`/services/kitchen-remodeling`. You design one page and make it the dataset's **record
+template** in the Besigner's **Page Properties**, under **Record pages**: pick the
+dataset, the address the pages live under (one segment like `services`, or nested like
+`services/residential`), and the field that holds each record's own segment.
+
+- Each record's segment lives in a **Page address** field (see
+  [Build a data model](model-builder.md#page-address-fields)). It can fill in from a
+  name field, and it stays put when the record is renamed.
+- Inside the template, `{{item.field}}` fills in from the record, exactly as in a
+  repeat, reference hop included. A listing that repeats over the dataset links to each
+  page with `{{item.url}}`.
+- The template stops answering at its own address. Every record page is in the
+  sitemap with its own canonical address, and `/llms.txt` names the group.
+- Record pages and their template don't count toward your plan's pages; your dataset
+  limits bound them instead.
+
+See [Service and location pages from a dataset](../../guides/service-and-location-pages-from-a-dataset.md)
+for the full walkthrough.
+
 ## Who a dataset is shared with
 
 Datasets belong to the **workspace**, not to a single site, so one dataset can drive pages
@@ -190,8 +213,9 @@ A few consequences worth knowing:
 
 ## Import & export
 
-Datasets round-trip via **CSV and JSON**: export your records, edit them elsewhere, and
-re-import with validation on the way in.
+Datasets round-trip as **CSV, JSON or NDJSON**: export the fields you choose, edit them
+elsewhere, and import them back through a wizard that matches columns and records and
+shows a dry run before anything is written — see [Import & export](./import-export.md).
 
 A whole-site export includes the datasets and media **that site can see**, and nothing
 else — an agency exporting a client site gets that client's data only. It carries up to

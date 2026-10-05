@@ -75,6 +75,13 @@ import {
   AI_CRM_MAPPING_INSTRUCTIONS,
   AI_JOB_CRM_STEP_BUDGET,
   aiCrmAdmissionRefusal,
+  AI_CRM_FACTS_MAX_CHARS,
+  AI_CRM_WHOLE_RECORD_FIELD,
+  aiCrmDisclosedFactsLines,
+  aiCrmEmailPrompt,
+  aiCrmFactsLines,
+  aiCrmFitFacts,
+  aiCrmRecordPrompt,
   aiCrmRecordInstructions,
   aiReusableCrmRecord,
   createAiJobCrmStep,
@@ -124,6 +131,15 @@ const DEAL_FACTS = {
   stage: 'Proposal sent',
   status: 'open',
   amount: 'USD 3200.00',
+  probability: 65,
+  forecastCategory: 'Best Case',
+  type: 'New Business',
+  leadSource: 'Web',
+  nextStep: 'Send the revised quote',
+  contactRoles: [
+    { name: 'Dana Ortiz', role: 'Decision Maker', primary: true },
+    { name: 'Lee Park', role: '', primary: false },
+  ],
   timeline: [{ on: '2026-09-12', kind: 'Call', text: 'Asked for a discount.' }],
   openTasks: [],
 }
@@ -300,6 +316,18 @@ describe('a record (AGL-2917)', () => {
       )
     const outcome = await runStep({ inputs: { task: 'record', record: 'deal', recordId: 'deal-1' } })
     expect(sent()[0].messages[0].content).toContain('Stages in order: proposal-sent "Proposal sent" (open); negotiation "Negotiation" (open); won "Won" (won)')
+    // Salesforce's Opportunity fields reach the model as facts (AGL-3516).
+    for (const fact of [
+      'Probability: 65%',
+      'Forecast category: Best Case',
+      'Type: New Business',
+      'Lead source: Web',
+      'Next step: Send the revised quote',
+      // The people on the deal (AGL-3521).
+      'Contact roles: Dana Ortiz (Decision Maker, Primary); Lee Park',
+    ]) {
+      expect(sent()[0].messages[0].content).toContain(fact)
+    }
     expect(sent()[1].messages.at(-1)?.content).toContain('Winning or losing a deal is the team’s call')
     expect(outcome.outputs[0]).toMatchObject({ id: 'record:deal:deal-1', proposal: { kind: 'record', record: { kind: 'deal', id: 'deal-1' } } })
     expect(keptFor()).toMatchObject({
@@ -405,6 +433,184 @@ describe('a record (AGL-2917)', () => {
     expect(outcome).toMatchObject({ failure: refusal.error, estCostUsd: 0, outputs: [] })
     expect(mockRunAiRequest).not.toHaveBeenCalled()
     expect(writes).toEqual([])
+  })
+})
+
+describe('the disclosed lines, while release_crm_assist_whole_record is off (AGL-3520)', () => {
+  it('writes the headcount the published disclosure names, and none of the other account fields', () => {
+    const lines = aiCrmDisclosedFactsLines('company', {
+      name: 'Acme',
+      industry: 'Retail',
+      employees: 250,
+      type: 'Customer',
+      rating: 'Hot',
+      annualRevenue: '$1,250,000.00',
+    })
+    expect(lines).toEqual(expect.arrayContaining(['Industry: Retail', 'Employees: 250']))
+    expect(lines.join('\n')).not.toMatch(/Customer|Hot|1,250,000/)
+  })
+
+  it('writes a deal’s contact roles by name and its products as a count', () => {
+    const lines = aiCrmDisclosedFactsLines('deal', {
+      title: 'Warehouse re-roof',
+      contact: 'Jane Doe',
+      contactRoles: [
+        { name: 'Jane Doe', role: 'Economic Buyer', primary: true },
+        { name: 'Sam Lee', role: '', primary: false },
+      ],
+      products: 2,
+    })
+    expect(lines).toEqual(
+      expect.arrayContaining(['With: Jane Doe', 'Contact roles: Jane Doe (Economic Buyer, Primary); Sam Lee', 'Products on the deal: 2']),
+    )
+  })
+
+  /*
+   * Facts a reader reports beyond the disclosed set stay out of the prompt
+   * unless the reader marked the whole record: the writer is the second of
+   * the two places that decide what is sent.
+   */
+  const everything = {
+    name: 'Dana Marsh',
+    jobTitle: 'Buyer',
+    emails: ['dana@acme.com'],
+    email: 'dana@acme.com',
+    phone: '+15125550107',
+    owner: 'Sam Rep',
+    marketingConsent: 'opted in on 2026-08-01',
+    mailingAddress: '1 Main St, Austin',
+    custom: [{ label: 'Tier', value: 'Gold' }],
+    timeline: [{ on: '2026-09-01', kind: 'Email', direction: 'inbound', from: 'dana@acme.com', to: 'sam@ourco.test', subject: 'Quote' }],
+    openTasks: [{ title: 'Call Dana', kind: 'Call', priority: 'high', status: 'In Progress', due: null, overdue: false, assignee: 'Sam Rep', notes: 'Ask for the PO.' }],
+  }
+  const WHOLE_ONLY = /dana@acme\.com|sam@ourco\.test|5550107|Sam Rep|opted in|Main St|Gold|In Progress|Ask for the PO/
+
+  it('writes only the disclosed lines for facts the reader did not mark whole', () => {
+    for (const kind of ['contact', 'company', 'deal', 'lead'] as const) {
+      expect(aiCrmRecordPrompt(kind, everything)).not.toMatch(WHOLE_ONLY)
+      expect(aiCrmEmailPrompt({ kind, facts: everything, request: 'Follow up' })).not.toMatch(WHOLE_ONLY)
+    }
+    expect(aiCrmRecordPrompt('contact', everything)).toContain('- 2026-09-01 Email (inbound): "Quote"')
+    expect(aiCrmRecordPrompt('contact', everything)).toContain('- Call Dana (Call, high priority, no due date)')
+  })
+
+  it('writes the whole record when the reader marked it', () => {
+    const whole = { ...everything, [AI_CRM_WHOLE_RECORD_FIELD]: true }
+    const prompt = aiCrmRecordPrompt('contact', whole)
+    expect(prompt).toContain('Email: dana@acme.com')
+    expect(prompt).toContain('Owner: Sam Rep')
+    expect(prompt).toContain('- Tier: Gold')
+    expect(prompt).toContain('from dana@acme.com')
+    expect(prompt).not.toContain('wholeRecord')
+    expect(aiCrmEmailPrompt({ kind: 'lead', facts: whole, request: 'Follow up' })).toContain('Phone: +15125550107')
+  })
+})
+
+describe('the whole record (AGL-3520)', () => {
+  it('writes every account field a company holds, its addresses and custom fields', () => {
+    const lines = aiCrmFactsLines('company', {
+      name: 'Acme',
+      website: 'https://acme.com/',
+      phone: '+15125550100',
+      industry: 'Retail',
+      employees: 250,
+      type: 'Customer',
+      rating: 'Hot',
+      annualRevenue: 'USD 1250000.00',
+      billingAddress: '1 Main St, Austin, TX 78701, US',
+      parentCompany: 'Acme Holdings',
+      owner: 'Sam Rep',
+      custom: [{ label: 'Tier', value: 'Gold' }],
+    })
+    expect(lines).toEqual(
+      expect.arrayContaining([
+        'Industry: Retail',
+        'Employees: 250',
+        'Type: Customer',
+        'Rating: Hot',
+        'Annual revenue: USD 1250000.00',
+        'Phone: +15125550100',
+        'Billing address: 1 Main St, Austin, TX 78701, US',
+        'Parent company: Acme Holdings',
+        'Owner: Sam Rep',
+        'Custom fields:',
+        '- Tier: Gold',
+      ]),
+    )
+  })
+
+  it("writes a contact's addresses, phones, consent and the people around them", () => {
+    const lines = aiCrmFactsLines('contact', {
+      name: 'Dana Marsh',
+      emails: ['dana@acme.com', 'dana@home.example'],
+      phone: '+15125550107',
+      mobilePhone: '+15125550108',
+      birthdate: '1984-07-21',
+      reportsTo: 'Lee Boss',
+      mailingAddress: '1 Main St, Austin',
+      marketingConsent: 'opted in on 2026-08-01',
+      doNotCall: true,
+    })
+    expect(lines).toEqual(
+      expect.arrayContaining([
+        'Email: dana@acme.com, dana@home.example',
+        'Phone: +15125550107',
+        'Mobile phone: +15125550108',
+        'Birthdate: 1984-07-21',
+        'Reports to: Lee Boss',
+        'Mailing address: 1 Main St, Austin',
+        'Marketing email consent: opted in on 2026-08-01',
+        'Do not call: they asked not to be phoned',
+      ]),
+    )
+  })
+
+  it("writes a lead's contact details and its open tasks", () => {
+    const lines = aiCrmFactsLines('lead', {
+      name: 'Dana Marsh',
+      email: 'dana@acme.com',
+      phone: '+15125550107',
+      address: 'Austin, TX, US',
+      campaigns: ['Spring push'],
+      openTasks: [{ title: 'Call Dana', kind: 'Call', priority: 'high', due: null, overdue: false, assignee: 'Sam Rep' }],
+    })
+    expect(lines).toEqual(
+      expect.arrayContaining([
+        'Email: dana@acme.com',
+        'Phone: +15125550107',
+        'Address: Austin, TX, US',
+        'Campaigns: Spring push',
+        'Open tasks:',
+        '- Call Dana (Call, high priority, no due date, assigned to Sam Rep)',
+      ]),
+    )
+  })
+
+  /*
+   * A record that holds everything at once is fitted by shortening its long
+   * texts, never by dropping a field.
+   */
+  it('fits an oversized record by cutting its long texts, keeping every field', () => {
+    const long = 'word '.repeat(2_000)
+    const facts = {
+      name: 'Dana Marsh',
+      email: 'dana@acme.com',
+      phone: '+15125550107',
+      notes: long,
+      custom: Array.from({ length: 40 }, (_, index) => ({ label: `Field ${index}`, value: long.slice(0, 280) })),
+      timeline: Array.from({ length: 12 }, () => ({ on: '2026-09-01', kind: 'Note', text: long.slice(0, 280) })),
+      openTasks: Array.from({ length: 8 }, (_, index) => ({ title: `Task ${index}`, kind: 'Call', priority: 'normal', due: null, notes: long.slice(0, 280) })),
+    }
+    expect(aiCrmFactsLines('lead', facts).join('\n').length).toBeGreaterThan(AI_CRM_FACTS_MAX_CHARS)
+    const fitted = aiCrmFitFacts('lead', facts)
+    const lines = aiCrmFactsLines('lead', fitted)
+    expect(lines.join('\n').length).toBeLessThanOrEqual(AI_CRM_FACTS_MAX_CHARS)
+    // Every field is still written, every custom field and every timeline entry.
+    expect(lines).toEqual(expect.arrayContaining(['Email: dana@acme.com', 'Phone: +15125550107']))
+    expect(lines.filter((entry) => entry.startsWith('- Field '))).toHaveLength(40)
+    expect(lines.filter((entry) => entry.startsWith('- 2026-09-01 Note'))).toHaveLength(12)
+    // A record that fits is sent unchanged.
+    expect(aiCrmFitFacts('lead', { name: 'Dana', notes: 'Short.' })).toEqual({ name: 'Dana', notes: 'Short.' })
   })
 })
 

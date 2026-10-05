@@ -971,8 +971,14 @@ describe('placed form preview', () => {
    */
   beforeAll(() => {
     Aglyn.components.registerComponent(
-      (({ children }: { children?: ReactNode }) => (
-        <form>{children}</form>
+      (({
+        children,
+        submitLabel,
+      }: {
+        children?: ReactNode
+        submitLabel?: string
+      }) => (
+        <form data-submit-label={submitLabel}>{children}</form>
       )) as never,
       { $id: 'form' } as never,
     )
@@ -1128,6 +1134,49 @@ describe('placed form preview', () => {
     // The canvas took the root's first child alone, so anything a design put
     // beside its form was missing from every page placing it.
     expect(leafText(baseElement)).toContain('We reply within a day')
+  })
+
+  /**
+   * The shape a form's publish writes: the canvas root unwrapped, so the
+   * design's root IS the form node naming the form (AGL-3494).
+   */
+  const formRootedDesign = {
+    rootId: 'f-form',
+    nodes: {
+      'f-form': {
+        $id: 'f-form',
+        componentId: 'form',
+        props: { formId: 'contact', submitLabel: 'Request a quote' },
+        nodes: ['f-email'],
+      },
+      'f-email': {
+        $id: 'f-email',
+        componentId: 'div',
+        parentId: 'f-form',
+        props: { children: 'Work email' },
+      },
+    },
+  } as any
+
+  it("draws the saved form's own submit label, as the page does (AGL-3494)", () => {
+    const { baseElement } = renderForm(formNode({ formId: 'contact' }), {
+      contact: formRootedDesign,
+    })
+
+    const forms = baseElement.querySelectorAll('form')
+    expect(forms).toHaveLength(1)
+    expect(forms[0].getAttribute('data-submit-label')).toBe('Request a quote')
+  })
+
+  it("draws the placement's own label over the form's (AGL-3494)", () => {
+    const { baseElement } = renderForm(
+      formNode({ formId: 'contact', submitLabel: 'Send it' }),
+      { contact: formRootedDesign },
+    )
+
+    expect(
+      baseElement.querySelector('form')?.getAttribute('data-submit-label'),
+    ).toBe('Send it')
   })
 
   it("never puts the entity's nodes into the canvas store", () => {

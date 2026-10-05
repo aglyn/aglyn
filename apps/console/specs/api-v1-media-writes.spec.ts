@@ -193,6 +193,11 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     __esModule: true,
     ...apiHttp,
     verifyApiKey: async () => ({ orgId: 'org-1', keyId: 'key-1', scopes: mockScopes }),
+    // The REAL document fields (AGL-3486): a pure helper the route spreads
+    // into the media document.
+    mediaVariantDocFields: jest.requireActual(
+      '../../../libs/tenant/data/admin/src/lib/server/media-variants',
+    ).mediaVariantDocFields,
     getOrgDoc: async () => mockOrg,
     lockdownRefusal: async () => null,
     // The release-flag verdict the video gate reads (AGL-2830), declared with
@@ -213,14 +218,19 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     getMediaQuarantine: async () =>
       mockQuarantined ? { reason: 'malware', status: 'active' } : null,
     // Models the REAL `MediaVariantOutcome` — `{ variants: number[] }`, and a
-    // `saveVariant(path, webp)` of exactly two arguments. An approximate fake
-    // here fabricated a green over a route reading `.widths` off a field that
-    // does not exist, which would have stored `variants: []` on every asset.
+    // `saveVariant(path, bytes, contentType)` of exactly three arguments. An
+    // approximate fake here fabricated a green over a route reading `.widths`
+    // off a field that does not exist, which would have stored `variants: []`
+    // on every asset.
     generateMediaVariants: async (options: {
       objectPath: string
-      saveVariant: (path: string, webp: Buffer) => Promise<void>
+      saveVariant: (path: string, bytes: Buffer, contentType: string) => Promise<void>
     }) => {
-      await options.saveVariant(`${options.objectPath}__w320.webp`, Buffer.alloc(16))
+      await options.saveVariant(
+        `${options.objectPath}__w320.webp`,
+        Buffer.alloc(16),
+        'image/webp',
+      )
       return { variants: [320] }
     },
     firebaseAdmin: {

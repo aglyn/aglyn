@@ -211,8 +211,8 @@ to.
 | **Set the contact's lifecycle stage** | Stage | The stage on **this site's** view of the contact. A stage the contact already has is left alone and announces nothing; a real change announces **Contact changed stage**, so an automation listening for it runs — under the same nesting limit a custom event has. |
 | **Tag the contact** | Tag (up to 60 characters) | Adds the tag to this site's tags on the contact; a tag already there is not duplicated. |
 | **Assign the contact an owner** | Assign to (A team member, or Round robin), Owner (email address or member id) | Sets the owner to the team member named, matched against your workspace's roster when the automation runs — by the address on their member record, or by their member id for a teammate whose account carries no address; somebody the roster does not have is a failed step, not a stored string — or, in round robin, to the next member of the pool under [CRM → Settings](../../content-and-data/crm/settings.md#round-robin), moving the rotation on; an empty pool is a failed step. Either way the contact is reassigned if it had an owner, the site's lead follows, and the new owner is notified. |
-| **Create a CRM task** | Title, Kind (Call, Email, Meeting, To-do), Due in (0–365 days), Assignee (email address or member id, optional) | A new open task on the CRM's **Tasks** list, linked to the contact (and to the contact's company when it has one), due that many days from the run. The assignee is matched the way the owner is; leave it blank to give the task to the contact's owner. |
-| **Log a CRM activity** | Kind (Call, Email, Meeting, Note, Other), What happened | An activity on the contact's timeline, stamped as made by the automation rather than by a person. |
+| **Create a CRM task** | Title, Type (Call, Email, Meeting, To-do), Priority (High, Normal, Low), Due in (0–365 days), Assignee (email address or member id, optional) | A new open task on the CRM's **Tasks** list, linked to the contact (and to the contact's company when it has one), due that many days from the run. Its type, priority and status carry your organization's [picklist labels](../../content-and-data/crm/tasks.md#task-picklists) for what the step names. The assignee is matched the way the owner is; leave it blank to give the task to the contact's owner. |
+| **Log a CRM activity** | Kind (Call, Email, Meeting, Note, Other), Direction (a call's Outbound, Inbound or Internal; an email's Outbound or Inbound), What happened | An activity on the contact's timeline, stamped as made by the automation rather than by a person. |
 
 Tasks and activities an automation creates are visible to exactly the sites a record a
 person made on this site would be — the same per-site visibility the contacts themselves
@@ -328,14 +328,16 @@ log you have to go and find.
 
 At the top of the **Actions** tab — and again on the **Workflows** tab, counting workflow
 runs — a line reads `1,284 action runs this month · 50,000 included`: how many metered
-runs this site has used this calendar month, against the number your plan includes. This
-line is the only place action runs are counted for you — the
+runs your workspace has used this calendar month, against the number your plan includes.
+The allowance belongs to the whole workspace, not to each site: every site's runs count
+against it, so the figure is the same on every site, and the organization's
+**Automation** page shows it too. The
 [billing usage meters](../../workspace-and-billing/billing-and-plans/overview.md#usage-meters)
-meter *workflow* runs, not action runs. Watch it: once the month's runs reach the limit,
-triggered automations stop running rather than queueing or billing on. The line renders
-nothing at all while the counter or the plan is still loading —
-`0 runs this month` on a site that has run thousands is the one reading that would make
-you stop debugging.
+show the same two figures. Watch it: once the workspace's runs reach the month's limit,
+triggered automations stop running on every site rather than queueing or billing on. The
+line renders nothing at all while the counter or the plan is still loading —
+`0 runs this month` on a workspace that has run thousands is the one reading that would
+make you stop debugging.
 
 ### What is and isn't recorded {#what-is-and-isnt-recorded}
 

@@ -19,8 +19,10 @@
 import {
   type ConsolePluginPageProps,
   CRM_COLLECTIONS,
+  crmPicklistShownLabel,
+  crmTaskPicklistLabels,
+  crmTaskStatusWrite,
   type CrmViewFilterClause,
-  findOrgMember,
   pluginDocsHelp,
 } from '@aglyn/aglyn'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
@@ -46,17 +48,14 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useCrmRecordNames } from '../hooks/use-crm-record-names'
 import { type CrmTaskRow, useCrmTaskList, useNowMs } from '../hooks/use-crm-tasks'
 import { useOrgMemberDirectory } from '../hooks/use-org-member-directory'
-import { downloadTextFile } from '../model/contacts-csv'
+import { useCrmTaskPicklists } from '../hooks/use-crm-task-picklists'
 import { crmRoutes } from '../model/crm-routes'
 import { refreshCrmNextActivity } from '../model/next-activity-api'
 import { completeCrmTask } from '../model/task-api'
 import { crmTaskCallScope } from '../model/task-routes'
-import { type TaskCsvOptions, tasksCsv } from '../model/tasks-csv'
 import {
-  CRM_TASK_KIND_LABELS,
   CRM_TASK_KINDS,
   CRM_TASK_PRIORITIES,
-  CRM_TASK_PRIORITY_LABELS,
   CRM_TASK_VIEWS,
   type CrmTaskView,
   TASK_LIST_QUERY_FIELDS,
@@ -79,7 +78,8 @@ import {
 } from './task-cells'
 import TaskEditDrawer from './task-edit-drawer'
 import TasksCalendar from './tasks-calendar'
-import { TaskImportButton } from './task-import-drawer'
+import { CrmExportButton, CrmImportButton } from './crm-transfer-buttons'
+import { CRM_TASKS_RESOURCE } from '../transfer/fields'
 import TaskSnoozeMenu from './task-snooze-menu'
 import TasksBulkBar from './tasks-bulk-bar'
 
@@ -96,7 +96,7 @@ const TASK_FILTER_FIELDS: readonly ListFilterField[] = [
 ]
 const TASK_FILTER_HEADERS: Readonly<Record<string, string>> = {
   view: 'Show',
-  kind: 'Kind',
+  kind: 'Type',
   priority: 'Priority',
   assigneeUid: 'Assignee',
 }
@@ -142,9 +142,9 @@ const EMPTY_COPY: Record<CrmTaskView, string> = {
  *
  * The rows are selectable, and a selection raises `TasksBulkBar` over the
  * list — Complete and Assign through their routes, the due date and the
- * delete as batched writes (AGL-2621). Export CSV beside the view control
- * writes the view through `tasksCsv()`, naming the assignee and the linked
- * records; the bar writes the same file over the selection.
+ * delete as batched writes (AGL-2621). Import and Export open the console's
+ * wizard and dialog on `crm.tasks` (AGL-3528); the export reads the view's
+ * own query, and the bar opens it on the selection.
  */
 export function TasksSection(props: ConsolePluginPageProps) {
   const { hostId, org, basePath = '' } = props
@@ -215,20 +215,28 @@ export function TasksSection(props: ConsolePluginPageProps) {
   })
   const { tasks, status, fromCache, scope, orgId, readTokens } = list
   const directory = useOrgMemberDirectory(orgId)
+  const picklists = useCrmTaskPicklists(orgId)
+  /*
+   * Type and Priority filter on the MEANING the query holds (AGL-3517), so
+   * each option is a meaning, named by the org's label for it.
+   */
   const filterOptions = useMemo(
     () => ({
       view: CRM_TASK_VIEWS.map((option) => ({ value: option.id, label: option.label })),
-      kind: CRM_TASK_KINDS.map((kind) => ({ value: kind, label: CRM_TASK_KIND_LABELS[kind] })),
+      kind: CRM_TASK_KINDS.map((kind) => ({
+        value: kind,
+        label: crmPicklistShownLabel(picklists.type, kind, null),
+      })),
       priority: CRM_TASK_PRIORITIES.map((priority) => ({
         value: priority,
-        label: CRM_TASK_PRIORITY_LABELS[priority],
+        label: crmPicklistShownLabel(picklists.priority, priority, null),
       })),
       assigneeUid: directory.members.map((member) => ({
         value: member.uid,
         label: member.label,
       })),
     }),
-    [directory.members],
+    [directory.members, picklists.type, picklists.priority],
   )
   // What the query could not hold, said above the list rather than matched in memory.
   const refused = useMemo(
@@ -262,19 +270,8 @@ export function TasksSection(props: ConsolePluginPageProps) {
   // A view, a filter or a page is a different set of rows; a selection made
   // on the last one would be a count over rows no longer on screen.
   useEffect(() => setSelectedIds([]), [view, list.plan, list.page])
-  const csvOptions: TaskCsvOptions = useMemo(
-    () => ({
-      assigneeEmail: (uid) => {
-        const member = findOrgMember(directory.members, uid)
-        return member?.email || member?.label || uid
-      },
-      recordName: nameOf,
-    }),
-    [directory.members, nameOf],
-  )
-  const handleExport = useCallback(() => {
-    downloadTextFile('tasks.csv', 'text/csv', tasksCsv(tasks, csvOptions))
-  }, [tasks, csvOptions])
+  // The view and its filters, for the export to read the same tasks the list does (AGL-3528).
+  const exportFilter = useMemo(() => ({ label: 'what the list shows', plan: list.plan }), [list.plan])
 
   /*
    * List or month (AGL-2662). A layout choice over the SAME rows and the
@@ -314,7 +311,8 @@ export function TasksSection(props: ConsolePluginPageProps) {
           await updateDoc(
             doc(firestore, scope[0], scope[1], CRM_COLLECTIONS.tasks, task.$id),
             {
-              status: 'open',
+              // Open again, with the label a new task starts with (AGL-3517).
+              ...crmTaskStatusWrite(picklists.status, false),
               completedAtMs: null,
               completedByUid: deleteField(),
               updatedAt: serverTimestamp(),
@@ -341,7 +339,7 @@ export function TasksSection(props: ConsolePluginPageProps) {
         setBusyId(null)
       }
     },
-    [scope, busyId, firestore, user, hostId, orgId, enqueueSnackbar],
+    [scope, busyId, firestore, user, hostId, orgId, enqueueSnackbar, picklists.status],
   )
 
   const columns: GridColDef[] = useMemo(
@@ -400,10 +398,12 @@ export function TasksSection(props: ConsolePluginPageProps) {
       },
       {
         field: 'kind',
-        headerName: 'Kind',
+        headerName: 'Type',
         width: 120,
         sortable: false,
-        renderCell: ({ row }: { row: CrmTaskRow }) => <TaskKindCell kind={row.kind} />,
+        renderCell: ({ row }: { row: CrmTaskRow }) => (
+          <TaskKindCell kind={row.kind} label={crmTaskPicklistLabels(row, picklists).type} />
+        ),
       },
       {
         field: 'priority',
@@ -411,7 +411,28 @@ export function TasksSection(props: ConsolePluginPageProps) {
         width: 110,
         sortable: false,
         renderCell: ({ row }: { row: CrmTaskRow }) => (
-          <TaskPriorityChip priority={row.priority} />
+          <TaskPriorityChip
+            priority={row.priority}
+            label={crmTaskPicklistLabels(row, picklists).priority}
+          />
+        ),
+      },
+      {
+        // The org's status label (AGL-3517); the checkbox is the open/done half.
+        field: 'statusLabel',
+        headerName: 'Status',
+        width: 150,
+        sortable: false,
+        valueGetter: (_value: unknown, row: CrmTaskRow) =>
+          crmTaskPicklistLabels(row, picklists).status,
+        renderCell: ({ row }: { row: CrmTaskRow }) => (
+          <Typography
+            variant="body2"
+            color={row.status === 'done' ? 'text.secondary' : undefined}
+            noWrap
+          >
+            {crmTaskPicklistLabels(row, picklists).status}
+          </Typography>
         ),
       },
       {
@@ -465,7 +486,7 @@ export function TasksSection(props: ConsolePluginPageProps) {
         ),
       },
     ],
-    [busyId, toggleDone, nowMs, directory, routes, nameOf, scope],
+    [busyId, toggleDone, nowMs, directory, routes, nameOf, scope, picklists],
   )
   /* The column and sort models are the view's (AGL-2617). */
   const filterColumns = useMemo(
@@ -491,10 +512,8 @@ export function TasksSection(props: ConsolePluginPageProps) {
           // The record actions, top right and never clipped (AGL-3311).
           action: (
             <CrmListActions>
-              <TaskImportButton hostId={hostId} />
-              <Button size="small" onClick={handleExport} disabled={!tasks.length}>
-                {'Export CSV'}
-              </Button>
+              <CrmImportButton resource={CRM_TASKS_RESOURCE} noun="tasks" hostId={hostId} />
+              <CrmExportButton resource={CRM_TASKS_RESOURCE} hostId={hostId} filter={exportFilter} />
               <Button
                 size="small"
                 variant="contained"
@@ -551,6 +570,7 @@ export function TasksSection(props: ConsolePluginPageProps) {
               {layout === 'calendar' ? (
                 <TasksCalendar
                   tasks={tasks}
+                  picklists={picklists}
                   truncated={list.hasMore}
                   onOpen={(task) => setDrawer({ open: true, task })}
                 />
@@ -563,7 +583,6 @@ export function TasksSection(props: ConsolePluginPageProps) {
                 selected={selectedIds}
                 onSelectedChange={setSelectedIds}
                 directory={directory}
-                csv={csvOptions}
               />
               <CrmColumnOrderProvider value={grid.columnOrder}>
                 <ListTable

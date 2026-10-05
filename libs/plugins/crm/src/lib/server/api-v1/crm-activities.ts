@@ -30,8 +30,11 @@ import {
   CRM_COLLECTIONS,
   type CrmActivity,
   type CrmActivityKind,
+  CRM_ACTIVITY_DIRECTIONS,
   CRM_ACTIVITY_LOG_FULL_MESSAGE,
+  type CrmActivityDirection,
   createResourceUid,
+  crmActivityDirection,
   crmActivityLogHasRoom,
 } from '@aglyn/aglyn/server'
 import {
@@ -85,6 +88,7 @@ function activityView(doc: FirebaseFirestore.DocumentSnapshot) {
     outcome: data.outcome ?? null,
     durationMinutes:
       typeof data.durationMinutes === 'number' ? data.durationMinutes : null,
+    direction: crmActivityDirection(data.kind, data.direction),
     siteId: data.hostId ?? null,
     ...crmTimes(data as FirebaseFirestore.DocumentData),
   }
@@ -100,6 +104,7 @@ const ACTIVITY_WRITABLE = new Set([
   'dealId',
   'outcome',
   'durationMinutes',
+  'direction',
   'consentSiteId',
 ])
 
@@ -113,6 +118,7 @@ interface ActivityInput {
   dealId?: string
   outcome?: string
   durationMinutes?: number
+  direction?: CrmActivityDirection
 }
 
 function readActivityInput(
@@ -158,6 +164,19 @@ function readActivityInput(
       errors.durationMinutes = 'Must be a whole number of minutes, 0 or more'
     } else {
       values.durationMinutes = body.durationMinutes
+    }
+  }
+
+  // Which way a call or an email went (AGL-3517); no other kind takes one.
+  if (body.direction !== undefined && body.direction !== null) {
+    const kind = values.kind ?? 'note'
+    const direction = crmActivityDirection(kind, body.direction)
+    const allowed = CRM_ACTIVITY_DIRECTIONS[kind] ?? []
+    if (direction) values.direction = direction
+    else {
+      errors.direction = allowed.length
+        ? `Must be one of: ${allowed.join(', ')}`
+        : 'Only a call or an email takes a direction'
     }
   }
 

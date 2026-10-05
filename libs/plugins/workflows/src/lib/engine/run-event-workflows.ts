@@ -32,6 +32,12 @@ import { runSummaryFields } from '../model/run-history'
 import { ACTION_MAX_EVENT_DEPTH, type HostWorkflow, runWorkflow } from '../model/workflows'
 import { eventRunSuspension } from './site-suspension'
 import {
+  recordRuns,
+  type RunMeterScope,
+  runMonthKey,
+  runsUsedThisMonth,
+} from './run-meter'
+import {
   deferFlowEnrollment,
   endFlowEnrollment,
   type FlowEnrollment,
@@ -191,16 +197,22 @@ export async function runEventWorkflows(
       if (data?.name) workflowMap[data.name] = withId
     }
 
-    // Monthly run cap by the owning org's plan (AGL-165) — dark-launch
-    // rule: workspaces without a plan are uncapped, like every other gate.
-    const monthKey = new Date().toISOString().slice(0, 7)
-    const runCounterRef = hostRef.collection('counters').doc('workflowRuns')
+    // Monthly run cap by the owning org's plan (AGL-165).
     // Run caps ride the owning org's doc (AGL-238) — read through
     // `getOrgForHost` below. The host document itself is not consulted: the
     // cap, the counter and the workflow definitions all live elsewhere, so a
     // read of it here would be billed on every host event and used for
     // nothing.
     const owner = await getOrgForHost(hostId)
+    // The band is the WORKSPACE's (AGL-3472): every site's runs count
+    // against it, read off the org's counter — see `run-meter.ts`.
+    const meter: RunMeterScope = {
+      firestore,
+      hostRef,
+      orgId: owner?.orgId,
+      counter: 'workflowRuns',
+      month: runMonthKey(),
+    }
     // A suspended site runs nothing (AGL-3356): see `eventRunSuspension`.
     // Asked before the cap so a locked site's events bill no runs.
     if (await eventRunSuspension(hostRef, owner?.org)) return alerts
@@ -210,8 +222,7 @@ export async function runEventWorkflows(
       const limit = resolveOrgEntitlements(
         org as any,
       ).workflowRunsPerMonth
-      const counterSnapshot = await runCounterRef.get()
-      const used = Number(counterSnapshot.get(monthKey) ?? 0)
+      const used = await runsUsedThisMonth(meter)
       if (used + workflows.length > limit) return alerts
     }
 
@@ -348,14 +359,7 @@ export async function runEventWorkflows(
       })
     }
     // Filtered-out workflows do not bill — only executed runs count.
-    if (executed > 0) {
-      await runCounterRef
-        .set(
-          { [monthKey]: FieldValue.increment(executed) },
-          { merge: true },
-        )
-        .catch(() => undefined)
-    }
+    await recordRuns({ ...meter, count: executed })
   } catch (error) {
     console.error('runEventWorkflows failed', hostId, event, error)
   }
@@ -383,7 +387,8 @@ export async function resumeWorkflowEnrollment(
 ): Promise<'ran' | 'waiting' | 'exited' | 'deferred' | 'stopped'> {
   const { nowMs } = options
   const hostId = enrollment.hostId
-  const hostRef = firebaseAdmin.app().firestore().collection('hosts').doc(hostId)
+  const firestore = firebaseAdmin.app().firestore()
+  const hostRef = firestore.collection('hosts').doc(hostId)
   const doc = await hostRef
     .collection('workflows')
     .doc(enrollment.actionId)
@@ -439,12 +444,14 @@ export async function resumeWorkflowEnrollment(
       durationMs: Date.now() - startedAt,
     }),
   )
-  const monthKey = new Date(nowMs).toISOString().slice(0, 7)
-  await hostRef
-    .collection('counters')
-    .doc('workflowRuns')
-    .set({ [monthKey]: FieldValue.increment(1) }, { merge: true })
-    .catch(() => undefined)
+  await recordRuns({
+    firestore,
+    hostRef,
+    orgId: owner?.orgId,
+    counter: 'workflowRuns',
+    month: runMonthKey(nowMs),
+    count: 1,
+  })
   return execution.ending
 }
 

@@ -161,6 +161,7 @@ import LocationsCard from './locations-card.component'
 import PosConsolePage from './pos-page.component'
 import PaymentsSettingsCard from './payments-settings-card.component'
 import ProductsHubCard from './products-hub-card.component'
+import { TransferLauncherContext } from '@aglyn/aglyn/app-utils/transfer-launcher-context'
 
 // `toBeDisabled` needs jest-dom, which this project's preset does not
 // load; the DOM attribute is the same assertion without the setup.
@@ -317,7 +318,13 @@ describe('products hub, plan not yet known', () => {
   })
 
   it('disables Import for the same reason', () => {
-    render(<ProductsHubCard hostId="host-1" />)
+    // Import opens the console's wizard, so it is drawn only under the shell's launcher.
+    const launcher = { openImport: jest.fn(), openExport: jest.fn(), close: jest.fn(), can: () => true }
+    render(
+      <TransferLauncherContext.Provider value={launcher}>
+        <ProductsHubCard hostId="host-1" />
+      </TransferLauncherContext.Provider>,
+    )
     expect(
       (screen.getByRole('button', { name: 'Import' }) as HTMLButtonElement)
         .disabled,

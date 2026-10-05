@@ -345,6 +345,53 @@ describe('the profile on a merge', () => {
   })
 })
 
+/**
+ * A PHONE LEARNED IN PASSING (AGL-3493): the number a booking form asked
+ * for. It fills an empty phone and never replaces one — a number somebody
+ * typed on the record, or gave the business before, is the better one.
+ */
+describe('the profile fill', () => {
+  const capture = (fill: string, facetPhone?: string) =>
+    upsertHostContact({
+      hostId: 'h1',
+      email: 'jo@example.com',
+      source: 'booking',
+      interaction: { summary: 'Booked "Free on-site estimate"' },
+      facetFill: { phone: fill },
+      ...(facetPhone ? { facet: { phone: facetPhone } } : {}),
+    })
+
+  it('writes the phone on a new person, normalized and echoed up', async () => {
+    await capture('(512) 555-0107')
+    expect(added[0].data.facets.h1.phone).toBe('+15125550107')
+    expect(added[0].data.phone).toBe('+15125550107')
+  })
+
+  it("fills THIS holder's empty phone, whatever another holder keeps", async () => {
+    seedSharedContact()
+    await capture('512-555-0107')
+    expect(facet('c1').phone).toBe('+15125550107')
+    expect(facet('c1', 'h2').phone).toBe('+15125550199')
+  })
+
+  it('never replaces a phone the holder already has', async () => {
+    seedSharedContact()
+    contacts['c1'].facets.h1.phone = '+15125550111'
+    await capture('512-555-0107')
+    expect(facet('c1').phone).toBe('+15125550111')
+  })
+
+  it("leaves a key the door's own profile carries to the profile", async () => {
+    await capture('512-555-0107', '512-555-0122')
+    expect(added[0].data.facets.h1.phone).toBe('+15125550122')
+  })
+
+  it('drops a fill that will not normalize', async () => {
+    await capture('call me')
+    expect(added[0].data.facets.h1).not.toHaveProperty('phone')
+  })
+})
+
 describe('the order door and the lifecycle stage', () => {
   const purchase = (hostId: string) =>
     upsertHostContact({
@@ -563,5 +610,106 @@ describe('what the call answers', () => {
       interaction: { summary: 'Added by hand' },
     })
     expect(result).toEqual({ contactId: 'c1', created: false })
+  })
+})
+
+/**
+ * Salesforce's standard contact fields (AGL-3515) on the capture door: the
+ * fields a door may know land normalized in the capturing facet, the
+ * holder's name follows a first and last name, and a capture that carries
+ * none of them leaves every one of them where another door put it.
+ */
+describe("Salesforce's standard contact fields", () => {
+  it('land in the capturing facet on a create, normalized, the name made of the parts', async () => {
+    await upsertHostContact({
+      hostId: 'h1',
+      email: 'ada@example.com',
+      source: 'manual',
+      interaction: { summary: 'Added by hand' },
+      facet: {
+        salutation: '  Dr. ',
+        firstName: ' Ada ',
+        lastName: 'Lovelace',
+        department: ' Research ',
+        mobilePhone: '(512) 555-0101',
+        homePhone: 'call me',
+        fax: '512 555 0109',
+        birthdate: '1815-12-10',
+        assistantName: 'Mary',
+        assistantPhone: '512 555 0103',
+        otherAddress: { line1: ' 2 Side St ', country: 'us' },
+        doNotCall: true,
+      },
+    })
+    const written = added[0].data
+    expect(written.facets.h1).toEqual(
+      expect.objectContaining({
+        name: 'Ada Lovelace',
+        salutation: 'Dr.',
+        firstName: 'Ada',
+        lastName: 'Lovelace',
+        department: 'Research',
+        mobilePhone: '+15125550101',
+        fax: '+15125550109',
+        birthdate: '1815-12-10',
+        assistantName: 'Mary',
+        assistantPhone: '+15125550103',
+        otherAddress: { line1: '2 Side St', country: 'US' },
+        doNotCall: true,
+      }),
+    )
+    expect(written.facets.h1).not.toHaveProperty('homePhone')
+    // The canonical name is the parts' for a door that gave only them.
+    expect(written.name).toBe('Ada Lovelace')
+    // None of them is echoed to the shared top of the document.
+    expect(written.mobilePhone).toBeUndefined()
+    expect(written.birthdate).toBeUndefined()
+  })
+
+  it('never clobbers them on a capture that does not carry them', async () => {
+    seedSharedContact()
+    Object.assign(contacts['c1'].facets.h1, {
+      name: 'Jo Smith',
+      firstName: 'Jo',
+      lastName: 'Smith',
+      mobilePhone: '+15125550101',
+      birthdate: '1990-01-01',
+      doNotCall: true,
+    })
+    await upsertHostContact({
+      hostId: 'h1',
+      email: 'jo@example.com',
+      name: 'Joanna From A Form',
+      source: 'form',
+      interaction: { summary: 'Submitted the contact form' },
+      facet: { phone: '512-555-0100', doNotCall: false },
+    })
+    expect(facet('c1')).toEqual(
+      expect.objectContaining({
+        name: 'Jo Smith',
+        firstName: 'Jo',
+        lastName: 'Smith',
+        mobilePhone: '+15125550101',
+        birthdate: '1990-01-01',
+        doNotCall: true,
+      }),
+    )
+  })
+
+  it('recomposes the holder name on a merge that carries a first or last name', async () => {
+    seedSharedContact()
+    Object.assign(contacts['c1'].facets.h1, { name: 'Jo', firstName: 'Jo' })
+    await upsertHostContact({
+      hostId: 'h1',
+      email: 'jo@example.com',
+      source: 'import',
+      interaction: { summary: 'Imported' },
+      facet: { lastName: 'Smith' },
+    })
+    expect(facet('c1')).toEqual(
+      expect.objectContaining({ name: 'Jo Smith', firstName: 'Jo', lastName: 'Smith' }),
+    )
+    // The other holder's facet carries none of it.
+    expect(facet('c1', 'h2')).not.toHaveProperty('lastName')
   })
 })

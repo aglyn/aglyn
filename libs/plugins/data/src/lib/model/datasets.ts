@@ -30,6 +30,7 @@ import {
   humanizeDatasetFieldId,
   validateDocument,
 } from './dataset-models'
+import { fillRecordAddresses } from '../record-pages/record-pages'
 
 /** Dataset field name: starts with a letter; letters/digits/underscores. */
 export const DATASET_FIELD_PATTERN = /^[A-Za-z][A-Za-z0-9_]*$/
@@ -283,13 +284,16 @@ export function prepareDatasetRecordWrite(
   const matched = Object.keys(picked)
   const coerced = coerceDocumentValues(model, asTextInput(model, picked))
   if (!options.existing) {
+    // A page address fills in from its source on the record's first write
+    // and is normalized on every one (AGL-3475).
+    const values = fillRecordAddresses(model, coerced)
     return {
       matched,
-      values: coerced,
-      errors: validateDocument(model, coerced),
+      values,
+      errors: validateDocument(model, values),
     }
   }
-  const values = { ...options.existing, ...coerced }
+  const values = fillRecordAddresses(model, { ...options.existing, ...coerced })
   const errors: Record<string, string> = {}
   for (const [fieldId, error] of Object.entries(
     validateDocument(model, values),

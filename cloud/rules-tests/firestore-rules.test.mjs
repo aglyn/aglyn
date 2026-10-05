@@ -55,12 +55,46 @@ import {
   writeBatch,
 } from 'firebase/firestore'
 
+import { judgeRulesArtifact } from '../../tools/scripts/lib/rules-deploy-artifact.mjs'
+
 const here = dirname(fileURLToPath(import.meta.url))
 
+/** The documented source: what the structural parsers below read. */
 const RULES_SOURCE = readFileSync(
   join(here, '..', 'firebase-firestore.rules'),
   'utf8',
 )
+
+/**
+ * What deploys, and so what the emulator loads (AGL-3544): the source without
+ * its comments. Every assertion below therefore runs against the deployed
+ * bytes, and the first test proves those are the source's.
+ */
+const RULES_DEPLOYED = readFileSync(
+  join(here, '..', 'firebase-firestore.deploy.rules'),
+  'utf8',
+)
+
+describe('the deploy artifact (AGL-3544)', () => {
+  it('is the documented source without its comments, regenerated since the last edit', () => {
+    const judgement = judgeRulesArtifact({ source: RULES_SOURCE, artifact: RULES_DEPLOYED })
+    assert.equal(
+      judgement.verdict,
+      'fresh',
+      `cloud/firebase-firestore.deploy.rules is stale from line ${judgement.firstDifferentLine}: ` +
+        'this suite would be testing the OLD rules. Run `npm run generate:rules-deploy`.',
+    )
+  })
+
+  it('keeps the source line numbering, so an emulator error points at the source', () => {
+    const lineOf = (text, pick) => pick(text.split('\n').map((line) => line.trim()))
+    const service = (lines) => lines.findIndex((line) => line.startsWith('service cloud.firestore'))
+    const lastClose = (lines) => lines.lastIndexOf('}')
+    assert.ok(lineOf(RULES_SOURCE, service) > 0, 'no `service cloud.firestore` line in the source')
+    assert.equal(lineOf(RULES_DEPLOYED, service), lineOf(RULES_SOURCE, service))
+    assert.equal(lineOf(RULES_DEPLOYED, lastClose), lineOf(RULES_SOURCE, lastClose))
+  })
+})
 
 /**
  * Strip comments with ONE left-to-right scan, so whichever delimiter appears
@@ -519,7 +553,7 @@ before(async () => {
   env = await initializeTestEnvironment({
     projectId: 'demo-rules-check',
     firestore: {
-      rules: RULES_SOURCE,
+      rules: RULES_DEPLOYED,
     },
   })
 })
@@ -660,6 +694,13 @@ beforeEach(async () => {
     await setDoc(doc(db, 'hosts', HOST, 'counters', 'emailSends'), { '2026-08': 500 })
     await setDoc(doc(db, 'hosts', HOST, 'counters', 'workflowRuns'), { '2026-08': 1000 })
     await setDoc(doc(db, 'hosts', HOST, 'counters', 'actionRuns'), { '2026-08': 1000 })
+    // The workspace's run counters (AGL-3472): the figure both run bands are
+    // enforced against, as the run meter's seed leaves them.
+    for (const counter of ['workflowRuns', 'actionRuns']) {
+      await setDoc(doc(db, 'orgs', ORG, 'counters', counter), {
+        '2026-08': 1000, seededFrom: '2026-08',
+      })
+    }
     await setDoc(doc(db, 'hosts', HOST, 'analytics', '2026-08-01'), { total: 900_000 })
     await setDoc(doc(db, 'hosts', HOST, 'members', 'm-collab'), {
       email: 'collab@acme.test', role: 'editor', status: 'active',
@@ -1647,6 +1688,37 @@ describe('hosts', () => {
       'deleting an analytics day',
       deleteDoc(doc(authed(EDITOR), 'hosts', HOST, 'analytics', '2026-08-01')),
     )
+  })
+
+  /**
+   * AGL-3472. The run bands are the WORKSPACE's, enforced against
+   * `orgs/{orgId}/counters/{workflowRuns|actionRuns}`, so that document is
+   * the wall the host counters above used to be: an owner who could lower it
+   * would lift the band for every site at once. The Automation page's run
+   * line reads it on every site, so a site collaborator — a member of the
+   * org — reads it too.
+   */
+  it('the workspace run counters are member-readable and server-written (AGL-3472)', async () => {
+    for (const counter of ['workflowRuns', 'actionRuns']) {
+      await assertSucceeds(getDoc(doc(authed(EDITOR), 'orgs', ORG, 'counters', counter)))
+      await assertFails(getDoc(doc(authed(OUTSIDER), 'orgs', ORG, 'counters', counter)))
+      await mustDeny(
+        `zeroing orgs/{orgId}/counters/${counter}[month]`,
+        updateDoc(doc(authed(OWNER), 'orgs', ORG, 'counters', counter), {
+          '2026-08': 0,
+        }),
+      )
+      await mustDeny(
+        `unseeding orgs/{orgId}/counters/${counter}`,
+        updateDoc(doc(authed(OWNER), 'orgs', ORG, 'counters', counter), {
+          seededFrom: '2099-01',
+        }),
+      )
+      await mustDeny(
+        `deleting orgs/{orgId}/counters/${counter}`,
+        deleteDoc(doc(authed(OWNER), 'orgs', ORG, 'counters', counter)),
+      )
+    }
   })
 
   /**
@@ -3934,6 +4006,34 @@ describe('hosts', () => {
       )
     })
 
+    /**
+     * The owner publishing the placeholder itself makes it their home page
+     * (AGL-3478): `publishScreenRoute` re-registers its route unchanged and
+     * clears the marker in the same update. The marker is a publish key, so
+     * a role that cannot publish cannot clear it.
+     */
+    it('allows a publisher to adopt the placeholder — route kept, marker cleared', async () => {
+      const db = authed(EDITOR)
+      const batch = writeBatch(db)
+      batch.update(doc(db, 'hosts', HOST), {
+        'screens.home': '/',
+        defaultHomeScreenId: deleteField(),
+      })
+      batch.set(
+        doc(db, 'hosts', HOST, 'screens', 'home'),
+        { slug: '/', publishedAt: new Date(), versionId: 'v-mine' },
+        { merge: true },
+      )
+      await mustAllow('publishScreenRoute on the placeholder', batch.commit())
+    })
+
+    it('refuses an author clearing the marker', async () => {
+      await mustDeny(
+        'an author adopting the placeholder',
+        updateDoc(hostRef(AUTHOR), { defaultHomeScreenId: deleteField() }),
+      )
+    })
+
     it('still allows a write that does not touch the map', async () => {
       await mustAllow(
         'a settings write',
@@ -5729,6 +5829,39 @@ describe('pre-release hardening guards', () => {
   })
 
   /**
+   * AGL-3533. `packageImports` is a site package import's record and its undo
+   * snapshot: the content every item it replaced held before the import, and
+   * the paths it wrote. Unreadable for the `mediaTombstones` reason — a copy of
+   * overwritten content nobody may browse — and unwritable because an undo
+   * writes the snapshot back with the Admin SDK. The import route is its only
+   * reader and writer. Owner too: a path question, not a role one.
+   */
+  it('package import records are invisible and unwritable to every client (AGL-3533)', async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'hosts', HOST, 'packageImports', 'i1'), {
+        status: 'applied',
+        snapshotPieces: 1,
+      })
+      await setDoc(doc(context.firestore(), 'hosts', HOST, 'packageImports', 'i1', 'snapshots', '0'), {
+        n: 0,
+        json: '{}',
+      })
+    })
+    for (const uid of [EDITOR, OWNER, VIEWER]) {
+      await assertFails(getDoc(doc(authed(uid), 'hosts', HOST, 'packageImports', 'i1')))
+      await assertFails(getDoc(doc(authed(uid), 'hosts', HOST, 'packageImports', 'i1', 'snapshots', '0')))
+      await assertFails(
+        setDoc(doc(authed(uid), 'hosts', HOST, 'packageImports', 'i1', 'snapshots', '0'), {
+          n: 0,
+          json: '{"page/home":{"content":{"displayName":"Forged"}}}',
+        }),
+      )
+      await assertFails(updateDoc(doc(authed(uid), 'hosts', HOST, 'packageImports', 'i1'), { status: 'applied' }))
+      await assertFails(deleteDoc(doc(authed(uid), 'hosts', HOST, 'packageImports', 'i1')))
+    }
+  })
+
+  /**
    * The org library's tombstones, which are the ones that actually exist in
    * production today — the org DAM is where the 2026-08-13 pass ran. There is
    * no catch-all under `match /orgs/{orgId}`, so this is default-deny rather
@@ -6398,6 +6531,91 @@ describe('a consent group change is the executor’s to write (AGL-3320)', () =>
       'staff finishing it by hand',
       updateDoc(job(authed(STAFF, { staff: true, staffRole: 'super' })), { status: 'done' }),
     )
+  })
+})
+
+/**
+ * An import's job (AGL-3524): `orgs/{orgId}/transferJobs/{jobId}`. The
+ * Admin-SDK job engine behind `/api/transfer/*` writes it and everything
+ * under it; the wizard's progress panel reads the job, so the members those
+ * routes admit — `data.manage`, org-wide — may read it and nobody may write.
+ * Its chunks, ledger, results and undo entries are served by the routes.
+ */
+describe('an import job is the engine’s to write (AGL-3524)', () => {
+  const JOB = { id: 'job-1', resource: 'bottles', status: 'applying', orgId: ORG }
+  const job = (db) => doc(db, 'orgs', ORG, 'transferJobs', 'job-1')
+  const ledger = (db) => doc(db, 'orgs', ORG, 'transferJobs', 'job-1', 'ledger', 'job-1:0')
+  const WIDE_EDITOR = 'uid-transfer-editor'
+  const REVOKED = 'uid-transfer-revoked'
+  const STAMPED = 'uid-transfer-stamped'
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      await setDoc(job(db), JOB)
+      await setDoc(ledger(db), { row: 0, chunk: 0 })
+      await setDoc(doc(db, 'orgs', ORG, 'members', WIDE_EDITOR), { role: 'editor', allHosts: true })
+      await setDoc(doc(db, 'orgs', ORG, 'members', REVOKED), {
+        role: 'editor', allHosts: true, roleId: 'no-data', resolvedPermissions: { 'data.manage': false },
+      })
+      await setDoc(doc(db, 'orgs', ORG, 'members', STAMPED), {
+        role: 'viewer', allHosts: true, roleId: 'importer', resolvedPermissions: { 'data.manage': true },
+      })
+    })
+  })
+
+  it('lets the members the routes admit read the job', async () => {
+    await mustAllow('the owner reading the job', getDoc(job(authed(OWNER))))
+    await mustAllow('an org-wide editor reading the job', getDoc(job(authed(WIDE_EDITOR))))
+    await mustAllow('a custom role stamped with data.manage reading the job', getDoc(job(authed(STAMPED))))
+    await mustAllow('staff reading the job', getDoc(job(authed(STAFF, { staff: true }))))
+  })
+
+  it('refuses everyone else a read', async () => {
+    await mustDeny('an editor whose data.manage is revoked', getDoc(job(authed(REVOKED))))
+    await mustDeny('an org-wide viewer', getDoc(job(authed(VIEWER))))
+    await mustDeny('a site collaborator', getDoc(job(authed(EDITOR))))
+    await mustDeny('an outsider', getDoc(job(authed(OUTSIDER))))
+    // What is under the job is served by the routes; no client reads it.
+    await mustDeny('the owner reading the ledger', getDoc(ledger(authed(OWNER))))
+    await mustDeny('staff reading the ledger', getDoc(ledger(authed(STAFF, { staff: true }))))
+  })
+
+  it('lets nobody write the job or anything under it', async () => {
+    await mustDeny('the owner creating a job', setDoc(doc(authed(OWNER), 'orgs', ORG, 'transferJobs', 'job-2'), JOB))
+    await mustDeny('the owner moving its status', updateDoc(job(authed(OWNER)), { status: 'applied' }))
+    await mustDeny('the owner deleting it', deleteDoc(job(authed(OWNER))))
+    await mustDeny('the owner writing a ledger entry', setDoc(doc(authed(OWNER), 'orgs', ORG, 'transferJobs', 'job-1', 'ledger', 'job-1:1'), { row: 1 }))
+    await mustDeny(
+      'staff finishing it by hand',
+      updateDoc(job(authed(STAFF, { staff: true, staffRole: 'super' })), { status: 'applied' }),
+    )
+  })
+})
+
+/**
+ * Remembered export choices (AGL-3525): `users/{uid}/transferPrefs/{key}`
+ * holds one person's last export choice and saved presets for a resource.
+ * The export dialog writes it from the browser, so the owner reads and
+ * writes their own and nobody else touches it.
+ */
+describe('remembered export choices are their owner’s alone (AGL-3525)', () => {
+  const PREFS = { presets: [{ id: 'p1', label: 'Mine', fieldIds: ['id', 'email'] }] }
+  const prefs = (db, uid = OWNER) => doc(db, 'users', uid, 'transferPrefs', 'crm.contacts')
+
+  it('lets the owner read and write their own', async () => {
+    await mustAllow('the owner saving their choices', setDoc(prefs(authed(OWNER)), PREFS))
+    await mustAllow('the owner reading their choices', getDoc(prefs(authed(OWNER))))
+    await mustAllow('the owner clearing their choices', deleteDoc(prefs(authed(OWNER))))
+  })
+
+  it('lets nobody else read or write them', async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(prefs(context.firestore()), PREFS)
+    })
+    await mustDeny('another member reading them', getDoc(prefs(authed(OUTSIDER))))
+    await mustDeny('another member overwriting them', setDoc(prefs(authed(OUTSIDER), OWNER), PREFS))
+    await mustDeny('a visitor reading them', getDoc(prefs(anon())))
   })
 })
 
@@ -12944,6 +13162,17 @@ describe('CRM sharing: a share is read where it lands and written only as grante
       'deleting a read-only deal share from the target',
       deleteDoc(doc(authed(EDITOR), 'orgs', ORG, 'deals', 'deal-shared-read')),
     )
+  })
+
+  it('lets an org-wide member delete any lead, whichever sites hold it (AGL-3561)', async () => {
+    // The owner's scope is `['org']`, which names no site: the sole-holder
+    // test alone refused them every site-held lead.
+    await mustAllow('the owner deleting a lead one site holds', deleteDoc(lead(OWNER, 'theirs')))
+    await mustAllow('the owner deleting a lead two sites hold', deleteDoc(lead(OWNER, 'co-held')))
+    await mustAllow('the owner deleting a lead shared with another site', deleteDoc(lead(OWNER, 'shared-read')))
+    // A scoped member keeps the sole-holder test: in scope, out of scope.
+    await mustAllow('an editor deleting a lead only their site holds', deleteDoc(lead(EDITOR, 'mine-shared-out')))
+    await mustDeny('an editor deleting a lead held by another site', deleteDoc(lead(EDITOR, 'shared-edit')))
   })
 })
 

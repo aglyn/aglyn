@@ -229,3 +229,68 @@ export function giftCardSettlementCents(
   const hold = (card?.holds ?? {})[sessionId]
   return Math.min(cents(hold?.cents), cents(card?.balanceCents))
 }
+
+/*==========================================
+ * ISSUING A CARD (AGL-2226, AGL-3551).
+ *
+ * A card is issued, never written: by hand from the Gift cards card, or one
+ * card per row from an import, both through `issueGiftCard`
+ * (`server/gift-card-issue.ts`). These are the rules both doors share.
+ *=========================================*/
+
+/** The most one card may be issued for, by hand or from a file. */
+export const GIFT_CARD_ISSUE_MAX_CENTS = 100_000
+
+/** The currency every card is held in: the store charges in US dollars. */
+export const GIFT_CARD_CURRENCY = 'USD'
+
+/**
+ * A code as the store keeps it: upper case, with no spaces — a code another
+ * platform printed in groups (`ABCD EFGH 1234`) is the same code joined.
+ */
+export function giftCardCodeOf(value: unknown): string {
+  return String(value ?? '')
+    .trim()
+    .replace(/\s+/g, '')
+    .toUpperCase()
+}
+
+/** The shortest code a card may carry: anything shorter can be guessed at a checkout. */
+export const GIFT_CARD_CODE_MIN = 8
+export const GIFT_CARD_CODE_MAX = 40
+
+/** Why a code cannot be a card's code, or `null`. A code is the card's document id and spends it. */
+export function giftCardCodeProblem(code: string): string | null {
+  if (code.length < GIFT_CARD_CODE_MIN || code.length > GIFT_CARD_CODE_MAX || !/^[A-Z0-9][A-Z0-9_-]*$/.test(code)) {
+    return (
+      `A gift card code is ${GIFT_CARD_CODE_MIN} to ${GIFT_CARD_CODE_MAX} letters, digits, ` +
+      'hyphens or underscores. Leave the code blank and a new one is made.'
+    )
+  }
+  return null
+}
+
+/** Why a card cannot be issued for this many cents, or `null`. */
+export function giftCardAmountProblem(amountCents: number): string | null {
+  if (!Number.isInteger(amountCents) || amountCents <= 0) return 'A gift card is issued for more than $0.'
+  if (amountCents > GIFT_CARD_ISSUE_MAX_CENTS) {
+    return `A gift card may be issued for at most $${(GIFT_CARD_ISSUE_MAX_CENTS / 100).toLocaleString('en-US')}.`
+  }
+  return null
+}
+
+/**
+ * Whether anybody has spent from a card: a redemption settled on it
+ * (`lastUsedAtMs`, a balance below what it was issued for), or a checkout
+ * holding part of it — expired holds included, because a lapsed hold is
+ * still settled when its session is paid (`giftCardSettlementCents`).
+ */
+export function giftCardRedeemed(
+  card: (HostGiftCard & { initialCents?: number; lastUsedAtMs?: number }) | undefined,
+): boolean {
+  if (!card) return false
+  if (Number(card.lastUsedAtMs) > 0) return true
+  if (Object.keys(card.holds ?? {}).length) return true
+  const initial = Number(card.initialCents)
+  return Number.isFinite(initial) && cents(card.balanceCents) < initial
+}

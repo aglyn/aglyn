@@ -31,6 +31,10 @@ import {
   readOrgBilling,
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
+import {
+  describeDiscountFullUse,
+  orgDiscountFullUse,
+} from '@aglyn/aglyn/app-utils/full-use-cost'
 import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 
 /**
@@ -44,7 +48,10 @@ import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write
  *
  * Apply runs `checkDiscountMargin` for THAT org first: a `block` rating —
  * too deep a discount, or a margin well below the net-margin floor — is
- * refused unless the caller passes `confirmBelowFloor`. StaffGuard-gated;
+ * refused unless the caller passes `confirmBelowFloor`. Beside it, the
+ * discount is judged against the org's full-use cost on the charges the
+ * coupon reaches (AGL-3473) and the verdict returned as `fullUse` — a
+ * warning, never a refusal. StaffGuard-gated;
  * audited to `adminAudit`; 501 without Stripe env. Uses Stripe's REST API
  * directly (no SDK).
  */
@@ -123,9 +130,8 @@ async function handler(request: Request): Promise<Response> {
     }
     const orgData = orgSnap.data() as any
     // AGL-1028: moved to `orgs/{orgId}/billing/stripe`, org doc as fallback.
-    const customerId = (await readOrgBilling(orgId)).stripeCustomerId as
-      | string
-      | undefined
+    const billing = await readOrgBilling(orgId)
+    const customerId = billing.stripeCustomerId as string | undefined
 
     if (action === 'remove') {
       const before = orgData?.discount ?? null
@@ -187,6 +193,33 @@ async function handler(request: Request): Promise<Response> {
     const amountOffUsd =
       coupon.amount_off != null ? Number(coupon.amount_off) / 100 : undefined
 
+    // THE FULL-USE WARNING (AGL-3473). The org as it bills — its plan and
+    // overrides from the org doc, its subscription and add-ons from the
+    // billing doc — using every band it resolves to, on the charges this
+    // coupon reaches. Returned to the console beside the guardrail's rating
+    // and recorded on the audit row; it refuses nothing, because a discount
+    // that spends cost to close a deal is staff's call to make.
+    // The org as it bills, for both verdicts below: the subscription and
+    // add-ons live on the billing doc since AGL-1028, and a guardrail that
+    // read the org doc alone priced most orgs at $0 and rated every
+    // discount ok.
+    const billedOrg = { ...orgData, ...billing }
+    const fullUseAssessment = orgDiscountFullUse(
+      billedOrg as never,
+      { percentOff, amountOffUsd },
+      {
+        duration: typeof coupon.duration === 'string' ? coupon.duration : null,
+        durationInMonths:
+          typeof coupon.duration_in_months === 'number' ? coupon.duration_in_months : null,
+      },
+    )
+    const fullUse = {
+      ok: fullUseAssessment.ok,
+      coverage: fullUseAssessment.coverage,
+      firstYearCoverage: fullUseAssessment.firstYearCoverage,
+      warning: fullUseAssessment.ok ? null : describeDiscountFullUse(fullUseAssessment),
+    }
+
     // Margin guardrail for THIS org (AGL-1105): a blocked discount needs an
     // explicit override.
     //
@@ -196,7 +229,7 @@ async function handler(request: Request): Promise<Response> {
     // cannot do this: no org has been chosen yet.
     const measuredCogsUsd = await latestMeasuredCogsUsd(orgId)
     const rating = checkDiscountMargin(
-      orgData,
+      billedOrg,
       { percentOff, amountOffUsd },
       { measuredCogsUsd },
     )
@@ -211,6 +244,7 @@ async function handler(request: Request): Promise<Response> {
               : 'This discount pushes net margin below the floor. Re-submit ' +
                 'with confirmBelowFloor to override.',
           rating,
+          fullUse,
           requiresConfirmation: true,
         },
         { status: 400 },
@@ -260,11 +294,13 @@ async function handler(request: Request): Promise<Response> {
         amountOffUsd: amountOffUsd ?? null,
         rating: rating.rating,
         marginPct: rating.marginPct,
+        fullUseOk: fullUse.ok,
+        fullUseCoverage: fullUse.coverage,
         reason: reason || null,
       },
       at: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
     })
-    return Response.json({ ok: true, rating }, { status: 200 })
+    return Response.json({ ok: true, rating, fullUse }, { status: 200 })
   } catch (error) {
     // An unverifiable credential is a 401, not a fault of ours
     // (AGL-1993). Null for anything else, so a real failure keeps its 500.

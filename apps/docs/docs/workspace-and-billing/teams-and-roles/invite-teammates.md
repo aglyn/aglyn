@@ -66,17 +66,69 @@ offers **Create my own site instead**, so accepting isn't your only option.
 admins are told you declined. You can't undo a decline. To join later, an admin has
 to invite you again.
 
-### An invitation never changes who owns the workspace
+### An ordinary invitation never changes who owns the workspace
 
 Accepting an invite normally sets your role to whatever the invite offered. The one
-role it cannot touch is the **owner's**. If an invitation is sent to the address that
-owns the workspace, accepting it is refused rather than applied — otherwise the owner
-would be quietly stepped down to a viewer or an admin, and only the owner can transfer
-ownership back, so nobody left in the workspace could undo it.
+role it cannot touch is the **owner's**. If an ordinary invitation is sent to the
+address that owns the workspace, accepting it is refused rather than applied —
+otherwise the owner would be quietly stepped down to a viewer or an admin, and only
+the owner can transfer ownership back, so nobody left in the workspace could undo it.
 
-Ownership moves one way only: **Settings → Transfer ownership**, by the current owner,
-to somebody already on the team. The previous owner becomes an admin. Nothing else in
-the product creates or moves an owner — an invitation cannot grant the role either.
+Ownership moves in two deliberate ways, and in no other: **Settings → Transfer
+ownership**, by the current owner, to somebody already on the team; and an **owner
+handoff**, below, which invites an address to take the workspace over.
+
+## Hand off the workspace to a new owner {#owner-handoff}
+
+An owner handoff invites someone to take the workspace over as its **owner**. It is
+how a workspace built for somebody else reaches them: an agency or the Aglyn team
+builds the site, then hands it to the client, who may not have an Aglyn account yet.
+
+1. Open the organization's **Team** page.
+2. Enter the new owner's email, and in **Role** choose **Owner (hand off this
+   workspace)**. Only the current owner sees this choice. (Aglyn staff send it from
+   the staff console.)
+3. In **Current owner**, choose what happens to you once they accept:
+   **Stay on as an admin after the handoff**, or **Leave after the handoff**.
+4. Choose **Send handoff**.
+
+The new owner gets an email saying the workspace is being handed to them, and the
+invitation shows in their console with **Accept** and **Decline**. Nothing changes
+until they accept. When they do, in one step:
+
+- they become the owner of the workspace and every site in it;
+- you stay on as an admin, or leave the workspace, as you chose;
+- the invitation is marked accepted and the activity log records the handoff.
+
+They land on the workspace's home, like anyone joining. Accepting does not ask them
+to upgrade or start a subscription.
+
+Some rules hold for every handoff:
+
+- **One at a time.** A workspace has one pending handoff. Sending a new one replaces
+  the last.
+- **No seat reserved.** The owner seat moves rather than being added, so a pending
+  handoff never counts against your team seats.
+- **Staying needs a seat.** If you stay on as an admin, the workspace ends up with one
+  more manager than before, so it needs a free team seat for you. On a plan with no
+  seat to spare (Free has one) the handoff is refused when you send it, and the
+  message points you to **Leave after the handoff** instead. Aglyn staff hold no seat,
+  so a staff member can always stay on.
+- **Single sign-on.** If the workspace enforces single sign-on, a handoff that would
+  leave it with no way in when your identity provider fails is refused, the same as a
+  transfer.
+
+The pending handoff is listed under **Pending invites** with **Resend** and **Revoke**,
+like any other invite.
+
+## Aglyn staff on your team {#aglyn-staff}
+
+Aglyn staff sometimes join a workspace to build it or to help. A staff member's row on
+the Team page carries an **Aglyn staff · no seat** chip, and takes none of your seats:
+the seat line above the table leaves them out, and an invitation to a staff address
+reserves nothing. If someone stops being Aglyn staff, their row takes a seat again
+like anyone else's. Nobody loses access when that happens; you just can't add the next
+person until a seat is free.
 
 ## How team members act
 

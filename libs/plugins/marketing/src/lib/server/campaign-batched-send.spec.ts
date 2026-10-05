@@ -319,7 +319,9 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   getOrgForHost: async () => ({
     orgId: 'org-1',
     org: {
-      plan: 'pro',
+      // Business, because Pro's monthly campaign allowance (2,500) is under
+      // the 3,000-person audience these batches address.
+      plan: 'business',
       ...(orgCreatedAtMs === null ? {} : { createdAt: orgCreatedAtMs }),
       ...(orgReputationPolicy
         ? { emailReputationPolicy: orgReputationPolicy }

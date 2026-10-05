@@ -41,6 +41,26 @@ jest.mock('../hooks/use-lead-source-picklist', () => {
   }
 })
 
+// The org's lead statuses (AGL-3512): the standard ones.
+jest.mock('../hooks/use-lead-status-picklist', () => {
+  const { effectiveCrmLeadStatusPicklist } = jest.requireActual('@aglyn/aglyn/app-utils/crm')
+  const picklist = effectiveCrmLeadStatusPicklist(null)
+  return {
+    useLeadStatusPicklist: () => ({ picklist, stored: false, ready: true, fromCache: false }),
+  }
+})
+
+// The org's Salutation, Industry and Rating (AGL-3513): the standard ones.
+jest.mock('../hooks/use-lead-picklists', () => {
+  const { effectiveCrmPicklist } = jest.requireActual('@aglyn/aglyn/app-utils/crm')
+  const lists = {
+    salutation: effectiveCrmPicklist('salutation', null),
+    industry: effectiveCrmPicklist('industry', null),
+    rating: effectiveCrmPicklist('rating', null),
+  }
+  return { useLeadPicklists: () => ({ lists, ready: true }) }
+})
+
 jest.mock('firebase/firestore', () => ({
   doc: (_db: unknown, ...segments: string[]) => ({ path: segments.join('/') }),
   deleteField: () => ({ op: 'delete' }),
@@ -196,6 +216,39 @@ describe('the profile on the lead page', () => {
       leadSource: { op: 'delete' },
       address: { op: 'delete' },
     })
+  })
+
+  it("saves Salesforce's standard fields and the name their parts make (AGL-3513)", async () => {
+    renderCard()
+    fireEvent.change(screen.getByLabelText('First name'), { target: { value: ' Jane ' } })
+    fireEvent.change(screen.getByLabelText('Last name'), { target: { value: 'Doe-Ray' } })
+    fireEvent.change(screen.getByLabelText('Mobile phone'), { target: { value: '(512) 555-0108' } })
+    fireEvent.change(screen.getByLabelText('Employees'), { target: { value: '1,200' } })
+    fireEvent.change(screen.getByLabelText('Annual revenue'), { target: { value: '1,250,000.50' } })
+    fireEvent.click(screen.getByLabelText('Do not call'))
+    fireEvent.click(saveButton())
+    await screen.findByRole('button', { name: 'Save' })
+    expect(updateDoc.mock.calls[0]?.[1]).toMatchObject({
+      firstName: 'Jane',
+      lastName: 'Doe-Ray',
+      name: 'Jane Doe-Ray',
+      mobilePhone: '+15125550108',
+      numberOfEmployees: 1200,
+      annualRevenueCents: 125000050,
+      currency: 'usd',
+      doNotCall: true,
+      // The name's words are what the list searches.
+      searchTokens: expect.arrayContaining(['jane', 'doe']),
+    })
+  })
+
+  it('refuses a revenue that is not an amount, and marks every number when the lead asked not to be called', async () => {
+    renderCard({ lead: { ...lead, phone: '+15125550107', doNotCall: true } })
+    expect(screen.getAllByText('(do not call)').length).toBeGreaterThan(0)
+    fireEvent.change(screen.getByLabelText('Annual revenue'), { target: { value: 'lots' } })
+    fireEvent.click(saveButton())
+    expect(await screen.findByText(/Enter an amount/)).not.toBeNull()
+    expect(updateDoc).not.toHaveBeenCalled()
   })
 
   it('refuses a phone it cannot read under the field, and writes nothing', async () => {

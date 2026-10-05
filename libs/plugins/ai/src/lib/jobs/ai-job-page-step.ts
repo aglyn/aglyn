@@ -73,6 +73,9 @@ import {
   AI_PAGE_SECTION_TOOL,
   aiEmptyPage,
   aiPageCheckContext,
+  aiPageRecordNote,
+  aiPageRecordTemplate,
+  aiPageRecordTokens,
   aiPageSectionCheck,
   aiPageSectionNodeId,
   aiPageSectionPrompt,
@@ -456,6 +459,10 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
     ])
     const org = (orgSnapshot.data() ?? null) as Partial<AglynOrgBilling> | null
     if (written?.deleted) return { ...aiUnspentOutcome(model), failure: AI_JOB_PAGE_DELETED_COPY }
+    // A record template's copy binds its dataset's fields, and its draft says
+    // where the member saves the binding (AGL-3475).
+    const record = aiPageRecordTemplate(screen.record, inventory, plan)
+    const recordNote = record ? aiPageRecordNote(record) : null
 
     // The plan starts from a copy of a screen the site has (rule 15): the copy
     // is the draft — unrouted, as every copy is — and nothing is generated.
@@ -505,7 +512,7 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
         if (review) return aiUnspentOutcome(model, { review })
         const hostSubdomain = await aiSiteSubdomain(firestore, hostId)
         return aiUnspentOutcome(model, {
-          outputs: [output({ id: copy.id, versionId: copy.versionId, name: copy.name, hostSubdomain })],
+          outputs: [output({ id: copy.id, versionId: copy.versionId, name: copy.name, hostSubdomain }, null, recordNote)],
         })
       }
       if (copy.ok === false && copy.status === 403) {
@@ -524,7 +531,12 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
     const sections = screen.sections.map((section) => section.name)
     // A third-party player the confirmed plan lists for this page is the only one it may embed (AGL-3433).
     const embeds = aiPlanEmbedsFor(plan, { slug: screen.slug })
-    const context = aiPageCheckContext(inventory, { reusableComponents, sections, embeds })
+    const context = aiPageCheckContext(inventory, {
+      reusableComponents,
+      sections,
+      embeds,
+      recordTokens: aiPageRecordTokens(record),
+    })
 
     // ── The last pass: the whole page, its listing, and the draft reported ──
     if (index === -1 && written) {
@@ -534,10 +546,16 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
         scrollTargetIds: sectionIds,
       })
       // The facts the brief did not give, on the page or in the defaults its components show (AGL-3056).
-      const note = aiBracketedFactsNote({
-        tree: { rootId: CANVAS_ROOT_ELEMENT_ID, nodes: page as unknown as AiDoctrineTree['nodes'] },
-        inventory,
-      })
+      const note =
+        [
+          aiBracketedFactsNote({
+            tree: { rootId: CANVAS_ROOT_ELEMENT_ID, nodes: page as unknown as AiDoctrineTree['nodes'] },
+            inventory,
+          }),
+          recordNote,
+        ]
+          .filter(Boolean)
+          .join(' ') || null
       // The page's own draft, reported once however many times the last pass
       // runs (AGL-3143): a refused pass reports it and a later one that
       // passes does not report it twice.
@@ -628,7 +646,7 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
       messages: [
         {
           role: 'user',
-          content: aiPageSectionPrompt({ job, plan, screen, index, maxElements, reusableComponents }),
+          content: aiPageSectionPrompt({ job, plan, screen, index, maxElements, reusableComponents, record }),
         },
       ],
       tool: AI_PAGE_SECTION_TOOL,

@@ -38,6 +38,10 @@ function docRef(path: string): any {
     set: async (value: Record<string, unknown>) => {
       docs.set(path, { ...(docs.get(path) ?? {}), ...value })
     },
+    create: async (value: Record<string, unknown>) => {
+      if (docs.has(path)) throw Object.assign(new Error('exists'), { code: 6 })
+      docs.set(path, value)
+    },
     collection: (name: string) => ({
       doc: (id: string) => docRef(`${path}/${name}/${id}`),
     }),
@@ -61,6 +65,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     }),
   },
   getOrgForHost: async () => ({ org: { plan: 'business' } }),
+  logHostActivity: async () => undefined,
   hostSendingIdentity: async () => ({ from: 'hello@northwind.example' }),
   meterHostEmail: async () => undefined,
   // The site's built-in copy, rendered for real, with the site's own tokens.

@@ -20,12 +20,13 @@ import { MdiIcon } from '@aglyn/shared-ui-jsx'
 import { alpha, Box } from '@mui/material'
 import { useCallback } from 'react'
 import { useAddElementDrawerCallback } from '../hooks/use-add-element-drawer-callback'
+import useAglynBesignerFlag from '../hooks/use-aglyn-besigner-flag'
 
 /** Editor chrome, so the accent is literal — see `SlotMarker` in node-leaf. */
 const SLOT_ACCENT = '#00B0FF'
 
 /**
- * Stand-in for an empty screen document.
+ * Stand-in for an empty document — a page, a component, an email.
  *
  * An empty screen has nothing to aim at. Inside a shared layout that is not
  * merely unhelpful, it is invisible: the layout's slot passes its children
@@ -41,9 +42,13 @@ const SLOT_ACCENT = '#00B0FF'
  * against the document root. Clicking opens the same Add Element drawer the
  * INSERT menu uses, with no parent — which the drawer callback resolves to
  * the root.
+ *
+ * The label names the document by the noun its editor publishes, so an empty
+ * component is not called a page (AGL-3477).
  */
 export function EmptyDocumentSlot() {
   const addElement = useAddElementDrawerCallback()
+  const [documentNoun] = useAglynBesignerFlag('documentNoun')
   const handleClick = useCallback(() => {
     // No parent: the drawer callback falls back to the document root, which
     // is the only correct target for a document with nothing in it.
@@ -98,7 +103,7 @@ export function EmptyDocumentSlot() {
     >
       <MdiIcon path={mdiPlusBoxOutline.path} sx={{ color: SLOT_ACCENT }} />
       <Box component="span" sx={{ color: SLOT_ACCENT, fontWeight: 700 }}>
-        {'This page is empty'}
+        {`This ${documentNoun || 'page'} is empty`}
       </Box>
       <Box component="span" sx={{ fontSize: 13 }}>
         {'Drag an element here, or click to add one'}

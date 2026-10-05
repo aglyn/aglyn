@@ -1,0 +1,4570 @@
+rules_version = '2'; // GENERATED from firebase-firestore.rules by `npm run generate:rules-deploy`; edit that file, never this one (AGL-3544).
+
+
+
+
+service cloud.firestore {
+match /databases/{database}/documents {
+function isSignedIn() { return request.auth != null; }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+function isVerified() {
+return isSignedIn() &&
+(request.auth.token.get('email_verified', false) == true ||
+isImpersonating());
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+function isImpersonating() {
+return isSignedIn() &&
+request.auth.token.get('impersonatedBy', '') is string &&
+request.auth.token.get('impersonatedBy', '') != '';
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+function isStaff() {
+return isSignedIn() && request.auth.token.get('staff', false) == true;
+}
+
+
+
+
+
+
+
+
+
+function staffRole() {
+return request.auth.token.get('staffRole', 'support');
+}
+function isBillingStaff() {
+return isStaff() && (staffRole() == 'super' || staffRole() == 'billing');
+}
+function isSuperStaff() { return isStaff() && staffRole() == 'super'; }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+function mediaObjectFieldsUnset() {
+return !request.resource.data.keys().hasAny([
+'storagePath', 'private', 'cdnPath', 'url', 'contentType',
+'contentHash', 'contentSha256', 'sizeBytes', 'variants',
+'variantsError', 'svgSanitized', 'uploadedBy', 'createdAt',
+'video', 'poster', 'posterError', 'videoRenditions',
+'deliveryCopies', 'embeddedMetadata', 'variantEncoderVersion',
+'display', 'variantRegeneration']);
+}
+function mediaObjectFieldsUnchanged() {
+return !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+'storagePath', 'private', 'cdnPath', 'url', 'contentType',
+'contentHash', 'contentSha256', 'sizeBytes', 'variants',
+'variantsError', 'svgSanitized', 'uploadedBy', 'createdAt',
+'video', 'poster', 'posterError', 'videoRenditions',
+'deliveryCopies', 'embeddedMetadata', 'variantEncoderVersion',
+'display', 'variantRegeneration']);
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+function orgCarriesCrmSuite(orgId) {
+return orgId != null &&
+exists(/databases/$(database)/documents/orgs/$(orgId)) &&
+crmSuiteCarried(get(/databases/$(database)/documents/orgs/$(orgId)).data);
+}
+function crmSuiteCarried(org) {
+return crmSuiteOverride(org) == true ||
+(crmSuiteOverride(org) == null &&
+((org.get('plan', 'free') in
+['starter', 'pro', 'business', 'scale', 'advanced', 'agency', 'enterprise'] &&
+!(orgSubscriptionStatus(org) in
+['canceled', 'unpaid', 'incomplete', 'incomplete_expired'])) ||
+(orgPlanComp(org) in
+['starter', 'pro', 'business', 'scale', 'advanced', 'agency', 'enterprise'] &&
+orgSubscriptionStatus(org) in
+['', 'canceled', 'unpaid', 'incomplete', 'incomplete_expired'])));
+}
+function crmSuiteOverride(org) {
+return org.get('entitlements', {}) is map &&
+org.get('entitlements', {}).get('features', {}) is map
+? org.get('entitlements', {}).get('features', {}).get('crm', null)
+: null;
+}
+function orgPlanComp(org) {
+return org.get('entitlements', {}) is map &&
+org.get('entitlements', {}).get('planComp', {}) is map
+? org.get('entitlements', {}).get('planComp', {}).get('plan', '')
+: '';
+}
+function orgSubscriptionStatus(org) {
+return org.get('billingStatus', '') is string && org.get('billingStatus', '') != ''
+? org.get('billingStatus', '')
+: (org.get('subscription', {}) is map
+? org.get('subscription', {}).get('status', '')
+: '');
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+function orgCarriesOutreach(orgId) {
+return orgId != null &&
+exists(/databases/$(database)/documents/orgs/$(orgId)) &&
+outreachOverride(get(/databases/$(database)/documents/orgs/$(orgId)).data) == true;
+}
+function outreachOverride(org) {
+return org.get('entitlements', {}) is map &&
+org.get('entitlements', {}).get('features', {}) is map
+? org.get('entitlements', {}).get('features', {}).get('outreach', null)
+: null;
+}
+
+
+
+
+
+
+
+match /orgs/{orgId} {
+function isOrgMember() {
+return isSignedIn() &&
+exists(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid));
+}
+function orgMember() {
+return get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data;
+}
+function canManageOrg() {
+return isOrgMember() && orgMember().role in ['owner', 'admin'];
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+function isOrgWideMember() {
+return isOrgMember() &&
+(orgMember().role in ['owner', 'admin'] ||
+orgMember().get('allHosts', false) == true);
+}
+function orgNotSuspended() {
+return orgMember().get('orgSuspended', false) != true;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+function memberGrants(permission) {
+return orgMember().get('permissions', {}).get(permission, true) == true;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+allow read: if isStaff() || isOrgMember();
+
+
+
+
+
+
+
+
+
+
+allow create, delete: if false;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+allow update: if (isSuperStaff() &&
+!request.resource.data.diff(resource.data).affectedKeys().hasAny(
+['slug', 'ownerUid', 'createdByUid', 'hosts', 'sso',
+'plan', 'entitlements', 'releaseFlags',
+'seatAddons', 'registerAllocations', 'collaboratorAllocations',
+'storageOverage', 'assistOverage',
+'bandwidthCap', 'stripeCustomerId', 'subscription',
+'billingStatus', 'brandingProfile', 'discount', 'enterprise',
+'suspendedAt', 'suspendedReason', 'suspendedReasonCode',
+'suspendedMessage', 'suspendedUntilMs', 'suspendedMode',
+'suspendedEnforcement', 'suspended', 'crmInbound', 'acquisition',
+'consentGroups', 'consentGroupsAwaitConfirmation', 'consentGroupsChange',
+'marketingConsentPolicy', 'upgradeProposal'])) ||
+(isBillingStaff() &&
+!request.resource.data.diff(resource.data).affectedKeys().hasAny(
+['slug', 'ownerUid', 'createdByUid', 'hosts', 'enabledPlugins',
+'sso',
+'plan', 'entitlements', 'releaseFlags',
+'seatAddons', 'registerAllocations', 'collaboratorAllocations',
+'storageOverage', 'assistOverage',
+'bandwidthCap', 'stripeCustomerId', 'subscription',
+'billingStatus', 'brandingProfile', 'discount', 'enterprise',
+'suspendedAt', 'suspendedReason', 'suspendedReasonCode',
+'suspendedMessage', 'suspendedUntilMs', 'suspendedMode',
+'suspendedEnforcement', 'suspended',
+'erasureRequestedAt', 'crmInbound', 'acquisition',
+'consentGroups', 'consentGroupsAwaitConfirmation', 'consentGroupsChange',
+'marketingConsentPolicy', 'upgradeProposal'])) ||
+
+
+
+(canManageOrg() && isVerified() && orgNotSuspended() &&
+!request.resource.data.diff(resource.data).affectedKeys().hasAny(
+['slug', 'ownerUid', 'createdByUid', 'hosts', 'plan',
+'entitlements', 'releaseFlags',
+'enabledPlugins', 'seatAddons', 'registerAllocations',
+'collaboratorAllocations', 'storageOverage', 'assistOverage',
+'bandwidthCap', 'stripeCustomerId', 'subscription',
+'billingStatus', 'brandingProfile', 'sso', 'discount',
+'enterprise',
+
+
+
+
+
+
+
+
+
+'usageBudget', 'usageAlerts', 'usageAlertsSeeded',
+'suspendedAt', 'suspendedReason', 'suspendedReasonCode',
+'suspendedMessage', 'suspendedUntilMs', 'suspendedMode',
+'suspendedEnforcement', 'suspended',
+'erasureRequestedAt',
+
+
+
+
+
+
+
+
+'timeZone',
+
+
+
+
+
+
+
+'nameLower', 'nameTokens', 'nameReversed',
+'crmInbound',
+
+
+
+'acquisition',
+
+
+
+
+
+
+
+
+
+
+'consentGroups', 'consentGroupsAwaitConfirmation',
+'marketingConsentPolicy',
+
+
+'consentGroupsChange',
+
+
+
+
+'upgradeProposal']));
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+match /billing/{billingDocId} {
+allow read: if isStaff() ||
+(canManageOrg() && memberGrants('billing.view'));
+allow write: if false;
+}
+
+
+
+
+
+
+
+
+
+
+match /members/{memberUid} {
+allow read: if isStaff() ||
+(isSignedIn() && memberUid == request.auth.uid) ||
+isOrgWideMember();
+allow write: if false;
+}
+
+
+
+match /invites/{inviteId} {
+allow read: if isStaff() || canManageOrg();
+allow write: if false;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+match /memberEmailAliases/{memberUid} {
+allow read, write: if false;
+}
+
+
+
+match /roles/{roleId} {
+allow read: if isStaff() || isOrgMember();
+allow write: if false;
+}
+
+
+
+
+
+
+
+
+match /aiJobs/{jobId} {
+allow read: if isStaff() || isOrgMember();
+allow write: if false;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+function canReadOutreach() {
+return isOrgWideMember() &&
+(memberStamps('outreach.use') ||
+(orgMember().role in ['owner', 'admin'] &&
+memberResolves('outreach.use'))) &&
+orgCarriesOutreach(orgId);
+}
+
+
+
+
+
+
+
+
+
+
+
+match /outreachMailboxes/{mailboxId} {
+allow read: if canReadOutreach();
+allow write: if false;
+}
+match /outreachSequences/{sequenceId} {
+allow read: if canReadOutreach();
+allow write: if false;
+
+
+match /reports/{reportId} {
+allow read: if canReadOutreach();
+allow write: if false;
+}
+}
+match /outreachEnrollments/{enrollmentId} {
+allow read: if canReadOutreach();
+allow write: if false;
+
+match /history/{entryId} {
+allow read: if canReadOutreach();
+allow write: if false;
+}
+}
+
+match /outreachSettings/{settingsId} {
+allow read: if canReadOutreach();
+allow write: if false;
+}
+match /outreachDoNotContact/{key} {
+allow read: if canReadOutreach();
+allow write: if false;
+}
+
+
+match /outreachDoNotContactDomains/{domain} {
+allow read: if canReadOutreach();
+allow write: if false;
+}
+
+
+
+
+
+
+match /outreachDomainIntel/{domain} {
+allow read: if canReadOutreach();
+allow write: if false;
+}
+match /outreachGatewayStats/{gateway} {
+allow read: if canReadOutreach();
+allow write: if false;
+}
+
+
+
+
+
+match /mailGatewayLedger/{key} {
+allow read: if isStaff() || isOrgMember();
+allow write: if false;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+match /aiUsageByUser/{subjectUid}/months/{month} {
+allow read: if isStaff() ||
+(isOrgMember() && subjectUid == request.auth.uid) ||
+(isOrgWideMember() &&
+((canManageOrg() &&
+(memberResolves('billing.view') || memberResolves('org.auditLog'))) ||
+memberStamps('billing.view') ||
+memberStamps('org.auditLog')));
+allow write: if false;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+match /aiAllotments/{subject} {
+allow read: if isStaff() ||
+(subject == 'org' && isOrgMember()) ||
+(isOrgMember() &&
+(subject == 'member:' + request.auth.uid ||
+(subject.matches('collab:[A-Za-z0-9_-]+:[A-Za-z0-9_-]+') &&
+subject.split(':')[2] == request.auth.uid))) ||
+(isOrgWideMember() &&
+((canManageOrg() &&
+(memberResolves('billing.view') || memberResolves('billing.manage'))) ||
+memberStamps('billing.view') ||
+memberStamps('billing.manage'))) ||
+(isOrgMember() &&
+subject.matches('(collab|host):[A-Za-z0-9_-]+(:[A-Za-z0-9_-]+)?') &&
+orgMember().get('hostAccess', {}).get(subject.split(':')[1], '') == 'admin');
+allow write: if false;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+match /aiBilling/{document} {
+allow read: if isStaff() ||
+(isOrgWideMember() &&
+((canManageOrg() &&
+(memberResolves('billing.view') || memberResolves('billing.manage'))) ||
+memberStamps('billing.view') ||
+memberStamps('billing.manage')));
+allow write: if false;
+}
+
+match /aiOverageCharges/{chargeId} {
+allow read: if isStaff() ||
+(isOrgWideMember() &&
+((canManageOrg() &&
+(memberResolves('billing.view') || memberResolves('billing.manage'))) ||
+memberStamps('billing.view') ||
+memberStamps('billing.manage')));
+allow write: if false;
+}
+
+
+
+
+
+
+
+match /usage/{month} {
+allow read: if isStaff() || isOrgWideMember();
+allow write: if false;
+}
+match /apiUsage/{month} {
+allow read: if isStaff() || isOrgWideMember();
+allow write: if false;
+}
+
+
+
+
+
+
+
+
+match /crmEmailUsage/{day} {
+allow read: if isStaff() || isOrgWideMember();
+allow write: if false;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+match /analytics/{day} {
+allow read: if isStaff() || isOrgWideMember();
+allow write: if false;
+}
+
+
+
+
+
+match /pluginSettings/{pluginId} {
+allow read: if isStaff() || isOrgMember();
+
+
+
+allow write: if isStaff() ||
+(canManageOrg() && isVerified() && orgNotSuspended());
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+function canWriteOrgData() {
+return isOrgMember() && isVerified() &&
+orgMember().role in ['owner', 'admin', 'editor'] &&
+orgNotSuspended();
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+function memberResolves(permission) {
+return orgMember()
+.get('resolvedPermissions', orgMember().get('permissions', {}))
+.get(permission, true) == true;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+function memberStamps(permission) {
+return orgMember()
+.get('resolvedPermissions', orgMember().get('permissions', {}))
+.get(permission, false) == true;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+function canWriteOrgDatasets() {
+return canWriteOrgData() && memberResolves('data.manage');
+}
+
+function canReadTransferJobs() {
+return isOrgWideMember() && isVerified() &&
+((orgMember().role in ['owner', 'admin', 'editor'] && memberResolves('data.manage')) ||
+memberStamps('data.manage'));
+}
+
+
+
+
+
+
+
+function canWriteOrgWideData() {
+return isOrgWideMember() && isVerified() &&
+orgMember().role in ['owner', 'admin', 'editor'] &&
+orgNotSuspended();
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+function canReadScoped() {
+return isOrgWideMember() ||
+(isOrgMember() &&
+resource.data.visibleTo.hasAny(orgMember().get('scopeTokens', ['org'])));
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+function canReadScopedPeople() {
+return canReadScoped() &&
+(memberStamps('data.manage') ||
+(orgMember().role in ['owner', 'admin', 'editor'] &&
+memberResolves('data.manage')));
+}
+function canWriteScopedOrgData() {
+return canWriteOrgData() && canReadScoped();
+}
+
+
+
+
+
+
+
+
+function canWriteScopedOrgDatasets() {
+return canWriteOrgDatasets() && canReadScoped();
+}
+
+
+
+
+function crmWriteScope() {
+return resource.data.get('writeTo', resource.data.visibleTo);
+}
+function canWriteScopedCrm() {
+return canWriteOrgData() &&
+(isOrgWideMember() ||
+(isOrgMember() &&
+crmWriteScope().hasAny(orgMember().get('scopeTokens', ['org']))));
+}
+function crmHeldScope() {
+return resource.data.visibleTo.removeAll(
+resource.data.get(['sharing', 'added'], []));
+}
+function crmSharingUnchanged() {
+return !request.resource.data.diff(resource.data).affectedKeys()
+.hasAny(['sharing', 'writeTo']);
+}
+function crmSharingAbsent() {
+return !request.resource.data.keys().hasAny(['sharing', 'writeTo']);
+}
+
+
+
+
+
+
+function scopeUnchanged() {
+return !request.resource.data.diff(resource.data)
+.affectedKeys().hasAny(['visibleTo']);
+}
+
+
+
+
+
+
+function canCreateScoped() {
+return isOrgWideMember() ||
+request.resource.data.visibleTo.hasAny(orgMember().get('scopeTokens', ['org']));
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+function crmMediaIdsOk() {
+return !('mediaIds' in request.resource.data) ||
+(request.resource.data.mediaIds is list &&
+request.resource.data.mediaIds.size() <= 20);
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+match /datasets/{datasetId} {
+allow read: if isStaff() || canReadScoped();
+allow create: if isStaff();
+allow update: if isStaff() ||
+(canWriteScopedOrgDatasets() && (isOrgWideMember() || scopeUnchanged()));
+allow delete: if isStaff();
+match /records/{recordId} {
+
+
+
+
+
+
+
+
+
+function parentDatasetVisible() {
+return isOrgWideMember() ||
+(isOrgMember() &&
+get(/databases/$(database)/documents/orgs/$(orgId)/datasets/$(datasetId))
+.data.visibleTo
+.hasAny(orgMember().get('scopeTokens', ['org'])));
+}
+allow read: if isStaff() || parentDatasetVisible();
+allow create: if isStaff();
+allow update, delete: if isStaff() ||
+(canWriteOrgDatasets() && parentDatasetVisible());
+}
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+match /contacts/{contactId} {
+allow read: if isStaff() || canReadScopedPeople();
+allow create, update, delete: if isStaff();
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+match /leads/{leadId} {
+allow read: if isStaff() || canReadScopedPeople();
+allow create: if isStaff();
+allow update: if isStaff() ||
+(canWriteScopedCrm() && (isOrgWideMember() || scopeUnchanged()) &&
+crmSharingUnchanged() &&
+orgCarriesCrmSuite(orgId) &&
+!request.resource.data.diff(resource.data).affectedKeys().hasAny(['emailState', 'emailStatus']));
+allow delete: if isStaff() ||
+(canWriteScopedCrm() &&
+(isOrgWideMember() ||
+crmHeldScope().hasOnly(
+orgMember().get('scopeTokens', ['org']))));
+}
+
+
+
+
+
+
+
+
+
+
+
+match /contactSegments/{segmentId} {
+allow read: if isStaff() || canReadScopedPeople();
+allow create: if isStaff() ||
+(canWriteOrgData() && canCreateScoped() && orgCarriesCrmSuite(orgId));
+allow update: if isStaff() ||
+(canWriteScopedOrgData() && (isOrgWideMember() || scopeUnchanged()) &&
+orgCarriesCrmSuite(orgId));
+allow delete: if isStaff() || canWriteScopedOrgData();
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+match /emailIndex/{emailKey} {
+allow read: if isStaff();
+allow write: if false;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+match /retainedRefusals/{personKey} {
+allow read, write: if false;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+match /companies/{companyId} {
+allow read: if isStaff() || canReadScopedPeople();
+allow create: if isStaff() ||
+(canWriteOrgData() && canCreateScoped() && crmSharingAbsent() &&
+crmMediaIdsOk() && orgCarriesCrmSuite(orgId));
+allow update: if isStaff() ||
+(canWriteScopedCrm() && (isOrgWideMember() || scopeUnchanged()) &&
+crmSharingUnchanged() &&
+crmMediaIdsOk() && orgCarriesCrmSuite(orgId));
+allow delete: if isStaff() || canWriteScopedCrm();
+}
+
+
+
+match /pipelines/{pipelineId} {
+allow read: if isStaff() || canReadScopedPeople();
+allow create: if isStaff() ||
+(canWriteOrgData() && canCreateScoped() && orgCarriesCrmSuite(orgId));
+allow update: if isStaff() ||
+(canWriteScopedOrgData() && (isOrgWideMember() || scopeUnchanged()) &&
+orgCarriesCrmSuite(orgId));
+allow delete: if isStaff() || canWriteScopedOrgData();
+}
+
+
+match /deals/{dealId} {
+allow read: if isStaff() || canReadScopedPeople();
+allow create: if isStaff() ||
+(canWriteOrgData() && canCreateScoped() && crmSharingAbsent() &&
+crmMediaIdsOk() && orgCarriesCrmSuite(orgId));
+allow update: if isStaff() ||
+(canWriteScopedCrm() && (isOrgWideMember() || scopeUnchanged()) &&
+crmSharingUnchanged() &&
+crmMediaIdsOk() && orgCarriesCrmSuite(orgId));
+allow delete: if isStaff() || canWriteScopedCrm();
+}
+
+
+match /crmTasks/{taskId} {
+allow read: if isStaff() || canReadScopedPeople();
+allow create: if isStaff() ||
+(canWriteOrgData() && canCreateScoped() && orgCarriesCrmSuite(orgId));
+allow update: if isStaff() ||
+(canWriteScopedOrgData() && (isOrgWideMember() || scopeUnchanged()) &&
+orgCarriesCrmSuite(orgId));
+allow delete: if isStaff() || canWriteScopedOrgData();
+}
+
+
+match /crmActivities/{activityId} {
+allow read: if isStaff() || canReadScopedPeople();
+allow create: if isStaff() ||
+(canWriteOrgData() && canCreateScoped() && orgCarriesCrmSuite(orgId));
+allow update: if isStaff() ||
+(canWriteScopedOrgData() && (isOrgWideMember() || scopeUnchanged()) &&
+orgCarriesCrmSuite(orgId));
+allow delete: if isStaff() || canWriteScopedOrgData();
+}
+
+
+
+
+
+
+
+match /contactFields/{fieldId} {
+allow read: if isStaff() || canReadScopedPeople();
+allow create: if isStaff() ||
+(canWriteOrgData() && canCreateScoped() && orgCarriesCrmSuite(orgId));
+allow update: if isStaff() ||
+(canWriteScopedOrgData() && (isOrgWideMember() || scopeUnchanged()) &&
+orgCarriesCrmSuite(orgId));
+allow delete: if isStaff() || canWriteScopedOrgData();
+}
+
+
+
+
+
+
+
+match /crmPicklists/{picklistId} {
+allow read: if isStaff() || canReadScopedPeople();
+allow create: if isStaff() ||
+(canWriteOrgData() && canCreateScoped() && orgCarriesCrmSuite(orgId));
+allow update: if isStaff() ||
+(canWriteScopedOrgData() && (isOrgWideMember() || scopeUnchanged()) &&
+orgCarriesCrmSuite(orgId));
+allow delete: if isStaff() || canWriteScopedOrgData();
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+match /crmViews/{viewId} {
+allow read: if isStaff() || canReadScopedPeople();
+allow create: if isStaff() ||
+(canWriteOrgData() && canCreateScoped() &&
+request.resource.data.createdByUid == request.auth.uid &&
+orgCarriesCrmSuite(orgId));
+allow update: if isStaff() ||
+(canWriteScopedOrgData() &&
+(isOrgWideMember() ||
+(resource.data.createdByUid == request.auth.uid &&
+scopeUnchanged())) &&
+orgCarriesCrmSuite(orgId));
+allow delete: if isStaff() ||
+(canWriteScopedOrgData() &&
+(isOrgWideMember() ||
+resource.data.createdByUid == request.auth.uid));
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+match /crmEmailTemplates/{templateId} {
+allow read: if isStaff() || canReadScopedPeople();
+allow create: if isStaff() ||
+(canWriteOrgData() && canCreateScoped() &&
+request.resource.data.createdByUid == request.auth.uid &&
+(request.resource.data.get('visibility', 'shared') != 'personal' ||
+request.resource.data.get('ownerUid', null) == request.auth.uid) &&
+orgCarriesCrmSuite(orgId));
+allow update: if isStaff() ||
+(canWriteScopedOrgData() &&
+(isOrgWideMember() ||
+(scopeUnchanged() &&
+request.resource.data.createdByUid == resource.data.createdByUid &&
+(resource.data.get('visibility', 'shared') != 'personal' ||
+resource.data.get('ownerUid', null) == request.auth.uid))) &&
+orgCarriesCrmSuite(orgId));
+allow delete: if isStaff() ||
+(canWriteScopedOrgData() &&
+(isOrgWideMember() ||
+resource.data.get('visibility', 'shared') != 'personal' ||
+resource.data.get('ownerUid', null) == request.auth.uid));
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+match /emailTopics/{topicId} {
+allow read: if isStaff() || isOrgWideMember();
+allow create, update: if isStaff() || canWriteOrgWideData();
+allow delete: if isStaff();
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+match /emailCampaigns/{campaignId} {
+allow read: if isStaff() || canReadScoped();
+allow create: if isStaff() || (canWriteOrgData() && canCreateScoped());
+allow update: if isStaff() ||
+(canWriteScopedOrgData() && (isOrgWideMember() || scopeUnchanged()));
+allow delete: if false;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+match /campaigns/{sendId} {
+allow read: if isStaff() || canReadScoped() ||
+(isOrgMember() &&
+('host:' + resource.data.hostId) in orgMember().get('scopeTokens', ['org']));
+allow write: if false;
+match /reports/{reportId} {
+allow read: if isStaff() || isOrgWideMember() ||
+(isOrgMember() &&
+get(/databases/$(database)/documents/orgs/$(orgId)/campaigns/$(sendId))
+.data.get('visibleTo', []).hasAny(orgMember().get('scopeTokens', ['org'])));
+allow write: if false;
+}
+}
+
+
+
+
+
+
+match /campaignSequenceReports/{campaignId} {
+allow read: if isStaff() || isOrgWideMember() ||
+(isOrgMember() &&
+get(/databases/$(database)/documents/orgs/$(orgId)/emailCampaigns/$(campaignId))
+.data.get('visibleTo', []).hasAny(orgMember().get('scopeTokens', ['org'])));
+allow write: if false;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+match /automations/{automationId} {
+allow read: if isStaff() || canReadScoped();
+allow write: if false;
+}
+
+
+
+
+
+
+
+
+match /lists/{listId} {
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+function isOrgWideAudienceManager() {
+return isOrgWideMember() &&
+orgMember().role in ['owner', 'admin', 'editor'] &&
+memberResolves('data.manage');
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+allow read: if isStaff() || isOrgWideMember();
+allow create, update: if isStaff() || canWriteOrgWideData();
+allow delete: if isStaff();
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+match /members/{memberId} {
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+allow read: if isStaff() || isOrgWideAudienceManager();
+allow create, update: if isStaff();
+
+
+
+allow delete: if isStaff() ||
+(isOrgWideAudienceManager() && isVerified() && orgNotSuspended());
+}
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+match /media/{mediaId} {
+allow read: if isStaff() || canReadScoped();
+allow create: if isStaff() ||
+(canWriteOrgData() && canCreateScoped() && mediaObjectFieldsUnset());
+allow update: if isStaff() ||
+(canWriteScopedOrgData() && (isOrgWideMember() || scopeUnchanged()) &&
+mediaObjectFieldsUnchanged());
+allow delete: if isStaff() || canWriteScopedOrgData();
+}
+
+
+
+match /mediaFolders/{folderId} {
+allow read: if isStaff() || canReadScoped();
+allow create: if isStaff() || (canWriteOrgData() && canCreateScoped());
+allow update: if isStaff() ||
+(canWriteScopedOrgData() && (isOrgWideMember() || scopeUnchanged()));
+allow delete: if isStaff() || canWriteScopedOrgData();
+}
+
+match /counters/{counterId} {
+allow read: if isStaff() || isOrgMember();
+allow write: if false;
+}
+
+
+
+
+match /installs/{listingId} {
+allow read: if isStaff() || isOrgMember();
+allow write: if false;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+match /activity/{entryId} {
+allow read: if isStaff();
+allow write: if false;
+}
+
+
+
+
+match /consentGroupChanges/{changeId} {
+allow read: if isStaff() || canManageOrg() ||
+(isOrgWideMember() && memberStamps('org.settings') &&
+memberStamps('data.manage'));
+allow write: if false;
+}
+
+
+
+
+match /transferJobs/{jobId} {
+allow read: if isStaff() || canReadTransferJobs();
+allow write: if false;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+match /dmcaStrikes/{reportId} {
+allow read: if isStaff();
+allow write: if false;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+match /ssoDomains/{domain} {
+allow read, write: if false;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+match /sendingDomains/{domain} {
+allow read, write: if false;
+}
+}
+
+
+
+match /orgSlugs/{slug} {
+allow read: if true;
+allow write: if false;
+}
+
+
+
+
+
+
+
+
+
+
+match /ssoDomains/{domain} {
+allow read, write: if false;
+}
+
+
+
+
+
+
+
+
+
+
+
+match /consoleDomains/{domain} {
+allow read, write: if false;
+}
+
+
+
+
+
+
+
+
+
+
+
+match /authHandoffs/{requestId} {
+allow read, write: if false;
+}
+
+
+match /hostIndex/{hostId} {
+allow read: if isSignedIn();
+allow write: if false;
+}
+
+
+
+
+
+match /apiKeys/{keyHash} {
+allow read, write: if false;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+match /outreachMailboxCredentials/{credentialId} {
+allow read, write: if false;
+}
+
+
+
+
+
+
+
+
+
+match /outreachLinks/{linkId} {
+allow read, write: if false;
+}
+
+
+
+match /apiIdempotency/{keyHash} {
+allow read, write: if false;
+}
+
+
+
+
+
+
+match /rateLimits/{bucketId} {
+allow read, write: if false;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+match /platformSettings/{settingId} {
+allow read, write: if false;
+}
+
+
+
+
+
+
+
+
+
+match /platformTaxablePurchases/{period} {
+allow read, write: if false;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+match /platformCronBeats/{jobId} {
+allow read, write: if false;
+}
+
+
+
+
+
+
+
+
+
+
+
+match /platformAiFreeSpend/{day} {
+allow read, write: if false;
+}
+
+
+
+
+
+
+
+
+
+
+match /stripeCustomers/{stripeCustomerId} {
+allow read, write: if false;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+match /platformRevenue/{invoiceId} {
+allow read, write: if false;
+}
+
+
+
+
+
+
+
+
+
+
+
+match /storefrontTaxCollected/{stripeObjectId} {
+allow read, write: if false;
+}
+
+
+
+
+
+
+
+function hostMemberRole(hostId) {
+return get(/databases/$(database)/documents/hosts/$(hostId))
+.data.get('memberRoles', {}).get(request.auth.uid, null);
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+function isHostMember(hostId) {
+return isSignedIn() && hostMemberRole(hostId) != null;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+function canWriteHostContent(hostId) {
+return isVerified() &&
+hostMemberRole(hostId) in ['admin', 'editor', 'author'];
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+function canPublishHostContent(hostId) {
+return isVerified() && hostMemberRole(hostId) in ['admin', 'editor'];
+}
+
+
+
+
+function routeRemovalAllowed() {
+let d = request.resource.data.get('screens', {})
+.diff(resource.data.get('screens', {}));
+let r = d.removedKeys();
+return r.size() == 0 || (r.size() == 1 &&
+(d.affectedKeys().size() == 1 ||
+(r.hasOnly([resource.data.get('defaultHomeScreenId', '')]) &&
+!('defaultHomeScreenId' in request.resource.data))));
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+function canReadHostSensitive(hostId) {
+return isSignedIn() && hostMemberRole(hostId) in ['admin', 'editor'];
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+function suspensionActive(carrier) {
+return lockWindowActive(
+carrier.get('suspendedAt', null) != null,
+carrier.get('suspendedUntilMs', null));
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+function lockWindowActive(placed, untilMs) {
+return placed &&
+!(untilMs is number && untilMs <= request.time.toMillis());
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+function platformLockdownActive() {
+return exists(/databases/$(database)/documents/lockdowns/platform) &&
+lockWindowActive(
+true,
+get(/databases/$(database)/documents/lockdowns/platform)
+.data.get('untilMs', null));
+}
+
+
+
+function orgSuspendedById(orgId) {
+return orgId != null &&
+exists(/databases/$(database)/documents/orgs/$(orgId)) &&
+suspensionActive(
+get(/databases/$(database)/documents/orgs/$(orgId)).data);
+}
+function hostOrgSuspended(hostId) {
+return orgSuspendedById(
+get(/databases/$(database)/documents/hosts/$(hostId))
+.data.get('orgId', null));
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+function hostSuspended(hostId) {
+return suspensionActive(
+get(/databases/$(database)/documents/hosts/$(hostId)).data);
+}
+
+
+
+
+
+
+
+
+
+
+
+function hostWritesFrozen(hostId) {
+return hostSuspended(hostId) || hostOrgSuspended(hostId) ||
+platformLockdownActive();
+}
+match /hosts/{hostId} {
+
+
+allow read: if isStaff() || (isSignedIn() &&
+resource.data.get('memberRoles', {}).get(request.auth.uid, null) != null);
+
+
+allow create: if false;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+allow update: if isStaff() ||
+(canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
+!request.resource.data.diff(resource.data).affectedKeys()
+.hasAny(['memberRoles', 'memberPermissions', 'orgId', 'admins',
+'hosts', 'subdomain',
+'cname', 'cnameAttachmentPending',
+'cnameDetachmentPending', 'themeInstalledFrom',
+'suspendedAt', 'suspendedReasonCode', 'suspendedMessage',
+'suspendedUntilMs', 'suspendedMode', 'suspendedEnforcement',
+'suspended', 'bandwidthCeiling',
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+'sendingDomain', 'sendingLocalPart',
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+'sendingLabel', 'sendingDomainRequestedAtMs',
+'sendingDomainRequestedBy',
+'projectId', 'projectNumber']) &&
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+(hostMemberRole(hostId) == 'admin' ||
+!request.resource.data.diff(resource.data).affectedKeys()
+.hasAny(['disabledPlugins', 'enabledPlugins', 'authScreens',
+'approvedImageHosts', 'approvedMediaHosts',
+'approvedFontHosts', 'approvedFormActions',
+'approvedConnectHosts', 'approvedFrameHosts'])) &&
+
+
+
+
+
+
+
+
+
+
+
+
+(canPublishHostContent(hostId) ||
+!request.resource.data.diff(resource.data).affectedKeys()
+.hasAny(['screens', 'defaultHomeScreenId'])) &&
+routeRemovalAllowed());
+allow delete: if isStaff() ||
+(hostMemberRole(hostId) == 'admin' && isVerified() &&
+!hostWritesFrozen(hostId));
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+match /screens/{screenId} {
+allow read: if isStaff() || isHostMember(hostId);
+allow create: if isStaff();
+allow update: if isStaff() ||
+(canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
+!request.resource.data.diff(resource.data).affectedKeys()
+.hasAny(['kind']) &&
+!(resource.data.get('deletedAt', null) != null &&
+request.resource.data.diff(resource.data).affectedKeys()
+.hasAny(['deletedAt'])) &&
+(canPublishHostContent(hostId) ||
+!request.resource.data.diff(resource.data).affectedKeys()
+.hasAny(['slug', 'publishedAt', 'versionId',
+'publishSchedule', 'deletedAt'])));
+allow delete: if isStaff() ||
+(canPublishHostContent(hostId) && !hostWritesFrozen(hostId));
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+match /versions/{versionId}/draft/{draftId} {
+allow read: if isStaff() || isHostMember(hostId);
+allow create, update, delete: if isStaff() ||
+(canWriteHostContent(hostId) && !hostWritesFrozen(hostId));
+}
+
+match /{sub}/{document=**} {
+allow read: if isStaff() || isHostMember(hostId);
+allow create: if isStaff();
+
+
+allow update: if isStaff() ||
+(canWriteHostContent(hostId) && !hostWritesFrozen(hostId));
+
+
+
+
+
+
+
+allow delete: if isStaff() ||
+(canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
+(canPublishHostContent(hostId) || sub != 'versions'));
+}
+}
+
+
+
+
+match /layouts/{layoutId} {
+allow read: if isStaff() || isHostMember(hostId);
+allow create: if isStaff();
+allow update: if isStaff() ||
+(canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
+(canPublishHostContent(hostId) ||
+!request.resource.data.diff(resource.data).affectedKeys()
+.hasAny(['versionId', 'publishSchedule'])));
+allow delete: if isStaff() ||
+(canPublishHostContent(hostId) && !hostWritesFrozen(hostId));
+
+
+match /versions/{versionId}/draft/{draftId} {
+allow read: if isStaff() || isHostMember(hostId);
+allow create, update, delete: if isStaff() ||
+(canWriteHostContent(hostId) && !hostWritesFrozen(hostId));
+}
+
+match /{sub}/{document=**} {
+allow read: if isStaff() || isHostMember(hostId);
+allow create: if isStaff();
+allow update: if isStaff() ||
+(canWriteHostContent(hostId) && !hostWritesFrozen(hostId));
+allow delete: if isStaff() ||
+(canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
+(canPublishHostContent(hostId) || sub != 'versions'));
+}
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+match /components/{componentId} {
+allow read: if isStaff() || isHostMember(hostId);
+allow create: if isStaff();
+allow update: if isStaff() ||
+(canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
+(canPublishHostContent(hostId) ||
+!request.resource.data.diff(resource.data).affectedKeys()
+.hasAny(['versionId', 'publishSchedule'])));
+allow delete: if isStaff() ||
+(canPublishHostContent(hostId) && !hostWritesFrozen(hostId));
+
+
+match /versions/{versionId}/draft/{draftId} {
+allow read: if isStaff() || isHostMember(hostId);
+allow create, update, delete: if isStaff() ||
+(canWriteHostContent(hostId) && !hostWritesFrozen(hostId));
+}
+
+match /{sub}/{document=**} {
+allow read: if isStaff() || isHostMember(hostId);
+allow create: if isStaff();
+allow update: if isStaff() ||
+(canWriteHostContent(hostId) && !hostWritesFrozen(hostId));
+allow delete: if isStaff() ||
+(canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
+(canPublishHostContent(hostId) || sub != 'versions'));
+}
+}
+
+
+
+
+
+
+
+
+
+match /templates/{templateId} {
+allow read: if isStaff() || isHostMember(hostId);
+allow create: if isStaff();
+allow update: if isStaff() ||
+(canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
+!request.resource.data.diff(resource.data)
+.affectedKeys().hasAny(['source']));
+allow delete: if isStaff() ||
+(canWriteHostContent(hostId) && !hostWritesFrozen(hostId));
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+match /forms/{formId} {
+allow read: if isStaff() || isHostMember(hostId);
+allow create: if isStaff();
+
+function formEdit() {
+let d = request.resource.data;
+let k = d.diff(resource.data).affectedKeys();
+return d.get('updatedAt', null) != resource.data.get('updatedAt', null) &&
+!k.hasAny(['stats']) &&
+(!k.hasAny(['archivedAt', 'retired']) ||
+d.get('retired', false) == (d.get('archivedAt', null) != null)) &&
+(!k.hasAny(['campaignIds', 'inCampaign']) ||
+d.get('inCampaign', false) == (d.get('campaignIds', []).size() > 0));
+}
+allow update: if isStaff() ||
+(canWriteHostContent(hostId) && !hostWritesFrozen(hostId) && formEdit());
+allow delete: if isStaff() ||
+(canPublishHostContent(hostId) && !hostWritesFrozen(hostId));
+
+
+
+
+
+match /versions/{versionId}/draft/{draftId} {
+allow read: if isStaff() || isHostMember(hostId);
+allow create, update, delete: if isStaff() ||
+(canWriteHostContent(hostId) && !hostWritesFrozen(hostId));
+}
+
+match /{sub}/{document=**} {
+allow read: if isStaff() || isHostMember(hostId);
+allow create: if isStaff();
+allow update: if isStaff() ||
+(canWriteHostContent(hostId) && !hostWritesFrozen(hostId));
+allow delete: if isStaff() ||
+(canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
+(canPublishHostContent(hostId) || sub != 'versions'));
+}
+}
+
+
+
+
+
+
+
+
+
+
+
+
+match /webhooks/{webhookId} {
+allow read: if isStaff() || canReadHostSensitive(hostId);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+allow update, delete: if isStaff() ||
+(canReadHostSensitive(hostId) && isVerified() &&
+!hostWritesFrozen(hostId));
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+match /orders/{orderId} {
+allow read: if isStaff() || canReadHostSensitive(hostId);
+allow update: if isStaff() ||
+(canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
+request.resource.data.diff(resource.data)
+.affectedKeys().hasOnly(['timeline', 'restockCheck']));
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+match /pluginSettings/{pluginId} {
+allow read: if isStaff() || isHostMember(hostId);
+allow write: if isStaff() ||
+(hostMemberRole(hostId) == 'admin' && isVerified() &&
+!hostWritesFrozen(hostId));
+}
+
+
+
+
+match /{subcollection}/{document=**} {
+
+
+
+
+
+
+
+
+
+
+
+allow read: if subcollection != 'siteMemberCredentials' &&
+(isStaff() || (isHostMember(hostId) &&
+!(subcollection in ['webhooks', 'orders', 'mediaTombstones', 'packageImports'])));
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+allow create: if subcollection != 'siteMemberCredentials' && (isStaff() ||
+((canWriteHostContent(hostId) && !hostWritesFrozen(hostId)) &&
+!(subcollection in ['screens', 'layouts', 'variables',
+'functions', 'workflows', 'services', 'redirects',
+'locations', 'products', 'components', 'registers', 'installs',
+'templates', 'collections', 'datasets', 'webhooks', 'orders',
+'counters', 'analytics', 'screenAnalytics', 'pageReviews', 'members',
+'media', 'mediaTombstones', 'packageImports', 'formSubmissions', 'forms', 'actions',
+'authors', 'carts', 'memberPosts', 'pluginSettings',
+'checkouts', 'giftCards', 'stripeTaxRates', 'restockAlerts',
+'inventoryReconciliation', 'stockHolds', 'themeHistory',
+'topicOptOuts', 'emailFrequency', 'campaigns', 'emailCampaigns',
+'emailAttributions', 'campaignAttributions',
+'campaignSequenceReports',
+'flowEnrollments', 'leads', 'siteMembers',
+'siteMemberCredentials', 'recordPages']) &&
+
+
+
+!string(document).matches('.*/formSubmissions/[^/]+')));
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+allow update: if subcollection != 'siteMemberCredentials' && (isStaff() ||
+((canWriteHostContent(hostId) && !hostWritesFrozen(hostId)) &&
+!(subcollection in ['screens', 'layouts', 'components', 'installs',
+'templates', 'collections', 'datasets', 'orders', 'registers',
+'webhooks', 'memberPosts', 'redirects', 'pluginSettings', 'forms',
+'formSubmissions',
+'counters', 'analytics', 'screenAnalytics', 'pageReviews', 'members',
+'media', 'mediaTombstones', 'packageImports', 'inventoryAdjustments', 'carts',
+'checkouts',
+'giftCards', 'stripeTaxRates', 'restockAlerts',
+'inventoryReconciliation', 'stockHolds', 'themeHistory',
+'topicOptOuts', 'emailFrequency', 'campaigns', 'emailCampaigns',
+'emailAttributions', 'campaignAttributions',
+'campaignSequenceReports',
+'flowEnrollments', 'leads', 'siteMembers',
+'siteMemberCredentials', 'recordPages'])));
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+allow delete: if subcollection != 'siteMemberCredentials' && (isStaff() ||
+((canWriteHostContent(hostId) && !hostWritesFrozen(hostId)) &&
+!(subcollection in ['screens', 'layouts', 'components',
+'collections', 'datasets', 'orders', 'registers', 'webhooks',
+'counters', 'memberPosts', 'redirects', 'pluginSettings', 'forms',
+'analytics', 'screenAnalytics', 'pageReviews', 'members', 'mediaTombstones',
+'packageImports',
+'inventoryAdjustments', 'carts', 'checkouts', 'giftCards',
+'stripeTaxRates', 'restockAlerts',
+'inventoryReconciliation', 'stockHolds', 'themeHistory',
+'topicOptOuts', 'emailFrequency', 'campaigns', 'emailCampaigns',
+'emailAttributions', 'campaignAttributions',
+'campaignSequenceReports',
+'flowEnrollments', 'siteMembers', 'siteMemberCredentials',
+'recordPages'])));
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+match /memberPosts/{postId} {
+allow delete: if isStaff() ||
+(canPublishHostContent(hostId) && !hostWritesFrozen(hostId));
+}
+
+
+
+
+
+match /siteMembers/{memberId} {
+allow update: if isStaff() ||
+(canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
+request.resource.data.diff(resource.data).affectedKeys()
+.hasOnly(['suspended']));
+allow delete: if canWriteHostContent(hostId) &&
+!hostWritesFrozen(hostId) &&
+!exists(/databases/$(database)/documents/hosts/$(hostId)/siteMemberCredentials/$(memberId));
+}
+
+
+
+
+
+match /formSubmissions/{submissionId} {
+allow update: if isStaff() ||
+(canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
+request.resource.data.diff(resource.data).affectedKeys()
+.hasOnly(['read']));
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+match /redirects/{redirectId} {
+allow update, delete: if isStaff() ||
+(canPublishHostContent(hostId) && !hostWritesFrozen(hostId));
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+match /media/{mediaId} {
+allow create: if isStaff() ||
+(canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
+mediaObjectFieldsUnset());
+allow update: if isStaff() ||
+(canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
+mediaObjectFieldsUnchanged());
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+match /collections/{collectionId} {
+allow update: if isStaff() ||
+(canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
+!request.resource.data.diff(resource.data).affectedKeys()
+.hasAny(['slug', 'kind']));
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+match /collections/{collectionId}/entries/{entryId} {
+allow create: if isStaff();
+allow update: if isStaff() ||
+(canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
+(canPublishHostContent(hostId) ||
+!request.resource.data.diff(resource.data).affectedKeys()
+.hasAny(['status', 'publishedAt', 'publishAt'])));
+allow delete: if isStaff() ||
+(canWriteHostContent(hostId) && !hostWritesFrozen(hostId));
+}
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+function isOrgWideMemberOf(orgId) {
+return isSignedIn() &&
+exists(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)) &&
+(get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.role in ['owner', 'admin'] ||
+get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.get('allHosts', false) == true);
+}
+match /{path=**}/formSubmissions/{submissionId} {
+allow read: if isStaff() || isOrgWideMemberOf(resource.data.orgId);
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+match /publishOutbox/{entryId} {
+
+
+allow read: if isStaff();
+allow create: if isStaff() ||
+(request.resource.data.keys().hasOnly(
+['hostId', 'paths', 'createdAt', 'attempts', 'entireHost']) &&
+request.resource.data.keys().hasAll(
+['hostId', 'paths', 'createdAt', 'attempts']) &&
+(!('entireHost' in request.resource.data) ||
+request.resource.data.entireHost == true) &&
+request.resource.data.hostId is string &&
+request.resource.data.paths is list &&
+request.resource.data.paths.size() > 0 &&
+
+
+
+request.resource.data.paths.size() <= 250 &&
+request.resource.data.attempts == 0 &&
+request.resource.data.createdAt == request.time &&
+(canPublishHostContent(request.resource.data.hostId) ||
+('entireHost' in request.resource.data &&
+canWriteHostContent(request.resource.data.hostId))) &&
+!hostWritesFrozen(request.resource.data.hostId));
+allow update: if false;
+allow delete: if isStaff() ||
+(resource.data.hostId is string &&
+(canPublishHostContent(resource.data.hostId) ||
+(resource.data.get('entireHost', false) == true &&
+canWriteHostContent(resource.data.hostId))));
+}
+
+
+
+
+match /users/{userId} {
+allow read, delete: if isStaff() ||
+(isSignedIn() && request.auth.uid == userId);
+
+
+
+
+allow create: if (isStaff() ||
+(isSignedIn() && request.auth.uid == userId)) &&
+!('acquisition' in request.resource.data);
+allow update: if (isStaff() ||
+(isSignedIn() && request.auth.uid == userId)) &&
+!request.resource.data.diff(resource.data).affectedKeys().hasAny(
+['acquisition']);
+
+
+
+match /orgs/{orgId} {
+allow read: if isStaff() ||
+(isSignedIn() && request.auth.uid == userId);
+allow write: if false;
+}
+
+
+
+
+
+match /hostMemberships/{hostId} {
+allow read: if isStaff() ||
+(isSignedIn() && request.auth.uid == userId);
+allow write: if false;
+}
+
+
+
+match /notifications/{notificationId} {
+allow read, update, delete: if isSignedIn() &&
+request.auth.uid == userId;
+allow create: if false;
+}
+
+
+
+
+
+
+match /passkeys/{credentialId} {
+allow read: if isStaff() ||
+(isSignedIn() && request.auth.uid == userId);
+allow write: if false;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+match /emails/{address} {
+allow read: if isStaff() ||
+(isSignedIn() && request.auth.uid == userId);
+allow write: if false;
+}
+
+
+
+
+
+
+
+
+match /legalAcceptances/{version} {
+allow read: if isStaff() ||
+(isSignedIn() && request.auth.uid == userId);
+allow write: if false;
+}
+
+
+
+
+
+
+
+
+
+
+match /aiUsage/{month} {
+allow read, write: if false;
+}
+
+
+match /transferPrefs/{resourceKey} {
+allow read, write: if isSignedIn() && request.auth.uid == userId;
+}
+}
+
+
+
+
+
+
+match /webauthnChallenges/{challengeId} {
+allow read, write: if false;
+}
+match /passkeyCredentialIndex/{credentialId} {
+allow read, write: if false;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+match /emailIdentityIndex/{address} {
+allow read, write: if false;
+}
+match /emailVerifications/{tokenId} {
+allow read, write: if false;
+}
+
+
+
+
+match /profiles/{profileUid} {
+allow read: if true;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+function profileFieldsValid() {
+return request.resource.data.handle is string &&
+request.resource.data.handle.size() >= 3 &&
+request.resource.data.handle.size() <= 30 &&
+request.resource.data.handle.matches('[a-z0-9][a-z0-9-]*') &&
+request.resource.data.displayName is string &&
+request.resource.data.displayName.size() <= 80;
+}
+function profileOwner() {
+return isStaff() || (isSignedIn() && request.auth.uid == profileUid);
+}
+allow create: if profileOwner() && profileFieldsValid() &&
+!request.resource.data.keys()
+.hasAny(['stripeAccountId', 'stripeChargesEnabled',
+'stripeAccountLivemode', 'stripePayoutsEnabled']);
+allow update: if profileOwner() && profileFieldsValid() &&
+!request.resource.data.diff(resource.data).affectedKeys()
+.hasAny(['stripeAccountId', 'stripeChargesEnabled',
+'stripeAccountLivemode', 'stripePayoutsEnabled']);
+}
+
+
+
+
+
+
+
+match /publisherProfiles/{orgId} {
+allow read: if true;
+
+
+
+function publisherManager() {
+return isStaff() || (isSignedIn() &&
+exists(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)) &&
+get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid))
+.data.role in ['owner', 'admin']);
+}
+function publisherFieldsValid() {
+return request.resource.data.handle is string &&
+request.resource.data.handle.size() >= 3 &&
+request.resource.data.handle.size() <= 30 &&
+request.resource.data.handle.matches('[a-z0-9][a-z0-9-]*') &&
+request.resource.data.displayName is string &&
+request.resource.data.displayName.size() <= 80;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+allow create: if false;
+
+
+
+
+
+allow update: if publisherManager() && publisherFieldsValid() &&
+!request.resource.data.diff(resource.data).affectedKeys()
+.hasAny(['handle', 'stripeAccountId', 'stripeChargesEnabled',
+'stripeAccountLivemode', 'stripePayoutsEnabled',
+'publisherAgreement', 'avatarUrl', 'website',
+'supportEmail', 'supportUrl', 'githubUrl', 'xUrl',
+'linkedinUrl', 'displayName', 'bio',
+'payoutDelayDays', 'payoutPolicyAtMs']);
+allow delete: if isStaff();
+}
+
+
+
+
+
+match /publisherHandles/{handle} {
+allow read: if true;
+allow write: if false;
+}
+
+
+
+
+
+
+match /marketplaceListings/{listingId} {
+allow read: if true;
+allow create: if false;
+
+
+
+
+
+
+function listingManager() {
+return isSignedIn() &&
+exists(/databases/$(database)/documents/orgs/$(resource.data.profileId)/members/$(request.auth.uid)) &&
+get(/databases/$(database)/documents/orgs/$(resource.data.profileId)/members/$(request.auth.uid))
+.data.role in ['owner', 'admin'];
+}
+
+
+
+
+
+
+
+
+
+allow update: if isStaff() ||
+(listingManager() &&
+!request.resource.data.diff(resource.data).affectedKeys()
+.hasAny(['installCount', 'priceUsd', 'profileId',
+'reviewStatus', 'reviewedBy', 'reviewedAt',
+'rejectionReason',
+
+
+
+
+
+
+'latestApprovedVersion',
+
+
+
+
+'ratingSum', 'ratingCount', 'ratingAverage',
+'commentCount',
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+'activeInstalls', 'pinnedActiveInstalls',
+'pinsVerifiedAtMs', 'pinnedVersionInstalls',
+
+
+
+'hiddenAt', 'hiddenBy', 'hiddenReason',
+
+
+
+
+
+
+
+
+
+
+
+
+'artifactType', 'type', 'kind',
+
+
+
+
+
+
+'verificationRequest',
+
+
+
+
+
+'latestVersion',
+
+
+
+
+
+'publisherOrgId', 'sourceComponentId', 'sourceHostId',
+'versionHistory', 'screenCount', 'previewImageUrl',
+'createdAt', 'updatedAt',
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+'logoUrl', 'screenshots',
+
+'nameLower', 'nameTokens', 'nameReversed',
+'browseAudience', 'browseTokens', 'takenDown',
+
+'displayName', 'deletedAt', 'visibility',
+
+'description', 'readme', 'homepageUrl', 'repositoryUrl',
+'license', 'workspaceLockedAt']));
+allow delete: if isStaff() || listingManager();
+
+
+
+match /versions/{version} {
+allow read, write: if isStaff();
+}
+
+
+
+
+
+
+match /reviews/{authorUid} {
+allow read: if true;
+allow write: if false;
+}
+
+
+
+
+match /pluginVersions/{version} {
+allow read, write: if isStaff();
+}
+}
+
+
+
+
+
+
+
+
+
+
+
+
+match /marketplaceArtifactBases/{sha256} {
+allow read, write: if false;
+}
+
+
+
+
+match /revocations/{listingId} {
+allow read: if true;
+allow write: if isStaff();
+}
+
+
+
+
+
+
+
+
+
+
+
+
+match /lockdowns/{lockdownId} {
+allow read: if isStaff();
+allow write: if false;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+match /abuseReports/{reportId} {
+allow read: if isStaff();
+allow write: if false;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+match /dmcaCounterNotices/{noticeId} {
+allow read: if isStaff();
+allow write: if false;
+}
+
+
+
+
+
+
+
+
+match /marketplaceReports/{reportId} {
+allow read, write: if isStaff();
+}
+
+match /marketplacePurchases/{purchaseId} {
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+allow read: if isStaff() || (isSignedIn() &&
+(resource.data.buyerUid == request.auth.uid ||
+(resource.data.buyerOrgId is string &&
+exists(/databases/$(database)/documents/orgs/$(resource.data.buyerOrgId)/members/$(request.auth.uid))) ||
+exists(/databases/$(database)/documents/orgs/$(resource.data.sellerOrgId)/members/$(request.auth.uid))));
+allow write: if false;
+}
+
+
+
+
+
+match /marketplaceRefundOrphans/{paymentIntentId} {
+allow read: if isStaff();
+allow write: if false;
+}
+
+
+
+
+
+
+
+
+
+
+
+match /adminAudit/{entryId} {
+allow read, create: if isStaff();
+allow update, delete: if false;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+match /contactSuppressions/{phoneKey} {
+allow read: if isStaff();
+allow write: if false;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+match /emailSuppressions/{emailKey} {
+allow read: if isStaff();
+allow write: if false;
+}
+
+
+
+
+
+
+
+
+
+
+match /mailDomains/{domain} {
+allow read: if isStaff();
+allow write: if false;
+}
+match /mailGatewayLedger/{key} {
+allow read: if isStaff();
+allow write: if false;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+match /emailDeliveries/{emailKey} {
+allow read, write: if false;
+match /messages/{messageId} {
+allow read, write: if false;
+}
+}
+
+
+
+
+
+
+
+
+
+
+
+
+match /systemEmailTemplates/{templateKey} {
+allow read, create, update: if isStaff();
+allow delete: if false;
+
+match /versions/{versionId} {
+allow read, create, update: if isStaff();
+allow delete: if false;
+}
+}
+}
+}

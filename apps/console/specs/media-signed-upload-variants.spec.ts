@@ -344,7 +344,9 @@ describe('the signed finalize lands the same document as the base64 route (AGL-1
     expect(response.status).toBe(200)
     // A 1200px PNG: the two narrower widths, and the two at or above it as
     // WebP at its own width (AGL-3082).
-    expect(writtenDocument()['variants']).toEqual([320, 640, 1280, 1920])
+    expect(writtenDocument()['variants']).toEqual([
+      160, 320, 480, 640, 768, 960, 1280, 1600, 1920, 2560,
+    ])
   })
 
   it('produces variants that are genuinely SMALLER, in bytes', async () => {

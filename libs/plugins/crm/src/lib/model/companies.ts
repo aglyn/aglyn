@@ -31,15 +31,23 @@
 import {
   type AglynPostalAddress,
   CONTACT_COMPANY_IDS_FIELD,
+  CRM_COMPANY_EMPLOYEES_MAX,
+  CRM_COMPANY_PICKLIST_FIELDS,
   type CrmCompany,
+  type CrmCompanyPicklistField,
+  type CrmPicklist,
+  type CrmPicklistId,
   companyDomainForEmail,
   isBlankAddress,
+  judgeCrmCompanyPicklists,
   nameSearchFields,
   normalizeAddress,
   normalizeCompanyDomain,
   normalizeCompanyWebsite,
   normalizePhone,
+  readCrmCompanyAccountFields,
 } from '@aglyn/aglyn'
+import { amountInputValue, DEFAULT_DEAL_CURRENCY, parseAmountInput } from './deal-board-model'
 
 /*
  * The mirror field lives with the planner in `@aglyn/aglyn` now, because the
@@ -81,15 +89,34 @@ export function suggestCompanyForEmail(
   return companies.find((company) => company.domain === domain) ?? null
 }
 
-/** What the form holds — every field as text, the address as its parts. */
+/** What the form holds — every field as text, the addresses as their parts. */
 export interface CompanyDraft {
   name: string
   domain: string
   website: string
   phone: string
+  /** Each company picklist's label (AGL-3514), `''` for none. */
+  type: string
   industry: string
+  rating: string
+  ownership: string
+  accountSource: string
   ownerUid: string
+  /** The billing address. */
   address: AglynPostalAddress
+  shippingAddress: AglynPostalAddress
+  /** As typed, in the currency's major unit — `parseAmountInput` reads it. */
+  annualRevenue: string
+  /** Lowercase ISO 4217. */
+  currency: string
+  numberOfEmployees: string
+  fax: string
+  accountNumber: string
+  site: string
+  tickerSymbol: string
+  sicCode: string
+  /** The parent company's id, `''` for none. */
+  parentCompanyId: string
   /** Comma-separated as typed; stored as the list `companyDraftFields` reads. */
   tags: string
   notes: string
@@ -100,11 +127,38 @@ export const EMPTY_COMPANY_DRAFT: CompanyDraft = {
   domain: '',
   website: '',
   phone: '',
+  type: '',
   industry: '',
+  rating: '',
+  ownership: '',
+  accountSource: '',
   ownerUid: '',
   address: {},
+  shippingAddress: {},
+  annualRevenue: '',
+  currency: DEFAULT_DEAL_CURRENCY,
+  numberOfEmployees: '',
+  fax: '',
+  accountNumber: '',
+  site: '',
+  tickerSymbol: '',
+  sicCode: '',
+  parentCompanyId: '',
   tags: '',
   notes: '',
+}
+
+/** How each account field is named in a refusal the drawer shows. */
+const ACCOUNT_FIELD_LABELS: Record<string, string> = {
+  annualRevenueCents: 'Annual revenue',
+  currency: 'The currency',
+  numberOfEmployees: 'Employees',
+  fax: 'The fax number',
+  accountNumber: 'The account number',
+  site: 'The account site',
+  tickerSymbol: 'The ticker symbol',
+  sicCode: 'The SIC code',
+  shippingAddress: 'The shipping address',
 }
 
 /** The drawer's cap on a company's tags — a contact's, so the two agree. */
@@ -131,17 +185,53 @@ export function normalizeCompanyTags(input: string): string[] {
 export function companyDraftFrom(
   company: Partial<CrmCompany> | null | undefined,
 ): CompanyDraft {
+  const text = (value: unknown) => (value === null || value === undefined ? '' : String(value))
   return {
-    name: String(company?.name ?? ''),
-    domain: String(company?.domain ?? ''),
-    website: String(company?.website ?? ''),
-    phone: String(company?.phone ?? ''),
-    industry: String(company?.industry ?? ''),
-    ownerUid: String(company?.ownerUid ?? ''),
+    name: text(company?.name),
+    domain: text(company?.domain),
+    website: text(company?.website),
+    phone: text(company?.phone),
+    type: text(company?.type),
+    industry: text(company?.industry),
+    rating: text(company?.rating),
+    ownership: text(company?.ownership),
+    accountSource: text(company?.accountSource),
+    ownerUid: text(company?.ownerUid),
     address: { ...(company?.address ?? {}) },
+    shippingAddress: { ...(company?.shippingAddress ?? {}) },
+    annualRevenue: amountInputValue(company?.annualRevenueCents),
+    currency: text(company?.currency).toLowerCase() || DEFAULT_DEAL_CURRENCY,
+    numberOfEmployees:
+      typeof company?.numberOfEmployees === 'number' ? String(company.numberOfEmployees) : '',
+    fax: text(company?.fax),
+    accountNumber: text(company?.accountNumber),
+    site: text(company?.site),
+    tickerSymbol: text(company?.tickerSymbol),
+    sicCode: text(company?.sicCode),
+    parentCompanyId: text(company?.parentCompanyId),
     tags: (company?.tags ?? []).join(', '),
-    notes: String(company?.notes ?? ''),
+    notes: text(company?.notes),
   }
+}
+
+/**
+ * What a draft's picklist fields are judged against (AGL-3514): the org's
+ * lists the form read, and the company as stored — whose own values are
+ * kept even when a list no longer offers them. Absent, each field is
+ * judged against its standard values alone.
+ */
+export interface CompanyDraftPicklists {
+  lists: Readonly<Partial<Record<CrmPicklistId, CrmPicklist>>>
+  current?: Partial<CrmCompany> | null
+}
+
+/** A typed head count, as the whole number stored, `null` for blank, `undefined` for unreadable. */
+function parseEmployees(input: string): number | null | undefined {
+  const cleaned = input.replace(/[\s,]/g, '')
+  if (!cleaned) return null
+  if (!/^\d+$/.test(cleaned)) return undefined
+  const value = Number(cleaned)
+  return value <= CRM_COMPANY_EMPLOYEES_MAX ? value : undefined
 }
 
 export type CompanyDraftResult =
@@ -158,7 +248,6 @@ export type CompanyDraftResult =
     }
   | { ok: false; error: string }
 
-const INDUSTRY_MAX = 80
 const NOTES_MAX = 4000
 
 /**
@@ -172,7 +261,10 @@ const NOTES_MAX = 4000
  * list's name filter — a range over `nameLower` — can find the record; a
  * company written without those keys still lists and cannot be searched.
  */
-export function companyDraftFields(draft: CompanyDraft): CompanyDraftResult {
+export function companyDraftFields(
+  draft: CompanyDraft,
+  picklists: CompanyDraftPicklists = { lists: {} },
+): CompanyDraftResult {
   const name = draft.name.trim().replace(/\s+/g, ' ')
   if (!name) return { ok: false, error: 'A company needs a name.' }
   const set: Record<string, unknown> = { ...nameSearchFields(name) }
@@ -217,9 +309,25 @@ export function companyDraftFields(draft: CompanyDraft): CompanyDraftResult {
     cleared.push('phone')
   }
 
-  const industry = draft.industry.trim().slice(0, INDUSTRY_MAX)
-  if (industry) set['industry'] = industry
-  else cleared.push('industry')
+  /*
+   * THE PICKLISTS (AGL-3514): each a label of the org's list, or the value
+   * the company already holds — an industry typed before Industry was a
+   * picklist stays until it is changed.
+   */
+  const judged = judgeCrmCompanyPicklists(
+    picklists.lists,
+    Object.fromEntries(
+      CRM_COMPANY_PICKLIST_FIELDS.map(({ field }) => [field, draft[field]]),
+    ),
+    { current: picklists.current ?? {} },
+  )
+  const picklistError = Object.values(judged.errors)[0]
+  if (picklistError) return { ok: false, error: picklistError }
+  for (const { field } of CRM_COMPANY_PICKLIST_FIELDS) {
+    const value = judged.values[field as CrmCompanyPicklistField]
+    if (value) set[field] = value
+    else cleared.push(field)
+  }
 
   const ownerUid = draft.ownerUid.trim()
   if (ownerUid) set['ownerUid'] = ownerUid
@@ -231,6 +339,55 @@ export function companyDraftFields(draft: CompanyDraft): CompanyDraftResult {
   set['address'] = isBlankAddress(draft.address)
     ? null
     : normalizeAddress(draft.address)
+
+  /*
+   * THE ACCOUNT FIELDS (AGL-3514), through the reader every door uses. The
+   * revenue is typed in the currency's major unit and stored in its minor
+   * one, with the currency beside it; without a revenue there is nothing
+   * for a currency to describe.
+   */
+  const revenueText = draft.annualRevenue.trim()
+  const revenue = revenueText ? parseAmountInput(revenueText) : null
+  if (revenueText && revenue === null) {
+    return { ok: false, error: 'The annual revenue is not an amount.' }
+  }
+  const employees = parseEmployees(draft.numberOfEmployees)
+  if (employees === undefined) {
+    return {
+      ok: false,
+      error: `Employees must be a whole number from 0 to ${CRM_COMPANY_EMPLOYEES_MAX.toLocaleString()}.`,
+    }
+  }
+  const account = readCrmCompanyAccountFields({
+    annualRevenueCents: revenue,
+    currency: revenue === null ? null : draft.currency,
+    numberOfEmployees: employees,
+    fax: draft.fax,
+    accountNumber: draft.accountNumber,
+    site: draft.site,
+    tickerSymbol: draft.tickerSymbol,
+    sicCode: draft.sicCode,
+    shippingAddress: isBlankAddress(draft.shippingAddress) ? null : draft.shippingAddress,
+  })
+  const [failed] = Object.entries(account.errors)
+  if (failed) {
+    const [field, message] = failed
+    return {
+      ok: false,
+      error: `${ACCOUNT_FIELD_LABELS[field] ?? field} ${message.charAt(0).toLowerCase()}${message.slice(1)}.`,
+    }
+  }
+  for (const [field, value] of Object.entries(account.values)) {
+    // The shipping address is nullable like the billing one; the rest are
+    // absent when blank, so an edit deletes them.
+    if (field === 'shippingAddress') set[field] = value ?? null
+    else if (value === null || value === undefined) cleared.push(field)
+    else set[field] = value
+  }
+
+  const parentCompanyId = draft.parentCompanyId.trim()
+  if (parentCompanyId) set['parentCompanyId'] = parentCompanyId
+  else cleared.push('parentCompanyId')
 
   const tags = normalizeCompanyTags(draft.tags)
   if (tags.length) set['tags'] = tags

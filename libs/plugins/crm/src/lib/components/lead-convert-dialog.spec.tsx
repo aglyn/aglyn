@@ -29,7 +29,7 @@
  */
 
 import { ORG_SCOPE_TOKEN, hostScopeToken } from '@aglyn/aglyn'
-import { render } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { LeadConvertDialog } from './lead-convert-dialog'
 
 /** Every `where` clause the dialog's reads were built with. */
@@ -44,9 +44,15 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
     factory()
     return { data: [], status: 'success', fromCache: false }
   },
+  // The org's deal types (AGL-3516): none stored, so the standard values.
+  useFirestoreDoc: (factory: () => unknown) => {
+    factory()
+    return { data: undefined, status: 'success', fromCache: false }
+  },
 }))
 jest.mock('firebase/firestore', () => ({
   collection: () => ({}),
+  doc: () => ({}),
   documentId: () => ({}),
   limit: () => ({}),
   orderBy: () => ({}),
@@ -71,7 +77,7 @@ jest.mock('./lead-owner-select', () => ({
 
 const roster = { options: [], loading: false } as never
 
-function mountDialog(props: { open: boolean; hostId: string }) {
+function mountDialog(props: { open: boolean; hostId: string; leadSource?: string }) {
   return render(
     <LeadConvertDialog
       open={props.open}
@@ -80,7 +86,7 @@ function mountDialog(props: { open: boolean; hostId: string }) {
       orgId="org-1"
       org={{}}
       leadId="lead-1"
-      lead={{ email: 'owen@example.com', name: 'Owen' }}
+      lead={{ email: 'owen@example.com', name: 'Owen', leadSource: props.leadSource }}
       basePath="/acme/crm"
       roster={roster}
     />,
@@ -108,5 +114,20 @@ describe('the convert dialog’s read scope (AGL-2641)', () => {
       expect(operator).toBe('array-contains-any')
       expect(tokens).toEqual([ORG_SCOPE_TOKEN, hostScopeToken('demo')])
     }
+  })
+})
+
+describe('the deal step (AGL-3516)', () => {
+  it("offers the deal's Type and says the lead's lead source travels with it", () => {
+    mountDialog({ open: true, hostId: 'demo', leadSource: 'Trade show' })
+    fireEvent.click(screen.getByLabelText('Open a deal'))
+    expect(screen.getByLabelText('Type')).toBeTruthy()
+    expect(screen.getByText("The deal's lead source is the lead's: Trade show.")).toBeTruthy()
+  })
+
+  it('says so when the lead has no lead source', () => {
+    mountDialog({ open: true, hostId: 'demo' })
+    fireEvent.click(screen.getByLabelText('Open a deal'))
+    expect(screen.getByText('The lead has no lead source, so the deal has none.')).toBeTruthy()
   })
 })

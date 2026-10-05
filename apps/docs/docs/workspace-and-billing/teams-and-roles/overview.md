@@ -189,6 +189,15 @@ buy seat add-ons to grow. Site **member accounts** — visitors who sign up to y
 published site — are not seats and are never capped. See
 [Billing & plans](../billing-and-plans/overview.md).
 
+Two things never take a seat:
+
+- **Aglyn staff.** A staff member who builds your workspace or joins it to help is
+  marked **Aglyn staff · no seat** on the Team page and is left out of every seat
+  count. See [Aglyn staff on your team](invite-teammates.md#aglyn-staff).
+- **A pending owner handoff.** Handing the workspace to a new owner moves the owner
+  seat rather than adding one. See
+  [Hand off the workspace to a new owner](invite-teammates.md#owner-handoff).
+
 :::tip How-tos
 - [Invite teammates](invite-teammates.md)
 - [Custom roles & permissions](custom-roles.md)

@@ -81,13 +81,21 @@ const HOUR_MS = 60 * 60 * 1000
 
 /** Mirrors `DEFAULT_DEAL_STAGES` in `libs/aglyn/src/lib/app-utils/crm.ts`. */
 const DEFAULT_DEAL_STAGES = [
-  { id: 'qualified', name: 'Qualified', order: 0, probability: 10, kind: 'open' },
-  { id: 'contact-made', name: 'Contact made', order: 1, probability: 20, kind: 'open' },
-  { id: 'proposal-sent', name: 'Proposal sent', order: 2, probability: 40, kind: 'open' },
-  { id: 'negotiation', name: 'Negotiation', order: 3, probability: 60, kind: 'open' },
-  { id: 'won', name: 'Won', order: 4, probability: 100, kind: 'won' },
-  { id: 'lost', name: 'Lost', order: 5, probability: 0, kind: 'lost' },
+  { id: 'prospecting', name: 'Prospecting', order: 0, probability: 10, kind: 'open', forecastCategory: 'pipeline' },
+  { id: 'qualification', name: 'Qualification', order: 1, probability: 10, kind: 'open', forecastCategory: 'pipeline' },
+  { id: 'needs-analysis', name: 'Needs Analysis', order: 2, probability: 20, kind: 'open', forecastCategory: 'pipeline' },
+  { id: 'value-proposition', name: 'Value Proposition', order: 3, probability: 50, kind: 'open', forecastCategory: 'pipeline' },
+  { id: 'id-decision-makers', name: 'Id. Decision Makers', order: 4, probability: 60, kind: 'open', forecastCategory: 'pipeline' },
+  { id: 'perception-analysis', name: 'Perception Analysis', order: 5, probability: 70, kind: 'open', forecastCategory: 'pipeline' },
+  { id: 'proposal-price-quote', name: 'Proposal/Price Quote', order: 6, probability: 75, kind: 'open', forecastCategory: 'bestCase' },
+  { id: 'negotiation-review', name: 'Negotiation/Review', order: 7, probability: 90, kind: 'open', forecastCategory: 'commit' },
+  { id: 'won', name: 'Closed Won', order: 8, probability: 100, kind: 'won', forecastCategory: 'closed' },
+  { id: 'lost', name: 'Closed Lost', order: 9, probability: 0, kind: 'lost', forecastCategory: 'omitted' },
 ]
+
+/** A seeded deal's forecast category, as a stage move stamps it (AGL-3516). */
+const forecastOf = (stageId) =>
+  DEFAULT_DEAL_STAGES.find((stage) => stage.id === stageId)?.forecastCategory ?? 'pipeline'
 
 /**
  * The search keys a company document carries, as `nameSearchFields` writes
@@ -117,16 +125,21 @@ export const CRM_FIXTURE = {
   /** The one open deal in Renewals — the deal the products card is driven on. */
   renewalDealId: 'seed-crm-deal-littlefox-renewal',
   renewalDealTitle: 'Little Fox Café — annual renewal',
-  /** Three more open Sales deals so the board has a card in every open stage. */
+  /** Three more open Sales deals, so the board's cards spread across its open stages. */
   boardDeals: {
-    voss: { id: 'seed-crm-deal-voss', title: 'Voss & Co. — retail shelf trial', stageId: 'qualified', amountCents: 60_000 },
+    voss: { id: 'seed-crm-deal-voss', title: 'Voss & Co. — retail shelf trial', stageId: 'prospecting', amountCents: 60_000 },
     northShore: {
       id: 'seed-crm-deal-northshore',
       title: 'North Shore Hotel — lobby coffee program',
-      stageId: 'contact-made',
+      stageId: 'needs-analysis',
       amountCents: 180_000,
     },
-    cedar: { id: 'seed-crm-deal-cedar', title: 'Cedar & Salt — event season catering', stageId: 'negotiation', amountCents: 120_000 },
+    cedar: {
+      id: 'seed-crm-deal-cedar',
+      title: 'Cedar & Salt — event season catering',
+      stageId: 'negotiation-review',
+      amountCents: 120_000,
+    },
   },
   /** The catalog product the products card's search finds (AGL-2620). */
   product: {
@@ -441,9 +454,14 @@ export async function seedCrmFixtures(options) {
   })
   const deals = [
     deal(F.dealId, F.dealTitle, {
-      stageId: 'proposal-sent',
+      stageId: 'proposal-price-quote',
       status: 'open',
       amountCents: 240_000,
+      // Salesforce's Opportunity fields (AGL-3516), so the deal page shows them.
+      type: 'New Business',
+      leadSource: 'Trade show',
+      nextStep: 'Walk the second location with the owner',
+      forecastCategory: forecastOf('proposal-price-quote'),
       expectedCloseAtMs: at(-14),
       stageChangedAtMs: at(3),
       ownerUid,
@@ -457,6 +475,8 @@ export async function seedCrmFixtures(options) {
       stageId: 'won',
       status: 'won',
       amountCents: 85_000,
+      type: 'New Business',
+      forecastCategory: forecastOf('won'),
       closedAtMs: at(5),
       stageChangedAtMs: at(5),
       ownerUid: teammateUid,
@@ -470,6 +490,7 @@ export async function seedCrmFixtures(options) {
     deal(F.boardDeals.voss.id, F.boardDeals.voss.title, {
       stageId: F.boardDeals.voss.stageId,
       status: 'open',
+      forecastCategory: forecastOf(F.boardDeals.voss.stageId),
       amountCents: F.boardDeals.voss.amountCents,
       expectedCloseAtMs: at(-40),
       stageChangedAtMs: at(6),
@@ -481,6 +502,8 @@ export async function seedCrmFixtures(options) {
     deal(F.boardDeals.northShore.id, F.boardDeals.northShore.title, {
       stageId: F.boardDeals.northShore.stageId,
       status: 'open',
+      leadSource: 'Web',
+      forecastCategory: forecastOf(F.boardDeals.northShore.stageId),
       amountCents: F.boardDeals.northShore.amountCents,
       stageChangedAtMs: at(2),
       ownerUid: teammateUid,
@@ -491,6 +514,7 @@ export async function seedCrmFixtures(options) {
     deal(F.boardDeals.cedar.id, F.boardDeals.cedar.title, {
       stageId: F.boardDeals.cedar.stageId,
       status: 'open',
+      forecastCategory: forecastOf(F.boardDeals.cedar.stageId),
       amountCents: F.boardDeals.cedar.amountCents,
       expectedCloseAtMs: at(-75),
       stageChangedAtMs: at(1),
@@ -503,9 +527,11 @@ export async function seedCrmFixtures(options) {
     // products card starts empty and the amount is typed.
     {
       ...deal(F.renewalDealId, F.renewalDealTitle, {
-        stageId: 'qualified',
+        stageId: 'prospecting',
         status: 'open',
         amountCents: 250_000,
+        type: 'Existing Business',
+        forecastCategory: forecastOf('prospecting'),
         expectedCloseAtMs: at(-150),
         stageChangedAtMs: at(4),
         ownerUid,

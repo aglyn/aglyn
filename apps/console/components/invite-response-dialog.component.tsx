@@ -164,11 +164,19 @@ export function InviteResponseDialog({ target, onClose }: InviteResponseDialogPr
         </>
       ) : (
         <>
-          <DialogTitle>{`Join ${orgName}?`}</DialogTitle>
+          <DialogTitle>
+            {invite?.handoff ? `Take over ${orgName}?` : `Join ${orgName}?`}
+          </DialogTitle>
           <DialogContent>
             <DialogContentText>
               {inviteSentence(invite) +
-                ' Accepting adds the workspace to your account and opens it.'}
+                (invite?.handoff
+                  ? ' Accepting makes you the owner of the workspace and every ' +
+                    'site in it. ' +
+                    (invite.handoff.previousOwner === 'stay'
+                      ? 'The current owner stays on as an admin.'
+                      : 'The current owner leaves the workspace.')
+                  : ' Accepting adds the workspace to your account and opens it.')}
             </DialogContentText>
           </DialogContent>
           <DialogActions>

@@ -48,6 +48,7 @@ import {
   emailUnverifiedResponse,
   firebaseAdmin,
   generateStoredMediaVariants,
+  mediaVariantDocFields,
   isImpersonationSession,
   MEDIA_STRONG_DIGEST_MAX_BYTES,
   quarantinedUploadRefusal,
@@ -626,22 +627,26 @@ async function handler(request: Request): Promise<Response> {
     // touched storage exactly zero times. Restating that rule at the call site
     // is how the two copies AGL-1468 collapsed came to disagree in the first
     // place.
-    const { variants, error: variantsError } = cdnAllowed
+    //
+    // The display copy rides the same call (AGL-3486); see the direct route.
+    const variantOutcome = cdnAllowed
       ? await generateStoredMediaVariants({
           contentType,
           sizeBytes: actualBytes,
           sourceWidth: dimensions?.width,
           objectPath,
+          display: true,
           readSource: async () => (await file.download())[0],
-          saveVariant: (path, webp) =>
-            bucket.file(path).save(webp, {
-              contentType: 'image/webp',
+          saveVariant: (path, bytes, type) =>
+            bucket.file(path).save(bytes, {
+              contentType: type,
               metadata: {
                 cacheControl: 'public, max-age=31536000, immutable',
               },
             }),
         })
-      : { variants: [] as number[], error: undefined }
+      : null
+    const variantsError = variantOutcome?.error
 
     /*
      * The video half (AGL-2742), and the reason it arrives in the FINALIZE
@@ -727,7 +732,11 @@ async function handler(request: Request): Promise<Response> {
       // being absent is a fact a query can use rather than a null to test.
       ...videoFields,
       uploadedBy: decoded.uid,
-      variants,
+      // `variants`, their encoder generation and the display copy
+      // (AGL-3486), as the direct route writes them.
+      ...(variantOutcome
+        ? mediaVariantDocFields(variantOutcome)
+        : { variants: [] as number[] }),
       // Only when something actually went wrong (AGL-1468). An asset with
       // nothing to generate — an SVG, a video, a source already narrower than
       // 320px — is the common case and must not carry a fault marker, or the

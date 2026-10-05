@@ -15,7 +15,13 @@
  * limitations under the License.
  */
 
-import type { ContactLifecycleStage, CrmActivityKind, CrmTaskKind } from '@aglyn/aglyn/app-utils/crm'
+import type {
+  ContactLifecycleStage,
+  CrmActivityDirection,
+  CrmActivityKind,
+  CrmTaskKind,
+  CrmTaskPriority,
+} from '@aglyn/aglyn/app-utils/crm'
 import {
   type ClientInteractionStep,
   type InteractionStepGuard,
@@ -74,11 +80,19 @@ export type AiAutomationServerStep = (
       type: 'createCrmTask'
       title: string
       kind: CrmTaskKind
+      /** By meaning; the runner stores the org's label (AGL-3538). */
+      priority?: CrmTaskPriority
       dueInDays: number
       assigneeUid?: string
       assigneeEmail?: string
     }
-  | { type: 'logCrmActivity'; kind: CrmActivityKind; body: string }
+  | {
+      type: 'logCrmActivity'
+      kind: CrmActivityKind
+      body: string
+      /** Which way a call or an email went (AGL-3538). */
+      direction?: CrmActivityDirection
+    }
 ) & {
   when?: InteractionStepGuard | null
 }
