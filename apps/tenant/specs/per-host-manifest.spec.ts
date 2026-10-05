@@ -243,15 +243,19 @@ describe('manifest icon media references (AGL-1407)', () => {
     )
   })
 
-  describe('the legacy absolute forms are untouched', () => {
-    it('a raw firebasestorage download URL, encoding intact', async () => {
-      const raw =
-        'https://firebasestorage.googleapis.com/v0/b/aglyn-main.appspot.com/' +
-        'o/orgs%2FjWmGooWE3L%2Fmedia%2Fbrand%2Flogo?alt=media&token=abc'
+  describe('a raw firebasestorage download URL (AGL-3506)', () => {
+    const raw =
+      'https://firebasestorage.googleapis.com/v0/b/aglyn-main.appspot.com/' +
+      'o/orgs%2FjWmGooWE3L%2Fmedia%2Fbrand%2Flogo?alt=media&token=abc'
+
+    it('is served through the site\'s CDN, not Google\'s edge', async () => {
       expect(await iconFor({ subdomain: 'northwind-coffee', logoUrl: raw })).toBe(
-        raw,
+        'https://northwind-coffee.aglyn.app/api/media/cdn/org:jWmGooWE3L/logo',
       )
     })
+  })
+
+  describe('the legacy absolute forms are untouched', () => {
 
     it("an external URL the author typed, on a site with NO origin", async () => {
       // Absolute already, so it never needed the origin — proof the new

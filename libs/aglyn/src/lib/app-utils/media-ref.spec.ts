@@ -49,6 +49,11 @@ const RAW_URL =
   'https://firebasestorage.googleapis.com/v0/b/aglyn.appspot.com/o/' +
   'hosts%2Fsite-a%2Fmedia%2Fmed123?alt=media&token=abc'
 
+/** A download URL for an object that is no library asset — an avatar. */
+const OTHER_STORAGE_URL =
+  'https://firebasestorage.googleapis.com/v0/b/aglyn.appspot.com/o/' +
+  'users%2Fu1%2Favatar.png?alt=media&token=abc'
+
 describe('media references (AGL-1215)', () => {
   describe('parse / format', () => {
     it('round-trips a host-library reference', () => {
@@ -119,8 +124,41 @@ describe('media references (AGL-1215)', () => {
       )
     })
 
-    it('passes a legacy raw storage URL through untouched', () => {
-      expect(resolveMediaSrc(RAW_URL, { hostId: 'site-a' })).toBe(RAW_URL)
+    it('routes a library object\'s storage URL through the CDN (AGL-3506)', () => {
+      expect(resolveMediaSrc(RAW_URL, { hostId: 'site-a' })).toBe(
+        '/api/media/cdn/site-a/med123',
+      )
+      // An org object in a nested folder, host-qualified like a reference.
+      const orgUrl =
+        'https://firebasestorage.googleapis.com/v0/b/aglyn.appspot.com/o/' +
+        'orgs%2Facme%2Fmedia%2Fbrand%2Flogos%2Fmed456?alt=media&token=t'
+      expect(resolveMediaSrc(orgUrl, { hostId: 'site-a' })).toBe(
+        '/api/media/cdn/org:acme:site-a/med456',
+      )
+      expect(resolveMediaSrc(orgUrl)).toBe('/api/media/cdn/org:acme/med456')
+      // The page names the asset's current bytes, as for a reference.
+      expect(
+        resolveMediaSrc(RAW_URL, { version: 'abc123def4567890' }),
+      ).toMatch(/^\/api\/media\/cdn\/site-a\/med123\?v=/)
+    })
+
+    it('passes a storage URL that names no library asset through', () => {
+      const base =
+        'https://firebasestorage.googleapis.com/v0/b/aglyn.appspot.com/o/'
+      for (const value of [
+        OTHER_STORAGE_URL,
+        // Derived objects: a variant, a rendition and a poster.
+        `${base}hosts%2Fsite-a%2Fmedia%2Fmed123__w640.webp?alt=media`,
+        `${base}hosts%2Fsite-a%2Fmedia%2Fmed123__r720p.mp4?alt=media`,
+        `${base}hosts%2Fsite-a%2Fmedia%2Fmed123__poster?alt=media`,
+        // Our path grammar on somebody else's host.
+        'https://cdn.other.test/v0/b/x/o/hosts%2Fsite-a%2Fmedia%2Fmed123',
+        // Not the download path shape.
+        `${base}hosts%2Fsite-a%2Fmedia%2Fmed123/extra`,
+        `${base}hosts%2F..%2Fmedia%2Fmed123`,
+      ]) {
+        expect(resolveMediaSrc(value, { hostId: 'site-a' })).toBe(value)
+      }
     })
 
     it('passes a legacy CDN path through untouched', () => {
@@ -185,10 +223,11 @@ describe('media references (AGL-1215)', () => {
       expect(siteRelativeMediaSrc(mimic)).toBe(mimic)
     })
 
-    it('leaves firebasestorage absolute — AGL-1726 condition 5', () => {
-      // A first-party HOST, but not a CDN path: free-tier orgs store this
-      // form, and relativizing it would blank every free-tier image.
-      expect(siteRelativeMediaSrc(RAW_URL)).toBe(RAW_URL)
+    it('leaves a non-library firebasestorage URL absolute — AGL-1726 condition 5', () => {
+      // A first-party HOST, but not a CDN path, and no asset to route to.
+      expect(siteRelativeMediaSrc(OTHER_STORAGE_URL)).toBe(OTHER_STORAGE_URL)
+      // A library object's URL is the asset, served by the site (AGL-3506).
+      expect(siteRelativeMediaSrc(RAW_URL)).toBe('/api/media/cdn/site-a/med123')
     })
 
     it('leaves an author hotlink and a protocol-relative url alone', () => {
@@ -257,12 +296,18 @@ describe('media references (AGL-1215)', () => {
       ).toBe('media:org:acme:site-a/med123')
     })
 
-    it('degrades to the raw URL for a free-tier org with no cdnPath', () => {
-      // `cdnPath` is gated on the paid `mediaCdn` entitlement, and the CDN
-      // handler does not re-check it — minting a reference from an id we
-      // happen to know would hand free-tier orgs paid delivery.
-      expect(mediaNodeSrc({ url: RAW_URL })).toBe(RAW_URL)
-      expect(mediaNodeSrc({ url: RAW_URL, cdnPath: null })).toBe(RAW_URL)
+    it('reads the reference off the storage URL when there is no cdnPath', () => {
+      // An upload from before the CDN reached every plan (AGL-1152): the
+      // picker stores the asset, not a URL that bypasses the CDN (AGL-3506).
+      expect(mediaNodeSrc({ url: RAW_URL })).toBe('media:site-a/med123')
+      expect(mediaNodeSrc({ url: RAW_URL, cdnPath: null })).toBe(
+        'media:site-a/med123',
+      )
+    })
+
+    it('keeps a private asset, and a non-library URL, on the stored url', () => {
+      expect(mediaNodeSrc({ url: RAW_URL, private: true })).toBe(RAW_URL)
+      expect(mediaNodeSrc({ url: OTHER_STORAGE_URL })).toBe(OTHER_STORAGE_URL)
     })
 
     it('has nothing to store when the asset has neither form', () => {
@@ -379,9 +424,19 @@ describe('media references (AGL-1215)', () => {
       ).toBe(`${ORIGIN}/api/media/cdn/org:acme/med123`)
     })
 
-    it('leaves an already-absolute URL alone, origin or not', () => {
-      expect(absoluteMediaSrc(RAW_URL, { origin: ORIGIN })).toBe(RAW_URL)
+    it('routes a library storage URL through the CDN when it has an origin', () => {
+      expect(absoluteMediaSrc(RAW_URL, { origin: ORIGIN })).toBe(
+        `${ORIGIN}/api/media/cdn/site-a/med123`,
+      )
+      // With no origin it keeps the absolute URL it already had (AGL-3506).
       expect(absoluteMediaSrc(RAW_URL)).toBe(RAW_URL)
+    })
+
+    it('leaves an already-absolute URL alone, origin or not', () => {
+      expect(absoluteMediaSrc(OTHER_STORAGE_URL, { origin: ORIGIN })).toBe(
+        OTHER_STORAGE_URL,
+      )
+      expect(absoluteMediaSrc(OTHER_STORAGE_URL)).toBe(OTHER_STORAGE_URL)
       expect(absoluteMediaSrc('https://x.test/a.png')).toBe(
         'https://x.test/a.png',
       )
@@ -458,7 +513,15 @@ describe('media references (AGL-1215)', () => {
     })
 
     it('leaves an off-site url untouched, query and all', () => {
-      expect(mediaVariantSrc(RAW_URL, { width: 640 })).toBe(RAW_URL)
+      expect(mediaVariantSrc(OTHER_STORAGE_URL, { width: 640 })).toBe(
+        OTHER_STORAGE_URL,
+      )
+    })
+
+    it('gives a library storage URL the CDN variant (AGL-3506)', () => {
+      expect(mediaVariantSrc(RAW_URL, { width: 640 })).toBe(
+        `${MEDIA_CDN_ROUTE}/site-a/med123?w=640`,
+      )
     })
   })
 
@@ -642,10 +705,10 @@ describe('media references (AGL-1215)', () => {
       ).toBe('media:site-a/med123')
     })
 
-    it('leaves a free-tier org on its raw storage URL, pin or no pin', () => {
-      // The entitlement gate is `cdnPath`, and a `contentHash` must not
-      // become a second way to reach paid delivery.
-      expect(mediaNodeSrc({ url: RAW_URL, contentHash: PIN })).toBe(RAW_URL)
+    it('writes no pin for a reference read off the storage URL either', () => {
+      expect(mediaNodeSrc({ url: RAW_URL, contentHash: PIN })).toBe(
+        'media:site-a/med123',
+      )
     })
   })
 })

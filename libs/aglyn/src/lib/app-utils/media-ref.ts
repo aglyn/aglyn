@@ -488,13 +488,22 @@ export interface ResolveMediaSrcOptions {
  *
  * 1. a **media reference** → the CDN URL for it, host-qualified if we know
  *    which site is asking;
- * 2. any other non-empty string → **itself, untouched**. That is the whole
- *    back-compat story and it needs no migration to be correct: nodes
- *    holding a raw `https://firebasestorage.googleapis.com/…` URL, nodes
- *    holding an `/api/media/cdn/…` path written by the first pass,
- *    and an author-typed external URL for a hotlinked image are all just
- *    passed through;
- * 3. empty/absent → undefined, so the caller shows its placeholder.
+ * 2. a **Storage download URL for a library object** → the same CDN URL,
+ *    exactly as if the reference had been stored (AGL-3506). See
+ *    {@link mediaRefFromStorageUrl};
+ * 3. any other non-empty string → **itself, untouched**. Nodes holding an
+ *    `/api/media/cdn/…` path written by the first pass and an author-typed
+ *    external URL for a hotlinked image are passed through;
+ * 4. empty/absent → undefined, so the caller shows its placeholder.
+ *
+ * Branch 2 is what routes every library byte through the CDN. A download
+ * URL goes from Google's edge straight to the visitor, so no code of ours
+ * runs on it: the bandwidth band never counts it (AGL-3474), and a lockdown,
+ * a quarantine or a takedown cannot refuse it (`media-download-tokens.ts`).
+ * Every upload still stores one on the media document's `url`, and older
+ * nodes, products and popups hold it verbatim. Resolving it here covers
+ * every one of them with no migration, and an image keeps the stable URL's
+ * edge caching.
  *
  * A value that opens with `media:` but does not parse resolves to undefined
  * rather than reaching an `<img src>`. There is no correct URL to emit for
@@ -506,7 +515,8 @@ export function resolveMediaSrc(
   options?: ResolveMediaSrcOptions,
 ): string | undefined {
   if (!value) return undefined
-  if (!isMediaRef(value)) {
+  const stored = isMediaRef(value) ? value : mediaRefFromStorageUrl(value)
+  if (!stored) {
     // A legacy stored CDN path names the same asset on the same route, so it
     // takes the version as a reference does (AGL-3485).
     const token = isMediaCdnPath(value)
@@ -514,7 +524,7 @@ export function resolveMediaSrc(
       : undefined
     return token ? `${value}?${MEDIA_CDN_VERSION_PARAM}=${token}` : value
   }
-  const ref = parseMediaRef(value)
+  const ref = parseMediaRef(stored)
   if (!ref) return undefined
   const scope = hostQualifiedScope(ref.scope, options?.hostId)
   // The stable URL, pinned or not (AGL-2798). The content-hashed form is held
@@ -625,8 +635,12 @@ export function siteRelativeMediaSrc(
  * relative URL — the rule the canonical and the RSS feed already follow
  * (AGL-1160/AGL-1272): never interpolate an unknown origin, and never emit a
  * URL that is well-formed but wrong. An absolute value is unaffected, so the
- * author-typed external URL and the raw storage URL never depend on knowing
- * the origin at all.
+ * author-typed external URL never depends on knowing the origin at all.
+ *
+ * A Storage download URL resolves to the CDN path (AGL-3506), so with an
+ * origin it leaves as the CDN URL. Without one it leaves as itself: it was
+ * already absolute and fetchable, and a reader with no origin is better
+ * served by the uncounted link it had than by no image at all.
  *
  * A protocol-relative `//host/x.png` only lacks a scheme; it is given `https:`
  * rather than an origin, which would corrupt it.
@@ -640,7 +654,7 @@ export function absoluteMediaSrc(
   if (/^[a-z][a-z0-9+.-]*:/i.test(resolved)) return resolved
   if (resolved.startsWith('//')) return `https:${resolved}`
   const origin = options?.origin
-  if (!origin) return undefined
+  if (!origin) return value && mediaRefFromStorageUrl(value) ? value : undefined
   return resolved.startsWith('/')
     ? `${origin}${resolved}`
     : `${origin}/${resolved}`
@@ -1004,6 +1018,98 @@ export function isFirstPartyMediaSrc(value: unknown): value is string {
   }
 }
 
+/** Firebase Storage's download host — where every upload's `url` points. */
+const STORAGE_DOWNLOAD_HOST = 'firebasestorage.googleapis.com'
+
+/**
+ * The Storage emulator's `host:port`, whose download URLs have the same shape
+ * as production's. Read per call so a test can set it; empty in a browser.
+ */
+function storageEmulatorHost(): string {
+  const env =
+    typeof process === 'undefined'
+      ? undefined
+      : process.env?.['FIREBASE_STORAGE_EMULATOR_HOST']
+  return String(env ?? '')
+    .trim()
+    .toLowerCase()
+}
+
+/**
+ * The library asset a Storage object key belongs to, or null.
+ *
+ * Every writer keys an asset's object as `{base}/media/[folders/]{mediaId}`,
+ * with `base` either `hosts/{hostId}` or `orgs/{orgId}`. So a key in that
+ * shape whose last segment is id-shaped IS that asset, wherever a folder move
+ * has since put it. Derived objects are no asset's key: a variant or a
+ * rendition carries a dot (`…__w640.webp`, `…__r720p.mp4`), and a poster
+ * ends in {@link MEDIA_POSTER_OBJECT_SUFFIX}, which is id-shaped and has to
+ * be refused by name.
+ *
+ * This names the asset and decides nothing about access.
+ */
+export function mediaAssetOfObjectKey(
+  objectPath: string,
+): { scope: string; mediaId: string } | null {
+  const segments = String(objectPath ?? '').split('/')
+  if (segments.length < 4 || segments[2] !== 'media') return null
+  if (segments.some((segment) => !segment || segment === '..')) return null
+  const [root, scopeId] = segments
+  const scope =
+    root === 'hosts' ? scopeId : root === 'orgs' ? `org:${scopeId}` : null
+  if (!scope) return null
+  const leaf = segments[segments.length - 1]
+  if (leaf.endsWith(MEDIA_POSTER_OBJECT_SUFFIX)) return null
+  const ref = parseMediaRef(`${MEDIA_REF_PREFIX}${scope}/${leaf}`)
+  return ref ? { scope: ref.scope, mediaId: ref.mediaId } : null
+}
+
+/**
+ * The `media:` reference a Storage DOWNLOAD URL names, or undefined when it
+ * names no library asset (AGL-3506).
+ *
+ * `https://firebasestorage.googleapis.com/v0/b/{bucket}/o/{key}?alt=media&token=…`
+ * is what every upload route stores on the media document's `url`, and the
+ * key alone says which asset it is ({@link mediaAssetOfObjectKey}). The
+ * bucket is not checked: this runs in the browser, where the bucket name is
+ * not reliably configured, and nothing is widened by skipping it — the CDN
+ * serves by scope and id to anyone who asks, under its own scope check, so a
+ * reference minted from a foreign bucket's URL reaches nothing a typed
+ * `media:` reference could not.
+ *
+ * The token is not needed and not kept. The CDN reads the object with the
+ * Admin SDK, so a token rotated by a lockdown, or a URL left stale by a
+ * folder move, still resolves to the asset's current bytes.
+ */
+export function mediaRefFromStorageUrl(value: unknown): string | undefined {
+  // Cheap reject before constructing a URL: this runs on every rendered image.
+  if (typeof value !== 'string' || !value.includes('/v0/b/')) return undefined
+  let url: URL
+  try {
+    url = new URL(value)
+  } catch {
+    return undefined
+  }
+  const emulator = storageEmulatorHost()
+  if (
+    url.hostname.toLowerCase() !== STORAGE_DOWNLOAD_HOST &&
+    !(emulator && url.host.toLowerCase() === emulator)
+  ) {
+    return undefined
+  }
+  // `/v0/b/{bucket}/o/{key}`, the key percent-encoded as one segment.
+  const match = /^\/v0\/b\/[^/]+\/o\/([^/]+)$/.exec(url.pathname)
+  if (!match) return undefined
+  let objectPath: string
+  try {
+    objectPath = decodeURIComponent(match[1])
+  } catch {
+    return undefined
+  }
+  const asset = mediaAssetOfObjectKey(objectPath)
+  return asset ? formatMediaRef(asset.scope, asset.mediaId) : undefined
+}
+
 /**
  * Reads a reference back out of a CDN path — how the picker mints one from
  * the `cdnPath` the server already wrote on the media doc, so nothing new
@@ -1069,14 +1175,12 @@ export function mediaRefPattern(mediaId: string): RegExp {
 /**
  * What the media picker writes into a node prop.
  *
- * The reference is derived from `cdnPath`, and that is load-bearing rather
- * than convenient: `cdnPath` is only minted for orgs entitled to `mediaCdn`
- * and is deleted for private assets (`mediaCdnPathUpdate`). Since the CDN
- * handler itself checks neither, minting a reference from an id we happen to
- * know would hand every free-tier org paid delivery. Deriving it means the
- * entitlement gate keeps working with no second copy of the rule — and a
- * free-tier org degrades to the raw storage URL, which is exactly what it
- * got before the CDN-path pass.
+ * The reference is derived from `cdnPath`, which `mediaCdnPathUpdate`
+ * deletes for a private asset. An asset with no `cdnPath` that is NOT private
+ * — uploaded before the CDN reached every plan (AGL-1152) — has its
+ * reference read off the Storage download URL instead (AGL-3506), so the
+ * picker stops writing a URL that bypasses the CDN. A private asset keeps
+ * the old fallback: no reference to it would render on a page anyway.
  *
  * `media.cdnPath` is expected to be already host-qualified by the picker
  * dialog (AGL-1043). That qualification is preserved in the stored scope so
@@ -1095,8 +1199,14 @@ export function mediaNodeSrc(media: {
   url?: string | null
   cdnPath?: string | null
   contentHash?: string | null
+  private?: boolean | null
 }): string | undefined {
-  return mediaRefFromCdnPath(media.cdnPath) ?? media.url ?? undefined
+  return (
+    mediaRefFromCdnPath(media.cdnPath) ??
+    (media.private ? undefined : mediaRefFromStorageUrl(media.url)) ??
+    media.url ??
+    undefined
+  )
 }
 
 /**

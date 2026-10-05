@@ -104,14 +104,16 @@ describe('HostIcon resolves a media reference (AGL-1407)', () => {
     )
   })
 
-  it('POSITIVE CONTROL: a raw storage URL still renders unchanged', () => {
+  it('routes a library object\'s raw storage URL through the CDN (AGL-3506)', () => {
     const raw =
       'https://firebasestorage.googleapis.com/v0/b/aglyn-main.appspot.com/o/' +
       'orgs%2FjWmGooWE3L%2Fmedia%2F19G8Ipyfb1?alt=media&token=eae58a84'
     const { container } = render(
       <HostIcon host={{ $id: 'hostA', seo: { favicon: raw } }} />,
     )
-    expect(imgSrc(container)).toBe(raw)
+    // The asset the URL names, served by our CDN and qualified for this
+    // site like a reference — never Google's edge, which nothing meters.
+    expect(imgSrc(container)).toBe('/api/media/cdn/org:jWmGooWE3L:hostA/19G8Ipyfb1')
   })
 
   it('POSITIVE CONTROL: an external URL still renders unchanged', () => {
