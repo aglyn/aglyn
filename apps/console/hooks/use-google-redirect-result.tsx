@@ -65,6 +65,11 @@ export function useGoogleRedirectResult(
     campaign_medium?: string
     campaign_name?: string
   },
+  // Called once the round trip has nothing left to do here: no redirect was
+  // pending, `onCredential` finished, or the result failed (AGL-3578). The
+  // sign-up page releases its hold on the auth layout here, so this must run
+  // on every path, including the ones that return early.
+  onSettled?: () => void,
 ): void {
   const auth = useAuth()
   const resolved = useRef(false)
@@ -122,6 +127,7 @@ export function useGoogleRedirectResult(
           credential: GoogleAuthProvider.credentialFromError(error),
         })
       })
+      .finally(() => onSettled?.())
     return () => {
       active = false
     }
