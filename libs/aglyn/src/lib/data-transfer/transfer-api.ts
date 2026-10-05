@@ -196,6 +196,8 @@ export interface TransferJobRecord extends TransferJob {
   headers?: string[]
   /** The person's choices the stored plan was built from. */
   picklistChoices?: TransferPicklistChoices
+  /** Field id → lookup value key → what the person chose for a value that named no record. */
+  lookupChoices?: Record<string, Record<string, TransferLookupChoice>>
   derive?: DeriveOptions
   /** The date order the person chose per field. */
   dateOrders?: Record<string, TransferDateOrder>
@@ -282,9 +284,14 @@ export interface TransferDerivationSummary {
   ambiguousDates: number
 }
 
-/** A lookup column's values that name no record. */
+/**
+ * A lookup column's values that name no record — or several — each with the
+ * rows that carry it and the records it may mean (AGL-3541).
+ */
 export interface TransferLookupReview {
   fieldId: string
+  /** Distinct values that named exactly one record. */
+  resolved?: number
   unresolved: {
     value: string
     key: string
@@ -517,7 +524,7 @@ export interface TransferAnalyzeResponse {
   picklists: TransferPicklistAnalysis[]
   /** With `mapping`: what reading each mapped field did, over every row. */
   derivations?: TransferDerivationSummary[]
-  /** With `mapping`: lookup values that name no record (none until a resource resolves lookups). */
+  /** With `mapping`: each mapped lookup column's values that name no record, with suggestions. */
   lookups?: TransferLookupReview[]
   /** With `mapping`: the rows against existing records. */
   matches?: TransferMatchReview

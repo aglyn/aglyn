@@ -110,6 +110,38 @@ server half returns with the fields. The Conflicts step shows the field
 disabled with your reason, and the Review step counts the values it held
 back.
 
+## Resolve a column that names another record
+
+A field of type `lookup` names a record of another resource — a contact's
+company, a deal's contact, a task's owner — through `lookup: { resource,
+by, creatable }`. The import resolves each distinct value the file holds
+through the TARGET's `lookup` hook: first by Aglyn ID when the cell could
+be one, then by each `by` field in order, using the target's match-key
+normalizer for that field. A value that names exactly one record becomes
+that record's id. The rest are listed on the Values step with the records
+they may mean — the records a value named several of, then whatever the
+target's optional `suggest(ctx, { by, values })` hook offers — and the
+person chooses for each: create it (only when `creatable`), use one of
+them, leave the field blank (nothing is written; a blank chosen here never
+clears a value), or refuse the rows.
+
+What your `apply` receives for the field is the record id, or — for a value
+the person chose to create — `transferLookupNewValue(name)`, which
+`transferLookupNewName` reads back. Create that record on your own write
+path, once however many rows name it, and find the one an earlier attempt
+created when a chunk is retried.
+
+A target no resource moves — the workspace's members an owner column names
+— is answered by the resource itself: list it under `lookupTargets` with
+its own `lookup` (and `suggest`, and the `matchKeys` its fields compare
+with), keyed by the name the field's `lookup.resource` uses.
+
+A resource of the WORKSPACE (`scope: 'org'`) may still be opened with a
+`hostId`: the job keeps that site, your hooks get it as `ctx.hostId`, and
+the transfer routes check the person's permission on that site — how a
+workspace's records are read through one site's view and imported as that
+site's captures.
+
 ## What an export asks of your server half
 
 The export reads your records through your `readPage`, a page at a time,

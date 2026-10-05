@@ -61,6 +61,9 @@ async function handler(request: Request): Promise<Response> {
       ...(body['picklistChoices'] && typeof body['picklistChoices'] === 'object'
         ? { picklistChoices: body['picklistChoices'] as TransferPlanChoices['picklistChoices'] }
         : {}),
+      ...(body['lookupChoices'] && typeof body['lookupChoices'] === 'object' && !Array.isArray(body['lookupChoices'])
+        ? { lookupChoices: body['lookupChoices'] as TransferPlanChoices['lookupChoices'] }
+        : {}),
       ...(body['derive'] && typeof body['derive'] === 'object' ? { derive: body['derive'] as TransferPlanChoices['derive'] } : {}),
       ...(body['dateOrders'] && typeof body['dateOrders'] === 'object'
         ? { dateOrders: body['dateOrders'] as TransferPlanChoices['dateOrders'] }

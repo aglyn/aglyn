@@ -25,6 +25,7 @@ import {
 } from '../data-transfer/field-catalog'
 import type { TransferAliasDictionary } from '../data-transfer/header-match'
 import type { MatchKeySpec, MatchLookup, MatchLookupRequest } from '../data-transfer/match'
+import type { TransferLookupSuggestion } from '../data-transfer/lookup'
 import type {
   ExistingPackageItem,
   PackageDependency,
@@ -226,6 +227,38 @@ export interface TransferLookupResult {
   records: ReadonlyMap<string, Readonly<Record<string, unknown>>>
 }
 
+/** What a lookup column's unresolved values are matched against for suggestions. */
+export interface TransferLookupSuggestRequest {
+  /** The target's field ids the column names records by (`TransferLookupTarget.by`). */
+  by: readonly string[]
+  /** The values that named no record, as the file spelled them. */
+  values: readonly string[]
+}
+
+/**
+ * How a lookup column's values are resolved to records (AGL-3541): the
+ * target resource's own hooks, or the {@link TransferRecordsHooks.lookupTargets}
+ * entry of a resource that answers a target no resource moves.
+ */
+export interface TransferLookupTargetHooks {
+  /**
+   * The target's keys, for the normalizer a `by` field compares with; a
+   * `by` field no key names compares caseless.
+   */
+  matchKeys?: readonly MatchKeySpec[]
+  /** The records holding each requested value — the target's `lookup`, asked by id and by each `by` field. */
+  lookup(ctx: TransferResourceContext, requests: readonly MatchLookupRequest[]): Promise<TransferLookupResult>
+  /**
+   * Records named LIKE each value, for the person to pick from, by value as
+   * given; best first. The engine shows at most five. Without it, a value
+   * that named several records still offers those.
+   */
+  suggest?(
+    ctx: TransferResourceContext,
+    request: TransferLookupSuggestRequest,
+  ): Promise<Readonly<Record<string, readonly TransferLookupSuggestion[]>>>
+}
+
 /**
  * A rule a row must keep that a field policy cannot say — a value that only
  * moves one way, two fields that must agree. Checked against each planned
@@ -307,6 +340,15 @@ export interface TransferRecordsHooks {
     ctx: TransferResourceContext,
     requests: readonly MatchLookupRequest[],
   ): Promise<TransferLookupResult>
+  /** Records named like a lookup column's unresolved values; see {@link TransferLookupTargetHooks.suggest}. */
+  suggest?: TransferLookupTargetHooks['suggest']
+  /**
+   * Lookup targets this resource answers itself, by the key its fields name
+   * in `TransferLookupTarget.resource` — records no transfer resource moves,
+   * like the workspace's members an owner column names. A target not listed
+   * here is a declared resource, resolved through its own hooks.
+   */
+  lookupTargets?: Readonly<Record<string, TransferLookupTargetHooks>>
   /**
    * The organization's effective list for each picklist the catalog names
    * (`TransferField.picklistId`), by picklist id. Without it a picklist
@@ -339,6 +381,11 @@ export interface TransferRecordsHooks {
   invariants?: readonly TransferInvariant[]
   /**
    * Writes one chunk's planned rows through the plugin's own write paths.
+   * A `lookup` field's value is the resolved record's id, or — when the
+   * person chose to create it — `transferLookupNewValue(name)`: the plugin
+   * creates that record on its own path, once however many rows name it
+   * (and finds the one an earlier attempt created, when a chunk is retried).
+   *
    * Nothing in this module or the job engine writes a record: `'records'`
    * here is a transfer kind, and a row's `values` are planned values. So
    * whatever a record write must derive is derived on the plugin's own path

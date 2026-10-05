@@ -122,6 +122,12 @@ import {
   transferUndoAvailable,
   transferUndoExpiresAt,
   transitionTransferJob,
+  transferLookupKey,
+  transferLookupNewValue,
+  mayBeTransferRecordId,
+  normalizeMatchValue,
+  matchLookupKey,
+  isBlankTransferValue,
   TRANSFER_UNDO_WINDOW_MS,
   type MatchKeySpec,
   type MatchLookupRequest,
@@ -138,6 +144,9 @@ import {
   type TransferFormat,
   type TransferJobRecord,
   type TransferJobRetention,
+  type TransferLookupChoice,
+  type TransferLookupReview,
+  type TransferLookupSuggestion,
   type TransferPicklistAnalysis,
   type TransferPlanChoices,
   type TransferPlanInvariantFailure,
@@ -178,6 +187,7 @@ import {
   TransferResourceUnavailableError,
   type ResolvedTransferResource,
   type TransferApplyWriter,
+  type TransferLookupTargetHooks,
   type TransferPicklistList,
   type TransferRecordsHooks,
   type TransferResourceContext,
@@ -424,9 +434,15 @@ async function resolveResource(deps: Pick<TransferEngineDeps, 'resolveResource'>
   }
 }
 
-/** The site a resource's records belong to: required for a `host` resource, `null` for an `org` one. */
+/**
+ * The site a transfer concerns: required for a `host` resource; for an
+ * `org` resource the site the person named, or `null` — a workspace's
+ * records can be read through one site's view of them and imported as
+ * that site's captures (the CRM's, AGL-3541), and the gate has already
+ * checked `data.manage` on that site.
+ */
 export function transferHostIdFor(resource: ResolvedTransferResource, hostId: string | null | undefined): string | null {
-  const site = resource.scope === 'host' && typeof hostId === 'string' && hostId.trim() ? hostId.trim() : null
+  const site = typeof hostId === 'string' && hostId.trim() && !hostId.includes('/') ? hostId.trim() : null
   if (resource.scope === 'host' && !site) {
     throw new TransferEngineError('invalid', 400, `${resource.label} belong to a site; name the site.`)
   }
@@ -831,7 +847,7 @@ export async function analyzeTransferJob(
   const picklists = analyzePicklistColumns(table, mapping, byId, lists)
   const lockedRules = [...(await transferResourceLockedRules(resource, ctx))]
 
-  let review: Pick<TransferAnalyzeResponse, 'derivations' | 'matches' | 'recordLabels'> = {}
+  let review: Pick<TransferAnalyzeResponse, 'derivations' | 'lookups' | 'matches' | 'recordLabels'> = {}
   if (input.mapping) {
     const fieldOptions = transferDateOrderOptions(input.dateOrders)
     const read = table.rows.map((cells, index) => {
@@ -847,8 +863,10 @@ export async function analyzeTransferJob(
       ? await lookupAll(hooks, ctx, matchLookupRequests(values, keys))
       : { lookup: new Map<string, string[]>(), records: new Map<string, Readonly<Record<string, unknown>>>() }
     const outcomes: RowMatchOutcome[] = matchRows(values, keys, found.lookup)
+    const lookups = await lookupReviews(await resolveLookupColumns(deps, hooks, ctx, mapping, byId, read))
     review = {
       derivations: summarizeTransferDerivations(mappedFields, read),
+      ...(lookups.length ? { lookups } : {}),
       matches: transferMatchReview(keys, outcomes, values),
       recordLabels: recordLabelsFor(found.records, transferMatchedRecordIds(outcomes)),
     }
@@ -874,6 +892,275 @@ export async function analyzeTransferJob(
     lockedRules,
     picklists,
     ...review,
+  }
+}
+
+/*==========================================
+ * LOOKUPS — cells that name another record (AGL-3541)
+ *=========================================*/
+
+/** The most suggestions one unresolved value carries. */
+const LOOKUP_SUGGESTIONS_MAX = 5
+
+/** The most rows one unresolved value lists. */
+const LOOKUP_ROWS_MAX = 20
+
+function isLookupField(field: TransferField | undefined): field is TransferField & { lookup: NonNullable<TransferField['lookup']> } {
+  return Boolean(field && field.type === 'lookup' && field.lookup?.resource && field.lookup.by?.length)
+}
+
+/** Who answers a lookup field's target, and the context it is asked in. */
+interface LookupTarget {
+  hooks: TransferLookupTargetHooks
+  ctx: TransferResourceContext
+}
+
+/**
+ * The target of a lookup field: one the resource answers itself
+ * (`lookupTargets`), or the declared resource it names, asked as that
+ * resource in the same workspace and site.
+ */
+async function lookupTargetFor(
+  deps: TransferEngineDeps,
+  hooks: TransferRecordsHooks,
+  ctx: TransferResourceContext,
+  key: string,
+): Promise<LookupTarget> {
+  const own = hooks.lookupTargets?.[key]
+  if (own) return { hooks: own, ctx }
+  const target = await resolveResource(deps, key)
+  return { hooks: transferRecordsHooks(target), ctx: { ...ctx, resource: target.key } }
+}
+
+/** One distinct value of a lookup column, as the file spelled it, and where. */
+interface LookupValue {
+  value: string
+  key: string
+  count: number
+  rows: number[]
+}
+
+/** What one lookup column's values resolved to. */
+interface LookupColumn {
+  field: TransferField & { lookup: NonNullable<TransferField['lookup']> }
+  target: LookupTarget
+  /** Value key → the one record it names. */
+  resolved: Map<string, string>
+  /** Values naming no record, or several, by key. */
+  unresolved: Map<string, LookupValue & { candidates: string[] }>
+  /** Every record the lookups found, by id. */
+  records: Map<string, Readonly<Record<string, unknown>>>
+}
+
+/**
+ * A record's name for the person: the first text it holds — the name a
+ * resource lists first, as every record label the wizard shows is — else
+ * its first `by` value.
+ */
+function lookupRecordLabel(record: Readonly<Record<string, unknown>> | undefined, by: readonly string[]): string | undefined {
+  if (!record) return undefined
+  const label = transferRowLabel(record)
+  if (label) return label
+  for (const fieldId of by) {
+    const value = record[fieldId]
+    if (value !== null && value !== undefined && String(value).trim()) return String(value).trim()
+  }
+  return undefined
+}
+
+/**
+ * Every mapped lookup column's values resolved against its target: each
+ * distinct value asked by id (when it could be one) and then by each `by`
+ * field in order; the first key that names exactly one record decides. A
+ * value that names several records, or none, is unresolved.
+ */
+async function resolveLookupColumns(
+  deps: TransferEngineDeps,
+  hooks: TransferRecordsHooks,
+  ctx: TransferResourceContext,
+  mapping: Record<number, string>,
+  byId: ReadonlyMap<string, TransferField>,
+  rows: ReadonlyArray<{ index: number; values: Readonly<Record<string, unknown>> }>,
+): Promise<LookupColumn[]> {
+  const columns: LookupColumn[] = []
+  for (const fieldId of new Set(Object.values(mapping))) {
+    const field = byId.get(fieldId)
+    if (!isLookupField(field)) continue
+    const values = new Map<string, LookupValue>()
+    for (const row of rows) {
+      const raw = row.values[field.id]
+      if (isBlankTransferValue(raw) || typeof raw === 'object') continue
+      const text = String(raw).trim()
+      const key = transferLookupKey(text)
+      const seen = values.get(key)
+      if (seen) {
+        seen.count += 1
+        if (seen.rows.length < LOOKUP_ROWS_MAX) seen.rows.push(row.index)
+      } else {
+        values.set(key, { value: text, key, count: 1, rows: [row.index] })
+      }
+    }
+    const target = await lookupTargetFor(deps, hooks, ctx, field.lookup.resource)
+    const column: LookupColumn = { field, target, resolved: new Map(), unresolved: new Map(), records: new Map() }
+    columns.push(column)
+    if (!values.size) continue
+
+    const keys: MatchKeySpec[] = [
+      { fieldId: TRANSFER_ID_FIELD, normalizer: 'aglynId' },
+      ...field.lookup.by.map(
+        (by): MatchKeySpec =>
+          target.hooks.matchKeys?.find((key) => key.fieldId === by) ?? { fieldId: by, normalizer: 'caseless' },
+      ),
+    ]
+    const requests: MatchLookupRequest[] = keys
+      .map((key) => {
+        const wanted = new Set<string>()
+        for (const entry of values.values()) {
+          if (key.normalizer === 'aglynId' && !mayBeTransferRecordId(entry.value)) continue
+          const normalized = normalizeMatchValue(key.normalizer, entry.value)
+          if (normalized) wanted.add(normalized)
+        }
+        return { ...key, values: [...wanted] }
+      })
+      .filter((request) => request.values.length)
+    const found = await lookupAll(target.hooks, target.ctx, requests)
+    for (const [id, record] of found.records) column.records.set(id, record)
+
+    for (const entry of values.values()) {
+      let candidates: string[] = []
+      for (const key of keys) {
+        if (key.normalizer === 'aglynId' && !mayBeTransferRecordId(entry.value)) continue
+        const normalized = normalizeMatchValue(key.normalizer, entry.value)
+        const ids = normalized ? [...new Set(found.lookup.get(matchLookupKey(key.fieldId, normalized)) ?? [])] : []
+        if (ids.length === 1) {
+          column.resolved.set(entry.key, ids[0] as string)
+          candidates = []
+          break
+        }
+        if (ids.length > 1 && !candidates.length) candidates = ids
+      }
+      if (!column.resolved.has(entry.key)) column.unresolved.set(entry.key, { ...entry, candidates })
+    }
+  }
+  return columns
+}
+
+/** The review the values step shows: every unresolved value, with records it may mean. */
+async function lookupReviews(columns: readonly LookupColumn[]): Promise<TransferLookupReview[]> {
+  const reviews: TransferLookupReview[] = []
+  for (const column of columns) {
+    const unresolved = [...column.unresolved.values()]
+    const asked = unresolved.length && column.target.hooks.suggest
+      ? await column.target.hooks.suggest(column.target.ctx, {
+          by: column.field.lookup.by,
+          values: unresolved.map((entry) => entry.value),
+        })
+      : {}
+    reviews.push({
+      fieldId: column.field.id,
+      resolved: column.resolved.size,
+      unresolved: unresolved.map((entry) => {
+        const several: TransferLookupSuggestion[] = entry.candidates.map((recordId) => ({
+          recordId,
+          label: lookupRecordLabel(column.records.get(recordId), column.field.lookup.by) ?? recordId,
+        }))
+        const seen = new Set<string>()
+        const suggestions = [...several, ...(asked[entry.value] ?? [])]
+          .filter((suggestion) => {
+            if (!suggestion?.recordId || seen.has(suggestion.recordId)) return false
+            seen.add(suggestion.recordId)
+            return true
+          })
+          .slice(0, LOOKUP_SUGGESTIONS_MAX)
+          .map((suggestion) => ({ recordId: suggestion.recordId, label: String(suggestion.label || suggestion.recordId) }))
+        return { value: entry.value, key: entry.key, count: entry.count, rows: entry.rows, suggestions }
+      }),
+    })
+  }
+  return reviews
+}
+
+/**
+ * What the person must still decide about the lookup columns, by field: a
+ * value with no choice, a "create" the target does not allow, and a record
+ * chosen that does not exist. The records chosen are looked up by id.
+ */
+async function lookupChoiceProblems(
+  columns: readonly LookupColumn[],
+  choices: Readonly<Record<string, Readonly<Record<string, TransferLookupChoice>>>> | undefined,
+): Promise<Record<string, string[]>> {
+  const problems: Record<string, string[]> = {}
+  for (const column of columns) {
+    const fieldChoices = choices?.[column.field.id] ?? {}
+    const found: string[] = []
+    const mapped = new Set<string>()
+    for (const entry of column.unresolved.values()) {
+      const choice = fieldChoices[entry.key]
+      if (!choice) found.push(`Choose what to do with “${entry.value}”.`)
+      else if (choice.action === 'create' && !column.field.lookup.creatable) {
+        found.push(`“${entry.value}” cannot be created by this import; use a record, leave it blank or refuse the rows.`)
+      } else if (choice.action === 'mapTo') {
+        if (typeof choice.recordId !== 'string' || !choice.recordId) found.push(`Choose the record “${entry.value}” means.`)
+        else if (!column.records.has(choice.recordId)) mapped.add(choice.recordId)
+      }
+    }
+    if (mapped.size) {
+      const known = await lookupAll(column.target.hooks, column.target.ctx, [
+        { fieldId: TRANSFER_ID_FIELD, normalizer: 'aglynId', values: [...mapped] },
+      ])
+      for (const id of mapped) {
+        if (known.records.has(id)) column.records.set(id, known.records.get(id) as Readonly<Record<string, unknown>>)
+        else found.push(`The record chosen for a value no longer exists (${id}); choose again.`)
+      }
+    }
+    if (found.length) problems[column.field.id] = found
+  }
+  return problems
+}
+
+/**
+ * The person's lookup choices applied to the rows: a resolved value becomes
+ * its record's id; an unresolved one its choice — the chosen record's id, a
+ * record to create, nothing written, or the row refused — each noted on the
+ * row as `unresolvedLookup`. A value left blank by choice is not written at
+ * all: it must never read as "clear the field".
+ */
+function applyLookupChoices(
+  rows: TransferPlanRow[],
+  columns: readonly LookupColumn[],
+  choices: Readonly<Record<string, Readonly<Record<string, TransferLookupChoice>>>> | undefined,
+): void {
+  for (const row of rows) {
+    const values = row.values as Record<string, unknown>
+    const notes = [...(row.notes ?? [])]
+    for (const column of columns) {
+      const raw = values[column.field.id]
+      if (isBlankTransferValue(raw) || typeof raw === 'object') continue
+      const text = String(raw).trim()
+      const key = transferLookupKey(text)
+      const id = column.resolved.get(key)
+      if (id) {
+        values[column.field.id] = id
+        continue
+      }
+      const choice = choices?.[column.field.id]?.[key]
+      const note = { class: 'unresolvedLookup' as const, fieldId: column.field.id, value: text }
+      if (choice?.action === 'mapTo') {
+        values[column.field.id] = choice.recordId
+        const label = lookupRecordLabel(column.records.get(choice.recordId), column.field.lookup.by)
+        notes.push({ ...note, detail: label ? `Uses “${label}”` : 'Uses a chosen record' })
+      } else if (choice?.action === 'create') {
+        values[column.field.id] = transferLookupNewValue(text)
+        notes.push({ ...note, detail: 'Creates it' })
+      } else if (choice?.action === 'refuseRow') {
+        delete values[column.field.id]
+        notes.push({ ...note, refuse: true, detail: 'Refuses the row' })
+      } else {
+        delete values[column.field.id]
+        notes.push({ ...note, detail: 'Left blank' })
+      }
+    }
+    if (notes.length) row.notes = notes
   }
 }
 
@@ -971,7 +1258,7 @@ function sliceLookupRequests(requests: readonly MatchLookupRequest[]): MatchLook
 }
 
 async function lookupAll(
-  hooks: TransferRecordsHooks,
+  hooks: Pick<TransferRecordsHooks, 'lookup'>,
   ctx: TransferResourceContext,
   requests: readonly MatchLookupRequest[],
 ): Promise<{ lookup: Map<string, string[]>; records: Map<string, Readonly<Record<string, unknown>>> }> {
@@ -1049,12 +1336,27 @@ export async function planTransferJob(
     }
     columns.push({ field: byId.get(analysis.fieldId) as PicklistColumn['field'], resolution, added, blank })
   }
-  if (Object.keys(choiceProblems).length) {
-    throw new TransferEngineError('choicesNeeded', 422, 'Choose what to do with every value the list does not hold.', choiceProblems)
-  }
   for (const [picklistId, values] of Object.entries(additions)) if (!values.length) delete additions[picklistId]
 
   const rows = readPlanRows(table, mapping, byId, columns, choices)
+
+  // Lookups: every value that names no record needs the person's choice too.
+  const lookupColumns = await resolveLookupColumns(deps, hooks, ctx, mapping, byId, rows)
+  const lookupProblems = await lookupChoiceProblems(lookupColumns, choices.lookupChoices)
+  for (const [fieldId, found] of Object.entries(lookupProblems)) {
+    choiceProblems[fieldId] = [...(choiceProblems[fieldId] ?? []), ...found]
+  }
+  if (Object.keys(choiceProblems).length) {
+    throw new TransferEngineError(
+      'choicesNeeded',
+      422,
+      Object.keys(lookupProblems).length
+        ? 'Choose what to do with every value the list does not hold and every record the file names that was not found.'
+        : 'Choose what to do with every value the list does not hold.',
+      choiceProblems,
+    )
+  }
+  applyLookupChoices(rows, lookupColumns, choices.lookupChoices)
   const values = rows.map((row) => row.values)
   const found = keys.length
     ? await lookupAll(hooks, ctx, matchLookupRequests(values, keys))
@@ -1106,6 +1408,7 @@ export async function planTransferJob(
     matchKeys: keys.map((key) => key.fieldId),
     policy,
     picklistChoices: choices.picklistChoices ?? {},
+    lookupChoices: choices.lookupChoices ?? {},
     ...(choices.derive ? { derive: choices.derive } : {}),
     ...(choices.dateOrders ? { dateOrders: choices.dateOrders } : {}),
     ...(choices.extras ? { extras: choices.extras } : {}),

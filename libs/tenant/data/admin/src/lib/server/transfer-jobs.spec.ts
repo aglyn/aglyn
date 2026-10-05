@@ -27,6 +27,22 @@ const mockDeclared: ResolvedTransferResourceDeclaration[] = [
     formats: ['csv', 'json', 'ndjson'],
     limits: { maxRows: 1000 },
   },
+  {
+    pluginId: 'cellar',
+    key: 'racks',
+    label: 'Racks',
+    scope: 'org',
+    kinds: ['records'],
+    formats: ['csv'],
+  },
+  {
+    pluginId: 'cellar',
+    key: 'wines',
+    label: 'Wines',
+    scope: 'org',
+    kinds: ['records'],
+    formats: ['csv'],
+  },
 ]
 
 jest.mock('@aglyn/aglyn/plugin-manager/first-party-plugins.generated', () => {
@@ -44,6 +60,8 @@ import {
   TRANSFER_DRAFT_RETENTION_MS,
   TRANSFER_UNDO_WINDOW_MS,
   buildMatchLookup,
+  rankTransferLookupSuggestions,
+  transferLookupNewName,
   planTransferUndo,
   type PlannedTransferRow,
   type TransferJobRecord,
@@ -51,6 +69,7 @@ import {
   type TransferUndoEntry,
   type TransferUndoStep,
 } from '@aglyn/aglyn/data-transfer'
+import type { MatchLookupRequest } from '@aglyn/aglyn/data-transfer'
 import {
   registerPluginTransferResource,
   resetTransferResourcesForTests,
@@ -664,6 +683,15 @@ describe('what the wizard reads (AGL-3539)', () => {
     expect(info.canCreateCustomField).toBe(false)
   })
 
+  it('keeps the site a workspace resource is imported through, and leaves it out when none is named', async () => {
+    const through = await uploadTransferSource(deps, {
+      orgId: ORG, actorUid: ME, resource: 'bottles', hostId: ' host-a ', fileName: 'b.csv', content: csv(1),
+    })
+    expect(through.job.hostId).toBe('host-a')
+    const workspace = await uploaded(csv(1))
+    expect(workspace.hostId).toBeUndefined()
+  })
+
   it('reads a CSV with the delimiter and header row the person confirmed', async () => {
     const job = await uploadTransferSource(deps, {
       orgId: ORG,
@@ -850,3 +878,184 @@ describe('cleaning up after a job (AGL-3540)', () => {
   })
 })
 
+/*==========================================
+ * Lookup columns (AGL-3541): `wines` name a rack (a declared resource) and a
+ * keeper (a target the wine resource answers itself)
+ *=========================================*/
+
+describe('lookup columns (AGL-3541)', () => {
+  const racks = new Map<string, Record<string, unknown>>([
+    ['rack-north-1', { name: 'North wall', code: 'N1' }],
+    ['rack-south-1', { name: 'South wall', code: 'S1' }],
+    ['rack-south-2', { name: 'South wall', code: 'S2' }],
+  ])
+  const keepers = new Map<string, Record<string, unknown>>([['uid-ana', { email: 'ana@cellar.test', name: 'Ana' }]])
+  const wines = new Map<string, Record<string, unknown>>()
+  const lookupIn = (store: Map<string, Record<string, unknown>>) => async (_ctx: unknown, requests: readonly MatchLookupRequest[]) => {
+    const all = [...store.entries()].map(([id, values]) => ({ id, values }))
+    const lookup = buildMatchLookup(all, requests)
+    const records = new Map<string, Record<string, unknown>>()
+    for (const ids of lookup.values()) for (const id of ids) records.set(id, { ...store.get(id) })
+    return { lookup, records }
+  }
+  const asked: string[][] = []
+
+  beforeEach(() => {
+    wines.clear()
+    asked.length = 0
+    registerPluginTransferResource(
+      'racks',
+      {
+        fields: () => ({ standard: [{ id: 'name', label: 'Name', type: 'text' }, { id: 'code', label: 'Code', type: 'text' }] }),
+        matchKeys: [{ fieldId: 'code', normalizer: 'caseless' }],
+        readPage: async () => ({ rows: [], next: null }),
+        lookup: lookupIn(racks),
+        suggest: async (_ctx, request) => {
+          asked.push([...request.values])
+          const candidates = [...racks.entries()].map(([recordId, values]) => ({ recordId, label: String(values['name']) }))
+          return Object.fromEntries(request.values.map((value) => [value, rankTransferLookupSuggestions(value, candidates)]))
+        },
+        apply: async () => ({ results: [], undo: [] }),
+        revert: async () => ({ done: [], conflicts: [] }),
+      },
+      { pluginId: 'cellar' },
+    )
+    registerPluginTransferResource(
+      'wines',
+      {
+        fields: () => ({
+          standard: [
+            { id: 'name', label: 'Name', type: 'text', required: true },
+            { id: 'rack', label: 'Rack', type: 'lookup', lookup: { resource: 'racks', by: ['code', 'name'], creatable: true } },
+            { id: 'keeper', label: 'Keeper', type: 'lookup', lookup: { resource: 'cellar.keepers', by: ['email'] } },
+          ],
+        }),
+        matchKeys: [{ fieldId: 'id', normalizer: 'aglynId' }],
+        lookupTargets: {
+          'cellar.keepers': { matchKeys: [{ fieldId: 'email', normalizer: 'email' }], lookup: lookupIn(keepers) },
+        },
+        readPage: async () => ({ rows: [], next: null }),
+        lookup: lookupIn(wines),
+        apply: async (_ctx, chunk, writer) => {
+          const results: TransferRowResult[] = []
+          for (const row of chunk.rows as PlannedTransferRow[]) {
+            const id = `w${row.index}`
+            wines.set(id, Object.fromEntries(row.diff.map((change) => [change.fieldId, change.after])))
+            const result: TransferRowResult = { row: row.index, outcome: 'created', recordId: id }
+            await writer.markApplied(result)
+            results.push(result)
+          }
+          return { results, undo: [] }
+        },
+        revert: async () => ({ done: [], conflicts: [] }),
+      },
+      { pluginId: 'cellar' },
+    )
+  })
+
+  const FILE = [
+    'Name,Rack,Keeper',
+    'Malbec,n1,ana@cellar.test',
+    'Rioja,North wall,',
+    'Barolo,South wall,ana@cellar.test',
+    'Chianti,Sout wal,',
+    'Port,Cellar door,',
+    'Sherry,rack-north-1,',
+    'Madeira,,bob@cellar.test',
+  ].join('\n')
+  const MAPPING = { 0: 'name', 1: 'rack', 2: 'keeper' }
+
+  async function wineJob(): Promise<TransferJobRecord> {
+    const { job } = await uploadTransferSource(deps, { orgId: ORG, actorUid: ME, resource: 'wines', fileName: 'wines.csv', content: FILE })
+    return job
+  }
+
+  it('resolves each value by id, then by each target field, and lists the rest with suggestions', async () => {
+    const job = await wineJob()
+    const analysis = await analyzeTransferJob(deps, { orgId: ORG, jobId: job.id, actorUid: ME, mapping: MAPPING })
+    const rack = analysis.lookups?.find((review) => review.fieldId === 'rack')
+    // n1 (by code), North wall (by name) and the id itself resolve.
+    expect(rack?.resolved).toBe(3)
+    expect(rack?.unresolved.map((entry) => entry.value)).toEqual(['South wall', 'Sout wal', 'Cellar door'])
+    // A value that names two records offers both; a misspelling the target's suggestions.
+    expect(rack?.unresolved[0]?.suggestions.map((entry) => entry.recordId).slice(0, 2)).toEqual(['rack-south-1', 'rack-south-2'])
+    expect(rack?.unresolved[1]).toMatchObject({ key: 'sout wal', count: 1, rows: [3] })
+    expect(rack?.unresolved[1]?.suggestions.map((entry) => entry.label)).toContain('South wall')
+    // Only the values that named nothing are sent for suggestions.
+    expect(asked).toEqual([['South wall', 'Sout wal', 'Cellar door']])
+    // A target the resource answers itself, with no suggest hook.
+    const keeper = analysis.lookups?.find((review) => review.fieldId === 'keeper')
+    expect(keeper).toEqual({
+      fieldId: 'keeper',
+      resolved: 1,
+      unresolved: [{ value: 'bob@cellar.test', key: 'bob@cellar.test', count: 1, rows: [6], suggestions: [] }],
+    })
+  })
+
+  it('needs a choice for every unresolved value, refuses a create the target does not allow and a record that is gone', async () => {
+    const job = await wineJob()
+    await analyzeTransferJob(deps, { orgId: ORG, jobId: job.id, actorUid: ME, mapping: MAPPING })
+    const missing = await refusal(planTransferJob(deps, { orgId: ORG, jobId: job.id, actorUid: ME, choices: { mapping: MAPPING } }))
+    expect(missing.code).toBe('choicesNeeded')
+    expect((missing.details as Record<string, string[]>)['rack']).toHaveLength(3)
+    const wrong = await refusal(
+      planTransferJob(deps, {
+        orgId: ORG,
+        jobId: job.id,
+        actorUid: ME,
+        choices: {
+          mapping: MAPPING,
+          lookupChoices: {
+            rack: {
+              'south wall': { action: 'mapTo', recordId: 'rack-gone' },
+              'sout wal': { action: 'leaveBlank' },
+              'cellar door': { action: 'create' },
+            },
+            keeper: { 'bob@cellar.test': { action: 'create' } },
+          },
+        },
+      }),
+    )
+    expect(wrong.details).toEqual({
+      rack: ['The record chosen for a value no longer exists (rack-gone); choose again.'],
+      keeper: ['“bob@cellar.test” cannot be created by this import; use a record, leave it blank or refuse the rows.'],
+    })
+  })
+
+  it('plans each row with the record it names, the person’s choices noted, and refuses the rows they refused', async () => {
+    const job = await wineJob()
+    await analyzeTransferJob(deps, { orgId: ORG, jobId: job.id, actorUid: ME, mapping: MAPPING })
+    const plan = await planTransferJob(deps, {
+      orgId: ORG,
+      jobId: job.id,
+      actorUid: ME,
+      choices: {
+        mapping: MAPPING,
+        lookupChoices: {
+          rack: {
+            'south wall': { action: 'mapTo', recordId: 'rack-south-2' },
+            'sout wal': { action: 'leaveBlank' },
+            'cellar door': { action: 'create' },
+          },
+          keeper: { 'bob@cellar.test': { action: 'refuseRow' } },
+        },
+      },
+    })
+    expect(plan.summary).toMatchObject({ create: 6, fail: 1 })
+    expect(plan.acknowledgementsRequired).toContain('unresolvedLookup')
+    const warning = plan.warnings.find((entry) => entry.class === 'unresolvedLookup')
+    expect(warning?.samples.map((sample) => sample.detail)).toEqual(['Uses “South wall”', 'Left blank', 'Creates it', 'Refuses the row'])
+    expect(plan.job.lookupChoices?.['keeper']).toEqual({ 'bob@cellar.test': { action: 'refuseRow' } })
+
+    await applyAll(job.id, ['unresolvedLookup'] as never[])
+    expect(wines.get('w0')).toEqual({ name: 'Malbec', rack: 'rack-north-1', keeper: 'uid-ana' })
+    expect(wines.get('w1')).toEqual({ name: 'Rioja', rack: 'rack-north-1' })
+    expect(wines.get('w2')).toEqual({ name: 'Barolo', rack: 'rack-south-2', keeper: 'uid-ana' })
+    // Left blank is not written at all — never a clear.
+    expect(wines.get('w3')).toEqual({ name: 'Chianti' })
+    // The plugin is handed the name to create.
+    expect(transferLookupNewName(wines.get('w4')?.['rack'])).toBe('Cellar door')
+    expect(wines.get('w5')).toEqual({ name: 'Sherry', rack: 'rack-north-1' })
+    expect(wines.has('w6')).toBe(false)
+  })
+})

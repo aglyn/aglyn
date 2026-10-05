@@ -140,6 +140,18 @@ with `buildMatchLookup`). `matchRows` returns one `RowMatchOutcome` per row:
 when a lower key points elsewhere), `ambiguous`, or `duplicateInFile` (any
 key value an earlier row carried).
 
+### `lookup.ts` — a cell that names another record
+
+A `lookup` field's cell names a record of another resource. The job engine
+resolves each distinct value (see `analyze` and `plan` below); this module
+holds what both sides share. `transferLookupKey` is the key a person's
+`TransferLookupChoice` is filed under (the text trimmed and lowercased);
+`mayBeTransferRecordId` says whether a cell is worth asking for by id;
+`transferLookupNewValue(name)` is what a row carries for a record the person
+chose to create (`new:` + the name — no Aglyn id holds a colon) and
+`transferLookupNewName` reads it back; `rankTransferLookupSuggestions` orders
+candidate records by `textSimilarity` for a resource's `suggest` hook.
+
 ### `policy.ts` — what a row does to a record
 
 `TransferRecordPolicy`: `onMatch` (`update`, `skip`, `duplicate`), `onNew`
@@ -254,7 +266,11 @@ half with `registerPluginTransferResource(key, impl)`: `fields(ctx)` returning
 `TransferCatalogInput`, `matchKeys` (`MatchKeySpec[]`), `aliases`
 (`TransferAliasDictionary[]`), `readPage(ctx, cursor, fieldIds, options)`,
 `lookup(ctx, requests)` returning the `MatchLookup` and the found records'
-current values, optional `plan`, `lockedRules` and `invariants`,
+current values, optional `suggest(ctx, { by, values })` (records named like
+a lookup column's unresolved values) and `lookupTargets` (lookup targets
+the resource answers itself, such as the workspace's members, each with
+its own `lookup`, `suggest` and `matchKeys`), optional `plan`,
+`lockedRules` and `invariants`,
 `apply(ctx, chunk, writer)` through the plugin's own write paths, and
 `revert(ctx, snapshot, decisions)`; a package kind registers `items`,
 `dependencies`, `remapIds`, `readItems` and `writeItems`. Registration runs
@@ -309,7 +325,12 @@ updatedAt ↑)` and `(retention ↑, retainUntil ↑)` the sweep asks.
 ### The routes
 
 The request and response types are the core's (`transfer-api.ts`), so the
-UI kit's client and the routes cannot disagree. Every refusal is a
+UI kit's client and the routes cannot disagree. A `host` resource needs the
+site named (`hostId`); a workspace (`org`) resource may be given one too,
+and then the job keeps it and every hook sees it as `ctx.hostId` — how a
+workspace's records are read through one site's view and imported as that
+site's captures — after the gate has checked `data.manage` on that site
+(`transferHostIdFor`). Every refusal is a
 `TransferErrorResponse` (`{ error, code, details? }`).
 
 | route | does | request → response |
@@ -317,11 +338,31 @@ UI kit's client and the routes cannot disagree. Every refusal is a
 | `fields` | what a resource offers: its descriptor, every field and group, its match keys (each a default, in order, and the presets' match-key hint), its locked rules and aliases, and the person's `TransferPrefs` from `users/{uid}/transferPrefs/{resourceKey}`. | `TransferFieldsRequest` → `TransferFieldsResponse` |
 | `export` | the chosen fields (checked against the catalog, in the person's order) of the selection (at most 10,000 ids), the list's filter or every record, read page by page through the resource's `readPage` and streamed as CSV (labels as the header, an optional byte-order mark), JSON or NDJSON. The rows are counted before the first byte — by the resource's `count` hook, or by reading ahead 5,000 rows — and sent as `X-Aglyn-Export-Rows`; a resource that cannot count and holds more goes without. An org-wide member reads everything; a collaborator scoped to some sites must reach a named site and is read through their `scopeTokens` (`memberScopeTokens`), which `readPage` must honor — the Admin SDK passes the rules. Audited as `data.transfer.export` with counts, never content. 20 a minute. | `TransferExportRequest` → the file, or `TransferErrorResponse` |
 | `upload` | stores a file whole, or one part of at most 3 MB (`part`, `parts`, then `jobId`), with the CSV `delimiter` and `headerRow` the person confirmed on the first part (kept as the job's `read`); inspects each part and the whole; refuses a format the resource does not take (415), more than 24 MB or the resource's `maxBytes` (413), more rows than its `maxRows` (default 50,000; 413). Makes the job, `draft`. | `TransferUploadRequest` → `TransferUploadResponse` |
-| `analyze` | header proposal (`matchHeaders` with the resource's aliases), 20 sample rows, the catalog, match keys, locked rules, and each mapped picklist column's values against the workspace's list (`picklists` hook) with a proposed choice per unmatched value. `mapping` re-reads the values under the person's mapping and adds every mapped field's `derivations` over the whole file, the rows `matches` against existing records under `matchKeys` (each key, by default) and `recordLabels`; `dateOrders` reads a field's dates in the order the person chose. → `analyzed`. | `TransferAnalyzeRequest` → `TransferAnalyzeResponse` |
-| `plan` | refuses a mapping `mappingProblems` blocks and any unmatched picklist value without a choice (`choicesNeeded`, by field); reads every row, resolves picklists into row notes, looks matches up in slices of 500 values, runs `matchRows` over the whole file (so an in-file duplicate is caught across chunks) and the resource's plan, fails the rows an invariant refuses, and stores the chunks. Writes no record. → `planned`. Answers the summary, the warnings, 50 rows of each verdict (`sample`), the first 500 `conflicts` (and `conflictCount`), the `ambiguous` rows and `recordLabels`; keeps `dateOrders` and the plugin steps' `extras` on the job. `action: 'rows'` pages the stored plan, by verdict. | `TransferPlanRequest` → `TransferPlanResponse`; `TransferPlanRowsRequest` → `TransferPlanRowsResponse` |
+| `analyze` | header proposal (`matchHeaders` with the resource's aliases), 20 sample rows, the catalog, match keys, locked rules, and each mapped picklist column's values against the workspace's list (`picklists` hook) with a proposed choice per unmatched value. `mapping` re-reads the values under the person's mapping and adds every mapped field's `derivations` over the whole file, each mapped lookup column's `lookups` (see below), the rows `matches` against existing records under `matchKeys` (each key, by default) and `recordLabels`; `dateOrders` reads a field's dates in the order the person chose. → `analyzed`. | `TransferAnalyzeRequest` → `TransferAnalyzeResponse` |
+| `plan` | refuses a mapping `mappingProblems` blocks, and any unmatched picklist value or unresolved lookup value without a usable choice (`choicesNeeded`, by field); reads every row, resolves picklists and lookups into row notes, looks matches up in slices of 500 values, runs `matchRows` over the whole file (so an in-file duplicate is caught across chunks) and the resource's plan, fails the rows an invariant refuses, and stores the chunks. Writes no record. → `planned`. Answers the summary, the warnings, 50 rows of each verdict (`sample`), the first 500 `conflicts` (and `conflictCount`), the `ambiguous` rows and `recordLabels`; keeps `dateOrders` and the plugin steps' `extras` on the job. `action: 'rows'` pages the stored plan, by verdict. | `TransferPlanRequest` → `TransferPlanResponse`; `TransferPlanRowsRequest` → `TransferPlanRowsResponse` |
 | `apply` | the first call needs `canApplyTransferPlan` (`acknowledgementsMissing` lists the rest); refuses while another job of the same resource is `applying` or another driver holds this one's lease (`busy`). Adds the chosen picklist values (`addPicklistValues`), then writes chunks for 45 seconds and answers the progress and the `results` of the chunks it wrote; called until `done`. A plugin `apply` that throws fails the job naming the chunk; calling again resumes it. | `TransferApplyRequest` → `TransferApplyResponse` |
 | `status` | the job, `TransferProgress`, and whether undo is open; `include: 'results'` adds every written row's result; `download: 'results'` answers the result file (the file's own columns, then `Outcome`, `Reason`, `Record ID`) as CSV with `X-Aglyn-Export-Rows`. | `TransferStatusRequest` → `TransferStatusResponse` or `text/csv` |
 | `undo` | for seven days after `applied`. `action: 'plan'` reads every touched record through `lookup` by id and runs `planTransferUndo`: counts of restore, delete, conflict and nothing, and the conflicts (what the record holds now, what undo would restore), paged; writes nothing. `action: 'apply'` reverts chunk by chunk through `revert`, each record with the person's `decisions[recordId]` or `otherwise`; called until `done`, then `undone`. | `TransferUndoPlanRequest` → `TransferUndoPlanResponse`; `TransferUndoApplyRequest` → `TransferUndoApplyResponse` |
+
+### Lookup columns (AGL-3541)
+
+For each mapped `lookup` field the engine finds the target — the
+resource's own `lookupTargets[field.lookup.resource]`, or the declared
+resource of that key, asked in the same workspace and site — and asks its
+`lookup` hook for every distinct value: by `id` (`aglynId`) when
+`mayBeTransferRecordId` holds, then by each `field.lookup.by` field with the
+target's match-key normalizer for it (caseless when none names it), in
+slices of 500. The first key that names exactly ONE record resolves the
+value. A value that names several, or none, is unresolved: `analyze` answers
+it as a `TransferLookupReview` row — the value, its key, its count, up to 20
+rows, and up to five suggestions (the records it named several of, then the
+target's `suggest`), with `resolved` counting the values that did resolve.
+`plan` needs a `lookupChoices[fieldId][key]` for every unresolved value:
+`mapTo` a record (looked up by id, refused if gone), `create` (refused unless
+the field's `lookup.creatable`), `leaveBlank` or `refuseRow`. Rows then carry
+the record id, `transferLookupNewValue(text)` for a create, nothing for
+leave-blank (never a clear), and an `unresolvedLookup` note with what was
+decided (`refuse` fails the row). The choices are kept on the job.
 
 ### Applying never writes a row twice
 

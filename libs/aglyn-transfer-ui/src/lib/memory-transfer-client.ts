@@ -56,6 +56,7 @@ import {
   transferAmbiguities,
   transferChunkRanges,
   transferDateOrderOptions,
+  transferLookupNewValue,
   transferMatchReview,
   transferMatchedRecordIds,
   transferPlanConflicts,
@@ -391,8 +392,10 @@ export function createMemoryTransferClient(
         if (choice?.action === 'mapTo')
           (row.values as Record<string, unknown>)[field.id] = choice.recordId
         else if (choice?.action === 'create')
-          (row.values as Record<string, unknown>)[field.id] = `new:${text}`
-        else (row.values as Record<string, unknown>)[field.id] = null
+          (row.values as Record<string, unknown>)[field.id] =
+            transferLookupNewValue(text)
+        // Left blank by choice is not written at all, as on the server.
+        else delete (row.values as Record<string, unknown>)[field.id]
         ;(row.notes as TransferRowNote[]).push({
           class: 'unresolvedLookup',
           fieldId: field.id,
