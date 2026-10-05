@@ -31,7 +31,7 @@ import { BUNDLE_ID } from '../constants/bundle-common'
  * answers nothing at the organization, where no site is named. An archived
  * form collects nothing, so it is left out — an automation keyed on it would
  * never fire. A form with no display name reads by its id, as every form list
- * names one.
+ * names one. Its one fact, `routesLeads`, says whether it files leads.
  */
 export const formRecordListSource: PluginRecordListSource = {
   query(firestore, request) {
@@ -44,7 +44,14 @@ export const formRecordListSource: PluginRecordListSource = {
   },
   record(id, data) {
     if (data['archivedAt'] != null) return null
-    return { id, name: String(data['displayName'] ?? '').trim() || id, facts: {} }
+    // Whether the form files its people as leads (`routing.lead`): a picker's
+    // recipe keys on the record such a form makes.
+    const routing = data['routing'] as { lead?: unknown } | null | undefined
+    return {
+      id,
+      name: String(data['displayName'] ?? '').trim() || id,
+      facts: { routesLeads: routing?.lead === true },
+    }
   },
 }
 

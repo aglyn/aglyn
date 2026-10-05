@@ -264,6 +264,10 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     refusal: null,
   }),
   flowEmailRefusal: async () => null,
+  // A reply to the person's own act is transactional (AGL-3458): it asks
+  // only the suppression lists, which hold nobody here.
+  filterSendableForHost: async (_hostId: string, emails: string[]) => emails,
+  hostDisplayName: (_host: unknown, hostId: string) => hostId,
   enrollListMember: async () => undefined,
 }))
 
@@ -428,7 +432,7 @@ describe('finding the person (claim 1)', () => {
     await run({ email: 'ada@gmail.com' })
     expect(contactUpdates()).toHaveLength(0)
     expect(history()[0]).toMatchObject({ result: 'failed' })
-    expect(history()[0].action).toContain('no contact this site can see for ada@gmail.com')
+    expect(history()[0].action).toContain('no contact or lead this site can see for ada@gmail.com')
   })
 
   it('falls back to the email when the id names nothing this site can see', async () => {
@@ -439,7 +443,7 @@ describe('finding the person (claim 1)', () => {
     seedActions({ type: 'addContactTag', tag: 'vip' })
     await run({ contactId: 'contact-1', email: 'ada@example.com' })
     expect(contactUpdates()).toHaveLength(0)
-    expect(history()[0].action).toContain('no contact this site can see for contact-1')
+    expect(history()[0].action).toContain('no contact or lead this site can see for contact-1')
   })
 
   it('resolves by email, normalized, for an event that carries no contactId', async () => {
@@ -460,7 +464,7 @@ describe('finding the person (claim 1)', () => {
     seedActions({ type: 'createCrmTask', title: 'Call', kind: 'call', dueInDays: 1 })
     await run({ email: 'nobody@example.com' })
     expect(orgRows('crmTasks')).toEqual([])
-    expect(history()[0].action).toContain('no contact this site can see for nobody@example.com')
+    expect(history()[0].action).toContain('no contact or lead this site can see for nobody@example.com')
   })
 })
 

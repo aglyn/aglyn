@@ -363,7 +363,8 @@ and the row name.
 
 The billing webhook files a third kind of row. The source is
 `stripe-fraud-signal`, the category is `phishing`, the severity is urgent and
-the reference is `PF-…`. It files one row for each of these Stripe events:
+the reference is `PF-…`. It files a row for each of these Stripe events,
+**one row per charge**:
 
 | Event | Filed when |
 | -- | -- |
@@ -380,10 +381,25 @@ see [Seller fraud pattern](#seller-fraud-pattern).
 The row names the workspace, the charge and the amount. When the charge can be
 read from Stripe, it also shows what the card's own checks said: CVC, postal
 code, issuing country, 3DS and Radar risk level. It links to the workspace's
-**Subscription** card on the staff org page, and staff are notified once for
-each signal. A redelivery only increases the count.
+**Subscription** card on the staff org page.
 
-**Nothing is refunded or canceled automatically.** You decide:
+One fraudulent charge usually draws more than one signal. A warning and a
+dispute can arrive in either order, and the issuer's warning can land a day
+after the chargeback was settled. Every signal on a charge goes onto that
+charge's one row, listed oldest first, and the row's Stripe link follows the
+newest one. The owners and staff are told once per charge, not once per
+signal. A redelivery of a signal already on the row adds nothing.
+
+A signal that arrives after you closed the row does not reopen it. It is
+added to the row next to your note, and no one is notified. The one
+exception: a **dispute** on a row you **dismissed** (judged genuine) reopens
+it and notifies again. The bank now says the cardholder did not make that
+payment, and the evidence deadline is running.
+
+Rows filed before 2026-10-02 were keyed per signal. A signal on one of those
+charges can still open one more row.
+
+**The alert refunds and cancels nothing.** You decide:
 
 - Refund on the charge in Stripe.
 - Cancel billing on the Subscription card ([Lockdown](./lockdown.md#cancel-billing)).

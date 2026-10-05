@@ -295,6 +295,13 @@ Generate the key pair with
 - **Server cold start**: the dispatchers' `ensureAll` loads every
   first-party `/server` entry once per process; the same dev metrics
   time it. Registrations are cached — repeat requests pay nothing.
+- **A render never awaits unbounded network I/O** (AGL-3565): an
+  enricher, resolver, redirect resolver, repeat reader or variable computer
+  runs inside a page render, so its outbound calls go behind `boundedAwait`
+  (`@aglyn/shared-util-http/bounded-await`) with a fallback the page can use.
+  `apps/tenant/specs/render-path-bounded-io.spec.ts` walks every plugin's
+  registrations into a registry the render reaches and refuses one that is
+  not; the rule and its reasons are in `libs/tenant/runtime/README.md`.
 - **Realm artifacts** are immutable content-addressed objects published
   with `public, max-age=31536000, immutable`; front them with a CDN and
   cache hits are free forever (a new version is a new URL).

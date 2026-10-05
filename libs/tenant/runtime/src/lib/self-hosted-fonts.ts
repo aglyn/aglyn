@@ -16,6 +16,10 @@
  */
 
 import type { HostTheme } from '@aglyn/shared-data-types'
+import {
+  boundedAwait,
+  createSettledValueCache,
+} from '@aglyn/shared-util-http/bounded-await'
 // By path: the theme lib's barrel carries React providers a server module
 // has no use for (AGL-405).
 import { getGoogleFontsUrl } from '@aglyn/shared-ui-theme/util/host-theme'
@@ -61,43 +65,42 @@ export const SELF_HOSTED_FONT_CACHE_CONTROL =
   'public, max-age=31536000, s-maxage=31536000, immutable'
 
 /**
- * What this process learned about a stylesheet: the faces, or null for a
- * failure, until `expires`. VALUES, never an in-flight promise. A promise held
- * across requests is awaited by renders that did not create it, and one that
- * never settles — a fetch whose render Next abandoned answers with a promise
- * that never resolves, and the abort signal never fires for it — would stall
- * every page of every site on that instance until the function times out.
+ * What this process learned about each stylesheet: the faces, or null for a
+ * failure. VALUES, never an in-flight promise — the settled-value cache
+ * refuses one. A promise held across requests is awaited by renders that did
+ * not create it, and one that never settles stalled every page of every site
+ * on the instance until the function timed out (AGL-3565).
  */
-const stylesheets = new Map<
-  string,
-  { expires: number; faces: GoogleFontFace[] | null }
->()
+const stylesheets = createSettledValueCache<string, GoogleFontFace[] | null>()
 
 /** Test seam: the process cache would otherwise leak between cases. */
 export function resetSelfHostedFontsForTests(): void {
   stylesheets.clear()
 }
 
-/** Google's faces for a stylesheet URL, or null; never waits past `ms`. */
+/**
+ * Google's faces for a stylesheet URL, or null; never waits past `ms`. The
+ * deadline is a real timer (`boundedAwait`): an abort signal alone did not
+ * bound Next's patched fetch on Vercel, whose promise could never settle.
+ */
 function fetchFaces(url: string, ms: number): Promise<GoogleFontFace[] | null> {
-  const asked = fetch(url, {
-    headers: { 'User-Agent': WOFF2_USER_AGENT },
-    signal: AbortSignal.timeout(ms),
-    next: { revalidate: STYLESHEET_TTL_MS / 1000 },
-  } as RequestInit)
-    .then(async (response) => {
-      if (!response.ok) return null
-      const parsed = parseGoogleFontFaces(await response.text())
-      return parsed.length ? parsed : null
-    })
-    .catch(() => null)
-  // The abort signal bounds a real request. This bounds the promise itself,
-  // whatever fetch handed back, so a page render cannot wait on it longer.
-  let timer: ReturnType<typeof setTimeout> | undefined
-  const deadline = new Promise<null>((resolve) => {
-    timer = setTimeout(() => resolve(null), ms)
-  })
-  return Promise.race([asked, deadline]).finally(() => clearTimeout(timer))
+  return boundedAwait(
+    (signal) =>
+      fetch(url, {
+        headers: { 'User-Agent': WOFF2_USER_AGENT },
+        signal,
+        next: { revalidate: STYLESHEET_TTL_MS / 1000 },
+      } as RequestInit)
+        .then(async (response) => {
+          if (!response.ok) return null
+          const parsed = parseGoogleFontFaces(await response.text())
+          return parsed.length ? parsed : null
+        })
+        .catch(() => null),
+    ms,
+    null,
+    'self-hosted-fonts.stylesheet',
+  )
 }
 
 /**
@@ -108,15 +111,12 @@ function fetchFaces(url: string, ms: number): Promise<GoogleFontFace[] | null> {
  * Next's data cache: a cold process reads the stored stylesheet rather than
  * asking Google again.
  */
-async function facesFor(url: string): Promise<GoogleFontFace[] | null> {
-  const held = stylesheets.get(url)
-  if (held && held.expires > Date.now()) return held.faces
-  const faces = await fetchFaces(url, STYLESHEET_TIMEOUT_MS)
-  stylesheets.set(url, {
-    expires: Date.now() + (faces ? STYLESHEET_TTL_MS : FAILURE_TTL_MS),
-    faces,
-  })
-  return faces
+function facesFor(url: string): Promise<GoogleFontFace[] | null> {
+  return stylesheets.readThrough(
+    url,
+    () => fetchFaces(url, STYLESHEET_TIMEOUT_MS),
+    (faces) => (faces ? STYLESHEET_TTL_MS : FAILURE_TTL_MS),
+  )
 }
 
 /** What a page inlines in its head for its theme's fonts. */

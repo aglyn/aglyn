@@ -411,6 +411,26 @@ export const CORE_OPERATOR_ALERTS: readonly OperatorAlertDefinition[] = [
     defaultEnabled: true,
   },
   {
+    // The post-deploy production canary (AGL-3567), raised from GitHub
+    // Actions through `/api/admin/operator-alerts/canary`. Red because a
+    // deploy that stops rendering pages is every published site down.
+    type: 'ops.productionCanaryRed',
+    label: 'Production canary failed after a deploy',
+    description:
+      'Right after a tenant or console production deploy, uncached pages stopped rendering. The canary rolls the deploy back by itself when the failure holds across sites; after any rollback the next release must be promoted by hand.',
+    tier: 'must',
+    category: 'ops',
+    title: '{{project}} production canary: {{outcome}}',
+    body: '{{detail}}',
+    link: '/admin/health',
+    delivery: 'immediate',
+    level: 'critical',
+    // The caller dedupes per deployment and verdict; this only stops a
+    // re-run of the same red run from telling it twice.
+    dedupeWindowMinutes: 30,
+    defaultEnabled: true,
+  },
+  {
     type: 'system.healthRecovered',
     label: 'Health check recovered',
     description: 'A degraded health check is healthy again.',
@@ -424,6 +444,42 @@ export const CORE_OPERATOR_ALERTS: readonly OperatorAlertDefinition[] = [
     // A check flapping across the line is told once an hour, not on
     // every swing.
     dedupeWindowMinutes: 60,
+    defaultEnabled: true,
+  },
+  {
+    // The render monitor (AGL-3568): a published site fetched over HTTP, on
+    // pages no cache can answer, failed several runs in a row. Red, not the
+    // amber of a degraded check: every visitor without a cached copy is
+    // getting an error page or a timeout right now.
+    type: 'system.siteRenderFailing',
+    label: 'Published site not rendering pages',
+    description:
+      'The render monitor asked a published site for pages no cache can answer, several runs in a row, and got no complete page back. Visitors to cached pages may still see them, so the site can look up while every other page fails. Check the latest site runtime deployment first and roll it back if it just shipped.',
+    tier: 'must',
+    category: 'ops',
+    title: 'Pages are not rendering on {{site}}',
+    body:
+      '{{site}} failed {{failures}} render checks in a row, over {{since}}. {{detail}} Cached pages may still load, so the site can look up while new renders fail.',
+    link: '/admin/health',
+    delivery: 'immediate',
+    // Told once per outage: the monitor raises it on the edge, and the
+    // window only covers a site flapping across the line.
+    dedupeWindowMinutes: 30,
+    defaultEnabled: true,
+  },
+  {
+    type: 'system.siteRenderRecovered',
+    label: 'Published site rendering again',
+    description:
+      'A published site the render monitor had reported as not rendering serves fresh pages again.',
+    tier: 'should',
+    category: 'ops',
+    title: '{{site}} is rendering pages again',
+    body: 'Fresh page renders on {{site}} pass again after {{duration}}.',
+    link: '/admin/health',
+    delivery: 'immediate',
+    level: 'success',
+    dedupeWindowMinutes: 30,
     defaultEnabled: true,
   },
 

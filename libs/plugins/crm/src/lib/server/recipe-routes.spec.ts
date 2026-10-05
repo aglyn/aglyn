@@ -263,8 +263,9 @@ describe('crm/recipe-install', () => {
     expect(landed[answer.actionId].recipe).toBe('welcomeNewLead')
     expect(landed[answer.actionId].enabled).toBe(true)
     // The caps are written OUT, as the editor writes them.
+    // On a new lead (AGL-3458): a lead-routed form makes a lead, not a contact.
     expect(landed[answer.actionId].trigger).toMatchObject({
-      event: 'contactCreated',
+      event: 'lead',
       oncePerVisitor: false,
       cooldownMinutes: null,
       condition: null,
@@ -386,6 +387,18 @@ describe('crm/recipe-install', () => {
         { field: 'formId', op: 'equals', value: 'contact' },
       ])
       expect(landed.steps).toEqual([{ type: 'addContactTag', tag: 'Contact us' }])
+      expect(landed.trigger.event).toBe('contactCreated')
+    })
+
+    it('listens for a new lead on a form that routes to leads, read off the form (AGL-3458)', async () => {
+      docs.set('hosts/host-a/forms/draft', { displayName: 'Draft', routing: { lead: true } })
+      const { status: code, answer } = await install({ ...tag, formId: 'draft' })
+      expect(code).toBe(201)
+      const landed = actionsOf('host-a')[answer.actionId]
+      expect(landed.trigger.event).toBe('lead')
+      expect(landed.trigger.conditions).toEqual([
+        { field: 'formId', op: 'equals', value: 'draft' },
+      ])
     })
   })
 

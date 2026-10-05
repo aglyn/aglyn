@@ -154,6 +154,24 @@ describe('sendGa4SitePublished when configured', () => {
       reason: 'network',
     })
   })
+
+  it('⛔ gives up at its deadline when the request never settles — a render awaits it (AGL-3565)', async () => {
+    jest.useFakeTimers()
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+    try {
+      fetchMock.mockReturnValueOnce(new Promise(() => undefined) as never)
+      const pending = sendGa4SitePublished({ hostId: 'host-1' })
+      await jest.advanceTimersByTimeAsync(3_000)
+      await expect(pending).resolves.toEqual({
+        sent: false,
+        synthesizedClientId: true,
+        reason: 'timeout',
+      })
+    } finally {
+      warn.mockRestore()
+      jest.useRealTimers()
+    }
+  })
 })
 
 /**

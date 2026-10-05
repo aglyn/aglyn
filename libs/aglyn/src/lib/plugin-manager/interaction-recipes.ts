@@ -55,8 +55,13 @@ export interface InteractionRecipeDeclaration {
 
 /** What a recipe is handed before it builds. */
 export interface InteractionRecipeInput {
-  /** The record a person picked, for a recipe that {@link InteractionRecipe.picks} one. */
-  picked?: { id: string; name: string }
+  /**
+   * The record a person picked, for a recipe that {@link InteractionRecipe.picks}
+   * one: its id, its name, and the `facts` its owner shares about it through
+   * the kind's list source — what a recipe may shape its draft by, such as
+   * whether a form files leads.
+   */
+  picked?: { id: string; name: string; facts?: Readonly<Record<string, unknown>> }
 }
 
 /**

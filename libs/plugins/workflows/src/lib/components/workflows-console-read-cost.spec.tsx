@@ -54,11 +54,14 @@ import {
 } from './workflows-console-sections'
 import { standInDatasetList } from '../testing/stand-in-dataset-list'
 import { standInOverlayList } from '../testing/stand-in-overlay-list'
+import { standInFormList } from '../testing/stand-in-recipes'
 
 // The datasets the pickers offer are the data plugin's, and the overlays
 // the marketing plugin's (AGL-3080).
 standInDatasetList()
 standInOverlayList()
+// The forms the trigger's "Form is" condition lists (AGL-3458).
+standInFormList()
 
 /**
  * Every query built during a render, as `path` + the `limit()` on it.
@@ -443,7 +446,7 @@ describe('workflows console read cost (AGL-2501)', () => {
    * the reading that says the reads MOVED rather than went away, and it pins
    * the window each one arrives at.
    */
-  it('opening the action editor is what buys the six option lists', async () => {
+  it('opening the action editor is what buys the option lists', async () => {
     await renderConsole('actions')
     await orgPanelListening()
     const before = mockListens.map((listen) => `${listen.path}#${listen.limit}`)
@@ -459,8 +462,10 @@ describe('workflows console read cost (AGL-2501)', () => {
       .sort()
     // A hundred and one apiece: the shared editor ceiling, plus the probe row
     // that lets the dialog say a picker ran short instead of quietly offering
-    // a partial list of targets.
+    // a partial list of targets. The forms are the trigger's "Form is"
+    // picker (AGL-3458), for the Form submitted event a new action starts on.
     expect(opened).toEqual([
+      'hosts/site1/forms#101',
       'hosts/site1/overlays#101',
       'hosts/site1/webhooks#101',
       'hosts/site1/workflows#101',

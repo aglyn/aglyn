@@ -1353,7 +1353,8 @@ const CORE_HOST_EVENTS = [{ type: 'pageView', order: 20 }]
  * The host events (AGL-3080): each plugin whose server doors call
  * `emitHostEvent` declares the events they raise under `hostEvents` — the
  * `type` a trigger stores, its `order` in every trigger picker, the `label`
- * a picker and a run row show, and the `payloadKeys` it puts in scope. They
+ * a picker and a run row show, the `payloadKeys` it puts in scope, and
+ * `recipientActed` when the event is the recipient's own action (AGL-3458). They
  * are compiled into a file of their own beside `host-events.ts`, the one
  * module that reads them, because the event bus, the pickers and the
  * validators read them with no plugin loaded and a catalog reader has no use
@@ -1361,8 +1362,8 @@ const CORE_HOST_EVENTS = [{ type: 'pageView', order: 20 }]
  *
  * Checked here: a plain type a trigger can store (a custom event's grammar,
  * so the validator takes it) that no other plugin and not the core declares,
- * a whole-number order no other event holds, a label, plain payload keys, and
- * nothing else but a `$comment`.
+ * a whole-number order no other event holds, a label, plain payload keys,
+ * `recipientActed: true` or nothing, and nothing else but a `$comment`.
  */
 function hostEventRows() {
   const plain = /^[a-z][A-Za-z0-9]{1,39}$/
@@ -1377,7 +1378,7 @@ function hostEventRows() {
       throw new Error(`${where} is present and declares nothing — drop it, or name the events the plugin raises`)
     }
     for (const event of declared) {
-      const { type, order, label, payloadKeys, $comment: _note, ...rest } = event ?? {}
+      const { type, order, label, payloadKeys, recipientActed, $comment: _note, ...rest } = event ?? {}
       if (typeof type !== 'string' || !plain.test(type)) {
         throw new Error(`${where}: "type" is the plain name a trigger stores, 2 to 40 letters and digits`)
       }
@@ -1399,6 +1400,12 @@ function hostEventRows() {
           throw new Error(`${what}: "payloadKeys" lists what the event puts in scope, or is left out`)
         }
         row.payloadKeys = payloadKeys
+      }
+      if (recipientActed !== undefined) {
+        if (recipientActed !== true) {
+          throw new Error(`${what}: "recipientActed" is true for an event that is the recipient's own action, or is left out`)
+        }
+        row.recipientActed = true
       }
       rows.push(row)
     }

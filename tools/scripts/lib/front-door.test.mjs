@@ -40,7 +40,10 @@ import {
   evaluateFrontDoorReaders,
   frontDoorPlan,
   gradeFrontDoor,
+  gradeUncachedRender,
   readCacheState,
+  RENDER_PROBE_ISR_PREFIX,
+  uncachedRenderPlan,
 } from './front-door.mjs'
 import { DEFAULT_TARGETS, markPendingDeployments } from './uptime-targets.mjs'
 
@@ -403,5 +406,80 @@ describe('a 200 says where the bytes came from (AGL-2709)', () => {
    */
   it('does not change the verdict — a stale page is still a page', () => {
     assert.equal(gradeFrontDoor(HEALTHY).ok, true)
+  })
+})
+
+/**
+ * UNCACHED RENDERS (AGL-3568). On 2026-10-05 every uncached render hung for
+ * 28 minutes while `/` was answered by the ISR cache, so every page row
+ * above stayed green. These rows must pass only on a render that ran now.
+ */
+describe('an uncached render row proves a render, not a cache (AGL-3568)', () => {
+  it('asks each front door for /search and a never-requested path', () => {
+    let n = 0
+    const plan = uncachedRenderPlan({}, FRONT_DOORS, () => `n${++n}`)
+    assert.deepEqual(
+      plan.map(([name, , path, expectStatus]) => [name, path, expectStatus]),
+      Object.keys(FRONT_DOORS).flatMap((door, index) => [
+        [`render/${door}/dynamic`, '/search', 200],
+        [`render/${door}/isr`, `${RENDER_PROBE_ISR_PREFIX}n${index * 2 + 2}`, 404],
+      ]),
+    )
+    // Every never-requested path is distinct, or the second one is a HIT.
+    const isrPaths = plan.filter(([name]) => name.endsWith('/isr')).map(([, , path]) => path)
+    assert.equal(new Set(isrPaths).size, isrPaths.length)
+  })
+
+  it('repoints a door by origin only, never by a fixture path', () => {
+    const plan = uncachedRenderPlan({ site: 'http://localhost:4500/home' })
+    const site = plan.filter(([name]) => name.startsWith('render/site/'))
+    assert.ok(site.every(([, base]) => base === 'http://localhost:4500'))
+    assert.ok(site.some(([, , path]) => path === '/search'))
+  })
+
+  it('passes a complete, fresh render at the status the probe expects', () => {
+    assert.equal(gradeUncachedRender({ ...HEALTHY, vercelCache: 'MISS' }, 200).ok, true)
+    assert.equal(
+      gradeUncachedRender({ ...HEALTHY, status: 404, vercelCache: 'MISS' }, 404).ok,
+      true,
+    )
+  })
+
+  it('fails a cached copy, which a front-door row must pass', () => {
+    const cached = { ...HEALTHY, vercelCache: 'HIT' }
+    assert.equal(gradeFrontDoor(cached).ok, true)
+    const verdict = gradeUncachedRender(cached, 200)
+    assert.equal(verdict.ok, false)
+    assert.match(verdict.detail, /served from cache/)
+  })
+
+  it('fails the outage shapes: a platform 504, a 500, an unfinished document', () => {
+    assert.equal(gradeUncachedRender({ status: 504, body: '' }, 404).ok, false)
+    assert.equal(gradeUncachedRender({ ...HEALTHY, status: 500 }, 404).ok, false)
+    assert.equal(
+      gradeUncachedRender(
+        { ...HEALTHY, status: 404, body: HEALTHY.body.replace('</html>', '') },
+        404,
+      ).ok,
+      false,
+    )
+  })
+
+  it('names a challenge as a challenge', () => {
+    const verdict = gradeUncachedRender(
+      { status: 429, body: '<title>Vercel Security Checkpoint</title>' },
+      200,
+    )
+    assert.equal(verdict.ok, false)
+    assert.equal(verdict.challenged, true)
+  })
+
+  it('is never laundered into PENDING', () => {
+    const results = markPendingDeployments([
+      { name: 'tenant', ok: true, status: 200 },
+      { name: 'render/site/isr', kind: 'render', ok: false, status: 404 },
+    ])
+    assert.equal(results[1].pending, undefined)
+    assert.equal(results[1].ok, false)
   })
 })

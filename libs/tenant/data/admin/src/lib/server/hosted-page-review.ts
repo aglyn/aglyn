@@ -117,10 +117,11 @@ import {
   foreignLinksForReputation,
   webRiskSignals,
 } from '@aglyn/shared-util-email/link-reputation'
+import { boundedAwait } from '@aglyn/shared-util-http/bounded-await'
 import { FieldValue } from 'firebase-admin/firestore'
 import firebaseAdmin from './firebase-admin'
 import { describeHeldPage, type HostedPageContext } from './held-page-subject'
-import { notifyRiskEvent } from './risk-notice'
+import { notifyRiskEvent, RISK_NOTICE_RENDER_DEADLINE_MS } from './risk-notice'
 import { orgAgeDays } from './org-age'
 import { requestPageSecurityHold } from './page-security-hold'
 import { getHostDocAdmin, getOrgForHost } from './organizations'
@@ -690,16 +691,23 @@ async function flagLivePage(input: {
       { merge: true },
     )
     if (!first) return
-    await notifyRiskEvent({
-      kind: 'page-flagged',
-      orgId: input.orgId,
-      hostId: input.hostId,
-      reviewId,
-      reference,
-      item: { label: heldPageLabel(subject), path: heldPageConsolePath(subject, input.hostId) },
-      page: subject,
-      staffEvidence: [...heldPageDetails(subject), evidence].join(' '),
-    })
+    // Inside the page's render: bounded, so a mail or webhook outage cannot
+    // hold the page (AGL-3565).
+    await boundedAwait(
+      notifyRiskEvent({
+        kind: 'page-flagged',
+        orgId: input.orgId,
+        hostId: input.hostId,
+        reviewId,
+        reference,
+        item: { label: heldPageLabel(subject), path: heldPageConsolePath(subject, input.hostId) },
+        page: subject,
+        staffEvidence: [...heldPageDetails(subject), evidence].join(' '),
+      }),
+      RISK_NOTICE_RENDER_DEADLINE_MS,
+      null,
+      'risk-notice.page-flagged',
+    )
   } catch (error) {
     console.error('[page-review] a live page could not be flagged', error)
   }

@@ -333,3 +333,139 @@ export function evaluateFrontDoorReaders(
   const orphan = [...doors].filter((name) => !canaries.has(name)).sort()
   return { ok: unpaired.length === 0 && orphan.length === 0, unpaired, orphan }
 }
+
+/**
+ * UNCACHED RENDERS: the question a front-door row cannot answer (AGL-3568).
+ *
+ * On 2026-10-05 every uncached page render on the site runtime hung to the
+ * platform's 60 s limit for 28 minutes, while `/` on both front doors was
+ * answered by the ISR cache: a visitor who got a cached page saw the site up,
+ * and so did every row above. `cacheNote` says so in words; it cannot make
+ * the row see the outage. These rows ask for pages no cache can answer:
+ *
+ *  - `dynamic` — `/search`, a route every site has that renders on every
+ *    request (`force-dynamic`) inside the full site layout. 200 is the pass.
+ *  - `isr` — a path nobody has ever requested, under the catch-all page.
+ *    A query string does not bust the ISR cache (measured 2026-08-11, see
+ *    `check-retired-colours.mjs`); a never-seen PATH does, and it renders in
+ *    the same static context every published page renders in. It is a 404
+ *    by construction, and the site's not-found page is drawn inside the same
+ *    layout, so a complete 404 document is the pass.
+ *
+ * The console's render monitor (`/api/admin/render-monitor`, every five
+ * minutes on Cloud Scheduler) runs these same two probes and alerts; these
+ * rows exist so a manual or occasional run proves renders too. Keep the two
+ * lists of probes in step: `@aglyn/tenant-data-admin/server/render-monitor`.
+ */
+
+/** Row names carry this prefix. */
+export const RENDER_PROBE_PREFIX = 'render'
+
+/** The never-requested path's prefix: a plain slug the catch-all serves. */
+export const RENDER_PROBE_ISR_PREFIX = '/aglyn-render-probe-'
+
+/**
+ * @type {ReadonlyArray<{kind: 'dynamic'|'isr', path: (nonce: string) => string,
+ *   expectStatus: number}>}
+ */
+export const UNCACHED_RENDER_PROBES = [
+  { kind: 'dynamic', path: () => '/search', expectStatus: 200 },
+  {
+    kind: 'isr',
+    path: (nonce) => `${RENDER_PROBE_ISR_PREFIX}${nonce}`,
+    expectStatus: 404,
+  },
+]
+
+/** A nonce no earlier run has used: time plus randomness, path-safe. */
+export function renderProbeNonce(now = Date.now()) {
+  return `${now.toString(36)}${Math.random().toString(36).slice(2, 8)}`
+}
+
+/**
+ * Expand the front doors into uncached render rows. An override repoints a
+ * door's ORIGIN only; the path is the probe's, because a fixture path would
+ * defeat the point of asking for a page no cache holds.
+ *
+ * @param {Record<string, string>} overrides name -> base URL
+ * @param {Record<string, string>} frontDoors
+ * @param {() => string} nonce
+ * @returns {Array<[string, string, string, number]>} [name, base, path, expectStatus]
+ */
+export function uncachedRenderPlan(
+  overrides = {},
+  frontDoors = FRONT_DOORS,
+  nonce = renderProbeNonce,
+) {
+  return Object.entries(frontDoors).flatMap(([name, base]) => {
+    const origin = overrides[name] ? new URL(overrides[name]).origin : base
+    return UNCACHED_RENDER_PROBES.map(({ kind, path, expectStatus }) => [
+      `${RENDER_PROBE_PREFIX}/${name}/${kind}`,
+      origin,
+      path(nonce()),
+      expectStatus,
+    ])
+  })
+}
+
+/**
+ * Grade one uncached render. Pure.
+ *
+ * The front door's markers and its challenge rule, at the status the probe
+ * expects, plus one rule a front door must not have: bytes that came out of
+ * a cache FAIL here, because this row exists to prove a render and a cached
+ * document proves none.
+ *
+ * @param {{status: number, contentType?: string|null, body?: string,
+ *   location?: string|null, vercelCache?: string|null,
+ *   nextCache?: string|null}} response
+ * @param {number} expectStatus
+ * @returns {{ok: boolean, detail: string, challenged: boolean}}
+ */
+export function gradeUncachedRender(response, expectStatus) {
+  const { status, contentType = null, body = '', location = null } = response
+  if (CHECKPOINT_MARKER.test(body)) {
+    return gradeFrontDoor({ status, contentType, body, location })
+  }
+  if (status >= 300 && status < 400) {
+    return {
+      ok: false,
+      challenged: false,
+      detail: `redirects to ${location ?? '?'} — no page was rendered`,
+    }
+  }
+  if (status !== expectStatus) {
+    return {
+      ok: false,
+      challenged: false,
+      detail: `HTTP ${status} (a render answers ${expectStatus})`,
+    }
+  }
+  if (!/text\/html/i.test(contentType ?? '')) {
+    return {
+      ok: false,
+      challenged: false,
+      detail: `not HTML (content-type: ${contentType || 'absent'})`,
+    }
+  }
+  const missing = PAGE_MARKERS.filter(({ marker }) => !body.includes(marker))
+  if (missing.length) {
+    return {
+      ok: false,
+      challenged: false,
+      detail: `${status} but ${missing.map((m) => m.missing).join(' · ')}`,
+    }
+  }
+  const cache = readCacheState({
+    vercelCache: response.vercelCache ?? null,
+    nextCache: response.nextCache ?? null,
+  })
+  if (cache.rendered === false) {
+    return {
+      ok: false,
+      challenged: false,
+      detail: `cache=${cache.state} — served from cache, so it proves no render`,
+    }
+  }
+  return { ok: true, challenged: false, detail: 'rendered now, uncached' }
+}

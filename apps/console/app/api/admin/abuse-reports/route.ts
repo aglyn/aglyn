@@ -273,7 +273,7 @@ function rowPayload(
     source: asString(data['source']),
     heldSend: heldSendPayload(data['heldSend']),
     heldPage: heldPagePayload(data),
-    paymentSignal: paymentSignalPayload(data['paymentSignal']),
+    paymentSignal: paymentSignalPayload(data['paymentSignal'], data['paymentSignals']),
     sellerPattern: sellerPatternPayload(data['sellerPattern']),
     riskNotice: riskNoticePayload(id, data),
     ownerReviewRequests: ownerReviewRequestsPayload(data['ownerReviewRequests']),
@@ -515,9 +515,26 @@ function sellerPatternPayload(value: unknown) {
  * Subscription card to act on. Staff-internal ids only; nothing a reporter
  * wrote.
  */
-function paymentSignalPayload(value: unknown) {
+function paymentSignalPayload(value: unknown, history: unknown) {
   if (!value || typeof value !== 'object') return null
   const signal = value as Record<string, unknown>
+  // Every signal on the charge, oldest first (AGL-3490); a row filed before
+  // the history existed carries none, and reads as its one signal.
+  const signals = (Array.isArray(history) ? history : []).flatMap((entry) => {
+    const item = (entry ?? {}) as Record<string, unknown>
+    const kind = asString(item['kind'])
+    const stripeObjectId = asString(item['stripeObjectId'])
+    if (!kind || !stripeObjectId) return []
+    const atMs = Number(item['atMs'])
+    return [
+      {
+        kind,
+        stripeObjectId,
+        atMs: Number.isFinite(atMs) && atMs > 0 ? atMs : null,
+        arrivedAfter: asString(item['arrivedAfter']),
+      },
+    ]
+  })
   const checks = (signal['checks'] ?? null) as Record<string, unknown> | null
   const amount = Number(signal['amountCents'])
   return {
@@ -531,6 +548,7 @@ function paymentSignalPayload(value: unknown) {
     detail: asString(signal['detail']),
     livemode: signal['livemode'] === true,
     subscriptionCard: asString(signal['subscriptionCard']),
+    signals,
     checks: checks
       ? {
           cvcCheck: asString(checks['cvcCheck']),

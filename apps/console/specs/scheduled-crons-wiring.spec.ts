@@ -124,6 +124,16 @@ describe('scheduled-crons.yml wiring', () => {
   )?.[1]
 
   /**
+   * The render monitor (AGL-3568): one route on a job of its own, every five
+   * minutes, because the fifteen-minute cadence is what missed the outage it
+   * exists for. Pinned in named consts for the reason the other families are.
+   */
+  const renderMonitorSchedule =
+    /^const CONSOLE_RENDER_MONITOR_SCHEDULE = '([^']+)'$/m.exec(functions)?.[1]
+  const renderMonitorRoute =
+    /^const CONSOLE_RENDER_MONITOR_ROUTE = '([^']+)'$/m.exec(functions)?.[1]
+
+  /**
    * Every console route ANY runner POSTs on a schedule.
    *
    * The workflow's `case` arms plus every Cloud Scheduler family. Routes
@@ -139,6 +149,7 @@ describe('scheduled-crons.yml wiring', () => {
       ...fastRoutes,
       ...[...dailyCrons.values()].map((daily) => daily.route),
       ...(aiBeatRoute ? [aiBeatRoute] : []),
+      ...(renderMonitorRoute ? [renderMonitorRoute] : []),
     ]),
   ]
 
@@ -346,13 +357,22 @@ describe('scheduled-crons.yml wiring', () => {
         job.target.includes(aiBeatRoute as string),
     )
 
+    /** The inventory row the render monitor is judged by, found by its route. */
+    const renderMonitorJobs = SCHEDULED_JOBS.filter(
+      (job) =>
+        job.runner === 'cloud-scheduler' &&
+        Boolean(renderMonitorRoute) &&
+        job.target.includes(renderMonitorRoute as string),
+    )
+
     /** Inventory rows driven by `consoleFastCrons`, keyed by the route. */
     const fastJobs = SCHEDULED_JOBS.filter(
       (job) =>
         job.runner === 'cloud-scheduler' &&
         job.id !== 'plugin-jobs-beat' &&
         !dailyCrons.has(job.id) &&
-        !aiBeatJobs.includes(job),
+        !aiBeatJobs.includes(job) &&
+        !renderMonitorJobs.includes(job),
     )
 
     /** Inventory rows driven by a `consoleDailyCron` export. */
@@ -528,6 +548,58 @@ describe('scheduled-crons.yml wiring', () => {
           .filter(([cron]) => scheduled.includes(cron))
           .map(([, route]) => route),
       ).not.toContain(aiBeatRoute)
+    })
+
+    it('runs the render monitor every five minutes on a job of its own, and watches it (AGL-3568)', () => {
+      // Parsed at all, and not decorative: the export reads both consts.
+      expect(renderMonitorRoute).toBe('/api/admin/render-monitor')
+      expect(functions).toContain('export const consoleRenderMonitor = onSchedule(')
+      expect(functions).toContain('schedule: CONSOLE_RENDER_MONITOR_SCHEDULE')
+      expect(functions).toMatch(/sweepConsoleCron\(\s*CONSOLE_RENDER_MONITOR_ROUTE,/)
+      // Faster than the fifteen-minute cadence that missed the 2026-10-05
+      // outage: two failing runs must alert inside ten minutes.
+      const everyNMinutes = /^\*\/(\d+)$/.exec(
+        String(renderMonitorSchedule).split(/\s+/)[0],
+      )
+      expect(Number(everyNMinutes?.[1])).toBeLessThanOrEqual(5)
+      // Exactly one inventory row, judged against the schedule the function
+      // declares, inside the grace the other frequent jobs keep.
+      expect(renderMonitorJobs.map((job) => job.id)).toEqual(['render-monitor'])
+      expect(renderMonitorJobs[0].cron).toBe(renderMonitorSchedule)
+      expect(renderMonitorJobs[0].graceMinutes).toBeLessThanOrEqual(45)
+      expect(renderMonitorJobs[0].graceMinutes).toBeGreaterThanOrEqual(30)
+      // One place only.
+      expect(fastRoutes).not.toContain(renderMonitorRoute)
+      expect(renderMonitorRoute).not.toBe(aiBeatRoute)
+      expect(
+        [...caseArms.entries()]
+          .filter(([cron]) => scheduled.includes(cron))
+          .map(([, route]) => route),
+      ).not.toContain(renderMonitorRoute)
+      // The wait outlasts the route, and the function outlasts the wait plus
+      // a challenged first attempt's retry delay.
+      const route = readFileSync(
+        join(repoRoot, 'apps', 'console', 'app', 'api', 'admin', 'render-monitor', 'route.ts'),
+        'utf8',
+      )
+      const maxDurationMs = Number(/^export const maxDuration = (\d+)$/m.exec(route)?.[1]) * 1_000
+      const waitMs = Number(
+        /^const CONSOLE_RENDER_MONITOR_TIMEOUT_MS = ([\d_]+)$/m.exec(functions)?.[1].replace(/_/g, ''),
+      )
+      const edge = readFileSync(
+        join(repoRoot, 'cloud', 'functions', 'src', 'edge-challenge.ts'),
+        'utf8',
+      )
+      const retryDelayMs = Number(
+        /export const EDGE_CHALLENGE_RETRY_DELAY_MS = ([\d_]+)/.exec(edge)?.[1].replace(/_/g, ''),
+      )
+      const declaration = functions.slice(
+        functions.indexOf('export const consoleRenderMonitor = onSchedule('),
+      )
+      const functionTimeoutMs = Number(/timeoutSeconds: (\d+)/.exec(declaration)?.[1]) * 1_000
+      expect(maxDurationMs).toBeGreaterThan(0)
+      expect(waitMs).toBeGreaterThan(maxDurationMs)
+      expect(functionTimeoutMs).toBeGreaterThan(waitMs + retryDelayMs)
     })
 
     it('waits for a beat longer than the console route may run (AGL-3026)', () => {
