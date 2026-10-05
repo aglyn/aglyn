@@ -31,27 +31,60 @@ name: Production canary
 # ---------------------------------------------------------------------------
 # WHAT IT DOES — see tools/scripts/prod-canary.mjs and docs/RELEASING.md
 # ---------------------------------------------------------------------------
-# Waits until the production alias serves the new deployment, renders a
-# never-requested path on every host (a guaranteed ISR MISS through the full
-# layout) plus the real pages and the health routes, 15 s budget each, and
-# only after three red rounds in a row — each failing on at least two hosts
-# with a SERVER failure, never a bot challenge or a canary-side network error
-# — rolls the project back to the previous good production deployment through
-# the Vercel REST API, re-runs the canary against it, posts to Slack `#ci`,
-# raises the console's `ops.productionCanaryRed` operator alert, and fails.
+# Grades the CANDIDATE deployment by its own `*.vercel.app` URL (AGL-3571) —
+# whether or not production serves it yet — holding Deployment Protection's
+# automation bypass. Each real client page is rendered fresh (a host spelling
+# no cache holds, so a page WITH images renders now: beta.223's hang), plus a
+# never-requested path per site (the layout) and `/api/health`, 15 s budget
+# each. Three red rounds in a row, each failing on at least two hosts with a
+# SERVER failure (never a bot challenge or a canary-side network error):
+#   - production serves it → rolls the project back to the previous good
+#     production deployment through the Vercel REST API and re-runs the canary
+#     against that;
+#   - production does not serve it (auto-assign off) → `candidate-red`:
+#     nothing to roll back, and it must NOT be promoted.
+# Either way it posts to Slack `#ci`, raises the console's
+# `ops.productionCanaryRed` operator alert, records a red commit status, and
+# fails. With no bypass at all it falls back to AGL-3567's reading: wait until
+# the production domains serve the deployment, then grade them.
 #
 # After any rollback Vercel turns production auto-assign OFF, so the next
-# good deployment must be promoted by hand (docs/RELEASING.md step 0).
+# good deployment must be promoted by hand (docs/RELEASING.md step 0) — and
+# graded first, by dispatching this workflow with its deployment id.
+#
+# THREE TRIGGERS
+#   deployment_status  the candidate, the minute Vercel says it is READY.
+#   workflow_dispatch  any deployment by id or URL (empty: what production
+#                      serves now). Defaults to a dry run.
+#   schedule           every 15 min, `--if-ungraded`: grades what production
+#                      serves only if no canary record names that deployment —
+#                      a Promote or a hand rollback emits no deployment event.
+#                      GitHub's schedule is best effort; after a Promote,
+#                      dispatch by hand rather than wait for it.
+#
+# Secrets: VERCEL_TOKEN, AGLYN_PROBE_TOKEN, SLACK_WEBHOOK_URL, CRON_SECRET, and
+# optionally VERCEL_AUTOMATION_BYPASS_SECRET — without it the script reads the
+# tenant project's own automation bypass with VERCEL_TOKEN (measured present
+# 2026-10-05, created 2026-09-23) and masks it in the log.
 #
 # Optional repository variables:
-#   CANARY_TENANT_HOSTS — extra published hosts, `host` or `host/path`,
-#     comma or space separated (default: demo.aglyn.app aglyn.com)
+#   CANARY_TENANT_HOSTS — the pages to render, `host` or `host/path`, comma or
+#     space separated; replaces the default list in lib/prod-canary.mjs
+#     (ready-to-roll.aglyn.app/, edr-construction.aglyn.app/ /services
+#     /contact, demo.aglyn.app, aglyn.com)
 #   CANARY_CONSOLE_HOST — default app.aglyn.com
 
 on:
   deployment_status:
+  schedule:
+    - cron: '7,22,37,52 * * * *'
   workflow_dispatch:
     inputs:
+      deployment:
+        description: 'Deployment id (dpl_…) or URL to grade before/without promoting it; empty = what production serves'
+        type: string
+        required: false
+        default: ''
       project:
         description: 'Which production project to canary'
         type: choice
@@ -70,7 +103,15 @@ concurrency:
   # Keyed by the environment string so a dispatch and an event for the same
   # project share a group, and a docs deploy's pending run (GitHub keeps one
   # pending run per group) can never displace a tenant canary's.
-  group: prod-canary-${{ github.event.deployment.environment || format('Production – aglyn-{0}', inputs.project) }}
+  #
+  # The schedule has a group of its own: GitHub keeps ONE pending run per
+  # group, and a pending scheduled run must never displace a pending
+  # candidate's. Two runs reading one deployment at once is harmless — the
+  # rollback re-reads what production serves before it acts.
+  group: >-
+    prod-canary-${{ github.event_name == 'schedule' && 'scheduled' ||
+    github.event.deployment.environment ||
+    format('Production – aglyn-{0}', inputs.project || 'tenant') }}
   cancel-in-progress: false
 
 permissions:
@@ -81,9 +122,10 @@ permissions:
 
 jobs:
   canary:
-    name: production serves pages after the deploy
+    name: the deployment renders real pages
     if: >-
       github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'schedule' ||
       (github.event.deployment_status.state == 'success' &&
        startsWith(github.event.deployment.environment, 'Production'))
     runs-on: ubuntu-latest
@@ -111,6 +153,8 @@ jobs:
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           AGLYN_PROBE_TOKEN: ${{ secrets.AGLYN_PROBE_TOKEN }}
+          # Optional: absent, the script reads the project's own with VERCEL_TOKEN.
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           # Same value as the console's Vercel env var: raises the operator alert.
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
@@ -120,6 +164,7 @@ jobs:
           EVENT_ENVIRONMENT: ${{ github.event.deployment.environment }}
           EVENT_DEPLOYMENT_URL: ${{ github.event.deployment_status.environment_url || github.event.deployment_status.target_url }}
           INPUT_PROJECT: ${{ inputs.project }}
+          INPUT_DEPLOYMENT: ${{ inputs.deployment }}
           INPUT_DRY_RUN: ${{ inputs.dry_run }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
@@ -127,8 +172,11 @@ jobs:
           argv=(--record "--run-url=$RUN_URL")
           if [ "$GITHUB_EVENT_NAME" = "deployment_status" ]; then
             argv+=("--environment=$EVENT_ENVIRONMENT" "--deployment-url=$EVENT_DEPLOYMENT_URL")
+          elif [ "$GITHUB_EVENT_NAME" = "schedule" ]; then
+            argv+=(--project=tenant --if-ungraded)
           else
             argv+=("--project=$INPUT_PROJECT")
+            if [ -n "$INPUT_DEPLOYMENT" ]; then argv+=("--deployment=$INPUT_DEPLOYMENT"); fi
             if [ "$INPUT_DRY_RUN" = "true" ]; then argv+=(--dry-run); fi
           fi
           node tools/scripts/prod-canary.mjs "${argv[@]}"

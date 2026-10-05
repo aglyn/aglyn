@@ -97,18 +97,45 @@ A promotion is any first-parent merge commit on `production`, dated by when
 GitHub merged it. The day starts at 00:00 America/Chicago, not UTC midnight,
 which falls at 7 PM Central.
 
-### 0 — If production was rolled back, promote by hand first
+### 0 — Test the candidate by its URL before Promote
+
+**Never promote a deployment the canary has not graded green.** beta.223 was
+promoted by hand onto a production whose auto-assign was off, and it hung every
+uncached client page with an image (AGL-3565): the canary of the day graded
+whatever the production domain served — the old deployment — and only the
+image-less demo site, so nothing read the candidate before visitors did
+(AGL-3571).
+
+The canary grades a candidate by its own `*.vercel.app` URL, whether or not
+production serves it, so this is a check you run before the Promote button:
+
+1. Find the candidate: the newest READY production deployment of the project
+   (Vercel → Deployments, or `vercel ls aglyn-tenant --prod --scope aglyn`).
+2. Read the canary's verdict on it. The `deployment_status` run already graded
+   it the minute it was READY: the commit's `prod-canary/aglyn-tenant` status
+   says `canary green on dpl_… (candidate)` or `candidate-red`. If there is no
+   status (or you want a fresh read), run it: Actions → **Production canary** →
+   Run workflow, `deployment` = the `dpl_…` id or its URL, `dry_run` unticked
+   so the verdict is recorded. Locally, read-only:
+
+   ```bash
+   AGLYN_PROBE_TOKEN=… node tools/scripts/prod-canary.mjs --project=tenant \
+     --dry-run --deployment=dpl_…
+   ```
+
+3. **`candidate-red` → do not promote.** Nothing was rolled back because
+   production never served it. Fix forward; the next deploy is graded the same
+   way.
 
 **After any rollback — the canary's or a human's — Vercel turns production
 auto-assign OFF for that project** (`autoAssignCustomDomains: false`, measured
 on aglyn-tenant after the 2026-10-05 rollback). Every later production
 deployment then builds READY and serves **nothing** until someone promotes it.
 The merge looks done, the build is green, and production is still the old
-release. The canary says so as a `not-serving` red, and
-`verify-production-aliases.mjs` reports the alias as stale.
+release. A green candidate run says so in its summary ("It is safe to
+Promote"), and `verify-production-aliases.mjs` reports the alias as stale.
 
-So the first step of the promotion after a rollback is to check, and once the
-new deployment is READY, to promote **that deployment by its URL**:
+So once the candidate is green, promote **that deployment by its URL**:
 
 ```bash
 curl -s -H "Authorization: Bearer $VERCEL_TOKEN" \
@@ -121,8 +148,11 @@ vercel promote <new-deployment-url> --scope aglyn   # re-enables auto-assign
 newest READY production deployment, and right after a rollback that is the
 deployment that was rolled back **from**.
 
-Then run the canary against it: Actions → **Production canary** → Run
-workflow, with `dry_run` unticked if a red should roll it back again.
+A Promote emits no deployment event. The canary's 15-minute schedule grades
+whatever production serves if no record names that deployment, but GitHub runs
+schedules late or not at all; to read production right after the Promote, run
+the workflow by hand with `deployment` empty (what production serves now) and
+`dry_run` unticked if a red should roll it back again.
 
 ### 1 — On `main`, when a batch is called
 
@@ -293,7 +323,9 @@ node tools/deploy/verify-production-aliases.mjs
 The tenant and console deploys are then read by the
 [production canary](#the-production-canary), which rolls a broken deploy back
 on its own. Read its run in the Actions tab: a red there means production was
-rolled back, or could not be, and step 0 is owed before the next promotion.
+rolled back, or could not be, or (`candidate-red`) the new deployment was never
+served and must not be promoted — and step 0 is owed before the next
+promotion.
 
 **`production` is branch-protected (AGL-1777).** A direct push is rejected: the
 promotion is a PR or it does not happen, and these four checks must be green
@@ -762,80 +794,157 @@ answered 200: the health checks were green, a human noticed after eighteen
 minutes, and the tenant builds no previews, so production was the first place
 that code ever ran on Vercel.
 
-**Trigger.** `deployment_status` events from the Vercel GitHub integration
-(environment `Production – aglyn-tenant` / `Production – aglyn-console`, state
-`success`). GitHub runs that workflow from the file at the deployed sha, so a
-change to the workflow file takes effect with the promotion that carries it;
-the script itself is checked out from `main`.
+The same afternoon beta.223 hung again, differently — only pages with an
+image, and only on render (AGL-3565) — and the canary could not have seen it
+(AGL-3571): it graded what the production DOMAIN served, which after a
+rollback is the old deployment, and its hosts were the image-less demo site
+and the 404 path. So it now grades the **candidate by its own URL** and
+renders **real client pages** fresh.
 
-**What it reads.** It waits (up to 5 min) until the production alias —
-`*.aglyn.app` for the tenant, `app.aglyn.com` for the console — serves the new
-deployment, then runs rounds of checks, 15 s budget per request, each failure
+**Triggers.**
+
+- `deployment_status` from the Vercel GitHub integration (environment
+  `Production – aglyn-tenant` / `Production – aglyn-console`, state
+  `success`): the candidate, graded the minute it is READY. GitHub runs that
+  workflow from the file at the deployed sha, so a change to the workflow file
+  takes effect with the promotion that carries it; the script itself is
+  checked out from `main`.
+- `workflow_dispatch`: any deployment by `dpl_…` id or URL, or (empty) what
+  production serves now — step 0.
+- `schedule`, every 15 minutes, `--if-ungraded`: a Promote or a hand rollback
+  moves production without a deployment event, so this grades what production
+  serves when no `prod-canary/<project>` status on its commit names that
+  deployment id. Best effort, as all GitHub schedules are.
+
+**How it reaches the candidate.** Production deployment URLs are behind
+Vercel Authentication. The canary sends Deployment Protection's **automation
+bypass** (`x-vercel-protection-bypass`) to `*.vercel.app` URLs only, plus
+`x-aglyn-probe` for our firewall's bot challenge. The bypass comes from the
+`VERCEL_AUTOMATION_BYPASS_SECRET` repo secret when set, else from the project
+itself: `GET /v9/projects/{id}` returns `protectionBypass` keyed by the secret,
+and `VERCEL_TOKEN` can read it (aglyn-tenant has one, created 2026-09-23 — the
+same value as the console's and as `AGLYN_VERCEL_BYPASS`, SECRET_ROTATION.md
+row 15). It is masked in the log. The site is named with `?tenantHost=`, which
+the tenant middleware has always honored on `.vercel.app` hosts — reachable
+only past that protection, so nothing new is exposed to the public. With no
+bypass at all the canary falls back to waiting (up to 5 min) for the
+production alias to serve the deployment and reading the public domains.
+
+**Cache busting that works on a real page.** Measured 2026-10-05 on a
+production deployment URL: the query string is not in the ISR key (`?__canary=`
+answered `HIT`), but the request host is (the deployment URL MISSed a page the
+domain served `STALE`) and so is the `[host]` route segment — and
+`normalizeHostAlias` resolves `ReAdy-to-roll.aglyn.app`, `READY-TO-ROLL`,
+`ready-to-roll.aglyn.app.` and `cname--AgLyn.com` to the same site. So every
+`page` row names its site with a new spelling (`freshHostSpelling`: letters
+recased by a number, then trailing dots; the custom-domain form recases only)
+and is a guaranteed render of the real page through the ISR path. A `:port`
+suffix does NOT work (the segment keeps it encoded and 404s).
+`apps/tenant/specs/probe-host-spelling.spec.ts` pins the resolver to these
+spellings; change the resolver and the probes together.
+
+**What it reads.** Rounds of checks, 15 s budget per request, each failure
 retried once:
 
 | row | what | why |
 |---|---|---|
-| `miss` | `https://<host>/__aglyn-canary-<nonce>` | a path nobody has requested is a guaranteed ISR **MISS**: the route and the full layout render during the request and return the site's not-found page (404 with a complete document). This is the row that would have caught beta.222 |
-| `page` | `https://<host>/<path>?__canary=<nonce>` | real pages. The query does **not** bust the ISR cache (measured: same `HIT`, same `age`); the row is there because right after a deploy the cache is empty anyway, and a routing break that 404s every page must read red |
-| `health` | `/api/health` on the first tenant host, and on the console | the route handler path. The console row on a tenant run is informational and never rolls the tenant back |
+| `page` | `https://<deployment>.vercel.app/<path>?tenantHost=<fresh spelling>` | each real page, rendered now with its images, components, repeats and forms. The row that catches beta.223. A `page` row answered from a cache is blind, never a pass |
+| `miss` | `https://<deployment>.vercel.app/__aglyn-canary-<nonce>?tenantHost=<site>` | a never-requested path: the route and the full layout render and return the site's not-found page (404 with a complete document). The row that catches beta.222 — and only proves the layout |
+| `health` | `/api/health` on the deployment, and on the console | the route handler path. The console row on a tenant run is informational and never rolls the tenant back |
 
-Hosts: `demo.aglyn.app` and `aglyn.com` by default, plus the repository
-variable `CANARY_TENANT_HOSTS` (`host` or `host/path`, comma or space
-separated) for published customer sites. A site that loads custom fonts or
-heavy data is worth listing: a break that only reaches those sites is
-invisible on the defaults.
+Pages by default (`DEFAULT_TENANT_HOSTS` in `tools/scripts/lib/prod-canary.mjs`):
+`ready-to-roll.aglyn.app/` (a dozen images), EDR Construction's `/`,
+`/services` and `/contact` (images, reusable components, repeats, a form),
+`demo.aglyn.app` and `aglyn.com` (one per host-resolution path). The repo
+variable `CANARY_TENANT_HOSTS` replaces the list (`host` or `host/path`, comma
+or space separated). If one of those sites is retired, its rows grade red on
+that one host — `isolated`, never a rollback alone — until it is replaced.
+
+Without the bypass, the public-domain rows of AGL-3567: `miss` on
+`https://<host>/__aglyn-canary-<nonce>` and `page` on
+`https://<host>/<path>?__canary=<nonce>`, which the cache may answer.
 
 **When it acts.** Every response is classified as the deployment's failure
 (5xx, timeout, an incomplete or foreign document, a real page that 404s) or the
 canary's (a bot checkpoint, a 429, a 401/403, a redirect, a DNS/TLS/connection
-error). Only the first kind counts. A round is red when such failures land on
-at least **two hosts at once** (one, if only one host is configured), so one
-customer breaking their own site cannot roll the platform back. Only **three
-red rounds in a row**, 20 s apart, roll back; a green round ends the run, and a
-red that recovers is reported, not acted on.
+error, a fresh page served from cache). Only the first kind counts. A round is
+red when such failures land on at least **two hosts at once** (one, if only one
+host is configured), so one customer breaking their own site cannot roll the
+platform back. Only **three red rounds in a row**, 20 s apart, act; a green
+round ends the run, and a red that recovers is reported, not acted on.
 
 **What it does on red.**
 
-1. Picks the target: the newest READY production deployment older than the
-   failing one that is not a redeploy of the same commit and not a commit
-   recorded red, preferring one the canary recorded green (`prod-canary/<project>`
-   commit statuses — the canary writes `success` on every green run).
-2. Re-reads production and rolls back through
-   `POST /v1/projects/{id}/rollback/{deploymentId}` — unless production has
-   already moved, in which case it touches nothing.
-3. Records `failure` on the bad commit, waits for the alias to serve the
-   target, and re-runs the canary against it.
-4. Posts to Slack `#ci` (the `SLACK_WEBHOOK_URL` the uptime probe uses),
-   raises the `ops.productionCanaryRed` operator alert (staff bell and
-   operator email) through `POST /api/admin/operator-alerts/canary` with
-   `CRON_SECRET`, and fails the run with the whole report in the job summary.
-   Slack goes first: when the console is the broken deploy, its alert route
-   may be down with it.
+- **Production does not serve it** (auto-assign off, or a dispatch on an
+  unpromoted deployment): `candidate-red`. Nothing to roll back. It records
+  `failure` on the commit (so the rollback picker never lands on it), posts,
+  alerts and fails: **do not promote it**. With auto-assign on it first waits
+  for the alias to switch, then treats it as served.
+- **Production serves it:**
+  1. Picks the target: the newest READY production deployment older than the
+     failing one that is not a redeploy of the same commit and not a commit
+     recorded red, preferring one the canary recorded green
+     (`prod-canary/<project>` commit statuses — the canary writes `success` on
+     every green run).
+  2. Re-reads production and rolls back through
+     `POST /v1/projects/{id}/rollback/{deploymentId}` — unless production has
+     already moved, in which case it touches nothing.
+  3. Records `failure` on the bad commit, waits for the alias to serve the
+     target, and re-runs the canary against the target's own URL.
+  4. Posts to Slack `#ci` (the `SLACK_WEBHOOK_URL` the uptime probe uses),
+     raises the `ops.productionCanaryRed` operator alert (staff bell and
+     operator email) through `POST /api/admin/operator-alerts/canary` with
+     `CRON_SECRET`, and fails the run with the whole report in the job
+     summary. Slack goes first: when the console is the broken deploy, its
+     alert route may be down with it.
 
-Then **auto-assign is OFF**, and step 0 of the next promotion is owed.
+  Then **auto-assign is OFF**, and step 0 of the next promotion is owed.
 
 `degraded` (failures that never span enough hosts), `inconclusive` (the canary
-could not see production) and `not-serving` (READY but not promoted) also post
-and fail, without a rollback.
+could not see the deployment) and `not-serving` (no bypass, and READY but not
+promoted) also post and fail, without a rollback. Every verdict is recorded as
+`canary <verdict> on <dpl_…> (candidate|serving)`, which is what the schedule
+reads.
 
-**On demand.** Actions → Production canary → Run workflow, choosing the
-project. `dry_run` (the default) runs the canary against current production
-and prints the rollback it **would** make; it writes nothing to Vercel or
-GitHub. Locally, read-only:
+**On demand.** Actions → Production canary → Run workflow: the project, a
+`deployment` (empty = what production serves), and `dry_run`. A dry run
+prints the rollback it **would** make and writes nothing to Vercel or GitHub —
+so tick it off to record a candidate's verdict. Locally, read-only:
 
 ```bash
+AGLYN_PROBE_TOKEN=… node tools/scripts/prod-canary.mjs --project=tenant --dry-run
 AGLYN_PROBE_TOKEN=… node tools/scripts/prod-canary.mjs --project=tenant --dry-run \
-  --hosts="demo.aglyn.app aglyn.com edr-construction.aglyn.app"
+  --deployment=dpl_… --hosts="ready-to-roll.aglyn.app edr-construction.aglyn.app/services"
 ```
 
-It reads `VERCEL_TOKEN`, or the Vercel CLI's own login. Without either it runs
-the checks alone. To mark a commit bad by hand after a manual rollback, so the
-picker never lands on it:
+It reads `VERCEL_TOKEN`, or the Vercel CLI's own login, and the bypass as
+above. Without a token it runs the public-domain checks alone. Measured
+2026-10-05: production (beta.221) GREEN, every `page` row a fresh `MISS`; the
+beta.223 deployment (`dpl_7ZvMsF75J2QXPq8udzqMurnsaUWd`) `CANDIDATE-RED` —
+every `page` row with an image timed out at 15 s while its `miss` and
+`health` rows answered, which is exactly what the AGL-3567 canary saw and
+called green. ⚠️ Each request to a deployment that hangs holds a function for
+the full 60 s; keep reads of a known-bad deployment to a handful.
+
+To mark a deployment bad by hand after a manual rollback, so the picker never
+lands on it and the schedule does not grade it again:
 
 ```bash
 gh api repos/aglyn/aglyn/statuses/<sha> -f state=failure \
-  -f context=prod-canary/aglyn-tenant -f description="rolled back by hand"
+  -f context=prod-canary/aglyn-tenant -f description="rolled back by hand: dpl_…"
 ```
+
+### The render monitor renders the same pages
+
+The console's render monitor (`/api/admin/render-monitor`, every 5 minutes,
+AGL-3568) renders the same client pages on production between deploys: on
+Aglyn's console it adds `ready-to-roll.aglyn.app` and `edr-construction.aglyn.app`
+to its watched sites, and renders one of each site's pages per run (rotating),
+fresh, through the tenant's production project domain
+`aglyn-tenant-aglyn.vercel.app` with the same spellings and the same bypass
+(`AGLYN_VERCEL_BYPASS`, else Vercel's exposed `VERCEL_AUTOMATION_BYPASS_SECRET`).
+Two failing runs raise `system.siteRenderFailing`. See
+`libs/tenant/data/admin/src/lib/server/render-monitor.ts`.
 
 ## Getting a fix live in five minutes
 

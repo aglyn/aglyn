@@ -23,8 +23,15 @@
 import {
   RENDER_PROBE_ISR_PREFIX,
   gradeRenderProbe,
+  PLATFORM_CONSOLE_VERCEL_PROJECT_ID,
+  PLATFORM_RENDER_ORIGIN,
+  freshHostSpelling,
   nextRenderMonitorState,
+  pageProbeUrl,
+  parseRenderMonitorPages,
   renderMonitorCheckId,
+  renderSpellingNumber,
+  resolveRenderMonitorPages,
   resolveRenderMonitorTargets,
   runRenderMonitor,
   type RenderMonitorStateDoc,
@@ -262,5 +269,126 @@ describe('runRenderMonitor (AGL-3568)', () => {
       raise: async () => undefined,
     })
     expect(report.sites[0].error).toBe('firestore down')
+  })
+})
+
+describe('real pages, rendered fresh (AGL-3571)', () => {
+  it('spells a site so no cache holds it — the literals the canary and the tenant resolver spec pin', () => {
+    expect(freshHostSpelling('ready-to-roll.aglyn.app', 0, 'aglyn.app')).toBe('ready-to-roll.aglyn.app')
+    expect(freshHostSpelling('ready-to-roll.aglyn.app', 5, 'aglyn.app')).toBe('ReAdy-to-roll.aglyn.app')
+    expect(freshHostSpelling('ready-to-roll.aglyn.app', 2 ** 19 + 1, 'aglyn.app')).toBe('Ready-to-roll.aglyn.app.')
+    expect(freshHostSpelling('aglyn.com', 3, 'aglyn.app')).toBe('cname--AGlyn.com')
+    expect(freshHostSpelling('aglyn.com', 256 + 3, 'aglyn.app')).toBe('cname--AGlyn.com')
+  })
+
+  it('numbers a run by the minute, so a run never reuses an earlier spelling', () => {
+    const at = Date.UTC(2026, 9, 5, 18, 33)
+    expect(renderSpellingNumber(at + 300_000)).toBe(renderSpellingNumber(at) + 5)
+    expect(renderSpellingNumber(0)).toBe(1)
+  })
+
+  it('reads the page list like the canary does, dropping what is not a host', () => {
+    expect(parseRenderMonitorPages('a.example.app, https://b.example.app/services b.example.app/contact/ nope!')).toEqual([
+      { origin: 'https://a.example.app', host: 'a.example.app', paths: ['/'] },
+      { origin: 'https://b.example.app', host: 'b.example.app', paths: ['/services', '/contact'] },
+    ])
+  })
+
+  it("renders Aglyn's client pages on Aglyn's own console only", () => {
+    const platform = resolveRenderMonitorPages({ VERCEL_PROJECT_ID: PLATFORM_CONSOLE_VERCEL_PROJECT_ID })
+    expect(platform.renderOrigin).toBe(PLATFORM_RENDER_ORIGIN)
+    expect(platform.pages.map((page) => [page.host, page.paths])).toEqual([
+      ['ready-to-roll.aglyn.app', ['/']],
+      ['edr-construction.aglyn.app', ['/', '/services', '/contact']],
+    ])
+    // Any other install — another Vercel project or none — renders none of them.
+    expect(resolveRenderMonitorPages({ VERCEL_PROJECT_ID: 'prj_someone_else' }).pages).toEqual([])
+    expect(resolveRenderMonitorPages({}).pages).toEqual([])
+    // An operator's own list needs their own render origin.
+    expect(resolveRenderMonitorPages({ RENDER_MONITOR_PAGES: 'shop.example.app' }).pages).toEqual([])
+    expect(
+      resolveRenderMonitorPages({
+        RENDER_MONITOR_PAGES: 'shop.example.app/cart',
+        RENDER_MONITOR_RENDER_ORIGIN: 'https://tenant-x.vercel.app',
+      }),
+    ).toEqual({
+      renderOrigin: 'https://tenant-x.vercel.app',
+      pages: [{ origin: 'https://shop.example.app', host: 'shop.example.app', paths: ['/cart'] }],
+    })
+    expect(
+      resolveRenderMonitorPages({ VERCEL_PROJECT_ID: PLATFORM_CONSOLE_VERCEL_PROJECT_ID, RENDER_MONITOR_ORIGINS: 'off' }).pages,
+    ).toEqual([])
+    // A site whose pages are rendered is watched whole.
+    expect(
+      resolveRenderMonitorTargets({ VERCEL_PROJECT_ID: PLATFORM_CONSOLE_VERCEL_PROJECT_ID, NEXT_PUBLIC_TENANT_DOMAIN: 'aglyn.app' }),
+    ).toEqual(['https://demo.aglyn.app', 'https://ready-to-roll.aglyn.app', 'https://edr-construction.aglyn.app'])
+  })
+
+  it("rotates through a site's pages, one per five-minute slot", () => {
+    const site = { origin: 'https://edr-construction.aglyn.app', host: 'edr-construction.aglyn.app', paths: ['/', '/services', '/contact'] }
+    const paths = [0, 1, 2, 3].map((slot) => new URL(pageProbeUrl(PLATFORM_RENDER_ORIGIN, site, slot, 7)).pathname)
+    expect(paths).toEqual(['/', '/services', '/contact', '/'])
+    const url = new URL(pageProbeUrl(PLATFORM_RENDER_ORIGIN, site, 1, 7))
+    expect(url.origin).toBe(PLATFORM_RENDER_ORIGIN)
+    expect(url.searchParams.get('tenantHost')).toBe(freshHostSpelling('edr-construction.aglyn.app', 7))
+  })
+
+  const env = {
+    NEXT_PUBLIC_TENANT_DOMAIN: 'sites.example.test',
+    RENDER_MONITOR_PAGES: 'shop.sites.example.test/cart',
+    RENDER_MONITOR_RENDER_ORIGIN: 'https://tenant-x.vercel.app',
+  }
+  const store: RenderMonitorStore = async (_checkId, work) => work(null).result
+
+  function fetcherFor(page: 'ok' | 'hang') {
+    const requested: Array<{ url: string; headers: Record<string, string> }> = []
+    const fetcher = (async (url: string, init: RequestInit) => {
+      requested.push({ url, headers: init.headers as Record<string, string> })
+      if (url.startsWith('https://tenant-x.vercel.app') && page === 'hang') {
+        return new Promise((_resolve, reject) => {
+          init.signal?.addEventListener('abort', () => reject(init.signal?.reason))
+        })
+      }
+      const status = url.endsWith('/search') || url.startsWith('https://tenant-x.vercel.app') ? 200 : 404
+      return new Response(PAGE, { status, headers: { 'content-type': 'text/html', 'x-vercel-cache': 'MISS' } })
+    }) as unknown as typeof fetch
+    return { fetcher, requested }
+  }
+
+  it('renders the real page through the render origin with the bypass, and fails the site when it hangs', async () => {
+    const healthy = fetcherFor('ok')
+    const report = await runRenderMonitor({
+      env,
+      store,
+      fetcher: healthy.fetcher,
+      headers: { 'x-vercel-protection-bypass': 'b' },
+      raise: async () => undefined,
+      now: () => Date.UTC(2026, 9, 5, 18, 35),
+    })
+    const shop = report.sites.find((site) => site.origin === 'https://shop.sites.example.test')
+    expect(shop?.ok).toBe(true)
+    const page = shop?.probes.find((probe) => probe.kind === 'page')
+    expect(page?.url).toMatch(/^https:\/\/tenant-x\.vercel\.app\/cart\?tenantHost=/)
+    expect(healthy.requested.find((r) => r.url === page?.url)?.headers['x-vercel-protection-bypass']).toBe('b')
+
+    // The beta.223 shape: layout probes pass, the page body hangs.
+    const hung = await runRenderMonitor({
+      env,
+      store,
+      fetcher: fetcherFor('hang').fetcher,
+      headers: { 'x-vercel-protection-bypass': 'b' },
+      raise: async () => undefined,
+      timeoutMs: 20,
+    })
+    const broken = hung.sites.find((site) => site.origin === 'https://shop.sites.example.test')
+    expect(broken?.ok).toBe(false)
+    expect(broken?.probes.filter((probe) => !probe.ok).map((probe) => [probe.kind, probe.code])).toEqual([['page', 'timeout']])
+  })
+
+  it('makes no page probe without the bypass, which could only be refused', async () => {
+    const { fetcher, requested } = fetcherFor('ok')
+    const report = await runRenderMonitor({ env, store, fetcher, raise: async () => undefined })
+    expect(report.sites.flatMap((site) => site.probes).some((probe) => probe.kind === 'page')).toBe(false)
+    expect(requested.some((r) => r.url.startsWith('https://tenant-x.vercel.app'))).toBe(false)
   })
 })

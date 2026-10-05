@@ -28,19 +28,27 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import {
+  DEFAULT_TENANT_HOSTS,
   EXIT,
   PROJECTS,
+  alreadyGraded,
+  automationBypassFrom,
   canaryPlan,
   canaryRecord,
   classifyResponse,
   decideVerdict,
   formatReport,
+  freshHostSpelling,
   gradeRound,
+  hostOf,
   parseHostList,
   pickRollbackTarget,
   projectForEnvironment,
+  recordDescription,
   servingState,
+  siteSpelling,
   slackPayload,
+  spellingCapacity,
 } from './prod-canary.mjs'
 
 const PAGE = '<!DOCTYPE html><html><head><script src="/_next/static/chunks/a.js"></script></head><body>x</body></html>'
@@ -338,4 +346,138 @@ test('the report names every row, its verdict and what it was not counted for', 
   assert.match(lines[0], /GREEN/)
   assert.ok(lines.some((line) => /✓ miss .*cache=MISS/.test(line)))
   assert.ok(lines.some((line) => /\[informational\]/.test(line)))
+})
+
+// ------------------------------------------------------ candidate (AGL-3571) --
+
+// What `normalizeHostAlias` (apps/tenant/utils/get-host.ts) does to a
+// `?tenantHost=` value, restated so these literals can be checked here; the
+// tenant spec `probe-host-spelling.spec.ts` checks the same literals against
+// the real resolver.
+const resolve = (spelling) => {
+  const trimmed = spelling.trim().toLowerCase()
+  if (trimmed.startsWith('cname--')) return trimmed
+  const bare = trimmed.replace(/\.+$/, '')
+  if (!bare.includes('.')) return bare
+  return bare.endsWith('.aglyn.app') ? bare.slice(0, -'.aglyn.app'.length) : `cname--${bare}`
+}
+
+test('fresh spellings: literals the tenant resolver spec pins too', () => {
+  assert.equal(freshHostSpelling('ready-to-roll.aglyn.app', 0), 'ready-to-roll.aglyn.app')
+  assert.equal(freshHostSpelling('ready-to-roll.aglyn.app', 5), 'ReAdy-to-roll.aglyn.app')
+  assert.equal(spellingCapacity('ready-to-roll.aglyn.app'), 2 ** 19)
+  assert.equal(freshHostSpelling('ready-to-roll.aglyn.app', 2 ** 19 + 1), 'Ready-to-roll.aglyn.app.')
+  assert.equal(freshHostSpelling('aglyn.com', 3), 'cname--AGlyn.com')
+  // The custom-domain form has no dots to spend, so it cycles.
+  assert.equal(freshHostSpelling('aglyn.com', 256 + 3), 'cname--AGlyn.com')
+})
+
+test('every fresh spelling names the same site, and no two numbers share one', () => {
+  for (const host of ['ready-to-roll.aglyn.app', 'edr-construction.aglyn.app', 'demo.aglyn.app', 'aglyn.com']) {
+    const seen = new Set()
+    const limit = Math.min(4 * spellingCapacity(host), 2000)
+    for (let n = 0; n < limit; n++) {
+      const spelling = freshHostSpelling(host, n)
+      assert.equal(resolve(spelling), siteSpelling(host), spelling)
+      if (n < spellingCapacity(host) || host.endsWith('.aglyn.app')) {
+        assert.ok(!seen.has(spelling), `${host} #${n} repeats ${spelling}`)
+      }
+      seen.add(spelling)
+      // The canonical-domain redirect tests the raw segment for this prefix.
+      if (!host.endsWith('.aglyn.app')) assert.ok(spelling.startsWith('cname--'))
+    }
+  }
+  assert.equal(siteSpelling('ready-to-roll.aglyn.app'), 'ready-to-roll')
+  assert.equal(siteSpelling('aglyn.com'), 'cname--aglyn.com')
+})
+
+test('the candidate plan renders real pages fresh on the deployment URL, never the public domain', () => {
+  const tenantHosts = parseHostList(DEFAULT_TENANT_HOSTS)
+  const plan = (nonce) =>
+    canaryPlan({
+      project: PROJECTS.tenant,
+      tenantHosts,
+      consoleHost: 'app.aglyn.com',
+      nonce,
+      deploymentHost: 'aglyn-tenant-ayy9d9vq5-aglyn.vercel.app',
+    })
+  const rows = plan('n1')
+  const tenantRows = rows.filter((row) => row.counts)
+  assert.ok(tenantRows.every((row) => row.url.startsWith('https://aglyn-tenant-ayy9d9vq5-aglyn.vercel.app/')))
+  const pages = rows.filter((row) => row.kind === 'page')
+  // Every default real page: ready-to-roll's home and EDR's three.
+  for (const [host, path] of [
+    ['ready-to-roll.aglyn.app', '/'],
+    ['edr-construction.aglyn.app', '/'],
+    ['edr-construction.aglyn.app', '/services'],
+    ['edr-construction.aglyn.app', '/contact'],
+  ]) {
+    const row = pages.find((page) => page.host === host && page.path === path)
+    assert.ok(row?.fresh, `${host}${path}`)
+    const url = new URL(row.url)
+    assert.equal(url.pathname, path)
+    assert.equal(resolve(url.searchParams.get('tenantHost')), siteSpelling(host))
+  }
+  const spellings = pages.map((row) => new URL(row.url).searchParams.get('tenantHost'))
+  // Two paths of one site never share a spelling, and neither does the next round.
+  const keys = pages.map((row, i) => `${row.path}|${spellings[i]}`)
+  assert.equal(new Set(spellings.filter((_, i) => pages[i].host === 'edr-construction.aglyn.app')).size, 3)
+  const next = plan('n2').filter((row) => row.kind === 'page').map((row) => `${row.path}|${new URL(row.url).searchParams.get('tenantHost')}`)
+  assert.ok(next.every((key) => !keys.includes(key)))
+  // The layout row per site, under the spelling its visitors' requests carry.
+  const miss = rows.find((row) => row.kind === 'miss' && row.host === 'aglyn.com')
+  assert.equal(new URL(miss.url).searchParams.get('tenantHost'), 'cname--aglyn.com')
+  assert.match(new URL(miss.url).pathname, /^\/__aglyn-canary-n1$/)
+  assert.ok(rows.some((row) => row.kind === 'health' && row.url.endsWith('.vercel.app/api/health') && row.counts))
+  assert.equal(rows.find((row) => row.host === 'app.aglyn.com').counts, false)
+})
+
+test('a fresh row answered from a cache is blind, not a pass and not a failure', () => {
+  const hit = classifyResponse({ kind: 'page', status: 200, contentType: HTML, body: PAGE, fresh: true, cache: 'HIT' })
+  assert.equal(hit.outcome, 'canary')
+  assert.match(hit.detail, /proves no render/)
+  assert.equal(classifyResponse({ kind: 'page', status: 200, contentType: HTML, body: PAGE, fresh: true, cache: 'STALE' }).outcome, 'canary')
+  assert.equal(classifyResponse({ kind: 'page', status: 200, contentType: HTML, body: PAGE, fresh: true, cache: 'MISS' }).outcome, 'ok')
+  // A public-domain page row keeps AGL-3567's reading: cached is still a pass.
+  assert.equal(classifyResponse({ kind: 'page', status: 200, contentType: HTML, body: PAGE, cache: 'HIT' }).outcome, 'ok')
+  // The beta.223 shape: a fresh render that hangs is the deployment failing.
+  assert.equal(classifyResponse({ kind: 'page', error: { name: 'TimeoutError' }, fresh: true }).outcome, 'server')
+})
+
+test('the automation bypass is read from the project map, which is keyed by the secret', () => {
+  assert.equal(
+    automationBypassFrom({ protectionBypass: { s3cr3t: { scope: 'automation-bypass', createdAt: 1 }, other: { scope: 'shareable-link' } } }),
+    's3cr3t',
+  )
+  assert.equal(automationBypassFrom({ protectionBypass: { other: { scope: 'shareable-link' } } }), null)
+  assert.equal(automationBypassFrom({}), null)
+  assert.equal(automationBypassFrom(null), null)
+})
+
+test('a deployment URL or bare host reduces to its host', () => {
+  assert.equal(hostOf('https://aglyn-tenant-ayy9d9vq5-aglyn.vercel.app/'), 'aglyn-tenant-ayy9d9vq5-aglyn.vercel.app')
+  assert.equal(hostOf('aglyn-tenant-ayy9d9vq5-aglyn.vercel.app'), 'aglyn-tenant-ayy9d9vq5-aglyn.vercel.app')
+  assert.equal(hostOf(''), '')
+})
+
+test('records name the deployment, so the scheduled run grades only what nobody has', () => {
+  const context = 'prod-canary/aglyn-tenant'
+  assert.equal(recordDescription('green', 'dpl_7Zv', false), 'canary green on dpl_7Zv (candidate)')
+  assert.equal(recordDescription('red', 'dpl_7Zv', true), 'canary red on dpl_7Zv (serving)')
+  const statuses = [
+    { context, state: 'success', description: recordDescription('green', 'dpl_CJs', false) },
+    { context: 'main-gate/fast', state: 'success', description: 'dpl_Exr' },
+  ]
+  assert.equal(alreadyGraded(statuses, context, 'dpl_CJs'), true)
+  // Same commit, another deployment of it, or another check naming it: ungraded.
+  assert.equal(alreadyGraded(statuses, context, 'dpl_Exr'), false)
+  assert.equal(alreadyGraded(null, context, 'dpl_CJs'), false)
+  assert.equal(alreadyGraded(statuses, context, null), false)
+})
+
+test('a red candidate production does not serve says do not promote, and exits non-zero', () => {
+  assert.notEqual(EXIT['candidate-red'], 0)
+  const payload = slackPayload({ project: PROJECTS.tenant, verdict: 'candidate-red', deployment: beta222 })
+  assert.match(payload.text, /Do NOT promote/)
+  assert.doesNotMatch(payload.text, /ROLLED BACK/)
 })

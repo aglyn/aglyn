@@ -57,6 +57,15 @@ const OUTCOMES: Record<string, (input: CanaryAlertInput) => { outcome: string; d
             `Deployment ${input.deploymentId} stopped rendering uncached pages on several sites ` +
             'and the canary could not roll it back. Roll it back in Vercel now.',
         },
+  // A candidate graded by its own URL before production served it (AGL-3571):
+  // nothing to roll back, and the one thing to say is "do not promote it".
+  'candidate-red': (input) => ({
+    outcome: 'candidate fails — do NOT promote',
+    detail:
+      `Deployment ${input.deploymentId} stopped rendering pages on several sites when the canary ` +
+      'rendered them on its own URL. Production does not serve it, so nothing was rolled back. ' +
+      'Do not promote it; fix forward and let the next deploy be graded.',
+  }),
   degraded: (input) => ({
     outcome: 'failing on some sites',
     detail:

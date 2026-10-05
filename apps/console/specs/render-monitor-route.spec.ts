@@ -57,7 +57,7 @@ function request(method: 'GET' | 'POST', secret?: string): Request {
   })
 }
 
-const ENV = ['CRON_SECRET', 'AGLYN_PROBE_TOKEN', 'AGLYN_VERCEL_BYPASS'] as const
+const ENV = ['CRON_SECRET', 'AGLYN_PROBE_TOKEN', 'AGLYN_VERCEL_BYPASS', 'VERCEL_AUTOMATION_BYPASS_SECRET'] as const
 const saved: Partial<Record<(typeof ENV)[number], string>> = {}
 
 beforeEach(() => {
@@ -65,6 +65,7 @@ beforeEach(() => {
   process.env['CRON_SECRET'] = 'cron-secret'
   process.env['AGLYN_PROBE_TOKEN'] = 'probe-token'
   delete process.env['AGLYN_VERCEL_BYPASS']
+  delete process.env['VERCEL_AUTOMATION_BYPASS_SECRET']
   mockRuns.length = 0
   mockBeats.length = 0
   mockReport = { dryRun: false, threshold: 2, sites: [] }
@@ -100,6 +101,17 @@ describe('/api/admin/render-monitor (AGL-3568)', () => {
       dryRun: false,
       headers: { 'x-aglyn-probe': 'probe-token' },
     })
+  })
+
+  it("sends Vercel's own exposed bypass when the install sets none of its own (AGL-3571)", async () => {
+    process.env['VERCEL_AUTOMATION_BYPASS_SECRET'] = 'system-bypass'
+    await POST(request('POST', 'cron-secret'))
+    expect(mockRuns[0]).toMatchObject({
+      headers: { 'x-aglyn-probe': 'probe-token', 'x-vercel-protection-bypass': 'system-bypass' },
+    })
+    process.env['AGLYN_VERCEL_BYPASS'] = 'configured-bypass'
+    await POST(request('POST', 'cron-secret'))
+    expect(mockRuns[1]).toMatchObject({ headers: { 'x-vercel-protection-bypass': 'configured-bypass' } })
   })
 
   it('a GET only looks: a dry run, and no beat', async () => {
