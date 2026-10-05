@@ -749,20 +749,6 @@ export function registerCrmConsoleApi(): void {
     },
     { machine: true },
   )
-  /*
-   * The whole-collection export (AGL-2662). A portability route: the people
-   * files — contacts and leads — are what a workspace is owed on every plan
-   * and whether or not the CRM is switched on for it, so the dispatcher
-   * leaves its release and enablement gates to the route, which asks both
-   * of the CRM's own records. Loaded with the first export.
-   */
-  registerPluginApiRoute(
-    CRM_API_ROUTES.export,
-    {
-      web: async (request) => (await import('./server/export-route')).crmExportRoute(request),
-    },
-    { portability: true },
-  )
   registerPluginApiRoute(
     CRM_EMAIL_TEMPLATE_DUPLICATE_ROUTE,
     crmEmailTemplateDuplicateHandler,

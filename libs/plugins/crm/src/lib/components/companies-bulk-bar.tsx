@@ -50,7 +50,6 @@ import {
   planCompanyRemoveTag,
   planCompanySetOwner,
 } from '../model/companies-bulk-writes'
-import type { CompanyCsvRow } from '../model/companies-csv'
 import { COMPANY_DETACH_LIMIT } from '../model/companies'
 import { deleteCompanyThroughRoute } from '../model/company-delete'
 import { normalizeBulkTag } from '../model/contacts-bulk-writes'
@@ -80,7 +79,7 @@ export interface CompaniesBulkBarProps {
   hostId: string | null
   /** `['orgs', orgId]`, or `null` while the org is unresolved. */
   scope: readonly ['orgs', string] | null
-  rows: readonly (CompanyBulkRow & CompanyCsvRow)[]
+  rows: readonly CompanyBulkRow[]
   selected: readonly string[]
   onSelectedChange: (ids: string[]) => void
   /** The section's roster — already read for the Owner column. */

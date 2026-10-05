@@ -18,11 +18,11 @@
 'use client'
 
 import {
-  countCsvDataRows,
   PERSON_ERASURE_NOT_REACHED,
   PERSON_ERASURE_REMOVES,
   PERSON_ERASURE_RETAINS,
 } from '@aglyn/aglyn'
+import { useTransferLauncher } from '@aglyn/aglyn/app-utils/transfer-launcher-context'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
@@ -32,19 +32,14 @@ import { useCallback, useState } from 'react'
 import { docsHelp } from '../../constants/docs-links'
 import { useOrgScope } from '../../hooks/use-org-scope'
 
-/** The header the export route promises its row count in. */
-const EXPORT_ROWS_HEADER = 'X-Aglyn-Export-Rows'
-
 /**
- * The two files of the people a workspace holds — what the record system's
- * export route owes every workspace, on every plan — in the order they are
- * offered.
+ * The two files of the people a workspace holds — the record system's
+ * transfer resources, which every workspace may export on every plan — in
+ * the order they are offered, with the export dialog's title for each.
  */
-type PeopleFile = 'contacts' | 'leads'
-
-const PEOPLE_FILES: ReadonlyArray<{ resource: PeopleFile; label: string }> = [
-  { resource: 'contacts', label: 'Export contacts' },
-  { resource: 'leads', label: 'Export leads' },
+const PEOPLE_FILES: ReadonlyArray<{ resource: string; label: string; title: string }> = [
+  { resource: 'crm.contacts', label: 'Export contacts', title: 'Export every contact' },
+  { resource: 'crm.leads', label: 'Export leads', title: 'Export every lead' },
 ]
 
 /** One of the erasure's three lists: what it removes, keeps, and cannot reach. */
@@ -73,11 +68,13 @@ function ErasureList(props: { heading: string; lines: readonly string[] }) {
  * page — so this card is where they stand on every plan, beside the
  * workspace's other settings.
  *
- * - The files are the CRM export route's contacts and leads files, which ask
- *   neither the plan nor the CRM's release flag. A file shorter than the row
- *   count the route promised is refused rather than saved, as the CRM's own
- *   button refuses one: a partial audience under a confident name is worse
- *   than no file.
+ * - The files are the CRM's `crm.contacts` and `crm.leads` transfer
+ *   resources, opened in the console's export dialog over the whole
+ *   workspace (AGL-3552): the person picks the fields and the format, and
+ *   the dialog checks the download against the row count the route
+ *   promised. The export route asks neither the plan nor the CRM's release
+ *   flag — only "Manage data", as every CRM export does — so the buttons are
+ *   offered to whoever the transfer gate would admit, on every plan.
  * - The erasure is filed by address alone, typed twice, so it reaches a
  *   person whether or not any page shows them. The route decides who may file
  *   one — a workspace owner or admin — and the section is offered to them.
@@ -87,56 +84,10 @@ export function OrgPrivacyCard() {
   const orgId = currentOrg?.$id ?? null
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
-  const [exporting, setExporting] = useState<PeopleFile | null>(null)
+  const transfer = useTransferLauncher()
   const [email, setEmail] = useState('')
   const [confirmEmail, setConfirmEmail] = useState('')
   const [filing, setFiling] = useState(false)
-
-  const exportFile = useCallback(
-    async (resource: PeopleFile) => {
-      if (!orgId || !user || exporting) return
-      setExporting(resource)
-      try {
-        const params = new URLSearchParams({ orgId, resource })
-        const response = await authorizedFetch(user, `/api/crm/export?${params.toString()}`)
-        if (!response.ok) {
-          const failure = (await response.json().catch(() => ({}))) as Record<string, unknown>
-          enqueueSnackbar(String(failure['error'] ?? 'The export could not be prepared.'), {
-            variant: 'warning',
-          })
-          return
-        }
-        const text = await response.text()
-        const promised = Number(response.headers.get(EXPORT_ROWS_HEADER) ?? '')
-        const received = countCsvDataRows(text)
-        if (Number.isFinite(promised) && received < promised) {
-          enqueueSnackbar(
-            `Export incomplete — ${received} of ${promised} rows arrived. ` +
-              'Nothing was saved; try again.',
-            { variant: 'error' },
-          )
-          return
-        }
-        const disposition = response.headers.get('Content-Disposition') ?? ''
-        const named = /filename="([^"]+)"/.exec(disposition)?.[1]
-        const objectUrl = URL.createObjectURL(new Blob([text], { type: 'text/csv' }))
-        const anchor = document.createElement('a')
-        anchor.href = objectUrl
-        anchor.download = named ?? `${resource}.csv`
-        document.body.appendChild(anchor)
-        anchor.click()
-        anchor.remove()
-        // Released at once: the file is the people this workspace holds.
-        URL.revokeObjectURL(objectUrl)
-      } catch (error) {
-        console.error(error)
-        enqueueSnackbar('The export could not be prepared.', { variant: 'error' })
-      } finally {
-        setExporting(null)
-      }
-    },
-    [orgId, user, exporting, enqueueSnackbar],
-  )
 
   const typed = email.trim().toLowerCase()
   const confirmed = typed.includes('@') && typed === confirmEmail.trim().toLowerCase()
@@ -188,19 +139,19 @@ export function OrgPrivacyCard() {
       >
         <Stack spacing={2}>
           <Typography variant="body2" color="text.secondary">
-            {'A spreadsheet of every contact this workspace holds, and one of every lead ' +
-              'its sites captured. Available on every plan, whether or not it includes ' +
-              'the CRM.'}
+            {'A file of every contact this workspace holds, and one of every lead its ' +
+              'sites captured, with the fields and the format you choose. Available on ' +
+              'every plan, whether or not it includes the CRM.'}
           </Typography>
           <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', rowGap: 1 }}>
-            {PEOPLE_FILES.map(({ resource, label }) => (
+            {PEOPLE_FILES.map(({ resource, label, title }) => (
               <Button
                 key={resource}
                 variant="outlined"
-                disabled={!orgId || exporting !== null}
-                onClick={() => void exportFile(resource)}
+                disabled={!orgId || !transfer?.can('export', { resource, scope: 'org' })}
+                onClick={() => transfer?.openExport({ resource, scope: 'org', title })}
               >
-                {exporting === resource ? 'Exporting…' : label}
+                {label}
               </Button>
             ))}
           </Stack>

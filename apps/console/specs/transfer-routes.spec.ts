@@ -142,16 +142,28 @@ jest.mock('@aglyn/tenant-data-admin/server/transfer-jobs', () => {
 
 // Every member reads bottles (as every member reads a dataset); ledgers
 // declare the permission they read with; kegs declare nothing, so they
-// export for Manage data alone.
-jest.mock('@aglyn/aglyn/plugin-manager/plugin-transfer-resources', () => ({
-  __esModule: true,
-  declaredTransferResource: (key: string) =>
-    ({
-      bottles: { key: 'bottles', scope: 'org', pluginId: 'cellar', readableByMembers: true },
-      ledgers: { key: 'ledgers', scope: 'org', pluginId: 'books', readPermission: 'books.read' },
-      kegs: { key: 'kegs', scope: 'org', pluginId: 'cellar' },
-    })[key] ?? null,
-}))
+// export for Manage data alone. The CRM's people files are the real
+// declarations, for Settings → Privacy (AGL-3552).
+jest.mock('@aglyn/aglyn/plugin-manager/plugin-transfer-resources', () => {
+  const { PLUGIN_TRANSFER_RESOURCES_DECLARED } = jest.requireActual(
+    '@aglyn/aglyn/plugin-manager/first-party-plugins.generated',
+  ) as { PLUGIN_TRANSFER_RESOURCES_DECLARED: ReadonlyArray<{ key: string }> }
+  const people = Object.fromEntries(
+    PLUGIN_TRANSFER_RESOURCES_DECLARED.filter((one) => one.key === 'crm.contacts' || one.key === 'crm.leads').map(
+      (one) => [one.key, one],
+    ),
+  )
+  return {
+    __esModule: true,
+    declaredTransferResource: (key: string) =>
+      ({
+        bottles: { key: 'bottles', scope: 'org', pluginId: 'cellar', readableByMembers: true },
+        ledgers: { key: 'ledgers', scope: 'org', pluginId: 'books', readPermission: 'books.read' },
+        kegs: { key: 'kegs', scope: 'org', pluginId: 'cellar' },
+        ...people,
+      } as Record<string, unknown>)[key] ?? null,
+  }
+})
 
 jest.mock('@aglyn/tenant-data-admin/server/transfer-export', () => ({
   __esModule: true,
@@ -456,6 +468,48 @@ describe('who may export, and who may import (AGL-3546)', () => {
     mockMember = null as never
     expect((await exportRoute(request('export', EXPORT))).status).toBe(403)
     expect((await fields(request('fields', FIELDS))).status).toBe(403)
+    expect(mockExport).not.toHaveBeenCalled()
+  })
+})
+
+/*
+ * SETTINGS → PRIVACY'S PEOPLE FILES (AGL-3552). Exporting every contact and
+ * every lead is a workspace's obligation on every plan, and the retired
+ * `/api/crm/export` handed them to a member holding "Manage data" whatever
+ * the plan: the transfer route must admit the same members, on Free, and
+ * refuse the same ones.
+ */
+describe('the people files, on every plan (AGL-3552)', () => {
+  const people = (resource: string) => ({ orgId: 'org-1', resource, fieldIds: ['email'], scope: { kind: 'all' }, format: 'csv' })
+
+  beforeEach(() => {
+    mockOrg = { $id: 'org-1', plan: 'free' }
+    mockEngine.readTransferResourceInfo.mockResolvedValue({
+      resource: { key: 'crm.contacts', label: 'Contacts' },
+      catalog: { fields: [], groups: [] },
+    })
+  })
+
+  it('hands a Free workspace’s manager every contact and every lead, read whole', async () => {
+    for (const resource of ['crm.contacts', 'crm.leads']) {
+      expect((await exportRoute(request('export', people(resource)))).status).toBe(200)
+      expect((await fields(request('fields', { orgId: 'org-1', resource }))).status).toBe(200)
+    }
+    expect(mockExport).toHaveBeenCalledTimes(2)
+    for (const [, input] of mockExport.mock.calls) {
+      expect(input).toMatchObject({ orgId: 'org-1', hostId: null, scope: { kind: 'all' } })
+      expect(input).not.toHaveProperty('scopeTokens')
+    }
+  })
+
+  it('refuses a member without Manage data, as the retired route did', async () => {
+    mockMember = { role: 'viewer' }
+    mockOrgPermissions.clear()
+    for (const resource of ['crm.contacts', 'crm.leads']) {
+      const refused = await exportRoute(request('export', people(resource)))
+      expect(refused.status).toBe(403)
+      expect(await refused.json()).toEqual({ error: 'Exporting needs the “Manage data” permission', code: 'forbidden' })
+    }
     expect(mockExport).not.toHaveBeenCalled()
   })
 })

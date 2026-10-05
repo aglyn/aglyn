@@ -94,6 +94,7 @@ import {
   type TransferBucket,
   type TransferEngineDeps,
 } from '@aglyn/tenant-data-admin/server/transfer-jobs'
+import { streamTransferExport } from '@aglyn/tenant-data-admin/server/transfer-export'
 import { registerCrmTransferResources } from './register'
 
 const ORG = 'org-1'
@@ -297,5 +298,68 @@ describe('what is only exported', () => {
       expect(refused).toBeInstanceOf(TransferEngineError)
       expect((refused as TransferEngineError).message).toMatch(/are exported, not imported\.$/)
     }
+  })
+})
+
+/*
+ * SETTINGS → PRIVACY'S PEOPLE FILES (AGL-3552). Every contact and every lead
+ * a workspace holds is exported on every plan, Free included: the plan is
+ * asked of an import (`requireCrmSuite`), never of the export, which reads
+ * the whole workspace for a reader who sees all of it.
+ */
+describe('the people files, on Free', () => {
+  // The export streams through web streams, which this suite's DOM environment lacks.
+  beforeAll(() => {
+    const web = jest.requireActual('node:stream/web') as typeof import('node:stream/web')
+    const util = jest.requireActual('node:util') as typeof import('node:util')
+    Object.assign(globalThis, {
+      ReadableStream: globalThis.ReadableStream ?? web.ReadableStream,
+      TextEncoder: globalThis.TextEncoder ?? util.TextEncoder,
+      TextDecoder: globalThis.TextDecoder ?? util.TextDecoder,
+    })
+  })
+
+  const text = async (stream: ReadableStream<Uint8Array>) => {
+    const reader = stream.getReader()
+    const decoder = new TextDecoder()
+    let out = ''
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) return out + decoder.decode()
+      out += decoder.decode(value, { stream: true })
+    }
+  }
+  const exported = async (resource: string, fieldIds: string[]) => {
+    const file = await streamTransferExport(deps, {
+      orgId: ORG,
+      actorUid: ME,
+      resource,
+      hostId: null,
+      fieldIds,
+      scope: { kind: 'all' },
+      format: 'csv',
+      bom: false,
+    })
+    return { rows: file.rows, lines: (await text(file.stream)).trim().split(/\r?\n/) }
+  }
+
+  it('writes every contact and every lead of the workspace, each capture surface by name', async () => {
+    mockMemory.seed(`orgs/${ORG}`, { plan: 'free' })
+    mockMemory.seed(at('contacts', 'bo'), { email: 'bo@other.test', name: 'Bo', visibleTo: ['host:site-2'] })
+    mockMemory.seed(at('leads', 'cy'), {
+      email: 'cy@initech.test',
+      status: 'new',
+      sources: ['signup', 'form:contact', 'manual'],
+      visibleTo: SITE_TOKENS,
+    })
+    mockMemory.seed(at('leads', 'di'), { email: 'di@other.test', status: 'working', source: 'booking', visibleTo: ['host:site-2'] })
+
+    const contacts = await exported('crm.contacts', ['email'])
+    expect(contacts.rows).toBe(2)
+    expect(contacts.lines.slice(1).sort()).toEqual(['ana@acme.com', 'bo@other.test'])
+
+    const leads = await exported('crm.leads', ['email', 'sources'])
+    expect(leads.rows).toBe(2)
+    expect(leads.lines.slice(1).sort()).toEqual(['cy@initech.test,Sign-up; Form contact; Added by hand', 'di@other.test,Booking'])
   })
 })

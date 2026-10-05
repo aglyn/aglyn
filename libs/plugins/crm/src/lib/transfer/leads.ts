@@ -51,6 +51,7 @@ import {
   personKey,
   resolveCrmLeadStatusWrite,
 } from '@aglyn/aglyn/server'
+import { CONTACT_SOURCE_LABELS } from '@aglyn/aglyn/app-utils/contacts'
 import {
   buildTransferPlan,
   matchLookupKey,
@@ -65,7 +66,6 @@ import {
 import type { TransferRecordsHooks } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
 import { addHostLeadOutcome, restampCrmListFieldsAt } from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
-import { csvLeadSourceLabel, csvLeadSources } from '../model/crm-csv'
 import { judgeLeadPicklistPatch, readLeadPicklists } from '../server/lead-picklists'
 import { readLeadSourcePicklist, resolveLeadSourceWrite } from '../server/lead-source-picklist'
 import { readCrmPicklist } from '../server/read-picklist'
@@ -118,6 +118,28 @@ const FILE_STATUSES: readonly CrmLeadStatus[] = CRM_LEAD_STATUSES.filter((status
 
 const leadsOf = (env: CrmTransferEnv) => env.orgRef.collection('leads')
 
+/** How one capture surface reads in a file. */
+function captureSourceLabel(source: string): string {
+  if (source === 'signup') return 'Sign-up'
+  if (source === 'booking') return 'Booking'
+  if (source === 'import') return CONTACT_SOURCE_LABELS.import
+  if (source === 'form') return CONTACT_SOURCE_LABELS.form
+  // A lead entered by hand or over the REST API (AGL-3231).
+  if (source === 'manual') return 'Added by hand'
+  if (source === 'api') return 'API'
+  if (source.startsWith('form:')) return `Form ${source.slice('form:'.length)}`
+  return source
+}
+
+/** Every surface that produced a capture — the array, or the older single field. */
+function captureSources(lead: Record<string, unknown>): string[] {
+  const sources = lead['sources']
+  if (Array.isArray(sources) && sources.length) {
+    return sources.map((source) => String(source))
+  }
+  return typeof lead['source'] === 'string' && lead['source'] ? [lead['source']] : []
+}
+
 /** Names written in place of ids, and the org's status list. */
 interface LeadNames {
   owner?: (uid: string) => string | undefined
@@ -167,7 +189,7 @@ export function leadTransferValues(
     campaigns: campaignIds.map((campaign) => names.campaign?.(campaign) ?? campaign),
     notes: text(lead['notes']),
     unqualifiedReason: text(lead['unqualifiedReason']),
-    sources: csvLeadSources(lead).map(csvLeadSourceLabel),
+    sources: captureSources(lead).map(captureSourceLabel),
     firstSeenAt: isoOf(lead['firstSeenAtMs'] ?? lead['createdAt']),
     lastSeenAt: isoOf(lead['lastSeenAtMs'] ?? lead['createdAt']),
     captures: Number.isFinite(captures) && captures > 0 ? captures : 0,

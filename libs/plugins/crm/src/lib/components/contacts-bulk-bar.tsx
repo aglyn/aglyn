@@ -89,7 +89,6 @@ import {
   type ContactBulkSelection,
   type ContactBulkSkip,
 } from '../model/contacts-bulk-writes'
-import type { ContactCsvRow } from '../model/contacts-csv'
 import {
   type CrmBulkOutcome,
   runCrmBulkBatch,
@@ -128,7 +127,7 @@ export interface ContactsBulkBarProps {
    */
   consentGroup: ConsentGroup | null
   /** The table's rows, already projected through the holder's facet. */
-  rows: readonly (ContactBulkRow & ContactCsvRow)[]
+  rows: readonly ContactBulkRow[]
   selected: readonly string[]
   onSelectedChange: (ids: string[]) => void
   /**
