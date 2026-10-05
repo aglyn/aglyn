@@ -159,6 +159,16 @@ unused field, which counts the 23 unions reported, and the one with a variant
 per step type, which counts the 8,757 bytes that compiled to too large a
 grammar.
 
+A description costs no grammar — `aiToolSchemaCompiledBytes` drops it — so a
+field grows the schema only by its structure and its enums. AGL-3538 gave the
+create-task step a `priority` (`low`, `normal`, `high`) and the log-activity
+step a `direction` (`outbound`, `inbound`, `internal`, or empty for a kind that
+takes none), which with the schema as it was came to 3,964 bytes. They fit by compiling the host
+events' enum once: the trigger's `event` keeps it, and a `waitForEvent` step's
+`event` is a string described as one of the trigger events, which the reader
+holds to the list and refuses by naming every event. The draft is 3,769 bytes,
+38 under the proven 3,807, and `tool-schema-limits.spec.ts` pins both.
+
 ## Credits, per step
 
 `runAiJobStep` is the one place a step is claimed, metered, run and recorded,
@@ -2799,15 +2809,33 @@ from the job, and the step writes no CRM record.
   org-wide at the organization level, or reaches the site under it; the member
   holds `data.manage`; the plan carries the CRM; and the record, with every
   activity, task and deal hanging off it, is visible to the site. It reports
-  the facts its builders list (`libs/plugins/crm/src/lib/model/record-facts.ts`),
-  which never include an email address, a phone number, a postal address,
-  consent, a custom field value, a team member or a record id. Text a person
-  wrote into the record (a name, a job title, a tag, notes, a logged activity,
-  a capture's summary, a task's or a deal's title, a reason) goes as written,
-  except that an email address or a phone number inside it is replaced by a
-  placeholder first (`crmFactProse`); a postal address typed into a note is
-  not recognized. The step writes into a prompt only the facts it names,
-  whatever else a reader reports.
+  the facts its builders list, and which builders depends on the
+  `release_crm_assist_whole_record` flag for the org (AGL-3520; off by default,
+  no staff preview). Off, the disclosed builders
+  (`libs/plugins/crm/src/lib/model/record-facts-disclosed.ts`) report what the
+  published Privacy Policy and Subprocessors row describe, which never include
+  an email address, a phone number, a postal address, consent, a custom field
+  value, a team member or a record id. Text a person wrote into the record (a
+  name, a job title, a tag, notes, a logged activity, a capture's summary, a
+  task's or a deal's title, a reason) goes as written, except that an email
+  address or a phone number inside it is replaced by a placeholder first
+  (`crmFactProse`); a postal address typed into a note is not recognized. The
+  step writes into a prompt only the facts `aiCrmDisclosedFactsLines` names,
+  whatever else a reader reports. On, the readers report the WHOLE record
+  (`libs/plugins/crm/src/lib/model/record-facts.ts`) — every standard field,
+  every email address, phone number and postal address, birthdate, assistant,
+  the reports-to contact, parent company and campaign by name, the owner and
+  task assignees by display name, the marketing consent, picklist labels and
+  custom field values under their labels — and mark it `wholeRecord: true`;
+  only then does the step write every fact (`aiCrmFactsLines`), fitting an
+  oversized record to `AI_CRM_FACTS_MAX_CHARS` by cutting its long texts,
+  never a field (`aiCrmFitFacts`). Still never reported either way: an
+  authentication token, an account identifier (a uid) or a record id other
+  than a pipeline stage's. The catalog's Anthropic row publishes the disclosed
+  wording; the open-ended wording waits in
+  `ANTHROPIC_CRM_ASSISTANCE_WHOLE_RECORD` until Privacy Policy section 2 and
+  the Subprocessors row are republished, which is the precondition for
+  turning the flag on.
 - **Why a seam, and not a contract in either plugin.** The package map forbids
   the AI plugin to import the CRM and the CRM to import the AI plugin, and keeps
   CRM shapes out of the core. `plugin-resource-drafts` is the seam a plugin

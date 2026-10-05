@@ -22,8 +22,14 @@ import {
   createResourceUid,
   CRM_COLLECTIONS,
   CRM_RECORDS_BAND_FULL_MESSAGE,
+  CRM_COMPANY_PICKLIST_FIELDS,
+  CRM_COMPANY_TEXT_MAX,
   type CrmCompany,
+  type CrmCompanyPicklistField,
+  crmCompanyParentId,
+  crmCompanyParentRefusal,
   crmNewRecordListFields,
+  crmPicklistDefaultLabel,
   pluginDocsHelp,
   crmMemberPickerLabel,
 } from '@aglyn/aglyn'
@@ -48,11 +54,16 @@ import {
 import {
   deleteField,
   doc,
+  getDoc,
   serverTimestamp,
   setDoc,
   updateDoc,
 } from 'firebase/firestore'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCompanyPicklists } from '../hooks/use-company-picklists'
+import { DEAL_CURRENCIES } from '../model/deal-board-model'
+import { CompanyPicker, useCompanyOptions } from './company-picker'
+import { CrmPicklistSelect } from './picklist-select'
 import { useContactFieldDefinitions } from '../hooks/use-contact-field-definitions'
 import { useCrmActivityLogger } from '../hooks/use-crm-activity-logger'
 import { useCrmRecordsQuota } from '../hooks/use-crm-records-quota'
@@ -74,6 +85,16 @@ import {
 import { CrmCustomFieldControl } from './crm-custom-field-control'
 import { CrmSitePicker } from './crm-site-picker'
 import { CRM_CLIENT_SEARCH_FIELDS, crmClientListFields } from '../model/crm-list-query'
+
+/**
+ * The list fields a client edit of a company rewrites: the search tokens,
+ * and the key beside each picklist field the Companies list filters by
+ * (AGL-3514).
+ */
+const COMPANY_CLIENT_LIST_FIELDS = [
+  ...CRM_CLIENT_SEARCH_FIELDS,
+  ...CRM_COMPANY_PICKLIST_FIELDS.flatMap((entry) => ('keyField' in entry ? [entry.keyField] : [])),
+]
 import { useCrmSharingFollowUp } from '../hooks/use-crm-sharing'
 
 export interface CompanyEditDrawerProps {
@@ -115,6 +136,17 @@ export interface CompanyEditDrawerProps {
   members: OrgMemberOptions
   /** Called with the record's id after a successful write. */
   onSaved: (companyId: string) => void
+}
+
+type AddressDraftField = 'address' | 'shippingAddress'
+
+/** How each picklist field is labeled on a company. */
+const COMPANY_PICKLIST_LABELS: Record<CrmCompanyPicklistField, string> = {
+  type: 'Type',
+  industry: 'Industry',
+  rating: 'Rating',
+  ownership: 'Ownership',
+  accountSource: 'Account source',
 }
 
 const ADDRESS_FIELDS: ReadonlyArray<{
@@ -179,6 +211,18 @@ export function CompanyEditDrawer(props: CompanyEditDrawerProps) {
    */
   const records = useCrmRecordsQuota(open && !company ? scope : null, org)
   const bandFull = !company && records.ready && !records.quota.allowed
+  /*
+   * SALESFORCE'S ACCOUNT FIELDS (AGL-3514): the org's lists behind Type,
+   * Industry, Rating, Ownership and Account Source, and the companies a
+   * parent may be chosen from — every one the reader can see but this one.
+   */
+  const picklists = useCompanyPicklists(scope?.[1] ?? null)
+  const seededDefaults = useRef(false)
+  const companyOptions = useCompanyOptions({ hostId, org, enabled: open })
+  const parentOptions = useMemo(
+    () => companyOptions.options.filter((option) => option.id !== company?.$id),
+    [companyOptions.options, company?.$id],
+  )
 
   /*
    * Seeded when the drawer OPENS, and not on every render of the card
@@ -198,29 +242,71 @@ export function CompanyEditDrawer(props: CompanyEditDrawerProps) {
     )
     setCustom({})
     setError('')
+    seededDefaults.current = false
     // The stored fields are read once per opening; `company` is a new object
     // on every snapshot and must not re-seed.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, companyId])
+  /*
+   * A NEW company starts each picklist on the org's default, once the
+   * lists have answered — Salesforce's form opens on it too — and only a
+   * field nobody has picked a value for yet.
+   */
+  useEffect(() => {
+    if (!open || company || !picklists.ready || seededDefaults.current) return
+    seededDefaults.current = true
+    setDraft((current) => {
+      const next = { ...current }
+      for (const { field, picklistId } of CRM_COMPANY_PICKLIST_FIELDS) {
+        const list = picklists.lists[picklistId]
+        const fallback = list ? crmPicklistDefaultLabel(list) : null
+        if (!next[field] && fallback) next[field] = fallback
+      }
+      return next
+    })
+  }, [open, company, picklists])
 
   const patch = useCallback(
-    (field: keyof Omit<CompanyDraft, 'address'>, value: string) =>
+    (field: keyof Omit<CompanyDraft, AddressDraftField>, value: string) =>
       setDraft((current) => ({ ...current, [field]: value })),
     [],
   )
   const patchAddress = useCallback(
-    (field: keyof AglynPostalAddress, value: string) =>
+    (which: AddressDraftField, field: keyof AglynPostalAddress, value: string) =>
       setDraft((current) => ({
         ...current,
-        address: { ...current.address, [field]: value },
+        [which]: { ...current[which], [field]: value },
       })),
     [],
+  )
+  /** The parent's own parent, as the cycle guard walks it; `null` for one this reader cannot see. */
+  const readParent = useCallback(
+    async (id: string) => {
+      if (!scope) return null
+      try {
+        const snapshot = await getDoc(
+          doc(firestore, scope[0], scope[1], CRM_COLLECTIONS.companies, id),
+        )
+        return snapshot.exists()
+          ? { parentCompanyId: crmCompanyParentId(snapshot.get('parentCompanyId')) }
+          : null
+      } catch {
+        return null
+      }
+    },
+    [firestore, scope],
   )
 
   const handleSave = useCallback(async () => {
     if (busy || !scope) return
-    const result = companyDraftFields(draft)
+    const result = companyDraftFields(draft, { lists: picklists.lists, current: company })
     if (result.ok === false) return setError(result.error)
+    // A parent is never this company, nor one already under it (AGL-3514).
+    const parentId = crmCompanyParentId(result.set['parentCompanyId'])
+    if (parentId && parentId !== crmCompanyParentId(company?.parentCompanyId)) {
+      const refusal = await crmCompanyParentRefusal(company?.$id ?? null, parentId, readParent)
+      if (refusal) return setError(refusal)
+    }
     const missing = crmCustomDraftMissingRequired(
       fields.active,
       storedCustom,
@@ -259,7 +345,7 @@ export function CompanyEditDrawer(props: CompanyEditDrawerProps) {
               'companies',
               stored,
               { ...result.set, ...cleared },
-              CRM_CLIENT_SEARCH_FIELDS,
+              COMPANY_CLIENT_LIST_FIELDS,
             )
             await updateDoc(ref, {
               ...result.set,
@@ -267,7 +353,8 @@ export function CompanyEditDrawer(props: CompanyEditDrawerProps) {
               // domain would stay stored and keep matching people by email.
               ...cleared,
               // The name and domain are what the Companies list searches
-              // (AGL-3321), from the listener's row with the edit over it.
+              // (AGL-3321), and the picklist keys what it filters by
+              // (AGL-3514), from the listener's row with the edit over it.
               ...searchFields,
               // The custom keys that changed, merged into the stored map.
               ...crmCustomDraftWrites(storedCustom, custom),
@@ -347,6 +434,8 @@ export function CompanyEditDrawer(props: CompanyEditDrawerProps) {
     fields.active,
     storedCustom,
     custom,
+    picklists.lists,
+    readParent,
   ])
 
   return (
@@ -399,6 +488,11 @@ export function CompanyEditDrawer(props: CompanyEditDrawerProps) {
           {bandFull ? (
             <Alert severity="warning">{CRM_RECORDS_BAND_FULL_MESSAGE}</Alert>
           ) : null}
+          {/*
+            Grouped as Salesforce's Account page groups them (AGL-3514):
+            what the company is, where it is, and what the team knows.
+          */}
+          <Typography variant="subtitle2">{'Account information'}</Typography>
           <TextField
             size="small"
             label="Name"
@@ -406,6 +500,16 @@ export function CompanyEditDrawer(props: CompanyEditDrawerProps) {
             value={draft.name}
             onChange={(event) => patch('name', event.target.value)}
             autoFocus
+          />
+          <CompanyPicker
+            label="Parent company"
+            options={parentOptions}
+            value={draft.parentCompanyId || null}
+            onChange={(id) => patch('parentCompanyId', id ?? '')}
+            ready={companyOptions.ready}
+            truncated={companyOptions.truncated}
+            disabled={busy}
+            helperText="The company this one belongs to, such as a subsidiary's group."
           />
           <TextField
             size="small"
@@ -430,10 +534,93 @@ export function CompanyEditDrawer(props: CompanyEditDrawerProps) {
           />
           <TextField
             size="small"
-            label="Industry"
-            value={draft.industry}
-            onChange={(event) => patch('industry', event.target.value)}
+            label="Fax"
+            placeholder="+1 512 555 0124"
+            value={draft.fax}
+            onChange={(event) => patch('fax', event.target.value)}
           />
+          {CRM_COMPANY_PICKLIST_FIELDS.map(({ field, picklistId }) => {
+            const list = picklists.lists[picklistId]
+            return list ? (
+              <CrmPicklistSelect
+                key={field}
+                picklistId={picklistId}
+                picklist={list}
+                label={COMPANY_PICKLIST_LABELS[field]}
+                value={draft[field]}
+                stored={company ? String(company[field] ?? '') : undefined}
+                onChange={(label) => patch(field, label)}
+                disabled={busy}
+              />
+            ) : null
+          })}
+          <TextField
+            size="small"
+            label="Account number"
+            value={draft.accountNumber}
+            onChange={(event) => patch('accountNumber', event.target.value)}
+            slotProps={{ htmlInput: { maxLength: CRM_COMPANY_TEXT_MAX.accountNumber } }}
+          />
+          <TextField
+            size="small"
+            label="Account site"
+            placeholder="Headquarters"
+            helperText="Which of the company's locations this record is."
+            value={draft.site}
+            onChange={(event) => patch('site', event.target.value)}
+            slotProps={{ htmlInput: { maxLength: CRM_COMPANY_TEXT_MAX.site } }}
+          />
+          <Stack direction="row" spacing={1}>
+            <TextField
+              size="small"
+              label="Ticker symbol"
+              value={draft.tickerSymbol}
+              onChange={(event) => patch('tickerSymbol', event.target.value)}
+              slotProps={{ htmlInput: { maxLength: CRM_COMPANY_TEXT_MAX.tickerSymbol } }}
+              sx={{ flex: 1 }}
+            />
+            <TextField
+              size="small"
+              label="SIC code"
+              value={draft.sicCode}
+              onChange={(event) => patch('sicCode', event.target.value)}
+              slotProps={{ htmlInput: { maxLength: CRM_COMPANY_TEXT_MAX.sicCode } }}
+              sx={{ flex: 1 }}
+            />
+          </Stack>
+          <TextField
+            size="small"
+            label="Employees"
+            value={draft.numberOfEmployees}
+            onChange={(event) => patch('numberOfEmployees', event.target.value)}
+            slotProps={{ htmlInput: { inputMode: 'numeric' } }}
+          />
+          <Stack direction="row" spacing={1}>
+            <TextField
+              size="small"
+              label="Annual revenue"
+              placeholder="0.00"
+              value={draft.annualRevenue}
+              onChange={(event) => patch('annualRevenue', event.target.value)}
+              slotProps={{ htmlInput: { inputMode: 'decimal' } }}
+              sx={{ flex: 1 }}
+            />
+            <TextField
+              select
+              size="small"
+              label="Currency"
+              value={draft.currency}
+              onChange={(event) => patch('currency', event.target.value)}
+              sx={{ width: 120 }}
+            >
+              {/* A stored code outside the short list stays selectable as itself. */}
+              {[...new Set<string>([...DEAL_CURRENCIES, draft.currency])].map((code) => (
+                <MenuItem key={code} value={code}>
+                  {code.toUpperCase()}
+                </MenuItem>
+              ))}
+            </TextField>
+          </Stack>
           {/*
             The owner is chosen from the team, never typed: the value is a
             uid, and a picker that is still loading says so rather than
@@ -473,16 +660,43 @@ export function CompanyEditDrawer(props: CompanyEditDrawerProps) {
             value={draft.tags}
             onChange={(event) => patch('tags', event.target.value)}
           />
-          <Typography variant="subtitle2">{'Address'}</Typography>
+          <Typography variant="subtitle2">{'Address information'}</Typography>
+          <Typography variant="body2" color="text.secondary">
+            {'Billing address'}
+          </Typography>
           {ADDRESS_FIELDS.map((field) => (
             <TextField
-              key={field.key}
+              key={`address.${field.key}`}
               size="small"
               label={field.label}
               value={draft.address[field.key] ?? ''}
-              onChange={(event) => patchAddress(field.key, event.target.value)}
+              onChange={(event) => patchAddress('address', field.key, event.target.value)}
             />
           ))}
+          <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between' }}>
+            <Typography variant="body2" color="text.secondary">
+              {'Shipping address'}
+            </Typography>
+            <Button
+              size="small"
+              disabled={busy}
+              onClick={() =>
+                setDraft((current) => ({ ...current, shippingAddress: { ...current.address } }))
+              }
+            >
+              {'Copy billing address'}
+            </Button>
+          </Stack>
+          {ADDRESS_FIELDS.map((field) => (
+            <TextField
+              key={`shippingAddress.${field.key}`}
+              size="small"
+              label={field.label}
+              value={draft.shippingAddress[field.key] ?? ''}
+              onChange={(event) => patchAddress('shippingAddress', field.key, event.target.value)}
+            />
+          ))}
+          <Typography variant="subtitle2">{'Description information'}</Typography>
           <TextField
             size="small"
             label="Notes"

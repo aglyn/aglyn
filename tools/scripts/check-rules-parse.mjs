@@ -88,9 +88,14 @@ import { fileURLToPath } from 'node:url'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 
-/** The rules files this repo ships. Both are compiled by the same grammar. */
+/**
+ * The rules files this repo ships, all compiled by the same grammar. The
+ * Firestore source AND its comment-stripped deploy artifact (AGL-3544): the
+ * artifact is what deploys, and the source is where a fault is fixed.
+ */
 const DEFAULT_TARGETS = [
   'cloud/firebase-firestore.rules',
+  'cloud/firebase-firestore.deploy.rules',
   'cloud/firebase-storage.rules',
 ]
 

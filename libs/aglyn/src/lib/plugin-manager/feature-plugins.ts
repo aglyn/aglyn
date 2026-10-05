@@ -1033,6 +1033,21 @@ export const CONSOLE_WIDGET_SLOTS = {
    * widget's declared permission.
    */
   orgSites: 'orgSites',
+  /**
+   * One side of one item in a site package import's Changes step, beside
+   * the other side (AGL-3545): the item drawn the way its owner previews it.
+   * Props: {@link ConsoleSitePackageItemPreviewZoneProps}.
+   *
+   * A package carries items of many kinds, and how one looks belongs to
+   * whoever keeps that kind — a form through the form's own preview, a site
+   * email through the email preview. So a widget here names the kinds it
+   * draws in its `itemKinds`, the import draws it for those and nothing else,
+   * and an item of a kind no widget names keeps the console's own rendering
+   * or its value list. The widget reads nothing it is not handed beyond what
+   * its preview always reads, and never writes: the import writes, after the
+   * person decides.
+   */
+  sitePackageItemPreview: 'sitePackageItemPreview',
 } as const
 
 export type ConsoleWidgetSlot =
@@ -1300,6 +1315,24 @@ export interface ConsoleTemplateInstallStatusZoneProps {
   template: Readonly<Record<string, unknown>>
 }
 
+/** What the `sitePackageItemPreview` zone hands each widget (AGL-3545). */
+export interface ConsoleSitePackageItemPreviewZoneProps {
+  /** The site the package is being imported into. */
+  hostId: string
+  /** Which side this is: the site's copy, or the file's. */
+  side: 'site' | 'file'
+  /** The item's package key, `<kind>/<id>`. */
+  itemKey: string
+  /** One of the kinds the widget names in `itemKinds`. */
+  kind: string
+  /** The document the side is: the site's item, or the id the file's would land under. */
+  itemId: string
+  /** The item as an import would write it: the document, without `$id`. */
+  content: unknown
+  /** What the import calls the item. */
+  title: string
+}
+
 /** What the `hostArtifactPublish` zone hands each widget (AGL-3080). */
 export interface ConsoleArtifactPublishZoneProps {
   /**
@@ -1360,6 +1393,26 @@ export const CONSOLE_STAFF_WIDGET_SLOTS: readonly ConsoleWidgetSlot[] = [
 /** Whether a slot is one of the {@link CONSOLE_STAFF_WIDGET_SLOTS}. */
 export function isConsoleStaffWidgetSlot(slot: string): boolean {
   return (CONSOLE_STAFF_WIDGET_SLOTS as readonly string[]).includes(slot)
+}
+
+/**
+ * The zones whose HOST decides who reads them (AGL-3554): each widget draws
+ * only the props the host hands it, and the host page is already gated on
+ * what its own route requires — a site package import's side-by-side diff,
+ * opened by whoever may import a package into the site. So the console asks
+ * the widget's own `permission` there and not its extension's: an
+ * extension's permission guards the extension's own surfaces and reads (the
+ * Email plugin's `data.manage`, for the audiences its page lists), and
+ * would otherwise hide a preview from the very person importing the item.
+ * The extension's plan feature is still asked.
+ */
+export const CONSOLE_HOST_GATED_WIDGET_SLOTS: readonly ConsoleWidgetSlot[] = [
+  CONSOLE_WIDGET_SLOTS.sitePackageItemPreview,
+]
+
+/** Whether a slot is one of the {@link CONSOLE_HOST_GATED_WIDGET_SLOTS}. */
+export function isConsoleHostGatedWidgetSlot(slot: string): boolean {
+  return (CONSOLE_HOST_GATED_WIDGET_SLOTS as readonly string[]).includes(slot)
 }
 
 /** Search listing values by field; a field the editor does not hold is absent. */
@@ -1507,6 +1560,12 @@ export interface ConsoleWidget {
    * slots read it; elsewhere it is ignored.
    */
   column?: ConsoleWidgetColumn
+  /**
+   * The kinds of item the widget draws, for a zone that draws one item of
+   * many kinds (`sitePackageItemPreview`, AGL-3545). Only the slots
+   * documented as reading it do; elsewhere it is ignored.
+   */
+  itemKinds?: readonly string[]
   /**
    * Stable identity for this widget, unique within the plugin per slot.
    * The id names the CARD, not its placement: the same card registered on

@@ -17,6 +17,7 @@
 'use client'
 
 import {
+  isConsoleHostGatedWidgetSlot,
   isConsoleStaffWidgetSlot,
   listConsoleWidgets,
   type ConsoleWidgetColumn,
@@ -151,6 +152,9 @@ export const WIDGET_ZONE_LAYOUTS: Readonly<
   recordEmail: 'bare',
   importMapping: 'bare',
   orgSites: 'stack',
+  // One pane of a package import's side-by-side diff, which lays the two
+  // panes out itself.
+  sitePackageItemPreview: 'bare',
 }
 
 /** The layout a zone renders its widgets in. */
@@ -209,6 +213,8 @@ export interface EntitledSlotWidget {
   title: string
   /** Present when the widget is a table column rather than a card (AGL-2940). */
   column?: ConsoleWidgetColumn
+  /** The kinds of item it draws, for a zone keyed by kind (AGL-3545). */
+  itemKinds?: readonly string[]
   Component: ComponentType<any>
 }
 
@@ -309,10 +315,14 @@ export function useSlotWidgets(slots: readonly string[]): {
         // The extension's requirement AND the widget's own, exactly as a nav
         // item composes with its extension's: a card cannot escape its
         // extension's gate by declaring a key its reader happens to hold.
+        // A zone its host gates (AGL-3554) asks the widget's own alone.
         permission: staff
           ? ('granted' as const)
           : resolveExtensionPermission(
-              requiredExtensionPermissions(extension, widget),
+              requiredExtensionPermissions(
+                isConsoleHostGatedWidgetSlot(slot) ? undefined : extension,
+                widget,
+              ),
               answers,
             ),
         widget: {
@@ -320,6 +330,7 @@ export function useSlotWidgets(slots: readonly string[]): {
           widgetId: widget.widgetId,
           title: widget.title ?? extension.displayName ?? widget.widgetId,
           column: widget.column,
+          ...(widget.itemKinds ? { itemKinds: widget.itemKinds } : {}),
           Component: widget.Component,
         },
       }),

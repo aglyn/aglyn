@@ -19,10 +19,14 @@ import { nameSearchFields } from '@aglyn/aglyn/app-utils/name-search'
 import {
   type AglynPostalAddress,
   CAPTURED_BY_HOST_FIELD,
+  composeContactName,
+  CONTACT_BIRTHDATE_REFUSAL,
   CONTACT_COMPANY_IDS_FIELD,
+  CONTACT_EXTRA_PHONE_FIELDS,
   CONTACT_FACETS_FIELD,
   CONTACT_FIELDS_MAX_PER_ORG,
   CONTACT_LIFECYCLE_STAGES,
+  CONTACT_NAME_PART_MAX,
   type ConsentGroup,
   consentGroupForHost,
   type ContactCompanyLinkPlan,
@@ -32,12 +36,16 @@ import {
   type ContactLifecycleStage,
   createResourceUid,
   CRM_COLLECTIONS,
+  CRM_LEAD_SOURCE_PICKLIST,
   CRM_MEDIA_IDS_MAX,
+  CRM_SALUTATION_PICKLIST,
   isContactLifecycleStage,
+  judgeCrmPicklistValue,
   MARKETING_CONSENT_BY_HOST_FIELD,
   marketingConsentFieldsForGroup,
   marketingConsentHostIds,
   normalizeAddress,
+  normalizeContactBirthdate,
   normalizeContactEmail,
   normalizeCrmMediaIds,
   normalizePhone,
@@ -79,6 +87,15 @@ import {
 } from '@aglyn/tenant-data-admin/server/retained-refusals'
 import { FieldPath, Timestamp } from 'firebase-admin/firestore'
 import { mergeContactRoute } from './contacts-merge'
+import { sweepDealContactRoles } from '../deal-contact-roles'
+import {
+  cachedContactReader,
+  clearReportsToOf,
+  CONTACT_REPORTS_TO_LOOP_REFUSAL,
+  CONTACT_REPORTS_TO_SELF_REFUSAL,
+  contactReportsToLoops,
+} from '../contact-reports-to'
+import { readCrmPicklist } from '../read-picklist'
 import {
   CRM_ID_MAX,
   CRM_LABEL_MAX,
@@ -87,9 +104,11 @@ import {
   memberError,
   readChoice,
   readOptionalText,
+  readOrgLeadSourcePicklist,
   readRefId,
   updatePayload,
 } from './crm-shared'
+import { resolveCrmPicklistWrite } from '../read-picklist'
 
 /**
  * `/v1/contacts` (AGL-618, AGL-2276, AGL-2606): the organization's people —
@@ -143,10 +162,27 @@ const CONTACT_CRM_FIELDS = [
   'address',
   'ownerUid',
   'lifecycleStage',
+  // The holder's Lead source, one of the org's picklist values (AGL-3511).
+  'leadSource',
   // Files are a facet field like the rest (AGL-2662): an agency running two
   // client brands has one contact document between them, and a contract one
   // client filed is not the other client's to read.
   'mediaIds',
+  // Salesforce's standard contact fields (AGL-3515), per holder like the rest.
+  'salutation',
+  'firstName',
+  'lastName',
+  'department',
+  'mobilePhone',
+  'homePhone',
+  'otherPhone',
+  'fax',
+  'birthdate',
+  'assistantName',
+  'assistantPhone',
+  'reportsToContactId',
+  'otherAddress',
+  'doNotCall',
 ] as const
 
 type ContactCrmField = (typeof CONTACT_CRM_FIELDS)[number]
@@ -170,9 +206,25 @@ function contactCrmProfile(
     address: null,
     ownerUid: null,
     lifecycleStage: null,
+    leadSource: null,
     // An empty ARRAY rather than null, so a client can index it without a
     // guard — the same shape `custom` publishes for the same reason.
     mediaIds: [],
+    salutation: null,
+    firstName: null,
+    lastName: null,
+    department: null,
+    mobilePhone: null,
+    homePhone: null,
+    otherPhone: null,
+    fax: null,
+    birthdate: null,
+    assistantName: null,
+    assistantPhone: null,
+    reportsToContactId: null,
+    otherAddress: null,
+    // A flag reads `false` rather than null: unset IS "may be called".
+    doNotCall: false,
   }
   for (const holder of groupId ? [groupId] : contactFacetHolders(data)) {
     const facet = readContactFacet(data, holder)
@@ -184,6 +236,10 @@ function contactCrmProfile(
         // follow, spelled apart because a list merges rather than wins.
         const held = profile[field] as string[]
         if (!held.length) profile[field] = normalizeCrmMediaIds(value)
+        continue
+      }
+      if (field === 'doNotCall') {
+        if (value === true) profile[field] = true
         continue
       }
       if (profile[field] === null && value !== undefined && value !== null) {
@@ -335,8 +391,26 @@ type ContactCrmInput = {
   address?: AglynPostalAddress | null
   ownerUid?: string | null
   lifecycleStage?: ContactLifecycleStage | null
+  /** A value of the org's Lead source picklist, judged by the writer (AGL-3511). */
+  leadSource?: string | null
   /** Org-library files attached by this holder (AGL-2662), by media id. */
   mediaIds?: string[]
+  /* Salesforce's standard contact fields (AGL-3515). */
+  salutation?: string | null
+  firstName?: string | null
+  lastName?: string | null
+  department?: string | null
+  mobilePhone?: string | null
+  homePhone?: string | null
+  otherPhone?: string | null
+  fax?: string | null
+  birthdate?: string | null
+  assistantName?: string | null
+  assistantPhone?: string | null
+  reportsToContactId?: string | null
+  otherAddress?: AglynPostalAddress | null
+  /** Stored only as `true`; `false` reads as `null`, which clears. */
+  doNotCall?: true | null
 }
 
 function readContactInput(
@@ -490,6 +564,9 @@ function readContactInput(
   }
   const ownerUid = readOptionalText(body, 'ownerUid', CONTACT_NAME_MAX, errors)
   if (ownerUid !== undefined) crm.ownerUid = ownerUid
+  // Shape only here; the org's list judges the value in `contactCrmRefErrors`.
+  const leadSource = readOptionalText(body, 'leadSource', CRM_LABEL_MAX, errors)
+  if (leadSource !== undefined) crm.leadSource = leadSource
   if (body.mediaIds !== undefined) {
     if (!Array.isArray(body.mediaIds)) {
       errors.mediaIds = 'Must be an array of media ids'
@@ -506,6 +583,55 @@ function readContactInput(
   } else {
     const stage = readChoice(body, 'lifecycleStage', CONTACT_LIFECYCLE_STAGES, errors)
     if (stage) crm.lifecycleStage = stage
+  }
+  /*
+   * Salesforce's standard contact fields (AGL-3515), through the normalizers
+   * the console's profile route uses. The salutation and the reports-to are
+   * judged after this pass, against the org's list and its contacts.
+   */
+  const salutation = readOptionalText(body, 'salutation', CRM_LABEL_MAX, errors)
+  if (salutation !== undefined) crm.salutation = salutation
+  for (const key of ['firstName', 'lastName'] as const) {
+    const part = readOptionalText(body, key, CONTACT_NAME_PART_MAX, errors)
+    if (part !== undefined) crm[key] = part
+  }
+  for (const key of ['department', 'assistantName'] as const) {
+    const text = readOptionalText(body, key, CONTACT_NAME_MAX, errors)
+    if (text !== undefined) crm[key] = text
+  }
+  for (const key of CONTACT_EXTRA_PHONE_FIELDS) {
+    const text = readOptionalText(body, key, CRM_LABEL_MAX, errors)
+    if (text === null) {
+      crm[key] = null
+    } else if (text !== undefined) {
+      const normalized = normalizePhone(text)
+      if (normalized) crm[key] = normalized
+      else errors[key] = 'Must be a phone number with a country code, like +15125550123'
+    }
+  }
+  const birthdate = readOptionalText(body, 'birthdate', 32, errors)
+  if (birthdate === null) {
+    crm.birthdate = null
+  } else if (birthdate !== undefined) {
+    const normalized = normalizeContactBirthdate(birthdate)
+    if (normalized) crm.birthdate = normalized
+    else errors.birthdate = CONTACT_BIRTHDATE_REFUSAL
+  }
+  const reportsTo = readRefId(body, 'reportsToContactId', errors)
+  if (reportsTo !== undefined) crm.reportsToContactId = reportsTo
+  if (body.otherAddress !== undefined) {
+    if (body.otherAddress === null) {
+      crm.otherAddress = null
+    } else if (typeof body.otherAddress !== 'object' || Array.isArray(body.otherAddress)) {
+      errors.otherAddress = 'Must be an address object'
+    } else {
+      crm.otherAddress = normalizeAddress(body.otherAddress as AglynPostalAddress)
+    }
+  }
+  if (body.doNotCall !== undefined) {
+    if (body.doNotCall === null || body.doNotCall === false) crm.doNotCall = null
+    else if (body.doNotCall === true) crm.doNotCall = true
+    else errors.doNotCall = 'Must be true or false'
   }
   values.crm = crm
   // Whether the body MEANT to write a profile — judged by the keys it sent,
@@ -579,12 +705,109 @@ function readContactInput(
 async function contactCrmRefErrors(
   ctx: ApiV1Context,
   crm: ContactCrmInput,
+  at: ContactWriteAt = { contactId: null },
 ): Promise<Record<string, string>> {
-  const [owner, refs] = await Promise.all([
+  const [owner, refs, leadSource, salutation, reportsTo] = await Promise.all([
     memberError(ctx, 'ownerUid', crm.ownerUid),
     crmRefErrors(ctx, { companyId: crm.companyId ?? undefined }),
+    // The holder's current lead source is kept even when the list no longer offers it.
+    contactLeadSourceErrors(ctx, crm, facetAt(ctx, at)?.facet.leadSource),
+    contactSalutationError(ctx, crm, at),
+    contactReportsToError(ctx, crm, at),
   ])
-  return { ...owner, ...refs }
+  return { ...owner, ...refs, ...leadSource, ...salutation, ...reportsTo }
+}
+
+/**
+ * The lead source a contact write stores (AGL-3511), judged against the
+ * org's Lead source list exactly as a lead's is: an active value stores the
+ * list's spelling, the holder's current value is always kept, and anything
+ * else is refused naming what the list allows. Rewrites `crm.leadSource` to
+ * the label the list spells. A contact takes no default — the list's default
+ * is for a new LEAD.
+ */
+async function contactLeadSourceErrors(
+  ctx: ApiV1Context,
+  crm: ContactCrmInput,
+  current: unknown,
+): Promise<Record<string, string>> {
+  if (typeof crm.leadSource !== 'string') return {}
+  const resolved = resolveCrmPicklistWrite(
+    CRM_LEAD_SOURCE_PICKLIST,
+    await readOrgLeadSourcePicklist(ctx),
+    crm.leadSource,
+    { current, created: false },
+  )
+  if (resolved.ok === false) return { leadSource: resolved.error }
+  crm.leadSource = resolved.write ?? null
+  return {}
+}
+
+/** The contact a write lands on — `null` for a create — and the site naming its facet. */
+interface ContactWriteAt {
+  contactId: string | null
+  siteId?: string
+  data?: FirebaseFirestore.DocumentData
+}
+
+/** The facet a write at `at` reads its current values from. */
+function facetAt(ctx: ApiV1Context, at: ContactWriteAt) {
+  if (!at.data || !at.siteId) return null
+  const group = consentGroupForHost(ctx.org as Record<string, unknown>, at.siteId)
+  return { groupId: group.groupId, facet: readContactFacet(at.data, group.groupId) }
+}
+
+/**
+ * The salutation, judged against the org's list (AGL-3515) the way the
+ * console's route judges it: an active value stores the list's spelling,
+ * the value the contact already holds is kept, anything else is named with
+ * the values allowed. Rewrites `crm.salutation` to the stored spelling.
+ */
+async function contactSalutationError(
+  ctx: ApiV1Context,
+  crm: ContactCrmInput,
+  at: ContactWriteAt,
+): Promise<Record<string, string>> {
+  if (!crm.salutation) return {}
+  const judged = judgeCrmPicklistValue(
+    CRM_SALUTATION_PICKLIST,
+    await readCrmPicklist(ctx.firestore, ctx.orgId, CRM_SALUTATION_PICKLIST),
+    crm.salutation,
+    facetAt(ctx, at)?.facet.salutation,
+  )
+  if (judged.ok === false) return { salutation: judged.error }
+  crm.salutation = judged.value ?? null
+  return {}
+}
+
+/**
+ * The reports-to (AGL-3515): a contact of this organization, never the
+ * contact itself, and never one whose own chain — through the named site's
+ * facets — leads back to it.
+ */
+async function contactReportsToError(
+  ctx: ApiV1Context,
+  crm: ContactCrmInput,
+  at: ContactWriteAt,
+): Promise<Record<string, string>> {
+  const managerId = crm.reportsToContactId
+  if (!managerId) return {}
+  if (managerId === at.contactId) {
+    return { reportsToContactId: CONTACT_REPORTS_TO_SELF_REFUSAL }
+  }
+  const read = cachedContactReader(contactsCollection(ctx))
+  if (!(await read(managerId))) {
+    return { reportsToContactId: 'No such contact in this organization' }
+  }
+  const facet = facetAt(ctx, at)
+  if (
+    at.contactId &&
+    facet &&
+    (await contactReportsToLoops(read, at.contactId, managerId, facet.groupId))
+  ) {
+    return { reportsToContactId: CONTACT_REPORTS_TO_LOOP_REFUSAL }
+  }
+  return {}
 }
 
 /**
@@ -604,6 +827,9 @@ function contactCrmCreateFields(
 ): Record<string, unknown> {
   const stored = createPayload(crm)
   if (Object.keys(stored).length === 0) return {}
+  // The holder's name is the first and last names' when either was given.
+  const composed = composeContactName(crm.firstName, crm.lastName)
+  if (composed) stored['name'] = composed
   const group = consentGroupForHost(ctx.org as Record<string, unknown>, siteId)
   return {
     [CONTACT_FACETS_FIELD]: {
@@ -639,6 +865,19 @@ function contactCrmUpdateFields(
   const group = consentGroupForHost(ctx.org as Record<string, unknown>, siteId)
   for (const [field, value] of Object.entries(updatePayload(crm))) {
     update[contactFacetPath(group.groupId, field)] = value
+  }
+  /*
+   * The holder's name follows the first and last names (AGL-3515): either
+   * sent recomposes it from what the facet will hold, and both cleared
+   * leave it as it stands.
+   */
+  if (crm.firstName !== undefined || crm.lastName !== undefined) {
+    const facet = readContactFacet(data, group.groupId)
+    const composed = composeContactName(
+      crm.firstName === undefined ? facet.firstName : crm.firstName,
+      crm.lastName === undefined ? facet.lastName : crm.lastName,
+    )
+    if (composed) update[contactFacetPath(group.groupId, 'name')] = composed
   }
   let link: ContactCompanyLinkPlan | null = null
   if (crm.companyId !== undefined) {
@@ -810,6 +1049,8 @@ async function createContact(
       headers: ctx.headers,
     })
   }
+  // The canonical name, or the first and last names' for a body with only those.
+  const canonicalName = name || composeContactName(crm.firstName, crm.lastName)
 
   const collection = contactsCollection(ctx)
   const claimed = await claimWrite(
@@ -866,7 +1107,7 @@ async function createContact(
       email,
       // The search keys travel with the name — the console's contact list
       // searches the whole collection, not the page it fetched.
-      ...(name ? nameSearchFields(name) : {}),
+      ...(canonicalName ? nameSearchFields(canonicalName) : {}),
       tags: tags ?? [],
       ...(notes ? { notes } : {}),
       ...(Object.keys(customValues).length ? { custom: customValues } : {}),
@@ -976,7 +1217,11 @@ async function updateContact(
       headers: ctx.headers,
     })
   }
-  const crmErrors = await contactCrmRefErrors(ctx, crm)
+  const crmErrors = await contactCrmRefErrors(ctx, crm, {
+    contactId: contactRef.id,
+    siteId: consentSiteId,
+    data: snap.data() ?? {},
+  })
   if (Object.keys(crmErrors).length) {
     return ApiErrors.badRequest({
       message: 'Contact failed validation',
@@ -1080,7 +1325,10 @@ async function updateContact(
  * Deletes the document whoever else holds it, and keeps every refusal it
  * held — each site's and the unscoped one — in the organization's retained
  * store in the same transaction (AGL-3338), so deleting a person over the
- * API is not a way to add somebody who said no to a list.
+ * API is not a way to add somebody who said no to a list. Then what pointed
+ * at the person goes: every other contact's reports-to naming them, in
+ * every holder's facet (AGL-3537), and their contact roles on deals
+ * (AGL-3521).
  *
  * Takes an `Idempotency-Key` with `deleteRecord`'s exact semantics, and for a
  * sharper reason: an erasure request is the operation most likely to be run
@@ -1102,9 +1350,14 @@ async function deleteContact(
   const { claim } = claimed
 
   try {
+    // The holders whose facets may name the person as a reports-to (AGL-3537).
+    let holders: string[] = []
     const removed = await removeContactKeepingRefusals({
       contactRef,
-      decide: deleteWholeContact,
+      decide: (contact) => {
+        holders = contactFacetHolders(contact)
+        return deleteWholeContact(contact)
+      },
       nowMs: Date.now(),
     })
     if (removed.outcome === 'missing') {
@@ -1114,6 +1367,21 @@ async function deleteContact(
         headers: ctx.headers,
       })
     }
+    // Nobody reports to a deleted person (AGL-3537)…
+    await clearReportsToOf(
+      ctx.firestore,
+      ctx.firestore.collection('orgs').doc(ctx.orgId).collection('contacts'),
+      holders,
+      contactRef.id,
+    )
+    // …and they leave every deal's contact roles (AGL-3521).
+    await sweepDealContactRoles(
+      ctx.firestore,
+      ctx.firestore.collection('orgs').doc(ctx.orgId).collection(CRM_COLLECTIONS.deals),
+      contactRef.id,
+      null,
+      '[api-v1] contacts delete',
+    )
     const view = { id: contactRef.id, object: 'contact', deleted: true }
     await claim.record(200, view)
     return apiJson(view, { headers: ctx.headers })

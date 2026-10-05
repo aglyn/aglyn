@@ -63,13 +63,17 @@ rules. Each rule has three parts:
 
 | part | what you choose |
 | -- | -- |
-| **Which records** | Leads, contacts, companies or deals. You can limit it to records captured on certain sites, and add optional conditions: lead source, tags, campaign, status or lifecycle stage, and owner. |
+| **Which records** | Leads, contacts, companies or deals. You can limit it to records captured on certain sites, and add optional conditions: lead source, lead source direction (Inbound or Outbound), tags, campaign, status or lifecycle stage, and owner. |
 | **Shared with** | Chosen sites, or all sites (including sites added later). |
 | **Access** | Read-only, or read and edit. |
 
 Conditions are combined with AND. Several values in one condition are
 combined with OR. A contact matches if any site that holds it recorded the
-value.
+value. A lead source direction is read through your
+[lead source values](./custom-fields.md#picklist-values)' groups each time a
+record is checked, so moving a value to another group changes which records
+the rule matches from then on — a record already shared keeps its share until
+it is next saved or the rule is saved again.
 
 When you save a rule, it is applied to the records you already have. The
 **Status** column shows the progress. Keep the page open until it says how

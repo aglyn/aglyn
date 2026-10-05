@@ -573,6 +573,30 @@ describe('records beside the contact (claim 3)', () => {
     ])
   })
 
+  it('files the task’s priority, with the org’s label beside each meaning (AGL-3517)', async () => {
+    seedActions({ type: 'createCrmTask', title: 'Walk the site', kind: 'meeting', priority: 'high', dueInDays: 1 })
+    await run({ email: 'ada@example.com' })
+    expect(orgRows('crmTasks')[0]).toMatchObject({
+      kind: 'meeting',
+      typeLabel: 'Meeting',
+      priority: 'high',
+      priorityLabel: 'High',
+      status: 'open',
+      statusLabel: 'Not Started',
+    })
+  })
+
+  it('logs which way a call went, and no direction on a kind that takes none (AGL-3517)', async () => {
+    seedActions({ type: 'logCrmActivity', kind: 'call', body: 'They rang in', direction: 'inbound' })
+    await run({ email: 'ada@example.com' })
+    expect(orgRows('crmActivities')[0]).toMatchObject({ kind: 'call', direction: 'inbound' })
+    seedActions({ type: 'logCrmActivity', kind: 'note', body: 'Noted', direction: 'inbound' })
+    await run({ email: 'ada@example.com' })
+    const note = orgRows('crmActivities').find((row) => row.kind === 'note')
+    expect(note).toBeTruthy()
+    expect(note).not.toHaveProperty('direction')
+  })
+
   it('prefers the assignee the step names', async () => {
     seedActions({ type: 'createCrmTask', title: 'Send the deck', kind: 'email', dueInDays: 0, assigneeUid: 'uid-sam' })
     await run({ email: 'ada@example.com' })

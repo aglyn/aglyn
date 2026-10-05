@@ -53,7 +53,12 @@ import {
   resolveOrgIdForHost,
   scopedToHost,
 } from './organizations'
-import { crmLeadListFields, crmReadTokens, crmScopeTokens } from '@aglyn/aglyn/server'
+import {
+  composeContactName,
+  crmLeadListFields,
+  crmReadTokens,
+  crmScopeTokens,
+} from '@aglyn/aglyn/server'
 import type { ConsentGroup, ScopeToken } from '@aglyn/aglyn/server'
 // The module path rather than the barrel, as `upsert-contact.ts` does: a spec
 // that substitutes the barrel keeps the real rule for which group a grant is.
@@ -615,10 +620,16 @@ export async function addHostLeadOutcome(options: {
           ? { phone: lead.phoneFill }
           : {}
       const storedScope = Array.isArray(stored['visibleTo']) ? (stored['visibleTo'] as unknown[]) : []
+      /*
+       * A lead that keeps a first or last name keeps the name they make
+       * (AGL-3513): a capture's typed name does not replace it.
+       */
+      const composedName = composeContactName(stored['firstName'], stored['lastName'])
+      const name = composedName || lead.name
       const listFields = crmLeadListFields({
         ...stored,
         email: lead.email,
-        ...(lead.name ? { name: lead.name } : {}),
+        ...(name ? { name } : {}),
         visibleTo: [...new Set([...storedScope, ...scope])],
       })
       tx.set(
@@ -626,6 +637,7 @@ export async function addHostLeadOutcome(options: {
         {
           email: lead.email,
           ...seen,
+          ...(composedName ? { name: composedName } : {}),
           ...phoneFill,
           ...listFields,
           /*

@@ -47,6 +47,8 @@ import {
 } from '@aglyn/tenant-feature-instance'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { pluginDocsHelp } from '@aglyn/aglyn'
+import TransferHeaderActions from '../../transfer/transfer-header-actions.component'
+import { COMMERCE_DISCOUNTS_TRANSFER } from '../../transfer/transfer-keys'
 
 export interface DiscountsCardProps {
   hostId: string
@@ -220,6 +222,9 @@ export function DiscountsCard(props: DiscountsCardProps) {
   return (
     <CardDisplay
       header={'Discounts'}
+      HeaderProps={{
+        action: <TransferHeaderActions resource={COMMERCE_DISCOUNTS_TRANSFER} hostId={hostId} />,
+      }}
       help={pluginDocsHelp('commerceEndToEnd', {
         anchor: '#4-what-checkout-does',
         excerpt:

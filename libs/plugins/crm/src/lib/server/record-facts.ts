@@ -23,7 +23,11 @@ import {
 } from '@aglyn/aglyn/plugin-manager/plugin-record-facts'
 import {
   CRM_COLLECTIONS,
+  CRM_LEAD_STATUS_PICKLIST,
+  contactDisplayName,
   crmReadTokens,
+  readContactFacet,
+  dealContactRolesOf,
   isOrgWideMember,
   type ConsentGroup,
   type ContactFieldDefinition,
@@ -37,13 +41,19 @@ import {
   consentGroupForSite,
   firebaseAdmin,
   getOrgDoc,
+  listOrgMembers,
   memberHasOrgPermission,
   readLeadForHost,
   resolveOrgIdForHost,
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
+import { readContainerIds } from '@aglyn/aglyn/app-utils/container-membership'
+import { readOrgContainers } from '@aglyn/tenant-data-admin/server/org-containers'
+import { isServerReleaseFlagOnForOrg } from '@aglyn/tenant-data-admin/server/release-flags'
+import type { ReleaseFlagKey } from '@aglyn/aglyn/app-utils/release-flags'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import {
+  CRM_FACTS_CONTACT_ROLES_MAX,
   CRM_IMPORT_FACTS_RESOURCE,
   CRM_RECORD_FACTS_RESOURCES,
   companyFacts,
@@ -52,8 +62,16 @@ import {
   importFacts,
   isCrmImportFactsCollection,
   leadFacts,
+  type CrmFactsNames,
   type CrmRecordFactsKind,
 } from '../model/record-facts'
+import {
+  disclosedCompanyFacts,
+  disclosedContactFacts,
+  disclosedDealFacts,
+  disclosedLeadFacts,
+} from '../model/record-facts-disclosed'
+import { readCrmPicklist } from './read-picklist'
 import { crmSuiteRefusal } from './suite-gate'
 import { contactPrimaryGroup } from '../model/contact-holder'
 
@@ -76,7 +94,20 @@ import { contactPrimaryGroup } from '../model/contact-holder'
  *     `visibleTo` meets the site's read tokens, as the console's listeners
  *     filter; at the organization level every row is the member's;
  *  5. what hangs off it — its logged activity, its tasks, its deals — is held
- *     to the same visibility, row by row.
+ *     to the same visibility, row by row;
+ *  6. a record it names — the person someone reports to, a parent company —
+ *     is named only when it is visible here too, and a campaign only when it
+ *     is the org's live one (AGL-3520).
+ *
+ * What a read answers depends on `release_crm_assist_whole_record` for the
+ * organization (AGL-3520). Off — the default, and what the published Privacy
+ * Policy and Subprocessors row describe — it answers the DISCLOSED facts
+ * (`model/record-facts-disclosed.ts`). On, it answers the WHOLE record: beside
+ * the documents, the org's custom field definitions, for their labels, and its
+ * roster, for the display names of the team members a record names; those
+ * facts carry `wholeRecord: true`, which is how a caller tells the two apart.
+ * There is no staff preview: a staff session reading a customer's record
+ * sends what that customer's published pages promise.
  *
  * A caller in the same process skips the plugin API dispatcher, and with it
  * the dispatcher's per-site enablement, release flag, lockdown and rate
@@ -90,6 +121,17 @@ type Refusal = { ok: false; status: 400 | 403 | 404; error: string }
 
 /** The org collection a contact lives in, beside the CRM's own. */
 const CONTACTS_COLLECTION = 'contacts'
+
+/** The release flag that lets a read answer the whole record (AGL-3520). */
+export const CRM_ASSIST_WHOLE_RECORD_FLAG: ReleaseFlagKey = 'release_crm_assist_whole_record'
+
+/**
+ * Whether reads for this organization answer the whole record. A verdict
+ * that cannot be reached is no: the disclosed facts are the published ones.
+ */
+async function readsWholeRecord(scope: CrmFactsScope): Promise<boolean> {
+  return isServerReleaseFlagOnForOrg(CRM_ASSIST_WHOLE_RECORD_FLAG, scope.orgId).catch(() => false)
+}
 
 /** Logged activities read per record before visibility and the timeline cut. */
 export const CRM_FACTS_ACTIVITIES_READ = 40
@@ -213,6 +255,37 @@ const refused = (kind: CrmRecordFactsKind | 'import', status: 400 | 404 = 404): 
   error: NOT_FOUND[kind],
 })
 
+/**
+ * The names a builder reports a record's references by (AGL-3520): the
+ * team's display names — never an address or a uid — and the org's custom
+ * field definitions visible here, for their labels. Read once per record.
+ */
+async function factsNames(scope: CrmFactsScope): Promise<CrmFactsNames> {
+  const [members, fields] = await Promise.all([
+    listOrgMembers(scope.orgId).catch(() => []),
+    orgCollection(scope.orgId, CRM_COLLECTIONS.contactFields).limit(CRM_FACTS_FIELD_DEFINITIONS_READ).get(),
+  ])
+  const byUid = new Map(
+    members.map((member) => {
+      const row = member as unknown as Data
+      return [String(row['$id'] ?? ''), String(row['displayName'] ?? '').trim()] as const
+    }),
+  )
+  return {
+    member: (uid) => byUid.get(uid) ?? '',
+    customFields: fields.docs
+      .map((doc) => (doc.data() ?? {}) as Partial<ContactFieldDefinition> & Data)
+      .filter((definition) => scope.visible(definition['visibleTo'])),
+  }
+}
+
+/** The names of the org's live campaigns among `ids`, in their order. */
+async function campaignNames(scope: CrmFactsScope, ids: readonly string[]): Promise<string[]> {
+  if (!ids.length) return []
+  const found = await readOrgContainers(firestore(), 'campaign', scope.orgId, [...ids]).catch(() => [])
+  return found.filter((container) => container.live).map((container) => container.name).filter(Boolean)
+}
+
 /** A reader that admits the caller, then reads the record. */
 function reader(read: (scope: CrmFactsScope, request: PluginRecordFactsRequest) => Promise<PluginRecordFactsRead>): PluginRecordFactsReader {
   return {
@@ -230,15 +303,41 @@ export const crmContactFactsReader = reader(async (scope, request) => {
   if (!row) return refused('contact')
   const group = scope.group ?? contactPrimaryGroup(row, scope.org)
   const naming = { field: 'contactId', id }
-  const [activities, tasks, deals] = await Promise.all([
+  const [activities, tasks, deals, whole] = await Promise.all([
     rowsNaming<CrmActivity>(scope, { ...naming, collection: CRM_COLLECTIONS.activities, orderBy: 'atMs', direction: 'desc', limit: CRM_FACTS_ACTIVITIES_READ }),
     rowsNaming<CrmTask>(scope, { ...naming, collection: CRM_COLLECTIONS.tasks, orderBy: 'dueAtMs', direction: 'asc', limit: CRM_FACTS_TASKS_READ }),
     rowsNaming<CrmDeal>(scope, { ...naming, collection: CRM_COLLECTIONS.deals, orderBy: 'updatedAt', direction: 'desc', limit: CRM_FACTS_DEALS_READ }),
+    readsWholeRecord(scope),
   ])
-  const pipelines = await pipelinesFor(scope, deals)
+  if (!whole) {
+    const pipelines = await pipelinesFor(scope, deals)
+    return {
+      ok: true,
+      facts: { ...disclosedContactFacts({ row, group, activities, tasks, deals, pipelines, nowMs: request.now.getTime() }) },
+    }
+  }
+  const reportsToId = readContactFacet(row, group.groupId).reportsToContactId
+  const [pipelines, names, reportsTo] = await Promise.all([
+    pipelinesFor(scope, deals),
+    factsNames(scope),
+    reportsToId ? visibleDoc(scope, CONTACTS_COLLECTION, reportsToId) : Promise.resolve(null),
+  ])
   return {
     ok: true,
-    facts: { ...contactFacts({ row, group, activities, tasks, deals, pipelines, nowMs: request.now.getTime() }) },
+    facts: {
+      ...contactFacts({
+        row,
+        group,
+        activities,
+        tasks,
+        deals,
+        pipelines,
+        nowMs: request.now.getTime(),
+        names,
+        ...(reportsTo ? { reportsToName: contactDisplayName(reportsTo, group.groupId) } : {}),
+      }),
+      wholeRecord: true,
+    },
   }
 })
 
@@ -247,16 +346,41 @@ export const crmCompanyFactsReader = reader(async (scope, request) => {
   const company = await visibleDoc(scope, CRM_COLLECTIONS.companies, id)
   if (!company) return refused('company')
   const naming = { field: 'companyId', id }
-  const [activities, tasks, deals] = await Promise.all([
+  const [activities, tasks, deals, whole] = await Promise.all([
     rowsNaming<CrmActivity>(scope, { ...naming, collection: CRM_COLLECTIONS.activities, orderBy: 'atMs', direction: 'desc', limit: CRM_FACTS_ACTIVITIES_READ }),
     rowsNaming<CrmTask>(scope, { ...naming, collection: CRM_COLLECTIONS.tasks, orderBy: 'dueAtMs', direction: 'asc', limit: CRM_FACTS_TASKS_READ }),
     rowsNaming<CrmDeal>(scope, { ...naming, collection: CRM_COLLECTIONS.deals, orderBy: 'updatedAt', direction: 'desc', limit: CRM_FACTS_DEALS_READ }),
+    readsWholeRecord(scope),
   ])
-  const pipelines = await pipelinesFor(scope, deals)
+  if (!whole) {
+    const pipelines = await pipelinesFor(scope, deals)
+    return {
+      ok: true,
+      facts: {
+        ...disclosedCompanyFacts({ company: company as Partial<CrmCompany>, activities, tasks, deals, pipelines, nowMs: request.now.getTime() }),
+      },
+    }
+  }
+  const parentId = typeof company['parentCompanyId'] === 'string' ? company['parentCompanyId'] : ''
+  const [pipelines, names, parent] = await Promise.all([
+    pipelinesFor(scope, deals),
+    factsNames(scope),
+    parentId ? visibleDoc(scope, CRM_COLLECTIONS.companies, parentId) : Promise.resolve(null),
+  ])
   return {
     ok: true,
     facts: {
-      ...companyFacts({ company: company as Partial<CrmCompany>, activities, tasks, deals, pipelines, nowMs: request.now.getTime() }),
+      ...companyFacts({
+        company: company as Partial<CrmCompany>,
+        activities,
+        tasks,
+        deals,
+        pipelines,
+        nowMs: request.now.getTime(),
+        names,
+        ...(parent ? { parentCompanyName: String(parent['name'] ?? '') } : {}),
+      }),
+      wholeRecord: true,
     },
   }
 })
@@ -266,10 +390,34 @@ export const crmDealFactsReader = reader(async (scope, request) => {
   const deal = (await visibleDoc(scope, CRM_COLLECTIONS.deals, id)) as (Partial<CrmDeal> & Data) | null
   if (!deal) return refused('deal')
   const naming = { field: 'dealId', id }
-  const [activities, tasks, pipelines] = await Promise.all([
+  if (!(await readsWholeRecord(scope))) {
+    const [activities, tasks, pipelines, contactNames] = await Promise.all([
+      rowsNaming<CrmActivity>(scope, { ...naming, collection: CRM_COLLECTIONS.activities, orderBy: 'atMs', direction: 'desc', limit: CRM_FACTS_ACTIVITIES_READ }),
+      rowsNaming<CrmTask>(scope, { ...naming, collection: CRM_COLLECTIONS.tasks, orderBy: 'dueAtMs', direction: 'asc', limit: CRM_FACTS_TASKS_READ }),
+      pipelinesFor(scope, [deal]),
+      dealContactNames(scope, deal),
+    ])
+    return {
+      ok: true,
+      facts: {
+        ...disclosedDealFacts({
+          deal,
+          pipeline: pipelines.get(String(deal.pipelineId ?? '')) ?? null,
+          activities,
+          tasks,
+          contactNames,
+          nowMs: request.now.getTime(),
+        }),
+      },
+    }
+  }
+  const [activities, tasks, pipelines, names, campaign, contactNames] = await Promise.all([
     rowsNaming<CrmActivity>(scope, { ...naming, collection: CRM_COLLECTIONS.activities, orderBy: 'atMs', direction: 'desc', limit: CRM_FACTS_ACTIVITIES_READ }),
     rowsNaming<CrmTask>(scope, { ...naming, collection: CRM_COLLECTIONS.tasks, orderBy: 'dueAtMs', direction: 'asc', limit: CRM_FACTS_TASKS_READ }),
     pipelinesFor(scope, [deal]),
+    factsNames(scope),
+    campaignNames(scope, typeof deal.campaignId === 'string' && deal.campaignId ? [deal.campaignId] : []),
+    dealContactNames(scope, deal),
   ])
   return {
     ok: true,
@@ -279,11 +427,37 @@ export const crmDealFactsReader = reader(async (scope, request) => {
         pipeline: pipelines.get(String(deal.pipelineId ?? '')) ?? null,
         activities,
         tasks,
+        contactNames,
         nowMs: request.now.getTime(),
+        names,
+        ...(campaign[0] ? { campaignName: campaign[0] } : {}),
       }),
+      wholeRecord: true,
     },
   }
 })
+
+/**
+ * The names of a deal's contacts the reader may see (AGL-3521), the Primary
+ * first and at most {@link CRM_FACTS_CONTACT_ROLES_MAX}: each read through
+ * the viewing holder, or its own primary holder at the organization level.
+ */
+async function dealContactNames(scope: CrmFactsScope, deal: Data): Promise<Map<string, string>> {
+  const roles = dealContactRolesOf(deal)
+    .sort((a, b) => Number(b.primary) - Number(a.primary))
+    .slice(0, CRM_FACTS_CONTACT_ROLES_MAX)
+  const names = new Map<string, string>()
+  await Promise.all(
+    roles.map(async (row) => {
+      const contact = await visibleDoc(scope, CONTACTS_COLLECTION, row.contactId)
+      if (!contact) return
+      const group = scope.group ?? contactPrimaryGroup(contact, scope.org)
+      const name = contactDisplayName(contact, group.groupId) || String(contact['email'] ?? '')
+      if (name) names.set(row.contactId, name)
+    }),
+  )
+  return names
+}
 
 export const crmLeadFactsReader = reader(async (scope, request) => {
   if (!scope.hostId) return { ok: false, status: 400, error: CRM_FACTS_LEAD_NEEDS_SITE }
@@ -291,15 +465,41 @@ export const crmLeadFactsReader = reader(async (scope, request) => {
   if (!id) return refused('lead')
   const snapshot = await readLeadForHost(scope.hostId, id)
   if (!snapshot) return refused('lead')
-  const activities = await rowsNaming<CrmActivity>(scope, {
-    field: 'leadId',
-    id,
-    collection: CRM_COLLECTIONS.activities,
-    orderBy: 'atMs',
-    direction: 'desc',
-    limit: CRM_FACTS_ACTIVITIES_READ,
-  })
-  return { ok: true, facts: { ...leadFacts({ lead: (snapshot.data() ?? {}) as Data, activities }) } }
+  const lead = (snapshot.data() ?? {}) as Data
+  const naming = { field: 'leadId', id }
+  if (!(await readsWholeRecord(scope))) {
+    const [activities, leadStatuses] = await Promise.all([
+      rowsNaming<CrmActivity>(scope, { ...naming, collection: CRM_COLLECTIONS.activities, orderBy: 'atMs', direction: 'desc', limit: CRM_FACTS_ACTIVITIES_READ }),
+      // The status fact reads as the org names it (AGL-3512).
+      readCrmPicklist(firestore(), scope.orgId, CRM_LEAD_STATUS_PICKLIST),
+    ])
+    return { ok: true, facts: { ...disclosedLeadFacts({ lead, activities, leadStatuses }) } }
+  }
+  const [activities, tasks, leadStatuses, names, campaigns] = await Promise.all([
+    rowsNaming<CrmActivity>(scope, { ...naming, collection: CRM_COLLECTIONS.activities, orderBy: 'atMs', direction: 'desc', limit: CRM_FACTS_ACTIVITIES_READ }),
+    // The lead's own tasks (AGL-3520), as a contact's are read.
+    rowsNaming<CrmTask>(scope, { ...naming, collection: CRM_COLLECTIONS.tasks, orderBy: 'dueAtMs', direction: 'asc', limit: CRM_FACTS_TASKS_READ }),
+    // The status fact reads as the org names it (AGL-3512).
+    readCrmPicklist(firestore(), scope.orgId, CRM_LEAD_STATUS_PICKLIST),
+    factsNames(scope),
+    campaignNames(scope, readContainerIds(lead, 'campaign')),
+  ])
+  return {
+    ok: true,
+    facts: {
+      ...leadFacts({
+        lead,
+        activities,
+        tasks,
+        nowMs: request.now.getTime(),
+        leadStatuses,
+        group: scope.group,
+        names,
+        campaignNames: campaigns,
+      }),
+      wholeRecord: true,
+    },
+  }
 })
 
 export const crmImportFactsReader = reader(async (scope, request) => {

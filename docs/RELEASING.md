@@ -519,11 +519,17 @@ Rules do **not** ride the merge. They deploy from a checkout pinned to the
 promoted SHA, by hand, with `tools/scripts/deploy-*-rules.mjs` — so a merged PR
 touching `cloud/firebase-*.rules` is not evidence the ruleset shipped.
 
-A Firestore or Storage rules source also has a hard 256 KiB limit, comments
+A Firestore or Storage ruleset also has a hard 256 KiB limit, comments
 included, that compiling and the emulator never check and the deploy enforces
 with a bare `400 INVALID_ARGUMENT` (AGL-3027), which is why
-`npm run check:rules-size` measures all three rules sources on every pull
-request.
+`npm run check:rules-size` measures every rules file on every pull request.
+
+The Firestore rules deploy from `cloud/firebase-firestore.deploy.rules`, which
+is `cloud/firebase-firestore.rules` with its comments stripped, line for line
+(AGL-3544). Edit only the source, then run `npm run generate:rules-deploy` and
+commit both. `check:rules-deploy` fails a stale artifact in CI, the pre-commit
+hook refuses one, and `deploy-firestore-rules.mjs` refuses to ship one, so the
+step itself does not change: run the deploy script from the pinned checkout.
 
 ```bash
 npm run check:rules-drift -- --baseline=origin/production

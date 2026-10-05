@@ -41,8 +41,10 @@ import { RecordActivityCard } from './record-activity-card'
 import { CrmShareChipView, RecordSharingCard } from './record-sharing-card'
 import { crmShareChipFor } from '../model/crm-sharing'
 import { CrmSendEmailButton } from './crm-send-email-button'
+import { DealContactRolesCard } from './deal-contact-roles-card'
 import { DealEditDrawer } from './deal-edit-drawer'
 import { DealProductsCard } from './deal-products-card'
+import { useCrmCampaigns } from '../hooks/use-crm-campaigns'
 import { DealPropertiesCard } from './deal-properties-card'
 import { DealStageCard } from './deal-stage-card'
 import RecordFilesCard from './record-files-card'
@@ -52,8 +54,9 @@ import { RecordTasksCard } from './record-tasks-card'
  * `/crm/deals/{dealId}` — one deal (AGL-2598).
  *
  * The record behind a card: its stage and the controls that move it, what
- * it is worth and who it is with, the products behind the amount
- * (AGL-2620), and the tasks and activity filed against it. One live
+ * it is worth and who it is with — every contact on it and the part each
+ * plays (AGL-3521) — the products behind the amount (AGL-2620), and the
+ * tasks and activity filed against it. One live
  * document read; the pipeline and the roster are the same bounded reads
  * the board makes. Editing opens the same drawer the board creates with,
  * and deleting is the one destructive act here — confirmed, then a
@@ -86,6 +89,11 @@ export function DealDetailPage(props: CrmDetailPageProps) {
   const [deleting, setDeleting] = useState(false)
   // The org's deal fields (AGL-2661), for the properties card's rows.
   const dealFields = useContactFieldDefinitions(scope.orgId, 'deal')
+  // The deal's campaign by name (AGL-3516), read only for a deal that names one.
+  const campaigns = useCrmCampaigns(
+    { hostId, orgId: scope.orgId },
+    { enabled: Boolean(deal?.campaignId) },
+  )
 
   const notFound = scope.ready && (!scope.orgId || (status !== 'loading' && !deal))
 
@@ -234,12 +242,27 @@ export function DealDetailPage(props: CrmDetailPageProps) {
                   ownerLabel={roster.nameOf(deal.ownerUid)}
                   routes={routes}
                   customFields={dealFields.active}
+                  campaignName={
+                    deal.campaignId
+                      ? (campaigns.options.find((option) => option.value === deal.campaignId)?.label ??
+                        deal.campaignId)
+                      : undefined
+                  }
                 />
               </Stack>
               <Stack sx={{ flex: 1, minWidth: 0 }}>
                 <RecordTasksCard hostId={hostId} org={org} basePath={basePath} dealId={deal.$id} />
               </Stack>
             </Stack>
+            {/* The people on the deal and the part each plays (AGL-3521). */}
+            <DealContactRolesCard
+              deal={deal}
+              hostId={hostId}
+              org={org}
+              routes={routes}
+              fromCache={fromCache}
+              unreadable={status === 'error'}
+            />
             {scope.orgId ? (
               <DealProductsCard
                 deal={deal}

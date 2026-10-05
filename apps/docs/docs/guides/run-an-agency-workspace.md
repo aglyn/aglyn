@@ -171,7 +171,7 @@ On **Pro and above**, every site exports a full backup from its own settings. Ta
 
 Take one from the site's **Admin → Backup & template**. It includes the datasets that
 site can see — up to 50, with up to 1,000 records each — so a larger dataset also wants
-its own export from the **Data** tab (**CSV** or **JSON**), which downloads every record.
+its own **Export** from the **Data** tab (CSV, JSON or NDJSON), which downloads every record.
 
 ## Step 6 — Billing, and what to tell clients {#step-6-billing}
 

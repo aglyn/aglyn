@@ -44,7 +44,9 @@
  */
 
 import {
+  CRM_LEAD_STATUS_PICKLIST,
   type CrmLeadFields,
+  crmLeadStatusLabelFor,
   isCrmLeadOpen,
   normalizeContactEmail,
   personKey,
@@ -52,6 +54,7 @@ import {
 import { firebaseAdmin, getOrgForHost, leadForWrite } from '@aglyn/tenant-data-admin'
 import { handOffLeadRecords } from '@aglyn/tenant-runtime/hand-off-lead'
 import { FieldValue } from 'firebase-admin/firestore'
+import { readCrmPicklist } from './read-picklist'
 
 /** Which door closed the lead, recorded on it beside the conversion stamp. */
 export type LeadAutoConvertedBy = 'signup' | 'purchase' | 'backfill'
@@ -87,9 +90,15 @@ export async function convertOpenLeadOntoContact(
     if (!snapshot.exists) return false
     const lead = (snapshot.data() ?? {}) as Record<string, unknown> & CrmLeadFields
     if (lead.convertedContactId || !isCrmLeadOpen(lead)) return false
+    // The org's label for Qualified, beside the meaning (AGL-3512).
+    const resolved = await getOrgForHost(input.hostId)
+    const statuses = resolved
+      ? await readCrmPicklist(firestore, resolved.orgId, CRM_LEAD_STATUS_PICKLIST)
+      : null
     await leadRef.set(
       {
         status: 'qualified',
+        ...(statuses ? { statusLabel: crmLeadStatusLabelFor(statuses, 'qualified') } : {}),
         convertedContactId: input.contactId,
         convertedAtMs: Date.now(),
         convertedBy: input.by,
@@ -97,7 +106,6 @@ export async function convertOpenLeadOntoContact(
       },
       { merge: true },
     )
-    const resolved = await getOrgForHost(input.hostId)
     if (resolved) {
       await handOffLeadRecords({
         firestore,

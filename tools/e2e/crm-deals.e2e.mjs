@@ -94,9 +94,10 @@ const { page } = session
 const card = (title) => page.getByRole('button', { name: title, exact: true })
 
 // ── The board ───────────────────────────────────────────────────────────────
-await step(tally, page, 'the board opens on Sales with a card in every open stage', async () => {
+await step(tally, page, 'the board opens on Sales with its cards across the open stages', async () => {
   await page.goto(hostUrl('/crm/deals'), { waitUntil: 'domcontentloaded', timeout: TIMEOUT_MS })
-  for (const column of ['Qualified', 'Contact made', 'Proposal sent', 'Negotiation']) {
+  // Salesforce's stages (AGL-3516); these four hold the seeded cards.
+  for (const column of ['Prospecting', 'Needs Analysis', 'Proposal/Price Quote', 'Negotiation/Review']) {
     await page.getByText(column, { exact: true }).first().waitFor({ timeout: TIMEOUT_MS })
   }
   for (const title of [F.dealTitle, F.boardDeals.voss.title, F.boardDeals.northShore.title, F.boardDeals.cedar.title]) {
@@ -105,18 +106,23 @@ await step(tally, page, 'the board opens on Sales with a card in every open stag
   const switcher = page.getByRole('combobox', { name: /^Pipeline/ })
   await switcher.waitFor({ timeout: TIMEOUT_MS })
   const chosen = (await switcher.textContent())?.trim()
-  tally.check('the board opens on Sales with a card in every open stage', chosen === 'Sales', `switcher reads ${chosen}`)
+  tally.check('the board opens on Sales with its cards across the open stages', chosen === 'Sales', `switcher reads ${chosen}`)
   await shot(page, 'crm-deals-board')
 })
 
 await step(tally, page, 'a card moves to another stage through its menu', async () => {
-  await rowAction(page, F.dealTitle, 'Move to Negotiation')
-  await expectSnackbar(page, 'Moved to Negotiation')
-  const stored = await waitFor(() => dealDoc(F.dealId), (d) => d.stageId === 'negotiation')
+  await rowAction(page, F.dealTitle, 'Move to Negotiation/Review')
+  await expectSnackbar(page, 'Moved to Negotiation/Review')
+  const stored = await waitFor(() => dealDoc(F.dealId), (d) => d.stageId === 'negotiation-review')
+  // The move stamps the stage's forecast category and clears any probability override (AGL-3516).
   tally.check(
     'a card moves to another stage through its menu',
-    stored.stageId === 'negotiation' && stored.status === 'open' && typeof stored.stageChangedAtMs === 'number',
-    `${stored.stageId} · ${stored.status}`,
+    stored.stageId === 'negotiation-review' &&
+      stored.status === 'open' &&
+      typeof stored.stageChangedAtMs === 'number' &&
+      stored.forecastCategory === 'commit' &&
+      stored.probability === null,
+    `${stored.stageId} · ${stored.status} · ${stored.forecastCategory} · ${stored.probability}`,
   )
 })
 
@@ -124,8 +130,9 @@ await step(tally, page, 'Mark won closes the deal and the Won column shows it', 
   await rowAction(page, F.dealTitle, 'Mark won')
   await expectSnackbar(page, 'Deal won')
   const stored = await waitFor(() => dealDoc(F.dealId), (d) => d.status === 'won')
-  // The closed columns fold away; opening Won reads its rows.
-  await page.getByRole('button', { name: 'Won', exact: true }).first().click()
+  // The closed columns fold away; opening Closed Won, Salesforce's name for
+  // the won stage (AGL-3516), reads its rows.
+  await page.getByRole('button', { name: 'Closed Won', exact: true }).first().click()
   await card(F.dealTitle).waitFor({ timeout: TIMEOUT_MS })
   tally.check(
     'Mark won closes the deal and the Won column shows it',
@@ -175,7 +182,7 @@ await step(tally, page, 'the Pipelines dialog creates a pipeline from the defaul
   const created = await waitFor(async () => (await pipelinesNamed(NEW_PIPELINE)).docs[0]?.data(), (d) => Boolean(d))
   tally.check(
     'the Pipelines dialog creates a pipeline from the default stages',
-    created.stages?.length === 6 && created.isDefault === false && created.archivedAt === null && Array.isArray(created.visibleTo),
+    created.stages?.length === 10 && created.isDefault === false && created.archivedAt === null && Array.isArray(created.visibleTo),
     `${created.stages?.length} stages · default ${created.isDefault} · visibleTo ${JSON.stringify(created.visibleTo)}`,
   )
   await dialog.getByText(NEW_PIPELINE, { exact: true }).waitFor({ timeout: TIMEOUT_MS })

@@ -945,7 +945,7 @@ describe('CRM steps', () => {
       validateHostAction(
         withStep({ type: 'createCrmTask', title: 'x', kind: 'note', dueInDays: 1 }),
       ),
-    ).toMatch(/kind of task/)
+    ).toMatch(/type of task/)
     expect(
       validateHostAction(
         withStep({ type: 'createCrmTask', title: 'x', kind: 'call', dueInDays: -1 }),
@@ -966,6 +966,20 @@ describe('CRM steps', () => {
         }),
       ),
     ).toMatch(/due in 0–/)
+  })
+
+  it('takes a task’s priority and a call’s direction by meaning, and refuses the rest (AGL-3517)', () => {
+    const task = { type: 'createCrmTask', title: 'x', kind: 'call', dueInDays: 1 }
+    expect(validateHostAction(withStep({ ...task, priority: 'high' }))).toBeNull()
+    expect(validateHostAction(withStep({ ...task, priority: 'urgent' }))).toMatch(/priority/)
+    const log = { type: 'logCrmActivity', kind: 'call', body: 'Rang in' }
+    expect(validateHostAction(withStep({ ...log, direction: 'internal' }))).toBeNull()
+    expect(validateHostAction(withStep({ ...log, kind: 'email', direction: 'internal' }))).toMatch(
+      /which way the email went/,
+    )
+    expect(validateHostAction(withStep({ ...log, kind: 'note', direction: 'inbound' }))).toMatch(
+      /only a call or an email takes a direction/,
+    )
   })
 
   it('refuses an assignee address that is not one, and needs none at all', () => {

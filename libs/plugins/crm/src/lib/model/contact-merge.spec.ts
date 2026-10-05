@@ -16,6 +16,7 @@
  */
 
 import {
+  CONTACT_MERGE_REPORTS_TO_SELF,
   contactMergePreview,
   mergeContactFacet,
   mergeInteractions,
@@ -315,6 +316,100 @@ describe('mergeContactFacet', () => {
   })
 })
 
+/**
+ * Salesforce's standard contact fields (AGL-3515): the generic fill for the
+ * rest, the name's three fields as one, do-not-call standing from either
+ * record, and nobody left reporting to themselves.
+ */
+describe("mergeContactFacet — Salesforce's standard fields", () => {
+  it('keeps the survivor values and fills its blanks from the merged record', () => {
+    const facet = mergeContactFacet(
+      { sources: {}, interactions: [], mobilePhone: '+15125550101', department: 'Ops' },
+      {
+        sources: {},
+        interactions: [],
+        mobilePhone: '+15125550199',
+        fax: '+15125550109',
+        birthdate: '1990-01-01',
+        otherAddress: { line1: '2 Side St' },
+      },
+    )
+    expect(facet).toMatchObject({
+      mobilePhone: '+15125550101',
+      department: 'Ops',
+      fax: '+15125550109',
+      birthdate: '1990-01-01',
+      otherAddress: { line1: '2 Side St' },
+    })
+  })
+
+  it("moves the name's three fields together, from the record that names the person", () => {
+    // The survivor names them, so the merged record's parts do not come across.
+    expect(
+      mergeContactFacet(
+        { sources: {}, interactions: [], name: 'Bob' },
+        { sources: {}, interactions: [], name: 'Robert Smith', firstName: 'Robert', lastName: 'Smith' },
+      ),
+    ).toMatchObject({ name: 'Bob' })
+    expect(
+      mergeContactFacet(
+        { sources: {}, interactions: [], name: 'Bob' },
+        { sources: {}, interactions: [], firstName: 'Robert', lastName: 'Smith' },
+      ),
+    ).not.toHaveProperty('firstName')
+    // The survivor names nobody, so all three come from the merged record.
+    expect(
+      mergeContactFacet(
+        { sources: {}, interactions: [] },
+        { sources: {}, interactions: [], name: 'Robert Smith', firstName: 'Robert', lastName: 'Smith' },
+      ),
+    ).toMatchObject({ name: 'Robert Smith', firstName: 'Robert', lastName: 'Smith' })
+  })
+
+  it('keeps do not call from either record', () => {
+    expect(
+      mergeContactFacet({ sources: {}, interactions: [] }, { sources: {}, interactions: [], doNotCall: true })
+        .doNotCall,
+    ).toBe(true)
+    expect(
+      mergeContactFacet({ sources: {}, interactions: [], doNotCall: true }, { sources: {}, interactions: [] })
+        .doNotCall,
+    ).toBe(true)
+  })
+
+  it('drops a reports-to that would point the survivor at itself', () => {
+    const ids = { survivorId: 's', mergedId: 'm' }
+    expect(
+      mergeContactFacet(
+        { sources: {}, interactions: [], reportsToContactId: 'm' },
+        { sources: {}, interactions: [] },
+        ids,
+      ).reportsToContactId,
+    ).toBeNull()
+    expect(
+      mergeContactFacet(
+        { sources: {}, interactions: [] },
+        { sources: {}, interactions: [], reportsToContactId: 's' },
+        ids,
+      ).reportsToContactId,
+    ).toBeNull()
+    expect(
+      mergeContactFacet(
+        { sources: {}, interactions: [] },
+        { sources: {}, interactions: [], reportsToContactId: 'boss' },
+        ids,
+      ).reportsToContactId,
+    ).toBe('boss')
+    // A survivor facet the merged record never held still loses its pointer at it.
+    const plan = planContactMerge(
+      { email: 's@example.com', facets: { a: { sources: {}, interactions: [], reportsToContactId: 'm' } } },
+      { email: 'm@example.com', facets: {} },
+      ids,
+    )
+    expect((plan.survivor['facets'] as any)['a'].reportsToContactId).toBeNull()
+  })
+})
+
 describe('mergeInteractions', () => {
   it('caps the union the way every capture caps a timeline', () => {
     const many = (start: number) =>
@@ -354,5 +449,47 @@ describe('contactMergePreview', () => {
     const byKey = Object.fromEntries(rows.map((row) => [row.key, row]))
     expect(byKey['tags']).toMatchObject({ survivor: '', merged: 'b-side', result: 'b-side' })
     expect(byKey['phone']).toMatchObject({ survivor: '', merged: '', result: '', from: 'none' })
+  })
+
+  /*
+   * Reports to, by the rule the write applies (AGL-3537): the kept record's
+   * manager stands, an empty one fills, and a pointer at either record —
+   * one person after the merge — becomes nobody.
+   */
+  describe('Reports to', () => {
+    const ids = { survivorId: 'c-keep', mergedId: 'c-gone' }
+    const names: Record<string, string> = { 'c-boss': 'Dana Boss', 'c-other': 'Lee Other', 'c-gone': 'J Doe' }
+    const contactName = (id: string) => names[id] ?? id
+    const pointing = (survivorTo: string | null, mergedTo: string | null) => {
+      const facet = (to: string | null) => ({ sources: {}, interactions: [], ...(to ? { reportsToContactId: to } : {}) })
+      const rows = contactMergePreview(
+        { email: 'jane@acme.com', facets: { a: facet(survivorTo) } },
+        { email: 'jane@gmail.com', facets: { a: facet(mergedTo) } },
+        'a',
+        { ids, contactName },
+      )
+      return rows.find((row) => row.key === 'reportsTo')
+    }
+
+    it('keeps the kept record’s manager, and fills an empty one from the other record', () => {
+      expect(pointing('c-boss', 'c-other')).toMatchObject({
+        label: 'Reports to',
+        survivor: 'Dana Boss',
+        merged: 'Lee Other',
+        result: 'Dana Boss',
+        from: 'survivor',
+      })
+      expect(pointing(null, 'c-other')).toMatchObject({ result: 'Lee Other', from: 'merged' })
+      expect(pointing(null, null)).toMatchObject({ result: '', from: 'none' })
+    })
+
+    it('makes a pointer at either record nobody, and says so', () => {
+      expect(pointing('c-gone', 'c-other')).toMatchObject({
+        survivor: 'J Doe',
+        result: CONTACT_MERGE_REPORTS_TO_SELF,
+        from: 'none',
+      })
+      expect(pointing(null, 'c-keep')).toMatchObject({ result: CONTACT_MERGE_REPORTS_TO_SELF })
+    })
   })
 })

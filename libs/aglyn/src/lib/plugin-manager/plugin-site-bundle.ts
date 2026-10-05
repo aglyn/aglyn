@@ -67,6 +67,20 @@ export interface PluginSiteBundleSectionDeclaration {
   key: string
   /** The most items one bundle carries; a restore reads no more. */
   limit: number
+  /**
+   * What a site package calls each item (AGL-3533): its kind, the plural
+   * label the import screen groups them under, and the field an item with a
+   * new id is matched by. Its references are the plugin's to name, through
+   * the section's registered {@link PluginSiteBundleSection.package} hooks.
+   */
+  package: {
+    kind: string
+    label: string
+    nameField?: string
+    slugField?: string
+    /** Node props that place one of its items in a design, as a host collection's declare them. */
+    placements?: ReadonlyArray<{ componentId?: string; prop: string }>
+  }
 }
 
 /** A declaration with the plugin that made it. */
@@ -116,8 +130,33 @@ export interface SiteBundleImportRequest extends SiteBundleRestoreRequest {
 /** A row the restore reports without refusing: a document restored as it was, and why it is worth a look. */
 export type SiteBundleReportRow = Record<string, unknown>
 
+/** An item another item names: its package kind and id. */
+export interface SiteBundleItemReference {
+  kind: string
+  id: string
+}
+
+/**
+ * A section's answers about its items as package items (AGL-3533): what each
+ * one refers to — another of its own items, a page, a media file — and the
+ * item with those references moved to new ids, for an item kept beside an
+ * existing one or mapped onto one the site already holds.
+ */
+export interface PluginSiteBundleSectionPackage {
+  /** The site items this item names, by package kind and id. */
+  dependencies(item: SiteBundleItem): SiteBundleItemReference[]
+  /**
+   * The item with every reference in `idMap` moved: `idMap` maps an item key
+   * (`<kind>/<id>`) to the id it now has, or to `null` when the reference is
+   * dropped. The item's own `$id` is the restore's to set, not this hook's.
+   */
+  remapIds(item: SiteBundleItem, idMap: ReadonlyMap<string, string | null>): SiteBundleItem
+}
+
 /** A plugin's answers for one section. */
 export interface PluginSiteBundleSection {
+  /** Its items as package items; required, since every section declares a package kind. */
+  package: PluginSiteBundleSectionPackage
   /** The site's share, read whole or not at all: throw rather than return a short list. */
   export(request: SiteBundleRequest): Promise<SiteBundleItem[]>
   /**
@@ -187,6 +226,16 @@ export function registerPluginSiteBundleSection(
     throw new Error(
       `site bundle section "${name}" is declared by "${declared.pluginId}"; ` +
         `refused "${pluginId}"`,
+    )
+  }
+  if (
+    typeof section.package?.dependencies !== 'function' ||
+    typeof section.package?.remapIds !== 'function'
+  ) {
+    throw new Error(
+      `site bundle section "${name}" declares package kind "${declared.package.kind}" ` +
+        'and registers no package hooks (dependencies, remapIds), so a package ' +
+        'could neither list what its items need nor keep a copy beside an existing one',
     )
   }
   sections.set(name, { pluginId, section })

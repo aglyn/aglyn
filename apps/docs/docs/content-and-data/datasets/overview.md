@@ -16,7 +16,7 @@ page (next to Media in the organization tabs), or from any site's Data page; bot
 the same data. Dataset limits, storage, and add-ons are billed at the organization
 level.
 
-![The Data page in the Aglyn console: an organization-shared dataset's records table under the grid's Columns, Filters, Export and Search controls, below the Add record, Schema, Import, CSV and JSON actions](/img/datasets/data-page.png)
+![The Data page in the Aglyn console: an organization-shared dataset's records table under the grid's Columns, Filters, Export and Search controls, below the Add record, Schema, Import and Export actions](/img/datasets/data-page.png)
 
 ```mermaid
 flowchart LR
@@ -213,8 +213,9 @@ A few consequences worth knowing:
 
 ## Import & export
 
-Datasets round-trip via **CSV and JSON**: export your records, edit them elsewhere, and
-re-import with validation on the way in.
+Datasets round-trip as **CSV, JSON or NDJSON**: export the fields you choose, edit them
+elsewhere, and import them back through a wizard that matches columns and records and
+shows a dry run before anything is written — see [Import & export](./import-export.md).
 
 A whole-site export includes the datasets and media **that site can see**, and nothing
 else — an agency exporting a client site gets that client's data only. It carries up to

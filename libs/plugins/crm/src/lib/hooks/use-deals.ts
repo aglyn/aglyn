@@ -17,6 +17,7 @@
 'use client'
 
 import { CRM_COLLECTIONS, type CrmDealStatus } from '@aglyn/aglyn'
+import { SCOPED_SEARCH_JOIN } from '@aglyn/aglyn/app-utils/name-search'
 import {
   useFirestore,
   useFirestoreCollection,
@@ -107,6 +108,48 @@ export function useLinkedDeals(
           )
         : null,
     [firestore, orgId, readTokens, field, id],
+    { idField: '$id' },
+  )
+}
+
+/**
+ * The deals a contact is on in ANY role (AGL-3521), for the contact's page
+ * beside the deals that name them as `contactId`.
+ *
+ * At the organization level, `contactRoleContactIds array-contains`. Under
+ * a site the scope and the contact are one clause —
+ * `scopedContactRoleContactIds array-contains-any` over `token~contactId`
+ * — because a query holds one array clause and the scope clause is one;
+ * that is a query the rules prove only for an org-wide member
+ * (`foldsScope`). A member whose reach is some sites asks nothing here, and
+ * reads the deals that name the contact as their Primary.
+ * `(contactRoleContactIds | scopedContactRoleContactIds, updatedAt DESC)`.
+ */
+export function useContactRoleDeals(
+  orgId: string | null,
+  readTokens: readonly string[] | null,
+  foldsScope: boolean,
+  contactId: string | null,
+) {
+  const firestore = useFirestore()
+  const scoped = readTokens
+    ? readTokens.slice(0, 30).map((token) => `${token}${SCOPED_SEARCH_JOIN}${contactId}`)
+    : null
+  const key = scoped ? scoped.join('\n') : ''
+  return useFirestoreCollection<DealDoc>(
+    () =>
+      orgId && contactId && (readTokens === null || (foldsScope && scoped?.length))
+        ? query(
+            collection(firestore, 'orgs', orgId, CRM_COLLECTIONS.deals),
+            scoped
+              ? where('scopedContactRoleContactIds', 'array-contains-any', scoped)
+              : where('contactRoleContactIds', 'array-contains', contactId),
+            orderBy('updatedAt', 'desc'),
+            limit(LINKED_DEALS_LIMIT),
+          )
+        : null,
+    // `key` stands for `scoped`, whose array is rebuilt on every render.
+    [firestore, orgId, key, foldsScope, contactId, readTokens === null],
     { idField: '$id' },
   )
 }

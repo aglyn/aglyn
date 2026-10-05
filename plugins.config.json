@@ -1,5 +1,5 @@
 {
-  "$comment": "First-party plugin registry (AGL-417). THE single place that maps plugin ids to packages, register entry points, and API path prefixes. `tools/scripts/generate-plugin-manifests.mjs` turns this into the per-app generated loader manifests — the only files allowed to reference @aglyn/plugins-* outside libs/plugins. `catalog` is the plugin's row on the workspace and site switchboards (label, description, release flag, what switching it off for a site stops, and what a published site loses); the generator compiles every row, in `order`, into libs/aglyn plugin-manager/first-party-plugins.generated.ts, so a new plugin is declared here and nowhere in core (AGL-3080). An entry with no `catalog` is not on the switchboard. `capabilities` are further switchboard ids the same bundle serves. register keys: site = canvas/site components (client barrel), console = ConsoleExtension (client barrel), tenantApi/consoleApi = API handlers (/server entry), declarations = the light registrations core reads before any surface loads (`/declarations`, both apps, client and server), serverDeclarations = the same for the server alone (`/declarations.server`, platform-event subscriptions), consoleServerDeclarations = the same for the CONSOLE's server alone (`/declarations.console-server`, never loaded or bundled by the tenant runtime: for registrations that open what only the console holds), subprocessors = the third-party recipients the plugin's code sends data to, and its other hosts and its uses of hosts declared elsewhere (`/subprocessors`, called by the generator rather than at runtime, and written into the console's subprocessors manifest as data for the subprocessor inventory), planEntitlements = what each plan includes of the plugin's own entitlement keys (`/plan-entitlements`, called by the generator rather than at runtime and compiled into the catalog file as data that core's PLAN_ENTITLEMENTS composes, because the pricing tables and the plan comparison read it without loading a plugin), usageAxes = the meters the plugin contributes to the platform's cost model and utilization table, and the lines of spend it adds to a workspace's usage budget (`/usage-axes`, called by the generator and compiled into the catalog file as data, because the discount guardrail and the staff org page price a rollup without loading a plugin), videoEmbedProviders = the video hosts whose own player the plugin's Video element frames (`/video-embed-providers`, called by the generator and compiled into the catalog file as data, which the published page and the tenant's frame-src read without loading the plugin), tenantEmails = the emails a site sends its own customers through the plugin (`/tenant-emails`, called by the generator and compiled into the email lib's tenant email catalog as data, which the send path reads without loading the plugin). activityMutationPaths = the plugin's modules that create, transfer or destroy a durable customer object, which `tools/scripts/check-activity-coverage.mjs` holds to logging an activity entry like the platform's own. `alwaysOn` here is the LOADER's meaning — the bundle activates whatever ids `ensure()` is given, so it defeats the per-page narrowing in required-site-plugins.ts and belongs only to `mui`, which the canvas cannot render without. A plugin that merely may not be switched OFF says so with `alwaysOn` in FIRST_PARTY_PLUGINS instead. `modules` (AGL-3116) names the subpath a surface registers from when that surface's code must not ride with the package root's — each site surface has its own module, so a published page never loads a console registrar. `contributes` (AGL-3116, required) declares what the plugin adds and where, in the shape a marketplace manifest uses (core `plugin-contributions.ts`): `site.components` = the canvas component ids it registers, `site.features` = the site runtimes it mounts on every page of a site that switched it on, `console.slots` = the widget slots and panels it fills, `console.routes` / `console.orgRoutes` = the console routes it serves, `console.shell` = it draws a nav tab, a provider or a staff tab the shell renders on every screen. The loaders place a plugin by this declaration alone, so `apps/console/specs/plugin-contributions-declared.spec.ts` holds it to what the registrars actually register. `hostCollections` (AGL-3080) = the subcollections under a site the plugin owns (core `plugin-host-collections.ts`); a collection's `resource` is the KIND a client creates a document in it as, through the platform's generic create route — its field allow-list, plan counter, feature and stamps (core `plugin-host-resources.ts`), compiled and never registered, because that route is a security path. A collection's `siteExport` is how the whole-site backup carries it and what a restore writes back (core `plugin-site-export.ts`). `sitemapSections` (AGL-3080) = the child sitemaps the plugin's own pages fill (core `plugin-sitemap-sections.ts`), compiled because the tenant's sitemap is a published-site reader. `sitemapReaders` (AGL-3475) = child-sitemap families a plugin's READER lists, for pages no single site collection describes (core `plugin-sitemap-readers.ts`): each `section` is a family whose children are `{section}-{key}`, compiled so an index cannot silently drop them, with the reader registered from `serverDeclarations`. `consoleRedirects` (AGL-3080) = the plugin's old console addresses and where each answers now, in Next's redirect shape, compiled into `apps/console/constants/plugins.redirects.generated.json`, which the console's next.config.js spreads into its redirects. `siteBundleSections` (AGL-3080) = the sections of the whole-site backup the plugin answers for itself, data a host collection's `siteExport` cannot describe (core `plugin-site-bundle.ts`): declared here, registered from `serverDeclarations`, and an export fails rather than leaving a declared section out. `taxReturnSource: true` (AGL-3080) = the plugin sells through the platform's own account and registers a tax return source (core `plugin-tax-return-sources.ts`); the operator's sales tax return refuses to be filed while a declared source is unregistered. `revenueSource: true` (AGL-3080) = the plugin earns the operator a take through the platform's account and registers a revenue source (core `plugin-revenue-sources.ts`); the staff revenue report names a declared source it could not read rather than counting it as zero. `notificationCategories` (AGL-3080) = the preference buckets the plugin's notification types fall in, by the prefix before the dot: an `id` no other plugin and not the core owns, a `label` and `description` for the settings page, and `defaults` for the console and email channels; compiled into the catalog file and read by core `notifications.ts`, because the fan-out resolves channels in processes that load no plugin. The id keys stored preferences, so it is never renamed. `notificationDigests` (AGL-3080) = the digests the plugin sends on its own schedule: the `key` its on-by-default switch is stored under in `users/{uid}.digestPrefs`, and the switch's `label` and `description`, compiled the same way so the settings page draws it without loading the plugin. `interactionSteps` (AGL-3080) = the steps the plugin adds to interactions: the stored `type`, the `label` editors, run histories and drafters name it by, and for a step that acts on one of the plugin's records, `picks` — the site collection it lists them from (one the plugin declares under `hostCollections`), the step fields holding the pick, and the words for the picker and for a step with none. `offered: false` keeps a step only an automation holds out of the besigner's interaction builder; `holds` marks a step that suspends the run, with the band of whole minutes it may hold and the `timeoutField` a hold that ran out of time leaves in scope, and a visitor's page never runs a step past one; `typedFields` are the fields a person types words into, each with the words a sentence `names` it by, where a drafted step may leave a bracketed placeholder. Compiled into the catalog file and read by core `site-interactions.ts` and `draft-placeholders.ts`. `hostEvents` (AGL-3080) = the host events the plugin's server doors raise with `emitHostEvent`: the `type` an automation's trigger stores (never renamed), its `order` in every trigger picker (the platform's own `pageView` is 20), the `label` pickers and run rows show, and the `payloadKeys` it puts in scope; compiled into `app-utils/plugin-host-events.generated.ts` and read by core `host-events.ts`, because the event bus, the trigger pickers and the validators read them with no plugin loaded. `containers` (AGL-3080) = the container kinds the plugin keeps — a document other records are filed under by naming its id in `<kind>Ids` on their own document, a campaign being the first — with the org collection a picker reads them from; compiled into core `plugin-manager/plugin-containers.generated.ts`, which the membership helpers and the container picker read. `subscriptionTopics` (AGL-3080) = the streams the plugin's mail is sent under, which a recipient can leave one at a time (`id` is a wire value: it rides in every signed unsubscribe link and keys every recorded opt-out, so it is never renamed), in the preference page's `order`; exactly one plugin marks its topic `default`, the stream a campaign or a scheduled automated email belongs to when it names none. Compiled into core `plugin-manager/plugin-subscription-topics.generated.ts`, the built-in floor of every org's topic catalog.",
+  "$comment": "First-party plugin registry (AGL-417). THE single place that maps plugin ids to packages, register entry points, and API path prefixes. `tools/scripts/generate-plugin-manifests.mjs` turns this into the per-app generated loader manifests — the only files allowed to reference @aglyn/plugins-* outside libs/plugins. `catalog` is the plugin's row on the workspace and site switchboards (label, description, release flag, what switching it off for a site stops, and what a published site loses); the generator compiles every row, in `order`, into libs/aglyn plugin-manager/first-party-plugins.generated.ts, so a new plugin is declared here and nowhere in core (AGL-3080). An entry with no `catalog` is not on the switchboard. `capabilities` are further switchboard ids the same bundle serves. register keys: site = canvas/site components (client barrel), console = ConsoleExtension (client barrel), tenantApi/consoleApi = API handlers (/server entry), declarations = the light registrations core reads before any surface loads (`/declarations`, both apps, client and server), serverDeclarations = the same for the server alone (`/declarations.server`, platform-event subscriptions), consoleServerDeclarations = the same for the CONSOLE's server alone (`/declarations.console-server`, never loaded or bundled by the tenant runtime: for registrations that open what only the console holds), subprocessors = the third-party recipients the plugin's code sends data to, and its other hosts and its uses of hosts declared elsewhere (`/subprocessors`, called by the generator rather than at runtime, and written into the console's subprocessors manifest as data for the subprocessor inventory), planEntitlements = what each plan includes of the plugin's own entitlement keys (`/plan-entitlements`, called by the generator rather than at runtime and compiled into the catalog file as data that core's PLAN_ENTITLEMENTS composes, because the pricing tables and the plan comparison read it without loading a plugin), usageAxes = the meters the plugin contributes to the platform's cost model and utilization table, and the lines of spend it adds to a workspace's usage budget (`/usage-axes`, called by the generator and compiled into the catalog file as data, because the discount guardrail and the staff org page price a rollup without loading a plugin), videoEmbedProviders = the video hosts whose own player the plugin's Video element frames (`/video-embed-providers`, called by the generator and compiled into the catalog file as data, which the published page and the tenant's frame-src read without loading the plugin), tenantEmails = the emails a site sends its own customers through the plugin (`/tenant-emails`, called by the generator and compiled into the email lib's tenant email catalog as data, which the send path reads without loading the plugin). activityMutationPaths = the plugin's modules that create, transfer or destroy a durable customer object, which `tools/scripts/check-activity-coverage.mjs` holds to logging an activity entry like the platform's own. `alwaysOn` here is the LOADER's meaning — the bundle activates whatever ids `ensure()` is given, so it defeats the per-page narrowing in required-site-plugins.ts and belongs only to `mui`, which the canvas cannot render without. A plugin that merely may not be switched OFF says so with `alwaysOn` in FIRST_PARTY_PLUGINS instead. `modules` (AGL-3116) names the subpath a surface registers from when that surface's code must not ride with the package root's — each site surface has its own module, so a published page never loads a console registrar. `contributes` (AGL-3116, required) declares what the plugin adds and where, in the shape a marketplace manifest uses (core `plugin-contributions.ts`): `site.components` = the canvas component ids it registers, `site.features` = the site runtimes it mounts on every page of a site that switched it on, `console.slots` = the widget slots and panels it fills, `console.routes` / `console.orgRoutes` = the console routes it serves, `console.shell` = it draws a nav tab, a provider or a staff tab the shell renders on every screen. The loaders place a plugin by this declaration alone, so `apps/console/specs/plugin-contributions-declared.spec.ts` holds it to what the registrars actually register. `hostCollections` (AGL-3080) = the subcollections under a site the plugin owns (core `plugin-host-collections.ts`); a collection's `resource` is the KIND a client creates a document in it as, through the platform's generic create route — its field allow-list, plan counter, feature and stamps (core `plugin-host-resources.ts`), compiled and never registered, because that route is a security path. A collection's `siteExport` is how the whole-site backup carries it and what a restore writes back (core `plugin-site-export.ts`). `sitemapSections` (AGL-3080) = the child sitemaps the plugin's own pages fill (core `plugin-sitemap-sections.ts`), compiled because the tenant's sitemap is a published-site reader. `sitemapReaders` (AGL-3475) = child-sitemap families a plugin's READER lists, for pages no single site collection describes (core `plugin-sitemap-readers.ts`): each `section` is a family whose children are `{section}-{key}`, compiled so an index cannot silently drop them, with the reader registered from `serverDeclarations`. `consoleRedirects` (AGL-3080) = the plugin's old console addresses and where each answers now, in Next's redirect shape, compiled into `apps/console/constants/plugins.redirects.generated.json`, which the console's next.config.js spreads into its redirects. `siteBundleSections` (AGL-3080) = the sections of the whole-site backup the plugin answers for itself, data a host collection's `siteExport` cannot describe (core `plugin-site-bundle.ts`): declared here, registered from `serverDeclarations`, and an export fails rather than leaving a declared section out. `transferResources` (AGL-3523) = what the plugin can import and export, each a `TransferResourceDescriptor` from core `data-transfer/resource.ts` (key, label, scope, kinds, formats, limits; core `plugin-transfer-resources.ts`): declared here, the server half registered from `serverDeclarations` or `consoleServerDeclarations`, the client half from the console registrar loaded at the `transferResources` slot, and a job fails rather than leaving a declared resource out. `taxReturnSource: true` (AGL-3080) = the plugin sells through the platform's own account and registers a tax return source (core `plugin-tax-return-sources.ts`); the operator's sales tax return refuses to be filed while a declared source is unregistered. `revenueSource: true` (AGL-3080) = the plugin earns the operator a take through the platform's account and registers a revenue source (core `plugin-revenue-sources.ts`); the staff revenue report names a declared source it could not read rather than counting it as zero. `notificationCategories` (AGL-3080) = the preference buckets the plugin's notification types fall in, by the prefix before the dot: an `id` no other plugin and not the core owns, a `label` and `description` for the settings page, and `defaults` for the console and email channels; compiled into the catalog file and read by core `notifications.ts`, because the fan-out resolves channels in processes that load no plugin. The id keys stored preferences, so it is never renamed. `notificationDigests` (AGL-3080) = the digests the plugin sends on its own schedule: the `key` its on-by-default switch is stored under in `users/{uid}.digestPrefs`, and the switch's `label` and `description`, compiled the same way so the settings page draws it without loading the plugin. `interactionSteps` (AGL-3080) = the steps the plugin adds to interactions: the stored `type`, the `label` editors, run histories and drafters name it by, and for a step that acts on one of the plugin's records, `picks` — the site collection it lists them from (one the plugin declares under `hostCollections`), the step fields holding the pick, and the words for the picker and for a step with none. `offered: false` keeps a step only an automation holds out of the besigner's interaction builder; `holds` marks a step that suspends the run, with the band of whole minutes it may hold and the `timeoutField` a hold that ran out of time leaves in scope, and a visitor's page never runs a step past one; `typedFields` are the fields a person types words into, each with the words a sentence `names` it by, where a drafted step may leave a bracketed placeholder. Compiled into the catalog file and read by core `site-interactions.ts` and `draft-placeholders.ts`. `hostEvents` (AGL-3080) = the host events the plugin's server doors raise with `emitHostEvent`: the `type` an automation's trigger stores (never renamed), its `order` in every trigger picker (the platform's own `pageView` is 20), the `label` pickers and run rows show, and the `payloadKeys` it puts in scope; compiled into `app-utils/plugin-host-events.generated.ts` and read by core `host-events.ts`, because the event bus, the trigger pickers and the validators read them with no plugin loaded. `containers` (AGL-3080) = the container kinds the plugin keeps — a document other records are filed under by naming its id in `<kind>Ids` on their own document, a campaign being the first — with the org collection a picker reads them from; compiled into core `plugin-manager/plugin-containers.generated.ts`, which the membership helpers and the container picker read. `subscriptionTopics` (AGL-3080) = the streams the plugin's mail is sent under, which a recipient can leave one at a time (`id` is a wire value: it rides in every signed unsubscribe link and keys every recorded opt-out, so it is never renamed), in the preference page's `order`; exactly one plugin marks its topic `default`, the stream a campaign or a scheduled automated email belongs to when it names none. Compiled into core `plugin-manager/plugin-subscription-topics.generated.ts`, the built-in floor of every org's topic catalog.",
   "plugins": [
     {
       "id": "mui",
@@ -124,7 +124,38 @@
       "hostCollections": [
         {
           "name": "forms",
-          "routeSlug": "forms"
+          "routeSlug": "forms",
+          "siteExport": {
+            "$comment": "A form's definition and published design (AGL-3533), never its submissions. The design is the parent's `rootId`/`nodes`; `versionId` is left off because the bundle carries no version documents, and a dangling pointer stops the editor minting version 1 (the component rule). The list keys and `stats` are what a live form carries: a restore writes with merge:false, so a key left off is erased, and the Forms list queries `retired` and `inCampaign`. Created only through the platform's create route, which counts it against `formsPerHost`.",
+            "limit": 200,
+            "fields": [
+              "displayName",
+              "slug",
+              "fields",
+              "consentFieldName",
+              "routing",
+              "legacyMatch",
+              "rootId",
+              "nodes",
+              "archivedAt",
+              "retired",
+              "campaignIds",
+              "inCampaign",
+              "stats",
+              "nameLower",
+              "nameTokens",
+              "nameReversed",
+              "searchTokens"
+            ],
+            "package": {
+              "kind": "form",
+              "label": "Forms",
+              "slugField": "slug",
+              "nameField": "displayName",
+              "placements": [{ "componentId": "form", "prop": "formId" }]
+            },
+            "count": { "quotaKey": "formsPerHost" }
+          }
         },
         {
           "name": "formSubmissions",
@@ -181,6 +212,25 @@
           "page": "the Forms page"
         }
       ],
+      "transferResources": [
+        {
+          "$comment": "AGL-3532. Personal data: the export route needs “Manage data” on the site and audits every file. Opened on one form, the columns are that form’s questions (`ctx.filter.formId`). Export only: A submission is what a visitor sent through a published form, stamped with the time and the page it came from; a file cannot have sent one, so submissions are exported and never imported.",
+          "key": "forms.submissions",
+          "label": "Form submissions",
+          "singularLabel": "Form submission",
+          "scope": "host",
+          "kinds": [
+            "records"
+          ],
+          "formats": [
+            "csv",
+            "json",
+            "ndjson"
+          ],
+          "description": "What visitors sent through this site’s forms: each answer, and when, on which page and through which form it arrived.",
+          "exportOnly": true
+        }
+      ],
       "contributes": {
         "site": {
           "components": [
@@ -192,6 +242,10 @@
           "shell": true,
           "routes": [
             "/forms"
+          ],
+          "slots": [
+            "sitePackageItemPreview",
+            "transferResources"
           ]
         }
       }
@@ -253,6 +307,7 @@
             ]
           },
           "siteExport": {
+            "package": { "kind": "service", "label": "Booking services", "nameField": "name" },
             "limit": 50,
             "fields": [
               "name",
@@ -283,6 +338,26 @@
           "payloadKeys": ["serviceName", "email", "startsAtMs"]
         }
       ],
+      "transferResources": [
+        {
+          "$comment": "AGL-3532. Export only: the one write path that creates a booking (`bookings/book`) emails the customer and may charge them, and the reminder job would email any booking it found. Export only: A booking is made on the booking page, which holds the slot, takes any payment and sends the confirmation and the reminder; one written from a file would skip all of that, so bookings are exported and never imported. AGL-3548: the Bookings page's plan feature (`bookings`) gates both directions, as the page does.",
+          "key": "bookings",
+          "featureFlag": "bookings",
+          "label": "Bookings",
+          "singularLabel": "Booking",
+          "scope": "host",
+          "kinds": [
+            "records"
+          ],
+          "formats": [
+            "csv",
+            "json",
+            "ndjson"
+          ],
+          "description": "Every booking on this site: the service, the time, the customer’s details, its status and what was paid.",
+          "exportOnly": true
+        }
+      ],
       "contributes": {
         "site": {
           "components": [
@@ -296,7 +371,8 @@
           ],
           "slots": [
             "consoleSearch",
-            "crmRecordBooking"
+            "crmRecordBooking",
+            "transferResources"
           ]
         }
       }
@@ -650,6 +726,74 @@
           "page": "the Categories page"
         }
       ],
+      "transferResources": [
+        {
+          "$comment": "Products and their variants, a row per variant (AGL-3531): matched by handle, then SKU, then ID, and updated on a match; Shopify's product CSV maps column for column, and the Shopify preset writes one.",
+          "key": "commerce.products",
+          "label": "Products",
+          "singularLabel": "Product",
+          "scope": "host",
+          "kinds": ["records"],
+          "formats": ["csv", "json", "ndjson"],
+          "limits": { "maxRows": 50000 },
+          "description": "Products with their options, variants, prices, stock, images and search listing."
+        },
+        {
+          "key": "commerce.categories",
+          "label": "Product categories",
+          "singularLabel": "Product category",
+          "scope": "host",
+          "kinds": ["records"],
+          "formats": ["csv", "json", "ndjson"],
+          "limits": { "maxRows": 2000 },
+          "description": "The category tree products are filed under, matched by slug, then name."
+        },
+        {
+          "$comment": "Exported only: an order is the record of a sale. The upload refuses a file, the hub offers no Import, and every row is still refused at the dry run.",
+          "key": "commerce.orders",
+          "label": "Orders",
+          "singularLabel": "Order",
+          "scope": "host",
+          "kinds": ["records"],
+          "formats": ["csv", "json", "ndjson"],
+          "exportOnly": true,
+          "description": "Every order with its items, money, customer and addresses. Exported only."
+        },
+        {
+          "key": "commerce.discounts",
+          "label": "Discounts",
+          "singularLabel": "Discount",
+          "scope": "host",
+          "kinds": ["records"],
+          "formats": ["csv", "json", "ndjson"],
+          "limits": { "maxRows": 5000 },
+          "description": "Discount codes and automatic promotions, matched by code, then name. New ones start switched off."
+        },
+        {
+          "key": "commerce.coupons",
+          "label": "Coupons",
+          "singularLabel": "Coupon",
+          "scope": "host",
+          "kinds": ["records"],
+          "formats": ["csv", "json", "ndjson"],
+          "limits": { "maxRows": 5000 },
+          "description": "Percent-off coupon codes, matched by code. New ones start switched off."
+        },
+        {
+          "$comment": "Imported by ISSUING each card through the plugin's issue path (AGL-3551), never by writing a balance: owners and admins only, the dry run lists every card and asks for the total typed back, and undo voids only cards nobody has spent from. A card's ID is its code. AGL-3548: issuing cards needs the plan's gift cards (`giftCards`), as the Gift cards card's issue route does; the cards a workspace already holds stay readable, and exportable, on every plan. AGL-3554: imported by the workspace’s owners and admins and the site’s admins alone (importRoles), as an import issues spendable money.",
+          "key": "commerce.gift-cards",
+          "featureFlag": "giftCards",
+          "featureFlagExempt": ["export"],
+          "importRoles": ["admin"],
+          "label": "Gift cards",
+          "singularLabel": "Gift card",
+          "scope": "host",
+          "kinds": ["records"],
+          "formats": ["csv", "json", "ndjson"],
+          "limits": { "maxRows": 2000 },
+          "description": "Every gift card's code, balance and status. An import issues each card, confirmed by the total."
+        }
+      ],
       "contributes": {
         "site": {
           "components": [
@@ -680,7 +824,8 @@
             "commerceGlance",
             "consoleSearch",
             "hostDashboard",
-            "siteMember"
+            "siteMember",
+            "transferResources"
           ]
         }
       }
@@ -934,6 +1079,117 @@
           "id": "tagByForm"
         }
       ],
+      "transferResources": [
+        {
+          "$comment": "AGL-3527. Workspace records; opened under a site, a transfer reads that site's view and an import files new people under it. AGL-3555: like every CRM resource it moves only on a plan with the CRM (featureFlag), except that the contacts and leads EXPORTS stay on every plan, the people files of Settings → Privacy.",
+          "key": "crm.contacts",
+          "featureFlag": "crm",
+          "featureFlagExempt": ["export"],
+          "label": "Contacts",
+          "singularLabel": "Contact",
+          "scope": "org",
+          "kinds": ["records"],
+          "formats": ["csv", "json", "ndjson"],
+          "limits": { "maxRows": 50000 },
+          "description": "Every contact field, custom fields included, with the company, the manager and the owner by name."
+        },
+        {
+          "key": "crm.companies",
+          "featureFlag": "crm",
+          "label": "Companies",
+          "singularLabel": "Company",
+          "scope": "org",
+          "kinds": ["records"],
+          "formats": ["csv", "json", "ndjson"],
+          "limits": { "maxRows": 50000 },
+          "description": "Every company field, custom fields included, with the parent company and the owner by name."
+        },
+        {
+          "key": "crm.email-templates",
+          "featureFlag": "crm",
+          "label": "Email templates",
+          "singularLabel": "Email template",
+          "scope": "org",
+          "kinds": [
+            "package"
+          ],
+          "formats": [
+            "json"
+          ],
+          "limits": {
+            "maxRows": 200
+          },
+          "description": "Shared email templates and snippets, and your own personal ones."
+        },
+        {
+          "key": "crm.leads",
+          "featureFlag": "crm",
+          "featureFlagExempt": ["export"],
+          "label": "Leads",
+          "singularLabel": "Lead",
+          "scope": "org",
+          "kinds": ["records"],
+          "formats": ["csv", "json", "ndjson"],
+          "limits": { "maxRows": 50000 },
+          "description": "Every lead field, custom fields included, with the status, the owner and the campaigns by name."
+        },
+        {
+          "$comment": "AGL-3528. Matched by Aglyn ID or the external id another CRM gave the deal, so a file imported twice updates rather than duplicates.",
+          "key": "crm.deals",
+          "featureFlag": "crm",
+          "label": "Deals",
+          "singularLabel": "Deal",
+          "scope": "org",
+          "kinds": ["records"],
+          "formats": ["csv", "json", "ndjson"],
+          "limits": { "maxRows": 50000 },
+          "description": "Every deal field, custom fields and contact roles included, with the pipeline, stage, contact and company by name."
+        },
+        {
+          "key": "crm.tasks",
+          "featureFlag": "crm",
+          "label": "Tasks",
+          "singularLabel": "Task",
+          "scope": "org",
+          "kinds": ["records"],
+          "formats": ["csv", "json", "ndjson"],
+          "limits": { "maxRows": 50000 },
+          "description": "Every task, with its type, priority and status as your lists label them and the contact, company and deal it is for."
+        },
+        {
+          "key": "crm.activities",
+          "featureFlag": "crm",
+          "label": "Activities",
+          "singularLabel": "Activity",
+          "scope": "org",
+          "kinds": ["records"],
+          "formats": ["csv", "json", "ndjson"],
+          "exportOnly": true,
+          "description": "Every call, email, meeting and note the team logged, with who logged it and what it was about."
+        },
+        {
+          "key": "crm.pipelines",
+          "featureFlag": "crm",
+          "label": "Pipelines and stages",
+          "singularLabel": "Stage",
+          "scope": "org",
+          "kinds": ["records"],
+          "formats": ["csv", "json", "ndjson"],
+          "exportOnly": true,
+          "description": "Each pipeline with its stages in order: their kind, probability and forecast category."
+        },
+        {
+          "key": "crm.fields",
+          "featureFlag": "crm",
+          "label": "Custom fields",
+          "singularLabel": "Custom field",
+          "scope": "org",
+          "kinds": ["records"],
+          "formats": ["csv", "json", "ndjson"],
+          "exportOnly": true,
+          "description": "Every custom field you defined, on which record, of what type, with its choices."
+        }
+      ],
       "contributes": {
         "console": {
           "shell": true,
@@ -947,7 +1203,8 @@
             "consoleSearch",
             "formContactFields",
             "hostDashboard",
-            "orgDashboard"
+            "orgDashboard",
+            "transferResources"
           ]
         }
       }
@@ -961,6 +1218,43 @@
         "consoleServerDeclarations": "registerOutreachConsoleServerDeclarations",
         "subprocessors": "outreachSubprocessors"
       },
+      "transferResources": [
+        {
+          "$comment": "AGL-3548: Sequences' entitlement (`outreach`) gates both directions, as every Sequences route does.",
+          "key": "outreach.sequences",
+          "featureFlag": "outreach",
+          "label": "Sequences",
+          "singularLabel": "Sequence",
+          "scope": "org",
+          "kinds": [
+            "package"
+          ],
+          "formats": [
+            "json"
+          ],
+          "limits": {
+            "maxRows": 500
+          },
+          "description": "Each sequence's steps and settings, imported as a draft. Never who was enrolled or what was sent."
+        },
+        {
+          "$comment": "AGL-3532. Add-only: a row never changes or removes an entry, because the list is a promise not to email someone. AGL-3548: Sequences' entitlement (`outreach`) gates both directions, as every Sequences route does.",
+          "key": "outreach.do-not-contact",
+          "featureFlag": "outreach",
+          "label": "Do-not-contact list",
+          "singularLabel": "Do-not-contact entry",
+          "scope": "org",
+          "kinds": [
+            "records"
+          ],
+          "formats": [
+            "csv",
+            "json",
+            "ndjson"
+          ],
+          "description": "The domains and addresses sequences never email. An import only adds to it; an address is kept as a fingerprint, so only domains are exported."
+        }
+      ],
       "apiPrefixes": [
         "outreach"
       ],
@@ -968,7 +1262,8 @@
         "libs/plugins/outreach/src/lib/mailboxes/mailbox-routes.ts",
         "libs/plugins/outreach/src/lib/routes/sequence-routes.ts",
         "libs/plugins/outreach/src/lib/routes/enroll-routes.ts",
-        "libs/plugins/outreach/src/lib/runtime/mailbox-health-store.ts"
+        "libs/plugins/outreach/src/lib/runtime/mailbox-health-store.ts",
+        "libs/plugins/outreach/src/lib/transfer/do-not-contact-transfer.ts"
       ],
       "catalog": {
         "order": 9,
@@ -1005,6 +1300,9 @@
       ],
       "contributes": {
         "console": {
+          "slots": [
+            "transferResources"
+          ],
           "shell": true,
           "orgRoutes": [
             "/outreach"
@@ -1047,7 +1345,13 @@
         {
           "$comment": "A site's datasets and their records, which live under the organization and are narrowed to the site on the way out; a restore validates each record against its dataset's model and meets the count against the datasets the workspace has paid for, add-ons included.",
           "key": "datasets",
-          "limit": 50
+          "limit": 50,
+          "package": {
+            "kind": "dataset",
+            "label": "Datasets",
+            "nameField": "displayName",
+            "placements": [{ "prop": "repeatDataset" }, { "componentId": "form", "prop": "datasetId" }]
+          }
         }
       ],
       "formRecordTarget": {
@@ -1123,6 +1427,22 @@
           "page": "the Data page"
         }
       ],
+      "transferResources": [
+        {
+          "$comment": "A dataset's records (AGL-3530), one dataset at a time: reached as data.dataset:<datasetId>, so a job, a person's remembered export fields and the one running import each belong to one dataset. The server half registers from consoleServerDeclarations, the client half from the console registrar. readableByMembers (AGL-3546): every member may read a dataset they can see, so every such member may export it; the resource checks the dataset's visibility itself. AGL-3548: the Data page's plan feature (`dataStore`) gates both directions, as the page and the datasets API do.",
+          "key": "data.dataset",
+          "featureFlag": "dataStore",
+          "label": "Dataset records",
+          "singularLabel": "Dataset record",
+          "description": "The records of one dataset, with every field it defines.",
+          "scope": "org",
+          "kinds": ["records"],
+          "formats": ["csv", "json", "ndjson"],
+          "limits": { "maxRows": 50000 },
+          "instances": true,
+          "readableByMembers": true
+        }
+      ],
       "contributes": {
         "console": {
           "shell": true,
@@ -1133,7 +1453,8 @@
             "besignerPageProperties",
             "entityPickers",
             "hostScreenRow",
-            "orgData"
+            "orgData",
+            "transferResources"
           ]
         }
       }
@@ -1168,6 +1489,64 @@
       },
       "apiPrefixes": [
         "email"
+      ],
+      "transferResources": [
+        {
+          "$comment": "One list's members (AGL-3529): imported INTO a list and exported FROM one, one list at a time as email.list-members:<listId>, opened from the list's page. Every address goes through the gate a typed one does; the statement of permission is the plugin's own wizard step; 50,000 rows a file is LIST_IMPORT_MAX_ADDRESSES (list-import.ts).",
+          "key": "email.list-members",
+          "label": "List members",
+          "singularLabel": "List member",
+          "scope": "host",
+          "kinds": [
+            "records"
+          ],
+          "formats": [
+            "csv",
+            "json",
+            "ndjson"
+          ],
+          "limits": {
+            "maxRows": 50000
+          },
+          "instances": true,
+          "description": "The people on one email list, with the consent each was added under."
+        },
+        {
+          "$comment": "A site's suppression list (AGL-3529). An import only adds: an address already suppressed is left as it is, and nothing removes one.",
+          "key": "email.suppressions",
+          "label": "Suppressions",
+          "singularLabel": "Suppression",
+          "scope": "host",
+          "kinds": [
+            "records"
+          ],
+          "formats": [
+            "csv",
+            "json",
+            "ndjson"
+          ],
+          "limits": {
+            "maxRows": 50000
+          },
+          "description": "The addresses a site's marketing email skips, and why."
+        },
+        {
+          "$comment": "The organization's email topics as workspace package items (AGL-3550): a topic's name, description, retired flag and confirmation setting, written through the topic page's own document shape. Never an opt-out or a confirmation — those are a person's, per site.",
+          "key": "email.topics",
+          "label": "Email topics",
+          "singularLabel": "Email topic",
+          "scope": "org",
+          "kinds": [
+            "package"
+          ],
+          "formats": [
+            "json"
+          ],
+          "limits": {
+            "maxRows": 200
+          },
+          "description": "Each topic's name, what recipients are told they get, and whether it is retired. Never who chose it."
+        }
       ],
       "catalog": {
         "order": 11,
@@ -1215,7 +1594,9 @@
             "campaignDesignPreview",
             "campaignSenderEditor",
             "campaignTopicOptions",
-            "campaignTopicSelect"
+            "campaignTopicSelect",
+            "sitePackageItemPreview",
+            "transferResources"
           ]
         }
       }
@@ -1226,7 +1607,8 @@
       "register": {
         "site": "registerEventsCalendarPlugin",
         "console": "registerEventsCalendarConsole",
-        "tenantApi": "registerEventsCalendarApi"
+        "tenantApi": "registerEventsCalendarApi",
+        "consoleServerDeclarations": "registerEventsCalendarConsoleServerDeclarations"
       },
       "modules": {
         "site": "site"
@@ -1250,7 +1632,48 @@
       "hostCollections": [
         {
           "name": "events",
-          "routeSlug": "events"
+          "routeSlug": "events",
+          "siteExport": {
+            "$comment": "A site's calendar events (AGL-3533). No attendee or RSVP data exists on them. A deleted event carries `deletedAt` and is left out by the export.",
+            "limit": 200,
+            "fields": [
+              "title",
+              "startsAtMs",
+              "endsAtMs",
+              "location",
+              "organizer",
+              "description",
+              "coverImage",
+              "coverImageAlt",
+              "status"
+            ],
+            "package": { "kind": "event", "label": "Events", "nameField": "title" },
+            "count": {
+              "uncapped": "The events page creates an event with a client write and no count, so a restore mints nothing an editor could not already."
+            }
+          }
+        }
+      ],
+      "transferResources": [
+        {
+          "$comment": "AGL-3532. AGL-3548: the Event Calendar add-on (`eventCalendar`) gates both directions, as the Events page does.",
+          "key": "events",
+          "featureFlag": "eventCalendar",
+          "label": "Events",
+          "singularLabel": "Event",
+          "scope": "host",
+          "kinds": [
+            "records"
+          ],
+          "formats": [
+            "csv",
+            "json",
+            "ndjson"
+          ],
+          "limits": {
+            "maxRows": 2000
+          },
+          "description": "This site’s calendar events, matched on their ID, then the title and start together."
         }
       ],
       "contributes": {
@@ -1263,6 +1686,9 @@
           "shell": true,
           "routes": [
             "/events"
+          ],
+          "slots": [
+            "transferResources"
           ]
         }
       }
@@ -1350,6 +1776,7 @@
             "fields": ["name", "parameters", "variables", "operations", "returnValue"]
           },
           "siteExport": {
+            "package": { "kind": "function", "label": "Functions", "nameField": "name", "bindingToken": "fn" },
             "limit": 100,
             "fields": ["name", "parameters", "variables", "operations", "returnValue"]
           }
@@ -1366,6 +1793,7 @@
             "fields": ["name", "type", "value", "workflowId", "workflowName"]
           },
           "siteExport": {
+            "package": { "kind": "variable", "label": "Variables", "nameField": "name", "bindingToken": "var", "references": [{ "field": "workflowId", "kind": "workflow" }] },
             "limit": 100,
             "fields": ["name", "type", "value", "workflowId", "workflowName"]
           }
@@ -1396,6 +1824,24 @@
         "serverDeclarations": "registerMarketingServerDeclarations",
         "tenantEmails": "marketingTenantEmails"
       },
+      "transferResources": [
+        {
+          "key": "marketing.campaigns",
+          "label": "Campaigns",
+          "singularLabel": "Campaign",
+          "scope": "org",
+          "kinds": [
+            "package"
+          ],
+          "formats": [
+            "json"
+          ],
+          "limits": {
+            "maxRows": 500
+          },
+          "description": "Each campaign's name, dates, lists and its emails' copy, imported as drafts. Never what was sent or its results."
+        }
+      ],
       "modules": {
         "site": "site"
       },
@@ -1426,11 +1872,62 @@
       "hostCollections": [
         {
           "name": "experiments",
-          "routeSlug": "marketing"
+          "routeSlug": "marketing",
+          "siteExport": {
+            "$comment": "A/B experiments (AGL-3533): the design and the outcome. The per-variant counters live in the `stats` subcollection and do not travel. A variant's `versionId` names a version of the experiment's page, and a package carries only a page's published version, so on another site the variants are picked again.",
+            "limit": 100,
+            "fields": [
+              "name",
+              "nameLower",
+              "nameTokens",
+              "nameReversed",
+              "status",
+              "target",
+              "screenId",
+              "nodeId",
+              "variants",
+              "goal",
+              "winnerVariantId",
+              "endAtMs",
+              "autoWinner",
+              "autoCompleted",
+              "completedAt"
+            ],
+            "package": {
+              "kind": "experiment",
+              "label": "Experiments",
+              "nameField": "name",
+              "references": [{ "field": "screenId", "kind": "page" }]
+            },
+            "count": {
+              "uncapped": "The experiments card creates an experiment with a client write and no count, so a restore mints nothing an editor could not already."
+            }
+          }
         },
         {
           "name": "overlays",
-          "routeSlug": "marketing"
+          "routeSlug": "marketing",
+          "siteExport": {
+            "$comment": "Announcement bars and popups (AGL-3533). `stats` is carried because the editor writes the whole document back with it, so a live overlay always holds one.",
+            "limit": 100,
+            "fields": [
+              "kind",
+              "name",
+              "enabled",
+              "startAtMs",
+              "endAtMs",
+              "pathPatterns",
+              "excludePathPatterns",
+              "order",
+              "bar",
+              "popup",
+              "stats"
+            ],
+            "package": { "kind": "overlay", "label": "Bars and popups", "nameField": "name" },
+            "count": {
+              "uncapped": "The overlays card creates a bar or popup with a client write and no count, so a restore mints nothing an editor could not already."
+            }
+          }
         },
         {
           "name": "campaignAttributions",
@@ -1509,7 +2006,8 @@
             "emailTemplateReport",
             "hostDashboard",
             "inboxCampaigns",
-            "inboxRecordAttribution"
+            "inboxRecordAttribution",
+            "transferResources"
           ]
         }
       }
@@ -1519,7 +2017,8 @@
       "package": "@aglyn/plugins-redirects",
       "register": {
         "console": "registerRedirectsConsole",
-        "tenantApi": "registerRedirectsApi"
+        "tenantApi": "registerRedirectsApi",
+        "consoleServerDeclarations": "registerRedirectsConsoleServerDeclarations"
       },
       "catalog": {
         "order": 16,
@@ -1552,7 +2051,35 @@
               "approvedByField": "externalDestinationApprovedBy"
             },
             "livePathField": "source"
+          },
+          "siteExport": {
+            "$comment": "A site's redirects (AGL-3533). `externalDestinationApprovedBy` is never read from a file: a restore stamps the admin who imported it on a destination off the site. `lastHitAt` is when it last fired here and does not travel.",
+            "limit": 500,
+            "fields": ["source", "destination", "statusCode", "kind", "priority", "enabled"],
+            "package": { "kind": "redirect", "label": "Redirects", "nameField": "source" }
           }
+        }
+      ],
+      "transferResources": [
+        {
+          "$comment": "AGL-3532. Written through the same allow-list, quota, publish role and approval stamp the redirects page and the create route use; the approver of an off-site destination is the person importing, never a column of the file. AGL-3548: the Redirects page's plan feature (`redirects`) gates both directions, as the page does; rules without it are not served either.",
+          "key": "redirects",
+          "featureFlag": "redirects",
+          "label": "Redirects",
+          "singularLabel": "Redirect",
+          "scope": "host",
+          "kinds": [
+            "records"
+          ],
+          "formats": [
+            "csv",
+            "json",
+            "ndjson"
+          ],
+          "limits": {
+            "maxRows": 5000
+          },
+          "description": "This site’s redirect rules, matched on the path they redirect from."
         }
       ],
       "contributes": {
@@ -1562,7 +2089,8 @@
             "/redirects"
           ],
           "slots": [
-            "consoleSearch"
+            "consoleSearch",
+            "transferResources"
           ]
         }
       }
@@ -1581,6 +2109,26 @@
         "planEntitlements": "workflowsPlanEntitlements",
         "usageAxes": "workflowsUsageAxes"
       },
+      "transferResources": [
+        {
+          "$comment": "AGL-3548: org automations' plan feature (`actions`) gates both directions, as their section and their create route do.",
+          "key": "workflows.org-automations",
+          "featureFlag": "actions",
+          "label": "Org automations",
+          "singularLabel": "Org automation",
+          "scope": "org",
+          "kinds": [
+            "package"
+          ],
+          "formats": [
+            "json"
+          ],
+          "limits": {
+            "maxRows": 100
+          },
+          "description": "The organization's automations — trigger, steps and sites — imported switched off."
+        }
+      ],
       "consoleRedirects": [
         {
           "$comment": "Workflows became Automation: the section holds a Workflows tab, so the parent could not keep the name. Next carries the query string across, so the tab deep links (`?tab=actions`, `?tab=webhooks`) survive; their ids never changed. `automation-section.spec.ts` holds the retired address.",
@@ -1630,6 +2178,7 @@
           },
           "siteExport": {
             "$comment": "`trigger` is written as a literal null by the edit path, so absence and null are different states and a restore keeps the null.",
+            "package": { "kind": "workflow", "label": "Workflows", "nameField": "name" },
             "limit": 100,
             "fields": ["name", "steps", "returnValue", "trigger"]
           }
@@ -1673,6 +2222,7 @@
           },
           "siteExport": {
             "$comment": "The stored shape `hostActionDocument` writes, which is narrower than the create's list: every creator now creates a shell and merge-sets the rest. `recipe` is the stamp of the recipe an action began as (AGL-2639).",
+            "package": { "kind": "action", "label": "Interactions and actions", "nameField": "name" },
             "limit": 100,
             "fields": ["name", "trigger", "steps", "enabled", "recipe"]
           }
@@ -1768,7 +2318,8 @@
             "adminOrgDetail",
             "consoleSearch",
             "hostActivity",
-            "staffSite"
+            "staffSite",
+            "transferResources"
           ]
         }
       }

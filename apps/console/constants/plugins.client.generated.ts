@@ -22,7 +22,7 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     id: 'forms',
     apiPrefixes: ["forms"],
     register: {"site":"registerFormsPlugin","console":"registerFormsConsole"},
-    contributes: {"console":{"shell":true,"routes":["/forms"]}},
+    contributes: {"console":{"shell":true,"routes":["/forms"],"slots":["sitePackageItemPreview","transferResources"]}},
     load: () => import('@aglyn/plugins-forms'),
     loads: {
       site: () => import('@aglyn/plugins-forms/site'),
@@ -32,7 +32,7 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     id: 'bookings',
     apiPrefixes: ["bookings"],
     register: {"site":"registerBookingsPlugin","console":"registerBookingsConsole"},
-    contributes: {"console":{"shell":true,"routes":["/bookings"],"slots":["consoleSearch","crmRecordBooking"]}},
+    contributes: {"console":{"shell":true,"routes":["/bookings"],"slots":["consoleSearch","crmRecordBooking","transferResources"]}},
     load: () => import('@aglyn/plugins-bookings'),
     loads: {
       site: () => import('@aglyn/plugins-bookings/site'),
@@ -42,7 +42,7 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     id: 'commerce',
     apiPrefixes: ["commerce","membership"],
     register: {"site":"registerCommercePlugin","console":"registerCommerceConsole"},
-    contributes: {"console":{"shell":true,"routes":["/pos","/products"],"slots":["commerceGlance","consoleSearch","hostDashboard","siteMember"]}},
+    contributes: {"console":{"shell":true,"routes":["/pos","/products"],"slots":["commerceGlance","consoleSearch","hostDashboard","siteMember","transferResources"]}},
     load: () => import('@aglyn/plugins-commerce'),
     loads: {
       site: () => import('@aglyn/plugins-commerce/site'),
@@ -59,27 +59,27 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     id: 'crm',
     apiPrefixes: ["crm"],
     register: {"console":"registerCrmConsole"},
-    contributes: {"console":{"shell":true,"routes":["/crm"],"orgRoutes":["/crm"],"slots":["consoleSearch","formContactFields","hostDashboard","orgDashboard"]}},
+    contributes: {"console":{"shell":true,"routes":["/crm"],"orgRoutes":["/crm"],"slots":["consoleSearch","formContactFields","hostDashboard","orgDashboard","transferResources"]}},
     load: () => import('@aglyn/plugins-crm'),
   },
   {
     id: 'outreach',
     apiPrefixes: ["outreach"],
     register: {"console":"registerOutreachConsole"},
-    contributes: {"console":{"shell":true,"orgRoutes":["/outreach"]}},
+    contributes: {"console":{"slots":["transferResources"],"shell":true,"orgRoutes":["/outreach"]}},
     load: () => import('@aglyn/plugins-outreach'),
   },
   {
     id: 'data',
     register: {"console":"registerDataConsole"},
-    contributes: {"console":{"shell":true,"routes":["/data"],"slots":["besignerPageProperties","entityPickers","hostScreenRow","orgData"]}},
+    contributes: {"console":{"shell":true,"routes":["/data"],"slots":["besignerPageProperties","entityPickers","hostScreenRow","orgData","transferResources"]}},
     load: () => import('@aglyn/plugins-data'),
   },
   {
     id: 'email',
     apiPrefixes: ["email"],
     register: {"site":"registerEmailPlugin","console":"registerEmailConsole"},
-    contributes: {"console":{"shell":true,"routes":["/emails"],"orgRoutes":["/emails"],"slots":["campaignDesignCreate","campaignDesignPreview","campaignSenderEditor","campaignTopicOptions","campaignTopicSelect"]}},
+    contributes: {"console":{"shell":true,"routes":["/emails"],"orgRoutes":["/emails"],"slots":["campaignDesignCreate","campaignDesignPreview","campaignSenderEditor","campaignTopicOptions","campaignTopicSelect","sitePackageItemPreview","transferResources"]}},
     load: () => import('@aglyn/plugins-email'),
     loads: {
       site: () => import('@aglyn/plugins-email/site'),
@@ -89,7 +89,7 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     id: 'events-calendar',
     apiPrefixes: ["events"],
     register: {"site":"registerEventsCalendarPlugin","console":"registerEventsCalendarConsole"},
-    contributes: {"console":{"shell":true,"routes":["/events"]}},
+    contributes: {"console":{"shell":true,"routes":["/events"],"slots":["transferResources"]}},
     load: () => import('@aglyn/plugins-events-calendar'),
     loads: {
       site: () => import('@aglyn/plugins-events-calendar/site'),
@@ -112,7 +112,7 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     id: 'marketing',
     apiPrefixes: ["campaigns","experiments"],
     register: {"console":"registerMarketingConsole","staff":"registerMarketingConsole","site":"registerMarketingPlugin"},
-    contributes: {"console":{"shell":true,"routes":["/marketing"],"orgRoutes":["/marketing"],"slots":["adminOrgDetail","besignerInteractions","crmRecordAttribution","emailMessages","emailTemplateRecipients","emailTemplateReport","hostDashboard","inboxCampaigns","inboxRecordAttribution"]}},
+    contributes: {"console":{"shell":true,"routes":["/marketing"],"orgRoutes":["/marketing"],"slots":["adminOrgDetail","besignerInteractions","crmRecordAttribution","emailMessages","emailTemplateRecipients","emailTemplateReport","hostDashboard","inboxCampaigns","inboxRecordAttribution","transferResources"]}},
     load: () => import('@aglyn/plugins-marketing'),
     loads: {
       site: () => import('@aglyn/plugins-marketing/site'),
@@ -121,14 +121,14 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
   {
     id: 'redirects',
     register: {"console":"registerRedirectsConsole"},
-    contributes: {"console":{"shell":true,"routes":["/redirects"],"slots":["consoleSearch"]}},
+    contributes: {"console":{"shell":true,"routes":["/redirects"],"slots":["consoleSearch","transferResources"]}},
     load: () => import('@aglyn/plugins-redirects'),
   },
   {
     id: 'workflows',
     apiPrefixes: ["hooks","automations"],
     register: {"console":"registerWorkflowsConsole","staff":"registerWorkflowsConsole"},
-    contributes: {"console":{"shell":true,"routes":["/automation"],"orgRoutes":["/automation"],"slots":["adminOrgDetail","consoleSearch","hostActivity","staffSite"]}},
+    contributes: {"console":{"shell":true,"routes":["/automation"],"orgRoutes":["/automation"],"slots":["adminOrgDetail","consoleSearch","hostActivity","staffSite","transferResources"]}},
     load: () => import('@aglyn/plugins-workflows'),
   },
   {

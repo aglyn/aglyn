@@ -19,9 +19,10 @@
 import {
   type ConsolePluginPageProps,
   type CrmDealStatus,
+  type CrmPicklist,
   CRM_COLLECTIONS,
+  crmPicklistRank,
   dealStageById,
-  findOrgMember,
   ORG_SCOPE_TOKEN,
   pluginDocsHelp,
 } from '@aglyn/aglyn'
@@ -34,9 +35,7 @@ import {
 import { CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
-import ListQueryNotices, {
-  listQueryRefusals,
-} from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
+import ListQueryNotices from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
 import { useCrmSavedView } from '../hooks/use-crm-saved-view'
 import { useCrmViewGrid } from '../hooks/use-crm-view-grid'
 import { CrmListActions, CrmListToolbar } from './crm-list-toolbar'
@@ -47,14 +46,22 @@ import {
   nextActivityColumn,
 } from './crm-next-activity-column'
 import {
+  DEAL_FILTER_CODECS,
   DEAL_LIST_DECLARATION,
   DEAL_LIST_FILTER_FIELDS,
+  DEAL_PICKLIST_FILTER_NONE,
   DEAL_PREFIX_SEARCH,
   dealPipelineBase,
+  dealQueryClause,
 } from '../constants/deal-filters'
 import { useCrmFoldsScope, useCrmListQuery } from '../hooks/use-crm-list-query'
+import { useCrmPicklist } from '../hooks/use-crm-picklist'
+import { crmAskClauses, crmQueryRefusals } from '../model/crm-list-query'
 import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
-import { listFilterGridColumns } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import {
+  type ListFilterOption,
+  listFilterGridColumns,
+} from '@aglyn/shared-ui-jsx/const/list-grid-filter'
 import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
 import CrmViewsControl from './crm-views-control'
 import EmptyStateComponent from '@aglyn/shared-ui-jsx/components/empty-state.component'
@@ -84,9 +91,7 @@ import {
 } from '../hooks/use-deals'
 import { useOrgMemberDirectory } from '../hooks/use-org-member-directory'
 import { usePipeline } from '../hooks/use-pipeline'
-import { downloadTextFile } from '../model/contacts-csv'
 import { crmRoutes } from '../model/crm-routes'
-import { type DealCsvOptions, dealsCsv } from '../model/deals-csv'
 import {
   boardSummary,
   DEAL_STATUS_LABELS,
@@ -97,7 +102,8 @@ import {
 import { customFieldColumns } from './contact-custom-columns'
 import { DealBoard } from './deal-board'
 import { DealEditDrawer } from './deal-edit-drawer'
-import { DealImportButton } from './deal-import-drawer'
+import { CrmExportButton, CrmImportButton } from './crm-transfer-buttons'
+import { CRM_DEALS_RESOURCE } from '../transfer/fields'
 import DealsBulkBar from './deals-bulk-bar'
 import { LostReasonDialog } from './lost-reason-dialog'
 import { OwnerAvatar } from './owner-avatar'
@@ -106,17 +112,31 @@ import { PipelinesDialog } from './pipelines-dialog'
 type View = 'board' | 'table'
 type StatusFilter = CrmDealStatus | 'all'
 
-/** What the deals table's panel offers: the status, and "No next activity". */
+/** What the deals table's panel offers: the status, "No next activity", the Type and the Lead source. */
 const DEAL_GRID_FILTER_FIELDS = DEAL_LIST_FILTER_FIELDS
 const DEAL_GRID_FILTER_HEADERS: Readonly<Record<string, string>> = {
   status: 'Status',
   [CRM_NEXT_ACTIVITY_FILTER_FIELD.column]: CRM_NEXT_ACTIVITY_FILTER_HEADER,
+  type: 'Type',
+  leadSource: 'Lead source',
 }
-const DEAL_FILTER_OPTIONS = {
-  status: (['open', 'won', 'lost'] as const).map((value) => ({
-    value,
-    label: DEAL_STATUS_LABELS[value],
-  })),
+const DEAL_STATUS_FILTER_OPTIONS = (['open', 'won', 'lost'] as const).map((value) => ({
+  value,
+  label: DEAL_STATUS_LABELS[value],
+}))
+
+/** Salesforce's Type and Lead source columns are offered, not shown, until a view turns them on (AGL-3516). */
+const DEAL_HIDDEN_COLUMNS: Readonly<Record<string, boolean>> = { type: false, leadSource: false }
+
+/** A picklist's choices for its filter: every value the org keeps, inactive ones marked, then "none". */
+function picklistFilterOptions(picklist: CrmPicklist, none: string): ListFilterOption[] {
+  return [
+    ...picklist.values.map((value) => ({
+      value: value.label,
+      label: value.active ? value.label : `${value.label} (inactive)`,
+    })),
+    { value: DEAL_PICKLIST_FILTER_NONE, label: none },
+  ]
 }
 
 
@@ -162,9 +182,9 @@ const ORG_PIPELINE_TOKENS: readonly string[] = [ORG_SCOPE_TOKEN]
  *
  * The table's rows are selectable, and a selection raises `DealsBulkBar`
  * over it — whose stage moves go through the same `useDealStageApi` as a
- * drag. Export CSV beside the status toggle writes the page through
- * `dealsCsv()`, naming the pipeline, the stage and the owner; the bar
- * writes the same file over the selection.
+ * drag. Import and Export open the console's import wizard and export
+ * dialog on `crm.deals` (AGL-3528): the export over the selection, the
+ * list's own query, or every deal.
  */
 export function DealsSection(props: ConsolePluginPageProps) {
   const { hostId, org, basePath } = props
@@ -189,6 +209,9 @@ export function DealsSection(props: ConsolePluginPageProps) {
   const nowMs = useMemo(() => Date.now(), [])
   // The org's deal fields, for the table's optional columns (AGL-2661).
   const dealFields = useContactFieldDefinitions(scope.orgId, 'deal')
+  // Salesforce's Type and Lead source lists, for their columns and filters (AGL-3516).
+  const typeList = useCrmPicklist('opportunityType', scope.orgId)
+  const leadSourceList = useCrmPicklist('leadSource', scope.orgId)
 
   const [view, setView] = useState<View>('board')
   const [closedExpanded, setClosedExpanded] = useState(false)
@@ -238,13 +261,16 @@ export function DealsSection(props: ConsolePluginPageProps) {
   const searchKey = searchWords.join(' ')
   const foldsScope = useCrmFoldsScope(scope.orgId, scope.visibleTo)
   const pipelineBase = useMemo(() => dealPipelineBase(pipeline?.$id ?? null), [pipeline?.$id])
+  // Each stored clause asked through the field its writer keeps — a Type
+  // or a Lead source by its key (AGL-3516).
+  const asked = useMemo(() => crmAskClauses(viewFilters, dealQueryClause), [viewFilters])
   const paged = useCrmListQuery<DealDoc>({
     scope: scope.scope,
     collection: CRM_COLLECTIONS.deals,
     visibleTo: scope.visibleTo,
     foldsScope,
     declaration: DEAL_LIST_DECLARATION,
-    clauses: viewFilters,
+    clauses: asked.clauses,
     search: searchWords,
     base: pipelineBase,
     prefixSearch: DEAL_PREFIX_SEARCH,
@@ -320,22 +346,12 @@ export function DealsSection(props: ConsolePluginPageProps) {
   // A page or a status is a different set of rows; a selection made on
   // the last one would be a count over rows no longer on screen.
   useEffect(() => setSelectedIds([]), [paged.plan, paged.page])
-  const csvOptions: DealCsvOptions = useMemo(
-    () => ({
-      pipelineName: (id) => pipelineState.pipelineById(id)?.name,
-      stageName: (pipelineId, stageId) =>
-        dealStageById(pipelineState.pipelineById(pipelineId), stageId)?.name,
-      ownerEmail: (uid) => {
-        const member = findOrgMember(roster.members, uid)
-        return member?.email || member?.label || uid
-      },
-    }),
-    [pipelineState, roster.members],
+  // The list's filter, when one narrows it, for the export to read the same
+  // records the list does (AGL-3528).
+  const exportFilter = useMemo(
+    () => (paged.plan.served.length || paged.plan.searched ? { label: 'what the list shows', plan: paged.plan } : null),
+    [paged.plan],
   )
-  // The page on screen; Export all on the bulk bar takes the whole list.
-  const handleExport = useCallback(() => {
-    downloadTextFile('deals.csv', 'text/csv', dealsCsv(paged.rows, csvOptions))
-  }, [paged.rows, csvOptions])
 
   const columns: GridColDef[] = useMemo(
     () => [
@@ -431,10 +447,13 @@ export function DealsSection(props: ConsolePluginPageProps) {
       },
       // When the earliest open task against the deal is due (AGL-2661).
       nextActivityColumn(nowMs),
+      // Salesforce's Type and Lead source, optional, in their lists' order (AGL-3516).
+      picklistColumn('type', 'Type', typeList.picklist),
+      picklistColumn('leadSource', 'Lead source', leadSourceList.picklist),
       // The org's deal fields as optional columns (AGL-2661).
       ...customFieldColumns(dealFields.active),
     ],
-    [pipelineState, roster, dealFields.active, nowMs],
+    [pipelineState, roster, dealFields.active, nowMs, typeList.picklist, leadSourceList.picklist],
   )
   /** The table's rows: the query's page. */
   const tableRows = paged.rows
@@ -443,26 +462,47 @@ export function DealsSection(props: ConsolePluginPageProps) {
    * filters are the grid's own panel over the view's clauses (AGL-3313),
    * every one of them asked of the query (AGL-3321).
    */
+  /*
+   * The choices each select column offers. A stored clause naming a value
+   * no longer listed stays a choice, so the panel can show it and clear it.
+   */
+  const filterOptions = useMemo<Record<string, ListFilterOption[]>>(() => {
+    const stale = (field: string, known: readonly { value: string }[]) =>
+      viewFilters
+        .filter((clause) => clause.field === field && clause.op !== 'isEmpty')
+        .flatMap((clause) => clause.value.split(','))
+        .map((value) => value.trim())
+        .filter((value) => value && !known.some((option) => option.value === value))
+        .map((value) => ({ value, label: value }))
+    const types = picklistFilterOptions(typeList.picklist, 'No type')
+    const sources = picklistFilterOptions(leadSourceList.picklist, 'No lead source')
+    return {
+      status: DEAL_STATUS_FILTER_OPTIONS,
+      type: [...types, ...stale('type', types)],
+      leadSource: [...sources, ...stale('leadSource', sources)],
+    }
+  }, [viewFilters, typeList.picklist, leadSourceList.picklist])
   const filterColumns = useMemo(
-    () => listFilterGridColumns(columns, DEAL_GRID_FILTER_FIELDS, DEAL_FILTER_OPTIONS, DEAL_GRID_FILTER_HEADERS),
-    [columns],
+    () => listFilterGridColumns(columns, DEAL_GRID_FILTER_FIELDS, filterOptions, DEAL_GRID_FILTER_HEADERS),
+    [columns, filterOptions],
   )
-  const grid = useCrmViewGrid(views, filterColumns)
+  const grid = useCrmViewGrid(views, filterColumns, DEAL_HIDDEN_COLUMNS)
   const gridFilter = useListGridFilter({
     clauses: viewFilters,
     onChange: views.setFilters,
-    selectFields: ['status'],
+    selectFields: ['status', 'type', 'leadSource'],
+    codecs: DEAL_FILTER_CODECS,
     search: { words: searchWords, onChange: setSearchWords },
   })
   // What the query could not hold, named by the clause the reader set.
   const refused = useMemo(
     () =>
-      listQueryRefusals(paged.plan.refused, {
+      crmQueryRefusals(paged.plan, asked, {
         fields: DEAL_GRID_FILTER_FIELDS,
         headers: DEAL_GRID_FILTER_HEADERS,
-        options: DEAL_FILTER_OPTIONS,
+        options: filterOptions,
       }),
-    [paged.plan.refused],
+    [paged.plan, asked, filterOptions],
   )
 
   const noOrg = scope.ready && !scope.orgId
@@ -480,17 +520,8 @@ export function DealsSection(props: ConsolePluginPageProps) {
           // The record actions, top right and never clipped (AGL-3311).
           action: (
             <CrmListActions>
-              <DealImportButton hostId={hostId} />
-              {/* The file is the table's rows, so it is offered with the table. */}
-              {view === 'table' ? (
-                <Button
-                  size="small"
-                  onClick={handleExport}
-                  disabled={!paged.rows.length}
-                >
-                  {'Export CSV'}
-                </Button>
-              ) : null}
+              <CrmImportButton resource={CRM_DEALS_RESOURCE} noun="deals" hostId={hostId} mappingZone="deals" />
+              <CrmExportButton resource={CRM_DEALS_RESOURCE} hostId={hostId} filter={exportFilter} />
               <Button
                 size="small"
                 startIcon={<MdiIcon path={mdiCogOutline.path} size={0.8} />}
@@ -630,7 +661,7 @@ export function DealsSection(props: ConsolePluginPageProps) {
                   headers={DEAL_GRID_FILTER_HEADERS}
                   clauses={viewFilters}
                   onChange={views.setFilters}
-                  options={DEAL_FILTER_OPTIONS}
+                  options={filterOptions}
                   marksServed={false}
                 />
               </CrmListToolbar>
@@ -645,7 +676,6 @@ export function DealsSection(props: ConsolePluginPageProps) {
                     pipelineById={pipelineState.pipelineById}
                     roster={roster}
                     api={api}
-                    csv={csvOptions}
                   />
                   <CrmColumnOrderProvider value={grid.columnOrder}>
                     <ListTable
@@ -741,6 +771,19 @@ export function DealsSection(props: ConsolePluginPageProps) {
   )
 }
 DealsSection.displayName = 'DealsSection'
+
+/** An optional column of a picklist field: its label, sorted in the list's order. */
+function picklistColumn(field: 'type' | 'leadSource', headerName: string, picklist: CrmPicklist): GridColDef {
+  return {
+    field,
+    headerName,
+    flex: 0.8,
+    minWidth: 130,
+    valueGetter: (_value: unknown, row: DealDoc) => String(row[field] ?? ''),
+    sortComparator: (a: string, b: string) =>
+      crmPicklistRank(picklist, a) - crmPicklistRank(picklist, b) || a.localeCompare(b),
+  }
+}
 
 function Figure(props: { label: string; value: string }) {
   return (

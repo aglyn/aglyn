@@ -25,6 +25,7 @@ import {
   PLAN_ENTITLEMENTS,
   resolveRolePermissions,
 } from '@aglyn/aglyn'
+import { pluginTransferResourceUi } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
 import { OUTREACH_CONSOLE_SECTIONS } from './components/outreach-console-sections'
 import {
   OUTREACH_PLUGIN_ID,
@@ -133,5 +134,13 @@ describe('outreach plugin (AGL-2974)', () => {
     expect(holds('admin')).toBe(true)
     expect(holds('editor')).toBe(false)
     expect(holds('viewer')).toBe(false)
+  })
+
+  it('registers the do-not-contact list’s Import and Export with the console', () => {
+    registerOutreachConsole()
+    expect(pluginTransferResourceUi('outreach.do-not-contact')).toMatchObject({
+      label: 'Do-not-contact list',
+      pluginId: OUTREACH_PLUGIN_ID,
+    })
   })
 })

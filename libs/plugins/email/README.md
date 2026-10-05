@@ -43,7 +43,8 @@ This plugin owns email designs, the topic catalog, lists, sending identities and
 `@aglyn/plugins-email/server` imports `firebase-admin` and is kept out of the client entry point.
 
 - `registerEmailApi()` (the `tenantApi` surface) registers the recipient-facing pages behind signed links: `email/unsubscribe`, `email/resubscribe`, `email/preferences` and `email/confirm`.
-- `registerEmailConsoleApi()` (the `consoleApi` surface) registers list membership routes (`email/list-rule-preview`, `email/list-members-preview`, `email/list-members-add`), the staged list import routes, the suppression routes, and an email design draft writer on the core's resource-drafts seam.
+- `registerEmailConsoleApi()` (the `consoleApi` surface) registers list membership routes (`email/list-rule-preview`, `email/list-members-preview`, `email/list-members-add`), the list import's screening readout (`email/list-import-screening`), the suppression routes, and an email design draft writer on the core's resource-drafts seam.
+- `registerEmailConsoleServerDeclarations()` (the `consoleServerDeclarations` surface) registers, among others, the plugin's two transfer resources: `email.list-members` (one list's members, imported into and exported from that list) and `email.suppressions` (a site's suppression list, import add-only). The console registrar registers their wizard halves, including the list import's own steps.
 
 Routes are served by the host app's API dispatcher under `/api/`.
 

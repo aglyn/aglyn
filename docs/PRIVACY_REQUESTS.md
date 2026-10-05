@@ -129,7 +129,7 @@ reversible-where-it-matters, and need no staff involvement:
 | **Erasure — one site** | `/[orgSlug]/hosts/[host]/admin` → **Delete site** | Site admin. Immediate, no hold |
 | **Access / portability — person** | `/manage/user` → **Close account** tab → **Download my data** | Machine-readable JSON, served to their own session. Excludes colleagues' data; never reproduces a secret |
 | **Access / portability — workspace** | `/[orgSlug]/settings` → **Delete** tab → **Download workspace data** | Owner or admin. No plan gate — a statutory right is not a feature |
-| **Access / portability — the people a workspace holds** | `/[orgSlug]/settings/privacy` → **Export contacts** / **Export leads** | Owner or admin. **Every plan** — outside the CRM, so Free has it too. Complete CSVs, the same files the CRM's **Export all…** writes. The **Erase a person** card beside them is §6's |
+| **Access / portability — the people a workspace holds** | `/[orgSlug]/settings/privacy` → **Export contacts** / **Export leads** | Owner or admin (the **Manage data** permission). **Every plan** — outside the CRM, so Free has it too. Each opens the transfer framework's export dialog on `crm.contacts` / `crm.leads` over the whole workspace (AGL-3552): every record, the fields and format the requester needs (CSV, JSON, NDJSON). The **Erase a person** card beside them is §6's |
 | **Rectification** | `/manage/user` and org settings | Self-service |
 | **Call/text opt-out** | reply STOP, or ask us — §5 | |
 

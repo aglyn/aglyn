@@ -20,6 +20,7 @@
 import { activityTypeLabel } from '@aglyn/aglyn/app-utils/activity-presenter'
 import { personKey } from '@aglyn/aglyn/app-utils/person-key'
 import { isPluginActivityTargetType } from '@aglyn/aglyn/plugin-manager/plugin-activity-actions'
+import { registerPluginRecordOriginWriter } from '@aglyn/aglyn/plugin-manager/plugin-record-origin'
 import type { PluginRecordActivityRequest } from '@aglyn/aglyn/plugin-manager/plugin-record-timeline'
 import type {
   PluginTextGenerationRequest,
@@ -1283,8 +1284,22 @@ describe('outreach/enroll (AGL-2980)', () => {
       address: { country: 'US' },
       company: 'Initech',
     })
+    // The record system hears where the person came from (AGL-3519), through the seam.
+    const origins: unknown[] = []
+    registerPluginRecordOriginWriter(
+      {
+        async stamp(request) {
+          origins.push(request)
+          return { records: 1 }
+        },
+      },
+      { pluginId: 'stand-in-records' },
+    )
     const { status, body } = await post(enroll().confirm, REP, { sequenceId, people: [{ leadId }] })
     expect(status).toBe(200)
+    expect(origins).toEqual([
+      expect.objectContaining({ email: 'sam@initech.example', origin: 'sequence' }),
+    ])
     expect(body.results[0]).toMatchObject({
       target: 'lead',
       leadId,

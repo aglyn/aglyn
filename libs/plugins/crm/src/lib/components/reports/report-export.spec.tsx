@@ -23,11 +23,11 @@
  */
 
 import { fireEvent, render, screen } from '@testing-library/react'
-import { downloadTextFile } from '../../model/contacts-csv'
+import { downloadTextFile } from '../../model/download-text-file'
 import { ReportExport } from './report-export'
 
-jest.mock('../../model/contacts-csv', () => ({
-  ...jest.requireActual('../../model/contacts-csv'),
+jest.mock('../../model/download-text-file', () => ({
+  ...jest.requireActual('../../model/download-text-file'),
   downloadTextFile: jest.fn(),
 }))
 jest.mock('@aglyn/shared-ui-jsx', () => ({

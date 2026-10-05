@@ -59,7 +59,7 @@ import {
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
 import { DATASET_FIELD_TYPES, DATASET_FIELD_TYPE_LABELS, type DatasetFieldDefinition, type DatasetFieldType, type DatasetModel, effectiveDatasetModel } from '../model/dataset-models'
-import { defaultDatasetFieldId, validateDatasetFieldId } from '../model/datasets'
+import { datasetDisplayName, defaultDatasetFieldId, validateDatasetFieldId } from '../model/datasets'
 import { RECORD_PAGE_ADDRESS_FIELD_TYPE, isRecordAddressField } from '../record-pages/record-pages'
 
 /** Types surfaced in the picker; the rest exist for compat, not authoring. */
@@ -221,7 +221,7 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
     })
     setNames({
       singular: dataset.names?.singular ?? '',
-      plural: dataset.names?.plural ?? dataset.displayName ?? '',
+      plural: dataset.names?.plural ?? datasetDisplayName(dataset),
     })
   }, [dataset])
 
@@ -517,7 +517,7 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
         maxWidth="sm"
         fullWidth
       >
-        <DialogTitle>{`Schema — ${dataset?.displayName ?? ''}`}</DialogTitle>
+        <DialogTitle>{`Schema — ${datasetDisplayName(dataset)}`}</DialogTitle>
         <DialogContent
           sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}
         >
@@ -998,7 +998,7 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
                   )
                   .map((target) => (
                     <MenuItem key={target.$id} value={target.$id}>
-                      {target.displayName ?? target.$id}
+                      {datasetDisplayName(target) || target.$id}
                     </MenuItem>
                   ))}
               </TextField>
@@ -1019,7 +1019,7 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
                 }
                 return (
                   <Alert severity="warning">
-                    {`"${target.displayName ?? target.$id}" is not shared with ` +
+                    {`"${datasetDisplayName(target) || target.$id}" is not shared with ` +
                       'every site this collection is. Those sites will show ' +
                       'this field blank. Widen its sharing, or narrow this ' +
                       "collection's."}

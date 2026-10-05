@@ -23,7 +23,7 @@ import { BUNDLE_ID } from '../../constants/bundle-common'
 
 /**
  * The zones this plugin hosts on its product surfaces (AGL-2916): the product
- * editor, the products hub and the CSV import dialog.
+ * editor, the products hub and the import wizard's After import step.
  *
  * Each is drawn through the shell's renderer (`useConsoleWidgetSlot`), so a
  * widget there passes the same enablement, entitlement and permission gates as
@@ -148,7 +148,7 @@ export interface ConsoleProductsHubZoneProps {
   /** The catalog rows the hub holds, in its order. */
   products: readonly ConsoleProductSummary[]
   /**
-   * The products the hub's latest CSV import created in this visit, and the
+   * The products the hub's latest import created in this visit, and the
    * options the `productImport` zone set for them; `null` before any import.
    * `key` is new for each import.
    */
@@ -168,8 +168,8 @@ export interface ConsoleProductsHubZoneProps {
 }
 
 /**
- * What the `productImport` zone hands each widget, inside the CSV import
- * dialog: how many products the import creates, and options a widget sets
+ * What the `productImport` zone hands each widget, in the import wizard's
+ * After import step: how many products the import creates, and options a widget sets
  * for what happens to them once they land. The hub hands the options, with
  * the ids of the products the import created, to `productsHub` as its
  * `lastImport`.
@@ -199,8 +199,9 @@ export const PRODUCT_IMPORT_ZONE =
  * Declares the three zones, from the console registrar. The ids are the ones
  * widgets have always registered under, so a widget written for them keeps
  * working. Each is `bare`: the section is one item of a layout this plugin
- * draws — among the editor's fields, above the catalog table, inside the
- * import dialog — and a wrapper would add a gap the page already spaces.
+ * draws — among the editor's fields, above the catalog table, in the import
+ * wizard's After import step — and a wrapper would add a gap the page
+ * already spaces.
  */
 export function registerCommerceZones(): void {
   const owner = { pluginId: BUNDLE_ID }
@@ -229,11 +230,11 @@ export function registerCommerceZones(): void {
   registerPluginZone(
     {
       zone: PRODUCT_IMPORT_ZONE,
-      label: 'Product CSV import',
+      label: 'Product import',
       surface: 'console',
       layout: 'bare',
       description:
-        'Inside the CSV import dialog. A widget here sets options for what happens to the imported products once they land; the hub hands them to `productsHub` with the ids the import created.',
+        'In the product import wizard’s After import step. A widget here sets options for what happens to the imported products once they land; the hub hands them to `productsHub` with the ids the import created.',
     },
     owner,
   )

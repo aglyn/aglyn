@@ -129,6 +129,9 @@ const FORM_FIELD: ListFilterField = {
   operators: ['contains'],
 }
 
+/** The column a contact's lead source filters as (AGL-3511). */
+export const CONTACT_LEAD_SOURCE_COLUMN = 'leadSource'
+
 /** What the Filters panel offers on a contact, in the grid's grammar. */
 export const CONTACT_LIST_FILTER_FIELDS: readonly ListFilterField[] = [
   NAME_FIELD,
@@ -208,6 +211,17 @@ export const CONTACT_LIST_FILTER_FIELDS: readonly ListFilterField[] = [
     kind: 'exact',
     path: 'companyId',
     operators: ['equals', 'isNotEmpty'],
+  },
+  /*
+   * A holder's lead source (AGL-3511), picked from the org's Lead source
+   * values and asked through its `leadSource` facet key — the label as the
+   * picklist compares it.
+   */
+  {
+    column: CONTACT_LEAD_SOURCE_COLUMN,
+    kind: 'exact',
+    path: 'leadSource',
+    operators: ['equals', 'isAnyOf', 'isNotEmpty'],
   },
   /*
    * The verdict on the address (AGL-3245), asked through `emailStatus` —
@@ -303,6 +317,7 @@ export const CONTACT_LIST_FILTER_HEADERS: Readonly<Record<string, string>> = {
   [CRM_CONTACT_VIEW_FIELDS.stage]: 'Stage',
   [CRM_CONTACT_VIEW_FIELDS.source]: 'Source',
   [CRM_CONTACT_VIEW_FIELDS.company]: 'Company',
+  [CONTACT_LEAD_SOURCE_COLUMN]: 'Lead source',
   emailState: 'Email',
 }
 
@@ -402,6 +417,7 @@ const FACET_FIELDS: Readonly<Record<string, CrmFacetKeyField>> = {
   [CRM_CONTACT_VIEW_FIELDS.tags]: 'tag',
   [CRM_CONTACT_VIEW_FIELDS.orders]: 'orders',
   [CRM_CONTACT_VIEW_FIELDS.ltv]: 'ltv',
+  [CONTACT_LEAD_SOURCE_COLUMN]: 'leadSource',
 }
 
 /** Who is asking: the viewing holder, and whether their query may drop the scope clause. */

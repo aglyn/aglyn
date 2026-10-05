@@ -24,8 +24,10 @@
  * it in the routes' own specs.
  */
 
+import { effectiveCrmPicklist } from '@aglyn/aglyn'
 import {
   companyDraftFields,
+  companyDraftFrom,
   EMPTY_COMPANY_DRAFT,
   suggestCompanyForEmail,
 } from './companies'
@@ -69,9 +71,23 @@ describe('companyDraftFields', () => {
       domain: 'https://www.Acme.com/about?x=1',
       website: 'acme.com',
       phone: '(512) 555-0123',
+      fax: '(512) 555-0124',
+      type: 'customer',
       industry: 'Hospitality',
+      rating: 'HOT',
+      ownership: 'Private',
+      accountSource: 'trade show',
+      annualRevenue: '$1,250,000.50',
+      currency: 'eur',
+      numberOfEmployees: '1,200',
+      accountNumber: ' ACME-001 ',
+      site: 'Headquarters',
+      tickerSymbol: 'ACME',
+      sicCode: '5812',
+      parentCompanyId: 'parent-1',
       ownerUid: 'uid-1',
       address: { line1: '1 Main St', country: 'us' },
+      shippingAddress: { line1: '1 Dock Rd', country: 'us' },
       tags: 'Enterprise',
       notes: 'Big account',
     })
@@ -83,9 +99,24 @@ describe('companyDraftFields', () => {
       domain: 'acme.com',
       website: 'https://acme.com/',
       phone: '+15125550123',
+      fax: '+15125550124',
+      // Each picklist as its list spells it (AGL-3514).
+      type: 'Customer',
       industry: 'Hospitality',
+      rating: 'Hot',
+      ownership: 'Private',
+      accountSource: 'Trade show',
+      annualRevenueCents: 125_000_050,
+      currency: 'eur',
+      numberOfEmployees: 1200,
+      accountNumber: 'ACME-001',
+      site: 'Headquarters',
+      tickerSymbol: 'ACME',
+      sicCode: '5812',
+      parentCompanyId: 'parent-1',
       ownerUid: 'uid-1',
       address: { line1: '1 Main St', country: 'US' },
+      shippingAddress: { line1: '1 Dock Rd', country: 'US' },
       tags: ['enterprise'],
       notes: 'Big account',
     })
@@ -104,13 +135,28 @@ describe('companyDraftFields', () => {
       'domain',
       'website',
       'phone',
+      'type',
       'industry',
+      'rating',
+      'ownership',
+      'accountSource',
       'ownerUid',
+      'annualRevenueCents',
+      // No revenue, so no currency to describe it.
+      'currency',
+      'numberOfEmployees',
+      'fax',
+      'accountNumber',
+      'site',
+      'tickerSymbol',
+      'sicCode',
+      'parentCompanyId',
       'tags',
       'notes',
     ])
-    // The address is nullable rather than absent: one stored shape for "none".
+    // The addresses are nullable rather than absent: one stored shape for "none".
     expect(result.set['address']).toBeNull()
+    expect(result.set['shippingAddress']).toBeNull()
     expect('domain' in result.set).toBe(false)
   })
 
@@ -142,6 +188,63 @@ describe('companyDraftFields', () => {
       phone: '12345',
     })
     expect(result).toMatchObject({ ok: false })
+  })
+
+  it('judges each picklist against the org’s list, keeping the value the company already holds (AGL-3514)', () => {
+    const lists = {
+      industry: effectiveCrmPicklist('industry', {
+        values: [{ id: 'roofing', label: 'Roofing', active: true }],
+      }),
+    }
+    const refused = companyDraftFields({ ...EMPTY_COMPANY_DRAFT, name: 'Acme', industry: 'Artisanal roofing' }, { lists })
+    expect(refused).toMatchObject({ ok: false, error: expect.stringMatching(/^Industry must be one of: /) })
+    // A company whose industry was typed before Industry was a picklist keeps it.
+    const kept = companyDraftFields(
+      { ...EMPTY_COMPANY_DRAFT, name: 'Acme', industry: 'Artisanal roofing' },
+      { lists, current: { industry: 'Artisanal roofing' } },
+    )
+    expect(kept).toMatchObject({ ok: true, set: { industry: 'Artisanal roofing' } })
+    expect(
+      companyDraftFields({ ...EMPTY_COMPANY_DRAFT, name: 'Acme', industry: 'roofing' }, { lists }),
+    ).toMatchObject({ ok: true, set: { industry: 'Roofing' } })
+  })
+
+  it('refuses an account field it cannot store, naming it', () => {
+    expect(companyDraftFields({ ...EMPTY_COMPANY_DRAFT, name: 'Acme', fax: '123' })).toEqual({
+      ok: false,
+      error: 'The fax number must be a phone number with a country code, like +15125550123.',
+    })
+    expect(companyDraftFields({ ...EMPTY_COMPANY_DRAFT, name: 'Acme', numberOfEmployees: 'lots' })).toMatchObject({
+      ok: false,
+      error: expect.stringMatching(/^Employees must be a whole number/),
+    })
+    expect(companyDraftFields({ ...EMPTY_COMPANY_DRAFT, name: 'Acme', annualRevenue: 'ten' })).toEqual({
+      ok: false,
+      error: 'The annual revenue is not an amount.',
+    })
+  })
+
+  it('starts a stored company’s draft from every field, revenue in major units', () => {
+    expect(
+      companyDraftFrom({
+        name: 'Acme',
+        annualRevenueCents: 125_000_050,
+        currency: 'EUR',
+        numberOfEmployees: 1200,
+        type: 'Customer',
+        rating: null,
+        shippingAddress: { city: 'Austin' },
+        parentCompanyId: 'parent-1',
+      }),
+    ).toMatchObject({
+      annualRevenue: '1250000.50',
+      currency: 'eur',
+      numberOfEmployees: '1200',
+      type: 'Customer',
+      rating: '',
+      shippingAddress: { city: 'Austin' },
+      parentCompanyId: 'parent-1',
+    })
   })
 
   it('refuses a website that is not http(s)', () => {

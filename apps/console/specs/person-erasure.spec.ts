@@ -136,6 +136,9 @@ function collectionRef(path: string): any {
     where: (field: string, op: string, value: unknown) => {
       if (op === '==') return make([...filters, (data) => data?.[field] === value], max, order)
       if (op === 'in') return make([...filters, (data) => (value as unknown[]).includes(data?.[field])], max, order)
+      if (op === 'array-contains') {
+        return make([...filters, (data) => Array.isArray(data?.[field]) && data[field].includes(value)], max, order)
+      }
       throw new Error(`unsupported op ${op}`)
     },
     orderBy: (field: string) => make([...filters, (data) => typeof data?.[field] === 'number'], max, field),

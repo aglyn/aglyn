@@ -69,6 +69,7 @@ the same day (`docs/FIRESTORE_MANUAL_CONFIG.md`).
 | `aiJobs` | `expiresAt` | **180 days** — the same clock as an Assist exchange | An AI generation job: the customer's **brief verbatim**, the step ledger with its credit figures, the outputs it named (a `text` output carries its copy on the document), the creating `uid`, and, while it waits for a person, the rules its last answer broke, each in a sentence that may quote a line of the answer, beside an outline of where it broke them that holds node ids, element ids, prop names and a Grid's layout values, and no copy (AGL-3078). Written only by the server; the drafts a job creates are ordinary content and live as long as the workspace does. Enabled and read back `ACTIVE` on 2026-09-14. | `ai-jobs.ts` `createAiJob` stamps `assistExchangeExpiry(now)` (AGL-2904) |
 | `aiInsights` | `expiresAt` | **180 days** — the job's own clock | An insight job's answer: the question verbatim, the tables of aggregates it read (counts, sums, rates and labels, never a record) and the insights written about them. Written only by the server and read only through `GET /api/ai/insights/{jobId}`. The policy is declared; enabling it in gcloud is owed. | `ai-job-insight-step.ts` stamps the job's `expiresAt` (AGL-2915) |
 | `months` (under `aiUsageByUser`) | `expiresAt` | **13 months** past the month the document describes | A person's monthly AI usage in one workspace, keyed by their `uid`: credits, provider spend, request and refusal counts, a split by kind and by site. Integers and an id, no prose. Written only by the server, in the same batch as the workspace's own month. Enabled and read back `ACTIVE` on 2026-09-14. | `ai-usage-by-user.ts` `recordUserAiUsage` stamps `aiUsageByUserExpiry(month)` (AGL-2928) |
+| `packageImports`, with its `snapshots` and `writtenPaths` | `expiresAt` | **8 days** — the 7-day undo window and a day | A site package import's record (who imported what, each item's decision), the previous content of every item it replaced or merged **verbatim**, and the paths it wrote — what undo needs. Admin SDK only; no client reads it. Each document carries its own stamp, since TTL does not cascade. The policies are declared; enabling them in gcloud is owed. | `site-package-ledger.ts` `writeLedgerPieces` and the import route stamp `packageLedgerExpiry(...)` (AGL-3543) |
 
 `docs/FIRESTORE_MANUAL_CONFIG.md` lists three of these five. `analytics` and
 `screenAnalytics` are live and undocumented there, and the `cspViolationDaily`
@@ -77,7 +78,7 @@ enabled. Corrected in that file with this change.
 
 ### Declared and written, but the gcloud policy is OWED
 
-These three have `expiresAt` stamped by every writer and a `fieldOverrides`
+These four have `expiresAt` stamped by every writer and a `fieldOverrides`
 entry in `cloud/firebase-firestore.indexes.json`, so nothing is at risk from an
 index deploy. **The `gcloud firestore fields ttls update` command has not been
 run**, so the timestamps are currently inert. They are listed separately rather
@@ -91,6 +92,7 @@ that blurs the two is worse than one that admits the gap. Commands in
 | `assistExchanges` | `expiresAt` | **180 days** | The **verbatim** half of an Assist exchange: the question, the answer, the asking `uid`, the host. | `assist-usage.ts` `ASSIST_EXCHANGE_RETENTION_DAYS` (AGL-1972) |
 | `churnSurveyDetails` | `expiresAt` | **365 days** | The churn survey's ≤500 characters of free text, split off the survey document. | `_lib/retention.ts` `CHURN_SURVEY_DETAIL_RETENTION_DAYS` (AGL-1978) |
 | `apiIdempotency` | `expiresAt` | **30 days** | Replay keys **and the original response body** — for the REST API, a copy of the created record's `values`. | `api-idempotency.ts` `API_IDEMPOTENCY_RETENTION_DAYS` (AGL-1978) |
+| `imports` (under an email list) | `expiresAt` | **15 days** — 7 to apply, the 7-day undo window, and a day | An email list import's ledger: up to 25 sample shared-mailbox addresses **verbatim**, the file's column names that read as a bought list, the consent sample's counts, and the `uid` of whoever stated permission. Read only while its job can still write; each member's consent record keeps who attested, so nothing needs the ledger afterwards. | `list-members.server.ts` stamps `listImportLedgerExpiry(Date.now())` on every dry run (AGL-3549) |
 
 `apps/console/specs/retention-ttl-config.spec.ts` asserts every policy as
 a three-part configuration — declared in the index file, documented with a

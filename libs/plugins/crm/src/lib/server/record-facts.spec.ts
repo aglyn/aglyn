@@ -28,6 +28,9 @@ type Data = Record<string, unknown>
 const mockDocs = new Map<string, Data>()
 const mockMembers = new Map<string, Data>()
 const mockHostOrgs = new Map<string, string>()
+/** The orgs `release_crm_assist_whole_record` is on for; a lookup for `org-broken` fails. */
+const mockWholeRecordOrgs = new Set<string>()
+const mockFlagAsks: string[] = []
 
 function mockSnapshot(path: string) {
   const data = mockDocs.get(path)
@@ -92,6 +95,29 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   memberHasOrgPermission: async (_orgId: string, member: Data, permission: string) =>
     permission === 'data.manage' && ['owner', 'admin', 'editor'].includes(String(member['role'])),
   consentGroupForSite: async (hostId: string, org: Data) => mockConsentGroupForHost(org, hostId),
+  // The roster the facts name a team member from (AGL-3520).
+  listOrgMembers: async (orgId: string) =>
+    [...mockMembers.entries()]
+      .filter(([key]) => key.startsWith(`${orgId}:`))
+      .map(([key, member]) => ({ $id: key.slice(orgId.length + 1), ...member })),
+}))
+
+// The whole-record release flag, per org (AGL-3520).
+jest.mock('@aglyn/tenant-data-admin/server/release-flags', () => ({
+  isServerReleaseFlagOnForOrg: async (flag: string, orgId: string) => {
+    mockFlagAsks.push(`${flag}:${orgId}`)
+    if (orgId === 'org-broken') throw new Error('Remote Config unreachable')
+    return flag === 'release_crm_assist_whole_record' && mockWholeRecordOrgs.has(orgId)
+  },
+}))
+
+// The campaigns a deal or a lead names, by name (AGL-3520).
+jest.mock('@aglyn/tenant-data-admin/server/org-containers', () => ({
+  readOrgContainers: async (_firestore: unknown, _kind: string, orgId: string, ids: string[]) =>
+    ids.map((id) => {
+      const data = mockDocs.get(`orgs/${orgId}/emailCampaigns/${id}`)
+      return { id, name: String(data?.['name'] ?? ''), live: Boolean(data) }
+    }),
 }))
 
 import { consentGroupForHost as mockConsentGroupForHost } from '@aglyn/aglyn/server'
@@ -114,6 +140,10 @@ function seed() {
   mockDocs.clear()
   mockMembers.clear()
   mockHostOrgs.clear()
+  mockFlagAsks.length = 0
+  // The whole record is on for org-1 unless a test turns it off.
+  mockWholeRecordOrgs.clear()
+  mockWholeRecordOrgs.add('org-1')
   mockHostOrgs.set('host-1', 'org-1')
   mockHostOrgs.set('host-2', 'org-1')
   mockHostOrgs.set('host-9', 'org-9')
@@ -126,8 +156,26 @@ function seed() {
   mockDocs.set('orgs/org-1/contacts/contact-1', {
     email: 'jane@example.com',
     visibleTo: ['host:host-1'],
-    facets: { 'host-1': { name: 'Jane Doe', jobTitle: 'Facilities manager', sources: { form: true }, interactions: [] } },
+    facets: {
+      'host-1': {
+        name: 'Jane Doe',
+        jobTitle: 'Facilities manager',
+        sources: { form: true },
+        interactions: [],
+        // The whole record (AGL-3520): an owner, a manager and a custom value.
+        ownerUid: 'owner',
+        reportsToContactId: 'contact-3',
+        custom: { tier: 'Gold' },
+      },
+    },
   })
+  mockDocs.set('orgs/org-1/contacts/contact-3', {
+    email: 'boss@example.com',
+    visibleTo: ['host:host-1'],
+    facets: { 'host-1': { name: 'Lee Boss', sources: {}, interactions: [] } },
+  })
+  mockDocs.set('orgs/org-1/contactFields/f-tier', { key: 'tier', label: 'Tier', type: 'text', order: 0, visibleTo: ['org'] })
+  mockMembers.set('org-1:owner', { role: 'owner', displayName: 'Sam Owner' })
   mockDocs.set('orgs/org-1/contacts/contact-2', {
     email: 'kim@example.com',
     visibleTo: ['host:host-2'],
@@ -224,7 +272,17 @@ describe('the CRM’s readers on the record-facts seam (AGL-2917)', () => {
       },
     })
     expect(JSON.stringify(result)).not.toContain('Host two only.')
-    expect(JSON.stringify(result)).not.toContain('jane@example.com')
+    // The whole record (AGL-3520): the address, the owner and the manager by
+    // name, a custom value under its label — and never a uid or a record id.
+    expect(result).toMatchObject({
+      facts: {
+        emails: ['jane@example.com'],
+        owner: 'Sam Owner',
+        reportsTo: 'Lee Boss',
+        custom: [{ label: 'Tier', value: 'Gold' }],
+      },
+    })
+    expect(JSON.stringify(result)).not.toMatch(/contact-3|:"owner"|f-tier/)
   })
 
   it('reads every row at the organization level, for an org-wide member only', async () => {
@@ -279,6 +337,23 @@ describe('the CRM’s readers on the record-facts seam (AGL-2917)', () => {
     expect(await read('crm.lead', { id: 'lead-9' })).toMatchObject({ ok: false, status: 404 })
   })
 
+  it('names the contacts on a deal the site may see, and leaves the rest out (AGL-3521)', async () => {
+    mockDocs.set('orgs/org-1/deals/d-1', {
+      ...(mockDocs.get('orgs/org-1/deals/d-1') as Record<string, unknown>),
+      contactRoles: [
+        { contactId: 'contact-1', role: 'Decision Maker', primary: true },
+        // Another site's person: not this site's to name.
+        { contactId: 'contact-2', role: 'Evaluator', primary: false },
+      ],
+    })
+    const answer = await read('crm.deal', { id: 'd-1' })
+    expect(answer).toMatchObject({
+      ok: true,
+      facts: { contactRoles: [{ name: 'Jane Doe', role: 'Decision Maker', primary: true }] },
+    })
+    expect(JSON.stringify(answer)).not.toContain('Kim Lee')
+  })
+
   it('lists an import’s fields with the custom fields the site may see', async () => {
     const result = await read('crm.import', { id: 'contacts' })
     expect(result.ok).toBe(true)
@@ -287,5 +362,79 @@ describe('the CRM’s readers on the record-facts seam (AGL-2917)', () => {
     expect(keys).toContain('custom:budget')
     expect(keys).not.toContain('custom:hidden')
     expect(await read('crm.import', { id: 'invoices' })).toMatchObject({ ok: false, status: 400 })
+  })
+})
+
+describe('what a read answers follows release_crm_assist_whole_record (AGL-3520)', () => {
+  beforeEach(() => {
+    mockDocs.set('orgs/org-1/deals/d-1', {
+      ...(mockDocs.get('orgs/org-1/deals/d-1') as Record<string, unknown>),
+      ownerUid: 'owner',
+      notes: 'Call Jane on (512) 555-0100 or write jane@example.com.',
+      lineItems: [{ name: 'Membrane', quantity: 2, unitAmountCents: 250_000, currency: 'usd' }],
+      custom: { tier: 'Gold' },
+    })
+    mockDocs.set('orgs/org-1/leads/lead-1', {
+      ...(mockDocs.get('orgs/org-1/leads/lead-1') as Record<string, unknown>),
+      email: 'sam@example.com',
+      phone: '+15125550107',
+      ownerUid: 'owner',
+      jobTitle: 'Facilities lead',
+    })
+  })
+
+  it('answers the disclosed facts while the flag is off, as the published pages promise', async () => {
+    mockWholeRecordOrgs.clear()
+    const contact = await read('crm.contact', {})
+    expect(contact).toMatchObject({ ok: true, facts: { record: 'contact', name: 'Jane Doe', jobTitle: 'Facilities manager' } })
+    const deal = await read('crm.deal', { id: 'd-1' })
+    expect(deal).toMatchObject({
+      ok: true,
+      facts: { record: 'deal', products: 1, notes: 'Call Jane on [phone number] or write [email address].' },
+    })
+    const lead = await read('crm.lead', { id: 'lead-1' })
+    expect(lead).toMatchObject({ ok: true, facts: { record: 'lead', name: 'Sam Rivera', jobTitle: 'Facilities lead', assigned: true } })
+    for (const answer of [contact, deal, lead]) {
+      const facts = answer.ok ? answer.facts : {}
+      expect(facts['wholeRecord']).toBeUndefined()
+      for (const key of ['emails', 'email', 'phone', 'owner', 'custom', 'reportsTo', 'marketingConsent', 'campaign']) {
+        expect([key, key in facts]).toEqual([key, false])
+      }
+      expect(JSON.stringify(facts)).not.toMatch(/jane@example\.com|sam@example\.com|5550107|Sam Owner|Lee Boss|Gold/)
+    }
+    expect(mockFlagAsks).toEqual(expect.arrayContaining(['release_crm_assist_whole_record:org-1']))
+  })
+
+  it('answers the whole record, marked as such, while the flag is on for the org', async () => {
+    const deal = await read('crm.deal', { id: 'd-1' })
+    expect(deal).toMatchObject({
+      ok: true,
+      facts: {
+        wholeRecord: true,
+        owner: 'Sam Owner',
+        products: [{ name: 'Membrane', quantity: 2, unitAmount: 'USD 2500.00' }],
+        notes: 'Call Jane on (512) 555-0100 or write jane@example.com.',
+        custom: [{ value: 'Gold' }],
+      },
+    })
+    expect(await read('crm.lead', { id: 'lead-1' })).toMatchObject({
+      ok: true,
+      facts: { wholeRecord: true, email: 'sam@example.com', phone: '+15125550107', owner: 'Sam Owner' },
+    })
+    expect(await read('crm.contact', {})).toMatchObject({ ok: true, facts: { wholeRecord: true, emails: ['jane@example.com'] } })
+  })
+
+  it('answers the disclosed facts when the flag cannot be read, and to staff of an org the flag is off for', async () => {
+    mockHostOrgs.set('host-broken', 'org-broken')
+    mockDocs.set('orgs/org-broken', { plan: 'pro' })
+    mockMembers.set('org-broken:owner', { role: 'owner', displayName: 'Bo Owner' })
+    mockDocs.set('orgs/org-broken/leads/lead-b', { name: 'Ana Ruiz', email: 'ana@example.com', status: 'new' })
+    const broken = await read('crm.lead', { orgId: 'org-broken', hostId: 'host-broken', id: 'lead-b' })
+    expect(broken).toMatchObject({ ok: true, facts: { record: 'lead', name: 'Ana Ruiz' } })
+    expect(JSON.stringify(broken)).not.toContain('ana@example.com')
+    mockWholeRecordOrgs.clear()
+    const staff = await read('crm.lead', { id: 'lead-1', uid: 'support', staff: true })
+    expect(staff).toMatchObject({ ok: true })
+    expect(JSON.stringify(staff)).not.toContain('sam@example.com')
   })
 })

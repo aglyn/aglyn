@@ -504,7 +504,7 @@ export const EXPECTED_POSTURE = Object.freeze([
         //
         // EXACT PATHS, NOT A `pre` PREFIX, and this is the part to preserve.
         // `/api/email` is a SHARED namespace, not this plugin's private one:
-        // `email/events` (the Resend webhook), `email/list-import-*`,
+        // `email/events` (the Resend webhook), `email/list-import-screening`,
         // `email/list-members-add` and `email/suppression-*` all live under it
         // too. Today they register on `consoleApi` and so are not served by
         // this project at all — but they are one `plugins.config.json` edit

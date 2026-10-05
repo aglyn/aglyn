@@ -493,10 +493,10 @@ carries a `resource`. `listPluginHostResources()` / `pluginHostResource(kind)`
 
 ### In the site backup — `siteExport`, and `plugin-site-export`
 
-A site admin on a plan with site export downloads one JSON bundle of the
-site and restores it later, into the same site or another. The platform's own
-documents are always in it. A plugin collection is in it only when the
-collection says so, beside its `resource`:
+A site admin on a plan with site export downloads the site as one site
+package (`aglyn-package` v2) and imports it later, into the same site or
+another. The platform's own documents are always in it. A plugin collection
+is in it only when the collection says so, beside its `resource`:
 
 ```json
 {
@@ -504,20 +504,36 @@ collection says so, beside its `resource`:
   "resource": { "kind": "bottle", "quotaKey": "bottlesPerHost", "…": "…" },
   "siteExport": {
     "limit": 100,
-    "fields": ["name", "vintage", "notes", "cellarId"]
+    "fields": ["name", "vintage", "notes", "cellarId"],
+    "package": {
+      "kind": "bottle",
+      "label": "Bottles",
+      "nameField": "name",
+      "references": [{ "field": "cellarId", "kind": "cellar" }],
+      "placements": [{ "componentId": "bottleCard", "prop": "bottleId" }]
+    }
   }
 }
 ```
 
 | Field | Semantics |
 | --- | --- |
-| `limit` | The most live documents one bundle carries (1–1000). The export reads no more, and a restore writes no more. |
-| `fields` | The keys a restore writes back, with `merge: false` — so it is every key a LIVE document carries, not what a create sends, and a key left off is erased from every restored document. `createdAt`, `updatedAt`, `createdBy`, `deletedAt`, `visibleTo` and an external destination's approver field are refused: a restore stamps or scopes them itself. |
+| `limit` | The most live documents one package carries (1–1000). The export reads no more, and an import writes no more. |
+| `fields` | The keys an import writes back, with `merge: false` — so it is every key a LIVE document carries, not what a create sends, and a key left off is erased from every restored document. `createdAt`, `updatedAt`, `createdBy`, `deletedAt`, `visibleTo` and an external destination's approver field are refused: an import stamps or scopes them itself, and stamps the importing admin as the approver of an off-site destination. |
+| `package.kind`, `package.label` | What a package calls each document — one owner per kind, none of the platform's (`page`, `layout`, `form`…) — and the plural the import screen groups them under. |
+| `package.slugField`, `package.nameField` | The field an incoming item with a new id is matched to the site's copy by: a slug first, then a name. At least one. |
+| `package.references` | Fields that hold the id of another site item, and its kind, so a reference to an item neither the package nor the site holds is reported as a missing dependency. Any other field holding a known item's id is still found and moved; this list is what makes a MISSING one visible. |
+| `package.bindingToken` | `var` or `fn`: the binding token (`{{var:id}}`, `{{fn:id(…)}}`) that names one of these items inside a design. |
+| `package.placements` | Node props that place one of these items in a design — `{ componentId?, prop }`, any node's prop when `componentId` is left out. |
+| `count` | Only for a collection with no `resource`: what an import is met against — `{ "quotaKey" }`, `{ "platformCap" }`, or `{ "uncapped": "<why>" }` for a collection the browser already creates without a count. |
 
-The export writes the collection's live documents under the collection's name,
-and a restore writes them back by id and counts the result against the
-`resource` — its `quotaKey`, or its `platformCap` — before the first write,
-so a `siteExport` on a collection with no `resource` is refused. A collection
+The export lists each live document as an item, hashed, with the items it
+depends on. An import plans first — each item `new`, `identical`, `differs`
+or `missingDependency` — then writes by id, the person's decision (create,
+replace, keep both, skip) and the count: the `resource`'s `quotaKey` or
+`platformCap`, or the `count` above, met before the first write and only for
+what the import adds. A `siteExport` with neither a `resource` nor a `count`
+is refused. A collection
 may not take a key the platform's bundle already uses (`screens`, `media`,
 …) or another plugin's. Compiled like `resource`, and refused at runtime:
 `listPluginSiteExportCollections()`
@@ -532,7 +548,13 @@ add-on. The plugin declares a SECTION of the bundle in `plugins.config.json`
 and answers for it from its `serverDeclarations` entry:
 
 ```json
-"siteBundleSections": [{ "key": "cellarLogs", "limit": 50 }]
+"siteBundleSections": [
+  {
+    "key": "cellarLogs",
+    "limit": 50,
+    "package": { "kind": "cellarLog", "label": "Cellar logs", "nameField": "title" }
+  }
+]
 ```
 
 ```ts
@@ -542,6 +564,13 @@ registerPluginSiteBundleSection(
     export: async (request) => (await import('./server/backup')).exportLogs(request),
     refusal: async (request) => (await import('./server/backup')).logsRefusal(request),
     import: async (request) => (await import('./server/backup')).importLogs(request),
+    package: {
+      dependencies: (item) => (item.cellarId ? [{ kind: 'cellar', id: item.cellarId }] : []),
+      remapIds: (item, idMap) => {
+        const moved = idMap.get(`cellar/${item.cellarId}`)
+        return moved === undefined ? item : { ...item, cellarId: moved }
+      },
+    },
   },
   { pluginId: 'acme-cellar' },
 )
@@ -552,12 +581,138 @@ registerPluginSiteBundleSection(
 | `export({ hostId, orgId, limit })` | The site's share, at most `limit` items, each a document with its `$id` and whatever it carries beneath it. Read whole or throw: a short list is a backup that lies. `orgId` is `null` for a site with no organization. |
 | `refusal({ …, org, items })` | Optional. Asked before the restore writes anything, with the bundle's items already capped at `limit`; answers the sentence the restore refuses with (403), or `null`. Sections are asked before the platform's own caps. |
 | `import({ …, write, stamps, loadPluginSurfaces })` | Writes the items back through `write(documentPath, data)` — whole documents, on the restore's batches and in its count, and only under the site's or its organization's tree — dated with `stamps()`. `loadPluginSurfaces()` loads every plugin's console server surface, for a check against something other plugins register there (a custom field type). Answers the rows the restore reports without refusing. |
+| `package.dependencies(item)` | The site items this item names, as `{ kind, id }` — what a package lists as its dependencies. Synchronous and light: it runs at export and at every import plan. |
+| `package.remapIds(item, idMap)` | The item with its references moved. `idMap` maps an item key (`<kind>/<id>`) to the id it now has — an item kept beside an existing one, or mapped onto one the site holds — or to `null` for a reference the person dropped. The item's own `$id` is the import's to set. |
 | `listDeclaredSiteBundleSections()` / `resolveSiteBundleSections()` | The declarations, and the declarations joined to their registered answers. A section declared and not registered runs the app's declarations step once; still missing, `resolveSiteBundleSections` throws, and the export or restore fails rather than leaving the section out. |
 
 One owner per key, never one the platform's bundle or a host collection's
-`siteExport` already uses, a `limit` from 1 to 1000, and a plugin with a
-`serverDeclarations` entry — the generator refuses anything else. The data
+`siteExport` already uses, a `limit` from 1 to 1000, a `package` kind no one
+else declares, and a plugin with a `serverDeclarations` entry — the generator
+refuses anything else, and a section registered without its `package` hooks
+is refused at registration. The data
 plugin's `datasets` is the first.
+
+## Import and export — `plugin-transfer-resources`
+
+Everything a person imports or exports is a transfer RESOURCE: rows in a file
+(`records`) or a set of items carried as a package (`package`). The matching,
+cell reading, conflict policy and dry run are the core's
+(`@aglyn/aglyn/data-transfer`, see `docs/DATA_TRANSFER.md`); the plugin that
+owns the records declares the resource and answers for it. Declare it in
+`plugins.config.json`, in the core's `TransferResourceDescriptor` shape:
+
+```json
+"transferResources": [
+  {
+    "key": "bottles",
+    "label": "Bottles",
+    "singularLabel": "Bottle",
+    "scope": "org",
+    "kinds": ["records"],
+    "formats": ["csv", "json", "ndjson"],
+    "limits": { "maxRows": 5000 }
+  }
+]
+```
+
+| Field | Semantics |
+| --- | --- |
+| `key` | Lowercase words joined by `-` or `.`, at most 64 characters; one owner per key. The URL and storage name. |
+| `label` / `singularLabel` / `description` | What the hub and the wizard call it. |
+| `scope` | `org` (the workspace's records) or `host` (one site's). |
+| `kinds` | `records`, `package`, or both. |
+| `formats` | `csv`, `json`, `ndjson`. |
+| `limits` | `maxRows` (and optional `maxBytes`) one file may carry. |
+| `instances` | `true` for a resource moved one instance at a time — one dataset's records, not every dataset's. Every key that reaches it names the instance as `<key>:<instance>` (`transferResourceInstanceKey`, `data.dataset:<datasetId>`), so a job, the person's remembered choices and the one running import are each kept per instance; the hooks read which one with `transferResourceInstanceOf(ctx)`. |
+| `readableByMembers` | `true` when every member may read the records, so any member may export what their scope lets them see (a collaborator only on a site they reach) and open the export dialog. A dataset's records are declared this way. |
+| `readPermission` | The permission that admits a member to export the records, beside **Manage data** (`data.manage`), which always admits. A resource that declares neither this nor `readableByMembers` exports for Manage data alone; importing needs Manage data either way. The launcher's `can('import' \| 'export', target)` answers the same rule for a list's buttons. |
+| `featureFlag` | The plan feature (`crm`) a workspace's plan must carry to move the records — the flag your console surfaces are gated by. Without it every transfer route refuses with 403 `{ error, reason: 'plan_required', code: <feature> }`, staff included, and `can` answers `false`. Register a `planGate(subject, intent)` with the server half to refuse in your plugin's own words; without one the core's sentence names the plan that includes the feature. |
+| `featureFlagExempt` | The intents (`import`, `export`) that stay open on every plan despite `featureFlag` — an obligation rather than a feature, like the CRM's contacts and leads exports. |
+| `importRoles` | The only roles (`admin`, `editor`, `author`, `viewer`) that may import the records, where they are: the member's role on the named site (a workspace owner or admin is every site's admin), or on the workspace for a workspace's records. Asked on top of **Manage data**, for a resource stricter than it, like gift cards (`["admin"]`). The transfer gate refuses anyone else on every import step, `can('import')` answers `false` for them, and the Import & export page offers them no Import. Not on an `exportOnly` resource. |
+
+The plugin also lists `transferResources` among its `contributes.console.slots`
+(`TRANSFER_RESOURCES_LOAD_POINT`), so the wizard loads its console registrar,
+and names a `serverDeclarations` or `consoleServerDeclarations` entry — the
+generator refuses the declaration otherwise. It registers two halves.
+
+**The server half**, from its declarations entry:
+
+```ts
+registerPluginTransferResource(
+  'bottles',
+  {
+    fields: async (ctx) => (await import('./transfer/bottles')).bottleFields(ctx),
+    matchKeys: [{ fieldId: 'id', normalizer: 'aglynId' }, { fieldId: 'sku', normalizer: 'caseless' }],
+    readPage: async (ctx, cursor, fieldIds, options) =>
+      (await import('./transfer/bottles')).readBottles(ctx, cursor, fieldIds, options),
+    lookup: async (ctx, requests) => (await import('./transfer/bottles')).lookupBottles(ctx, requests),
+    apply: async (ctx, chunk, writer) => (await import('./transfer/bottles')).applyBottles(ctx, chunk, writer),
+    revert: async (ctx, snapshot, decisions) =>
+      (await import('./transfer/bottles')).revertBottles(ctx, snapshot, decisions),
+  },
+  { pluginId: 'acme-cellar' },
+)
+```
+
+Every hook is handed `ctx`: `{ resource, orgId, hostId, actorUid, jobId?, extras?, headers? }` — the resource key (naming the instance for one declared with `instances`), the site for a `host` resource, the member moving the data, the job once one exists, the plugin's own wizard steps' answers by step id (in `plan`, those sent with this dry run; afterwards, those the plan was made with — what the browser said, to check and never to trust for who said it), and the uploaded file's column names.
+
+| Hook | Semantics |
+| --- | --- |
+| `fields(ctx)` | The field catalog as `TransferCatalogInput` — standard, the organization's custom fields, derived and system fields, and groups. `transferResourceCatalog` builds it with the core and refuses one `transferFieldProblems` rejects. |
+| `matchKeys` | `MatchKeySpec[]`, in priority order — the keys a row finds its record by, every one a default. Or `matchKeys(ctx)` answering `{ keys, defaults? }` when the keys depend on the context (an instance's own fields): `defaults` are the keys a person starts with, and the ones the Re-importable preset leads with. At least one; read through `transferResourceMatchKeys(resource, ctx)`. |
+| `aliases` | Optional `TransferAliasDictionary[]`: other products' header spellings for these fields. |
+| `presets` | Optional `TransferResourcePreset[]`: presets of the resource's own, listed in the export dialog after the built-in ones, each `{ id, label, fieldIds, description?, headers? }`. `headers` names another product's column for each field, and the CSV is written under those names while the preset is chosen. Refused under a built-in preset's id, twice, or with no label or fields. |
+| `readPage(ctx, cursor, fieldIds, { pageSize, ids, filter, scopeTokens })` | One export page, `{ rows, next }`, each row keyed by field id and holding only `fieldIds`. `cursor` is `null` for the first page and `next` `null` after the last. `ids` is the person's selection, `filter` the list's current filter in the plugin's own terms, and `scopeTokens` — present for a collaborator scoped to some sites — the `visibleTo` tokens a row must hold one of; the route reads through the Admin SDK, so honoring them is the enforcement. |
+| `count?(ctx, { ids, filter, scopeTokens })` | Optional: how many records that export reads, before its first page, so the file carries `X-Aglyn-Export-Rows` and the download is checked whole. Without it the route reads ahead up to 5,000 rows to count, and a larger file goes without a count. |
+| `lookup(ctx, requests)` | The records holding each requested key value: `{ lookup: MatchLookup, records }`, with each found record's current values for the plan's before → after. Undo also asks it for records by id (`TRANSFER_ID_FIELD` with the `aglynId` normalizer) to read what each holds now, so it answers that key whether or not `matchKeys` names it. |
+| `picklists(ctx, picklistIds)` | Optional; the organization's list for each picklist the catalog names (`TransferField.picklistId`), as `{ [picklistId]: { spec, set } }`. Without it a picklist column is imported as typed. |
+| `addPicklistValues(ctx, picklistId, values)` | Optional; adds the values the person chose to add before the import's first write. Called again with the same values on a retry, so an id the list already holds is left as it is. |
+| `plan(ctx, input)` | Optional; the core's `buildTransferPlan` otherwise (`planTransferResourceRows`). It receives every row of the file at once, so a resource whose record spans several rows can fold them, and whatever extra a planned row carries is kept in the stored dry run for `apply`. A plugin's own checks of the file are the `screening` warning class, each sample carrying a `detail` (`TRANSFER_FILE_SAMPLE_ROW` as the row of one about the whole file), acknowledged like every other class. |
+| `lockedRules(ctx)` | Optional `TransferLockedRule[]`, shown locked in the wizard with their reasons. |
+| `defaultPolicy` | Optional `TransferPolicyDefaults` (or `defaultPolicy(ctx)` answering one): where the person starts on the Conflicts step — `{ record?, fieldDefault?, fields?, note? }`, each part optional. Without it, the core's: update, create, ask; fill blanks and leave on blank. Set it when fill blanks is wrong for the resource (a redirect file is the definition of its rules, so `redirects` starts from overwrite), with a `note` the step shows. Kept to what holds for the context's catalog (`transferPolicyDefaultsFor`); the person can change every part, and the dry run fills what a request leaves out from it (`withTransferPolicyDefaults`). Served as `TransferResourceInfo.defaultPolicy`. |
+| `match(ctx, input)` | Optional: which record each row is about, when key-by-key matching is not how the resource tells its records apart. `input` is `{ rows, keys, lookup, records, outcomes }` — `outcomes` the core's `matchRows`. Answers `{ outcomes, records? }`: one outcome per row, and any record the outcomes name that `lookup` did not read. The engine runs it (`matchTransferResourceRows`) for the Matching step, the Conflicts step and the dry run, and `plan` receives these outcomes as `input.matches`, so all three show what the write acts on. |
+| `valuesEqual(field, a, b)` | Optional `TransferValuesComparator`: whether two values of a field are the same as the resource stores them (`true`/`false`), or `undefined` to leave it to the core's `transferValuesEqual`. Used by the Conflicts step's `transferPlanConflicts` and the core plan (`BuildTransferPlanInput.valuesEqual`, which `planTransferResourceRows` fills), so a value the write folds — a status's case, a path's trailing slash — is no conflict and no change. |
+| `invariants` | Optional rules a planned row must keep, each `{ id, label, check(row, before) }` answering why the row breaks it or `null`; `transferInvariantFailures` checks every writing row. |
+| `apply(ctx, chunk, writer)` | Writes one chunk of planned rows through the plugin's OWN write paths, so plan bands, consent rules and activity entries hold. Skips a row `writer.alreadyApplied(row)` answers for, calls `writer.markApplied(result, undo)` the moment each write lands, and stops at a row boundary when `writer.timeLeftMs()` runs short. Answers `{ results, undo }`. |
+| `revert(ctx, snapshot, decisions)` | Reverses a chunk's writes, deciding each entry with the core's `planTransferUndo`; a conflict is carried out only when `decisions[recordId]` is `revert`. Answers `{ done, conflicts }`. |
+| `items(ctx)`, `dependencies(item)`, `remapIds(item, idMap)`, `readItems(ctx, ids)`, `writeItems(ctx, items, writer)`, `revertItems(ctx, steps)` | A `package` kind's hooks (AGL-3535). An item's kind is the resource key. `items` answers what the workspace holds, hashed over the same content `readItems` exports (`existingPackageItemsOf`), so an unchanged item compares `identical`. `dependencies` names what an item refers to — other package items, and other kinds (`site`, a mailbox). `remapIds` rewrites them through `idMap` (keyed `<kind>/<id>`; `''` is a dropped reference — `remapPackageReference`). `writeItems` writes each decided item through the plugin's own paths under its `targetId` (a kept-both copy also gets `rename`), marking every item, a failed one too, with `writer.markApplied`. `revertItems` carries out the `delete` and `restore` steps the engine decided, answering `{ done, refused }`. |
+| `problems(ctx, write)`, `referenceTargets(ctx, kinds)`, `rules` | Optional package hooks: what the plugin's own write would refuse about an item, asked at the dry run; what the workspace holds of the other kinds the items name, so a reference resolves or can be mapped; and the rules an import keeps, shown with their reasons. |
+
+Registration is refused with no owner, for a key nobody declared or another
+plugin declared, for a declaration the core's `transferResourceProblems`
+rejects, and naming every hook a declared kind lacks.
+
+**The client half**, from its console registrar:
+
+```ts
+registerPluginTransferResourceUi('bottles', {
+  label: 'Bottles',
+  icon: { path: mdiBottleWine },
+  extraSteps: [{ id: 'vintages', label: 'Vintages', after: 'values', component: VintagesStep }],
+})
+```
+
+An extra step follows one of the core's steps (`upload`, `mapping`, `values`,
+`matching`, `conflicts`, `dryRun`, `apply`) and is handed
+`{ resource, orgId, hostId, jobId, value, setValue, setComplete }`; what it
+passes to `setValue` reaches the server half with the dry run, under the
+step's `id` in `extras`, and the wizard holds Next until `setComplete(true)`.
+The console's wizard shows the steps that come before the review (after
+`upload` through `conflicts`), since an answer must reach the dry run.
+`transferWizardSteps(key)` answers the full order.
+
+| Reader | Semantics |
+| --- | --- |
+| `listDeclaredTransferResources()` / `declaredTransferResource(key)` | The compiled declarations. |
+| `listTransferResourcesFor({ scope, org, host?, isFlagOn?, staffBypass? })` | The resources of one scope whose plugin runs for the workspace (`org`) or the site (`host`), and whose release flag is on when a verdict is passed. |
+| `resolveTransferResource(key)` / `resolveTransferResources()` | A declaration joined to its server half. A resource declared and not registered runs the app's declarations step once; still missing, it throws `TransferResourceUnavailableError` (`reason: 'unregistered'`), and a key nobody declares throws it with `reason: 'undeclared'` — as does a key naming an instance of a resource without `instances`, or none of one with them. For an instance key the answer's `key` is the whole key and `instance` the instance. |
+| `transferRecordsHooks(resource)` / `transferPackageHooks(resource)` | The hooks of a declared kind, typed; throws for a kind the resource does not declare. |
+| `pluginTransferResourceUi(key)` / `listPluginTransferResourceUis()` | The client halves; an instance key finds its resource's. |
+
+`apps/console/specs/plugin-contributions-declared.spec.ts` holds both halves
+to the declaration: every console registrar runs and the client halves must
+be exactly the declared resources, and the server declarations run and every
+declared resource must resolve.
 
 ## Sitemap sections — `plugin-sitemap-sections`
 

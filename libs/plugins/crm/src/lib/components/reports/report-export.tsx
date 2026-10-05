@@ -20,7 +20,7 @@ import { csvDocument } from '@aglyn/aglyn'
 import { mdiDownloadOutline } from '@aglyn/shared-data-mdi'
 import { MdiIcon } from '@aglyn/shared-ui-jsx'
 import { Button } from '@mui/material'
-import { downloadTextFile } from '../../model/contacts-csv'
+import { downloadTextFile } from '../../model/download-text-file'
 
 export interface ReportExportProps {
   /** The file's name — see `reportFilename`. */

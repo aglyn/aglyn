@@ -16,10 +16,15 @@
  */
 'use client'
 
-import { checkQuota, pluginDocsHelp } from '@aglyn/aglyn'
+import { checkQuota, pluginDocsHelp, useTransferLauncher } from '@aglyn/aglyn'
 import { normalizeContactEmail } from '@aglyn/aglyn'
 import { pluginRecordByEmailHref } from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
 import { BOOKINGS_BOOKER_PARAM } from '../model/bookings-record-routes'
+import {
+  BOOKINGS_TRANSFER_RESOURCE,
+  bookerBookingsFilterValue,
+  upcomingBookingsFilterValue,
+} from '../transfer/bookings-transfer-common'
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { describePaymentRisk, type PaymentRisk } from '@aglyn/aglyn/app-utils/payment-risk'
 import { type ConsolePluginPageProps } from '@aglyn/aglyn'
@@ -187,6 +192,23 @@ export function BookingsConsolePage(props: ConsolePluginPageProps) {
   const searchParams = useSearchParams()
   const bookerFilter = normalizeContactEmail(searchParams?.get(BOOKINGS_BOOKER_PARAM))
   const { basePath } = props
+  /*
+   * Export, opened on the list as it stands: one booker's bookings when the
+   * page is narrowed to them, otherwise the upcoming ones from this moment.
+   * `null` outside the console shell, where there is nothing to export into.
+   * No Import: a booking is only ever made on the booking page.
+   */
+  const transferLauncher = useTransferLauncher()
+  const handleExport = useCallback(() => {
+    transferLauncher?.openExport({
+      resource: BOOKINGS_TRANSFER_RESOURCE,
+      scope: 'host',
+      hostId,
+      filter: bookerFilter
+        ? { label: `Bookings for ${bookerFilter}`, value: bookerBookingsFilterValue(bookerFilter) }
+        : { label: 'Upcoming bookings', value: upcomingBookingsFilterValue(Date.now()) },
+    })
+  }, [transferLauncher, hostId, bookerFilter])
 
   const {
     data: serviceDocs,
@@ -601,6 +623,13 @@ export function BookingsConsolePage(props: ConsolePluginPageProps) {
       })}
         contentGutterX
         contentGutterY
+        HeaderProps={{
+          action: transferLauncher?.can('export', { resource: BOOKINGS_TRANSFER_RESOURCE, scope: 'host', hostId }) ? (
+            <Button size="small" color="primary" onClick={handleExport}>
+              {'Export'}
+            </Button>
+          ) : undefined,
+        }}
       >
         {bookerFilter ? (
           <Typography

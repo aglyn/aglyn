@@ -86,6 +86,8 @@ describe('convertOpenLeadOntoContact', () => {
     ).resolves.toBe(true)
     expect(docs.get(path)).toMatchObject({
       status: 'qualified',
+      // The org's label for Qualified, beside the meaning (AGL-3512).
+      statusLabel: 'Qualified',
       convertedContactId: 'c-1',
       convertedBy: 'signup',
       ownerUid: 'rep',
@@ -102,6 +104,16 @@ describe('convertOpenLeadOntoContact', () => {
         by: 'signup',
       }),
     ])
+  })
+
+  it('stamps the org’s own label for Qualified (AGL-3512)', async () => {
+    docs.set('orgs/org-1/crmPicklists/leadStatus', {
+      values: [{ id: 'qualified', label: 'Converted', active: true }],
+      defaultValueId: null,
+    })
+    docs.set(path, { email: EMAIL, status: 'new' })
+    await convertOpenLeadOntoContact({ hostId: HOST, email: EMAIL, contactId: 'c-1', by: 'signup' })
+    expect(docs.get(path)).toMatchObject({ status: 'qualified', statusLabel: 'Converted' })
   })
 
   it('reads a lead with no status as open, the way the list does', async () => {

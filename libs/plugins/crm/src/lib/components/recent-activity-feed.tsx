@@ -16,10 +16,12 @@
  */
 'use client'
 
+import { CrmExportButton } from './crm-transfer-buttons'
+import { CRM_ACTIVITIES_RESOURCE } from '../transfer/fields'
 import * as Aglyn from '@aglyn/aglyn'
 import type { CrmActivityRow } from '@aglyn/aglyn'
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
-import { Typography } from '@mui/material'
+import { Stack, Typography } from '@mui/material'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { crmRoutes } from '../model/crm-routes'
 import { ActivityList } from './activity-list'
@@ -130,10 +132,14 @@ export function RecentActivityFeed(props: RecentActivityFeedProps) {
       contentGutterY
       HeaderProps={{
         action: (
-          <TimelineExpandAllButton
-            expansion={expansion}
-            disabled={!activities.rows.length}
-          />
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+            {/* Every logged activity, as a file (AGL-3528). */}
+            <CrmExportButton resource={CRM_ACTIVITIES_RESOURCE} hostId={hostId} />
+            <TimelineExpandAllButton
+              expansion={expansion}
+              disabled={!activities.rows.length}
+            />
+          </Stack>
         ),
       }}
     >

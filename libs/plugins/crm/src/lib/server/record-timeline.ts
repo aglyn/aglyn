@@ -31,6 +31,7 @@ import {
   CRM_COLLECTIONS,
   crmActivityLogHasRoom,
   crmScopeTokens,
+  crmTaskLabelsForNew,
   crmTaskListFields,
   crmTaskReminderAfterEdit,
   isCrmActivityKind,
@@ -56,6 +57,7 @@ import { createHash } from 'crypto'
 import { FieldValue } from 'firebase-admin/firestore'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { buildCrmCapturedEmailActivity, crmCapturedEmailKey } from '../model/crm-inbound'
+import { readCrmTaskPicklists } from './read-picklist'
 import { CRM_SUITE_FEATURE } from './suite-gate'
 
 /**
@@ -376,12 +378,18 @@ export function createCrmRecordTimelineWriter(deps: CrmRecordTimelineDeps): Plug
         request.assigneeUid === null
           ? (admitted.holderUid ?? '')
           : String(request.assigneeUid ?? '').trim()
+      // The org's labels for the meanings it is filed with (AGL-3517).
+      const labels = crmTaskLabelsForNew(await readCrmTaskPicklists(firestore, orgRef.id), {
+        kind: request.kind,
+        priority: 'normal',
+      })
       const task: CrmTask = {
         title,
         ...(notes ? { notes } : {}),
         kind: request.kind,
         priority: 'normal',
         status: 'open',
+        ...labels,
         dueAtMs: request.dueAtMs,
         // The reminder a person's task gets (AGL-2659): the due time.
         remindAtMs: crmTaskReminderAfterEdit({ dueAtMs: request.dueAtMs, previous: null }),

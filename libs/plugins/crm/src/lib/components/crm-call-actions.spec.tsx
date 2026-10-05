@@ -112,3 +112,24 @@ describe('CrmCallButton', () => {
     expect(dialogProps.at(-1)).toMatchObject({ kind: 'call' })
   })
 })
+
+/**
+ * DO NOT CALL (AGL-3515): a warning, never a block. The number still dials
+ * and the button still links — a returned call is a call — but both say the
+ * person asked not to be phoned before anyone taps.
+ */
+describe('a person marked do not call', () => {
+  it('still dials, and the button says so in its label and its tooltip', () => {
+    render(<CrmCallButton hostId="host-1" link={{ contactId: 'c-1' }} phone="+15125550123" doNotCall />)
+    const call = anchor('Call (do not call)')
+    expect(call.getAttribute('href')).toBe('tel:+15125550123')
+    fireEvent.mouseOver(call)
+    return screen.findByText('Marked do not call — they asked not to be phoned.')
+  })
+
+  it('marks the number beside the link', () => {
+    const { container } = render(<CrmPhoneLink phone="+15125550123" doNotCall />)
+    expect(anchor('+15125550123').getAttribute('href')).toBe('tel:+15125550123')
+    expect(container.textContent).toBe('+15125550123 (do not call)')
+  })
+})

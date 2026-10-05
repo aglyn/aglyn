@@ -996,7 +996,13 @@ export function FormDetailCard(props: FormDetailCardProps) {
             and this is read a row at a time.
            */
           size: { xs: 12 },
-          children: <FormSubmissionsCard hostId={hostId} formId={formId} />,
+          children: (
+            <FormSubmissionsCard
+              hostId={hostId}
+              formId={formId}
+              formName={form?.displayName}
+            />
+          ),
         },
         {
           // Full width: the frame is a document, and a document in a

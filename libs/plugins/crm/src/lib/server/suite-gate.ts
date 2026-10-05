@@ -31,9 +31,10 @@
  *
  * Capture — a form, a sign-up, a booking, an order — does not come through
  * these routes, and records what it records on every plan. The compliance
- * doors are every plan's too: `crm/erase-person`, and the contacts and leads
- * files of `/api/crm/export`, because exporting and erasing the people a
- * workspace holds are obligations rather than CRM features.
+ * doors are every plan's too: `crm/erase-person` here, and the `crm.contacts`
+ * and `crm.leads` exports of the transfer framework, which ask no plan,
+ * because exporting and erasing the people a workspace holds are
+ * obligations rather than CRM features.
  *
  * ## After authorization, never before
  *

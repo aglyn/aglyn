@@ -68,6 +68,10 @@ export * from './contacts'
 // A lead's or a contact's email state (AGL-3245): the last verdict on its
 // address, in words a person can act on, mirrored from the senders' lists.
 export * from './email-state'
+// A field whose choices an admin keeps (AGL-3510): standard values built in,
+// the organization's own beside them, and the judge every write asks. Pure,
+// and named for no plugin — a plugin's registry of picklists sits on top.
+export * from './picklists'
 // The records that sit beside a contact — companies, pipelines, deals, tasks,
 // activities, field definitions (AGL-2595). Pure like `contacts`, and beside
 // it because `ContactFacet` names its lifecycle stage and custom-value types;

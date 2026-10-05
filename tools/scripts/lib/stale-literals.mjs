@@ -47,7 +47,11 @@ import { join } from 'node:path'
 const SOURCE = /\.(?:tsx?|jsx?|mjs|cjs)$/
 const SPEC = /\.(?:spec|test)\.[cm]?[jt]sx?$/
 const GENERATED = /\.generated\.[cm]?[jt]sx?$/
-const QUOTED = /(['"`])((?:\\.|(?!\1).){4,160}?)\1/g
+// No minimum length: a short literal like `'won'` must still pair its own
+// quotes, or its closing quote opens the next match and the code BETWEEN two
+// strings (`, order: 4, kind: `) reads as copy.
+// Length is filtered after pairing, in `literalsOf`.
+const QUOTED = /(['"`])((?:\\.|(?!\1).)*?)\1/g
 const JSX_TEXT = />\s*([^<>{}\n]{4,160}?)\s*</g
 const TITLE = /\b(?:it|test|describe)(?:\.(?:each|only|skip)(?:\([^)]*\))?)?\s*\(/
 const NEGATIVE = /\bnot\.|queryBy|toBeNull|toBeUndefined|doesNotMatch|notTo/
@@ -62,7 +66,7 @@ export function literalsOf(line) {
   for (const match of String(line).matchAll(JSX_TEXT)) found.push(match[1])
   return found
     .map((text) => text.trim())
-    .filter((text) => text.length >= 4 && /[A-Za-z]{3,}/.test(text) && !text.includes('${'))
+    .filter((text) => text.length >= 4 && text.length <= 160 && /[A-Za-z]{3,}/.test(text) && !text.includes('${'))
     .filter((text) => !/^[@./]/.test(text) && !/^[\w.-]+\/[\w./@-]*$/.test(text))
     // Copy has a space or reads as one capitalized word. An identifier does
     // neither, so camelCase, PascalCase and CONSTANT_CASE are dropped.

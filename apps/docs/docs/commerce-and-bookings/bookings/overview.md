@@ -211,6 +211,33 @@ and tells you the amount before you confirm.
   **Reverse transfer** so the amount comes back from your account rather than
   Aglyn's.
 
+### Export bookings {#export-bookings}
+
+**Export** in the header of the bookings card downloads the site's bookings as
+a file.
+
+- **Which bookings.** The list you're looking at — **Upcoming bookings**, or
+  one person's bookings when the page is narrowed to them — or every booking
+  the site has taken.
+- **Which columns.** Pick and order them yourself, or start from a preset.
+  The columns are grouped as **Booking** (the service, the start and end in
+  UTC and as a local time in the booking's time zone, the duration and the
+  status), **Customer** (name, email, phone, address and the CRM record the
+  booking link came from), **Payment** (the amount paid, tax, the platform
+  fee and any refund, in US dollars, with the Stripe payment IDs) and
+  **System** (when it was booked, confirmed and reminded). Your last choice
+  is remembered for next time.
+- **Formats.** CSV, JSON or NDJSON.
+
+Exporting needs the **Manage data** permission on the site, and every export
+is recorded in the workspace's audit log — who exported, when and how many
+bookings, never the bookings themselves. A customer whose details were
+erased exports with those columns blank.
+
+Bookings can't be imported. A booking is made on the booking page, which
+holds the slot, takes any payment and sends the confirmation and the
+reminder; a booking written from a file would skip all of that.
+
 ## Related
 
 - [Commerce](../commerce/overview.md)

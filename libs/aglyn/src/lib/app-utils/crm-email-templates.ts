@@ -349,11 +349,21 @@ function resolveCrmMergeField(key: string, context: CrmMergeContext): string {
       const name = groupId
         ? contactDisplayName(contact, groupId)
         : text(contact['name'])
+      /*
+       * The holder's own first and last names when it keeps them (AGL-3515)
+       * — a two-word first name or a particle in a surname is then what the
+       * person wrote — and the display name split at its first space when
+       * it keeps neither.
+       */
+      const parts =
+        text(facet.firstName) || text(facet.lastName)
+          ? { firstName: text(facet.firstName), lastName: text(facet.lastName) }
+          : splitPersonName(name)
       switch (field) {
         case 'firstName':
-          return splitPersonName(name).firstName
+          return parts.firstName
         case 'lastName':
-          return splitPersonName(name).lastName
+          return parts.lastName
         case 'name':
           return name
         case 'email':
@@ -369,11 +379,20 @@ function resolveCrmMergeField(key: string, context: CrmMergeContext): string {
     case 'lead': {
       const lead = context.lead
       if (!lead) return ''
+      /*
+       * The lead's own first and last names when it keeps them (AGL-3513),
+       * as the contact's are read; the name split at its first space when
+       * it keeps neither.
+       */
+      const parts =
+        text(lead['firstName']) || text(lead['lastName'])
+          ? { firstName: text(lead['firstName']), lastName: text(lead['lastName']) }
+          : splitPersonName(lead['name'])
       switch (field) {
         case 'firstName':
-          return splitPersonName(lead['name']).firstName
+          return parts.firstName
         case 'lastName':
-          return splitPersonName(lead['name']).lastName
+          return parts.lastName
         case 'name':
           return text(lead['name'])
         case 'email':

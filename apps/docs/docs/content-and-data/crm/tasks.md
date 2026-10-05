@@ -1,15 +1,15 @@
 ---
 sidebar_position: 10
 title: Tasks & follow-ups
-description: Calls, emails, meetings and to-dos with a due date, an assignee and a link to the record they are for — overdue and today read off the clock, a snooze, a reminder at its own time, and a morning digest.
+description: Calls, emails, meetings and to-dos with a status, a due date, an assignee and a link to the record they are for — overdue and today read off the clock, a snooze, a reminder at its own time, and a morning digest.
 ---
 
 # Tasks & follow-ups
 
 A **task** is a piece of work somebody on your team owes a person in the CRM: a call to
-return, an email to send, a meeting to hold, or a plain to-do. Every task has a title, a
-kind, a priority, an optional due date and time, an optional assignee, notes, and a link
-to the **contact**, **company** or **deal** it is about.
+return, an email to send, a meeting to hold, or a plain to-do. Every task has a subject, a
+type, a priority, a status, an optional due date and time, an optional assignee, notes,
+and a link to the **contact**, **company** or **deal** it is about.
 
 Tasks live in the CRM hub at `…/hosts/{site}/crm/tasks` and, over every site at once, at
 `…/{organization}/crm/tasks`; every record page carries its own short list of them. They
@@ -24,6 +24,40 @@ Tasks are part of the **CRM**, included from **Starter**. On Free the section is
 locked, with the rest of the CRM. See
 [What each plan includes](./overview.md#what-each-plan-includes).
 :::
+
+## Status, priority, type and subject {#task-picklists}
+
+A task's **Status**, **Priority** and **Type** are picklists your organization keeps
+under **CRM › Fields › Tasks**, each starting from Salesforce's standard values:
+
+| Picklist | Standard values | What each value means to the CRM |
+| --- | --- | --- |
+| **Status** | Not Started, In Progress, Waiting on someone else, Deferred, Completed | Completed is **done**; the other four are **open** |
+| **Priority** | High, Normal, Low | high, normal, low |
+| **Type** | Call, Email, Meeting, To-do | call, email, meeting, to-do (Salesforce's *Other*) |
+
+Every value **means** one of the CRM's own states, shown in the values card's **Means**
+column. The meaning is what everything that runs on its own reads: the views below, the
+overdue and today colors, [reminders](#reminders), the [daily digest](#the-daily-digest),
+[Next activity](#next-activity), the reports and every automation. The label is your
+organization's — rename **In Progress** to *Working* and every task that held it says
+*Working*, and nothing that counts open tasks changes. A value you add names its meaning
+(an *On hold* status that is **open**, a *Site visit* type that is a **meeting**); a
+standard value's meaning is fixed. A value deleted with a replacement moves its tasks
+only to a value of the same meaning, so a delete can never complete or reopen a task.
+
+A task made before these lists existed holds only the meaning, and shows the first
+active value of it — an open task reads **Not Started**, a done one **Completed** —
+until it is saved with a label of its own.
+
+**Subject** is a list of suggestions, not a picklist a task holds: **Call**, **Send
+Letter**, **Send Quote** and **Other** to start. The drawer's **Subject** field offers
+them as you type and takes any text, as Salesforce's does. Renaming or deleting a
+suggestion changes no task's subject.
+
+Rename, reorder, deactivate, add or make a value the default on the
+[Fields page](./custom-fields.md#task-picklists); a new task starts on each list's
+default (**Not Started**, **Normal**, **To-do**).
 
 ## The tasks page
 
@@ -44,16 +78,17 @@ them. Each view is a window over the due date computed from **your own clock and
 zone** when you look, and a tab left open across midnight repaints yesterday's work as
 overdue on its own.
 
-Each row shows a checkbox that completes or reopens the task, the title (with the first
-line of notes under it), the kind, the priority, the due date colored by where it stands
+Each row shows a checkbox that completes or reopens the task, the subject (with the first
+line of notes under it), the type, the priority, the status, the due date colored by where it stands
 — red when overdue, amber when due today — with a snooze beside it, the assignee, and
 the record it is for, as a link into that record's page. The list shows a view a page
 at a time, with the usual footer to pick how many rows a page holds and to turn to the
 next page.
 
-Beside **Show**, the **Filters** panel narrows a view by **Kind** (call, email,
+Beside **Show**, the **Filters** panel narrows a view by **Type** (call, email,
 meeting, to-do), **Priority** (low, normal, high) and **Assignee** — each **is** one or
-**is any of** several — and
+**is any of** several, the type and the priority by meaning, each named by your
+organization's label for it — and
 **Search** finds a task by a word of its title. The view, the filters and the search
 are all answered by the list's query, so they reach every task in the view, page by
 page, and add up with each other. The search matches whole words from their start —
@@ -103,50 +138,53 @@ them, set their due date, export them or delete them. Completing and assigning g
 through the server exactly as the row's checkbox and the drawer do, so every completion
 fires its event and every new assignee is told.
 
-**Export CSV** in the card's header downloads the page on screen as `tasks.csv`:
-title, kind, priority, status, the due date and the completion as timestamps, the
-assignee by email address, the contact, company and deal by name, and notes. The bar's
-**Export CSV** writes the same file over the selection.
+**Export…** in the card's header opens the [export dialog](./export.md) on the
+view's tasks, and the bar's on the selection: **Subject**, **Type**, **Priority**
+and **Status** by your organization's labels, the due date and the completion,
+the assignee by email, the contact by email, the company and the deal by name
+(or the deal's external id), and notes.
 
-### Import from CSV
+### Import and export {#import-from-csv}
 
-**Import CSV** in the card's header takes a spreadsheet of tasks — a
-hand-off list, another tool's export — and files each row as a new task. A
-task has no key, so nothing is merged: importing a file twice files it twice.
-Importing needs the same **Manage data** permission as creating a task, and
-nobody is notified of an imported task, however many name them.
-
-The three steps are the ones the [contacts import](./import.md) walks: choose
-the file (up to 5,000 rows), match its columns, check the ten-row preview,
-then import in batches of 200 with a result that says how many were
-**added** and **skipped**, the skipped rows downloadable as a CSV that says
-why. **Download template** hands you the export's own header over no rows.
+**Import** in the card's header takes a file of tasks — a hand-off list, a
+Salesforce or HubSpot tasks export — through the [import wizard](./import.md).
+A row finds its task by **Aglyn ID** or by its **External ID** (the id it had
+in the product it came from), so importing the same file again **updates**
+those tasks rather than filing them twice. Importing needs the same **Manage
+data** permission as creating a task, and nobody is notified of an imported
+task.
 
 | Field | What is read |
 | --- | --- |
-| **Title** | Required. A row without one is skipped. |
-| **Kind** | `call`, `email`, `meeting` or `to-do`, by id or by label; **To-do** when empty or unreadable (and an unreadable one is reported). |
-| **Priority** | `low`, `normal` or `high` — `medium` reads as normal, `urgent` as high; **Normal** when empty or unreadable. |
-| **Status** | `open` or `done` (`yes`, `true`, `completed` also read as done). A done row is filed completed, by you, at the time of the import. Open when empty. |
-| **Due** | A calendar day (`2026-09-30`, read as noon UTC) or a timestamp. Anything else is dropped and reported; the task has no due date. |
-| **Assignee** | The email address of a member of your organization. An address that matches **nobody on the team skips the row** — a task nobody holds is a task nobody does — as *No team member has that assignee address*. Empty files the task unassigned. |
-| **Notes** | Free text. |
+| **Subject** | Required for a new task. |
+| **External ID** | Kept on the task; what a later import finds it by. |
+| **Type**, **Priority**, **Status** | Your organization's values (*Site visit*, *In Progress*) or a meaning (`call`, `high`, `done`); empty, **To-do**, **Normal** and **Not Started**. A task whose status means done is stamped completed, by you, at the time of the import; one a file reopens loses its stamp. |
+| **Due** | A date or a date and time. |
+| **Assigned to** | A member of your workspace, by email or name. |
+| **Contact** | A contact by email. |
+| **Company** | A company by its domain or name. |
+| **Deal** | A deal by its external id or its name. |
+| **Notes** | Text. |
 
-The export's **Contact**, **Company**, **Deal** and **Completed** columns are
-proposed as **Do not import**: a task is linked to its record from the record's
-own page. Every imported task is the chosen site's task; the organization's
-own tasks — the ones with no site — are filed one at a time from the
-[organization hub](#organization-tasks), which is also where the drawer asks
-which site a file is filed from.
+A person, company or deal the file names that your CRM does not hold is
+listed on the wizard's **Values** step: use a similar record, leave the link
+blank, or refuse the row. Every imported task is the chosen site's task; the
+organization's own tasks — the ones with no site — are filed one at a time
+from the [organization hub](#organization-tasks).
 
 ### Creating a task
 
-**New task** opens a drawer over the list. Give the task a title, pick a kind and a
-priority, set a due date and time (or leave it empty for a task with no deadline), choose
+**New task** opens a drawer over the list. Give the task a subject — type it, or pick
+one of your organization's suggestions — pick a type, a priority and a status, set a
+due date and time (or leave it empty for a task with no deadline), choose
 an assignee from your team, link it to a contact, a company or a deal by name, and add
 notes. A new task is assigned to you unless you pick somebody else. **Remind me**, under
 the due date, is the task's [reminder](#reminders): the due time unless you move it, or
 **No reminder**.
+
+The drawer's **Status** offers the values of the task's own state only — an open
+task's open statuses, a done task's done ones. Completing a task is the checkbox, below,
+because completing is what runs your automations.
 
 Opening a row opens the same drawer to edit it. **Delete** at the bottom of the drawer
 removes the task for everyone who can see it; a task that was finished is better ticked
@@ -171,14 +209,17 @@ is already late.
 
 ### Completing and reopening
 
-Tick the checkbox to complete a task. Completing is the one task action with a side
+Tick the checkbox to complete a task: its status becomes the first active **done**
+value — **Completed** unless you renamed it. Unticking reopens it as a new task starts,
+**Not Started** by default. Completing is the one task action with a side
 effect beyond the task itself: it fires the **`taskCompleted`** event on the site, which a
 [workflow](../../marketing-and-automation/workflows-and-actions/overview.md) can trigger
 on. From a site's hub the event fires on that site; from the organization's hub it fires
 on the site the task was created from, and an [organization task](#organization-tasks)
 fires none. Ticking a done task in the Done view reopens it; reopening fires nothing.
 
-The `taskCompleted` payload carries `taskId`, `title`, `kind`, `priority`, `dueAtMs`,
+The `taskCompleted` payload carries the meanings, never the labels — so an automation
+keeps working when the labels are renamed: `taskId`, `title`, `kind`, `priority`, `dueAtMs`,
 `completedAtMs`, `completedByUid`, `assigneeUid`, `createdByUid`, `contactId`,
 `companyId`, `dealId` and `taskHostId` (the site the task was created on). Every optional
 field is present as an empty string rather than absent, so a filter such as
@@ -243,7 +284,10 @@ either.
 
 Tasks created by an [automation](./automations.md) or over the
 [REST API](/api/resources/tasks) get the same default: a reminder at the due time,
-unless the API call says otherwise (`remindAt`).
+unless the API call says otherwise (`remindAt`). Both store your organization's labels
+beside the meanings: the **Create a CRM task** step names a type and a priority, and
+the API takes a label (`"In Progress"`) or a meaning (`"open"`) for `kind`, `priority`
+and `status`.
 
 ### Turning reminders off
 

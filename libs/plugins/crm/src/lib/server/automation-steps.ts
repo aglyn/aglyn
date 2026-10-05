@@ -25,10 +25,14 @@ import {
   CRM_COLLECTIONS,
   crmActivityLogHasRoom,
   type CrmActivity,
+  type CrmActivityDirection,
+  crmActivityDirection,
   type CrmActivityLink,
   type CrmTask,
+  type CrmTaskPriority,
   crmEmailDeliveryTags,
   crmScopeTokens,
+  crmTaskLabelsForNew,
   crmTaskListFields,
   crmTaskReminderAfterEdit,
   normalizeContactEmail,
@@ -67,6 +71,7 @@ import {
 import type { InteractionStepGuard } from '@aglyn/aglyn/app-utils/site-interactions'
 import type { ContactLifecycleStage, CrmActivityKind, CrmTaskKind } from '@aglyn/aglyn/app-utils/crm-kinds'
 import type { CRM_STEP_TYPES } from '../constants/bundle-common'
+import { readCrmTaskPicklists } from './read-picklist'
 import { CRM_SUITE_FEATURE } from './suite-gate'
 
 /**
@@ -130,11 +135,19 @@ export type CrmAutomationStep = (
       type: 'createCrmTask'
       title: string
       kind: CrmTaskKind
+      /** `normal` when absent — the steps written before priorities were (AGL-3517). */
+      priority?: CrmTaskPriority
       dueInDays: number
       assigneeUid?: string
       assigneeEmail?: string
     }
-  | { type: 'logCrmActivity'; kind: CrmActivityKind; body: string }
+  | {
+      type: 'logCrmActivity'
+      kind: CrmActivityKind
+      body: string
+      /** Which way a call or an email went (AGL-3517). */
+      direction?: CrmActivityDirection
+    }
 ) & { when?: InteractionStepGuard | null } & { type: CrmStepType }
 
 /** The site, the plan and the org a step or an email is answered for. */
@@ -397,11 +410,19 @@ export async function runCrmAutomationStep(
       assignee = named.uid
     }
     const dueAtMs = nowMs + dueInDays * DAY_MS
+    const priority: CrmTaskPriority =
+      step.priority === 'high' || step.priority === 'low' ? step.priority : 'normal'
+    // The org's labels for the meanings the step names (AGL-3517).
+    const labels = crmTaskLabelsForNew(
+      await readCrmTaskPicklists(firebaseAdmin.app().firestore(), env.orgId),
+      { kind: step.kind, priority },
+    )
     const task: CrmTask = {
       title,
       kind: step.kind,
-      priority: 'normal',
+      priority,
       status: 'open',
+      ...labels,
       dueAtMs,
       // The reminder a person's task gets (AGL-2659): the due time.
       remindAtMs: crmTaskReminderAfterEdit({ dueAtMs, previous: null }),
@@ -442,9 +463,11 @@ export async function runCrmAutomationStep(
     if (!crmActivityLogHasRoom(logged)) {
       return { error: CRM_ACTIVITY_LOG_FULL_MESSAGE }
     }
+    const direction = crmActivityDirection(step.kind, step.direction)
     const activity: CrmActivity = {
       kind: step.kind,
       body,
+      ...(direction ? { direction } : {}),
       atMs: nowMs,
       byUid: '',
       sourceActionId: actionId,

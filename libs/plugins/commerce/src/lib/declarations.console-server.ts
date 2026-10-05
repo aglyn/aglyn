@@ -20,6 +20,7 @@
 import { registerApiV1SiteResource } from '@aglyn/tenant-data-admin/server/api-v1-resources'
 import { registerPluginPersonEraser } from '@aglyn/aglyn/plugin-manager/plugin-person-erasure'
 import { BUNDLE_ID } from './constants/bundle-common'
+import { registerCommerceTransferResources } from './transfer/register-transfer-resources'
 
 /**
  * The commerce plugin's CONSOLE-ONLY server declarations, named under
@@ -70,4 +71,8 @@ export function registerCommerceConsoleServerDeclarations(): void {
     },
     { pluginId: BUNDLE_ID },
   )
+  // Products, categories, orders, discounts, coupons and gift cards on the
+  // import wizard and the export dialog (AGL-3531): the transfer routes are
+  // the console's alone, so they register here.
+  registerCommerceTransferResources()
 }

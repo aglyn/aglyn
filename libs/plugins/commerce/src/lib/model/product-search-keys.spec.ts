@@ -94,8 +94,8 @@ describe('every product write path carries them', () => {
   /*
    * A static check, because there is no runtime one. Products are written
    * from three places and none of them shares a function with the others: the
-   * editor dialog builds one payload for both create and edit, the CSV import
-   * builds its own, and the console's resources route decides which keys it
+   * editor dialog builds one payload for both create and edit, the import
+   * (the transfer resource's server half) builds its own, and the console's resources route decides which keys it
    * will store at all.
    */
   const DIALOG =
@@ -125,10 +125,13 @@ describe('every product write path carries them', () => {
     expect(base).not.toMatch(/\n {6}name:/)
   })
 
-  it('the CSV import derives them too', () => {
+  it('the import derives them too', () => {
     // A catalog arrives here in bulk, which is precisely the catalog the
     // 500-row window cannot show and the search has to reach.
-    expect(read(HUB)).toContain('CommerceModel.productSearchFields(product)')
+    const importer = read('libs/plugins/commerce/src/lib/transfer/products.server.ts')
+    expect(importer).toContain('...productSearchFields(product)')
+    expect(importer).toContain('...derivedKeys(product, smart)')
+    expect(importer).toContain('...withoutUndefined(derivedKeys(next, smart))')
   })
 
   it('the resources route stores all four', () => {
@@ -163,11 +166,12 @@ describe('every product write path carries them', () => {
   })
 
   it('every stock writer stores the In stock verdict with the count', () => {
-    // A sale, a cancellation, a stock adjustment and the editor: each writes
+    // A sale, a cancellation, a stock adjustment, an import and the editor: each writes
     // `variants`, and `soldOut` is derived from them (AGL-3321).
     for (const path of [
       'libs/plugins/commerce/src/lib/server/reserve-stock.ts',
       'libs/plugins/commerce/src/lib/server/cancel-order.ts',
+      'libs/plugins/commerce/src/lib/transfer/products.server.ts',
       HUB,
       DIALOG,
     ]) {

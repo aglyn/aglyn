@@ -23,6 +23,8 @@ import { lazy } from 'react'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { registerDatasetRecordList } from './model/dataset-record-list'
 import { registerPageRecordSource } from '@aglyn/aglyn/app-utils/page-record-sources'
+import { registerPluginTransferResourceUi } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
+import { DATASET_TRANSFER_RESOURCE } from './transfer/dataset-transfer-key'
 import { DATASET_REPEAT_SOURCE } from './repeat/dataset-repeat-source'
 import { RECORD_PAGE_ADDRESS_FIELD } from './record-pages/record-pages'
 import { RECORD_PAGE_SOURCE } from './record-pages/record-page-source'
@@ -61,6 +63,14 @@ export function registerDataConsole(): void {
   registerPageRecordSource(RECORD_PAGE_SOURCE)
   // The workspace's datasets, for another plugin's picker (AGL-3080).
   registerDatasetRecordList()
+  // A dataset's records in the import wizard and the export dialog
+  // (AGL-3530); the Data card names the dataset when it opens them.
+  registerPluginTransferResourceUi(
+    DATASET_TRANSFER_RESOURCE,
+    // The Import & export hub lists each dataset from the `dataset` record list (AGL-3535).
+    { label: 'Dataset records', icon: { path: mdiDatabaseOutline.path }, instancesFrom: 'dataset' },
+    { pluginId: BUNDLE_ID },
+  )
   Aglyn.registerConsoleExtension({
     // Org datasets card (AGL-419): org/data renders it through the
     // 'orgData' widget slot.

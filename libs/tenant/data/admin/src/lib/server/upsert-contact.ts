@@ -19,6 +19,8 @@ import {
   type AglynPostalAddress,
   CAPTURED_BY_HOST_FIELD,
   checkCrmRecordsQuota,
+  composeContactName,
+  CONTACT_EXTRA_PHONE_FIELDS,
   type ConsentGroup,
   consentGroupScope,
   CONTACT_FACETS_FIELD,
@@ -30,6 +32,7 @@ import {
   type ContactSource,
   marketingConsentFieldsForGroup,
   mergeContactInteraction,
+  normalizeContactBirthdate,
   normalizeContainerIds,
   readContactFacet,
   normalizeContactEmail,
@@ -140,6 +143,22 @@ export type UpsertHostContactFacet = Partial<
     | 'ownerUid'
     | 'lifecycleStage'
     | 'custom'
+    // Salesforce's standard contact fields (AGL-3515) a door may know —
+    // the reports-to is not one: it names another record, and only the
+    // profile route can check that the holder sees it.
+    | 'salutation'
+    | 'firstName'
+    | 'lastName'
+    | 'department'
+    | 'mobilePhone'
+    | 'homePhone'
+    | 'otherPhone'
+    | 'fax'
+    | 'birthdate'
+    | 'assistantName'
+    | 'assistantPhone'
+    | 'otherAddress'
+    | 'doNotCall'
   >
 >
 
@@ -173,9 +192,58 @@ function storableProfile(input: ContactProfileInput | undefined): {
   ownerUid?: string
   lifecycleStage?: ContactFacet['lifecycleStage']
   custom?: Record<string, ContactCustomValue>
+  salutation?: string
+  firstName?: string
+  lastName?: string
+  department?: string
+  mobilePhone?: string
+  homePhone?: string
+  otherPhone?: string
+  fax?: string
+  birthdate?: string
+  assistantName?: string
+  assistantPhone?: string
+  otherAddress?: ReturnType<typeof normalizeAddress>
+  doNotCall?: true
 } {
   if (!input) return {}
   const out: ReturnType<typeof storableProfile> = {}
+  /*
+   * Salesforce's standard contact fields (AGL-3515), under the same rule as
+   * the rest: given keys only, each normalized, an unusable value dropped.
+   * The salutation is judged against the org's list by the door that took
+   * it and held here to the label's shape, like the lead source. Do not
+   * call is written only as `true`: a door may learn that a person asked
+   * not to be phoned, and no capture is the person taking it back.
+   */
+  if (typeof input.salutation === 'string') {
+    const salutation = input.salutation.trim().replace(/\s+/g, ' ').slice(0, 120)
+    if (salutation) out.salutation = salutation
+  }
+  if (input.firstName !== undefined) {
+    const firstName = composeContactName(input.firstName, '')
+    if (firstName) out.firstName = firstName
+  }
+  if (input.lastName !== undefined) {
+    const lastName = composeContactName('', input.lastName)
+    if (lastName) out.lastName = lastName
+  }
+  for (const key of ['department', 'assistantName'] as const) {
+    if (typeof input[key] !== 'string') continue
+    const value = (input[key] as string).trim().slice(0, 120)
+    if (value) out[key] = value
+  }
+  for (const key of CONTACT_EXTRA_PHONE_FIELDS) {
+    if (input[key] === undefined) continue
+    const phone = normalizePhone(input[key])
+    if (phone) out[key] = phone
+  }
+  if (input.birthdate !== undefined) {
+    const birthdate = normalizeContactBirthdate(input.birthdate)
+    if (birthdate) out.birthdate = birthdate
+  }
+  if (input.otherAddress !== undefined) out.otherAddress = normalizeAddress(input.otherAddress)
+  if (input.doNotCall === true) out.doNotCall = true
   if (input.phone !== undefined) {
     const phone = normalizePhone(input.phone)
     if (phone) out.phone = phone
@@ -707,6 +775,21 @@ export async function upsertHostContact(
        */
       const profile = storableProfile(options.facet)
       fillProfile(profile, options.facetFill, facet)
+      /*
+       * THE NAME FOLLOWS THE FIRST AND LAST NAMES (AGL-3515): a door that
+       * carried either writes the holder's name as their composition, over
+       * the name the facet held — the parts are the newer, structured
+       * statement of the same thing. A door that carried neither leaves the
+       * name to the rule above, where the existing name wins.
+       */
+      const composedName =
+        profile.firstName !== undefined || profile.lastName !== undefined
+          ? composeContactName(
+              profile.firstName ?? facet.firstName,
+              profile.lastName ?? facet.lastName,
+            )
+          : ''
+      const facetName = composedName || merged.name
       const advanced = advanceContactLifecycleStage(
         profile.lifecycleStage ?? facet.lifecycleStage,
         options.initialLifecycleStage,
@@ -760,7 +843,7 @@ export async function upsertHostContact(
           // The search keys travel WITH the name, and only when the name is
           // written: stamping an empty key over a real one would make the
           // contact unfindable by the name it still displays.
-          ...(merged.name ? nameSearchFields(merged.name) : {}),
+          ...(facetName ? nameSearchFields(facetName) : {}),
           // The search echo of the facet's phone — see `HostContact.phone`.
           ...(profile.phone ? { phone: profile.phone } : {}),
           // The search echo of the facet's company name — see `HostContact.companyName`.
@@ -777,7 +860,7 @@ export async function upsertHostContact(
             [group.groupId]: {
               sources: merged.sources,
               interactions: merged.interactions,
-              ...(merged.name ? { name: merged.name } : {}),
+              ...(facetName ? { name: facetName } : {}),
               /*
                * ADDED TO, never replaced. A person who filled in the spring
                * form and later the summer one is in both pushes, and an
@@ -952,6 +1035,13 @@ export async function upsertHostContact(
     )
     if (advanced) profile.lifecycleStage = advanced
     if (profile.address === null) delete profile.address
+    if (profile.otherAddress === null) delete profile.otherAddress
+    // The holder's name is the first and last names' when the door gave
+    // either (AGL-3515); the canonical name is the one the door gave, or
+    // that composition for a door that gave only the parts.
+    const composedName = composeContactName(profile.firstName, profile.lastName)
+    const canonicalName = (options.name || composedName).slice(0, 120)
+    const holderName = (composedName || options.name || '').slice(0, 120)
 
     const record: Record<string, unknown> = {
       hostId: options.hostId,
@@ -989,7 +1079,7 @@ export async function upsertHostContact(
           ? [ORG_SCOPE_TOKEN]
           : consentGroupScope(group),
       email,
-      ...(options.name ? nameSearchFields(options.name.slice(0, 120)) : {}),
+      ...(canonicalName ? nameSearchFields(canonicalName) : {}),
       // The search echo of the facet's phone — see `HostContact.phone`.
       ...(profile.phone ? { phone: profile.phone } : {}),
       // The search echo of the facet's company name — see `HostContact.companyName`.
@@ -1011,9 +1101,7 @@ export async function upsertHostContact(
           // whole membership.
           ...(campaignIds.length ? { campaignIds } : {}),
           ...customFacet,
-          ...(options.name
-            ? { name: options.name.slice(0, 120) }
-            : {}),
+          ...(holderName ? { name: holderName } : {}),
           ...profile,
           ...(options.purchaseCents
             ? {
@@ -1089,7 +1177,7 @@ export async function upsertHostContact(
           contactId: created.id,
           hostId: options.hostId,
           email,
-          ...(options.name ? { name: options.name.slice(0, 120) } : {}),
+          ...(holderName ? { name: holderName } : {}),
           source: options.source,
           campaignIds,
           ...(profile.lifecycleStage

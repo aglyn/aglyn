@@ -26,6 +26,10 @@
       "types": "./src/lib/foundation/index.d.ts",
       "default": "./src/lib/foundation/index.js"
     },
+    "./data-transfer": {
+      "types": "./src/lib/data-transfer/index.d.ts",
+      "default": "./src/lib/data-transfer/index.js"
+    },
     "./*": {
       "types": "./src/lib/*.d.ts",
       "default": "./src/lib/*.js"

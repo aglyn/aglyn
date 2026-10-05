@@ -27,9 +27,63 @@
  * itself and escapes it here.
  */
 
-/** One cell, quoted when it has to be: a comma, a quote or a line break. */
-export const escapeCsvCell = (cell: string): string =>
-  /[",\r\n]/.test(cell) ? `"${cell.replace(/"/g, '""')}"` : cell
+/**
+ * A cell a spreadsheet would run as a formula: one that opens with `=`, `+`,
+ * `-` or `@`, or with a tab or carriage return (which some spreadsheets strip
+ * before reading the rest as a formula). Leading `'`s are looked through, so
+ * a cell that already starts with the guard is guarded again and the reader
+ * below can always take exactly one back off.
+ */
+const CSV_FORMULA_LEAD = /^'*[=+\-@\t\r]/
+
+/** A plain number as text: `-5`, `+1.5`, `.25`, `1e-3`. */
+const CSV_NUMBER = /^[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?$/
+
+export interface CsvCellOptions {
+  /**
+   * The cell holds a number (a number value, or a number, currency or
+   * percent field). A cell that reads as a plain number is then written as
+   * is — `-5` stays a negative number in the spreadsheet — and anything else
+   * is still guarded.
+   */
+  numeric?: boolean
+}
+
+/**
+ * A cell that cannot run as a spreadsheet formula (AGL-3548).
+ *
+ * Every CSV the platform writes may hold text a stranger typed — a form
+ * answer, a lead's company name — and a spreadsheet that opens the file runs
+ * `=HYPERLINK(...)` or `@SUM(...)` as a formula. A leading `'` makes the
+ * spreadsheet show the cell as text instead. Only the CSV gets this; a JSON
+ * or NDJSON file is read by programs, so it keeps the value as it is.
+ * {@link restoreCsvFormulaCell} takes the `'` back off on import.
+ */
+export function neutralizeCsvFormula(cell: string, options?: CsvCellOptions): string {
+  if (!CSV_FORMULA_LEAD.test(cell)) return cell
+  if (options?.numeric && CSV_NUMBER.test(cell)) return cell
+  return `'${cell}`
+}
+
+/**
+ * A CSV cell as it was before {@link neutralizeCsvFormula}: one leading `'`
+ * dropped when it guards a formula character (or another guard), so a file
+ * exported and imported again holds the same text. A `'` before anything
+ * else is part of the value and stays.
+ */
+export function restoreCsvFormulaCell(cell: string): string {
+  return /^'+[=+\-@\t\r]/.test(cell) ? cell.slice(1) : cell
+}
+
+/**
+ * One cell: guarded against running as a formula (see
+ * {@link neutralizeCsvFormula}), then quoted when it has to be — a comma, a
+ * quote or a line break. Every CSV writer goes through this.
+ */
+export const escapeCsvCell = (cell: string, options?: CsvCellOptions): string => {
+  const safe = neutralizeCsvFormula(cell, options)
+  return /[",\r\n]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe
+}
 
 /**
  * Data rows in a CSV document — the header excluded, quoted newlines not
@@ -124,7 +178,8 @@ export function exportShortfall(
  *
  * The inverse of the escaper above, and the one parser in the repo — see the
  * module note for why the email list importer reaches this rather than
- * writing its own.
+ * writing its own. A cell the escaper guarded against running as a formula
+ * comes back without its guard ({@link restoreCsvFormulaCell}).
  *
  * A wholly blank row is dropped. Every spreadsheet writes a trailing newline
  * and a row of empty cells is not a record; carrying it through would give
@@ -154,11 +209,11 @@ export function parseCsv(text: string): string[][] {
     if (char === '"') {
       quoted = true
     } else if (char === ',') {
-      row.push(cell)
+      row.push(restoreCsvFormulaCell(cell))
       cell = ''
     } else if (char === '\n' || char === '\r') {
       if (char === '\r' && source[index + 1] === '\n') index += 1
-      row.push(cell)
+      row.push(restoreCsvFormulaCell(cell))
       cell = ''
       rows.push(row)
       row = []
@@ -167,7 +222,7 @@ export function parseCsv(text: string): string[][] {
     }
   }
   if (cell !== '' || row.length) {
-    row.push(cell)
+    row.push(restoreCsvFormulaCell(cell))
     rows.push(row)
   }
   return rows.filter((cells) => cells.some((value) => value.trim() !== ''))

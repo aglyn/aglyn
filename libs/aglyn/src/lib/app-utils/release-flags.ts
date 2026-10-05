@@ -46,6 +46,7 @@ export type ReleaseFlagKey =
   | 'release_video_uploads'
   | 'release_video_delivery'
   | 'release_ai_generative'
+  | 'release_crm_assist_whole_record'
 
 export interface ReleaseFlagDefinition {
   key: ReleaseFlagKey
@@ -190,6 +191,24 @@ const PLATFORM_RELEASE_FLAGS: readonly ReleaseFlagDefinition[] = [
       'Turning it on sends customer briefs and site content to Anthropic ' +
       'on the same ANTHROPIC_API_KEY and under the same subprocessor ' +
       'disclosure as Assist (AGL-1909).',
+    defaultEnabled: false,
+  },
+  // What CRM assistance hands the model provider, not whether it runs:
+  // `release_ai_generative` opens the doors, this widens what a record sends
+  // through them. Per org, with no staff preview — the data is the customer's,
+  // and a staff session reading a customer's record must send what the
+  // published pages promise. The CRM's record-facts readers hold the gate.
+  {
+    key: 'release_crm_assist_whole_record',
+    label: 'CRM assistance: whole record',
+    description:
+      'What AI assistance in the CRM (a record summary, next step or ' +
+      'email draft) sends the model provider (AGL-3520). OFF: the ' +
+      'disclosed fields, with addresses and numbers in typed text ' +
+      'replaced. ON: the whole record, contact details and custom fields ' +
+      'included. Turn on only after Privacy Policy section 2 and the ' +
+      'Subprocessors row are republished; see ' +
+      'docs/drafts/agl-3520-crm-assistance-whole-record-disclosure.md.',
     defaultEnabled: false,
   },
 ]

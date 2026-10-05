@@ -23,11 +23,12 @@
  * The list is the org's, but enrolling somebody on it is done as one site,
  * and the Consent column reads what each person agreed to with one site's
  * group. So with no site in the URL the page must say which before it builds
- * the membership panel — and it must hand the panel, and the importer, THAT
- * site and THAT site's consent group rather than any other.
+ * the membership panel — and it must hand the panel, and the import wizard,
+ * THAT site and THAT site's consent group rather than any other.
  *
- * The membership panel and the importer are stubbed: what belongs here is
- * what they are handed, and each has its own suite for what it does.
+ * The membership panel and the console's transfer launcher are stubbed: what
+ * belongs here is what they are handed, and each has its own suite for what
+ * it does.
  */
 
 import { act, fireEvent, render, screen } from '@testing-library/react'
@@ -36,8 +37,12 @@ import type { ReactNode } from 'react'
 let listDoc: Record<string, unknown> | undefined
 /** The props the members panel was last mounted with, or null. */
 let panelProps: Record<string, any> | null = null
-/** The props the importer was last mounted with, or null. */
+/** What the import wizard was last opened with, or null. */
 let importProps: Record<string, any> | null = null
+/** What the export dialog was last opened with, or null. */
+let exportProps: Record<string, any> | null = null
+/** The console shell's launcher; `null` outside the shell. */
+let launcher: Record<string, unknown> | null = null
 
 const FIRESTORE = {}
 const SCOPE = { scope: ['orgs', 'org-1'], orgId: 'org-1', ready: true }
@@ -68,6 +73,11 @@ jest.mock('@aglyn/aglyn', () => {
   return { ...actual, pluginDocsHelp: () => undefined }
 })
 
+jest.mock('@aglyn/aglyn/app-utils/transfer-launcher-context', () => ({
+  __esModule: true,
+  useTransferLauncher: () => launcher,
+}))
+
 jest.mock('@aglyn/shared-ui-jsx', () => ({
   CardDisplay: ({ children, HeaderProps }: any) => (
     <div>
@@ -84,14 +94,6 @@ jest.mock('./list-members-panel', () => ({
   default: (props: Record<string, unknown>) => {
     panelProps = props
     return <div>{'the members'}</div>
-  },
-}))
-
-jest.mock('./list-import-drawer', () => ({
-  __esModule: true,
-  default: (props: Record<string, unknown>) => {
-    importProps = props
-    return <div>{'the importer'}</div>
   },
 }))
 
@@ -114,6 +116,13 @@ const ORG = {
 async function mountAtOrg(hosts = TWO_SITES) {
   panelProps = null
   importProps = null
+  exportProps = null
+  launcher = launcher ?? {
+    openImport: (props: Record<string, unknown>) => (importProps = props),
+    openExport: (props: Record<string, unknown>) => (exportProps = props),
+    close: () => undefined,
+    can: () => true,
+  }
   window.sessionStorage.clear()
   render(
     (
@@ -184,7 +193,47 @@ describe('an audience opened on the organization’s page', () => {
     })
 
     fireEvent.click(screen.getByText('Import'))
-    expect(importProps?.hostId).toBe('host-3')
+    expect(importProps).toMatchObject({
+      resource: 'email.list-members:list-1',
+      scope: 'host',
+      hostId: 'host-3',
+      title: 'Import into Newsletter',
+    })
+
+    fireEvent.click(screen.getByText('Export'))
+    expect(exportProps).toMatchObject({
+      resource: 'email.list-members:list-1',
+      hostId: 'host-3',
+      title: 'Export Newsletter',
+    })
+  })
+
+  it('offers no import or export outside the console shell', async () => {
+    listDoc = { name: 'Newsletter', kind: 'manual', hostId: 'host-2' }
+    const held = launcher
+    launcher = null
+    try {
+      render(
+        (
+          <EmailOrgMountProvider
+            mount={{
+              orgId: 'org-1',
+              orgSlug: 'acme',
+              hosts: TWO_SITES,
+              hostsReady: true,
+              hostsPath: '/acme/hosts',
+            }}
+            basePath="/acme/emails"
+          >
+            <ListDetailCard hostId={null} org={ORG} listId="list-1" basePath="/acme/emails" />
+          </EmailOrgMountProvider>
+        ) as ReactNode as never,
+      )
+      expect(screen.queryByText('Import')).toBeNull()
+      expect(screen.queryByText('Export')).toBeNull()
+    } finally {
+      launcher = held
+    }
   })
 
   it('takes the only site without asking', async () => {
