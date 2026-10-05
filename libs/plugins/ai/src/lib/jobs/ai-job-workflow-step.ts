@@ -15,13 +15,7 @@
  * limitations under the License.
  */
 
-import {
-  ACTION_MAX_CONDITIONS,
-  ACTION_MAX_STEPS,
-  FLOW_TIMED_OUT_FIELD,
-  FLOW_WAIT_MAX_MINUTES,
-  HOST_ACTION_STEP_LABELS,
-} from '@aglyn/aglyn/app-utils/actions'
+import { ACTION_MAX_CONDITIONS, ACTION_MAX_STEPS } from '@aglyn/aglyn/app-utils/site-interactions'
 import {
   CONTACT_LIFECYCLE_STAGES,
   CONTACT_TAG_MAX_LENGTH,
@@ -36,6 +30,11 @@ import {
   aiAutomationDraftNote,
   type AiAutomationRecords,
 } from '../model/ai-automation-draft'
+import {
+  AI_AUTOMATION_TIMED_OUT_FIELD,
+  AI_AUTOMATION_WAIT_MINUTES,
+  aiStepLabel,
+} from '../model/ai-automation-format'
 import {
   aiActionOutline,
   aiActionRecordKinds,
@@ -187,8 +186,8 @@ const STEP_USES: Readonly<Record<AiAutomationStepType, string>> = {
   setContactStage: 'sets the person’s lifecycle stage. Fields: stage',
   addContactTag: 'tags the person. Fields: text (the tag)',
   assignContactOwner: 'gives the person an owner. Fields: text (the owner)',
-  createCrmTask: 'creates a follow-up task. Fields: text (the task), taskKind, dueInDays',
-  logCrmActivity: 'logs what happened on the person’s record. Fields: activityKind, text (what happened)',
+  createCrmTask: 'creates a follow-up task. Fields: text (the task), taskKind, priority, dueInDays',
+  logCrmActivity: 'logs what happened on the person’s record. Fields: activityKind, direction (a call’s or an email’s), text (what happened)',
 }
 
 function triggerLine(event: HostEventType): string {
@@ -204,7 +203,7 @@ function triggerLine(event: HostEventType): string {
 
 function stepLine(type: AiAutomationStepType): string {
   const need = AI_AUTOMATION_STEP_NEEDS[type]
-  return `- ${type} (${HOST_ACTION_STEP_LABELS[type]}) ${STEP_USES[type]}.${
+  return `- ${type} (${aiStepLabel(type)}) ${STEP_USES[type]}.${
     need ? ` Needs ${AI_AUTOMATION_NEED_LABELS[need]}.` : ''
   }`
 }
@@ -232,8 +231,8 @@ export const AI_JOB_WORKFLOW_DRAFT_INSTRUCTIONS: readonly AiSystemBlock[] = [
       '- A form is named by the id or the name the request lists: formId on contactCreated, formName on formSubmission. A form the description names that the request does not list is written in the description’s words.',
       '- A deal stage in a condition on stageId or previousStageId is written as the stage’s name.',
       `- A lifecycle stage is one of: ${CONTACT_LIFECYCLE_STAGES.join(', ')}. A new lead is the stage lead.`,
-      `- The trigger holds at most ${ACTION_MAX_CONDITIONS} conditions; combinator is and unless the description means any of them. A step's when holds one condition of its own at most, over the same fields. After waitForEvent, when on the field "${FLOW_TIMED_OUT_FIELD}" with notEmpty means the wait ran out of time.`,
-      `- At most ${ACTION_MAX_STEPS} steps. minutes are whole minutes, at most ${FLOW_WAIT_MAX_MINUTES}; dueInDays is from 0 to ${CRM_TASK_MAX_DUE_DAYS}; addContactTag’s text is at most ${CONTACT_TAG_MAX_LENGTH} characters.`,
+      `- The trigger holds at most ${ACTION_MAX_CONDITIONS} conditions; combinator is and unless the description means any of them. A step's when holds one condition of its own at most, over the same fields. After waitForEvent, when on the field "${AI_AUTOMATION_TIMED_OUT_FIELD}" with notEmpty means the wait ran out of time.`,
+      `- At most ${ACTION_MAX_STEPS} steps. minutes are whole minutes, at most ${AI_AUTOMATION_WAIT_MINUTES.max}; dueInDays is from 0 to ${CRM_TASK_MAX_DUE_DAYS}; addContactTag’s text is at most ${CONTACT_TAG_MAX_LENGTH} characters.`,
       '- assignContactOwner’s text is "round robin", or the teammate’s email address when the description gives one. A teammate named without an address goes in notes.',
       '- Write an email’s subject and body, and any text a person reads, in the site’s voice and the language of the description. Where the description lacks a fact such as a phone number, an address or a price, write a short description of it in square brackets instead of inventing it.',
       '- A trigger or a step the request says this workspace cannot use is never used. When the description needs one, or needs something no trigger or step here does, answer with unsupported set to the reason, no steps, and trigger event formSubmission with no conditions. unsupported is empty on every automation that is built.',

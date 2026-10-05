@@ -36,6 +36,15 @@ type FakeQuery = { path: string; clauses: Clause[]; limit?: number }
 let leadsBySite: Record<string, Array<Record<string, unknown>>> = {}
 
 const firestore = {}
+// The org's lead statuses (AGL-3512): the standard ones.
+jest.mock('../../hooks/use-lead-status-picklist', () => {
+  const { effectiveCrmLeadStatusPicklist } = jest.requireActual('@aglyn/aglyn/app-utils/crm')
+  const picklist = effectiveCrmLeadStatusPicklist(null)
+  return {
+    useLeadStatusPicklist: () => ({ picklist, stored: false, ready: true, fromCache: false }),
+  }
+})
+
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => firestore,
 }))

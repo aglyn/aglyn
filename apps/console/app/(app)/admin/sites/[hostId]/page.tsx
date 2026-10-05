@@ -53,6 +53,8 @@ import PluginWidgetSlot, {
 } from '../../../../../components/plugin-widget-slot.component'
 import StaffEmailDeliveriesCard from '../../../../../components/staff-email-deliveries-card.component'
 import StaffOrgOwnershipTransfer from '../../../../../components/staff-org-ownership-transfer.component'
+import StaffOrgOwnerHandoff from '../../../../../components/org-owner-handoff.component'
+import StaffOrgUpgradeProposal from '../../../../../components/staff-org-upgrade-proposal.component'
 import StaffSiteTransfer from '../../../../../components/staff-site-transfer.component'
 import StaffSiteContentCard from '../../../../../components/staff-site-content-card.component'
 import {
@@ -441,6 +443,24 @@ const AdminHostDetail: NextPageWithLayout<Record<string, never>> = () => {
                           orgName={site?.org?.name}
                           ownerUid={site?.org?.ownerUid}
                           onTransferred={() => setSiteNonce((nonce) => nonce + 1)}
+                        />
+                      ) : null}
+                      {/* Handing the workspace to the client the site was
+                          built for, and later asking them to upgrade, are
+                          the same two acts as on the organization page
+                          (AGL-3466). */}
+                      {orgId ? (
+                        <StaffOrgOwnerHandoff
+                          orgId={orgId}
+                          orgName={site?.org?.name}
+                          onSent={() => setSiteNonce((nonce) => nonce + 1)}
+                        />
+                      ) : null}
+                      {orgId ? (
+                        <StaffOrgUpgradeProposal
+                          orgId={orgId}
+                          org={(site?.org ?? null) as never}
+                          onChanged={() => setSiteNonce((nonce) => nonce + 1)}
                         />
                       ) : null}
                       {/* Moving the site itself to another organization

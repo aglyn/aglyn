@@ -15,18 +15,14 @@
  * limitations under the License.
  */
 
-import {
-  PLATFORM_BRANDING_PROFILE,
-  pluginRequestFromWeb,
-} from '@aglyn/aglyn/server'
+import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   generateOrgSlug,
   isSignupCanaryOrgSlug,
   isValidOrgSlug,
   resolveIdpDisplayName,
 } from '@aglyn/aglyn/server'
-import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
-import { renderSystemEmail } from '../../_lib/render-system-email'
+import { announceNewWorkspace } from '../../_lib/growth-announcements'
 import { enforceSanctionsGeo } from '../../../../constants/sanctions-geo'
 import {
   consumeRateLimit,
@@ -36,15 +32,12 @@ import {
   freeWorkspaceCapRefusalResponse,
   isImpersonationSession,
   lockdownRefusal,
-  meterOrgEmail,
-  notifyStaff,
   OrgSlugTakenError,
   recordSignupAttempt,
   recordSignupRefusal,
 } from '@aglyn/tenant-data-admin'
 import { readClientIp } from '@aglyn/aglyn/app-utils/request-ip'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
-import { buildRoute, Route } from '../../../../constants/route-links'
 
 /**
  * Creates an organization for the signed-in user (AGL-233). Like Slack,
@@ -214,6 +207,9 @@ async function handler(request: Request): Promise<Response> {
       // a customer's behalf is exempt: a ceiling that stops support from
       // fixing a workspace produces the ticket it was meant to prevent.
       bypassFreeWorkspaceCap: decoded['staff'] === true,
+      // A staff creator takes none of the workspace's seats (AGL-3466); the
+      // verified token already says whether they are staff.
+      ownerStaffSeat: decoded['staff'] === true,
       ownerEmail: decoded.email ?? null,
       // Not `decoded['name']` (AGL-1131): a SAML assertion puts its mapped
       // attributes under `firebase.sign_in_attributes` and never promotes
@@ -222,95 +218,21 @@ async function handler(request: Request): Promise<Response> {
       ownerDisplayName: resolveIdpDisplayName(decoded) || null,
     })
 
-    // Welcome email on the owner's FIRST org only (AGL-768): someone who
-    // creates their second workspace does not get welcomed again. Counted
-    // after creation — they now own exactly one — and wrapped so nothing in
-    // the send can turn a created org into a 500. Best-effort like every
-    // other send; the copy below is the last resort behind the rendered
-    // template, and `sendEmail` never throws.
-    try {
-      if (decoded.email && isEmailConfigured()) {
-        const ownedCount = (
-          await firebaseAdmin
-            .app()
-            .firestore()
-            .collection('orgs')
-            .where('ownerUid', '==', decoded.uid)
-            .limit(2)
-            .get()
-        ).size
-        if (ownedCount === 1) {
-          const origin = headers.origin ?? `https://${headers.host}`
-          // Same claim, same reason (AGL-1131) — the welcome email opened
-          // "Hi there," for SSO owners regardless of what their IdP sent.
-          const ownerName = resolveIdpDisplayName(decoded) || 'there'
-          const fallbackText =
-            `Hi ${ownerName}, thanks for creating ${name}. Your workspace ` +
-            `is ready.\n\nOpen your dashboard at ${origin}.`
-          // No brand argument: `renderSystemEmail` already merges
-          // `DEFAULT_BRAND_TOKENS` — the platform profile — under whatever the
-          // caller supplies (AGL-2139). That is the right answer here anyway,
-          // since the org was created seconds ago and carries no `whiteLabel`
-          // entitlement, so `resolveBrandingProfile` would return exactly it.
-          const designed = await renderSystemEmail('welcome', {
-            name: ownerName,
-            'org.name': name,
-            consoleUrl: origin,
-          })
-          await sendEmail({
-            to: decoded.email,
-            subject:
-              designed?.subject ??
-              `Welcome to ${PLATFORM_BRANDING_PROFILE.productName}`,
-            text: designed?.text || fallbackText,
-            ...(designed?.html ? { html: designed.html } : {}),
-            context: 'welcome',
-          })
-          // Cost meter (AGL-1438). Org-scoped: the org exists by now — this
-          // runs after `createOrganization` returned its id.
-          await meterOrgEmail(orgId)
-        }
-      }
-    } catch (welcomeError) {
-      console.error('welcome email skipped', welcomeError)
-    }
-
-    /*
-     * AND TELL OURSELVES (AGL-3225).
-     *
-     * Nothing did. A workspace being created is the platform's most basic
-     * growth event and the only message it produced went to the customer —
-     * so the way to learn that anyone had signed up was to go and look at
-     * Firestore.
-     *
-     * After the response is decided and inside its own `catch`, like the
-     * welcome email above: `notifyStaff` never throws, and a sign-up that
-     * failed because we could not tell ourselves about it would be the worst
-     * trade in the route.
-     */
-    try {
-      /*
-       * ⚠️ Except the canary's own (AGL-3248), for the same reason the
-       * attempt marker above excludes it — and with the same one-line test.
-       *
-       * It walks hourly and REAPS what it made, so each announcement is a
-       * workspace that no longer exists behind a link to an admin page that
-       * 404s. Nine of the ten most recent staff rows were canary on
-       * 2026-09-22, which is how a feed meant to carry the platform's growth
-       * stops being read at all. The walk's own health has a channel that is
-       * supposed to page — `signupCanaryHealth` — and this is not it.
-       */
-      if (!isSignupCanaryOrgSlug(slug)) {
-        await notifyStaff({
-          type: 'staff.orgCreated',
-          title: `New workspace: ${name}`,
-          body: `${decoded.email ?? 'An account'} created ${name} (/${slug}).`,
-          link: buildRoute(Route.ADMIN_ORG_DETAIL, { orgId }),
-        })
-      }
-    } catch (staffError) {
-      console.error('staff new-workspace notification skipped', staffError)
-    }
+    // The welcome email and the staff notice, shared with the site door that
+    // also creates workspaces (AGL-3491). Never throws.
+    await announceNewWorkspace({
+      orgId,
+      name,
+      slug,
+      owner: {
+        uid: decoded.uid,
+        email: decoded.email ?? null,
+        // Same claim, same reason (AGL-1131) — the welcome email opened
+        // "Hi there," for SSO owners regardless of what their IdP sent.
+        displayName: resolveIdpDisplayName(decoded) || null,
+      },
+      origin: headers.origin ?? `https://${headers.host}`,
+    })
 
     return Response.json({ orgId, slug }, { status: 200 })
   } catch (error) {

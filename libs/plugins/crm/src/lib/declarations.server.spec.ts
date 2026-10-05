@@ -42,9 +42,15 @@ import {
 } from '@aglyn/aglyn/plugin-manager/plugin-lead-conversion'
 import { pluginPersonRecords } from '@aglyn/aglyn/plugin-manager/plugin-person-records'
 import { pluginRecordIndex } from '@aglyn/aglyn/plugin-manager/plugin-record-index'
+import { pluginRecordTimelineWriter } from '@aglyn/aglyn/plugin-manager/plugin-record-timeline'
+import {
+  registeredServerStepExecutor,
+  resetServerStepExecutorsForTests,
+} from '@aglyn/aglyn/plugin-manager/plugin-server-steps'
 import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { CRM_STEP_TYPES } from './constants/bundle-common'
 import {
   crmCompanyRecordIndex,
   crmContactCaptureWriter,
@@ -126,6 +132,22 @@ describe('what the CRM declares at boot', () => {
     expect(pluginPersonRecords()).toEqual({ pluginId: 'crm', records: crmPersonRecordsService })
     expect(deferredImports).toContain('./server/person-records')
     expect(staticImports).not.toContain('./server/person-records')
+  })
+
+  it('runs its automation steps under this plugin, loaded with the first step (AGL-3080)', () => {
+    resetServerStepExecutorsForTests()
+    registerCrmServerDeclarations()
+    for (const type of CRM_STEP_TYPES) {
+      expect(registeredServerStepExecutor(type)?.pluginId).toBe('crm')
+    }
+    expect(deferredImports).toContain('./server/automation-steps')
+    expect(staticImports).not.toContain('./server/automation-steps')
+  })
+
+  it('files an automation’s email on the timeline through its writer (AGL-3080)', () => {
+    registerCrmServerDeclarations()
+    expect(pluginRecordTimelineWriter()?.pluginId).toBe('crm')
+    expect(typeof pluginRecordTimelineWriter()?.writer.prepareEmail).toBe('function')
   })
 
   it('registers the workspace’s contact-capture writer, under this plugin', () => {

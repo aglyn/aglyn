@@ -70,7 +70,12 @@ export function useInviteResponse() {
         }
         const name = invite.orgName ?? 'the organization'
         if (answer === 'accept') {
-          enqueueSnackbar(`Joined ${name}`, { variant: 'success' })
+          // A handoff lands on the org home like any join (AGL-3466): the
+          // new owner looks around first, and is asked to upgrade later.
+          enqueueSnackbar(
+            payload?.owner === true ? `You now own ${name}` : `Joined ${name}`,
+            { variant: 'success' },
+          )
           if (invite.orgId) selectOrg(invite.orgId)
           if (invite.orgSlug) {
             void router.push(

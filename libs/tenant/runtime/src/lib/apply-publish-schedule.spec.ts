@@ -56,6 +56,8 @@ let entitled = true
  */
 let routingMap: Record<string, string> = {}
 let screenDocs: Record<string, Record<string, unknown>> = {}
+/** The host's placeholder home page (AGL-3408), when a case gives it one. */
+let defaultHomeScreenId: string | undefined
 
 const docSnapshot = (data?: Record<string, unknown>) => ({
   exists: data !== undefined,
@@ -69,7 +71,8 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     update: updateMock,
   })
   const hostDoc = {
-    get: async () => docSnapshot({ screens: routingMap }),
+    get: async () =>
+      docSnapshot({ screens: routingMap, defaultHomeScreenId }),
     update: updateMock,
     collection: () => ({ doc: subDoc }),
   }
@@ -127,6 +130,7 @@ beforeEach(() => {
   // Already live at /about — see the fixture note above.
   routingMap = { 'screen-1': 'about' }
   screenDocs = { 'screen-1': { slug: 'about' } }
+  defaultHomeScreenId = undefined
 })
 
 describe('a due schedule on an unentitled plan (AGL-1185)', () => {
@@ -413,6 +417,52 @@ describe('a scheduled first publish registers the route (AGL-1589)', () => {
     expect(commitMock).not.toHaveBeenCalled()
   })
 
+  /*
+   * PAGE GROUPS (AGL-3463). A group is a folder in the Pages list: it has no
+   * address of its own and contributes nothing to the paths of the pages in
+   * it. Publishing one is refused; publishing a page inside one is not.
+   */
+  it('never routes a page group, even one carrying a stray slug', async () => {
+    screenDocs = { 'screen-1': { slug: 'campaigns', kind: 'group' } }
+
+    const result = await run({ versionId: 'v-live', publishSchedule: schedule() })
+
+    expect(updateMock).toHaveBeenCalledWith({
+      'publishSchedule.status': 'skipped-unroutable',
+    })
+    expect(result).toBe('v-live')
+    expect(commitMock).not.toHaveBeenCalled()
+  })
+
+  it('publishes a page inside a group at the group’s level', async () => {
+    screenDocs = {
+      'screen-1': { slug: 'launch-waitlist', parentId: 'group-1' },
+      'group-1': { kind: 'group' },
+    }
+
+    await run({ versionId: 'v-live', publishSchedule: schedule() })
+
+    expect(batchUpdateMock.mock.calls[0][1]).toEqual({
+      'screens.screen-1': 'launch-waitlist',
+    })
+    expect(commitMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('composes through nested groups under a page', async () => {
+    screenDocs = {
+      'screen-1': { slug: 'about', parentId: 'group-2' },
+      'group-2': { kind: 'group', parentId: 'group-1' },
+      'group-1': { kind: 'group', parentId: 'parent-1' },
+      'parent-1': { slug: 'company' },
+    }
+
+    await run({ versionId: 'v-live', publishSchedule: schedule() })
+
+    expect(batchUpdateMock.mock.calls[0][1]).toEqual({
+      'screens.screen-1': 'company/about',
+    })
+  })
+
   it('leaves the schedule PENDING when the routing read fails', async () => {
     // Fail-open: an unanswerable routing question must not become an
     // `applied` status, because `applied` never retries. The next beat does.
@@ -427,5 +477,151 @@ describe('a scheduled first publish registers the route (AGL-1589)', () => {
     expect(result).toBe('v-live')
     expect(updateMock).not.toHaveBeenCalled()
     expect(commitMock).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * A scheduled publish or unpublish of a PARENT touches the parent's own
+ * routing entry and nothing else (AGL-3463). Pages nested under it keep
+ * serving at their own addresses, and drafts under it stay drafts — exactly
+ * what the console's unpublish and publish do, with no browser present to
+ * show a confirmation.
+ */
+describe('a scheduled publish or unpublish of a parent (AGL-3463)', () => {
+  /** Every routing-map key any write in this run touched. */
+  const routingKeysWritten = () =>
+    [
+      ...updateMock.mock.calls.map((call) => call[0]),
+      ...batchUpdateMock.mock.calls.map((call) => call[1]),
+    ]
+      .flatMap((data) => Object.keys((data ?? {}) as object))
+      .filter((key) => key.startsWith('screens.'))
+
+  beforeEach(() => {
+    screenDocs = {
+      'screen-1': { slug: 'company' },
+      about: { slug: 'about', parentId: 'screen-1' },
+      team: { slug: 'team', parentId: 'about' },
+      draft: { slug: 'draft', parentId: 'screen-1' },
+    }
+  })
+
+  it('an unpublish removes the parent’s entry and leaves its live children routed', async () => {
+    routingMap = {
+      'screen-1': 'company',
+      about: 'company/about',
+      team: 'company/about/team',
+    }
+
+    await run({
+      versionId: 'v-live',
+      publishSchedule: schedule({ action: 'unpublish' }),
+    })
+
+    expect(routingKeysWritten()).toEqual(['screens.screen-1'])
+    expect(updateMock).toHaveBeenCalledWith(
+      expect.objectContaining({ 'publishSchedule.status': 'applied' }),
+    )
+  })
+
+  it('a first publish registers the parent alone — no draft below it goes live', async () => {
+    // The parent was unpublished with its slug cleared and has a new one now;
+    // `about` kept its address and is detached from it.
+    screenDocs['screen-1'] = { slug: 'firm' }
+    routingMap = { about: 'company/about', team: 'company/about/team' }
+
+    await run({ versionId: 'v-live', publishSchedule: schedule() })
+
+    expect(batchUpdateMock.mock.calls[0][1]).toEqual({
+      'screens.screen-1': 'firm',
+    })
+    expect(routingKeysWritten()).toEqual(['screens.screen-1'])
+  })
+
+  it('a republish of a live parent writes no routing entry at all', async () => {
+    routingMap = {
+      'screen-1': 'company',
+      about: 'company/about',
+      team: 'company/about/team',
+    }
+
+    await run({ versionId: 'v-live', publishSchedule: schedule() })
+
+    expect(routingKeysWritten()).toEqual([])
+  })
+})
+
+/**
+ * AGL-3478 — a schedule on the placeholder home page is its owner publishing
+ * it.
+ *
+ * A new site is born with a Home page the platform routed at `/`, named by
+ * `defaultHomeScreenId` so a starter may take the root back. Its owner editing
+ * it and scheduling the result live makes it their home page, and the marker
+ * has to go in the same commit — left behind, the next starter would unpublish
+ * the page they made, and the site would still read as blank.
+ */
+describe('a scheduled publish of the placeholder home page (AGL-3478)', () => {
+  /** Host keys of the single host update in the batch. */
+  const hostKeysWritten = () =>
+    Object.keys((batchUpdateMock.mock.calls[0]?.[1] ?? {}) as object)
+
+  beforeEach(() => {
+    defaultHomeScreenId = 'screen-1'
+    routingMap = { 'screen-1': '/' }
+    screenDocs = { 'screen-1': { slug: '/' } }
+  })
+
+  it('clears the marker with the pointer in ONE commit, and keeps the route', async () => {
+    const result = await run({ versionId: 'v-seeded', publishSchedule: schedule() })
+
+    expect(result).toBe('v-scheduled')
+    expect(batchUpdateMock).toHaveBeenCalledTimes(2)
+    // Only the marker: the route is already `/`, and rewriting it would be
+    // a publish of an address nobody asked to change.
+    expect(hostKeysWritten()).toEqual(['defaultHomeScreenId'])
+    expect(batchUpdateMock.mock.calls[1][1]).toMatchObject({
+      versionId: 'v-scheduled',
+      'publishSchedule.status': 'applied',
+    })
+    expect(commitMock).toHaveBeenCalledTimes(1)
+    expect(updateMock).not.toHaveBeenCalled()
+  })
+
+  it('reports it as the site’s first publish — the platform’s route never was one', async () => {
+    await run({ versionId: 'v-seeded', publishSchedule: schedule() })
+
+    expect(ga4Mock).toHaveBeenCalledWith({ hostId: 'h1', firstPublish: true })
+  })
+
+  it('is not the first when the owner already has another page live', async () => {
+    routingMap = { 'screen-1': '/', pricing: 'pricing' }
+
+    await run({ versionId: 'v-seeded', publishSchedule: schedule() })
+
+    expect(hostKeysWritten()).toEqual(['defaultHomeScreenId'])
+    expect(ga4Mock).toHaveBeenCalledWith({ hostId: 'h1', firstPublish: false })
+  })
+
+  it('registers the route too when the owner had unpublished it first', async () => {
+    routingMap = {}
+
+    await run({ versionId: 'v-seeded', publishSchedule: schedule() })
+
+    expect(batchUpdateMock.mock.calls[0][1]).toEqual({
+      'screens.screen-1': '/',
+      defaultHomeScreenId: expect.anything(),
+    })
+  })
+
+  it('leaves the marker alone when another page is scheduled anywhere else', async () => {
+    // The untouched-placeholder site: nothing about it changes.
+    defaultHomeScreenId = 'home'
+    routingMap = { home: '/' }
+    screenDocs = { 'screen-1': { slug: 'about' } }
+
+    await run({ versionId: 'v-live', publishSchedule: schedule() })
+
+    expect(hostKeysWritten()).toEqual(['screens.screen-1'])
   })
 })

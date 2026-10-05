@@ -227,7 +227,7 @@ jest.mock('@aglyn/aglyn/server', () => ({
   // exactly like the behaviour under test regressing.
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/stored-nodes'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/screen-route'),
-  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/actions'),
+  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/site-interactions'),
   // The REAL host-role gate (AGL-2334). These routes ask
   // `hostRoleCanWrite` whether the caller may write at all, and this factory
   // is a CLOSED WORLD — anything it does not name is `undefined`, so leaving

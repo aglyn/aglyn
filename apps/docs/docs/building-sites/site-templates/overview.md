@@ -23,7 +23,8 @@ scale with your tier.
   [template library](./templates-library.md), so you can edit and version them like any
   other template. A starter's first page becomes the site's home page: it replaces the
   placeholder **Home** page a new site is created with (which is kept as a draft),
-  but never a home page you published yourself.
+  but never a home page you published yourself — and that includes the placeholder
+  once you have edited and published it.
 - **Save a site as a template** from **Setup → Site template**, which publishes it to the
   marketplace — see [save & share a template](./save-a-template.md). Browsing and installing
   marketplace templates happens in the **Start from a template** picker, opened by the

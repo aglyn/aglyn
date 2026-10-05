@@ -16,8 +16,10 @@
  */
 
 import { FieldValue } from 'firebase-admin/firestore'
+import { outreachOpenSourceOf, type OutreachOpenSource } from '../engine/open-source'
 import {
   judgeOutreachOpen,
+  outreachOpenAgentEvidence,
   OUTREACH_PROXY_OPEN_REASONS,
   type OutreachOpenJudgement,
 } from '../engine/open-tracking'
@@ -51,13 +53,21 @@ import type { OutreachRuntimeDeps } from './runtime-deps'
 
 /** What one recorded open turned out to be. */
 export interface OutreachOpenOutcome extends OutreachOpenJudgement {
+  /** The network the fetch came from (AGL-3488); `null` when no address was read. */
+  source: OutreachOpenSource | null
   /** Whether it was this person's first human open — the sequence's `uniqueOpens`. */
   first: boolean
   /** The enrollment it was recorded against, or `null` when there is none. */
   enrollment: OutreachEnrollment | null
 }
 
-const nothing = (): OutreachOpenOutcome => ({ human: false, machineReason: null, first: false, enrollment: null })
+const nothing = (): OutreachOpenOutcome => ({
+  human: false,
+  machineReason: null,
+  source: null,
+  first: false,
+  enrollment: null,
+})
 
 /**
  * Records one fetch of a tracking image.
@@ -74,6 +84,11 @@ export async function recordOutreachOpen(
     target: OutreachOpenTarget
     method: string
     userAgent: string | null | undefined
+    /**
+     * The fetch's address (AGL-3488), read for the network it belongs to and
+     * dropped: the row keeps the network, never the address.
+     */
+    address?: string | null
   },
 ): Promise<OutreachOpenOutcome> {
   // A test's image (AGL-3325) names no enrollment and counts on nothing.
@@ -81,6 +96,7 @@ export async function recordOutreachOpen(
   const firestore = deps.firestore()
   const { orgId, enrollmentId, stepIndex } = input.target
   const nowMs = deps.now()
+  const source = outreachOpenSourceOf(input.address)
   const ref = outreachOrgCollection(firestore, orgId, 'enrollments').doc(enrollmentId)
 
   const outcome = await firestore.runTransaction(async (transaction) => {
@@ -92,6 +108,7 @@ export async function recordOutreachOpen(
       method: input.method,
       userAgent: input.userAgent,
       sinceSentMs: sent === null ? null : nowMs - sent,
+      source,
     })
     const held = readOutreachEngagement(enrollment.engagement)
     const first = judgement.human && held.firstOpenAtMs === null
@@ -120,10 +137,12 @@ export async function recordOutreachOpen(
           stepIndex,
           human: judgement.human,
           machineReason: judgement.machineReason,
+          userAgent: outreachOpenAgentEvidence(input.userAgent),
+          source,
         }),
       )
     }
-    return { ...judgement, first, enrollment: { ...enrollment, engagement } } as OutreachOpenOutcome
+    return { ...judgement, source, first, enrollment: { ...enrollment, engagement } } as OutreachOpenOutcome
   })
 
   if (outcome.enrollment?.sequenceId) {

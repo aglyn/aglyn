@@ -354,6 +354,7 @@ beforeEach(() => {
   stripePosts.length = 0
   mockAdmin.__state.bookings.clear()
   mockAdmin.__state.service['priceUsd'] = 75
+  delete mockAdmin.__state.service['priceDisplay']
   mockAdmin.__state.org = {
     id: 'org-1',
     ownerUid: 'owner-1',
@@ -436,6 +437,26 @@ describe('a paid booking pays the MERCHANT (AGL-2315)', () => {
     await bookHandler(makeReq(), res)
     expect(res.statusCode).toBe(200)
     expect(stripePosts).toHaveLength(0)
+  })
+
+  it.each(['varies', 'estimate', 'contact'])(
+    'books a priced service whose price reads "%s" with no charge, like an estimate (AGL-3475)',
+    async (display) => {
+      // The stored $75 stands behind a label, so it is neither shown nor
+      // charged: no card, and so no connected account to need.
+      mockAdmin.__state.service['priceDisplay'] = display
+      mockAdmin.__state.ownerProfile = {}
+      const res = makeRes()
+      await bookHandler(makeReq(), res)
+      expect(res.statusCode).toBe(200)
+      expect(stripePosts).toHaveLength(0)
+    },
+  )
+
+  it('charges the stored price when the service states it as the price', async () => {
+    mockAdmin.__state.service['priceDisplay'] = 'fixed'
+    const params = await book()
+    expect(params.get('line_items[0][price_data][unit_amount]')).toBe('7500')
   })
 })
 

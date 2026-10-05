@@ -43,7 +43,7 @@ import {
   CAMPAIGN_SENDS_COLLECTION,
   EMAIL_CAMPAIGNS_COLLECTION,
   campaignSendVisibleTo,
-} from '@aglyn/shared-ui-email-campaigns/model'
+} from '../model/campaign-container'
 
 type Firestore = FirebaseFirestore.Firestore
 

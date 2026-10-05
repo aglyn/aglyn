@@ -184,10 +184,16 @@ jest.mock('@aglyn/aglyn/server', () => ({
   ).checkApiRequestQuota,
   checkEntitlement: (_org: unknown, entitlement: string) =>
     mockEntitlements[entitlement] ?? false,
+  createResourceUid: () => 'rec_1',
+}))
+
+// The data plugin's dataset model, as the dataset handlers read it
+// (AGL-3080: the model is the data plugin's own).
+jest.mock('../../../libs/plugins/data/src/lib/model/dataset-models', () => ({
+  ...jest.requireActual('../../../libs/plugins/data/src/lib/model/dataset-models'),
   effectiveDatasetModel: () => ({ fields: [] }),
   coerceDocumentValues: (_m: unknown, v: Record<string, unknown>) => v,
   validateDocument: () => ({}),
-  createResourceUid: () => 'rec_1',
 }))
 
 import { GET } from '../app/api/v1/[[...route]]/route'
@@ -425,9 +431,8 @@ describe('GET /v1/media', () => {
 
   it('publishes the CDN url separately, and never invents one', async () => {
     // RED CHECK: fall `cdnUrl` back to `data.url` and a private PDF grows a
-    // link the caller will treat as publicly embeddable. `cdnPath` is absent
-    // for private assets and for plans without `mediaCdn`, and that absence
-    // is the signal.
+    // link the caller will treat as publicly embeddable. A private asset has
+    // no `cdnPath`, and that absence is the signal.
     const { body } = await get('/media')
     const byId = Object.fromEntries(
       body.data.map((m: { id: string }) => [m.id, m]),
@@ -437,6 +442,16 @@ describe('GET /v1/media', () => {
     )
     expect(byId.m_private.cdnUrl).toBeNull()
     expect(byId.m_private.private).toBe(true)
+  })
+
+  it('derives the CDN url for a file that predates its cdnPath (AGL-3506)', async () => {
+    // Uploaded before the CDN reached every plan: no stored `cdnPath`, and a
+    // null `cdnUrl` pushed the integrator onto `url`, whose bytes go from
+    // Storage to the visitor uncounted and out of reach of a lockdown.
+    const { body } = await get('/sites/host_1/media')
+    expect(body.data[0].cdnUrl).toBe(
+      'https://app.aglyn.com/api/media/cdn/host_1/m_site',
+    )
   })
 
   it('serves a site library at the site path, distinct from the org one', async () => {

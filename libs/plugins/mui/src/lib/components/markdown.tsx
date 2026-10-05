@@ -163,7 +163,10 @@ export interface MarkdownProps extends BoxProps {
    * existed: see `mediaBodyImageAttributes` for why a partial answer is worse
    * than none.
    */
-  intrinsicSizes?: Record<string, { width: number; height: number }>
+  intrinsicSizes?: Record<
+    string,
+    { width: number; height: number; version?: string }
+  >
 }
 
 /**

@@ -25,7 +25,7 @@ import {
   EMAIL_ATTRIBUTION_MODEL,
   EMAIL_ATTRIBUTION_WINDOW_DAYS,
 } from '@aglyn/shared-util-email'
-import type { CampaignCaveat } from '@aglyn/shared-ui-email-campaigns/model/campaign-report'
+import type { CampaignCaveat } from './campaign-report'
 
 /**
  * WHAT A CAMPAIGN CAUSED — the read half of the identify-moment join.
@@ -117,6 +117,21 @@ export type CampaignConversionKind = (typeof CAMPAIGN_CONVERSION_KINDS)[number]
  * it came through, so a record can say which rep's outreach it credits.
  */
 export type CampaignTouchChannel = 'email' | 'web' | 'sequence'
+
+/**
+ * The record each conversion kind credits, as its owner publishes the kind
+ * (`plugin-record-counts`, `plugin-record-lists`): a credited form names the
+ * SUBMISSION it credits, the rest the record of their own name. The owners
+ * count and read those records; this plugin only names the kind.
+ */
+export const CAMPAIGN_CONVERSION_RECORD_KINDS: Readonly<
+  Record<CampaignConversionKind, string>
+> = {
+  form: 'formSubmission',
+  lead: 'lead',
+  contact: 'contact',
+  booking: 'booking',
+}
 
 /**
  * What a reader calls one kind, and what the count means.

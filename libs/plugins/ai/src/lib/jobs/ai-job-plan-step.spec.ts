@@ -63,7 +63,7 @@ import {
   AI_INVENTORY_LOOKUP_TOOL_NAME,
   aiInventoryLookupTool,
 } from '../tools/ai-inventory-lookup-tool'
-import { AI_BUILD_PLAN_TOOL, type AiBuildPlan } from '../model/ai-build-plan'
+import { AI_BUILD_PLAN_RECORDS_TOOL, AI_BUILD_PLAN_TOOL, type AiBuildPlan } from '../model/ai-build-plan'
 import { AI_MODEL_CATALOG, AI_STEP_TIERS } from '../providers/catalog'
 import { AI_ROUTING_TABLE } from '../providers/routing'
 import {
@@ -131,6 +131,7 @@ const PLAN: AiBuildPlan = {
       slug: '/pricing',
       layout: 'lay-site',
       template: null,
+      record: null,
       duplicateOf: null,
       nav: true,
       seoTitle: 'Roof repair pricing',
@@ -254,6 +255,19 @@ describe('the plan step', () => {
       { ...AI_JOB_PLAN_INSTRUCTIONS[0], cacheBreakpoint: true },
       expect.objectContaining({ volatile: true }),
     ])
+  })
+
+  it('offers each screen a record template only on a site with a dataset to bind (AGL-3475)', async () => {
+    mockRunAiRequest.mockResolvedValue(planAnswer(PLAN))
+    mockReadInventory.mockResolvedValue({
+      ...INVENTORY,
+      datasets: [{ id: 'ds-services', name: 'Services', fields: ['Name'], fieldIds: ['name'] }],
+    })
+    await planStep()({ job: job(), stepIndex: 0, now: NOW, firestore })
+    expect(mockRunAiRequest.mock.calls[0][0].tools?.[0]).toBe(AI_BUILD_PLAN_RECORDS_TOOL)
+    mockReadInventory.mockResolvedValue({ ...INVENTORY, datasets: [] })
+    await planStep()({ job: job(), stepIndex: 0, now: NOW, firestore })
+    expect(mockRunAiRequest.mock.calls[1][0].tools?.[0]).toBe(AI_BUILD_PLAN_TOOL)
   })
 
   it('runs on the model the machine resolves for job.plan, and reports that model', async () => {

@@ -15,7 +15,11 @@
  * limitations under the License.
  */
 
-import { pluginRequestFromWeb, submissionMonthKey } from '@aglyn/aglyn/server'
+import { pluginRequestFromWeb, utcMonthKey } from '@aglyn/aglyn/server'
+import {
+  pluginVisitorDoors,
+  type VisitorDoorCounts,
+} from '@aglyn/aglyn/plugin-manager/plugin-visitor-doors'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
@@ -87,59 +91,60 @@ async function handler(request: Request): Promise<Response> {
     const more = docs.length > PAGE_SIZE
     const pageDocs = more ? docs.slice(0, PAGE_SIZE) : docs
     /**
-     * Form-abuse counters, joined per host for the ORG-NARROWED case only
-     * (AGL-1681) — the staff org detail page's Sites card, where "my form
+     * Each public door's counters, joined per host for the ORG-NARROWED case
+     * only (AGL-1681) — the staff org detail page's Sites card, where "my form
      * stopped working" support conversations start. Without this join staff
-     * answered that question with a raw Firestore read of
-     * `hosts/{id}/counters/formSubmissionsRefused`, per host, by hand.
+     * answered that question with a raw Firestore read of a site's counters,
+     * per host, by hand. The doors and their two counters are the ones the
+     * plugins that keep them declare (`visitorDoors`, AGL-3080): the month's
+     * ceiling refusals with the ceiling they tripped at, and the month's
+     * honeypot catches (AGL-1831), the number the AGL-1664 assessment set its
+     * App Check / CAPTCHA revisit trigger on.
      *
      * One `getAll` for the page, the same bounded-round-trip shape
      * `/api/admin/orgs` uses for its billing join. The picker case (no
-     * `orgId`) deliberately skips it and serves `forms: null` — 200 rows ×
-     * a counter read would price the global picker for a field it never
-     * renders, and `null` (vs a zero) keeps "not joined" distinguishable
-     * from "nothing refused".
+     * `orgId`) deliberately skips it and serves `doors: null` — 200 rows ×
+     * the counter reads would price the global picker for a field it never
+     * renders, and `null` (vs a zero) keeps "not joined" distinguishable from
+     * "nothing refused".
      *
-     * The month key is `submissionMonthKey()` — the SAME function the submit
-     * route increments by. Deriving the key separately is how a staff view
-     * reads zero refusals on exactly the sites being refused (AGL-1681's
-     * warning). The counter document persists from its first trip forever,
-     * so only the CURRENT month's key means "refusing now"; `ceiling` is a
-     * plain field and rides along whenever recorded.
-     *
-     * `formSubmissionsSpam` (AGL-1831, written by 9db4f322a) rides in the
-     * same getAll: the month's honeypot catches, the number the AGL-1664
-     * assessment set its App Check / CAPTCHA revisit trigger on ("spam >
-     * ~20% of submissions on any paying host"). Until this join it was
-     * readable only via an admin-SDK probe.
+     * The month key is `utcMonthKey()` — the SAME function every door
+     * increments by. Deriving the key separately is how a staff view reads
+     * zero refusals on exactly the sites being refused (AGL-1681's warning).
+     * A counter document persists from its first trip forever, so only the
+     * CURRENT month's key means "refusing now"; `ceiling` is a plain field
+     * and rides along whenever recorded.
      */
-    const monthKey = submissionMonthKey()
-    const formsByHostId = new Map<
-      string,
-      { month: string; refused: number; ceiling: number | null; spam: number }
-    >()
-    if (orgId && pageDocs.length > 0) {
+    const monthKey = utcMonthKey()
+    const doors = pluginVisitorDoors()
+    const doorsByHostId = new Map<string, Record<string, VisitorDoorCounts>>()
+    if (orgId && pageDocs.length > 0 && doors.length > 0) {
       const counterSnaps = await db.getAll(
-        ...pageDocs.flatMap((docSnap) => [
-          docSnap.ref.collection('counters').doc('formSubmissionsRefused'),
-          docSnap.ref.collection('counters').doc('formSubmissionsSpam'),
-        ]),
+        ...pageDocs.flatMap((docSnap) =>
+          doors.flatMap((door) => [
+            docSnap.ref.collection('counters').doc(door.refusedCounter),
+            docSnap.ref.collection('counters').doc(door.caughtCounter),
+          ]),
+        ),
       )
-      pageDocs.forEach((docSnap, index) => {
-        const refusedSnap = counterSnaps[index * 2]
-        const spamSnap = counterSnaps[index * 2 + 1]
-        const ceiling = refusedSnap?.exists ? refusedSnap.get('ceiling') : null
-        formsByHostId.set(docSnap.id, {
-          month: monthKey,
-          refused: refusedSnap?.exists
-            ? Number(refusedSnap.get(monthKey) ?? 0)
-            : 0,
-          ceiling: typeof ceiling === 'number' ? ceiling : null,
-          spam: spamSnap?.exists ? Number(spamSnap.get(monthKey) ?? 0) : 0,
+      pageDocs.forEach((docSnap, hostIndex) => {
+        const counts: Record<string, VisitorDoorCounts> = {}
+        doors.forEach((door, doorIndex) => {
+          const at = (hostIndex * doors.length + doorIndex) * 2
+          const refusedSnap = counterSnaps[at]
+          const caughtSnap = counterSnaps[at + 1]
+          const ceiling = refusedSnap?.exists ? refusedSnap.get('ceiling') : null
+          counts[door.door] = {
+            month: monthKey,
+            refused: refusedSnap?.exists ? Number(refusedSnap.get(monthKey) ?? 0) : 0,
+            ceiling: typeof ceiling === 'number' ? ceiling : null,
+            caught: caughtSnap?.exists ? Number(caughtSnap.get(monthKey) ?? 0) : 0,
+          }
         })
+        doorsByHostId.set(docSnap.id, counts)
       })
     }
-    // Identity only, plus the AGL-1681 counters join above. A host document
+    // Identity only, plus the AGL-1681 door counters join above. A host document
     // carries screens, layouts and directory maps; projecting them into a
     // picker would ship kilobytes per row for three fields.
     //
@@ -154,7 +159,7 @@ async function handler(request: Request): Promise<Response> {
       cnameAttachmentPending: docSnap.get('cnameAttachmentPending') === true,
       homeScreenId: homeScreenId(docSnap.get('screens')),
       orgId: docSnap.get('orgId') ?? null,
-      forms: formsByHostId.get(docSnap.id) ?? null,
+      doors: doorsByHostId.get(docSnap.id) ?? null,
     }))
     return Response.json(
       {

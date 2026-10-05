@@ -95,7 +95,7 @@ describe('THE INVERSION: a metered org past its band is BILLED, not blocked', ()
     // 1 GB over × $0.026 × 1.30. LITERAL, not derived from the rate constant —
     // a guard that recomputes the expression it is testing cannot fail when
     // the expression is wrong.
-    expect(gate.projectedOverageUsd).toBeCloseTo(0.0338, 6)
+    expect(gate.projectedOverageUsd).toBeCloseTo(0.0349, 6)
   })
 
   it('asks the customer for NOTHING first — no consent, no acknowledgement', () => {
@@ -192,12 +192,12 @@ describe("THE CUSTOMER'S CAP: their control, their number, and only theirs", () 
     expect(under.code).toBeNull()
     // And it BILLS — a cap bounds the invoice, it does not zero it.
     expect(under.billed).toBe(true)
-    expect(under.projectedOverageUsd).toBeCloseTo(0.0338, 6)
+    expect(under.projectedOverageUsd).toBeCloseTo(0.0349, 6)
     expect(under.monthlyCapUsd).toBe(5)
   })
 
   it('the boundary belongs to the customer: exactly AT the cap is served', () => {
-    // $0.0338 of overage is 1 GB. A cap of exactly that must not refuse the
+    // $0.0349 of overage is 1 GB. A cap of exactly that must not refuse the
     // gigabyte it was sized for.
     const capped = proOrg(writtenBySetCap(storageOverageUsd(1024)))
     expect(
@@ -333,13 +333,13 @@ describe('WHAT STILL HARD-BANDS: free/hobby, so it always actually stays free', 
   })
 
   it('enterprise WALLS at its finite fallback, and never bills', () => {
-    // Since 2026-09-07 the plan row is twice Agency's band — 120 GB a site —
+    // Since 2026-09-07 the plan row is twice Agency's band — 40 GB a site —
     // rather than UNLIMITED, and Enterprise meters nothing, so past that line
     // the gate is the Free-shaped refusal: a cap an agreement raises with a
     // per-org override, never an invoice. Under the line, everything.
     const under = mediaStorageGate({
       org: { plan: 'enterprise' } as any,
-      usedMb: 122_879,
+      usedMb: 40_959,
     })
     expect(under.allowed).toBe(true)
     expect(under.billed).toBe(false)
@@ -441,10 +441,10 @@ describe('INGRESS AND report-usage TELL THE SAME STORY', () => {
   it('the price the card quotes is the price the rollup bills', () => {
     // AGL-1957's fix, preserved verbatim through the inversion: the card's
     // `pricePerGbUsd` is served from this helper, and the rollup prices from
-    // the same constants. LITERAL 0.0338 on both sides — deriving one from the
+    // the same constants. LITERAL 0.0349 on both sides — deriving one from the
     // other is the tautology that cannot fail.
-    expect(storageOveragePricePerGbUsd()).toBeCloseTo(0.0338, 8)
-    expect(storageOverageUsd(1024)).toBeCloseTo(0.0338, 8)
+    expect(storageOveragePricePerGbUsd()).toBeCloseTo(0.0349, 8)
+    expect(storageOverageUsd(1024)).toBeCloseTo(0.0349, 8)
     // One GB over the band, priced by the rollup: the same 3.38 cents.
     const included = PLAN_ENTITLEMENTS.pro.storagePerHostMb * 3 // hostLimit 3
     const rollup = estimateMonthlyUsageCost(
@@ -476,7 +476,7 @@ describe('THE ALERT is the protection now, so it has to be able to fire', () => 
    * fail on the only plan where the question could be asked.
    *
    * Every case here is therefore on **Pro: hostLimit 3**, where the org-wide
-   * band is 30720 MB and the library's own band is 10240 MB. A full library
+   * band is 15360 MB and the library's own band is 5120 MB. A full library
    * reads as 33% org-wide and 100% on its own, and the two answers differ.
    */
 
@@ -487,8 +487,8 @@ describe('THE ALERT is the protection now, so it has to be able to fire', () => 
     // Literal, so a plan-table edit that collapses them re-arms the trap
     // loudly instead of quietly making every case below vacuous.
     expect(PLAN_ENTITLEMENTS.pro.hostLimit).toBe(3)
-    expect(PRO_SCOPE_MB).toBe(10240)
-    expect(ORG_WIDE_MB).toBe(30720)
+    expect(PRO_SCOPE_MB).toBe(5120)
+    expect(ORG_WIDE_MB).toBe(15360)
     expect(ORG_WIDE_MB).not.toBe(PRO_SCOPE_MB)
   })
 
@@ -503,13 +503,13 @@ describe('THE ALERT is the protection now, so it has to be able to fire', () => 
   })
 
   it('warns on APPROACH, before any money — again on a plan where it can', () => {
-    // 75% of the library's own 10240 MB is 7680 MB — the first step, with
+    // 75% of the library's own 5120 MB is 3840 MB — the first step, with
     // days of headroom, not an announcement.
-    expect(usageAlertThreshold(7680, PRO_SCOPE_MB)).toBe(75)
-    expect(usageAlertThreshold(7679, PRO_SCOPE_MB)).toBe(0)
-    expect(usageAlertThreshold(8192, PRO_SCOPE_MB)).toBe(80)
-    // And the same reading is silent org-wide: 8192/30720 = 26.7%.
-    expect(usageAlertThreshold(8192, ORG_WIDE_MB)).toBe(0)
+    expect(usageAlertThreshold(3840, PRO_SCOPE_MB)).toBe(75)
+    expect(usageAlertThreshold(3839, PRO_SCOPE_MB)).toBe(0)
+    expect(usageAlertThreshold(4096, PRO_SCOPE_MB)).toBe(80)
+    // And the same reading is silent org-wide: 4096/15360 = 26.7%.
+    expect(usageAlertThreshold(4096, ORG_WIDE_MB)).toBe(0)
   })
 
   it('steps through 75, 80, 90 and the band, answering the HIGHEST reached (AGL-3431)', () => {

@@ -38,7 +38,8 @@ const LOCALE_PATTERN = /^[a-z]{2}(-[A-Za-z]{2,4})?$/
  * Site languages (AGL-164): the locale list screens can be translated
  * into, plus the default. Screens link to their translations from the
  * screens list; the Language Switcher element renders the links.
- * Business tier (`multilingual` flag).
+ * Listing more than one language is the Business tier (`multilingual`
+ * flag); naming the one language a site publishes in is open to every plan.
  */
 export function LanguagesCard(props: { hostId: string }) {
   const { hostId } = props
@@ -90,7 +91,9 @@ export function LanguagesCard(props: { hostId: string }) {
         persist: false,
       })
     }
-    if (!hasEntitlement('multilingual', org)) {
+    // One language is a site's language, not a multilingual site: every plan
+    // may say what it publishes in. The entitlement is for a second one.
+    if (parsed.length > 1 && !hasEntitlement('multilingual', org)) {
       return void enqueueSnackbar(
         'Multilingual sites require a Business plan — see Billing',
         { variant: 'warning', persist: false },

@@ -24,7 +24,7 @@ import {
   type SeoAuditReport,
   type SeoFinding,
 } from '@aglyn/aglyn/app-utils/seo-audit'
-import { SEO_KEYWORD_LINES_MAX_CHARS } from '@aglyn/aglyn/app-utils/seo-keywords'
+import { SEO_KEYWORD_LINES_MAX_CHARS, SEO_MAX_KEYWORDS } from '@aglyn/aglyn/app-utils/seo-keywords'
 import type { ConsoleSeoCheck } from '@aglyn/aglyn/plugin-manager/feature-plugins'
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
@@ -185,7 +185,7 @@ export function SeoCheckCard(props: SeoCheckCardProps) {
           fullWidth
           label="Target keywords by page (optional)"
           placeholder={'/pricing: pricing, plans\n/lamps: brass desk lamps'}
-          helperText="One line per page. The check says where each page already uses its keywords."
+          helperText={`One line per page, up to ${SEO_MAX_KEYWORDS} keywords each. The check says where each page already uses its keywords.`}
           value={keywords}
           onChange={(event) => setKeywords(event.target.value.slice(0, SEO_KEYWORD_LINES_MAX_CHARS))}
           disabled={busy}

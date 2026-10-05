@@ -131,7 +131,7 @@ jest.mock('@aglyn/aglyn/server', () => ({
   // throws inside the route and its own catch answers 500, which reads
   // exactly like the behaviour under test regressing.
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/stored-nodes'),
-  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/actions'),
+  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/site-interactions'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/organizations'),
   // The REAL fields a new form is written with for its list (AGL-3330).
   newFormListFields: jest.requireActual('../../../libs/aglyn/src/lib/app-utils/forms')
@@ -324,13 +324,13 @@ describe('a ceiling reached takes nothing away', () => {
   it('leaves submissions on a different route and a different band', () => {
     /*
      * The load-bearing separation, checked at the source because the two
-     * routes are in different apps and the failure is a route learning about
+     * routes are in different packages and the failure is a route learning about
      * the wrong number. A submit path that consulted the catalog ceiling
      * would refuse a visitor on a site that has done nothing wrong — and
      * refuse the metered revenue that submission represents.
      */
     const submitRoute = readFileSync(
-      join(__dirname, '..', '..', 'tenant', 'app', 'api', 'forms', 'submit', 'route.ts'),
+      join(__dirname, '..', '..', '..', 'libs', 'plugins', 'forms', 'src', 'lib', 'server', 'form-submit.ts'),
       'utf8',
     )
     // Matched as a CALL. A bare substring stays satisfied by a renamed

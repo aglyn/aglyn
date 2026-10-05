@@ -193,6 +193,11 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     __esModule: true,
     ...apiHttp,
     verifyApiKey: async () => ({ orgId: 'org-1', keyId: 'key-1', scopes: mockScopes }),
+    // The REAL document fields (AGL-3486): a pure helper the route spreads
+    // into the media document.
+    mediaVariantDocFields: jest.requireActual(
+      '../../../libs/tenant/data/admin/src/lib/server/media-variants',
+    ).mediaVariantDocFields,
     getOrgDoc: async () => mockOrg,
     lockdownRefusal: async () => null,
     // The release-flag verdict the video gate reads (AGL-2830), declared with
@@ -213,14 +218,19 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     getMediaQuarantine: async () =>
       mockQuarantined ? { reason: 'malware', status: 'active' } : null,
     // Models the REAL `MediaVariantOutcome` — `{ variants: number[] }`, and a
-    // `saveVariant(path, webp)` of exactly two arguments. An approximate fake
-    // here fabricated a green over a route reading `.widths` off a field that
-    // does not exist, which would have stored `variants: []` on every asset.
+    // `saveVariant(path, bytes, contentType)` of exactly three arguments. An
+    // approximate fake here fabricated a green over a route reading `.widths`
+    // off a field that does not exist, which would have stored `variants: []`
+    // on every asset.
     generateMediaVariants: async (options: {
       objectPath: string
-      saveVariant: (path: string, webp: Buffer) => Promise<void>
+      saveVariant: (path: string, bytes: Buffer, contentType: string) => Promise<void>
     }) => {
-      await options.saveVariant(`${options.objectPath}__w320.webp`, Buffer.alloc(16))
+      await options.saveVariant(
+        `${options.objectPath}__w320.webp`,
+        Buffer.alloc(16),
+        'image/webp',
+      )
       return { variants: [320] }
     },
     firebaseAdmin: {
@@ -259,10 +269,16 @@ jest.mock('@aglyn/aglyn/server', () => ({
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/media-embedded-metadata'),
   createResourceUid: () => `med_${++mockUidSeq}`,
   readImageDimensions: () => ({ width: 800, height: 600 }),
+  PLATFORM_BRAND_NAME: 'Aglyn',
+}))
+
+// The data plugin's dataset model, as the dataset handlers read it
+// (AGL-3080: the model is the data plugin's own).
+jest.mock('../../../libs/plugins/data/src/lib/model/dataset-models', () => ({
+  ...jest.requireActual('../../../libs/plugins/data/src/lib/model/dataset-models'),
   effectiveDatasetModel: () => ({ fields: [] }),
   coerceDocumentValues: (_m: unknown, v: Record<string, unknown>) => v,
   validateDocument: () => ({}),
-  PLATFORM_BRAND_NAME: 'Aglyn',
 }))
 
 jest.mock('../utils/server/media-scope', () => ({

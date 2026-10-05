@@ -142,6 +142,14 @@ const storageFile = () => ({
 })
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
+  // The REAL document fields and derived paths (AGL-3486): pure helpers the
+  // routes spread into the media document and drop objects by.
+  mediaVariantDocFields: jest.requireActual(
+    '../../../libs/tenant/data/admin/src/lib/server/media-variants',
+  ).mediaVariantDocFields,
+  mediaDerivedObjectPaths: jest.requireActual(
+    '../../../libs/tenant/data/admin/src/lib/server/media-variants',
+  ).mediaDerivedObjectPaths,
   __esModule: true,
   ...jest.requireActual(
     '../../../libs/tenant/data/admin/src/lib/server/media-variants',

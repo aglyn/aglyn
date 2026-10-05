@@ -328,6 +328,8 @@ describe('when a video request becomes a delivery redirect (AGL-2824)', () => {
       location: `https://delivery.test/${masterKey()}?until=${NOW + MEDIA_DELIVERY_MIN_TTL_MS}`,
       expiresAtMs: NOW + MEDIA_DELIVERY_MIN_TTL_MS,
       key: masterKey(),
+      // The copy's size, which the CDN counts a sitting at (AGL-3474).
+      sizeBytes: 11,
     })
     expect(fake.minted[0]?.claims).toEqual({
       scope: 'host-1',

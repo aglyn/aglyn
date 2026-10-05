@@ -16,3 +16,16 @@ export const BUNDLE_ID = 'crm'
 
 /** The records band's meter in the monthly usage sweep (`server/crm-records-meter.ts`). */
 export const CRM_RECORDS_METER_ID = 'records'
+
+/**
+ * The automation steps this plugin runs for the workflows engine
+ * (`server/automation-steps.ts`), as `plugins.config.json` declares them
+ * under `serverSteps`.
+ */
+export const CRM_STEP_TYPES = [
+  'setContactStage',
+  'addContactTag',
+  'assignContactOwner',
+  'createCrmTask',
+  'logCrmActivity',
+] as const

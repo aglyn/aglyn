@@ -148,6 +148,13 @@ jest.mock('@aglyn/tenant-data-admin', () => {
         claims,
       }
     },
+    // AGL-3466: revoking staff takes the no-seat stamp off the account's
+    // rows and pending invites. Recorded, so the suite can say which
+    // actions reach it.
+    clearStaffSeatStamps: async (uid: string, email: string | null) => {
+      mockCalls.push(`clearStaffSeatStamps:${uid}:${email}`)
+      return { members: 1, invites: 0 }
+    },
     eraseUser: async () => ({ ok: true, deleted: {} }),
     consumePasswordResetSend: async () => ({ allowed: true }),
     passwordResetThrottleMessage: () => '',
@@ -275,5 +282,18 @@ describe('AGL-2005 · staff actions land in the identified account’s pool', ()
       ),
     ).toBe(true)
     expect(mockCalls.some((call) => call.startsWith('PROJECT:'))).toBe(false)
+  })
+})
+
+describe('AGL-3466 · revoking staff takes the no-seat stamp off', () => {
+  it('clears the stamps for the revoked account, by uid and address', async () => {
+    expect((await manage({ action: 'revokeStaff' })).status).toBe(200)
+    expect(mockCalls).toContain(`clearStaffSeatStamps:${TARGET_UID}:staff@aglyn.com`)
+  })
+
+  it('leaves them alone for every other action', async () => {
+    expect((await manage({ action: 'grantStaff' })).status).toBe(200)
+    expect((await manage({ action: 'disable' })).status).toBe(200)
+    expect(mockCalls.some((call) => call.startsWith('clearStaffSeatStamps:'))).toBe(false)
   })
 })

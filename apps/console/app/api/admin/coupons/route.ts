@@ -18,6 +18,11 @@
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import { DISCOUNT_APPROVAL_THRESHOLD_PCT } from '@aglyn/aglyn/server'
 import {
+  couponCaseLabel,
+  rateCouponAgainstFullUse,
+  type CouponDuration,
+} from '@aglyn/aglyn/app-utils/full-use-cost'
+import {
   emailUnverifiedResponse,
   firebaseAdmin,
   isImpersonationSession,
@@ -55,14 +60,18 @@ import { readStaffListQuery } from '../../../../utils/server/staff-list-query'
  *          repeating/forever; optional max redemptions and expiry) and, when
  *          a code is given, a promotion code customers can type at checkout.
  *          A ≥`DISCOUNT_APPROVAL_THRESHOLD_PCT`% coupon needs an explicit
- *          `confirmHighDiscount` flag.
+ *          `confirmHighDiscount` flag. Every create answers with the
+ *          coupon's full-use verdict (`fullUseVerdict`) — a warning when a
+ *          discounted charge falls under a plan's full-use cost, never a
+ *          refusal.
  *
  *          `activate` / `deactivate` flip `active` on an existing promotion
  *          code named by `promotionCodeId`. Checkout resolves a typed code
  *          with `active=true`, so an inactive code is reported to the
  *          customer as unrecognized — the flip back is a customer-facing
  *          repair, and it belongs here rather than in a Stripe Dashboard
- *          session no audit trail can see.
+ *          session no audit trail can see. Activating is minting again, so
+ *          it answers with the same full-use verdict.
  *
  *          Both actions are audited to `adminAudit`.
  *
@@ -93,6 +102,46 @@ async function stripe(
  * resource entirely.
  */
 const PROMOTION_CODE_ID = /^promo_[A-Za-z0-9]+$/
+
+/**
+ * A coupon's full-use verdict, for the response and the audit row (AGL-3473).
+ *
+ * A coupon here carries no plan restriction, so its code can be redeemed on
+ * any paid plan at either interval by a customer using everything the plan
+ * includes. The verdict says whether each discounted charge — on the charges
+ * its duration actually reaches — still covers that plan's full-use cost net
+ * of Stripe, and by how much the worst one falls short. It is a WARNING: a
+ * coupon is a tool for closing a deal, so a discount that spends cost is
+ * created all the same, and staff are shown what it spends.
+ */
+function fullUseVerdict(
+  discount: { percentOff?: number; amountOffUsd?: number },
+  duration: CouponDuration,
+) {
+  const verdict = rateCouponAgainstFullUse(discount, duration)
+  const worst = verdict.worst
+  return {
+    ok: verdict.ok,
+    warning: verdict.warning,
+    under: verdict.under,
+    worst: {
+      plan: worst.plan,
+      interval: worst.interval,
+      label: couponCaseLabel(worst),
+      coverage: worst.coverage,
+      chargeNetUsd: worst.chargeNetUsd,
+      chargeCogsUsd: Number.isFinite(worst.chargeCogsUsd) ? worst.chargeCogsUsd : null,
+      chargeUnderCostUsd: Number.isFinite(worst.chargeUnderCostUsd)
+        ? worst.chargeUnderCostUsd
+        : null,
+      monthsOfFirstYear: worst.reach.monthsOfFirstYear,
+      firstYearCoverage: worst.firstYearCoverage,
+      firstYearUnderCostUsd: Number.isFinite(worst.firstYearUnderCostUsd)
+        ? worst.firstYearUnderCostUsd
+        : null,
+    },
+  }
+}
 
 /** Shape one Stripe promotion code for the console. */
 function serializePromotionCode(code: any) {
@@ -289,6 +338,21 @@ async function handler(request: Request): Promise<Response> {
         )
       }
 
+      const amountOff = current.body?.coupon?.amount_off
+      const fullUse = active
+        ? fullUseVerdict(
+            typeof percentOff === 'number'
+              ? { percentOff }
+              : typeof amountOff === 'number'
+                ? { amountOffUsd: amountOff / 100 }
+                : {},
+            {
+              duration: current.body?.coupon?.duration ?? null,
+              durationInMonths: current.body?.coupon?.duration_in_months ?? null,
+            },
+          )
+        : null
+
       const updated = await stripe(
         secretKey,
         `promotion_codes/${promotionCodeId}`,
@@ -313,14 +377,21 @@ async function handler(request: Request): Promise<Response> {
           active: updated.body?.active === true,
           code: updated.body?.code ?? null,
           couponId: updated.body?.coupon?.id ?? null,
+          ...(fullUse
+            ? { fullUseOk: fullUse.ok, fullUseWorstCoverage: fullUse.worst.coverage }
+            : {}),
         },
         at: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
       })
 
       // Answer with a fresh read of what was written, so the console renders
-      // Stripe's state rather than the state it asked for.
+      // Stripe's state rather than the state it asked for — and, turning a
+      // code on, with its full-use verdict for the console to warn with.
       return Response.json(
-        { code: serializePromotionCode(updated.body) },
+        {
+          code: serializePromotionCode(updated.body),
+          ...(fullUse ? { fullUse } : {}),
+        },
         { status: 200 },
       )
     }
@@ -385,6 +456,11 @@ async function handler(request: Request): Promise<Response> {
         { status: 400 },
       )
     }
+
+    const fullUse = fullUseVerdict(
+      hasPercent ? { percentOff: percentOff! } : { amountOffUsd: amountOffUsd! },
+      { duration, durationInMonths: durationInMonths ?? null },
+    )
 
     const couponParams: Record<string, string> = { duration }
     if (hasPercent) couponParams.percent_off = String(percentOff)
@@ -452,12 +528,18 @@ async function handler(request: Request): Promise<Response> {
         duration,
         code: promotionCode?.code ?? null,
         maxRedemptions: maxRedemptions > 0 ? maxRedemptions : null,
+        // What the staff member was warned about when they created it.
+        fullUseOk: fullUse.ok,
+        fullUseWorstCoverage: fullUse.worst.coverage,
       },
       at: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
     })
 
     return Response.json(
-      { coupon: serializeCoupon(coupon, promotionCode ? [promotionCode] : []) },
+      {
+        coupon: serializeCoupon(coupon, promotionCode ? [promotionCode] : []),
+        fullUse,
+      },
       { status: 200 },
     )
   } catch (error) {

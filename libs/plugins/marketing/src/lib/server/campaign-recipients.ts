@@ -28,7 +28,7 @@ import {
 } from '@aglyn/tenant-data-admin/server/email-delivery-log'
 import { isDocumentId } from '@aglyn/tenant-data-admin/server/document-id'
 import { FieldPath } from 'firebase-admin/firestore'
-import { CAMPAIGN_SEND_HOST_FIELD } from '@aglyn/shared-ui-email-campaigns/model'
+import { CAMPAIGN_SEND_HOST_FIELD } from '../model/campaign-container'
 import { orgCampaignSends, sendIsOnHost } from './campaign-org-refs'
 
 /**

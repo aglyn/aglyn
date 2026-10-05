@@ -16,7 +16,6 @@
  */
 'use client'
 
-import { type DatasetModel, validateDocument } from '@aglyn/aglyn'
 import {
   type DatasetRecordField,
   type DatasetReferenceResolver,
@@ -35,6 +34,7 @@ import {
   Typography,
 } from '@mui/material'
 import { useMemo } from 'react'
+import { type DatasetModel, validateDocument } from '../model/dataset-models'
 
 /**
  * Looking at a record, as its own gesture.

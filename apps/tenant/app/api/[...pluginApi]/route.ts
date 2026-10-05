@@ -39,6 +39,7 @@ import {
 import {
   isPluginCardPaymentRoute,
   isPluginMachineRoute,
+  isPluginOwnVisitorGatesRoute,
   isPluginPortabilityRoute,
   isPluginRecipientLinkRoute,
 } from '@aglyn/aglyn/app-utils/api-plugins'
@@ -69,6 +70,18 @@ async function dispatch(
   await ensureRemoteServerBundles()
   const { pluginApi } = await params
   const path = Array.isArray(pluginApi) ? pluginApi.join('/') : ''
+
+  // A door that keeps its own visitor gates (AGL-3080) — a first-party
+  // plugin's route that runs the cross-origin, enablement, lockdown and rate
+  // decisions itself, because its answers to them are published ones — is
+  // handed the request untouched, before any gate below. See
+  // `PluginApiRouteOptions.ownVisitorGates` for what declaring it takes on.
+  if (isPluginOwnVisitorGatesRoute(path)) {
+    const own = resolvePluginApiMatch(path)
+    if (own) {
+      return runPluginApiMatch(own, request, { pluginApi: pluginApi ?? [] }, runLegacyHandler)
+    }
+  }
 
   // Same-origin gate (AGL-1880). FIRST, and before any Firestore read, which
   // is the opposite of where the rate limiter sits and for a reason the two

@@ -618,7 +618,7 @@ await put(
 
 // ── Inbox (AGL-3319) ──────────────────────────────────────────────────────
 // Contact-form submissions in the shape the tenant's submit route writes
-// (`apps/tenant/app/api/forms/submit/route.ts`), so the Inbox shows people
+// (`libs/plugins/forms/src/lib/server/form-submit.ts`), so the Inbox shows people
 // writing in, not only the guide's anonymous survey.
 console.log('Inbox:')
 const submissionsRef = firestore.collection('hosts').doc(hostId).collection('formSubmissions')
@@ -694,6 +694,31 @@ for (const name of ['contacts', 'leads', 'companies', 'crmActivities', 'crmTasks
     }
   }
   console.log(`  orgs/${orgId}/${name}: ${moved}`)
+}
+
+// A reserved domain has no DNS at all, so the platform's MX check (AGL-3328)
+// reads every one of those addresses as `no_mx` and a record page draws "No
+// MX record — cannot receive mail" beside a customer the frame shows taking
+// orders. The cache the check reads first (`mailDomains/{domain}`) is given
+// an ordinary answer for each: an MX at an exchange no gateway is named for,
+// which draws no chip, as most small businesses' domains would.
+console.log('MX answers for the reserved domains:')
+const reservedDomains = new Set()
+for (const name of ['contacts', 'leads', 'companies']) {
+  const snapshot = await firestore.collection('orgs').doc(orgId).collection(name).get()
+  for (const doc of snapshot.docs) {
+    const match = JSON.stringify(doc.data()).match(/@([a-z0-9-]+\.example)\b/g) ?? []
+    for (const at of match) reservedDomains.add(at.slice(1))
+  }
+}
+for (const domain of reservedDomains) {
+  await firestore.collection('mailDomains').doc(domain).set({
+    domain,
+    status: 'mx',
+    mx: [`mx.${domain}`],
+    resolvedAtMs: now.toMillis(),
+  })
+  console.log(`  mailDomains/${domain}`)
 }
 
 // The base seed's placeholder people: two bookings named for famous

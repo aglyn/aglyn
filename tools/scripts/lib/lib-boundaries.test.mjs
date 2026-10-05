@@ -30,12 +30,14 @@ import { describe, it } from 'node:test'
 import {
   DEP_CONSTRAINTS,
   INDEPENDENTLY_VERSIONED,
+  LAZY_AND_STATIC_ALLOWED,
   OVERRIDES_CALL,
   caretAdmits,
   compareToAllowlist,
   compareVersions,
   declarationsOwed,
   evaluateEdges,
+  lazyAndStaticPairs,
   lintOverridesFor,
   missingMapRows,
   overrideWiring,
@@ -111,6 +113,67 @@ describe('evaluateEdges', () => {
   it('judges static edges only: the loader manifests reach plugins dynamically on purpose', () => {
     assert.deepEqual(evaluateEdges(graph([['console', 'plugins-crm', 'dynamic']])), [])
     assert.deepEqual(pairs(evaluateEdges(graph([['console', 'plugins-crm']]))), ['console -> plugins-crm'])
+  })
+})
+
+describe('lazyAndStaticPairs (AGL-3557)', () => {
+  it('is RED for a plugin that lazy-loads a library it also imports statically', () => {
+    const found = lazyAndStaticPairs(
+      graph([
+        ['plugins-forms', 'tenant-runtime'],
+        ['plugins-forms', 'tenant-runtime', 'dynamic'],
+      ]),
+    )
+    assert.deepEqual(found, [{ from: 'plugins-forms', to: 'tenant-runtime', via: ['plugins-forms', 'tenant-runtime'] }])
+  })
+
+  it('is RED for the app that loads that plugin lazily and imports the library statically', () => {
+    const found = lazyAndStaticPairs(
+      graph([
+        ['console', 'plugins-forms', 'dynamic'],
+        ['plugins-forms', 'tenant-runtime', 'dynamic'],
+        ['console', 'tenant-runtime'],
+      ]),
+    )
+    assert.deepEqual(pairs(found), ['console -> tenant-runtime'])
+    assert.deepEqual(found[0].via, ['console', 'plugins-forms', 'tenant-runtime'])
+  })
+
+  it('is GREEN for the manifest shape: an app loads plugins lazily and never statically', () => {
+    assert.deepEqual(
+      lazyAndStaticPairs(
+        graph([
+          ['console', 'plugins-forms', 'dynamic'],
+          ['console', 'plugins-crm', 'dynamic'],
+          ['plugins-forms', 'tenant-runtime'],
+          ['console', 'tenant-runtime'],
+        ]),
+      ),
+      [],
+    )
+  })
+
+  it('follows dynamic edges only: a static hop ends the lazy reach', () => {
+    assert.deepEqual(
+      lazyAndStaticPairs(
+        graph([
+          ['console', 'plugins-forms', 'dynamic'],
+          ['plugins-forms', 'tenant-runtime'],
+          ['tenant-runtime', 'aglyn', 'dynamic'],
+          ['console', 'aglyn'],
+        ]),
+      ),
+      [],
+    )
+  })
+
+  it('holds the allowed rows to the ratchet: each row names a real pair and says why', () => {
+    for (const row of LAZY_AND_STATIC_ALLOWED) assert.ok(row.from && row.to && row.why, JSON.stringify(row))
+    const verdict = compareToAllowlist(
+      lazyAndStaticPairs(graph([['console', 'besigner-feature-designer'], ['console', 'besigner-feature-designer', 'dynamic']])),
+      LAZY_AND_STATIC_ALLOWED.filter((row) => row.to === 'besigner-feature-designer'),
+    )
+    assert.equal(verdict.clean, true)
   })
 })
 

@@ -23,15 +23,9 @@ import {
   evaluateExpression,
   evaluateStepGuard,
   evaluateTriggerConditions,
-  FLOW_TIMED_OUT_FIELD,
   flowSubscriptionTopicId,
   hostPublicOrigin,
   isClientActionStep,
-  isFlowSuspendingStep,
-  type HostAction,
-  type HostActionAlert,
-  type HostActionStep,
-  type HostActionStepType,
   type HostEventType,
   type HostFunction,
   type HostVariable,
@@ -88,6 +82,12 @@ import { describeStepOutcome } from '../model/step-outcomes'
 import { type HostWebhook, WEBHOOK_URL_PATTERN } from '../model/webhooks'
 import { eventRunSuspension } from './site-suspension'
 import {
+  recordRuns,
+  type RunMeterScope,
+  runMonthKey,
+  runsUsedThisMonth,
+} from './run-meter'
+import {
   advanceFlowEnrollment,
   claimFlowEnrollment,
   deferFlowEnrollment,
@@ -99,12 +99,6 @@ import {
   type FlowSweepResult,
   sweepDueFlowEnrollments,
 } from './flow-enrollments'
-import {
-  isCrmActionStep,
-  logCrmEmailActivity,
-  prepareCrmEmailActivity,
-  runCrmActionStep,
-} from './crm-action-steps'
 // The runtime's leaves rather than its barrel: the engine's specs substitute
 // each leaf, and a mock of the barrel would take the rest of it down too.
 import type { HostEventPayload } from '@aglyn/tenant-runtime/host-event-listeners'
@@ -132,6 +126,15 @@ import {
 import { runTriggeredByFields } from './run-trigger-actor'
 // By path, not the barrel: only a server run asks.
 import { pluginServerStepExecutor } from '@aglyn/aglyn/plugin-manager/plugin-server-steps'
+import { preparePluginRecordEmail } from '@aglyn/aglyn/plugin-manager/plugin-record-timeline'
+import {
+  FLOW_TIMED_OUT_FIELD,
+  type HostAction,
+  type HostActionAlert,
+  type HostActionStep,
+  type HostActionStepType,
+  isFlowSuspendingStep,
+} from '../model/host-actions'
 
 /** Bounded fan-out per event, mirroring the workflow runner. */
 const MAX_TRIGGERED_ACTIONS = 10
@@ -149,13 +152,6 @@ export interface ActionRunEnv {
    */
   actionsAllowed: boolean
   webhooksAllowed: boolean
-  /**
-   * Whether the owning org holds the CRM suite (AGL-2611) — the gate the
-   * five CRM steps take, resolved once beside `webhooksAllowed` and for the
-   * same reason: a step gated on the org doc it already read costs no
-   * second read per step.
-   */
-  crmAllowed: boolean
   depth: number
   /**
    * The owning org's billing doc, already read by the entitlement gate that
@@ -219,7 +215,6 @@ export function automationRunEnv(input: {
     alerts: input.alerts ?? [],
     actionsAllowed: checkEntitlement(org as any, 'actions'),
     webhooksAllowed: checkEntitlement(org as any, 'webhooks'),
-    crmAllowed: checkEntitlement(org as any, 'crm'),
     depth: input.depth,
     org,
     orgId: input.owner?.orgId ?? null,
@@ -760,21 +755,31 @@ async function runServerStep(
         hostId,
       )
       /*
-       * THE TIMELINE ENTRY (AGL-2615). A message addressed to the contact
-       * the event is about is logged on that contact's timeline as an
-       * email activity — the same row the console's own send logs — so an
-       * automated welcome shows beside the calls a rep made, with its
-       * delivery state. Prepared first because the row's id has to be on
-       * the message for the webhook to find it; written only after the
-       * provider accepted. Behind the suite gate like every other CRM
-       * write an action makes.
+       * THE TIMELINE ENTRY (AGL-2615). A message addressed to the person the
+       * event is about is filed on that person's timeline — the same entry a
+       * member's own send files — so an automated welcome shows beside the
+       * calls a rep made, with its delivery state. Whether the message earns
+       * an entry, and where, is the record system's to say: it is offered
+       * the message first, because the entry's tags have to ride the message
+       * for the delivery webhook to find it, and files it only after the
+       * provider accepted. No record system, or a message that earns no
+       * entry, sends untagged.
        */
-      const emailActivity = env.crmAllowed
-        ? await prepareCrmEmailActivity(
-            { hostId, org: env.org, orgId: env.orgId },
+      const recordEmail = env.orgId
+        ? await preparePluginRecordEmail({
+            orgId: env.orgId,
+            hostId,
             to,
-            payload,
-          )
+            link: {
+              ...(String(payload['contactId'] ?? '').trim()
+                ? { contactId: String(payload['contactId']).trim() }
+                : {}),
+              ...(String(payload['email'] ?? '').trim()
+                ? { email: String(payload['email']).trim() }
+                : {}),
+            },
+            org: env.org,
+          })
         : null
       // In the site's header and footer (AGL-3370): a workflow's email is the
       // site writing to its contact, in words the site owner typed.
@@ -790,7 +795,7 @@ async function runServerStep(
         text: framed?.text || emailText,
         ...(framed?.html ? { html: framed.html } : {}),
         sendingIdentity: await hostSendingIdentity(hostId),
-        ...(emailActivity ? { tags: emailActivity.tags } : {}),
+        ...(recordEmail ? { tags: [...recordEmail.tags] } : {}),
         audience: 'tenant',
         context: enrollmentRef ? 'flow step' : 'event action',
         // A step staff released above carries its release to the send
@@ -854,14 +859,12 @@ async function runServerStep(
       // cost.
       if (result.sent) {
         await meterHostEmail(hostId)
-        if (emailActivity) {
-          await logCrmEmailActivity(
-            { hostId, org: env.org, orgId: env.orgId },
-            emailActivity,
-            { subject: emailSubject, body: emailText, to },
-            run.id,
-          )
-        }
+        await recordEmail?.file({
+          subject: emailSubject,
+          body: emailText,
+          to,
+          sourceRef: run.id,
+        })
       }
       if (sendError) return failed(sendError)
     } else if (step.type === 'enrollList') {
@@ -982,28 +985,6 @@ async function runServerStep(
         ids: [campaign.id],
       })
       if (!filed?.filed) return failed(`no contact for ${email}`)
-    } else if (isCrmActionStep(step)) {
-      // The plan gate, the way `webhookPost` takes the `webhooks` one:
-      // refused into the run history with the tier that carries it, so
-      // a Free workspace whose flow names a CRM step reads why the step
-      // did nothing rather than a log that says it ran.
-      if (!env.crmAllowed) {
-        return failed(
-          `CRM steps require the ${planLabelGrantingFeature('crm')} plan`,
-        )
-      }
-      // The five CRM steps (AGL-2605) share a resolver and a scope, so
-      // they share a module; see `crm-action-steps.ts`.
-      const outcome = await runCrmActionStep(
-        { hostId, org: env.org, orgId: env.orgId },
-        run.id,
-        step,
-        payload,
-      )
-      if (outcome.error) return failed(outcome.error)
-      detail = outcome.detail
-      // A stage set by an automation IS a stage change; see `raiseEarnedEvent`.
-      if (outcome.emit) await raiseEarnedEvent(env, outcome.emit)
     } else {
       /*
        * A STEP ANOTHER PLUGIN RUNS: one that writes that plugin's records,
@@ -1498,12 +1479,9 @@ export async function runEventActions(
     const placed = await findOrgAutomationsForEvent(hostId, event)
     if (!actions.length && !placed) return alerts
 
-    const monthKey = new Date().toISOString().slice(0, 7)
-    const runCounterRef = hostRef.collection('counters').doc('actionRuns')
     // Webhook steps take the higher `webhooks` gate (AGL-149); plan gates
     // ride the owning org's doc (AGL-238).
     let webhooksAllowed = true
-    let crmAllowed = true
     /*
      * Whether each half fits under the month's allowance — all or nothing per
      * half, as the site's own actions always were.
@@ -1512,7 +1490,7 @@ export async function runEventActions(
      * were always asked, so an organization placing automations on a site can
      * never be what stops that site's own actions running. The org half is
      * asked second, against what is left after the site's half, and both
-     * count on this site's one meter: an org automation's run is this site's
+     * count on this site's meter: an org automation's run is this site's
      * run, and the usage card, the usage alerts and the COGS rollup read it
      * there.
      */
@@ -1521,18 +1499,25 @@ export async function runEventActions(
     // Plan-less orgs resolve as free (AGL-247) — gates always run. Held for
     // the rest of the run so a step's own plan check costs no second read.
     const owner = await getOrgForHost(hostId)
+    // The band is the WORKSPACE's (AGL-3472): every site's runs count
+    // against it, read off the org's counter — see `run-meter.ts`.
+    const meter: RunMeterScope = {
+      firestore,
+      hostRef,
+      orgId: owner?.orgId,
+      counter: 'actionRuns',
+      month: runMonthKey(),
+    }
     // A suspended site runs nothing (AGL-3356): see `eventRunSuspension`.
     if (await eventRunSuspension(hostRef, owner?.org)) return alerts
     {
       const org = owner?.org
       if (!checkEntitlement(org as any, 'actions')) return alerts
       webhooksAllowed = checkEntitlement(org as any, 'webhooks')
-      crmAllowed = checkEntitlement(org as any, 'crm')
       const limit = resolveOrgEntitlements(
         org as any,
       ).actionRunsPerMonth
-      const counterSnapshot = await runCounterRef.get()
-      const used = Number(counterSnapshot.get(monthKey) ?? 0)
+      const used = await runsUsedThisMonth(meter)
       // Asked as "would it go over", the question this gate has always
       // asked — so a counter that reads as no number refuses nothing, as
       // before, rather than refusing everything.
@@ -1559,7 +1544,6 @@ export async function runEventActions(
       // Admitted by the `actions` gate above.
       actionsAllowed: true,
       webhooksAllowed,
-      crmAllowed,
       depth,
       org: owner?.org ?? null,
       orgId: owner?.orgId ?? null,
@@ -1617,11 +1601,7 @@ export async function runEventActions(
         orgAutomation: { orgId: placed?.orgId ?? '' },
       })
     }
-    if (executed > 0) {
-      await runCounterRef
-        .set({ [monthKey]: FieldValue.increment(executed) }, { merge: true })
-        .catch(() => undefined)
-    }
+    await recordRuns({ ...meter, count: executed })
   } catch (error) {
     console.error('runEventActions failed', hostId, event, error)
   }
@@ -1655,7 +1635,7 @@ export type SingleActionSkip =
 
 /** What one dispatched action did, for a caller that has to say so. */
 export interface SingleActionOutcome {
-  /** Its steps ran, and the run counted on the site's meter. */
+  /** Its steps ran, and the run counted on the site's and workspace's meters. */
   ran: boolean
   /** Why nothing ran; `null` when it ran. */
   skipped: SingleActionSkip | null
@@ -1724,22 +1704,25 @@ export async function runSingleActionOutcome(
       return skipped('conditions')
     }
 
-    const monthKey = new Date().toISOString().slice(0, 7)
-    const runCounterRef = hostRef.collection('counters').doc('actionRuns')
     let webhooksAllowed = true
-    let crmAllowed = true
     // Held for the rest of the run, as in `runEventActions` above.
     const owner = await getOrgForHost(hostId)
+    // The workspace's band, as in `runEventActions` above (AGL-3472).
+    const meter: RunMeterScope = {
+      firestore,
+      hostRef,
+      orgId: owner?.orgId,
+      counter: 'actionRuns',
+      month: runMonthKey(),
+    }
     {
       const org = owner?.org
       if (!checkEntitlement(org as any, 'actions')) return skipped('plan')
       webhooksAllowed = checkEntitlement(org as any, 'webhooks')
-      crmAllowed = checkEntitlement(org as any, 'crm')
       const limit = resolveOrgEntitlements(
         org as any,
       ).actionRunsPerMonth
-      const counterSnapshot = await runCounterRef.get()
-      const used = Number(counterSnapshot.get(monthKey) ?? 0)
+      const used = await runsUsedThisMonth(meter)
       if (used + 1 > limit) return skipped('allowance', limit)
     }
 
@@ -1750,16 +1733,13 @@ export async function runSingleActionOutcome(
       // Admitted by the `actions` gate above.
       actionsAllowed: true,
       webhooksAllowed,
-      crmAllowed,
       depth: 0,
       org: owner?.org ?? null,
       orgId: owner?.orgId ?? null,
       loadWorkflowContext: makeWorkflowContextLoader(hostRef),
     }
     await executeAction(env, doc.id, action, event, payload)
-    await runCounterRef
-      .set({ [monthKey]: FieldValue.increment(1) }, { merge: true })
-      .catch(() => undefined)
+    await recordRuns({ ...meter, count: 1 })
     return { ran: true, skipped: null, alerts }
   } catch (error) {
     console.error('runSingleAction failed', hostId, actionId, error)
@@ -1881,7 +1861,6 @@ export async function resumeFlowEnrollment(
     // Admitted by the `actions` gate above.
     actionsAllowed: true,
     webhooksAllowed: checkEntitlement(owner?.org as any, 'webhooks'),
-    crmAllowed: checkEntitlement(owner?.org as any, 'crm'),
     depth: 0,
     org: owner?.org ?? null,
     orgId: owner?.orgId ?? null,
@@ -1933,12 +1912,14 @@ export async function resumeFlowEnrollment(
    * limit enforced against a person rather than against the decision that
    * added them. The gate belongs at enrollment, and that is where it is.
    */
-  const monthKey = new Date(nowMs).toISOString().slice(0, 7)
-  await hostRef
-    .collection('counters')
-    .doc('actionRuns')
-    .set({ [monthKey]: FieldValue.increment(1) }, { merge: true })
-    .catch(() => undefined)
+  await recordRuns({
+    firestore,
+    hostRef,
+    orgId: owner?.orgId,
+    counter: 'actionRuns',
+    month: runMonthKey(nowMs),
+    count: 1,
+  })
   return ending
 }
 

@@ -146,6 +146,13 @@
       },
       "description": "Aglyn AI: generative building and automation behind the AI add-on (AGL-2903). OFF by default, staff preview only; generative routes answer 404 while off. On, it sends customer briefs and site content to Anthropic under the Assist disclosure (AGL-1909).",
       "valueType": "JSON"
+    },
+    "release_crm_assist_whole_record": {
+      "defaultValue": {
+        "value": "{\"enabled\": false, \"rolloutPercent\": 0}"
+      },
+      "description": "CRM assistance (AGL-3520). OFF: AI gets the disclosed fields of a record. ON: the whole record, contact details and custom fields included. Turn on only after Privacy Policy section 2 and the Subprocessors row are republished.",
+      "valueType": "JSON"
     }
   },
   "version": {

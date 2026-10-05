@@ -52,9 +52,11 @@ import {
   notifyRiskEvent,
   notifyStaff,
   raiseOperatorAlert,
+  settleSubscriptionStart,
   updateExisting,
   writeOrgBilling,
 } from '@aglyn/tenant-data-admin'
+import { isLiveSubscriptionStatus } from '@aglyn/aglyn/app-utils/org-billing-doc'
 import { runPluginEventHandlers } from '@aglyn/aglyn/server'
 // The branch decision, kept in its own module so it can be exercised without
 // a signed payload, an idempotency claim and a Firestore double standing
@@ -964,6 +966,28 @@ async function handler(request: Request): Promise<Response> {
               ...(downgradeLanded ? { pendingDowngrade: null } : {}),
             },
           } as never)
+          // A live subscription settles what the sale was waiting on
+          // (AGL-3466): the standing upgrade proposal, and a comp granted for
+          // a sales trial, which would otherwise wait dormant and hand the
+          // tier back for free if this subscription ended. Comps granted for
+          // any other reason are left alone. After the mirror, so the status
+          // it acts on is the one that landed; best-effort, because a
+          // delivery Stripe retries for a cleanup is worse than a cleanup the
+          // next delivery repeats — the step is idempotent.
+          const mirroredStatus = canceled ? 'canceled' : String(object?.status ?? 'active')
+          if (isLiveSubscriptionStatus(mirroredStatus)) {
+            try {
+              const settled = await settleSubscriptionStart(String(orgId), {
+                status: mirroredStatus,
+                subscriptionId: object?.id ? String(object.id) : null,
+              })
+              if (settled.proposalCleared || settled.trialCompRemoved) {
+                ledger.effect('subscription-start-settled')
+              }
+            } catch (error) {
+              console.error('[billing webhook] settling the subscription start failed', error)
+            }
+          }
           // The AI add-on leaving at a period end, or arriving by any path
           // the add-ons route did not mirror itself, in the workspace's own
           // feed (AGL-2929). Nobody is present at a Stripe flip, and the row

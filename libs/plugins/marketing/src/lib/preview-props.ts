@@ -16,7 +16,6 @@
  */
 
 import { collection, getDocs, limit, query, type Firestore } from 'firebase/firestore'
-import type { HostAction } from '@aglyn/aglyn'
 import type { SiteRuntimePreviewContext } from '@aglyn/aglyn'
 import { compileClientAutomations, type RawHostAction } from './model'
 
@@ -47,7 +46,7 @@ export async function loadMarketingPreviewProps(
     )
     const actions: RawHostAction[] = snapshot.docs.map((doc) => ({
       id: doc.id,
-      action: doc.data() as HostAction,
+      action: doc.data() as RawHostAction['action'],
     }))
     const clientAutomations = compileClientAutomations(actions, {
       path: '/',

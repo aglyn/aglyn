@@ -92,6 +92,63 @@ introduce a price or an entitlement the account owner has not chosen.
 
 ---
 
+## 2026-10-05 — Private images served through the media CDN count toward bandwidth (AGL-3518)
+
+- **Decided by:** the account owner, 2026-10-05, asked in session whether private images (signed, `no-store`, served by the media CDN on every request) should count: anything served through the CDN that is not page weight counts, the `/pricing` copy moving first but staying general rather than naming images. The team's own console preview is excluded.
+- **Scope:** pricing
+- **Evidence:** `countsTowardBand` in `libs/tenant/data/admin/src/lib/server/serve-media-cdn.ts`; `MediaSignatureAudience` in `media-signing.ts`; `apps/console/app/api/media/sign/route.ts`; `serve-media-cdn.bandwidth.spec.ts`; `ORIGIN_MEDIA_BANDWIDTH_SENTENCE`; `/pricing` screen `v0clP6xQl-` version `1rNY19KoQ7`; AGL-3518.
+
+## 2026-10-02 — Video, audio and file downloads count 1.6× toward bandwidth (AGL-3474)
+
+- **Decided by:** the account owner, 2026-10-02, approving the proposal on AGL-3474 that origin-served media count at a weight against both the bandwidth band and its overage, so it earns cost + 30% after Stripe's fee — serving and storing included. The weight is derived in code, not chosen.
+- **Scope:** pricing, packaging
+- **Evidence:** `ORIGIN_MEDIA_SERVE_COST_USD_PER_GB`, `ORIGIN_MEDIA_BANDWIDTH_WEIGHT`, `ORIGIN_MEDIA_BANDWIDTH_SENTENCE` in `libs/aglyn/src/lib/app-utils/plan-entitlements.ts`; `pageViewsFromMediaBytes` in `media-bandwidth.ts`; `media-bandwidth.spec.ts`; `media-bandwidth-weight-copy.spec.ts`; `tools/marketing/pricing-copy/tables.json` (`metered.mediaNote`); `bandwidth.md`, `billing-and-plans/overview.md`, `media/overview.md`; AGL-3474.
+
+**What it costs.** A decimal GB of video, audio or a file served from origin, at
+the dearest region: Vercel Fast Data Transfer $0.35, Fast Origin Transfer $0.43,
+GCS internet egress $0.111759 ($0.12/GiB list), function memory held while the
+stream plays $0.016267 (2 GB × $0.0183/GB-hr × 1,600 s at 5 Mbit/s), an active-CPU
+allowance $0.003683 (60 s at $0.221/hr), and 1,000 range requests $0.007 — **$0.918709**
+($0.986456 a GiB). Storage is not in it: stored bytes are already billed as storage.
+
+**The weight** is the smallest, in tenths, that satisfies both:
+
+| Condition | Rule | Minimum |
+|---|---|---|
+| (a) overage | w × $0.83/1k views × (1e9 ÷ 1,037,107.2 B) × (1 − 0.029) ≥ 1.3 × $0.918709 | 1.5369 |
+| (b) band | w × $0.63712 a GiB of band ≥ $0.986456 a GiB of media | 1.5483 |
+
+So **1.6**. At 1.6 a GB past the band bills $1.2805 and keeps $1.2434 after the fee
+against $1.1943 required; a band spent wholly on media costs $0.6165 per GiB of band
+against the $0.63712 it was sized on. At 1.5 both fail.
+
+**Page first.** It changes what a customer is billed, so `/pricing` must carry
+the sentence before the promotion that bills it goes out.
+
+## 2026-10-02 — Every plan covers its full-use cost plus 30% after Stripe's fee: per-site and purchasable bands cut, overage priced to keep 30% after card fees (AGL-3469, AGL-3476)
+
+- **Decided by:** the account owner, 2026-10-01/02, in four answers: the full-use rule is cost + 30% (a markup, not a margin on price); overage keeps 30% after Stripe's fee; coupons never take a fully-used plan below cost; and the included count of anything a customer can buy more of — collaborators per site, team seats, datasets — is small (five to ten at most) so buying more is a real choice. The approved ladder is the one below. This entry supersedes the 2026-10-01 entries below it on the bands it names.
+- **Scope:** pricing, packaging
+- **Evidence:** `PLAN_ENTITLEMENTS` (`storagePerHostMb`, `bandwidthGb` Starter/Pro, `dataStorageMbPerOrg`, `emailSendsPerMonth`, `contactsPerHost` Business, `membersPerHost`, `managersPerOrg`, `datasetsPerOrg`), the forms plugin's `formSubmissionsPerMonth` and the CRM plugin's `crmEmailsPerDay`; `METERED_PRICE_MULTIPLE` and `publishedMeteredPrice` beside `METERED_MARKUP`; `METERED_BILLED_RATES_USD` and the estimate in `apps/console/utils/usage-metering.ts`; `apps/console/specs/tier-margin-floor.spec.ts` (rule raised from ≥ 0 to ≥ cost × 1.3; the seat term counts `hostLimit × membersPerHost + managersPerOrg`); the Sept-1 `LOCKED` pin ($0.0349, $0.83, $0.083); `tools/marketing/pricing-copy/tables.json` (regenerated); the same-dated entry in Drive → Pricing & Packaging → 05-Pricing-Decision-Log; AGL-3469, AGL-3476.
+
+**What moved.** Storage per site Pro → Agency 5 · 10 · 15 · 20 · 20 GB (was 10 · 20 · 30 · 40 · 60);
+bandwidth Starter 15 GB, Pro 25 GB (was 20, 30); form submissions per site Business → Agency
+5,000 · 10,000 · 10,000 · 10,000; dataset storage Starter → Agency 512 MB · 2 · 10 · 25 · 50 ·
+200 GB; campaign emails Pro · Business · Scale 2,500 · 15,000 · 25,000; Business CRM records
+30,000; Starter one-to-one emails 35 a day; site collaborators per site Starter → Agency 2 · 3 ·
+5 · 5 · 5 · 5; team seats Pro → Agency 3 · 5 · 5 · 10 · 10; datasets Starter → Agency 2 · 5 ·
+10 · 15 · 25 · 50. Maxima and every add-on price unchanged; Enterprise's fallback stays Agency × 2.
+Overage: storage $0.0338 → $0.0349 per GB-month, page views $0.80 → $0.83 and form submissions
+$0.08 → $0.083 per 1,000.
+
+**Why.** At 100% of every band the ladder only broke even (0.1–7.3% of the annual price), and
+the collaborator seat term priced one site's population where the cap admits it on every site —
+Agency's 250 a site across 100 sites was 25,000 people. Every tier now covers 1.30–1.32× its
+full-use cost after Stripe's fee (22.4–23.3% of the annual price), and the pass-through keeps 30%
+after the card fee rather than before it.
+
+---
+
 ## 2026-10-01 — Vercel bills a decimal GB, Firestore is nam5, and an API request is a function: page views $0.80 and form submissions $0.08 per 1k, bandwidth and API bands re-sized (AGL-3444, AGL-1879)
 
 - **Decided by:** the account owner, 2026-10-01, under the same day's "worst case everywhere" decision, asked to settle three open questions with facts and fix any that held: where production's Firestore is, which GB Vercel bills transfer in, and what a `/v1` request costs. All three held. Overage = cost × 1.3 rounded up to the cent; bandwidth bands = the largest multiple of 5 GB that clears the floor at the annual price after Stripe's fee; an API band that would take its plan under water re-sized the same way. This entry supersedes the 2026-10-01 entry below it on the two rates and the bands.
@@ -856,7 +913,7 @@ above. The hashes on those records still say which text was agreed to.
 
 - **Decided by:** the account owner, 2026-09-11 — the CRM is for paying subscribers and no part of it is on Free, one gate in place of a view-only Leads mode; beta.118 held until it ships. Supersedes the 2026-09-10 entry below (Free opens on Leads, view-only), which never shipped, and the 2026-09-05 line that Free keeps the contacts list.
 - **Scope:** pricing
-- **Evidence:** `featureFlag: 'crm'` on the CRM console extension in `libs/plugins/crm/src/lib/plugin.ts`, composed into every section's lock by `resolveHubSections` in `apps/console/utils/plugin-hub-sections.ts` and drawn beside the shell's upgrade notice by `apps/console/components/plugin-hub-rail.component.tsx` (`libs/plugins/crm/src/lib/plugin.spec.ts`, `apps/console/specs/plugin-hub-sections.spec.ts`); every `crm/*` route refusing 403 `plan_required` / `crm` after authorization through `libs/plugins/crm/src/lib/server/suite-gate.ts`, with capture, `crm/erase-person` and the contacts and leads files of `/api/crm/export` exempt (`company-delete.spec.ts`, `contact-email-history.spec.ts`, `org-activity.spec.ts`, `recipe-routes.spec.ts`, `libs/plugins/crm/src/lib/server/export-route.spec.ts`); `contacts` joining the CRM resources of `/v1` in `libs/plugins/crm/src/lib/declarations.console-server.ts` (`api-v1-crm-resources.spec.ts`); client creates and updates of a lead, a contact and a segment asking `orgCarriesCrmSuite` in `cloud/firebase-firestore.rules` (`cloud/rules-tests/firestore-rules.test.mjs`, `crm-suite-rules-drift.spec.ts`); Settings → Privacy exporting contacts and leads and filing an erasure by address on every plan (`apps/console/components/settings/org-privacy-card.component.tsx`, `org-privacy-card.spec.tsx`, `libs/plugins/crm/src/lib/server/erase-person.spec.ts`); `tools/e2e/crm-free-plan.e2e.mjs`; the same-dated entry in Drive → Pricing & Packaging → 05-Pricing-Decision-Log; AGL-2851, AGL-2839.
+- **Evidence:** `featureFlag: 'crm'` on the CRM console extension in `libs/plugins/crm/src/lib/plugin.ts`, composed into every section's lock by `resolveHubSections` in `apps/console/utils/plugin-hub-sections.ts` and drawn beside the shell's upgrade notice by `apps/console/components/plugin-hub-rail.component.tsx` (`libs/plugins/crm/src/lib/plugin.spec.ts`, `apps/console/specs/plugin-hub-sections.spec.ts`); every `crm/*` route refusing 403 `plan_required` / `crm` after authorization through `libs/plugins/crm/src/lib/server/suite-gate.ts`, with capture, `crm/erase-person` and the contacts and leads files exempt — since AGL-3552 the `crm.contacts` / `crm.leads` exports of `/api/transfer/export`, which ask no plan (`company-delete.spec.ts`, `contact-email-history.spec.ts`, `org-activity.spec.ts`, `recipe-routes.spec.ts`, `libs/plugins/crm/src/lib/transfer/records.spec.ts`, `apps/console/specs/transfer-routes.spec.ts`); `contacts` joining the CRM resources of `/v1` in `libs/plugins/crm/src/lib/declarations.console-server.ts` (`api-v1-crm-resources.spec.ts`); client creates and updates of a lead, a contact and a segment asking `orgCarriesCrmSuite` in `cloud/firebase-firestore.rules` (`cloud/rules-tests/firestore-rules.test.mjs`, `crm-suite-rules-drift.spec.ts`); Settings → Privacy exporting contacts and leads and filing an erasure by address on every plan (`apps/console/components/settings/org-privacy-card.component.tsx`, `org-privacy-card.spec.tsx`, `libs/plugins/crm/src/lib/server/erase-person.spec.ts`); `tools/e2e/crm-free-plan.e2e.mjs`; the same-dated entry in Drive → Pricing & Packaging → 05-Pricing-Decision-Log; AGL-2851, AGL-2839. Since AGL-3555 every CRM transfer resource declares `featureFlag: "crm"` in `plugins.config.json` (only the `crm.contacts` / `crm.leads` exports exempt, `featureFlagExempt`), and its `planGate` (`libs/plugins/crm/src/lib/transfer/register.ts`) answers with `suite-gate.ts`'s own refusal on every `/api/transfer/*` route that names it — fields, export, upload, analyze, plan, apply, status, undo — asked by the gate in `apps/console/utils/server/transfer-gate.ts` after authorization, staff included; a lookup into a CRM resource and a workspace package's CRM email templates are refused or left out alike, and the launcher's `can` and Settings → Import & export offer no CRM button on Free but those two exports (`transferPlanRefusal` in `libs/aglyn/src/lib/plugin-manager/plugin-transfer-resources.ts`; `apps/console/specs/transfer-routes.spec.ts`, `transfer-package-routes.spec.ts`, `transfer-launcher.spec.tsx`, `org-data-transfer-card-plan.spec.tsx`, `libs/plugins/crm/src/lib/transfer/records.spec.ts`).
 
 **No price, band or cap moves.** What moves is what a Free workspace reaches: no part of the
 CRM. On Free every CRM section — Leads, Contacts, Companies, Deals, Tasks, Reports, Fields and

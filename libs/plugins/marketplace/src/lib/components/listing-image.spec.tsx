@@ -47,14 +47,15 @@ describe('ListingImage (AGL-1424)', () => {
     )
   })
 
-  it('passes a raw firebasestorage URL through UNCHANGED', () => {
+  it('serves a raw firebasestorage URL through the CDN, with no data change', () => {
     // The positive control. This is what every live listing holds right now,
-    // and the whole point of shipping the renderer first is that it keeps
-    // working with no data change at all.
+    // and it keeps working with no data change at all — through the CDN,
+    // which counts and can stop its bytes, rather than Google's edge
+    // (AGL-3506).
     const { container } = render(
       <ListingImage src={RAW_STORAGE_URL} alt="preview" />,
     )
-    expect(srcOf(container)).toBe(RAW_STORAGE_URL)
+    expect(srcOf(container)).toBe('/api/media/cdn/org:hz_KgetqSq/koESooh9vV')
   })
 
   it('passes a genuinely external https URL through UNCHANGED', () => {

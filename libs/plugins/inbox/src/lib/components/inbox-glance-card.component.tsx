@@ -27,13 +27,12 @@ import {
 // barrel is the CRM's site entry point, and a dashboard card named there
 // would ship to every published page.
 import { pluginRecordListHref } from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
+import { pluginRecordListQuery } from '@aglyn/aglyn/plugin-manager/plugin-record-lists'
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
 import { Avatar, Box, Button, Stack, Typography } from '@mui/material'
 import {
   collection,
   getCountFromServer,
-  limit,
-  orderBy,
   query,
   where,
 } from 'firebase/firestore'
@@ -70,7 +69,7 @@ const PREVIEW_ROWS = 3
  *
  * `orderBy('createdAt', 'desc')` is checked against the writer rather than
  * assumed — an `orderBy` drops documents missing the field, which on a
- * newest-first list is invisible. `apps/tenant/app/api/forms/submit/route.ts`
+ * newest-first list is invisible. `libs/plugins/forms/src/lib/server/form-submit.ts`
  * is the only path that creates one and stamps `createdAt: serverTimestamp()`
  * on every add, the v1 API only reads and deletes, and `formSubmissions` is
  * absent from `IMPORTABLE_FIELDS`, so no restore can mint one without it.
@@ -81,11 +80,12 @@ export function InboxGlanceCard(props: { hostId: string }) {
   const { orgSlug, host } = useParams<{ orgSlug: string; host: string }>()
   const { data: submissionDocs } = useFirestoreCollection<any>(
     () =>
-      query(
-        collection(firestore, 'hosts', hostId, 'formSubmissions'),
-        orderBy('createdAt', 'desc'),
-        limit(PREVIEW_ROWS + 1),
-      ),
+      // The newest of the site's, one past the preview, through the list
+      // source the forms plugin publishes for its records (AGL-3080).
+      pluginRecordListQuery('formSubmission', firestore, {
+        hostId,
+        limit: PREVIEW_ROWS + 1,
+      }),
     [firestore, hostId],
     { idField: '$id' },
   )

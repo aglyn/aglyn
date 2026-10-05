@@ -36,6 +36,8 @@ const HOST_ID = 'site-1'
 const ORG_ID = 'org-1'
 const MONTH = new Date().toISOString().slice(0, 7)
 const RUNS = `hosts/${HOST_ID}/counters/actionRuns`
+/** The workspace's action runs — what the band is enforced against (AGL-3472). */
+const ORG_RUNS = `orgs/${ORG_ID}/counters/actionRuns`
 
 /** Every document, by full path. */
 let store: Record<string, Record<string, any>> = {}
@@ -91,9 +93,44 @@ const collectionRef = (path: string): any => ({
     store[`${path}/${id}`] = { ...data }
     return docRef(`${path}/${id}`)
   },
+  // Equality only — the one filter the run meter's seed asks for.
+  where: (field: string, _op: '==', value: unknown) => ({
+    get: async () => ({
+      docs: Object.keys(store)
+        .filter(
+          (key) =>
+            key.startsWith(`${path}/`) &&
+            !key.slice(path.length + 1).includes('/') &&
+            store[key]?.[field] === value,
+        )
+        .map((key) => ({ ...snapshotOf(key), ref: docRef(key) })),
+    }),
+  }),
 })
 
-const firestoreHandle: any = { collection: (name: string) => collectionRef(name) }
+const firestoreHandle: any = {
+  collection: (name: string) => collectionRef(name),
+  batch: () => {
+    const writes: Array<() => Promise<void>> = []
+    return {
+      set: (ref: any, data: any, options?: { merge?: boolean }) => {
+        writes.push(() => ref.set(data, options))
+      },
+      commit: async () => {
+        for (const write of writes) await write()
+      },
+    }
+  },
+  runTransaction: async (body: (transaction: any) => Promise<any>) =>
+    await body({
+      get: async (ref: any) => await ref.get(),
+      getAll: async (...refs: any[]) =>
+        await Promise.all(refs.map((ref) => ref.get())),
+      set: (ref: any, data: any, options?: { merge?: boolean }) => {
+        void ref.set(data, options)
+      },
+    }),
+}
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
@@ -143,6 +180,8 @@ describe('runSingleActionOutcome', () => {
       alerts: [{ message: 'Half way there', severity: 'info' }],
     })
     expect(metered()).toBe(1)
+    // …and on the workspace's counter, in the same write.
+    expect(store[ORG_RUNS]?.[MONTH]).toBe(1)
     expect(history()).toEqual([
       expect.objectContaining({
         result: 'succeeded',
@@ -188,14 +227,16 @@ describe('runSingleActionOutcome', () => {
   it('says the allowance is spent, and which allowance', async () => {
     seedAction()
     const limit = resolveOrgEntitlements(mockOrg as never).actionRunsPerMonth
-    store[RUNS] = { [MONTH]: limit }
+    // Spent by the WORKSPACE (AGL-3472): this site has run none of them.
+    store[ORG_RUNS] = { [MONTH]: limit, seededFrom: MONTH }
     expect(await runSingleActionOutcome(HOST_ID, 'act-1', 'scrollDepth', {})).toEqual({
       ran: false,
       skipped: 'allowance',
       alerts: [],
       limit,
     })
-    expect(metered()).toBe(limit)
+    expect(metered()).toBe(0)
+    expect(store[ORG_RUNS]?.[MONTH]).toBe(limit)
     expect(history()).toEqual([])
   })
 

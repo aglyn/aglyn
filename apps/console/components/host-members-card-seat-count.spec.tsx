@@ -24,8 +24,8 @@
  * (AGL-1124). That array's length was handed to `checkOrgSeatQuota` as the
  * site's seat usage AND printed verbatim as "N of M member seats used".
  *
- * `membersPerHost` is 50 on Business and runs to 250 on Agency — all above
- * the window — so a site with 60 collaborators on Business read
+ * A band above the window — Business carried 50 until AGL-3469, and a staff
+ * grant can still set one — made a site with 60 collaborators read
  * "25 of 50 member seats used": comfortably under its band, with the
  * extra-seat upsell suppressed, while it was in fact over. The API still
  * refused the next add (`api/hosts/members` counts server-side), so the
@@ -151,15 +151,21 @@ jest.mock('@aglyn/tenant-feature-instance/hooks/use-paged-collection', () => ({
 }))
 
 /**
- * Business: `membersPerHost` 50, `maxMembersPerHost` 100, and a per-seat
- * add-on price — so 60 real collaborators are over the included band and the
- * upsell is exactly what should appear. Real `checkSeatQuota`, real
+ * Business with a staff-granted `membersPerHost` of 50 (the plan includes 5),
+ * `maxMembersPerHost` 100, and a per-seat add-on price — so the band sits
+ * above the page window, 60 real collaborators are over it, and the upsell is
+ * exactly what should appear. Real `checkSeatQuota`, real
  * `resolveOrgEntitlements`; only the counts are staged.
  */
 jest.mock('../hooks/use-current-org', () => ({
   __esModule: true,
   default: () => ({
-    org: { $id: 'org-1', plan: 'business', ownerUid: 'owner-1' },
+    org: {
+      $id: 'org-1',
+      plan: 'business',
+      ownerUid: 'owner-1',
+      entitlements: { membersPerHost: 50 },
+    },
     orgId: 'org-1',
     ready: true,
   }),

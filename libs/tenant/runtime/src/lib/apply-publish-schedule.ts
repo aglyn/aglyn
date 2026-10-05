@@ -21,7 +21,9 @@ import {
   checkEntitlement,
   composeScreenRoutePath,
   SCREEN_KIND_EMAIL,
+  SCREEN_KIND_GROUP,
   SCREEN_ROOT_PATH,
+  toScreenRouteNode,
 } from '@aglyn/aglyn/server'
 // Deep import, like the Measurement Protocol sender's: `analytics-events.ts`
 // is deliberately DOM-free so both sides of the publish path can share the
@@ -56,11 +58,12 @@ type RouteRefusal = 'not-a-page' | 'no-path' | 'path-taken'
  * The three refusals are all "this cannot become an address", and all three
  * are silent no-ops if left unrecorded, which is the bug this issue is about:
  *
- * - `not-a-page` — an email document (AGL-1383). It has no URL, the serve
- *   path refuses to render it, and a routing entry would make it BILLABLE
- *   against `screensPerHost` without making it reachable. `kind: 'template'`
- *   is deliberately NOT refused: a collection entry template is routed on
- *   purpose, which is how the compose pipeline picks it up (AGL-1400).
+ * - `not-a-page` — an email document (AGL-1383) or a page group (AGL-3463).
+ *   Neither has a URL, the serve path refuses to render either, and a routing
+ *   entry would make it BILLABLE against `screensPerHost` without making it
+ *   reachable. `kind: 'template'` is deliberately NOT refused: a collection
+ *   entry template is routed on purpose, which is how the compose pipeline
+ *   picks it up (AGL-1400).
  * - `no-path` — the screen or an ancestor has no slug, so there is no address
  *   to publish at.
  * - `path-taken` — another screen already holds the address. The interactive
@@ -88,15 +91,19 @@ async function resolveScheduledRoutePath(options: {
     if (currentId === screenId) {
       if (
         snapshot.get('deletedAt') != null ||
-        snapshot.get('kind') === SCREEN_KIND_EMAIL
+        snapshot.get('kind') === SCREEN_KIND_EMAIL ||
+        snapshot.get('kind') === SCREEN_KIND_GROUP
       ) {
         return { refused: 'not-a-page' }
       }
     }
-    screensById[currentId] = {
+    // The kind rides along so a GROUP ancestor composes as nothing rather
+    // than as a slugless page that refuses the path (AGL-3463).
+    screensById[currentId] = toScreenRouteNode({
       slug: snapshot.get('slug'),
       parentId: snapshot.get('parentId'),
-    }
+      kind: snapshot.get('kind'),
+    })
     currentId = snapshot.get('parentId')
   }
 
@@ -174,6 +181,11 @@ export async function applyDuePublishSchedule(options: {
   // Scheduled unpublish (AGL-113, screens only): drop the routing-map entry
   // so the path 404s on the next revalidate. This render still serves the
   // current version — the map is matched before this runs.
+  //
+  // THIS screen's entry only (AGL-3463). A scheduled unpublish of a parent
+  // leaves every page nested under it serving at its own address, exactly as
+  // the console's unpublish does; a page below only goes when it is
+  // unpublished itself.
   if (schedule.action === 'unpublish') {
     if (collectionName === 'screens') {
       try {
@@ -217,6 +229,10 @@ export async function applyDuePublishSchedule(options: {
   // Screens only. A layout has no address of its own, exactly as the
   // unpublish branch above is screens-only.
   //
+  // Only THIS screen's entry is written, never a descendant's (AGL-3463): a
+  // scheduled publish of a parent neither puts the drafts beneath it live
+  // nor moves a page below that kept its own address.
+  //
   // In practice the CRON BEAT is the only caller that reaches a first publish:
   // the lazy ISR path resolves a request path through the routing map before
   // it ever loads a screen, so an unrouted screen 404s without its schedule
@@ -234,21 +250,28 @@ export async function applyDuePublishSchedule(options: {
   // The placeholder home page this publish takes `/` from, if it does
   // (AGL-3408) — its entry leaves the map in the same commit.
   let releasedPlaceholder: string | undefined
+  // This IS the placeholder home page, published by its owner (AGL-3478): a
+  // schedule is somebody's deliberate act, and the platform never writes one.
+  // From here it is their home page, so the marker goes in the same commit —
+  // a starter must not unpublish it — and the publish is an activation.
+  let publishesPlaceholder = false
   if (collectionName === 'screens') {
     try {
       const host = await hostRef.get()
       const routing = (host.get('screens') ?? {}) as Record<string, string>
+      const defaultHomeScreenId = host.get('defaultHomeScreenId')
+      publishesPlaceholder =
+        Boolean(defaultHomeScreenId) && defaultHomeScreenId === docId
       // An existing entry is the republish case: the route is already live,
       // this only swaps which version it serves, and there is nothing to
-      // register and no activation to report.
-      if (!routing[docId]) {
+      // register and no activation to report — except on the placeholder,
+      // whose live route the platform registered rather than its owner.
+      if (!routing[docId] || publishesPlaceholder) {
         // The same predicate the console's three publish surfaces use, so a
         // `first_publish` breakdown means one thing across all four senders.
-        firstPublish = isFirstPublishedRoute(
-          routing,
-          host.get('defaultHomeScreenId'),
-        )
-        const defaultHomeScreenId = host.get('defaultHomeScreenId')
+        firstPublish = isFirstPublishedRoute(routing, defaultHomeScreenId)
+      }
+      if (!routing[docId]) {
         const resolved = await resolveScheduledRoutePath({
           hostRef,
           screenId: docId,
@@ -295,7 +318,7 @@ export async function applyDuePublishSchedule(options: {
       versionId: schedule.versionId,
       'publishSchedule.status': 'applied',
     }
-    if (routePath) {
+    if (routePath || publishesPlaceholder) {
       // ONE atomic commit, and the order matters more than the write count:
       // a status of `applied` with no routing entry is permanent (nothing
       // retries a terminal status), so the entry and the status must land
@@ -303,7 +326,7 @@ export async function applyDuePublishSchedule(options: {
       // and the next beat runs it again.
       const batch = firestore.batch()
       batch.update(hostRef, {
-        [`screens.${docId}`]: routePath,
+        ...(routePath ? { [`screens.${docId}`]: routePath } : {}),
         // The first real home page replaces the placeholder (AGL-3408), in
         // the same commit, so `/` is never answered by two screens.
         ...(releasedPlaceholder
@@ -311,6 +334,9 @@ export async function applyDuePublishSchedule(options: {
               [`screens.${releasedPlaceholder}`]: FieldValue.delete(),
               defaultHomeScreenId: FieldValue.delete(),
             }
+          : {}),
+        ...(publishesPlaceholder
+          ? { defaultHomeScreenId: FieldValue.delete() }
           : {}),
       })
       if (releasedPlaceholder) {

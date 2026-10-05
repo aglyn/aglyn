@@ -36,6 +36,14 @@ export interface OrgInvitesBannerProps {
 
 /** "You've been invited to Acme as admin." */
 export function inviteSentence(invite: PendingInvite): string {
+  // An owner handoff says what it does (AGL-3466): "as owner" undersells
+  // being handed the workspace.
+  if (invite.handoff) {
+    return (
+      `You've been invited to take over ${invite.orgName ?? 'a workspace'} ` +
+      'as its owner.'
+    )
+  }
   return (
     `You've been invited to ${invite.orgName ?? 'an organization'}` +
     (invite.role ? ` as ${invite.role}` : '') +

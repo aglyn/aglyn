@@ -221,6 +221,25 @@ export async function addOutreachDoNotContact(
 }
 
 /**
+ * Takes an address entry off the list by its key (the address itself is not
+ * stored, so the key is all there is to name it by); answers whether it was
+ * on it. Only an import's undo calls it, for entries that import added: no
+ * member removes an address, because the list is the record that a person
+ * asked not to be emailed.
+ */
+export async function removeOutreachDoNotContactEntry(
+  firestore: FirebaseFirestore.Firestore,
+  orgId: string,
+  key: string,
+): Promise<boolean> {
+  if (!/^[0-9a-f]{64}$/.test(key)) return false
+  const ref = outreachDoNotContactCollection(firestore, orgId).doc(key)
+  if (!(await ref.get()).exists) return false
+  await ref.delete()
+  return true
+}
+
+/**
  * The fields an address entry and a domain entry share, held to the rules
  * the module note gives: a reason and a source the list knows, and a member
  * behind every member-sourced add.

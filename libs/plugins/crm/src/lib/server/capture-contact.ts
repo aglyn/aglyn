@@ -24,13 +24,14 @@ import {
   type ContactSource,
 } from '@aglyn/aglyn/app-utils/contacts'
 import { formLeadSource } from '@aglyn/aglyn/app-utils/forms'
+import { normalizePhone } from '@aglyn/aglyn/foundation/definitions/contact.types'
 import {
   type CrmLeadFields,
   isCrmLeadOpen,
   normalizeContactEmail,
   personKey,
 } from '@aglyn/aglyn/server'
-import { captureHostContact } from '@aglyn/tenant-runtime/capture-host-contact'
+import { captureHostContact } from './capture-host-contact'
 import { contactCaptureActor } from '@aglyn/tenant-runtime/capture-actor'
 import { emitHostEvent } from '@aglyn/tenant-runtime/emit-host-event'
 import {
@@ -46,6 +47,7 @@ import {
   type PluginConversionTouch,
 } from '@aglyn/aglyn/plugin-manager/plugin-conversion-credit'
 import { convertOpenLeadOntoContact } from './convert-open-lead'
+import { crmRecordOriginWriter } from './record-origin'
 
 /**
  * The CRM answering the platform's contact-capture contract (AGL-3080).
@@ -106,11 +108,12 @@ export async function captureContactForCrm(
   if (!normalizeContactEmail(request.identity.email)) return refusedEmail()
   try {
     if (surface === 'lead') {
-      if (!(await heldAsContact(request))) return await fileLead(request)
+      if (!(await heldAsContact(request))) return await stampedAfter(request, fileLead(request))
     } else if (surface === 'touch') {
-      if (await openLeadFor(request)) return await fileLead(request)
+      if (await openLeadFor(request)) return await stampedAfter(request, fileLead(request))
     }
     const verdict = await captureOnContact(request)
+    if (verdict.ok) await stampOrigin(request)
     if (verdict.ok && verdict.record === 'contact' && surface === 'relationship') {
       await convertOpenLeadOntoContact({
         hostId: request.hostId,
@@ -133,6 +136,32 @@ export async function captureContactForCrm(
       error: 'The contact could not be recorded. Nothing else was affected.',
     }
   }
+}
+
+/**
+ * WHERE THE PERSON CAME FROM (AGL-3519): the door's word — a form, a
+ * booking, a newsletter, a member, an order — as the built-in Lead source
+ * it names, on a record the capture just started and that names none. A
+ * person met before keeps whatever lead source they hold, or the lack of one.
+ * Never fails the capture: the writer swallows its own errors.
+ */
+async function stampOrigin(request: PluginContactCaptureRequest): Promise<void> {
+  await crmRecordOriginWriter.stamp({
+    hostId: request.hostId,
+    email: normalizeContactEmail(request.identity.email) ?? '',
+    origin: request.interaction.source,
+    firstTouchOnly: true,
+  })
+}
+
+/** A filed lead's verdict, after its origin is stamped when the filing took. */
+async function stampedAfter(
+  request: PluginContactCaptureRequest,
+  filed: Promise<PluginContactCaptured>,
+): Promise<PluginContactCaptured> {
+  const verdict = await filed
+  if (verdict.ok) await stampOrigin(request)
+  return verdict
 }
 
 /** The refusal every door gets for an address nothing can key. */
@@ -194,6 +223,7 @@ async function fileLead(request: PluginContactCaptureRequest): Promise<PluginCon
       source,
       ...(request.marketingConsent ? { marketingConsent: true } : {}),
       ...disclosureOf(request),
+      ...phoneFillOf(request),
     },
     ...(conversionTouchOf(request.detail).conversionTouch
       ? { touch: conversionTouchOf(request.detail).conversionTouch }
@@ -265,6 +295,9 @@ async function captureOnContact(
         ? { initialLifecycleStage: request.lifecycleFloor as never }
         : {}),
       ...(request.profile ? { facet: request.profile as never } : {}),
+      ...(phoneFillOf(request).phoneFill
+        ? { facetFill: { phone: phoneFillOf(request).phoneFill } }
+        : {}),
     })
     if ('refused' in verdict) {
       return { ok: false, reason: verdict.refused, error: refusalText(verdict.refused) }
@@ -305,6 +338,21 @@ function disclosureOf(
 ): { disclosedConsentGroup?: string } {
   const key = request.disclosedConsentGroup
   return typeof key === 'string' && key ? { disclosedConsentGroup: key } : {}
+}
+
+/**
+ * THE PHONE A CAPTURE LEARNED IN PASSING (AGL-3493), off `profileFill`.
+ *
+ * Normalized here so a lead and a contact written by one capture keep the
+ * same E.164 string, and dropped when it will not normalize: a fill is an
+ * enrichment, and a number in some other shape on the record is the
+ * "stored three ways" failure `normalizePhone` exists to end. Both writers
+ * put it only where the record holds no phone.
+ */
+function phoneFillOf(request: PluginContactCaptureRequest): { phoneFill?: string } {
+  const raw = request.profileFill?.['phone']
+  const phone = typeof raw === 'string' ? normalizePhone(raw) : null
+  return phone ? { phoneFill: phone } : {}
 }
 
 /**

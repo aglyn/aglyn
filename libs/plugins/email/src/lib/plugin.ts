@@ -16,16 +16,29 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
+import { registerPluginTransferResourceUi } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
 import { registerPluginZone } from '@aglyn/aglyn/plugin-manager/plugin-zones'
-import { mdiEmailOutline } from '@aglyn/shared-data-mdi'
+import {
+  mdiAccountMultipleOutline,
+  mdiEmailOffOutline,
+  mdiEmailOutline,
+} from '@aglyn/shared-data-mdi'
 import { lazy } from 'react'
 import {
   EMAIL_MESSAGES_ZONE,
   EMAIL_TEMPLATE_RECIPIENTS_ZONE,
+  EMAIL_TEMPLATE_REPORT_ZONE,
 } from './components/email-zones'
 import { EMAILS_CONSOLE_SECTIONS } from './components/emails-console-sections'
 import { BUNDLE_ID } from './constants/bundle-common'
+import { SITE_EMAIL_PACKAGE_KIND } from './constants/site-package'
 import { registerEmailRecordRoutes } from './model/email-record-routes'
+import {
+  LIST_CONSENT_STEP_ID,
+  LIST_EXISTING_STEP_ID,
+  LIST_MEMBERS_RESOURCE,
+  SUPPRESSIONS_RESOURCE,
+} from './transfer/email-transfer-catalog'
 
 /** Code-split: the Emails console page only loads when opened. */
 const EmailsConsolePage = lazy(() => import('./components/emails-console-page'))
@@ -49,6 +62,64 @@ const CampaignDesignCreateWidget = lazy(
 const EmailDesignPreview = lazy(
   () => import('./components/email-design-preview'),
 )
+const SitePackageEmailPreview = lazy(
+  () => import('./components/site-package-email-preview'),
+)
+
+/* The list import's own wizard steps, loaded when the wizard reaches one. */
+const ListExistingStep = lazy(() =>
+  import('./transfer/list-import-steps').then((steps) => ({
+    default: steps.ListExistingStep,
+  })),
+)
+const ListConsentStep = lazy(() =>
+  import('./transfer/list-import-steps').then((steps) => ({
+    default: steps.ListConsentStep,
+  })),
+)
+
+/**
+ * The client half of what this plugin imports and exports (AGL-3529,
+ * AGL-3550): how the wizard and the hub name each resource, and the list import's two steps of its
+ * own — whether people the workspace already holds may change, and the
+ * statement of permission under what the dry run found. The server half
+ * registers from the console declarations.
+ */
+export function registerEmailTransferResourceUis(): void {
+  registerPluginTransferResourceUi(
+    LIST_MEMBERS_RESOURCE,
+    {
+      label: 'list members',
+      icon: { path: mdiAccountMultipleOutline.path },
+      extraSteps: [
+        {
+          id: LIST_EXISTING_STEP_ID,
+          label: 'People already on this list',
+          after: 'matching',
+          component: ListExistingStep,
+        },
+        {
+          id: LIST_CONSENT_STEP_ID,
+          label: 'Permission',
+          after: 'conflicts',
+          component: ListConsentStep,
+        },
+      ],
+    },
+    { pluginId: BUNDLE_ID },
+  )
+  registerPluginTransferResourceUi(
+    SUPPRESSIONS_RESOURCE,
+    { label: 'suppressions', icon: { path: mdiEmailOffOutline.path } },
+    { pluginId: BUNDLE_ID },
+  )
+  // How the Import & export hub names topics in a workspace package (AGL-3550).
+  registerPluginTransferResourceUi(
+    'email.topics',
+    { label: 'Email topics' },
+    { pluginId: BUNDLE_ID },
+  )
+}
 
 /**
  * Console half (AGL-395): registers the Emails nav item + page in the
@@ -63,6 +134,7 @@ export function registerEmailConsole(): void {
   // Where a message and a sending identity are read (AGL-3080), for the
   // surfaces that link to them without knowing this page's address.
   registerEmailRecordRoutes()
+  registerEmailTransferResourceUis()
   /*
    * The two places this plugin's pages hand over to whichever plugin owns
    * campaigns. A message is one send of a campaign and every action on it is
@@ -79,6 +151,16 @@ export function registerEmailConsole(): void {
       layout: 'bare',
       description:
         'The whole body of `/emails/messages` and the routes under it, under a site and on the organization’s Emails page. A widget here is handed the site (or `null` and the org mount at the organization level), the Emails page’s base path and the segments under `messages`, and draws the list, one message’s report or its composer.',
+    },
+    { pluginId: BUNDLE_ID },
+  )
+  registerPluginZone(
+    {
+      zone: EMAIL_TEMPLATE_REPORT_ZONE,
+      label: 'What a template’s emails did',
+      surface: 'console',
+      description:
+        'On one template’s page, under its name. A widget here reports the messages sent from that template — their figures, the audiences they went to and the messages themselves — read from the plugin that sends them; it is handed the site, the template’s id and the Emails page’s base path.',
     },
     { pluginId: BUNDLE_ID },
   )
@@ -165,6 +247,15 @@ export function registerEmailConsole(): void {
         widgetId: 'email-campaign-design-preview',
         title: 'Preview',
         Component: EmailDesignPreview,
+      },
+      {
+        // A site email in a site package import, each side drawn by the
+        // preview that renders through the send path's code (AGL-3545).
+        slot: Aglyn.CONSOLE_WIDGET_SLOTS.sitePackageItemPreview,
+        widgetId: 'email-site-package-preview',
+        title: 'Email preview',
+        itemKinds: [SITE_EMAIL_PACKAGE_KIND],
+        Component: SitePackageEmailPreview,
       },
     ],
     navItems: [

@@ -42,6 +42,10 @@ import {
 } from '../../../../utils/server/provision-host'
 import { readClientIp } from '@aglyn/aglyn/app-utils/request-ip'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
+import {
+  announceNewSite,
+  announceNewWorkspace,
+} from '../../_lib/growth-announcements'
 
 /**
  * Creates a host (user request 2026-07-07 — the hosts page had no create
@@ -245,6 +249,32 @@ async function handler(request: Request): Promise<Response> {
       'Created the site',
       { type: 'host', id: hostId, name: displayName },
     )
+    // A workspace provisioned on the way here is announced exactly as one
+    // made through `/api/orgs/create` is (AGL-3491): this is the door a
+    // brand-new account most often takes, and it used to welcome nobody and
+    // tell staff nothing. Then the site itself. Neither throws.
+    const actorEmail = decoded.email ? String(decoded.email) : null
+    const orgSlug = (org?.['slug'] as string | undefined) ?? null
+    if (orgMembership.created === true) {
+      await announceNewWorkspace({
+        orgId: orgMembership.orgId,
+        name: (org?.['name'] as string | undefined) ?? displayName,
+        slug: orgSlug ?? '',
+        owner: {
+          uid: decoded.uid,
+          email: actorEmail,
+          displayName: resolveIdpDisplayName(decoded) || null,
+        },
+        origin: headers.origin ?? `https://${headers.host}`,
+      })
+    }
+    await announceNewSite({
+      hostId,
+      displayName,
+      subdomain,
+      orgSlug,
+      createdBy: actorEmail,
+    })
     // No starter seeding here (AGL-687). Starters render from the code
     // definitions and are copied in only when a user uses or edits one, so a
     // new site starts with an empty library and still gets every later

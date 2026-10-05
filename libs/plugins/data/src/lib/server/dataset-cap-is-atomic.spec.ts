@@ -259,20 +259,6 @@ jest.mock('@aglyn/aglyn/server', () => ({
   // bug.
   ...jest.requireActual('@aglyn/aglyn/app-utils/plan-entitlements'),
   createResourceUid: () => `uid-${(mockUid += 1)}`,
-  // The REAL referential-integrity index: both record writes on this route
-  // derive `referencedIds` from their values, and an omitted helper is a
-  // CLOSED WORLD — every create 500s and the cap this suite is about is never
-  // reached.
-  datasetIntegrityFields: jest.requireActual(
-    '@aglyn/aglyn/app-utils/dataset-models',
-  ).datasetIntegrityFields,
-  // Validation is not what this suite is about; the model below accepts the
-  // one field every seeded row carries.
-  effectiveDatasetModel: () => ({
-    fields: [{ id: 'name', type: 'text', label: 'Name' }],
-  }),
-  coerceDocumentValues: (_model: unknown, values: unknown) => values,
-  validateDocument: () => ({}),
   // The model below names no custom field type, so there is none to load.
   ensureDeclaredCustomFieldTypes: async () => undefined,
   defaultScopeForNewResource: () => 'org',
@@ -290,6 +276,23 @@ jest.mock('@aglyn/aglyn/server', () => ({
       authorization: request.headers.get('authorization') ?? undefined,
     },
   }),
+}))
+
+// The data plugin's dataset model, as the dataset handlers read it
+// (AGL-3080: the model is the data plugin's own).
+jest.mock('../model/dataset-models', () => ({
+  // The REAL referential-integrity index: both record writes on this route
+  // derive `referencedIds` from their values, and an omitted helper is a
+  // CLOSED WORLD — every create 500s and the cap this suite is about is never
+  // reached.
+  ...jest.requireActual('../model/dataset-models'),
+  // Validation is not what this suite is about; the model below accepts the
+  // one field every seeded row carries.
+  effectiveDatasetModel: () => ({
+    fields: [{ id: 'name', type: 'text', label: 'Name' }],
+  }),
+  coerceDocumentValues: (_model: unknown, values: unknown) => values,
+  validateDocument: () => ({}),
 }))
 
 import { PLAN_ENTITLEMENTS } from '@aglyn/aglyn/app-utils/plan-entitlements'
@@ -370,7 +373,7 @@ describe('the premise', () => {
     // write would succeed and every assertion would still pass.
     expect(STARTER_RECORDS).toBe(1000)
     expect(Number.isFinite(STARTER_RECORDS)).toBe(true)
-    expect(STARTER_DATASETS).toBe(3)
+    expect(STARTER_DATASETS).toBe(2)
     expect(PLAN_ENTITLEMENTS.enterprise.recordsPerDataset).toBe(
       Number.POSITIVE_INFINITY,
     )
@@ -610,11 +613,11 @@ describe('CONCURRENTLY: datasetsPerOrg cannot be laundered', () => {
   })
 
   it('a plan whose band dwarfs the attempts lands all of them', async () => {
-    // Enterprise's fallback is 4,000 datasets (twice Agency's, since
-    // 2026-09-07) — two hundred times the attempts here, so the cap never
-    // enters the race and every write must land.
+    // Enterprise's fallback is 100 datasets (twice Agency's) — five times the
+    // attempts here, so the cap never enters the race and every write must
+    // land.
     mockState.org = { plan: 'enterprise' }
-    expect(PLAN_ENTITLEMENTS.enterprise.datasetsPerOrg).toBe(4_000)
+    expect(PLAN_ENTITLEMENTS.enterprise.datasetsPerOrg).toBe(100)
     const attempts = 20
     seedDatasets(0)
     const responses = await Promise.all(

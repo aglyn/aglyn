@@ -508,6 +508,128 @@ export interface ContactFacet {
    * a private asset is still served through the signed CDN door.
    */
   mediaIds?: string[]
+  /*
+   * SALESFORCE'S STANDARD CONTACT FIELDS (AGL-3515), per holder like the
+   * profile above and for the same reason. Every one of them is personal
+   * data about the person, so none reaches the org view (see
+   * `ORG_CONTACT_FIELDS`) and an erasure takes them with the document.
+   */
+  /** One of the org's salutation values, by label (`Mr.`, `Dr.` …). */
+  salutation?: string
+  /**
+   * The person's given and family names. While either is set, {@link name}
+   * is their composition — see {@link composeContactName} — so every reader
+   * of the display name reads the same person the structured fields name. A
+   * facet holding only `name` keeps it as typed: nothing splits a stored
+   * name into parts after the fact.
+   */
+  firstName?: string
+  lastName?: string
+  department?: string
+  /** E.164, like {@link phone}. */
+  mobilePhone?: string
+  /** E.164. */
+  homePhone?: string
+  /** E.164. */
+  otherPhone?: string
+  /** E.164. */
+  fax?: string
+  /** A calendar date, `YYYY-MM-DD`, never in the future — {@link normalizeContactBirthdate}. */
+  birthdate?: string
+  assistantName?: string
+  /** E.164. */
+  assistantPhone?: string
+  /**
+   * Another contact of the org this holder can see — the person's manager.
+   * Never the contact itself, and never a contact whose own chain leads
+   * back here: `crm/contact-update` refuses both. `null` is "nobody" — what
+   * a merge leaves where a pointer would have named the person themselves.
+   */
+  reportsToContactId?: string | null
+  /**
+   * A second postal address. {@link address} is the MAILING address — the
+   * one a letter goes to — and keeps its field name; this is Salesforce's
+   * Other Address beside it.
+   */
+  otherAddress?: AglynPostalAddress | null
+  /**
+   * The person asked not to be phoned. Stored only as `true`; absent is
+   * "may be called". A hint beside every number and on the Call button,
+   * never a block: the rep decides.
+   */
+  doNotCall?: boolean
+}
+
+/**
+ * The profile's phone fields besides `phone` (AGL-3515), each stored E.164
+ * through `normalizePhone`, in the order a record page lists them.
+ */
+export const CONTACT_EXTRA_PHONE_FIELDS = [
+  'mobilePhone',
+  'homePhone',
+  'otherPhone',
+  'fax',
+  'assistantPhone',
+] as const
+
+export type ContactExtraPhoneField = (typeof CONTACT_EXTRA_PHONE_FIELDS)[number]
+
+/** How each phone field is labeled on screen, in a file and in the docs. */
+export const CONTACT_PHONE_FIELD_LABELS: Record<'phone' | ContactExtraPhoneField, string> = {
+  phone: 'Phone',
+  mobilePhone: 'Mobile phone',
+  homePhone: 'Home phone',
+  otherPhone: 'Other phone',
+  fax: 'Fax',
+  assistantPhone: 'Assistant phone',
+}
+
+/** The longest first or last name a facet keeps — the composed name stays within 120. */
+export const CONTACT_NAME_PART_MAX = 59
+
+/**
+ * The display name a holder's first and last names make: `"First Last"`,
+ * either alone, or `''` when neither is set — Salesforce's Name, less the
+ * salutation, which is a form of address and not part of who the person is.
+ */
+export function composeContactName(firstName: unknown, lastName: unknown): string {
+  const part = (value: unknown) =>
+    String(value ?? '')
+      .trim()
+      .replace(/\s+/g, ' ')
+      .slice(0, CONTACT_NAME_PART_MAX)
+  return [part(firstName), part(lastName)].filter(Boolean).join(' ')
+}
+
+/** The sentence a birthdate that cannot be stored is refused with. */
+export const CONTACT_BIRTHDATE_REFUSAL =
+  'Birthdate must be a past date written YYYY-MM-DD, like 1984-07-21.'
+
+/**
+ * A birthdate as stored: `YYYY-MM-DD` for a real calendar date that is not
+ * in the future, `''` for a blank (a clear), and `null` for anything else.
+ *
+ * "Not in the future" is judged against the latest calendar day anywhere on
+ * Earth (UTC+14), so a person entering today's date where the day has
+ * already turned is never refused.
+ */
+export function normalizeContactBirthdate(value: unknown, nowMs = Date.now()): string | null {
+  const text = String(value ?? '').trim()
+  if (!text) return ''
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text)
+  if (!match) return null
+  const [year, month, day] = [Number(match[1]), Number(match[2]), Number(match[3])]
+  const date = new Date(Date.UTC(year, month - 1, day))
+  if (
+    year < 1000 ||
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  ) {
+    return null
+  }
+  const latestToday = new Date(nowMs + 14 * 60 * 60 * 1000).toISOString().slice(0, 10)
+  return text > latestToday ? null : text
 }
 
 /** The map field holding the facets: `{ [groupId]: ContactFacet }`. */

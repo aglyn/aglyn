@@ -41,7 +41,7 @@ else:
 - a **booking**;
 - a **form** whose own page has **Also create a lead from the address someone
   gives this form** switched on;
-- [Import CSV](#import-from-csv), [New lead](#adding-a-lead-by-hand), and
+- [Import](#import-from-csv), [New lead](#adding-a-lead-by-hand), and
   [`POST /v1/leads`](/api/resources/leads#create-a-lead) over the REST API.
 
 A lead surface files a lead and **no contact**. The one exception is a person
@@ -101,17 +101,45 @@ their company **as text** until it converts:
 | Field | Notes |
 | --- | --- |
 | **Email** | The identity: a site holds one lead per address. |
-| **Name** | The person's name. |
+| **Salutation**, **First name**, **Last name** | How to address the person, and their name in parts. The salutation is one of your organization's [Salutation values](./custom-fields.md#picklist-values) — the list contacts use. While a first or last name is set, **Name** is the two together ("Ann Lee") and follows them; a lead that only has a name keeps it as it was captured, and is never split. |
+| **Name** | The person's name — what the list shows and searches. |
 | **Company** | The company's name, typed. Not a link — a thousand imported leads must not create a thousand companies. [Converting](#converting-a-lead) is what links or creates the company record, by this name or by the address's domain. |
-| **Job title**, **Phone**, **Website** | As on a business card. The phone is stored with its country code; the website as a full address. |
-| **Lead source** | Where the lead came from, picked from your organization's own [lead source values](./custom-fields.md#lead-source-values). A new lead starts from the list's default when it has one. Distinct from **Sources** below, which the site records. |
+| **Job title**, **Phone**, **Mobile phone**, **Fax**, **Website** | As on a business card. Phone numbers are stored with their country code; the website as a full address. |
+| **Do not call** | The person asked not to be phoned. It shows as a warning on every number and on **Call**, and never blocks the call — the same as on a contact. |
+| **Industry**, **Rating** | Picked from your organization's Industry (Salesforce's standard industries) and Rating (Hot, Warm, Cold) values — the same lists [companies](./companies.md) use, kept under **CRM › Fields › Companies** — so a lead converts into the same value. |
+| **Employees**, **Annual revenue** | The company's size, as the lead tells it. Revenue is typed in a currency's major units, like `1250000.00`, and kept with its currency. |
+| **Lead source** | Where the lead came from, picked from your organization's own [lead source values](./custom-fields.md#picklist-values) — Salesforce's standard set, Aglyn's own doors and outreach, and any you add — listed under **Inbound**, **Outbound** and values in no group. A new lead starts from the list's default when it has one, and a lead your site captures is given its door's value — see [Lead source, filled in for you](#lead-source-filled-in). Distinct from **Sources** below, which the site records. |
 | **Tags** | Comma-separated, lower-cased. |
 | **Campaigns** | The site's [campaigns](../../marketing-and-automation/email-campaigns/overview.md#what-belongs-to-a-campaign) the lead is filed under, picked by name. Grouping, not consent: it decides which campaign pages list the lead, never whether anything mails them. Enrolling the lead in a sequence that is in a campaign files it there too. |
 | **Address** | Street, city, state, postal code and a two-letter country code. |
 | **Status**, **Owner**, **Notes** | The working state — see [The Leads list](#the-leads-list). |
 
+### Lead source, filled in for you {#lead-source-filled-in}
+
+Aglyn's own doors and outreach each have a built-in lead source, and fill it in on a
+person they meet first:
+
+| Where the person came from | Lead source |
+| --- | --- |
+| A form on your site | **Website form** |
+| A booking | **Booking** |
+| A newsletter sign-up | **Newsletter sign-up** |
+| A site member sign-up | **Site member sign-up** |
+| An online purchase | **Online purchase** |
+| A sign-up for an account on Aglyn itself (Aglyn's own workspace) | **Account sign-up** |
+| Enrolled in a [sequence](./sequences.md) | **Sequence** |
+| An email campaign | **Email campaign** — offered for you to pick; no campaign creates leads by itself today |
+
+The value lands on the lead, and on your site's own record of a contact, only when it has
+no lead source yet: whatever a person already has is never replaced, and a lead source
+someone cleared stays clear when the person comes back. Rename a built-in value and the
+doors fill in your name for it; deactivate one and that door fills in nothing. A lead
+added by hand, over the API or from a CSV is not filled in — those are ways of adding a
+lead, not places it came from. Vendors Aglyn does not run, like a data provider or a
+sending tool, are values you add yourself.
+
 Every one of them is editable on the [lead's page](#a-leads-page), comes in through
-[Import CSV](#import-from-csv), and is handed to the contact when the lead converts.
+[Import](#import-from-csv), and is handed to the contact when the lead converts.
 
 Beside them, your organization can define its own lead properties — a budget, a
 territory, a renewal date — on the **Leads** tab of
@@ -150,7 +178,8 @@ carries:
 | **Email** | The last verdict on the lead's address — see [Email state](#email-state) — or a dash when nothing is known. |
 | **Owner** | The team member working the lead, or *Unassigned*. A lead inherits its [contact's owner](#who-owns-a-lead) when one is assigned on capture. |
 | **Source** | Every surface that captured this person: Booking, the form they submitted, an import, New lead, or the API — and Sign-up on leads filed before sign-ups stopped making leads. |
-| **Lead source** | The lead's [lead source](./custom-fields.md#lead-source-values). |
+| **Lead source** | The lead's [lead source](./custom-fields.md#picklist-values). |
+| **Industry**, **Rating** | Off until you turn them on from the column menu. |
 | **Tags** | The lead's tags. |
 | **Campaign** | The campaigns the lead is filed under, by name. Under a site only — a campaign belongs to one site. |
 | **Last seen** | When the person last did something on your site. |
@@ -175,6 +204,21 @@ New or Nurturing lead to Working. Neither ever moves a lead back: a lead
 already Working, Qualified or Unqualified keeps its status, and a converted
 lead is never touched. You can still set any open status by hand.
 
+**Your own statuses.** Lead status is a [picklist](./custom-fields.md#picklist-values)
+like Salesforce's: the five above are its standard values, and on the **Leads** tab of
+**CRM → Fields**, under **Lead status values**, you can rename them, reorder them,
+deactivate one, and add your own — "Contacted", "Meeting set", "Lost to competitor".
+Every value you add **means** one of the five, picked when you add it in the **Means**
+column; it cannot mean Qualified, which only a conversion sets. The meaning is what the
+list filters by, what the open count and the digest count, and what sequences and sharing
+rules read; your label is what the lead shows. A lead set to "Contacted" is a Working lead
+labeled Contacted. A lead given only a meaning — by a capture, a sequence or an
+automation — shows the default value when it has that meaning, else the first active value
+of that meaning. Deleting a value you added moves its leads to another value of the same
+meaning. The status select on a lead, the row's select, **Set status** on the bulk bar and
+the **New lead** drawer list your active values; picking an Unqualified one opens the
+dialog that asks why. The **Status** filter still picks a meaning, named by your values of it.
+
 The [Daily CRM digest](./tasks.md#the-daily-digest) lists only New leads as
 unworked, and counts the Nurturing ones on a line of their own ("12 leads
 are in sequences or campaigns"), because email is already reaching them.
@@ -185,8 +229,8 @@ The table's own toolbar filters the list: **Filters** opens the filter
 panel, and **Search** finds a lead by a word of its name, its email address —
 and each part of the address, so the domain alone finds it — its company,
 its title or its tags.
-**Status**, **Email**, **Owner**, **Lead source** and **Campaign** are
-picked from a list in the panel, and from each column's menu. **Status**
+**Status**, **Email**, **Owner**, **Lead source**, **Lead source direction**,
+**Industry**, **Rating** and **Campaign** are picked from a list in the panel, and from each column's menu. **Status**
 starts on **Open (new, nurturing or working)**, every lead that still needs working;
 pick one status instead, or remove the filter to see every lead. A lead
 nobody has touched yet has no status of its own and reads as **New**, so the
@@ -194,9 +238,14 @@ leads your site collected before the CRM existed are already in the Open
 view. **Email** narrows by the address's verdict — **Cannot be emailed** for
 every verdict but OK, one verdict on its own, or **Nothing known**. **Campaign** narrows to the leads filed under one of the campaigns,
 by name, and **Lead source** to one of your lead source values — inactive
-ones included, marked — or to **No lead source**. **Owner** keeps one
-teammate's leads. **Status**, **Email**, **Owner** and **Lead source** each
-take one choice (**is**) or several (**is any of**); **Campaign** takes one.
+ones included, marked — or to **No lead source**. **Lead source direction**
+keeps the leads whose lead source is in the **Inbound** or the **Outbound**
+group, as the [lead source values](./custom-fields.md#picklist-values) group
+them when you filter: move a value to another group and its leads move with
+it. **Industry** and **Rating** keep the leads holding one of your values — inactive
+ones included, marked. **Owner** keeps one teammate's leads. **Status**, **Email**, **Owner**,
+**Lead source** and **Lead source direction** each take one choice (**is**) or
+several (**is any of**); **Campaign** takes one.
 
 The panel edits one filter at a time, and filters on different columns add
 up: filter **Lead source**, then **Status**, and the list keeps both. Every
@@ -223,7 +272,8 @@ email address, and a notice says so; the Campaign filter is not applied for
 them. **No lead source** cannot be picked beside a lead source value, and a
 filter whose choices, multiplied by the other filters' choices, come to more
 than 30 is not applied either (**Cannot be emailed** counts as every verdict
-it covers); the notice names both.
+it covers, and a **Lead source direction** as every lead source value in its
+group); the notice names both.
 
 ### Working a lead from the row
 
@@ -243,65 +293,50 @@ Every change here is saved immediately; there is no separate save step.
 Every row has a checkbox. Tick one or more — or the header's checkbox for
 the page — and a bar appears over the list with **Set owner**, **Set
 status**, **Unqualify** (one reason for all of them), **Add to campaign**
-(under a site) and **Export CSV** for the selection, beside **Export all…**
-for every lead. What each does, and which leads it skips by name, is in
+(under a site) and **Export…** for the selection. What each does, and which leads it skips by name, is in
 [Bulk actions → Leads](./bulk-actions.md#leads). The selection clears when
 the filters or the search change.
 
-### Export CSV
+### Import and export {#import-from-csv}
 
-**Export CSV** at the top of the card downloads the page on screen as
-`leads.csv`; the bulk bar's **Export all…** writes every lead. The file holds
-email, name, company, job title, phone, website, status, the owner by email
-address, the lead source, the sources by name, first and last seen, the
-number of captures, the address in six columns, tags, the unqualified reason,
-when the lead converted, and notes. At the organization level the file also
-names each lead's **Site**.
+**Export…** at the top of the card opens the [export dialog](./export.md) on
+the list's current filter or every lead, and the bulk bar's on the
+selection: every lead field, your lead [custom fields](./custom-fields.md)
+included — the status as your organization labels it, the owner by email,
+the campaigns by name, the address in six columns, and what the capture
+doors recorded (the sources, first and last seen, the number of captures,
+when the lead converted).
 
-### Import from CSV
-
-**Import CSV** beside **Export CSV** takes a spreadsheet of leads — another
-tool's export, a list from an event — and files each row under one of your
-sites. A lead is keyed by email address, so a person the site has already
-met is **updated** rather than added twice, and importing the same file
-again finishes what a closed drawer left. Importing needs the same **Manage
-data** permission as importing contacts.
-
-The three steps are the ones the [contacts import](./import.md) walks: choose
-the file (up to 5,000 rows), match its columns, check the ten-row preview,
-then import in batches of 200 with a result that says how many were
-**added**, **updated** and **skipped**, the skipped rows downloadable as a
-CSV that says why, and how many addresses have no mail server — those leads
-read [**Would bounce**](#email-state). **Download template** hands you the export's own header
-over no rows.
+**Import** takes a file of leads — a Salesforce leads report, a HubSpot,
+Apollo or Pipedrive export, a list from an event — through the
+[import wizard](./import.md) and files each row under one of your sites. A
+lead is the person at an address, so a row finds its lead by **Aglyn ID** or
+**email**, and a person the site has already met is **updated** rather than
+added twice. Every new lead comes in through the door a sign-up or a form
+uses: keyed by address, held to the site's lead ceiling, filed under the site.
+Importing needs the same **Manage data** permission as importing contacts.
 
 | Field | What is read |
 | --- | --- |
-| **Email** | Required, and the identity. A row whose address cannot be read is skipped as *No usable email address*; two rows with the same address skip the second as a duplicate. |
-| **Name** | The person's name, as the list and campaign merge tags read it. |
-| **Company name**, **Job title**, **Phone**, **Website** | The lead's own profile, as text. A phone is read with its country code (a bare ten-digit number as North American); a website as `acme.com` or a full address. A phone or website that cannot be read is dropped and reported, and the rest of the row is kept. |
-| **Lead source** | One of your organization's active [lead source values](./custom-fields.md#lead-source-values), in any capitalization. A row naming any other value is skipped whole as *Names a lead source that isn't one of this organization's active values*, and the drawer lists those values before you import. A lead the site already holds keeps a value the list has since deactivated. A new lead with the cell blank starts from the list's default. |
-| **Address line 1** … **Country (two-letter code)** | The address, six columns as the contacts import takes them. A country typed as a name rather than a code is dropped and reported. |
-| **Tags** | Comma or `\|` separated, lower-cased. |
-| **Campaigns** | Comma or `\|` separated, by **name**, matched to the site's own campaigns without regard to case and added to the campaigns the lead is already in. A row naming a campaign the site does not have is skipped whole as *Names a campaign this site does not have*, rather than filed under half of them. A column headed `Campaign` alone is read as the **Lead source**, which is what another tool's export means by it. |
-| **Status** | `new`, `nurturing`, `working` or `unqualified`, by id or by label. **Qualified** is not a status a file may set — a lead becomes qualified by [converting](#converting-a-lead), beside the contact that conversion created — so a cell naming it is dropped and reported, and the lead keeps the status it has. |
-| **Owner** | The email address of a member of your organization. An address that matches nobody leaves the lead unassigned and is named at the end of the import. |
-| **Unqualified reason** | Kept only on a row whose **Status** is `unqualified`; on any other row it is dropped and reported, because the reason is what an unqualified lead was closed for. |
-| **Notes** | Free text. |
-
-The export's **Sources**, **First seen**, **Last seen** and **Captures**
-columns are proposed as **Do not import**: they are what the capture doors
-recorded about what the visitor actually did, and a file must not be able to
-rewrite it. **Converted** is left out for the same reason — it is stamped
-when a lead really becomes a contact. At the organization level the export's
-**Site** column is left out too: the drawer asks which site the file is
-filed under, and every row in the file goes there.
+| **Email** | Required, and the identity; a matched lead's address never changes. |
+| **Salutation**, **First name**, **Last name**, **Full name** | While a first or last name is set, the lead's name is the two together. |
+| **Company**, **Job title**, **Phone**, **Mobile phone**, **Fax**, **Website** | The lead's own profile, as text; converting the lead links or creates the company. A phone that cannot be read, or a website that is not one, fails the row with why. |
+| **Do not call** | A file can turn it on, never off. |
+| **Industry**, **Rating**, **Lead source**, **Salutation** | Your organization's values, by label; a new lead with none starts from each list's default. |
+| **Employees**, **Annual revenue** | A whole number; an amount with its currency. |
+| **Address** street … country | Six columns; country as a two-letter code. |
+| **Status** | Any of your statuses but **Qualified**: a lead becomes Qualified by [converting](#converting-a-lead) it. A file's Qualified is held back, named on the Review step. |
+| **Owner** | A member of your workspace, by email or name. |
+| **Campaigns** | Your campaigns by name, added to the ones the lead is already filed under. A name your workspace has no campaign for is yours to map, leave out or refuse on the Values step. |
+| **Tags** | Added to the lead's own. |
+| **Unqualified reason** | Kept only on a lead that is Unqualified. |
+| **Notes** | Text. |
+| **Custom fields** | Every lead field you defined under [Fields](./custom-fields.md). |
 
 **No marketing consent is recorded by an import.** A capture writes a
 consent basis only when the visitor ticked a box in front of them, and a
-spreadsheet is not that box, so there is no consent column to fill. An
-imported lead can be included in a campaign audience only if the site
-already holds a consent for that person from an earlier capture — see
+file is not that box. An imported lead can be included in a campaign
+audience only if the site already holds a consent for that person — see
 [Who a campaign is allowed to reach](../../marketing-and-automation/email-campaigns/overview.md#who-a-campaign-is-allowed-to-reach).
 
 ### Who owns a lead
@@ -329,8 +364,11 @@ header carries **Convert**, **Call** and **Log a call** beside **Send email** �
 **Open contact**, **Open company** and **Open deal** in place of **Convert**.
 Beside the status, the header names every campaign the lead is filed under.
 
-**Details** is the lead's **profile** — company, job title, phone, website,
-lead source, tags and address — with any [custom lead fields](./custom-fields.md)
+**Details** is the lead's **profile**, laid out as Salesforce lays out a lead:
+the salutation and the name's parts, then **Lead information** — company, job
+title, industry, rating, lead source, tags, employees and annual revenue —
+then **Contact information** — phone, mobile phone, fax, website and **Do
+not call** — then the address, with any [custom lead fields](./custom-fields.md)
 under **More fields**, and free-text **notes**, all saved together by the one
 **Save** in the card's header. Once the lead converts, the profile is read-only
 here, because the contact is the record then; the notes can still be written.
@@ -390,7 +428,8 @@ When a lead is real, click **Convert** on the lead's page, or choose
 from the list in one click. The dialog asks three things:
 
 1. **Contact.** The lead becomes a contact at the **Sales qualified**
-   lifecycle stage, carrying the lead's phone, job title, address, tags,
+   lifecycle stage, carrying the lead's salutation, first and last name,
+   phone, mobile phone, fax, **Do not call**, job title, address, tags,
    campaigns, notes and company name, owned by whoever you pick — the lead's owner by default.
    Pick nobody and the workspace's [assignment rules](./settings.md#assignment-rules)
    and the site's [default owner](./settings.md#default-owner) decide, and
@@ -408,11 +447,19 @@ from the list in one click. The dialog asks three things:
    whatever its domain; otherwise one at the address's domain; otherwise a
    new company named as the lead names it, with the domain filled in when
    the address has one. A lead with no company text at a public mailbox
-   such as Gmail proposes nothing.
+   such as Gmail proposes nothing. A company the conversion **creates** takes
+   the lead's industry, rating, employees, annual revenue and currency,
+   website, phone, fax, its address as the billing address, and its lead
+   source as the [Account source](./companies.md); a company it **links**
+   takes them only into the fields it leaves empty, never over what it holds.
 3. **Deal.** Tick **Open a deal** to open one in your default pipeline with a
-   title, an amount, a currency and a starting stage. A workspace with no
-   pipeline yet gets a **Sales** pipeline with the default stages created
-   along with the deal.
+   title, an amount, a currency, a starting stage and a
+   [type](./deals.md#type-and-lead-source) — your list's default until you
+   pick another. The deal carries the lead's **lead source**, as Salesforce's
+   conversion does, and its **campaign** — the campaign the lead was most
+   recently filed under — and takes its stage's forecast category. A workspace with
+   no pipeline yet gets a **Sales** pipeline with the
+   [default stages](./deals.md#pipelines) created along with the deal.
 
 Converting marks the lead **Qualified**, records what it became, and takes
 you to the new contact's page. What was filed on the lead follows it: the

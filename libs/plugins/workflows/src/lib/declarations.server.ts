@@ -27,7 +27,19 @@ import {
   registerPluginRecordIndex,
   type PluginRecordIndex,
 } from '@aglyn/aglyn/plugin-manager/plugin-record-index'
+import { registerPluginTransferResource } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
 import { BUNDLE_ID } from './constants/bundle-common'
+import {
+  ORG_AUTOMATION_PACKAGE_RULES,
+  ORG_AUTOMATIONS_TRANSFER_KEY,
+  orgAutomationDependencies,
+  rawOrgAutomationContent,
+  remapOrgAutomationIds,
+} from './transfer/org-automations-package'
+
+/** The org automations package's server half (AGL-3535), loaded when an import or export first asks. */
+const automationsPackage = async () =>
+  (await import('./transfer/org-automations-package.server')).createOrgAutomationsPackage()
 
 /**
  * The automation engine, as the runtime hears it.
@@ -81,6 +93,22 @@ export const workflowsHostEventListener: HostEventListener = {
  * plugin door loads. Registering twice replaces in place.
  */
 export function registerWorkflowsServerDeclarations(): void {
+  // Org automations in a workspace package (AGL-3535).
+  registerPluginTransferResource(
+    ORG_AUTOMATIONS_TRANSFER_KEY,
+    {
+      items: async (ctx) => (await automationsPackage()).items(ctx),
+      dependencies: (item) => orgAutomationDependencies(rawOrgAutomationContent(item)),
+      remapIds: (item, idMap) => remapOrgAutomationIds(rawOrgAutomationContent(item), idMap),
+      readItems: async (ctx, ids) => (await automationsPackage()).readItems(ctx, ids),
+      writeItems: async (ctx, items, writer) => (await automationsPackage()).writeItems(ctx, items as never, writer),
+      revertItems: async (ctx, steps) => (await automationsPackage()).revertItems(ctx, steps as never),
+      problems: async (ctx, write) => (await automationsPackage()).problems(ctx, write as never),
+      referenceTargets: async (ctx, kinds) => (await automationsPackage()).referenceTargets(ctx, kinds),
+      rules: ORG_AUTOMATION_PACKAGE_RULES,
+    },
+    { pluginId: BUNDLE_ID },
+  )
   registerHostEventListener(BUNDLE_ID, workflowsHostEventListener)
   // The readers and the Admin SDK arrive with the first read, not with the boot.
   registerPluginRecordIndex('workflow', lazyIndex('workflowRecordIndex'), { pluginId: BUNDLE_ID })

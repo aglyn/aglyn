@@ -16,12 +16,15 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
+import { registerPluginTransferResourceUi } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
 import { mdiCalendarClock } from '@aglyn/shared-data-mdi'
 import { lazy } from 'react'
 import { BUNDLE_ID } from './constants/bundle-common'
+import { registerBookingsRecordCounts } from './model/bookings-record-counts'
 import { registerBookingsRecordRoutes } from './model/bookings-record-routes'
 import { BOOKINGS_SEARCH_SOURCES } from './model/bookings-search-sources'
 import { BOOKINGS_CONFIG_SCHEMA } from './plugin-config'
+import { BOOKINGS_TRANSFER_RESOURCE } from './transfer/bookings-transfer-common'
 
 /** Code-split: the Bookings console page only loads when opened. */
 const BookingsConsolePage = lazy(
@@ -37,9 +40,17 @@ const BookMeetingButton = lazy(() => import('./components/book-meeting-action'))
  */
 export function registerBookingsConsole(): void {
   registerBookingsRecordRoutes()
+  // How many bookings a site took, counted for another plugin's figure.
+  registerBookingsRecordCounts()
   // Per-plugin settings (AGL-428): the schema powers the generic form on
   // the Plugins & add-ons hub and defaults-merged reads everywhere.
   Aglyn.registerPluginConfigSchema(BOOKINGS_CONFIG_SCHEMA)
+  // The export dialog's name for the site's bookings; exported, never imported.
+  registerPluginTransferResourceUi(
+    BOOKINGS_TRANSFER_RESOURCE,
+    { label: 'Bookings', icon: { path: mdiCalendarClock.path } },
+    { pluginId: BUNDLE_ID },
+  )
   Aglyn.registerConsoleExtension({
     pluginId: BUNDLE_ID,
     displayName: 'Bookings',

@@ -28,12 +28,9 @@
  */
 
 import type { CustomFieldType } from '@aglyn/aglyn'
-import {
-  registerCustomFieldType,
-  validateDocument,
-  type DatasetModel,
-} from '@aglyn/aglyn/server'
+import { registerCustomFieldType } from '@aglyn/aglyn/server'
 import { loadCustomFieldTypes } from './custom-field-types'
+import { type DatasetModel, validateDocument } from '../model/dataset-models'
 
 /** A custom field type shaped like the marketplace's `rating`. */
 const RATING_FIELD: CustomFieldType = {

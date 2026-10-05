@@ -39,6 +39,7 @@ import {
 import { planListQuery } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
 import { nameSearchNormalizers } from '@aglyn/aglyn/app-utils/name-search'
+import { escapeCsvCell } from '@aglyn/aglyn/app-utils/csv'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { Alert, Button, Chip, Stack, TextField, Typography } from '@mui/material'
 import type { GridColDef } from '@mui/x-data-grid'
@@ -601,13 +602,15 @@ const AdminAudit: NextPageWithLayout<Record<string, never>> = () => {
     } finally {
       setExporting(false)
     }
-    const escape = (value: unknown) => {
-      const text =
+    // The one escaper: a reason or a target a spreadsheet would run as a
+    // formula is written as text.
+    const escape = (value: unknown) =>
+      escapeCsvCell(
         typeof value === 'object' && value !== null
           ? JSON.stringify(value)
-          : String(value ?? '')
-      return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text
-    }
+          : String(value ?? ''),
+        { numeric: typeof value === 'number' },
+      )
     // `reason`/`note` (AGL-1652), `scope` and `actorEmail` (AGL-2287) and
     // `targetTenantId` (AGL-2324) are columns of their own: the export is
     // read in a spreadsheet, and a field nobody can filter or sort on is a

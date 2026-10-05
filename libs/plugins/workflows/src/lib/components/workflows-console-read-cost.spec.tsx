@@ -325,7 +325,7 @@ async function renderConsole(section: string) {
     <WorkflowsConsolePage
       hostId="site1"
       entitled
-      org={{ plan: 'business' } as never}
+      org={{ $id: 'org1', plan: 'business' } as never}
       permissions={{} as never}
       basePath={BASE_PATH}
       sections={shellSections()}
@@ -396,7 +396,8 @@ describe('workflows console read cost (AGL-2501)', () => {
     await renderConsole('actions')
     await orgPanelListening()
     summarize('actions section', mockListens)
-    // The run counter is one document; the actions ceiling is a hundred plus
+    // The run counter is one document — the workspace's, which the band is
+    // held to (AGL-3472); the actions ceiling is a hundred plus
     // the probe row that makes "there are more" a fact. The organization's
     // automations placed on this site (AGL-3302) are one filtered read,
     // ceilinged at the organization's cap plus the probe — billed per
@@ -406,8 +407,8 @@ describe('workflows console read cost (AGL-2501)', () => {
       mockListens.map((listen) => `${listen.path}#${listen.limit}`).sort(),
     ).toEqual([
       'hosts/site1/actions#101',
-      'hosts/site1/counters/actionRuns#1',
       'orgs/org1/automations#101',
+      'orgs/org1/counters/actionRuns#1',
     ])
     expect(documentCeiling(mockListens)).toBe(203)
   })
@@ -427,8 +428,8 @@ describe('workflows console read cost (AGL-2501)', () => {
     expect(
       mockListens.map((listen) => `${listen.path}#${listen.limit}`).sort(),
     ).toEqual([
-      'hosts/site1/counters/workflowRuns#1',
       'hosts/site1/workflows#101',
+      'orgs/org1/counters/workflowRuns#1',
     ])
     expect(documentCeiling(mockListens)).toBe(102)
   })
@@ -631,12 +632,14 @@ describe('the org Automation hub’s read cost', () => {
   it('lists each OPEN site’s workflows in one small window apiece', async () => {
     await renderOrgConsole('workflows', { sites: 7 })
     summarize('org workflows section', mockListens)
-    // The first five sites on arrival, ten rows and the probe apiece.
-    expect(pinned()).toEqual(
-      ['site1', 'site2', 'site3', 'site4', 'site5'].map(
+    // The first five sites on arrival, ten rows and the probe apiece — and
+    // the workspace's one run counter, whatever the site count (AGL-3472).
+    expect(pinned()).toEqual([
+      ...['site1', 'site2', 'site3', 'site4', 'site5'].map(
         (site) => `hosts/${site}/workflows#11`,
       ),
-    )
+      'orgs/org1/counters/workflowRuns#1',
+    ])
 
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Show 2 more sites' }))
@@ -651,6 +654,7 @@ describe('the org Automation hub’s read cost', () => {
     expect(pinned()).toEqual([
       'hosts/site1/actions#11',
       'hosts/site2/actions#11',
+      'orgs/org1/counters/actionRuns#1',
     ])
   })
 

@@ -241,6 +241,12 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   writeOrgBilling: async (orgId: string, patch: unknown) => {
     mockBillingWrites.push({ orgId, patch })
   },
+  // AGL-3466: a live subscription settles the upgrade proposal and the
+  // sales-trial comp. Captured, so the suite can say which deliveries ask.
+  settleSubscriptionStart: async (orgId: string, context: unknown) => {
+    mockSettles.push({ orgId, context })
+    return { proposalCleared: true, trialCompRemoved: true }
+  },
   // CAPTURED. The entry claims a plan MOVED, and the only way to show the
   // claim is true is to see the mirror being asked to move it — a stub that
   // answers `true` and writes nothing would let every control below pass
@@ -257,6 +263,8 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 
 /** Whether the org mirror finds a workspace to write to. */
 let mockMirrorLands = true
+/** The settle calls a delivery made (AGL-3466). */
+const mockSettles: Array<{ orgId: string; context: unknown }> = []
 
 jest.mock('../utils/server-plugin-loader', () => ({
   __esModule: true,
@@ -370,6 +378,7 @@ describe('what a subscription event earns in the feed', () => {
     mockOrgActivity.length = 0
     mockPlanMirrors.length = 0
     mockAfterScheduled.length = 0
+    mockSettles.length = 0
     mockMirrorLands = true
     global.fetch = jest.fn(async () => ({
       ok: true,
@@ -410,6 +419,34 @@ describe('what a subscription event earns in the feed', () => {
       action: 'Changed the plan from starter to pro',
       target: { type: 'subscription', id: 'sub_1', name: 'pro' },
     })
+  })
+
+  it('a live subscription settles the proposal and the trial comp (AGL-3466)', async () => {
+    const post = loadWebhook()
+    await post(
+      signed(event(subscription({ plan: 'starter' }), 'customer.subscription.created')),
+    )
+    expect(mockSettles).toEqual([
+      { orgId: 'org-real', context: { status: 'active', subscriptionId: 'sub_1' } },
+    ])
+  })
+
+  it('a subscription that is not live settles nothing (AGL-3466)', async () => {
+    const post = loadWebhook()
+    await post(
+      signed(
+        event(subscription({ plan: 'starter', status: 'incomplete' }), 'customer.subscription.created'),
+      ),
+    )
+    await post(
+      signed(
+        event(
+          subscription({ plan: 'free', status: 'canceled', cancellationReason: 'cancellation_requested' }),
+          'customer.subscription.deleted',
+        ),
+      ),
+    )
+    expect(mockSettles).toEqual([])
   })
 
   it('names NOBODY when Stripe cancels after failed payments', async () => {

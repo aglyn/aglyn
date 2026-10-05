@@ -17,7 +17,10 @@
 'use client'
 
 import {
+  composeContactName,
   CONTACT_LIFECYCLE_STAGE_LABELS,
+  CONTACT_NAME_PART_MAX,
+  CRM_SALUTATION_PICKLIST,
   CONTACT_LIFECYCLE_STAGES,
   consentGroupDisclosure,
   consentGroupDisclosureKey,
@@ -46,6 +49,7 @@ import {
   Typography,
 } from '@mui/material'
 import { useEffect, useState } from 'react'
+import { useCrmPicklist } from '../hooks/use-crm-picklist'
 import { useCrmScope } from '../hooks/use-crm-scope'
 import { parseContactTags } from '../model/contact-record'
 import {
@@ -60,12 +64,21 @@ import {
   type AddressDraft,
 } from './contact-address-fields'
 import { CrmSitePicker } from './crm-site-picker'
+import { CrmPicklistSelect } from './picklist-select'
 import type { OrgMemberOption } from './use-org-members'
 
 /** What the drawer hands back — already normalized where the route would. */
 export interface NewContactValues {
   email: string
+  /** The name as typed, or the first and last names' composition when either was given. */
   name: string
+  /** Salesforce's standard contact fields (AGL-3515), `''` (or `false`) for none. */
+  salutation: string
+  firstName: string
+  lastName: string
+  mobilePhone: string
+  department: string
+  doNotCall: boolean
   phone: string
   jobTitle: string
   /** The picked company's name — the label the list column and the search read. */
@@ -162,13 +175,21 @@ export function NewContactDrawer(props: NewContactDrawerProps) {
    * the route will capture the contact under. `null` until a site is
    * picked, and the submit waits on it.
    */
-  const { createHostId, createGroup } = useCrmScope({ hostId, org })
+  const { createHostId, createGroup, orgId } = useCrmScope({ hostId, org })
   const consentGroup: ConsentGroup | null = createGroup
+  const salutations = useCrmPicklist(CRM_SALUTATION_PICKLIST, open ? orgId : null)
   const companies = useCompanyOptions({ hostId, org, enabled: open })
   const createCompany = useCreateCompany({ hostId, org })
 
   const [email, setEmail] = useState('')
   const [name, setName] = useState('')
+  const [salutation, setSalutation] = useState('')
+  const [firstName, setFirstName] = useState('')
+  const [lastName, setLastName] = useState('')
+  const [mobilePhone, setMobilePhone] = useState('')
+  const [department, setDepartment] = useState('')
+  const [doNotCall, setDoNotCall] = useState(false)
+  const [mobileError, setMobileError] = useState('')
   const [phone, setPhone] = useState('')
   const [jobTitle, setJobTitle] = useState('')
   const [company, setCompany] = useState<CompanyOption | null>(null)
@@ -191,6 +212,13 @@ export function NewContactDrawer(props: NewContactDrawerProps) {
     if (!open) return
     setEmail('')
     setName('')
+    setSalutation('')
+    setFirstName('')
+    setLastName('')
+    setMobilePhone('')
+    setDepartment('')
+    setDoNotCall(false)
+    setMobileError('')
     setPhone('')
     setJobTitle('')
     setCompany(null)
@@ -213,10 +241,29 @@ export function NewContactDrawer(props: NewContactDrawerProps) {
         ? 'Enter it with its country code, like +1 512 555 0107.'
         : '',
     )
-    if (!normalizedEmail || (trimmedPhone && !normalizedPhone)) return
+    const trimmedMobile = mobilePhone.trim()
+    const normalizedMobile = trimmedMobile ? normalizePhone(trimmedMobile) : ''
+    setMobileError(
+      trimmedMobile && !normalizedMobile
+        ? 'Enter it with its country code, like +1 512 555 0107.'
+        : '',
+    )
+    if (
+      !normalizedEmail ||
+      (trimmedPhone && !normalizedPhone) ||
+      (trimmedMobile && !normalizedMobile)
+    ) {
+      return
+    }
     onSubmit({
       email: normalizedEmail,
-      name: name.trim().slice(0, 120),
+      name: composedName || name.trim().slice(0, 120),
+      salutation,
+      firstName: firstName.trim(),
+      lastName: lastName.trim(),
+      mobilePhone: normalizedMobile ?? '',
+      department: department.trim().slice(0, 120),
+      doNotCall,
       phone: normalizedPhone ?? '',
       jobTitle: jobTitle.trim().slice(0, 120),
       companyName: company ? company.name.trim().slice(0, 120) : '',
@@ -233,6 +280,8 @@ export function NewContactDrawer(props: NewContactDrawerProps) {
   }
 
   const disclosure = consentGroup ? consentGroupDisclosure(consentGroup) : null
+  // While a first or last name is typed, the name is theirs (AGL-3515).
+  const composedName = composeContactName(firstName, lastName)
 
   return (
     <NavigationDrawerComponent
@@ -293,12 +342,45 @@ export function NewContactDrawer(props: NewContactDrawerProps) {
             fullWidth
             autoFocus
           />
+          <CrmPicklistSelect
+            picklistId={CRM_SALUTATION_PICKLIST}
+            picklist={salutations.picklist}
+            value={salutation}
+            onChange={setSalutation}
+            disabled={Boolean(busy)}
+          />
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+            <TextField
+              size="small"
+              label="First name"
+              value={firstName}
+              onChange={(event) => setFirstName(event.target.value)}
+              slotProps={{ htmlInput: { maxLength: CONTACT_NAME_PART_MAX } }}
+              fullWidth
+            />
+            <TextField
+              size="small"
+              label="Last name"
+              value={lastName}
+              onChange={(event) => setLastName(event.target.value)}
+              slotProps={{ htmlInput: { maxLength: CONTACT_NAME_PART_MAX } }}
+              fullWidth
+            />
+          </Stack>
           <TextField
             size="small"
             label="Name"
-            value={name}
+            value={composedName || name}
             onChange={(event) => setName(event.target.value)}
-            slotProps={{ htmlInput: { maxLength: 120 } }}
+            slotProps={{
+              htmlInput: { maxLength: 120 },
+              input: { readOnly: Boolean(composedName) },
+            }}
+            helperText={
+              composedName
+                ? 'Made of the first and last name.'
+                : 'Or the whole name in one field.'
+            }
             fullWidth
           />
           <TextField
@@ -312,9 +394,35 @@ export function NewContactDrawer(props: NewContactDrawerProps) {
           />
           <TextField
             size="small"
+            label="Mobile phone"
+            value={mobilePhone}
+            onChange={(event) => setMobilePhone(event.target.value)}
+            error={Boolean(mobileError)}
+            helperText={mobileError || undefined}
+            fullWidth
+          />
+          <FormControlLabel
+            control={
+              <Checkbox
+                checked={doNotCall}
+                onChange={(event) => setDoNotCall(event.target.checked)}
+              />
+            }
+            label="Do not call"
+          />
+          <TextField
+            size="small"
             label="Job title"
             value={jobTitle}
             onChange={(event) => setJobTitle(event.target.value)}
+            slotProps={{ htmlInput: { maxLength: 120 } }}
+            fullWidth
+          />
+          <TextField
+            size="small"
+            label="Department"
+            value={department}
+            onChange={(event) => setDepartment(event.target.value)}
             slotProps={{ htmlInput: { maxLength: 120 } }}
             fullWidth
           />
@@ -375,7 +483,7 @@ export function NewContactDrawer(props: NewContactDrawerProps) {
             onChange={(event) => setTags(event.target.value)}
             fullWidth
           />
-          <Typography variant="subtitle2">{'Address'}</Typography>
+          <Typography variant="subtitle2">{'Mailing address'}</Typography>
           <ContactAddressFields value={address} onChange={setAddress} />
           <Stack>
             <FormControlLabel

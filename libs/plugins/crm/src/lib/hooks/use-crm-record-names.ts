@@ -17,7 +17,7 @@
 
 import { contactDisplayName, CRM_COLLECTIONS } from '@aglyn/aglyn'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
-import { doc, getDoc } from 'firebase/firestore'
+import { doc, type Firestore, getDoc } from 'firebase/firestore'
 import { useCallback, useEffect, useState } from 'react'
 import { contactPrimaryGroup } from '../model/contact-record'
 
@@ -79,6 +79,66 @@ export function resetCrmRecordNameCache(): void {
 }
 
 /**
+ * The reads that fill the cache for `records` not already in it — each
+ * record read once however many callers ask at the same time.
+ */
+function startNameReads(
+  firestore: Firestore,
+  orgId: string,
+  groupId: string | null,
+  org: Record<string, unknown> | null | undefined,
+  records: ReadonlyArray<{ kind: CrmRecordKind; id: string }>,
+): Promise<void>[] {
+  const reads: Promise<void>[] = []
+  for (const { kind, id } of records) {
+    if (!id) continue
+    const key = cacheKey(orgId, kind, id)
+    if (nameCache.has(key)) continue
+    let read = pending.get(key)
+    if (!read) {
+      read = getDoc(doc(firestore, 'orgs', orgId, CRM_RECORD_COLLECTIONS[kind], id))
+        .then((snapshot) => {
+          const data = snapshot.exists() ? (snapshot.data() as Record<string, unknown>) : undefined
+          nameCache.set(
+            key,
+            data ? crmRecordName(kind, data, groupId ?? contactPrimaryGroup(data, org).groupId) : null,
+          )
+        })
+        .catch(() => {
+          // A refused or failed read is not cached: the cell keeps showing
+          // the id, and the next mount tries again.
+        })
+        .finally(() => {
+          pending.delete(key)
+        })
+      pending.set(key, read)
+    }
+    reads.push(read)
+  }
+  return reads
+}
+
+/**
+ * The names of `records`, read now — for a one-off like a file export,
+ * which needs every name at once rather than a listener's re-render
+ * (AGL-3521). Shares {@link useCrmRecordNames}' cache, and answers the same
+ * lookup: `undefined` for a record that could not be named.
+ */
+export async function readCrmRecordNames(
+  firestore: Firestore,
+  options: {
+    orgId: string
+    groupId: string | null
+    org?: Record<string, unknown> | null
+    records: ReadonlyArray<{ kind: CrmRecordKind; id: string }>
+  },
+): Promise<(kind: CrmRecordKind, id: string) => string | undefined> {
+  const { orgId, groupId, org, records } = options
+  await Promise.all(startNameReads(firestore, orgId, groupId, org, records))
+  return (kind, id) => nameCache.get(cacheKey(orgId, kind, id)) ?? undefined
+}
+
+/**
  * The names of the records a list of tasks points at, resolved once each.
  *
  * Returns a lookup rather than a map so the caller does not have to know the
@@ -114,42 +174,16 @@ export function useCrmRecordNames(options: {
   useEffect(() => {
     if (!orgId || !wanted) return
     let active = true
-    const reads: Promise<void>[] = []
-    for (const entry of wanted.split('\n')) {
-      const [kind, id] = entry.split(':') as [CrmRecordKind, string]
-      const key = cacheKey(orgId, kind, id)
-      if (nameCache.has(key)) continue
-      let read = pending.get(key)
-      if (!read) {
-        read = getDoc(
-          doc(firestore, 'orgs', orgId, CRM_RECORD_COLLECTIONS[kind], id),
-        )
-          .then((snapshot) => {
-            const data = snapshot.exists()
-              ? (snapshot.data() as Record<string, unknown>)
-              : undefined
-            nameCache.set(
-              key,
-              data
-                ? crmRecordName(
-                    kind,
-                    data,
-                    groupId ?? contactPrimaryGroup(data, org).groupId,
-                  )
-                : null,
-            )
-          })
-          .catch(() => {
-            // A refused or failed read is not cached: the cell keeps showing
-            // the id, and the next mount tries again.
-          })
-          .finally(() => {
-            pending.delete(key)
-          })
-        pending.set(key, read)
-      }
-      reads.push(read)
-    }
+    const reads = startNameReads(
+      firestore,
+      orgId,
+      groupId,
+      org,
+      wanted.split('\n').map((entry) => {
+        const [kind, id] = entry.split(':') as [CrmRecordKind, string]
+        return { kind, id }
+      }),
+    )
     if (!reads.length) return
     void Promise.all(reads).then(() => {
       if (active) setResolved((count) => count + 1)

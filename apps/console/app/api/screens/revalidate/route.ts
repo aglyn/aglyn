@@ -49,6 +49,7 @@ import {
   lockdownRefusal,
 } from '@aglyn/tenant-data-admin'
 import { collectionLivePageScope } from '@aglyn/tenant-data-admin/server/collection-live-pages'
+import { pluginLivePaths } from '@aglyn/aglyn/plugin-manager/plugin-live-paths'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 import {
   screenIdsUsingComponentDeep,
@@ -541,6 +542,13 @@ export async function POST(request: Request): Promise<Response> {
       affectedScreenIds = [screenId]
     }
 
+    // The addresses plugins serve FROM these screens (AGL-3475) — a record
+    // template's pages, which the routing map does not name.
+    const pluginPaths = await pluginLivePaths({
+      hostId,
+      screenIds: affectedScreenIds,
+    })
+
     // Already URL-shaped where they were derived from a slug or a rule;
     // routing-map values need the leading-slash conversion. The derived ones
     // lead, because the tenant's cap takes the first paths it is handed and
@@ -555,6 +563,7 @@ export async function POST(request: Request): Promise<Response> {
         .map((id) => screens[id])
         .filter((path): path is string => Boolean(path))
         .map((path) => screenRoutePathToUrl(path)),
+      ...pluginPaths,
     ].filter((path, index, all) => all.indexOf(path) === index)
 
     if (scanTruncated) {

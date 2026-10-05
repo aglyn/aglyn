@@ -81,9 +81,11 @@ or charges is not something to rehearse, so it is left to the run itself; what c
 is each call's result and the workflow's return value.
 
 At the top of the **Workflows** tab, `12 workflow runs this month · 5,000 included`
-reports the metered allowance you're spending. When the month's runs reach the limit,
-triggered workflows stop running — silently, without queueing and without billing on —
-so it's a number worth glancing at before you wonder why an automation went quiet.
+reports the metered allowance you're spending. The allowance is your workspace's, shared
+by all of its sites, so the count includes every site's workflow runs. When the month's
+runs reach the limit, triggered workflows stop running on every site — silently, without
+queueing and without billing on — so it's a number worth glancing at before you wonder
+why an automation went quiet.
 
 Each workflow row has a **Runs** button. It opens the run-history table described under
 [Run history](actions-builder.md#run-history) — **Time**, **Trigger**, **Result**,

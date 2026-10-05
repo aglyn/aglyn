@@ -357,3 +357,49 @@ describe('the subscribe path applies the code it is sent', () => {
     expect(subscriptionBodies[0].get('discounts[0][promotion_code]')).toBeNull()
   })
 })
+
+/**
+ * A CODE IS NEVER REFUSED FOR WHAT IT COSTS US (AGL-3473). Codes are a sales
+ * tool staff hand out to close a deal, and the customer redeeming one at
+ * checkout is not the person to tell it spends cost — nobody who could act
+ * on that is there. So the code is applied exactly as before, and its
+ * full-use verdict rides on the subscription Stripe creates, for staff
+ * reporting, in the one request the route was already making.
+ */
+describe('a code under full-use cost is applied, and its verdict recorded (AGL-3473)', () => {
+  it('prices the preview with the code, however deep it goes', async () => {
+    coupon = { duration: 'once', percent_off: 97 }
+    const response = await post(loadCheckout(), {
+      action: 'preview',
+      promotionCode: 'LAUNCH97',
+    })
+    expect(response.status).toBe(200)
+    const payload = await response.json()
+    expect(payload.promotionCodeApplied).toBe('LAUNCH97')
+    expect(JSON.stringify(payload)).not.toMatch(/full_use|fullUse|coverage/)
+  })
+
+  it('subscribes with the code, and records the verdict on the subscription', async () => {
+    coupon = { duration: 'forever', amount_off: 2400 }
+    const response = await post(loadCheckout(), { promotionCode: 'LAUNCH97' })
+    expect(response.status).toBe(200)
+    expect(subscriptionBodies).toHaveLength(1)
+    const body = subscriptionBodies[0]
+    expect(body.get('discounts[0][promotion_code]')).toBe('promo_1')
+    expect(body.get('metadata[full_use_ok]')).toBe('false')
+    expect(Number(body.get('metadata[full_use_coverage]'))).toBeLessThan(1)
+    expect(body.get('metadata[full_use_first_year_coverage]')).not.toBeNull()
+  })
+
+  it('records a code inside the plan’s margin as covering its cost', async () => {
+    coupon = { duration: 'once', percent_off: 5 }
+    const response = await post(loadCheckout(), { promotionCode: 'LAUNCH97' })
+    expect(response.status).toBe(200)
+    expect(subscriptionBodies[0].get('metadata[full_use_ok]')).toBe('true')
+  })
+
+  it('records nothing when no code was applied', async () => {
+    await post(loadCheckout(), {})
+    expect(subscriptionBodies[0].get('metadata[full_use_ok]')).toBeNull()
+  })
+})

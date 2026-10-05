@@ -126,6 +126,11 @@ export type PaidMediaDelivery =
       location: string
       expiresAtMs: number
       objectPath: string
+      /** Whose library the object is in, for the bandwidth count. */
+      collection: 'hosts' | 'orgs'
+      scopeId: string
+      /** The object's size, 0 when Storage did not say. */
+      sizeBytes: number
     }
   | { ok: true; via: 'external'; location: string }
   | {
@@ -136,6 +141,11 @@ export type PaidMediaDelivery =
       /** The scope segment the delivery was minted for. */
       scope: string
       mediaId: string
+      /** Whose library the asset is in, for the bandwidth count. */
+      collection: 'hosts' | 'orgs'
+      scopeId: string
+      /** The size of the copy the provider serves. */
+      sizeBytes: number
     }
   | {
       ok: false
@@ -170,6 +180,12 @@ export interface PaidMediaDeliveryIo {
     expiresAtMs: number,
     options?: { attachment?: boolean },
   ): Promise<string>
+  /**
+   * The object's size in bytes, for the bandwidth a signed read can send;
+   * 0 when it cannot be read. Optional, so a double that never signs a
+   * Storage read need not answer it.
+   */
+  storageObjectSize?(objectPath: string): Promise<number>
 }
 
 /** Object types a browser runs rather than shows: always saved, never rendered. */
@@ -280,6 +296,9 @@ export async function resolvePaidMediaDelivery(options: {
       expiresAtMs: redirect.expiresAtMs,
       scope: asset.deliveryScope,
       mediaId: asset.mediaId,
+      collection: asset.collection,
+      scopeId: asset.scopeId,
+      sizeBytes: redirect.sizeBytes,
     }
   }
 
@@ -385,14 +404,21 @@ export async function resolvePaidMediaDelivery(options: {
       if (asset) return deliverAsset(asset.scope, asset.mediaId)
       assertMediaSignatureTtl(ttlMs)
       const expiresAtMs = nowMs + ttlMs
+      const [location, sizeBytes] = await Promise.all([
+        io.signStorageRead(objectPath, expiresAtMs, {
+          attachment: storageReadIsAttachment(objectPath, options.cdnParams),
+        }),
+        io.storageObjectSize?.(objectPath).catch(() => 0) ?? Promise.resolve(0),
+      ])
       return {
         ok: true,
         via: 'signed-storage',
-        location: await io.signStorageRead(objectPath, expiresAtMs, {
-          attachment: storageReadIsAttachment(objectPath, options.cdnParams),
-        }),
+        location,
         expiresAtMs,
         objectPath,
+        collection: segments[0] === 'orgs' ? 'orgs' : 'hosts',
+        scopeId: segments[1],
+        sizeBytes,
       }
     }
   }
@@ -422,6 +448,7 @@ export function createPaidMediaDeliveryIo(options: {
         expires: number
         responseDisposition?: string
       }): Promise<[string] | string[]>
+      getMetadata?(): Promise<[{ size?: unknown }, ...unknown[]] | Array<{ size?: unknown }>>
     }
   }
 }): PaidMediaDeliveryIo {
@@ -448,6 +475,13 @@ export function createPaidMediaDeliveryIo(options: {
         ...(signOptions?.attachment ? { responseDisposition: 'attachment' } : {}),
       })
       return String(url)
+    },
+    storageObjectSize: async (objectPath) => {
+      const file = bucket.file(objectPath)
+      if (!file.getMetadata) return 0
+      const [metadata] = await file.getMetadata()
+      const size = Number(metadata?.size)
+      return Number.isSafeInteger(size) && size > 0 ? size : 0
     },
   }
 }

@@ -94,14 +94,14 @@ describe('meteredIncludedAllowance', () => {
   })
 
   it('sizes enterprise bands at the finite fallback, unmetered', () => {
-    // Twice Agency's bands since 2026-09-07 — 200 sites × 120 GB, 790 GB of
-    // views, 200 × 50,000 submissions — and `metered` false, so nothing past
+    // Twice Agency's bands since 2026-09-07 — 200 sites × 40 GB, 790 GB of
+    // views, 200 × 20,000 submissions — and `metered` false, so nothing past
     // them bills: an agreement sets the terms, and a per-org override the
     // figures.
     const included = meteredIncludedAllowance({ plan: 'enterprise' } as any)
-    expect(included.storageGb).toBe(24_000)
+    expect(included.storageGb).toBe(8_000)
     expect(included.pageViews).toBe(pageViewsFromBandwidthGb(790))
-    expect(included.meters.formSubmissions!).toBe(10_000_000)
+    expect(included.meters.formSubmissions!).toBe(4_000_000)
     expect(included.metered).toBe(false)
     // A contracted UNLIMITED still subtracts to zero billable usage.
     const contracted = meteredIncludedAllowance({
@@ -233,7 +233,7 @@ describe('estimateMonthlyUsageCost', () => {
           storageBytes: (included.storageGb + 10) * GB,
           // Exactly the band → free, and it must not drag storage down
           pageViews: included.pageViews,
-          // 200 past the 200 band → 200 × $0.00005 = $0.01
+          // 200 past the 200 band → 200 × $0.0000615 = $0.0123 of cost
           meters: { formSubmissions: included.meters.formSubmissions! + 200 },
         },
       ],
@@ -248,18 +248,21 @@ describe('estimateMonthlyUsageCost', () => {
     // 2026-08-09 (AGL-1280) from $0.03/GB and $0.0005/submission, which made
     // the published "cost + 30%" false. A diff here means a rate moved.
     expect(estimate.billableCostUsd).toBeCloseTo(0.27)
-    expect(estimate.billedCents).toBe(35) // 0.27 × 1.3 = 0.351
+    // Billed at the published rates (AGL-3476): 10 GB × $0.0349 + 200 ×
+    // $0.000083 = $0.3656.
+    expect(estimate.billedCents).toBe(37)
     // Gross cost is untouched — it is our COGS, which no band reduces.
     expect(estimate.costUsd).toBeGreaterThan(estimate.billableCostUsd)
   })
 
   /**
    * A page view past the band bills its weight AND its CDN requests, both at
-   * the CDN's dearest region (AGL-1879, AGL-3444) — $0.80 per 1,000 — while
+   * the CDN's dearest region (AGL-1879, AGL-3444) — $0.83 per 1,000, cost +
+   * 30% kept after the card fee (AGL-3476) — while
    * `costUsd`, the COGS figure the cost model shares, prices every view on
    * weight alone.
    */
-  it('bills page views past the band at $0.80 per 1,000', () => {
+  it('bills page views past the band at $0.83 per 1,000', () => {
     const included = meteredIncludedAllowance(starter)
     const estimate = estimateMonthlyUsageCost(
       [
@@ -275,13 +278,13 @@ describe('estimateMonthlyUsageCost', () => {
       Math.ceil(included.pageViews) - included.pageViews + 100_000,
       6,
     )
-    // Pinned as LITERALS: 100,000 views × $0.80 / 1,000 = $80.00, from a
+    // Pinned as LITERALS: 100,000 views × $0.83 / 1,000 = $83.00, from a
     // cost of 100,000 × $0.000615385 = $61.54.
     const views = estimate.billablePageViews
     expect(estimate.billableCostUsd).toBeCloseTo(views * 0.00061538462, 8)
-    expect(estimate.billedCents).toBe(Math.round(views * 0.0008 * 100))
-    expect(estimate.billedCents).toBe(8000)
-    expect(estimate.billableUsdByMeter.pageViews).toBeCloseTo(views * 0.0008, 5)
+    expect(estimate.billedCents).toBe(Math.round(views * 0.00083 * 100))
+    expect(estimate.billedCents).toBe(8300)
+    expect(estimate.billableUsdByMeter.pageViews).toBeCloseTo(views * 0.00083, 5)
     // COGS stays on weight: every view, at the shared unit rate.
     expect(estimate.costUsd).toBeCloseTo(
       estimate.pageViews * ORG_COGS_UNIT_RATES_USD.perPageView,
@@ -421,22 +424,27 @@ describe('the billed rate table and the COGS rate table (AGL-2194)', () => {
   it('prices the published rate set after markup', () => {
     const per1k = (rate: number) =>
       Math.round(rate * METERED_MARKUP * 1000 * 10_000) / 10_000
-    expect(
-      Math.round(
-        METERED_UNIT_RATES_USD.storagePerGbMonth * METERED_MARKUP * 10_000,
-      ) / 10_000,
-    ).toBe(0.0338)
-    expect(per1k(METERED_OVERAGE_COST_USD.perPageView)).toBe(0.8)
-    expect(per1k(METERED_UNIT_RATES_USD.perFormSubmission)).toBe(0.08)
+    // The billed table is the published set (AGL-3476): cost + 30% grossed
+    // up for the card fee and rounded UP — $0.0349, $0.83 and $0.083.
+    expect(METERED_BILLED_RATES_USD.storagePerGbMonth).toBe(0.0349)
+    expect(Math.round(METERED_BILLED_RATES_USD.perFormSubmission * 1000 * 10_000) / 10_000).toBe(
+      0.083,
+    )
+    // …and each keeps at least cost × 1.3 once Stripe's 2.9% comes off.
+    for (const key of ['storagePerGbMonth', 'perPageView', 'perFormSubmission'] as const) {
+      expect(METERED_BILLED_RATES_USD[key] * (1 - 0.029)).toBeGreaterThanOrEqual(
+        METERED_OVERAGE_COST_USD[key] * METERED_MARKUP,
+      )
+    }
     // The page-view price is the weight term plus the request term; the
     // weight term alone, marked up, is a figure no surface publishes.
     expect(METERED_OVERAGE_COST_USD.perPageView).toBe(
       METERED_UNIT_RATES_USD.perPageView + PAGE_VIEW_CDN_REQUEST_COST_USD,
     )
     expect(per1k(METERED_UNIT_RATES_USD.perPageView)).toBe(0.5187)
-    // And the billed table is that sum marked up, the figure the Billing
-    // card prints.
-    expect(Math.round(METERED_BILLED_RATES_USD.perPageView * 1000 * 100) / 100).toBe(0.8)
+    // And the billed table is that sum priced, the figure the Billing card
+    // prints.
+    expect(Math.round(METERED_BILLED_RATES_USD.perPageView * 1000 * 100) / 100).toBe(0.83)
     // Storage and form submissions carry no second term.
     expect(METERED_OVERAGE_COST_USD.storagePerGbMonth).toBe(
       METERED_UNIT_RATES_USD.storagePerGbMonth,
@@ -547,9 +555,9 @@ describe('the metered bands plugins declare', () => {
       (sum, usd) => sum + usd,
       0,
     )
-    expect(shares).toBeCloseTo(estimate.billableCostUsd * METERED_MARKUP, 10)
+    expect(Math.round(shares * 100)).toBe(estimate.billedCents)
     expect(estimate.billableUsdByMeter['formSubmissions']).toBeCloseTo(
-      900 * METERED_UNIT_RATES_USD.perFormSubmission * METERED_MARKUP,
+      900 * METERED_BILLED_RATES_USD.perFormSubmission,
       10,
     )
   })

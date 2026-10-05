@@ -79,9 +79,9 @@ import { recordDeliverabilityFromDeliveryEvents } from '@aglyn/tenant-data-admin
 // the shape the webhook writes and the shape the report reads cannot drift
 // into two definitions of what a "link" is.
 import {
-  CAMPAIGN_LINK_ROLLUP_MAX,
-  campaignLinkKey,
-} from '@aglyn/shared-ui-email-campaigns/model'
+  SEND_LINK_ROLLUP_MAX,
+  sendLinkKey,
+} from '@aglyn/shared-ui-email-campaigns/model/send-report'
 import { createHash } from 'crypto'
 import { FieldValue } from 'firebase-admin/firestore'
 import { assignExperimentVariant, type HostExperiment } from '../model/experiments'
@@ -316,7 +316,7 @@ async function recordCampaignLinkClick(args: {
     // contain `.`, `/` or `~`, and every URL contains at least two of them.
     // The URL itself rides in the value, so nothing has to be un-hashed.
     const key = createHash('sha256').update(link).digest('hex').slice(0, 32)
-    if (links[key] === undefined && Object.keys(links).length >= CAMPAIGN_LINK_ROLLUP_MAX) {
+    if (links[key] === undefined && Object.keys(links).length >= SEND_LINK_ROLLUP_MAX) {
       transaction.set(
         ref,
         { overflowClicks: FieldValue.increment(1) },
@@ -736,7 +736,7 @@ export const emailEventsHandler: PluginApiHandler = async (req, res) => {
        * ONE DOCUMENT, not a document per URL. The report then reads the whole
        * table with a single `getDoc`, and the map cannot grow without bound
        * because the transaction refuses a new key past the cap and counts the
-       * click as overflow instead. `campaignLinkKey` drops the query string,
+       * click as overflow instead. `sendLinkKey` drops the query string,
        * so a link personalised per recipient cannot mint a row per recipient
        * — see that function for why that is a correctness requirement and not
        * only a size one.
@@ -751,7 +751,7 @@ export const emailEventsHandler: PluginApiHandler = async (req, res) => {
           await recordCampaignLinkClick({
             firestore,
             campaignRef,
-            link: campaignLinkKey(data?.click?.link),
+            link: sendLinkKey(data?.click?.link),
           }).catch(() => undefined)
         }
 

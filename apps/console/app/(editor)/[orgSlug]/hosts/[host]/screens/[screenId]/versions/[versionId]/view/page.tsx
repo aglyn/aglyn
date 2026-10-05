@@ -23,6 +23,7 @@ import {
   composeScreenRoutePath,
   blockingRouteOwner,
   HostScreenVisibility,
+  liveScreenDescendants,
   normalizeScreenSlug,
   readContainerIds,
   reservedScreenRouteMessage,
@@ -30,6 +31,7 @@ import {
   screenRoutePathToUrl,
   SCREEN_SLUG_PATH_SEPARATOR_MESSAGE,
   screenSlugHasPathSeparator,
+  toScreenRouteNode,
   type ConsoleSeoFieldValues,
   type ScreenRouteNode,
   type ScreenUid,
@@ -149,6 +151,10 @@ import PageHoldBanner from '../../../../../../../../../../components/page-holds/
 import ArtifactDeleteConfirmDescription, {
   fetchArtifactUsage,
 } from '../../../../../../../../../../components/artifacts/artifact-delete-confirm.component'
+import LiveDescendantsNote, {
+  liveDescendantsToastClause,
+  type LiveDescendantPage,
+} from '../../../../../../../../../../components/live-descendants-note.component'
 import {
   collectionTemplatePublishMessage,
   collectionTemplateRoutesSummary,
@@ -384,13 +390,28 @@ function ScreenDetails() {
     })
   const publishedPath = routingMap?.[screenId]
   const isRoutePublished = publishedPath != null
+  // Through `toScreenRouteNode`, so a page GROUP above this screen composes
+  // as nothing rather than as a slugless page that refuses the path
+  // (AGL-3463).
   const screensById = useMemo(() => {
     const map: Record<ScreenUid, ScreenRouteNode> = {}
-    for (const item of screenDocs ?? []) {
-      map[item.$id] = { slug: item.slug, parentId: item.parentId }
-    }
+    for (const item of screenDocs ?? []) map[item.$id] = toScreenRouteNode(item)
     return map
   }, [screenDocs])
+  /**
+   * The pages under this one that keep serving when it is unpublished or
+   * deleted: neither act removes more than this page's own routing entry
+   * (AGL-3463), so the delete confirmation and the unpublish toast name them.
+   */
+  const liveDescendants = useMemo<LiveDescendantPage[]>(
+    () =>
+      liveScreenDescendants(screenId, screensById, routingMap).map((page) => ({
+        ...page,
+        name: (screenDocs ?? []).find((item: any) => item.$id === page.id)
+          ?.displayName,
+      })),
+    [screenId, screensById, routingMap, screenDocs],
+  )
 
   /**
    * The screen read holds the GLOBAL loading overlay — bounded (AGL-1261).
@@ -572,11 +593,14 @@ function ScreenDetails() {
     const confirmed = await confirm({
       title: 'Delete this page?',
       description: (
-        <ArtifactDeleteConfirmDescription
-          kind="screen"
-          name={displayName}
-          scan={scan}
-        />
+        <>
+          <ArtifactDeleteConfirmDescription
+            kind="screen"
+            name={displayName}
+            scan={scan}
+          />
+          <LiveDescendantsNote pages={liveDescendants} />
+        </>
       ),
       confirmationText: 'Delete',
       confirmationButtonProps: { color: 'error' },
@@ -617,6 +641,7 @@ function ScreenDetails() {
     user,
     orgSlug,
     host,
+    liveDescendants,
   ])
 
   // --- Publish / unpublish the route ------------------------------------
@@ -711,10 +736,10 @@ function ScreenDetails() {
     const dequeue = queueLoading()
     try {
       await unpublishScreenRoute(firestore, { hostId, screenId, user })
-      enqueueSnackbar('Page unpublished', {
-        variant: 'success',
-        persist: false,
-      })
+      enqueueSnackbar(
+        `Page unpublished${liveDescendantsToastClause(liveDescendants.length)}`,
+        { variant: 'success', persist: false },
+      )
       logActivity('Unpublished screen', {
         type: 'screen',
         id: screenId,
@@ -735,6 +760,7 @@ function ScreenDetails() {
     displayName,
     logActivity,
     user,
+    liveDescendants,
   ])
 
   /**
@@ -773,9 +799,25 @@ function ScreenDetails() {
   )
 
   // --- Version publish-now ----------------------------------------------
+  // The placeholder home page a site is created with (AGL-3408) becomes the
+  // owner's the first time they make one of their versions live (AGL-3478):
+  // it publishes through the route seam, which moves the pointer and clears
+  // `defaultHomeScreenId` in one write, so a starter applied later never
+  // unpublishes it and the site stops reading as blank.
   const handlePublishVersion = useCallback(
     (id: string) => async () => {
-      await updateDoc(screenRef, { versionId: id, updatedAt: Timestamp.now() })
+      const publishesPlaceholder =
+        Boolean(publishedPath) && screenId === hostData?.defaultHomeScreenId
+      await (
+        publishesPlaceholder
+          ? publishScreenRoute(
+              firestore,
+              { hostId, screenId, versionId: id, user },
+              screen?.slug ?? publishedPath,
+              publishedPath,
+            )
+          : updateDoc(screenRef, { versionId: id, updatedAt: Timestamp.now() })
+      )
         .then(() => {
           enqueueSnackbar('Version is now live', {
             variant: 'success',
@@ -792,7 +834,20 @@ function ScreenDetails() {
           enqueueSnackbar('An error has occurred', { variant: 'error' }),
         )
     },
-    [screenRef, enqueueSnackbar, displayName, logActivity, screenId, revalidateLivePage],
+    [
+      screenRef,
+      enqueueSnackbar,
+      displayName,
+      logActivity,
+      screenId,
+      revalidateLivePage,
+      publishedPath,
+      hostData?.defaultHomeScreenId,
+      firestore,
+      hostId,
+      user,
+      screen?.slug,
+    ],
   )
 
   // --- Schedule publish / unpublish (AGL-113; Business tier like AGL-61) --

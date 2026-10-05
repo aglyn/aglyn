@@ -308,11 +308,12 @@ describe('THE NOTICE PAGE the middleware rewrites to', () => {
     }
     mockGetHostNamed.mockResolvedValue({ host: withIcons, error: null })
     const html = await (await fetchNotice()).text()
+    // One derived size of each (AGL-3484), never the full-size upload.
     expect(html).toContain(
-      '<link rel="icon" href="/api/media/cdn/org:o1:host-1/fav">',
+      '<link rel="icon" href="/api/media/cdn/org:o1:host-1/fav?icon=png-32">',
     )
     expect(html).toContain(
-      '<link rel="apple-touch-icon" href="/api/media/cdn/org:o1:host-1/app">',
+      '<link rel="apple-touch-icon" href="/api/media/cdn/org:o1:host-1/app?icon=flat-180&amp;bg=ffffff">',
     )
   })
 

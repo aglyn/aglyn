@@ -289,7 +289,7 @@ import { nameSearchTokens } from '@aglyn/aglyn/app-utils/name-search'
 import {
   campaignListRows,
   CAMPAIGN_SEND_CONTAINER_FIELD,
-} from '@aglyn/shared-ui-email-campaigns/model'
+} from '../model/campaign-container'
 import {
   buildUnsubscribeUrl,
   unsubscribeSignatureMatches,

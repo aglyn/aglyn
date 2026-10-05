@@ -44,6 +44,10 @@ import {
   meteredPriceId,
 } from '@aglyn/tenant-data-admin/server/billing-addons'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
+import {
+  describeDiscountFullUse,
+  orgDiscountFullUse,
+} from '@aglyn/aglyn/app-utils/full-use-cost'
 
 // lockdown-423: exempt — the payment recovery path — a billing-locked org must be able to pay
 // its way out (AGL-1501 keeps those sessions for exactly this). That exemption is about
@@ -198,6 +202,10 @@ export async function resolvePromotionCode(
   duration?: string | null
   /** Stripe's `coupon.duration_in_months`, set only for `repeating`. */
   durationInMonths?: number | null
+  /** Stripe's `coupon.percent_off`, when the code takes a percentage off. */
+  percentOff?: number | null
+  /** Stripe's `coupon.amount_off` in dollars, when it takes an amount off each charge. */
+  amountOffUsd?: number | null
 }> {
   const wanted = String(code ?? '').trim()
   if (!wanted) return {}
@@ -225,6 +233,63 @@ export async function resolvePromotionCode(
       typeof found?.coupon?.duration_in_months === 'number'
         ? found.coupon.duration_in_months
         : null,
+    percentOff:
+      typeof found?.coupon?.percent_off === 'number' ? found.coupon.percent_off : null,
+    amountOffUsd:
+      typeof found?.coupon?.amount_off === 'number' ? found.coupon.amount_off / 100 : null,
+  }
+}
+
+/**
+ * What a promotion code does to this purchase against its full-use cost
+ * (AGL-3473): the subscription metadata that records the verdict for staff
+ * reporting, or none when no code was applied — or the verdict could not be
+ * worked out.
+ *
+ * NEVER a refusal. A code is a sales tool staff hand out to close a deal, and
+ * the customer redeeming it at checkout is not the person to tell that it
+ * spends cost — no one who could act on that is here. So the code is applied
+ * as it always was; the verdict rides on the subscription Stripe creates
+ * (one request it was already making) and a code under cost is logged, so
+ * staff can read what each discount spent.
+ */
+function promotionCodeFullUseMetadata(
+  plan: OrgPlan,
+  interval: 'month' | 'year',
+  aiAddon: boolean,
+  promo: Awaited<ReturnType<typeof resolvePromotionCode>>,
+): Record<string, string> {
+  if (!promo.id) return {}
+  try {
+    const assessed = orgDiscountFullUse(
+      {
+        plan,
+        subscription: { status: 'active', interval },
+        seatAddons: aiAddon ? { aiAddon: 1 } : {},
+      } as never,
+      {
+        percentOff: promo.percentOff ?? undefined,
+        amountOffUsd: promo.amountOffUsd ?? undefined,
+      },
+      { duration: promo.duration ?? null, durationInMonths: promo.durationInMonths ?? null },
+    )
+    if (!assessed.ok) {
+      console.info('[billing/checkout] promotion code under full-use cost', {
+        code: promo.code,
+        plan,
+        interval,
+        aiAddon,
+        verdict: describeDiscountFullUse(assessed),
+      })
+    }
+    return {
+      'metadata[full_use_ok]': String(assessed.ok),
+      'metadata[full_use_coverage]': assessed.coverage.toFixed(3),
+      'metadata[full_use_first_year_coverage]': assessed.firstYearCoverage.toFixed(3),
+    }
+  } catch (error) {
+    console.error('[billing/checkout] full-use verdict unavailable', error)
+    return {}
   }
 }
 
@@ -563,6 +628,13 @@ async function handler(request: Request): Promise<Response> {
       )
     }
 
+    // The promotion code, resolved ABOVE the point of no return: a lookup is
+    // a read, and a failed one must not burn the key.
+    const promo = await resolvePromotionCode(
+      secretKey,
+      String(body?.promotionCode ?? ''),
+    )
+
     // Point of no return (AGL-1697): the only thing left is the subscription
     // itself. Every refusal — lockdown, membership, permission, the
     // subscription_exists guard, and the two above — sits above this line, so
@@ -669,11 +741,12 @@ async function handler(request: Request): Promise<Response> {
     if (body?.internalTraffic === true) {
       subParams.set(`metadata[${INTERNAL_TRAFFIC_PARAM}]`, INTERNAL_TRAFFIC_VALUE)
     }
-    const promo = await resolvePromotionCode(
-      secretKey,
-      String(body?.promotionCode ?? ''),
-    )
     if (promo.id) subParams.set('discounts[0][promotion_code]', promo.id)
+    for (const [key, value] of Object.entries(
+      promotionCodeFullUseMetadata(plan as OrgPlan, interval, aiAddonWanted, promo),
+    )) {
+      subParams.set(key, value)
+    }
 
     const created = await fetch('https://api.stripe.com/v1/subscriptions', {
       method: 'POST',

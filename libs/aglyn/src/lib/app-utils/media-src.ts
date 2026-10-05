@@ -15,6 +15,33 @@
  * limitations under the License.
  */
 
+import { mediaRefFromStorageUrl, resolveMediaSrc } from './media-ref'
+
+/** The shape every helper here reads off a media document. */
+interface MediaSrcInput {
+  url?: string
+  cdnPath?: string
+  private?: boolean
+}
+
+/**
+ * The CDN path an asset is delivered from, or undefined for a private asset.
+ *
+ * `cdnPath` when the document has one. A non-private asset without it was
+ * uploaded before the CDN reached every plan (AGL-1152), and its path is read
+ * off the Storage download URL instead (AGL-3506) — that URL goes from
+ * Google's edge to the visitor with no code of ours on it, so the bandwidth
+ * band never counts it and a lockdown cannot refuse it. A private asset has
+ * no public path by design and keeps its stored `url`, which the console
+ * shows to its own staff.
+ */
+function deliveryCdnPath(media: MediaSrcInput): string | undefined {
+  if (media.cdnPath) return media.cdnPath
+  if (media.private) return undefined
+  const ref = mediaRefFromStorageUrl(media.url)
+  return ref ? resolveMediaSrc(ref) : undefined
+}
+
 /**
  * A usable `src` for a picked media asset.
  *
@@ -35,21 +62,17 @@
  * `og:image` and by `resolveSocialImage`, where an absolute URL is the point
  * (AGL-1701). The origin prefix stays for them.
  */
-export function mediaSrc(media: {
-  url?: string
-  cdnPath?: string
-}): string {
-  // `cdnPath` FIRST (AGL-1215). It is keyed by media id, so it survives a
+export function mediaSrc(media: MediaSrcInput): string {
+  // The CDN path FIRST (AGL-1215). It is keyed by media id, so it survives a
   // folder move — which physically copies the object, rewrites `url` and
   // deletes the original, permanently breaking anything holding the old
-  // raw URL. Preferring `url` meant this helper emitted the fragile form
-  // for every paid org, where both fields are always populated. `url`
-  // stays the fallback for free-tier orgs (`cdnPath` is a paid `mediaCdn`
-  // entitlement) and legacy uploads that predate it.
-  if (media.cdnPath)
+  // raw URL. `url` stays the fallback for a private asset and for a value
+  // that names no library object.
+  const cdnPath = deliveryCdnPath(media)
+  if (cdnPath)
     return typeof window === 'undefined'
-      ? media.cdnPath
-      : `${window.location.origin}${media.cdnPath}`
+      ? cdnPath
+      : `${window.location.origin}${cdnPath}`
   if (media.url) return media.url
   return ''
 }
@@ -75,13 +98,13 @@ export function mediaSrc(media: {
  * variants existed still renders, just without the saving.
  */
 export function mediaThumbnailSrc(
-  media: { url?: string; cdnPath?: string },
+  media: MediaSrcInput,
   width: number,
 ): string {
-  const cdnPath = media.cdnPath
-  // No `cdnPath` means a free-tier or private asset, and a width parameter
-  // on a raw storage URL means nothing — appending one would only fork the
-  // browser cache for identical bytes.
+  const cdnPath = deliveryCdnPath(media)
+  // No CDN path means a private asset, and a width parameter on a raw
+  // storage URL means nothing — appending one would only fork the browser
+  // cache for identical bytes.
   if (!cdnPath) return mediaSrc(media)
   // A signed private URL already carries `?exp=&sig=`; a second `?` makes a
   // path the route rejects outright.

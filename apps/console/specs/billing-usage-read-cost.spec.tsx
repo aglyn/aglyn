@@ -205,6 +205,11 @@ describe('the meter reads counters, never collections', () => {
     expect(byId).toContain(
       `orgs/org-1/crmEmailUsage/${new Date().toISOString().slice(0, 10)}`,
     )
+    // The workspace's run counters (AGL-3472) — the figures the run gates are
+    // held to — and never a site's slice of either band.
+    expect(byId).toContain('orgs/org-1/counters/workflowRuns')
+    expect(byId).toContain('orgs/org-1/counters/actionRuns')
+    expect(byId.filter((path) => /^hosts\/[^/]+\/counters\/(workflow|action)Runs$/.test(path))).toEqual([])
   })
 })
 
@@ -249,6 +254,22 @@ describe('the organization is read once, whatever the site count', () => {
     // scan. Pinned as a comment on the route; pinned here as the ONE request
     // that carries them.
     expect(asked).toHaveLength(1)
+  })
+
+  it('asks for the storage band exactly once, for the org (AGL-3479)', async () => {
+    // Storage is one band for the workspace: the pool and the band arrive
+    // from the route the upload gate's own resolver answers, in one request
+    // and one `getAll` server-side — never one request per site, and never
+    // the org library's counter summed client-side beside the sites'.
+    await mount(HOSTS_3)
+    await waitFor(() => {
+      expect(
+        mockFetched.filter((url) => url.startsWith('/api/media/storage')),
+      ).toEqual(['/api/media/storage?orgId=org-1'])
+    })
+    expect(
+      mockReads.filter((read) => read.path === 'orgs/org-1/counters/media'),
+    ).toEqual([])
   })
 
   it('adds no Firestore read for the hourly ceiling', async () => {

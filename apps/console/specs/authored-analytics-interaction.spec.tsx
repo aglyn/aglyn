@@ -99,7 +99,7 @@ jest.mock('@aglyn/besigner-ui', () => ({
  *
  * Everything the assertions turn on is a pure function over a plan document
  * or a step: `checkEntitlement`, `isClientStepEntitled`,
- * `planLabelGrantingFeature`, `validateHostAction`. A double answering a
+ * `planLabelGrantingFeature`, `validateInteraction`. A double answering a
  * constant for any of them would make this suite agree with itself and with
  * nothing that ships — which is the exact failure mode the feature had.
  */
@@ -202,7 +202,7 @@ describe('the analytics step reaches storage with its parameters (AGL-1587)', ()
         params: { plan: 'starter', placement: 'hero' },
       },
     ])
-    expect(Aglyn.validateHostAction(candidate)).toBeNull()
+    expect(Aglyn.validateInteraction(candidate)).toBeNull()
 
     /**
      * The provider's node-scoped save (AGL-1478) drops the selector and adds
@@ -244,7 +244,7 @@ describe('the analytics step reaches storage with its parameters (AGL-1587)', ()
   it('refuses a parameter the runtime would strip, naming it', () => {
     // The author-facing half of the sanitizer: the runtime drops this
     // parameter and says nothing, because it is running for a visitor.
-    const problem = Aglyn.validateHostAction(
+    const problem = Aglyn.validateInteraction(
       buildInteractionCandidate({
         name: 'Track the CTA',
         event: 'elementClick',
@@ -270,7 +270,7 @@ describe('the analytics step reaches storage with its parameters (AGL-1587)', ()
     // — a typo in the branch, a `params` read that always found something to
     // strip — would pass the case above for entirely the wrong reason.
     expect(
-      Aglyn.validateHostAction(
+      Aglyn.validateInteraction(
         buildInteractionCandidate({
           name: 'Track the CTA',
           event: 'elementClick',

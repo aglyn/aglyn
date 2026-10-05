@@ -88,7 +88,10 @@ export const MEDIA_TAKEDOWN_BROWSER_STABLE_MS = 60_000
 /** `s-maxage` on an image response — the shared edge's worst case. */
 export const MEDIA_TAKEDOWN_EDGE_IMAGE_MS = 3_600_000
 
-/** `max-age` on the immutable content-hashed URL: a year, in one browser. */
+/**
+ * `max-age` on the immutable content-hashed URL and on the versioned URL a
+ * published page names (AGL-3485): a year, in one browser.
+ */
 export const MEDIA_TAKEDOWN_BROWSER_IMMUTABLE_MS = 31_536_000_000
 
 export type MediaTakedownSurface =
@@ -169,9 +172,10 @@ export const MEDIA_TAKEDOWN_REACH: readonly MediaTakedownReachEntry[] = [
     stopped: false,
     worstCaseMs: null,
     statement:
-      'The content-hashed permanent URL stays pinned in any browser that ' +
-      'already fetched it — that form is promised never to change, so ' +
-      'nothing can expire it early. There is no per-file purge for it.',
+      'An image as a published page shows it, and the content-hashed ' +
+      'permanent URL, stay pinned for up to a year in any browser that ' +
+      'already fetched them — those URLs are promised never to change, so ' +
+      'nothing can expire them early. There is no per-file purge for them.',
   },
   {
     surface: 'delivered',
@@ -210,7 +214,7 @@ export function mediaTakedownReachSummary(): string {
   return (
     'Stops at our origin in ~15s and kills the raw download link ' +
     'immediately; an already-cached image can serve from the CDN edge for ' +
-    'up to an hour and from one browser for up to a minute. It is not a ' +
-    'recall — anything already downloaded stays downloaded.'
+    'up to an hour, and stays in a browser that already loaded the page. ' +
+    'It is not a recall — anything already downloaded stays downloaded.'
   )
 }

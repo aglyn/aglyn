@@ -40,7 +40,12 @@
 
 import { act, render, screen, within } from '@testing-library/react'
 import { useMemo, useState, type ReactNode } from 'react'
-import { PageHeaderActionsContext } from '@aglyn/aglyn'
+import {
+  PageHeaderActionsContext,
+  TransferLauncherContext,
+  type TransferExportLaunch,
+  type TransferLauncher,
+} from '@aglyn/aglyn'
 import { ConsoleWidgetSlotContext } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
 
 /** The rows the mocked page query hands the card. */
@@ -241,6 +246,8 @@ function renderForms(options: {
   used?: number
   /** Mount inside the console shell, which hands its zone renderer down. */
   inShell?: boolean
+  /** The shell's import wizard and export dialog, when mounted in the shell. */
+  launcher?: TransferLauncher
 }) {
   mockCountCalls.length = 0
   mockZoneCalls.length = 0
@@ -258,13 +265,20 @@ function renderForms(options: {
       />
     </HeaderHarness>
   )
+  const shell = options.inShell ? (
+    <ConsoleWidgetSlotContext.Provider value={ShellSlot as never}>
+      {page}
+    </ConsoleWidgetSlotContext.Provider>
+  ) : (
+    page
+  )
   return render(
-    (options.inShell ? (
-      <ConsoleWidgetSlotContext.Provider value={ShellSlot as never}>
-        {page}
-      </ConsoleWidgetSlotContext.Provider>
+    (options.launcher ? (
+      <TransferLauncherContext.Provider value={options.launcher}>
+        {shell}
+      </TransferLauncherContext.Provider>
     ) : (
-      page
+      shell
     )) as any,
   )
 }
@@ -282,7 +296,8 @@ describe('the forms catalog publishes its controls to the page header', () => {
   it('leaves the card header empty, so the two are not both offered', () => {
     renderForms({ org: { plan: 'pro' }, used: 3 })
     // The card still names itself; what it no longer carries is the action
-    // cluster. Both would put two create buttons on one screen.
+    // cluster. Both would put two create buttons on one screen. (Inside the
+    // shell its header holds Export submissions alone — see below.)
     expect(mockCardProps.header).toBe('Forms')
     expect(mockCardProps.HeaderProps?.action).toBeUndefined()
     expect(
@@ -421,5 +436,38 @@ describe('retired forms are reached through the Status filter, on the query (AGL
       mockTableProps.onFilterModelChange({ items: [], quickFilterValues: ['demo'] })
     })
     expect(lastRequest()).toMatchObject({ search: ['demo'] })
+  })
+})
+
+describe('the catalog exports every form’s submissions from its card header', () => {
+  const exports: TransferExportLaunch[] = []
+  const launcher: TransferLauncher = {
+    openImport: () => {
+      throw new Error('submissions are never imported')
+    },
+    openExport: (launch) => exports.push(launch),
+    close: () => undefined,
+    can: () => true,
+  }
+
+  beforeEach(() => {
+    exports.length = 0
+  })
+
+  it('opens the export dialog on the whole site, with no filter and no Import', () => {
+    renderForms({ org: { plan: 'pro' }, used: 3, launcher })
+    const card = within(screen.getByRole('region', { name: 'card' }))
+    // The card header carries Export alone; Create Form stays in the page header.
+    expect(card.queryByRole('button', { name: 'Create Form' })).toBeNull()
+    expect(card.queryByRole('button', { name: /Import/ })).toBeNull()
+    act(() => {
+      card.getByRole('button', { name: 'Export submissions' }).click()
+    })
+    expect(exports).toEqual([{ resource: 'forms.submissions', scope: 'host', hostId: 'host-1' }])
+  })
+
+  it('offers no Export outside the console shell', () => {
+    renderForms({ org: { plan: 'pro' }, used: 3 })
+    expect(screen.queryByRole('button', { name: 'Export submissions' })).toBeNull()
   })
 })

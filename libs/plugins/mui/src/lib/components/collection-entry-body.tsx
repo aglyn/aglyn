@@ -43,7 +43,10 @@ export interface CollectionEntryBodyProps {
    * records (AGL-3149) — never set by hand, and never on the template, where
    * `markdown` is still the `{{entry.body}}` token and names no asset.
    */
-  intrinsicSizes?: Record<string, { width: number; height: number }>
+  intrinsicSizes?: Record<
+    string,
+    { width: number; height: number; version?: string }
+  >
 }
 
 const renderInlines = (

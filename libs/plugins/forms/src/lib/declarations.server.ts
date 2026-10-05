@@ -22,6 +22,11 @@ import {
   registerPluginEventHandler,
   type PluginEventPayloads,
 } from '@aglyn/aglyn/plugin-manager/plugin-events'
+import {
+  registerPluginRecordIndex,
+  type PluginRecordIndex,
+} from '@aglyn/aglyn/plugin-manager/plugin-record-index'
+import { registerPluginIntakeGate } from '@aglyn/aglyn/plugin-manager/plugin-intake-gates'
 import { BUNDLE_ID } from './constants/bundle-common'
 
 /**
@@ -68,6 +73,16 @@ export function formsCountingRemovedRecords(
  * event names.
  */
 export function registerFormsServerDeclarations(): void {
+  // The form door's own gates, for a monitor that must not write to ask them
+  // (the funnel probe, AGL-2586): loaded with the first question.
+  registerPluginIntakeGate(
+    'form',
+    async (request) => (await import('./server/form-intake-gate')).formIntakeGate(request),
+    { pluginId: BUNDLE_ID },
+  )
+  // Submissions are this plugin's records (AGL-3080): the Inbox reads, marks
+  // and threads them through this index rather than through the collection.
+  registerPluginRecordIndex('formSubmission', lazyFormSubmissionIndex, { pluginId: BUNDLE_ID })
   registerPluginEventHandler(
     'host.records.removed',
     async (payload) => {
@@ -86,4 +101,14 @@ export function registerFormsServerDeclarations(): void {
     },
     { pluginId: BUNDLE_ID },
   )
+}
+
+const loadFormSubmissionIndex = async () =>
+  (await import('./server/form-submission-index')).formSubmissionRecordIndex
+
+/** The index, its module (and the Admin SDK with it) loaded on its first read. */
+const lazyFormSubmissionIndex: PluginRecordIndex = {
+  list: async (request) => (await loadFormSubmissionIndex()).list(request),
+  get: async (request) => (await loadFormSubmissionIndex()).get(request),
+  ref: async (request) => (await loadFormSubmissionIndex()).ref?.(request) ?? null,
 }

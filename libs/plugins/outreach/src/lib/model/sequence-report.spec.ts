@@ -200,6 +200,32 @@ describe('opens in the report (AGL-3395)', () => {
     expect(report.caveats.map((entry) => entry.id)).toContain('opens-counted')
   })
 
+  it('calls the open rate unmeasured, never 0%, when every fetch was a machine’s (AGL-3488)', () => {
+    // The production shape: 72 sends, 148 fetches, all of them scanners or proxies.
+    const report = outreachSequenceReport(
+      { sent: 72, people: 62, openTracked: true, openPeople: 62, opens: 0, uniqueOpens: 0, machineOpens: 148, proxyOpens: 128 },
+      false,
+      true,
+    )
+    expect(report.opensUnmeasured).toBe(true)
+    expect(report.rates.open).toBeNull()
+    expect(report.caveats.map((entry) => entry.id)).toEqual(
+      expect.arrayContaining(['opens-counted', 'opens-all-machine']),
+    )
+    // No fetch at all is not the same claim: nothing has been fetched yet, and 0% stands.
+    const quiet = outreachSequenceReport({ sent: 4, people: 4, openTracked: true, openPeople: 4 }, false, true)
+    expect(quiet.opensUnmeasured).toBe(false)
+    expect(quiet.rates.open?.value).toBe(0)
+    // One person's open is a measurement, however many machines fetched besides.
+    const one = outreachSequenceReport(
+      { sent: 72, people: 62, openTracked: true, openPeople: 62, opens: 1, uniqueOpens: 1, machineOpens: 148 },
+      false,
+      true,
+    )
+    expect(one.opensUnmeasured).toBe(false)
+    expect(one.rates.open?.numerator).toBe(1)
+  })
+
   it('says the figures stop where the switch did', () => {
     const caveats = outreachSequenceReport({ sent: 4, people: 4, openTracked: true, openPeople: 4 }, false, false)
       .caveats.map((entry) => entry.id)

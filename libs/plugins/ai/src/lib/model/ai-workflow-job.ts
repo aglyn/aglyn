@@ -15,7 +15,6 @@
  * limitations under the License.
  */
 
-import type { HostActionStepType } from '@aglyn/aglyn/app-utils/actions'
 import { checkEntitlement } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import {
   HOST_EVENT_LABELS,
@@ -23,6 +22,7 @@ import {
   type HostEventType,
 } from '@aglyn/aglyn/app-utils/host-events'
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
+import type { AiAutomationFormatStepType } from './ai-automation-format'
 
 /**
  * A `workflow` job (AGL-2919): an automation drafted from a description, or an
@@ -158,7 +158,7 @@ export const AI_AUTOMATION_STEP_TYPES = [
   'assignContactOwner',
   'createCrmTask',
   'logCrmActivity',
-] as const satisfies readonly HostActionStepType[]
+] as const satisfies readonly AiAutomationFormatStepType[]
 
 export type AiAutomationStepType = (typeof AI_AUTOMATION_STEP_TYPES)[number]
 

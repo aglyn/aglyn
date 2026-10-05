@@ -16,7 +16,13 @@
  */
 'use client'
 
-import { CAPTURED_BY_HOST_FIELD, pluginDocsHelp } from '@aglyn/aglyn'
+import { pluginDocsHelp } from '@aglyn/aglyn'
+import { pluginRecordCountSource } from '@aglyn/aglyn/plugin-manager/plugin-record-counts'
+import {
+  PLUGIN_RECORD_LIST_IDS_MAX,
+  pluginRecordListByIdsQuery,
+  pluginRecordsFromRows,
+} from '@aglyn/aglyn/plugin-manager/plugin-record-lists'
 import { mdiEyeOutline, mdiMapMarkerOutline } from '@aglyn/shared-data-mdi'
 import { AppLink, CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
 import {
@@ -38,7 +44,6 @@ import {
 } from '@mui/material'
 import {
   collection,
-  documentId,
   getCountFromServer,
   getDocs,
   query,
@@ -64,6 +69,7 @@ import {
 import {
   CAMPAIGN_CONVERSION_KINDS,
   CAMPAIGN_CONVERSION_KIND_COPY,
+  CAMPAIGN_CONVERSION_RECORD_KINDS,
   campaignConversionsCoverage,
   campaignTouchLabel,
   type CampaignConversionKind,
@@ -118,8 +124,11 @@ import {
  */
 const LANDING_PAGE_CEILING = 100
 
-/** Firestore's cap on the values in one `in` filter. */
-const ID_CHUNK = 30
+/** The most submissions one by-name read asks for — Firestore's `in` cap. */
+const ID_CHUNK = PLUGIN_RECORD_LIST_IDS_MAX
+
+/** A credited form conversion's `refId` names a submission of this kind. */
+const SUBMISSION_RECORD_KIND = CAMPAIGN_CONVERSION_RECORD_KINDS.form
 
 const conversionsDocsHelp = pluginDocsHelp('emailCampaigns', {
   anchor: '#the-campaign-report',
@@ -237,55 +246,29 @@ export function CampaignConversionsCard(props: CampaignConversionsCardProps) {
    * the most flattering wrong answer available here.
    *=========================================*/
   /*
-   * A PATH STRING and a BOOLEAN, not an object.
+   * THE TOTAL IS COUNTED BY THE PLUGIN THAT KEEPS THE RECORDS
+   * (`plugin-record-counts`, AGL-3080): the forms plugin's submissions, the
+   * bookings plugin's bookings, the record system's leads and contacts. The
+   * owner says which of its records this site produced — its own
+   * submissions and bookings, the leads it CAPTURED (AGL-3275; not the ones
+   * a consent group merely shares with it), and for contacts, which the
+   * organization holds once for every site, all of them, which the owner
+   * marks as a count that crosses sites. With no owner in this console the
+   * total is withheld exactly as a failed count is.
    *
-   * Both are effect dependencies, and an object rebuilt on every render
-   * reopens the effect on every render — which here means paying for two
-   * aggregation counts per render rather than per kind. Primitives compare by
-   * value, so the reads happen when the question changes and not when React
-   * re-runs the component.
+   * The source is resolved per kind and the query built inside the effect,
+   * from primitives: a query object rebuilt on every render as a dependency
+   * would reopen the effect, and pay for two aggregation counts, on every
+   * render rather than per kind.
    */
-  const totalCollectionPath = useMemo((): string | null => {
-    switch (kind) {
-      case 'form':
-        return `hosts/${hostId}/formSubmissions`
-      case 'lead':
-        /*
-         * The ORG's leads (AGL-3275), narrowed below to the ones this site
-         * CAPTURED. A lead is one document per person, stamped in
-         * `capturedByHostIds` with every site that met them, and its
-         * attribution is written by the site that captured it — so this
-         * site's captures are exactly the population its lead attributions
-         * are drawn from, and the total does not cross hosts.
-         *
-         * Not `visibleTo`: that also names the sites a consent group shares a
-         * person with, and would count leads a sibling brand captured that
-         * could never have been credited here. The price is that a
-         * collaborator scoped to one site cannot run the count — the rules
-         * prove a lead read by `visibleTo` — and is shown the withheld split,
-         * as they already are for contacts.
-         */
-        return dataScope ? `${dataScope[0]}/${dataScope[1]}/leads` : null
-      case 'booking':
-        return `hosts/${hostId}/bookings`
-      case 'contact':
-        /*
-         * ORG-SCOPED, and the coverage model is told so below. A contact is
-         * shared across every site in the org while an attribution belongs to
-         * one host, so this total counts contacts created on another site
-         * that could never have been credited here.
-         */
-        return dataScope ? `${dataScope[0]}/${dataScope[1]}/contacts` : null
-      default:
-        return null
-    }
-  }, [kind, hostId, dataScope])
-
-  /** The total counts only the org records THIS site captured. */
-  const totalCapturedHere = kind === 'lead'
+  const orgId = dataScope ? dataScope[1] : null
+  const countSource = useMemo(
+    () => pluginRecordCountSource(CAMPAIGN_CONVERSION_RECORD_KINDS[kind]),
+    [kind],
+  )
 
   /** The kind's records live outside this host, so the total over-counts. */
-  const totalCrossesHosts = kind === 'contact'
+  const totalCrossesHosts = countSource?.crossesSites === true
 
   const [attributedCount, setAttributedCount] = useState<number | null>(null)
   const [totalCount, setTotalCount] = useState<number | null>(null)
@@ -293,7 +276,10 @@ export function CampaignConversionsCard(props: CampaignConversionsCardProps) {
   useEffect(() => {
     // A campaign-scoped view has no uncredited figure to compute — see the
     // prop's docblock — so it does not pay for one either.
-    if (campaignId || !totalCollectionPath) {
+    const totalQuery = campaignId
+      ? null
+      : (countSource?.query(firestore, { hostId, orgId }) ?? null)
+    if (!totalQuery) {
       setAttributedCount(null)
       setTotalCount(null)
       return
@@ -308,16 +294,7 @@ export function CampaignConversionsCard(props: CampaignConversionsCardProps) {
       .catch(() => {
         // Left null, which withholds the split. See the block comment.
       })
-    const segments = totalCollectionPath.split('/')
-    const records = collection(firestore, segments[0], ...segments.slice(1))
-    void getCountFromServer(
-      totalCapturedHere
-        ? query(
-            records,
-            where(CAPTURED_BY_HOST_FIELD, 'array-contains', hostId),
-          )
-        : records,
-    )
+    void getCountFromServer(totalQuery)
       .then((snapshot) => {
         if (active) setTotalCount(snapshot.data().count)
       })
@@ -327,15 +304,7 @@ export function CampaignConversionsCard(props: CampaignConversionsCardProps) {
     return () => {
       active = false
     }
-  }, [
-    attributions,
-    firestore,
-    kind,
-    campaignId,
-    totalCollectionPath,
-    totalCapturedHere,
-    hostId,
-  ])
+  }, [attributions, firestore, kind, campaignId, countSource, hostId, orgId])
 
   const coverage = campaignConversionsCoverage({
     kind,
@@ -407,22 +376,28 @@ export function CampaignConversionsCard(props: CampaignConversionsCardProps) {
         ),
       )
 
-      const submissions = collection(
-        firestore,
-        'hosts',
-        hostId,
-        'formSubmissions',
-      )
+      /*
+       * The page each credited submission was sent from, asked of the plugin
+       * that keeps submissions (`plugin-record-lists`, by name), a chunk at a
+       * time. With no such plugin here every one reads as not found, and is
+       * counted as missing below rather than grouped under a guess.
+       */
       const paths = new Map<string, string>()
       for (let index = 0; index < refIds.length; index += ID_CHUNK) {
-        const chunk = refIds.slice(index, index + ID_CHUNK)
-        const found = await getDocs(
-          query(submissions, where(documentId(), 'in', chunk)),
-        )
-        found.docs.forEach((entry) => {
-          const path = String((entry.data() as any)?.path ?? '').trim()
-          if (path) paths.set(entry.id, path)
+        const named = pluginRecordListByIdsQuery(SUBMISSION_RECORD_KIND, firestore, {
+          hostId,
+          ids: refIds.slice(index, index + ID_CHUNK),
         })
+        if (!named) continue
+        const found = await getDocs(named)
+        const records = pluginRecordsFromRows(
+          SUBMISSION_RECORD_KIND,
+          found.docs.map((entry) => ({ ...entry.data(), $id: entry.id })),
+        )
+        for (const record of records) {
+          const path = String(record.facts['path'] ?? '').trim()
+          if (path) paths.set(record.id, path)
+        }
       }
 
       const counts = new Map<string, number>()

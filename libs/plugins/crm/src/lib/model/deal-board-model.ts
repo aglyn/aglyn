@@ -29,9 +29,11 @@
 import {
   type CrmDeal,
   type CrmDealStage,
+  type CrmForecastCategory,
   type CrmPipeline,
   DEFAULT_DEAL_STAGES,
   dealStageById,
+  isCrmForecastCategory,
   isPipelineArchived,
   weightedDealAmountCents,
 } from '@aglyn/aglyn/app-utils/crm'
@@ -300,10 +302,8 @@ export interface BoardSummary {
  * stage the pipeline no longer has.
  */
 export function boardSummary(
-  deals: readonly Pick<
-    CrmDeal,
-    'status' | 'amountCents' | 'currency' | 'stageId'
-  >[],
+  deals: readonly (Pick<CrmDeal, 'status' | 'amountCents' | 'currency' | 'stageId'> &
+    Partial<Pick<CrmDeal, 'probability'>>)[],
   pipeline: Pick<CrmPipeline, 'stages'> | null | undefined,
 ): BoardSummary {
   const summary: BoardSummary = {
@@ -428,6 +428,7 @@ export function addStage(
     order: at,
     probability: clampProbability(probability),
     kind: 'open',
+    forecastCategory: 'pipeline',
   }
   sorted.splice(at, 0, stage)
   return renumberStages(sorted)
@@ -457,6 +458,24 @@ export function setStageProbability(
   return stages.map((stage) =>
     stage.id === stageId && stage.kind === 'open'
       ? { ...stage, probability: clampProbability(probability) }
+      : stage,
+  )
+}
+
+/**
+ * Set an OPEN stage's forecast category (AGL-3516). Won is Closed and Lost
+ * is Omitted by definition, for the reason {@link setStageProbability}
+ * gives; a deal's own category is changed on the deal.
+ */
+export function setStageForecastCategory(
+  stages: readonly CrmDealStage[],
+  stageId: string,
+  category: CrmForecastCategory | string,
+): CrmDealStage[] {
+  if (!isCrmForecastCategory(category)) return [...stages]
+  return stages.map((stage) =>
+    stage.id === stageId && stage.kind === 'open'
+      ? { ...stage, forecastCategory: category }
       : stage,
   )
 }

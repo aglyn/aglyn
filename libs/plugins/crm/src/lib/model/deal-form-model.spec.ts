@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { DEFAULT_DEAL_STAGES } from '@aglyn/aglyn'
+import { crmPicklistFromLabels, DEFAULT_DEAL_STAGES, effectiveCrmPicklist } from '@aglyn/aglyn'
 import {
   contactChoicesFor,
   dealDocumentFromForm,
@@ -23,6 +23,7 @@ import {
   dealFormProblem,
   dealPatchFromForm,
   emptyDealForm,
+  judgeDealFormPicklists,
 } from './deal-form-model'
 
 const pipeline = { $id: 'default', stages: [...DEFAULT_DEAL_STAGES] }
@@ -38,7 +39,7 @@ describe('the deal form (AGL-2598)', () => {
     const form = emptyDealForm(pipeline, { contactId: 'c1', contactName: 'Ada' })
     expect(form).toMatchObject({
       pipelineId: 'default',
-      stageId: 'qualified',
+      stageId: 'prospecting',
       currency: 'usd',
       contactId: 'c1',
       contactName: 'Ada',
@@ -83,7 +84,7 @@ describe('the deal form (AGL-2598)', () => {
       title: 'Roaster upgrade',
       titleLower: 'roaster upgrade',
       pipelineId: 'default',
-      stageId: 'qualified',
+      stageId: 'prospecting',
       status: 'open',
       amountCents: 250_000,
       currency: 'eur',
@@ -140,6 +141,162 @@ describe('the deal form (AGL-2598)', () => {
     expect(form.currency).toBe('usd')
     expect(form.expectedClose).toMatch(/^2026-(09-30|10-01|10-02)$/)
     expect(form.stageId).toBe('negotiation')
+  })
+})
+
+describe("the deal form's Opportunity fields (AGL-3516)", () => {
+  const prospecting = DEFAULT_DEAL_STAGES[0]
+  const proposal = DEFAULT_DEAL_STAGES.find((stage) => stage.id === 'proposal-price-quote')
+
+  it('writes type, lead source, next step, an override and a campaign, and stamps the stage’s category', () => {
+    const doc = dealDocumentFromForm(
+      {
+        ...emptyDealForm(pipeline),
+        title: 'Roaster',
+        type: 'New Business',
+        leadSource: 'Trade show',
+        nextStep: '  Send the   quote ',
+        probability: '35',
+        campaignId: 'spring',
+      },
+      { ...context, stage: proposal },
+    )
+    expect(doc).toMatchObject({
+      type: 'New Business',
+      leadSource: 'Trade show',
+      nextStep: 'Send the quote',
+      probability: 35,
+      forecastCategory: 'bestCase',
+      campaignId: 'spring',
+    })
+    // A category picked on the form wins over the stage's.
+    expect(
+      dealDocumentFromForm(
+        { ...emptyDealForm(pipeline), title: 'R', forecastCategory: 'commit' },
+        { ...context, stage: prospecting },
+      ),
+    ).toMatchObject({ forecastCategory: 'commit' })
+    // Left blank: nothing stored but the stage's category.
+    const blank = dealDocumentFromForm({ ...emptyDealForm(pipeline), title: 'R' }, { ...context, stage: prospecting })
+    expect(blank).toMatchObject({ forecastCategory: 'pipeline' })
+    for (const key of ['type', 'leadSource', 'nextStep', 'probability', 'campaignId']) {
+      expect(blank).not.toHaveProperty(key)
+    }
+  })
+
+  it('refuses a probability outside 0–100 and clears a blank one back to the stage’s', () => {
+    const form = { ...emptyDealForm(pipeline), title: 'Roaster' }
+    expect(dealFormProblem({ ...form, probability: '120' }, 'edit')).toMatch(/probability/)
+    expect(dealFormProblem({ ...form, probability: 'most' }, 'edit')).toMatch(/probability/)
+    expect(dealFormProblem({ ...form, probability: '0' }, 'edit')).toBeNull()
+    const { set, clear } = dealPatchFromForm(form, context.nowMs, { stage: prospecting })
+    expect(clear).toEqual(expect.arrayContaining(['probability', 'type', 'leadSource', 'nextStep', 'campaignId']))
+    expect(set).toMatchObject({ forecastCategory: 'pipeline' })
+    expect(dealPatchFromForm({ ...form, probability: '0' }, context.nowMs).set).toMatchObject({ probability: 0 })
+    // No stage known and none picked: the field goes, and readers derive it.
+    expect(dealPatchFromForm(form, context.nowMs).clear).toContain('forecastCategory')
+  })
+
+  it('round-trips the fields of a stored deal', () => {
+    const form = dealFormFromDoc({
+      $id: 'd1',
+      title: 'Roaster',
+      pipelineId: 'default',
+      stageId: 'prospecting',
+      status: 'open',
+      visibleTo: ['org'],
+      hostId: 'shop',
+      type: 'Existing Business',
+      leadSource: 'Web',
+      nextStep: 'Call',
+      probability: 0,
+      forecastCategory: 'commit',
+      campaignId: 'spring',
+    })
+    expect(form).toMatchObject({
+      type: 'Existing Business',
+      leadSource: 'Web',
+      nextStep: 'Call',
+      probability: '0',
+      forecastCategory: 'commit',
+      campaignId: 'spring',
+    })
+  })
+
+  it('judges the two picklists the way the server doors do', () => {
+    const lists = {
+      type: effectiveCrmPicklist('opportunityType', null),
+      leadSource: effectiveCrmPicklist('leadSource', null),
+    }
+    const form = { ...emptyDealForm(pipeline), title: 'R', type: 'new business', leadSource: 'web' }
+    expect(judgeDealFormPicklists(form, lists, { created: true })).toMatchObject({
+      ok: true,
+      values: { type: 'New Business', leadSource: 'Web' },
+    })
+    expect(judgeDealFormPicklists({ ...form, type: 'Upsell' }, lists, { created: true })).toEqual({
+      ok: false,
+      error: 'Type must be one of: Existing Business, New Business.',
+    })
+    // A value the deal already holds is kept, listed or not.
+    expect(
+      judgeDealFormPicklists({ ...form, type: 'Upsell' }, lists, { created: false, current: { type: 'Upsell' } }),
+    ).toMatchObject({ ok: true, values: { type: 'Upsell' } })
+    // A new deal with no Type takes the list's default; its lead source is never defaulted.
+    const defaulted = {
+      type: { ...crmPicklistFromLabels(['Renewal', 'New Business']), defaultValueId: null },
+      leadSource: lists.leadSource,
+    }
+    defaulted.type.defaultValueId = defaulted.type.values[0].id
+    expect(
+      judgeDealFormPicklists({ ...form, type: '', leadSource: '' }, defaulted, { created: true }),
+    ).toMatchObject({ ok: true, values: { type: 'Renewal', leadSource: '' } })
+    expect(
+      judgeDealFormPicklists({ ...form, type: '', leadSource: '' }, defaulted, { created: false }),
+    ).toMatchObject({ ok: true, values: { type: '' } })
+  })
+})
+
+describe("the deal form's contact keeps the Primary contact role (AGL-3521)", () => {
+  const form = { ...emptyDealForm(pipeline), title: 'Committee' }
+
+  it('creates a deal with its contact as the Primary role, and none without one', () => {
+    expect(dealDocumentFromForm({ ...form, contactId: 'c1' }, context)).toMatchObject({
+      contactId: 'c1',
+      contactRoles: [{ contactId: 'c1', primary: true }],
+    })
+    expect(dealDocumentFromForm(form, context)).not.toHaveProperty('contactRoles')
+  })
+
+  it('moves the Primary with a changed contact, and writes no roles when it is unchanged', () => {
+    const current = {
+      contactId: 'c1',
+      contactRoles: [
+        { contactId: 'c1', role: 'Decision Maker', primary: true },
+        { contactId: 'c2', role: 'Evaluator', primary: false },
+      ],
+    }
+    const nowMs = context.nowMs
+    expect(dealPatchFromForm({ ...form, contactId: 'c2' }, nowMs, { current }).set).toMatchObject({
+      contactId: 'c2',
+      contactRoles: [
+        { contactId: 'c1', role: 'Decision Maker', primary: false },
+        { contactId: 'c2', role: 'Evaluator', primary: true },
+      ],
+    })
+    expect(dealPatchFromForm({ ...form, contactId: 'c3' }, nowMs, { current }).set['contactRoles']).toEqual([
+      { contactId: 'c3', primary: true },
+      { contactId: 'c1', role: 'Decision Maker', primary: false },
+      { contactId: 'c2', role: 'Evaluator', primary: false },
+    ])
+    const cleared = dealPatchFromForm(form, nowMs, { current })
+    expect(cleared.clear).toContain('contactId')
+    expect(cleared.set['contactRoles']).toEqual([
+      { contactId: 'c1', role: 'Decision Maker', primary: false },
+      { contactId: 'c2', role: 'Evaluator', primary: false },
+    ])
+    expect(dealPatchFromForm({ ...form, contactId: 'c1' }, nowMs, { current }).set).not.toHaveProperty(
+      'contactRoles',
+    )
   })
 })
 

@@ -446,6 +446,13 @@ export async function composeNodesWithChrome(options: {
   screenNodes: Record<string, any> | Promise<Record<string, any>>
   /** Entry-template tokens (AGL-105) substituted before denormalize. */
   tokens?: Record<string, string>
+  /**
+   * The one record this page renders (AGL-3475) — a record template's routed
+   * record. Its `{{item.*}}` tokens are put into the page after the repeats
+   * expand, and into each repeat's filter before, exactly as a repeat puts
+   * its rows into its copies.
+   */
+  record?: Aglyn.PageRecordScope | null
   /** Routed content collection (AGL-551) for Collection entries blocks. */
   collection?: ComposeCollectionContext
   /**
@@ -657,14 +664,16 @@ export async function composeNodesWithChrome(options: {
   // asked is the composed one — after grafting — because that is the map the
   // expansion reads: a repeatable living in a layout or a reusable component
   // is invisible in `screenNodes`, and reading only the screen's keys would
-  // silently render one template row where the author put a list. The
+  // silently render an empty list where the author put rows. The
   // screen's own keys were issued beside the chrome reads above; a key only a
   // layout or a component adds is read here, for that key alone.
   //
   // The rows come from the plugin that keeps them, through the repeat-rows
   // contract; this composition names no collection. A declared source whose
   // reader is missing THROWS rather than answering "no rows", so a broken boot
-  // keeps the last good render instead of replacing every list with one row.
+  // keeps the last good render instead of emptying every list. A repeat its
+  // rows answer nothing for renders zero copies, never its raw template
+  // (AGL-3496).
   const composedRepeatKeys = Aglyn.repeatKeys(grafted as any)
   const unreadRepeatKeys = composedRepeatKeys.filter(
     (key) => !screenRepeatKeys.includes(key),
@@ -675,7 +684,17 @@ export async function composeNodesWithChrome(options: {
         ...(await readRepeatRows({ hostId, keys: unreadRepeatKeys })),
       }
     : screenRepeatRows
-  const repeated = Aglyn.expandRepeatables(grafted as any, repeatRows)
+  // A record template's routed record (AGL-3475): its values reach each
+  // repeat's filter before the expansion, and every token the expansion left
+  // — the page's own `{{item.*}}`, never a copy's — right after it.
+  const filtered = Aglyn.substituteRepeatFilterRecordTokens(
+    grafted as Record<string, any>,
+    options.record,
+  )
+  const repeated = Aglyn.substituteNodesRecordTokens(
+    Aglyn.expandRepeatables(filtered, repeatRows),
+    options.record,
+  )
   // Collection entries blocks (AGL-551) expand alongside repeatables:
   // per-entry {{entry.*}} tokens substitute inside the clones here, while
   // page-level tokens wait for resolveNamedTokens below.
@@ -876,6 +895,8 @@ export async function composeScreenNodes(options: {
   screen: Aglyn.AglynScreen
   /** Entry-template tokens (AGL-105) substituted before denormalize. */
   tokens?: Record<string, string>
+  /** The one record a record template renders (AGL-3475). */
+  record?: Aglyn.PageRecordScope | null
   /** Routed content collection (AGL-551) for Collection entries blocks. */
   collection?: ComposeCollectionContext
   /**
@@ -990,6 +1011,7 @@ export async function composeScreenNodes(options: {
       () => ({}) as any,
     ),
     tokens: options.tokens,
+    ...(options.record ? { record: options.record } : {}),
     collection: options.collection,
     host: options.host,
     socialImages: options.socialImages,

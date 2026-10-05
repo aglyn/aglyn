@@ -27,6 +27,10 @@
  */
 
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import {
+  TransferLauncherContext,
+  type TransferLauncher,
+} from '@aglyn/aglyn/app-utils/transfer-launcher-context'
 import { CompaniesBulkBar } from './companies-bulk-bar'
 
 /** Every write the store received, in order. */
@@ -123,11 +127,14 @@ jest.mock('./use-crm-api', () => ({
 const deletes = () =>
   posted.filter((call) => call.route === 'company-delete').map((call) => call.payload)
 
-const downloads: Array<{ name: string; body: string }> = []
-jest.mock('../model/contacts-csv', () => ({
-  downloadTextFile: (name: string, _type: string, body: string) =>
-    void downloads.push({ name, body }),
-}))
+/** The console's launcher, recording what the bar opened (AGL-3527). */
+const launcher: TransferLauncher & { exports: unknown[] } = {
+  exports: [],
+  openImport: jest.fn(),
+  openExport: (launch) => void launcher.exports.push(launch),
+  close: jest.fn(),
+  can: () => true,
+}
 
 const SCOPE = ['orgs', 'org-1'] as const
 const members = {
@@ -146,15 +153,16 @@ const rows = [
 
 function mount(selected: string[], onSelectedChange = jest.fn()) {
   const result = render(
-    <CompaniesBulkBar
-      hostId="host-1"
-      scope={SCOPE}
-      rows={rows}
-      selected={selected}
-      onSelectedChange={onSelectedChange}
-      members={members}
-      csv={{ ownerEmail: members.emailFor }}
-    />,
+    <TransferLauncherContext.Provider value={launcher}>
+      <CompaniesBulkBar
+        hostId="host-1"
+        scope={SCOPE}
+        rows={rows}
+        selected={selected}
+        onSelectedChange={onSelectedChange}
+        members={members}
+      />
+    </TransferLauncherContext.Provider>,
   )
   return { ...result, onSelectedChange }
 }
@@ -176,7 +184,7 @@ beforeEach(() => {
   deleteAnswers = {}
   deleteRefusals = {}
   confirmAnswer = 'proceed'
-  downloads.length = 0
+  launcher.exports.length = 0
 })
 
 describe('the bar and its selection', () => {
@@ -188,7 +196,7 @@ describe('the bar and its selection', () => {
   it('says how many are selected and offers every action', () => {
     mount(['c1', 'c2'])
     expect(screen.getByText('2 selected')).toBeTruthy()
-    for (const name of ['Add tag', 'Remove tag', 'Set owner', 'Export CSV', 'Delete', 'Clear']) {
+    for (const name of ['Add tag', 'Remove tag', 'Set owner', 'Export…', 'Delete', 'Clear']) {
       expect(screen.getByRole('button', { name })).toBeTruthy()
     }
   })
@@ -224,15 +232,12 @@ describe('tagging and the owner', () => {
 })
 
 describe('the file', () => {
-  it('exports the selection under the import’s header, the owner by address', () => {
-    mount(['c1'])
-    fireEvent.click(screen.getByRole('button', { name: 'Export CSV' }))
-    expect(downloads).toHaveLength(1)
-    expect(downloads[0].name).toBe('companies-selected.csv')
-    const [header, line] = downloads[0].body.split('\n')
-    expect(header.startsWith('Company,Domain,Website')).toBe(true)
-    expect(line).toContain('Acme')
-    expect(line).toContain('ada@example.com')
+  it('opens the export dialog on the selected companies (AGL-3527)', () => {
+    mount(['c1', 'c2'])
+    fireEvent.click(screen.getByRole('button', { name: 'Export…' }))
+    expect(launcher.exports).toEqual([
+      { resource: 'crm.companies', scope: 'org', hostId: 'host-1', selection: ['c1', 'c2'] },
+    ])
   })
 })
 

@@ -102,12 +102,13 @@ describe('legacy collection surface: the entry cover (AGL-1407)', () => {
     expect(sources(await renderCover(REF))).toEqual([RESOLVED])
   })
 
+  it('serves a raw firebasestorage download URL through the CDN (AGL-3506)', async () => {
+    expect(sources(await renderCover(RAW_STORAGE_URL))).toEqual([
+      '/api/media/cdn/org:jWmGooWE3L:DXnRbPH4CQ/cover',
+    ])
+  })
+
   describe('the legacy stored forms are passed through untouched', () => {
-    it('a raw firebasestorage download URL', async () => {
-      expect(sources(await renderCover(RAW_STORAGE_URL))).toEqual([
-        RAW_STORAGE_URL,
-      ])
-    })
 
     it('the AGL-175 relative CDN path', async () => {
       expect(sources(await renderCover(LEGACY_CDN_PATH))).toEqual([

@@ -89,6 +89,21 @@ describe('email media resolution does not drift from @aglyn/aglyn', () => {
     `media:h1/${'m'.repeat(65)}`,
     `media:${'h'.repeat(65)}/med123`,
     `media:org:${'o'.repeat(65)}/med123`,
+    // A library object's Storage download URL routes through the CDN
+    // (AGL-3506) — host and org libraries, nested folders — and every
+    // near-miss passes through: a derived object, a key outside a library,
+    // a malformed key, our grammar on another host.
+    'https://firebasestorage.googleapis.com/v0/b/x/o/h1%2F..%2Fmedia%2Fmed123',
+    'https://firebasestorage.googleapis.com/v0/b/x/o/hosts%2Fh1%2Fmedia%2Fmed123?alt=media&token=t',
+    'https://firebasestorage.googleapis.com/v0/b/x/o/orgs%2Fo1%2Fmedia%2Fa%2Fb%2Fmed123?alt=media',
+    'https://firebasestorage.googleapis.com/v0/b/x/o/hosts%2Fh1%2Fmedia%2Fmed123__w640.webp',
+    'https://firebasestorage.googleapis.com/v0/b/x/o/hosts%2Fh1%2Fmedia%2Fmed123__poster',
+    'https://firebasestorage.googleapis.com/v0/b/x/o/hosts%2Fh1%2Fmedia%2Fbad%20id',
+    'https://firebasestorage.googleapis.com/v0/b/x/o/hosts%2Fh1%2Ffiles%2Fmed123',
+    'https://firebasestorage.googleapis.com/v0/b/x/o/hosts%2Fh1%2Fmedia%2F%E0%A4%A',
+    'https://firebasestorage.googleapis.com/v0/b/x/o/hosts%2Fh1%2Fmedia%2Fmed123/extra',
+    `https://firebasestorage.googleapis.com/v0/b/x/o/hosts%2F${'h'.repeat(65)}%2Fmedia%2Fmed123`,
+    'https://cdn.other.test/v0/b/x/o/hosts%2Fh1%2Fmedia%2Fmed123',
     // Everything else passes through untouched.
     '/api/media/cdn/h1/med123',
     'https://firebasestorage.googleapis.com/v0/b/x/o/y.png?alt=media',
@@ -145,6 +160,12 @@ describe('email media resolution does not drift from @aglyn/aglyn', () => {
       '/api/media/cdn/h1/med123',
     )
     expect(resolveEmailMediaSrc('media:h1/bad id')).toBeUndefined()
+    expect(
+      resolveEmailMediaSrc(
+        'https://firebasestorage.googleapis.com/v0/b/x/o/orgs%2Fo1%2Fmedia%2Fmed123?alt=media&token=t',
+        'h2',
+      ),
+    ).toBe('/api/media/cdn/org:o1:h2/med123')
     // A content pin names no URL (AGL-2798). Both copies agreeing on the
     // hashed form would pass the table above and still mail a URL an inbox
     // keeps for a year after the asset is replaced.

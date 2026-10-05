@@ -88,6 +88,15 @@ describe('the windows are the ones the CDN actually sends', () => {
     )
   })
 
+  it('a versioned image URL keeps the edge window and the browser pin (AGL-3485)', () => {
+    expect(MEDIA_TAKEDOWN_EDGE_IMAGE_MS).toBe(
+      directive('MEDIA_CDN_VERSIONED_CACHE_CONTROL', 's-maxage'),
+    )
+    expect(MEDIA_TAKEDOWN_BROWSER_IMMUTABLE_MS).toBe(
+      directive('MEDIA_CDN_VERSIONED_CACHE_CONTROL', 'max-age'),
+    )
+  })
+
   it('the origin lag matches the deny list and lock TTLs, which agree', () => {
     const source = cdnSource()
     const lock = source.match(/MEDIA_CDN_LOCK_TTL_MS = (\d+)_?(\d*)/)

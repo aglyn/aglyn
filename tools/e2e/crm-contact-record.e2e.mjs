@@ -79,15 +79,17 @@ const { page } = session
 await step(tally, page, 'the record opens on the person', async () => {
   await page.goto(hostUrl(`/crm/contacts/${nadia.id}`), { waitUntil: 'domcontentloaded', timeout: TIMEOUT_MS })
   await page.getByRole('heading', { name: nadia.name }).first().waitFor({ timeout: TIMEOUT_MS })
-  for (const header of ['Properties', 'Relationship', 'Custom fields', 'Timeline']) {
+  // The custom fields are Properties' last group, More fields, rather than a
+  // card of their own.
+  for (const header of ['Properties', 'More fields', 'Relationship', 'Timeline']) {
     await page.getByText(header, { exact: true }).first().waitFor({ timeout: TIMEOUT_MS })
   }
-  tally.pass('the record opens on the person', 'Properties · Relationship · Custom fields · Timeline')
+  tally.pass('the record opens on the person', 'Properties · More fields · Relationship · Timeline')
   await shot(page, 'crm-contact-record')
 })
 
 await step(tally, page, 'a custom field value saves into the facet', async () => {
-  const card = cardNamed(page, 'Custom fields')
+  const card = cardNamed(page, 'Properties')
   await pickSelect(page, CRM_FIXTURE.roastField.label, 'Medium', card)
   await card.getByRole('button', { name: 'Save', exact: true }).click()
   await expectSnackbar(page, 'Contact saved')
@@ -154,7 +156,7 @@ await step(tally, page, 'Recent activity lists the newest logged activity', asyn
   await page.goto(hostUrl('/crm/contacts'), { waitUntil: 'domcontentloaded', timeout: TIMEOUT_MS })
   await page.getByText('Recent activity', { exact: true }).waitFor({ timeout: TIMEOUT_MS })
   await page.getByText(CRM_FIXTURE.activityBody).waitFor({ timeout: TIMEOUT_MS })
-  const feed = page.locator('div', { has: page.getByText('Recent activity', { exact: true }) }).last()
+  const feed = cardNamed(page, 'Recent activity')
   const link = feed.getByRole('link', { name: 'Contact' }).first()
   const href = await link.getAttribute('href')
   tally.check(

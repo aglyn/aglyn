@@ -239,6 +239,8 @@ const EXCEPTIONS: Record<string, string> = {
     'Renders metrics.mrrUsd straight from /api/admin/overview; its `plan` references are the broadcast-audience selector and a per-org label, not a computation.',
   'apps/console/app/(app)/admin/revenue/page.tsx':
     'Renders figures straight from /api/admin/revenue, which computes every one of them through isBillingSubscription/orgListPriceMonthlyUsd/orgMonthlyRevenueUsd in utils/server/revenue-report.ts. Its only `plan` reference is the docblock and the on-page copy EXPLAINING that a plan tier is not a price (AGL-925) — the guard reads `plan` off raw source including comments, so stating the rule is what trips it. The page performs no revenue arithmetic at all.',
+  'libs/plugins/crm/src/lib/server/api-v1/crm-leads.ts':
+    'The leads REST resource (AGL-3513). Its `annualRevenueCents` is Salesforce’s Annual Revenue field on a lead — the prospect’s own company revenue, copied as the caller wrote it — and its `plan` is the lead conversion plan (which contact, company and deal a conversion makes). Neither is an org plan or a sum of anything: the file performs no revenue arithmetic.',
 }
 
 function walk(dir: string, out: string[] = []): string[] {

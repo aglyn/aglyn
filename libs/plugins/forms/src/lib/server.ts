@@ -101,6 +101,23 @@ export const formStatsHandler: PluginApiHandler = async (req, res) => {
   }
 }
 
+/**
+ * Tenant API registration: every form's door, `POST /api/forms/submit`, at
+ * the address it has always had (AGL-3080).
+ *
+ * It keeps its own visitor gates (`ownVisitorGates`), so the dispatcher hands
+ * it the request untouched — see `server/form-submit.ts` for why each gate is
+ * the route's to answer. Its module, with everything a submission reaches,
+ * loads with the first submission rather than with the tenant's API surface.
+ */
+export function registerFormsApi(): void {
+  registerPluginApiRoute(
+    'forms/submit',
+    { web: async (request) => (await import('./server/form-submit')).POST(request) },
+    { ownVisitorGates: true },
+  )
+}
+
 /** Console API registration. */
 export function registerFormsConsoleApi(): void {
   registerPluginApiRoute('forms/stats', formStatsHandler)

@@ -124,7 +124,7 @@ jest.mock('firebase-admin/firestore', () => ({
 
 import {
   LEADS_MAX_PER_HOST,
-  submissionMonthKey,
+  utcMonthKey,
   VISITOR_RECORD_NOTICE_SENT_FIELD,
   visitorRecordRefusedCounterId,
 } from '@aglyn/aglyn/server'
@@ -324,7 +324,7 @@ describe('a trip is visible to the site owner (AGL-1529)', () => {
     await add(state)
     const counter = state.counters[visitorRecordRefusedCounterId('leads')]
     expect(counter).toBeTruthy()
-    expect(counter[submissionMonthKey()]).toEqual({ __increment: 1 })
+    expect(counter[utcMonthKey()]).toEqual({ __increment: 1 })
     expect(counter['ceiling']).toBe(LEADS_MAX_PER_HOST)
     expect(typeof counter['lastRefusedAtMs']).toBe('number')
   })
@@ -417,7 +417,7 @@ describe('the ceiling notice goes out once per crossing (AGL-3442)', () => {
     await add(state)
     expect(mockNotifications).toHaveLength(1)
     // Every refusal is still counted for the inbox.
-    expect(counter(state)[submissionMonthKey()]).toEqual({ __increment: 1 })
+    expect(counter(state)[utcMonthKey()]).toEqual({ __increment: 1 })
   })
 
   it('stays silent in the next month while the site is still at the ceiling', async () => {

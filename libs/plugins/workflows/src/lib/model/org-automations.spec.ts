@@ -20,10 +20,6 @@
  * hold, what a save stores, and when it runs on a site.
  */
 
-import {
-  CLIENT_ACTION_STEP_TYPES,
-  HOST_ACTION_STEP_LABELS,
-} from '@aglyn/aglyn/app-utils/actions'
 import { HOST_EVENT_TYPES } from '@aglyn/aglyn/app-utils/host-events'
 import {
   isOrgAutomationStepType,
@@ -37,6 +33,8 @@ import {
   prunePausedHostIds,
   readOrgAutomation,
 } from './org-automations'
+import { CLIENT_ACTION_STEP_TYPES } from '@aglyn/aglyn/app-utils/site-interactions'
+import { HOST_ACTION_STEP_LABELS } from './host-actions'
 
 /** A body the editor would send for a one-step automation. */
 function body(overrides: Record<string, unknown> = {}) {

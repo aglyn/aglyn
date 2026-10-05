@@ -18,6 +18,7 @@
 import {
   isFirstPartyHost,
   MEDIA_CDN_ROUTE,
+  mediaAssetOfObjectKey,
   MEDIA_REF_PREFIX,
   parseMediaRef,
 } from './media-ref'
@@ -145,13 +146,9 @@ export function parsePaidMediaSource(stored: unknown): PaidMediaSource {
 }
 
 /**
- * The library asset a media object key belongs to, or null.
- *
- * Every writer keys an asset's object as `{base}/media/[folders/]{mediaId}`,
- * with `base` either `hosts/{hostId}` or `orgs/{orgId}`. So a key in that
- * shape whose last segment is id-shaped IS that asset, wherever a folder move
- * has since put it. Derived objects (`…__r720p.mp4`, `…__poster.webp`) carry
- * a dot and are no asset's key.
+ * The library asset a media object key belongs to, or null. The grammar is
+ * {@link mediaAssetOfObjectKey}'s, which the render-time resolver shares
+ * (AGL-3506); this name stays for the paid-media callers.
  *
  * This names the asset and decides nothing about access: a caller that signs
  * still has to check the bucket and that the library is its own.
@@ -159,17 +156,7 @@ export function parsePaidMediaSource(stored: unknown): PaidMediaSource {
 export function paidMediaAssetOfObject(
   objectPath: string,
 ): { scope: string; mediaId: string } | null {
-  const segments = String(objectPath ?? '').split('/')
-  if (segments.length < 4 || segments[2] !== 'media') return null
-  if (segments.some((segment) => !segment || segment === '..')) return null
-  const [root, scopeId] = segments
-  const scope =
-    root === 'hosts' ? scopeId : root === 'orgs' ? `org:${scopeId}` : null
-  if (!scope) return null
-  const ref = parseMediaRef(
-    `${MEDIA_REF_PREFIX}${scope}/${segments[segments.length - 1]}`,
-  )
-  return ref ? { scope: ref.scope, mediaId: ref.mediaId } : null
+  return mediaAssetOfObjectKey(objectPath)
 }
 
 /**

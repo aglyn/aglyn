@@ -143,4 +143,35 @@ export const TTL_POLICIES = Object.freeze([
     // Expiry is enforced in code as well; this bounds the row itself.
     why: 'cross-domain session handoff records',
   },
+  {
+    collection: 'packageImports',
+    field: 'expiresAt',
+    // AGL-3543 — a site package import's record under
+    // `hosts/{hostId}/packageImports/{importId}`. Kept the 7-day undo window
+    // and a day (`PACKAGE_LEDGER_RETENTION_MS`).
+    why: 'site package import records, 8 days',
+  },
+  {
+    collection: 'snapshots',
+    field: 'expiresAt',
+    // AGL-3543 — the verbatim previous content of every item a package import
+    // replaced, in pieces beneath its record. TTL does not cascade, so each
+    // piece carries the record's clock.
+    why: 'site package undo snapshots (verbatim content), 8 days',
+  },
+  {
+    collection: 'writtenPaths',
+    field: 'expiresAt',
+    // AGL-3543 — the paths a package import wrote, for undo to delete.
+    why: 'site package written-path lists, 8 days',
+  },
+  {
+    collection: 'imports',
+    field: 'expiresAt',
+    // AGL-3549 — an email list import's ledger under
+    // `orgs/{orgId}/lists/{listId}/imports/{jobId}`: sample shared-mailbox
+    // addresses and who stated permission. Kept while its job can write
+    // (`LIST_IMPORT_LEDGER_RETENTION_MS`).
+    why: 'email list import ledgers (sample addresses), 15 days',
+  },
 ])

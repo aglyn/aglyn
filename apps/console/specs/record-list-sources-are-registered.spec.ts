@@ -15,8 +15,12 @@
  * limitations under the License.
  */
 
+import { PLUGIN_RECORD_COUNTS } from '@aglyn/aglyn/plugin-manager/plugin-record-counts'
 import { pluginRecordListSource } from '@aglyn/aglyn/plugin-manager/plugin-record-lists'
-import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
+import {
+  resetPluginServicesForTests,
+  resolvePluginServices,
+} from '@aglyn/aglyn/plugin-manager/plugin-services'
 import { CONSOLE_PLUGIN_MANIFEST } from '../constants/plugins.client.generated'
 
 /**
@@ -44,14 +48,36 @@ const LISTED: Record<string, string> = {
   action: 'workflows',
   product: 'commerce',
   overlay: 'marketing',
+  // A campaign's form conversions grouped by the page each credited
+  // submission was sent from.
+  formSubmission: 'forms',
+}
+
+/**
+ * Each kind another plugin's figure COUNTS (`plugin-record-counts`), by the
+ * plugin that keeps it: a campaign's conversions out of every submission,
+ * booking, lead and contact the site holds. Not registered withholds the
+ * figure, the same silent answer.
+ */
+const COUNTED: Record<string, string> = {
+  formSubmission: 'forms',
+  booking: 'bookings',
+  lead: 'crm',
+  contact: 'crm',
 }
 
 let ownersBeforeBoot: Array<string | null>
+let countersBeforeBoot: Array<string | null>
+
+/** Which plugin keeps a kind's count source, or `null` when none does. */
+const counterOf = (kind: string): string | null =>
+  resolvePluginServices(PLUGIN_RECORD_COUNTS).find((entry) => entry.key === kind)?.pluginId ?? null
 
 beforeAll(async () => {
   resetPluginServicesForTests()
   ownersBeforeBoot = Object.keys(LISTED).map((kind) => pluginRecordListSource(kind)?.pluginId ?? null)
-  for (const pluginId of new Set(Object.values(LISTED))) {
+  countersBeforeBoot = Object.keys(COUNTED).map(counterOf)
+  for (const pluginId of new Set([...Object.values(LISTED), ...Object.values(COUNTED)])) {
     const entry = CONSOLE_PLUGIN_MANIFEST.find((row) => row.id === pluginId)
     const loaded = (await entry?.load()) as Record<string, () => void>
     loaded[String(entry?.register?.console)]()
@@ -65,5 +91,15 @@ describe('the record list sources, in this console', () => {
 
   it.each(Object.entries(LISTED))('lists %s through %s', (kind, pluginId) => {
     expect(pluginRecordListSource(kind)?.pluginId).toBe(pluginId)
+  })
+})
+
+describe('the record count sources, in this console', () => {
+  it('THE CONTROL: before the registrars run, no kind is counted', () => {
+    expect(countersBeforeBoot).toEqual(Object.keys(COUNTED).map(() => null))
+  })
+
+  it.each(Object.entries(COUNTED))('counts %s through %s', (kind, pluginId) => {
+    expect(counterOf(kind)).toBe(pluginId)
   })
 })

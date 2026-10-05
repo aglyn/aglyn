@@ -57,9 +57,14 @@ export const RECORD_KIND_ICONS: Record<CrmRecordKind, string> = {
   deal: mdiHandshakeOutline.path,
 }
 
-export function TaskKindCell(props: { kind: CrmTaskKind; iconOnly?: boolean }) {
+/**
+ * The task's type: the icon of its meaning and the org's label for it
+ * (AGL-3517) — `label`, from `crmTaskPicklistLabels`, or the built-in name
+ * of the kind where a surface has no list to hand.
+ */
+export function TaskKindCell(props: { kind: CrmTaskKind; label?: string; iconOnly?: boolean }) {
   const { kind, iconOnly } = props
-  const label = CRM_TASK_KIND_LABELS[kind] ?? kind
+  const label = props.label || (CRM_TASK_KIND_LABELS[kind] ?? kind)
   return (
     <Stack
       direction="row"
@@ -77,14 +82,15 @@ TaskKindCell.displayName = 'TaskKindCell'
 /**
  * Priority as a chip. Only `high` is colored: a column where every row
  * carries a colored chip is a column nobody scans, and "normal" is the
- * absence of a flag rather than a flag of its own.
+ * absence of a flag rather than a flag of its own. The color follows the
+ * MEANING; the text is the org's label for it when one is passed (AGL-3517).
  */
-export function TaskPriorityChip(props: { priority: CrmTaskPriority }) {
+export function TaskPriorityChip(props: { priority: CrmTaskPriority; label?: string }) {
   const { priority } = props
   return (
     <Chip
       size="small"
-      label={CRM_TASK_PRIORITY_LABELS[priority] ?? priority}
+      label={props.label || (CRM_TASK_PRIORITY_LABELS[priority] ?? priority)}
       color={priority === 'high' ? 'error' : 'default'}
       variant={priority === 'normal' ? 'filled' : 'outlined'}
     />

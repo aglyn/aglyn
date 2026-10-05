@@ -28,9 +28,9 @@
 
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
-import { datasetIntegrityFields } from '@aglyn/aglyn'
 import { rowAnswers } from '@aglyn/tenant-feature-instance/testing/list-query-double'
 import { HostDatasetsCard } from './host-datasets-card.component'
+import { datasetIntegrityFields } from '../model/dataset-models'
 
 jest.setTimeout(30_000)
 

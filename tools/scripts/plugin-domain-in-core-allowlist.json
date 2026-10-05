@@ -93,38 +93,12 @@
       "why": "The published page's resolution of the operator's own advertising tags (see advertising-tags.ts): it installs nothing on a customer's site (`isPlatformMarketingHost`), and on the platform's marketing site hands the verdict to the shared mount."
     },
     {
-      "path": "apps/tenant/app/api/forms/submit/route.ts",
-      "rules": [
-        "domain-name",
-        "plugin-collection:forms",
-        "domain-declares:forms"
-      ],
-      "lane": "forms"
-    },
-    {
-      "path": "apps/tenant/app/api/health/funnel/funnel-probe.ts",
-      "rules": [
-        "plugin-collection:forms"
-      ],
-      "lane": "forms"
-    },
-    {
       "path": "apps/tenant/app/api/health/funnel/funnel-verdict.ts",
       "rules": [
         "domain-declares:marketing"
       ],
       "lane": "stays",
       "why": "The operator's own lead-funnel probe (AGL-2586) on the health board: can a prospect still reach the platform's marketing host through its contact, sales and demo forms. Not a tenant feature; a self-host points it at its own marketing host or leaves it unset. It reads a form's campaigns through the core's container seam by kind, as any non-owner does, and the word it trips on is `campaignCount`, the fact it grades: a lead form filed under no campaign is mailed by nobody."
-    },
-    {
-      "path": "libs/aglyn/src/lib/app-utils/actions.ts",
-      "rules": [
-        "domain-name",
-        "domain-exports:workflows",
-        "domain-declares:data",
-        "domain-declares:workflows"
-      ],
-      "lane": "workflows"
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/advertising-tag-mounts.tsx",
@@ -151,16 +125,6 @@
       ],
       "lane": "stays",
       "why": "The install-provenance contract every installed document carries and every reader of installed content shares (the theme editor, a template's page, the site's theme resolution, the AI plugin); named for installed content, not its installer, since AGL-3080. The one marketplace word left is `publisherOrgId`, a PERSISTED field of the stamp on every installed document, named in the Firestore rules and their tests: renaming it is a data migration of every installed artifact on every site for a word, and the field means the org that authored the content whoever installed it."
-    },
-    {
-      "path": "libs/aglyn/src/lib/app-utils/automation-placeholders.ts",
-      "rules": [
-        "domain-name",
-        "domain-exports:workflows",
-        "domain-declares:data",
-        "domain-declares:workflows"
-      ],
-      "lane": "workflows"
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/contact-custom-fields.ts",
@@ -225,23 +189,6 @@
       "lane": "crm"
     },
     {
-      "path": "libs/aglyn/src/lib/app-utils/dataset-models.ts",
-      "rules": [
-        "domain-name",
-        "domain-exports:data",
-        "domain-declares:data"
-      ],
-      "lane": "data"
-    },
-    {
-      "path": "libs/aglyn/src/lib/app-utils/datasets.ts",
-      "rules": [
-        "domain-name",
-        "domain-declares:data"
-      ],
-      "lane": "data"
-    },
-    {
       "path": "libs/aglyn/src/lib/app-utils/dynamic-list-rule.ts",
       "rules": [
         "domain-name",
@@ -250,14 +197,6 @@
         "domain-declares:marketing"
       ],
       "lane": "marketing"
-    },
-    {
-      "path": "libs/aglyn/src/lib/app-utils/form-abuse-ceiling.ts",
-      "rules": [
-        "domain-name",
-        "domain-declares:forms"
-      ],
-      "lane": "forms"
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/form-contract.ts",
@@ -271,7 +210,6 @@
       "path": "libs/aglyn/src/lib/app-utils/forms.ts",
       "rules": [
         "domain-name",
-        "plugin-id",
         "domain-declares:crm",
         "domain-declares:data",
         "domain-declares:forms",
@@ -370,13 +308,6 @@
       "why": "The designer's generic form controls; nothing of the forms plugin's model."
     },
     {
-      "path": "libs/plugins/crm/src/lib/server/contact-email-history.ts",
-      "rules": [
-        "plugin-collection:marketing"
-      ],
-      "lane": "coupling"
-    },
-    {
       "path": "libs/plugins/inbox/src/lib/components/contacts-card.component.tsx",
       "rules": [
         "plugin-collection:crm"
@@ -386,38 +317,7 @@
     {
       "path": "libs/plugins/inbox/src/lib/components/inbox-glance-card.component.tsx",
       "rules": [
-        "plugin-collection:crm",
-        "plugin-collection:forms"
-      ],
-      "lane": "coupling"
-    },
-    {
-      "path": "libs/plugins/inbox/src/lib/components/submissions-card.component.tsx",
-      "rules": [
-        "plugin-collection:forms"
-      ],
-      "lane": "coupling"
-    },
-    {
-      "path": "libs/plugins/inbox/src/lib/server.ts",
-      "rules": [
-        "plugin-collection:forms"
-      ],
-      "lane": "coupling"
-    },
-    {
-      "path": "libs/plugins/marketing/src/lib/components/campaign-conversions-card.tsx",
-      "rules": [
-        "plugin-collection:bookings",
-        "plugin-collection:forms",
-        "console-path:crm"
-      ],
-      "lane": "coupling"
-    },
-    {
-      "path": "libs/plugins/marketing/src/lib/server/campaign-send.ts",
-      "rules": [
-        "plugin-collection:marketplace"
+        "plugin-collection:crm"
       ],
       "lane": "coupling"
     },
@@ -428,24 +328,6 @@
       ],
       "lane": "stays",
       "why": "Generic field definitions for any data-driven form; nothing of the forms plugin."
-    },
-    {
-      "path": "libs/shared/ui/email-campaigns/src/lib/model/campaign-container.ts",
-      "rules": [
-        "domain-name",
-        "domain-exports:marketing",
-        "domain-declares:marketing"
-      ],
-      "lane": "marketing"
-    },
-    {
-      "path": "libs/shared/ui/email-campaigns/src/lib/model/campaign-report.ts",
-      "rules": [
-        "domain-name",
-        "domain-exports:marketing",
-        "domain-declares:marketing"
-      ],
-      "lane": "marketing"
     },
     {
       "path": "libs/shared/ui/jsx-forms/src/lib/mapper/form-field-grid.tsx",
@@ -547,17 +429,6 @@
       "why": "The platform's email meters, which every sender increments whatever plugin it is: the cost meter counts all mail, and the enforceable meter counts the mail rail's refusable `campaign` send priority (`send-rate.ts`), the only tier a plan's `emailSendsPerMonth` may refuse — so a password reset is never blocked by a quota. `campaign` here is the rail's priority tier, and the counter it trips on is persisted as `campaignEmailSends` under every org and site and read by billing; renaming it is a data migration of every workspace's meter for a word."
     },
     {
-      "path": "libs/tenant/data/admin/src/lib/server/erase-person.ts",
-      "rules": [
-        "plugin-id",
-        "plugin-collection:bookings",
-        "plugin-collection:commerce",
-        "plugin-collection:crm",
-        "domain-declares:email"
-      ],
-      "lane": "crm"
-    },
-    {
       "path": "libs/tenant/data/admin/src/lib/server/ga4-measurement-protocol.ts",
       "rules": [
         "domain-name",
@@ -606,20 +477,6 @@
       ],
       "lane": "stays",
       "why": "The console's Firebase boot, not a tenant feature: its analytics is the platform Firebase project's own, under the operator's measurement id (NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID), and the comment names what the SDK's boot sends. Swapped with the operator's Firebase project on a self-host."
-    },
-    {
-      "path": "libs/tenant/runtime/src/lib/assign-contact-owner.ts",
-      "rules": [
-        "plugin-collection:crm"
-      ],
-      "lane": "crm"
-    },
-    {
-      "path": "libs/tenant/runtime/src/lib/associate-company-by-domain.ts",
-      "rules": [
-        "plugin-collection:crm"
-      ],
-      "lane": "crm"
     }
   ]
 }

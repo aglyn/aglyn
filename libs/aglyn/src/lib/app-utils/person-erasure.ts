@@ -116,8 +116,11 @@ export interface PersonErasureRequest {
    */
   pendingSinceMs?: number
   erasedAtMs?: number
-  /** Counts only — what the sweep removed or anonymized, for the audit. */
-  result?: Record<string, number>
+  /**
+   * Counts only — what the sweep removed or anonymized, for the audit: the
+   * platform's own figures, and each plugin's share under `plugins`.
+   */
+  result?: Readonly<Record<string, unknown>>
   failedAtMs?: number
   failureCount?: number
   /** The last failure's message, for the staff reader. Never the data. */

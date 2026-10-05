@@ -187,7 +187,7 @@ describe('the doctrine block', () => {
 
   it('pins the doctrine’s bytes, so changing what every generator is told is a deliberate cache break', () => {
     expect(createHash('sha256').update(AI_DOCTRINE_SYSTEM_BLOCK.text).digest('hex')).toBe(
-      '076f7a49597a403a154d5ee25fcfccd7a9ab06f00a6f6b8c375d31ca708535c7',
+      '7539869a891b136c0489db134e2bc930ace38a605eb46a019485562c098066c9',
     )
   })
 
@@ -380,6 +380,7 @@ const CLEAN_PLAN: AiBuildPlan = {
       slug: '/services/roof-repair',
       layout: 'lay-site',
       template: null,
+      record: null,
       duplicateOf: null,
       nav: true,
       seoTitle: 'Roof repair in Springfield',

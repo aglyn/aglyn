@@ -58,17 +58,9 @@ describe('expandRepeatables reference hops (AGL-180)', () => {
     nodes['label'].props.children = '{{item.name}} by {{item.author.name}}'
     const posts = {
       records: [{ $id: 'p1', name: 'Hello', author: 'a1' }],
-      model: {
-        order: ['name', 'author'],
-        fields: {
-          name: { name: 'Name', type: 'text' },
-          author: {
-            name: 'Author',
-            type: 'reference',
-            reference: { datasetId: 'authors' },
-          },
-        },
-      },
+      // The rows' references, as the plugin keeping them states them: the
+      // `author` field points into the rows answered under `authors`.
+      model: { references: { author: 'authors' } },
     } as any
     const authors = {
       records: [{ $id: 'a1', name: 'Ada' }],
@@ -84,16 +76,7 @@ describe('expandRepeatables reference hops (AGL-180)', () => {
     nodes['label'].props.children = '{{item.tags.name}} / {{item.ghost.name}}'
     const posts = {
       records: [{ $id: 'p1', tags: ['t1', 't2'] }],
-      model: {
-        order: ['tags'],
-        fields: {
-          tags: {
-            name: 'Tags',
-            type: 'reference',
-            reference: { datasetId: 'tags', multiple: true },
-          },
-        },
-      },
+      model: { references: { tags: 'tags' } },
     } as any
     const tags = {
       records: [
@@ -138,14 +121,31 @@ describe('expandRepeatables', () => {
     expect(label.props.children).toBe('Ada ({{item.missing}})')
   })
 
-  it('fails open on unknown datasets and empty records', () => {
-    const untouched = expandRepeatables(baseNodes(), { Other: team })
-    expect((untouched['list'] as any).nodes).toEqual(['row'])
-    const empty = expandRepeatables(baseNodes(), { Team: { records: [] } })
-    expect((empty['list'] as any).nodes).toEqual(['row'])
-    expect(expandRepeatables(baseNodes(), undefined)['list']).toEqual(
-      baseNodes()['list'],
+  /**
+   * AGL-3496: a repeat with nothing to render publishes NOTHING. Drawn as
+   * written, its template is `{{item.name}} — {{item.role}}` on a customer's
+   * live page — the broken card edr-construction.aglyn.app/services showed.
+   */
+  it('renders zero copies for an unknown dataset, no records, or no rows map', () => {
+    for (const rows of [{ Other: team }, { Team: { records: [] } }, {}, undefined]) {
+      const result = expandRepeatables(baseNodes(), rows)
+      const list = result['list'] as any
+      expect(list.nodes).toEqual([])
+      // The element stays — the frame the author placed — minus its directive.
+      expect(list.props).toEqual({})
+      expect(result['root']).toEqual(baseNodes()['root'])
+    }
+  })
+
+  it('renders zero copies when the filter matches nothing', () => {
+    const nodes = baseNodes()
+    nodes.list.props.repeatFilter = 'role == Pilot'
+    const result = expandRepeatables(nodes, { Team: team })
+    expect((result['list'] as any).nodes).toEqual([])
+    const printed = JSON.stringify(
+      (result['list'] as any).nodes.map((id: string) => result[id]),
     )
+    expect(printed).not.toContain('{{item.')
   })
 })
 
@@ -185,6 +185,17 @@ describe('hasRepeatableNodes (AGL-1440)', () => {
       expect(hasRepeatableNodes(nodes)).toBe(false)
       expect(expandRepeatables(nodes, { Team: team })).toEqual(nodes)
     }
+  })
+
+  it('says yes to every repeat the expansion would EMPTY, too (AGL-3496)', () => {
+    // A padded key with no rows behind it: the gate must still send it to the
+    // expansion, which renders it zero times. Refused here, it would be
+    // published as its template, `{{item.*}}` tokens and all.
+    const nodes = baseNodes()
+    nodes.list.props.repeatDataset = '  Team  '
+    expect(hasRepeatableNodes(nodes)).toBe(true)
+    expect(repeatKeys(nodes)).toEqual(['Team'])
+    expect((expandRepeatables(nodes, {})['list'] as any).nodes).toEqual([])
   })
 
   it('finds a repeatable grafted in from a reusable component or layout', () => {

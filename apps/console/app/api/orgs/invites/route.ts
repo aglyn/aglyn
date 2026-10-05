@@ -31,13 +31,24 @@ import {
   resolveBrandingProfile,
   Route,
 } from '@aglyn/aglyn/server'
+// The owner-handoff vocabulary (AGL-3466), from its module rather than the
+// barrel.
+import {
+  OWNER_HANDOFF_PREVIOUS_OWNER_LABELS,
+  parseOwnerHandoff,
+  usesCustomerSeat,
+} from '@aglyn/aglyn/app-utils/organizations'
 import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
 import { renderSystemEmail } from '../../_lib/render-system-email'
 import {
+  acceptOwnerHandoff,
   collaboratorSeatRefusal,
   collaboratorSeatRefusalResponse,
+  isStaffAddress,
   managerSeatRefusal,
   managerSeatRefusalResponse,
+  ownerHandoffRefusalResponse,
+  ownerHandoffSeatRefusal,
   consumeRateLimit,
   emailUnverifiedResponse,
   firebaseAdmin,
@@ -57,6 +68,7 @@ import {
 import { attributableAccountForAddress } from '@aglyn/tenant-data-admin/server/account-addresses'
 import { FieldValue } from 'firebase-admin/firestore'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
+import { assessOwnershipTransferLockout } from '../../_lib/sso-transfer-lockout'
 
 // `author` (AGL-2334). An invite carries the pending host grant, so leaving
 // it out here would make the role assignable to an existing account and not
@@ -159,6 +171,11 @@ async function handler(request: Request): Promise<Response> {
             orgName: orgSnapshot?.get('name') ?? null,
             orgSlug: orgSnapshot?.get('slug') ?? null,
             role: inviteDoc.get('role') ?? null,
+            // An owner handoff says so (AGL-3466), so the answer dialog can
+            // tell the invitee they are being handed the workspace.
+            ...(parseOwnerHandoff(inviteDoc.get('handoff'))
+              ? { handoff: parseOwnerHandoff(inviteDoc.get('handoff')) }
+              : {}),
           }
         }),
       )
@@ -432,6 +449,7 @@ async function handler(request: Request): Promise<Response> {
     const sendInviteEmail = async (
       email: string,
       role: string,
+      handoff?: { previousOwner: 'stay' | 'leave' } | null,
     ): Promise<boolean> => {
       if (!isEmailConfigured()) {
         console.warn(
@@ -449,15 +467,26 @@ async function handler(request: Request): Promise<Response> {
         orgSnapshot.data() as Partial<AglynOrgBilling>,
       )
       const origin = headers.origin ?? `https://${headers.host}`
-      const fallbackText =
-        `You've been invited to join ${orgName} as ${role}.\n\n` +
-        `Sign in at ${origin} with this email address and accept ` +
-        'the invite from your dashboard.'
+      // An owner handoff is its own message (AGL-3466): the invitee is being
+      // handed the workspace, which "join as owner" does not say.
+      const previousOwnerLine = handoff
+        ? handoff.previousOwner === 'stay'
+          ? 'The current owner stays on as an admin.'
+          : 'The current owner leaves the workspace once you accept.'
+        : ''
+      const fallbackText = handoff
+        ? `You've been invited to take over ${orgName} as its owner. ` +
+          `${previousOwnerLine}\n\n` +
+          `Sign in at ${origin} with this email address and accept ` +
+          'the invitation from your dashboard. Nothing changes until you accept.'
+        : `You've been invited to join ${orgName} as ${role}.\n\n` +
+          `Sign in at ${origin} with this email address and accept ` +
+          'the invite from your dashboard.'
       // The staff design when one is published (AGL-750), else the catalog's
       // built-in copy, in this org's header and footer (AGL-3322). The copy
       // here is the last resort behind both.
       const designed = await renderSystemEmail(
-        'org-invite',
+        handoff ? 'org-owner-handoff' : 'org-invite',
         {
           // AGL-2139: the brand as merge tokens, so a staff-designed template
           // renders THIS org's brand rather than a hard-coded "Aglyn". The
@@ -466,6 +495,7 @@ async function handler(request: Request): Promise<Response> {
           ...brandMergeTokens(branding),
           'org.name': String(orgName),
           'invite.role': role,
+          'handoff.previousOwner': previousOwnerLine,
           signInUrl: origin,
         },
         {
@@ -478,7 +508,9 @@ async function handler(request: Request): Promise<Response> {
         to: email,
         subject:
           designed?.subject ??
-          `You've been invited to ${orgName} on ${branding.productName}`,
+          (handoff
+            ? `${orgName} is being handed to you on ${branding.productName}`
+            : `You've been invited to ${orgName} on ${branding.productName}`),
         text: designed?.text || fallbackText,
         ...(designed?.html ? { html: designed.html } : {}),
         fromName: branding.fromName,
@@ -517,8 +549,44 @@ async function handler(request: Request): Promise<Response> {
         return Response.json({ error: 'Invalid email' }, { status: 400 })
       }
       const role = body?.role
-      if (!isOrgRole(role) || role === 'owner') {
+      if (!isOrgRole(role)) {
         return Response.json({ error: 'Role must be admin, editor, or viewer' }, { status: 400 })
+      }
+      /*
+       * AN OWNER HANDOFF (AGL-3466) — the one way an invitation may name
+       * `owner`. It moves the workspace to the invitee when they accept, so
+       * only the person who could transfer it today may send one: the owner,
+       * or staff. An admin holding `members.manage` invites members; they do
+       * not give the workspace away.
+       */
+      const handoff = role === 'owner' ? parseOwnerHandoff(body?.handoff) : null
+      if (role === 'owner') {
+        if (!handoff) {
+          return Response.json({
+            error: 'Choose whether the current owner stays on as an admin or leaves after the handoff',
+          }, { status: 400 })
+        }
+        const ownerUid = String((await getOrgDoc(orgId))?.['ownerUid'] ?? '')
+        const isOwner =
+          !!ownerUid && ownerUid === decoded.uid && actor?.member.role === 'owner'
+        if (!isStaff && !isOwner) {
+          return Response.json({
+            error: 'Only the owner can hand this workspace to someone else',
+          }, { status: 403 })
+        }
+        const ownerEmail = String(
+          (
+            await firestore
+              .collection('orgs')
+              .doc(orgId)
+              .collection('members')
+              .doc(ownerUid || '-')
+              .get()
+          ).get('email') ?? '',
+        ).toLowerCase()
+        if (ownerEmail && ownerEmail === email) {
+          return Response.json({ error: 'That address already owns this workspace' }, { status: 400 })
+        }
       }
       // Sending gate (AGL-1907) — after the role check and the body
       // validation, before the dedup read and the write. The seat quota
@@ -548,6 +616,15 @@ async function handler(request: Request): Promise<Response> {
         .limit(1)
         .get()
       const reusing = !existingPending.empty
+      // Platform staff take no seat (AGL-3466). Checked against the address's
+      // account now, and against the account that accepts when it does.
+      const staffInvitee = await isStaffAddress(email)
+      // Whether the row being reused already holds the manager seat this
+      // invite would take — a pending handoff or a staff invite does not.
+      const reusedHeldManagerSeat =
+        reusing &&
+        usesCustomerSeat(existingPending.docs[0].data()) &&
+        isOrgWideMember(existingPending.docs[0].data())
       // Manager-seat quota (AGL-471): only a genuinely NEW invite consumes a
       // seat — reusing an already-pending row does not, since it already
       // counts toward the roster this measures. A site-scoped invite becomes
@@ -562,15 +639,33 @@ async function handler(request: Request): Promise<Response> {
       // click it. `managerSeatRefusal` counts the roster AND the pending
       // invites through the shared `readSeatEntries`, which is what stops the
       // four doors measuring four different populations.
-      const managerRefusal = await managerSeatRefusal({
-        orgId,
-        // The request-deduped read, like the collaborator gate below — this
-        // is the second of the two and must not pay for the org doc twice.
-        org: ((await getOrgDoc(orgId)) ?? {}) as Partial<AglynOrgBilling>,
-        becomesManager:
-          !reusing &&
-          isOrgWideMember({ role, allHosts: body?.allHosts === true, hostAccess }),
-      })
+      //
+      // An owner handoff reserves no seat (AGL-3466): the owner seat moves.
+      // Its own check asks whether the move leaves one more manager than
+      // before — a `stay` beside a customer owner does — and refuses with the
+      // way out, so a handoff can never add a free manager.
+      if (handoff) {
+        const handoffRefusal = await ownerHandoffSeatRefusal({
+          orgId,
+          email,
+          previousOwner: handoff.previousOwner,
+          inviteeStaff: staffInvitee,
+        })
+        if (handoffRefusal) return handoffRefusal
+      }
+      const managerRefusal = handoff
+        ? null
+        : await managerSeatRefusal({
+            orgId,
+            // The request-deduped read, like the collaborator gate below —
+            // this is the second of the two and must not pay for the org doc
+            // twice.
+            org: ((await getOrgDoc(orgId)) ?? {}) as Partial<AglynOrgBilling>,
+            becomesManager:
+              !reusedHeldManagerSeat &&
+              isOrgWideMember({ role, allHosts: body?.allHosts === true, hostAccess }),
+            self: { staffSeat: staffInvitee },
+          })
       if (managerRefusal) return managerRefusal
       // Collaborator seats (AGL-2068) — the OTHER branch of the same
       // question, and the one nothing has ever asked. A site-scoped invite
@@ -581,6 +676,7 @@ async function handler(request: Request): Promise<Response> {
       // full access on its site. Skipped when reusing a pending row, for the
       // same reason the manager gate is — it already counts toward `used`.
       if (
+        !handoff &&
         !reusing &&
         Object.keys(hostAccess).length &&
         !isOrgWideMember({ role, allHosts: body?.allHosts === true, hostAccess })
@@ -589,19 +685,51 @@ async function handler(request: Request): Promise<Response> {
           orgId,
           org: ((await getOrgDoc(orgId)) ?? {}) as any,
           hostIds: Object.keys(hostAccess),
-          self: { email },
+          self: { email, staffSeat: staffInvitee },
         })
         if (seatRefusal) return seatRefusal
       }
       const inviteId = reusing
         ? existingPending.docs[0].id
         : createResourceUid()
+      // One pending owner handoff per workspace (AGL-3466): a new one
+      // replaces whatever handoff was still waiting, whoever it named.
+      const replacedHandoffs = handoff
+        ? (
+            await invitesRef
+              .where('role', '==', 'owner')
+              .where('acceptedAt', '==', null)
+              .get()
+          ).docs.filter((doc) => doc.id !== inviteId)
+        : []
+      for (const replaced of replacedHandoffs) {
+        await replaced.ref.delete()
+        void logOrgActivity(
+          orgId,
+          { uid: decoded.uid, email: decoded.email },
+          `Replaced the workspace handoff to ${replaced.get('email') ?? replaced.id}`,
+          { type: 'invite', id: replaced.id, name: String(replaced.get('email') ?? '') },
+        )
+      }
       await invitesRef.doc(inviteId).set(
         {
           email,
           role,
-          allHosts: body?.allHosts === true,
-          hostAccess,
+          // A handoff makes its accepter the owner, which reaches every site.
+          allHosts: handoff ? true : body?.allHosts === true,
+          hostAccess: handoff ? {} : hostAccess,
+          // A reused row converges: a handoff re-sent as an ordinary invite
+          // stops being one, and the staff stamp follows the claim.
+          ...(handoff
+            ? { handoff }
+            : reusing
+              ? { handoff: FieldValue.delete() }
+              : {}),
+          ...(staffInvitee
+            ? { staffSeat: true }
+            : reusing
+              ? { staffSeat: FieldValue.delete() }
+              : {}),
           invitedBy: decoded.uid,
           createdAt: FieldValue.serverTimestamp(),
           acceptedAt: null,
@@ -611,12 +739,16 @@ async function handler(request: Request): Promise<Response> {
       void logOrgActivity(
         orgId,
         { uid: decoded.uid, email: decoded.email },
-        `${reusing ? 'Updated invite for' : 'Invited'} ${email} as ${role}`,
+        handoff
+          ? `${reusing ? 'Updated the handoff to' : 'Invited'} ${email} to take over the workspace ` +
+              `(${OWNER_HANDOFF_PREVIOUS_OWNER_LABELS[handoff.previousOwner].toLowerCase()})`
+          : `${reusing ? 'Updated invite for' : 'Invited'} ${email} as ${role}`,
         { type: 'invite', id: inviteId, name: email },
+        isStaff && !actor ? { staffActorId: decoded.uid } : undefined,
       )
       // Best-effort delivery via Resend (AGL-708): the invite works without
       // it — the console banner surfaces it after sign-in either way.
-      const emailed = await sendInviteEmail(email, role)
+      const emailed = await sendInviteEmail(email, role, handoff)
       // Tell the org's admins (AGL-1116). Until now a pending invite left no
       // trace outside the activity log, which nobody watches: the `team.invite`
       // notification type has existed since AGL-259 with no emitter at all.
@@ -624,6 +756,8 @@ async function handler(request: Request): Promise<Response> {
       // otherwise find out.
       const inviteOrg = await orgForNotice()
       const inviter = resolveIdpDisplayName(decoded) || decoded.email || 'An admin'
+      // A handoff names what it does rather than a role (AGL-3466).
+      const asWhat = handoff ? 'its new owner' : role
       void notifyOrgAdmins(orgId, {
         type: 'team.invite',
         title: reusing
@@ -631,8 +765,8 @@ async function handler(request: Request): Promise<Response> {
           : `Invited ${email} to ${inviteOrg.name}`,
         body:
           (reusing
-            ? `${inviter} updated the invite for ${email} to join ${inviteOrg.name} as ${role}. `
-            : `${inviter} invited ${email} to ${inviteOrg.name} as ${role}. `) +
+            ? `${inviter} updated the invite for ${email} to join ${inviteOrg.name} as ${asWhat}. `
+            : `${inviter} invited ${email} to ${inviteOrg.name} as ${asWhat}. `) +
           (emailed
             ? 'The invite email was sent.'
             : 'No invite email was sent; they will see the invite when they sign in.'),
@@ -643,7 +777,7 @@ async function handler(request: Request): Promise<Response> {
       // And the invitee, when the address already belongs to an account
       // (AGL-3402): someone signed in to one workspace and invited to another
       // otherwise has no in-app trace of the invitation.
-      await notifyInvitee(email, role, inviteId)
+      await notifyInvitee(email, asWhat, inviteId)
       return Response.json(
         { ok: true, inviteId, emailed, updated: reusing },
         { status: 200 },
@@ -692,6 +826,7 @@ async function handler(request: Request): Promise<Response> {
       const emailed = await sendInviteEmail(
         String(invite['email']),
         String(invite['role'] ?? 'viewer'),
+        parseOwnerHandoff(invite['handoff']),
       )
       void logOrgActivity(
         orgId,
@@ -716,6 +851,63 @@ async function handler(request: Request): Promise<Response> {
       const invitee = await inviteeAddresses(invite)
       if (invitee instanceof Response) return invitee
       const { email, addresses: acceptableEmails } = invitee
+      /*
+       * AN OWNER HANDOFF (AGL-3466). The accepter becomes the owner, in one
+       * transaction that also re-checks the seat and marks the invite.
+       *
+       * The SSO lockout check comes FIRST, as it does for the transfer in
+       * /api/orgs/settings: the accepter is about to be the org's only owner,
+       * and for an enforced org that seat is the whole way back in if the
+       * identity provider fails. `sso-transfer-lockout-wiring.spec.ts` pins
+       * the order.
+       */
+      const acceptedHandoff = parseOwnerHandoff(invite['handoff'])
+      if (invite['role'] === 'owner' && acceptedHandoff) {
+        const lockout = await assessOwnershipTransferLockout(
+          orgId,
+          decoded.uid,
+          (await getOrgDoc(orgId)) as Record<string, unknown> | undefined,
+        )
+        if (lockout.refused) {
+          void logOrgActivity(
+            orgId,
+            { uid: decoded.uid, email: decoded.email },
+            lockout.verdict === 'would-strand'
+              ? 'Refused a workspace handoff that would have left no way in ' +
+                  'if single sign-on failed'
+              : 'Refused a workspace handoff — the single sign-on lockout ' +
+                  'check did not complete',
+            { type: 'invite', id: inviteId, name: email },
+          )
+          return Response.json({ error: lockout.reason }, { status: 409 })
+        }
+        const moved = await acceptOwnerHandoff({
+          orgId,
+          inviteId,
+          uid: decoded.uid,
+          email,
+          emails: acceptableEmails,
+          displayName: resolveIdpDisplayName(decoded) || undefined,
+          photoURL: resolveIdpPhotoUrl(decoded) || undefined,
+        })
+        const handoffOrg = await orgForNotice()
+        void notifyOrgAdmins(orgId, {
+          type: 'team.invite',
+          title: `${email} took over ${handoffOrg.name}`,
+          body:
+            `${email} accepted the handoff and now owns ${handoffOrg.name}. ` +
+            (moved.previousOwner === 'stay'
+              ? 'The previous owner stays on as an admin.'
+              : 'The previous owner left the workspace.'),
+          ...(handoffOrg.slug
+            ? { link: buildRoute(Route.MANAGE_TEAM, { orgSlug: handoffOrg.slug }) }
+            : {}),
+        })
+        await markInviteNotificationsRead(decoded.uid, inviteId)
+        // The org home, as for any other join: a client handed a workspace
+        // looks around first, and is asked to upgrade as a separate step.
+        return Response.json({ ok: true, owner: true }, { status: 200 })
+      }
       // The manager seat is charged INSIDE `upsertOrgMember`'s transaction
       // (AGL-2068 on the manager key). The gate that stood here read the
       // roster and then wrote through a separate call, so N people accepting
@@ -838,6 +1030,10 @@ async function handler(request: Request): Promise<Response> {
     // bare 500. Nothing was written and the invite is left unaccepted.
     const ownerRefusal = orgOwnerSeatRefusalResponse(error)
     if (ownerRefusal) return ownerRefusal
+    // A handoff refused inside its transaction (AGL-3466): the seat the
+    // outgoing owner would keep, or an invite answered in the meantime.
+    const handoffRefusal = ownerHandoffRefusalResponse(error)
+    if (handoffRefusal) return handoffRefusal
     // Accepting an invite into a full org (AGL-2068 on the manager key). The
     // refusal is now raised inside the grant transaction, so it arrives here
     // as a throw rather than as an early return.

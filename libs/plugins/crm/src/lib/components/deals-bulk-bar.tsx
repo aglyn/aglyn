@@ -45,7 +45,6 @@ import { useCallback, useMemo, useState } from 'react'
 import { useCrmBulkApply } from '../hooks/use-crm-bulk-apply'
 import type { DealStageApi } from '../hooks/use-deal-stage-api'
 import type { OrgMemberDirectory } from '../hooks/use-org-member-directory'
-import { downloadTextFile } from '../model/contacts-csv'
 import {
   type CrmBulkPlan,
   type CrmBulkWrite,
@@ -59,14 +58,14 @@ import {
   closingStage,
   openStages,
 } from '../model/deal-board-model'
-import { type DealCsvOptions, dealsCsv } from '../model/deals-csv'
 import {
   type CrmBulkNoun,
   CrmBulkBarFrame,
   CrmBulkValueDialog,
   countNoun,
 } from './crm-bulk-bar-frame'
-import CrmExportAllButton from './crm-export-all-button'
+import { CrmExportButton } from './crm-transfer-buttons'
+import { CRM_DEALS_RESOURCE } from '../transfer/fields'
 import { LostReasonDialog } from './lost-reason-dialog'
 import { useCrmSharingFollowUp } from '../hooks/use-crm-sharing'
 
@@ -89,8 +88,6 @@ export interface DealsBulkBarProps {
   roster: OrgMemberDirectory
   /** The one door a stage change goes through. */
   api: DealStageApi
-  /** How the export names the pipeline, the stage and the owner — the table's own. */
-  csv?: DealCsvOptions
 }
 
 const NOUN: CrmBulkNoun = { singular: 'deal', plural: 'deals' }
@@ -112,7 +109,7 @@ export function DealsBulkBar(props: DealsBulkBarProps) {
 DealsBulkBar.displayName = 'DealsBulkBar'
 
 function DealsBulkBarBody(props: DealsBulkBarProps) {
-  const { hostId, scope, rows, selected, onSelectedChange, pipelineById, roster, api, csv } =
+  const { hostId, scope, rows, selected, onSelectedChange, pipelineById, roster, api } =
     props
   const firestore = useFirestore()
   const { confirm } = useConfirmationContext()
@@ -225,10 +222,6 @@ function DealsBulkBarBody(props: DealsBulkBarProps) {
     },
     [api, runCalls],
   )
-
-  const handleExport = useCallback(() => {
-    downloadTextFile('deals-selected.csv', 'text/csv', dealsCsv(selectedRows, csv))
-  }, [selectedRows, csv])
 
   const handleDelete = useCallback(async () => {
     if (!scope || !selectedRows.length) return
@@ -350,17 +343,11 @@ function DealsBulkBarBody(props: DealsBulkBarProps) {
       <Button size="small" disabled={busy || !scope} onClick={() => setLosing(true)}>
         {'Mark lost'}
       </Button>
-      <Button size="small" disabled={busy} onClick={handleExport}>
-        {'Export CSV'}
-      </Button>
-      {/*
-        The selection's file is the rows on screen; this one is the whole
-        collection, streamed by the server (AGL-2662).
-      */}
-      <CrmExportAllButton
-        resource="deals"
-        orgId={scope?.[1] ?? null}
+      {/* The selection through the export dialog: every field, chosen (AGL-3528). */}
+      <CrmExportButton
+        resource={CRM_DEALS_RESOURCE}
         hostId={hostId}
+        selection={selectedRows.map((row) => row.$id)}
         disabled={busy}
       />
       <Button

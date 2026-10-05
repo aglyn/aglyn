@@ -173,7 +173,7 @@ jest.mock('@aglyn/aglyn/server', () => ({
   // The custom-field reader the route judges a lead's map with (AGL-3272).
   ...jest.requireActual('@aglyn/aglyn/app-utils/contact-custom-fields'),
   ...jest.requireActual('@aglyn/aglyn/app-utils/crm'),
-  ...jest.requireActual('@aglyn/aglyn/app-utils/form-abuse-ceiling'),
+  ...jest.requireActual('@aglyn/aglyn/app-utils/utc-month'),
   ...jest.requireActual('@aglyn/aglyn/app-utils/marketing-consent'),
   ...jest.requireActual('@aglyn/aglyn/app-utils/person-key'),
   ...jest.requireActual('@aglyn/aglyn/app-utils/scope-tokens'),
@@ -409,7 +409,13 @@ describe('the lead source', () => {
     const out = await call({ hostId: HOST, email: 'a@b.com', leadSource: 'Sales Navigator' })
     expect(out.status).toBe(400)
     expect(out.body).toEqual({
-      error: 'Lead source must be one of: Outbound · Apollo, Website form.',
+      // The org's own values, then every standard value it has not stored.
+      error:
+        'Lead source must be one of: Outbound · Apollo, Website form, ' +
+        'Phone inquiry, Email inquiry, Partner referral, Employee referral, ' +
+        'External referral, Advertisement, Trade show, Webinar, Word of mouth, ' +
+        'Booking, Newsletter sign-up, Site member sign-up, Online purchase, ' +
+        'Account sign-up, Purchased list, Sequence, Email campaign, Other.',
       field: 'leadSource',
     })
     const inactive = await call({ hostId: HOST, email: 'a@b.com', leadSource: 'Old list' })
@@ -440,6 +446,55 @@ describe('the lead source', () => {
     ).toBe(200)
     expect((await call({ hostId: HOST, email: 'held@example.com' })).status).toBe(200)
     expect(leadAt('held@example.com')?.['leadSource']).toBe('Retired value')
+  })
+})
+
+describe("Salesforce's standard lead fields (AGL-3513)", () => {
+  it('stores them, judging Salutation, Industry and Rating, and composes the name', async () => {
+    const out = await call({
+      hostId: HOST,
+      email: 'maya@example.com',
+      name: 'Ignored',
+      salutation: 'dr.',
+      firstName: 'Maya',
+      lastName: 'Quinn',
+      mobilePhone: '(512) 555-0108',
+      fax: '+1 512 555 0109',
+      doNotCall: true,
+      industry: 'food & beverage',
+      rating: 'hot',
+      annualRevenueCents: 125_000_050,
+      currency: 'EUR',
+      numberOfEmployees: 42,
+    })
+    expect(out.status).toBe(201)
+    expect(leadAt('maya@example.com')).toMatchObject({
+      name: 'Maya Quinn',
+      salutation: 'Dr.',
+      firstName: 'Maya',
+      lastName: 'Quinn',
+      mobilePhone: '+15125550108',
+      fax: '+15125550109',
+      doNotCall: true,
+      industry: 'Food & Beverage',
+      rating: 'Hot',
+      annualRevenueCents: 125_000_050,
+      currency: 'eur',
+      numberOfEmployees: 42,
+    })
+  })
+
+  it('refuses a Rating outside the list under the field, before any write', async () => {
+    const out = await call({ hostId: HOST, email: 'maya@example.com', rating: 'Freezing' })
+    expect(out.status).toBe(400)
+    expect(out.body).toEqual({ error: 'Rating must be one of: Hot, Warm, Cold.', field: 'rating' })
+    expect(leadPaths()).toEqual([])
+  })
+
+  it('refuses a mobile number it cannot read, under the field', async () => {
+    const out = await call({ hostId: HOST, email: 'maya@example.com', mobilePhone: 'call me' })
+    expect(out.status).toBe(400)
+    expect(out.body.field).toBe('mobilePhone')
   })
 })
 

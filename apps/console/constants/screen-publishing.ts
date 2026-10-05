@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { HostUid, ScreenUid } from '@aglyn/aglyn'
+import type { HostUid, ScreenUid, VersionUid } from '@aglyn/aglyn'
 import {
   isFirstPublishedRoute,
   trackEvent,
@@ -102,7 +102,9 @@ interface RouteState {
 }
 
 /**
- * THE FIRST REAL HOME PAGE REPLACES THE PLACEHOLDER (AGL-3408).
+ * THE FIRST REAL HOME PAGE REPLACES THE PLACEHOLDER (AGL-3408), AND THE
+ * PLACEHOLDER ITSELF STOPS BEING ONE THE MOMENT ITS OWNER PUBLISHES IT
+ * (AGL-3478).
  *
  * A new site is created with a placeholder home page on `/`, and every
  * surface's conflict check passes over it (`blockingRouteOwner`) — so a write
@@ -110,16 +112,26 @@ interface RouteState {
  * in the SAME batch, or two screens would answer the root and which one a
  * visitor gets would be undefined.
  *
+ * The other way the placeholder ends is the owner editing it and publishing
+ * it, which is the obvious thing to do with a page called Home. From then on
+ * it is their home page: a starter must not unpublish it, the site is not
+ * blank, and this publish is the one `first_publish` counts. `published` names
+ * the screen the write PUTS ON THE SITE, as opposed to the ones it only
+ * re-addresses — a move or a rename that carries the placeholder along is not
+ * its owner publishing it, so a sync names nothing unless its caller says so.
+ * The platform's own publish at creation never comes through here.
+ *
  * Adds its fields to `hostUpdates`, the caller's one update of the host
  * document, rather than staging a second update of its own: one write per
- * document keeps the batch what the rules evaluate as a single change. The
- * placeholder's own `publishedAt` goes too, so Screens lists it as the draft
- * it now is, and the marker goes so the root is handed over exactly once.
+ * document keeps the batch what the rules evaluate as a single change. When
+ * the root is taken, the placeholder's own `publishedAt` goes too, so Screens
+ * lists it as the draft it now is. Either way the marker goes in the same
+ * write, so the placeholder ends exactly once.
  *
  * Answers the entry it removed, for the caller to fold into the addresses it
  * announces — `{}` when nothing was released.
  */
-function stagePlaceholderRelease(
+function stagePlaceholderUpdates(
   batch: WriteBatch,
   firestore: Firestore,
   options: {
@@ -127,11 +139,17 @@ function stagePlaceholderRelease(
     state: RouteState
     entries: Record<string, string | null | undefined>
     hostUpdates: Record<string, unknown>
+    published?: ScreenUid
   },
 ): Record<string, null> {
-  const { hostId, state, entries, hostUpdates } = options
+  const { hostId, state, entries, hostUpdates, published } = options
   const placeholder = state.defaultHomeScreenId
-  if (!placeholder || state.screens[placeholder] !== SCREEN_ROOT_PATH) return {}
+  if (!placeholder) return {}
+  if (published === placeholder && entries[placeholder]) {
+    hostUpdates['defaultHomeScreenId'] = deleteField()
+    return {}
+  }
+  if (state.screens[placeholder] !== SCREEN_ROOT_PATH) return {}
   const takesRoot = Object.entries(entries).some(
     ([screenId, path]) => screenId !== placeholder && path === SCREEN_ROOT_PATH,
   )
@@ -275,14 +293,24 @@ function announceRouteChange(options: {
  * the map is what the tenant site matches request paths against, so a
  * screen without an entry is unreachable. Dotted field paths keep sibling
  * map entries untouched. `path` defaults to `slug` for parent-less screens.
+ *
+ * `versionId` moves the screen's live-version pointer in the same batch. It is
+ * for the one version publish that is also a route's first publication: the
+ * placeholder home page's (AGL-3478), whose route the platform registered and
+ * whose owner is only now putting their own page there. The pointer, the
+ * route and the cleared marker land together or not at all.
  */
 export async function publishScreenRoute(
   firestore: Firestore,
-  ids: { hostId: HostUid; screenId: ScreenUid } & PublishAnnouncer,
+  ids: {
+    hostId: HostUid
+    screenId: ScreenUid
+    versionId?: VersionUid
+  } & PublishAnnouncer,
   slug: string,
   path: string = slug,
 ): Promise<void> {
-  const { hostId, screenId, user } = ids
+  const { hostId, screenId, versionId, user } = ids
   // Read the routing map BEFORE writing to it (AGL-1588). `first_publish`
   // asks what the map looked like a moment ago, and a moment later it can
   // never be empty. One extra document read on a rare, deliberate, already
@@ -317,18 +345,22 @@ export async function publishScreenRoute(
   // tidier `Promise.all`.
   const batch = writeBatch(firestore)
   const hostUpdates: Record<string, unknown> = { [`screens.${screenId}`]: path }
-  const released = stagePlaceholderRelease(batch, firestore, {
+  const released = stagePlaceholderUpdates(batch, firestore, {
     hostId,
     state: { screens: before, defaultHomeScreenId },
     entries: { [screenId]: path },
     hostUpdates,
+    published: screenId,
   })
   const paths = changedPaths(before, { ...released, [screenId]: path })
   // `publishedAt` records when the route went live; it rides the same merge
   // as the slug so publishing stamps it in one write (cleared on unpublish).
+  const published = { slug, publishedAt: Timestamp.now() }
   batch.set(
     doc(firestore, 'hosts', hostId, 'screens', screenId),
-    { slug, publishedAt: Timestamp.now() },
+    versionId
+      ? { ...published, versionId, updatedAt: Timestamp.now() }
+      : published,
     { merge: true },
   )
   batch.update(doc(firestore, 'hosts', hostId), hostUpdates)
@@ -345,7 +377,9 @@ export async function publishScreenRoute(
   // saved version a live route serves). That is a content update to a site
   // that is already published, and counting it here would let one activated
   // org look like many, which is the opposite of what an activation rate is
-  // for. Only a route going live counts.
+  // for. Only a route going live counts — and the placeholder home page's
+  // first publish by its owner is one (AGL-3478): the platform put that route
+  // there, so the owner's publish is the first time the site holds their page.
   //
   // No ids in the payload: the metric is "did this user ever publish", which
   // GA answers from the event alone, and a host id would be a resource
@@ -362,31 +396,70 @@ export async function publishScreenRoute(
 }
 
 /**
- * Applies a set of routing-map changes in one write: a `path` string sets
- * the entry, `null` removes it. Used to cascade descendant path rewrites
- * when a screen's slug or parent changes (hierarchical slugs).
+ * Thrown by {@link syncScreenRouteEntries} for an entry that would remove a
+ * route. Names the screens, so the caller that computed it can be found.
+ */
+export class RouteRemovalRefusedError extends Error {
+  readonly screenIds: ScreenUid[]
+
+  constructor(screenIds: ScreenUid[]) {
+    super(
+      `A routing sync never takes a page off the site (${screenIds.join(', ')}). ` +
+        'Unpublish the page itself instead.',
+    )
+    this.name = 'RouteRemovalRefusedError'
+    this.screenIds = screenIds
+  }
+}
+
+/**
+ * Sets a group of routing-map entries in one write. Used to cascade
+ * descendant path rewrites when a screen's slug or parent changes
+ * (hierarchical slugs), and by the besigner's publish.
+ *
+ * It SETS entries and never removes one (AGL-3463). A sync is what a move, a
+ * rename or a parent's publish writes for a whole subtree, and a removal in
+ * it would take a page off the site that nobody pointed at — a live child,
+ * gone because something above it changed. `buildScreenRouteEntries` never
+ * computes one; this refuses one anyway, before anything is read or written,
+ * so a caller that builds its own entries cannot reach around that. The way
+ * to take a page off the site is {@link unpublishScreenRoute}, which removes
+ * that page's entry and nothing else. The Firestore rules hold the same line
+ * for any client write (`routeRemovalAllowed`): one removal per write, with
+ * nothing else in the map changing beside it.
+ *
+ * `published` names the screen the caller's Publish puts on the site, when
+ * the sync is a publish rather than a move or a rename. Only that screen can
+ * stop being the placeholder home page (AGL-3478); a subtree rewrite that
+ * carries the placeholder to a new address leaves it the placeholder.
  */
 export async function syncScreenRouteEntries(
   firestore: Firestore,
   hostId: HostUid,
-  entries: Record<ScreenUid, string | null>,
+  entries: Record<ScreenUid, string>,
   announcer: PublishAnnouncer,
+  options?: { published?: ScreenUid },
 ): Promise<void> {
+  const removals = Object.entries(entries)
+    .filter(([, path]) => typeof path !== 'string' || !path)
+    .map(([screenId]) => screenId)
+  if (removals.length) throw new RouteRemovalRefusedError(removals)
   if (!Object.keys(entries).length) return
-  // Read before the write: an entry being REMOVED carries `null`, so the
-  // address that is about to stop resolving exists nowhere else by the time
-  // the announcement is made (AGL-2573).
+  // Read before the write: a rewritten entry's OLD address is about to stop
+  // resolving, and it exists nowhere else by the time the announcement is
+  // made (AGL-2573).
   const state = await readRouteState(firestore, hostId)
   const updates: Record<string, unknown> = {}
   for (const [screenId, path] of Object.entries(entries)) {
-    updates[`screens.${screenId}`] = path ?? deleteField()
+    updates[`screens.${screenId}`] = path
   }
   const batch = writeBatch(firestore)
-  const released = stagePlaceholderRelease(batch, firestore, {
+  const released = stagePlaceholderUpdates(batch, firestore, {
     hostId,
     state,
     entries,
     hostUpdates: updates,
+    published: options?.published,
   })
   const paths = changedPaths(state.screens, { ...released, ...entries })
   batch.update(doc(firestore, 'hosts', hostId), updates)
@@ -408,7 +481,9 @@ export async function syncScreenRouteEntries(
  * Only ever the screen the host names as `defaultHomeScreenId`, and only while
  * it still holds `/`. The screen is unpublished, not deleted: anything its
  * owner typed into it is still in Screens as a draft. The marker goes in the
- * same batch, so the root is handed back exactly once.
+ * same batch, so the root is handed back exactly once. A placeholder its owner
+ * has published is no longer named (AGL-3478), so their home page stays put
+ * and the starter's home lands beside it.
  *
  * Answers whether `/` was released, so the caller can free it in the slug set
  * it de-conflicts against. A host that cannot be read releases nothing.
@@ -448,7 +523,14 @@ export async function releaseDefaultHomeRoot(
 /**
  * Removes a screen's routing-map entry (and its stored slug when
  * `clearSlug`), making the path 404 after the tenant's ISR revalidate.
- * Used on unpublish and on screen delete.
+ * Used on unpublish and on screen delete, from every surface that offers
+ * them.
+ *
+ * THIS screen's entry and nothing else (AGL-3463). Pages nested under it keep
+ * their own entries and keep serving at the addresses they have: unpublishing
+ * or deleting a parent never takes a page below it off the site. The
+ * confirmations that lead here list those pages (`liveScreenDescendants`),
+ * so the author can take them down one by one if that is what they meant.
  */
 export async function unpublishScreenRoute(
   firestore: Firestore,

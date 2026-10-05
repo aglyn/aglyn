@@ -1,0 +1,168 @@
+/**
+ * @license
+ * Copyright 2026 Aglyn LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import {
+  type HostContactCreated,
+  upsertHostContact,
+  type UpsertHostContactOptions,
+  type UpsertHostContactVerdict,
+} from '@aglyn/tenant-data-admin'
+import { assignOwnerForCapture } from './assign-contact-owner'
+import { associateCompanyByDomain } from './associate-company-by-domain'
+import { emitHostEvent } from '@aglyn/tenant-runtime/emit-host-event'
+import { contactCaptureActor } from '@aglyn/tenant-runtime/capture-actor'
+import type { HostEventActor, HostEventPayload } from '@aglyn/tenant-runtime/host-event-listeners'
+
+
+/**
+ * THE contact capture door for a server path (AGL-2605).
+ *
+ * `upsertHostContact` writes the contact and reports, through its
+ * `onCreated` hook, when the write made a NEW person. This wrapper is the
+ * one place that hook is bound to `contactCreated`, and it is the function
+ * every server door calls — the forms route, the membership and newsletter
+ * handlers, the order and booking webhooks. A door that calls
+ * `upsertHostContact` directly still captures the contact and fires nothing,
+ * which is a contact no automation can welcome; `capture-host-contact.spec`
+ * scans for exactly that call.
+ *
+ * ## Why the binding lives here and not in the data library
+ *
+ * What listens for the event — the automation engine among them — imports
+ * the data library for its Firestore handle, its org helpers and its
+ * senders. The data library emitting an event would import the listeners
+ * back, which is a cycle, and the module boundaries (`scope:data` depends on
+ * data and util only) refuse it in any case. So the lower layer reports a
+ * fact and this layer, which already knows how to announce one, announces
+ * it. The alternative — a sink the runtime registers into when its module
+ * happens to be imported — would fire only in a process that had loaded the
+ * runtime, and a Stripe webhook that created a contact in a process that had
+ * not would announce nothing with no error anywhere. The listeners themselves
+ * are registered by a call made at boot (`host-event-listeners.ts`), so every
+ * process has them before its first request.
+ *
+ * Fire-and-forget in the same sense the capture itself is: the hook's
+ * failure is caught inside `upsertHostContact`, so a runner that throws
+ * costs the door nothing, and this function never rejects.
+ *
+ * ## The company, before the announcement (AGL-2613)
+ *
+ * A new person with a work email address is linked to the company at that
+ * domain here, in the same hook, BEFORE `contactCreated` goes out — so an
+ * automation that reads the new contact finds them already filed, rather
+ * than racing a link that lands a moment later. Only when the door did not
+ * name a company itself: the console's drawer and an import row that
+ * carried one have written it into the facet, and the capture must not
+ * second-guess a person's choice with a domain match. The association never
+ * rejects, and its own catch keeps a failed lookup from costing the event.
+ *
+ * ## The owner, on the same terms (AGL-2618)
+ *
+ * Then the org's assignment rules and the site's default owner decide who
+ * follows the new person up — again before `contactCreated`, so an
+ * automation's "create a task for the owner" finds one — and again only
+ * when the door named none: a drawer, an import column or a conversion
+ * that picked an owner has said whose the record is. The pass reads the
+ * form and the tags off the same options the data library was handed,
+ * because the created-report carries the identity and not the routing.
+ * It never rejects either; a record it could not assign is one somebody
+ * assigns by hand, which is what every record was before this existed.
+ *
+ * What this does NOT do is close a lead (AGL-3232): a lead is the CRM's
+ * record, and which relationship closes one is the CRM's rule, answered in
+ * its capture writer for the doors that report through the capture seam.
+ * The order doors call this directly and close nothing — a buyer with an
+ * open lead is a lead the rep converts, as in Salesforce.
+ */
+export async function captureHostContact(
+  captureOptions: Omit<UpsertHostContactOptions, 'onCreated'> & {
+    /** Who caused the capture, when the door knows (AGL-3376). */
+    actor?: HostEventActor
+  },
+): Promise<UpsertHostContactVerdict> {
+  const { actor, ...options } = captureOptions
+  return upsertHostContact({
+    ...options,
+    onCreated: async (created) => {
+      if (!options.facet?.companyId) {
+        await associateCompanyByDomain(created).catch((error: unknown) => {
+          console.error('captureHostContact company association failed', error)
+        })
+      }
+      if (!options.facet?.ownerUid) {
+        await assignOwnerForCapture({
+          hostId: created.hostId,
+          contactId: created.contactId,
+          email: created.email,
+          source: created.source,
+          formId: options.interaction.formId ?? null,
+          tags: options.tags,
+        }).catch((error: unknown) => {
+          console.error('captureHostContact owner assignment failed', error)
+        })
+      }
+      const cause = contactCaptureActor(created.source, created.email, actor)
+      await emitHostEvent(
+        created.hostId,
+        'contactCreated',
+        contactCreatedPayload(created, options.interaction.formId),
+        cause ? { actor: cause } : {},
+      )
+    },
+  })
+}
+
+/**
+ * The `contactCreated` payload, as the scalars an event may carry.
+ *
+ * `HostEventPayload` holds strings, numbers and booleans and nothing
+ * nested, because the payload seeds an expression scope and a condition
+ * editor whose operators compare strings. So `campaignIds` rides as one
+ * comma-joined string — `contains` still finds a campaign in it — and is
+ * present only when the capture had campaigns, so `notEmpty` on it reads
+ * as "came in through a campaign form". `name` and `lifecycleStage` are
+ * always present, empty when the door had none, so a condition on either
+ * never sees a missing key: `lifecycleStage == "lead"` is the filter that
+ * picks the form captures out of the sign-ups (AGL-2612).
+ *
+ * `formId` rides the same way `campaignIds` does — present only when the
+ * capture came through a form — because the created-report carries the
+ * person's identity and not the routing, and the form is routing: it is
+ * read off the interaction the door was handed. Present, it is what lets a
+ * condition say `formId` equals this form and no other (AGL-2626); absent,
+ * `notEmpty` on it reads as "came in through a form".
+ */
+export function contactCreatedPayload(
+  created: HostContactCreated,
+  formId?: string | null,
+): HostEventPayload {
+  const form = String(formId ?? '').trim()
+  return {
+    contactId: created.contactId,
+    email: created.email,
+    name: created.name ?? '',
+    source: created.source,
+    hostId: created.hostId,
+    lifecycleStage: created.lifecycleStage ?? '',
+    ...(created.campaignIds.length
+      ? { campaignIds: created.campaignIds.join(',') }
+      : {}),
+    ...(form ? { formId: form } : {}),
+  }
+}
+
+export default captureHostContact

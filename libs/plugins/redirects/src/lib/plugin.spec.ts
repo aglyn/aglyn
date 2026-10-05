@@ -16,6 +16,7 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
+import { pluginTransferResourceUi } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { registerRedirectsConsole } from './plugin'
 
@@ -30,5 +31,10 @@ describe('redirects plugin', () => {
     expect(extension?.navItems?.[0]?.Component).toBeDefined()
     // Console-only: it contributes no besigner/canvas bundle.
     expect(Aglyn.plugins.getDependency(BUNDLE_ID)).toBeUndefined()
+  })
+
+  it('names its transfer resource for the import wizard and the export dialog', () => {
+    registerRedirectsConsole()
+    expect(pluginTransferResourceUi('redirects')).toMatchObject({ label: 'Redirects', pluginId: BUNDLE_ID })
   })
 })

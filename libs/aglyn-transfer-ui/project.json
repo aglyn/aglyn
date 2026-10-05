@@ -1,0 +1,30 @@
+{
+  "name": "aglyn-transfer-ui",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/aglyn-transfer-ui/src",
+  "projectType": "library",
+  "tags": ["scope:lib", "scope:aglyn", "scope:ui", "scope:core", "type:ui"],
+  "targets": {
+    "build": {
+      "executor": "@nx/js:swc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/libs/aglyn-transfer-ui",
+        "main": "libs/aglyn-transfer-ui/src/index.ts",
+        "tsConfig": "libs/aglyn-transfer-ui/tsconfig.lib.json",
+        "assets": ["libs/aglyn-transfer-ui/*.md"]
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "outputs": ["{options.outputFile}"]
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/libs/aglyn-transfer-ui"],
+      "options": {
+        "jestConfig": "libs/aglyn-transfer-ui/jest.config.ts"
+      }
+    }
+  }
+}

@@ -24,19 +24,27 @@ import {
   decodeStoredNodes,
   blockingRouteOwner,
   formatQuotaLimit,
+  isScreenGroup,
+  liveScreenDescendants,
   normalizeScreenSlug,
   reservedScreenRouteMessage,
   reservedScreenRouteSegment,
+  screenGroupDissolveMoves,
+  screenRouteParentId,
   screenRoutePathToUrl,
+  SCREEN_KIND_GROUP,
   SCREEN_SLUG_PATH_SEPARATOR_MESSAGE,
   screenSlugHasPathSeparator,
+  toScreenRouteNode,
   wouldCreateScreenCycle,
   type ScreenRouteNode,
   type ScreenUid,
 } from '@aglyn/aglyn'
+import { artifactRenameListKeys } from '@aglyn/aglyn/app-utils/artifact-list-keys'
 import {
   ICON_VARIANT_CLOSE,
   ICON_VARIANT_MODIFY_DELETE,
+  ICON_VARIANT_MODIFY_EDIT,
   ICON_VARIANT_PAGES,
   ICON_VARIANT_SHOW_DETAIL,
   ICON_VARIANT_BESIGNER,
@@ -57,6 +65,7 @@ import { Timestamp } from '@aglyn/shared-util-timestamp'
 import {
   mdiBookmarkOutline,
   mdiContentCopy,
+  mdiFolderPlusOutline,
   mdiOpenInNew,
   mdiPublishOff,
   mdiTranslate,
@@ -105,6 +114,9 @@ import ArtifactDeleteConfirmDescription, {
   fetchArtifactUsage,
 } from '../../../../../../components/artifacts/artifact-delete-confirm.component'
 import HostDisplayNameComponent from '../../../../../../components/host-display-name.component'
+import LiveDescendantsNote, {
+  type LiveDescendantPage,
+} from '../../../../../../components/live-descendants-note.component'
 import SaveAsTemplateDialog, {
   type SaveAsTemplateSource,
 } from '../../../../../../components/templates/save-as-template-dialog.component'
@@ -272,13 +284,28 @@ function Screens(props) {
       ).size,
     [data, routingMap],
   )
+  // Through `toScreenRouteNode`, so a GROUP carries its kind (AGL-3463). A
+  // map of `{ slug, parentId }` alone reads a group as a slugless page and
+  // composes no path for anything inside it.
   const screensById = useMemo(() => {
     const map: Record<ScreenUid, ScreenRouteNode> = {}
-    for (const screen of screens) {
-      map[screen.$id] = { slug: screen.slug, parentId: screen.parentId }
-    }
+    for (const screen of screens) map[screen.$id] = toScreenRouteNode(screen)
     return map
   }, [screens])
+  /**
+   * The pages under `id` that keep serving when `id` is unpublished or
+   * deleted (AGL-3463): neither act removes more than its own routing entry,
+   * so the confirmations name these rather than leave the author believing
+   * the whole section went down.
+   */
+  const liveDescendantPages = useCallback(
+    (id: ScreenUid): LiveDescendantPage[] =>
+      liveScreenDescendants(id, screensById, routingMap).map((page) => ({
+        ...page,
+        name: screens.find((screen) => screen.$id === page.id)?.displayName,
+      })),
+    [screens, screensById, routingMap],
+  )
   const { enqueueSnackbar, closeSnackbar } = useSnackbar()
   // Duplicate (AGL-2936): the copy is a draft — no routing entry — so the
   // list gains a row and the live site gains nothing until it is published.
@@ -491,14 +518,17 @@ function Screens(props) {
       await confirm({
         title: 'Delete this page?',
         description: (
-          <ArtifactDeleteConfirmDescription
-            kind="screen"
-            name={
-              screens.find((screen: any) => screen.$id === id)?.displayName ??
-              id
-            }
-            scan={scan}
-          />
+          <>
+            <ArtifactDeleteConfirmDescription
+              kind="screen"
+              name={
+                screens.find((screen: any) => screen.$id === id)
+                  ?.displayName ?? id
+              }
+              scan={scan}
+            />
+            <LiveDescendantsNote pages={liveDescendantPages(id)} />
+          </>
         ),
         confirmationText: 'Delete',
         confirmationButtonProps: { color: 'error' },
@@ -522,7 +552,16 @@ function Screens(props) {
           dequeueLoading && dequeueLoading()
         })
     },
-    [confirm, firestore, hostId, queueLoading, logActivity, screens, user],
+    [
+      confirm,
+      firestore,
+      hostId,
+      queueLoading,
+      logActivity,
+      screens,
+      user,
+      liveDescendantPages,
+    ],
   )
 
   /**
@@ -542,18 +581,27 @@ function Screens(props) {
    *
    * `unpublishScreenRoute` removes the routing-map entry and drops
    * `publishedAt`; the screen, its versions and its slug are untouched, so
-   * Publish puts it back at the same address.
+   * Publish puts it back at the same address. Pages nested under it keep
+   * their own entries, and the dialog names them (AGL-3463).
    */
   const handleUnpublishScreen = useCallback(
     (id: string, name: string, path: string | undefined) => async () => {
       const confirmed = await confirm({
         title: 'Unpublish this page?',
-        description: path
-          ? `${screenRoutePathToUrl(path)} will stop resolving on the live ` +
-            'site. The page, its content and its address are kept — ' +
-            'publishing again puts it back.'
-          : 'This page will stop resolving on the live site. Its content ' +
-            'and address are kept — publishing again puts it back.',
+        description: (
+          <>
+            <span>
+              {path
+                ? `${screenRoutePathToUrl(path)} will stop resolving on the ` +
+                  'live site. The page, its content and its address are ' +
+                  'kept — publishing again puts it back.'
+                : 'This page will stop resolving on the live site. Its ' +
+                  'content and address are kept — publishing again puts it ' +
+                  'back.'}
+            </span>
+            <LiveDescendantsNote pages={liveDescendantPages(id)} />
+          </>
+        ),
         confirmationText: 'Unpublish',
       })
         .then(() => true)
@@ -582,13 +630,17 @@ function Screens(props) {
       enqueueSnackbar,
       logActivity,
       user,
+      liveDescendantPages,
     ],
   )
 
   // Drop handler for the hierarchy table: re-parents/reorders the screen,
   // rewrites sibling `order` values, then cascades routing-map paths for the
   // moved screen and its descendants (parent `company` + own `about` →
-  // /company/about, same rules as the besigner Publishing section).
+  // /company/about, same rules as the besigner Publishing section). A live
+  // page whose new chain does not compose — dropped under a page with no
+  // slug — keeps the address it has; a move never takes a page off the site
+  // (AGL-3463).
   const handleMoveScreen = useCallback(
     async ({ screenId, nextParentId, beforeId }: ScreenMoveRequest) => {
       if (loading) return
@@ -626,8 +678,52 @@ function Screens(props) {
       const nextRouteEntries = parentChanged
         ? buildScreenRouteEntries(screenId, nextById, routingMap, {
             publish: false,
+            currentById: screensById,
           })
         : undefined
+      /*
+       * A GROUP IS NOT A LEVEL, AND THIS IS WHERE THAT IS HELD (AGL-3463).
+       *
+       * A page composes its path under the nearest ancestor that is not a
+       * group, so a drop that leaves that ancestor where it was — into a group,
+       * out of one, from one group to another at the same level — has nothing
+       * to rewrite. Asserted rather than assumed: the entries this drop would
+       * write are compared with the live map, and if any address would move
+       * the drop is refused before a single write. The case it catches is a
+       * page whose stored slug and published address already disagree (the
+       * glued `alternativeswebflow` shape from AGL-2572), which any re-parent
+       * would otherwise "repair" by moving the live page to a new URL.
+       *
+       * Entries that equal the live map are dropped from the write as well, so
+       * a move into a group touches no routing entry at all.
+       */
+      const routeLevelKept =
+        screenRouteParentId(screenId, screensById) ===
+        screenRouteParentId(screenId, nextById)
+      const changedRouteEntries: Record<ScreenUid, string> =
+        Object.fromEntries(
+          Object.entries(nextRouteEntries ?? {}).filter(
+            ([id, path]) => routingMap?.[id] !== path,
+          ),
+        )
+      const [movedAddress] = Object.entries(changedRouteEntries)
+      if (routeLevelKept && movedAddress) {
+        const [movedId, movedTo] = movedAddress
+        const from = routingMap?.[movedId]
+        console.error(
+          '[screens] a move within one route level would change addresses',
+          changedRouteEntries,
+        )
+        enqueueSnackbar(
+          `Not moved — this would change ${
+            from ? screenRoutePathToUrl(from) : 'a page'
+          } to ${screenRoutePathToUrl(movedTo)}. ` +
+            'Its slug and its published address disagree; publish it again ' +
+            'so they match, then move it.',
+          { variant: 'warning', persist: false },
+        )
+        return
+      }
       /*
        * A move can recompose a live address onto a reserved segment with
        * nobody typing anything (AGL-2588).
@@ -654,11 +750,7 @@ function Screens(props) {
        */
       const reservedMove = Object.values(nextRouteEntries ?? {}).reduce<
         string | undefined
-      >(
-        (found, path) =>
-          found ?? (path ? reservedScreenRouteSegment(path) : undefined),
-        undefined,
-      )
+      >((found, path) => found ?? reservedScreenRouteSegment(path), undefined)
       if (reservedMove) {
         enqueueSnackbar(reservedScreenRouteMessage(reservedMove), {
           variant: 'warning',
@@ -699,25 +791,35 @@ function Screens(props) {
           }
         })
         await batch.commit()
-        if (nextRouteEntries) {
+        if (Object.keys(changedRouteEntries).length) {
           // Dragging a screen to a new parent MOVES it; it does not put it
           // on the site (AGL-2571). Live paths follow the new parent, and a
           // screen nobody published stays out of the routing map — the map
           // is the only thing that makes a path reachable, so writing an
           // entry here would publish by drag-and-drop. These are the same
           // entries the reservation check above read, so what is refused and
-          // what is written are one composition.
-          await syncScreenRouteEntries(firestore, hostId, nextRouteEntries, {
+          // what is written are one composition — less the ones that already
+          // say what they would be set to.
+          await syncScreenRouteEntries(firestore, hostId, changedRouteEntries, {
             user,
           })
         }
+        const livePath = routingMap?.[screenId]
         enqueueSnackbar(
           // "Now served at" only for a screen that IS served (AGL-2571) —
           // an unpublished screen is moved, not routed, and saying otherwise
           // is the same false report the toolbar was making.
-          parentChanged && nextSelfPath && routingMap?.[screenId] !== undefined
-            ? `Page moved — now served at ${screenRoutePathToUrl(nextSelfPath)}`
-            : 'Page moved',
+          parentChanged && livePath && !nextSelfPath
+            ? // Kept, not dropped (AGL-3463): the new parent composes no
+              // address, so the page stays where it is until it is
+              // published again.
+              `Page moved — still served at ${screenRoutePathToUrl(livePath)}` +
+                ', its address until you publish it again'
+            : parentChanged && nextSelfPath && livePath && !routeLevelKept
+              ? `Page moved — now served at ${screenRoutePathToUrl(nextSelfPath)}`
+              : parentChanged && nextSelfPath && livePath
+                ? `Page moved — still served at ${screenRoutePathToUrl(nextSelfPath)}`
+                : 'Page moved',
           { variant: 'success', persist: false },
         )
       } catch (error) {
@@ -740,6 +842,206 @@ function Screens(props) {
       queueLoading,
       enqueueSnackbar,
       user,
+    ],
+  )
+
+  /**
+   * PAGE GROUPS (AGL-3463): a folder in this list that holds pages and is not
+   * one. `{ id }` renames that group; no id creates a new one.
+   */
+  const [groupDialog, setGroupDialog] = useState<{
+    id?: ScreenUid
+    name: string
+  } | null>(null)
+
+  /**
+   * Create or rename a group.
+   *
+   * A group is born through /api/hosts/resources like every screen, as
+   * `kind: 'group'` and with nothing else — no slug, no version, no routing
+   * entry. The route stamps the kind and the rules freeze it, so a group
+   * cannot later be turned into a page it never paid for, and it spends none
+   * of the plan's page allowance (`screenClaimsToBeAPage`).
+   *
+   * A new group goes to the TOP of the list, where the author who just made
+   * it is looking. Appended, it lands on the last page of top-level rows.
+   */
+  const handleSubmitGroup = useCallback(async () => {
+    if (!groupDialog) return
+    const name = groupDialog.name.trim()
+    if (!name) return
+    const dequeueLoading = queueLoading()
+    try {
+      if (groupDialog.id) {
+        await updateDoc(doc(firestore, 'hosts', hostId, 'screens', groupDialog.id), {
+          displayName: name,
+          ...artifactRenameListKeys('screens', name),
+          updatedAt: Timestamp.now(),
+        })
+        enqueueSnackbar('Group renamed', { variant: 'success', persist: false })
+      } else {
+        const id = createResourceUid()
+        await createHostResource({
+          hostId,
+          resource: 'screen',
+          id,
+          data: { displayName: name, kind: SCREEN_KIND_GROUP },
+        })
+        const topOrders = screens
+          .filter((screen) => !screen.parentId || !screensById[screen.parentId])
+          .map((screen) => screen.order)
+          .filter((order): order is number => typeof order === 'number')
+        await updateDoc(doc(firestore, 'hosts', hostId, 'screens', id), {
+          order: Math.min(0, ...topOrders) - 1,
+        }).catch(() => undefined)
+        logActivity('Created group', { type: 'screen', id, name })
+        enqueueSnackbar(
+          `Created group “${name}” — drag pages onto it to move them in`,
+          { variant: 'success', persist: false },
+        )
+      }
+      setGroupDialog(null)
+    } catch (error) {
+      console.error(error)
+      enqueueSnackbar(
+        (error as Error)?.message ?? 'An error has occurred',
+        { variant: 'error', allowDuplicate: true },
+      )
+    } finally {
+      dequeueLoading()
+    }
+  }, [
+    groupDialog,
+    queueLoading,
+    firestore,
+    hostId,
+    createHostResource,
+    screens,
+    screensById,
+    logActivity,
+    enqueueSnackbar,
+  ])
+
+  /**
+   * DELETING A GROUP KEEPS ITS PAGES, AND THEIR ADDRESSES (AGL-3463).
+   *
+   * The group's direct children move up one level, into the group's own
+   * place among its siblings, and the group is soft-deleted — one batch, so
+   * there is never a moment where they point at a deleted parent. A group
+   * contributes nothing to a path, so no address changes and the routing map
+   * is not written; that is asserted on the after-state before anything is,
+   * exactly as a drop is.
+   */
+  const handleDeleteGroup = useCallback(
+    async (id: ScreenUid) => {
+      const group = screens.find((screen) => screen.$id === id)
+      const name = group?.displayName ?? id
+      const moves = screenGroupDissolveMoves(id, screensById)
+      const childIds = Object.keys(moves)
+      const confirmed = await confirm({
+        title: 'Delete this group?',
+        description: childIds.length
+          ? `Everything in “${name}” moves up a level, where the group ` +
+            'was. No page changes its address and nothing is unpublished.'
+          : `“${name}” is empty. Nothing else changes.`,
+        confirmationText: 'Delete group',
+        confirmationButtonProps: { color: 'error' },
+      })
+        .then(() => true)
+        .catch(() => false)
+      if (!confirmed) return
+
+      const nextById: Record<ScreenUid, ScreenRouteNode | undefined> = {
+        ...screensById,
+      }
+      delete nextById[id]
+      for (const [childId, parentId] of Object.entries(moves)) {
+        nextById[childId] = { ...screensById[childId], parentId }
+      }
+      const moved = childIds.flatMap((childId) =>
+        Object.entries(
+          buildScreenRouteEntries(childId, nextById, routingMap, {
+            publish: false,
+            currentById: screensById,
+          }),
+        ).filter(([screenId, path]) => routingMap?.[screenId] !== path),
+      )
+      if (moved.length) {
+        console.error('[screens] deleting a group would move addresses', moved)
+        enqueueSnackbar(
+          'Not deleted — a page in this group has a published address that ' +
+            'does not match its slug. Publish it again, then delete the group.',
+          { variant: 'warning', persist: false },
+        )
+        return
+      }
+
+      const dequeueLoading = queueLoading()
+      try {
+        // The level the children join, in display order, with the group's
+        // slot replaced by its children in theirs.
+        const levelOf = (screen: ScreenHierarchyRow) =>
+          screen.parentId && screensById[screen.parentId]
+            ? screen.parentId
+            : undefined
+        const groupLevel = group ? levelOf(group) : undefined
+        const children = screens
+          .filter((screen) => screen.$id in moves)
+          .sort(compareScreenSiblings)
+        const ordered = screens
+          .filter((screen) => levelOf(screen) === groupLevel)
+          .sort(compareScreenSiblings)
+          .flatMap((screen) => (screen.$id === id ? children : [screen]))
+        const batch = writeBatch(firestore)
+        ordered.forEach((screen, index) => {
+          const ref = doc(firestore, 'hosts', hostId, 'screens', screen.$id)
+          if (screen.$id in moves) {
+            batch.update(ref, {
+              parentId: moves[screen.$id] ?? deleteField(),
+              order: index,
+              updatedAt: Timestamp.now(),
+            })
+          } else if (screen.order !== index) {
+            batch.update(ref, { order: index })
+          }
+        })
+        batch.update(doc(firestore, 'hosts', hostId, 'screens', id), {
+          deletedAt: Timestamp.now(),
+        })
+        await batch.commit()
+        // A group is never routed. An entry one holds anyway was written by
+        // something else, and it leaves with the group.
+        if (routingMap?.[id] != null) {
+          await unpublishScreenRoute(firestore, { hostId, screenId: id, user })
+        }
+        logActivity('Deleted group', { type: 'screen', id, name })
+        enqueueSnackbar(
+          childIds.length
+            ? `Group deleted — its pages moved up a level, at the same addresses`
+            : 'Group deleted',
+          { variant: 'success', persist: false },
+        )
+      } catch (error) {
+        console.error(error)
+        enqueueSnackbar('An error has occurred', {
+          variant: 'error',
+          allowDuplicate: true,
+        })
+      } finally {
+        dequeueLoading()
+      }
+    },
+    [
+      screens,
+      screensById,
+      routingMap,
+      confirm,
+      queueLoading,
+      firestore,
+      hostId,
+      user,
+      logActivity,
+      enqueueSnackbar,
     ],
   )
 
@@ -853,13 +1155,22 @@ function Screens(props) {
   // templates alike — beside who is in it.
   const { holds: pageHolds } = usePageHolds(hostId)
   const renderRowPresence = useCallback(
-    (row: { $id: string }) => (
+    (row: { $id: string; kind?: unknown }) => (
       <>
         <PageHoldChips holds={pageHolds} target={{ type: 'screen', id: row.$id }} />
         <DocumentPresenceChips people={peopleIn('screen', row.$id)} />
+        {/* What a plugin makes of the page (AGL-3475) — a record
+            template's base and record count, say. */}
+        <PluginWidgetSlot
+          slot="hostScreenRow"
+          hostId={hostId}
+          orgId={org?.$id}
+          screenId={row.$id}
+          screenKind={typeof row.kind === 'string' ? row.kind : undefined}
+        />
       </>
     ),
-    [peopleIn, pageHolds],
+    [peopleIn, pageHolds, hostId, org?.$id],
   )
 
   const handleRowOpen = useCallback(
@@ -902,6 +1213,42 @@ function Screens(props) {
 
   const renderRowActions = useCallback(
     (row: ScreenHierarchyRow) => {
+      /*
+        A GROUP HAS NOTHING TO OPEN (AGL-3463): no live page, no preview, no
+        details, no besigner, no SEO, no publish or unpublish. Hiding them
+        rather than disabling them is the deliberate exception to the rule
+        below — a disabled control says "not yet", and for a group the answer
+        is "never", which the Path column already says.
+      */
+      if (isScreenGroup(row)) {
+        const groupName = row.displayName ?? row.$id
+        return (
+          <ListRowActions
+            label={groupName}
+            items={[
+              {
+                key: 'rename',
+                label: 'Rename group',
+                icon: <MdiIcon path={ICON_VARIANT_MODIFY_EDIT.path} size={0.8} />,
+                onClick: () => setGroupDialog({ id: row.$id, name: groupName }),
+              },
+              {
+                key: 'delete',
+                label: 'Delete group',
+                destructive: true,
+                icon: (
+                  <MdiIcon path={ICON_VARIANT_MODIFY_DELETE.path} size={0.8} />
+                ),
+                onClick: () => void handleDeleteGroup(row.$id),
+                // The delete stamps `deletedAt`, which the rules hold for the
+                // roles that may publish (AGL-2334).
+                disabled: !canPublish,
+                disabledReason: canPublish ? undefined : publishBlock,
+              },
+            ]}
+          />
+        )
+      }
       // AGL-374: slug→path normalization, custom domains, preview links;
       // AGL-1271: a collection template's live URL is decided by the
       // collection that renders it, not its own (dropped) routing entry.
@@ -1056,6 +1403,7 @@ function Screens(props) {
       canPublish,
       publishBlock,
       handleDeleteScreen,
+      handleDeleteGroup,
       handleUnpublishScreen,
       rowHref,
       hostLocales.length,
@@ -1123,6 +1471,15 @@ function Screens(props) {
                 onClick={() => setTemplatesOpen(true)}
               >
                 {'Templates'}
+              </Button>
+              {/* A folder for pages, with no address of its own (AGL-3463). */}
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={<MdiIcon path={mdiFolderPlusOutline.path} />}
+                onClick={() => setGroupDialog({ name: '' })}
+              >
+                {'New group'}
               </Button>
               <Button size="small" variant="contained" onClick={handleFormOpen}>
                 {'Create New Page'}
@@ -1307,7 +1664,9 @@ function Screens(props) {
                 {screens
                   .filter(
                     (screen: any) =>
-                      screen.$id !== translationsFor?.screenId,
+                      screen.$id !== translationsFor?.screenId &&
+                      // A group is not a page and has no translation.
+                      !isScreenGroup(screen),
                   )
                   .map((screen: any) => (
                     <MenuItem key={screen.$id} value={screen.$id}>
@@ -1327,6 +1686,55 @@ function Screens(props) {
             {'Save'}
           </Button>
         </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(groupDialog)}
+        onClose={() => setGroupDialog(null)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <form
+          onSubmit={(event) => {
+            event.preventDefault()
+            void handleSubmitGroup()
+          }}
+        >
+          <DialogTitle>
+            {groupDialog?.id ? 'Rename group' : 'New group'}
+          </DialogTitle>
+          <DialogContent>
+            <TextField
+              autoFocus
+              fullWidth
+              size="small"
+              label="Group name"
+              value={groupDialog?.name ?? ''}
+              onChange={(event) =>
+                setGroupDialog((prev) =>
+                  prev ? { ...prev, name: event.target.value } : prev,
+                )
+              }
+              slotProps={{ htmlInput: { maxLength: 60 } }}
+              helperText={
+                'Groups organize this list. A group has no address of its ' +
+                'own, so the pages in it keep theirs.'
+              }
+              sx={{ mt: 1 }}
+            />
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setGroupDialog(null)}>{'Cancel'}</Button>
+            <Button
+              type="submit"
+              variant="contained"
+              color="primary"
+              disabled={!groupDialog?.name.trim() || loading}
+            >
+              {groupDialog?.id ? 'Save' : 'Create group'}
+            </Button>
+          </DialogActions>
+        </form>
       </Dialog>
     </>
   )

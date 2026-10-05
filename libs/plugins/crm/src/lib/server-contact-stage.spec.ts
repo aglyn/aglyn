@@ -79,8 +79,11 @@ jest.mock('firebase-admin/firestore', () => ({
 
 jest.mock('@aglyn/tenant-runtime', () => ({
   __esModule: true,
-  captureHostContact: jest.fn(),
   emitHostEvent: (...args: unknown[]) => mockEmit(...args),
+}))
+jest.mock('./server/capture-host-contact', () => ({
+  __esModule: true,
+  captureHostContact: jest.fn(),
 }))
 
 jest.mock('@aglyn/tenant-data-admin', () => ({

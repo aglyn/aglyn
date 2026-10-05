@@ -37,6 +37,8 @@ It also registers a `rating` custom field type (`registerCustomFieldType`) with 
 
 The server entry also registers the server side of the `rating` field type, so its validators run on write paths where no client loaded the plugin.
 
+From its server declarations it also answers the platform's kill switch for another plugin (`registerPluginRevocationReader`, `plugin-revocations`): a listing's revocation, which the campaign send path reads before it mails a design installed from that listing.
+
 A listing type whose copies live in another plugin's storage is that plugin's to read and write: `install-dataset-schema`, `publish-dataset-schema` and `update-artifact` keep the listing, its gates, the purchase, the provenance stamp and the tally, and ask the type's owner for the rest through `@aglyn/aglyn/plugin-manager/plugin-artifact-types` (the data plugin keeps `datasetSchema`). With no owner in the deployment the doors refuse (`501`, or `503` when the declared owner did not start) before anything is written.
 
 **Exports from `.`**

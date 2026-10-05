@@ -16,23 +16,16 @@
  */
 'use client'
 
+import { TransferResumeImport } from '@aglyn/aglyn/app-utils/transfer-resume-import'
 import {
   type AglynOrgBilling,
   checkDatasetQuota,
   checkEntitlement,
   checkQuota,
-  coerceDocumentValues,
-  datasetIntegrityUpdate,
-  datasetValueToInput,
-  effectiveDatasetModel,
-  formatDatasetValue,
   getCustomFieldType,
-  modelFromFieldEntries,
-  parseDatasetFieldEntries,
   pluginDocsHelp,
-  validateDocument,
+  useTransferLauncher,
 } from '@aglyn/aglyn'
-import { exportShortfall, mapImportColumns, parseImportRows } from '../model'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
@@ -64,11 +57,9 @@ import {
   deleteDoc,
   deleteField,
   doc,
-  documentId,
   getCountFromServer,
   getDocs,
   limit,
-  orderBy,
   query,
   where,
   setDoc,
@@ -93,6 +84,10 @@ import {
   planRecordQuery,
   recordColumn,
 } from './dataset-record-filter'
+import { coerceDocumentValues, datasetIntegrityUpdate, datasetValueToInput, effectiveDatasetModel, formatDatasetValue, modelFromFieldEntries, validateDocument } from '../model/dataset-models'
+import { fillRecordAddresses } from '../record-pages/record-pages'
+import { datasetDisplayName, parseDatasetFieldEntries } from '../model/datasets'
+import { datasetTransferResourceKey } from '../transfer/dataset-transfer-key'
 
 export interface HostDatasetsCardProps {
   /** Host context: resolves the owning org and logs host activity. */
@@ -110,21 +105,6 @@ export interface HostDatasetsCardProps {
    */
   org?: Partial<AglynOrgBilling>
 }
-
-/**
- * How many existing records a keyed CSV import may consult.
- *
- * The upsert has to ask "does a record with this key already exist", which no
- * page can answer — so it reads its own window, once, when a key field is
- * chosen. The window is bounded because `recordsPerDataset` is unlimited on
- * the agency plan and an unbounded client read is a browser hang behind a
- * dialog button; it is the same ceiling the listener used to carry, moved from
- * every mount of the card to the one moment it is needed.
- *
- * A dataset larger than this is not silently mis-imported: the import says
- * which keys it could consult, measured against the server's exact count.
- */
-const IMPORT_KEY_WINDOW = 500
 
 /**
  * The sentence that says who a NEW dataset is shared with, for the card and
@@ -291,7 +271,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
   const datasets = useMemo(
     () =>
       [...(datasetDocs ?? [])].sort((a, b) =>
-        String(a.displayName ?? '').localeCompare(String(b.displayName ?? '')),
+        datasetDisplayName(a).localeCompare(datasetDisplayName(b)),
       ),
     [datasetDocs],
   )
@@ -628,7 +608,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
     // write that used to stand in for it is gone.
     if (!a || !b || !orgId) return
     const fieldFor = (target: any, fieldId: string) => ({
-      name: String(target.displayName ?? fieldId),
+      name: datasetDisplayName(target) || fieldId,
       type: 'reference' as const,
       required: true,
       reference: {
@@ -638,7 +618,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
       },
     })
     const payload = {
-      displayName: `${a.displayName} ↔ ${b.displayName}`,
+      displayName: `${datasetDisplayName(a)} ↔ ${datasetDisplayName(b)}`,
       fields: ['aRef', 'bRef'],
       model: {
         order: ['aRef', 'bRef'],
@@ -675,7 +655,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
     const confirmed = await confirm({
       title: 'Delete this collection?',
       description:
-        `"${selected.displayName}"` +
+        `"${datasetDisplayName(selected)}"` +
         // What is actually being destroyed, not what is loaded (AGL-1716):
         // a 40,000-row dataset used to warn about "its 500 documents".
         (recordCount
@@ -722,7 +702,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
     logActivity('Deleted dataset', {
       type: 'content',
       id: selected.$id,
-      name: selected.displayName,
+      name: datasetDisplayName(selected),
     })
   }, [
     selected,
@@ -883,7 +863,12 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
   )
   const handleSaveRecord = useCallback(async () => {
     if (!editor || !selected || !dataScope) return
-    const coerced = coerceDocumentValues(model, editor.values)
+    // The editor holds the record's WHOLE values, so an address it already
+    // has stays and an empty one fills in from its source (AGL-3475).
+    const coerced = fillRecordAddresses(
+      model,
+      coerceDocumentValues(model, editor.values),
+    )
     const errors = validateDocument(model, coerced)
     if (Object.keys(errors).length) {
       return void setEditor((prev) => (prev ? { ...prev, errors } : prev))
@@ -945,7 +930,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
     logActivity(editor.id ? 'Updated record' : 'Added record', {
       type: 'content',
       id: selected.$id,
-      name: selected.displayName,
+      name: datasetDisplayName(selected),
     })
   }, [
     editor,
@@ -1020,7 +1005,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
           )
         } catch {
           return void enqueueSnackbar(
-            `Cannot delete: "${other.displayName}" could not be checked for ` +
+            `Cannot delete: "${datasetDisplayName(other)}" could not be checked for ` +
               'references, so removing this record could break it. Nothing ' +
               'was deleted.',
             { variant: 'error' },
@@ -1042,7 +1027,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
         if (restricted) {
           return void enqueueSnackbar(
             `Cannot delete: referenced by ${hits.length} document` +
-              `${hits.length === 1 ? '' : 's'} in "${other.displayName}"`,
+              `${hits.length === 1 ? '' : 's'} in "${datasetDisplayName(other)}"`,
             { variant: 'warning', persist: false },
           )
         }
@@ -1094,309 +1079,55 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
     [selected, datasets, firestore, dataScope, announceRecords, enqueueSnackbar],
   )
 
-  // CSV/JSON round-tripping (AGL-182).
-  const download = useCallback((name: string, mime: string, text: string) => {
-    const url = URL.createObjectURL(new Blob([text], { type: mime }))
-    const anchor = document.createElement('a')
-    anchor.href = url
-    anchor.download = name
-    anchor.click()
-    URL.revokeObjectURL(url)
-  }, [])
-  const [exporting, setExporting] = useState<'csv' | 'json' | null>(null)
   /**
-   * The export is a SERVER stream now (AGL-2335).
-   *
-   * It used to serialize `records` — the card's live listener window, which
-   * is `limit(500)` with no `orderBy`. Firestore answers an unordered limit
-   * in document-id order over auto-ids, so a 2,000-row dataset did not
-   * export "the first 500": it exported 500 unpredictable rows, and running
-   * it twice could produce different ones. `sortDatasetRecords` then sorted
-   * that sample, so the file looked ordered and was arbitrary. The button
-   * said `CSV`, and the agency guide calls the result a *full handover*.
-   *
-   * Fetching the whole collection here instead was not an option — the
-   * agency plan's `recordsPerDataset` is UNLIMITED, so an unbounded
-   * client-side read is a browser hang and a large read bill behind a button
-   * labelled `CSV`. `/api/orgs/datasets/export` pages and streams it.
-   *
-   * The response is CHECKED, not trusted: the route reports a `count()`
-   * aggregate in `X-Aglyn-Export-Rows`, and a body with fewer rows than that
-   * is refused rather than saved. A stream that dies halfway produces a
-   * perfectly well-formed shorter file — nothing about the bytes says they
-   * are short, which is precisely how the old truncation stayed invisible.
+   * Import and export (AGL-3530) open the console's import wizard and export
+   * dialog on this dataset (`data.dataset:<datasetId>`): the file is read,
+   * matched and written on the server, through the same record writes as
+   * every other create and update, and the export streams the fields the
+   * person picks. Outside the console shell there is no launcher, and no
+   * Import or Export to offer. Inside it, Import is offered to a member who
+   * may import (Manage data) and Export to any member who can see the
+   * dataset (AGL-3546) — the transfer routes' own rule.
    */
-  const handleExport = useCallback(
-    (format: 'csv' | 'json') => async () => {
-      if (!selected?.$id || !orgId || exporting) return
-      setExporting(format)
-      try {
-        const response = await authorizedFetch(
-          user,
-          `/api/orgs/datasets/export?orgId=${encodeURIComponent(orgId)}` +
-            `&datasetId=${encodeURIComponent(selected.$id)}` +
-            `&format=${format}`,
-        )
-        if (!response.ok) {
-          const failure = await response.json().catch(() => ({}))
-          throw new Error(failure?.error ?? 'Export failed')
-        }
-        const text = await response.text()
-        const { promised, received, short } = exportShortfall(
-          response.headers.get('X-Aglyn-Export-Rows'),
-          text,
-          format,
-        )
-        if (short) {
-          enqueueSnackbar(
-            `Export incomplete — ${received} of ${promised} documents ` +
-              'arrived. Nothing was saved; try again.',
-            { variant: 'error' },
-          )
-          return
-        }
-        const base =
-          String(selected.displayName ?? 'collection')
-            .replace(/[^A-Za-z0-9_-]+/g, '-')
-            .toLowerCase() || 'collection'
-        download(
-          `${base}.${format}`,
-          format === 'csv' ? 'text/csv' : 'application/json',
-          text,
-        )
-      } catch (error) {
-        enqueueSnackbar(
-          error instanceof Error ? error.message : 'Export failed',
-          { variant: 'error' },
-        )
-      } finally {
-        setExporting(null)
-      }
-    },
-    [selected, orgId, user, exporting, download, enqueueSnackbar],
-  )
-
-  // keyField (wave v6): optional unique key — matching rows update the
-  // existing record instead of appending a duplicate.
-  const [importer, setImporter] = useState<{
-    text: string
-    keyField: string
-  } | null>(null)
-  const importPreview = useMemo(() => {
-    if (!importer) return null
-    const rows = parseImportRows(importer.text)
-    if (!rows || !rows.length) return null
-    const { mapping, unmatched } = mapImportColumns(
-      model,
-      Object.keys(rows[0]),
-    )
-    const prepared = rows.map((raw) => {
-      const input: Record<string, string> = {}
-      for (const [column, fieldId] of Object.entries(mapping)) {
-        input[fieldId] = raw[column] ?? ''
-      }
-      const values = coerceDocumentValues(model, input)
-      const errors = validateDocument(model, values)
-      return { values, errors, valid: !Object.keys(errors).length }
+  const transfer = useTransferLauncher()
+  const transferTarget = selected?.$id
+    ? { resource: datasetTransferResourceKey(selected.$id), scope: 'org' as const }
+    : null
+  const canImport = Boolean(transfer && transferTarget && transfer.can('import', transferTarget))
+  const canExport = Boolean(transfer && transferTarget && transfer.can('export', transferTarget))
+  const handleImport = useCallback(() => {
+    if (!transfer || !selected?.$id) return
+    const dataset = { id: selected.$id, name: datasetDisplayName(selected) }
+    transfer.openImport({
+      resource: datasetTransferResourceKey(dataset.id),
+      scope: 'org',
+      title: dataset.name ? `Import into ${dataset.name}` : 'Import records',
+      onFinished: () => {
+        // An import moves the record count, and the aggregate is a one-shot.
+        setRecordCountEpoch((epoch) => epoch + 1)
+        logActivity('Imported records', { type: 'content', id: dataset.id, name: dataset.name })
+      },
     })
-    return {
-      prepared,
-      unmatched,
-      valid: prepared.filter((row) => row.valid).length,
-    }
-  }, [importer, model])
-  const handleImport = useCallback(async () => {
-    if (!selected || !importPreview || !dataScope) return
-    const validRows = importPreview.prepared.filter((row) => row.valid)
-
-    // Unique-key upsert (wave v6): with a key field picked, incoming rows
-    // that match an existing record's key update it in place, and
-    // duplicate keys within the import collapse to the last row.
-    const keyField = importer?.keyField ?? ''
-    const keyOf = (values: Record<string, unknown>) =>
-      String(values?.[keyField] ?? '').trim().toLowerCase()
-    let updates: Array<{ id: string; values: Record<string, unknown> }> = []
-    let creates = validRows
-    if (keyField) {
-      /*
-       * The key index is its OWN read, not the table's window.
-       *
-       * It used to be built from the card's live listener, which is now a
-       * PAGE — and a page cannot answer "does this key already exist". An
-       * upsert that consults ten rows would turn nearly every update into a
-       * create: duplicate rows, and quota spent on them.
-       *
-       * So it is read here, once, at the moment a key field is actually
-       * chosen — which is also strictly cheaper than the listener it replaces,
-       * since that one paid for five hundred documents on every mount of a
-       * card nobody had scrolled.
-       *
-       * ⚠️ STILL BOUNDED, and the bound is honest rather than hidden. An
-       * unbounded client read is what AGL-2335 refused for the export, for the
-       * same reason: `recordsPerDataset` is unlimited on the agency plan, so
-       * "read them all" is a browser hang behind a dialog button. Past the
-       * ceiling the reader is TOLD which keys could be consulted instead of
-       * being handed silent duplicates — `recordCount` is the server
-       * aggregate, so that comparison is exact.
-       */
-      const existingByKey = new Map<
-        string,
-        { id: string; values: Record<string, unknown> }
-      >()
-      const keyWindow = await getDocs(
-        query(
-          collection(
-            firestore,
-            dataScope[0],
-            dataScope[1],
-            'datasets',
-            selected.$id,
-            'records',
-          ),
-          orderBy(documentId()),
-          limit(IMPORT_KEY_WINDOW),
-        ),
-      ).catch(() => null)
-      for (const snapshot of keyWindow?.docs ?? []) {
-        const values = (snapshot.get('values') as Record<string, unknown>) ?? {}
-        const key = keyOf(values)
-        if (key) existingByKey.set(key, { id: snapshot.id, values })
-      }
-      if (recordCount > IMPORT_KEY_WINDOW) {
-        enqueueSnackbar(
-          `Matching on "${keyField}" read the first ` +
-            `${IMPORT_KEY_WINDOW.toLocaleString()} of ${recordCount.toLocaleString()} ` +
-            'records — rows keyed beyond that will be added rather than updated.',
-          { variant: 'warning', persist: true },
-        )
-      }
-      const deduped = new Map<string, (typeof validRows)[number]>()
-      const keyless: typeof validRows = []
-      for (const row of validRows) {
-        const key = keyOf(row.values)
-        if (key) deduped.set(key, row)
-        else keyless.push(row)
-      }
-      updates = []
-      creates = [...keyless]
-      for (const [key, row] of deduped) {
-        const existing = existingByKey.get(key)
-        // The import's columns over the record's own: a column the file
-        // does not carry keeps its value, and the filter fields are derived
-        // from the WHOLE record, not the columns imported.
-        if (existing) {
-          updates.push({ id: existing.id, values: { ...existing.values, ...row.values } })
-        } else creates.push(row)
-      }
-    }
-
-    // Against the dataset's real size, not the loaded window (AGL-1716) —
-    // `room` subtracts this number from the limit, so an understated count
-    // did not merely fail to refuse, it INFLATED the slots offered.
-    const quota = checkQuota(
-      org,
-      'recordsPerDataset',
-      recordCount + creates.length - 1,
-    )
-    const room = quota.allowed
-      ? creates.length
-      : Math.max(0, Number(quota.limit ?? 0) - recordCount)
-    const toWrite = creates.slice(0, room)
-    if (!toWrite.length && !updates.length) {
-      return void enqueueSnackbar(
-        `Record limit reached (${quota.limit}) — see Billing to upgrade`,
-        { variant: 'warning', persist: false },
-      )
-    }
-    // Updates stay client-direct (no quota consumed), chunked under
-    // Firestore's 500-writes/batch limit.
-    for (let start = 0; start < updates.length; start += 400) {
-      const batch = writeBatch(firestore)
-      updates.slice(start, start + 400).forEach((update) => {
-        const ref = doc(
-          firestore,
-          dataScope[0],
-          dataScope[1],
-          'datasets',
-          selected.$id,
-          'records',
-          update.id,
-        )
-        batch.set(
-          ref,
-          {
-            values: update.values,
-            // Every write that sets `values` moves the integrity index with
-            // them, or the index describes the values this row used to hold.
-            ...datasetIntegrityUpdate(model, update.values, deleteField()),
-            updatedAt: Timestamp.now(),
-          },
-          // Each named field replaced whole — `merge: true` would fold the
-          // `filterValues` map into the stored one and keep a cleared value.
-          {
-            mergeFields: ['values', 'referencedIds', 'filterKeys', 'filterValues', 'updatedAt'],
-          },
-        )
-      })
-      await batch.commit()
-    }
-    // Creates go through the quota-enforcing API (AGL-473). The legacy
-    // host-scope client batch that used to be the `else` here is gone
-    // (AGL-1050) — it was the largest of the quota bypasses, since a CSV
-    // import could create records by the hundred without ever asking.
-    try {
-      if (toWrite.length) {
-        await callDatasetApi({
-          action: 'import-records',
-          datasetId: selected.$id,
-          records: toWrite.map((row) => ({ values: row.values })),
-        })
-      } else if (updates.length) {
-        // An import that only UPDATED existing rows never reaches the server
-        // leg, so it has to announce for itself — otherwise the one import
-        // shape that changes every row of a dataset is the one that refreshes
-        // nothing (AGL-3113).
-        await announceRecords(selected.$id)
-      }
-    } catch (error: any) {
-      return void enqueueSnackbar(error?.message ?? 'Import failed', {
-        variant: 'warning',
-        persist: false,
-      })
-    }
-    setImporter(null)
-    // An import moves the record count and the aggregate is a one-shot —
-    // the listener refreshes the ROWS for free, the count has to be asked
-    // again or the next import prices its room off a pre-import number.
-    setRecordCountEpoch((epoch) => epoch + 1)
-    const skippedInvalid = importPreview.prepared.length - validRows.length
-    const skippedQuota = creates.length - toWrite.length
-    enqueueSnackbar(
-      `Imported ${toWrite.length} new` +
-        (updates.length ? `, updated ${updates.length}` : '') +
-        (skippedInvalid ? `, ${skippedInvalid} invalid skipped` : '') +
-        (skippedQuota ? `, ${skippedQuota} over the record limit` : ''),
-      { variant: skippedInvalid || skippedQuota ? 'warning' : 'success' },
-    )
-    logActivity('Imported records', {
-      type: 'content',
-      id: selected.$id,
-      name: selected.displayName,
+  }, [transfer, selected, logActivity])
+  const handleExport = useCallback(() => {
+    if (!transfer || !selected?.$id) return
+    const name = datasetDisplayName(selected)
+    transfer.openExport({
+      resource: datasetTransferResourceKey(selected.$id),
+      scope: 'org',
+      title: name ? `Export ${name}` : 'Export records',
+      // The table's own query, re-planned on the server the way the table
+      // plans it, so "the current filter" exports what the table shows.
+      ...(filteringRecords
+        ? {
+            filter: {
+              label: 'The records the table’s filters and search show',
+              value: { clauses: recordClauses, search: gridFilter.searchWords },
+            },
+          }
+        : {}),
     })
-  }, [
-    selected,
-    importPreview,
-    importer?.keyField,
-    org,
-    model,
-    recordCount,
-    firestore,
-    dataScope,
-    callDatasetApi,
-    announceRecords,
-    enqueueSnackbar,
-    logActivity,
-  ])
+  }, [transfer, selected, filteringRecords, recordClauses, gridFilter.searchWords])
 
   /*
    * One column per schema field, filterable as far as `datasetRecordFilter`
@@ -1499,7 +1230,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
             >
               {datasets.map((item) => (
                 <MenuItem key={item.$id} value={item.$id}>
-                  {item.displayName}
+                  {datasetDisplayName(item)}
                 </MenuItem>
               ))}
             </TextField>
@@ -1513,32 +1244,26 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
             <Button size="small" onClick={() => setSchemaOpen(true)}>
               {'Schema'}
             </Button>
-            <Button
-              size="small"
-              onClick={() => setImporter({ text: '', keyField: '' })}
-            >
-              {'Import'}
-            </Button>
+            {/* An import left unfinished, reopened where it stopped (AGL-3549). */}
+            {transferTarget ? (
+              <TransferResumeImport
+                target={transferTarget}
+                {...(selected ? { title: `Import into ${datasetDisplayName(selected)}` } : {})}
+                onFinished={() => setRecordCountEpoch((epoch) => epoch + 1)}
+              />
+            ) : null}
+            {canImport ? (
+              <Button size="small" onClick={handleImport}>
+                {'Import'}
+              </Button>
+            ) : null}
             {/* The real dataset size, not the loaded window (AGL-2335) —
-                the export is a server stream now, so a dataset whose first
-                page has not landed yet is still exportable. */}
-            {recordCount || records.length ? (
-              <>
-                <Button
-                  size="small"
-                  disabled={Boolean(exporting)}
-                  onClick={handleExport('csv')}
-                >
-                  {exporting === 'csv' ? 'Exporting…' : 'CSV'}
-                </Button>
-                <Button
-                  size="small"
-                  disabled={Boolean(exporting)}
-                  onClick={handleExport('json')}
-                >
-                  {exporting === 'json' ? 'Exporting…' : 'JSON'}
-                </Button>
-              </>
+                the export is a server stream, so a dataset whose first page
+                has not landed yet is still exportable. */}
+            {canExport && (recordCount || records.length) ? (
+              <Button size="small" onClick={handleExport}>
+                {'Export'}
+              </Button>
             ) : null}
             <Button size="small" color="error" onClick={handleDeleteDataset}>
               {'Delete'}
@@ -1866,82 +1591,6 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
         </DialogActions>
       </Dialog>
       <Dialog
-        open={Boolean(importer)}
-        onClose={() => setImporter(null)}
-        maxWidth="sm"
-        fullWidth
-      >
-        <DialogTitle>{'Import records'}</DialogTitle>
-        <DialogContent
-          sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}
-        >
-          <TextField
-            multiline
-            minRows={6}
-            size="small"
-            label="CSV (with header row) or JSON array"
-            value={importer?.text ?? ''}
-            onChange={(event) =>
-              setImporter((prev) =>
-                prev ? { ...prev, text: event.target.value } : prev,
-              )
-            }
-            sx={{ mt: 1 }}
-            helperText="Columns match by field id or display name"
-          />
-          <TextField
-            select
-            size="small"
-            label="Match on field (upsert)"
-            value={importer?.keyField ?? ''}
-            onChange={(event) =>
-              setImporter((prev) =>
-                prev ? { ...prev, keyField: event.target.value } : prev,
-              )
-            }
-            helperText={
-              'Rows whose value matches an existing record update it ' +
-              'instead of appending a duplicate.'
-            }
-            sx={{ maxWidth: 280 }}
-          >
-            <MenuItem value="">{'None — always append'}</MenuItem>
-            {model.order.map((fieldId) => (
-              <MenuItem key={fieldId} value={fieldId}>
-                {model.fields[fieldId]?.name ?? fieldId}
-              </MenuItem>
-            ))}
-          </TextField>
-          {importPreview ? (
-            <Typography variant="body2" color="text.secondary">
-              {`${importPreview.prepared.length} rows parsed · ` +
-                `${importPreview.valid} valid` +
-                (importPreview.prepared.length - importPreview.valid
-                  ? ` · ${importPreview.prepared.length - importPreview.valid} invalid (skipped)`
-                  : '') +
-                (importPreview.unmatched.length
-                  ? ` · unmatched columns: ${importPreview.unmatched.join(', ')}`
-                  : '')}
-            </Typography>
-          ) : importer?.text.trim() ? (
-            <Typography variant="body2" color="warning.main">
-              {'Nothing parseable yet — CSV needs a header row.'}
-            </Typography>
-          ) : null}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setImporter(null)}>{'Cancel'}</Button>
-          <Button
-            variant="contained"
-            color="primary"
-            disabled={!importPreview?.valid}
-            onClick={handleImport}
-          >
-            {'Import valid rows'}
-          </Button>
-        </DialogActions>
-      </Dialog>
-      <Dialog
         open={Boolean(joiner)}
         onClose={() => setJoiner(null)}
         maxWidth="xs"
@@ -1970,7 +1619,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
             >
               {datasets.map((item) => (
                 <MenuItem key={item.$id} value={item.$id}>
-                  {item.displayName}
+                  {datasetDisplayName(item)}
                 </MenuItem>
               ))}
             </TextField>

@@ -23,12 +23,15 @@ import {
 } from '@aglyn/aglyn'
 import { describeHostTokens } from '@aglyn/aglyn/app-utils/host-tokens'
 import { BindingPickerContext, type BindingOption } from '@aglyn/besigner-ui'
-import { collection, doc, limit, query } from 'firebase/firestore'
+import { doc } from 'firebase/firestore'
 import { useParams } from 'next/navigation'
 import { useMemo } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
-import useFirestoreCollection from '../hooks/use-firestore-collection'
 import useFirestoreDoc from '../hooks/use-firestore-doc'
+import {
+  bindingLookupsFromDocs,
+  useHostBindingDocs,
+} from '../hooks/use-host-binding-docs'
 
 export interface BindingPickerProviderProps {
   hostId: string
@@ -46,16 +49,8 @@ const EMPTY_COMPONENT_PROPS: ReusableComponentProp[] = []
 export function BindingPickerProvider(props: BindingPickerProviderProps) {
   const { hostId, children } = props
   const firestore = useFirestore()
-  const { data: variableDocs } = useFirestoreCollection<any>(
-    () => query(collection(firestore, 'hosts', hostId, 'variables'), limit(100)),
-    [firestore, hostId],
-    { idField: '$id' },
-  )
-  const { data: functionDocs } = useFirestoreCollection<any>(
-    () => query(collection(firestore, 'hosts', hostId, 'functions'), limit(100)),
-    [firestore, hostId],
-    { idField: '$id' },
-  )
+  // The same lists every save converts typed names against (AGL-3481).
+  const { variableDocs, functionDocs } = useHostBindingDocs(hostId)
   // The site itself, for `host.*` tokens (AGL-1023). One doc, already cached
   // by every other surface on the page.
   const { data: hostDoc } = useFirestoreDoc<any>(
@@ -177,28 +172,14 @@ export function BindingPickerProvider(props: BindingPickerProviderProps) {
           : 'Not set on this site — renders as nothing',
       })
     }
-        // Live canvas resolution (AGL-97): id keys serve resolveBindings;
-    // name keys stay ONLY for save-time typed-name normalization
-    // (normalizeBindingTokens looks names up as map keys) — the retired
-    // legacy pass (AGL-194) no longer reads them at render.
-    const variables: Record<string, any> = {}
-    for (const variable of variableDocs ?? []) {
-      if (variable.deletedAt || !variable.name) continue
-      variables[variable.name] = variable
-    }
-    for (const variable of variableDocs ?? []) {
-      if (variable.deletedAt || !variable.name) continue
-      variables[variable.$id] = variable
-    }
-    const functions: Record<string, any> = {}
-    for (const definition of functionDocs ?? []) {
-      if (definition.deletedAt || !definition.name) continue
-      functions[definition.name] = definition
-    }
-    for (const definition of functionDocs ?? []) {
-      if (definition.deletedAt || !definition.name) continue
-      functions[definition.$id] = definition
-    }
+    // Live canvas resolution (AGL-97): id keys serve resolveBindings;
+    // name keys stay ONLY for typed-name normalization (normalizeBindingTokens
+    // looks names up as map keys) — the retired legacy pass (AGL-194) no
+    // longer reads them at render.
+    const { variables, functions } = bindingLookupsFromDocs(
+      variableDocs,
+      functionDocs,
+    )
     // The same document the Site options above preview, so the canvas fills
     // `{{host.*}}` in with exactly the values the picker promised (AGL-2881).
     return {

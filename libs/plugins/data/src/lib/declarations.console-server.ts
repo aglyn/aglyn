@@ -30,9 +30,12 @@ import {
   registerApiV1Resource,
   registerApiV1UsageFigures,
 } from '@aglyn/tenant-data-admin/server/api-v1-resources'
+import { registerPluginTransferResource } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin/server/firebase-admin'
 import { BUNDLE_ID, DATASET_SCHEMA_ARTIFACT_TYPE } from './constants/bundle-common'
 import { registerDatasetFigureReaders } from './server/dataset-figures'
+import { DATASET_TRANSFER_RESOURCE } from './transfer/dataset-transfer-key'
+import { DATASET_TRANSFER_HOOKS } from './transfer/dataset-transfer-resource'
 
 /**
  * The data plugin's CONSOLE-ONLY server declarations, named under
@@ -64,10 +67,17 @@ import { registerDatasetFigureReaders } from './server/dataset-figures'
  * boot that skipped this refuses the install rather than reading it as a type
  * nobody keeps.
  *
+ * And a dataset's records are imported and exported through the platform's
+ * transfer routes (`/api/transfer/*`, AGL-3530): this registers the server
+ * half of the `data.dataset` resource `plugins.config.json` declares
+ * (`transferResources`), so a boot that skipped it fails the wizard rather
+ * than reading as a dataset with nothing to move.
+ *
  * Light at boot: the API handler is imported with its first request, the
  * description when the document is first built, the usage reader with the
  * first usage call, the index's reader with its first read and the schema's
- * answers with the first publish, install or update; the figure
+ * answers with the first publish, install or update, the transfer hooks with
+ * the first import or export; the figure
  * readers reach Firestore only when one is asked. Registering again replaces
  * this plugin's own entries, so a second call (a hot reload, a spec) is
  * harmless.
@@ -90,6 +100,9 @@ export function registerDataConsoleServerDeclarations(): void {
   registerPluginRecordIndex('dataset', lazyDatasetIndex, { pluginId: BUNDLE_ID })
   registerDatasetFigureReaders(() => firebaseAdmin.app().firestore())
   registerArtifactTypeOwner(DATASET_SCHEMA_ARTIFACT_TYPE, lazyDatasetSchemaOwner, {
+    pluginId: BUNDLE_ID,
+  })
+  registerPluginTransferResource(DATASET_TRANSFER_RESOURCE, DATASET_TRANSFER_HOOKS, {
     pluginId: BUNDLE_ID,
   })
 }

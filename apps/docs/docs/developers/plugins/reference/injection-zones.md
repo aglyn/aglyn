@@ -24,6 +24,7 @@ The guaranteed zones are the exported `CONSOLE_WIDGET_SLOTS` catalog —
 | `pluginInstallStatus` | An installation's own page, above where it runs: what the installing plugin says about the version the workspace runs. Drawn only for an installation that exists | `orgSlug`, `pluginRef` (the installation's id), `pin` (one pin of it) |
 | `templateGallery` | The template gallery ("Start from a template" on a site's Pages, Layouts and Components tabs), below the site's own templates and the starters: a shelf of templates your plugin offers to install. Call `reportShelf` with `loading`, `empty` or `shown` so the gallery's "nothing matches" line counts your shelf, and `onInstalled()` once an install lands so the gallery closes | `hostId`, `kind` (`page`, `layout` or `component`), `search` (the word typed in the gallery's search, `''` for none), `onInstalled()`, `reportShelf(shelfId, state)` |
 | `templateInstallStatus` | A row of a site's Templates library whose template a plugin installed, beside its Source badge: what your plugin says about the copy the site holds, such as an update to install. Drawn once per such row; draw nothing for a template you did not install | `hostId`, `template` (the row's template document, `$id` included) |
+| `sitePackageItemPreview` | One side of an item in a site package import's **Changes** step, beside the other side: the item drawn the way your plugin previews it. Name the package kinds your widget draws in the widget's `itemKinds` (for example `itemKinds: ['form']`); the import draws your widget for items of those kinds only, once for the site's copy and once for the file's, and a kind no widget names keeps the console's own rendering or its value list. Your widget reads what its preview always reads and writes nothing. The console asks your widget's own `permission` here, not your extension's: the import's card already admits whoever may import the package, and your extension's permission guards your own pages | `hostId`, `side` (`'site'` or `'file'`), `itemKey` (`<kind>/<id>`), `kind`, `itemId`, `content` (the item as the import would write it, without `$id`), `title` — `ConsoleSitePackageItemPreviewZoneProps` |
 | `dashboardFooter` | Bottom of the host dashboard | `hostId` |
 | `orgSettings` | Organization → Settings, below the tabs | `orgId`, `org` |
 | `hostSettings` | Host setup page, below the built-in cards | `hostId` |
@@ -45,13 +46,15 @@ The guaranteed zones are the exported `CONSOLE_WIDGET_SLOTS` catalog —
 | `besignerInspector` | A section at the bottom of the besigner's Attributes panel, under the selected element's fields, on every editor the designer opens | `hostId` (`null` on an editor that names no site), `node` (the selected element) |
 | `besignerToolbar` | The besigner's secondary toolbar, after undo and redo, on every editor the designer opens | `hostId` (`null` on an editor that names no site) |
 | `besignerInteractions` | The besigner's Interactions section, on every editor that offers one. Your widget draws nothing: it reads the section experiments your plugin runs on the site and calls `reportSectionExperiments` from an effect, and the section badges an element that has one and offers to start one from your `create`. Report `null` to withdraw | `hostId`, `screenId` (`null` on a layout or a component, which is no page to run one on: report no `create` there), `reportSectionExperiments(reporterId, { experiments, create? } \| null)` |
+| `besignerPageProperties` | A section at the foot of the Besigner's **Page Properties** drawer, under the page's publishing, layout, SEO and password sections: what your plugin makes of the page itself, such as serving it once per record. Your widget saves through its own routes, never the drawer's buttons | `hostId`, `orgId` (`undefined` while it resolves), `screenId` (the page in the editor), `screenKind?` (the page's stored `kind`: `'template'` for a template, absent for a page) — `ConsoleBesignerPagePropertiesZoneProps` |
+| `hostScreenRow` | Inside each row of a site's **Pages** list, beside the page's name: a chip about that page, such as that it is a record template and how many pages it serves. Drawn once per row, so read what you need once for the site and answer each row from that; draw nothing for a page you have nothing to say about | `hostId`, `orgId` (`undefined` while it resolves), `screenId` (the row's page), `screenKind?` — `ConsoleHostScreenRowZoneProps` |
 | `hostScreens` | A site's **Pages** list, beside Templates and Create New Page: another way to start a page | `hostId`, `orgId` (`undefined` while the page resolves it) |
 | `hostTemplates` | A site's Templates page, beside Create Template: another way to start a template | `hostId`, `orgId` |
 | `hostLayouts` | A site's Layouts page, beside Templates and Create New Layout: another way to start a layout | `hostId`, `orgId` |
 | `hostComponents` | A site's Components page, beside Templates and Create Component: another way to start a reusable component | `hostId`, `orgId` |
 | `recordInsights` | A CRM contact's, company's, deal's or lead's page, under its header. Hosted by the CRM plugin (see [Zones a plugin hosts](#zones-a-plugin-hosts)) | `hostId` (`null` at the organization level), `orgId`, `record` (`{ kind, id, name }`), `proposeTask(task, key)` (opens the CRM's task form filled in; absent on a lead), and on a deal `stages`, `stageId` and `proposeStage(stageId, key)` (asks, then moves the deal through its stage route) |
 | `recordEmail` | Inside the CRM's one-to-one composer, under the message. Hosted by the CRM plugin (see [Zones a plugin hosts](#zones-a-plugin-hosts)) | `hostId`, `orgId`, `record`, `subject`, `body`, `proposeDraft({ subject, body }, key)` (fills the composer, asking before it replaces a written message; Send is the member's) |
-| `importMapping` | Inside a CRM contacts, companies, deals or leads import, under its column matching. Hosted by the CRM plugin (see [Zones a plugin hosts](#zones-a-plugin-hosts)) | `hostId`, `orgId`, `collection`, `columns` (each `{ header, shape }`, where `shape` is `email`, `phone`, `number`, `date`, `yes-no`, `url`, `text` or `empty`; never a cell), `mapping`, `proposeMapping(mapping, key)` (replaces the drawer's matching; Import is the write) |
+| `importMapping` | Under the column matching of a CRM import drawer, and of the import wizard's Columns step on any surface that names the zone (see [Import and export](../guides/import-and-export.md)). Hosted by the CRM plugin and the wizard (see [Zones a plugin hosts](#zones-a-plugin-hosts)) | `hostId`, `orgId`, `collection`, `columns` (each `{ header, shape }`, where `shape` is `email`, `phone`, `number`, `date`, `yes-no`, `url`, `text` or `empty`; never a cell), `mapping`, `proposeMapping(mapping, key)` (replaces the drawer's matching; Import is the write) |
 
 Rules of thumb: widgets receive shell-resolved context as props and must
 not reach for console-app hooks; data access goes through
@@ -65,7 +68,7 @@ unloaded plugins.
 A zone can sit on a plugin's own surface rather than on a console page, such as `hostForms`
 on the forms plugin's Forms page, `hostAutomations`, `automationEditor` and `automationRun`
 on the workflows plugin's Automation page, or `recordInsights`, `recordEmail` and
-`importMapping` on the CRM plugin's record pages, one-to-one composer and import drawers. A plugin cannot import the console's `PluginWidgetSlot`,
+`importMapping` on the CRM plugin's record pages, one-to-one composer and import drawers, and in the import wizard. A plugin cannot import the console's `PluginWidgetSlot`,
 so the shell hands its renderer down: read it with `useConsoleWidgetSlot()` from
 `@aglyn/aglyn` and draw the zone through it.
 
@@ -93,7 +96,7 @@ importing the host's package:
 | `automationRun` | On each failed run in an automation's run history | `hostId`, `orgId`, `target` (as above), `runId` (the run's entry in the site's activity log) |
 | `productEditor` | The commerce product editor, under a product's description, tags and categories: copy proposed for the fields, which Save product writes | `hostId`, `orgId`, `product` (as the editor holds it), `categories`, `proposeValues(values, key)` — stages copy in the editor as unsaved edits |
 | `productsHub` | The commerce products page, above its catalog table: proposals the hub writes when a member applies them | `hostId`, `orgId`, `products` (the catalog rows the hub holds), `lastImport` (the products the latest import created, with its options, or `null`), and the hub's writes a widget asks for: `applyProductCopy`, `createProductDrafts`, `createCategories`, `createDiscountDrafts` |
-| `productImport` | Inside the commerce CSV import dialog: options for what happens to the imported products once they land | `hostId`, `orgId`, `count` (products the import creates), `options`, `setOption(key, on)` |
+| `productImport` | The commerce products import wizard's After import step: options for what happens to the imported products once they land | `hostId`, `orgId`, `count` (products the dry run creates), `options`, `setOption(key, on)` |
 
 ## How a zone spaces your widget
 
@@ -115,11 +118,14 @@ page spaces it there:
   editor, and on a failed run.
 - `siteMember`: a section of a site user's drawer.
 - `besignerInspector` and `seoFields`: a section among a panel's own fields.
+- `besignerPageProperties`: a section of the Page Properties drawer's column.
+- `hostScreenRow`: a chip in a Pages list row, beside the page's own chips.
 - `productEditor`, `productsHub` and `productImport`: a section the commerce
   plugin places among its product editor's fields, above its catalog table,
-  and in its CSV import dialog.
+  and in its import wizard's After import step.
 - `recordEmail` and `importMapping`: a section the CRM plugin places under its
-  one-to-one composer's message and under an import drawer's column matching.
+  one-to-one composer's message and under an import drawer's or the import
+  wizard's column matching.
 - `besignerFunctions`, `orgData`, `orgMarketplace`, `orgAddons` and
   `marketplaceListing`: the body of a dialog or a page.
 - `consoleDock`: a floating dock.

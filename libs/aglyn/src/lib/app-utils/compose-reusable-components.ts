@@ -45,6 +45,9 @@ import {
   withoutRepeatDirective,
 } from './expand-repeatables'
 import { FORM_COMPONENT_ID, FORM_ID_PROP } from './forms'
+
+/** The Form's after-submit reveal target: a node id (`form.tsx`). */
+const FORM_REVEAL_NODE_PROP = 'revealNodeId'
 import { mergeNodeSx } from './merge-node-sx'
 import {
   hasUrlScheme,
@@ -78,6 +81,92 @@ function joinClassNames(...lists: unknown[]): string | undefined {
     .flatMap((list) => list.split(/\s+/))
     .filter(Boolean)
   return names.length ? [...new Set(names)].join(' ') : undefined
+}
+
+/**
+ * A node's interactions, read off the node rather than through the type:
+ * `interactions` is declared on `NodeSchema`, one layer above the
+ * `AglynNodeSchema` the graft is generic over.
+ */
+function interactionsOf(node: unknown): readonly unknown[] {
+  const value = (node as { interactions?: unknown })?.interactions
+  return Array.isArray(value) ? value : []
+}
+
+/**
+ * Whether a placement says something about this prop. `undefined`, `null` and
+ * `''` say nothing: the attributes panel writes an emptied field as absent
+ * (AGL-1191), and a document saved before it did carries the empty string. A
+ * `false` or a `0` is a real setting and is kept.
+ */
+function isSetOnPlacement(value: unknown): boolean {
+  return value !== undefined && value !== null && value !== ''
+}
+
+/**
+ * The props a placement whose design root names the design itself (a placed
+ * form) renders with, or `undefined` when neither side has any (AGL-3494).
+ *
+ * The design root's own props are the base — the saved form's submit label,
+ * success message and settings, edited once for every page. The placement's
+ * own props go over them ONE PROP AT A TIME, and only the ones it actually
+ * sets ({@link isSetOnPlacement}), so a page that left the label alone shows
+ * the form's, and a page that wrote one keeps it. The placement's `root`
+ * attribute slice (AGL-3285), already merged into `rootProps` by the graft, is
+ * laid over last so it beats the placement's own props, as it always has.
+ *
+ * Classes are joined rather than replaced, the design root's first, for the
+ * reason the instance merge joins them: the show/hide steps toggle a class on
+ * the element, and either author may have named one.
+ *
+ * Exported for the spec that pins the merge; the graft is its only caller.
+ */
+export function placementPropsOverRoot(
+  rootProps: unknown,
+  placementProps: unknown,
+  rootAttrs?: Record<string, unknown>,
+): Record<string, unknown> | undefined {
+  const base = (rootProps as Record<string, unknown> | undefined) ?? undefined
+  const own = (placementProps as Record<string, unknown> | undefined) ?? {}
+  if (base === undefined && placementProps === undefined && !rootAttrs) {
+    return undefined
+  }
+  const merged: Record<string, unknown> = { ...(base ?? {}) }
+  for (const [key, value] of Object.entries(own)) {
+    // A placement's empty value never masks the form's — but where the form
+    // says nothing either, the placement's own shape is kept as it was.
+    if (isSetOnPlacement(value) || !(key in merged)) merged[key] = value
+  }
+  const className = joinClassNames(base?.['className'], own['className'])
+  if (className) merged['className'] = className
+  if (rootAttrs) Object.assign(merged, rootAttrs)
+  return merged
+}
+
+/**
+ * The design root's props with an after-submit reveal target that names one of
+ * the design's own nodes pointed at that node's grafted id (AGL-3494).
+ *
+ * A form's own besigner can only pick a reveal target from the form's design,
+ * so the stored id is a design id, and every design node is renamed by the
+ * graft (`cmp__{instance}__{id}`). Left as stored, the reveal would look for an
+ * element no page has. The root itself is unwrapped onto the placement, so a
+ * reveal of the root names the placement's id.
+ */
+function revealTargetInPlacement(
+  rootProps: unknown,
+  definition: { rootId: NodeId; nodes: Record<NodeId, unknown> },
+  prefixId: (id: NodeId) => string,
+  instanceId: NodeId,
+): unknown {
+  const props = rootProps as Record<string, unknown> | undefined
+  const target = props?.[FORM_REVEAL_NODE_PROP]
+  if (typeof target !== 'string' || !definition.nodes[target]) return rootProps
+  return {
+    ...props,
+    [FORM_REVEAL_NODE_PROP]:
+      target === definition.rootId ? instanceId : prefixId(target),
+  }
 }
 
 /**
@@ -1403,8 +1492,10 @@ export function composeReusableComponentNodes<
        * design always take this shape, so for forms this branch is the normal
        * path rather than the exception.
        *
-       * The instance keeps its own props: it is the node the page authored,
-       * carrying the id everything else resolves against.
+       * The instance keeps its own id and place: it is the node the page
+       * authored, carrying the id everything else resolves against. What it
+       * DRAWS is the design root's, with the placement's own settings on top
+       * (AGL-3494) — see {@link placementPropsOverRoot}.
        */
       const graftedRootId = prefixId(definition.rootId)
       const definitionRoot = definition.nodes[definition.rootId] as N | undefined
@@ -1422,27 +1513,57 @@ export function composeReusableComponentNodes<
         }
         delete next[graftedRootId]
         /*
-         * The root's own override slices land on the instance, because the
-         * instance IS the root here (AGL-3285). The grafted root carried them
-         * and has just been dropped; without this a placed form's `root`
-         * target would save and never render. Same precedence as the merge
-         * branch below: the slice first, the placement's own `sx` over it.
+         * THE DESIGN'S ROOT SETTINGS ARE THE FORM'S OWN (AGL-3494).
+         *
+         * The submit label, the success message and the root's styling are
+         * edited on the saved form, once, for every page placing it. The
+         * grafted root carries them — already with this placement's `root`
+         * override slices merged in by the graft above (AGL-3285) — so it is
+         * the base, and the placement's own settings go over it one prop at a
+         * time. A placement that never set a label shows the form's; one that
+         * did keeps showing its own, which is every placement saved before
+         * the design's settings reached the page.
+         *
+         * The `root` attribute slice is laid over once more, last, because a
+         * "Change it on this page only" edit is the most specific statement
+         * there is about this one element — the order it already had over the
+         * placement's own props before this merge existed.
+         *
+         * `sx` composes the same way `mergeNodeSx` composes it for an
+         * instance: the design root's (with the `root` slice), then the
+         * placement's own over it.
          */
-        const rootSx = styleOverrides[STYLE_OVERRIDES_ROOT_KEY]
         const rootAttrs = attrOverrides[STYLE_OVERRIDES_ROOT_KEY]
-        const unwrappedSx = rootSx
-          ? mergeNodeSx(rootSx, instanceNode.sx)
-          : undefined
+        const unwrappedProps = placementPropsOverRoot(
+          revealTargetInPlacement(
+            graftedRoot.props,
+            definition,
+            prefixId,
+            instanceId,
+          ),
+          instanceNode.props,
+          rootAttrs,
+        )
+        const unwrappedSx = mergeNodeSx(graftedRoot.sx, instanceNode.sx)
+        const unwrappedClassName = joinClassNames(
+          (graftedRoot as { className?: unknown }).className,
+          (instanceNode as { className?: unknown }).className,
+        )
+        // Root's first, like the merge branch below: the form's own
+        // choreography enrolls before what this page adds.
+        const unwrappedInteractions = [
+          ...interactionsOf(graftedRoot),
+          ...interactionsOf(instanceNode),
+        ]
         next[instanceId] = {
           ...instanceNode,
+          ...(unwrappedProps === undefined
+            ? {}
+            : { props: unwrappedProps as N['props'] }),
           ...(unwrappedSx === undefined ? {} : { sx: unwrappedSx as N['sx'] }),
-          ...(rootAttrs
-            ? {
-                props: {
-                  ...((instanceNode.props as object | undefined) ?? {}),
-                  ...rootAttrs,
-                },
-              }
+          ...(unwrappedClassName ? { className: unwrappedClassName } : {}),
+          ...(unwrappedInteractions.length
+            ? { interactions: unwrappedInteractions }
             : {}),
           nodes: adopted,
         }
@@ -1493,12 +1614,8 @@ export function composeReusableComponentNodes<
          *
          * `interactions` is declared on `NodeSchema`, one layer above the
          * `AglynNodeSchema` this function is generic over, so both are read
-         * off the node rather than through the type.
+         * off the node rather than through the type ({@link interactionsOf}).
          */
-        const interactionsOf = (node: unknown): readonly unknown[] => {
-          const value = (node as { interactions?: unknown })?.interactions
-          return Array.isArray(value) ? value : []
-        }
         const mergedInteractions = [
           ...interactionsOf(graftedRoot),
           ...interactionsOf(instanceNode),

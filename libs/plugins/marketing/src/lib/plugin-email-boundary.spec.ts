@@ -28,10 +28,12 @@
  * of Email-plugin code, and nothing anywhere fails. The switchboard is simply
  * bypassed, silently.
  *
- * The shapes both plugins read — the campaign container, the rate math and
- * the message record — live in `@aglyn/shared-ui-email-campaigns`, which both
- * depend on as peers; what a campaign earned and caused is Marketing's own
- * model. This guard is what keeps them there.
+ * The campaign's own shapes — the container, a send's report, the message
+ * record, what a design's sends did — are Marketing's model (AGL-3080); the
+ * rate math every bulk sender divides by is the shared library's
+ * (`@aglyn/shared-ui-email-campaigns/model/send-report`), which both depend on
+ * as peers. The Email plugin keeps none of them and re-exports none of them.
+ * This guard is what keeps it that way.
  *
  * It is a SOURCE assertion, not a render or import test, because the defect
  * is which modules end up in the graph. A rendered campaign card passes
@@ -89,11 +91,18 @@ const MOVED_ENTRY_POINTS = [
  * behind, where the next surface to show money could not reach them. They
  * live beside the rate primitives now and this library renders nothing.
  */
-const SHARED_SOURCES = [
-  'model/campaign-container.ts',
-  'model/campaign-report.ts',
-  'model/email-record.ts',
-]
+const SHARED_SOURCES = ['model/send-report.ts']
+
+/** Marketing's own campaign model: what the Email plugin used to re-export. */
+const MARKETING_MODEL = join(__dirname, 'model')
+const OWNED_BY_MARKETING = new Set(
+  ['campaign-container.ts', 'campaign-report.ts', 'email-record.ts', 'template-report.ts'].flatMap(
+    (module) => exportedNames(readFileSync(join(MARKETING_MODEL, module), 'utf8')),
+  ),
+)
+
+/** `libs/plugins/email/src/lib` — every source file the Email plugin ships. */
+const EMAIL_SRC = join(__dirname, '../../../email/src/lib')
 
 /** Every `.ts`/`.tsx` file under a directory, specs included. */
 function sourceFiles(dir: string): string[] {
@@ -216,16 +225,22 @@ describe('the boundary this guard is reading', () => {
    */
 
   it('found the shared library and read real symbols out of it', () => {
-    expect(OWNED_BY_SHARED_LIB.size).toBeGreaterThan(40)
-    // One from each source module. The figure
-    // primitives are no longer among them: they are `@aglyn/shared-ui-jsx`'s
-    // (AGL-3080), which is where every surface can reach them.
+    expect(OWNED_BY_SHARED_LIB.size).toBeGreaterThan(5)
+    // The rate math and the link rollup. The figure primitives are
+    // `@aglyn/shared-ui-jsx`'s, and the campaign's shapes are this plugin's
+    // (AGL-3080).
     expect([...OWNED_BY_SHARED_LIB]).toEqual(
+      expect.arrayContaining(['SendStats', 'sendRate', 'sendLinkReport']),
+    )
+  })
+
+  it("found this plugin's campaign model and read real symbols out of it", () => {
+    expect([...OWNED_BY_MARKETING]).toEqual(
       expect.arrayContaining([
         'CAMPAIGN_SEND_CONTAINER_FIELD',
         'campaignReport',
-        'CampaignStats',
         'emailSendTimeMs',
+        'templateReport',
       ]),
     )
   })
@@ -284,5 +299,35 @@ describe('marketing does not reach into the email plugin for campaign shapes', (
     )
 
     expect(borrowed).toEqual([])
+  })
+})
+
+describe('the campaign model is this plugin’s, and the Email plugin keeps no copy', () => {
+  /*
+   * The other direction of the same line (AGL-3080). A shape the Email plugin
+   * declared or re-exported again would be a second definition of a
+   * campaign's model, reachable from a plugin an organization can have
+   * without Marketing.
+   */
+  const emailFiles = sourceFiles(EMAIL_SRC).filter((file) => !/\.spec\.tsx?$/.test(file))
+
+  it('found the Email plugin’s sources', () => {
+    expect(emailFiles.length).toBeGreaterThan(20)
+  })
+
+  it('declares none of the campaign model’s names', () => {
+    const declared = emailFiles.flatMap((file) =>
+      exportedNames(readFileSync(file, 'utf8'))
+        .filter((name) => OWNED_BY_MARKETING.has(name))
+        .map((name) => `${short(file)} exports ${name}`),
+    )
+    expect(declared).toEqual([])
+  })
+
+  it('reaches no campaign module of the shared library, which keeps only the rate math', () => {
+    const reached = emailFiles.filter((file) =>
+      /@aglyn\/shared-ui-email-campaigns\/model\/(?:campaign-|email-record)/.test(readFileSync(file, 'utf8')),
+    )
+    expect(reached.map(short)).toEqual([])
   })
 })

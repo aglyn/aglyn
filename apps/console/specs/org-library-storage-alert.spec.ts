@@ -21,22 +21,31 @@
  */
 
 /**
- * The media-storage alert can see the ORG LIBRARY (AGL-1473).
+ * The workspace's ONE storage alert (AGL-3482).
  *
- * `usage-alerts` summed `hosts/{id}/counters/media` and nothing else, so an org
- * whose bytes live in the shared org DAM read as using zero storage — on the
- * one alert whose entire purpose is warning somebody before a downgrade leaves
- * them over their allowance. Those bytes are enforced at upload against
- * `storagePerHostMb`, so the alert was silent about storage the platform will
- * refuse the next upload for.
+ * Storage is one band for the whole workspace since AGL-2075: every site's
+ * library and the organization library, against
+ * `Math.max(1, hostLimit) × storagePerHostMb` — the band ingress refuses at and
+ * the invoice subtracts. So the alert is one check against that band, and the
+ * org library has no allowance of its own to be warned about. It is counted
+ * (AGL-1473): an org whose bytes live in the shared library reads as using
+ * them, and the body says how much of the total the library holds.
  *
- * Unlike the rollup's billing arm this is NOT behind a switch. A warning is
- * not a charge, and staying quiet about an enforced limit is the defect rather
- * than the caution.
+ * No plan figure is written here: every band is derived from
+ * `PLAN_ENTITLEMENTS`, and the plans are chosen by what they DO — refuse past
+ * the band, or bill past it — not by name.
  */
+
+import {
+  PLAN_ENTITLEMENTS,
+  planMetersInfraOverage,
+  resolveOrgEntitlements,
+} from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { formatStorageMb } from '../utils/usage-alert-notice'
 
 const CRON_SECRET = 'test-cron-secret'
 const MB = 1024 * 1024
+const MONTH = new Date().toISOString().slice(0, 7)
 
 interface SeededOrg {
   id: string
@@ -45,6 +54,8 @@ interface SeededOrg {
   orgLibraryBytes: number
   /** Existing `usageAlerts` guard map. */
   usageAlerts?: Record<string, { month?: string; threshold?: number }>
+  /** Any other org-doc field — entitlement overrides, a storage cap. */
+  extra?: Record<string, unknown>
 }
 interface SeededHost {
   id: string
@@ -54,14 +65,12 @@ interface SeededHost {
 
 let mockOrgs: SeededOrg[]
 let mockHosts: SeededHost[]
+/** What the sweep wrote to each org doc — the guard map among it. */
+let mockWrites: Record<string, Record<string, unknown>>
 /**
- * Every `notifyOrgAdmins` call.
- *
- * `body` is captured since 2026-08-18: once storage past the band BILLS
- * rather than being refused, this notification is the whole of the "no
- * surprise bill" protection, and what it says is the protection — a body that
- * tells a metered org to "upgrade to raise the limit" describes a wall that
- * is not there and omits the charge that is.
+ * Every `notifyOrgAdmins` call, title AND body: past the band a metered plan
+ * BILLS rather than refusing, so what this notification says is the whole of
+ * the "no surprise bill" protection.
  */
 let mockNotifications: Array<{ orgId: string; title: string; body: string }>
 
@@ -123,6 +132,7 @@ function fakeOrgDoc(org: SeededOrg) {
     plan: org.plan,
     slug: org.id,
     ...(org.usageAlerts ? { usageAlerts: org.usageAlerts } : {}),
+    ...org.extra,
   }
   return {
     id: org.id,
@@ -130,7 +140,9 @@ function fakeOrgDoc(org: SeededOrg) {
     get: (field: string) => data[field],
     ref: {
       id: org.id,
-      set: async () => undefined,
+      set: async (update: Record<string, unknown>) => {
+        mockWrites[org.id] = update
+      },
       collection: (name: string) =>
         name === 'counters'
           ? {
@@ -281,11 +293,39 @@ jest.mock('../utils/screen-cap-reconciliation', () => ({
 
 import { POST } from '../app/api/billing/usage-alerts/route'
 
-/** Starter: 1 site × 2048 MB. 80% of the band is 1638.4 MB. */
-const BAND_MB = 2048
+type PlanKey = keyof typeof PLAN_ENTITLEMENTS
+const PLANS = Object.keys(PLAN_ENTITLEMENTS) as PlanKey[]
+const entitlementsOf = (org: Record<string, unknown>) =>
+  resolveOrgEntitlements(org as never)
+/** The pooled band, in the arithmetic ingress and the invoice share. */
+const bandMbOf = (org: Record<string, unknown>) => {
+  const resolved = entitlementsOf(org)
+  return Math.max(1, resolved.hostLimit) * resolved.storagePerHostMb
+}
+const finiteStorage = (plan: PlanKey) =>
+  Number.isFinite(entitlementsOf({ plan }).storagePerHostMb) &&
+  Number.isFinite(entitlementsOf({ plan }).hostLimit)
+/** A plan that REFUSES past the band, with one site — its band is one site's. */
+const HARD = PLANS.find(
+  (plan) =>
+    finiteStorage(plan) &&
+    !planMetersInfraOverage({ plan } as never) &&
+    entitlementsOf({ plan }).hostLimit === 1,
+) as PlanKey
+/** A plan that BILLS past the band, with several sites pooled into it. */
+const METERED = PLANS.find(
+  (plan) =>
+    finiteStorage(plan) &&
+    planMetersInfraOverage({ plan } as never) &&
+    entitlementsOf({ plan }).hostLimit > 1,
+) as PlanKey
+const HARD_BAND_MB = () => bandMbOf({ plan: HARD })
+const METERED_BAND_MB = () => bandMbOf({ plan: METERED })
+const METERED_SCOPE_MB = () => entitlementsOf({ plan: METERED }).storagePerHostMb
 
 async function run() {
   mockNotifications = []
+  mockWrites = {}
   const response = await POST(
     new Request('https://app.aglyn.com/api/billing/usage-alerts', {
       method: 'POST',
@@ -301,178 +341,109 @@ type CapturedAlert = { title: string; body: string }
 
 const mediaAlerts = (notifications: CapturedAlert[]) =>
   notifications.filter((entry) => entry.title.includes('media storage'))
+/** Every storage notice of any name — there must only ever be the one. */
+const storageAlerts = (notifications: CapturedAlert[]) =>
+  notifications.filter((entry) => /storage/i.test(entry.title))
 
-/** The AGL-1886 check, keyed and labelled apart from the org-wide one. */
-const libraryAlerts = (notifications: CapturedAlert[]) =>
-  notifications.filter((entry) =>
-    entry.title.includes('organization library storage'),
-  )
+const mbBytes = (mb: number) => Math.round(mb * MB)
 
 beforeEach(() => {
   process.env.CRON_SECRET = CRON_SECRET
+  delete process.env['BILL_ORG_LIBRARY_STORAGE_FROM']
   jest.clearAllMocks()
   mockHosts = []
   mockOrgs = []
+  mockWrites = {}
 })
 
-describe('the media-storage alert sees the org library (AGL-1473)', () => {
-  it('warns an org that is over its allowance PURELY in the org library', async () => {
-    // Every site counter at zero. Before this fix the alert computed 0 MB
-    // used, while the next org DAM upload would be refused at the cap.
+it('has the plans it reasons about', () => {
+  expect(HARD).toBeDefined()
+  expect(METERED).toBeDefined()
+  // What makes METERED the plan that tells the pooled band from one site's.
+  expect(METERED_BAND_MB()).toBeGreaterThan(METERED_SCOPE_MB())
+})
+
+describe('the storage alert sees the org library (AGL-1473)', () => {
+  it('warns an org that is over its band PURELY in the org library', async () => {
     mockOrgs = [
-      { id: 'org-1', plan: 'starter', orgLibraryBytes: BAND_MB * MB },
+      { id: 'org-1', plan: HARD, orgLibraryBytes: mbBytes(HARD_BAND_MB()) },
     ]
     mockHosts = [{ id: 'site-a', orgId: 'org-1', mediaBytes: 0 }]
     expect(mediaAlerts(await run())).toHaveLength(1)
   })
 
   it('adds the library to the sites rather than replacing them', async () => {
-    // Neither figure crosses 80% alone (half the band each); together they are
-    // the whole band. A fix that overwrote `mediaBytes` instead of adding
-    // would pass the test above and fail this one.
+    // Neither figure crosses a step alone (half the band each); together
+    // they are the whole band.
     mockOrgs = [
-      { id: 'org-1', plan: 'starter', orgLibraryBytes: (BAND_MB / 2) * MB },
+      { id: 'org-1', plan: HARD, orgLibraryBytes: mbBytes(HARD_BAND_MB() / 2) },
     ]
     mockHosts = [
-      { id: 'site-a', orgId: 'org-1', mediaBytes: (BAND_MB / 2) * MB },
+      { id: 'site-a', orgId: 'org-1', mediaBytes: mbBytes(HARD_BAND_MB() / 2) },
     ]
     expect(mediaAlerts(await run())).toHaveLength(1)
   })
 
-  it('leaves a quiet org quiet — no alert invented by the extra read', async () => {
-    mockOrgs = [{ id: 'org-1', plan: 'starter', orgLibraryBytes: 1024 }]
+  it('leaves a quiet org quiet', async () => {
+    mockOrgs = [{ id: 'org-1', plan: HARD, orgLibraryBytes: 1024 }]
     mockHosts = [{ id: 'site-a', orgId: 'org-1', mediaBytes: 1024 }]
-    expect(mediaAlerts(await run())).toHaveLength(0)
+    expect(storageAlerts(await run())).toHaveLength(0)
   })
 
-  it('leaves a host-only org’s alert exactly where it was', async () => {
-    // The regression that would cost money elsewhere in this issue: nothing
-    // about a site's own library may change. An org with no library counter at
-    // all must behave as it always did, on both sides of the threshold.
-    mockOrgs = [{ id: 'org-1', plan: 'starter', orgLibraryBytes: 0 }]
+  it('warns a host-only org on both sides of the band as it always did', async () => {
+    mockOrgs = [{ id: 'org-1', plan: HARD, orgLibraryBytes: 0 }]
     mockHosts = [
-      { id: 'site-a', orgId: 'org-1', mediaBytes: Math.round(0.5 * BAND_MB * MB) },
+      { id: 'site-a', orgId: 'org-1', mediaBytes: mbBytes(0.5 * HARD_BAND_MB()) },
     ]
     expect(mediaAlerts(await run())).toHaveLength(0)
 
-    mockHosts = [{ id: 'site-a', orgId: 'org-1', mediaBytes: BAND_MB * MB }]
-    expect(mediaAlerts(await run())).toHaveLength(1)
+    mockHosts = [{ id: 'site-a', orgId: 'org-1', mediaBytes: mbBytes(HARD_BAND_MB()) }]
+    const notifications = await run()
+    expect(mediaAlerts(notifications)).toHaveLength(1)
+    // No library, no sentence about one.
+    expect(mediaAlerts(notifications)[0].body).not.toContain(
+      'of it is in the organization library',
+    )
   })
 })
 
-/**
- * The org library is warnable AT ALL (AGL-1886).
- *
- * AGL-1473's suite above passes on `starter`, and that is exactly why the
- * defect survived it: starter's `hostLimit` is 1, so the org-wide band
- * (`hostLimit x storagePerHostMb`) and the per-scope cap the uploader enforces
- * are the SAME NUMBER, and any org-library overage crosses both at once. Give
- * the org a second site and the two numbers part company — the org library can
- * be full, refusing uploads, and read as a third of the band it is compared
- * against.
- *
- * That is a guard that could not fail, on a plan where it could never be
- * asked. These cases ask it on `pro`.
- *
- * the condition on billing these bytes from today was, verbatim: "also give
- * overage protection and usage alerts, so customers don't get a surprise
- * bill." An alert that is structurally unable to fire is not an alert.
- */
-describe('the org library is warnable on its own (AGL-1886)', () => {
-  /** Pro: 3 sites x 10240 MB. The org-wide band is 30720 MB. */
-  const PRO_SCOPE_MB = 10240
-  const PRO_BAND_MB = 3 * PRO_SCOPE_MB
-
-  it('warns an org whose library is full while the org-wide band is a third used', async () => {
-    // The bytes: 10240 MB in the org library, nothing on either site. The
-    // uploader refuses the next org DAM upload — `storagePerHostMb` is the
-    // scope's cap and this scope is at it.
-    mockOrgs = [{ id: 'org-1', plan: 'pro', orgLibraryBytes: PRO_SCOPE_MB * MB }]
+describe('one storage alert, against the workspace’s pooled band (AGL-3482)', () => {
+  it('says nothing about a full library while the workspace has room', async () => {
+    // One site's worth of bytes in the org library, nothing on the sites. That
+    // refuses nothing and bills nothing — the pool is a fraction used — so a
+    // notice telling this workspace to free up space would be false.
+    mockOrgs = [
+      { id: 'org-1', plan: METERED, orgLibraryBytes: mbBytes(METERED_SCOPE_MB()) },
+    ]
     mockHosts = [
       { id: 'site-a', orgId: 'org-1', mediaBytes: 0 },
       { id: 'site-b', orgId: 'org-1', mediaBytes: 0 },
     ]
+    expect(METERED_SCOPE_MB() / METERED_BAND_MB()).toBeLessThan(0.75)
+    expect(storageAlerts(await run())).toHaveLength(0)
+  })
+
+  it('sends ONE notice for the pool, naming the library’s share of it', async () => {
+    const band = METERED_BAND_MB()
+    const library = Math.round(0.3 * band)
+    mockOrgs = [{ id: 'org-1', plan: METERED, orgLibraryBytes: mbBytes(library) }]
+    mockHosts = [
+      { id: 'site-a', orgId: 'org-1', mediaBytes: mbBytes(0.25 * band) },
+      { id: 'site-b', orgId: 'org-1', mediaBytes: mbBytes(0.3 * band) },
+    ]
     const notifications = await run()
-    // The org-wide check is SILENT and correct to be: 10240 of 30720 is 33%.
-    // Forced red by deleting the `orgLibraryStorage` check: this line still
-    // passed and the next one failed, which is the shape of the whole bug.
-    expect(mediaAlerts(notifications)).toHaveLength(0)
-    expect(10240 / PRO_BAND_MB).toBeLessThan(0.8)
-    // The library check fires, at the cap.
-    expect(libraryAlerts(notifications)).toHaveLength(1)
-    // Pro METERS storage, so past the band the product keeps working and
-    // starts charging (2026-08-18). The alert has to say that — "you've
-    // reached your limit" would describe a wall that no longer exists, and
-    // would omit the only thing the customer needs to know.
-    expect(libraryAlerts(notifications)[0].title).toContain('now billed')
-    expect(libraryAlerts(notifications)[0].body).toContain(
-      'billed on your monthly invoice',
+    expect(storageAlerts(notifications)).toHaveLength(1)
+    const [alert] = mediaAlerts(notifications)
+    expect(alert.title).toContain('above 80%')
+    // The pooled band is the figure quoted, with every library in it.
+    expect(alert.body).toContain(`of the ${formatStorageMb(band)} of media storage`)
+    expect(alert.body).toContain('across all its sites and its organization library')
+    expect(alert.body).toContain(
+      `${formatStorageMb(library)} of it is in the organization library.`,
     )
-    // And it names both ways out, because the cap is the customer's control.
-    expect(libraryAlerts(notifications)[0].body).toContain('monthly cap')
-    expect(libraryAlerts(notifications)[0].body).toContain('upgrade')
-  })
-
-  it('CONTROL: a plan that hard-bands is still told to upgrade, not billed at', () => {
-    // The other side of the same branch, and the reason it is a branch. Free
-    // never bills for storage — its band is a wall — so telling a free org
-    // that extra storage "is billed on your monthly invoice" would be a
-    // surprise bill invented by a notification. Forced red by dropping the
-    // `check.billsOverage` ternary: free got the metered wording.
-    //
-    // Free's `hostLimit` is 1, so both storage checks cross together here.
-    // That collapse is what makes free useless for testing WHICH band is
-    // read — but it is irrelevant to WHAT THE ALERT SAYS, which is all this
-    // case asks.
-    return (async () => {
-      mockOrgs = [{ id: 'org-1', plan: 'free', orgLibraryBytes: 250 * MB }]
-      mockHosts = [{ id: 'site-a', orgId: 'org-1', mediaBytes: 0 }]
-      const notifications = await run()
-      const library = libraryAlerts(notifications)
-      expect(library).toHaveLength(1)
-      expect(library[0].title).toContain('reached')
-      expect(library[0].title).not.toContain('billed')
-      // What already exists keeps working and nothing is charged — the
-      // upgrade is only how to add more (AGL-3431).
-      expect(library[0].body).toContain('nothing is charged')
-      expect(library[0].body).toContain('upgrade in Billing')
-      expect(library[0].body).not.toContain('invoice')
-      expect(library[0].body).not.toMatch(/\bbilled\b/)
-    })()
-  })
-
-  it('warns on the approach, before the money and before the refusal', async () => {
-    // 85% of the scope cap: uploads still succeed, nothing is refused yet, and
-    // this is the last stretch in which a customer can act for free.
-    mockOrgs = [
-      {
-        id: 'org-1',
-        plan: 'pro',
-        orgLibraryBytes: Math.round(0.85 * PRO_SCOPE_MB * MB),
-      },
-    ]
-    mockHosts = [{ id: 'site-a', orgId: 'org-1', mediaBytes: 0 }]
-    const notifications = await run()
-    expect(libraryAlerts(notifications)).toHaveLength(1)
-    expect(libraryAlerts(notifications)[0].title).toContain('above 80%')
-  })
-
-  it('stays quiet below the first step', async () => {
-    mockOrgs = [
-      {
-        id: 'org-1',
-        plan: 'pro',
-        orgLibraryBytes: Math.round(0.74 * PRO_SCOPE_MB * MB),
-      },
-    ]
-    mockHosts = [{ id: 'site-a', orgId: 'org-1', mediaBytes: 0 }]
-    expect(libraryAlerts(await run())).toHaveLength(0)
   })
 
   it('prints the step actually crossed: 75 at 79%, 90 at 95% (AGL-3431)', async () => {
-    // The ladder is 75, 80, 90, 100 and only the highest step reached is
-    // sent, so the title must name THAT step — a fixed "above 80%" would be
-    // wrong at both of these readings.
     for (const [share, step] of [
       [0.79, 'above 75%'],
       [0.95, 'above 90%'],
@@ -480,28 +451,164 @@ describe('the org library is warnable on its own (AGL-1886)', () => {
       mockOrgs = [
         {
           id: 'org-1',
-          plan: 'pro',
-          orgLibraryBytes: Math.round(share * PRO_SCOPE_MB * MB),
+          plan: METERED,
+          orgLibraryBytes: mbBytes(share * METERED_BAND_MB()),
         },
       ]
       mockHosts = [{ id: 'site-a', orgId: 'org-1', mediaBytes: 0 }]
-      const notifications = await run()
-      expect(libraryAlerts(notifications)).toHaveLength(1)
-      expect(libraryAlerts(notifications)[0].title).toContain(step)
+      const alerts = mediaAlerts(await run())
+      expect(alerts).toHaveLength(1)
+      expect(alerts[0].title).toContain(step)
     }
   })
 
-  it('leaves a host-only org untouched by the new check', async () => {
-    // Nothing about a site's own library moves. An org with no library at all
-    // gets neither alert, whatever its sites hold, until the org-wide band
-    // itself is crossed.
-    mockOrgs = [{ id: 'org-1', plan: 'pro', orgLibraryBytes: 0 }]
-    mockHosts = [
-      { id: 'site-a', orgId: 'org-1', mediaBytes: PRO_SCOPE_MB * MB },
-      { id: 'site-b', orgId: 'org-1', mediaBytes: 0 },
+  it('never measures against a band of zero sites — `Math.max(1, …)`', async () => {
+    // A site limit that resolves to 0 still includes one site's band on the
+    // invoice and at ingress. Measured against `0 × storagePerHostMb` the
+    // alert could never fire at all.
+    const org = { plan: HARD, entitlements: { hostLimit: 0 } }
+    expect(entitlementsOf(org).hostLimit).toBe(0)
+    const band = bandMbOf(org)
+    expect(band).toBe(entitlementsOf(org).storagePerHostMb)
+    mockOrgs = [
+      {
+        id: 'org-1',
+        plan: HARD,
+        orgLibraryBytes: mbBytes(band),
+        extra: { entitlements: { hostLimit: 0 } },
+      },
     ]
-    const notifications = await run()
-    expect(libraryAlerts(notifications)).toHaveLength(0)
-    expect(mediaAlerts(notifications)).toHaveLength(0)
+    const alerts = mediaAlerts(await run())
+    expect(alerts).toHaveLength(1)
+    expect(alerts[0].body).toContain(formatStorageMb(band))
+  })
+})
+
+describe('what the storage notice says happens at the band (AGL-3482)', () => {
+  it('on a plan that refuses past it: uploads stop, nothing is charged', async () => {
+    mockOrgs = [
+      { id: 'org-1', plan: HARD, orgLibraryBytes: mbBytes(HARD_BAND_MB()) },
+    ]
+    const [reached] = mediaAlerts(await run())
+    expect(reached.title).toContain('reached')
+    expect(reached.title).not.toContain('billed')
+    expect(reached.body).toContain('new uploads stop')
+    expect(reached.body).toContain('nothing is charged')
+    expect(reached.body).toContain('upgrade in Billing')
+    expect(reached.body).not.toContain('invoice')
+    expect(reached.body).not.toMatch(/\bbilled\b/)
+
+    mockOrgs = [
+      { id: 'org-1', plan: HARD, orgLibraryBytes: mbBytes(0.85 * HARD_BAND_MB()) },
+    ]
+    const [approach] = mediaAlerts(await run())
+    expect(approach.body).toContain('new uploads stop')
+    expect(approach.body).not.toMatch(/\bbilled\b/)
+  })
+
+  it('on a plan that bills past it: billed unless a storage cap is set', async () => {
+    // The org library's storage on the invoice, as in production.
+    process.env['BILL_ORG_LIBRARY_STORAGE_FROM'] = '2020-01'
+    mockOrgs = [
+      { id: 'org-1', plan: METERED, orgLibraryBytes: mbBytes(METERED_BAND_MB()) },
+    ]
+    const [reached] = mediaAlerts(await run())
+    expect(reached.title).toContain('now billed')
+    expect(reached.body).toContain(
+      'billed on your monthly invoice unless you set a storage cap',
+    )
+    expect(reached.body).toContain('upgrade')
+    expect(reached.body).not.toContain('uploads stop')
+    expect(reached.body).not.toContain('organization library stop')
+
+    mockOrgs = [
+      {
+        id: 'org-1',
+        plan: METERED,
+        orgLibraryBytes: mbBytes(0.85 * METERED_BAND_MB()),
+      },
+    ]
+    const [approach] = mediaAlerts(await run())
+    expect(approach.body).toContain('Nothing is charged yet')
+    expect(approach.body).toContain('unless you set a storage cap')
+  })
+
+  it('names the cap the customer set rather than offering one', async () => {
+    process.env['BILL_ORG_LIBRARY_STORAGE_FROM'] = '2020-01'
+    mockOrgs = [
+      {
+        id: 'org-1',
+        plan: METERED,
+        orgLibraryBytes: mbBytes(METERED_BAND_MB()),
+        extra: { storageOverage: { capUsd: 10 } },
+      },
+    ]
+    const [reached] = mediaAlerts(await run())
+    expect(reached.body).toContain('storage cap you set in Billing')
+    expect(reached.body).toContain('new uploads stop')
+    expect(reached.body).not.toContain('unless you set')
+  })
+
+  it('says the org library stops at the band while it is not invoiced', async () => {
+    // `mediaStorageGate` refuses org-library uploads past the band on a
+    // metered plan until `BILL_ORG_LIBRARY_STORAGE_FROM` names a month.
+    mockOrgs = [
+      { id: 'org-1', plan: METERED, orgLibraryBytes: mbBytes(METERED_BAND_MB()) },
+    ]
+    const [reached] = mediaAlerts(await run())
+    expect(reached.body).toContain(
+      'Uploads to the organization library stop at the included amount',
+    )
+  })
+})
+
+describe('one guard, as before (AGL-3482)', () => {
+  const atEightyFive = () => [
+    {
+      id: 'org-1',
+      plan: METERED,
+      orgLibraryBytes: mbBytes(0.85 * METERED_BAND_MB()),
+    },
+  ]
+
+  it('does not re-announce a step the `mediaStorage` guard already holds', async () => {
+    // The guard key is the one the pooled figure was always announced under,
+    // so a workspace already told is not told again — whatever month it was.
+    mockOrgs = atEightyFive().map((org) => ({
+      ...org,
+      usageAlerts: { mediaStorage: { month: '2026-01', threshold: 80 } },
+    }))
+    expect(storageAlerts(await run())).toHaveLength(0)
+  })
+
+  it('does not read a per-library guard as anything', async () => {
+    // A workspace told this month about its library alone, under the retired
+    // `orgLibraryStorage` key, and inside its pooled band: nothing is due, and
+    // nothing rewrites the retired entry.
+    mockOrgs = [
+      {
+        id: 'org-1',
+        plan: METERED,
+        orgLibraryBytes: mbBytes(METERED_SCOPE_MB()),
+        usageAlerts: { orgLibraryStorage: { month: MONTH, threshold: 100 } },
+      },
+    ]
+    expect(storageAlerts(await run())).toHaveLength(0)
+    const guards = (mockWrites['org-1']?.['usageAlerts'] ?? {}) as Record<
+      string,
+      unknown
+    >
+    expect(guards).not.toHaveProperty('orgLibraryStorage')
+    expect(guards).not.toHaveProperty('mediaStorage')
+  })
+
+  it('records the pooled crossing under `mediaStorage` and nothing else', async () => {
+    mockOrgs = atEightyFive()
+    expect(storageAlerts(await run())).toHaveLength(1)
+    const guards = mockWrites['org-1']?.['usageAlerts'] as Record<string, unknown>
+    expect(guards['mediaStorage']).toEqual({ month: MONTH, threshold: 80 })
+    expect(Object.keys(guards).filter((key) => /storage/i.test(key))).toEqual([
+      'mediaStorage',
+    ])
   })
 })

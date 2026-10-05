@@ -16,7 +16,7 @@
  */
 
 import { SEO_LISTING_FIELDS, seoListingFieldTooLong } from './seo-listing-fields'
-import { seoKeywordCoverage, seoKeywordList, type SeoKeywordCoverage } from './seo-keywords'
+import { seoKeywordCoverage, seoKeywordSplit, type SeoKeywordCoverage } from './seo-keywords'
 import type { SeoPageFacts } from './seo-page-facts'
 
 /**
@@ -183,22 +183,49 @@ export function seoNormalizePath(path: string): string {
   return `/${trimmed.replace(/^\/+/, '').replace(/\/+$/, '')}`
 }
 
+/** Target keyword lines read: the keywords each page is checked for, and those past the limit. */
+export interface SeoKeywordLines {
+  /** By normalized path, at most `SEO_MAX_KEYWORDS` each. */
+  keywords: Record<string, string[]>
+  /** By normalized path, the distinct keywords past the limit, which are not checked. */
+  unchecked: Record<string, string[]>
+}
+
 /**
  * Target keywords per page, one line a page: `/pricing: plans, pricing`.
  * A line without a path names no page; a path the site does not publish is
- * reported by the scan that matches the lines to pages.
+ * reported by the scan that matches the lines to pages. Two lines for one
+ * path are one list, and the limit is the page's, not the line's.
  */
-export function parseSeoKeywordLines(raw: unknown): Record<string, string[]> {
-  const out: Record<string, string[]> = {}
+export function readSeoKeywordLines(raw: unknown): SeoKeywordLines {
+  const typed: Record<string, string[]> = {}
   for (const line of String(raw ?? '').split('\n')) {
     const at = line.indexOf(':')
     if (at <= 0) continue
     const path = seoNormalizePath(line.slice(0, at))
-    const keywords = seoKeywordList(line.slice(at + 1))
-    if (keywords.length) out[path] = seoKeywordList([...(out[path] ?? []), ...keywords])
+    const parts = line.slice(at + 1).split(',')
+    if (parts.some((part) => part.trim())) typed[path] = [...(typed[path] ?? []), ...parts]
+  }
+  const out: SeoKeywordLines = { keywords: {}, unchecked: {} }
+  for (const [path, parts] of Object.entries(typed)) {
+    const { keywords, unchecked } = seoKeywordSplit(parts)
+    if (keywords.length) out.keywords[path] = keywords
+    if (unchecked.length) out.unchecked[path] = unchecked
   }
   return out
 }
+
+/** The keywords each page is checked for; see {@link readSeoKeywordLines}. */
+export function parseSeoKeywordLines(raw: unknown): Record<string, string[]> {
+  return readSeoKeywordLines(raw).keywords
+}
+
+/**
+ * Element ids, each once: a component placed twice, or a repeat's copies,
+ * point several facts at one element on the page.
+ */
+const distinctIds = (ids: readonly (string | null)[]): string[] =>
+  [...new Set(ids.filter((id): id is string => Boolean(id)))]
 
 function finding(
   code: SeoFindingCode,
@@ -272,12 +299,13 @@ function pageFindings(
     if (h1s.length > 1) {
       out.push(
         finding('h1-multiple', 'medium', `This page has ${h1s.length} main headings; it should have one.`, {
-          nodeIds: h1s.slice(1).map((heading) => heading.nodeId).filter((id): id is string => Boolean(id)),
+          nodeIds: distinctIds(h1s.slice(1).map((heading) => heading.nodeId)),
         }),
       )
     }
     const first = h1s[0]
-    if (first.text.length < THIN_H1_MIN_CHARS || GENERIC_H1.has(normalized(first.text))) {
+    // A heading made of a token says what its value says, which the check cannot read.
+    if (first.text && (first.text.length < THIN_H1_MIN_CHARS || GENERIC_H1.has(normalized(first.text)))) {
       out.push(
         finding('h1-thin', 'medium', `The main heading “${first.text}” says little about the page.`, {
           nodeIds: first.nodeId ? [first.nodeId] : [],
@@ -293,7 +321,7 @@ function pageFindings(
         'image-alt-missing',
         'medium',
         `${missingAlt.length} ${missingAlt.length === 1 ? 'image has' : 'images have'} no description for readers who cannot see ${missingAlt.length === 1 ? 'it' : 'them'}.`,
-        { nodeIds: missingAlt.map((image) => image.nodeId) },
+        { nodeIds: distinctIds(missingAlt.map((image) => image.nodeId)) },
       ),
     )
   }

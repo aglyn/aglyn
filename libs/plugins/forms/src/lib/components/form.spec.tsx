@@ -605,7 +605,7 @@ describe('form survey fields (AGL-544)', () => {
 
     it('AND chains require every condition over the submission', async () => {
       const fields = await submitSurvey()
-      const conditions: Aglyn.HostActionTriggerCondition[] = [
+      const conditions: Aglyn.InteractionCondition[] = [
         { field: 'subscribe', op: 'notEmpty' },
         { field: 'email', op: 'contains', value: '@example.com' },
       ]

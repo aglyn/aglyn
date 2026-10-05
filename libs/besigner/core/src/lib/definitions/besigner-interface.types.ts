@@ -77,6 +77,13 @@ export type BesignerContext = {
     /** What kind of host view the canvas is editing (screen or shared layout). */
     viewType?: HostViewType
     /**
+     * What the open document is called in copy — 'page', 'component',
+     * 'email', 'template', or a plugin document's own noun. The view type
+     * cannot say this: a page component edits in the SCREEN view. Unset when
+     * no editor has published one, which canvas copy reads as 'page'.
+     */
+    documentNoun?: string
+    /**
      * WYSIWYG bindings (AGL-97): when not false, the canvas resolves
      * variable/function binding tokens live; toggle off for raw tokens.
      */

@@ -163,7 +163,7 @@ the page AND on the document behind it through the emulator-side Admin SDK:
 
 ```bash
 E2E_BASE_URL=http://localhost:4210 npm run e2e:crm          # all eight, in order
-npm run e2e:crm:bulk-bar        # tick two rows → tag, stage, owner, audience, CSV, remove
+npm run e2e:crm:bulk-bar        # tick two rows → tag, stage, owner, audience, export, remove
 npm run e2e:crm:reports         # /crm/reports (dashes until read) + the two dashboard cards
 npm run e2e:crm:leads           # status, owner, convert from the row menu, already-converted, unqualify (+ Convert… disabled), Inbox → CRM
 npm run e2e:crm:automation      # Contact created / Contact changed stage → tag on the facet, Runs

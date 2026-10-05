@@ -23,8 +23,7 @@ import {
 } from '@aglyn/aglyn/server'
 import {
   billsOrgLibraryStorage,
-  METERED_MARKUP,
-  METERED_UNIT_RATES_USD,
+  METERED_BILLED_RATES_USD,
 } from './usage-metering'
 
 /**
@@ -222,17 +221,13 @@ export function resolveStorageCap(
  * while the rollup bills another is the surprise bill wearing a disclosure.
  */
 export function storageOveragePricePerGbUsd(): number {
-  return METERED_UNIT_RATES_USD.storagePerGbMonth * METERED_MARKUP
+  return METERED_BILLED_RATES_USD.storagePerGbMonth
 }
 
 /** What an upload past the allowance would cost the customer for the month. */
 export function storageOverageUsd(overageMb: number): number {
   if (!Number.isFinite(overageMb) || overageMb <= 0) return 0
-  return (
-    (overageMb / 1024) *
-    METERED_UNIT_RATES_USD.storagePerGbMonth *
-    METERED_MARKUP
-  )
+  return (overageMb / 1024) * METERED_BILLED_RATES_USD.storagePerGbMonth
 }
 
 export interface StorageCapVerdict {

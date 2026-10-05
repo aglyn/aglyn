@@ -1,16 +1,17 @@
 ---
 sidebar_position: 8
 title: Companies
-description: Group your contacts under the businesses they belong to — one record per company, with its domain, owner, address and the people who work there.
+description: Group your contacts under the businesses they belong to — one record per company, with its domain, owner, type, industry, addresses, parent company and the people who work there.
 ---
 
 # Companies
 
 A **company** is the organization behind one or more of your contacts. Where a
 contact is a person, a company is the account they work for: it has a domain,
-an owner on your team, an address and notes of its own, and a list of the
-people at it. The Companies section lives in the CRM hub at
-`…/hosts/{site}/crm/companies`.
+an owner on your team, billing and shipping addresses, the account fields a
+Salesforce Account carries — type, industry, rating, revenue, employees and
+the rest — and a list of the people at it. The Companies section lives in the
+CRM hub at `…/hosts/{site}/crm/companies`.
 
 :::info Plan availability
 Companies are part of the **CRM**, included from **Starter**. On Free the section is
@@ -28,8 +29,15 @@ earliest open task against it is due. The table's **Search** box finds a
 company by a word of its name or its domain. **Filters** › **Company** finds
 one whose name **equals** what you type, or **starts with** it — which
 orders the list by name — **Filters** › **Owner** shows one teammate's
-accounts, or any of several, and **Next activity** › **is empty** keeps only
-the companies with nothing scheduled.
+accounts, or any of several, **Filters** › **Type**, **Industry** and
+**Rating** show the companies holding one value of that list, or any of
+several, and **Next activity** › **is empty** keeps only the companies with
+nothing scheduled.
+
+**Type**, **Industry**, **Rating**, **Account source**, **Employees** and
+**Annual revenue** are optional columns: turn one on from a column's menu
+(⋮ › **Manage columns**), and a [saved view](./views.md) that shows it keeps
+it.
 
 Every filter and the search are answered by the list's query, so they reach
 every company, a page at a time, not only the page on screen, and filters on
@@ -58,25 +66,68 @@ is optional:
 - **Domain** — the bare hostname (`acme.com`). Anything pasted with it — a
   protocol, `www.`, a path — is stripped, because the domain is a key: it is
   what suggests a company for a contact from their email address.
-- **Website**, **phone**, **industry**, **address** and **notes**.
+The form is grouped the way a Salesforce Account is:
+
+**Account information**
+
+- **Parent company** — another company this one sits under, such as a
+  subsidiary's group. It is chosen from the companies your site may see; a
+  company cannot be its own parent, nor sit under a company that is already
+  under it.
+- **Website**, **phone** and **fax**. Phone and fax numbers need a country
+  code (`+1 512 555 0123`).
+- **Type**, **Industry**, **Rating**, **Ownership** and **Account source** —
+  each a choice from your organization's list, managed on the **Companies**
+  tab of [Fields](./custom-fields.md#picklist-values) (**Account source** is
+  the [lead source](./leads.md) list, on the **Leads** tab). A new company
+  starts on each list's default, when you have set one. A company that holds
+  a value the list no longer offers — an industry typed before Industry was a
+  list, or a value since deactivated — keeps it until you change it.
+- **Account number**, **Account site** (which of the company's locations the
+  record is, such as *Headquarters*), **Ticker symbol** and **SIC code**.
+- **Employees** — a whole number.
+- **Annual revenue** and its **currency** — typed in the currency's main unit
+  (`1250000.00`); the default currency is USD.
+- **Owner** — the member of your team responsible for the account. It defaults
+  to you.
 - **Tags** — comma-separated, lowercased, up to 20; the same kind of tag a
   contact carries, shown in the list and set on many companies at once from
   the [bulk bar](./bulk-actions.md#companies).
-- **Owner** — the member of your team responsible for the account. It defaults
-  to you.
+
+**Address information** — the **billing address** and the **shipping
+address**; **Copy billing address** fills the second from the first.
+
+**Description information** — **notes**.
 
 The company is saved and its page opens.
+
+### The lists behind the choices
+
+| Field | Standard values |
+| --- | --- |
+| **Type** | Analyst, Press, Competitor, Prospect, Customer, Reseller, Integrator, Investor, Partner, Consulting, Other |
+| **Industry** | Agriculture, Apparel, Banking, Biotechnology, Chemicals, Communications, Construction, Consulting, Education, Electronics, Energy, Engineering, Entertainment, Environmental, Finance, Food & Beverage, Government, Healthcare, Hospitality, Insurance, Machinery, Manufacturing, Media, Not For Profit, Recreation, Retail, Shipping, Technology, Telecommunications, Transportation, Utilities, Other |
+| **Rating** | Hot, Warm, Cold |
+| **Ownership** | Public, Private, Subsidiary, Other |
+| **Account source** | Your lead sources |
+
+Every organization has the standard values; you can rename, reorder,
+deactivate or set a default on them, and add your own. Renaming a value
+renames it on every company that holds it.
 
 ## A company's page
 
 The page names the company in the heading and the trail, and holds its
 properties, its contacts, its [deals](./deals.md), its open [tasks](./tasks.md)
 and the [activity](./activities.md) logged against it. The header of the
-first card carries the domain under the company's kind, the industry and the
-owner as chips, **Back to companies**, **Call** and **Log a call** (see
+first card carries the domain under the company's kind, the type, the
+industry, the rating and the owner as chips, **Back to companies**, **Call** and **Log a call** (see
 [click to call](./activities.md#click-to-call)), and **Edit**, which opens the
 same form the company was created with; **Delete company** is in the header's
-menu (⋮). The company's phone number is a link on the properties card too.
+menu (⋮). The card lists the rest in the form's three groups — the parent
+company (a link to its page) and the other account information, the billing
+and shipping addresses, and the notes. The company's phone number is a link on
+the properties card too.
 Every CRM record page — contact, company, deal and lead — is headed the same
 way.
 
@@ -140,46 +191,29 @@ workspace has turned on **Create companies from work email domains** in
 which case the company is created from the domain and the contact linked to
 it.
 
-## Import from CSV
+## Import
 
-**Import CSV**, in the card's header, takes a spreadsheet of companies — an export
-from another CRM, an account list — and files each one. A company already in
-your list is **updated** rather than added twice: a row is matched to an
-existing company by its **domain** first, and by its **name** when the row has
-no domain or no company carries it. Importing needs the same **Manage data**
-permission as creating a company.
+**Import**, in the card's header, takes a file of companies — a Salesforce
+accounts export, a HubSpot or Apollo list, a spreadsheet — through the
+[import wizard](./import.md). A company already in your list is **updated**
+rather than added twice: a row is matched by its **Aglyn ID**, then its
+**domain**, then its **name**, among the companies this site sees. Every
+field is offered, your company [custom fields](./custom-fields.md) included;
+a **parent company** is found by domain or name, and one the CRM lacks can be
+created; a list value your organization lacks is yours to map, add or leave
+blank. See [what each company field reads](./import.md#what-each-company-field-reads).
 
-The three steps are the ones the [contacts import](./import.md) walks:
-choose the file (up to 5,000 rows), match its columns — Aglyn proposes a match
-from the header names and shows the first row's value beside each — check the
-ten-row preview, then import in batches of 200 with a progress bar and a
-result that says how many were **added**, **updated** and **skipped**, with
-the skipped rows downloadable as a CSV that says why. **Download template**
-hands you the export's own header over no rows, so a sheet filled in against
-it maps itself.
+A new company counts against your plan's [records band](../../workspace-and-billing/billing-and-plans/overview.md#crm-records).
+An import can be undone for seven days.
 
-| Field | What is read |
-| --- | --- |
-| **Company name** | Required. A row without one is skipped. |
-| **Domain** | The bare hostname (`acme.com`); a URL or `www.` is stripped. What a row is matched on first. A cell that is not a hostname is dropped and reported. |
-| **Website**, **phone**, **industry**, **notes** | As on the company form; a phone that cannot be read is dropped and reported. |
-| **Owner** | The email address of a member of your organization. An address that matches nobody leaves the company without an owner, and the result names those addresses. |
-| **Address line 1, line 2, city, state, postal code, country** | The postal address. Country must be a two-letter code. |
-| **Tags** | Separated by `,` or `\|`, lowercased. Added to any tags the company already has. |
-| **Custom fields** | Every field defined on the **Companies** tab of [Fields](./custom-fields.md) is offered as a target, and a header that matches a field's label or key is proposed for it — ahead of a standard alias, so a company field called *Region* wins over the address's region. A value that does not fit the field's type is dropped and reported. On an update, only the fields the file carries are written. |
+## Export
 
-A new company counts against your plan's [records band](../../workspace-and-billing/billing-and-plans/overview.md#crm-records);
-on a plan whose band is a hard limit, rows past it are skipped as
-**CRM records limit reached** — updates to existing companies still go through.
-
-## Export CSV
-
-**Export CSV**, in the card's header, downloads the companies on screen as
-`companies.csv`; the [bulk bar's](./bulk-actions.md#companies) **Export CSV**
-downloads the selected rows as `companies-selected.csv`. Both write the same
-file: every column above plus the **contacts** count, with the owner written as
-their email address, under the header the import reads — so an export
-re-imports without a hand mapping, and the count maps to nothing.
+**Export…**, in the card's header, and the [bulk bar's](./bulk-actions.md#companies)
+**Export…** open the [export dialog](./export.md): choose the fields — every
+standard and custom field, the parent company and the owner by name, the
+contacts count — and the records: the selection, the list's current filter,
+or every company. The default, **Re-importable**, is a file that imports back
+into the companies it came from.
 
 ## Deleting a company
 
@@ -187,6 +221,8 @@ Deleting a company unlinks it from every contact first, so no contact is left
 pointing at a record that no longer exists. Up to 500 contacts are unlinked in
 one pass; a company with more than that reports how many remain, and deleting
 again continues from where it stopped. The contacts themselves are untouched.
+The companies under it lose their **parent company** in the same pass, and
+keep everything else.
 The list's [bulk bar](./bulk-actions.md#companies) deletes a selection the same
 way, one company after another.
 

@@ -112,10 +112,16 @@ jest.mock('@aglyn/aglyn/server', () => ({
   ...jest.requireActual(
     '../../../libs/aglyn/src/lib/foundation/definitions/contact.types',
   ),
+  createResourceUid: () => `id_${++mockUidSeq}`,
+}))
+
+// The data plugin's dataset model, as the dataset handlers read it
+// (AGL-3080: the model is the data plugin's own).
+jest.mock('../../../libs/plugins/data/src/lib/model/dataset-models', () => ({
+  ...jest.requireActual('../../../libs/plugins/data/src/lib/model/dataset-models'),
   effectiveDatasetModel: () => ({ fields: [] }),
   coerceDocumentValues: (_m: unknown, v: Record<string, unknown>) => v,
   validateDocument: () => ({}),
-  createResourceUid: () => `id_${++mockUidSeq}`,
 }))
 
 jest.mock('firebase-admin/firestore', () => {
@@ -536,14 +542,14 @@ describe('PATCH and DELETE /v1/companies/{id}', () => {
       await call('POST', 'companies', {
         name: 'Acme',
         notes: 'Old',
-        industry: 'Coffee',
+        industry: 'Food & Beverage',
         consentSiteId: 'host-1',
       }),
     )
     const patched = await json(
       await call('PATCH', `companies/${created.id}`, { notes: null, name: 'Acme Ltd' }),
     )
-    expect(patched).toMatchObject({ name: 'Acme Ltd', notes: null, industry: 'Coffee' })
+    expect(patched).toMatchObject({ name: 'Acme Ltd', notes: null, industry: 'Food & Beverage' })
     const stored = mockDocs.get(`${COMPANIES}/${created.id}`)!
     expect(stored).not.toHaveProperty('notes')
     expect(stored.nameLower).toBe('acme ltd')
@@ -577,6 +583,119 @@ describe('PATCH and DELETE /v1/companies/{id}', () => {
     expect(await json(replay)).toEqual(receipt)
     // A wrong id is still a 404, even with a key.
     expect((await call('DELETE', 'companies/never', undefined, 'del-2')).status).toBe(404)
+  })
+
+  it('clears the parent of the companies under a deleted one, and nothing else (AGL-3514)', async () => {
+    const parent = await json(await call('POST', 'companies', { name: 'Acme', consentSiteId: 'host-1' }))
+    const child = await json(
+      await call('POST', 'companies', {
+        name: 'Acme West',
+        parentCompanyId: parent.id,
+        industry: 'Retail',
+        consentSiteId: 'host-1',
+      }),
+    )
+    expect(child.parentCompanyId).toBe(parent.id)
+    expect((await call('DELETE', `companies/${parent.id}`, undefined, 'del-parent')).status).toBe(200)
+    const stored = mockDocs.get(`${COMPANIES}/${child.id}`)!
+    expect(stored).not.toHaveProperty('parentCompanyId')
+    expect(stored.industry).toBe('Retail')
+  })
+})
+
+describe('Salesforce’s Account fields on /v1/companies (AGL-3514)', () => {
+  it('stores each picklist as its list spells it, with the key the list filters by, and the account fields', async () => {
+    const response = await call('POST', 'companies', {
+      name: 'Acme',
+      type: 'customer',
+      industry: 'food & BEVERAGE',
+      rating: 'hot',
+      ownership: 'Private',
+      accountSource: 'trade show',
+      annualRevenueCents: 125_000_000,
+      currency: 'EUR',
+      numberOfEmployees: 250,
+      fax: '(512) 555-0124',
+      accountNumber: 'ACME-001',
+      site: 'Headquarters',
+      tickerSymbol: 'ACME',
+      sicCode: '5812',
+      shippingAddress: { line1: '1 Dock Rd', country: 'us' },
+      consentSiteId: 'host-1',
+    })
+    expect(response.status).toBe(201)
+    const view = await json(response)
+    expect(view).toMatchObject({
+      type: 'Customer',
+      industry: 'Food & Beverage',
+      rating: 'Hot',
+      ownership: 'Private',
+      accountSource: 'Trade show',
+      annualRevenueCents: 125_000_000,
+      currency: 'eur',
+      numberOfEmployees: 250,
+      fax: '+15125550124',
+      accountNumber: 'ACME-001',
+      site: 'Headquarters',
+      tickerSymbol: 'ACME',
+      sicCode: '5812',
+      shippingAddress: { line1: '1 Dock Rd', country: 'US' },
+      parentCompanyId: null,
+    })
+    expect(mockDocs.get(`${COMPANIES}/${view.id}`)).toMatchObject({
+      typeKey: 'customer',
+      industryKey: 'food & beverage',
+      ratingKey: 'hot',
+      accountSourceKey: 'trade show',
+    })
+  })
+
+  it('refuses a value outside a list, naming what it allows, and keeps the value a company already holds', async () => {
+    const refused = await call('POST', 'companies', {
+      name: 'Acme',
+      industry: 'Artisanal roofing',
+      consentSiteId: 'host-1',
+    })
+    expect(refused.status).toBe(400)
+    expect((await json(refused)).error.fields.industry).toMatch(/^Industry must be one of: Agriculture, /)
+    const headcount = await call('POST', 'companies', {
+      name: 'Acme',
+      numberOfEmployees: -3,
+      consentSiteId: 'host-1',
+    })
+    expect((await json(headcount)).error.fields.numberOfEmployees).toMatch(/whole number/)
+    expect(childPaths(COMPANIES)).toEqual([])
+    // A company whose industry was typed while the field was free text keeps it.
+    mockDocs.set(`${COMPANIES}/legacy`, {
+      name: 'Legacy',
+      industry: 'Artisanal roofing',
+      hostId: 'host-1',
+      visibleTo: ['host:host-1'],
+    })
+    const kept = await call('PATCH', 'companies/legacy', { industry: 'artisanal roofing', rating: 'Warm' })
+    expect(kept.status).toBe(200)
+    expect(await json(kept)).toMatchObject({ industry: 'Artisanal roofing', rating: 'Warm' })
+    const changed = await call('PATCH', 'companies/legacy', { industry: 'Woodworking' })
+    expect(changed.status).toBe(400)
+  })
+
+  it('refuses a parent that is the company itself, one below it, or none at all', async () => {
+    const top = await json(await call('POST', 'companies', { name: 'Top', consentSiteId: 'host-1' }))
+    const middle = await json(
+      await call('POST', 'companies', { name: 'Middle', parentCompanyId: top.id, consentSiteId: 'host-1' }),
+    )
+    const self = await call('PATCH', `companies/${top.id}`, { parentCompanyId: top.id })
+    expect((await json(self)).error.fields.parentCompanyId).toMatch(/its own parent/)
+    const cycle = await call('PATCH', `companies/${top.id}`, { parentCompanyId: middle.id })
+    expect((await json(cycle)).error.fields.parentCompanyId).toMatch(/sits under this one/)
+    const missing = await call('POST', 'companies', {
+      name: 'Orphan',
+      parentCompanyId: 'never',
+      consentSiteId: 'host-1',
+    })
+    expect((await json(missing)).error.fields.parentCompanyId).toMatch(/no such parent/)
+    const cleared = await call('PATCH', `companies/${middle.id}`, { parentCompanyId: null })
+    expect(await json(cleared)).toMatchObject({ parentCompanyId: null })
   })
 })
 
@@ -714,7 +833,7 @@ describe('/v1/pipelines', () => {
     // The deal landed at the top of the pipeline it seeded.
     expect(deal).toMatchObject({
       pipelineId: pipeline.id,
-      stageId: 'qualified',
+      stageId: 'prospecting',
       status: 'open',
       currency: 'usd',
       closedAt: null,
@@ -799,6 +918,72 @@ describe('/v1/deals', () => {
     })
   })
 
+  /*
+   * Salesforce's Opportunity fields (AGL-3516): the two picklists judged
+   * against the org's lists, a fixed forecast category, a probability
+   * override a stage move clears, and a campaign that must be the org's.
+   */
+  it('writes the Opportunity fields, judged, and a stage move re-stamps the forecast', async () => {
+    mockDocs.set(`${ORG}/emailCampaigns/spring`, { name: 'Spring launch', visibleTo: ['org'] })
+    const created = await call('POST', 'deals', {
+      title: 'Beans',
+      consentSiteId: 'host-1',
+      type: 'new business',
+      leadSource: 'trade show',
+      nextStep: 'Send the quote',
+      probability: 35,
+      campaignId: 'spring',
+    })
+    expect(created.status).toBe(201)
+    const deal = await json(created)
+    expect(deal).toMatchObject({
+      stageId: 'prospecting',
+      type: 'New Business',
+      leadSource: 'Trade show',
+      nextStep: 'Send the quote',
+      probability: 35,
+      // The stage's, stamped at creation.
+      forecastCategory: 'pipeline',
+      campaignId: 'spring',
+    })
+    expect(mockDocs.get(`${DEALS}/${deal.id}`)).toMatchObject({
+      typeKey: 'new business',
+      leadSourceKey: 'trade show',
+    })
+
+    // A value outside the org's lists is refused, naming what they allow.
+    const refused = await json(await call('PATCH', `deals/${deal.id}`, { type: 'Upsell' }))
+    expect(refused.error.fields).toEqual({
+      type: 'Type must be one of: Existing Business, New Business.',
+    })
+    const unknownCampaign = await json(await call('PATCH', `deals/${deal.id}`, { campaignId: 'gone' }))
+    expect(unknownCampaign.error.fields).toEqual({ campaignId: 'No such campaign in this organization' })
+    const badCategory = await json(await call('PATCH', `deals/${deal.id}`, { forecastCategory: 'upside' }))
+    expect(badCategory.error.fields.forecastCategory).toMatch(/omitted, pipeline, bestCase, commit, closed/)
+    const badProbability = await json(await call('PATCH', `deals/${deal.id}`, { probability: 101 }))
+    expect(badProbability.error.fields).toHaveProperty('probability')
+
+    // A move stamps the new stage's category and clears the override…
+    const moved = await json(await call('PATCH', `deals/${deal.id}`, { stageId: 'proposal-price-quote' }))
+    expect(moved).toMatchObject({ forecastCategory: 'bestCase', probability: null })
+    // …unless the same body sets them.
+    const pinned = await json(
+      await call('PATCH', `deals/${deal.id}`, {
+        stageId: 'negotiation-review',
+        probability: 95,
+        forecastCategory: 'commit',
+      }),
+    )
+    expect(pinned).toMatchObject({ forecastCategory: 'commit', probability: 95 })
+    const won = await json(await call('PATCH', `deals/${deal.id}`, { status: 'won' }))
+    expect(won).toMatchObject({ forecastCategory: 'closed', probability: null })
+
+    // Clearing the type clears its key with it.
+    await call('PATCH', `deals/${deal.id}`, { type: null })
+    expect(mockDocs.get(`${DEALS}/${deal.id}`)).toMatchObject({ typeKey: null })
+    expect(mockDocs.get(`${DEALS}/${deal.id}`)).not.toHaveProperty('type')
+  })
+
   it('moves by stage or by status, never by a pair that disagrees', async () => {
     const deal = await json(
       await call('POST', 'deals', { title: 'Beans', consentSiteId: 'host-1' }),
@@ -822,12 +1007,12 @@ describe('/v1/deals', () => {
     const reopened = await json(
       await call('PATCH', `deals/${deal.id}`, { status: 'open' }),
     )
-    expect(reopened).toMatchObject({ stageId: 'qualified', status: 'open', closedAt: null })
+    expect(reopened).toMatchObject({ stageId: 'prospecting', status: 'open', closedAt: null })
 
     const byStage = await json(
-      await call('PATCH', `deals/${deal.id}`, { stageId: 'negotiation' }),
+      await call('PATCH', `deals/${deal.id}`, { stageId: 'negotiation-review' }),
     )
-    expect(byStage).toMatchObject({ stageId: 'negotiation', status: 'open' })
+    expect(byStage).toMatchObject({ stageId: 'negotiation-review', status: 'open' })
 
     const moved = await call('PATCH', `deals/${deal.id}`, { pipelineId: 'other' })
     expect((await json(moved)).error.fields.pipelineId).toMatch(/Not writable/)
@@ -849,7 +1034,7 @@ describe('/v1/deals', () => {
       await call('POST', 'deals', { title: 'Beans', contactId: 'c-1', consentSiteId: 'host-1' }),
     )
     // Open stages and a loss say nothing about a purchase.
-    await call('PATCH', `deals/${deal.id}`, { stageId: 'negotiation' })
+    await call('PATCH', `deals/${deal.id}`, { stageId: 'negotiation-review' })
     await call('PATCH', `deals/${deal.id}`, { status: 'lost' })
     expect(stageOf()).toBe('opportunity')
 
@@ -878,6 +1063,95 @@ describe('/v1/deals', () => {
     )
     expect(born.status).toBe('won')
     expect(stageOf()).toBe('customer')
+  })
+
+  /*
+   * Opportunity Contact Roles (AGL-3521): the whole list replaced as sent,
+   * each role judged against the org's list, and the Primary in step with
+   * `contactId` whichever of the two a body names.
+   */
+  it('reads and writes contact roles, keeping the Primary and contactId as one', async () => {
+    mockDocs.set(`${ORG}/contacts/c-2`, { email: 'blake@example.com' })
+    mockDocs.set(`${ORG}/contacts/c-3`, { email: 'casey@example.com' })
+    const created = await json(
+      await call('POST', 'deals', {
+        title: 'Committee',
+        consentSiteId: 'host-1',
+        contactRoles: [
+          { contactId: 'c-1', role: 'decision maker', primary: true },
+          { contactId: 'c-2', role: 'Evaluator' },
+        ],
+      }),
+    )
+    expect(created).toMatchObject({
+      contactId: 'c-1',
+      contactRoles: [
+        { contactId: 'c-1', role: 'Decision Maker', primary: true },
+        { contactId: 'c-2', role: 'Evaluator', primary: false },
+      ],
+    })
+    expect(mockDocs.get(`${DEALS}/${created.id}`)).toMatchObject({
+      contactRoleContactIds: ['c-1', 'c-2'],
+      contactRoleKeys: ['decision maker', 'evaluator'],
+    })
+
+    // `contactId` alone makes that contact Primary, added with no role.
+    const moved = await json(await call('PATCH', `deals/${created.id}`, { contactId: 'c-3' }))
+    expect(moved).toMatchObject({
+      contactId: 'c-3',
+      contactRoles: [
+        { contactId: 'c-3', role: null, primary: true },
+        { contactId: 'c-1', role: 'Decision Maker', primary: false },
+        { contactId: 'c-2', role: 'Evaluator', primary: false },
+      ],
+    })
+    // A list without a Primary clears `contactId`.
+    const none = await json(
+      await call('PATCH', `deals/${created.id}`, {
+        contactRoles: [{ contactId: 'c-2', role: 'Evaluator', primary: false }],
+      }),
+    )
+    expect(none).toMatchObject({ contactId: null, contactRoles: [{ contactId: 'c-2', primary: false }] })
+    expect(mockDocs.get(`${DEALS}/${created.id}`)).not.toHaveProperty('contactId')
+    expect(mockDocs.get(`${DEALS}/${created.id}`)).toMatchObject({ contactRoleContactIds: ['c-2'] })
+
+    // Refusals: a role off the list, two Primaries, a contact twice, a
+    // contact that does not exist, and a contactId that disagrees.
+    const role = await json(
+      await call('PATCH', `deals/${created.id}`, { contactRoles: [{ contactId: 'c-1', role: 'Coach' }] }),
+    )
+    expect(role.error.fields.contactRoles).toMatch(/^Contact role must be one of: Business User/)
+    const two = await json(
+      await call('PATCH', `deals/${created.id}`, {
+        contactRoles: [
+          { contactId: 'c-1', primary: true },
+          { contactId: 'c-2', primary: true },
+        ],
+      }),
+    )
+    expect(two.error.fields.contactRoles).toBe('At most one contact may be Primary')
+    const twice = await json(
+      await call('PATCH', `deals/${created.id}`, {
+        contactRoles: [{ contactId: 'c-1' }, { contactId: 'c-1' }],
+      }),
+    )
+    expect(twice.error.fields.contactRoles).toMatch(/twice/)
+    const ghost = await json(
+      await call('PATCH', `deals/${created.id}`, { contactRoles: [{ contactId: 'c-ghost' }] }),
+    )
+    expect(ghost.error.fields.contactRoles).toBe('No such contact in this organization: c-ghost')
+    const disagree = await json(
+      await call('PATCH', `deals/${created.id}`, {
+        contactId: 'c-1',
+        contactRoles: [{ contactId: 'c-2', primary: true }],
+      }),
+    )
+    expect(disagree.error.fields.contactId).toBe('Must name the Primary in contactRoles, or be left out')
+
+    // A deal written before roles reads as its one contact, Primary.
+    mockDocs.set(`${DEALS}/d-legacy`, { title: 'Old', pipelineId: 'p', stageId: 's', status: 'open', contactId: 'c-1' })
+    const legacy = await json(await call('GET', 'deals/d-legacy'))
+    expect(legacy.contactRoles).toEqual([{ contactId: 'c-1', role: null, primary: true }])
   })
 
   it('validates a status filter and sends the most selective id as the clause', async () => {
@@ -1013,7 +1287,90 @@ describe('/v1/tasks', () => {
   })
 })
 
+describe('/v1/tasks picklists (AGL-3517)', () => {
+  it('takes a label or a meaning for kind, priority and status, storing both and answering the label', async () => {
+    mockDocs.set(`${ORG}/crmPicklists/taskStatus`, {
+      values: [{ id: 'on-hold', label: 'On hold', active: true, meaning: 'open' }],
+      defaultValueId: null,
+    })
+    const task = await json(
+      await call('POST', 'tasks', {
+        title: 'Walk the site',
+        kind: 'Meeting',
+        priority: 'high',
+        status: 'on hold',
+        consentSiteId: 'host-1',
+      }),
+    )
+    expect(task).toMatchObject({
+      kind: 'meeting',
+      typeLabel: 'Meeting',
+      priority: 'high',
+      priorityLabel: 'High',
+      status: 'open',
+      statusLabel: 'On hold',
+    })
+    expect(mockDocs.get(`${TASKS}/${task.id}`)).toMatchObject({ statusLabel: 'On hold', typeLabel: 'Meeting' })
+
+    // A label of the other meaning moves the status, and completion with it.
+    const done = await json(await call('PATCH', `tasks/${task.id}`, { status: 'Completed' }))
+    expect(done).toMatchObject({ status: 'done', statusLabel: 'Completed' })
+    expect(done.completedAt).not.toBeNull()
+
+    const bad = await call('POST', 'tasks', { title: 'X', status: 'Paused', consentSiteId: 'host-1' })
+    expect(bad.status).toBe(400)
+    expect((await json(bad)).error.fields.status).toBe(
+      'Status must be one of: On hold, Not Started, In Progress, Waiting on someone else, Deferred, Completed.',
+    )
+  })
+
+  it('answers a task written before the picklists with the first label of each meaning', async () => {
+    mockDocs.set(`${TASKS}/legacy`, {
+      title: 'Old',
+      kind: 'call',
+      priority: 'low',
+      status: 'done',
+      visibleTo: tokensFor('host-1'),
+      hostId: 'host-1',
+    })
+    expect(await json(await call('GET', 'tasks/legacy'))).toMatchObject({
+      typeLabel: 'Call',
+      priorityLabel: 'Low',
+      statusLabel: 'Completed',
+    })
+  })
+})
+
 describe('/v1/activities', () => {
+  it('records which way a call or an email went, and refuses one the kind does not take (AGL-3517)', async () => {
+    const call1 = await json(
+      await call('POST', 'activities', {
+        kind: 'call',
+        body: 'Team sync about the account',
+        contactId: 'c-1',
+        direction: 'internal',
+        consentSiteId: 'host-1',
+      }),
+    )
+    expect(call1).toMatchObject({ kind: 'call', direction: 'internal' })
+    expect(mockDocs.get(`${ACTIVITIES}/${call1.id}`)!.direction).toBe('internal')
+    const email = await call('POST', 'activities', {
+      kind: 'email',
+      body: 'Forwarded',
+      contactId: 'c-1',
+      direction: 'internal',
+      consentSiteId: 'host-1',
+    })
+    expect((await json(email)).error.fields).toEqual({ direction: 'Must be one of: outbound, inbound' })
+    const note = await call('POST', 'activities', {
+      body: 'A note',
+      contactId: 'c-1',
+      direction: 'inbound',
+      consentSiteId: 'host-1',
+    })
+    expect((await json(note)).error.fields).toEqual({ direction: 'Only a call or an email takes a direction' })
+  })
+
   it('refuses the record’s 5,001st activity and lands its 5,000th (AGL-2611)', async () => {
     // The per-record ceiling, counted on the contact the activity names.
     for (let index = 0; index < CRM_ACTIVITIES_PER_RECORD_CEILING - 1; index += 1) {
@@ -1361,7 +1718,7 @@ describe('an archived pipeline (AGL-2620)', () => {
     // A deal closed in the archived pipeline can still be moved: its stages resolve.
     mockDocs.set(`${DEALS}/d-old`, { title: 'Old', pipelineId: 'old', stageId: 'won', status: 'won', ...stamp })
     const reopened = await json(await call('PATCH', 'deals/d-old', { status: 'open' }))
-    expect(reopened).toMatchObject({ stageId: 'qualified', status: 'open' })
+    expect(reopened).toMatchObject({ stageId: 'prospecting', status: 'open' })
   })
 })
 

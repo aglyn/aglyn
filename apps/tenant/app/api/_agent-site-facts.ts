@@ -27,6 +27,10 @@ import {
   withRenderCache,
 } from '@aglyn/tenant-data-admin/render-cache'
 import { getTemplateScreenRouting } from '@aglyn/tenant-runtime/template-screens'
+import {
+  listPluginSitemapReaders,
+  pluginSitemapReader,
+} from '@aglyn/aglyn/plugin-manager/plugin-sitemap-readers'
 
 /**
  * The facts `/llms.txt` and `/openapi.json` are both built from (AGL-2716).
@@ -47,6 +51,12 @@ export interface AgentSiteFacts {
    * entry, since one with none has no listing or feed yet (AGL-3101).
    */
   collections: Array<{ slug: string; name?: string; entryCount?: number }>
+  /**
+   * Pages a plugin serves one per record, grouped by base (AGL-3475) — read
+   * from the same readers that list them in the sitemap, so the two files
+   * agree about which exist.
+   */
+  pageGroups: Array<{ name: string; base: string; count: number; hasListing: boolean }>
   /** Top-level pages worth naming in a curated list. */
   pages: Array<{ path: string; title?: string }>
   /** Whether the site serves `/search`. */
@@ -171,6 +181,30 @@ export async function readAgentSiteFacts(host: AglynHost): Promise<AgentSiteFact
       } catch {
         collections = []
       }
+      // Record pages (AGL-3475), by the readers that list them in the
+      // sitemap. One that fails costs the file its groups, not the file.
+      const routedPaths = new Set(
+        Object.entries(host.screens ?? {})
+          .filter(([screenId]) => !templateScreenIds.has(screenId))
+          .map(([, path]) => screenRoutePathToUrl(path)),
+      )
+      const pageGroups: AgentSiteFacts['pageGroups'] = []
+      for (const declared of listPluginSitemapReaders()) {
+        try {
+          const reader = await pluginSitemapReader(declared)
+          for (const group of (await reader.listings?.({ hostId: host.$id })) ?? []) {
+            if (!group.base || !(group.count > 0)) continue
+            pageGroups.push({
+              name: group.name,
+              base: group.base,
+              count: group.count,
+              hasListing: routedPaths.has(`/${group.base}`),
+            })
+          }
+        } catch (error) {
+          console.error('llms.txt: a sitemap reader failed', declared.section, error)
+        }
+      }
       /*
         `/search` exists on every site the router serves it for, which is every
         site — the results screen is composed rather than authored. Stated as a
@@ -179,6 +213,7 @@ export async function readAgentSiteFacts(host: AglynHost): Promise<AgentSiteFact
       */
       return {
         collections,
+        pageGroups,
         pages: curatedPages(host, new Set([
           ...templateScreenIds,
           ...Object.keys(listRoutes),

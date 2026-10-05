@@ -47,22 +47,22 @@ import { doc } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
 import { useCallback, useMemo, useState } from 'react'
 import {
-  campaignLinkReport,
-  campaignReport,
-  type CampaignLinkRollup,
-  type CampaignStats,
-} from '@aglyn/shared-ui-email-campaigns/model/campaign-report'
+  sendLinkReport,
+  type SendLinkRollup,
+  type SendStats,
+} from '@aglyn/shared-ui-email-campaigns/model/send-report'
+import { campaignReport } from '../model/campaign-report'
 import {
   campaignHeldForReviewNotice,
   campaignSendDisplay,
   CAMPAIGN_SEND_CONTAINER_FIELD,
-} from '@aglyn/shared-ui-email-campaigns/model/campaign-container'
+} from '../model/campaign-container'
 import {
   emailAudienceLabel,
   emailIsUnsent,
   emailSendTimeMs,
   emailSentAs,
-} from '@aglyn/shared-ui-email-campaigns/model/email-record'
+} from '../model/email-record'
 import { emailPlainTextState } from '@aglyn/aglyn/app-utils/recipient-email-render'
 import { useMarketingHubPath } from './use-marketing-hub-path'
 import { siteRecordRouteContext, useRecordRouteContext } from './record-route-context'
@@ -155,7 +155,7 @@ export function EmailDetail(props: EmailDetailProps) {
   const firestore = useFirestore()
 
   const { data: email, status } = useFirestoreDoc<
-    Record<string, any> & { stats?: CampaignStats }
+    Record<string, any> & { stats?: SendStats }
   >(
     () => (orgId ? campaignSendDoc(firestore, orgId, emailId) : null),
     [firestore, orgId, emailId],
@@ -185,7 +185,7 @@ export function EmailDetail(props: EmailDetailProps) {
    * read by the list, the glance widget and the send path; putting an
    * unbounded map on it would make every one of those reads larger.
    */
-  const { data: links } = useFirestoreDoc<CampaignLinkRollup>(
+  const { data: links } = useFirestoreDoc<SendLinkRollup>(
     () =>
       orgId ? campaignSendReportDoc(firestore, orgId, emailId, 'links') : null,
     [firestore, orgId, emailId],
@@ -241,7 +241,7 @@ export function EmailDetail(props: EmailDetailProps) {
   )
 
   const report = useMemo(() => campaignReport(email?.stats), [email])
-  const linkReport = useMemo(() => campaignLinkReport(links), [links])
+  const linkReport = useMemo(() => sendLinkReport(links), [links])
   const subject = String(email?.subject || 'Untitled email')
   /*
    * The composed body, kept on the send document. A message written without

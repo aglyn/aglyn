@@ -35,7 +35,7 @@ This plugin owns email designs, the topic catalog, lists, sending identities and
 
 - An **Emails** nav item and page at `/emails`, with the sections Messages, Templates, Audiences, Topics, Sending and Suppressions as routes. It requires the `data.manage` permission and is code-split.
 - The same page at the organization level, `/[orgSlug]/emails` (an `orgNavItems` entry, served by the shell's generic org route to org-wide members). Audiences and topics are the organization's; messages, templates, sending identities and suppression lists are read site by site over a capped batch of sites, and every write that belongs to a site asks which one.
-- Two zones this plugin hosts for the plugin that owns campaigns: the whole body of the Messages section (under a site, and on the organization's page with `hostId: null` and the org mount), and the recipients table under a template's report. This package draws neither.
+- Three zones this plugin hosts for the plugin that owns campaigns: the whole body of the Messages section (under a site, and on the organization's page with `hostId: null` and the org mount), what the emails sent from a template did (`emailTemplateReport`, on the template's page), and who received them (`emailTemplateRecipients`). This package draws none of them and reads no send.
 - Five widgets drawn in zones the campaign owner's pages host: `campaignTopicSelect`, `campaignTopicOptions`, `campaignSenderEditor`, `campaignDesignCreate` and `campaignDesignPreview`. Each reports back through a callback; none writes a campaign.
 
 ### On the server
@@ -43,7 +43,8 @@ This plugin owns email designs, the topic catalog, lists, sending identities and
 `@aglyn/plugins-email/server` imports `firebase-admin` and is kept out of the client entry point.
 
 - `registerEmailApi()` (the `tenantApi` surface) registers the recipient-facing pages behind signed links: `email/unsubscribe`, `email/resubscribe`, `email/preferences` and `email/confirm`.
-- `registerEmailConsoleApi()` (the `consoleApi` surface) registers list membership routes (`email/list-rule-preview`, `email/list-members-preview`, `email/list-members-add`), the staged list import routes, the suppression routes, and an email design draft writer on the core's resource-drafts seam.
+- `registerEmailConsoleApi()` (the `consoleApi` surface) registers list membership routes (`email/list-rule-preview`, `email/list-members-preview`, `email/list-members-add`), the list import's screening readout (`email/list-import-screening`), the suppression routes, and an email design draft writer on the core's resource-drafts seam.
+- `registerEmailConsoleServerDeclarations()` (the `consoleServerDeclarations` surface) registers, among others, the plugin's two transfer resources: `email.list-members` (one list's members, imported into and exported from that list) and `email.suppressions` (a site's suppression list, import add-only). The console registrar registers their wizard halves, including the list import's own steps.
 
 Routes are served by the host app's API dispatcher under `/api/`.
 
@@ -51,7 +52,7 @@ Routes are served by the host app's API dispatcher under `/api/`.
 
 | import | contents |
 | -- | -- |
-| `@aglyn/plugins-email` | `BUNDLE_ID`, the email block components and their schemas, `registerEmailConsole`, the site half, and the model (template reports, sending-domain status, and report types re-exported from `@aglyn/shared-ui-email-campaigns`) |
+| `@aglyn/plugins-email` | `BUNDLE_ID`, the email block components and their schemas, `registerEmailConsole`, the site half, and the model (the renderer re-exports, template provenance and sending-domain status) |
 | `@aglyn/plugins-email/site` | `registerEmailPlugin` and `EMAIL_BUNDLE` only, with no console code |
 | `@aglyn/plugins-email/server` | `registerEmailApi`, `registerEmailConsoleApi` and the list handlers |
 | `@aglyn/plugins-email/*` | any module under `src/lib/`. Console components are deep-imported from `@aglyn/plugins-email/components/...` and are deliberately not re-exported from the root |
@@ -79,7 +80,7 @@ registerEmailApi()
 
 ## How it fits
 
-A plugin may import the tenant runtime, the renderer, the Besigner logic, the core and the shared packages. It never imports another plugin, and the core never imports a plugin. Email depends on `@aglyn/aglyn`, `@aglyn/tenant-data-admin`, `@aglyn/tenant-feature-instance` and `@aglyn/shared-*` packages, including `@aglyn/shared-ui-email-campaigns` and `@aglyn/shared-util-email`. Its relationship with the marketing plugin runs entirely through plugin zones and widget slots registered with the core, so neither package imports the other.
+A plugin may import the tenant runtime, the renderer, the Besigner logic, the core and the shared packages. It never imports another plugin, and the core never imports a plugin. Email depends on `@aglyn/aglyn`, `@aglyn/tenant-data-admin`, `@aglyn/tenant-feature-instance` and `@aglyn/shared-*` packages, including `@aglyn/shared-util-email`. Its relationship with the marketing plugin runs entirely through plugin zones and widget slots registered with the core, so neither package imports the other.
 
 ## License
 

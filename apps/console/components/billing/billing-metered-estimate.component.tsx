@@ -16,7 +16,9 @@
  */
 'use client'
 
-import { resolveOrgEntitlements, type AglynOrgBilling } from '@aglyn/aglyn'
+import type { AglynOrgBilling } from '@aglyn/aglyn'
+import { analyticsBandwidthReading } from '@aglyn/aglyn/app-utils/media-bandwidth'
+import { ORIGIN_MEDIA_BANDWIDTH_WEIGHT } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import {
   billsOrgLibraryStorage,
   estimateMonthlyUsageCost,
@@ -124,6 +126,13 @@ export function BillingMeteredEstimateComponent(
    * "Calculating…" than a number that is low).
    */
   const [orgLibraryBytes, setOrgLibraryBytes] = useState<number | null>(null)
+  /**
+   * The org library's video and file DELIVERY this month (AGL-3474), which
+   * the media CDN counts on the org's own day documents. `null` until known,
+   * for the reason `orgLibraryBytes` is.
+   */
+  const [orgLibraryDelivery, setOrgLibraryDelivery] =
+    useState<HostUsageSnapshot | null>(null)
   const [config, setConfig] = useState<UsageConfig | null>(null)
   const month = new Date().toISOString().slice(0, 7)
   const orgId = (org as any)?.$id as string | undefined
@@ -151,15 +160,16 @@ export function BillingMeteredEstimateComponent(
             ),
           ),
         ])
+        // Page views plus the site's counted video and file delivery, in
+        // views (AGL-3474) — what the rollup reads off the same documents.
+        const bandwidth = analyticsBandwidthReading(analytics?.docs ?? [])
         return {
           storageBytes: Number(media?.get('bytes') ?? 0),
           meters: hostMeterReadings((name) =>
             counters[counterNames.indexOf(name)]?.get(month),
           ),
-          pageViews: (analytics?.docs ?? []).reduce(
-            (sum, day) => sum + Number(day.get('total') ?? 0),
-            0,
-          ),
+          pageViews: bandwidth.meteredPageViews,
+          mediaBandwidthBytes: bandwidth.mediaBytes,
         }
       }),
     ).then((usage) => {
@@ -193,6 +203,40 @@ export function BillingMeteredEstimateComponent(
     }
   }, [firestore, orgId])
 
+  // The org library's delivery (AGL-3474), on the same terms as its bytes:
+  // known or held at null. Billed past the band whatever the storage switch
+  // says — it is bandwidth, not storage.
+  useEffect(() => {
+    if (!orgId) {
+      setOrgLibraryDelivery({ storageBytes: 0, pageViews: 0 })
+      return
+    }
+    let active = true
+    void getDocs(
+      query(
+        collection(firestore, 'orgs', orgId, 'analytics'),
+        where(documentId(), '>=', `${month}-01`),
+        where(documentId(), '<=', `${month}-31`),
+      ),
+    )
+      .then((days) => {
+        const bandwidth = analyticsBandwidthReading(days.docs)
+        if (active) {
+          setOrgLibraryDelivery({
+            storageBytes: 0,
+            pageViews: bandwidth.meteredPageViews,
+            mediaBandwidthBytes: bandwidth.mediaBytes,
+          })
+        }
+      })
+      .catch(() => {
+        // Held at null, as the library's bytes are.
+      })
+    return () => {
+      active = false
+    }
+  }, [firestore, orgId, month])
+
   // Whether THIS month's invoice includes the library — a server env var
   // (`BILL_ORG_LIBRARY_STORAGE_FROM`) this client component cannot read, so
   // it is fetched once and evaluated through the same
@@ -225,19 +269,25 @@ export function BillingMeteredEstimateComponent(
     }
   }, [user])
 
-  const ready = snapshots !== null && orgLibraryBytes !== null && config !== null
+  const ready =
+    snapshots !== null &&
+    orgLibraryBytes !== null &&
+    orgLibraryDelivery !== null &&
+    config !== null
   const orgLibrary: HostUsageSnapshot = {
     storageBytes: orgLibraryBytes ?? 0,
     pageViews: 0,
   }
+  // Every site and the org library's delivery: billed on the same terms.
+  const deliveredUsage = [
+    ...(snapshots ?? []),
+    ...(orgLibraryDelivery ? [orgLibraryDelivery] : []),
+  ]
   // TWO estimates, the rollup's exact split (AGL-1473): `estimate` is the
   // TRUTH — every byte the org stores — and drives the usage lines.
   // `billedEstimate` is what the INVOICE will see, and it excludes the org
-  // library until the switch covers this month.
-  const estimate = estimateMonthlyUsageCost(
-    [...(snapshots ?? []), orgLibrary],
-    org,
-  )
+  // library's STORAGE until the switch covers this month.
+  const estimate = estimateMonthlyUsageCost([...deliveredUsage, orgLibrary], org)
   const libraryBilled =
     config === 'unknown'
       ? true
@@ -246,23 +296,38 @@ export function BillingMeteredEstimateComponent(
         : true
   const billedEstimate = libraryBilled
     ? estimate
-    : estimateMonthlyUsageCost(snapshots ?? [], org)
+    : estimateMonthlyUsageCost(deliveredUsage, org)
   const { included } = estimate
   const orgLibraryGb = (orgLibraryBytes ?? 0) / (1024 * 1024 * 1024)
   /**
-   * The org library's OWN allowance (AGL-1886), which is not the org-wide
-   * band beside it.
+   * What the org library's share of the "Storage" row means (AGL-3479).
    *
-   * Uploads are enforced PER SCOPE against `storagePerHostMb` — the upload
-   * route reads the very counter it increments — so the org library fills up
-   * and starts refusing at this number, while the "Storage" row above
-   * compares an org-wide total to `hostLimit × storagePerHostMb`. On any plan
-   * with more than one site those are different numbers, and the one that
-   * stops an upload is this one. Showing only the other is how a customer
-   * ends up refused at 33% of the band the card told them about.
+   * The library has no allowance of its own. Since AGL-2075 ingress measures
+   * every site's library and the org's against ONE band — the
+   * `hostLimit × storagePerHostMb` the row above is "of", resolved by
+   * `resolveOrgMediaBand` — so the caption names the library's bytes as part
+   * of that pool and never "of" a figure.
+   *
+   * What happens AT the band is the gate's answer (`mediaStorageGate`), not
+   * one sentence for every plan: an unmetered plan refuses past it, a metered
+   * plan accepts and bills — and while the library's storage is not yet on
+   * the invoice (`libraryBilled` false), uploads into it are refused at the
+   * band like Free's, because there is no price to attach. An unlimited band
+   * stops nothing.
    */
-  const orgLibraryAllowanceGb =
-    resolveOrgEntitlements(org as never).storagePerHostMb / 1024
+  const orgLibraryCaption = (() => {
+    const share =
+      `Includes ${orgLibraryGb.toFixed(2)} GB in your organization library, ` +
+      'which shares this allowance with your sites.'
+    if (!Number.isFinite(included.storageGb)) return share
+    if (!included.metered) {
+      return `${share} New uploads stop when your workspace reaches it.`
+    }
+    return libraryBilled
+      ? share
+      : `${share} Organization-library storage is measured but not yet ` +
+          'billed, so uploads into it stop at the allowance for now.'
+  })()
   // `UNLIMITED` is Infinity, and a band derived from it stays Infinity —
   // `Number.isFinite` catches both that and a NaN from bad override data.
   const band = (value: number, digits = 0) =>
@@ -372,18 +437,12 @@ export function BillingMeteredEstimateComponent(
           )}
           {orgLibraryGb > 0 ? (
             <Typography variant="caption" color="text.secondary">
-              {`Includes ${orgLibraryGb.toFixed(2)} of ` +
-                `${band(orgLibraryAllowanceGb, 2)} GB in your organization ` +
-                'library, which has its own allowance — new uploads there ' +
-                'stop at it. ' +
-                (libraryBilled
-                  ? ''
-                  : 'Organization-library storage is measured but not yet billed.')}
+              {orgLibraryCaption}
             </Typography>
           ) : null}
           {usageRow(
             'Page views',
-            estimate.pageViews.toLocaleString(),
+            Math.round(estimate.pageViews).toLocaleString(),
             band(included.pageViews),
             billedEstimate.billablePageViews,
             Math.ceil(billedEstimate.billablePageViews).toLocaleString(),
@@ -392,6 +451,20 @@ export function BillingMeteredEstimateComponent(
             `${rateText(METERED_BILLED_RATES_USD.perPageView * 1000)} per 1,000`,
             billedEstimate.billableUsdByMeter.pageViews,
           )}
+          {estimate.mediaBandwidthBytes > 0 ? (
+            // Video and files are counted in page views at their weight
+            // (AGL-3474), so the row above already prices them; this says how
+            // much of it they are, as served.
+            <Typography variant="caption" color="text.secondary">
+              {`Includes ${(
+                estimate.mediaBandwidthBytes /
+                (1024 * 1024 * 1024)
+              ).toFixed(2)} GB of video, audio and files served from your ` +
+                `media library, which count ${ORIGIN_MEDIA_BANDWIDTH_WEIGHT}× ` +
+                'toward bandwidth because serving them costs more than ' +
+                'serving pages.'}
+            </Typography>
+          ) : null}
           {meteredBands().map((metered) => (
             <Fragment key={metered.id}>
               {usageRow(
@@ -414,7 +487,8 @@ export function BillingMeteredEstimateComponent(
       <Typography variant="caption" color="text.secondary">
         {included.metered
           ? `Only usage beyond your plan's included ${meteredNouns} is ` +
-            `metered, at our cost × ${METERED_MARKUP}. ` +
+            `metered, at our cost + ${Math.round((METERED_MARKUP - 1) * 100)}% ` +
+            'after card fees. ' +
             (annual
               ? 'Your subscription is annual, so usage accrues across the ' +
                 'year and settles on your renewal invoice.'

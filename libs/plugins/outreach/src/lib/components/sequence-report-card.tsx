@@ -16,7 +16,7 @@
  */
 'use client'
 
-import type { CampaignRate } from '@aglyn/shared-ui-email-campaigns/model'
+import type { SendRate } from '@aglyn/shared-ui-email-campaigns/model/send-report'
 import {
   Alert,
   ButtonBase,
@@ -137,7 +137,7 @@ const count = (value: number): string => value.toLocaleString()
  * the percentage, never dropped: "12% of people emailed" and "12% of people
  * who opened" are different claims and a bare "12%" is neither.
  */
-function rateText(rate: CampaignRate | null): { value: string; hint?: string } {
+function rateText(rate: SendRate | null): { value: string; hint?: string } {
   if (!rate) return { value: '—' }
   return {
     value: `${(rate.value * 100).toFixed(1)}%`,
@@ -186,7 +186,12 @@ export function OutreachSequenceReportCard(props: OutreachSequenceReportCardProp
                     report.opens === report.uniqueOpens ? undefined : `${count(report.opens)} opens in all`
                   }
                 />
-                <OutreachFigure label="Open rate" value={openRate.value} hint={openRate.hint} />
+                <OutreachFigure
+                  label="Open rate"
+                  {...(report.opensUnmeasured
+                    ? { value: 'Unmeasured', hint: 'Only machines fetched the image' }
+                    : { value: openRate.value, hint: openRate.hint })}
+                />
                 {report.machineOpens > 0 ? (
                   <OutreachFigure
                     label="Machine opens"

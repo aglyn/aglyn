@@ -18,9 +18,15 @@
 
 import {
   CRM_COLLECTIONS,
+  CRM_FORECAST_CATEGORIES,
+  CRM_FORECAST_CATEGORY_LABELS,
   CRM_RECORDS_BAND_FULL_MESSAGE,
+  type CrmForecastCategory,
   crmNewRecordListFields,
+  DEAL_NEXT_STEP_MAX,
   dealHasLineItems,
+  dealStageById,
+  dealStageForecastCategory,
   findOrgMember,
   nameSearchKey,
   crmMemberPickerLabel,
@@ -62,6 +68,8 @@ import {
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useContactFieldDefinitions } from '../hooks/use-contact-field-definitions'
 import { useCrmActivityLogger } from '../hooks/use-crm-activity-logger'
+import { useCrmCampaigns } from '../hooks/use-crm-campaigns'
+import { useCrmPicklist } from '../hooks/use-crm-picklist'
 import { useCrmRecordsQuota } from '../hooks/use-crm-records-quota'
 import {
   type CrmOrgDoc,
@@ -79,8 +87,13 @@ import {
   crmCustomDraftWrites,
 } from '../model/crm-custom-draft'
 import { CrmCustomFieldControl } from './crm-custom-field-control'
+import { CrmPicklistSelect } from './picklist-select'
 import { CrmSitePicker } from './crm-site-picker'
-import { CRM_CLIENT_SEARCH_FIELDS, crmClientListFields } from '../model/crm-list-query'
+import {
+  CRM_CLIENT_SEARCH_FIELDS,
+  CRM_DEAL_CONTACT_ROLE_LIST_FIELDS,
+  crmClientListFields,
+} from '../model/crm-list-query'
 import {
   DEAL_CURRENCIES,
   type DealDoc,
@@ -98,6 +111,7 @@ import {
   type DealFormValues,
   dealPatchFromForm,
   emptyDealForm,
+  judgeDealFormPicklists,
 } from '../model/deal-form-model'
 import { useCrmSharingFollowUp } from '../hooks/use-crm-sharing'
 
@@ -111,6 +125,15 @@ const CONTACT_WINDOW = 300
 
 /** Companies offered per keystroke; a longer list is a scroll, not a pick. */
 const COMPANY_MATCHES = 8
+
+/** The list fields an edit restamps: the title's search words, the two picklist keys. */
+const DEAL_CLIENT_LIST_FIELDS = [
+  ...CRM_CLIENT_SEARCH_FIELDS,
+  'typeKey',
+  'leadSourceKey',
+  // The arrays a deal's contact roles are found by (AGL-3521).
+  ...CRM_DEAL_CONTACT_ROLE_LIST_FIELDS,
+] as const
 
 /** A company as the picker offers it. */
 interface CompanyChoice {
@@ -169,6 +192,16 @@ export interface DealEditDrawerProps {
  * `contactChoicesFor` for why the contact search cannot be a query. Both
  * pickers copy the chosen NAME onto the deal beside the id, so a board of
  * cards can caption itself without a read per card.
+ *
+ * ## Salesforce's Opportunity fields (AGL-3516)
+ *
+ * Type and Lead source are the org's picklists, judged on save as every
+ * server door judges them (`judgeDealFormPicklists`) — a new deal with no
+ * Type takes the list's default. The probability is this deal's own
+ * override, blank for its stage's; the forecast category is one of the
+ * fixed set, "From the stage" storing the stage's. A stage move later
+ * stamps both afresh. The campaign is one of the campaigns the Campaigns
+ * picker of a lead offers at this level.
  */
 export function DealEditDrawer(props: DealEditDrawerProps) {
   const {
@@ -211,6 +244,10 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
    * difference (`crm-custom-draft`) in the same write as the fixed fields.
    */
   const fields = useContactFieldDefinitions(open ? orgId : null, 'deal')
+  // The org's lists for the two picklist fields, and its campaigns (AGL-3516).
+  const typeList = useCrmPicklist('opportunityType', open ? orgId : null)
+  const leadSourceList = useCrmPicklist('leadSource', open ? orgId : null)
+  const campaigns = useCrmCampaigns({ hostId, orgId }, { enabled: open })
   const storedCustom = useMemo(() => deal?.custom ?? {}, [deal?.custom])
   const [custom, setCustom] = useState<CrmCustomDraft>({})
 
@@ -235,6 +272,26 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
     [pipelines, values.pipelineId, defaultPipeline],
   )
   const stages = useMemo(() => openStages(pipeline), [pipeline])
+  /*
+   * The stage the deal is in — the one picked on a new deal, the stored one
+   * on an edit, looked up in the deal's OWN pipeline and never the default's
+   * — whose probability and forecast category the blank fields stand for.
+   */
+  const currentStage = useMemo(
+    () =>
+      dealStageById(
+        pipelines.find((entry) => entry.$id === values.pipelineId),
+        values.stageId,
+      ),
+    [pipelines, values.pipelineId, values.stageId],
+  )
+  const campaignOptions = useMemo(() => {
+    const options = campaigns.options.map((option) => ({ value: option.value, label: option.label }))
+    // A campaign the deal names but the picker no longer offers stays itself.
+    return values.campaignId && !options.some((option) => option.value === values.campaignId)
+      ? [...options, { value: values.campaignId, label: values.campaignId }]
+      : options
+  }, [campaigns.options, values.campaignId])
 
   /*
    * THE CONTACT WINDOW: the newest contacts this viewer may see, read only
@@ -347,6 +404,16 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
       enqueueSnackbar(CRM_RECORDS_BAND_FULL_MESSAGE, { variant: 'warning', persist: false })
       return
     }
+    const judged = judgeDealFormPicklists(
+      values,
+      { type: typeList.picklist, leadSource: leadSourceList.picklist },
+      { current: deal ?? null, created: !deal },
+    )
+    if (judged.ok === false) {
+      enqueueSnackbar(judged.error, { variant: 'warning', persist: false })
+      return
+    }
+    const saved = judged.values
     setBusy(true)
     try {
       const nowMs = Date.now()
@@ -354,7 +421,11 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
         const verdict = await writeGuardedBySeed(
           { subject: 'deal', unreadable, fromCache },
           async () => {
-            const { set, clear } = dealPatchFromForm(values, nowMs, { amountDerived })
+            const { set, clear } = dealPatchFromForm(saved, nowMs, {
+              amountDerived,
+              stage: currentStage,
+              current: deal,
+            })
             await updateDoc(
               doc(firestore, 'orgs', orgId, CRM_COLLECTIONS.deals, deal.$id),
               {
@@ -362,13 +433,14 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
                 ...Object.fromEntries(clear.map((key) => [key, deleteField()])),
                 // The custom keys that changed, merged into the stored map.
                 ...crmCustomDraftWrites(storedCustom, custom),
-                // The title is what the Deals table searches (AGL-3321),
+                // The title is what the Deals table searches (AGL-3321), and
+                // the Type and Lead source what it filters by (AGL-3516),
                 // from the listener's row with the edit over it.
                 ...crmClientListFields(
                   'deals',
                   deal as unknown as Record<string, unknown>,
-                  set,
-                  CRM_CLIENT_SEARCH_FIELDS,
+                  { ...set, ...Object.fromEntries(clear.map((key) => [key, null])) },
+                  DEAL_CLIENT_LIST_FIELDS,
                 ),
               },
             )
@@ -387,11 +459,12 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
         if (!createHostId) return
         const customDocument = crmCustomDraftDocument(custom)
         const record: Record<string, unknown> = {
-          ...dealDocumentFromForm(values, {
+          ...dealDocumentFromForm(saved, {
             visibleTo: [...createTokens],
             hostId: createHostId,
             uid: user.uid,
             nowMs,
+            stage: currentStage,
           }),
           ...(customDocument ? { custom: customDocument } : {}),
         }
@@ -438,6 +511,9 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
     onClose,
     storedCustom,
     custom,
+    typeList.picklist,
+    leadSourceList.picklist,
+    currentStage,
   ])
 
   return (
@@ -564,6 +640,72 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
             fullWidth
             slotProps={{ inputLabel: { shrink: true } }}
           />
+          <Stack direction="row" spacing={1}>
+            <CrmPicklistSelect
+              picklistId="opportunityType"
+              picklist={typeList.picklist}
+              value={values.type}
+              stored={deal?.type ?? ''}
+              onChange={(type) => update({ type })}
+              disabled={busy}
+            />
+            <CrmPicklistSelect
+              picklistId="leadSource"
+              picklist={leadSourceList.picklist}
+              value={values.leadSource}
+              stored={deal?.leadSource ?? ''}
+              onChange={(leadSource) => update({ leadSource })}
+              disabled={busy}
+            />
+          </Stack>
+          <TextField
+            label="Next step"
+            value={values.nextStep}
+            onChange={(event) => update({ nextStep: event.target.value })}
+            fullWidth
+            slotProps={{ htmlInput: { maxLength: DEAL_NEXT_STEP_MAX } }}
+          />
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start' }}>
+            <TextField
+              label="Probability"
+              value={values.probability}
+              onChange={(event) => update({ probability: event.target.value })}
+              placeholder={currentStage ? String(currentStage.probability) : ''}
+              helperText={
+                currentStage
+                  ? `From stage: ${currentStage.probability}%`
+                  : 'Blank uses the stage’s'
+              }
+              sx={{ flex: 1 }}
+              slotProps={{
+                htmlInput: { inputMode: 'numeric', 'aria-label': 'Probability' },
+                input: { endAdornment: '%' },
+                inputLabel: { shrink: true },
+              }}
+            />
+            <TextField
+              select
+              label="Forecast category"
+              value={values.forecastCategory}
+              onChange={(event) =>
+                update({ forecastCategory: event.target.value as '' | CrmForecastCategory })
+              }
+              helperText="A stage move sets it from the new stage."
+              sx={{ flex: 1 }}
+              slotProps={{ select: { displayEmpty: true }, inputLabel: { shrink: true } }}
+            >
+              <MenuItem value="">
+                {currentStage
+                  ? `From the stage (${CRM_FORECAST_CATEGORY_LABELS[dealStageForecastCategory(currentStage)]})`
+                  : 'From the stage'}
+              </MenuItem>
+              {CRM_FORECAST_CATEGORIES.map((category) => (
+                <MenuItem key={category} value={category}>
+                  {CRM_FORECAST_CATEGORY_LABELS[category]}
+                </MenuItem>
+              ))}
+            </TextField>
+          </Stack>
           <TextField
             select
             label="Owner"
@@ -657,6 +799,26 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
               <TextField {...params} label="Company" placeholder="Company name" />
             )}
           />
+          <TextField
+            select
+            label="Campaign"
+            value={values.campaignId}
+            onChange={(event) => update({ campaignId: event.target.value })}
+            fullWidth
+            helperText={
+              campaigns.ready && !campaignOptions.length
+                ? 'There are no campaigns yet. Create one from Marketing.'
+                : 'The campaign this deal is attributed to.'
+            }
+            slotProps={{ select: { displayEmpty: true }, inputLabel: { shrink: true } }}
+          >
+            <MenuItem value="">{'None'}</MenuItem>
+            {campaignOptions.map((option) => (
+              <MenuItem key={option.value} value={option.value}>
+                {option.label}
+              </MenuItem>
+            ))}
+          </TextField>
           <TextField
             label="Notes"
             value={values.notes}

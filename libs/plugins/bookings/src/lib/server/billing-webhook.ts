@@ -52,6 +52,10 @@ import { pluginTaxProfile } from '@aglyn/aglyn/plugin-manager/plugin-tax-profile
 import { fileBookingOnCrm } from './booking-crm'
 import { bookingTimeZoneFor } from './booking-time-zone'
 import { formatBookingWhen } from '../model/booking-time'
+import {
+  bookingContactLines,
+  readBookingPhone,
+} from '../model/booking-contact-fields'
 
 /**
  * Paid-booking section of the platform Stripe webhook (AGL-170/418):
@@ -553,6 +557,12 @@ export const bookingsBillingWebhookHandler: BillingWebhookHandler = async ({
             // Paid, so a relationship (AGL-3232): the lead the request-time
             // capture filed for the address is closed onto the contact.
             surface: 'relationship',
+            // The phone the booking form asked for (AGL-3493), onto the
+            // contact only where it holds none — as the request-time
+            // capture put it on the lead.
+            ...(readBookingPhone(booking['phone'])
+              ? { profileFill: { phone: readBookingPhone(booking['phone']) } }
+              : {}),
             // Paid, so a customer (AGL-2612) — the request-time capture
             // said `lead`, and this is the door that has seen the money.
             lifecycleFloor: 'customer',
@@ -572,19 +582,36 @@ export const bookingsBillingWebhookHandler: BillingWebhookHandler = async ({
             },
           })
         }
+        // In the booking's own zone, and named (AGL-3432): a formatter with
+        // no zone reads in the server's — UTC — and tells a paying guest the
+        // wrong hour, and an empty zone prints "()".
+        const timezone = await bookingTimeZoneFor(
+          firestore,
+          String(hostId),
+          booking,
+        )
+        const when = formatBookingWhen(Number(booking['startsAtMs']), timezone)
+        const paid = `$${(paidAmountCents / 100).toFixed(2)}`
+        // The site's managers hear of a PAID booking too (AGL-3500): the
+        // free path tells them when the request lands, and a paid one is
+        // only a booking once this event has cleared the charge, so this is
+        // its moment. Who, what, when, what was paid, and the phone and
+        // address the service asked for.
+        const contactLines = bookingContactLines(booking)
+        void notifyHostManagers(String(hostId), {
+          type: 'content.booking',
+          title: 'New booking on {site}',
+          body:
+            `${String(booking['name'] ?? '') || 'A guest'}` +
+            (booking['email'] ? ` (${String(booking['email'])})` : '') +
+            ` booked ${String(booking['serviceName'] ?? '') || 'a service'} ` +
+            `on {site} for ${when} (${timezone}). ${paid} was paid.` +
+            (contactLines.length ? ` ${contactLines.join('. ')}.` : ''),
+          link: `/${hostId}/bookings`,
+        })
         // Confirmation email now that payment cleared (env-gated inside
         // sendEmail, which no-ops when Resend isn't configured).
         if (booking['email']) {
-          // In the booking's own zone, and named (AGL-3432): a formatter with
-          // no zone reads in the server's — UTC — and tells a paying guest the
-          // wrong hour, and an empty zone prints "()".
-          const timezone = await bookingTimeZoneFor(
-            firestore,
-            String(hostId),
-            booking,
-          )
-          const when = formatBookingWhen(Number(booking['startsAtMs']), timezone)
-          const paid = `$${(paidAmountCents / 100).toFixed(2)}`
           const fallbackText =
             `Hi ${booking['name'] ?? ''},\n\nPayment received — ` +
             `"${booking['serviceName'] ?? 'your booking'}" is ` +

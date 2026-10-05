@@ -149,10 +149,16 @@ jest.mock('@aglyn/aglyn/server', () => ({
   // The CRM collection names (AGL-2606): the usage object reports the size
   // of each, so the handler reads them on every call.
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/crm'),
+  createResourceUid: () => 'uid_1',
+}))
+
+// The data plugin's dataset model, as the dataset handlers read it
+// (AGL-3080: the model is the data plugin's own).
+jest.mock('../../../libs/plugins/data/src/lib/model/dataset-models', () => ({
+  ...jest.requireActual('../../../libs/plugins/data/src/lib/model/dataset-models'),
   effectiveDatasetModel: () => ({ fields: [] }),
   coerceDocumentValues: (_m: unknown, v: Record<string, unknown>) => v,
   validateDocument: () => ({}),
-  createResourceUid: () => 'uid_1',
 }))
 
 jest.mock('firebase-admin/firestore', () => {

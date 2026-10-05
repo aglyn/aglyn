@@ -23,8 +23,6 @@ import {
   HOST_EVENT_TYPES,
   hostEventLabel,
   hostEventPayloadHint,
-  type HostActionStep,
-  type HostActionStepType,
   type HostFunction,
   type HostVariable,
   pluginDocsHelp,
@@ -109,6 +107,7 @@ import {
   runWorkflow,
   WORKFLOW_MAX_STEPS,
 } from '../model/workflows'
+import type { HostActionStep, HostActionStepType } from '../model/host-actions'
 
 /**
  * How many workflows the card reads.

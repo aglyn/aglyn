@@ -15,16 +15,6 @@
  * limitations under the License.
  */
 
-import {
-  ACTIONS_MAX_PER_HOST,
-  hostActionDocument,
-  type HostAction,
-  type HostActionStep,
-  type HostActionStepType,
-  type HostActionTriggerCondition,
-  validateHostAction,
-} from '@aglyn/aglyn/app-utils/actions'
-import { automationPlaceholders } from '@aglyn/aglyn/app-utils/automation-placeholders'
 import { hostRoleCanWrite } from '@aglyn/aglyn/app-utils/organizations'
 import { checkEntitlement } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
@@ -38,6 +28,18 @@ import {
 } from '@aglyn/aglyn/plugin-manager/plugin-resource-drafts'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { BUNDLE_ID } from './constants/bundle-common'
+import {
+  ACTIONS_MAX_PER_HOST,
+  siteInteractionDocument,
+} from '@aglyn/aglyn/app-utils/site-interactions'
+import {
+  type HostAction,
+  type HostActionStep,
+  type HostActionStepType,
+  type HostActionTriggerCondition,
+  validateHostAction,
+} from './model/host-actions'
+import { interactionPlaceholders } from '@aglyn/aglyn/app-utils/draft-placeholders'
 
 /**
  * AN AUTOMATION ANOTHER PLUGIN ASKS FOR (AGL-2919).
@@ -49,7 +51,7 @@ import { BUNDLE_ID } from './constants/bundle-common'
  * never a copy of them:
  *
  *  - THE DOCUMENT is `hosts/{hostId}/actions/{id}` in the stored shape the
- *    Actions editor saves (`hostActionDocument`), with only the fields each
+ *    Actions editor saves (`siteInteractionDocument`), with only the fields each
  *    step type holds. It is listed on the Automation page's Actions, opens in
  *    that editor, and runs through the same executor as one a person made.
  *  - IT IS OFF. A draft is written `enabled: false` whatever the caller sent,
@@ -136,8 +138,8 @@ export const AUTOMATION_STEP_FIELDS: Readonly<Record<HostActionStepType, readonl
   setContactStage: ['lifecycleStage'],
   addContactTag: ['tag'],
   assignContactOwner: ['ownerUid', 'ownerEmail', 'roundRobin'],
-  createCrmTask: ['title', 'kind', 'dueInDays', 'assigneeUid', 'assigneeEmail'],
-  logCrmActivity: ['kind', 'body'],
+  createCrmTask: ['title', 'kind', 'priority', 'dueInDays', 'assigneeUid', 'assigneeEmail'],
+  logCrmActivity: ['kind', 'body', 'direction'],
 }
 
 /** The trigger keys an automation stores. */
@@ -249,7 +251,7 @@ function factsOf(action: Pick<HostAction, 'trigger' | 'steps' | 'enabled'>): Rec
     event: action.trigger?.event ?? '',
     steps: (action.steps ?? []).length,
     enabled: action.enabled === true,
-    placeholders: automationPlaceholders(action).length,
+    placeholders: interactionPlaceholders(action).length,
   }
 }
 
@@ -344,7 +346,7 @@ export function createAutomationDraftWriter(
           roleRefusal(host, request.uid) ?? planRefusal(request.org) ?? roomRefusal(liveCount(rows))
         if (refusal) return { ok: false, ...refusal }
         tx.create(actionRef, {
-          ...hostActionDocument(action),
+          ...siteInteractionDocument(action),
           createdAt: request.now,
           updatedAt: request.now,
           createdBy: request.uid,

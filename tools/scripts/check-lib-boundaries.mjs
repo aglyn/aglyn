@@ -20,7 +20,7 @@
 //   npm run check:lib-boundaries
 //   npm run check:lib-boundaries -- --graph <file>   # an nx graph JSON already on disk
 //
-// Four things, all from one `nx graph --file` and the tracked tree:
+// Five things, all from one `nx graph --file` and the tracked tree:
 //
 //  1. Every static project edge satisfies `DEP_CONSTRAINTS`, or is a row of
 //     `lib-boundaries-allowlist.json`. A new edge is red; so is a row the
@@ -34,6 +34,10 @@
 //     patterns against the directory of the config it loaded, so the
 //     lint-side override can only come from the project's own config, and
 //     one that lacks it lints red on an edge the map carries.
+//  5. No project imports a library statically that it also reaches through
+//     lazy `import()` edges, beyond `LAZY_AND_STATIC_ALLOWED` (AGL-3557).
+//     The lint rule reds every such static import, in the lazy importer and
+//     in each app that loads it lazily, but only the full lint in CI runs it.
 //
 // The lint rule sees the same map at every file; this sees it at the project
 // level, so an edge that reached `main` through a disabled line is still
@@ -49,10 +53,12 @@ import { fileURLToPath } from 'node:url'
 
 import {
   DEP_CONSTRAINTS,
+  LAZY_AND_STATIC_ALLOWED,
   OVERRIDES_CALL,
   compareToAllowlist,
   declarationsOwed,
   evaluateEdges,
+  lazyAndStaticPairs,
   missingMapRows,
   overrideWiring,
   packageFindings,
@@ -183,6 +189,24 @@ for (const project of packageMap) {
   }
 }
 
+// 5. The lazy loads.
+const lazy = compareToAllowlist(lazyAndStaticPairs(document), LAZY_AND_STATIC_ALLOWED)
+for (const pair of lazy.regressions) {
+  problems.push(
+    `${pair.from} imports ${pair.to} statically and lazily (${pair.via.join(' ~> ')}), so CI's full lint fails every ` +
+      `static import of ${pair.to} in ${pair.from} with "Static imports of lazy-loaded libraries are forbidden".\n` +
+      `    Lazy-load a module of your own project that imports ${pair.to} statically, never ${pair.to} itself ` +
+      `(libs/plugins/email/src/lib/declarations.console-server.ts loads its transfer/*.server.ts that way). ` +
+      `A row in LAZY_AND_STATIC_ALLOWED (tools/scripts/lib/lib-boundaries.mjs) is only for a pair whose \`nx run ${pair.from}:lint\` is clean.`,
+  )
+}
+for (const pair of lazy.stale) {
+  problems.push(
+    `${pair.from} -> ${pair.to} is in LAZY_AND_STATIC_ALLOWED but no longer imported both ways.\n` +
+      `    Remove its row from tools/scripts/lib/lib-boundaries.mjs.`,
+  )
+}
+
 const edgeCount = Object.values(document.graph.dependencies).flat().filter((edge) => edge.type === 'static' && !edge.target.startsWith('npm:')).length
 if (problems.length) {
   console.error(`check:lib-boundaries: ${problems.length} finding(s) over ${projectNames.length} projects, ${edgeCount} static edges\n`)
@@ -191,6 +215,6 @@ if (problems.length) {
 }
 console.log(
   `check:lib-boundaries: ${projectNames.length} projects, ${edgeCount} static edges, ` +
-    `${allowlist.length} allowlisted (all still real), every project in docs/PACKAGES.md, ` +
+    `${allowlist.length} allowlisted (all still real), ${LAZY_AND_STATIC_ALLOWED.length} lazy-and-static pairs (all allowed), every project in docs/PACKAGES.md, ` +
     `${packageMap.filter((project) => project.projectType === 'library').length} lib package.json files in shape`,
 )

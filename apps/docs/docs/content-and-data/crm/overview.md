@@ -23,7 +23,7 @@ opens at the **organization** level, over every site at once, at
 `…/contacts` address, under a site or under the organization — still opens the
 hub.
 
-![The Contacts section of the CRM: the contacts table with two rows selected, the bulk bar offering Add tag, Remove tag, Set owner, Set stage, Set company, Add to list, Export CSV, Export all and Remove from this site, and the table's own Columns, Filters, Export and Search controls](/img/contacts/crm-contacts.png)
+![The Contacts section of the CRM: Import, Export… and New contact in the card's header, the contacts table with two rows selected, the bulk bar offering Add tag, Remove tag, Set owner, Set stage, Set company, Add to list, Share with sites…, Export… and Remove from this site, and the table's own Columns, Filters, Export and Search controls](/img/contacts/crm-contacts.png)
 
 ```mermaid
 flowchart LR
@@ -43,9 +43,9 @@ flowchart LR
 
 | Section | Address | What lives there |
 | --- | --- | --- |
-| **[Contacts](./contact-record.md)** | `/crm/contacts` | Every person your site may see, as a list with Owner and Stage columns, filters and search; a person's own page is `/crm/contacts/{id}`. [CSV import](./import.md), [bulk actions](./bulk-actions.md), [saved views](./views.md) and the [timeline](./activities.md) live here too. |
+| **[Contacts](./contact-record.md)** | `/crm/contacts` | Every person your site may see, as a list with Owner and Stage columns, filters and search; a person's own page is `/crm/contacts/{id}`. [import](./import.md) and [export](./export.md), [bulk actions](./bulk-actions.md), [saved views](./views.md) and the [timeline](./activities.md) live here too. |
 | **[Leads](./leads.md)** | `/crm/leads` | People a site has captured but not yet qualified — a status, an owner and notes on each, and a conversion into a contact, a company and a deal. [CSV import and export](./leads.md#import-from-csv) too. |
-| **[Companies](./companies.md)** | `/crm/companies` | The organizations your contacts belong to, keyed by domain — a captured contact is linked to the company at their email domain on its own; a company's page is `/crm/companies/{id}`. [CSV import and export](./companies.md#import-from-csv) and [bulk actions](./bulk-actions.md#companies) too. |
+| **[Companies](./companies.md)** | `/crm/companies` | The organizations your contacts belong to, keyed by domain — a captured contact is linked to the company at their email domain on its own; a company's page is `/crm/companies/{id}`. [import](./companies.md#import) and [export](./companies.md#export) and [bulk actions](./bulk-actions.md#companies) too. |
 | **[Deals](./deals.md)** | `/crm/deals` | The sales pipeline — open deals by stage, with an amount, an owner and an expected close, as a board or a table with [export and bulk actions](./bulk-actions.md#deals); a deal's page is `/crm/deals/{id}`. |
 | **[Tasks](./tasks.md)** | `/crm/tasks` | Calls, emails, meetings and to-dos by due date, each linked to the contact, company or deal it is for, with [export and bulk actions](./bulk-actions.md#tasks). |
 | **[Reports](./reports.md)** | `/crm/reports` | New contacts over time, sources and the lifecycle funnel, conversion by source, the lead funnel, the open pipeline and its forecast, won and lost, activity by teammate, and the task load — every table exportable as CSV. |
@@ -91,7 +91,7 @@ under Billing & plans.
 
 | | Free | Starter and above |
 | --- | --- | --- |
-| **The CRM** — Leads, Contacts, Companies, Deals, Tasks, Reports, Fields and Settings; working a lead — status, owner, notes, conversion and import; on Contacts, **New contact**, **Import CSV**, saved views, and every edit to a contact — profile, tags, notes, owner, lifecycle stage, company, custom fields, tasks, deals, files, logged calls and activities and merges — one record at a time or from the bulk bar; CSV export and **Erase this person** from the CRM's own pages; the two CRM dashboard cards; the CRM automation steps; the CRM's REST API resources | None. The **CRM** tab stays in the navigation, and every section is shown locked beside the upgrade notice | Yes |
+| **The CRM** — Leads, Contacts, Companies, Deals, Tasks, Reports, Fields and Settings; working a lead — status, owner, notes, conversion and import; on Contacts, **New contact**, **Import**, saved views, and every edit to a contact — profile, tags, notes, owner, lifecycle stage, company, custom fields, tasks, deals, files, logged calls and activities and merges — one record at a time or from the bulk bar; CSV export and **Erase this person** from the CRM's own pages; the two CRM dashboard cards; the CRM automation steps; the CRM's REST API resources | None. The **CRM** tab stays in the navigation, and every section is shown locked beside the upgrade notice | Yes |
 | **One-to-one email** from a record | None | A daily cap by tier — see [One-to-one email](../../workspace-and-billing/billing-and-plans/overview.md#one-to-one-email) |
 | **Capture** — member sign-ups and orders updating the person in Contacts; bookings and forms with lead routing on filing a lead; other forms and newsletter opt-ins landing on whichever record the person is | Yes, up to the 100-record band | Yes |
 | **Privacy requests** — exporting every contact and every lead, and erasing a person, from [Settings → Privacy](../../workspace-and-billing/signing-in-and-sessions.md#privacy-requests) | Yes | Yes |
@@ -136,7 +136,7 @@ you:
 - Tick rows and act on all of them at once — tag them, set their owner or
   stage, add them to an email audience, export them, or remove them from this
   site; see [Bulk actions](./bulk-actions.md).
-- **Export to CSV**, and **Import CSV** — see below.
+- **Export…** and **Import** — see below.
 
 The Contacts section is part of the [CRM](#what-each-plan-includes), included from
 Starter. On Free it is shown locked in the rail with the rest of the CRM; the people
@@ -145,14 +145,17 @@ your sites capture are still kept, and can be exported from
 
 Under the list, a **Recent activity** card shows the newest calls, emails,
 meetings and notes anyone on the team has logged against any record, each
-collapsed to one row that opens to the rest. **Import CSV**, **Export CSV** and
+collapsed to one row that opens to the rest. **Import**, **Export…** and
 **New contact** are in the header of the Contacts card.
 
-## Import from CSV
+## Import and export
 
-**Import CSV** on the Contacts section brings a spreadsheet of people in — map its
-columns to contact fields, preview the first rows, and import in batches with a report
-of what was added, updated and skipped. See [Import contacts from CSV](./import.md).
+**Import** on the Contacts and Companies sections brings a file in — a
+Salesforce, HubSpot, Apollo or Pipedrive export maps itself — through a dry run
+that shows every match, conflict and warning and asks how each is handled, and
+can be undone for seven days. See [Import contacts and companies](./import.md).
+**Export…** chooses the fields, custom fields included, and the records — the
+selection, the list's filter or everything. See [Export](./export.md).
 Importing is part of the [CRM](#what-each-plan-includes), included from Starter.
 
 ## Segments
@@ -222,7 +225,7 @@ What differs from a site's hub:
 - **Every create names a site.** A contact, company, deal or logged activity
   is always captured *by* a site — that is what decides which of your sites may
   see it and whose marketing consent a contact's checkbox records — so **New
-  contact**, **New company**, **New deal**, **Log activity** and **Import CSV**
+  contact**, **New company**, **New deal**, **Log activity** and **Import**
   each begin with a required **Site** picker. The pick is remembered for the
   session, and an organization with exactly one site never sees the field. The
   REST API asks the same question as `consentSiteId`. A **task** is the one

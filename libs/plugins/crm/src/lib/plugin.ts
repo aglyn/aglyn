@@ -21,11 +21,14 @@ import { lazy } from 'react'
 import { CRM_CONSOLE_SECTIONS } from './components/crm-console-sections'
 import { CrmGlanceCard } from './components/crm-glance-card'
 import { BUNDLE_ID } from './constants/bundle-common'
+import { registerCrmTransferResourceUis } from './transfer/ui'
 import { withCrmOrgMount } from './hooks/use-crm-org-mount'
+import { registerCrmRecordCounts } from './model/crm-record-counts'
 import { registerCrmRecordRoutes } from './model/crm-record-routes'
 import { registerCrmRecordLists } from './model/crm-record-lists'
 import { CRM_SEARCH_SOURCES } from './model/crm-search-sources'
 import { registerPluginZone } from '@aglyn/aglyn/plugin-manager/plugin-zones'
+import { registerPluginTransferResourceUi } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
 import { CRM_RECORD_ATTRIBUTION_ZONE } from './components/crm-attribution-zone'
 import { CRM_RECORD_BOOKING_ZONE } from './components/crm-booking-zone'
 
@@ -59,9 +62,16 @@ const CrmTasksDueCard = lazy(
  * address is a URL, not a stored id, and the nav item keeps redirecting it.
  */
 export function registerCrmConsole(): void {
+  // How the Import & export hub names email templates in a workspace package (AGL-3535).
+  registerPluginTransferResourceUi('crm.email-templates', { label: 'Email templates' }, { pluginId: BUNDLE_ID })
   registerCrmRecordRoutes()
+  // How the import wizard and the export dialog name the CRM's records (AGL-3527).
+  registerCrmTransferResourceUis(BUNDLE_ID)
   // The CRM's records as another plugin's picker lists them (AGL-3080).
   registerCrmRecordLists()
+  // The leads a site captured and the organization's contacts, counted for
+  // another plugin's figure.
+  registerCrmRecordCounts()
   registerPluginZone(
     {
       zone: CRM_RECORD_BOOKING_ZONE,

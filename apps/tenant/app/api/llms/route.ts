@@ -87,6 +87,7 @@ export async function GET(request: Request): Promise<Response> {
     agent: host.seo?.agent,
     pages: facts.pages,
     collections: facts.collections,
+    pageGroups: facts.pageGroups,
     hasSearch: facts.hasSearch,
     contactEmail: host.seo?.entity?.email,
   })

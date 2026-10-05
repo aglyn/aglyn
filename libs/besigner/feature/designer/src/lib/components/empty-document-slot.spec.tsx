@@ -22,11 +22,19 @@ const mockAddElement = jest.fn()
 jest.mock('../hooks/use-add-element-drawer-callback', () => ({
   useAddElementDrawerCallback: () => mockAddElement,
 }))
+let mockDocumentNoun: string | undefined
+jest.mock('../hooks/use-aglyn-besigner-flag', () => ({
+  __esModule: true,
+  default: () => [mockDocumentNoun, jest.fn()],
+}))
 
 import { EmptyDocumentSlot } from './empty-document-slot'
 
 describe('EmptyDocumentSlot (AGL-1246)', () => {
-  beforeEach(() => mockAddElement.mockReset())
+  beforeEach(() => {
+    mockAddElement.mockReset()
+    mockDocumentNoun = undefined
+  })
 
   it('renders a labelled, clickable region', () => {
     render(<EmptyDocumentSlot />)
@@ -34,6 +42,16 @@ describe('EmptyDocumentSlot (AGL-1246)', () => {
     expect(region.hasAttribute('data-aglyn-empty-document')).toBe(true)
     expect(region.textContent).toContain('This page is empty')
     expect(region.textContent).toContain('Drag an element here')
+  })
+
+  it('names the document its editor is editing (AGL-3477)', () => {
+    // A page component edits in the SCREEN view, so only the noun the
+    // editor publishes can tell the slot it is not a page.
+    mockDocumentNoun = 'component'
+    render(<EmptyDocumentSlot />)
+    const region = screen.getByRole('button')
+    expect(region.textContent).toContain('This component is empty')
+    expect(region.textContent).not.toContain('page')
   })
 
   it('opens the drawer with NO parent, so it resolves to the document root', () => {

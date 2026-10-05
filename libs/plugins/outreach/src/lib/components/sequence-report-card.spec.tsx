@@ -89,6 +89,23 @@ describe('the sequence report card', () => {
     expect(screen.queryByText(/Opens aren.t measured/i)).toBeNull()
   })
 
+  it('says the open rate is unmeasured, not 0.0%, when only machines fetched the image (AGL-3488)', () => {
+    render(
+      <OutreachSequenceReportCard
+        sequence={{
+          stats: { sent: 72, people: 62, openTracked: true, openPeople: 62, machineOpens: 148, proxyOpens: 128 },
+          settings: settings(true, true),
+        }}
+        links={noLinks}
+        timeZone="America/Chicago"
+      />,
+    )
+    expect(screen.getByText('Unmeasured')).toBeTruthy()
+    expect(screen.getByText('Only machines fetched the image')).toBeTruthy()
+    expect(screen.queryByText('0.0%')).toBeNull()
+    expect(screen.getByText(/whether anyone read these emails can.t be told from opens/i)).toBeTruthy()
+  })
+
   it('prints the rate with the denominator it was taken over', () => {
     // "12%" alone is not a claim anyone can check, and "of delivered" and "of
     // people emailed" are different quantities.

@@ -50,6 +50,7 @@ import {
 import { collection, doc, limit, query } from 'firebase/firestore'
 import { useParams } from 'next/navigation'
 import { useCallback, useState } from 'react'
+import { bookingPriceText } from '../model/booking-price'
 
 
 /**
@@ -243,7 +244,8 @@ export function BookMeetingDialog(props: BookMeetingDialogProps) {
               const id = String(service['$id'])
               const name = String(service['name'] ?? '')
               const link = bookingLinkFor({ site, service: { id }, path, recordRef })
-              const price = Number(service['priceUsd'] ?? 0)
+              // `$150`, `free`, or the label the service states its price as (AGL-3475).
+              const price = bookingPriceText(service)
               return (
                 <Stack key={id} direction="row" spacing={1} sx={{ alignItems: 'center' }}>
                   <Stack sx={{ flex: 1, minWidth: 0 }}>
@@ -251,8 +253,7 @@ export function BookMeetingDialog(props: BookMeetingDialogProps) {
                       {name}
                     </Typography>
                     <Typography variant="caption" color="text.secondary" noWrap>
-                      {`${Number(service['durationMinutes'] ?? 0)} min` +
-                        (price > 0 ? ` · $${price}` : ' · free')}
+                      {`${Number(service['durationMinutes'] ?? 0)} min · ${price === 'Free' ? 'free' : price}`}
                     </Typography>
                     {link ? (
                       <Typography variant="caption" sx={{ wordBreak: 'break-all' }}>

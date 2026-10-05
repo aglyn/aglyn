@@ -36,8 +36,8 @@
  *    would find nothing here.
  *  - A BANNER COUNTED OVER A PAGE. The open-dispute banner is its own query,
  *    so a deadline on an order no page shows is still raised.
- *  - AN EXPORT OF THE PAGE. Export CSV walks the list's plan, not the rows
- *    on screen.
+ *  - AN EXPORT OF THE PAGE. Export hands the export dialog the list's plan,
+ *    not the rows on screen.
  *  - A REFUSAL READ AS AN ANSWER. A combination one query cannot hold is
  *    named above the table, through `listQueryRefusals`.
  */
@@ -147,9 +147,6 @@ jest.mock('@aglyn/tenant-feature-instance/hooks/use-list-query', () => {
   }
 })
 
-/** What Export CSV asked Firestore for, one entry per page. */
-const mockExportReads: Array<{ constraints: Array<{ kind: string; args: unknown[] }> }> = []
-
 jest.mock('firebase/firestore', () => {
   const marker =
     (kind: string) =>
@@ -168,29 +165,7 @@ jest.mock('firebase/firestore', () => {
     doc: (_db: unknown, ...segments: string[]) => segments.join('/'),
     getDoc: jest.fn(),
     Timestamp: { fromDate: (date: Date) => date },
-    /*
-     * Firestore's answer to the export's query: the plan the list is showing
-     * (the double's last), from the cursor, to the page's limit.
-     */
-    getDocs: jest.fn(
-      async (asked: { constraints: Array<{ kind: string; args: unknown[] }> }) => {
-        mockExportReads.push(asked)
-        const { answerListQuery: answer, lastListQueryPlan: last } = jest.requireActual(
-          '@aglyn/tenant-feature-instance/testing/list-query-double',
-        )
-        const matched = answer(mockOrders, last())
-        const after = asked.constraints.find((entry) => entry.kind === 'startAfter')
-        const from = after
-          ? matched.findIndex((row: { $id: string }) => row.$id === (after.args[0] as { id: string }).id) + 1
-          : 0
-        const size = Number(asked.constraints.find((entry) => entry.kind === 'limit')?.args[0])
-        const docs = matched.slice(from, from + size).map((row: Record<string, unknown>) => ({
-          id: row.$id,
-          data: () => row,
-        }))
-        return { docs, size: docs.length }
-      },
-    ),
+    getDocs: jest.fn(async () => ({ docs: [], size: 0 })),
   }
 })
 
@@ -230,6 +205,7 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
 }))
 
 import { HostOrdersCard } from './host-orders-card.component'
+import { TransferLauncherContext } from '@aglyn/aglyn/app-utils/transfer-launcher-context'
 
 /** The order numbers the grid is showing. */
 const shownNumbers = () =>
@@ -241,7 +217,6 @@ const numberOf = (index: number) => `#${5000 - index}`
 
 beforeEach(() => {
   jest.spyOn(Date, 'now').mockReturnValue(NOW)
-  mockExportReads.length = 0
   mockSnackbars.length = 0
 })
 afterEach(() => jest.restoreAllMocks())
@@ -315,35 +290,35 @@ describe('the orders list asks its query, not its page (AGL-3321)', () => {
     expect(shownNumbers()).toEqual([numberOf(120)])
   })
 
-  it('exports every match of the query, not the page on screen', async () => {
-    const blobs: string[] = []
-    const RealBlob = global.Blob
-    global.Blob = class {
-      constructor(parts: string[]) {
-        blobs.push(parts.join(''))
-      }
-    } as unknown as typeof Blob
-    global.URL.createObjectURL = jest.fn(() => 'blob:orders')
-    global.URL.revokeObjectURL = jest.fn()
-    // The download itself: jsdom cannot navigate.
-    jest.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined)
-    try {
-      render(<HostOrdersCard hostId="host-1" />)
-      setSearch(['mug'])
-      fireEvent.click(screen.getByRole('button', { name: 'Export CSV' }))
-      await waitFor(() => expect(blobs).toHaveLength(1))
-      const plan = lastListQueryPlan()
-      expect(mockExportReads[0].constraints).toContainEqual({
-        kind: 'where',
-        args: ['searchTokens', 'array-contains', 'mug'],
-      })
-      // Every Mug order in the store — 139 — over the page's ten.
-      const expected = answerListQuery(mockOrders, plan!).length
-      expect(expected).toBe(STORE_SIZE - 1)
-      expect(blobs[0].trim().split('\n')).toHaveLength(expected + 1)
-      expect(mockSnackbars).toEqual([])
-    } finally {
-      global.Blob = RealBlob
-    }
+  it('exports every match of the query, not the page on screen', () => {
+    // The export dialog is the console's (AGL-3531); the list hands it its
+    // query — the planned predicates and order — and the server reads every
+    // match (`records.server.spec.ts`).
+    const openExport = jest.fn()
+    render(
+      <TransferLauncherContext.Provider value={{ openImport: jest.fn(), openExport, close: jest.fn(), can: () => true }}>
+        <HostOrdersCard hostId="host-1" />
+      </TransferLauncherContext.Provider>,
+    )
+    setSearch(['mug'])
+    fireEvent.click(screen.getByRole('button', { name: 'Export orders' }))
+    const plan = lastListQueryPlan()
+    expect(openExport).toHaveBeenCalledWith(
+      expect.objectContaining({
+        resource: 'commerce.orders',
+        scope: 'host',
+        hostId: 'host-1',
+        filter: expect.objectContaining({
+          value: { filters: plan?.filters, orderBy: { path: 'createdAtMs', direction: 'desc' } },
+        }),
+      }),
+    )
+    expect(plan?.filters).toContainEqual({ path: 'searchTokens', op: 'array-contains', value: 'mug' })
+  })
+
+  it('offers no Export outside the console shell, and no Import at all', () => {
+    render(<HostOrdersCard hostId="host-1" />)
+    expect(screen.queryByRole('button', { name: 'Export orders' })).toBeNull()
+    expect(screen.queryByRole('button', { name: /Import/ })).toBeNull()
   })
 })

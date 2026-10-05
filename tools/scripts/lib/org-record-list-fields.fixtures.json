@@ -20,7 +20,9 @@
         "campaignIds": [
           "spring-push",
           "founder-icp1"
-        ]
+        ],
+        "industry": " Food   &  Beverage",
+        "rating": "Hot"
       },
       "expected": {
         "searchTokens": [
@@ -182,7 +184,9 @@
         ],
         "status": "new",
         "leadSourceKey": "trade show",
-        "emailStatus": "none"
+        "emailStatus": "none",
+        "industryKey": "food & beverage",
+        "ratingKey": "hot"
       }
     },
     {
@@ -261,7 +265,9 @@
         "scopedCampaignIds": [],
         "status": "working",
         "leadSourceKey": null,
-        "emailStatus": "bounced"
+        "emailStatus": "bounced",
+        "industryKey": null,
+        "ratingKey": null
       }
     },
     {
@@ -311,7 +317,9 @@
         "scopedCampaignIds": [],
         "status": "new",
         "leadSourceKey": null,
-        "emailStatus": "none"
+        "emailStatus": "none",
+        "industryKey": null,
+        "ratingKey": null
       }
     },
     {
@@ -351,7 +359,8 @@
               "bad key!": "x"
             },
             "ordersCount": 3,
-            "ltvCents": 4500
+            "ltvCents": 4500,
+            "leadSource": "  Outbound ·  Apollo "
           },
           "group-b": {
             "ownerUid": "uid-2",
@@ -590,6 +599,8 @@
           "*:custom.seats=12",
           "*:custom.trial",
           "*:custom.trial=false",
+          "*:leadSource",
+          "*:leadSource=outbound · apollo",
           "*:owner=uid-2",
           "group-a:owner",
           "group-a:owner=uid-1",
@@ -610,6 +621,8 @@
           "group-a:custom.seats=12",
           "group-a:custom.trial",
           "group-a:custom.trial=false",
+          "group-a:leadSource",
+          "group-a:leadSource=outbound · apollo",
           "group-b:owner",
           "group-b:owner=uid-2"
         ],
@@ -709,7 +722,9 @@
         "visibleTo": [
           "org",
           "host:site-a"
-        ]
+        ],
+        "type": "Customer",
+        "industry": "  Food   &  Beverage "
       },
       "expected": {
         "searchTokens": [
@@ -775,7 +790,11 @@
           "host:site-a~acme-coffee",
           "host:site-a~acme-coffee.",
           "host:site-a~com"
-        ]
+        ],
+        "typeKey": "customer",
+        "industryKey": "food & beverage",
+        "ratingKey": null,
+        "accountSourceKey": null
       }
     },
     {
@@ -819,7 +838,148 @@
           "org~q",
           "org~q3"
         ],
-        "titleLower": "acme renewal — q3"
+        "titleLower": "acme renewal — q3",
+        "typeKey": null,
+        "leadSourceKey": null,
+        "contactRoleContactIds": [],
+        "scopedContactRoleContactIds": [],
+        "contactRoleKeys": []
+      }
+    },
+    {
+      "collection": "deals",
+      "record": {
+        "title": "Pilot",
+        "visibleTo": [
+          "org"
+        ],
+        "type": "New Business",
+        "leadSource": "Trade  show"
+      },
+      "expected": {
+        "searchTokens": [
+          "p",
+          "pi",
+          "pil",
+          "pilo",
+          "pilot"
+        ],
+        "scopedSearchTokens": [
+          "org~p",
+          "org~pi",
+          "org~pil",
+          "org~pilo",
+          "org~pilot"
+        ],
+        "titleLower": "pilot",
+        "typeKey": "new business",
+        "leadSourceKey": "trade show",
+        "contactRoleContactIds": [],
+        "scopedContactRoleContactIds": [],
+        "contactRoleKeys": []
+      }
+    },
+    {
+      "collection": "deals",
+      "record": {
+        "title": "Buying committee",
+        "visibleTo": [
+          "host:site-a",
+          "host:site-b"
+        ],
+        "contactId": "c-ana",
+        "contactRoles": [
+          {
+            "contactId": "c-ben",
+            "role": "Decision  Maker",
+            "primary": true
+          },
+          {
+            "contactId": "c-ana",
+            "role": "Evaluator",
+            "primary": false
+          },
+          {
+            "contactId": "c-ben",
+            "role": "Other",
+            "primary": false
+          },
+          {
+            "contactId": "c-cy",
+            "primary": false
+          }
+        ]
+      },
+      "expected": {
+        "searchTokens": [
+          "b",
+          "bu",
+          "buy",
+          "buyi",
+          "buyin",
+          "buying",
+          "c",
+          "co",
+          "com",
+          "comm",
+          "commi",
+          "commit",
+          "committ",
+          "committe",
+          "committee"
+        ],
+        "scopedSearchTokens": [
+          "host:site-a~b",
+          "host:site-a~bu",
+          "host:site-a~buy",
+          "host:site-a~buyi",
+          "host:site-a~buyin",
+          "host:site-a~buying",
+          "host:site-a~c",
+          "host:site-a~co",
+          "host:site-a~com",
+          "host:site-a~comm",
+          "host:site-a~commi",
+          "host:site-a~commit",
+          "host:site-a~committ",
+          "host:site-a~committe",
+          "host:site-a~committee",
+          "host:site-b~b",
+          "host:site-b~bu",
+          "host:site-b~buy",
+          "host:site-b~buyi",
+          "host:site-b~buyin",
+          "host:site-b~buying",
+          "host:site-b~c",
+          "host:site-b~co",
+          "host:site-b~com",
+          "host:site-b~comm",
+          "host:site-b~commi",
+          "host:site-b~commit",
+          "host:site-b~committ",
+          "host:site-b~committe",
+          "host:site-b~committee"
+        ],
+        "titleLower": "buying committee",
+        "typeKey": null,
+        "leadSourceKey": null,
+        "contactRoleContactIds": [
+          "c-ben",
+          "c-ana",
+          "c-cy"
+        ],
+        "scopedContactRoleContactIds": [
+          "host:site-a~c-ben",
+          "host:site-a~c-ana",
+          "host:site-a~c-cy",
+          "host:site-b~c-ben",
+          "host:site-b~c-ana",
+          "host:site-b~c-cy"
+        ],
+        "contactRoleKeys": [
+          "decision maker",
+          "evaluator"
+        ]
       }
     },
     {
@@ -893,7 +1053,9 @@
         "campaignIds": [
           "spring-push",
           "founder-icp1"
-        ]
+        ],
+        "industry": " Food   &  Beverage",
+        "rating": "Hot"
       },
       "expected": {
         "searchTokens": [
@@ -1055,7 +1217,9 @@
         ],
         "status": "new",
         "leadSourceKey": "trade show",
-        "emailStatus": "none"
+        "emailStatus": "none",
+        "industryKey": "food & beverage",
+        "ratingKey": "hot"
       }
     },
     {
@@ -1134,7 +1298,9 @@
         "scopedCampaignIds": [],
         "status": "working",
         "leadSourceKey": null,
-        "emailStatus": "bounced"
+        "emailStatus": "bounced",
+        "industryKey": null,
+        "ratingKey": null
       }
     },
     {
@@ -1184,7 +1350,9 @@
         "scopedCampaignIds": [],
         "status": "new",
         "leadSourceKey": null,
-        "emailStatus": "none"
+        "emailStatus": "none",
+        "industryKey": null,
+        "ratingKey": null
       }
     },
     {
@@ -1224,7 +1392,8 @@
               "bad key!": "x"
             },
             "ordersCount": 3,
-            "ltvCents": 4500
+            "ltvCents": 4500,
+            "leadSource": "  Outbound ·  Apollo "
           },
           "group-b": {
             "ownerUid": "uid-2",
@@ -1463,6 +1632,8 @@
           "*:custom.seats=12",
           "*:custom.trial",
           "*:custom.trial=false",
+          "*:leadSource",
+          "*:leadSource=outbound · apollo",
           "*:owner=uid-2",
           "group-a:owner",
           "group-a:owner=uid-1",
@@ -1483,6 +1654,8 @@
           "group-a:custom.seats=12",
           "group-a:custom.trial",
           "group-a:custom.trial=false",
+          "group-a:leadSource",
+          "group-a:leadSource=outbound · apollo",
           "group-b:owner",
           "group-b:owner=uid-2"
         ],
@@ -1584,7 +1757,9 @@
         "visibleTo": [
           "org",
           "host:site-a"
-        ]
+        ],
+        "type": "Customer",
+        "industry": "  Food   &  Beverage "
       },
       "expected": {
         "searchTokens": [
@@ -1651,6 +1826,10 @@
           "host:site-a~acme-coffee.",
           "host:site-a~com"
         ],
+        "typeKey": "customer",
+        "industryKey": "food & beverage",
+        "ratingKey": null,
+        "accountSourceKey": null,
         "nextTaskAtMs": null
       }
     },
@@ -1696,6 +1875,11 @@
           "org~q3"
         ],
         "titleLower": "acme renewal — q3",
+        "typeKey": null,
+        "leadSourceKey": null,
+        "contactRoleContactIds": [],
+        "scopedContactRoleContactIds": [],
+        "contactRoleKeys": [],
         "nextTaskAtMs": null
       }
     },

@@ -93,7 +93,7 @@ jest.mock('@aglyn/tenant-data-admin/server/duplicate-activity', () => ({
 import { setRegisteringPluginId } from '@aglyn/aglyn/app-utils/registering-plugin'
 import { pluginResourceDraftWriter } from '@aglyn/aglyn/plugin-manager/plugin-resource-drafts'
 import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
-import { CAMPAIGN_SEND_CONTAINER_FIELD } from '@aglyn/shared-ui-email-campaigns/model'
+import { CAMPAIGN_SEND_CONTAINER_FIELD } from '../model/campaign-container'
 import { nameSearchTokens } from '@aglyn/aglyn/app-utils/name-search'
 import {
   CAMPAIGN_DRAFT_DEFAULT_NAME,

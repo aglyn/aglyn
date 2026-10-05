@@ -32,7 +32,7 @@ import {
   siteLockdownFromDocs,
   visibleToHost,
 } from '@aglyn/aglyn/server'
-import type { PluginRevocation } from '@aglyn/aglyn/server'
+import { readListingRevocation } from '@aglyn/aglyn/plugin-manager/plugin-revocations'
 import { renderRecipientEmail } from '@aglyn/aglyn/app-utils/recipient-email-render'
 import { composeHostComponentNodes } from '@aglyn/aglyn/app-utils/load-referenced-components'
 import type { EmailRenderProduct } from '@aglyn/shared-util-email'
@@ -41,7 +41,7 @@ import {
   campaignHeldForReviewNotice,
   campaignPlacedOnHost,
   campaignSendHeldForReview,
-} from '@aglyn/shared-ui-email-campaigns/model'
+} from '../model/campaign-container'
 import { readPluginRecordCard } from '@aglyn/aglyn/plugin-manager/plugin-record-cards'
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import { hostPublicOrigin } from '@aglyn/aglyn/server'
@@ -686,9 +686,14 @@ async function loadEmailTemplate(hostId: string, screenId: string) {
     | { listingId?: string | null; version?: string | null }
     | undefined
   if (installedFrom?.listingId) {
-    const revocation = (
-      await firestore.collection('revocations').doc(installedFrom.listingId).get()
-    ).data() as PluginRevocation | undefined
+    /*
+     * The revocation is kept by the plugin that runs the distribution channel
+     * the design came from, and asked through the platform's slot
+     * (`plugin-revocations`). A reader that FAILS throws through, so a send
+     * that cannot learn whether its design was pulled is refused rather than
+     * mailed — the direction the read had when this file made it itself.
+     */
+    const revocation = await readListingRevocation(installedFrom.listingId)
     const block = emailStarterSendBlock({ installedFrom, revocation })
     if (block) throw new CampaignSendError(block.reason, 409)
   }

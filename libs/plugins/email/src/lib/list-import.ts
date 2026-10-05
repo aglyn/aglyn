@@ -16,15 +16,19 @@
  */
 
 /**
- * READING A MERCHANT'S CONTACT FILE, and saying what is in it.
+ * WHAT A MERCHANT'S CONTACT FILE SAYS ABOUT ITSELF — the pure half of the
+ * list-member import's controls.
  *
  * `docs/specs/email-competitive-gaps.md` G5 is the product gap — a customer
  * arriving with a list has no way to bring it — and P4 is its condition: an
  * importer is simultaneously the biggest onboarding blocker and the biggest
- * abuse vector, so it ships WITH its controls or not at all. This module is
- * the pure half of those controls. It parses, it de-duplicates, and it
- * SCREENS. It decides nothing about consent and it enrolls nobody: the
- * consent question belongs to `enrollment-basis`, which the one-address
+ * abuse vector, so it ships WITH its controls or not at all. The import runs
+ * on the platform's transfer framework (AGL-3529), which reads the file,
+ * maps its columns, collapses repeated addresses and reports the lines that
+ * are not addresses; this module is what the framework cannot know: the
+ * header spellings that mean an address, a name or a declared opt-in, and
+ * the two SCREENS. It decides nothing about consent and it enrolls nobody:
+ * the consent question belongs to `enrollment-basis`, which the one-address
  * add path already asks, and an import that answered it a second way would be
  * exactly the defect class the register has a P1 entry for.
  *
@@ -37,28 +41,28 @@
  * `jigsaw` or `append` is a purchase tell, and again a merchant may simply
  * have named a column badly.
  *
- * So neither one drops an address. Both are put in front of the operator
- * BEFORE they attest, because the attestation is the thing with teeth: an
- * operator who states they have permission for a file whose headers say it
- * was appended has made a claim their own console showed them the evidence
- * against. That is what makes the record worth keeping.
+ * So neither one drops an address. Both are put in front of the operator as
+ * warnings they acknowledge BEFORE the import writes, beside the statement of
+ * permission, because the attestation is the thing with teeth: an operator who
+ * states they have permission for a file whose headers say it was appended
+ * has made a claim their own console showed them the evidence against. That
+ * is what makes the record worth keeping.
  *
  * ## A declared basis per address, and why it is still an assertion
  *
  * P4 asks for "a declared basis per address, not one checkbox over the file".
  * A file may carry an opt-in source and an opt-in date per row, and when it
- * does they are read here and carried onto the import as evidence. They do
+ * does they are read and carried onto the membership as evidence. They do
  * NOT become the person's own opt-in. Nothing arriving in a spreadsheet is a
  * checkbox somebody ticked; it is the merchant telling us about one, which is
  * an operator assertion however many columns it arrives in. The basis stays
  * `operator-attested` and the declared source rides along as the reason.
  */
 
-import { normalizeContactEmail } from '@aglyn/aglyn/app-utils/contacts'
-import { parseCsv } from '@aglyn/aglyn/app-utils/csv'
-
 /**
- * The most addresses one uploaded file may name.
+ * The most rows one uploaded file may carry — the list-member resource's
+ * `limits.maxRows` in `plugins.config.json`, which the transfer engine
+ * enforces at the upload (`list-import.spec.ts` holds the two equal).
  *
  * A bound on the WORK an import represents, not a capacity limit: it refuses
  * a FILE, before anything is written, and it can never drop a person already
@@ -68,8 +72,7 @@ import { parseCsv } from '@aglyn/aglyn/app-utils/csv'
  *
  * 50,000 is Klaviyo's shape rather than a number of our own — its only
  * published hard import limit is a 50 MB CSV, which is the same statement in
- * bytes. Above this the parse itself is the cost, and it happens in one
- * request.
+ * bytes.
  */
 export const LIST_IMPORT_MAX_ADDRESSES = 50_000
 
@@ -138,8 +141,8 @@ export const PURCHASE_TELL_COLUMNS: readonly string[] = [
   'scraped',
 ]
 
-/** Header aliases that name the address column. */
-const EMAIL_COLUMNS = [
+/** Header spellings that name the address column. */
+export const LIST_IMPORT_EMAIL_COLUMNS: readonly string[] = [
   'email',
   'emailaddress',
   'email address',
@@ -150,20 +153,23 @@ const EMAIL_COLUMNS = [
   'primary email',
 ]
 
-/** Header aliases that name a display name. */
-const NAME_COLUMNS = [
+/**
+ * Header spellings that name the member's display name.
+ *
+ * Not `First name`: a file that splits the name maps its parts to the
+ * contact record's first and last name, and the membership's name is
+ * composed from them when no column names it whole.
+ */
+export const LIST_IMPORT_NAME_COLUMNS: readonly string[] = [
   'name',
   'full name',
   'fullname',
   'display name',
   'contact name',
-  'first name',
-  'firstname',
-  'given name',
 ]
 
-/** Header aliases carrying the merchant's declared opt-in source. */
-const OPT_IN_SOURCE_COLUMNS = [
+/** Header spellings carrying the merchant's declared opt-in source. */
+export const LIST_IMPORT_OPT_IN_SOURCE_COLUMNS: readonly string[] = [
   'opt-in source',
   'optin source',
   'opt in source',
@@ -173,8 +179,8 @@ const OPT_IN_SOURCE_COLUMNS = [
   'source',
 ]
 
-/** Header aliases carrying the merchant's declared opt-in date. */
-const OPT_IN_DATE_COLUMNS = [
+/** Header spellings carrying the merchant's declared opt-in date. */
+export const LIST_IMPORT_OPT_IN_DATE_COLUMNS: readonly string[] = [
   'opt-in date',
   'optin date',
   'opt in date',
@@ -185,60 +191,7 @@ const OPT_IN_DATE_COLUMNS = [
   'confirmed at',
 ]
 
-/** What the merchant's file says about one person. */
-export interface ListImportRow {
-  /** The source line, verbatim, so a bad one can be pointed at on screen. */
-  input: string
-  /** The normalized address, or `null` when the line does not carry one. */
-  email: string | null
-  /** A display name from the file, or `''`. */
-  name: string
-  /**
-   * Where the file says this person opted in, or `''`.
-   *
-   * Evidence for the operator's assertion and never a basis of its own — see
-   * the module note.
-   */
-  declaredSource: string
-  /** When the file says they opted in, or `''`, kept as written. */
-  declaredAt: string
-}
-
-/** What one file turned out to be. */
-export interface ParsedListImport {
-  /** The header row's column names, or `[]` for a bare list of addresses. */
-  columns: string[]
-  /**
-   * One row per usable, first-seen address, plus one per unusable line.
-   *
-   * A repeat of an address already seen is collapsed and counted in
-   * {@link duplicates} rather than carried: the membership is keyed by the
-   * normalized address, so two lines would be one row and reporting them as
-   * two would tell the operator they are attesting for more people than they
-   * are. That is exactly the rule `resolveAddresses` applies to a paste.
-   */
-  rows: ListImportRow[]
-  /** Rows carrying a usable address. */
-  usable: number
-  /** Lines that are not addresses. Reported, never dropped. */
-  unusable: number
-  /** Repeat appearances of an address already counted. */
-  duplicates: number
-  /** True when the file names more than {@link LIST_IMPORT_MAX_ADDRESSES}. */
-  overCeiling: boolean
-}
-
-/** What the mechanical screening found. Signals, not verdicts. */
-export interface ListImportScreening {
-  /** Addresses at a shared or unattended mailbox. */
-  roleAccounts: string[]
-  /** Column names in the file that read as purchase or append tells. */
-  purchaseTellColumns: string[]
-  /** True when the file declares an opt-in source or date per row. */
-  declaresBasis: boolean
-}
-
-/** Normalizes a header cell for alias matching. */
+/** Normalizes a header cell for the purchase-tell match. */
 function headerKey(value: string): string {
   return String(value ?? '')
     .trim()
@@ -247,154 +200,24 @@ function headerKey(value: string): string {
     .replace(/\s+/g, ' ')
 }
 
-/** The index of the first column matching one of `aliases`, or -1. */
-function columnIndex(columns: string[], aliases: readonly string[]): number {
-  const keys = columns.map(headerKey)
-  for (const alias of aliases) {
-    const at = keys.indexOf(alias)
-    if (at !== -1) return at
-  }
-  return -1
+/** Whether a normalized address is at a shared or unattended mailbox. */
+export function isRoleAccount(email: string | null | undefined): boolean {
+  const address = String(email ?? '')
+  const at = address.indexOf('@')
+  if (at <= 0) return false
+  return ROLE_ACCOUNT_LOCAL_PARTS.includes(address.slice(0, at).toLowerCase())
 }
 
 /**
- * Whether a parsed first row is a HEADER rather than a person.
- *
- * A header is a row with no address in it. That test rather than an alias
- * match, because the common shape of a merchant's export is a header whose
- * address column is called something we have never seen — and treating that
- * file as headerless would import the word "Email Address" as a line that is
- * not an address, and shift every subsequent column read by one.
- *
- * A one-column file of bare addresses therefore has no header, correctly:
- * every row including the first carries an address.
+ * The file's column names that read as purchase or append tells — every
+ * column, mapped or not: a column the operator chose to ignore still says
+ * where the file came from.
  */
-function looksLikeHeader(cells: readonly string[]): boolean {
-  return !cells.some((cell) => normalizeContactEmail(cell))
-}
-
-/**
- * Reads an uploaded or pasted file into rows.
- *
- * Handles the two shapes a merchant's list actually arrives in: a CSV with a
- * header, and a bare column of addresses with no header at all. Both go
- * through one parser — `parseCsv` — because a newline-separated list of
- * addresses IS a single-column CSV, and a second code path for it would be a
- * second place for the quoting rules to differ.
- *
- * ## Every line comes back, including the bad ones
- *
- * A file that silently discarded its malformed lines would tell an operator
- * that 100 addresses went on the list when 94 did, and the six they never
- * hear about are the six they typed wrong. This is the rule `resolveAddresses`
- * already applies to a paste, restated for a file.
- */
-export function parseListImport(text: string): ParsedListImport {
-  const table = parseCsv(String(text ?? ''))
-  if (!table.length) {
-    return {
-      columns: [],
-      rows: [],
-      usable: 0,
-      unusable: 0,
-      duplicates: 0,
-      overCeiling: false,
-    }
-  }
-  const headed = table.length > 1 && looksLikeHeader(table[0])
-  const columns = headed ? table[0].map((cell) => String(cell ?? '').trim()) : []
-  const body = headed ? table.slice(1) : table
-
-  const emailAt = headed ? columnIndex(columns, EMAIL_COLUMNS) : 0
-  const nameAt = headed ? columnIndex(columns, NAME_COLUMNS) : -1
-  const sourceAt = headed ? columnIndex(columns, OPT_IN_SOURCE_COLUMNS) : -1
-  const dateAt = headed ? columnIndex(columns, OPT_IN_DATE_COLUMNS) : -1
-
-  const seen = new Set<string>()
-  const rows: ListImportRow[] = []
-  let usable = 0
-  let unusable = 0
-  let duplicates = 0
-  let overCeiling = false
-
-  for (const cells of body) {
-    /*
-     * The named column when the header named one, and otherwise the first
-     * cell in the row that IS an address.
-     *
-     * The fallback is what makes an unrecognized header survivable: an
-     * export whose address column is called `Primary contact e-mail (work)`
-     * matches no alias, and refusing the whole file over a column name would
-     * be refusing the customer's migration over our vocabulary.
-     */
-    const raw =
-      emailAt >= 0 && emailAt < cells.length
-        ? String(cells[emailAt] ?? '')
-        : (cells.find((cell) => normalizeContactEmail(cell)) ?? '')
-    const email = normalizeContactEmail(raw)
-    const input = String(raw ?? '').trim() || cells.join(', ').trim()
-    if (!email) {
-      unusable += 1
-      rows.push({
-        input,
-        email: null,
-        name: '',
-        declaredSource: '',
-        declaredAt: '',
-      })
-      continue
-    }
-    if (seen.has(email)) {
-      duplicates += 1
-      continue
-    }
-    if (seen.size >= LIST_IMPORT_MAX_ADDRESSES) {
-      overCeiling = true
-      break
-    }
-    seen.add(email)
-    usable += 1
-    rows.push({
-      input,
-      email,
-      name: nameAt >= 0 ? String(cells[nameAt] ?? '').trim() : '',
-      declaredSource: sourceAt >= 0 ? String(cells[sourceAt] ?? '').trim() : '',
-      declaredAt: dateAt >= 0 ? String(cells[dateAt] ?? '').trim() : '',
-    })
-  }
-
-  return { columns, rows, usable, unusable, duplicates, overCeiling }
-}
-
-/**
- * The mechanical checks, over a parsed file.
- *
- * Cheap by construction: two substring passes and one set membership per
- * address. It is deliberately not a deliverability service — Omnisend's own
- * caveat on the one that exists is that "list cleaning confirms
- * deliverability only and does not establish recipient consent", and consent
- * is the only question this import actually turns on.
- */
-export function screenListImport(
-  parsed: Pick<ParsedListImport, 'columns' | 'rows'>,
-): ListImportScreening {
-  const roleAccounts: string[] = []
-  for (const row of parsed.rows) {
-    if (!row.email) continue
-    const local = row.email.slice(0, row.email.indexOf('@'))
-    if (ROLE_ACCOUNT_LOCAL_PARTS.includes(local)) roleAccounts.push(row.email)
-  }
-  const purchaseTellColumns = parsed.columns.filter((column) => {
+export function purchaseTellColumns(headers: readonly string[]): string[] {
+  return headers.filter((column) => {
     const key = headerKey(column)
     return PURCHASE_TELL_COLUMNS.some((tell) => key.includes(tell))
   })
-  return {
-    roleAccounts,
-    purchaseTellColumns,
-    declaresBasis: parsed.rows.some(
-      (row) => !!row.declaredSource || !!row.declaredAt,
-    ),
-  }
 }
 
 /**

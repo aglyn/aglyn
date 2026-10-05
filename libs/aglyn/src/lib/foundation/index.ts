@@ -87,6 +87,7 @@ export type {
   OrgSeatAddons,
   OrgSubscription,
   OrgUid,
+  OrgUpgradeProposal,
 } from './definitions/org-billing.types'
 export type {
   AglynDocument,

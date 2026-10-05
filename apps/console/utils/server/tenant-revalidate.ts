@@ -50,6 +50,7 @@
  */
 import { TENANT_APEX, screenRoutePathToUrl } from '@aglyn/aglyn/server'
 import type { Firestore } from 'firebase-admin/firestore'
+import { pluginLivePaths } from '@aglyn/aglyn/plugin-manager/plugin-live-paths'
 
 /** A publish should feel instant; a slow tenant must not hold the caller. */
 const TIMEOUT_MS = 5000
@@ -555,7 +556,13 @@ export async function revalidateEntireHost(
     if (!snapshot.exists) return miss('error')
     const subdomain = String(snapshot.get('subdomain') ?? '')
     if (!subdomain) return miss('error')
-    const paths = wholeHostPaths(snapshot)
+    // Every page plugins serve with no routing-map entry of their own, a
+    // record template's included (AGL-3475): a locked site must stop serving
+    // those as surely as its routed ones.
+    const paths = [
+      ...wholeHostPaths(snapshot),
+      ...(await pluginLivePaths({ hostId })),
+    ].filter((path, index, all) => all.indexOf(path) === index)
     const result = await postTenantRevalidate({
       subdomain,
       hostId,

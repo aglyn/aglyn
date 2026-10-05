@@ -33,13 +33,15 @@ import {
   type PluginRecordIndex,
 } from '@aglyn/aglyn/plugin-manager/plugin-record-index'
 import { registerPluginRecordEmailStateWriter } from '@aglyn/aglyn/plugin-manager/plugin-record-email-state'
+import { registerPluginRecordOriginWriter } from '@aglyn/aglyn/plugin-manager/plugin-record-origin'
 import {
   registerPluginRecordTimelineWriter,
   type PluginRecordTimelineWriter,
 } from '@aglyn/aglyn/plugin-manager/plugin-record-timeline'
 import { registerPluginRecordWrittenListener } from '@aglyn/aglyn/plugin-manager/plugin-record-written'
+import { registerServerStepExecutor } from '@aglyn/aglyn/plugin-manager/plugin-server-steps'
 import { registerPluginUsageMeter } from '@aglyn/aglyn/plugin-manager/plugin-usage-meters'
-import { BUNDLE_ID, CRM_RECORDS_METER_ID } from './constants/bundle-common'
+import { BUNDLE_ID, CRM_RECORDS_METER_ID, CRM_STEP_TYPES } from './constants/bundle-common'
 import { summarizeConsentGroupChange } from './model/consent-group-summary'
 
 /**
@@ -144,6 +146,12 @@ export const crmRecordTimelineWriter: PluginRecordTimelineWriter = {
     const { createCrmRecordTimelineWriter, defaultCrmRecordTimelineDeps } =
       await import('./server/record-timeline')
     return createCrmRecordTimelineWriter(defaultCrmRecordTimelineDeps()).recordEmailDelivery!(request)
+  },
+  // An automation's email to the person its event is about, filed on that
+  // person's timeline with its delivery state (AGL-2615, AGL-3080).
+  async prepareEmail(request) {
+    const { prepareCrmRecordEmail } = await import('./server/automation-steps')
+    return prepareCrmRecordEmail(request)
   },
 }
 
@@ -252,6 +260,19 @@ export function registerCrmServerDeclarations(): void {
   // through it (AGL-2660). Deferred like the rest; an API registration
   // replaces this one with the same writer, loaded eagerly.
   registerPluginRecordTimelineWriter(crmRecordTimelineWriter, { pluginId: BUNDLE_ID })
+  // Where a person came from (AGL-3519): a door the CRM does not run — the
+  // platform's account sign-up, a sequence enrolling someone — names its
+  // origin, and the CRM stamps the built-in Lead source on a record holding
+  // none. Deferred like the rest.
+  registerPluginRecordOriginWriter(
+    {
+      async stamp(request) {
+        const { crmRecordOriginWriter } = await import('./server/record-origin')
+        return crmRecordOriginWriter.stamp(request)
+      },
+    },
+    { pluginId: BUNDLE_ID },
+  )
   // Sharing rules (AGL-3336), re-evaluated after every server write of a
   // lead, a contact, a company or a deal: the core tells its record-written
   // listeners from the list-field restamp every such writer ends with, in
@@ -272,6 +293,14 @@ export function registerCrmServerDeclarations(): void {
   // sequence reads them (AGL-3080). Deferred like the rest.
   registerPluginRecordIndex('company', crmCompanyRecordIndex, { pluginId: BUNDLE_ID })
   registerPluginRecordIndex('messageTemplate', crmMessageTemplateRecordIndex, { pluginId: BUNDLE_ID })
+  // The automation steps that write the CRM (AGL-2605, AGL-3080), run for the
+  // workflows engine through the server-step seam and declared under
+  // `serverSteps`. Deferred like the rest: the writes load with the first step.
+  registerServerStepExecutor(
+    CRM_STEP_TYPES,
+    async (request) => (await import('./server/automation-steps')).runCrmAutomationStep(request),
+    { pluginId: BUNDLE_ID },
+  )
   registerPluginConsentGroupParticipant(
     {
       async preview(request) {

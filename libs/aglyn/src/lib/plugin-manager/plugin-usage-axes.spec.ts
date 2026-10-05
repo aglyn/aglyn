@@ -23,6 +23,7 @@ import {
 import { UTILIZATION_BANDS } from '../app-utils/margin-utilization'
 import {
   countedPluginBands,
+  orgCountedPluginBands,
   declaredMeterReading,
   liveMeterReading,
   meteredBandField,
@@ -138,6 +139,23 @@ describe('a band billed as an infrastructure meter, and a band only counted', ()
         .map((band) => band.id)
         .sort(),
     ).toEqual([...metered, ...counted].sort())
+  })
+})
+
+describe('a band enforced against a workspace-wide counter (AGL-3472)', () => {
+  /*
+   * The run bands are the WORKSPACE's: the workflows plugin counts every run
+   * on the org's counter as well as the site's, and holds its run gates to
+   * it. The Billing card meters these once for the organization from the
+   * same counter, so the meter and the gate cannot disagree.
+   */
+  it('is the workflows plugin’s two run bands, each on its own counter', () => {
+    expect(
+      orgCountedPluginBands().map((band) => [band.pluginId, band.id, band.orgCounter]),
+    ).toEqual([
+      ['workflows', 'workflowRuns', 'workflowRuns'],
+      ['workflows', 'actionRuns', 'actionRuns'],
+    ])
   })
 })
 

@@ -210,3 +210,13 @@ const isSentinel = (value: unknown): boolean =>
 /** The search fields every CRM record carries — what a client edit of searched text rewrites. */
 export const CRM_CLIENT_SEARCH_FIELDS = ['searchTokens', 'scopedSearchTokens'] as const
 
+
+/**
+ * The list fields a deal's contact roles are found by (AGL-3521) — what a
+ * client write of `contactRoles` or `contactId` rewrites beside them.
+ */
+export const CRM_DEAL_CONTACT_ROLE_LIST_FIELDS = [
+  'contactRoleContactIds',
+  'scopedContactRoleContactIds',
+  'contactRoleKeys',
+] as const

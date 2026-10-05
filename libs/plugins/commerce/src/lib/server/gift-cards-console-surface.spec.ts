@@ -142,9 +142,15 @@ describe('AGL-2226 · issuing and voiding are server-side and gated', () => {
     expect(handler).toMatch(/checkEntitlement\([^)]*'giftCards'\)/s)
   })
 
-  it('bounds the amount a single issue can mint', () => {
-    expect(handler).toContain('MAX_ISSUE_CENTS')
-    expect(handler).toMatch(/amountCents\s*<=\s*0|amountCents\s*>\s*MAX_ISSUE_CENTS/)
+  it('bounds the amount a single issue can mint, on the one issue path the import shares', () => {
+    // AGL-3551 moved the issue into `gift-card-issue.ts`, which the console
+    // and the gift card import both call: the bound is asserted where it is.
+    expect(handler).toMatch(/\bissueGiftCard\(/)
+    const issue = source('server/gift-card-issue.ts')
+    expect(issue).toContain('giftCardAmountProblem(amountCents)')
+    const model = source('model/commerce-gift-cards.ts')
+    expect(model).toMatch(/amountCents\s*<=\s*0/)
+    expect(model).toMatch(/amountCents\s*>\s*GIFT_CARD_ISSUE_MAX_CENTS/)
   })
 
   it('voids by zeroing, never by deleting', () => {

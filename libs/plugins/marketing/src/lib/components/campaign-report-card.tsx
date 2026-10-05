@@ -35,11 +35,11 @@ import {
 } from '@mui/material'
 import { useFirestore, useFirestoreDoc } from '@aglyn/tenant-feature-instance'
 import {
-  campaignLinkReport,
-  campaignReport,
-  type CampaignLinkRollup,
-  type CampaignStats,
-} from '@aglyn/shared-ui-email-campaigns/model/campaign-report'
+  sendLinkReport,
+  type SendLinkRollup,
+  type SendStats,
+} from '@aglyn/shared-ui-email-campaigns/model/send-report'
+import { campaignReport } from '../model/campaign-report'
 import {
   campaignRevenueReport,
   type CampaignRevenueRollup,
@@ -61,13 +61,11 @@ import {
   RateRow,
   Section,
 } from '@aglyn/shared-ui-jsx/components/measured-figures.component'
-import {
-  emailSendTimeMs,
-} from '@aglyn/shared-ui-email-campaigns/model/email-record'
+import { emailSendTimeMs } from '../model/email-record'
 import {
   campaignSendDisplay,
   campaignSendProgress,
-} from '@aglyn/shared-ui-email-campaigns/model/campaign-container'
+} from '../model/campaign-container'
 import { campaignSendDoc, campaignSendReportDoc } from './campaign-queries'
 import {
   orgSiteHubPath,
@@ -194,7 +192,7 @@ export function CampaignReportCard(props: CampaignReportCardProps) {
   const firestore = useFirestore()
 
   const { data: campaign, status } = useFirestoreDoc<
-    Record<string, unknown> & { stats?: CampaignStats }
+    Record<string, unknown> & { stats?: SendStats }
   >(
     () => (orgId ? campaignSendDoc(firestore, orgId, campaignId) : null),
     [firestore, orgId, campaignId],
@@ -207,7 +205,7 @@ export function CampaignReportCard(props: CampaignReportCardProps) {
    * path; putting an unbounded map on it would make every one of those reads
    * larger. Split, the rollup is read by exactly the screen that renders it.
    */
-  const { data: links } = useFirestoreDoc<CampaignLinkRollup>(
+  const { data: links } = useFirestoreDoc<SendLinkRollup>(
     () =>
       orgId ? campaignSendReportDoc(firestore, orgId, campaignId, 'links') : null,
     [firestore, orgId, campaignId],
@@ -262,7 +260,7 @@ export function CampaignReportCard(props: CampaignReportCardProps) {
     : basePath
 
   const report = campaignReport(campaign?.stats)
-  const linkReport = campaignLinkReport(links)
+  const linkReport = sendLinkReport(links)
   const revenueReport = campaignRevenueReport({
     rollup: revenue,
     /*

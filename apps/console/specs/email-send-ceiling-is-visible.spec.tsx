@@ -125,7 +125,7 @@ jest.mock('firebase/firestore', () => ({
 
 import BillingUsageComponent from '../components/billing/billing-usage.component'
 
-/** Pro: `hostLimit: 3`, `emailSendsPerMonth: 5,000`. */
+/** Pro: `hostLimit: 3`, `emailSendsPerMonth: 2,500`. */
 const PRO = { $id: 'org-1', plan: 'pro' } as any
 /** Enterprise: a finite CONTRACTED default, no longer the sentinel's home. */
 const ENTERPRISE = { $id: 'org-1', plan: 'enterprise' } as any
@@ -216,7 +216,7 @@ describe('the fixture really is two different windows', () => {
    */
   it('the hourly ceiling and the monthly allowance are different numbers', () => {
     const monthly = resolveOrgEntitlements(PRO).emailSendsPerMonth
-    expect(monthly).toBe(5000)
+    expect(monthly).toBe(2500)
     expect(HOUR_LIMIT).toBe(500)
     expect(HOUR_LIMIT).not.toBe(monthly)
     expect(DELIVERABLE_MONTHLY).not.toBe(monthly)
@@ -239,7 +239,7 @@ describe('the hourly ceiling reaches the customer', () => {
   it('keeps the two windows apart — neither denominator is the other', async () => {
     // 420 of an hour and 420 of a month are different facts. Under the old
     // surface only the second existed, and the merchant deferred at 420/500
-    // was reading 420/5,000 and seeing 8%.
+    // was reading 420/2,500 and seeing 17%.
     mockMonthlyCampaignSends = 420
     mockCeilingPayload = ceiling({ hourUsed: 420 })
     render(<BillingUsageComponent org={PRO} hosts={HOSTS} />)
@@ -247,7 +247,7 @@ describe('the hourly ceiling reaches the customer', () => {
     await waitFor(() => {
       expect(meterRow(HOURLY).textContent).toContain(`420 / ${HOUR_LIMIT}`)
     })
-    expect(meterRow(MONTHLY).textContent).toContain('420 / 5000')
+    expect(meterRow(MONTHLY).textContent).toContain('420 / 2500')
     // Each row names its own window in its own label, so neither number can be
     // read as the other.
     expect(meterRow(HOURLY).textContent).toContain('this hour')
@@ -385,7 +385,7 @@ describe('the UNLIMITED sentinel (AGL-2482)', () => {
   })
 
   it('a plan INSIDE the deliverable ceiling is told nothing of the sort', async () => {
-    // Non-vacuous: Pro's 5,000 fits inside 360,000, so the note must be
+    // Non-vacuous: Pro's 2,500 fits inside 360,000, so the note must be
     // absent — a note that always renders says nothing.
     expect(resolveOrgEntitlements(PRO).emailSendsPerMonth).toBeLessThan(
       DELIVERABLE_MONTHLY,
@@ -463,17 +463,17 @@ describe('the email overage caption', () => {
   const OVERAGE = /emails over your included/
 
   it('prices the excess on the COST meter, at the plan rate', async () => {
-    // Pro includes 5,000. The campaign meter is well inside the band — as it
-    // always is, since the cap refuses campaigns — and 6,200 total sends put
+    // Pro includes 2,500. The campaign meter is well inside the band — as it
+    // always is, since the cap refuses campaigns — and 3,700 total sends put
     // the org 1,200 over on transactional mail.
     mockMonthlyCampaignSends = 900
-    mockMonthlyTotalSends = 6_200
+    mockMonthlyTotalSends = 3_700
     render(<BillingUsageComponent org={PRO} hosts={HOSTS} />)
     await waitFor(() => {
       expect(screen.getByText(OVERAGE)).toBeTruthy()
     })
     const caption = screen.getByText(OVERAGE).textContent ?? ''
-    expect(caption).toContain('1,200 emails over your included 5,000')
+    expect(caption).toContain('1,200 emails over your included 2,500')
     // Pro's rate is $2.25/1,000, so 1,200 over is $2.70. Cents on the rate,
     // because "$2.25" is a price and "$2.2" is a typo.
     expect(caption).toContain('$2.25/1,000')

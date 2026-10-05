@@ -36,6 +36,13 @@ import {
   UNLIMITED,
 } from '@aglyn/aglyn'
 import { pluginOrgCapacities } from '@aglyn/aglyn/plugin-manager/plugin-org-capacity'
+import {
+  FULL_USE_QUOTE_MULTIPLE,
+  describeDiscountFullUse,
+  describeFullUseFloor,
+  orgDiscountFullUse,
+  orgFullUseFloor,
+} from '@aglyn/aglyn/app-utils/full-use-cost'
 import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
 import {
   AppLink, CardDisplay, Container } from '@aglyn/shared-ui-jsx'
@@ -85,10 +92,13 @@ import { docsHelp } from '../../../../../constants/docs-links'
 import MediaUrlField from '../../../../../components/media-url-field.component'
 import { buildRoute, Route } from '../../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
-import StaffHostFormCountersChips from '../../../../../components/staff-host-form-counters.component'
+import StaffSiteDoorFlags from '../../../../../components/staff-site-door-flags.component'
 import StaffEmailDeliveriesCard from '../../../../../components/staff-email-deliveries-card.component'
 import StaffOrgActions from '../../../../../components/staff-org-actions.component'
 import StaffOrgOwnershipTransfer from '../../../../../components/staff-org-ownership-transfer.component'
+import StaffOrgOwnerHandoff from '../../../../../components/org-owner-handoff.component'
+import StaffOrgUpgradeProposal from '../../../../../components/staff-org-upgrade-proposal.component'
+import { countManagerSeats, isStaffSeat } from '@aglyn/aglyn/app-utils/organizations'
 import { StaffSiteRowActions } from '../../../../../components/staff-site-row-actions.component'
 import StaffOrgRefundCard from '../../../../../components/staff-org-refund-card.component'
 import StaffOrgSubscriptionCard from '../../../../../components/staff-org-subscription-card.component'
@@ -660,14 +670,21 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
       active = false
     }
   }, [firestore, orgId])
+  // Manager seats as the gates count them (AGL-3466): org-wide members only,
+  // and never platform staff. The raw roster length billed every site
+  // collaborator and every staff helper as a manager seat.
+  const managerSeatsUsed = useMemo(
+    () => countManagerSeats(memberDocs ?? []),
+    [memberDocs],
+  )
   const usageByKey = useMemo<Record<string, number>>(
     () => ({
       hostLimit: (hostDocs ?? []).length,
-      managersPerOrg: (memberDocs ?? []).length,
-      maxManagersPerOrg: (memberDocs ?? []).length,
+      managersPerOrg: managerSeatsUsed,
+      maxManagersPerOrg: managerSeatsUsed,
       ...capacityCounts,
     }),
-    [hostDocs, memberDocs, capacityCounts],
+    [hostDocs, managerSeatsUsed, capacityCounts],
   )
 
   // Direct org editing (AGL-358): name/logo/contacts through the same
@@ -785,6 +802,8 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
       name: string | null
       percentOff: number | null
       amountOffUsd: number | null
+      duration: string | null
+      durationInMonths: number | null
     }>
   >([])
   const [selectedCoupon, setSelectedCoupon] = useState('')
@@ -838,6 +857,26 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
       { measuredCogsUsd: usageLatest?.measuredCogsUsd ?? null },
     )
   }, [org, selectedCouponObj, cogsReady, usageLatest])
+  /**
+   * The same coupon against this org's full-use cost (AGL-3473) — the org
+   * using every band it resolves to, on the charges the coupon's duration
+   * reaches, net of Stripe. A warning beside the rating, never a gate: the
+   * apply route returns the same verdict and applies the coupon all the same.
+   */
+  const discountFullUse = useMemo(() => {
+    if (!org || !selectedCouponObj) return null
+    return orgDiscountFullUse(
+      org as never,
+      {
+        percentOff: selectedCouponObj.percentOff ?? undefined,
+        amountOffUsd: selectedCouponObj.amountOffUsd ?? undefined,
+      },
+      {
+        duration: selectedCouponObj.duration,
+        durationInMonths: selectedCouponObj.durationInMonths,
+      },
+    )
+  }, [org, selectedCouponObj])
 
   const handleApplyDiscount = async () => {
     if (!selectedCoupon || discountBusy) return
@@ -861,6 +900,12 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
         })
       }
       enqueueSnackbar('Discount applied', { variant: 'success' })
+      if (payload?.fullUse?.warning) {
+        enqueueSnackbar(`Under full-use cost. ${payload.fullUse.warning}`, {
+          variant: 'warning',
+          autoHideDuration: 15000,
+        })
+      }
       setSelectedCoupon('')
       setDiscountReason('')
       setConfirmBelowFloor(false)
@@ -986,6 +1031,30 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
       month: usageLatest?.month ?? null,
     } as const
   }, [entAmount, entInterval, org, cogsReady, usageLatest])
+
+  /**
+   * The quote against cost + 30% at full use (AGL-3473): the org as it would
+   * bill once provisioned — the chosen plan, its overrides and add-ons, the
+   * amount as its price — every band at 100%, net of Stripe. The route
+   * refuses under it with the same figures.
+   */
+  const entFullUse = useMemo(() => {
+    const amount = Number(entAmount)
+    if (!(amount > 0) || !org) return null
+    return orgFullUseFloor(
+      {
+        ...org,
+        plan: entPlan,
+        subscription: {
+          ...(org.subscription ?? {}),
+          status: 'active',
+          interval: entInterval,
+          customMonthlyUsd: amount,
+        },
+      } as never,
+      { multiple: FULL_USE_QUOTE_MULTIPLE },
+    )
+  }, [entAmount, entInterval, entPlan, org])
 
   useEffect(() => {
     // A different quote is a different deal, so it gets a different attempt.
@@ -1292,6 +1361,21 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                           ownerUid={org?.ownerUid}
                           onTransferred={() => setOrgNonce((nonce) => nonce + 1)}
                         />
+                        {/* A client the workspace was built for usually has
+                            no account yet, so the handoff is an invitation
+                            (AGL-3466). Staff take no seat, so no override. */}
+                        <StaffOrgOwnerHandoff
+                          orgId={orgId}
+                          orgName={org?.name}
+                          onSent={() => setOrgNonce((nonce) => nonce + 1)}
+                        />
+                        {/* The separate step after the evaluation: ask the
+                            owner to buy the plan (AGL-3466). */}
+                        <StaffOrgUpgradeProposal
+                          orgId={orgId}
+                          org={org as never}
+                          onChanged={() => setOrgNonce((nonce) => nonce + 1)}
+                        />
                       </Stack>
                     </CardDisplay>
                   ),
@@ -1359,12 +1443,10 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                                 spacing={1}
                                 sx={{ alignItems: 'center' }}
                               >
-                                {/* Form-abuse flag (AGL-1681): a refusing
+                                {/* Door-abuse flags (AGL-1681): a refusing
                                     site is visible here, without opening
                                     each host or the Firebase console. */}
-                                <StaffHostFormCountersChips
-                                  forms={host.forms}
-                                />
+                                <StaffSiteDoorFlags doors={host.doors} />
                                 <Typography
                                   variant="caption"
                                   color="text.secondary"
@@ -1444,6 +1526,14 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                                   <Chip
                                     label="all sites"
                                     size="small"
+                                  />
+                                ) : null}
+                                {/* Platform staff hold no seat (AGL-3466). */}
+                                {isStaffSeat(member) ? (
+                                  <Chip
+                                    label="staff · no seat"
+                                    size="small"
+                                    variant="outlined"
                                   />
                                 ) : null}
                               </Stack>
@@ -1825,6 +1915,10 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                                 coupon.percentOff != null
                                   ? `${coupon.percentOff}%`
                                   : `$${coupon.amountOffUsd}`
+                              } · ${
+                                coupon.duration === 'repeating'
+                                  ? `${coupon.durationInMonths ?? '?'} mo`
+                                  : (coupon.duration ?? 'duration unknown')
                               }`}
                             </MenuItem>
                           ))}
@@ -1886,6 +1980,20 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                                 {MARGIN_SCOPE_NOTE}
                               </Typography>
                             </Stack>
+                          </Alert>
+                        ) : null}
+                        {discountFullUse ? (
+                          <Alert
+                            severity={discountFullUse.ok ? 'success' : 'warning'}
+                          >
+                            {/* A warning, not a gate (AGL-3473): applying
+                                is staff's call, and this is what it spends
+                                if the org uses everything it bought. */}
+                            {(discountFullUse.ok
+                              ? 'Covers full-use cost. '
+                              : 'Under full-use cost — the discount can still ' +
+                                'be applied. ') +
+                              describeDiscountFullUse(discountFullUse, 'On this org')}
                           </Alert>
                         ) : null}
                         {discountRating?.rating === 'block' ? (
@@ -2067,6 +2175,16 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                             </Stack>
                           </Alert>
                         ) : null}
+                        {entFullUse ? (
+                          <Alert severity={entFullUse.ok ? 'success' : 'error'}>
+                            {`Full-use floor (${FULL_USE_QUOTE_MULTIPLE.toFixed(2)}× cost): ` +
+                              (entFullUse.ok
+                                ? 'clears. '
+                                : 'under it — provisioning is refused. ') +
+                              `On ${entPlan}, it ` +
+                              describeFullUseFloor(entFullUse)}
+                          </Alert>
+                        ) : null}
                         {entResult?.checkoutUrl ? (
                           <Alert severity="success">
                             <MuiLink
@@ -2093,7 +2211,11 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                           size="small"
                           variant="contained"
                           color="primary"
-                          disabled={entBusy || !(Number(entAmount) > 0)}
+                          disabled={
+                            entBusy ||
+                            !(Number(entAmount) > 0) ||
+                            entFullUse?.ok === false
+                          }
                           onClick={() => void handleProvisionEnterprise()}
                           sx={{ alignSelf: 'flex-start' }}
                         >

@@ -33,6 +33,7 @@ import {
   type OrgEntitlements,
   type OrgFeatureFlags,
   SCREEN_KIND_EMAIL,
+  SCREEN_KIND_GROUP,
   screenClaimsToBeAPage,
 } from '@aglyn/aglyn/server'
 import {
@@ -65,28 +66,7 @@ import {
 } from './count-billable-screens'
 import { announceLivePaths } from '../../../../utils/server/announce-live-paths'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
-
-/**
- * Is a destination a path on the site itself? (AGL-1881.)
- *
- * The question behind a declared `externalDestination`: a value that is not
- * plainly a site path is one that sends traffic off the platform, and takes
- * the approver stamp. Written to answer FALSE for anything that is not plainly
- * a path, including `undefined`, so a create that omits the field is treated
- * as external and takes the stamp rather than skipping it. `strictNullChecks`
- * is off, so the `typeof` test is what keeps a missing value out of
- * `.startsWith`.
- *
- * The redirects plugin's `isExternalRedirectDestination` is the same predicate
- * negated, for the one kind that declares a destination today; the two must
- * agree, and the direction of any disagreement is a rule that does not fire,
- * never one that fires unapproved.
- */
-function isSitePath(destination: unknown): boolean {
-  if (typeof destination !== 'string') return false
-  const value = destination.trim()
-  return value.startsWith('/') && !value.startsWith('//')
-}
+import { isSitePath } from '../../_lib/external-destination'
 
 /**
  * The one plan quota billed as a per-site ALLOCATION of an org pool rather
@@ -197,8 +177,9 @@ interface HostResource {
  * could create any number of them.
  */
 const RESOURCES: Record<string, HostResource> = {
-  // Sent by the screens page (displayName/description/slug), the template
-  // installers (adds `seo`) and the email composer (`kind: 'email'`).
+  // Sent by the screens page (displayName/description/slug, or a page group's
+  // `kind: 'group'`), the template installers (adds `seo`) and the email
+  // composer (`kind: 'email'`).
   // `versionId` points at the first version the caller is about to mint.
   screen: {
     collection: 'screens',
@@ -610,11 +591,19 @@ async function handler(request: Request): Promise<Response> {
     // owns the stamp. Written as "not a page, and not the one exception", a
     // future non-page kind is refused by default — which is the same shape the
     // flat cap thirty lines below already uses, and for the same stated reason.
+    //
+    // A page GROUP (AGL-3463) is the second value born rather than converted
+    // to. It has no promotion to gate: no route converts a group into
+    // anything, the rules freeze `kind`, and the serve path refuses it, so a
+    // group can never become the page a create here would have charged for.
     const requestedKind = (data as Record<string, unknown>)['kind']
+    const createsGroup =
+      resourceKey === 'screen' && requestedKind === SCREEN_KIND_GROUP
     if (
       resourceKey === 'screen' &&
       typeof requestedKind === 'string' &&
       requestedKind !== SCREEN_KIND_EMAIL &&
+      !createsGroup &&
       !screenClaimsToBeAPage({ kind: requestedKind })
     ) {
       return Response.json({
@@ -717,6 +706,14 @@ async function handler(request: Request): Promise<Response> {
     if (resourceKey === 'template' && doc['kind'] !== 'component') {
       delete doc['componentKind']
     }
+    // A group is a name and nothing else (AGL-3463): no address, no first
+    // version, no search snippet. Dropped like any field the kind cannot use,
+    // so a group can never be stored carrying an address it will not serve.
+    if (createsGroup) {
+      delete doc['slug']
+      delete doc['versionId']
+      delete doc['seo']
+    }
     /*
      * COMPRESSED AT REST (AGL-1151).
      *
@@ -790,7 +787,10 @@ async function handler(request: Request): Promise<Response> {
         resourceKey === 'screen'
           ? await readScreenSources(hostRef, (query) => tx.get(query as any))
           : []
-      if (resource.quotaKey) {
+      // A group spends none of the plan's page allowance, so a site at its
+      // page limit can still make one (AGL-3463). The flat non-page cap below
+      // is what bounds how many exist.
+      if (resource.quotaKey && !createsGroup) {
         // Platform-seeded starters (AGL-687) are excluded from the template
         // count: they are content WE put in the library, and charging a free
         // plan's ten-template allowance for them would leave no room for the
@@ -867,6 +867,17 @@ async function handler(request: Request): Promise<Response> {
       ) {
         const existing = nonPageScreenIds(screenRows, routingMap).size
         if (existing >= NON_PAGE_SCREEN_MAX_PER_HOST) {
+          // Groups share the bucket (AGL-3463), so a refused group names them
+          // first. The email sentence stays word for word: the email plugin's
+          // writer refuses in these words too, and a spec holds the two equal.
+          if (requestedKind === SCREEN_KIND_GROUP) {
+            return {
+              error:
+                'This site is at its limit of ' +
+                `${NON_PAGE_SCREEN_MAX_PER_HOST} page groups, email designs ` +
+                'and template pages — delete some to make room',
+            }
+          }
           return {
             error:
               'This site is at its limit of ' +

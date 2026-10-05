@@ -67,7 +67,20 @@ interface Registration {
   eraser: PluginUserEraser
 }
 
-const registrations: Registration[] = []
+/**
+ * One list per process, on `globalThis` (AGL-3464): the app registers its
+ * plugins' erasers from `instrumentation.ts`, which Next compiles apart from
+ * the route that runs the erasure, and a module-scoped list is filled in one
+ * copy and read empty in the other — the AGL-3412 shape.
+ */
+const ERASERS_KEY = Symbol.for('@aglyn/aglyn:plugin-user-erasers')
+
+const globalScope = globalThis as typeof globalThis & {
+  [ERASERS_KEY]?: Registration[]
+}
+
+const registrations: Registration[] =
+  globalScope[ERASERS_KEY] ?? (globalScope[ERASERS_KEY] = [])
 
 /**
  * Registers a plugin's eraser. Owner = the loader's marker inside a register

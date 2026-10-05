@@ -34,7 +34,7 @@ import {
  * page's own expansion.
  *
  * ABSENT when no host app reads rows: every repeat then draws its template
- * once, as the canvas always did.
+ * once, with no badge.
  */
 export interface RepeatRowsRequest {
   /** The registered repeat source's id. */

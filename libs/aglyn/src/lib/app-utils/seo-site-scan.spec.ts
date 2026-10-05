@@ -141,6 +141,121 @@ describe('scanSeoSite', () => {
   })
 })
 
+/**
+ * Each page as it publishes (AGL-3501): a heading a reusable component
+ * renders is the page's, with the placement's values, and a repeat shows its
+ * rows — so a keyword said only inside a component counts, and a page whose
+ * only main heading is a component's has one.
+ */
+describe('scanSeoSite on a page that places components and repeats', () => {
+  const contactHost: SeoSiteHost = { displayName: 'EDR', screens: { home: '/', contact: 'contact' } }
+  const contactDocs: Record<string, Doc> = {
+    'hosts/h2/screens/home': { displayName: 'Home', versionId: 'v1' },
+    'hosts/h2/screens/home/versions/v1': {
+      rootId: 'root',
+      nodes: {
+        root: { componentId: 'div', nodes: ['main'] },
+        main: { componentId: 'section', props: { component: 'main' }, nodes: ['nav'] },
+        nav: { componentId: 'reusableInstance', props: { refId: 'cta' }, nodes: [] },
+      },
+    },
+    'hosts/h2/screens/contact': { displayName: 'Contact', versionId: 'v2' },
+    'hosts/h2/screens/contact/versions/v2': {
+      rootId: 'root',
+      nodes: {
+        root: { componentId: 'div', nodes: ['main'] },
+        main: { componentId: 'section', props: { component: 'main' }, nodes: ['hero', 'list'] },
+        hero: {
+          componentId: 'reusableInstance',
+          props: { refId: 'sectionHeading', propValues: { title: 'Book a free on-site estimate' } },
+          nodes: [],
+        },
+        list: { componentId: 'muiStack', props: { repeatDataset: 'services' }, nodes: ['service'] },
+        service: { componentId: 'muiTypography', props: { variant: 'h3', children: '{{item.name}}' }, nodes: [] },
+      },
+    },
+    'hosts/h2/components/sectionHeading': {
+      rootId: 'box',
+      nodes: {
+        box: { componentId: 'muiBox', nodes: ['title', 'photo'] },
+        title: { componentId: 'muiTypography', parentId: 'box', props: { variant: 'h1', children: '{{prop.title}}' }, nodes: [] },
+        photo: { componentId: 'image', parentId: 'box', props: { src: 'media:h2/crew', alt: '' }, nodes: [] },
+      },
+      props: [{ name: 'title', type: 'text', defaultValue: 'Section title' }],
+    },
+    // A component that links: every page placing it links there.
+    'hosts/h2/components/cta': {
+      rootId: 'link',
+      nodes: { link: { componentId: 'link', props: { screenId: 'contact', children: 'Get an estimate' }, nodes: [] } },
+    },
+  }
+  const rows = { services: { records: [{ $id: 'r1', name: 'Roof repair' }, { $id: 'r2', name: 'Siding' }] } }
+
+  it('reads a component’s heading, text and image as the page’s, pointed at the placement', async () => {
+    const store = fakeStore(contactDocs)
+    const scan = await scanSeoSite(store, 'h2', contactHost, {
+      keywords: '/contact: on-site estimate, roof repair',
+      readRepeatRows: async (keys) => {
+        expect(keys).toEqual(['services'])
+        return rows
+      },
+    })
+    const contact = scan.pages.find((entry) => entry.screenId === 'contact')
+    expect(contact?.facts.h1s).toEqual([
+      { nodeId: 'hero', level: 1, text: 'Book a free on-site estimate', editable: false, inComponent: true },
+    ])
+    expect(contact?.facts.imagesMissingAlt.map((image) => [image.nodeId, image.editable])).toEqual([['hero', false]])
+    expect(contact?.facts.text).toContain('Roof repair')
+    // The stored map is what a fix edits, so it is the one carried.
+    expect((contact?.nodes as Record<string, { componentId?: string }>)?.['hero']?.componentId).toBe('reusableInstance')
+    expect(contact?.linkedFrom).toBe(true)
+    // Each component is read once, however many pages place it.
+    expect(store.reads.filter((path) => path.startsWith('hosts/h2/components/')).sort()).toEqual([
+      'hosts/h2/components/cta',
+      'hosts/h2/components/sectionHeading',
+    ])
+
+    const report = seoAudit(scan.pages, seoAuditSiteOf(contactHost), { notes: scan.notes })
+    const findings = report.pages.find((entry) => entry.screenId === 'contact')?.findings ?? []
+    expect(findings.map((entry) => entry.code)).not.toContain('keyword-missing')
+    expect(findings.map((entry) => entry.code)).not.toContain('h1-missing')
+    expect(findings.find((entry) => entry.code === 'image-alt-missing')?.nodeIds).toEqual(['hero'])
+  })
+
+  it('reads a repeat once, as written and without its tokens, when its rows cannot be read — and says so', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const scan = await scanSeoSite(fakeStore(contactDocs), 'h2', contactHost, {
+      readRepeatRows: async () => {
+        throw new Error('no reader')
+      },
+    })
+    const contact = scan.pages.find((entry) => entry.screenId === 'contact')
+    expect(contact?.facts.text).not.toContain('{{')
+    expect(contact?.facts.headings.find((heading) => heading.level === 3)).toEqual({
+      nodeId: 'service',
+      level: 3,
+      text: '',
+      editable: false,
+    })
+    expect(scan.notes).toEqual([
+      'Lists that repeat over your datasets were checked without their rows, which could not be read just now.',
+    ])
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('AGL-3501:seo-repeat-rows-unread'))
+    warn.mockRestore()
+  })
+
+  it('names the keywords past the five a page is checked for', async () => {
+    const scan = await scanSeoSite(fakeStore(contactDocs), 'h2', contactHost, {
+      keywords: '/contact: a, b, c\n/contact: d, e, f, g\n/missing: x, y, z, u, v, w',
+    })
+    expect(scan.pages.find((entry) => entry.screenId === 'contact')?.keywords).toEqual(['a', 'b', 'c', 'd', 'e'])
+    expect(scan.notes).toEqual([
+      'Keywords for /missing were not used: no checked page is published at that address.',
+      'Only the first 5 keywords for /contact were checked, so “f”, “g” were not.',
+    ])
+  })
+})
+
 describe('seoAuditSiteOf', () => {
   it('reads the switch, the entity and the agent guidance off the host', () => {
     expect(seoAuditSiteOf({ seo: { discourageSearchEngines: true } })).toEqual({

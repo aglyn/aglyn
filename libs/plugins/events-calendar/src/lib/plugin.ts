@@ -16,9 +16,14 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
+import { registerPluginTransferResourceUi } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
 import { mdiCalendarMonthOutline } from '@aglyn/shared-data-mdi'
 import { lazy } from 'react'
 import { BUNDLE_ID } from './constants/bundle-common'
+import {
+  EVENTS_TRANSFER_LABEL,
+  EVENTS_TRANSFER_RESOURCE,
+} from './transfer/events-transfer-key'
 
 /**
  * The console page is code-split: the shell registers the extension at app
@@ -29,7 +34,8 @@ const EventsConsolePage = lazy(() => import('./components/events-console-page'))
 
 /**
  * Console half only: registers the Events nav item + page + dashboard card
- * in the ConsoleExtension registry. Safe to call at console app load — it
+ * in the ConsoleExtension registry, and how the import wizard and export
+ * dialog show this site's events. Safe to call at console app load — it
  * pulls no besigner/canvas code (the page is lazy). The shell renders the
  * nav item and, through its generic plugin route, the page — so the Events
  * surface exists without any edit to the console's own nav or page files.
@@ -70,6 +76,16 @@ export function registerEventsCalendarConsole(): void {
     ],
     dashboardCards: [{ cardId: 'events-upcoming', title: 'Upcoming events' }],
   })
+  // The client half of the `events` import and export; the server half is
+  // registered from `declarations.console-server.ts`.
+  registerPluginTransferResourceUi(
+    EVENTS_TRANSFER_RESOURCE,
+    {
+      label: EVENTS_TRANSFER_LABEL,
+      icon: { path: mdiCalendarMonthOutline.path },
+    },
+    { pluginId: BUNDLE_ID },
+  )
 }
 
 export * from './site'

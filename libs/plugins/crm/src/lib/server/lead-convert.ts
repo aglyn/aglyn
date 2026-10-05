@@ -38,6 +38,7 @@
 import {
   CONTACT_ERASED_MESSAGE,
   CRM_RECORDS_BAND_FULL_MESSAGE,
+  judgeCrmPicklistValue,
   normalizeCompanyDomain,
   type PluginApiHandler,
 } from '@aglyn/aglyn/server'
@@ -48,6 +49,7 @@ import {
 } from './convert-host-lead'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 import { holdsDataManage } from './org-caller'
+import { readCrmPicklist } from './read-picklist'
 import { crmSuiteRefusal } from './suite-gate'
 
 // The stage picker moved to the runtime with the writes; re-exported so the
@@ -79,6 +81,11 @@ export interface LeadConvertRequest {
     currency?: string
     /** A stage of the default pipeline; its first open stage when absent. */
     stageId?: string
+    /**
+     * One of the org's deal types (AGL-3516); the list's default when
+     * absent. The deal's lead source is the lead's own.
+     */
+    type?: string
   }
 }
 
@@ -186,6 +193,7 @@ export const leadConvertHandler: PluginApiHandler = async (req, res) => {
     amountCents: number | null
     currency: string
     stageId: string | undefined
+    type?: string
   } | null = null
   if (body.deal) {
     const title = String(body.deal.title ?? '')
@@ -207,6 +215,7 @@ export const leadConvertHandler: PluginApiHandler = async (req, res) => {
       stageId: body.deal.stageId ? String(body.deal.stageId) : undefined,
     }
   }
+  const requestedType = deal ? String(body.deal?.type ?? '').trim() : ''
 
   try {
     const decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
@@ -242,8 +251,22 @@ export const leadConvertHandler: PluginApiHandler = async (req, res) => {
       res.status(suite.status).json(suite.body)
       return
     }
+    const firestore = firebaseAdmin.app().firestore()
+    // The deal's Type against the org's list (AGL-3516), before any write.
+    if (deal && requestedType) {
+      const judged = judgeCrmPicklistValue(
+        'opportunityType',
+        await readCrmPicklist(firestore, orgId, 'opportunityType'),
+        requestedType,
+      )
+      if (judged.ok === false) {
+        res.status(400).json({ error: judged.error, field: 'deal.type' })
+        return
+      }
+      if (judged.value) deal.type = judged.value
+    }
     const result = await convertHostLead({
-      firestore: firebaseAdmin.app().firestore(),
+      firestore,
       hostId,
       orgId,
       org: org as Record<string, unknown>,
