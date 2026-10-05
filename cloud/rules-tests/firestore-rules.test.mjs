@@ -13163,6 +13163,17 @@ describe('CRM sharing: a share is read where it lands and written only as grante
       deleteDoc(doc(authed(EDITOR), 'orgs', ORG, 'deals', 'deal-shared-read')),
     )
   })
+
+  it('lets an org-wide member delete any lead, whichever sites hold it (AGL-3561)', async () => {
+    // The owner's scope is `['org']`, which names no site: the sole-holder
+    // test alone refused them every site-held lead.
+    await mustAllow('the owner deleting a lead one site holds', deleteDoc(lead(OWNER, 'theirs')))
+    await mustAllow('the owner deleting a lead two sites hold', deleteDoc(lead(OWNER, 'co-held')))
+    await mustAllow('the owner deleting a lead shared with another site', deleteDoc(lead(OWNER, 'shared-read')))
+    // A scoped member keeps the sole-holder test: in scope, out of scope.
+    await mustAllow('an editor deleting a lead only their site holds', deleteDoc(lead(EDITOR, 'mine-shared-out')))
+    await mustDeny('an editor deleting a lead held by another site', deleteDoc(lead(EDITOR, 'shared-edit')))
+  })
 })
 
 

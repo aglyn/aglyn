@@ -1509,9 +1509,11 @@ service cloud.firestore {
        * list key `emailStatus` (AGL-3321) stay closed: the senders' verdict
        * is not a member's to clear.
        *
-       * DELETE IS SOLE-HOLDER ONLY, as on a contact: one brand removing a
-       * lead must not destroy the sibling brand's record. Every other case
-       * is an update that drops this site's token.
+       * DELETE IS SOLE-HOLDER ONLY for a scoped member, as on a contact:
+       * one brand removing a lead must not destroy the sibling brand's
+       * record. Every other case is an update that drops this site's token.
+       * An org-wide member already holds every brand, so they may delete any
+       * lead in the org.
        */
       match /leads/{leadId} {
         allow read: if isStaff() || canReadScopedPeople();
@@ -1523,8 +1525,9 @@ service cloud.firestore {
            !request.resource.data.diff(resource.data).affectedKeys().hasAny(['emailState', 'emailStatus']));
         allow delete: if isStaff() ||
           (canWriteScopedCrm() &&
-           crmHeldScope().hasOnly(
-             orgMember().get('scopeTokens', ['org'])));
+           (isOrgWideMember() ||
+            crmHeldScope().hasOnly(
+              orgMember().get('scopeTokens', ['org']))));
       }
       // Segments are saved filters over the contacts above and are stamped
       // org-wide at creation, so they follow the same predicate: a segment

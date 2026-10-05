@@ -1513,6 +1513,8 @@ allow create, update, delete: if isStaff();
 
 
 
+
+
 match /leads/{leadId} {
 allow read: if isStaff() || canReadScopedPeople();
 allow create: if isStaff();
@@ -1523,8 +1525,9 @@ orgCarriesCrmSuite(orgId) &&
 !request.resource.data.diff(resource.data).affectedKeys().hasAny(['emailState', 'emailStatus']));
 allow delete: if isStaff() ||
 (canWriteScopedCrm() &&
+(isOrgWideMember() ||
 crmHeldScope().hasOnly(
-orgMember().get('scopeTokens', ['org'])));
+orgMember().get('scopeTokens', ['org']))));
 }
 
 
