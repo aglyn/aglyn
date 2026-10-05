@@ -179,6 +179,18 @@ describe('Aglyn: Screen Manager', () => {
     })
   })
 
+  describe('parent of a self-parented root (AGL-3565)', () => {
+    it('answers no parent for a root stored as its own parent', () => {
+      const canvas = new CanvasManager(undefined as any)
+      canvas.setNodes({
+        [NODE_ROOT_ID]: { $id: NODE_ROOT_ID, parentId: NODE_ROOT_ID, nodes: ['child'] },
+        child: { $id: 'child', parentId: NODE_ROOT_ID },
+      } as any)
+      expect(canvas.getNode(NODE_ROOT_ID)?.parent).toBeUndefined()
+      expect(canvas.getNode('child')?.parent?.$id).toBe(NODE_ROOT_ID)
+    })
+  })
+
   describe('initial-state tracking', () => {
     const makeCanvas = () => {
       const canvas = new CanvasManager(undefined as any)

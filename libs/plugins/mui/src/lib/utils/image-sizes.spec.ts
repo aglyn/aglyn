@@ -153,3 +153,26 @@ describe('layoutBandWidths — what the layout states (AGL-3485)', () => {
     ).toEqual({})
   })
 })
+
+describe('layoutBandWidths — a parent chain that loops (AGL-3565)', () => {
+  it('terminates when the root is its own parent, as stored pages are', () => {
+    const root: LayoutNode = { componentId: 'div' }
+    root.parent = root
+    const box: LayoutNode = {
+      componentId: 'muiBox',
+      sx: { display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)' },
+      parent: root,
+    }
+    const image: LayoutNode = { componentId: 'image', parent: box }
+    expect(layoutBandWidths(image)).toEqual(
+      layoutBandWidths({ componentId: 'image', parent: { ...box, parent: undefined } }),
+    )
+  })
+
+  it('terminates on a longer cycle too', () => {
+    const a: LayoutNode = { componentId: 'muiBox' }
+    const b: LayoutNode = { componentId: 'muiBox', parent: a }
+    a.parent = b
+    expect(() => layoutBandWidths({ componentId: 'image', parent: a })).not.toThrow()
+  })
+})

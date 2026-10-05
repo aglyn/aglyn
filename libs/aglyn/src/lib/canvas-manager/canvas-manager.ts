@@ -106,7 +106,9 @@ export class AglynNode<P = JSX.AnyProps> implements NodeSchema<P> {
   public hidden?: boolean
 
   get parent(): NodeSchema<any> | undefined {
-    if (!this.parentId) return
+    // The root is stored as its own parent (`parentId: "_@_"`); answering it
+    // here would hand every ancestor walk an endless loop (AGL-3565).
+    if (!this.parentId || this.parentId === this.$id) return
     return this.store.getNode(this.parentId)
   }
   get index(): number | null {

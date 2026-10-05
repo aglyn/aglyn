@@ -86,6 +86,9 @@ function buildNodes(children) {
   const map = {
     [ROOT_ID]: {
       $id: ROOT_ID,
+      // Production stores the root as its own parent; the smoke has to render
+      // that shape, or an ancestor walk that loops on it passes here (AGL-3565).
+      parentId: ROOT_ID,
       componentId: 'div',
       nodes: children.map((child) => child.id),
     },
