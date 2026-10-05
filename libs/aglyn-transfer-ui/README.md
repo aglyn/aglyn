@@ -6,9 +6,6 @@ UI over the import/export core in `@aglyn/aglyn/data-transfer`, which holds
 the header matching, value reading, record matching, conflict policy, the
 dry-run plan and undo.
 
-> Beta. Not yet on the registry: its first version is published by hand
-> before any published package depends on it.
-
 ## Install
 
     npm install @aglyn/aglyn-transfer-ui@beta
