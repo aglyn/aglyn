@@ -55,12 +55,46 @@ import {
   writeBatch,
 } from 'firebase/firestore'
 
+import { judgeRulesArtifact } from '../../tools/scripts/lib/rules-deploy-artifact.mjs'
+
 const here = dirname(fileURLToPath(import.meta.url))
 
+/** The documented source: what the structural parsers below read. */
 const RULES_SOURCE = readFileSync(
   join(here, '..', 'firebase-firestore.rules'),
   'utf8',
 )
+
+/**
+ * What deploys, and so what the emulator loads (AGL-3544): the source without
+ * its comments. Every assertion below therefore runs against the deployed
+ * bytes, and the first test proves those are the source's.
+ */
+const RULES_DEPLOYED = readFileSync(
+  join(here, '..', 'firebase-firestore.deploy.rules'),
+  'utf8',
+)
+
+describe('the deploy artifact (AGL-3544)', () => {
+  it('is the documented source without its comments, regenerated since the last edit', () => {
+    const judgement = judgeRulesArtifact({ source: RULES_SOURCE, artifact: RULES_DEPLOYED })
+    assert.equal(
+      judgement.verdict,
+      'fresh',
+      `cloud/firebase-firestore.deploy.rules is stale from line ${judgement.firstDifferentLine}: ` +
+        'this suite would be testing the OLD rules. Run `npm run generate:rules-deploy`.',
+    )
+  })
+
+  it('keeps the source line numbering, so an emulator error points at the source', () => {
+    const lineOf = (text, pick) => pick(text.split('\n').map((line) => line.trim()))
+    const service = (lines) => lines.findIndex((line) => line.startsWith('service cloud.firestore'))
+    const lastClose = (lines) => lines.lastIndexOf('}')
+    assert.ok(lineOf(RULES_SOURCE, service) > 0, 'no `service cloud.firestore` line in the source')
+    assert.equal(lineOf(RULES_DEPLOYED, service), lineOf(RULES_SOURCE, service))
+    assert.equal(lineOf(RULES_DEPLOYED, lastClose), lineOf(RULES_SOURCE, lastClose))
+  })
+})
 
 /**
  * Strip comments with ONE left-to-right scan, so whichever delimiter appears
@@ -519,7 +553,7 @@ before(async () => {
   env = await initializeTestEnvironment({
     projectId: 'demo-rules-check',
     firestore: {
-      rules: RULES_SOURCE,
+      rules: RULES_DEPLOYED,
     },
   })
 })

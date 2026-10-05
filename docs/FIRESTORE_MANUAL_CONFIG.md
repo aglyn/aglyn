@@ -16,12 +16,15 @@ reproducible. Prod project: **`aglyn-main`**, database **`(default)`**.
 single-field overrides/exemptions from `cloud/firebase-firestore.indexes.json`,
 and **deletes anything in the project that isn't in that file** (composite
 indexes and `fieldOverrides` alike). `firestore:rules` replaces the ruleset from
-`cloud/firebase-firestore.rules`. So:
+`cloud/firebase-firestore.deploy.rules`, the comment-stripped artifact of
+`cloud/firebase-firestore.rules` (AGL-3544; regenerate it with
+`npm run generate:rules-deploy`). So:
 
 - Composite indexes → `firebase-firestore.indexes.json` `indexes`
 - Single-field index exemptions (e.g. the large `nodes`/snapshot blobs) →
   `firebase-firestore.indexes.json` `fieldOverrides` with `indexes: []`
-- Security rules → `firebase-firestore.rules`
+- Security rules → `firebase-firestore.rules` (edited), deployed as
+  `firebase-firestore.deploy.rules` (generated)
 
 **Always diff BOTH `indexes` and `fieldOverrides` against the live project before
 an index deploy.** That diff is now a command (AGL-1804):

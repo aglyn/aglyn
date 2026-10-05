@@ -871,6 +871,17 @@ jobs:
 
       - run: npm run check:rules-size
 
+      # AGL-3544. What deploys is cloud/firebase-firestore.deploy.rules, the
+      # documented source with its comments stripped, line for line, so the
+      # comments stop counting toward the limit above. Every emulator, rules
+      # suite and deploy loads the artifact, so one left stale after a rules
+      # edit would test and ship the OLD rules while the source reads as the
+      # new ones. The check regenerates it in memory and fails on any byte of
+      # difference; `npm run generate:rules-deploy` is the fix.
+      - run: npm run test:rules-deploy
+
+      - run: npm run check:rules-deploy
+
       # AGL-2486. `compiler.reactRemoveProperties` deletes JSX props from the
       # BROWSER build only, and jest's transform keeps them — so a prop being
       # erased in production still renders under test and its spec passes.
