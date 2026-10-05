@@ -15,6 +15,8 @@ content on the marketing site and is written separately.
 
 ### Added
 
+- **seo:** every site icon size and the web app manifest derive from one upload ([AGL-3484](https://linear.app/aglyn/issue/AGL-3484))
+- **media:** every upload optimized, and old media converges lazily ([AGL-3486](https://linear.app/aglyn/issue/AGL-3486), [AGL-3504](https://linear.app/aglyn/issue/AGL-3504))
 - **bookings:** a service may ask the booker for a phone and the job address ([AGL-3493](https://linear.app/aglyn/issue/AGL-3493), [AGL-3500](https://linear.app/aglyn/issue/AGL-3500))
 - **data:** offer to make a record template a page again when it stops serving ([AGL-3475](https://linear.app/aglyn/issue/AGL-3475))
 - **ai:** a plan may bind one page to a dataset as its record template ([AGL-3475](https://linear.app/aglyn/issue/AGL-3475))
@@ -37,6 +39,8 @@ content on the marketing site and is written separately.
 
 ### Fixed
 
+- **seo:** check each page as it publishes, and name keywords past five ([AGL-3501](https://linear.app/aglyn/issue/AGL-3501))
+- **media:** published images size themselves from the composed tree, no re-save ([AGL-3485](https://linear.app/aglyn/issue/AGL-3485))
 - **commerce:** paid video and downloads served off the CDN count toward bandwidth ([AGL-3505](https://linear.app/aglyn/issue/AGL-3505))
 - **console:** any plan may name the one language its site is in ([AGL-3502](https://linear.app/aglyn/issue/AGL-3502))
 - **media:** a serve is counted before its request ends, and a lost count is logged ([AGL-3503](https://linear.app/aglyn/issue/AGL-3503), [AGL-3474](https://linear.app/aglyn/issue/AGL-3474))
