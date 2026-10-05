@@ -145,6 +145,32 @@ declare module '@mui/material/styles' {
   }
 
   /**
+   * A color's two HOVER shades (AGL-3465), read by the `MuiButton` and
+   * `MuiFab` overrides — `ACCENT_HOVER_FILL` and `ACCENT_HOVER_TEXT` in
+   * `util/accent-text.ts`.
+   *
+   * - `hover` — the fill a contained Button or a Fab takes on hover,
+   *   carrying `contrastText` at AA. Not `dark`: that slot is the accent
+   *   rendered as TEXT, lighter than `main` in a dark scheme, and a light
+   *   label on it disappears.
+   * - `hoverText` — the label of a hovered text or outlined Button: `dark`,
+   *   walked until it clears AA on MUI's hover wash as well as on the bare
+   *   page and paper.
+   *
+   * `createResponsiveTheme` derives both, which is why they are optional on
+   * each side: a theme built with plain `createTheme` has neither, and an
+   * author may set one.
+   */
+  interface PaletteColor {
+    hover?: string
+    hoverText?: string
+  }
+  interface SimplePaletteColorOptions {
+    hover?: string
+    hoverText?: string
+  }
+
+  /**
    * START EXAMPLE – MODULE AUGMENTATION ↓
    * ⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄
    * ```typescript

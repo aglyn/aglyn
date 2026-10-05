@@ -16,6 +16,7 @@
  */
 
 import { sanitizeEventParams } from '@aglyn/aglyn/app-utils/analytics-events'
+import { boundedAwait } from '@aglyn/shared-util-http/bounded-await'
 // One definition for a pair of strings that has to agree with a setting in the
 // GA UI nothing here can typecheck against (AGL-1582/AGL-2064). Four surfaces
 // stamp them now — the console, the tenant runtime, the docs site, and this
@@ -242,32 +243,45 @@ async function postGa4Event(options: {
     ? { ...params, [INTERNAL_TRAFFIC_PARAM]: INTERNAL_TRAFFIC_VALUE }
     : params
   try {
-    const response = await fetch(
-      `${GA4_ENDPOINT}?measurement_id=${encodeURIComponent(
-        credentials.measurementId,
-      )}&api_secret=${encodeURIComponent(credentials.apiSecret)}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          client_id: clientId,
-          // Opaque uid only — it is what stitches this event to the
-          // console's client-side events, which set the same user_id.
-          ...(userId ? { user_id: userId } : {}),
-          // Keeps THIS path out of ads personalization, and it is the only
-          // thing that does. The property runs Google Signals and ads
-          // personalization ON in every region, so a server event sent without
-          // this flag would join the advertising audiences the browser tags
-          // build — carrying a `client_id` that may be synthesized from a
-          // Stripe customer id, which is a stronger identifier than any cookie
-          // the browser path has. A per-hit assertion rather than a property
-          // setting, so no dashboard change can quietly opt these events in.
-          non_personalized_ads: true,
-          events: [{ name: eventName, params: stamped }],
-        }),
-        signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
-      },
+    // A real deadline, not only the request's signal (AGL-3565): this is
+    // awaited inside a page render when a scheduled publish lands, and a
+    // signal did not bound Next's patched fetch there.
+    const response = await boundedAwait(
+      (signal) =>
+        fetch(
+          `${GA4_ENDPOINT}?measurement_id=${encodeURIComponent(
+            credentials.measurementId,
+          )}&api_secret=${encodeURIComponent(credentials.apiSecret)}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              client_id: clientId,
+              // Opaque uid only — it is what stitches this event to the
+              // console's client-side events, which set the same user_id.
+              ...(userId ? { user_id: userId } : {}),
+              // Keeps THIS path out of ads personalization, and it is the only
+              // thing that does. The property runs Google Signals and ads
+              // personalization ON in every region, so a server event sent without
+              // this flag would join the advertising audiences the browser tags
+              // build — carrying a `client_id` that may be synthesized from a
+              // Stripe customer id, which is a stronger identifier than any cookie
+              // the browser path has. A per-hit assertion rather than a property
+              // setting, so no dashboard change can quietly opt these events in.
+              non_personalized_ads: true,
+              events: [{ name: eventName, params: stamped }],
+            }),
+            signal,
+          },
+        ),
+      SEND_TIMEOUT_MS,
+      null,
+      'ga4.measurement-protocol',
     )
+    if (!response) {
+      console.warn(JSON.stringify({ ...log, error: 'timeout' }))
+      return { sent: false, reason: 'timeout' }
+    }
     if (!response.ok) {
       console.warn(JSON.stringify({ ...log, status: response.status }))
       return { sent: false, reason: `http-${response.status}` }

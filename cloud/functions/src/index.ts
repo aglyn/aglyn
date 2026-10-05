@@ -668,6 +668,75 @@ export const consoleAiJobsBeat = onSchedule(
   },
 )
 
+/*==============================================================
+ * THE RENDER MONITOR (AGL-3568)
+ *=============================================================*/
+
+/**
+ * Every five minutes, five-field UTC cron — the same string the
+ * `render-monitor` row of `SCHEDULED_JOBS` holds, which
+ * `scheduled-crons-wiring.spec.ts` asserts.
+ *
+ * On 2026-10-05 every uncached published page hung for 28 minutes and the
+ * only page monitor that fetched over HTTP was the GitHub uptime probe, whose
+ * fifteen-minute schedule GitHub ran four times that day. A detector is only
+ * as fast as its scheduler, so this one is on the punctual runner.
+ */
+const CONSOLE_RENDER_MONITOR_SCHEDULE = '*/5 * * * *'
+
+/**
+ * The console route that fetches each watched site's uncached pages and
+ * raises the operator alert. A console route and not a fetch from here, so
+ * the alert goes through the operator-alert registry with everything else
+ * and a person can run the same check by hand.
+ */
+const CONSOLE_RENDER_MONITOR_ROUTE = '/api/admin/render-monitor'
+
+/**
+ * How long the POST waits: the route's 60 s `maxDuration`, with room for the
+ * answer to arrive.
+ */
+const CONSOLE_RENDER_MONITOR_TIMEOUT_MS = 75_000
+
+/**
+ * Drives the render monitor on Cloud Scheduler.
+ *
+ * Its own job rather than a route on `consoleFastCrons`, because fifteen
+ * minutes is the cadence that missed the outage it exists for: two failing
+ * runs at five minutes alert inside ten. No retry, like every console cron
+ * here; the next tick is five minutes away, and the route stamps its own
+ * beat, so a monitor that stops is itself a red row on `/api/health/crons`.
+ */
+export const consoleRenderMonitor = onSchedule(
+  {
+    schedule: CONSOLE_RENDER_MONITOR_SCHEDULE,
+    timeZone: 'Etc/UTC',
+    secrets: [CONSOLE_CRON_SECRET],
+    retryCount: 0,
+    // A POST at its full wait, after a challenged first attempt and the
+    // retry's delay (AGL-2642).
+    timeoutSeconds: 120,
+  },
+  async () => {
+    if (!CONSOLE_URL) {
+      logger.error(
+        'render monitor skipped — set AGLYN_CONSOLE_URL to the origin that ' +
+          'SERVES your console, e.g. https://app.example.com. Until it is set, ' +
+          'nothing notices a published site that stops rendering pages.',
+      )
+      return
+    }
+    try {
+      await sweepConsoleCron(CONSOLE_RENDER_MONITOR_ROUTE, CONSOLE_RENDER_MONITOR_TIMEOUT_MS)
+    } catch (error) {
+      logger.error('console cron threw', {
+        route: CONSOLE_RENDER_MONITOR_ROUTE,
+        error: String(error),
+      })
+    }
+  },
+)
+
 
 /*==============================================================
  * THE CONSOLE'S DAILY CRONS

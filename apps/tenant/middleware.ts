@@ -41,6 +41,8 @@ import {
 // Deep import for the same reason: the leaving notice's path, from a leaf
 // with no imports of its own (AGL-3452).
 import { LEAVING_NOTICE_PATH } from '@aglyn/aglyn/app-utils/leaving-notice'
+// Deep import for the same reason: a leaf with no imports of its own.
+import { boundedAwait } from '@aglyn/shared-util-http/bounded-await'
 import { resolveSchemeRouteSegment } from '@aglyn/shared-ui-theme/util/scheme-route-segment'
 // Deep import for the same reason: the declared video hosts' player origins,
 // compiled data with no plugin behind it, which `frame-src` must admit.
@@ -284,6 +286,15 @@ const COLOR_SCHEME_HINT = 'Sec-CH-Prefers-Color-Scheme'
  * loader's own lockdown branch is the defence in depth behind this.
  */
 const LOCKDOWN_VERDICT_TTL_MS = 30_000
+/**
+ * How long a request waits on the verdict before serving as if it were
+ * unreachable — fail open on the lock, stale on the lists, as a thrown fetch
+ * always has (AGL-3565). Generous on purpose: a cold verdict route answers
+ * well inside it, and a lock that reads open for one TTL is the cost of
+ * reaching it; the bound exists so a verdict that NEVER answers cannot hold
+ * every page of the site to the platform's function limit.
+ */
+const LOCKDOWN_VERDICT_DEADLINE_MS = 8_000
 const lockdownVerdicts = new Map<
   string,
   {
@@ -423,12 +434,23 @@ async function hostVerdict(
   // an outage would refuse its own images.
   let siteOrigins: string[] = cached?.siteOrigins ?? []
   try {
-    const response = await fetch(
-      `${origin}/api/lockdown-verdict?host=${encodeURIComponent(tenantHost)}`,
-      { headers: { accept: 'application/json' } },
+    // The body is read inside the deadline too: a verdict that never answers,
+    // or answers with a body that never ends, is the outage case below — not
+    // a request every page of the site waits on (AGL-3565).
+    const verdict = await boundedAwait(
+      (signal) =>
+        fetch(
+          `${origin}/api/lockdown-verdict?host=${encodeURIComponent(tenantHost)}`,
+          { headers: { accept: 'application/json' }, signal },
+        ).then(async (response) =>
+          response.ok ? { data: await response.json().catch(() => null) } : null,
+        ),
+      LOCKDOWN_VERDICT_DEADLINE_MS,
+      null,
+      'tenant-middleware.lockdown-verdict',
     )
-    if (response.ok) {
-      const data = (await response.json().catch(() => null)) as {
+    if (verdict) {
+      const data = verdict.data as {
         locked?: boolean
         mode?: string
         attribution?: boolean

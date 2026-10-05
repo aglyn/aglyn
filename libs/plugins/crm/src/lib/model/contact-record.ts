@@ -16,6 +16,7 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
+import { readNextTaskAtMs } from './crm-next-activity'
 import { type CrmShareChip, crmShareChipFor } from './crm-sharing'
 import type {
   AglynPostalAddress,
@@ -212,7 +213,7 @@ export function contactRecordFromDoc(
       facet.lastEmailEngagementAtMs > 0
         ? facet.lastEmailEngagementAtMs
         : null,
-    nextTaskAtMs: Aglyn.readNextTaskAtMs(row as { nextTaskAtMs?: unknown }),
+    nextTaskAtMs: readNextTaskAtMs(row as { nextTaskAtMs?: unknown }),
     emailState: Aglyn.readEmailState(row),
     shareChip: crmShareChipFor(row, group.hostIds),
     createdAt: row['createdAt'],

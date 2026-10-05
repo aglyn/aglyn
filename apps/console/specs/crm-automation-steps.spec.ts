@@ -247,8 +247,6 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   // fixture so a case can stand a record at the ceiling without seeding five
   // thousand documents.
   countCrmActivitiesForRecord: async () => mockActivityCount,
-  // The `nextTaskAtMs` writer (AGL-2661): a spy, the recompute is the data layer's suite.
-  recomputeCrmNextTaskAt: (...args: unknown[]) => mockRecomputeNextActivity(...(args as [])),
   // The email row's reference and write (AGL-2615), faithful to the real
   // pair: a minted document under the org's activities, set with the server
   // clock on both stamps.
@@ -266,7 +264,18 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     refusal: null,
   }),
   flowEmailRefusal: async () => null,
+  // A reply to the person's own act is transactional (AGL-3458): it asks
+  // only the suppression lists, which hold nobody here.
+  filterSendableForHost: async (_hostId: string, emails: string[]) => emails,
+  hostDisplayName: (_host: unknown, hostId: string) => hostId,
   enrollListMember: async () => undefined,
+}))
+
+// The `nextTaskAtMs` writer (AGL-2661): a spy, the recompute is the CRM's own suite.
+jest.mock('../../../libs/plugins/crm/src/lib/server/crm-next-activity', () => ({
+  __esModule: true,
+  ...jest.requireActual('../../../libs/plugins/crm/src/lib/server/crm-next-activity'),
+  recomputeCrmNextTaskAt: (...args: unknown[]) => mockRecomputeNextActivity(...(args as [])),
 }))
 
 jest.mock('../../../libs/plugins/crm/src/lib/server/assign-contact-owner', () => ({
@@ -423,7 +432,7 @@ describe('finding the person (claim 1)', () => {
     await run({ email: 'ada@gmail.com' })
     expect(contactUpdates()).toHaveLength(0)
     expect(history()[0]).toMatchObject({ result: 'failed' })
-    expect(history()[0].action).toContain('no contact this site can see for ada@gmail.com')
+    expect(history()[0].action).toContain('no contact or lead this site can see for ada@gmail.com')
   })
 
   it('falls back to the email when the id names nothing this site can see', async () => {
@@ -434,7 +443,7 @@ describe('finding the person (claim 1)', () => {
     seedActions({ type: 'addContactTag', tag: 'vip' })
     await run({ contactId: 'contact-1', email: 'ada@example.com' })
     expect(contactUpdates()).toHaveLength(0)
-    expect(history()[0].action).toContain('no contact this site can see for contact-1')
+    expect(history()[0].action).toContain('no contact or lead this site can see for contact-1')
   })
 
   it('resolves by email, normalized, for an event that carries no contactId', async () => {
@@ -455,7 +464,7 @@ describe('finding the person (claim 1)', () => {
     seedActions({ type: 'createCrmTask', title: 'Call', kind: 'call', dueInDays: 1 })
     await run({ email: 'nobody@example.com' })
     expect(orgRows('crmTasks')).toEqual([])
-    expect(history()[0].action).toContain('no contact this site can see for nobody@example.com')
+    expect(history()[0].action).toContain('no contact or lead this site can see for nobody@example.com')
   })
 })
 

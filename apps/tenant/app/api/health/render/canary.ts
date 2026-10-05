@@ -84,9 +84,11 @@
 import {
   HEALTH_PROBE_TTL_MS,
   renderHealth,
+  type HealthCheck,
   type RenderCheck,
   type RenderOutcome,
 } from '@aglyn/aglyn/server'
+import { isValidElement } from 'react'
 
 import { loadPageData } from '../../../[host]/[scheme]/[[...slug]]/load-page-data'
 
@@ -180,4 +182,69 @@ export async function probeRender(host: string | null): Promise<RenderCheck> {
     outcome = { kind: 'unavailable' }
   }
   return renderHealth(outcome, host, Date.now() - startedAt)
+}
+
+/**
+ * How long the document stages may take together before the canary calls
+ * it (AGL-3568). A real timer, so a stage that never settles is reported as
+ * one rather than holding the health route to the platform's 60 s limit.
+ * Generous against an ordinary render, whose stages read through the
+ * render cache in well under a second.
+ */
+export const DOCUMENT_BUDGET_MS = 10_000
+
+/** The document check: which stage failed, never what the page says. */
+export interface DocumentCheck extends HealthCheck {
+  host: string
+}
+
+type DocumentStage = 'layout' | 'head'
+
+/**
+ * Does the DOCUMENT around the page still come together? (AGL-3568)
+ *
+ * `probeRender` runs the loader and nothing else. On 2026-10-05 every
+ * uncached page on the site runtime hung in the site LAYOUT for 28 minutes
+ * (an unbounded theme-font fetch, AGL-3564) while the loader, and so both
+ * canaries, stayed green. This runs the two stages a render runs around the
+ * loader, the site layout and the page head, through the real code (see
+ * `document-stages.ts`), inside one budget:
+ *
+ * - `<stage>-timeout` — the stage did not settle inside the budget. The
+ *   outage's own shape.
+ * - `<stage>-threw` — the stage threw, which a visitor sees as an error page.
+ * - `layout-empty` — the layout resolved to something that is not an
+ *   element, so there is no document to put the page in.
+ *
+ * Never throws, for the reason `probeRender` gives.
+ */
+export async function probeDocument(
+  host: string | null,
+  budgetMs: number = DOCUMENT_BUDGET_MS,
+): Promise<DocumentCheck> {
+  if (!host) return { ok: false, ms: 0, host: '', code: 'not-configured' }
+  const startedAt = Date.now()
+  let stage: DocumentStage = 'layout'
+  const work = (async (): Promise<string | null> => {
+    const stages = await import('./document-stages')
+    const layout = await stages.runSiteLayout(host)
+    if (!isValidElement(layout)) return 'layout-empty'
+    stage = 'head'
+    await stages.runSiteHead(host)
+    return null
+  })().then(
+    (code) => ({ code }),
+    () => ({ code: `${stage}-threw` }),
+  )
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const deadline = new Promise<{ code: string }>((resolve) => {
+    timer = setTimeout(() => resolve({ code: `${stage}-timeout` }), budgetMs)
+  })
+  try {
+    const { code } = await Promise.race([work, deadline])
+    const ms = Date.now() - startedAt
+    return code ? { ok: false, ms, host, code } : { ok: true, ms, host }
+  } finally {
+    clearTimeout(timer)
+  }
 }

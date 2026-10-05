@@ -67,17 +67,22 @@ Page triggers can be limited to certain paths (`/pricing`, `/blog/*`), and a
 **once per visitor**, or **with a cooldown** (a minimum number of minutes between fires
 for the same browser).
 
+Every switched-on automation listening for an event runs when it fires, however many
+the site has — a site with an auto-reply for each of a dozen forms runs every one whose
+conditions match.
+
 ### CRM events {#crm-events}
 
 Six server events come from the [CRM](../../content-and-data/crm/overview.md) —
-two about contacts, three about deals and one about tasks. Pick one and the **Filter**
-field's helper text lists the keys below, so a filter such as
-`lifecycleStage == "customer"` or a condition such as *`source` equals `booking`* can be
-written without leaving the editor.
+two about contacts, three about deals and one about tasks — and a seventh, **New lead**,
+from its leads. Pick one and the **Filter** field's helper text lists the keys below, so
+a condition such as *`lifecycleStage` equals `customer`* or *`source` equals `booking`*
+can be written without leaving the editor.
 
 | Event | Fires when | Keys in scope for filters and conditions |
 | --- | --- | --- |
 | **Contact created** (`contactCreated`) | A capture on your site makes a **new** contact: a form submission, a member sign-up, a newsletter subscription, an order or a booking from an address your workspace did not already hold. A repeat visit by somebody already on the list is recorded as an interaction and does **not** fire it. | `contactId` · `email` · `name` (empty when the capture had none) · `source` (`form`, `member`, `newsletter`, `order` or `booking`) · `hostId` · `lifecycleStage` (the stage the capture set — `lead`, `subscriber` or `customer`; empty when it set none) · `campaignIds` (comma-joined; present only when the capture came through a campaign) · `formId` (present only when the capture came through a form — the key **Tag by form** conditions on) |
+| **New lead** (`lead`) | A capture files a **new** [lead](../../content-and-data/crm/leads.md): a form with lead routing on, or a booking request, from an address the workspace holds as neither a lead nor a contact. Such a form makes a lead and **no** contact, so **Contact created** does not fire for it. | `leadId` · `email` · `name` (empty when the capture had none) · `source` (`form:` and the form's id, or the door's word) · `hostId` · `formId` (present only when a form filed the lead) · `campaignIds` (comma-joined; present only when the form is filed under a campaign) |
 | **Contact changed stage** (`contactStageChanged`) | A contact's **lifecycle stage** is moved — from the contact's page or with **Set stage** on the contacts table in the console, or by a **Set the contact's lifecycle stage** step in another automation. Setting the stage a contact already has fires nothing. | `contactId` · `email` · `lifecycleStage` (the new stage) · `previousStage` (empty when the contact had none) |
 | **Deal moved** (`dealStageChanged`) | A [deal](../../content-and-data/crm/deals.md#moving-winning-and-losing) moves between open stages, or is reopened — from the board, the deal's page or the REST API. | `dealId` · `title` · `amountCents` · `currency` · `stageId` · `previousStageId` · `ownerUid` · `contactId` · `companyId` |
 | **Deal won** (`dealWon`) | A deal is marked won. | The same keys as **Deal moved**. |
@@ -103,6 +108,12 @@ that's the submitted field values. Pick an operator in the **"Only run when"** s
   `plan` equals `Pro`.
 - **A field contains…** — a partial match, handy for checkbox groups that submit
   all ticked options joined with `, ` (e.g. `topics` contains `Pricing`).
+- **Form is…** — on an event that names the form (**Form submitted**, **Contact
+  created**, **New lead**), pick one of the site's forms. It is stored by the form's id
+  (`formId`), so renaming the form never stops it matching, where a condition on
+  `formName` would. An automation whose **Form is** names a different form from the one
+  just submitted is passed over quietly — a site with one auto-reply per form gets one
+  run row per submission, not one per form.
 
 When the condition isn't met the action is skipped, and the skip is **recorded**: the
 [run history](#run-history) gets a `Skipped` row naming the field or fields whose
@@ -111,12 +122,17 @@ to "why didn't my automation fire?", and it sits in the same place as the runs t
 fire. A skip still **doesn't count as a metered run**: nothing executed, so nothing is
 charged.
 
-Conditions are the no-code sibling of the free-text **Filter** expression; use whichever
-reads better (both must pass when both are set). One difference worth knowing: only a
-condition writes a `Skipped` row. A **Filter** expression that evaluates false — or that
-throws, which also stops the action — records nothing at all, so an automation that
-never fires because of a broken filter has an empty run history rather than an
-explanation. Prefer a condition when you want the skip on the record.
+Conditions are the no-code sibling of the free-text **Filter** expression (both must
+pass when both are set). A filter runs the automation when it is **truthy**: a field name
+such as `subscribe` runs it when that field is filled in, and arithmetic such as
+`total - 100` when the result is not zero. **A filter can't compare values** — it has no
+`==`, `!=`, `<`, `>`, `&&` or `||` — so a comparison belongs in a condition:
+*`source` equals `form`*, not `source == "form"`. The editor refuses to save a filter it
+can't run, and says why. A filter saved before that check, which no event can ever
+satisfy, writes a `Skipped` row with the same reason on every event it would have run on.
+
+A filter that is merely false — `subscribe` on a submission that left the box empty —
+records nothing, so prefer a condition when you want every skip on the record.
 
 **Example — grow an email list from a signup form:** add the **Marketing consent** field
 to your form — a **Checkboxes** field named `marketingConsent`, labeled `Marketing emails`,
@@ -181,9 +197,14 @@ Five server steps act on the [CRM](../../content-and-data/crm/overview.md).
 None of them asks *which* contact: each acts on the person the triggering event names —
 by `contactId` when the event carries one (every [CRM event](#crm-events) does), otherwise
 by the `email` in the event's data, which is what a form submission, a sign-up, a booking
-or a lead carries. When neither names a contact this site can see, the step writes
-nothing and the run is recorded as **Failed** with the reason (*"no contact this site can
-see for …"*), in the same [run history](#run-history) every other step reports to.
+or a lead carries. When the workspace holds the person as a **lead** and not yet a
+contact — what a form with lead routing on files — the step acts on the lead instead:
+the owner, the tag, the task and the activity land on the lead and follow it when it is
+converted. A lead has no lifecycle stage, so **Set the contact's lifecycle stage** on a
+lead fails and says so. When the event names nobody this site can see, the step writes
+nothing and the run is recorded as **Failed** with the reason (*"no contact or lead this
+site can see for …"*), in the same [run history](#run-history) every other step reports
+to.
 
 | Step | Fields | What it writes |
 | --- | --- | --- |
@@ -238,8 +259,35 @@ A few things worth knowing before you build one:
 Emails sent from a step after a wait are treated as marketing: they carry an unsubscribe
 link and header, skip anyone who has unsubscribed or bounced, respect the topic the step
 is set to, count toward how much mail one person receives from your site in a day, and go
-only to people with a marketing consent record. An email sent *before* any wait is an
-immediate reply to what the visitor just did and is treated as transactional.
+only to people with a marketing consent record.
+
+### Transactional replies {#transactional-replies}
+
+An email that answers what the person just did — the auto-reply to a form they filled
+in, the confirmation of a booking they made, the welcome on a sign-up or a new lead — is
+a **transactional reply**: it goes out with **no unsubscribe link and no unsubscribe
+header**, the way a reply you send from the Inbox does. The email step's **Transactional
+reply (no unsubscribe)** switch shows which kind each step sends. It is on by default
+for a step that qualifies, which is every step that:
+
+- is on **Form submitted**, **New booking**, **Member signed up** or **New lead**;
+- runs before any wait;
+- names no email topic; and
+- goes to the address the event carries, not to another field.
+
+A step that doesn't qualify shows the switch off and says why, and is sent as a mailing
+whatever it says. Switch a qualifying step off to send it as a mailing anyway. A
+transactional reply still skips anybody who bounced, complained, or unsubscribed from
+your site.
+
+### Merge tags in an email {#merge-tags}
+
+An email step's subject and body fill the same merge tags a campaign does — `{{name}}`,
+`{{firstName}}`, `{{email}}` — and the CRM's, such as `{{contact.firstName}}`,
+`{{lead.company}}` and `{{site.name}}`, from the contact or lead the event is about, else
+from the name and address the event carried. Text after a `|` is used when there is no
+value: `Hi {{firstName|there}}` greets somebody who gave no name as *Hi there*. A tag
+that can't be filled is left out, never sent as braces.
 
 Every reference (workflow, dataset, webhook, overlay, list, campaign) is picked from a
 list and stored by id — renaming things never breaks an automation. Deleting can,
@@ -304,7 +352,12 @@ deliberate:
   leads. An action dispatched from an in-page trigger (scroll depth, element click, exit
   intent, time on page) logs its runs, but a condition that stops one of those writes
   nothing.
-- **A `Filter` expression rejection writes nothing**, as above.
+- **A `Filter` that is merely false writes nothing**, as above. A filter no event can
+  satisfy — a comparison, or text the evaluator can't read — writes a `Skipped` row
+  with the reason.
+- **Another form's automation writes nothing.** An automation whose **Form is** names a
+  different form from the one just submitted is passed over without a row; a condition
+  on a typed `formName` still writes one, since a typo would otherwise go unnoticed.
 - **The table is a recent sample, not a guaranteed tail.** It reads a bounded window of
   the site's activity records — which also carry publishes, media saves and member
   changes — keeps this automation's runs from that window, sorts them newest-first and

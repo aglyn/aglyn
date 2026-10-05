@@ -16,6 +16,10 @@
  */
 
 import type { HostTheme } from '@aglyn/shared-data-types'
+import {
+  boundedAwait,
+  createSettledValueCache,
+} from '@aglyn/shared-util-http/bounded-await'
 // By path: the theme lib's barrel carries React providers a server module
 // has no use for (AGL-405).
 import { getGoogleFontsUrl } from '@aglyn/shared-ui-theme/util/host-theme'
@@ -60,10 +64,14 @@ const MAX_FONT_BYTES = 2 * 1024 * 1024
 export const SELF_HOSTED_FONT_CACHE_CONTROL =
   'public, max-age=31536000, s-maxage=31536000, immutable'
 
-const stylesheets = new Map<
-  string,
-  { expires: number; faces: Promise<GoogleFontFace[] | null> }
->()
+/**
+ * What this process learned about each stylesheet: the faces, or null for a
+ * failure. VALUES, never an in-flight promise — the settled-value cache
+ * refuses one. A promise held across requests is awaited by renders that did
+ * not create it, and one that never settles stalled every page of every site
+ * on the instance until the function timed out (AGL-3565).
+ */
+const stylesheets = createSettledValueCache<string, GoogleFontFace[] | null>()
 
 /** Test seam: the process cache would otherwise leak between cases. */
 export function resetSelfHostedFontsForTests(): void {
@@ -71,34 +79,44 @@ export function resetSelfHostedFontsForTests(): void {
 }
 
 /**
+ * Google's faces for a stylesheet URL, or null; never waits past `ms`. The
+ * deadline is a real timer (`boundedAwait`): an abort signal alone did not
+ * bound Next's patched fetch on Vercel, whose promise could never settle.
+ */
+function fetchFaces(url: string, ms: number): Promise<GoogleFontFace[] | null> {
+  return boundedAwait(
+    (signal) =>
+      fetch(url, {
+        headers: { 'User-Agent': WOFF2_USER_AGENT },
+        signal,
+        next: { revalidate: STYLESHEET_TTL_MS / 1000 },
+      } as RequestInit)
+        .then(async (response) => {
+          if (!response.ok) return null
+          const parsed = parseGoogleFontFaces(await response.text())
+          return parsed.length ? parsed : null
+        })
+        .catch(() => null),
+    ms,
+    null,
+    'self-hosted-fonts.stylesheet',
+  )
+}
+
+/**
  * Google's faces for a stylesheet URL, from this process's cache when it has
- * them. Null when the fetch failed or answered with nothing usable; the page
- * then links the stylesheet as it always did, rather than losing its font.
- *
- * Asked through `fetch` with a day's revalidation, which on the server is
+ * them. Null when the fetch failed, timed out or answered with nothing usable;
+ * the page then links the stylesheet as it always did, rather than losing its
+ * font. Asked through `fetch` with a day's revalidation, which on the server is
  * Next's data cache: a cold process reads the stored stylesheet rather than
  * asking Google again.
  */
 function facesFor(url: string): Promise<GoogleFontFace[] | null> {
-  const now = Date.now()
-  const held = stylesheets.get(url)
-  if (held && held.expires > now) return held.faces
-  const faces = fetch(url, {
-    headers: { 'User-Agent': WOFF2_USER_AGENT },
-    signal: AbortSignal.timeout(STYLESHEET_TIMEOUT_MS),
-    next: { revalidate: STYLESHEET_TTL_MS / 1000 },
-  } as RequestInit)
-    .then(async (response) => {
-      if (!response.ok) return null
-      const parsed = parseGoogleFontFaces(await response.text())
-      return parsed.length ? parsed : null
-    })
-    .catch(() => null)
-  stylesheets.set(url, { expires: now + STYLESHEET_TTL_MS, faces })
-  void faces.then((found) => {
-    if (!found) stylesheets.set(url, { expires: now + FAILURE_TTL_MS, faces })
-  })
-  return faces
+  return stylesheets.readThrough(
+    url,
+    () => fetchFaces(url, STYLESHEET_TIMEOUT_MS),
+    (faces) => (faces ? STYLESHEET_TTL_MS : FAILURE_TTL_MS),
+  )
 }
 
 /** What a page inlines in its head for its theme's fonts. */

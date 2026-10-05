@@ -675,8 +675,10 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       // own fields and none a `null` union: the bytes that keep a request
       // within a provider's union limit (AGL-3096). Up 84 at AGL-3538: a
       // task's priority and a logged call's direction, in the tool and in
-      // the steps' field lists.
-      'workflow-draft': { prefixTokens: 4_708, minimum: 1_024, caches: true, toolsStable: true },
+      // the steps' field lists. Up 9 more at AGL-3458, which named the
+      // `lead` event's keys — the form, the site, the name, the campaigns —
+      // which the tool lists for the conditions it may write.
+      'workflow-draft': { prefixTokens: 4_717, minimum: 1_024, caches: true, toolsStable: true },
       'workflow-explain': { prefixTokens: 2_219, minimum: 1_024, caches: true, toolsStable: true },
       'seo-fields': { prefixTokens: 734, minimum: 4_096, caches: false, toolsStable: true },
       'seo-fields-full': { prefixTokens: 873, minimum: 4_096, caches: false, toolsStable: true },

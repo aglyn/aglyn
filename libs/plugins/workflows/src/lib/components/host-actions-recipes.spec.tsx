@@ -42,7 +42,8 @@ const collections: Record<string, Array<Record<string, unknown>>> = {
   screens: [],
   forms: [
     { $id: 'form-contact', displayName: 'Contact us' },
-    { $id: 'form-quote', displayName: 'Request a quote' },
+    // A form with lead routing on files a lead and no contact (AGL-3458).
+    { $id: 'form-quote', displayName: 'Request a quote', routing: { lead: true } },
     // Archived forms collect nothing and are not offered.
     { $id: 'form-old', displayName: 'Old campaign', archivedAt: 1 },
   ],
@@ -151,14 +152,18 @@ describe('the Recipes menu (AGL-2626)', () => {
         'Started from the “Welcome a new lead” recipe — change anything, then save.',
       ),
     ).toBeTruthy()
-    // The trigger and its condition, as the recipe wrote them.
-    expect(within(dialog).getByDisplayValue('contactCreated')).toBeTruthy()
+    // The trigger and its condition, as the recipe wrote them: a NEW LEAD a
+    // form filed (AGL-3458), which is what a lead-routed form makes.
+    expect(within(dialog).getByDisplayValue('lead')).toBeTruthy()
+    expect(within(dialog).getByDisplayValue('notEmpty')).toBeTruthy()
     expect(
       (within(dialog).getByLabelText('Field') as HTMLInputElement).value,
-    ).toBe('source')
+    ).toBe('formId')
+    // The email is a transactional reply, said on the step (AGL-3458).
     expect(
-      (within(dialog).getByLabelText('Value') as HTMLInputElement).value,
-    ).toBe('form')
+      (within(dialog).getByLabelText('Transactional reply (no unsubscribe)') as HTMLInputElement)
+        .checked,
+    ).toBe(true)
     // The four steps, in order, with the owner step on the rotation.
     expect(within(dialog).getByDisplayValue('roundRobin')).toBeTruthy()
     expect(
@@ -204,17 +209,30 @@ describe('the Recipes menu (AGL-2626)', () => {
     expect(
       (within(dialog).getByLabelText('Name') as HTMLInputElement).value,
     ).toBe('Tag Contact us submissions')
-    expect(
-      (within(dialog).getByLabelText('Field') as HTMLInputElement).value,
-    ).toBe('formId')
-    expect(
-      (within(dialog).getByLabelText('Value') as HTMLInputElement).value,
-    ).toBe('form-contact')
+    // `formId equals …` reads back as "Form is" with the form picked by id
+    // (AGL-3458), not as a field and a value to type.
+    expect(within(dialog).getByDisplayValue('formIs')).toBeTruthy()
+    expect(within(dialog).getByDisplayValue('form-contact')).toBeTruthy()
+    expect(within(dialog).getByRole('combobox', { name: 'Form' }).textContent).toBe('Contact us')
     expect(
       (within(dialog).getByLabelText('Tag') as HTMLInputElement).value,
     ).toBe('Contact us')
     expect(mockCreateResource).not.toHaveBeenCalled()
     expect(setDoc).not.toHaveBeenCalled()
+  })
+
+  it('listens for a new lead when the form picked for Tag by form files leads (AGL-3458)', () => {
+    render(<HostActionsCard hostId="host-1" org={PRO} />)
+    chooseRecipe('Tag by form')
+
+    const picker = screen.getByRole('dialog', { name: 'Tag by form' })
+    fireEvent.mouseDown(within(picker).getByRole('combobox', { name: 'Form' }))
+    fireEvent.click(within(screen.getByRole('listbox')).getByText('Request a quote'))
+    fireEvent.click(within(picker).getByRole('button', { name: 'Use recipe' }))
+
+    const dialog = editor()
+    expect(within(dialog).getByDisplayValue('lead')).toBeTruthy()
+    expect(within(dialog).getByDisplayValue('form-quote')).toBeTruthy()
   })
 
   it('refuses a recipe on a plan without the builder, the way Add action does', () => {

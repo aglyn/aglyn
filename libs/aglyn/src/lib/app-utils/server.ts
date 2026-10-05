@@ -90,7 +90,6 @@ export * from './person-erasure'
 // leaves, whether one is owed, and the words the notification and the mail
 // say. Pure like `crm`, read by the hourly route and by every writer of the
 // field.
-export * from './crm-task-reminders'
 // Reading a received email (AGL-2657): the address in a header, the thread
 // a subject belongs to, the reply above the quoted history — and the domain
 // the platform receives mail on. Pure; every surface that reads mail it was
@@ -101,10 +100,6 @@ export * from './inbound-mail-domain'
 // confirmed count as theirs wherever the roster is asked who wrote a
 // message. Pure; the store and the confirmation link are server-side.
 export * from './member-email-aliases'
-// The next activity a record carries (AGL-2661): what `nextTaskAtMs` IS given
-// a record's open tasks, the view clause a list filters on, the report figure.
-// Pure like `crm`; the admin library's `recomputeCrmNextTaskAt` is the writer.
-export * from './crm-next-activity'
 // The CSV cell grammar the exports write with (AGL-2621), and the target a
 // mapped column names for a custom field — named rather than starred, because
 // an importer built on this file exports the shared ceilings under its own

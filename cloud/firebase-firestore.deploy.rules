@@ -1862,6 +1862,15 @@ allow write: if false;
 }
 
 
+match /campaignVisitReports/{campaignId} {
+allow read: if isStaff() || isOrgWideMember() ||
+(isOrgMember() &&
+get(/databases/$(database)/documents/orgs/$(orgId)/emailCampaigns/$(campaignId))
+.data.get('visibleTo', []).hasAny(orgMember().get('scopeTokens', ['org'])));
+allow write: if false;
+}
+
+
 
 
 

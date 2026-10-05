@@ -1860,6 +1860,15 @@ service cloud.firestore {
              .data.get('visibleTo', []).hasAny(orgMember().get('scopeTokens', ['org'])));
         allow write: if false;
       }
+      // A campaign's site reach (AGL-3461): counts written only by the
+      // `campaignVisit` beacon, read on the sequence rollup's terms.
+      match /campaignVisitReports/{campaignId} {
+        allow read: if isStaff() || isOrgWideMember() ||
+          (isOrgMember() &&
+           get(/databases/$(database)/documents/orgs/$(orgId)/emailCampaigns/$(campaignId))
+             .data.get('visibleTo', []).hasAny(orgMember().get('scopeTokens', ['org'])));
+        allow write: if false;
+      }
 
       /**
        * Org automations (AGL-3302): one automation the organization places on

@@ -61,7 +61,6 @@ import {
   hostSendingIdentity,
   logOrgActivity,
   memberHasOrgPermission,
-  newCrmActivityRef,
   orgDataCollectionForHost,
   readLeadForHost,
   readOrgEmailRamp,
@@ -69,7 +68,6 @@ import {
   releaseCrmEmailSend,
   reserveCrmEmailSend,
   resolveOrgMembership,
-  writeCrmEmailActivity,
 } from '@aglyn/tenant-data-admin'
 import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 import {
@@ -79,6 +77,7 @@ import {
   readCrmRouteScope,
 } from './org-caller'
 import { crmSuiteRefusal } from './suite-gate'
+import { newCrmActivityRef, writeCrmEmailActivity } from './crm-email-activity'
 
 /**
  * `POST /api/crm/email-send` — one email to one person, from their record

@@ -411,6 +411,26 @@ export function buildServerConfigReport(
       raw: env['OPERATOR_HEALTH_TENANT_ORIGIN'],
       value: describePresence(env['OPERATOR_HEALTH_TENANT_ORIGIN']),
     }),
+    analyzeOpaqueKnob({
+      key: 'RENDER_MONITOR_ORIGINS',
+      label: 'Render monitor sites',
+      drives:
+        'Published sites the render monitor fetches uncached pages from, ' +
+        'besides the demonstration site, alerting when one stops rendering. ' +
+        '`off` watches nothing. Absent, only the demonstration site is ' +
+        'watched (AGL-3568).',
+      raw: env['RENDER_MONITOR_ORIGINS'],
+      value: describePresence(env['RENDER_MONITOR_ORIGINS']),
+    }),
+    analyzeOpaqueKnob({
+      key: 'RENDER_MONITOR_FAILURE_THRESHOLD',
+      label: 'Render monitor failures before alerting',
+      drives:
+        'Failing render monitor runs in a row before the operator is ' +
+        'alerted. Absent, 2 (AGL-3568).',
+      raw: env['RENDER_MONITOR_FAILURE_THRESHOLD'],
+      value: describePresence(env['RENDER_MONITOR_FAILURE_THRESHOLD']),
+    }),
   ]
 
   return {

@@ -100,6 +100,7 @@ function collectionRef(path: string): any {
   const query = (matchers: ((data: Record<string, any>) => boolean)[]): any => ({
     where: (field: string, _op: string, value: unknown) =>
       query([...matchers, (data) => readField(data, field) === value]),
+    orderBy: () => query(matchers),
     limit: () => query(matchers),
     get: async () => {
       const docs = childrenOf(path)

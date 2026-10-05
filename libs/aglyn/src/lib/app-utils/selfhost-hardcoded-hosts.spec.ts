@@ -143,6 +143,12 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
       "AGL-3211. The promotion's own changelog publisher, a release script run from CI and never shipped. The literal is the `??` default of `TENANT_ORIGIN` and nothing else reads it: it builds the origin the script POSTs `/api/revalidate` to after writing the entry, and a self-host operator points that variable at the site they actually serve. Left as the default so the platform's own promotion needs no variable to drop its changelog's cache. Inert on a self-hosted instance in the strongest sense — the call is best-effort and already swallows its own failure, so an origin nobody runs resolves to a quiet skip rather than a failed publish.",
   },
   {
+    file: 'tools/scripts/lib/prod-canary.mjs',
+    count: 5,
+    reason:
+      "AGL-3567. The post-deploy production canary, run from GitHub Actions after the platform's own tenant and console deploys and never shipped in any app. Its literals are the platform's Vercel alias patterns it reads deployments by and the default hosts it probes (`demo.aglyn.app` and `aglyn.com`, one per tenant host-resolution path, and `app.aglyn.com`), each overridable by the workflow's inputs. Operator-only ops tooling: a self-hosted instance has no Vercel aliases for it to read and nothing that runs it.",
+  },
+  {
     file: 'apps/console/constants/subprocessor-inventory.ts',
     count: 3,
     reason:

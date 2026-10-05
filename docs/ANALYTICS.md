@@ -2355,6 +2355,40 @@ rules refuse the field to every client. The staff console's Acquisition card
 reads it; see `apps/docs/docs/staff-console/acquisition.md`. `signupCampaign`
 is unchanged and still feeds `sign_up`.
 
+#### 12d. A site visitor's campaign touch — one entry, two halves (AGL-3461)
+
+Sections 12–12c are the platform's own acquisition. A CUSTOMER site's visitors
+carry a different thing to the moment they identify (a form, a member or
+newsletter sign-up, a booking): their latest campaign touch, held by
+`libs/aglyn/src/lib/app-utils/utm-touch.ts` and credited by the Marketing
+plugin's creditor (`campaign-conversion-attribution.ts`).
+
+| Tier | Source | Storage | Consent |
+| ---- | ------ | ------- | ------- |
+| 1 | the live URL's `utm_*`, and the page the visitor is on when it is filed under a campaign | none — memory for the pageview | none needed |
+| 2 | the last `utm_*` arrival and the last page filed under a campaign | ONE `localStorage` entry, `aglyn:campaign-touch`, 7-day window | `analytics_storage`; withdrawn → entry removed |
+
+The entry is the same wire form a door posts as `campaignTouch`:
+`utm_source|medium|campaign` + `t` (the labels' instant) and `pc` (campaign
+ids), `ps` (screen id), `pp` (path), `pt` (the page's instant). The halves'
+keys do not overlap, each has its own parser and window, and an entry written
+before the page half existed still reads. **No second key** — the page touch
+and the first-visit answer below both live in, or are read off, this one entry.
+
+The server believes none of it: a page credits a campaign only while the screen
+is still filed under it and the campaign still exists, and a label credits the
+one live campaign on the site that lists it in `utmCampaigns`. The rule
+(`last-touch`) is stamped on every record and spelled out by
+`campaignCreditRule`.
+
+**Campaign reach.** The Marketing site runtime posts a `campaignVisit` beacon
+through the collector (`plugin-site-beacons`): a view of a page filed under a
+campaign, cookieless, and — when `claimFirstCampaignTouch` answers — a first
+visit, meaning the entry held no live touch before this page load wrote one.
+Counted into `orgs/{orgId}/campaignVisitReports/{campaignId}` (Admin SDK only),
+so the rollup is bounded by the campaigns that exist. A visitor without the
+analytics grant is in the views and never in the first visits.
+
 ### 13. Why a server event can still report nothing with the credentials in place (AGL-2327)
 
 Three distinct causes have been mistaken for each other, twice. Check them in

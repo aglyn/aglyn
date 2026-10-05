@@ -217,6 +217,11 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     declared: false,
   }),
   dataStorageRefusal: async () => null,
+  // A transactional reply's suppression check (AGL-3458): every address is
+  // sendable here; `run-event-actions-flow.spec.ts` holds the refusal.
+  filterSendableForHost: async (_hostId: string, emails: string[]) => emails,
+  hostDisplayName: (host: Record<string, unknown> | undefined, hostId: string) =>
+    String(host?.['displayName'] ?? '') || hostId,
   flowEmailRefusal: async () => null,
   hostSendingIdentity: async () => ({
     from: 'hello@site.mail.aglyn.app',
@@ -701,6 +706,42 @@ describe('a workflow of function calls', () => {
       createdAt: 'server-timestamp',
     })
     expect(counter('workflowRuns')).toBe(1)
+  })
+})
+
+describe('a filter no event can satisfy (AGL-3458)', () => {
+  it('runs nothing, bills nothing, and says why in the run history', async () => {
+    seed(`${hostPath}/workflows/wf-compare`, {
+      name: 'Compares',
+      trigger: { event: 'formSubmission', filter: 'formName == "Contact"' },
+      returnValue: '',
+      steps: [{ functionName: 'score', args: ['budget'], resultName: 'score' }],
+    })
+
+    await runEventWorkflows(HOST_ID, 'formSubmission', SUBMISSION)
+
+    expect(history()).toEqual([
+      expect.objectContaining({
+        action: 'Workflow skipped on formSubmission',
+        result: 'skipped',
+        summary: expect.stringContaining('can’t compare values'),
+        target: { type: 'workflow', id: 'wf-compare', name: 'Compares' },
+      }),
+    ])
+    expect(counter('workflowRuns')).toBeUndefined()
+  })
+
+  it('runs a readable filter as it always has', async () => {
+    seed(`${hostPath}/workflows/wf-budget`, {
+      name: 'Has a budget',
+      trigger: { event: 'formSubmission', filter: 'budget' },
+      returnValue: '',
+      steps: [{ functionName: 'score', args: ['budget'], resultName: 'score' }],
+    })
+
+    await runEventWorkflows(HOST_ID, 'formSubmission', SUBMISSION)
+
+    expect(history().map((row) => row['result'])).toEqual(['succeeded'])
   })
 })
 

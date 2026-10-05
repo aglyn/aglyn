@@ -164,6 +164,9 @@ export FIRESTORE_EMULATOR_HOST="localhost:${FIRESTORE_PORT}"
 export FIREBASE_AUTH_EMULATOR_HOST="localhost:${AUTH_PORT}"
 
 cd "$REPO_ROOT"
+# The seed includes the client-shaped site (`ridgeline`, and its
+# `ridgeline-stalled` copy) the smoke renders under its route budget
+# (AGL-3566) — `tools/scripts/lib/seed-client-site.mjs`.
 echo "==> seeding"
 "$NODE_BIN" tools/scripts/seed-e2e.mjs
 

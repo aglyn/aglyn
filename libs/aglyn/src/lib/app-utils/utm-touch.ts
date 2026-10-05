@@ -65,6 +65,13 @@
  * entry is DELETED on the read that finds it, rather than ignored, so a
  * device never holds a campaign it can no longer be credited with.
  *
+ * One entry, {@link UTM_TOUCH_STORAGE_KEY}, holds everything this module
+ * remembers: the labels below and the page touch further down, side by side
+ * in the wire form a door sends. Their keys do not overlap, so each half is
+ * read by its own parser, an entry written before the page touch existed
+ * still reads, and a half past the window is dropped without touching the
+ * other. Withdrawing consent removes the one entry.
+ *
  * ## Last touch, not first
  *
  * The revenue join credits the LAST click, and a product where a lead and an
@@ -111,8 +118,9 @@
  *
  * Only the three allowlisted `utm_` labels, scrubbed by
  * {@link parseUtmAttribution} — which refuses an email-shaped value
- * outright. No address, no person's identifier, no click id, nothing that
- * names the visitor. A campaign link is exactly where putting a recipient in
+ * outright — and, for the page touch below, the ids of the campaigns and the
+ * screen a page is filed under with its path. No address, no person's
+ * identifier, no click id, nothing that names the visitor. A campaign link is exactly where putting a recipient in
  * a query string would be tempting, and the parser is what makes it
  * impossible rather than merely discouraged: the stored string is re-parsed
  * through the same allowlist that wrote it, so a hand-edited `localStorage`
@@ -175,8 +183,12 @@ function touchIsInWindow(touchedAtMs: number, convertedAtMs: number): boolean {
 }
 
 /**
- * Where the touch is held. Namespaced like every other key this app sets, and
- * spelled as visitors' devices already hold it.
+ * Where the touches are held. Namespaced like every other key this app sets,
+ * and spelled as visitors' devices already hold it.
+ *
+ * The only key this module writes. The labels and the page touch share it in
+ * the wire form {@link utmTouchField} sends, so remembering a page adds no
+ * second thing to the visitor's device.
  */
 export const UTM_TOUCH_STORAGE_KEY = 'aglyn:campaign-touch'
 
@@ -203,6 +215,34 @@ export interface UtmTouch extends UtmAttribution {
  * consent section above.
  */
 let storageConsent: boolean | null = null
+
+/** Callers waiting for {@link storageConsent} to settle. */
+const consentWaiters: Array<(allowed: boolean) => void> = []
+
+/**
+ * Run `callback` once the visitor's storage consent is settled — at once when
+ * it already is, else on the first {@link setUtmTouchConsent} that settles it.
+ *
+ * For a caller whose answer depends on whether the device may remember
+ * anything ({@link claimFirstCampaignTouch}, AGL-3461): asked too early, an
+ * unresolved state would read as "may not", and the visit would go uncounted
+ * for no reason but timing.
+ *
+ * @returns a function that withdraws the callback if it has not run.
+ */
+export function whenUtmTouchConsentSettles(
+  callback: (allowed: boolean) => void,
+): () => void {
+  if (storageConsent !== null) {
+    callback(storageConsent)
+    return () => undefined
+  }
+  consentWaiters.push(callback)
+  return () => {
+    const index = consentWaiters.indexOf(callback)
+    if (index >= 0) consentWaiters.splice(index, 1)
+  }
+}
 
 function localStore(): Storage | null {
   if (typeof window === 'undefined') return null
@@ -264,8 +304,21 @@ export function parseUtmTouch(
  */
 export function setUtmTouchConsent(allowed: boolean | null): void {
   storageConsent = allowed === true ? true : allowed === false ? false : null
+  if (storageConsent !== null && consentWaiters.length) {
+    const settled = storageConsent
+    for (const waiter of consentWaiters.splice(0)) {
+      try {
+        waiter(settled)
+      } catch {
+        // One caller's failure must not stop the next hearing the answer.
+      }
+    }
+  }
   if (storageConsent === true) {
     rememberUtmTouch()
+    // A grant given after the landing remembers the page the visitor is on,
+    // exactly as it remembers the labels on its address.
+    rememberPageTouch()
     return
   }
   if (storageConsent === false) {
@@ -277,6 +330,61 @@ export function setUtmTouchConsent(allowed: boolean | null): void {
       // Nothing else to try, and a failed cleanup must not break the page.
     }
   }
+}
+
+/** The two touches one stored entry holds, each `null` when absent or aged out. */
+interface HeldTouches {
+  labels: UtmTouch | null
+  page: PageTouch | null
+}
+
+/** The stored form of both touches — the ONLY place the entry is composed. */
+function heldWire(held: HeldTouches): string {
+  return [utmTouchWire(held.labels), pageTouchWire(held.page)]
+    .filter(Boolean)
+    .join('&')
+}
+
+/**
+ * Store both touches as the one entry, or remove it when neither is left.
+ *
+ * @returns whether the store took the write.
+ */
+function writeHeld(store: Storage, held: HeldTouches): boolean {
+  const wire = heldWire(held)
+  try {
+    if (wire) store.setItem(UTM_TOUCH_STORAGE_KEY, wire)
+    else store.removeItem(UTM_TOUCH_STORAGE_KEY)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * What the device holds, each half re-parsed through its own allowlist and
+ * window — or `null` when the store cannot be read.
+ *
+ * A half past the window, and anything a hand edit added, is dropped from the
+ * entry on the read that finds it: the entry is rewritten in its canonical
+ * form, or removed when nothing creditable is left. An entry already in that
+ * form is left alone, so an ordinary read writes nothing.
+ */
+function readHeld(store: Storage, nowMs: number): HeldTouches | null {
+  let raw: string | null
+  try {
+    raw = store.getItem(UTM_TOUCH_STORAGE_KEY)
+  } catch {
+    return null
+  }
+  const held: HeldTouches = {
+    labels: parseUtmTouch(raw, nowMs),
+    page: parsePageTouch(raw, nowMs),
+  }
+  // A failed cleanup leaves an entry that is already uncreditable; the next
+  // read finds it again.
+  if (raw && heldWire(held) !== raw) writeHeld(store, held)
+  return held
 }
 
 /**
@@ -305,16 +413,13 @@ export function rememberUtmTouch(
   const campaign = parseUtmAttribution(new URLSearchParams(source))
   if (!campaign) return null
   const touch: UtmTouch = { ...campaign, atMs: nowMs }
-  const wire = utmTouchWire(touch)
-  if (!wire) return null
-  try {
-    store.setItem(UTM_TOUCH_STORAGE_KEY, wire)
-  } catch {
-    // A store that refuses the write costs the walk from the landing page to
-    // the conversion, never a conversion on the landing page itself — the
-    // live URL below still carries that visitor.
-    return null
-  }
+  if (!utmTouchWire(touch)) return null
+  noteHeldBeforeThisPage(store, nowMs)
+  const held = readHeld(store, nowMs) ?? { labels: null, page: null }
+  // A store that refuses the write costs the walk from the landing page to
+  // the conversion, never a conversion on the landing page itself — the live
+  // URL below still carries that visitor. The page half is kept as it was.
+  if (!writeHeld(store, { ...held, labels: touch })) return null
   return touch
 }
 
@@ -346,24 +451,7 @@ export function readUtmTouch(
   if (storageConsent !== true) return null
   const store = localStore()
   if (!store) return null
-  let raw: string | null
-  try {
-    raw = store.getItem(UTM_TOUCH_STORAGE_KEY)
-  } catch {
-    return null
-  }
-  if (!raw) return null
-  const touch = parseUtmTouch(raw, nowMs)
-  if (!touch) {
-    try {
-      store.removeItem(UTM_TOUCH_STORAGE_KEY)
-    } catch {
-      // The entry stays until the next read finds it again; it is already
-      // uncreditable, so nothing downstream is affected.
-    }
-    return null
-  }
-  return touch
+  return readHeld(store, nowMs)?.labels ?? null
 }
 
 /**
@@ -374,10 +462,317 @@ export function readUtmTouch(
  * that produced none. Empty when there is no touch — never a placeholder,
  * never `campaignTouch: undefined`, so that "arrived from nowhere" and "this
  * door does not report" stay distinguishable on the wire.
+ *
+ * Both touches ride the one field (AGL-3461): the labels the visitor arrived
+ * with and the page filed under a campaign they last viewed. Their keys do
+ * not overlap, so each parser reads its own half of the same string and
+ * ignores the other's — which is also why every door carries the page touch
+ * without a change of its own.
  */
 export function utmTouchField(
   nowMs: number = Date.now(),
 ): { campaignTouch?: string } {
-  const wire = utmTouchWire(readUtmTouch(nowMs))
+  const wire = [
+    utmTouchWire(readUtmTouch(nowMs)),
+    pageTouchWire(readPageTouch(nowMs)),
+  ]
+    .filter(Boolean)
+    .join('&')
   return wire ? { campaignTouch: wire } : {}
+}
+
+/*==========================================
+ * THE PAGE TOUCH (AGL-3461) — a page filed under a campaign, viewed.
+ *
+ * A merchant files a landing page under a campaign (`containerIds` on the
+ * screen, `container-membership.ts`) so the campaign can say what its pages
+ * did. A visitor who reaches that page by typing its address, from a search
+ * result or from a link carrying no labels has still been touched by the
+ * campaign: they are reading its page. Without this, that visitor's form
+ * submission reads "not credited to a campaign", because the only carriers
+ * are a `utm_campaign` label and a click on the campaign's own mail.
+ *
+ * ## What the device holds, and why it is ids
+ *
+ * The campaigns the page was filed under WHEN IT WAS VIEWED, the screen and
+ * the path, and the instant — in the same entry as the labels
+ * ({@link UTM_TOUCH_STORAGE_KEY}), under keys of its own. Ids, never names:
+ * a campaign's name is editable and is resolved on the server at the moment
+ * of credit, and an id names nothing a reader of the device could learn
+ * anything from.
+ *
+ * Nothing here is trusted. The server re-reads the screen and the campaign at
+ * the identify moment, and credits a campaign only while it still exists and
+ * the page is still filed under it — so a hand-edited entry can claim no more
+ * than a page the site really files under a real campaign.
+ *
+ * ## The same window, the same last-touch rule, the same consent
+ *
+ * {@link ATTRIBUTION_WINDOW_DAYS}, overwritten by the next page filed under a
+ * campaign, and kept on the device only under the grant the labels above
+ * wait for. The page the visitor is ON needs no grant at all, exactly as the
+ * live URL needs none: {@link notePageCampaigns} holds it in memory for the
+ * pageview, and a door on that page reports it with nothing written.
+ *
+ * ## The first campaign touch in the window
+ *
+ * A campaign's page counts the visitors it reached FIRST: those whose first
+ * campaign touch in the window was this campaign's ({@link
+ * claimFirstCampaignTouch}). The entry above already answers that, with no
+ * record of its own: it holds a touch from the last seven days or it does
+ * not. So a page load reads it once, before anything it writes, and the first
+ * claim made on that page load is a first touch only when the device held
+ * nothing creditable. Without the grant nothing is read and nothing is
+ * claimed: a visit that cannot be told from the last one is not counted as a
+ * first.
+ *=========================================*/
+
+/**
+ * How many of a page's campaigns a touch carries. A page is rarely filed
+ * under more than one; the cap is on the bytes a wire field may carry.
+ */
+export const PAGE_TOUCH_MAX_CAMPAIGNS = 5
+
+/** The page touch's keys inside the wire form, outside the `utm_` allowlist. */
+const PAGE_TOUCH_KEYS = {
+  campaigns: 'pc',
+  screen: 'ps',
+  path: 'pp',
+  time: 'pt',
+} as const
+
+/** A document id as the platform mints them; anything else is not one. */
+const DOCUMENT_ID = /^[A-Za-z0-9_-]{1,64}$/
+
+/** The longest page path a touch carries. */
+const MAX_PATH = 200
+
+/** The longest key a first-touch claim answers with. */
+const MAX_CLAIM_KEY = 120
+
+/** A page filed under one or more campaigns, and when it was viewed. */
+export interface PageTouch {
+  /** The campaign ids the page was filed under, in the screen's order. */
+  containerIds: string[]
+  /** The screen the page renders. */
+  screenId: string
+  /** The page's path, `/`-led. */
+  path: string
+  /** When the visitor viewed it, epoch ms. */
+  atMs: number
+}
+
+/** The page this pageview is on, when it is filed under a campaign. */
+let currentPage: PageTouch | null = null
+
+/**
+ * Whether this page load's first campaign touch is the device's first in the
+ * window: `unread` until the entry is first consulted, `first` when it held
+ * nothing creditable then, `spent` once it held something or a claim has been
+ * answered. Module scope is the page load: a client-side navigation keeps it,
+ * a reload starts it again from what the device holds.
+ */
+let firstTouch: 'unread' | 'first' | 'spent' = 'unread'
+
+/**
+ * Settle {@link firstTouch} from the entry as it stands, once per page load
+ * and before anything this page load writes into it.
+ */
+function noteHeldBeforeThisPage(store: Storage, nowMs: number): void {
+  if (firstTouch !== 'unread') return
+  const held = readHeld(store, nowMs)
+  // An entry that cannot be read is one that cannot say it was empty.
+  firstTouch = held && !held.labels && !held.page ? 'first' : 'spent'
+}
+
+function cleanContainerIds(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return []
+  const ids: string[] = []
+  for (const entry of raw) {
+    const id = typeof entry === 'string' ? entry.trim() : ''
+    if (!DOCUMENT_ID.test(id) || ids.includes(id)) continue
+    ids.push(id)
+    if (ids.length >= PAGE_TOUCH_MAX_CAMPAIGNS) break
+  }
+  return ids
+}
+
+function cleanPath(raw: unknown): string {
+  const path = typeof raw === 'string' ? raw.trim() : ''
+  if (!path.startsWith('/') || path.startsWith('//')) return ''
+  return path.slice(0, MAX_PATH)
+}
+
+/**
+ * The canonical wire form of a page touch — the ONLY place it is written, so
+ * it cannot drift from what {@link parsePageTouch} reads back.
+ */
+export function pageTouchWire(touch: PageTouch | null | undefined): string {
+  if (!touch) return ''
+  const containerIds = cleanContainerIds(touch.containerIds)
+  const screenId = String(touch.screenId ?? '').trim()
+  const atMs = Math.round(Number(touch.atMs))
+  if (!containerIds.length || !DOCUMENT_ID.test(screenId)) return ''
+  if (!Number.isFinite(atMs) || atMs <= 0) return ''
+  const params = new URLSearchParams()
+  params.set(PAGE_TOUCH_KEYS.campaigns, containerIds.join(','))
+  params.set(PAGE_TOUCH_KEYS.screen, screenId)
+  const path = cleanPath(touch.path)
+  if (path) params.set(PAGE_TOUCH_KEYS.path, path)
+  params.set(PAGE_TOUCH_KEYS.time, String(atMs))
+  return params.toString()
+}
+
+/**
+ * Read a stored or transmitted page touch back, or `null`.
+ *
+ * The window is enforced here for the reason {@link parseUtmTouch} gives:
+ * every reader agrees that an expired touch is nothing. The ids are shape-
+ * checked only — whether the page is still filed under them is the server's
+ * question, asked at the moment of credit.
+ */
+export function parsePageTouch(
+  wire: unknown,
+  nowMs: number = Date.now(),
+): PageTouch | null {
+  if (typeof wire !== 'string' || !wire) return null
+  let params: URLSearchParams
+  try {
+    params = new URLSearchParams(wire)
+  } catch {
+    return null
+  }
+  const containerIds = cleanContainerIds(
+    String(params.get(PAGE_TOUCH_KEYS.campaigns) ?? '').split(','),
+  )
+  const screenId = String(params.get(PAGE_TOUCH_KEYS.screen) ?? '').trim()
+  if (!containerIds.length || !DOCUMENT_ID.test(screenId)) return null
+  const atMs = Number(params.get(PAGE_TOUCH_KEYS.time))
+  if (!touchIsInWindow(atMs, nowMs)) return null
+  return {
+    containerIds,
+    screenId,
+    path: cleanPath(params.get(PAGE_TOUCH_KEYS.path)),
+    atMs,
+  }
+}
+
+/**
+ * Write the page this pageview is on as the visitor's last page touch, beside
+ * the labels already held.
+ */
+function rememberPageTouch(nowMs: number = Date.now()): void {
+  if (storageConsent !== true || !currentPage) return
+  const store = localStore()
+  if (!store || !pageTouchWire(currentPage)) return
+  noteHeldBeforeThisPage(store, nowMs)
+  const held = readHeld(store, nowMs) ?? { labels: null, page: null }
+  // A refused write keeps the page the visitor is on reported live; only the
+  // walk to a page filed under nothing loses it.
+  writeHeld(store, { ...held, page: currentPage })
+}
+
+/**
+ * Tell this module which campaigns the page being viewed is filed under.
+ *
+ * Called by the plugin that keeps campaigns, on every pageview, with what its
+ * server half read off the screen — or with `null` for a page filed under
+ * none, which clears the LIVE page and leaves the remembered one alone: a
+ * visitor who reads a campaign's landing page and then the site's pricing
+ * page has still been touched by the campaign.
+ *
+ * Overwrites the remembered page touch, because the model is last touch.
+ *
+ * @returns the touch now live, or `null`.
+ */
+export function notePageCampaigns(
+  page: {
+    screenId?: string | null
+    containerIds?: readonly string[] | null
+    path?: string | null
+  } | null,
+  nowMs: number = Date.now(),
+): PageTouch | null {
+  const containerIds = cleanContainerIds(page?.containerIds ?? [])
+  const screenId = String(page?.screenId ?? '').trim()
+  if (!page || !containerIds.length || !DOCUMENT_ID.test(screenId)) {
+    currentPage = null
+    return null
+  }
+  const path = cleanPath(
+    page.path ??
+      (typeof window === 'undefined' ? '' : window.location.pathname),
+  )
+  // The same page noted twice in one pageview keeps the instant it was first
+  // viewed: a re-render is not a second visit.
+  if (
+    currentPage &&
+    currentPage.screenId === screenId &&
+    currentPage.path === path &&
+    currentPage.containerIds.join(',') === containerIds.join(',')
+  ) {
+    return currentPage
+  }
+  currentPage = { containerIds, screenId, path, atMs: nowMs }
+  rememberPageTouch(nowMs)
+  return currentPage
+}
+
+/**
+ * The page touch to credit a conversion happening right now, or `null`.
+ *
+ * The page the visitor is on wins, with the instant they viewed it; only on a
+ * page filed under nothing does this fall back to what was remembered. An
+ * expired entry is deleted on the read that finds it, as the labels' is.
+ */
+export function readPageTouch(
+  nowMs: number = Date.now(),
+): PageTouch | null {
+  if (currentPage && touchIsInWindow(currentPage.atMs, nowMs)) {
+    return currentPage
+  }
+  if (storageConsent !== true) return null
+  const store = localStore()
+  if (!store) return null
+  return readHeld(store, nowMs)?.page ?? null
+}
+
+/**
+ * Whether this pageview is the device's FIRST campaign touch in the window —
+ * answered with `keys` when it is, and `[]` otherwise.
+ *
+ * `keys` are the caller's own words for what touched the visitor on this
+ * page: a campaign id, or a label the server will look up. They are answered
+ * together or not at all, because they are one touch. Once per page load: the
+ * first claim spends it, and a later page in the same visit has been preceded
+ * by this one.
+ *
+ * A first touch is only claimed when the device now REMEMBERS one — the
+ * page's or the address's labels are written before the answer — so the next
+ * page load reads it and answers `[]`. A device that refuses the write claims
+ * nothing, and the figure stays a floor rather than counting one visitor on
+ * every page.
+ *
+ * Answers `[]` without the storage grant — see the section note.
+ */
+export function claimFirstCampaignTouch(
+  keys: readonly string[],
+  nowMs: number = Date.now(),
+): string[] {
+  if (storageConsent !== true) return []
+  const store = localStore()
+  if (!store) return []
+  noteHeldBeforeThisPage(store, nowMs)
+  if (firstTouch !== 'first') return []
+  firstTouch = 'spent'
+  rememberPageTouch(nowMs)
+  rememberUtmTouch(undefined, nowMs)
+  const held = readHeld(store, nowMs)
+  if (!held?.labels && !held?.page) return []
+  const claimed: string[] = []
+  for (const raw of keys) {
+    const key = typeof raw === 'string' ? raw.trim().slice(0, MAX_CLAIM_KEY) : ''
+    if (key && !claimed.includes(key)) claimed.push(key)
+  }
+  return claimed
 }

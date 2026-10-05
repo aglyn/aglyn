@@ -35,11 +35,6 @@ import {
 import type { ReceivedEmail } from '@aglyn/shared-util-email'
 import { visibleToHost } from '@aglyn/aglyn/app-utils/scope-tokens'
 import { findContactByEmail } from '@aglyn/tenant-data-admin/server/contact-email-index'
-import {
-  createCrmEmailActivity,
-  crmCapturedEmailActivityRef,
-  newCrmActivityRef,
-} from '@aglyn/tenant-data-admin/server/crm-email-activity'
 import { countCrmActivitiesForRecord } from '@aglyn/tenant-data-admin/server/crm-records'
 import {
   buildCrmCapturedEmailActivity,
@@ -50,6 +45,11 @@ import {
   isCrmInboundToken,
   mintCrmInboundToken,
 } from '../model/crm-inbound'
+import {
+  createCrmEmailActivity,
+  crmCapturedEmailActivityRef,
+  newCrmActivityRef,
+} from './crm-email-activity'
 
 /**
  * EMAIL CAPTURE (AGL-2657): the half with Firestore.

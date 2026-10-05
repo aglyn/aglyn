@@ -479,21 +479,20 @@ jest.mock('@aglyn/tenant-data-admin/server/organizations', () => ({
 }))
 
 /**
- * The one-to-one email's timeline write (AGL-2615), doubled at its leaf.
+ * The one-to-one email's timeline entry (AGL-2615, AGL-3080), doubled at the
+ * record timeline's seam.
  *
- * The writer's own rules — forward-only, transactional, never throwing —
- * are proven against a Firestore double in `tenant-data-admin`. What only
- * this file can prove is what the WEBHOOK hands it: which events reach it,
- * from which tags, in the log's vocabulary rather than the provider's. The
- * event-to-state mapping is the real one, so a spec here cannot pass on a
- * vocabulary the writer does not speak.
+ * Which entry the tags name, the state an event moves it to, and the
+ * forward-only write are the record system's, proven in the CRM's own spec.
+ * What only this file can prove is what the WEBHOOK hands it: which events
+ * reach it, with every tag the message carried, in the log's vocabulary
+ * rather than the provider's.
  */
 const recordedCrmDeliveries: Array<Record<string, unknown>> = []
-jest.mock('@aglyn/tenant-data-admin/server/crm-email-activity', () => ({
-  ...jest.requireActual('@aglyn/tenant-data-admin/server/crm-email-activity'),
-  recordCrmEmailDelivery: async (_firestore: unknown, input: Record<string, unknown>) => {
-    recordedCrmDeliveries.push(input)
-    return 'advanced'
+jest.mock('@aglyn/aglyn/plugin-manager/plugin-record-timeline', () => ({
+  ...jest.requireActual('@aglyn/aglyn/plugin-manager/plugin-record-timeline'),
+  recordPluginTaggedEmailDelivery: async (request: Record<string, unknown>) => {
+    recordedCrmDeliveries.push(request)
   },
 }))
 
@@ -2136,28 +2135,28 @@ describe('a one-to-one CRM email', () => {
     },
   })
 
-  it('moves the activity to delivered, and still needs no campaign', async () => {
+  it('hands the record system a delivered event with every tag, and still needs no campaign', async () => {
     const result = await deliver(withMessage('email.delivered', CRM_TAGS))
 
     expect(result.status).toBe(200)
     expect(recordedCrmDeliveries).toEqual([
-      { orgId: ORG, activityId: ACTIVITY, state: 'delivered', atMs: expect.any(Number) },
+      { tags: CRM_TAGS, event: 'delivered', atMs: expect.any(Number) },
     ])
     // Not a campaign: the campaign denominator is untouched and nothing
     // was re-created under the host.
     expect(writtenPaths()).toEqual([])
   })
 
-  it('moves it to opened and clicked from the engagement events', async () => {
+  it('hands it the engagement events, in the log’s vocabulary', async () => {
     await deliver(withMessage('email.opened', CRM_TAGS))
     await deliver(withMessage('email.clicked', CRM_TAGS))
 
-    expect(recordedCrmDeliveries.map((one) => one['state'])).toEqual(['opened', 'clicked'])
+    expect(recordedCrmDeliveries.map((one) => one['event'])).toEqual(['opened', 'clicked'])
     expect(errors).toEqual([])
   })
 
-  it('moves it to bounced and still suppresses the address', async () => {
-    // A message id, because the state is read off the NORMALIZED event and
+  it('hands it a bounce and still suppresses the address', async () => {
+    // A message id, because the event is read off the NORMALIZED event and
     // the adapter files nothing it cannot key by message.
     await deliver(
       failure(
@@ -2171,32 +2170,19 @@ describe('a one-to-one CRM email', () => {
     )
 
     expect(recordedCrmDeliveries).toEqual([
-      { orgId: ORG, activityId: ACTIVITY, state: 'bounced', atMs: expect.any(Number) },
+      { tags: CRM_TAGS, event: 'bounced', atMs: expect.any(Number) },
     ])
     expect(docs.get(SUPPRESSION_PATH)?.reason).toBe('bounce')
   })
 
-  it('moves it to complained', async () => {
+  it('hands it a complaint', async () => {
     await deliver(failure('email.complained', { email_id: 'email_complained_1' }, CRM_TAGS))
-    expect(recordedCrmDeliveries[0]).toMatchObject({ state: 'complained' })
+    expect(recordedCrmDeliveries[0]).toMatchObject({ event: 'complained' })
   })
 
-  it('writes nothing for a message that names no activity', async () => {
-    await deliver(withMessage('email.delivered', { context: 'invite', hostId: HOST }))
-    expect(recordedCrmDeliveries).toEqual([])
-  })
-
-  it('writes nothing for an id that names a path rather than a document', async () => {
-    await deliver(
-      withMessage('email.delivered', { ...CRM_TAGS, activityId: 'a/b' }),
-    )
-    await deliver(withMessage('email.delivered', { ...CRM_TAGS, orgId: '__x__' }))
-    expect(recordedCrmDeliveries).toEqual([])
-  })
-
-  it('leaves an event with no state of its own alone', async () => {
-    // `email.sent` is gated out above the campaign counters; a CRM row
-    // starts at `sent` when it is written, so nothing is owed here.
+  it('hands it nothing for an event that never reaches the gates', async () => {
+    // `email.sent` is answered before the delivery gates; an entry starts at
+    // `sent` when it is written, so nothing is owed here.
     await deliver(withMessage('email.sent', CRM_TAGS))
     expect(recordedCrmDeliveries).toEqual([])
   })

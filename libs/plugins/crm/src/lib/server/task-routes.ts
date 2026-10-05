@@ -24,9 +24,6 @@ import {
   crmScopeTokens,
   crmTaskListFields,
   crmTaskStatusWrite,
-  crmTaskReminderAfterEdit,
-  crmTaskReminderPending,
-  crmTaskReminderWhen,
   isOrgWideMember,
   memberCanSee,
   type PluginApiHandler,
@@ -34,12 +31,10 @@ import {
   type PluginApiResponse,
 } from '@aglyn/aglyn/server'
 import {
-  crmNextActivityLinksOf,
   firebaseAdmin,
   getOrgForHost,
   memberHasOrgPermission,
   notifyUsers,
-  recomputeCrmNextTaskAt,
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
 import { emitHostEvent } from '@aglyn/tenant-runtime'
@@ -65,6 +60,12 @@ import {
   readCrmRouteScope,
 } from './org-caller'
 import { crmSuiteRefusal } from './suite-gate'
+import {
+  crmTaskReminderAfterEdit,
+  crmTaskReminderPending,
+  crmTaskReminderWhen,
+} from '../model/crm-task-reminders'
+import { crmNextActivityLinksOf, recomputeCrmNextTaskAt } from './crm-next-activity'
 
 /**
  * The two things a task does that a browser must not do alone (AGL-2599).

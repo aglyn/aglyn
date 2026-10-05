@@ -9,6 +9,37 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.223 — 2026-10-05
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/03858b42b...v1.0.0-beta.223)
+
+### Added
+
+- **marketing:** a campaign gets credit for visits and conversions without UTMs, its page opens on what it caused, and Inbox and alert links name the campaign ([AGL-3461](https://linear.app/aglyn/issue/AGL-3461))
+- **ops:** a five-minute render monitor fetches uncached pages from the console ([AGL-3568](https://linear.app/aglyn/issue/AGL-3568))
+- **console:** the production canary raises an operator alert on a failed deploy ([AGL-3567](https://linear.app/aglyn/issue/AGL-3567))
+- **ci:** a production canary reads production after every tenant/console deploy and rolls back a red one ([AGL-3567](https://linear.app/aglyn/issue/AGL-3567))
+
+### Fixed
+
+- **console:** the production build turns off Turbopack's build cache to fit the 8 GB builder ([AGL-3570](https://linear.app/aglyn/issue/AGL-3570))
+- **forms:** form leads carry their campaign, auto-replies are transactional, and every workflow runs ([AGL-3458](https://linear.app/aglyn/issue/AGL-3458))
+- **abuse:** one fraud row per charge; a late Stripe signal joins it ([AGL-3490](https://linear.app/aglyn/issue/AGL-3490))
+- **tenant:** a page render awaits no network call without a real deadline ([AGL-3569](https://linear.app/aglyn/issue/AGL-3569))
+- **tenant:** a page never waits on a theme font stylesheet past its deadline ([AGL-3564](https://linear.app/aglyn/issue/AGL-3564))
+- **theme:** every button color has a legible hover in both schemes ([AGL-3465](https://linear.app/aglyn/issue/AGL-3465))
+
+### Tests
+
+- **tools:** the client-site seed names its fixed ids through key functions ([AGL-3566](https://linear.app/aglyn/issue/AGL-3566))
+- **aglyn:** the self-host sweep reads the production canary as operator tooling ([AGL-3567](https://linear.app/aglyn/issue/AGL-3567))
+- **tenant:** the production smoke renders a client-shaped site under a route budget ([AGL-3566](https://linear.app/aglyn/issue/AGL-3566))
+
+### Changed
+
+- **plugins:** the record system moves a delivered message's timeline entry ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **crm:** a record's next activity and a task's reminder are the CRM's model ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+
 ## v1.0.0-beta.222 — 2026-10-05
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.221...v1.0.0-beta.222)

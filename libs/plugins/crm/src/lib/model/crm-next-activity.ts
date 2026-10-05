@@ -28,7 +28,7 @@
  * route is its door for client-direct task writes.
  */
 
-import type { CrmDeal, CrmTask, CrmViewFilterClause } from './crm'
+import type { CrmDeal, CrmTask, CrmViewFilterClause } from '@aglyn/aglyn/app-utils/crm'
 
 /** The field on a contact, a company and a deal — the one name every list reads. */
 export const CRM_NEXT_ACTIVITY_FIELD = 'nextTaskAtMs'

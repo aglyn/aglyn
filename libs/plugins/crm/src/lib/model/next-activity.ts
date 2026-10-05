@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-import type { CrmNextActivityLink } from '@aglyn/aglyn'
 import type { CrmTaskRouteScope } from './task-routes'
+import { type CrmNextActivityLink } from './crm-next-activity'
 
 /**
  * The contract between the console and the plugin's next-activity route

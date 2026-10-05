@@ -373,6 +373,23 @@ const AGLYN_CONFIG = {
      */
     workerThreads: false,
 
+    /**
+     * Turbopack's on-disk build cache, which Next 16.3 turns on by default,
+     * stays off (AGL-3570).
+     *
+     * With it on, Turbopack tracks dependencies in memory for the whole
+     * compile, then writes the cache (1.3 GB for the console) to
+     * `.next/cache` while the page-data workers run. Vercel restores that
+     * directory into the next build, and the restored cache makes the build
+     * bigger, not faster. On an 8 GB builder the console then stalls with no
+     * error and no OOM kill: beta.222 sat at "Collecting page data" until the
+     * 45-minute limit, and its cacheless retry sat in the compile.
+     * Measured locally, a cold console build peaked at 8.3 GB in the
+     * `next-build` process with the cache on and 6.3 GB with it off, and
+     * finished sooner.
+     */
+    turbopackFileSystemCacheForBuild: false,
+
     /** Trades some build speed for a smaller webpack heap (AGL-563). */
     webpackMemoryOptimizations: true,
 

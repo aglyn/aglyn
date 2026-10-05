@@ -41,6 +41,8 @@ let mockActivityCount = 0
 let minted = 0
 /** Set to make every Firestore read throw. */
 let storageDown = false
+/** Every lead assignment the owner step asked for (AGL-3458). */
+let mockLeadAssignments: Record<string, any>[] = []
 
 jest.mock('firebase-admin/firestore', () => ({
   __esModule: true,
@@ -126,20 +128,40 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   }),
   restampCrmListFieldsAt: async () => 'current',
   countCrmActivitiesForRecord: async () => mockActivityCount,
-  recomputeCrmNextTaskAt: async () => ({ records: 0, missing: 0 }),
   newCrmActivityRef: (_firestore: unknown, orgId: string) =>
     mockCollectionRef(`orgs/${orgId}/crmActivities`).doc(),
   writeCrmEmailActivity: async (ref: any, activity: Record<string, any>) => ref.set(activity),
+}))
+
+jest.mock('./crm-next-activity', () => ({
+  __esModule: true,
+  ...jest.requireActual('./crm-next-activity'),
+  recomputeCrmNextTaskAt: async () => ({ records: 0, missing: 0 }),
 }))
 
 jest.mock('./assign-contact-owner', () => ({
   __esModule: true,
   OWNER_ASSIGNMENT_REFUSALS: {},
   reassignContactOwner: async () => ({ outcome: 'unchanged', ownerUid: 'uid-sam' }),
+  // The rotation's own transaction is `assign-contact-owner.spec.ts`'s; here
+  // the step's request, and the owner it wrote on the lead the event names.
+  reassignLeadOwner: async (input: Record<string, any>) => {
+    mockLeadAssignments.push(input)
+    const path = `orgs/${ORG_ID}/leads/${input['leadId']}`
+    store[path] = { ...(store[path] ?? {}), ownerUid: 'uid-sam' }
+    return {
+      outcome: 'assigned',
+      ownerUid: 'uid-sam',
+      by: 'roundRobin',
+      leadMirrored: false,
+      notified: true,
+    }
+  },
 }))
 
 import { CRM_ACTIVITIES_PER_RECORD_CEILING } from '@aglyn/aglyn/app-utils/crm'
 import { declaredServerSteps, type ServerStepRequest } from '@aglyn/aglyn/plugin-manager/plugin-server-steps'
+import { personKey } from '@aglyn/aglyn/server'
 import { BUNDLE_ID, CRM_STEP_TYPES } from '../constants/bundle-common'
 import { prepareCrmRecordEmail, runCrmAutomationStep } from './automation-steps'
 
@@ -177,6 +199,7 @@ beforeEach(() => {
   mockActivityCount = 0
   minted = 0
   storageDown = false
+  mockLeadAssignments = []
   store[`orgs/${ORG_ID}`] = BUSINESS
   store[contactPath] = {
     email: 'ada@example.com',
@@ -249,8 +272,106 @@ describe('a CRM step', () => {
     store[contactPath]['visibleTo'] = ['host:other-site']
     expect(
       await runCrmAutomationStep(stepRequest({ type: 'addContactTag', tag: 'vip' }, { contactId: 'contact-1' })),
-    ).toEqual({ error: 'no contact this site can see for contact-1' })
+    ).toEqual({ error: 'no contact or lead this site can see for contact-1' })
     expect(updates).toEqual([])
+  })
+})
+
+/*
+ * AGL-3458 — a lead-routed form files a LEAD and no contact, so the steps a
+ * welcome automation runs act on the lead the `lead` event names.
+ */
+describe('a CRM step on a lead, when the workspace holds no contact', () => {
+  const LEAD_KEY = 'lead-key-1'
+  const leadPath = `orgs/${ORG_ID}/leads/${LEAD_KEY}`
+  const onLead = { leadId: LEAD_KEY, email: 'lead@example.com' }
+
+  beforeEach(() => {
+    store[leadPath] = { email: 'lead@example.com', visibleTo: [`host:${HOST_ID}`] }
+  })
+
+  it('rotates in an owner on the LEAD, through the lead assignment', async () => {
+    const answer = await runCrmAutomationStep(stepRequest({ type: 'assignContactOwner', roundRobin: true }, onLead))
+    expect(mockLeadAssignments).toEqual([{ hostId: HOST_ID, leadId: LEAD_KEY, assign: { roundRobin: true } }])
+    expect(answer).toEqual({ detail: 'round robin → uid-sam (lead)' })
+  })
+
+  it('books the task on the lead, for the owner a step before it just chose', async () => {
+    await runCrmAutomationStep(stepRequest({ type: 'assignContactOwner', roundRobin: true }, onLead))
+    const answer = await runCrmAutomationStep(
+      stepRequest({ type: 'createCrmTask', title: 'Call the new lead', kind: 'call', dueInDays: 1 }, onLead),
+    )
+    expect(answer).toEqual({ detail: 'Call the new lead (lead)' })
+    const [task] = childrenOf(`orgs/${ORG_ID}/crmTasks`).map((key) => store[key])
+    expect(task).toMatchObject({
+      title: 'Call the new lead',
+      leadId: LEAD_KEY,
+      assigneeUid: 'uid-sam',
+      sourceActionId: 'action-1',
+      hostId: HOST_ID,
+    })
+    expect(task?.['contactId']).toBeUndefined()
+  })
+
+  it('tags the lead itself, with arrayUnion', async () => {
+    const answer = await runCrmAutomationStep(stepRequest({ type: 'addContactTag', tag: 'website' }, onLead))
+    expect(answer).toEqual({ detail: 'website (lead)' })
+    expect(updates).toEqual([
+      { path: leadPath, data: { tags: { __arrayUnion: ['website'] }, updatedAt: 'server-timestamp' } },
+    ])
+  })
+
+  it('logs an activity under the lead', async () => {
+    await runCrmAutomationStep(stepRequest({ type: 'logCrmActivity', kind: 'note', body: 'Welcomed' }, onLead))
+    const [row] = childrenOf(`orgs/${ORG_ID}/crmActivities`).map((key) => store[key])
+    expect(row).toMatchObject({ body: 'Welcomed', leadId: LEAD_KEY, sourceActionId: 'action-1' })
+  })
+
+  it('refuses a stage on a lead, and says why', async () => {
+    const answer = await runCrmAutomationStep(
+      stepRequest({ type: 'setContactStage', lifecycleStage: 'customer' }, onLead),
+    )
+    expect(answer).toEqual({
+      error: 'the event names a lead, and a lead has no lifecycle stage until it is converted to a contact',
+    })
+    expect(updates).toEqual([])
+  })
+
+  it('finds the lead by its address when the event carries no leadId', async () => {
+    const byAddress = `orgs/${ORG_ID}/leads/${personKey('lead@example.com')}`
+    store[byAddress] = { email: 'lead@example.com', visibleTo: [`host:${HOST_ID}`] }
+    await runCrmAutomationStep(stepRequest({ type: 'addContactTag', tag: 'vip' }, { email: 'lead@example.com' }))
+    expect(updates.map((update) => update.path)).toEqual([byAddress])
+  })
+
+  it('treats a lead this site cannot see as nobody', async () => {
+    store[leadPath]['visibleTo'] = ['host:other-site']
+    expect(await runCrmAutomationStep(stepRequest({ type: 'addContactTag', tag: 'vip' }, onLead))).toEqual({
+      error: 'no contact or lead this site can see for lead@example.com',
+    })
+    expect(updates).toEqual([])
+  })
+
+  it('CONTROL: a contact for the address is still the one acted on', async () => {
+    await runCrmAutomationStep(stepRequest({ type: 'addContactTag', tag: 'vip' }, { ...onLead, email: 'ada@example.com' }))
+    expect(updates.map((update) => update.path)).toEqual([contactPath])
+  })
+
+  it('files the welcome email on the lead’s timeline', async () => {
+    // The timeline's link names the person by address; the lead is keyed by it.
+    store[`orgs/${ORG_ID}/leads/${personKey('lead@example.com')}`] = store[leadPath]
+    const prepared = await prepareCrmRecordEmail(
+      emailRequest({ to: 'lead@example.com', link: { email: 'lead@example.com' } }),
+    )
+    expect(prepared).not.toBeNull()
+    await prepared?.file({ subject: 'Thanks', body: 'Hi', to: 'lead@example.com', sourceRef: 'action-1' })
+    const [row] = childrenOf(`orgs/${ORG_ID}/crmActivities`).map((key) => store[key])
+    expect(row).toMatchObject({
+      kind: 'email',
+      subject: 'Thanks',
+      leadId: personKey('lead@example.com'),
+    })
+    expect(row?.['contactId']).toBeUndefined()
   })
 })
 

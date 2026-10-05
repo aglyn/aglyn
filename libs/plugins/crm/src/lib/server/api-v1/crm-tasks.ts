@@ -47,8 +47,6 @@ import {
   type CrmTaskPicklists,
   crmTaskPicklistLabels,
   type CrmTaskPriority,
-  crmTaskReminderAfterEdit,
-  crmTaskReminderPending,
   type CrmTaskStatus,
   createResourceUid,
   crmTaskListFields,
@@ -57,8 +55,6 @@ import {
 import {
   apiJson,
   ApiErrors,
-  crmNextActivityLinksOf,
-  recomputeCrmNextTaskAt,
   restampCrmListFieldsAt,
 } from '@aglyn/tenant-data-admin'
 import { FieldValue, Timestamp } from 'firebase-admin/firestore'
@@ -90,6 +86,8 @@ import {
   updatePayload,
 } from './crm-shared'
 import { readCrmTaskPicklists } from '../read-picklist'
+import { crmTaskReminderAfterEdit, crmTaskReminderPending } from '../../model/crm-task-reminders'
+import { crmNextActivityLinksOf, recomputeCrmNextTaskAt } from '../crm-next-activity'
 
 const TASK_STATUSES = ['open', 'done'] as const
 

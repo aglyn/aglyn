@@ -61,8 +61,13 @@ import {
   type CampaignRevenueRollup,
 } from '../model/campaign-revenue'
 import {
+  campaignVisitsReport,
+  type CampaignVisitRollup,
+} from '../model/campaign-visits'
+import {
   campaignSendReportDoc,
   campaignSequenceReportDoc,
+  campaignVisitReportDoc,
 } from './campaign-queries'
 
 /**
@@ -178,15 +183,25 @@ export function CampaignConversionsSection(
      */
     hostId: string
     /**
+     * The campaign CONTAINER's own id (AGL-3461). A conversion credited to a
+     * page filed under the campaign, to a link labeled for it, or to one of
+     * its sequences carries the container's id rather than a send's, so it
+     * is counted beside the sends' — and a campaign that never sent an email
+     * still has figures.
+     */
+    campaignId?: string
+    /**
      * That site's marketing hub URL, for its conversions list; `null` hides
      * the link rather than pointing it nowhere.
      */
     basePath: string | null
   },
 ) {
-  const { hostId, sendIds, truncated, basePath } = props
+  const { hostId, sendIds, truncated, basePath, campaignId } = props
   const firestore = useFirestore()
-  const key = idsKey(sendIds)
+  const key = idsKey(
+    campaignId ? [campaignId, ...sendIds.filter((id) => id !== campaignId)] : sendIds,
+  )
   const [counts, setCounts] = useState<Record<string, number> | null>(null)
   const [failed, setFailed] = useState(false)
 
@@ -272,10 +287,15 @@ export function CampaignConversionsSection(
               'form appears as a submission, a contact and a lead.'}
           </Typography>
           <Typography variant="caption" color="text.secondary">
-            {'Credited to this campaign’s own emails. Somebody who arrived ' +
-              'from a link tagged with utm_ parameters is credited to that ' +
-              'label instead, and somebody who arrived directly is credited ' +
-              'to nobody — both are counted on the site’s conversions list.'}
+            {(campaignId
+              ? 'Credited to this campaign — a click on one of its emails or ' +
+                'sequences, a link carrying a utm_campaign label it declares, ' +
+                'or a page filed under it, whichever touched the visitor last. '
+              : 'Credited to this email. ') +
+              'Somebody who arrived from a utm_ label no campaign declares is ' +
+              'credited to that label instead, and somebody who arrived ' +
+              'directly is credited to nobody — both are counted on the ' +
+              'site’s conversions list.'}
           </Typography>
           {truncated ? (
             <Typography variant="caption" color="text.secondary">
@@ -899,3 +919,87 @@ export function CampaignSequencesSection(props: {
   )
 }
 CampaignSequencesSection.displayName = 'CampaignSequencesSection'
+
+/**
+ * WHO IT REACHED ON THE SITE (AGL-3461) — first visits and views of the pages
+ * filed under the campaign.
+ *
+ * One keyed read of `orgs/{orgId}/campaignVisitReports/{campaignId}`, which the
+ * site collector's `campaignVisit` beacon writes: keyed by the campaign's own
+ * id, so this costs one document whatever the traffic. Across every site the
+ * campaign is placed on, because the visitors are the campaign's whichever of
+ * them they read.
+ *
+ * Absent is not zero, for the sequences section's reason: a campaign whose
+ * pages nobody has opened since counting began has no document, and says so.
+ */
+export function CampaignVisitsSection(props: {
+  orgId: string | null
+  campaignId: string
+}) {
+  const { orgId, campaignId } = props
+  const firestore = useFirestore()
+  const [rollup, setRollup] = useState<CampaignVisitRollup | undefined | null>(null)
+  const [failed, setFailed] = useState(false)
+
+  useEffect(() => {
+    let active = true
+    setRollup(null)
+    setFailed(false)
+    if (!orgId) return undefined
+    getDoc(campaignVisitReportDoc(firestore, orgId, campaignId))
+      .then((snapshot) => {
+        if (active) setRollup((snapshot.data() as CampaignVisitRollup | undefined) ?? undefined)
+      })
+      .catch(() => {
+        // Withheld, never zeroed — the conversions section's reason.
+        if (active) setFailed(true)
+      })
+    return () => {
+      active = false
+    }
+  }, [firestore, orgId, campaignId])
+
+  const report = rollup === null ? null : campaignVisitsReport(rollup)
+
+  return (
+    <Section title="Who it reached">
+      {failed ? (
+        <Alert severity="warning">{'The visits to this campaign could not be read.'}</Alert>
+      ) : !report ? (
+        <Typography variant="body2" color="text.secondary">
+          {'Reading the visits to this campaign…'}
+        </Typography>
+      ) : !report.recorded ? (
+        <Typography variant="body2" color="text.secondary">
+          {'No visits yet. File a page under this campaign — or give it the ' +
+            'utm_campaign labels its links carry — and visitors count here ' +
+            'from their next visit.'}
+        </Typography>
+      ) : (
+        <Stack spacing={1}>
+          <Stack direction="row" spacing={3} sx={{ flexWrap: 'wrap' }}>
+            <Figure
+              label="First visits"
+              value={report.firstVisits}
+              note={`visitors reaching it for the first time in ${EMAIL_ATTRIBUTION_WINDOW_DAYS} days`}
+            />
+            <Figure label="Page views" value={report.views} note="views of the pages filed under it" />
+          </Stack>
+          <Typography variant="caption" color="text.secondary">
+            {'A first visit is a visitor reaching this campaign — on a page filed ' +
+              'under it, or from a link labeled for it — who has not reached it ' +
+              `in the last ${EMAIL_ATTRIBUTION_WINDOW_DAYS} days. It is counted ` +
+              'only where the visitor’s device may remember the visit, so ' +
+              'visitors who declined analytics storage are in the page views and ' +
+              'not here. Across every site the campaign is placed on' +
+              (report.since
+                ? `, since ${new Date(`${report.since}-01T00:00:00Z`).toLocaleDateString(undefined, { month: 'long', year: 'numeric', timeZone: 'UTC' })}.`
+                : '.')}
+          </Typography>
+        </Stack>
+      )}
+    </Section>
+  )
+}
+CampaignVisitsSection.displayName = 'CampaignVisitsSection'

@@ -146,14 +146,17 @@ describe('the conversions section never totals the kinds', () => {
   })
 
   /**
-   * The rollup is incremented for the EMAIL channel only — a `utm_` label has
-   * no document to hang a report on and an unbounded key space to grow one
-   * with. A reader looking at these figures has to be told what is not in
-   * them, or they read as every conversion the campaign caused.
+   * The rollup is incremented for this email's clicks only. A page filed
+   * under the campaign and a label it declares credit the campaign CONTAINER,
+   * counted on the campaign's own page (AGL-3461), and an undeclared `utm_`
+   * label has no document to hang a report on. A reader looking at these
+   * figures has to be told what is not in them, or they read as every
+   * conversion the campaign caused.
    */
-  it('says the figures cover campaign emails and not tagged links', async () => {
+  it('says the figures cover this email, and where the rest are counted', async () => {
     await renderReport(ROLLUP)
-    expect(screen.getByText(/Campaign emails only/i)).toBeTruthy()
+    expect(screen.getByText(/This email only/i)).toBeTruthy()
+    expect(screen.getByText(/counted on the campaign’s own page/i)).toBeTruthy()
   })
 
   /**

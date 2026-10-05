@@ -1050,15 +1050,20 @@ draws. The plugin whose console page shows a kind declares it in
 `plugins.config.json`, and the manifest generator compiles it:
 
 ```json
-"recordPages": [{ "kind": "formSubmission", "path": "/inbox" }]
+"recordPages": [{
+  "kind": "formSubmission",
+  "path": "/inbox",
+  "record": { "path": "/inbox/submissions", "param": "submission" }
+}]
 ```
 
 | Field / API | Semantics |
 | --- | --- |
 | `kind` | The record kind, as the routes and indexes key it. One page per kind. |
 | `path` | The site console path the kind is read on, under one of the declaring plugin's own console routes, or the generator refuses it. |
+| `record` | Optional: where ONE record opens — a `path` under the same routes, and the plain query key (`param`) the page reads the record's id from. |
 | `pluginRecordPage(kind)` | The declaration, or `null` when no plugin in the build shows the kind. |
-| `pluginRecordPageLink(kind, hostId)` | `/{hostId}{path}`, the shape a notification's `link` takes, or `null`, in which case the notification goes without a link. |
+| `pluginRecordPageLink(kind, hostId, recordId?)` | `/{hostId}{path}`, the shape a notification's `link` takes, or `null`, in which case the notification goes without a link. With `recordId` and a declared `record`, `/{hostId}{record.path}?{param}={id}`, so a notification about one record opens it. |
 
 The Inbox declares `formSubmission`.
 
@@ -1697,6 +1702,7 @@ await recordCapturedContact({ …, detail: { [CONVERSION_TOUCH_DETAIL]: touch } 
 | `recordConversionClick({ email, hostId, creditTo, atMs, via? })` | A person followed a link in mail a plugin sent them; `via` is the sender's own facts (its sequence, its enrollment). |
 | `creditConversionOutcome({ hostId, orgId?, containerIds, outcome, atMs? })` | What a plugin's own record produced, counted under the containers it is filed in (`plugin-containers`). |
 | `eraseConversionCredits(key)` | Everything the creditor holds about a person, by `personKey`, on every site — called by the platform's address erasure beside the delivery log. |
+| `describeConversion({ hostId, touch?, containerIds? })` | The touch a door resolved and the containers its record is filed under, in words: `credited` (`label`, `how`, `containerId?`) and `filedUnder` (`id`, `label`, in the order asked, deleted ones left out) — what a door's alert says about where an outcome came from. `null` when nobody credits, or the creditor does not describe (the method is optional). `conversionDescriptionSentences(description)` turns it into the sentences an alert appends — "Credited to …: the visitor …" and "Filed under …", never one worded as the other. |
 
 Nothing here throws: every door has already done the thing being credited.
 The first call that finds no creditor runs the app's boot step once and asks
@@ -1834,6 +1840,7 @@ if (result.sent) await entry?.file({ subject, body: text, to, sourceRef: automat
 | --- | --- |
 | `preparePluginRecordEmail(request)` | `{ tags, file }`, or `null` when no plugin keeps records, the one that does files no sent mail, or the message earns no entry — it is not addressed to the person `link` finds, the plan carries no record system, or the record is at its activity ceiling. Never throws; neither does `file`. |
 | `writer.prepareEmail(request)` | Optional on the writer: what the record system answers. Nothing is written until `file`. |
+| `recordPluginTaggedEmailDelivery({ tags, event, atMs })` | What the delivery webhook calls for every delivery event: every tag the message carried and the event in the delivery log's vocabulary (`delivered`, `opened`, `clicked`, `bounced`, `complained`). The record system moves the entry its own tags name, forward only, and leaves tags it did not put there. Does nothing with no record system; never throws. |
 
 The automation engine offers every `sendEmail` step this way; the CRM files
 the entry when the message goes to the contact the event is about, with the
@@ -2161,7 +2168,10 @@ plugin's declarations never ran:
 A recipe that needs a record picked first — "Tag by form" needs the form —
 names it in `picks`: the record `kind`, listed through the kind's
 `plugin-record-lists` source, and the words the picker asks in (`label`,
-`plural`, `prompt`, `none`). It receives the pick as `build({ picked: { id, name } })`.
+`plural`, `prompt`, `none`). It receives the pick as `build({ picked: { id, name, facts } })`,
+where `facts` are what the kind's owner shares about the record through its list source —
+the Forms plugin shares `routesLeads`, so "Tag by form" listens for a new lead on a form
+that files leads.
 
 | API | Semantics |
 | --- | --- |

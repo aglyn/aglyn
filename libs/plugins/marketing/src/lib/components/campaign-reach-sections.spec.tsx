@@ -224,10 +224,10 @@ describe('what a campaign caused', () => {
     )
     await settle()
 
-    // A campaign container carries no `utm_` label, so the web channel can
-    // never join to it; a conversion with no touch is credited to nobody.
-    // Both are on the site's list, and the copy sends the reader there.
-    expect(screen.getByText(/utm_ parameters/)).toBeTruthy()
+    // A `utm_` label no campaign declares names no campaign, so the web
+    // channel cannot join it here; a conversion with no touch is credited to
+    // nobody. Both are on the site's list, and the copy sends the reader there.
+    expect(screen.getByText(/utm_ label no campaign declares/)).toBeTruthy()
     expect(screen.getByText(/arrived directly/)).toBeTruthy()
     expect(
       screen.getByText('All conversions').closest('a')?.getAttribute('href'),

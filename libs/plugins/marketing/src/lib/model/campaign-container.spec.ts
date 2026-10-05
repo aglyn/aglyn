@@ -30,6 +30,9 @@
  */
 
 import {
+  CAMPAIGN_UTM_LABELS_MAX,
+  campaignUtmLabels,
+  normalizeCampaignUtmLabel,
   campaignListRows,
   campaignRollup,
   campaignSendDisplay,
@@ -438,5 +441,22 @@ describe('an unsent email is not rolled up as a send', () => {
     expect(rollup.drafts).toBe(0)
     expect(rollup.delivered.value).toBe(180)
     expect(rollup.delivered.sends).toBe(2)
+  })
+})
+
+describe('the utm_campaign labels a campaign answers to (AGL-3461)', () => {
+  it('normalizes a label the way the lookup matches it', () => {
+    expect(normalizeCampaignUtmLabel('  OneJob-AI ')).toBe('onejob-ai')
+    expect(normalizeCampaignUtmLabel('buyer@example.com')).toBe('')
+    expect(normalizeCampaignUtmLabel(42)).toBe('')
+  })
+
+  it('reads the stored array or the drawer’s text, deduped and capped', () => {
+    expect(campaignUtmLabels('vibe-coders, RT-Vibe\nvibe-coders,,')).toEqual(['vibe-coders', 'rt-vibe'])
+    expect(campaignUtmLabels(['onejob-ai', 'ONEJOB-AI', ''])).toEqual(['onejob-ai'])
+    expect(campaignUtmLabels(Array.from({ length: 30 }, (_, i) => `l${i}`))).toHaveLength(
+      CAMPAIGN_UTM_LABELS_MAX,
+    )
+    expect(campaignUtmLabels(undefined)).toEqual([])
   })
 })

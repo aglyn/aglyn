@@ -34,7 +34,14 @@ import {
   tenantDataTag,
   withRenderCache,
 } from '@aglyn/tenant-data-admin/render-cache'
+import { boundedAwait } from '@aglyn/shared-util-http/bounded-await'
 import { FieldValue } from 'firebase-admin/firestore'
+
+/**
+ * How long a render waits on the phishing review of an off-site rule before
+ * treating the rule as held for this request (AGL-3565).
+ */
+const REDIRECT_REVIEW_DEADLINE_MS = 5_000
 
 /**
  * One of three per-render reads AGL-1302 left uncached (AGL-1440).
@@ -142,18 +149,29 @@ export async function resolveRedirect(
     // not fire and is not counted; the request resolves as if it had no rule.
     // Outside the cache, like the paid gate: a staff decision takes effect on
     // the next request, not at the end of an hour.
+    //
+    // The review asks Google Web Risk and, for a rule it holds, files the hold
+    // and tells staff — all inside this page render. It answers within a
+    // deadline or the rule is treated as held, as the review itself fails
+    // closed; the review carries on behind the page, so the next request
+    // reads its decision (AGL-3565).
     if (isExternalRedirectDestination(matched.destination)) {
-      const review = await reviewSiteRedirect({
-        hostId: host.$id,
-        ruleId: matchId,
-        source: ruleList[matched.index].source,
-        destination: matched.destination,
-        // The resolved host doc, when the hook handed one over; read otherwise.
-        host: typeof host['subdomain'] === 'string' ? host : undefined,
-        org: (owner?.org as Record<string, unknown> | undefined) ?? null,
-        orgId: owner?.orgId ?? null,
-      })
-      if (review.outcome !== 'serve') return null
+      const review = await boundedAwait(
+        reviewSiteRedirect({
+          hostId: host.$id,
+          ruleId: matchId,
+          source: ruleList[matched.index].source,
+          destination: matched.destination,
+          // The resolved host doc, when the hook handed one over; read otherwise.
+          host: typeof host['subdomain'] === 'string' ? host : undefined,
+          org: (owner?.org as Record<string, unknown> | undefined) ?? null,
+          orgId: owner?.orgId ?? null,
+        }),
+        REDIRECT_REVIEW_DEADLINE_MS,
+        null,
+        'redirects.site-redirect-review',
+      )
+      if (review?.outcome !== 'serve') return null
     }
 
     // Sampled hit recording (fire-and-forget): day-doc counter + recency

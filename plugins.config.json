@@ -177,10 +177,12 @@
       ],
       "hostEvents": [
         {
+          "$comment": "`formId` is the submitted form's id, present only when the form exists on the site (AGL-3458), so a condition keyed on it survives the form being renamed where one on `formName` does not.",
           "type": "formSubmission",
           "order": 10,
           "label": "Form submitted",
-          "payloadKeys": ["formName", "path", "and every submitted field by name"]
+          "payloadKeys": ["formId", "formName", "path", "and every submitted field by name"],
+          "recipientActed": true
         }
       ],
       "visitorDoors": [
@@ -335,7 +337,8 @@
           "type": "booking",
           "order": 70,
           "label": "New booking",
-          "payloadKeys": ["serviceName", "email", "startsAtMs"]
+          "payloadKeys": ["serviceName", "email", "startsAtMs"],
+          "recipientActed": true
         }
       ],
       "transferResources": [
@@ -659,7 +662,8 @@
           "type": "memberSignUp",
           "order": 30,
           "label": "Member signed up",
-          "payloadKeys": ["email"]
+          "payloadKeys": ["email"],
+          "recipientActed": true
         },
         {
           "type": "memberSignIn",
@@ -1021,10 +1025,12 @@
       ],
       "hostEvents": [
         {
+          "$comment": "Raised when a capture files a NEW lead — a lead-routed form or a booking request (AGL-3232). `formId` is present only when a form filed it (AGL-3458), and `campaignIds` only when the capture surface is filed under campaigns, comma-joined as on `contactCreated`.",
           "type": "lead",
           "order": 60,
           "label": "New lead",
-          "payloadKeys": ["email", "source", "leadId"]
+          "payloadKeys": ["leadId", "email", "name", "source", "hostId", "formId", "campaignIds"],
+          "recipientActed": true
         },
         {
           "$comment": "Raised by the console's `crm/task-complete` route rather than by a Firestore trigger, so the payload names who completed the task and what it hung off (AGL-2599).",
@@ -1724,7 +1730,11 @@
       "recordPages": [
         {
           "kind": "formSubmission",
-          "path": "/inbox"
+          "path": "/inbox",
+          "record": {
+            "path": "/inbox/submissions",
+            "param": "submission"
+          }
         }
       ],
       "contributes": {
