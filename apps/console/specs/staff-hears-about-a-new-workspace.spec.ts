@@ -77,6 +77,7 @@ jest.mock('@aglyn/aglyn/server', () => ({
   // exercised if this can actually say yes (AGL-3248).
   isSignupCanaryOrgSlug: (slug: string) =>
     typeof slug === 'string' && slug.startsWith('signup-canary-'),
+  isSignupCanaryEmail: () => false,
   pluginRequestFromWeb: async (request: Request) => ({
     method: request.method,
     body: await request.json().catch(() => ({})),

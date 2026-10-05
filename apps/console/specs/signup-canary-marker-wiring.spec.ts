@@ -307,10 +307,24 @@ describe('the canary is excluded from the drought it would otherwise trip', () =
  * changes.
  */
 describe('the canary does not announce itself to staff', () => {
-  it('the workspace announcement is guarded by the slug', () => {
-    expect(CREATE_ROUTE).toMatch(
-      /if \(!isSignupCanaryOrgSlug\(slug\)\) \{\s*await notifyStaff\(\{\s*type: 'staff\.orgCreated'/,
+  it('the workspace announcement is guarded by the slug, and by the address', () => {
+    // One announcer for every door that makes a workspace (AGL-3491): the
+    // guard lives there, and each door must go through it.
+    const ANNOUNCER = readFileSync(
+      join(REPO_ROOT, 'apps/console/app/api/_lib/growth-announcements.ts'),
+      'utf8',
     )
+    expect(ANNOUNCER).toMatch(
+      /if \(!isSignupCanaryOrgSlug\(slug\) && !isSignupCanaryEmail\(owner\.email\)\) \{\s*await notifyStaff\(\{\s*type: 'staff\.orgCreated'/,
+    )
+    const SITE_ROUTE = readFileSync(
+      join(REPO_ROOT, 'apps/console/app/api/hosts/create/route.ts'),
+      'utf8',
+    )
+    for (const door of [CREATE_ROUTE, SITE_ROUTE]) {
+      expect(door).toMatch(/await announceNewWorkspace\(\{/)
+      expect(door).not.toMatch(/type: 'staff\.orgCreated'/)
+    }
   })
 
   it('the account announcement is guarded by the address', () => {

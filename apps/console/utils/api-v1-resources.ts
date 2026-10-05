@@ -69,6 +69,7 @@ import { usageBand } from '@aglyn/tenant-data-admin/server/api-v1-kit'
 import { createHash, randomUUID } from 'crypto'
 import { Timestamp } from 'firebase-admin/firestore'
 import { type ApiV1Context, apiUsageMonth, requireScope } from './api-v1'
+import { announceNewSite } from '../app/api/_lib/growth-announcements'
 import {
   claimWrite,
   orgOwnsHost,
@@ -303,6 +304,14 @@ async function createSite(request: Request, ctx: ApiV1Context): Promise<Response
       subdomain,
     } as never)
     await claim.record(200, view)
+    // Told to staff like a console-made site (AGL-3491); never throws.
+    await announceNewSite({
+      hostId: created.hostId,
+      displayName,
+      subdomain,
+      orgSlug: (ctx.org.slug as string | undefined) ?? null,
+      createdBy: ctx.keyName ? `API key ${ctx.keyName}` : 'An API key',
+    })
     return apiJson(view, { status: 201, headers: ctx.headers })
   } catch (error) {
     await claim.release()
