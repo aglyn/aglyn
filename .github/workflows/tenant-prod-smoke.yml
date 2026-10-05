@@ -20,6 +20,18 @@ name: Tenant production smoke
 # So the defect was never the check. It was that the check was not a gate.
 #
 # ---------------------------------------------------------------------------
+# AND A GATE IS ONLY AS GOOD AS WHAT IT RENDERS (AGL-3566)
+# ---------------------------------------------------------------------------
+# beta.222 passed this job and then held every uncached client page to the
+# 60 s limit in production (AGL-3565): the site layout awaited a theme-font
+# fetch that never settled. The seeded `demo` site loads no fonts, so the
+# await returned at once, and nothing timed the routes. The smoke now renders
+# a site shaped like a client's — fonts, icons, logo, layout, component,
+# dataset, form, booking — under a per-route render budget, and renders it a
+# second time with the font origin hung. Against the pre-hotfix module that
+# second pass reds; see the script's header.
+#
+# ---------------------------------------------------------------------------
 # WHY HERE, AND NOT IN THE THREE PLACES THAT LOOK CLOSER
 # ---------------------------------------------------------------------------
 # Main Gate's `full` sweep. It already runs the production builds, so the smoke
@@ -142,6 +154,8 @@ jobs:
           {
             echo "### Tenant production smoke"
             echo
-            echo "A real \`next start\` server answered the seeded routes."
+            echo "A real \`next start\` server answered the seeded routes, each"
+            echo "within its render budget — the client-shaped site twice, once"
+            echo "against the live font origin and once with it hung (AGL-3566)."
             echo "Gated \`$(git rev-parse --short HEAD)\`."
           } >> "$GITHUB_STEP_SUMMARY"

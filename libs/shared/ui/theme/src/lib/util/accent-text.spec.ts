@@ -118,6 +118,12 @@ function cssVarValues(css: string, name: string): string[] {
 /** The accent-text shade each scheme authors, per `console.theme.ts`. */
 const ACCENT_TEXT_LIGHT = '#0077ad'
 const ACCENT_TEXT_DARK = '#4dc8ff'
+/**
+ * The light scheme's `primary.hoverText`: `#0077ad` is 4.54:1 on the page
+ * and 4.37:1 once MUI's hover wash is under it, so the hovered label walks
+ * one notch deeper (AGL-3465).
+ */
+const HOVER_TEXT_LIGHT = '#0073a8'
 
 describe('the brand blue paints every FILL; text takes the accent shade', () => {
   it('primary.main is `#00b0ff` in both schemes, untouched', () => {
@@ -140,15 +146,21 @@ describe('the brand blue paints every FILL; text takes the accent shade', () => 
   })
 
   it('a TEXT button label takes the accent-text shade', () => {
-    for (const [theme, accent] of [
-      [consoleThemeLight, ACCENT_TEXT_LIGHT],
-      [consoleThemeDark, ACCENT_TEXT_DARK],
+    // At rest, then under the pointer: the hover label is the same shade
+    // walked on until it clears AA over MUI's hover wash too (AGL-3465),
+    // which moves only the light scheme's.
+    for (const [theme, accent, hovered] of [
+      [consoleThemeLight, ACCENT_TEXT_LIGHT, HOVER_TEXT_LIGHT],
+      [consoleThemeDark, ACCENT_TEXT_DARK, ACCENT_TEXT_DARK],
     ] as const) {
       const css = renderCss(theme, MuiButton, {
         variant: 'text',
         color: 'primary',
       })
-      expect(cssVarValues(css, '--variant-textColor')).toEqual([accent])
+      expect(cssVarValues(css, '--variant-textColor')).toEqual([
+        accent,
+        hovered,
+      ])
     }
   })
 
@@ -162,6 +174,7 @@ describe('the brand blue paints every FILL; text takes the accent shade', () => 
     })
     expect(cssVarValues(css, '--variant-outlinedColor')).toEqual([
       ACCENT_TEXT_LIGHT,
+      HOVER_TEXT_LIGHT,
     ])
     expect(cssVarValues(css, '--variant-outlinedBorder')).toContain(
       'rgba(0, 176, 255, 0.5)',
@@ -218,16 +231,25 @@ describe('accentTextColor is wired to text properties ONLY', () => {
     }
   })
 
-  it('EXACTLY three properties emit a colour — swept, not spot-checked', () => {
-    // The sweep rather than two named components: an override that set any
-    // other foreground would be a repaint, whichever component grew it. What
-    // is checked is the RESULT, walked deeply, for any key or value carrying
-    // a colour — so the allowance below is the complete list of places an
-    // accent is painted as text, and anything new shows up here.
+  it('EXACTLY these properties emit a colour — swept, not spot-checked', () => {
+    // The sweep rather than named components: an override that set any
+    // other colour would be a repaint, whichever component grew it. What is
+    // checked is the RESULT, walked deeply, for any key or value carrying a
+    // colour — so the allowance below is the complete list of places an
+    // override paints one, and anything new shows up here.
+    //
+    // Three are the accent as text at rest. The hover entries (AGL-3465)
+    // are the hover slots: the fill a contained Button and a Fab take under
+    // the pointer, and the hovered text/outlined label.
+    const HOVER = '@media (hover: hover).&:hover'
     const allowed = new Set([
       'MuiButton.--variant-textColor',
       'MuiButton.--variant-outlinedColor',
       'MuiLink.color',
+      `MuiButton.${HOVER}.--variant-containedBg`,
+      `MuiButton.${HOVER}.--variant-textColor`,
+      `MuiButton.${HOVER}.--variant-outlinedColor`,
+      `MuiFab.${HOVER}.backgroundColor`,
     ])
     const offenders: string[] = []
     const walk = (label: string, value: unknown, path: string) => {
@@ -268,7 +290,8 @@ describe('accentTextColor is wired to text properties ONLY', () => {
       }
     }
     expect(offenders).toEqual([])
-    // And the allowance is not vacuous: those three ARE emitted, per scheme.
+    // And the allowance is not vacuous: the text three ARE emitted, per
+    // scheme. The hover entries are measured in `hover-shades.spec.ts`.
     for (const [theme, accent] of [
       [consoleThemeLight, ACCENT_TEXT_LIGHT],
       [consoleThemeDark, ACCENT_TEXT_DARK],

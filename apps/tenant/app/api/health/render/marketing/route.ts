@@ -47,7 +47,13 @@ import {
   type RenderCheck,
 } from '@aglyn/aglyn/server'
 
-import { marketingHost, PROBE_TTL_MS, probeRender } from '../canary'
+import {
+  marketingHost,
+  PROBE_TTL_MS,
+  probeDocument,
+  probeRender,
+  type DocumentCheck,
+} from '../canary'
 
 // lockdown-423: exempt — infrastructure monitoring probe; no org-scoped action.
 
@@ -59,12 +65,25 @@ export const revalidate = 0
 // The host is resolved INSIDE the probe, not captured at module load, so a
 // configuration change takes effect on the next probe rather than needing a
 // cold instance.
-const renderProbe = memoizeWithTtl<RenderCheck>(PROBE_TTL_MS, () =>
-  probeRender(marketingHost()),
-)
+//
+// `document` runs the site layout and the page head around the loader
+// (AGL-3568): the loader alone stayed green through the 2026-10-05 outage,
+// which hung in the layout. Both share one memo, so a probe stays one
+// computation per instance per TTL.
+const renderProbe = memoizeWithTtl<{
+  render: RenderCheck
+  document: DocumentCheck
+}>(PROBE_TTL_MS, async () => {
+  const host = marketingHost()
+  const [render, documentCheck] = await Promise.all([
+    probeRender(host),
+    probeDocument(host),
+  ])
+  return { render, document: documentCheck }
+})
 
 export async function GET(): Promise<Response> {
-  const checks = { render: await renderProbe() }
+  const checks = await renderProbe()
   const status = healthStatus(checks)
   return recordHealthResponse(
     Response.json(

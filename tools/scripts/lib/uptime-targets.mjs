@@ -216,7 +216,9 @@ export function evaluateCanaryReaders(
  *  - a HEALTH row only. A front-door page row (`kind: 'page'`) carries a slash
  *    in its name for readability and must never be eligible: a 404 on the page
  *    a visitor asks for is the AGL-786 defect wearing a different hostname, not
- *    a fact about the deploy queue (AGL-2709);
+ *    a fact about the deploy queue (AGL-2709). An uncached render row
+ *    (`kind: 'render'`, AGL-3568) is never eligible either: its 404 is
+ *    graded by its own probe, which expects one;
  *  - a 404 only (a 500 or a 503 from a route that DOES exist stays DOWN);
  *  - only while that target's own ROOT is UP. A deployment that is actually
  *    down does not 404 selectively, it fails everything — so this can never
@@ -237,6 +239,7 @@ export function markPendingDeployments(results) {
     const target = result.name.split('/')[0]
     if (
       result.kind !== 'page' &&
+      result.kind !== 'render' &&
       result.name.includes('/') &&
       result.status === 404 &&
       rootUp.get(target) === true

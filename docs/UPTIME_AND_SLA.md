@@ -693,15 +693,24 @@ node tools/scripts/probe-uptime.mjs                        # production defaults
 node tools/scripts/probe-uptime.mjs http://localhost:4200  # anything else
 ```
 
-It probes two kinds of row. A **health** row reads one of the JSON contracts
+It probes three kinds of row. A **health** row reads one of the JSON contracts
 listed at the top of this file. A **page** row — see
 [The front door](#the-front-door) — fetches the URL a visitor types and grades
-what a visitor would get.
+what a visitor would get. A **render** row — see
+[Uncached renders](#uncached-renders) — fetches a page no cache can answer.
 
 Exits non-zero if any target is down. `.github/workflows/uptime-probe.yml`
-runs it every 15 minutes on GitHub's runners — not our infrastructure, which is
-the only part that makes it a real probe. A monitor hosted on the thing it
-monitors cannot observe its own outage.
+asks GitHub to run it every 15 minutes on GitHub's runners — not our
+infrastructure, which is the only part that makes it a real probe. A monitor
+hosted on the thing it monitors cannot observe its own outage.
+
+:::danger GitHub's schedule is not the cadence (AGL-3568)
+On 2026-10-05 GitHub ran this workflow four times (00:00, 05:29, 12:29Z) and not
+once during the 28 minutes every uncached tenant page hung to Vercel's 60 s
+limit. The cadence that alerts is the console's
+[render monitor](#uncached-renders), every five minutes on Cloud Scheduler.
+This workflow is the second opinion and the manual check.
+:::
 
 It refuses to follow redirects. A base URL that `3xx`es to the real host would
 otherwise report the redirect target's health under the wrong name, and
@@ -842,6 +851,66 @@ sites`). Keep both arms: `sites` red with `delivery` green is still how a reader
 tells our sample workspace from a platform event. The repoint described under
 [Repointing `marketing-home` and `customer-site`](#repointing-the-two-page-checks)
 was never applied, and should not be now.
+
+## Uncached renders {#uncached-renders}
+
+**What happened.** beta.222 merged 2026-10-05 14:54Z. For about 28 minutes
+every uncached page render on the tenant hung to Vercel's 60 s limit (504): the
+site layout awaited a theme-font stylesheet with no deadline (AGL-3485, fixed
+by AGL-3564). Nothing alerted:
+
+- the GitHub probe was not running (see above);
+- the front-door rows fetch `/`, which the ISR cache answered — and a cached
+  page is what a visitor to a cached page got, so the row was right and
+  useless;
+- `/api/health/render/site` reported `ok` throughout: it runs the page LOADER
+  in-process and never the `[host]/[scheme]/layout.tsx` the hang was in.
+
+**What closes it (AGL-3568).** Three changes, one per gap.
+
+1. **The render monitor** —
+   `apps/console/app/api/admin/render-monitor/route.ts`, driven by
+   `consoleRenderMonitor` on Cloud Scheduler every five minutes. It runs on
+   the CONSOLE, a different deployment from the one it watches, and fetches
+   two pages per watched site over HTTP with the `x-aglyn-probe` bypass:
+   `/search` (`force-dynamic`, so rendered per request inside the full layout,
+   200 is the pass) and `/aglyn-render-probe-<nonce>` (a path nobody has
+   requested, so the catch-all renders it in the ISR context every published
+   page renders in; the site's own 404 document is the pass). A cache state of
+   `HIT`/`STALE` fails, because it proves no render. Each fetch gives up at
+   25 s. Two failing runs in a row raise `system.siteRenderFailing` (must,
+   immediate, red) through `raiseOperatorAlert`, which also posts the
+   Slack-compatible `OPERATOR_ALERT_WEBHOOK_URL`; the first pass after raises
+   `system.siteRenderRecovered`. State lives in
+   `operatorHealthState/render-monitor--<host>`, beside every other health
+   check. Watched by default: `demo.<NEXT_PUBLIC_TENANT_DOMAIN>`; add
+   `aglyn.com` and any other site with `RENDER_MONITOR_ORIGINS` on the
+   console. Logic and spec: `libs/tenant/data/admin/src/lib/server/render-monitor.ts`.
+   The monitor itself is a row on `/api/health/crons` (`render-monitor`,
+   30-minute grace), so a monitor that stops is red too.
+2. **The render canaries run the document** — `/api/health/render/site` and
+   `/api/health/render/marketing` now carry a `document` check beside
+   `render`: they call the real site layout (an async Server Component is a
+   function, so calling it runs every await it makes) and the catch-all page's
+   `generateMetadata`, inside a 10 s real-timer budget. A hang reads
+   `layout-timeout`; a throw `layout-threw`/`head-threw`. The uptime probe's
+   tenant rows already read both routes.
+3. **The GitHub probe renders too** — every front door gets
+   `render/<door>/dynamic` and `render/<door>/isr` rows with the same two
+   paths, graded by `gradeUncachedRender` in `tools/scripts/lib/front-door.mjs`.
+   Unlike a front-door row, a cached copy FAILS here.
+
+Measured 2026-10-05 against production from a browser: `demo.aglyn.app/search`
+and `aglyn.com/search` answer 200 `x-vercel-cache: MISS`; a fresh
+`/aglyn-render-probe-*` path answers 404 `MISS` with a complete document; `/`
+on `demo.aglyn.app` answered `STALE` in the same minute.
+
+```bash
+# Just the render rows, against production (needs AGLYN_PROBE_TOKEN):
+node tools/scripts/probe-uptime.mjs --only render/
+# What the console monitor sees right now, without recording anything:
+curl -s -H "x-cron-secret: $CRON_SECRET" https://app.aglyn.com/api/admin/render-monitor
+```
 
 ## Production monitoring and alerting (AGL-1502, 2026-08-13)
 

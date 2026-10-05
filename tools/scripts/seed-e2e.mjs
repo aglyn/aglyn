@@ -50,6 +50,7 @@ import { datasetFilterFields, effectiveModel } from './lib/record-filter-keys.mj
 import { readLegalDocumentVersion } from './lib/legal-document-version.mjs'
 import { withCrmListFields } from './lib/org-record-list-fields.mjs'
 import { putMediaDocument } from './lib/media-counter.mjs'
+import { seedClientSite } from './lib/seed-client-site.mjs'
 import { listingQueryFieldsPatch } from './lib/listing-query-fields.mjs'
 import { listMemberSearchTokens } from './lib/email-search-tokens.mjs'
 import { displayNameSearchFields, nameSearchTokens } from './lib/name-search-tokens.mjs'
@@ -1304,6 +1305,13 @@ await seedFreePlanWorkspace({
     written += 1
   },
 })
+// A site shaped like a real client's (AGL-3566): theme fonts, favicon and app
+// icon, logo, shared layout, a reusable component, a dataset repeat, a form
+// and a booking widget — every read the site layout makes on a render. The
+// tenant production smoke renders it; `demo` has none of those and is why an
+// unbounded font fetch shipped green (AGL-3565). Its own org, so the console
+// suites' counts of the e2e org's sites do not move.
+await seedClientSite({ firestore, put, now })
 // A notification (AGL-259/267 taxonomy) so the notifications page's
 // feed and category mute switches have content.
 await put(

@@ -42,6 +42,20 @@
  * all: a health route answers from inside a route handler and never enters the
  * ISR path that was throwing. See `lib/front-door.mjs`.
  *
+ * AND A THIRD, `render` (AGL-3568): a page row's `/` is answered by the ISR
+ * cache, so on 2026-10-05, when every UNCACHED render hung for 28 minutes,
+ * the front doors stayed green on cached copies. Each front door now also
+ * gets two requests no cache can answer — `/search` (rendered per request)
+ * and a never-requested path under the catch-all (a 404 drawn inside the
+ * same layout) — so even an occasional run proves a render, not a cache.
+ *
+ * ⚠️ THIS IS NOT THE CADENCE. GitHub ran this fifteen-minute schedule four times on
+ * 2026-10-05 and not once during the outage. The real cadence is the
+ * console's render monitor, `/api/admin/render-monitor`, every five minutes
+ * on Cloud Scheduler (`consoleRenderMonitor`), which runs the same two probes
+ * and alerts the operator. This script is a second opinion from outside our
+ * infrastructure, and a manual run.
+ *
  *   node tools/scripts/probe-uptime.mjs
  *   node tools/scripts/probe-uptime.mjs console=https://app.aglyn.com
  *   node tools/scripts/probe-uptime.mjs http://localhost:4200
@@ -54,7 +68,9 @@ import {
   cacheNote,
   frontDoorPlan,
   gradeFrontDoor,
+  gradeUncachedRender,
   readCacheState,
+  uncachedRenderPlan,
 } from './lib/front-door.mjs'
 import { withProbeHeaders } from './lib/probe-headers.mjs'
 // WHAT is probed lives in a module of its own so a test can assert it without
@@ -268,13 +284,79 @@ async function probePage(name, base, path) {
   }
 }
 
+/**
+ * Request one page no cache can answer and grade it as a render (AGL-3568).
+ *
+ * A row of its own rather than a mode of `probePage`: a page row passes on a
+ * cached copy by design (grading a HIT red would fire on ordinary traffic),
+ * and this row exists to fail on one. `expectStatus` is the probe's — the
+ * never-requested path passes as the site's own 404 document.
+ */
+async function probeRender(name, base, path, expectStatus) {
+  const url = `${base.replace(/\/$/, '')}${path}`
+  const startedAt = Date.now()
+  try {
+    const response = await fetch(url, {
+      redirect: 'manual',
+      headers: withProbeHeaders({
+        'user-agent': 'aglyn-uptime-probe',
+        accept: 'text/html,application/xhtml+xml',
+      }),
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    })
+    const body = await response.text()
+    const verdict = gradeUncachedRender(
+      {
+        status: response.status,
+        contentType: response.headers.get('content-type'),
+        body,
+        location: response.headers.get('location'),
+        vercelCache: response.headers.get('x-vercel-cache'),
+        nextCache: response.headers.get('x-nextjs-cache'),
+      },
+      expectStatus,
+    )
+    return {
+      name,
+      url,
+      ms: Date.now() - startedAt,
+      kind: 'render',
+      ok: verdict.ok,
+      challenged: verdict.challenged,
+      status: response.status,
+      detail: verdict.detail,
+    }
+  } catch (error) {
+    const aborted = error?.name === 'TimeoutError' || error?.name === 'AbortError'
+    return {
+      name,
+      url,
+      ms: Date.now() - startedAt,
+      kind: 'render',
+      ok: false,
+      // A hung render is the failure these rows exist for; say it as one.
+      detail: aborted
+        ? `no complete page in ${TIMEOUT_MS}ms — a render that hangs`
+        : `unreachable (${error?.cause?.code ?? error?.name ?? 'error'})`,
+    }
+  }
+}
+
 // Root first, then each subsystem — see `lib/uptime-targets.mjs` for what is
 // on the list and why. The front doors come last: they are the only rows that
 // answer "does a visitor get a page", and reading them at the bottom of the
-// log puts the visitor's verdict beside the summary line.
+// log puts the visitor's verdict beside the summary line. Each door's
+// uncached renders follow it (AGL-3568).
 const plan = [
   ...buildPlan(targets).map((row) => [...row, 'health']),
   ...frontDoorPlan(frontDoorOverrides).map((row) => [...row, 'page']),
+  ...uncachedRenderPlan(frontDoorOverrides).map(([name, base, path, expectStatus]) => [
+    name,
+    base,
+    path,
+    'render',
+    expectStatus,
+  ]),
 ].filter(([name]) => !only || name.includes(only))
 
 // A filter that matches nothing must never read as a clean sweep.
@@ -284,8 +366,12 @@ if (!plan.length) {
 }
 
 const results = await Promise.all(
-  plan.map(([name, base, path, kind]) =>
-    kind === 'page' ? probePage(name, base, path) : probe(name, base, path),
+  plan.map(([name, base, path, kind, expectStatus]) =>
+    kind === 'render'
+      ? probeRender(name, base, path, expectStatus)
+      : kind === 'page'
+        ? probePage(name, base, path)
+        : probe(name, base, path),
   ),
 )
 
