@@ -28,6 +28,8 @@ format.
 
 ### Choose the fields {#export-fields}
 
+![The export dialog: a preset, the searchable list of fields to tick and order, the records and the format](/img/datasets/export-dialog.png)
+
 Every field of the dataset is offered, plus three the platform keeps on every record:
 the record's **Aglyn ID**, and when it was **Created** and last **Updated**. Search the
 list, tick what you want, and move fields up or down to set the column order. Presets
@@ -79,6 +81,8 @@ looks wrong. A file is refused before upload when it holds more than **50,000 ro
 split it and import each part.
 
 ### 2. Columns {#import-columns}
+
+![The import wizard's Columns step: each column of the file matched to a field of the dataset, with how sure the match is](/img/datasets/import-wizard-columns.png)
 
 Each column is matched to a field of the dataset, with how sure the match is: by the
 field's name, by its ID (what older exports used as headers), by a close spelling, or by

@@ -179,7 +179,7 @@ Automation steps live in the **Do** list of an action — see
 
 **Delete** removes the dataset *and every record in it*, permanently — the
 confirmation tells you how many documents go with it. There is no undo and no
-retention window, so export first (**CSV** or **JSON**) if you might want the
+retention window, so **Export** it first if you might want the
 rows back. Deleting a single record from the table leaves the dataset itself
 alone.
 
