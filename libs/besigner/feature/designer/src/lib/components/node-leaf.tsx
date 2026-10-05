@@ -617,6 +617,12 @@ export const NodeLeaf = observer(
             ...(node.sx !== undefined && {
               sx: JSON.parse(JSON.stringify(node.sx)),
             }),
+            // Joined with the design root's by the graft (AGL-3494), so the
+            // replacement's class list is the whole one the page draws.
+            ...(typeof (node as { className?: unknown }).className ===
+              'string' && {
+              className: (node as { className?: unknown }).className,
+            }),
             ...(node.styleOverrides && {
               styleOverrides: JSON.parse(JSON.stringify(node.styleOverrides)),
             }),
@@ -657,6 +663,7 @@ export const NodeLeaf = observer(
       node,
       JSON.stringify(node?.props ?? {}),
       JSON.stringify(node?.sx ?? {}),
+      (node as { className?: unknown } | undefined)?.className,
       JSON.stringify(node?.styleOverrides ?? {}),
       JSON.stringify(node?.attrOverrides ?? {}),
       definitions,
@@ -682,6 +689,15 @@ export const NodeLeaf = observer(
               ...(placedForm.replacement.sx === undefined
                 ? {}
                 : { sx: placedForm.replacement.sx }),
+              // The design root's classes joined with the placement's
+              // (AGL-3494), as the published page draws them.
+              ...((placedForm.replacement as { className?: unknown })
+                .className === undefined
+                ? {}
+                : {
+                    className: (placedForm.replacement as { className?: unknown })
+                      .className,
+                  }),
             } as typeof shownNode)
           : shownNode,
       [placedForm, shownNode],

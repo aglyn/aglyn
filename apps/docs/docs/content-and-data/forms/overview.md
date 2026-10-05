@@ -47,6 +47,20 @@ That per-address limit is one of several protections in front of your form — s
 [Spam and abuse protection](#spam-and-abuse-protection).
 :::
 
+### Place a saved form on a page {#place-a-saved-form}
+
+A form built on the **Forms** page goes on a page through a **Form** element: drop one
+in the Besigner and pick the form under **Form**. The page then draws that form's
+fields, and its button text, **Success message**, **After submit** outcome and styling
+come from the form itself, so editing them on the form changes every page that places
+it.
+
+Picking the form clears the button text, message and caption the element started with
+(the **Contact Section** block's *Send message*, for example), so they can't hide the
+form's own. To change one of them on one page only, set it on the placed element after
+picking the form, or under **Change it on this page only**. That replaces just the
+setting you changed; anything you leave empty still follows the form.
+
 ### Monthly allowance per plan
 
 Each tier includes a monthly form-submission allowance, counted per site:

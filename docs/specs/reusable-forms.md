@@ -394,6 +394,38 @@ Preview and the published page all run:
   offers the same parts (both under *Change it on this page only*, AGL-3288). A page may change a field's label or
   placeholder, the submit button's text and the success message.
 
+**The form's own root settings render on every placement (AGL-3494).** A
+published design's root is the `form` node naming the form (publish unwraps the
+canvas root), and the graft unwraps that root onto the placement. The props the
+placement renders are the design root's — submit label, success message, caption,
+after-submit outcome, dataset binding — with the placement's own props laid over
+them **one prop at a time**, and only the ones it sets: `undefined`, `null` and
+`''` say nothing, `false` and `0` are kept. The `root` attribute slice goes over
+both, last. `sx` merges the same way (`mergeNodeSx`: design root with the `root`
+style slice, then the placement's own), classes and interactions join with the
+design root's first, and a design-internal `revealNodeId` is renamed to its
+grafted id. So a placement that set nothing follows the form, and one saved with
+its own copies (every placement from before this) keeps rendering them.
+`placementPropsOverRoot` in `compose-reusable-components.ts` is the merge.
+
+Because a placement's own prop is an override, what a `form` node merely STARTED
+with must not survive the moment it becomes a placement: the Contact Section
+preset seeds *Send message* and a thank-you line, the Contact Form preset a
+caption. Picking a form in the Attributes panel therefore drops
+`FORM_ENTITY_OWNED_PROPS` from the node (`formPropsOnBind` in `forms.ts`); only
+a change of `formId` does this, so an existing placement keeps what it carries.
+
+A design whose root is a container (the form node one level down) is grafted
+like an instance: the container takes the placement's place and the inner form
+node renders the design's own props. The placement's form props have no element
+to land on there, and are not moved onto the inner node, so no existing
+placement changes what it shows.
+
+A reusable-component instance is unchanged: its root is never the instance's
+own component, so the instance's props are bookkeeping (`refId`, `name`,
+`propValues`) and the definition root's props already render, with the
+instance's `sx` over the root's.
+
 What a page may **not** change is anything that alters what the form submits.
 `PLACED_FORM_REFUSED_ATTR_PROPS` in `compose-reusable-components.ts` is the
 list — `formId`, `formName`, the dataset binding, the after-submit outcome, and
