@@ -181,19 +181,33 @@ await step(tally, page, 'Add to list checks, attests, then adds both', async () 
   await dialog.getByRole('button', { name: 'Done' }).click()
 })
 
-await step(tally, page, 'Export CSV downloads the selection', async () => {
+await step(tally, page, 'Export… downloads the selection', async () => {
+  // The bar's Export… opens the export dialog over the selection (AGL-3527);
+  // the card header and the activity feed carry an Export… of their own, so
+  // the button is read inside the bar, the innermost block holding its acts.
+  const bar = page
+    .locator('div', { has: page.getByRole('button', { name: 'Add to list', exact: true }) })
+    .filter({ has: page.getByRole('button', { name: 'Export…', exact: true }) })
+    .last()
+  await bar.getByRole('button', { name: 'Export…', exact: true }).click({ timeout: TIMEOUT_MS })
+  const dialog = page.getByRole('dialog')
+  const exportFields = dialog.getByRole('button', { name: /^Export \d+ fields?$/ })
+  await exportFields.waitFor({ timeout: TIMEOUT_MS })
   const [download] = await Promise.all([
     page.waitForEvent('download', { timeout: TIMEOUT_MS }),
-    page.getByRole('button', { name: 'Export CSV', exact: true }).last().click(),
+    exportFields.click({ timeout: TIMEOUT_MS }),
   ])
-  const path = await download.path()
-  const csv = readFileSync(path, 'utf8')
-  const lines = csv.trim().split('\n')
+  await dialog.waitFor({ state: 'hidden', timeout: TIMEOUT_MS })
+  const csv = readFileSync(await download.path(), 'utf8')
   const hasBoth = PAIR.every((c) => csv.includes(c.email))
+  // Everyone else the list shows stays out of the file.
+  const others = Object.values(CRM_FIXTURE.contacts)
+    .filter((c) => !PAIR.includes(c) && c.email && csv.includes(c.email))
+    .map((c) => c.email)
   tally.check(
-    'Export CSV downloads the selection',
-    download.suggestedFilename() === 'contacts-selected.csv' && hasBoth && lines.length === 3,
-    `${download.suggestedFilename()} — ${lines.length} lines`,
+    'Export… downloads the selection',
+    download.suggestedFilename().endsWith('.csv') && hasBoth && others.length === 0,
+    `${download.suggestedFilename()} — both ${hasBoth} · others ${JSON.stringify(others)}`,
   )
 })
 
