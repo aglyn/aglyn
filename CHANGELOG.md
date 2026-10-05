@@ -115,6 +115,7 @@ content on the marketing site and is written separately.
 
 ### Documentation
 
+- **media:** the media page shots state storage against the workspace band ([AGL-3470](https://linear.app/aglyn/issue/AGL-3470))
 - **data:** record pages across the datasets docs and the plugin reference ([AGL-3475](https://linear.app/aglyn/issue/AGL-3475))
 - **data:** a guide to service and location pages from a dataset ([AGL-3475](https://linear.app/aglyn/issue/AGL-3475))
 - **pricing:** the 1.6x media sentence is live on /pricing ([AGL-3474](https://linear.app/aglyn/issue/AGL-3474))
