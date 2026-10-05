@@ -9,6 +9,126 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.222 — 2026-10-05
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.221...v1.0.0-beta.222)
+
+### Added
+
+- **bookings:** a service may ask the booker for a phone and the job address ([AGL-3493](https://linear.app/aglyn/issue/AGL-3493), [AGL-3500](https://linear.app/aglyn/issue/AGL-3500))
+- **data:** offer to make a record template a page again when it stops serving ([AGL-3475](https://linear.app/aglyn/issue/AGL-3475))
+- **ai:** a plan may bind one page to a dataset as its record template ([AGL-3475](https://linear.app/aglyn/issue/AGL-3475))
+- **data:** set up record pages in Page Properties and preview them on the canvas ([AGL-3475](https://linear.app/aglyn/issue/AGL-3475))
+- **outreach:** an Opens column, and opens judged by where the fetch came from (AGL-3488) (#1196) ([AGL-3488](https://linear.app/aglyn/issue/AGL-3488))
+- **billing:** video, audio and file downloads count 1.6x toward bandwidth ([AGL-3474](https://linear.app/aglyn/issue/AGL-3474))
+- **data:** save a record template, and give a dataset its page addresses ([AGL-3475](https://linear.app/aglyn/issue/AGL-3475))
+- **data:** a record write, a template publish and a lockdown drop record pages ([AGL-3475](https://linear.app/aglyn/issue/AGL-3475))
+- **data:** record pages are linked by {{item.url}} and listed in sitemap and llms.txt ([AGL-3475](https://linear.app/aglyn/issue/AGL-3475))
+- **data:** a dataset record is served at /{base}/{address} from one template page ([AGL-3475](https://linear.app/aglyn/issue/AGL-3475))
+- **pricing:** every plan covers full-use cost + 30% after card fees ([AGL-3469](https://linear.app/aglyn/issue/AGL-3469), [AGL-3476](https://linear.app/aglyn/issue/AGL-3476))
+- **media:** the library states storage used against the org-wide band ([AGL-3470](https://linear.app/aglyn/issue/AGL-3470), [AGL-2075](https://linear.app/aglyn/issue/AGL-2075))
+- **orgs:** staff take no seat, owner handoff invite, staff ask to upgrade ([AGL-3466](https://linear.app/aglyn/issue/AGL-3466))
+- **plugins:** every plugin that keeps a person erases its share, the CRM first and last ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080), [AGL-2623](https://linear.app/aglyn/issue/AGL-2623))
+- **screens:** page groups, and nothing above a live page takes it off the site ([AGL-3463](https://linear.app/aglyn/issue/AGL-3463), [AGL-2334](https://linear.app/aglyn/issue/AGL-2334), [AGL-3408](https://linear.app/aglyn/issue/AGL-3408))
+- **plugins:** a plugin asks the plugin that keeps people for the person ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **abuse:** a link's path can be looked up in Web Risk, behind a switch left off ([AGL-3459](https://linear.app/aglyn/issue/AGL-3459))
+- **plugins:** a door asks the plugin that credits outcomes; it holds the campaign joins ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **plugins:** a plugin declares the artifact types it keeps, and an installer asks it ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+
+### Fixed
+
+- **commerce:** paid video and downloads served off the CDN count toward bandwidth ([AGL-3505](https://linear.app/aglyn/issue/AGL-3505))
+- **console:** any plan may name the one language its site is in ([AGL-3502](https://linear.app/aglyn/issue/AGL-3502))
+- **media:** a serve is counted before its request ends, and a lost count is logged ([AGL-3503](https://linear.app/aglyn/issue/AGL-3503), [AGL-3474](https://linear.app/aglyn/issue/AGL-3474))
+- **bookings:** the slot listing is a page of whole days, and the widget shows all of them ([AGL-3492](https://linear.app/aglyn/issue/AGL-3492))
+- **data:** list values stored as lists, and a repeat with no rows publishes nothing ([AGL-3496](https://linear.app/aglyn/issue/AGL-3496))
+- **plugins:** erasers registered at boot are the ones the erasure runs ([AGL-3464](https://linear.app/aglyn/issue/AGL-3464))
+- **seo:** an image marked decorative is not missing a description ([AGL-3499](https://linear.app/aglyn/issue/AGL-3499))
+- **data:** record pages carry their own {{item.url}}, and the setup reads at a glance ([AGL-3475](https://linear.app/aglyn/issue/AGL-3475))
+- **billing:** the quota banner states storage on org pages too ([AGL-3479](https://linear.app/aglyn/issue/AGL-3479), [AGL-3482](https://linear.app/aglyn/issue/AGL-3482))
+- **forms:** a placed form renders the saved form's own label, message and styling ([AGL-3494](https://linear.app/aglyn/issue/AGL-3494))
+- **billing:** the staff discount guardrail rates the org as it bills ([AGL-3498](https://linear.app/aglyn/issue/AGL-3498))
+- **media:** any member may read the storage band, and a read-only lock allows it ([AGL-3482](https://linear.app/aglyn/issue/AGL-3482))
+- **billing:** one storage alert, against the workspace's pooled band ([AGL-3482](https://linear.app/aglyn/issue/AGL-3482), [AGL-2075](https://linear.app/aglyn/issue/AGL-2075))
+- **billing:** a coupon under full-use cost is a warning, judged on the charges it reaches ([AGL-3473](https://linear.app/aglyn/issue/AGL-3473))
+- **bookings:** the per-service availability reads get their composite index ([AGL-3483](https://linear.app/aglyn/issue/AGL-3483))
+- **billing:** the storage cap card states the allowance as the workspace's ([AGL-3479](https://linear.app/aglyn/issue/AGL-3479), [AGL-2075](https://linear.app/aglyn/issue/AGL-2075))
+- **billing:** storage is metered and warned on as the workspace's one band ([AGL-3479](https://linear.app/aglyn/issue/AGL-3479), [AGL-2075](https://linear.app/aglyn/issue/AGL-2075), [AGL-3470](https://linear.app/aglyn/issue/AGL-3470))
+- **besigner:** every save converts typed binding names to id tokens ([AGL-3481](https://linear.app/aglyn/issue/AGL-3481))
+- **besigner:** layout chrome draws site variables as the page does ([AGL-3480](https://linear.app/aglyn/issue/AGL-3480))
+- **orgs:** the upgrade-proposal card carries a help link, as help coverage requires ([AGL-3466](https://linear.app/aglyn/issue/AGL-3466))
+- **billing:** video and files served from origin count against the bandwidth band ([AGL-3474](https://linear.app/aglyn/issue/AGL-3474))
+- **screens:** publishing the placeholder home page makes it the owner's ([AGL-3478](https://linear.app/aglyn/issue/AGL-3478), [AGL-3408](https://linear.app/aglyn/issue/AGL-3408))
+- **workflows:** the run bands are held to the workspace's runs, not one site's ([AGL-3472](https://linear.app/aglyn/issue/AGL-3472))
+- **billing:** the full-use cost names stored data as the platform model does ([AGL-3473](https://linear.app/aglyn/issue/AGL-3473))
+- **billing:** quotes and discounts are rated against what a plan costs at full use ([AGL-3473](https://linear.app/aglyn/issue/AGL-3473))
+- **besigner:** the empty-document slot names the document it stands for ([AGL-3477](https://linear.app/aglyn/issue/AGL-3477))
+- **console:** the theme section lists what you have changed below the editor ([AGL-3471](https://linear.app/aglyn/issue/AGL-3471))
+- **billing:** the upgrade proposal email falls back to the configured brand name ([AGL-3466](https://linear.app/aglyn/issue/AGL-3466))
+- **console:** the interaction builder offers no step only an automation holds ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **billing:** price at nam5, in decimal GB, and a /v1 request as a function ([AGL-3444](https://linear.app/aglyn/issue/AGL-3444), [AGL-1879](https://linear.app/aglyn/issue/AGL-1879))
+- **abuse:** a Web Risk lookup that cannot reach the store reads unknown, not notFound ([AGL-3451](https://linear.app/aglyn/issue/AGL-3451), [AGL-3450](https://linear.app/aglyn/issue/AGL-3450))
+- **api:** the /v1 root lists each resource once, and datasets only with the data plugin ([AGL-3455](https://linear.app/aglyn/issue/AGL-3455))
+- **data:** concurrent dataset-schema installs cannot cross the org's dataset cap ([AGL-3454](https://linear.app/aglyn/issue/AGL-3454), [AGL-2371](https://linear.app/aglyn/issue/AGL-2371))
+
+### Performance
+
+- **media:** images say how big they render, and published URLs are versioned ([AGL-3485](https://linear.app/aglyn/issue/AGL-3485), [AGL-2486](https://linear.app/aglyn/issue/AGL-2486))
+- **tenant:** a theme's Google fonts are served by the site, not linked ([AGL-3485](https://linear.app/aglyn/issue/AGL-3485))
+- **tenant:** a published page ships its node map as a tree that states each id once ([AGL-3438](https://linear.app/aglyn/issue/AGL-3438))
+- **mui:** an entries block loads its search box only when search is on ([AGL-3438](https://linear.app/aglyn/issue/AGL-3438))
+
+### Changed
+
+- **marketing:** a campaign's model is marketing's; the send math stays shared ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **forms:** the door's own words leave the core forms model ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **forms:** a flooded door's notices are the forms plugin's declaration ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **workflows:** the automation vocabulary moves to its plugin, behind step seams ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **plugins:** send names, the kill switch and site record counts come from owners ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **crm:** a captured person, their owner and their company are the CRM's ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **data:** the dataset model is the data plugin's own ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **plugins:** the CRM runs the automation steps that write its records ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080), [AGL-2615](https://linear.app/aglyn/issue/AGL-2615))
+- **forms:** the form door is the forms plugin's route, keeping its own visitor gates ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **inbox:** the Inbox reads form submissions through the forms plugin's records ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **outreach:** a sequence reads its people through the record system's seams ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **plugins:** a plugin offers its automation recipes through a recipe seam ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **ai:** the quota banner's AI credit warning is the AI plugin's band declaration ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **plugins:** a plugin declares the entity kinds a Besigner picker lists ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **data:** the dataset automation steps run in the data plugin ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080), [AGL-3456](https://linear.app/aglyn/issue/AGL-3456))
+- **plugins:** commerce and forms serve their resources under a site on /v1 ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080), [AGL-900](https://linear.app/aglyn/issue/AGL-900), [AGL-1928](https://linear.app/aglyn/issue/AGL-1928))
+- **data:** a dataset schema's install, publish and update are the data plugin's ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080), [AGL-2891](https://linear.app/aglyn/issue/AGL-2891), [AGL-1044](https://linear.app/aglyn/issue/AGL-1044), [AGL-1484](https://linear.app/aglyn/issue/AGL-1484))
+
+### Documentation
+
+- **data:** record pages across the datasets docs and the plugin reference ([AGL-3475](https://linear.app/aglyn/issue/AGL-3475))
+- **data:** a guide to service and location pages from a dataset ([AGL-3475](https://linear.app/aglyn/issue/AGL-3475))
+- **pricing:** the 1.6x media sentence is live on /pricing ([AGL-3474](https://linear.app/aglyn/issue/AGL-3474))
+- **teams:** owner handoff, staff seats, and building a site for a client ([AGL-3466](https://linear.app/aglyn/issue/AGL-3466))
+- **media:** the Media page shots show the Library card's two tabs ([AGL-3457](https://linear.app/aglyn/issue/AGL-3457))
+- **build:** record what took aglyn.com/press under 500 KiB ([AGL-3438](https://linear.app/aglyn/issue/AGL-3438))
+
+<details>
+<summary>Also in this release: 8 test, 8 chore</summary>
+
+- **ai:** the palette knows the Image element's Sizes attribute ([AGL-3485](https://linear.app/aglyn/issue/AGL-3485))
+- **linear:** the issue ceiling is AGL-3501, read from Linear ([AGL-3501](https://linear.app/aglyn/issue/AGL-3501), [AGL-3500](https://linear.app/aglyn/issue/AGL-3500))
+- **linear:** the issue ceiling is AGL-3498, read from Linear ([AGL-3498](https://linear.app/aglyn/issue/AGL-3498))
+- **data:** the repo guards answer for record pages ([AGL-3475](https://linear.app/aglyn/issue/AGL-3475))
+- **billing:** the storage alert spec imports entitlements by package ([AGL-3482](https://linear.app/aglyn/issue/AGL-3482))
+- **billing:** the plan-card and batched-send specs read the cut bands ([AGL-3469](https://linear.app/aglyn/issue/AGL-3469))
+- **pricing:** the Figma frames state the 1.6× origin-media weight ([AGL-3474](https://linear.app/aglyn/issue/AGL-3474))
+- **docs:** regenerate the Assist docs index for the storage copy ([AGL-3476](https://linear.app/aglyn/issue/AGL-3476))
+- **console:** the automation-step fakes take the run meter's transaction and batch ([AGL-3472](https://linear.app/aglyn/issue/AGL-3472))
+- **pricing:** the Figma frames carry every moved figure ([AGL-3444](https://linear.app/aglyn/issue/AGL-3444), [AGL-3469](https://linear.app/aglyn/issue/AGL-3469), [AGL-3476](https://linear.app/aglyn/issue/AGL-3476))
+- **tools:** the Linear ceiling reads AGL-3478, read from the workspace ([AGL-3478](https://linear.app/aglyn/issue/AGL-3478), [AGL-3470](https://linear.app/aglyn/issue/AGL-3470), [AGL-3466](https://linear.app/aglyn/issue/AGL-3466), [AGL-3471](https://linear.app/aglyn/issue/AGL-3471), [AGL-3477](https://linear.app/aglyn/issue/AGL-3477))
+- **outreach:** the emulator spec's erasure request carries the erasure's time ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **billing:** the pricing page caught up with the nam5 and decimal-GB figures ([AGL-3444](https://linear.app/aglyn/issue/AGL-3444), [AGL-1879](https://linear.app/aglyn/issue/AGL-1879))
+- **tools:** raise the Linear id ceiling to AGL-3463, read from the workspace ([AGL-3463](https://linear.app/aglyn/issue/AGL-3463), [AGL-3456](https://linear.app/aglyn/issue/AGL-3456))
+- **console:** the outbox drain spec ages a pending entry from before the drain started ([AGL-3462](https://linear.app/aglyn/issue/AGL-3462))
+- **tenant-runtime:** the door scan's control names the contract door, not a count ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+
+</details>
+
 ## v1.0.0-beta.221 — 2026-10-01
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.220...v1.0.0-beta.221)
