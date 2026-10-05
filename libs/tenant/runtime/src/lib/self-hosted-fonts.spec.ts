@@ -68,6 +68,25 @@ describe('selfHostedThemeFonts (AGL-3485)', () => {
     expect(await selfHostedThemeFonts(THEME)).toBeNull()
   })
 
+  it('⛔ never holds a render on a fetch that does not settle — it links the stylesheet', async () => {
+    // A fetch whose render Next abandoned can answer with a promise that
+    // never resolves and that no abort signal reaches. Held across requests,
+    // that stalled every page on the instance until the function timed out.
+    jest.useFakeTimers()
+    try {
+      fetchMock.mockReturnValue(new Promise(() => undefined))
+      const pending = selfHostedThemeFonts(THEME)
+      await jest.advanceTimersByTimeAsync(2_500)
+      await expect(pending).resolves.toBeNull()
+      // A second render does not wait on the first one's promise either.
+      const again = selfHostedThemeFonts(THEME)
+      await jest.advanceTimersByTimeAsync(0)
+      await expect(again).resolves.toBeNull()
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
   it('asks nothing for a theme with no Google font', async () => {
     expect(await selfHostedThemeFonts({ fonts: [] })).toBeNull()
     expect(await selfHostedThemeFonts(undefined)).toBeNull()

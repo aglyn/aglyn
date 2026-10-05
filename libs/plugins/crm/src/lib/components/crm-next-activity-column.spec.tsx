@@ -24,17 +24,17 @@
  * saved with the toggle on reads the same.
  */
 
-import {
-  CRM_NEXT_ACTIVITY_FIELD,
-  CRM_NO_NEXT_ACTIVITY_CLAUSE,
-  isNoNextActivityClause,
-} from '@aglyn/aglyn'
 import { render } from '@testing-library/react'
 import { listFilterGridColumns, listPlainCodec } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
 import {
   CRM_NEXT_ACTIVITY_FILTER_FIELD,
   nextActivityColumn,
 } from './crm-next-activity-column'
+import {
+  CRM_NEXT_ACTIVITY_FIELD,
+  CRM_NO_NEXT_ACTIVITY_CLAUSE,
+  isNoNextActivityClause,
+} from '../model/crm-next-activity'
 
 const NOW = Date.parse('2026-09-08T12:00:00Z')
 

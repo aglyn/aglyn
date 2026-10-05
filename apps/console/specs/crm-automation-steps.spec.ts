@@ -247,8 +247,6 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   // fixture so a case can stand a record at the ceiling without seeding five
   // thousand documents.
   countCrmActivitiesForRecord: async () => mockActivityCount,
-  // The `nextTaskAtMs` writer (AGL-2661): a spy, the recompute is the data layer's suite.
-  recomputeCrmNextTaskAt: (...args: unknown[]) => mockRecomputeNextActivity(...(args as [])),
   // The email row's reference and write (AGL-2615), faithful to the real
   // pair: a minted document under the org's activities, set with the server
   // clock on both stamps.
@@ -267,6 +265,13 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   }),
   flowEmailRefusal: async () => null,
   enrollListMember: async () => undefined,
+}))
+
+// The `nextTaskAtMs` writer (AGL-2661): a spy, the recompute is the CRM's own suite.
+jest.mock('../../../libs/plugins/crm/src/lib/server/crm-next-activity', () => ({
+  __esModule: true,
+  ...jest.requireActual('../../../libs/plugins/crm/src/lib/server/crm-next-activity'),
+  recomputeCrmNextTaskAt: (...args: unknown[]) => mockRecomputeNextActivity(...(args as [])),
 }))
 
 jest.mock('../../../libs/plugins/crm/src/lib/server/assign-contact-owner', () => ({

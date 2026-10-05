@@ -56,6 +56,10 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   resolveOrgMembership: (...args: unknown[]) => resolveOrgMembership(...args),
   memberHasOrgPermission: (...args: unknown[]) => memberHasOrgPermission(...args),
   notifyUsers: jest.fn(),
+}))
+// The CRM's own `nextTaskAtMs` writer and sweep, doubled at their module.
+jest.mock('./crm-next-activity', () => ({
+  __esModule: true,
   recomputeCrmNextTaskAt: (...args: unknown[]) => recomputeCrmNextTaskAt(...(args as [])),
   sweepCrmNextTaskAt: (...args: unknown[]) => sweepCrmNextTaskAt(...(args as [])),
   crmNextActivityLinksOf: (task: Record<string, unknown>) => task,

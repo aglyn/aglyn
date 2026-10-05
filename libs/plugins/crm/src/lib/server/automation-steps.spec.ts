@@ -126,10 +126,15 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   }),
   restampCrmListFieldsAt: async () => 'current',
   countCrmActivitiesForRecord: async () => mockActivityCount,
-  recomputeCrmNextTaskAt: async () => ({ records: 0, missing: 0 }),
   newCrmActivityRef: (_firestore: unknown, orgId: string) =>
     mockCollectionRef(`orgs/${orgId}/crmActivities`).doc(),
   writeCrmEmailActivity: async (ref: any, activity: Record<string, any>) => ref.set(activity),
+}))
+
+jest.mock('./crm-next-activity', () => ({
+  __esModule: true,
+  ...jest.requireActual('./crm-next-activity'),
+  recomputeCrmNextTaskAt: async () => ({ records: 0, missing: 0 }),
 }))
 
 jest.mock('./assign-contact-owner', () => ({

@@ -1840,6 +1840,7 @@ if (result.sent) await entry?.file({ subject, body: text, to, sourceRef: automat
 | --- | --- |
 | `preparePluginRecordEmail(request)` | `{ tags, file }`, or `null` when no plugin keeps records, the one that does files no sent mail, or the message earns no entry — it is not addressed to the person `link` finds, the plan carries no record system, or the record is at its activity ceiling. Never throws; neither does `file`. |
 | `writer.prepareEmail(request)` | Optional on the writer: what the record system answers. Nothing is written until `file`. |
+| `recordPluginTaggedEmailDelivery({ tags, event, atMs })` | What the delivery webhook calls for every delivery event: every tag the message carried and the event in the delivery log's vocabulary (`delivered`, `opened`, `clicked`, `bounced`, `complained`). The record system moves the entry its own tags name, forward only, and leaves tags it did not put there. Does nothing with no record system; never throws. |
 
 The automation engine offers every `sendEmail` step this way; the CRM files
 the entry when the message goes to the contact the event is about, with the

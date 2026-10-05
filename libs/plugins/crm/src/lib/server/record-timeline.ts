@@ -20,6 +20,7 @@ import {
   type PluginRecordActivityRequest,
   type PluginRecordDeliveryRequest,
   type PluginRecordEntryContext,
+  type PluginRecordTaggedDeliveryRequest,
   type PluginRecordTaskRequest,
   type PluginRecordTimelineWriter,
   type PluginRecordWrite,
@@ -30,10 +31,11 @@ import {
   CRM_ACTIVITY_LOG_FULL_MESSAGE,
   CRM_COLLECTIONS,
   crmActivityLogHasRoom,
+  CRM_EMAIL_ACTIVITY_TAG,
+  CRM_EMAIL_ORG_TAG,
   crmScopeTokens,
   crmTaskLabelsForNew,
   crmTaskListFields,
-  crmTaskReminderAfterEdit,
   isCrmActivityKind,
   isCrmTaskKind,
   readContactFacet,
@@ -44,21 +46,26 @@ import {
 } from '@aglyn/aglyn/server'
 import {
   countCrmActivitiesForRecord,
-  createCrmEmailActivity,
-  crmActivityRef,
-  crmCapturedEmailActivityRef,
   findContactByEmail,
   firebaseAdmin,
   readLeadForHost,
-  recomputeCrmNextTaskAt,
-  recordCrmEmailDelivery,
 } from '@aglyn/tenant-data-admin'
+import { isDocumentId } from '@aglyn/tenant-data-admin/server/document-id'
 import { createHash } from 'crypto'
 import { FieldValue } from 'firebase-admin/firestore'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { buildCrmCapturedEmailActivity, crmCapturedEmailKey } from '../model/crm-inbound'
 import { readCrmTaskPicklists } from './read-picklist'
 import { CRM_SUITE_FEATURE } from './suite-gate'
+import { crmTaskReminderAfterEdit } from '../model/crm-task-reminders'
+import { recomputeCrmNextTaskAt } from './crm-next-activity'
+import {
+  createCrmEmailActivity,
+  crmActivityRef,
+  crmCapturedEmailActivityRef,
+  crmEmailDeliveryStateForEvent,
+  recordCrmEmailDelivery,
+} from './crm-email-activity'
 
 /**
  * THE CRM'S WRITER ON THE CORE'S RECORD-TIMELINE SEAM (AGL-2981).
@@ -431,6 +438,27 @@ export function createCrmRecordTimelineWriter(deps: CrmRecordTimelineDeps): Plug
       if (outcome === 'missing') return refuse(404, 'No email by that Message-ID is filed here.')
       if (outcome === 'failed') return refuse(409, 'The delivery state could not be written.')
       return { ok: true, id: ref.id, created: outcome === 'advanced' }
+    },
+
+    /*
+     * A delivery event for a message the CRM tagged (AGL-2615): an email sent
+     * from a record, or an automation's email to its contact, carries the org
+     * and the activity it was filed as. The state comes from the log's own
+     * vocabulary; both ids are path components, so both are checked before
+     * either names a document. Tags that name no activity of the CRM's are
+     * somebody else's message. The write is forward-only and never throws.
+     */
+    async recordTaggedDelivery(request: PluginRecordTaggedDeliveryRequest): Promise<void> {
+      const state = crmEmailDeliveryStateForEvent(request.event)
+      const activityId = request.tags?.[CRM_EMAIL_ACTIVITY_TAG]
+      const orgId = request.tags?.[CRM_EMAIL_ORG_TAG]
+      if (!state || !isDocumentId(activityId) || !isDocumentId(orgId)) return
+      await recordCrmEmailDelivery(deps.firestore(), {
+        orgId,
+        activityId,
+        state,
+        atMs: Number.isFinite(request.atMs) ? request.atMs : Date.now(),
+      })
     },
 
     // An automation's email to the person its event is about (AGL-2615):

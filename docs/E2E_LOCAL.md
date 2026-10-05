@@ -280,6 +280,21 @@ build all missed it. Run this for ANY change touching apps/tenant
 rendering paths (layouts, providers, shared client components the
 tenant mounts).
 
+**Every route is timed (AGL-3566).** Each must answer in full within
+`SMOKE_ROUTE_BUDGET_MS` (default `15000`); the time per route is printed, and
+a route over budget fails by name. The routes include a site shaped like a
+client's — `ridgeline`, seeded by `tools/scripts/lib/seed-client-site.mjs`
+with Google theme fonts, a favicon and app icon, a logo, a shared layout, a
+reusable component, a dataset repeat, a form and a booking widget — because
+the `demo` site has none of those, and beta.222 shipped green past this smoke
+with a site layout that waited forever on a theme-font fetch (AGL-3565). The
+client site is rendered twice, on two `next start`s of the one build: against
+the live font origin, then as `ridgeline-stalled` with
+`tools/e2e/lib/hung-font-origin.mjs` preloaded, which makes every fetch to
+`fonts.googleapis.com` a promise that never settles. The second pass is what
+reds on the pre-hotfix module; the first alone would not, because off Vercel
+Google answers in milliseconds.
+
 The harness signs in once through the real `/signin` UI (a synthetic
 localStorage session races the app's `connectAuthEmulator` call — don't),
 pre-warms each route so dev-server compiles don't eat the navigation

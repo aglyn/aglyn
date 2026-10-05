@@ -724,7 +724,7 @@ export interface CrmDeal extends CrmScoped {
    * nothing scheduled" is asked of a LIST — a column, a filter, a report
    * tile — and a list cannot afford a task query per row. Every server
    * writer of a task recomputes it for the records the task names
-   * (`recomputeCrmNextTaskAt` in the admin library), and a client-direct
+   * (`recomputeCrmNextTaskAt` in the CRM's server), and a client-direct
    * task write asks the console route to do the same; the Fields section
    * offers a one-off recompute for the records written before the field
    * existed. Absent on such a record, which every reader treats as `null`.

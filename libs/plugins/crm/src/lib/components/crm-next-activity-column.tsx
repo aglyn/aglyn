@@ -16,11 +16,11 @@
  */
 'use client'
 
-import { CRM_NEXT_ACTIVITY_FIELD, readNextTaskAtMs } from '@aglyn/aglyn'
 import type { ListFilterField } from '@aglyn/shared-ui-jsx/const/list-filter'
 import { Tooltip, Typography } from '@mui/material'
 import type { GridColDef } from '@mui/x-data-grid'
 import { TaskDueText } from './task-cells'
+import { CRM_NEXT_ACTIVITY_FIELD, readNextTaskAtMs } from '../model/crm-next-activity'
 
 /**
  * The "Next activity" column the contacts, companies and deals lists share

@@ -64,11 +64,6 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     ...jest.requireActual(
       '../../../libs/plugins/crm/src/lib/server/contact-lifecycle-floor',
     ),
-    // The REAL `nextTaskAtMs` writer (AGL-2661), over the same double, so the
-    // figure a task write leaves on its contact is the one read back.
-    ...jest.requireActual(
-      '../../../libs/tenant/data/admin/src/lib/server/crm-next-activity',
-    ),
     verifyApiKey: async () => ({
       orgId: 'org-1',
       keyId: 'key-1',
@@ -103,7 +98,6 @@ jest.mock('@aglyn/aglyn/server', () => ({
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/marketing-consent'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/consent-groups'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/crm'),
-  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/crm-task-reminders'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/crm-email-templates'),
   // The REAL custom-field reader (AGL-2661): a company body judged against
   // the company definitions and a deal body against the deal ones is the

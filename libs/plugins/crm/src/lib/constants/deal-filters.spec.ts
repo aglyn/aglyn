@@ -24,7 +24,7 @@
  * query does not translate is asked as it is stored.
  */
 
-import { CRM_NO_NEXT_ACTIVITY_CLAUSE } from '@aglyn/aglyn'
+import { CRM_NO_NEXT_ACTIVITY_CLAUSE } from '../model/crm-next-activity'
 import {
   DEAL_FILTER_CODECS,
   DEAL_LIST_DECLARATION,

@@ -61,9 +61,9 @@ import { CRM_COLLECTIONS } from '@aglyn/aglyn/app-utils/crm'
 import { personKey } from '@aglyn/aglyn/app-utils/person-key'
 import { FieldValue } from 'firebase-admin/firestore'
 import { settleCompanyContactsCounts } from '@aglyn/tenant-data-admin/server/contact-company-link'
-import { recomputeCrmNextTaskAt } from '@aglyn/tenant-data-admin/server/crm-next-activity'
 import { restampCrmListFieldsAt } from '@aglyn/tenant-data-admin/server/crm-records'
 import { logHostActivity } from '@aglyn/tenant-data-admin/server/organizations'
+import { recomputeCrmNextTaskAt } from './crm-next-activity'
 
 /** How many pointing rows one repoint pass reads — and one batch writes. */
 const REPOINT_PAGE = 400

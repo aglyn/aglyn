@@ -19,14 +19,7 @@ import {
   type AglynOrgBilling,
   type AglynOrgMember,
   buildRoute,
-  composeCrmTaskReminderBody,
-  composeCrmTaskReminderEmailText,
-  composeCrmTaskReminderSubject,
   CRM_COLLECTIONS,
-  CRM_TASK_REMINDER_CEILING,
-  type CrmReminderTask,
-  crmTaskReminderDue,
-  crmTaskReminderLink,
   isReleaseFlagOnForOrg,
   notificationMuted,
   parseOrgReleaseFlagOverrides,
@@ -67,6 +60,15 @@ import { writeCronBeat } from '@aglyn/aglyn/app-utils/health-report'
 import { brandSupportLine } from '@aglyn/aglyn/app-utils/brand-support-line'
 import { platformConsoleOrigin as consoleOrigin } from '@aglyn/aglyn/app-utils/platform-brand'
 import { digestTimeZone } from './daily-digest-route'
+import {
+  composeCrmTaskReminderBody,
+  composeCrmTaskReminderEmailText,
+  composeCrmTaskReminderSubject,
+  CRM_TASK_REMINDER_CEILING,
+  type CrmReminderTask,
+  crmTaskReminderDue,
+  crmTaskReminderLink,
+} from '../model/crm-task-reminders'
 
 /**
  * The mark a scheduled run leaves for `/api/health/crons` (AGL-1955), on the

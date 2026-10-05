@@ -147,6 +147,12 @@ export const crmRecordTimelineWriter: PluginRecordTimelineWriter = {
       await import('./server/record-timeline')
     return createCrmRecordTimelineWriter(defaultCrmRecordTimelineDeps()).recordEmailDelivery!(request)
   },
+  // A delivery event for a message the CRM tagged (AGL-2615, AGL-3080).
+  async recordTaggedDelivery(request) {
+    const { createCrmRecordTimelineWriter, defaultCrmRecordTimelineDeps } =
+      await import('./server/record-timeline')
+    return createCrmRecordTimelineWriter(defaultCrmRecordTimelineDeps()).recordTaggedDelivery!(request)
+  },
   // An automation's email to the person its event is about, filed on that
   // person's timeline with its delivery state (AGL-2615, AGL-3080).
   async prepareEmail(request) {

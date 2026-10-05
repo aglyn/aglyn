@@ -34,7 +34,6 @@ import {
   crmScopeTokens,
   crmTaskLabelsForNew,
   crmTaskListFields,
-  crmTaskReminderAfterEdit,
   normalizeContactEmail,
   parseCrmMemberRef,
   planLabelGrantingFeature,
@@ -53,11 +52,8 @@ import {
   consentGroupForSite,
   countCrmActivitiesForRecord,
   firebaseAdmin,
-  newCrmActivityRef,
   orgDataQueryForHost,
-  recomputeCrmNextTaskAt,
   restampCrmListFieldsAt,
-  writeCrmEmailActivity,
 } from '@aglyn/tenant-data-admin'
 // The leaf, not the barrel: the specs substitute the barrel wholesale, and
 // the lookup must reach the real index logic under them.
@@ -73,6 +69,9 @@ import type { ContactLifecycleStage, CrmActivityKind, CrmTaskKind } from '@aglyn
 import type { CRM_STEP_TYPES } from '../constants/bundle-common'
 import { readCrmTaskPicklists } from './read-picklist'
 import { CRM_SUITE_FEATURE } from './suite-gate'
+import { crmTaskReminderAfterEdit } from '../model/crm-task-reminders'
+import { recomputeCrmNextTaskAt } from './crm-next-activity'
+import { newCrmActivityRef, writeCrmEmailActivity } from './crm-email-activity'
 
 /**
  * THE AUTOMATION STEPS THAT WRITE THE CRM (AGL-2605), run for the automation

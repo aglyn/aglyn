@@ -128,10 +128,13 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   resolveOrgMembership: (...args: unknown[]) => resolveOrgMembership(...args),
   memberHasOrgPermission: (...args: unknown[]) => memberHasOrgPermission(...args),
   notifyUsers: (...args: unknown[]) => notifyUsers(...args),
+}))
+// The CRM's own `nextTaskAtMs` writer, doubled at its module; the links it is
+// handed are the real ones.
+jest.mock('./crm-next-activity', () => ({
+  __esModule: true,
+  ...jest.requireActual('./crm-next-activity'),
   recomputeCrmNextTaskAt: (...args: unknown[]) => recomputeCrmNextTaskAt(...(args as [])),
-  crmNextActivityLinksOf: jest.requireActual(
-    '../../../../../tenant/data/admin/src/lib/server/crm-next-activity',
-  ).crmNextActivityLinksOf,
 }))
 
 import { crmTaskListFields } from '@aglyn/aglyn'

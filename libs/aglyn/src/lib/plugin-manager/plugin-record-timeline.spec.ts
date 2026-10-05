@@ -20,8 +20,10 @@ import {
   PLUGIN_RECORD_TIMELINE,
   pluginRecordTimelineWriter,
   preparePluginRecordEmail,
+  recordPluginTaggedEmailDelivery,
   registerPluginRecordTimelineWriter,
   type PluginRecordEmailSent,
+  type PluginRecordTaggedDeliveryRequest,
   type PluginRecordTimelineWriter,
 } from './plugin-record-timeline'
 import { hasPluginService, resetPluginServicesForTests } from './plugin-services'
@@ -154,6 +156,50 @@ describe('an email prepared for the record (AGL-3080)', () => {
       { pluginId: 'records' },
     )
     expect(await preparePluginRecordEmail(REQUEST)).toBeNull()
+    jest.restoreAllMocks()
+  })
+})
+
+describe('a delivery event for a tagged message (AGL-3080)', () => {
+  const EVENT: PluginRecordTaggedDeliveryRequest = {
+    tags: { orgId: 'org-1', activityId: 'act-1', hostId: 'host-1' },
+    event: 'delivered',
+    atMs: 5,
+  }
+
+  it('does nothing while no plugin keeps records, or for one that files no sent mail', async () => {
+    await expect(recordPluginTaggedEmailDelivery(EVENT)).resolves.toBeUndefined()
+    registerPluginRecordTimelineWriter(writer('records'), { pluginId: 'records' })
+    await expect(recordPluginTaggedEmailDelivery(EVENT)).resolves.toBeUndefined()
+  })
+
+  it('hands the record system every tag and the event as the webhook heard them', async () => {
+    const heard: PluginRecordTaggedDeliveryRequest[] = []
+    registerPluginRecordTimelineWriter(
+      {
+        ...writer('records'),
+        async recordTaggedDelivery(request) {
+          heard.push(request)
+        },
+      },
+      { pluginId: 'records' },
+    )
+    await recordPluginTaggedEmailDelivery(EVENT)
+    expect(heard).toEqual([EVENT])
+  })
+
+  it('never throws at the webhook', async () => {
+    jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    registerPluginRecordTimelineWriter(
+      {
+        ...writer('records'),
+        async recordTaggedDelivery() {
+          throw new Error('storage down')
+        },
+      },
+      { pluginId: 'records' },
+    )
+    await expect(recordPluginTaggedEmailDelivery(EVENT)).resolves.toBeUndefined()
     jest.restoreAllMocks()
   })
 })
