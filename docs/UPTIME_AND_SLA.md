@@ -888,6 +888,20 @@ by AGL-3564). Nothing alerted:
    console. Logic and spec: `libs/tenant/data/admin/src/lib/server/render-monitor.ts`.
    The monitor itself is a row on `/api/health/crons` (`render-monitor`,
    30-minute grace), so a monitor that stops is red too.
+
+   **Real pages (AGL-3571).** Both probes above draw the layout and no page
+   body, and beta.223 (2026-10-05, AGL-3565) hung only page bodies with an
+   image: `demo` has none. So a third probe, `page`, draws one real page per
+   site per run (rotating through its list), fresh, through the tenant's
+   production `*.vercel.app` domain with `?tenantHost=` set to a spelling of
+   the site no cache holds (the `[host]` segment is in the ISR key and
+   `normalizeHostAlias` resolves every case/trailing-dot spelling to one
+   site), with the Deployment Protection bypass (`AGLYN_VERCEL_BYPASS`, else
+   Vercel's exposed `VERCEL_AUTOMATION_BYPASS_SECRET`). On Aglyn's console it
+   draws `ready-to-roll.aglyn.app/` and EDR Construction's `/`, `/services`,
+   `/contact` — the production canary's pages (RELEASING.md, "The production
+   canary") — and watches those two sites; elsewhere `RENDER_MONITOR_PAGES` +
+   `RENDER_MONITOR_RENDER_ORIGIN`.
 2. **The render canaries run the document** — `/api/health/render/site` and
    `/api/health/render/marketing` now carry a `document` check beside
    `render`: they call the real site layout (an async Server Component is a

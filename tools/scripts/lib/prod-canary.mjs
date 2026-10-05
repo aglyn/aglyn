@@ -43,6 +43,40 @@
  * beta.222. The real page paths are still requested (with the query, which is
  * harmless) because right after a deploy their ISR cache is empty too, and
  * because a routing break that 404s every real page must not read as green.
+ *
+ * ## Grade the CANDIDATE by its own URL, with real pages rendered fresh (AGL-3571)
+ *
+ * beta.223 hung every uncached render of a client page WITH AN IMAGE (an
+ * ancestor walk looped on the page root, AGL-3565). The canary above could not
+ * have caught it, twice over: it graded whatever the production DOMAIN served
+ * — after an instant rollback auto-assign is off, so the new deployment was
+ * READY, unaliased, and the canary read the old one — and its hosts were
+ * `demo.aglyn.app` (no images) and the 404 path, which draws the layout and no
+ * page body. So, whenever a bypass secret is at hand, the canary now requests
+ * the deployment's own `*.vercel.app` URL and names the site with the
+ * `?tenantHost=` override the middleware has always honored on `.vercel.app`
+ * hosts (production deployment URLs sit behind Vercel Authentication, so only
+ * a holder of the automation bypass gets that far).
+ *
+ * ### The cache-busting technique that works on a REAL page
+ *
+ * Measured 2026-10-05 on beta.221's deployment URL with the bypass:
+ *  - the query is not in the ISR key (`&__canary=` → HIT, as AGL-3567 found);
+ *  - the REQUEST HOST is: the same page via the deployment URL was a MISS
+ *    while the production domain answered STALE — so every page on a candidate
+ *    is uncached on the canary's first request, and only then;
+ *  - the `[host]` route segment is, and `normalizeHostAlias` resolves many
+ *    spellings of one site — any letter case, the full `{sub}.aglyn.app` name,
+ *    trailing dots. `?tenantHost=ReAdy-to-roll.aglyn.app` rendered the real
+ *    home page (200, its images) as a MISS; a second spelling MISSed again.
+ *    (A `:port` suffix does NOT work: the segment keeps it encoded and 404s.)
+ *
+ * `freshHostSpelling` turns a number into one of those spellings, so every
+ * `page` row renders the real page through the full ISR path on every round,
+ * on the candidate or on production, and a row served from a cache is a blind
+ * row rather than a pass. The same encoding lives in the render monitor
+ * (`libs/tenant/data/admin/src/lib/server/render-monitor.ts`), and
+ * `apps/tenant/specs/probe-host-spelling.spec.ts` pins both to the resolver.
  */
 
 import { gradeFrontDoor } from './front-door.mjs'
@@ -78,16 +112,120 @@ export const PROJECTS = {
 }
 
 /**
- * Platform-owned hosts only. Customer sites are added through the
- * `CANARY_TENANT_HOSTS` repo variable, never hard-coded here, because a
- * customer host in source outlives the customer.
+ * The pages a tenant canary renders, overridden whole by the
+ * `CANARY_TENANT_HOSTS` repo variable (same grammar, `parseHostList`).
  *
- * `aglyn.com` is served by the tenant runtime through the custom-domain
- * path, and `demo.aglyn.app` through the `.aglyn.app` subdomain path: two
- * host-resolution paths, so a middleware break that spares one is caught by
- * the other (the reasoning `FRONT_DOORS` gives).
+ * Real client pages first (AGL-3571), because a platform page with no images
+ * is exactly what beta.223 spared: `ready-to-roll.aglyn.app/` carries a dozen
+ * images, and EDR Construction's home, services and contact pages carry
+ * images, reusable components, repeats and a form between them. Then the two
+ * platform hosts, which resolve through the two host paths — `aglyn.com` the
+ * custom-domain path, `demo.aglyn.app` the `.aglyn.app` subdomain path — so a
+ * middleware break that spares one is caught by the other.
+ *
+ * If one of these sites is retired, its rows 404 as a real page and grade
+ * `server` on that one host — `isolated`, never a rollback on its own — and
+ * the run's summary names it; replace it here or in the variable.
  */
-export const DEFAULT_TENANT_HOSTS = 'demo.aglyn.app aglyn.com'
+export const DEFAULT_TENANT_HOSTS = [
+  'ready-to-roll.aglyn.app',
+  'edr-construction.aglyn.app',
+  'edr-construction.aglyn.app/services',
+  'edr-construction.aglyn.app/contact',
+  'demo.aglyn.app',
+  'aglyn.com',
+].join(' ')
+
+/** The platform apex a site subdomain hangs off. */
+export const TENANT_APEX = 'aglyn.app'
+
+/** The middleware's custom-domain sentinel (`apps/tenant/utils/get-host.ts`). */
+export const CNAME_HOST_PREFIX = 'cname--'
+
+/** How a site is named to the tenant through `?tenantHost=`, as its visitors' requests are. */
+export function siteSpelling(host) {
+  return host.endsWith(`.${TENANT_APEX}`)
+    ? host.slice(0, -(TENANT_APEX.length + 1))
+    : `${CNAME_HOST_PREFIX}${host}`
+}
+
+/** Letters past this are never recased, so the bit arithmetic stays in 32 bits. */
+const MAX_SPELLING_BITS = 30
+
+const spellingLetters = (host) =>
+  [...host.toLowerCase()]
+    .map((char, index) => (/[a-z]/.test(char) ? index : -1))
+    .filter((index) => index >= 0)
+    .slice(0, MAX_SPELLING_BITS)
+
+/** How many letter-case spellings a host has before trailing dots (or a cycle) begin. */
+export function spellingCapacity(host) {
+  return 2 ** spellingLetters(host).length
+}
+
+/**
+ * Spelling number `n` of one site: a `?tenantHost=` value that resolves to
+ * that site and is a `[host]` segment no other number produces, so the render
+ * it asks for has no cache entry to come from.
+ *
+ *  - `{sub}.aglyn.app` → the full name with letters upper-cased by the bits
+ *    of `n`, then one trailing dot per exhausted round of cases.
+ *    `normalizeHostAlias` lower-cases, strips trailing dots and the apex.
+ *  - anything else → `cname--{domain}`, its domain letters recased the same
+ *    way. Trailing dots are NOT stripped on this form, so its spellings cycle
+ *    after `2 ** letters`; and the `cname--` prefix stays lower-case, because
+ *    the page's canonical-domain redirect tests the raw segment for it.
+ *
+ * MUST stay identical to `freshHostSpelling` in render-monitor.ts; the
+ * literals in both specs and `probe-host-spelling.spec.ts` hold that.
+ */
+export function freshHostSpelling(host, n) {
+  const subdomain = host.endsWith(`.${TENANT_APEX}`)
+  const prefix = subdomain ? '' : CNAME_HOST_PREFIX
+  const chars = [...host.toLowerCase()]
+  const letters = spellingLetters(host)
+  const capacity = 2 ** letters.length
+  const value = Math.max(0, Math.floor(Number(n) || 0))
+  const bits = value % capacity
+  letters.forEach((index, bit) => {
+    if (Math.floor(bits / 2 ** bit) % 2 === 1) chars[index] = chars[index].toUpperCase()
+  })
+  const dots = subdomain ? '.'.repeat(Math.floor(value / capacity)) : ''
+  return `${prefix}${chars.join('')}${dots}`
+}
+
+/** A small stable number from a string (FNV-1a), for spelling numbers per run. */
+export function spellingSeed(text) {
+  let hash = 0x811c9dc5
+  for (const char of String(text)) {
+    hash ^= char.codePointAt(0)
+    hash = Math.imul(hash, 0x01000193) >>> 0
+  }
+  return hash
+}
+
+/** Strip a scheme and path: `https://x.vercel.app/` → `x.vercel.app`. */
+export function hostOf(urlOrHost) {
+  const text = String(urlOrHost ?? '').trim()
+  if (!text) return ''
+  try {
+    return new URL(/^https?:\/\//i.test(text) ? text : `https://${text}`).host.toLowerCase()
+  } catch {
+    return ''
+  }
+}
+
+/**
+ * The project's Protection Bypass for Automation secret, from GET
+ * /v9/projects — whose `protectionBypass` map is keyed BY the secret. Null
+ * when the project has none, which leaves the canary on the public domains.
+ */
+export function automationBypassFrom(project) {
+  const entry = Object.entries(project?.protectionBypass ?? {}).find(
+    ([, value]) => value?.scope === 'automation-bypass',
+  )
+  return entry ? entry[0] : null
+}
 export const DEFAULT_CONSOLE_HOST = 'app.aglyn.com'
 
 export const DEFAULTS = {
@@ -152,13 +290,63 @@ export function parseHostList(text) {
  * requested on a tenant run (and is part of the summary) but a console
  * failure must never roll the tenant back.
  *
+ * With `deploymentHost` (a tenant deployment's own `*.vercel.app` host, which
+ * the canary can only reach holding the automation bypass), every tenant row
+ * is requested from THAT deployment, naming the site with `?tenantHost=`:
+ *
+ *  - `page`  each real page, under a fresh spelling of the site
+ *            (`freshHostSpelling`) — a real page, rendered now, through the
+ *            ISR path every visitor's first request takes. `fresh: true` makes
+ *            a cached answer a blind row instead of a pass.
+ *  - `miss`  a never-requested path under the site's own spelling: the layout
+ *            and not-found page, as before.
+ *  - `health` the deployment's `/api/health`.
+ *
+ * Without it, the public domains as before — what production serves.
+ *
  * @param {{project: object, tenantHosts: Array<{host: string, paths: string[]}>,
- *   consoleHost: string, nonce: string}} input
+ *   consoleHost: string, nonce: string, deploymentHost?: string|null}} input
  */
-export function canaryPlan({ project, tenantHosts, consoleHost, nonce }) {
+export function canaryPlan({ project, tenantHosts, consoleHost, nonce, deploymentHost = null }) {
   const bust = (path) => `${path}${path.includes('?') ? '&' : '?'}__canary=${nonce}`
   const miss = `/__aglyn-canary-${nonce}`
   const rows = []
+  if (project.key === 'tenant' && deploymentHost) {
+    const base = `https://${deploymentHost}`
+    const seed = spellingSeed(nonce)
+    let offset = 0
+    for (const { host, paths } of tenantHosts) {
+      for (const path of paths) {
+        // One spelling per row, so two paths of one site and two rounds of one
+        // path are never the same cache key.
+        // Random-ish within four rounds of cases: a repeat is merely a blind
+        // row, and the URL stays a few dots long at most.
+        const spelling = freshHostSpelling(host, 1 + ((seed + offset++) % (4 * spellingCapacity(host) - 1)))
+        rows.push({
+          kind: 'page',
+          host,
+          path,
+          fresh: true,
+          url: `${base}${path}?tenantHost=${encodeURIComponent(spelling)}`,
+          counts: true,
+        })
+      }
+      rows.push({
+        kind: 'miss',
+        host,
+        path: miss,
+        url: `${base}${miss}?tenantHost=${encodeURIComponent(siteSpelling(host))}`,
+        counts: true,
+      })
+    }
+    // Graded under the first site, as on the public plan: a dead deployment
+    // fails every site anyway, and a health row is not a site of its own.
+    if (tenantHosts[0]) {
+      rows.push({ kind: 'health', host: tenantHosts[0].host, url: `${base}/api/health`, counts: true })
+    }
+    rows.push({ kind: 'health', host: consoleHost, url: `https://${consoleHost}/api/health`, counts: false })
+    return rows
+  }
   if (project.key === 'tenant') {
     for (const { host, paths } of tenantHosts) {
       for (const path of paths) {
@@ -197,6 +385,9 @@ export function canaryPlan({ project, tenantHosts, consoleHost, nonce }) {
  */
 const TIMEOUT_ERRORS = new Set(['TimeoutError', 'AbortError'])
 
+/** Cache states whose bytes came out of a store rather than a render. */
+const CACHED_STATES = new Set(['HIT', 'STALE', 'PRERENDER'])
+
 /**
  * Classify one response.
  *
@@ -209,9 +400,13 @@ const TIMEOUT_ERRORS = new Set(['TimeoutError', 'AbortError'])
  *  - `degraded`  a health route answered in JSON but reported a dependency
  *                down. The code rendered; a rollback would not fix Firestore.
  *
+ * A `fresh` row answered from a cache (`cache`: the `x-vercel-cache` state)
+ * is `canary` — blind, see the body.
+ *
  * @param {{kind: 'page'|'miss'|'health', status?: number,
  *   contentType?: string|null, body?: string, location?: string|null,
- *   error?: {name?: string, code?: string}|null, budgetMs?: number}} response
+ *   error?: {name?: string, code?: string}|null, budgetMs?: number,
+ *   fresh?: boolean, cache?: string|null}} response
  * @returns {{outcome: 'ok'|'server'|'canary'|'degraded', detail: string}}
  */
 export function classifyResponse({
@@ -222,6 +417,8 @@ export function classifyResponse({
   location = null,
   error = null,
   budgetMs = DEFAULTS.budgetMs,
+  fresh = false,
+  cache = null,
 }) {
   if (error) {
     if (TIMEOUT_ERRORS.has(error.name)) {
@@ -245,6 +442,13 @@ export function classifyResponse({
     location,
   })
   if (verdict.challenged) return { outcome: 'canary', detail: verdict.detail }
+  // A `fresh` row exists to make the deployment render now. Bytes out of a
+  // cache prove no render, so they are not a pass — but they are no failure
+  // of the deployment either (a spelling repeated within the hour).
+  const cached = String(cache ?? '').trim().toUpperCase()
+  if (verdict.ok && fresh && CACHED_STATES.has(cached)) {
+    return { outcome: 'canary', detail: `served from cache (${cached}), so it proves no render` }
+  }
   if (verdict.ok) {
     return {
       outcome: 'ok',
@@ -352,6 +556,9 @@ export const EXIT = {
   green: 0,
   recovered: 0,
   rollback: 1,
+  // A red CANDIDATE that production does not serve: nothing to roll back,
+  // and it must not be promoted (AGL-3571).
+  'candidate-red': 1,
   degraded: 1,
   'not-serving': 1,
   error: 2,
@@ -400,6 +607,31 @@ export function pickRollbackTarget({ deployments, bad, redShas = new Set(), gree
     target: candidates[0],
     reason: 'newest older READY production deployment (none recorded green yet)',
   }
+}
+
+/**
+ * The commit-status description a verdict is recorded under. It names the
+ * deployment and whether production served it then, so a later run can tell
+ * "this deployment was graded" from "this commit was graded" — one commit
+ * deploys more than once.
+ */
+export function recordDescription(verdict, deploymentId, serving) {
+  return `canary ${verdict} on ${deploymentId ?? 'production'} (${serving ? 'serving' : 'candidate'})`
+}
+
+/**
+ * Has the canary already graded THIS deployment? The scheduled run asks it of
+ * whatever production serves, and grades only what nobody has: a promote of a
+ * graded candidate, or a hand rollback to an old one, emits no event of its
+ * own (AGL-3571).
+ */
+export function alreadyGraded(statuses, context, deploymentId) {
+  if (!deploymentId) return false
+  return (statuses ?? []).some(
+    (status) =>
+      status?.context === context &&
+      String(status?.description ?? '').includes(deploymentId),
+  )
 }
 
 /** Split a commit's statuses into the canary's green and red records. */
@@ -474,6 +706,7 @@ export function slackPayload({ project, verdict, deployment, rollback = null, ru
       : rollback?.action === 'would-roll-back'
         ? `production WOULD be rolled back to ${describe(rollback.target)}`
         : `production is failing and was NOT rolled back (${rollback?.reason ?? 'no target'})`,
+    'candidate-red': 'the CANDIDATE deployment fails its pages — production does not serve it, so nothing was rolled back. Do NOT promote it',
     degraded: 'pages are failing on some hosts; not enough at once to roll back',
     inconclusive: 'the canary could not see production (challenged or unreachable)',
     'not-serving': 'the new deployment is READY but production is not serving it',

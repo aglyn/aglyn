@@ -144,7 +144,16 @@ console:
 - **A path nobody has asked for before**, which the site answers with its own
   "page not found" page, drawn in the same layout as every published page.
 
-A run passes when both come back as complete pages within 25 seconds. When a site
+Those two draw the layout but not a page's own content, and a fault can hide
+there: on 2026-10-05 every page **with an image** hung while the search page and
+the "page not found" page drew fine. So a site can also be given **real pages** to
+draw fresh. Each run draws one of them (taking turns), asked for under a spelling
+of the site's name no cache has seen, through a deployment address of your
+published-site runtime that only your scheduled jobs can reach. Name the pages
+with `RENDER_MONITOR_PAGES` and that address with `RENDER_MONITOR_RENDER_ORIGIN`;
+without both, no real page is asked for.
+
+A run passes when every page comes back complete within 25 seconds. When a site
 fails two runs in a row, **Published site not rendering pages** goes out once,
 naming what failed (a timeout, an error status, an unfinished page). The first
 passing run after that sends **Published site rendering again**. Each watched site

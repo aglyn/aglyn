@@ -313,6 +313,9 @@ export function imageSizes(input: ImageSizesInput): ImageSizes {
   }
 }
 
+/** No published page nests deeper; a walk past this is following a cycle. */
+const MAX_LAYOUT_DEPTH = 256
+
 /** The Grid element's persisted component id (`grid.tsx`). */
 const GRID_COMPONENT_ID = 'muiGrid'
 
@@ -493,7 +496,17 @@ export function layoutBandWidths(
   // stated length, not as layout.
   if (node) applySizing(node, false)
   let child = node
-  for (let current = node?.parent; current; current = current.parent) {
+  // Stored pages name the root as its own parent (`parentId: "_@_"`), so a
+  // walk that only stops at a missing parent never ends (AGL-3565). Stop at
+  // any node already visited, and never climb further than a page can nest.
+  const visited = new Set<LayoutNode>(node ? [node] : [])
+  let depth = 0
+  for (
+    let current = node?.parent;
+    current && !visited.has(current) && depth < MAX_LAYOUT_DEPTH;
+    current = current.parent, depth += 1
+  ) {
+    visited.add(current)
     const props = propsOf(current)
     if (current.componentId === GRID_COMPONENT_ID) {
       const spans = gridSpanPerBand(props['size'])

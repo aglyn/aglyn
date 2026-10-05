@@ -195,13 +195,15 @@ describe('the hierarchy ancestor walk on a stored document', () => {
   })
   afterEach(() => act(() => Besigner.focus.clearFocusStatus()))
 
-  it('stores the document root as its own parent', () => {
+  it('stores the document root as its own parent, which `parent` does not echo', () => {
     // The premise the rest of this file rests on, asserted rather than
-    // assumed: a walk that follows `parent` from anywhere in this document
-    // arrives at a node that answers with itself.
+    // assumed: stored documents name the root as its own parent. The canvas
+    // getter answers nothing for it (AGL-3565), so a walk that follows
+    // `parent` ends at the root; the guards below still cover a tree whose
+    // nodes loop through anything else.
     const root = Aglyn.canvas.getNode(Aglyn.NODE_ROOT_ID)!
     expect(root.parentId).toBe(Aglyn.NODE_ROOT_ID)
-    expect(root.parent?.$id).toBe(Aglyn.NODE_ROOT_ID)
+    expect(root.parent).toBeUndefined()
   })
 
   it('terminates when the root parents itself', () => {

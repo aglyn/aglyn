@@ -9,6 +9,15 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.224 — 2026-10-05
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/b89f8dd0e...v1.0.0-beta.224)
+
+### Fixed
+
+- **ci:** the production canary grades a candidate deployment by its own URL, on real image pages, before Promote ([AGL-3571](https://linear.app/aglyn/issue/AGL-3571))
+- **mui:** an image's layout walk stops at a root that is its own parent ([AGL-3565](https://linear.app/aglyn/issue/AGL-3565), [AGL-3485](https://linear.app/aglyn/issue/AGL-3485))
+
 ## v1.0.0-beta.223 — 2026-10-05
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/03858b42b...v1.0.0-beta.223)
