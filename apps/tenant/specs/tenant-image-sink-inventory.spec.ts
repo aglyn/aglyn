@@ -243,9 +243,9 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
     why: "The bar mounts only for an authenticated editor of this site, and its favicon is resolved by the edit-context route with the same resolver the layout's <link rel=icon> uses. Its <style> is BAR_CSS, ours.",
   },
   'apps/tenant/app/[host]/[scheme]/layout.tsx': {
-    markers: 2,
+    markers: 1,
     guard: 'media-ref',
-    why: "The site favicon, the org brand favicon and its dark-tab partner (the brand profile's faviconDarkUrl, emitted as a second <link rel=icon> under prefers-color-scheme: dark), the apple-touch-icon (AGL-3382) and the navigation loader logos, all through resolveMediaSrc since AGL-1407. Site-relative is correct here: a page is present to resolve against.",
+    why: "The site favicon, the org brand favicon and its dark-tab partner (the brand profile's faviconDarkUrl, emitted as a second <link rel=icon> under prefers-color-scheme: dark — the one literal marker), the apple-touch-icons (AGL-3382) and the navigation loader logos, all through resolveMediaSrc since AGL-1407. The favicon and touch-icon sets are mapped from siteFaviconLinks / siteAppleTouchIconLinks in libs/aglyn/src/lib/app-utils/site-icon-set.ts (AGL-3484): each href is that resolved src, or the same src with an `?icon=` query naming a size our own CDN draws, so the set adds no host the resolver did not already admit. Site-relative is correct here: a page is present to resolve against.",
   },
   'apps/tenant/app/api/_legal-intake/chrome.ts': {
     markers: 1,
@@ -260,12 +260,7 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
   'apps/tenant/app/api/locked/route.ts': {
     markers: 2,
     guard: 'media-ref',
-    why: "The lockdown interstitial. Its <style> is inline constant CSS; its icon links (AGL-3382) are the site's seo.favicon/appIcon through resolveMediaSrc, emitted only for a bandwidth cap or containment, never for a lock.",
-  },
-  'apps/tenant/app/api/manifest/route.ts': {
-    markers: 1,
-    guard: 'media-ref',
-    why: 'The PWA icon through absoluteMediaSrc, which is the correct resolver precisely because the install prompt and the OS icon cache fetch it with no page to resolve a relative URL against.',
+    why: "The lockdown interstitial. Its <style> is inline constant CSS; its icon links (AGL-3382) are the site's seo.favicon/appIcon through resolveMediaSrc, with an `?icon=` size query when the src is our own CDN's (AGL-3484), emitted only for a bandwidth cap or containment, never for a lock.",
   },
   'apps/tenant/components/site-status-screen.component.tsx': {
     markers: 1,
@@ -280,7 +275,7 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
   'libs/aglyn/src/lib/app-utils/agent-openapi.ts': {
     markers: 1,
     guard: 'platform',
-    why: "Not a sink: the `icons` marker is the JSON SCHEMA that DESCRIBES the web app manifest's `icons[].src` member in `/openapi.json` (AGL-2722). It is a `{ type: 'string' }` under a property key, so the only thing this file emits for it is the word `src` in a published description. The manifest's real icon URLs are built by `apps/tenant/app/api/manifest/route.ts`, which is declared above and is where that risk actually lives. No author string is read here and no URL is produced here.",
+    why: "Not a sink: the `icons` marker is the JSON SCHEMA that DESCRIBES the web app manifest's `icons[].src` member in `/openapi.json` (AGL-2722). It is a `{ type: 'string' }` under a property key, so the only thing this file emits for it is the word `src` in a published description. The manifest's real icon URLs are built by `buildSiteManifest` in `apps/tenant/utils/site-icons.ts` (AGL-3484), outside this sweep's roots: the resolved app icon, favicon or logo made absolute against the host's public origin, then `siteManifestIcons` in `site-icon-set.ts` appends an `?icon=` query naming a size our own CDN draws — no host the resolver did not already admit. No author string is read here and no URL is produced here.",
   },
   'libs/aglyn/src/lib/app-utils/docs-index.generated.ts': {
     markers: 2,

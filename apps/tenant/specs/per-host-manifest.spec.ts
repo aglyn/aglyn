@@ -45,7 +45,27 @@ jest.mock('@aglyn/aglyn/app-utils/site-theme', () => ({
   resolveSiteTheme: (site: { theme?: unknown }) => site?.theme,
 }))
 
+/**
+ * The icon source's media document (AGL-3484): its type and content hash.
+ * None read by default — the shape a failed read has, which derives the set
+ * unversioned — and set per case where the version or the type matters.
+ */
+const mockIconFacts = jest.fn()
+jest.mock('@aglyn/tenant-runtime/get-site-icon-facts', () => ({
+  __esModule: true,
+  getSiteIconFacts: (...args: unknown[]) => mockIconFacts(...args),
+}))
+
 import { GET } from '../app/api/manifest/route'
+
+/**
+ * The FILE an icon entry is drawn from: a derived icon is its source's URL
+ * plus an `?icon=` query (AGL-3484), and a pass-through entry is the source.
+ */
+const sourceOf = (src: string | undefined) =>
+  src?.replace(/[?&]icon=.*$/, '')
+
+beforeEach(() => mockIconFacts.mockResolvedValue(new Map()))
 
 const call = async (host: string | null) =>
   GET(
@@ -87,7 +107,7 @@ describe('per-host web app manifest (AGL-1252)', () => {
     expect(body.name).toBe('Northwind Coffee')
     expect(body.theme_color).toBe('#6f4e37')
     expect(body.background_color).toBe('#fff8f0')
-    expect(body.icons?.[0]?.src).toBe('https://cdn.test/northwind.png')
+    expect(sourceOf(body.icons?.[0]?.src)).toBe('https://cdn.test/northwind.png')
     // Nothing of ours may appear.
     expect(JSON.stringify(body)).not.toMatch(/aglyn/i)
   })
@@ -177,7 +197,7 @@ describe('manifest icon media references (AGL-1407)', () => {
   const iconFor = async (host: Record<string, unknown>) => {
     mockGetHost.mockResolvedValue({ host: { displayName: 'Site', ...host } })
     const { body } = await manifestFor('a-site')
-    return body.icons?.[0]?.src
+    return sourceOf(body.icons?.[0]?.src)
   }
 
   it('resolves a media reference to an ABSOLUTE CDN URL', async () => {
@@ -306,11 +326,10 @@ describe('manifest icon media references (AGL-1407)', () => {
       ).toBe('https://cdn.test/northwind.png')
     })
 
-    it('still declares `any`, because nothing measured the file', async () => {
-      // A dedicated field is not a measurement (AGL-2204): no dimensions are
-      // stored for it, a `media:` reference carries no extension to sniff,
-      // and an SVG has no raster size at all. `any` is the honest answer for
-      // either source.
+    it('still declares `any` for a file nothing measured or drew', async () => {
+      // A hotlinked icon has no renderer behind it (AGL-2204): no dimensions
+      // are stored for it, and nothing draws it at a size, so `any` is the
+      // honest answer. A CDN-served one is DRAWN at each size (AGL-3484).
       mockGetHost.mockResolvedValue({
         host: {
           displayName: 'Northwind Coffee',
@@ -318,8 +337,9 @@ describe('manifest icon media references (AGL-1407)', () => {
         },
       })
       const { body } = await manifestFor('northwind-coffee')
-      expect(body.icons?.[0]?.sizes).toBe('any')
-      expect(body.icons?.[0]?.purpose).toBe('any')
+      expect(body.icons).toEqual([
+        { src: 'https://cdn.test/icon-512.png', sizes: 'any', purpose: 'any' },
+      ])
     })
 
     it('installs an app icon on a site with no logo at all', async () => {
@@ -345,49 +365,48 @@ describe('manifest icon media references (AGL-1407)', () => {
 
 /**
  * The icon `sizes` declaration must never be a measurement we did not take
- * (AGL-2204).
+ * (AGL-2204) — and since AGL-3484 most of them ARE taken.
  *
  * The route used to emit `sizes: '512x512'` for whatever `logoUrl` was. On
  * `aglyn.com` that is the wordmark lockup — `viewBox "0 0 79 24"`, verified on
  * production as `image/svg+xml`, 6296 bytes, intrinsic 300x91 — i.e. a 3.29:1
  * rectangle declared as a 1:1 square. Installers trust `sizes`; that is what
- * the field is for. So the tile gets cached at 512 square and painted
- * stretched or letterboxed.
+ * the field is for.
  *
- * The route cannot know the true size: a `media:` reference resolves to an
- * extensionless CDN path, nothing stores the logo's dimensions, and
- * `AglynHostMedia.width` is raster-only so an SVG never has one. Therefore the
- * ONLY defensible assertion is a negative one — no icon entry may carry a
- * concrete `WxH`.
+ * A CDN-served source is now DRAWN at every size it declares: the `?icon=`
+ * representation center-fits it on a square of exactly that side, so a
+ * `192x192` entry is a 192px square by construction, wordmark or not. The
+ * rule is therefore that a concrete `WxH` appears only on an entry the
+ * renderer draws at that size, and everything else says `any`.
  *
- * ## Why the last test in this block exists
- *
- * A guard that only reads the route's current output cannot tell you it is
- * capable of failing. {@link expectNoFabricatedSize} is therefore run twice:
- * once over the real handler, and once over a literal copy of the PRE-FIX
- * manifest, which it must REJECT. If someone reinstates a hard-coded size, the
- * first call reds; if someone guts the predicate into a tautology, the second
- * one does.
+ * {@link expectEverySizeMeasured} is run twice, as before: over the real
+ * handler, and over the PRE-FIX manifest, which it must REJECT.
  */
 describe('manifest icon sizes are never fabricated (AGL-2204)', () => {
   beforeEach(() => jest.clearAllMocks())
 
-  /** A concrete pixel declaration, e.g. `512x512` or `48x48 96x96`. */
-  const FABRICATED = /\d+x\d+/
+  const CONCRETE = /^(\d+)x(\d+)$/
 
-  const expectNoFabricatedSize = (body: {
-    icons?: Array<{ sizes?: string }>
+  const expectEverySizeMeasured = (body: {
+    icons?: Array<{ src: string; sizes?: string }>
   }) => {
     for (const icon of body.icons ?? []) {
-      // `any`, or absent. Anything else claims a measurement.
-      expect(icon.sizes ?? 'any').not.toMatch(FABRICATED)
+      const sizes = icon.sizes ?? 'any'
+      if (sizes === 'any') continue
+      // One concrete square, drawn at exactly that size by the renderer.
+      const match = CONCRETE.exec(sizes)
+      expect(match).not.toBeNull()
+      expect(match?.[1]).toBe(match?.[2])
+      expect(icon.src).toMatch(
+        new RegExp(`[?&]icon=(png|maskable)-${match?.[1]}(&|$)`),
+      )
     }
   }
 
   /** The real shape of the live `aglyn.com` logo, measured on production. */
   const AGLYN_LOGO = { viewBoxWidth: 79, viewBoxHeight: 24 }
 
-  it('declares `any`, not a square, for the wide wordmark it actually serves', async () => {
+  it('declares only the squares it draws, for the wide wordmark it serves', async () => {
     mockGetHost.mockResolvedValue({
       host: {
         displayName: 'Aglyn Marketing Website',
@@ -398,17 +417,16 @@ describe('manifest icon sizes are never fabricated (AGL-2204)', () => {
     })
     const { body } = await manifestFor('aglyn-marketing')
 
-    // The asset is emphatically not square, which is what made `512x512` a lie.
+    // The asset is emphatically not square, which is what made `512x512` a
+    // lie for the ORIGINAL — and why the derived 512 is center-fit instead.
     expect(AGLYN_LOGO.viewBoxWidth).not.toBe(AGLYN_LOGO.viewBoxHeight)
 
-    expect(body.icons).toHaveLength(1)
-    expect(body.icons[0].sizes).toBe('any')
-    expect(body.icons[0].purpose).toBe('any')
-    expectNoFabricatedSize(body)
+    expect(body.icons.length).toBeGreaterThan(1)
+    expectEverySizeMeasured(body)
   })
 
   it('never fabricates a size for ANY logo shape', async () => {
-    // Every stored generation of `logoUrl`, since none of them carries a size.
+    // Every stored generation of `logoUrl`.
     const logos = [
       'media:org:jWmGooWE3L:DXnRbPH4CQ/hWwBgGtkiM',
       '/api/media/cdn/org:jWmGooWE3L/4GF1hRJBUp',
@@ -420,7 +438,7 @@ describe('manifest icon sizes are never fabricated (AGL-2204)', () => {
         host: { displayName: 'A Site', $id: 'DXnRbPH4CQ', cname: 'a.test', logoUrl },
       })
       const { body } = await manifestFor('a-site')
-      expectNoFabricatedSize(body)
+      expectEverySizeMeasured(body)
     }
   })
 
@@ -428,14 +446,14 @@ describe('manifest icon sizes are never fabricated (AGL-2204)', () => {
     mockGetHost.mockResolvedValue({ host: { displayName: 'No Logo Co' } })
     const { body } = await manifestFor('no-logo')
     expect(body).not.toHaveProperty('icons')
-    expectNoFabricatedSize(body)
+    expectEverySizeMeasured(body)
   })
 
   /**
-   * THE NEGATIVE CONTROL — proves the three assertions above can fail.
+   * THE NEGATIVE CONTROL — proves the assertions above can fail.
    *
-   * This is the manifest this route emitted before the fix, verbatim off
-   * production. The guard must reject it.
+   * This is the manifest this route emitted before AGL-2204, verbatim off
+   * production: the ORIGINAL file, declared as a square it never was.
    */
   it('REJECTS the pre-fix manifest — proof the guard is not a tautology', () => {
     const preFix = {
@@ -448,14 +466,19 @@ describe('manifest icon sizes are never fabricated (AGL-2204)', () => {
         },
       ],
     }
-    expect(() => expectNoFabricatedSize(preFix)).toThrow()
+    expect(() => expectEverySizeMeasured(preFix)).toThrow()
   })
 
-  it('REJECTS a fabricated size hidden among valid ones', () => {
-    // A size list is still a measurement claim, so the predicate must not be
-    // satisfiable by putting `any` first.
+  it('REJECTS a size list, and a size the src does not draw', () => {
     expect(() =>
-      expectNoFabricatedSize({ icons: [{ sizes: 'any 192x192' }] }),
+      expectEverySizeMeasured({
+        icons: [{ src: 'https://a.test/x?icon=png-192', sizes: 'any 192x192' }],
+      }),
+    ).toThrow()
+    expect(() =>
+      expectEverySizeMeasured({
+        icons: [{ src: 'https://a.test/x?icon=png-192', sizes: '512x512' }],
+      }),
     ).toThrow()
   })
 })
@@ -482,7 +505,7 @@ describe('link-preview manifest fields (AGL-3382)', () => {
     expect(body.short_name).toBe('Ready To')
   })
 
-  it('lists the app icon first and the favicon after it', async () => {
+  it('draws the whole set from the app icon when the site has one', async () => {
     mockGetHost.mockResolvedValue({
       host: {
         ...SITE,
@@ -493,12 +516,10 @@ describe('link-preview manifest fields (AGL-3382)', () => {
       },
     })
     const { body } = await manifestFor('ready-to-roll')
-    expect(body.icons.map((icon: { src: string }) => icon.src)).toEqual([
-      `${ORIGIN}org:Ok7uFGMCC-:ZG22ootbN-/mKeulwfbL0`,
-      `${ORIGIN}org:Ok7uFGMCC-:ZG22ootbN-/o0-uaWHCNA`,
-    ])
-    // The favicon claims no size either (AGL-2204).
-    expect(body.icons[1]).not.toHaveProperty('sizes')
+    const sources = new Set(
+      body.icons.map((icon: { src: string }) => sourceOf(icon.src)),
+    )
+    expect([...sources]).toEqual([`${ORIGIN}org:Ok7uFGMCC-:ZG22ootbN-/mKeulwfbL0`])
   })
 
   it('installs a favicon-only site with its favicon', async () => {
@@ -506,9 +527,10 @@ describe('link-preview manifest fields (AGL-3382)', () => {
       host: { ...SITE, seo: { favicon: 'media:org:Ok7uFGMCC-/o0-uaWHCNA' } },
     })
     const { body } = await manifestFor('ready-to-roll')
-    expect(body.icons).toEqual([
-      { src: `${ORIGIN}org:Ok7uFGMCC-:ZG22ootbN-/o0-uaWHCNA`, purpose: 'any' },
-    ])
+    const sources = new Set(
+      body.icons.map((icon: { src: string }) => sourceOf(icon.src)),
+    )
+    expect([...sources]).toEqual([`${ORIGIN}org:Ok7uFGMCC-:ZG22ootbN-/o0-uaWHCNA`])
   })
 
   it('still lists no icons, and nothing of ours, for a site with neither', async () => {
@@ -516,5 +538,133 @@ describe('link-preview manifest fields (AGL-3382)', () => {
     const { body } = await manifestFor('ready-to-roll')
     expect(body).not.toHaveProperty('icons')
     expect(JSON.stringify(body)).not.toMatch(/_static|brand/)
+  })
+})
+
+/**
+ * The whole manifest, derived (AGL-3484). Nothing in it is entered by hand: a
+ * customer who never thinks about installability gets a complete manifest and
+ * every icon size from what they already filled in.
+ */
+describe('the derived manifest (AGL-3484)', () => {
+  beforeEach(() => jest.clearAllMocks())
+
+  const SITE = {
+    $id: 'ZG22ootbN-',
+    displayName: 'EDR Construction',
+    subdomain: 'edr-construction',
+    seo: {
+      title: 'EDR Construction Services',
+      description: 'Commercial and residential builds in Austin.',
+      favicon: 'media:org:Ok7uFGMCC-/o0-uaWHCNA',
+    },
+    defaultLocale: 'es',
+    theme: {
+      colorSchemes: {
+        light: {
+          primary: { main: '#c2410c' },
+          background: { default: '#FAFAF9' },
+        },
+      },
+    },
+  }
+  const SRC =
+    'https://edr-construction.aglyn.app/api/media/cdn/org:Ok7uFGMCC-:ZG22ootbN-/o0-uaWHCNA'
+
+  it('derives every field from the site’s settings', async () => {
+    mockGetHost.mockResolvedValue({ host: SITE })
+    const { body } = await manifestFor('edr')
+    expect(body).toMatchObject({
+      name: 'EDR Construction Services',
+      short_name: 'EDR', // ≤12 at a word boundary
+      description: 'Commercial and residential builds in Austin.',
+      lang: 'es',
+      start_url: '/',
+      scope: '/',
+      display: 'standalone',
+      theme_color: '#c2410c',
+      background_color: '#fafaf9',
+    })
+  })
+
+  it('names the site, then its display name, and says English by default', async () => {
+    mockGetHost.mockResolvedValue({
+      host: { displayName: 'Acme Tools', name: 'acme' },
+    })
+    const { body } = await manifestFor('acme')
+    expect(body.name).toBe('Acme Tools')
+    expect(body.lang).toBe('en')
+    expect(body).not.toHaveProperty('description')
+  })
+
+  it('lists ten `any` sizes and two maskable ones, versioned by the content hash', async () => {
+    mockGetHost.mockResolvedValue({ host: SITE })
+    mockIconFacts.mockResolvedValue(
+      new Map([
+        [
+          '/api/media/cdn/org:Ok7uFGMCC-:ZG22ootbN-/o0-uaWHCNA',
+          { contentType: 'image/png', contentHash: 'h4sh' },
+        ],
+      ]),
+    )
+    const { body } = await manifestFor('edr')
+    expect(body.icons).toEqual([
+      ...[48, 72, 96, 128, 144, 152, 192, 256, 384, 512].map((size) => ({
+        src: `${SRC}?icon=png-${size}&v=h4sh`,
+        sizes: `${size}x${size}`,
+        type: 'image/png',
+        purpose: 'any',
+      })),
+      ...[192, 512].map((size) => ({
+        // The maskable plate is the site's own light background.
+        src: `${SRC}?icon=maskable-${size}&bg=fafaf9&v=h4sh`,
+        sizes: `${size}x${size}`,
+        type: 'image/png',
+        purpose: 'maskable',
+      })),
+    ])
+  })
+
+  it('passes an SVG source through as `sizes: "any"` after the drawn set', async () => {
+    mockGetHost.mockResolvedValue({ host: SITE })
+    mockIconFacts.mockResolvedValue(
+      new Map([
+        [
+          '/api/media/cdn/org:Ok7uFGMCC-:ZG22ootbN-/o0-uaWHCNA',
+          { contentType: 'image/svg+xml', contentHash: 'h4sh' },
+        ],
+      ]),
+    )
+    const { body } = await manifestFor('edr')
+    expect(body.icons.at(-1)).toEqual({
+      src: SRC,
+      sizes: 'any',
+      type: 'image/svg+xml',
+      purpose: 'any',
+    })
+    expect(body.icons).toHaveLength(13)
+  })
+
+  it('reads the facts of the one source the set is drawn from', async () => {
+    mockGetHost.mockResolvedValue({ host: SITE })
+    await manifestFor('edr')
+    expect(mockIconFacts).toHaveBeenCalledWith({
+      hostId: 'ZG22ootbN-',
+      srcs: ['/api/media/cdn/org:Ok7uFGMCC-:ZG22ootbN-/o0-uaWHCNA'],
+    })
+  })
+
+  it('falls back from app icon to favicon to logo', async () => {
+    mockGetHost.mockResolvedValue({
+      host: {
+        ...SITE,
+        logoUrl: 'media:org:Ok7uFGMCC-/logo',
+        seo: { appIcon: '', favicon: '' },
+      },
+    })
+    const { body } = await manifestFor('edr')
+    expect(sourceOf(body.icons[0].src)).toBe(
+      'https://edr-construction.aglyn.app/api/media/cdn/org:Ok7uFGMCC-:ZG22ootbN-/logo',
+    )
   })
 })

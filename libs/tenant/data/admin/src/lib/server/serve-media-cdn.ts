@@ -52,6 +52,12 @@ import {
   parseMediaCdnScope,
 } from '@aglyn/aglyn/app-utils/media-cdn-scope'
 import { mediaDeliveryProvider } from '@aglyn/aglyn/plugin-manager/media-delivery-provider'
+import {
+  parseSiteIconSpec,
+  SITE_ICON_BACKGROUND_PARAM,
+  SITE_ICON_PARAM,
+  SITE_ICON_VERSION_PARAM,
+} from '@aglyn/aglyn/app-utils/site-icon-set'
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { analyticsDayExpiresAt } from './analytics-retention'
 import { firebaseAdmin } from './firebase-admin'
@@ -66,6 +72,7 @@ import { mediaDeliveryOrgIdFor, mediaDeliveryRedirect } from './media-delivery'
 import { getMediaQuarantine } from './media-quarantine'
 import { verifyMediaAccess } from './media-signing'
 import { mediaStoragePathInScope } from './media-storage-path'
+import { serveMediaCdnIcon } from './media-cdn-icon'
 
 /**
  * Variant widths generated at upload (AGL-175).
@@ -119,7 +126,19 @@ export function mediaCdnForwardedQuery(query: NextApiRequest['query']): string {
   // redirect must name the SAME representation the caller asked for, or a
   // stale content pin on a poster URL lands the browser on the master video
   // (AGL-2743).
-  for (const key of ['w', 'poster', 'r', 'download', 'exp', 'sig'] as const) {
+  // `icon`, `bg` and `v` for the same reason: a site icon (AGL-3484) behind a
+  // stale content pin must stay the icon, not become the full-size original.
+  for (const key of [
+    'w',
+    'poster',
+    'r',
+    'download',
+    SITE_ICON_PARAM,
+    SITE_ICON_BACKGROUND_PARAM,
+    SITE_ICON_VERSION_PARAM,
+    'exp',
+    'sig',
+  ] as const) {
     const raw = query[key]
     const value = Array.isArray(raw) ? raw[0] : raw
     if (value !== undefined && value !== '') params.set(key, String(value))
@@ -1346,6 +1365,50 @@ export async function serveMediaCdn(
         `${MEDIA_CDN_ROUTE}/${scopeSegment}/${mediaId}${mediaCdnForwardedQuery(req.query)}`,
       )
       res.status(302).end()
+      return
+    }
+
+    /*
+     * A site icon (AGL-3484): one size of the favicon, touch icon or manifest
+     * set, drawn from this asset's bytes. Past every gate above and ahead of
+     * every other representation, which it excludes — see `media-cdn-icon.ts`.
+     */
+    const iconSpec = parseSiteIconSpec(req.query[SITE_ICON_PARAM])
+    if (iconSpec) {
+      const iconBase = `${isOrg ? 'orgs' : 'hosts'}/${scopeId}`
+      const iconFile = firebaseAdmin
+        .app()
+        .storage()
+        .bucket(process.env['NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET'])
+        .file(
+          mediaStoragePathInScope({
+            storagePath: snapshot.get('storagePath'),
+            base: iconBase,
+            mediaId,
+          }),
+        )
+      await serveMediaCdnIcon({
+        req,
+        res,
+        spec: iconSpec,
+        source: {
+          contentType: snapshot.get('contentType'),
+          contentHash: currentHash,
+          stablePath: `${MEDIA_CDN_ROUTE}/${scopeSegment}/${mediaId}`,
+          file: iconFile as never,
+        },
+        setCacheControl,
+        cacheControl: {
+          stable: MEDIA_CDN_STABLE_CACHE_CONTROL,
+          immutable: MEDIA_CDN_IMMUTABLE_CACHE_CONTROL,
+        },
+        rateLimit: () =>
+          mediaCdnRateLimitRefusal({
+            headers: req.headers,
+            remoteAddress: req.socket?.remoteAddress,
+            rateClass: 'image',
+          }),
+      })
       return
     }
 

@@ -110,6 +110,17 @@ jest.mock('next/headers', () => ({
   headers: async () => new Headers(),
 }))
 
+/**
+ * The icon sources' media documents (AGL-3484): their type and content hash,
+ * which decide whether the set is derived and how it is versioned. None read
+ * by default — the shape a failed read has — so the set derives unversioned.
+ */
+const mockIconFacts = jest.fn()
+jest.mock('@aglyn/tenant-runtime/get-site-icon-facts', () => ({
+  __esModule: true,
+  getSiteIconFacts: (...args: unknown[]) => mockIconFacts(...args),
+}))
+
 import HostLayout from '../app/[host]/[scheme]/layout'
 
 const HOST_ID = 'DXnRbPH4CQ'
@@ -120,13 +131,13 @@ const FREE_ORG = { org: { $id: 'org-free', plan: 'free' } }
 const AGENCY_ORG = { org: { $id: 'org-agency', plan: 'agency' } }
 
 /**
- * Renders the layout and returns the `href` of the icon link, or `null`.
+ * Every `<link rel="icon">` the layout returns, as plain props.
  *
  * The layout is an async Server Component, so it is awaited to a React element
  * tree and walked rather than mounted — `<link>` here is a hoisted head tag,
  * not something a jsdom container would hold.
  */
-const iconHref = async (favicon?: string, hostId = HOST_ID) => {
+const iconLinks = async (favicon?: string, hostId = HOST_ID) => {
   mockGetHostCached.mockResolvedValue({
     host: {
       $id: hostId,
@@ -138,24 +149,40 @@ const iconHref = async (favicon?: string, hostId = HOST_ID) => {
     children: null,
     params: Promise.resolve({ host: hostId }),
   } as never)
-  const found: string[] = []
+  const found: Array<Record<string, string>> = []
   const walk = (node: any) => {
     if (Array.isArray(node)) return node.forEach(walk)
     if (!node || typeof node !== 'object') return
     if (node.type === 'link' && node.props?.rel === 'icon') {
-      found.push(node.props.href)
+      found.push(node.props)
     }
     if (node.props?.children) walk(node.props.children)
   }
   walk(tree)
-  expect(found.length).toBeLessThanOrEqual(1)
-  return found[0] ?? null
+  return found
+}
+
+/**
+ * The FILE the site's icon links are drawn from, or `null` for none.
+ *
+ * A CDN-served icon is linked once per derived size (AGL-3484), each its
+ * source's URL plus an `?icon=` query; anything else is one link to itself.
+ * Either way every link names one source, which is what this returns.
+ */
+const iconHref = async (favicon?: string, hostId = HOST_ID) => {
+  const links = await iconLinks(favicon, hostId)
+  const sources = new Set(
+    links.map(({ href }) => href.replace(/[?&]icon=.*$/, '')),
+  )
+  expect(sources.size).toBeLessThanOrEqual(1)
+  return [...sources][0] ?? null
 }
 
 describe('tenant `<link rel="icon">` (AGL-1421)', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     mockOrg.mockResolvedValue(FREE_ORG)
+    mockIconFacts.mockResolvedValue(new Map())
   })
 
   it('emits the SITE’s own icon, not the platform default', async () => {
@@ -259,6 +286,60 @@ describe('tenant `<link rel="icon">` (AGL-1421)', () => {
       // Agency site's tab on any transient Firestore error.
       mockOrg.mockResolvedValue({ org: null })
       expect(await iconHref(undefined)).toBe('data:,')
+    })
+  })
+
+  /**
+   * The sizes, typed and measured (AGL-3484).
+   *
+   * EDR Construction's favicon is a 512×512 PNG, and every tab downloaded all
+   * 63 KB of it to draw 16 pixels. A CDN-served favicon is now one PNG per
+   * tab size, each declaring the `type` and `sizes` it really has.
+   */
+  describe('the derived favicon set (AGL-3484)', () => {
+    const SRC = '/api/media/cdn/org:jWmGooWE3L:DXnRbPH4CQ/19G8Ipyfb1'
+
+    it('links a PNG per tab size, each with its real type and size', async () => {
+      mockIconFacts.mockResolvedValue(
+        new Map([[SRC, { contentType: 'image/png', contentHash: 'h4sh' }]]),
+      )
+      const links = await iconLinks('media:org:jWmGooWE3L/19G8Ipyfb1')
+      expect(links.map(({ href, type, sizes }) => ({ href, type, sizes }))).toEqual(
+        [16, 32, 48].map((size) => ({
+          href: `${SRC}?icon=png-${size}&v=h4sh`,
+          type: 'image/png',
+          sizes: `${size}x${size}`,
+        })),
+      )
+    })
+
+    it('passes an SVG through as `sizes="any"` after its PNGs', async () => {
+      mockIconFacts.mockResolvedValue(
+        new Map([[SRC, { contentType: 'image/svg+xml', contentHash: 'h4sh' }]]),
+      )
+      const links = await iconLinks('media:org:jWmGooWE3L/19G8Ipyfb1')
+      expect(links).toHaveLength(4)
+      expect(links[3]).toMatchObject({
+        href: SRC,
+        type: 'image/svg+xml',
+        sizes: 'any',
+      })
+    })
+
+    it('links an uploaded ICO as it is — there is nothing to draw it with', async () => {
+      mockIconFacts.mockResolvedValue(
+        new Map([[SRC, { contentType: 'image/x-icon', contentHash: 'h4sh' }]]),
+      )
+      const links = await iconLinks('media:org:jWmGooWE3L/19G8Ipyfb1')
+      expect(links.map(({ href }) => href)).toEqual([SRC])
+    })
+
+    it('reads the facts of exactly the favicon and touch icon sources', async () => {
+      await iconLinks('media:org:jWmGooWE3L/19G8Ipyfb1')
+      expect(mockIconFacts).toHaveBeenCalledWith({
+        hostId: HOST_ID,
+        srcs: [SRC, SRC],
+      })
     })
   })
 })
