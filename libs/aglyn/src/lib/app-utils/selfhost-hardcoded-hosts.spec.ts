@@ -144,9 +144,15 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
   },
   {
     file: 'tools/scripts/lib/prod-canary.mjs',
-    count: 5,
+    count: 10,
     reason:
-      "AGL-3567. The post-deploy production canary, run from GitHub Actions after the platform's own tenant and console deploys and never shipped in any app. Its literals are the platform's Vercel alias patterns it reads deployments by and the default hosts it probes (`demo.aglyn.app` and `aglyn.com`, one per tenant host-resolution path, and `app.aglyn.com`), each overridable by the workflow's inputs. Operator-only ops tooling: a self-hosted instance has no Vercel aliases for it to read and nothing that runs it.",
+      "AGL-3567 and AGL-3571. The post-deploy production canary, run from GitHub Actions after the platform's own tenant and console deploys and never shipped in any app. Its literals are the platform's Vercel alias patterns it reads deployments by, the platform apex it spells site names under, and the default pages it renders (two real client sites with images, `demo.aglyn.app` and `aglyn.com` — one per tenant host-resolution path — and `app.aglyn.com`), each overridable by the `CANARY_TENANT_HOSTS`/`CANARY_CONSOLE_HOST` repo variables. Operator-only ops tooling: a self-hosted instance has no Vercel aliases for it to read and nothing that runs it.",
+  },
+  {
+    file: 'libs/tenant/data/admin/src/lib/server/render-monitor.ts',
+    count: 4,
+    reason:
+      "AGL-3571. `PLATFORM_RENDER_PAGES`, the real client pages the render monitor renders on Aglyn's own console and nowhere else: `resolveRenderMonitorPages` applies the list only when `VERCEL_PROJECT_ID` is Aglyn's console project id, and only together with Aglyn's tenant render origin, which answers solely to Aglyn's automation bypass. On any other install — another Vercel project, a container with no `VERCEL_PROJECT_ID` — the list is never read; an operator names their own pages with `RENDER_MONITOR_PAGES` and `RENDER_MONITOR_RENDER_ORIGIN`. Spec: render-monitor.spec.ts, \"renders Aglyn's client pages on Aglyn's own console only\".",
   },
   {
     file: 'apps/console/constants/subprocessor-inventory.ts',

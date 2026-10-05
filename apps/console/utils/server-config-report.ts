@@ -423,6 +423,27 @@ export function buildServerConfigReport(
       value: describePresence(env['RENDER_MONITOR_ORIGINS']),
     }),
     analyzeOpaqueKnob({
+      key: 'RENDER_MONITOR_PAGES',
+      label: 'Render monitor real pages',
+      drives:
+        'Published pages the render monitor draws fresh, one per site per ' +
+        'run, so a fault only a page body hits (an image, a form) alerts. ' +
+        'Needs RENDER_MONITOR_RENDER_ORIGIN and the Vercel bypass. Absent, ' +
+        'none, except on the platform operator\'s own console (AGL-3571).',
+      raw: env['RENDER_MONITOR_PAGES'],
+      value: describePresence(env['RENDER_MONITOR_PAGES']),
+    }),
+    analyzeOpaqueKnob({
+      key: 'RENDER_MONITOR_RENDER_ORIGIN',
+      label: 'Render monitor render origin',
+      drives:
+        'The published-site runtime origin that picks the site from ' +
+        '?tenantHost=, which the render monitor asks for real pages ' +
+        'through. Absent, no real page is drawn (AGL-3571).',
+      raw: env['RENDER_MONITOR_RENDER_ORIGIN'],
+      value: describePresence(env['RENDER_MONITOR_RENDER_ORIGIN']),
+    }),
+    analyzeOpaqueKnob({
       key: 'RENDER_MONITOR_FAILURE_THRESHOLD',
       label: 'Render monitor failures before alerting',
       drives:

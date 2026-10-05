@@ -33,10 +33,20 @@ import { runRenderMonitor } from '@aglyn/tenant-data-admin/server/render-monitor
 import { isCronAuthorized, isCronDryRun } from '../../../../utils/cron-auth'
 import { recordCronBeat } from '../../../../utils/cron-beat'
 
-/** The headers that get our own request past our own edge, when configured. */
+/**
+ * The headers that get our own request past our own edge, when configured.
+ *
+ * The bypass falls back to `VERCEL_AUTOMATION_BYPASS_SECRET`, the system
+ * variable Vercel exposes to a project that generated one (AGL-3571). The
+ * console and the tenant hold the SAME value by design (SECRET_ROTATION.md
+ * row 15; measured equal 2026-10-05), and the monitor's `page` probe needs it
+ * to reach the tenant's protected `*.vercel.app` production domain.
+ */
 function edgeBypassHeaders(): Record<string, string> {
   const probe = String(process.env['AGLYN_PROBE_TOKEN'] ?? '').trim()
-  const bypass = String(process.env['AGLYN_VERCEL_BYPASS'] ?? '').trim()
+  const bypass = String(
+    process.env['AGLYN_VERCEL_BYPASS'] || process.env['VERCEL_AUTOMATION_BYPASS_SECRET'] || '',
+  ).trim()
   return {
     ...(probe ? { 'x-aglyn-probe': probe } : {}),
     ...(bypass ? { 'x-vercel-protection-bypass': bypass } : {}),

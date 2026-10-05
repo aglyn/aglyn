@@ -20,15 +20,26 @@
 // `lib/prod-canary.mjs`, where every decision lives and is unit-tested.
 //
 //   node tools/scripts/prod-canary.mjs --project=tenant --dry-run
+//   node tools/scripts/prod-canary.mjs --project=tenant --dry-run --deployment=dpl_…
 //   node tools/scripts/prod-canary.mjs --environment="Production – aglyn-tenant" \
 //     --deployment-url=https://aglyn-tenant-abc-aglyn.vercel.app --record
+//   node tools/scripts/prod-canary.mjs --project=tenant --if-ungraded --record
 //
-// 1. Resolve the deployment under test (the event's, else current production)
-//    and wait until production SERVES it.
-// 2. Render uncached pages on every host, round after round, until the
-//    verdict settles (see `decideVerdict`).
-// 3. On `rollback`: pick the target, roll production back through the Vercel
-//    REST API, wait for it to serve, and re-run the canary against it.
+// 1. Resolve the deployment under test: the event's or `--deployment`'s (the
+//    CANDIDATE), else what production serves now.
+// 2. Render pages round after round until the verdict settles (see
+//    `decideVerdict`). With the automation bypass (AGL-3571) every tenant row
+//    is requested from the deployment's OWN URL, each real page under a fresh
+//    host spelling so it renders now — before, and whether or not, production
+//    serves it. Without it, the production domains, once they serve it.
+// 3. On `rollback` while production serves it: pick the target, roll
+//    production back through the Vercel REST API, wait for it to serve, and
+//    re-run the canary against it. A red candidate production does NOT serve
+//    is `candidate-red`: nothing to roll back, and it must not be promoted.
+//
+// `--if-ungraded` (the scheduled run): grade what production serves only when
+// no canary record names that deployment — a Promote or a hand rollback moves
+// production without any deployment event.
 // 4. Record the verdict as a commit status (`--record`), post to Slack and
 //    raise the console's `ops.productionCanaryRed` operator alert when it is
 //    not green, and exit non-zero for anything a human must read.
@@ -37,12 +48,14 @@
 // WOULD make. Without a Vercel token it runs the canary alone and says so.
 //
 // Env: VERCEL_TOKEN (else the Vercel CLI's own auth file, for local runs),
-// AGLYN_PROBE_TOKEN (the bot-protection bypass), CANARY_TENANT_HOSTS,
+// AGLYN_PROBE_TOKEN (the bot-protection bypass), VERCEL_AUTOMATION_BYPASS_SECRET
+// or AGLYN_VERCEL_BYPASS (Deployment Protection's bypass; else read from the
+// tenant project with the Vercel token), CANARY_TENANT_HOSTS,
 // CANARY_CONSOLE_HOST, SLACK_WEBHOOK_URL, CRON_SECRET (the console's
 // operator alert), GITHUB_TOKEN + GITHUB_REPOSITORY
 // (reading and writing the canary's commit statuses), GITHUB_STEP_SUMMARY.
 //
-// Exit: 0 green/recovered · 1 rollback/degraded/not-serving · 2 operational
+// Exit: 0 green/recovered · 1 rollback/candidate-red/degraded/not-serving · 2 operational
 // error · 3 inconclusive (the canary could not see production).
 
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs'
@@ -57,15 +70,19 @@ import {
   EXIT,
   PROJECTS,
   TEAM_ID,
+  alreadyGraded,
+  automationBypassFrom,
   canaryPlan,
   canaryRecord,
   classifyResponse,
   decideVerdict,
   formatReport,
   gradeRound,
+  hostOf,
   parseHostList,
   pickRollbackTarget,
   projectForEnvironment,
+  recordDescription,
   servingState,
   slackPayload,
   statusContext,
@@ -172,6 +189,26 @@ const readServing = async () => ({
 })
 const readDeployment = (idOrHost) => vercel(`/v13/deployments/${encodeURIComponent(idOrHost)}`)
 
+/**
+ * Deployment Protection's bypass for automation: the env's, else the tenant
+ * project's own, read with the Vercel token we already hold (its
+ * `protectionBypass` map is keyed by the secret). Masked in the Actions log.
+ */
+async function resolveBypass() {
+  let secret =
+    (process.env.VERCEL_AUTOMATION_BYPASS_SECRET || process.env.AGLYN_VERCEL_BYPASS || '').trim() || null
+  if (!secret && vercelToken && project.key === 'tenant') {
+    try {
+      secret = automationBypassFrom(await readProject())
+    } catch (error) {
+      say(`could not read the project's automation bypass: ${error.message}`)
+    }
+  }
+  if (secret && process.env.GITHUB_ACTIONS) console.log(`::add-mask::${secret}`)
+  return secret
+}
+let bypassHeader = null
+
 /** Poll until production serves `deploymentId`, or `waitMs` passes. */
 async function waitUntilServing(deploymentId, waitMs) {
   const deadline = Date.now() + waitMs
@@ -247,10 +284,19 @@ async function fetchOnce(row) {
         'user-agent': 'aglyn-prod-canary',
         accept: row.kind === 'health' ? 'application/json' : 'text/html,application/xhtml+xml',
         'cache-control': 'no-cache',
+        // Only to our own deployment URLs, which are what it unlocks.
+        ...(bypassHeader && new URL(row.url).host.endsWith('.vercel.app')
+          ? { 'x-vercel-protection-bypass': bypassHeader }
+          : {}),
       }),
       signal: AbortSignal.timeout(config.budgetMs),
     })
     const body = await response.text()
+    const cache = readCacheState({
+      vercelCache: response.headers.get('x-vercel-cache'),
+      nextCache: response.headers.get('x-nextjs-cache'),
+      age: response.headers.get('age'),
+    })
     const verdict = classifyResponse({
       kind: row.kind,
       status: response.status,
@@ -258,11 +304,8 @@ async function fetchOnce(row) {
       body,
       location: response.headers.get('location'),
       budgetMs: config.budgetMs,
-    })
-    const cache = readCacheState({
-      vercelCache: response.headers.get('x-vercel-cache'),
-      nextCache: response.headers.get('x-nextjs-cache'),
-      age: response.headers.get('age'),
+      fresh: row.fresh,
+      cache: cache.state,
     })
     return { ...row, ...verdict, status: response.status, ms: Date.now() - startedAt, cache: cache.state }
   } catch (error) {
@@ -286,12 +329,12 @@ async function check(row) {
   return result
 }
 
-async function runCanary(label) {
+async function runCanary(label, deploymentHost = null) {
   const rounds = []
   for (let index = 0; index < config.maxRounds; index++) {
     if (index > 0) await sleep(config.roundIntervalMs)
     const nonce = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`
-    const plan = canaryPlan({ project, tenantHosts, consoleHost, nonce })
+    const plan = canaryPlan({ project, tenantHosts, consoleHost, nonce, deploymentHost })
     const results = await Promise.all(plan.map(check))
     const round = { ...gradeRound(results, config), results }
     rounds.push(round)
@@ -390,31 +433,21 @@ async function finish(input) {
 // ------------------------------------------------------------------- main --
 
 let deployment = null
-let note = null
+const notes = []
+// The deployment to grade: the event's or the dispatcher's, else what
+// production serves now. `--deployment` takes an id or a URL.
+const named = flag('deployment-url') || flag('deployment')
+const candidateMode = Boolean(named)
 if (!vercelToken) {
-  note = 'No Vercel token: canary only, no deployment resolved and no rollback possible.'
-  say(note)
+  notes.push('No Vercel token: canary only, no deployment resolved and no rollback possible.')
+  say(notes[0])
 } else {
   try {
-    const deploymentUrl = flag('deployment-url')
-    if (deploymentUrl) {
-      deployment = await readDeployment(new URL(deploymentUrl).host)
+    if (named) {
+      deployment = await readDeployment(/^dpl_/.test(named) ? named : hostOf(named))
       if (deployment?.projectId && deployment.projectId !== project.id) {
-        say(`${deploymentUrl} belongs to ${deployment.projectId}, not ${project.name}`)
+        say(`${named} belongs to ${deployment.projectId}, not ${project.name}`)
         process.exit(EXIT.error)
-      }
-      const state = await waitUntilServing(deployment.id, config.serveWaitMs)
-      if (!state.serving) {
-        await finish({
-          verdict: 'not-serving',
-          deployment,
-          rounds: [],
-          note:
-            `Production still serves ${state.productionId}. ` +
-            (state.autoAssign
-              ? `It did not switch within ${config.serveWaitMs / 1000} s.`
-              : 'Auto-assign is OFF (a rollback happened): promote the deployment by hand — docs/RELEASING.md step 0 — then run this canary from the Actions tab.'),
-        })
       }
     } else {
       const { productionId } = servingState(await readServing(), null)
@@ -425,15 +458,88 @@ if (!vercelToken) {
     process.exit(EXIT.error)
   }
 }
-
-const canary = await runCanary('canary')
 const commit = deployment?.meta?.githubCommitSha ?? null
+
+// The scheduled run (AGL-3571): a Promote or a hand rollback moves production
+// without a deployment event, so every few minutes this asks whether what
+// production serves has ever been graded, and grades it only if not.
+if (has('if-ungraded')) {
+  if (!deployment || !commit) {
+    say('no production deployment or commit resolved; nothing to compare')
+    process.exit(vercelToken ? EXIT.error : 0)
+  }
+  try {
+    const statuses = await github(`/commits/${commit}/statuses?per_page=100`)
+    if (statuses && alreadyGraded(statuses, statusContext(project), deployment.id)) {
+      say(`${deployment.id} is already graded on ${commit.slice(0, 10)}; nothing to do`)
+      process.exit(0)
+    }
+  } catch (error) {
+    say(`could not read the canary record (${error.message}); grading anyway`)
+  }
+  say(`production serves ${deployment.id}, which the canary has never graded`)
+}
+
+// Grade the deployment by its OWN URL whenever the bypass is at hand (the
+// tenant only: the console's pages are not host-routed). Without it, the
+// candidate can only be read through the production domains, once they serve it.
+const bypass = await resolveBypass()
+bypassHeader = bypass
+const deploymentHost =
+  project.key === 'tenant' && bypass && deployment?.url && !has('public')
+    ? hostOf(deployment.url)
+    : null
+if (deploymentHost) {
+  notes.push(`Graded by the deployment's own URL (${deploymentHost}), each real page rendered fresh.`)
+} else if (project.key === 'tenant') {
+  notes.push('Graded through the production domains (no bypass secret, or --public): pages may come from cache.')
+}
+
+if (candidateMode && !deploymentHost && vercelToken) {
+  const state = await waitUntilServing(deployment.id, config.serveWaitMs)
+  if (!state.serving) {
+    await finish({
+      verdict: 'not-serving',
+      deployment,
+      rounds: [],
+      note:
+        `Production still serves ${state.productionId}. ` +
+        (state.autoAssign
+          ? `It did not switch within ${config.serveWaitMs / 1000} s.`
+          : 'Auto-assign is OFF (a rollback happened). With no bypass secret the candidate cannot be read before it is promoted — docs/RELEASING.md step 0.'),
+    })
+  }
+}
+
+const canary = await runCanary('canary', deploymentHost)
+let serving = deployment && vercelToken
+  ? servingState(await readServing(), deployment.id)
+  : { serving: true, productionId: null, autoAssign: true }
+const note = () => notes.join(' ')
 
 if (canary.verdict !== 'rollback') {
   if (canary.verdict === 'green' || canary.verdict === 'recovered') {
-    await record(commit, 'success', `canary ${canary.verdict} on ${deployment?.id ?? 'production'}`)
+    await record(commit, 'success', recordDescription(canary.verdict, deployment?.id, serving.serving))
+    if (deployment && !serving.serving) {
+      notes.push(
+        `Production serves ${serving.productionId}, not this deployment` +
+          (serving.autoAssign ? '.' : ' (auto-assign is OFF).') +
+          ' It is safe to Promote; run this canary again after (docs/RELEASING.md step 0).',
+      )
+    }
   }
-  await finish({ ...canary, deployment, note })
+  await finish({ ...canary, deployment, note: note() })
+}
+
+// A red candidate that production does not serve has nothing to roll back. If
+// auto-assign is on it is about to be served, so wait for that first.
+if (deployment && !serving.serving && candidateMode && serving.autoAssign) {
+  serving = await waitUntilServing(deployment.id, config.serveWaitMs)
+}
+if (deployment && !serving.serving) {
+  await record(commit, 'failure', recordDescription('candidate-red', deployment.id, false))
+  notes.push(`Production serves ${serving.productionId}; this deployment must not be promoted.`)
+  await finish({ ...canary, verdict: 'candidate-red', deployment, note: note() })
 }
 
 // ---------------------------------------------------------------- rollback --
@@ -442,7 +548,7 @@ if (!vercelToken || !deployment) {
   await finish({
     ...canary,
     deployment,
-    note,
+    note: note(),
     rollback: { action: 'not-rolled-back', target: null, reason: 'no Vercel token or deployment to roll back from' },
   })
 }
@@ -475,12 +581,13 @@ if (rollback.target && DRY_RUN) {
       const description = encodeURIComponent(`prod-canary: ${deployment.id} failed (${RUN_URL || 'local'})`)
       await vercel(`/v1/projects/${project.id}/rollback/${targetId}?description=${description}`, { method: 'POST' })
       rollback.action = 'rolled-back'
-      await record(commit, 'failure', `canary red; rolled back to ${targetId}`)
+      await record(commit, 'failure', `${recordDescription('red', deployment.id, true)}; rolled back to ${targetId}`)
       const after = await waitUntilServing(targetId, 180_000)
       if (!after.serving) {
         rollback.after = `not serving yet (production is ${after.productionId})`
       } else {
-        const recheck = await runCanary('after-rollback')
+        const targetHost = deploymentHost && rollback.target.url ? hostOf(rollback.target.url) : null
+        const recheck = await runCanary('after-rollback', targetHost)
         rollback.after = recheck.verdict
         canary.rounds.push(...recheck.rounds.map((round) => ({ ...round, status: `after-rollback ${round.status}` })))
       }
@@ -490,4 +597,4 @@ if (rollback.target && DRY_RUN) {
   }
 }
 
-await finish({ ...canary, deployment, note, rollback })
+await finish({ ...canary, deployment, note: note(), rollback })

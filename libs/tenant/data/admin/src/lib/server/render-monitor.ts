@@ -53,9 +53,29 @@ import type { OperatorHealthStateDoc } from './operator-health'
  * `operatorHealthState/render-monitor--<host>`, beside every other health
  * check, so Staff → Operator alerts lists it with its status and since when.
  *
- * Nothing here names an Aglyn host: the default target is the install's own
- * demonstration site label under its own tenant apex, the convention the
- * middleware and the render canaries already follow.
+ * Nothing here names an Aglyn host for anyone else: the default target is the
+ * install's own demonstration site label under its own tenant apex, the
+ * convention the middleware and the render canaries already follow. The one
+ * exception is `PLATFORM_RENDER_PAGES` below, which applies on Aglyn's own
+ * console deployment and nowhere else.
+ *
+ * ## Real pages, rendered fresh (AGL-3571)
+ *
+ * The two probes above draw the layout. They do not draw a page BODY, and
+ * beta.223 hung only on page bodies with an image in them (an ancestor walk
+ * looped on the page root, AGL-3565): `demo` has no images and the not-found
+ * page has no body, so this monitor read green through it. So a third probe,
+ * `page`, renders a real published page through the full ISR path — through
+ * the tenant's `*.vercel.app` production domain (`RENDER_MONITOR_RENDER_ORIGIN`),
+ * which honors `?tenantHost=` and sits behind Deployment Protection, naming
+ * the site with a spelling no cache holds (`freshHostSpelling`). The cache key
+ * includes the `[host]` segment, and `normalizeHostAlias` resolves every
+ * spelling to the same site. Without the automation bypass the render origin
+ * answers its sign-in redirect, so no `page` probe is made at all.
+ *
+ * One page per site per run, rotating through that site's list: a platform
+ * break fails every page with an image, so every run, and alerts as fast as
+ * before; a break on one page alone is seen on its turn.
  */
 
 /** The state documents' collection: the health checks' own. */
@@ -84,7 +104,7 @@ export const RENDER_MONITOR_DEFAULT_THRESHOLD = 2
  */
 export const RENDER_PROBE_ISR_PREFIX = '/aglyn-render-probe-'
 
-export type RenderProbeKind = 'dynamic' | 'isr'
+export type RenderProbeKind = 'dynamic' | 'isr' | 'page'
 
 export interface RenderProbeSpec {
   kind: RenderProbeKind
@@ -203,6 +223,133 @@ export function gradeRenderProbe(
   return { ok: true, challenged: false, code: 'ok', detail: 'rendered' }
 }
 
+/**
+ * The pages Aglyn's own console renders fresh when `RENDER_MONITOR_PAGES` is
+ * unset: the canary's real client pages (`tools/scripts/lib/prod-canary.mjs`
+ * `DEFAULT_TENANT_HOSTS`), images, reusable components, repeats and a form
+ * between them. Applied ONLY on that console deployment (`VERCEL_PROJECT_ID`),
+ * so no other install ever requests them.
+ */
+export const PLATFORM_RENDER_PAGES = [
+  'ready-to-roll.aglyn.app/',
+  'edr-construction.aglyn.app/',
+  'edr-construction.aglyn.app/services',
+  'edr-construction.aglyn.app/contact',
+].join(' ')
+
+/** Aglyn's console project on Vercel, the one deployment the list above is for. */
+export const PLATFORM_CONSOLE_VERCEL_PROJECT_ID = 'prj_gEzxEXc0Lhs81rmaXIg2a1GbsDfl'
+
+/**
+ * The tenant's production project domain on Vercel: follows every promote and
+ * rollback, honors `?tenantHost=`, and is reachable only with the bypass.
+ */
+export const PLATFORM_RENDER_ORIGIN = 'https://aglyn-tenant-aglyn.vercel.app'
+
+/** The middleware's custom-domain sentinel (`apps/tenant/utils/get-host.ts`). */
+const CNAME_HOST_PREFIX = 'cname--'
+
+/** Letters past this are never recased, so the bit arithmetic stays in 32 bits. */
+const MAX_SPELLING_BITS = 30
+
+function spellingLetters(host: string): number[] {
+  return [...host.toLowerCase()]
+    .map((char, index) => (/[a-z]/.test(char) ? index : -1))
+    .filter((index) => index >= 0)
+    .slice(0, MAX_SPELLING_BITS)
+}
+
+/**
+ * Spelling number `n` of one site: a `?tenantHost=` value that resolves to
+ * that site and is a `[host]` route segment no other number produces, so the
+ * page it asks for has no cache entry to come from.
+ *
+ *  - `{sub}.{apex}` → the full name, letters upper-cased by the bits of `n`,
+ *    then one trailing dot per exhausted round of cases.
+ *  - any other name → `cname--{name}`, recased the same way and cycling after
+ *    `2 ** letters` (that form keeps trailing dots), with the prefix left
+ *    lower-case because the canonical-domain redirect tests the raw segment.
+ *
+ * MUST stay identical to `freshHostSpelling` in
+ * `tools/scripts/lib/prod-canary.mjs`; `apps/tenant/specs/probe-host-spelling.spec.ts`
+ * pins both against `normalizeHostAlias`.
+ */
+export function freshHostSpelling(host: string, n: number, apex: string = TENANT_APEX): string {
+  const subdomain = host.endsWith(`.${apex}`)
+  const prefix = subdomain ? '' : CNAME_HOST_PREFIX
+  const chars = [...host.toLowerCase()]
+  const letters = spellingLetters(host)
+  const capacity = 2 ** letters.length
+  const value = Math.max(0, Math.floor(Number(n) || 0))
+  const bits = value % capacity
+  letters.forEach((index, bit) => {
+    if (Math.floor(bits / 2 ** bit) % 2 === 1) chars[index] = chars[index].toUpperCase()
+  })
+  const dots = subdomain ? '.'.repeat(Math.floor(value / capacity)) : ''
+  return `${prefix}${chars.join('')}${dots}`
+}
+
+/**
+ * The spelling number for a run at `nowMs`: minutes since 2026-10-01, so it
+ * never repeats on one deployment — a `{sub}.aglyn.app` name of 18 letters
+ * gains its first trailing dot after half a year.
+ */
+export function renderSpellingNumber(nowMs: number): number {
+  return Math.max(1, Math.floor((nowMs - Date.UTC(2026, 9, 1)) / 60_000))
+}
+
+/** One watched site's real pages. */
+export interface RenderMonitorPages {
+  /** The site's public origin, which keys its state document. */
+  origin: string
+  host: string
+  paths: string[]
+}
+
+/**
+ * `"a.example.app b.example.app/services, https://b.example.app/contact"` →
+ * one entry per host, paths merged, `/` when an entry names none. Entries that
+ * are not a hostname are dropped, as `RENDER_MONITOR_ORIGINS` drops them.
+ */
+export function parseRenderMonitorPages(text: string | undefined | null): RenderMonitorPages[] {
+  const byHost = new Map<string, string[]>()
+  for (const raw of String(text ?? '').split(/[\s,]+/)) {
+    const entry = raw.trim().replace(/^https?:\/\//i, '')
+    if (!entry) continue
+    const slash = entry.indexOf('/')
+    const host = (slash === -1 ? entry : entry.slice(0, slash)).toLowerCase()
+    if (!/^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(host)) continue
+    const path = slash === -1 ? '/' : entry.slice(slash).replace(/\/+$/, '') || '/'
+    const paths = byHost.get(host) ?? []
+    if (!paths.includes(path)) paths.push(path)
+    byHost.set(host, paths)
+  }
+  return [...byHost].map(([host, paths]) => ({ origin: `https://${host}`, host, paths }))
+}
+
+/**
+ * Which real pages the monitor renders, and through which origin.
+ *
+ * `RENDER_MONITOR_PAGES` (same grammar as the canary's `CANARY_TENANT_HOSTS`)
+ * and `RENDER_MONITOR_RENDER_ORIGIN`, else — on Aglyn's own console only —
+ * `PLATFORM_RENDER_PAGES` through `PLATFORM_RENDER_ORIGIN`. `off` (here or in
+ * `RENDER_MONITOR_ORIGINS`) renders none. No render origin, no pages.
+ */
+export function resolveRenderMonitorPages(
+  env: Readonly<Record<string, string | undefined>>,
+): { renderOrigin: string; pages: RenderMonitorPages[] } {
+  const off = /^(off|none|false|0)$/i
+  const raw = String(env['RENDER_MONITOR_PAGES'] ?? '').trim()
+  if (off.test(raw) || off.test(String(env['RENDER_MONITOR_ORIGINS'] ?? '').trim())) {
+    return { renderOrigin: '', pages: [] }
+  }
+  const platform = env['VERCEL_PROJECT_ID'] === PLATFORM_CONSOLE_VERCEL_PROJECT_ID
+  const renderOrigin =
+    originOf(env['RENDER_MONITOR_RENDER_ORIGIN']) || (platform ? PLATFORM_RENDER_ORIGIN : '')
+  const pages = parseRenderMonitorPages(raw || (platform ? PLATFORM_RENDER_PAGES : ''))
+  return renderOrigin ? { renderOrigin, pages } : { renderOrigin: '', pages: [] }
+}
+
 /** A configured value as an origin, or '' when it is not one. */
 export function originOf(value: string | undefined | null): string {
   const trimmed = String(value ?? '').trim().replace(/\/+$/, '')
@@ -235,7 +382,9 @@ export function resolveRenderMonitorTargets(
     .split(/[\s,]+/)
     .map((value) => originOf(value))
     .filter(Boolean)
-  return [...new Set([demo, ...listed].filter(Boolean))]
+  // A site whose pages are rendered is watched whole: its layout probes too.
+  const paged = resolveRenderMonitorPages(env).pages.map((page) => page.origin)
+  return [...new Set([demo, ...listed, ...paged].filter(Boolean))]
 }
 
 /** The state document id for one origin. */
@@ -385,23 +534,37 @@ function describeDuration(ms: number): string {
   return rest ? `${hours} h ${rest} min` : `${hours} h`
 }
 
+/**
+ * The `page` probe's URL for one run: this run's page of the site's list
+ * (rotating every five-minute slot), under this run's spelling of the site.
+ */
+export function pageProbeUrl(
+  renderOrigin: string,
+  site: RenderMonitorPages,
+  slot: number,
+  spelling: number,
+): string {
+  const path = site.paths[Math.abs(slot) % site.paths.length] ?? '/'
+  const url = new URL(path, renderOrigin)
+  url.searchParams.set('tenantHost', freshHostSpelling(site.host, spelling))
+  return url.toString()
+}
+
 function probeLine(row: RenderProbeRow): string {
   return `${row.kind} ${new URL(row.url).pathname}: ${row.detail} (${row.ms} ms)`
 }
 
 /** Fetch and grade one probe. Never throws. */
 async function runProbe(
-  origin: string,
-  spec: RenderProbeSpec,
+  url: string,
+  spec: { kind: RenderProbeKind; expectStatus: number },
   options: {
     fetcher: typeof fetch
     headers: Record<string, string>
-    nonce: string
     timeoutMs: number
     clock: () => number
   },
 ): Promise<RenderProbeRow> {
-  const url = `${origin}${spec.path(options.nonce)}`
   const startedAt = options.clock()
   try {
     const response = await options.fetcher(url, {
@@ -489,23 +652,41 @@ export async function runRenderMonitor(
     options.nonce ??
     (() => `${clock().toString(36)}${Math.random().toString(36).slice(2, 8)}`)
 
+  const probeOptions = {
+    fetcher: options.fetcher ?? fetch,
+    headers: options.headers ?? {},
+    timeoutMs: options.timeoutMs ?? RENDER_MONITOR_TIMEOUT_MS,
+    clock,
+  }
+  // Real pages need the render origin AND the bypass that gets past its
+  // Deployment Protection; without both a `page` probe could only fail.
+  const { renderOrigin, pages } = resolveRenderMonitorPages(env)
+  const canRenderPages = Boolean(
+    renderOrigin && probeOptions.headers['x-vercel-protection-bypass'],
+  )
+  const runAt = clock()
+  const slot = Math.floor(runAt / 300_000)
+
   const sites = await Promise.all(
     resolveRenderMonitorTargets(env).map(
       async (origin): Promise<RenderMonitorSiteResult> => {
-        const probes = await Promise.all(
-          RENDER_PROBES.map((spec) =>
-            runProbe(origin, spec, {
-              fetcher: options.fetcher ?? fetch,
-              headers: options.headers ?? {},
-              nonce: nonce(),
-              timeoutMs: options.timeoutMs ?? RENDER_MONITOR_TIMEOUT_MS,
-              clock,
-            }),
-          ),
+        const layoutProbes = RENDER_PROBES.map((spec) =>
+          runProbe(`${origin}${spec.path(nonce())}`, spec, probeOptions),
         )
+        const site = canRenderPages ? pages.find((page) => page.origin === origin) : undefined
+        const pageProbe = site
+          ? [
+              runProbe(
+                pageProbeUrl(renderOrigin, site, slot, renderSpellingNumber(runAt)),
+                { kind: 'page', expectStatus: 200 },
+                probeOptions,
+              ),
+            ]
+          : []
+        const probes = await Promise.all([...layoutProbes, ...pageProbe])
         const ok = probes.every((probe) => probe.ok)
-        const site: RenderMonitorSiteResult = { origin, ok, probes }
-        if (dryRun) return site
+        const result: RenderMonitorSiteResult = { origin, ok, probes }
+        if (dryRun) return result
         const host = new URL(origin).host
         const failing = probes.filter((probe) => !probe.ok)
         const detail = ok
@@ -536,9 +717,9 @@ export async function runRenderMonitor(
               }
             },
           )
-          site.status = next.status
-          site.consecutiveFailures = next.consecutiveFailures
-          site.transition = transition
+          result.status = next.status
+          result.consecutiveFailures = next.consecutiveFailures
+          result.transition = transition
           if (transition === 'failing') {
             await raise('system.siteRenderFailing', {
               dedupeKey: host,
@@ -559,10 +740,10 @@ export async function runRenderMonitor(
             })
           }
         } catch (error) {
-          site.error = error instanceof Error ? error.message : String(error)
+          result.error = error instanceof Error ? error.message : String(error)
           console.error(`[render-monitor] ${host} could not be recorded`, error)
         }
-        return site
+        return result
       },
     ),
   )

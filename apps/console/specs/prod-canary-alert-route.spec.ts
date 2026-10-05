@@ -119,10 +119,16 @@ describe('canaryAlertFromBody', () => {
   it('writes every verdict the canary alerts on, and says when nothing was rolled back', () => {
     const notRolled = canaryAlertFromBody({ ...RED, rolledBackTo: undefined, after: undefined })
     expect(notRolled.ok && notRolled.options.context?.outcome).toBe('failing, NOT rolled back')
-    for (const verdict of ['degraded', 'inconclusive', 'not-serving']) {
+    for (const verdict of ['degraded', 'inconclusive', 'not-serving', 'candidate-red']) {
       const alert = canaryAlertFromBody({ ...RED, verdict })
       expect([verdict, alert.ok]).toEqual([verdict, true])
     }
+  })
+
+  it('tells a red candidate not to be promoted, since there was nothing to roll back (AGL-3571)', () => {
+    const alert = canaryAlertFromBody({ ...RED, verdict: 'candidate-red', rolledBackTo: undefined })
+    expect(alert.ok && alert.options.context?.outcome).toMatch(/do NOT promote/)
+    expect(alert.ok && alert.options.dedupeKey).toMatch(/:candidate-red$/)
   })
 
   it('is a registered operator alert whose tokens the request fills', () => {
