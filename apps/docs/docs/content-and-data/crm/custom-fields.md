@@ -139,12 +139,21 @@ need mapping.
 
 Some standard fields are **picklists** — a fixed set of choices, the way Salesforce's
 standard fields are. Each picklist's values are kept on the tab of the record it belongs
-to, below that tab's custom fields. On the **Leads** tab that is **Lead source**, under
-**Lead source values**, and [**Lead status**](./leads.md#lead-statuses), under **Lead
-status values**. Lead source: every lead's page, the **New lead** drawer and every
-contact's page offer its values as a select, the leads and contacts lists filter by
-them — the leads list by a value's group too — and [Reports](./reports.md#lead-sources)
-counts leads by them.
+to, below that tab's custom fields, under its own **values** card:
+
+| Tab | Picklists |
+| --- | --- |
+| **Leads** | **Lead source**, [**Lead status**](./leads.md#lead-statuses) |
+| **Contacts** | **Salutation** |
+| **Companies** | **Type**, **Industry**, **Rating**, **Ownership** |
+| **Deals** | **Type** |
+| **Tasks** | **Status**, **Priority**, **Type**, **Subject** |
+
+Lead source is the one picklist several records share: a lead's and a contact's lead
+source, a company's **Account source** and a deal's lead source all hold its values.
+Every lead's page, the **New lead** drawer and every contact's page offer its values as a
+select, the leads and contacts lists filter by them — the leads list by a value's group
+too — and [Reports](./reports.md#lead-sources) counts leads by them.
 
 **Standard values come with every organization.** Each picklist ships Salesforce's
 standard set — and, for Lead source, a value for each of Aglyn's own doors and outreach —
@@ -183,7 +192,7 @@ group's heading, with values in no group last.
 | **Drag**, or the arrows | Reorders the list. The order is the order every select offers. |
 | **Sort A–Z** | Puts the whole list in alphabetical order. |
 | **Group** | Files the value under a group, or none. |
-| **Rename** | Renames the value, and every record holding it — for lead source, every lead and contact — is updated to the new name in the same step, so a report grouped by the field follows the rename. |
+| **Rename** | Renames the value, and every record holding it — for lead source, every lead, contact, company and deal — is updated to the new name in the same step, so a report grouped by the field follows the rename. |
 | **Make default** | New records start with this value — in the **New lead** drawer, over the API, and from a CSV row that names none. On Lead status, the default is the label a lead of its meaning shows when it was given the meaning alone. **Clear default** removes it. |
 | **Deactivate** | Takes the value out of every select without touching the records that hold it. They show it as *(inactive)* and keep it until someone changes it. **Activate** brings it back. |
 | **Delete…** | Offered only on your own values. Removes the value for good: you pick another active value to move its records to, or clear it from them — on Lead status, another value of the same meaning, and never clear. To keep it on those records, deactivate it instead. |
