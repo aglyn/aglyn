@@ -28,6 +28,8 @@ content on the marketing site and is written separately.
 - **tenant:** llms.txt lists indexable pages in site order, each paragraph once ([AGL-3576](https://linear.app/aglyn/issue/AGL-3576))
 - **crm:** the Lead source direction filter works for every org ([AGL-3577](https://linear.app/aglyn/issue/AGL-3577))
 - **signup:** a phone Google sign-up lands before the auth layout moves it ([AGL-3578](https://linear.app/aglyn/issue/AGL-3578))
+- **ops:** status checks watch real pages, and a monitor blocked by bot protection reports itself instead of an outage ([AGL-3580](https://linear.app/aglyn/issue/AGL-3580))
+- **ops:** a new scheduled job no longer reads as failing on its first deploy, and a daily job refused during a functions deploy is retried ([AGL-3580](https://linear.app/aglyn/issue/AGL-3580))
 
 <details>
 <summary>Also in this release: 1 test</summary>
