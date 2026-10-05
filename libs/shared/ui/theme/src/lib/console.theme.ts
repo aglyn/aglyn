@@ -18,7 +18,11 @@
 import { lightBlue } from '@mui/material/colors'
 import type { PaletteOptions, Theme, ThemeOptions } from '../vendor/mui'
 import { buildFontFamilyList } from './constants'
-import { accentTextColor } from './util/accent-text'
+import {
+  accentHoverFillColor,
+  accentHoverTextColor,
+  accentTextColor,
+} from './util/accent-text'
 import createResponsiveTheme, {
   createResponsiveCssVarTheme,
 } from './util/create-responsive-theme'
@@ -307,11 +311,25 @@ const baseOptions: ThemeOptions = {
         // and `--variant-containedBg` are left on `main`: a border and a
         // fill owe 3:1, and the brand belongs there.
         //
+        // Hover, every variant (AGL-3465). MUI's contained hover sets
+        // `--variant-containedBg` to `palette[color].dark` — the accent-text
+        // shade, LIGHTER than `main` in a dark scheme, so a white label
+        // sinks to ~2:1 under the pointer. It takes the hover fill
+        // (`palette[color].hover`) instead, which carries `contrastText` at
+        // AA in both schemes. Text and outlined labels take `hoverText`,
+        // the accent-text shade that still clears AA once MUI's hover wash
+        // is under it. Same media query and selector as MUI's rule, emitted
+        // after it, so these win on a pointer device and a touch screen
+        // keeps MUI's reset. `inherit` has no palette entry and keeps MUI's
+        // grey hover.
+        //
         // Resolved per instance rather than baked, because `components` are
         // evaluated ONCE against the root theme — a literal read here would
         // freeze the light-scheme hex into dark mode.
         root: ({ theme, ownerState }) => {
           const accent = accentTextColor(theme, ownerState?.color)
+          const hoverFill = accentHoverFillColor(theme, ownerState?.color)
+          const hoverText = accentHoverTextColor(theme, ownerState?.color)
           return {
             '&a[disabled], &.disabled': {
               pointerEvents: 'none',
@@ -321,6 +339,17 @@ const baseOptions: ThemeOptions = {
             ...(accent && {
               '--variant-textColor': accent,
               '--variant-outlinedColor': accent,
+            }),
+            ...((hoverFill || hoverText) && {
+              '@media (hover: hover)': {
+                '&:hover': {
+                  ...(hoverFill && { '--variant-containedBg': hoverFill }),
+                  ...(hoverText && {
+                    '--variant-textColor': hoverText,
+                    '--variant-outlinedColor': hoverText,
+                  }),
+                },
+              },
             }),
           }
         },
@@ -358,6 +387,22 @@ const baseOptions: ThemeOptions = {
     MuiFab: {
       defaultProps: {
         color: 'primary',
+      },
+      styleOverrides: {
+        // The Fab fills its hover with `palette[color].dark` too, under the
+        // same `contrastText` — so it takes the hover fill for the reason
+        // `MuiButton` does. Gated to pointer devices, which leaves MUI's own
+        // `(hover: none)` reset to `main` in charge on a touch screen.
+        root: ({ theme, ownerState }) => {
+          const hoverFill = accentHoverFillColor(theme, ownerState?.color)
+          return hoverFill
+            ? {
+                '@media (hover: hover)': {
+                  '&:hover': { backgroundColor: hoverFill },
+                },
+              }
+            : {}
+        },
       },
     },
     MuiIconButton: {
