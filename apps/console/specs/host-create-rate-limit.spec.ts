@@ -64,13 +64,16 @@ function mockSubcollection(path: string): unknown {
 }
 /**
  * The transaction's writes on a successful create: the host, its home page
- * and that page's first version (AGL-3408), and the org's claim. Every id is
- * `host-new` because `createResourceUid` is stubbed to it.
+ * and that page's first version (AGL-3408), the header and footer layout the
+ * page renders inside and its first version (AGL-3497), and the org's claim.
+ * Every id is `host-new` because `createResourceUid` is stubbed to it.
  */
 const CREATE_WRITES = [
   'hosts/host-new',
   'hosts/host-new/screens/host-new',
   'hosts/host-new/screens/host-new/versions/host-new',
+  'hosts/host-new/layouts/host-new',
+  'hosts/host-new/layouts/host-new/versions/host-new',
   'orgs/org-1',
 ]
 /**
