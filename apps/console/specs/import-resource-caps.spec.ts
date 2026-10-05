@@ -195,6 +195,9 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   // AGL-1506: inert verdict — the 423 wiring has its own specs; these
   // suites test other properties and must not depend on lockdown reads.
   lockdownRefusal: async () => null,
+  // A package import reads the site it lands in first (AGL-3533), media
+  // included; the host-scope narrowing has its own suite.
+  scopedToHost: (ref: any) => ref,
   emailUnverifiedResponse: () =>
     Response.json({ error: 'Verify your email' }, { status: 403 }),
 }))

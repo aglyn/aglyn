@@ -91,11 +91,9 @@ function restoreInto(overrides: Partial<SiteBundleImportRequest> = {}) {
 
 describe('the data plugin declares its section of the backup', () => {
   it('as `datasets`, so a bundle carries them under the key it always has', () => {
-    expect(listDeclaredSiteBundleSections()).toContainEqual({
-      pluginId: 'data',
-      key: 'datasets',
-      limit: 50,
-    })
+    expect(listDeclaredSiteBundleSections()).toContainEqual(
+      expect.objectContaining({ pluginId: 'data', key: 'datasets', limit: 50 }),
+    )
   })
 })
 

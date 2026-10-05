@@ -3327,7 +3327,7 @@ service cloud.firestore {
         // by accident.
         allow read: if subcollection != 'siteMemberCredentials' &&
           (isStaff() || (isHostMember(hostId) &&
-            !(subcollection in ['webhooks', 'orders', 'mediaTombstones'])));
+            !(subcollection in ['webhooks', 'orders', 'mediaTombstones', 'packageImports'])));
         // THE EXCLUSION LISTS ARE THE MECHANISM. Sibling match blocks are OR'd
         // and the LOOSER one wins, so a dedicated deny (or a tighter dedicated
         // block) beside this catch-all decides nothing until the name is also
@@ -3428,6 +3428,11 @@ service cloud.firestore {
         //    path. A write forges someone else's preference, a delete puts an
         //    address back into a stream it left, and the Admin-SDK preference
         //    page is the only writer.
+        //  - `packageImports`, all three and READ (AGL-3533): a site package
+        //    import's record and undo snapshot (each replaced item's prior
+        //    content, the paths written). A read browses overwritten content;
+        //    a write forges what undo writes back past every allow-list.
+        //    Only the import route reads or writes it.
         //  - `siteMembers`, all three (AGL-3308): its block below re-grants
         //    the suspend flag and a delete that strands no credential.
         //    `siteMemberCredentials` holds the password hashes; the `!=` that
@@ -3439,7 +3444,7 @@ service cloud.firestore {
               'locations', 'products', 'components', 'registers', 'installs',
               'templates', 'collections', 'datasets', 'webhooks', 'orders',
               'counters', 'analytics', 'screenAnalytics', 'pageReviews', 'members',
-              'media', 'mediaTombstones', 'formSubmissions', 'forms', 'actions',
+              'media', 'mediaTombstones', 'packageImports', 'formSubmissions', 'forms', 'actions',
               'authors', 'carts', 'memberPosts', 'pluginSettings',
               'checkouts', 'giftCards', 'stripeTaxRates', 'restockAlerts',
               'inventoryReconciliation', 'stockHolds', 'themeHistory',
@@ -3557,7 +3562,7 @@ service cloud.firestore {
               'webhooks', 'memberPosts', 'redirects', 'pluginSettings', 'forms',
               'formSubmissions',
               'counters', 'analytics', 'screenAnalytics', 'pageReviews', 'members',
-              'media', 'mediaTombstones', 'inventoryAdjustments', 'carts',
+              'media', 'mediaTombstones', 'packageImports', 'inventoryAdjustments', 'carts',
               'checkouts',
               'giftCards', 'stripeTaxRates', 'restockAlerts',
               'inventoryReconciliation', 'stockHolds', 'themeHistory',
@@ -3608,6 +3613,7 @@ service cloud.firestore {
               'collections', 'datasets', 'orders', 'registers', 'webhooks',
               'counters', 'memberPosts', 'redirects', 'pluginSettings', 'forms',
               'analytics', 'screenAnalytics', 'pageReviews', 'members', 'mediaTombstones',
+              'packageImports',
               'inventoryAdjustments', 'carts', 'checkouts', 'giftCards',
               'stripeTaxRates', 'restockAlerts',
               'inventoryReconciliation', 'stockHolds', 'themeHistory',

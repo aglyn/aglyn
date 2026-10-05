@@ -214,7 +214,44 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
   {
     "pluginId": "forms",
     "name": "forms",
-    "routeSlug": "forms"
+    "routeSlug": "forms",
+    "siteExport": {
+      "limit": 200,
+      "fields": [
+        "displayName",
+        "slug",
+        "fields",
+        "consentFieldName",
+        "routing",
+        "legacyMatch",
+        "rootId",
+        "nodes",
+        "archivedAt",
+        "retired",
+        "campaignIds",
+        "inCampaign",
+        "stats",
+        "nameLower",
+        "nameTokens",
+        "nameReversed",
+        "searchTokens"
+      ],
+      "package": {
+        "kind": "form",
+        "label": "Forms",
+        "nameField": "displayName",
+        "slugField": "slug",
+        "placements": [
+          {
+            "componentId": "form",
+            "prop": "formId"
+          }
+        ]
+      },
+      "count": {
+        "quotaKey": "formsPerHost"
+      }
+    }
   },
   {
     "pluginId": "forms",
@@ -260,7 +297,12 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
         "askPhone",
         "askAddress",
         "priceDisplay"
-      ]
+      ],
+      "package": {
+        "kind": "service",
+        "label": "Booking services",
+        "nameField": "name"
+      }
     }
   },
   {
@@ -504,7 +546,29 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
   {
     "pluginId": "events-calendar",
     "name": "events",
-    "routeSlug": "events"
+    "routeSlug": "events",
+    "siteExport": {
+      "limit": 200,
+      "fields": [
+        "title",
+        "startsAtMs",
+        "endsAtMs",
+        "location",
+        "organizer",
+        "description",
+        "coverImage",
+        "coverImageAlt",
+        "status"
+      ],
+      "package": {
+        "kind": "event",
+        "label": "Events",
+        "nameField": "title"
+      },
+      "count": {
+        "uncapped": "The events page creates an event with a client write and no count, so a restore mints nothing an editor could not already."
+      }
+    }
   },
   {
     "pluginId": "logic",
@@ -532,7 +596,13 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
         "variables",
         "operations",
         "returnValue"
-      ]
+      ],
+      "package": {
+        "kind": "function",
+        "label": "Functions",
+        "nameField": "name",
+        "bindingToken": "fn"
+      }
     }
   },
   {
@@ -561,18 +631,88 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
         "value",
         "workflowId",
         "workflowName"
-      ]
+      ],
+      "package": {
+        "kind": "variable",
+        "label": "Variables",
+        "nameField": "name",
+        "references": [
+          {
+            "field": "workflowId",
+            "kind": "workflow"
+          }
+        ],
+        "bindingToken": "var"
+      }
     }
   },
   {
     "pluginId": "marketing",
     "name": "experiments",
-    "routeSlug": "marketing"
+    "routeSlug": "marketing",
+    "siteExport": {
+      "limit": 100,
+      "fields": [
+        "name",
+        "nameLower",
+        "nameTokens",
+        "nameReversed",
+        "status",
+        "target",
+        "screenId",
+        "nodeId",
+        "variants",
+        "goal",
+        "winnerVariantId",
+        "endAtMs",
+        "autoWinner",
+        "autoCompleted",
+        "completedAt"
+      ],
+      "package": {
+        "kind": "experiment",
+        "label": "Experiments",
+        "nameField": "name",
+        "references": [
+          {
+            "field": "screenId",
+            "kind": "page"
+          }
+        ]
+      },
+      "count": {
+        "uncapped": "The experiments card creates an experiment with a client write and no count, so a restore mints nothing an editor could not already."
+      }
+    }
   },
   {
     "pluginId": "marketing",
     "name": "overlays",
-    "routeSlug": "marketing"
+    "routeSlug": "marketing",
+    "siteExport": {
+      "limit": 100,
+      "fields": [
+        "kind",
+        "name",
+        "enabled",
+        "startAtMs",
+        "endAtMs",
+        "pathPatterns",
+        "excludePathPatterns",
+        "order",
+        "bar",
+        "popup",
+        "stats"
+      ],
+      "package": {
+        "kind": "overlay",
+        "label": "Bars and popups",
+        "nameField": "name"
+      },
+      "count": {
+        "uncapped": "The overlays card creates a bar or popup with a client write and no count, so a restore mints nothing an editor could not already."
+      }
+    }
   },
   {
     "pluginId": "marketing",
@@ -604,6 +744,22 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
         "approvedByField": "externalDestinationApprovedBy"
       },
       "livePathField": "source"
+    },
+    "siteExport": {
+      "limit": 500,
+      "fields": [
+        "source",
+        "destination",
+        "statusCode",
+        "kind",
+        "priority",
+        "enabled"
+      ],
+      "package": {
+        "kind": "redirect",
+        "label": "Redirects",
+        "nameField": "source"
+      }
     }
   },
   {
@@ -641,7 +797,12 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
         "steps",
         "returnValue",
         "trigger"
-      ]
+      ],
+      "package": {
+        "kind": "workflow",
+        "label": "Workflows",
+        "nameField": "name"
+      }
     }
   },
   {
@@ -696,7 +857,12 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
         "steps",
         "enabled",
         "recipe"
-      ]
+      ],
+      "package": {
+        "kind": "action",
+        "label": "Interactions and actions",
+        "nameField": "name"
+      }
     }
   },
 ]
@@ -764,7 +930,21 @@ export const PLUGIN_SITE_BUNDLE_SECTIONS_DECLARED: readonly ResolvedPluginSiteBu
   {
     "pluginId": "data",
     "key": "datasets",
-    "limit": 50
+    "limit": 50,
+    "package": {
+      "kind": "dataset",
+      "label": "Datasets",
+      "nameField": "displayName",
+      "placements": [
+        {
+          "prop": "repeatDataset"
+        },
+        {
+          "componentId": "form",
+          "prop": "datasetId"
+        }
+      ]
+    }
   }
 ]
 

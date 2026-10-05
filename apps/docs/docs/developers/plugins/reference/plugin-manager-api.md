@@ -493,10 +493,10 @@ carries a `resource`. `listPluginHostResources()` / `pluginHostResource(kind)`
 
 ### In the site backup — `siteExport`, and `plugin-site-export`
 
-A site admin on a plan with site export downloads one JSON bundle of the
-site and restores it later, into the same site or another. The platform's own
-documents are always in it. A plugin collection is in it only when the
-collection says so, beside its `resource`:
+A site admin on a plan with site export downloads the site as one site
+package (`aglyn-package` v2) and imports it later, into the same site or
+another. The platform's own documents are always in it. A plugin collection
+is in it only when the collection says so, beside its `resource`:
 
 ```json
 {
@@ -504,20 +504,36 @@ collection says so, beside its `resource`:
   "resource": { "kind": "bottle", "quotaKey": "bottlesPerHost", "…": "…" },
   "siteExport": {
     "limit": 100,
-    "fields": ["name", "vintage", "notes", "cellarId"]
+    "fields": ["name", "vintage", "notes", "cellarId"],
+    "package": {
+      "kind": "bottle",
+      "label": "Bottles",
+      "nameField": "name",
+      "references": [{ "field": "cellarId", "kind": "cellar" }],
+      "placements": [{ "componentId": "bottleCard", "prop": "bottleId" }]
+    }
   }
 }
 ```
 
 | Field | Semantics |
 | --- | --- |
-| `limit` | The most live documents one bundle carries (1–1000). The export reads no more, and a restore writes no more. |
-| `fields` | The keys a restore writes back, with `merge: false` — so it is every key a LIVE document carries, not what a create sends, and a key left off is erased from every restored document. `createdAt`, `updatedAt`, `createdBy`, `deletedAt`, `visibleTo` and an external destination's approver field are refused: a restore stamps or scopes them itself. |
+| `limit` | The most live documents one package carries (1–1000). The export reads no more, and an import writes no more. |
+| `fields` | The keys an import writes back, with `merge: false` — so it is every key a LIVE document carries, not what a create sends, and a key left off is erased from every restored document. `createdAt`, `updatedAt`, `createdBy`, `deletedAt`, `visibleTo` and an external destination's approver field are refused: an import stamps or scopes them itself, and stamps the importing admin as the approver of an off-site destination. |
+| `package.kind`, `package.label` | What a package calls each document — one owner per kind, none of the platform's (`page`, `layout`, `form`…) — and the plural the import screen groups them under. |
+| `package.slugField`, `package.nameField` | The field an incoming item with a new id is matched to the site's copy by: a slug first, then a name. At least one. |
+| `package.references` | Fields that hold the id of another site item, and its kind, so a reference to an item neither the package nor the site holds is reported as a missing dependency. Any other field holding a known item's id is still found and moved; this list is what makes a MISSING one visible. |
+| `package.bindingToken` | `var` or `fn`: the binding token (`{{var:id}}`, `{{fn:id(…)}}`) that names one of these items inside a design. |
+| `package.placements` | Node props that place one of these items in a design — `{ componentId?, prop }`, any node's prop when `componentId` is left out. |
+| `count` | Only for a collection with no `resource`: what an import is met against — `{ "quotaKey" }`, `{ "platformCap" }`, or `{ "uncapped": "<why>" }` for a collection the browser already creates without a count. |
 
-The export writes the collection's live documents under the collection's name,
-and a restore writes them back by id and counts the result against the
-`resource` — its `quotaKey`, or its `platformCap` — before the first write,
-so a `siteExport` on a collection with no `resource` is refused. A collection
+The export lists each live document as an item, hashed, with the items it
+depends on. An import plans first — each item `new`, `identical`, `differs`
+or `missingDependency` — then writes by id, the person's decision (create,
+replace, keep both, skip) and the count: the `resource`'s `quotaKey` or
+`platformCap`, or the `count` above, met before the first write and only for
+what the import adds. A `siteExport` with neither a `resource` nor a `count`
+is refused. A collection
 may not take a key the platform's bundle already uses (`screens`, `media`,
 …) or another plugin's. Compiled like `resource`, and refused at runtime:
 `listPluginSiteExportCollections()`
@@ -532,7 +548,13 @@ add-on. The plugin declares a SECTION of the bundle in `plugins.config.json`
 and answers for it from its `serverDeclarations` entry:
 
 ```json
-"siteBundleSections": [{ "key": "cellarLogs", "limit": 50 }]
+"siteBundleSections": [
+  {
+    "key": "cellarLogs",
+    "limit": 50,
+    "package": { "kind": "cellarLog", "label": "Cellar logs", "nameField": "title" }
+  }
+]
 ```
 
 ```ts
@@ -542,6 +564,13 @@ registerPluginSiteBundleSection(
     export: async (request) => (await import('./server/backup')).exportLogs(request),
     refusal: async (request) => (await import('./server/backup')).logsRefusal(request),
     import: async (request) => (await import('./server/backup')).importLogs(request),
+    package: {
+      dependencies: (item) => (item.cellarId ? [{ kind: 'cellar', id: item.cellarId }] : []),
+      remapIds: (item, idMap) => {
+        const moved = idMap.get(`cellar/${item.cellarId}`)
+        return moved === undefined ? item : { ...item, cellarId: moved }
+      },
+    },
   },
   { pluginId: 'acme-cellar' },
 )
@@ -552,11 +581,15 @@ registerPluginSiteBundleSection(
 | `export({ hostId, orgId, limit })` | The site's share, at most `limit` items, each a document with its `$id` and whatever it carries beneath it. Read whole or throw: a short list is a backup that lies. `orgId` is `null` for a site with no organization. |
 | `refusal({ …, org, items })` | Optional. Asked before the restore writes anything, with the bundle's items already capped at `limit`; answers the sentence the restore refuses with (403), or `null`. Sections are asked before the platform's own caps. |
 | `import({ …, write, stamps, loadPluginSurfaces })` | Writes the items back through `write(documentPath, data)` — whole documents, on the restore's batches and in its count, and only under the site's or its organization's tree — dated with `stamps()`. `loadPluginSurfaces()` loads every plugin's console server surface, for a check against something other plugins register there (a custom field type). Answers the rows the restore reports without refusing. |
+| `package.dependencies(item)` | The site items this item names, as `{ kind, id }` — what a package lists as its dependencies. Synchronous and light: it runs at export and at every import plan. |
+| `package.remapIds(item, idMap)` | The item with its references moved. `idMap` maps an item key (`<kind>/<id>`) to the id it now has — an item kept beside an existing one, or mapped onto one the site holds — or to `null` for a reference the person dropped. The item's own `$id` is the import's to set. |
 | `listDeclaredSiteBundleSections()` / `resolveSiteBundleSections()` | The declarations, and the declarations joined to their registered answers. A section declared and not registered runs the app's declarations step once; still missing, `resolveSiteBundleSections` throws, and the export or restore fails rather than leaving the section out. |
 
 One owner per key, never one the platform's bundle or a host collection's
-`siteExport` already uses, a `limit` from 1 to 1000, and a plugin with a
-`serverDeclarations` entry — the generator refuses anything else. The data
+`siteExport` already uses, a `limit` from 1 to 1000, a `package` kind no one
+else declares, and a plugin with a `serverDeclarations` entry — the generator
+refuses anything else, and a section registered without its `package` hooks
+is refused at registration. The data
 plugin's `datasets` is the first.
 
 ## Import and export — `plugin-transfer-resources`

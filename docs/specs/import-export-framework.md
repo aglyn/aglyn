@@ -2,8 +2,8 @@
 
 Status: the core (AGL-3522), the extension point (AGL-3523), the job
 engine (AGL-3524), the UI kit (AGL-3526), the console client with the
-core launcher (AGL-3539) and the field-selectable export (AGL-3525) are
-built; everything else in the build plan below
+core launcher (AGL-3539), the field-selectable export (AGL-3525) and site
+packages (AGL-3533) are built; everything else in the build plan below
 is open. Linear project P-AGL-140.
 The architecture of the core, and how the rest plugs into it, is in
 [`docs/DATA_TRANSFER.md`](../DATA_TRANSFER.md).
@@ -65,7 +65,7 @@ matches · **Dry** = dry-run preview · **Undo**
 | Products | CSV (a common storefront format) | Requires Handle and Title; a colliding slug gets a suffix (always creates); written from the browser | Match by handle or SKU, updates, Map, FS, server job |
 | Orders (export) | CSV | What the list query matches, up to 5,000 | FS, streaming past 5,000 |
 | Discounts, coupons, gift cards, categories, suppliers, locations, subscriptions, site members, inventory | — | None | Everything |
-| Whole-site backup | JSON (`aglyn-site-export` v1) | All or nothing: settings, pages and layouts, components, authors, collections, media manifest, plugin collections and datasets; import overwrites by id with an allow-list, checks plan caps | Choosing items, Dry, collision choices, version diff, dependencies, Undo. Not carried: email templates, forms, redirects, products, events, experiments and overlays, themes |
+| Whole-site backup | JSON (`aglyn-package` v2; v1 still imports) | Since AGL-3533: the everything preset of a site package. Items with content hashes and dependencies, selective export with dependencies, a plan (new, identical, differs, missing dependency) before any write, per-item decisions (replace as a new version, keep both, skip, merge), missing-dependency choices, plan caps on what is added, a 7-day undo. Carries email templates, forms, redirects, events, experiments and overlays, and the theme and its library too | The item-by-item wizard and a rendered diff (AGL-3534). Not carried: products |
 | Templates and marketplace installs | Internal copy | Copies into the site library | Collision prompts, file import |
 | One page, component or layout as a file | — | None | Everything |
 | Outreach sequences and enrollments, campaigns, automations | — | None | Everything |
@@ -185,7 +185,7 @@ matches · **Dry** = dry-run preview · **Undo**
 | AGL-3530 | Datasets | AGL-3524–3526 |
 | AGL-3531 | Commerce | AGL-3524–3526 |
 | AGL-3532 | Form submissions, bookings, redirects, events, do-not-contact domains | AGL-3524–3526 |
-| AGL-3533 | Site package v2: selective export, dependency graph, content hashes; the backup becomes a preset | AGL-3522, AGL-3523 |
+| AGL-3533 | Site package v2: selective export, dependency graph, content hashes; the backup becomes a preset (built) | AGL-3522, AGL-3523 |
 | AGL-3534 | Package import wizard | AGL-3526, AGL-3533 |
 | AGL-3535 | Organization packages and the Import & Export hub | AGL-3524, AGL-3526, AGL-3533 |
 

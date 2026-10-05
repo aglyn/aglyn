@@ -15,6 +15,7 @@ this document is the architecture.
 | Field-selectable export route | `apps/console/app/api/transfer/export`; the engine half `libs/tenant/data/admin/src/lib/server/transfer-export.ts`; the file format in the core's `export-file.ts` | AGL-3525 |
 | UI kit: export dialog, import wizard | `libs/aglyn-transfer-ui` | AGL-3526 |
 | Console client and the core launcher plugins open the kit through | `apps/console/utils/transfer-http-client.ts`; `libs/aglyn/src/lib/app-utils/transfer-launcher-context.ts`; the shell's `transfer-launcher-provider.component.tsx` | AGL-3539 |
+| Site packages: a site's items as one file, planned and undone | core `data-transfer/site-package.ts`; routes `apps/console/app/api/hosts/{export,import}` | AGL-3533 |
 | Each resource | the owning plugin's `src/lib/transfer/` | AGL-3527–3535 |
 
 The core knows nothing of any plugin. It holds no vendor's header names, no
@@ -461,3 +462,107 @@ one holding fewer rows than `X-Aglyn-Export-Rows` promised; its `savePrefs`
 is the surface's `saveTransferPrefs` (`apps/console/utils/transfer-prefs-store.ts`),
 which merges over the stored document and writes it back normalized.
 
+## Site packages
+
+A site package (`aglyn-package` v2, `package.ts`) is a site's designable
+items as one file: a manifest of `{ kind, $id, slug?, name?, contentHash,
+deps }` and each item's content by `<kind>/<id>`. The whole-site backup is
+the package's everything preset. The site-specific half is
+`@aglyn/aglyn/data-transfer/site-package` — its own subpath, not re-exported by
+`@aglyn/aglyn/data-transfer`, because it reads the compiled plugin
+declarations the generic core does not.
+
+### Kinds
+
+| source | kinds |
+| -- | -- |
+| platform | `settings` and `theme` (singletons of the site's fields), `page` and `email` (screens, split by `kind`), `emailTemplate` (the site's own emails, keyed by catalog key), `layout`, `component`, `author`, `collection` (with its entries), `mediaFolder`, `media`, `siteMediaFolder`, `siteMedia`, `savedTheme` (the theme library) |
+| a host collection's `siteExport.package` | `form`, `redirect`, `event`, `experiment`, `overlay`, `service`, `function`, `variable`, `workflow`, `action` |
+| a backup section's `package` | `dataset` |
+
+A plugin declares its kind beside its data in `plugins.config.json`: the
+kind, a plural label, the slug or name field an item with a new id is matched
+by, the fields holding other items' ids, the binding token (`var`, `fn`) that
+names its items, and the node props that place one (`placements`). A section
+also registers `package.dependencies(item)` and `package.remapIds(item, idMap)`
+with its answers; registering a section without them is refused. The
+generator gives every kind one owner and refuses a platform kind.
+
+An item's content is the document a v1 backup carried, without `$id`: a page
+with its published `version` and its routing-map address as `route`, a
+collection with its `entries`, a section's item as the plugin exported it.
+`siteBundleItems` reads a v1 backup into items (and caps each array where the
+restore always capped it); `siteWritesToBundle` turns resolved writes back into
+the v1 shape the restore's writers take, so there is one write path.
+
+### Dependencies and moving references
+
+`siteItemDependencies` lists what an item names: typed references (a page's
+`layoutId`, a collection's entry screens, a declared `references` field), a
+reusable component placement's `refId`, a declared placement (a `form` node's
+`formId`, a node's `repeatDataset`), the `{{var:id}}` and `{{fn:id(…)}}`
+tokens, the section's own answer, and any other string or map key in the
+content that is, or holds as a whole token, the id of a known item (links like
+`screen:<id>`, media references). Ids that are words — a catalog key,
+`default` — are never searched for, and inside text only ids of at least eight
+characters are. `remapSiteReferences` is the same walk rewriting through an id
+map; a dropped reference becomes `null` in a field, leaves a list, a map or a
+binding token, and empties any other string.
+
+### Hashes
+
+The console hashes an item over what an import would WRITE
+(`siteItemProjection`, `_lib/site-package-read.ts`): its allow-list, its
+version's and its entries', its address, no stamps, node trees decoded and
+dates in one wire form. So an item restored yesterday and exported today is
+`identical` to the file it came from, and a besigner-saved page compares
+equal whichever storage form either side holds.
+
+### Export — `GET|POST /api/hosts/export`
+
+`{ hostId, items?, dependencies?, list? }`. No `items`: everything. `items`
+names item keys; `dependencies` adds what they need (`packageDependencyClosure`).
+`list` answers the manifest and the kinds alone, for a picker. Every manifest
+entry keeps its full dependency list, so an import can say which ones the file
+does not carry. The file is v2 only.
+
+### Import — `POST /api/hosts/import`
+
+`{ hostId, action, package | bundle, mode?, decisions?, dependencyChoices?,
+importId?, otherwise? }`. A v1 `aglyn-site-export` backup is converted in
+memory. An item of a kind this site does not read (a plugin it lacks) is set
+aside and named in `unknownKinds`; a site email under a key the platform does
+not send is named in `notSent`.
+
+| action | does |
+| -- | -- |
+| `plan` | Reads the site the same way the export does, hashes both sides, and answers `planSitePackageImport`: each item matched by id, then slug, then name, within its kind; `new`, `identical`, `differs` or `missingDependency`; the proposed decision (create new, skip everything else) and the decisions it may take. With the person's decisions it also answers `capRefusal`: the sentence an apply would be refused with, counting only what the import adds. Writes nothing. |
+| `apply` | `mode: 'decide'` (default with an action): each item's decision — `create`, `replace`, `keepBoth`, `skip`, `merge` (settings and theme) — or the proposed one; `dependencyChoices[<kind>/<id>]` is `import` (the package's copy of a skipped new item), `{ mapTo }`, `drop` or `keep`. `mode: 'restore'`, and a request with no `action` at all: every item under its own id, as a v1 restore wrote. Then the restore's write path: pre-checks, the undo snapshot, the screens leg in one transaction, every other collection on batches, the plugin sections item by item, whole-host revalidation, an activity entry and an `adminAudit` row (`site.package.apply`). |
+| `undoPlan` / `undo` | For seven days: what undo would do (`restore`, `delete`, `conflict`), then do it — write each replaced item back through the same writers, and delete every document the import wrote that the undo did not write back. An item with a document updated after the import finished is a conflict, reverted only when `decisions[key]` or `otherwise` says `revert`. Audited as `site.package.undo`. |
+
+`resolveSitePackageImport` turns decisions into writes. Keep both gives the
+item a new id (`createResourceUid`) and slug (`keepBothSlug`), and a page a
+moved address; every incoming reference to it is rewritten. A replace or skip
+of an item matched by slug or name points incoming references at the site's
+item. A replace of a page, layout or site email writes the incoming design as a
+NEW version when the site holds that version id with a different design, so no
+version the site has is overwritten and the one it published stays in its
+history. Merge fills what the site has not set and keeps every value it has.
+A media item kept as a copy keeps its own stored file's address.
+
+### The ledger — why these routes and not the job engine
+
+`hosts/{hostId}/packageImports/{importId}` records who imported what, each
+item's decision and target, and the window; `snapshots/{n}` holds every
+replaced or merged item's previous content and `writtenPaths/{n}` every path
+written per item, as JSON pieces of at most 900,000 characters. Admin SDK
+only: the rules name `packageImports` in the host catch-all's read and write
+exclusions.
+
+A package is a site's items rather than rows of a file, and its writes are the
+restore's: the allow-lists, the atomic screens leg (AGL-2370), the plugin
+sections and the whole-host revalidation. So it keeps its own routes with the
+engine's guarantees — a plan that writes nothing, an undo for seven days, an
+audit row per apply and undo — rather than teaching the row engine items. An
+apply is one request, with no chunk cursor to lease; two imports are
+serialized where it matters by the screens transaction, as before.

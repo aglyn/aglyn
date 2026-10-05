@@ -1618,6 +1618,7 @@ function hostCollectionRows() {
   const rows = []
   const owners = new Map()
   const resourceKinds = new Map()
+  const packageKinds = new Map()
   for (const plugin of config.plugins) {
     const declared = plugin.hostCollections
     if (!declared) continue
@@ -1659,7 +1660,7 @@ function hostCollectionRows() {
         row.resource = hostResourceRow(declaration.resource, `${what} resource`, resourceKinds, plugin.id)
       }
       if (declaration.siteExport !== undefined) {
-        row.siteExport = siteExportRow(declaration.siteExport, `${what} siteExport`, name, row.resource)
+        row.siteExport = siteExportRow(declaration.siteExport, `${what} siteExport`, name, row.resource, packageKinds, plugin.id)
       }
       rows.push(row)
     }
@@ -1791,11 +1792,117 @@ function stampRecord(stamps, what, writable) {
 const CORE_SITE_EXPORT_KEYS = [
   'format', 'version', 'exportedAt', 'sourceHostId', 'host',
   'screens', 'layouts', 'versions', 'components', 'authors', 'collections', 'entries',
-  'media', 'mediaFolders', 'hostMedia', 'hostMediaFolders',
+  'media', 'mediaFolders', 'hostMedia', 'hostMediaFolders', 'emailTemplates', 'emailTemplateVersions', 'themes',
 ]
 
 /** The most documents one bundle may carry of one collection. */
 const SITE_EXPORT_MAX_LIMIT = 1000
+
+/**
+ * The item kinds the platform's own site package carries (AGL-3533, core
+ * `data-transfer/site-package.ts`). A plugin's package kind is its own word
+ * for its items, so it may not take one of these.
+ */
+const CORE_SITE_PACKAGE_KINDS = [
+  'settings', 'theme', 'page', 'email', 'emailTemplate', 'layout', 'component', 'author', 'collection',
+  'media', 'mediaFolder', 'siteMedia', 'siteMediaFolder', 'savedTheme',
+]
+
+/** The binding-token prefixes core's grammar holds (`{{var:id}}`, `{{fn:id(…)}}`). */
+const SITE_PACKAGE_BINDING_TOKENS = ['var', 'fn']
+
+const PACKAGE_KIND = /^[a-z][A-Za-z0-9]*$/
+
+/**
+ * What a site package calls one of a declaration's items (AGL-3533): its
+ * `kind`, the plural `label` the import screen groups them under, the field
+ * holding its name or slug (what an incoming item is matched by when its id is
+ * new), the fields holding ids of other site items, and the binding token
+ * that names one of its items inside a design. Every kind has one owner.
+ */
+function sitePackageRow(
+  pkg,
+  what,
+  fields,
+  kinds,
+  owner,
+  allowed = ['kind', 'label', 'nameField', 'slugField', 'references', 'bindingToken', 'placements'],
+) {
+  if (!pkg || typeof pkg !== 'object' || Array.isArray(pkg)) {
+    throw new Error(`${what} needs a "package": the kind a site package lists its items as`)
+  }
+  const { $comment: _note, ...row } = pkg
+  const unknown = Object.keys(row).filter((key) => !allowed.includes(key))
+  if (unknown.length) throw new Error(`${what}: ${unknown.join(', ')} is not a package field`)
+  const { kind, label, nameField, slugField, references, bindingToken, placements } = row
+  if (typeof kind !== 'string' || !PACKAGE_KIND.test(kind)) throw new Error(`${what}: "kind" is one word in camelCase`)
+  if (CORE_SITE_PACKAGE_KINDS.includes(kind)) throw new Error(`${what}: "${kind}" is a kind the platform's own package carries`)
+  const held = kinds.get(kind)
+  if (held) throw new Error(`${what}: kind "${kind}" is already declared by ${held} — one kind has one owner`)
+  kinds.set(kind, owner)
+  if (typeof label !== 'string' || !label.trim()) throw new Error(`${what} needs a "label", plural, for the import screen`)
+  for (const [key, value] of [['nameField', nameField], ['slugField', slugField]]) {
+    if (value === undefined) continue
+    if (typeof value !== 'string' || !PLAIN_FIELD.test(value)) throw new Error(`${what}: "${key}" is a plain field name`)
+    if (fields && !fields.includes(value)) throw new Error(`${what}: "${key}" "${value}" is not one of the fields a restore writes`)
+  }
+  if (!nameField && !slugField) throw new Error(`${what} needs a "nameField" or a "slugField": an item with a new id is matched by one`)
+  const refs = []
+  for (const ref of references ?? []) {
+    const { field, kind: target } = ref ?? {}
+    if (typeof field !== 'string' || !PLAIN_FIELD.test(field)) throw new Error(`${what}: a reference's "field" is a plain field name`)
+    if (fields && !fields.includes(field)) throw new Error(`${what}: reference "${field}" is not one of the fields a restore writes`)
+    if (typeof target !== 'string' || !PACKAGE_KIND.test(target)) throw new Error(`${what}: reference "${field}" names the "kind" it points at`)
+    refs.push({ field, kind: target })
+  }
+  if (references !== undefined && !Array.isArray(references)) throw new Error(`${what}: "references" is a list`)
+  if (bindingToken !== undefined && !SITE_PACKAGE_BINDING_TOKENS.includes(bindingToken)) {
+    throw new Error(`${what}: "bindingToken" is one of ${SITE_PACKAGE_BINDING_TOKENS.join(', ')}`)
+  }
+  if (placements !== undefined && !Array.isArray(placements)) throw new Error(`${what}: "placements" is a list`)
+  const placed = []
+  for (const placement of placements ?? []) {
+    const { componentId, prop } = placement ?? {}
+    if (typeof prop !== 'string' || !PLAIN_FIELD.test(prop)) throw new Error(`${what}: a placement's "prop" is a plain prop name`)
+    if (componentId !== undefined && (typeof componentId !== 'string' || !componentId.trim())) {
+      throw new Error(`${what}: a placement's "componentId" is an element id, or is left out to mean any node`)
+    }
+    placed.push({ ...(componentId ? { componentId } : {}), prop })
+  }
+  return {
+    kind,
+    label,
+    ...(nameField ? { nameField } : {}),
+    ...(slugField ? { slugField } : {}),
+    ...(refs.length ? { references: refs } : {}),
+    ...(bindingToken ? { bindingToken } : {}),
+    ...(placed.length ? { placements: placed } : {}),
+  }
+}
+
+/**
+ * What a restore of a collection with no `resource` is met against
+ * (AGL-3533): a plan `quotaKey`, a flat `platformCap` by the name of core's
+ * constant, or `uncapped` with the reason a count would add nothing — a
+ * collection the browser already creates without one, where a restore can
+ * mint no more than an editor can.
+ */
+function siteExportCountRow(count, what) {
+  if (!count || typeof count !== 'object' || Array.isArray(count)) throw new Error(`${what} is an object`)
+  const { $comment: _note, ...row } = count
+  const keys = Object.keys(row)
+  if (keys.length !== 1 || !['quotaKey', 'platformCap', 'uncapped'].includes(keys[0])) {
+    throw new Error(`${what} is one of { "quotaKey" }, { "platformCap" } or { "uncapped": "<why>" }`)
+  }
+  const [key] = keys
+  const value = row[key]
+  if (key === 'uncapped') {
+    if (typeof value !== 'string' || value.trim().length < 20) throw new Error(`${what}: "uncapped" says why no count applies`)
+  } else if (typeof value !== 'string' || !/^[A-Za-z][A-Za-z0-9_]*$/.test(value)) {
+    throw new Error(`${what}: "${key}" is a plain key`)
+  }
+  return { [key]: value }
+}
 
 /**
  * A plugin's host collection in the whole-site export (AGL-3080): the export
@@ -1814,16 +1921,19 @@ const SITE_EXPORT_MAX_LIMIT = 1000
  *    an external destination's approver is provenance a file cannot supply.
  *  - NO KEY THE PLATFORM'S OWN BUNDLE USES.
  */
-function siteExportRow(siteExport, what, collection, resource) {
+function siteExportRow(siteExport, what, collection, resource, packageKinds, pluginId) {
   if (!siteExport || typeof siteExport !== 'object' || Array.isArray(siteExport)) throw new Error(`${what} is an object`)
   const { $comment: _note, ...fields } = siteExport
-  const unknown = Object.keys(fields).filter((key) => !['limit', 'fields'].includes(key))
+  const unknown = Object.keys(fields).filter((key) => !['limit', 'fields', 'package', 'count'].includes(key))
   if (unknown.length) throw new Error(`${what}: ${unknown.join(', ')} is not a site export field`)
   if (CORE_SITE_EXPORT_KEYS.includes(collection)) {
     throw new Error(`${what}: "${collection}" is a key the platform's own bundle writes`)
   }
-  if (!resource) {
-    throw new Error(`${what} needs the collection's "resource": a restore creates documents here, and the resource names the count they are met against`)
+  if (resource && fields.count !== undefined) {
+    throw new Error(`${what}: "count" is for a collection with no "resource" — the resource already names the count`)
+  }
+  if (!resource && fields.count === undefined) {
+    throw new Error(`${what} needs the collection's "resource", or a "count": a restore creates documents here, and the count is what they are met against`)
   }
   const { limit } = fields
   if (!Number.isInteger(limit) || limit < 1 || limit > SITE_EXPORT_MAX_LIMIT) {
@@ -1833,12 +1943,17 @@ function siteExportRow(siteExport, what, collection, resource) {
   const never = [
     ...SERVER_STAMPED_FIELDS,
     'visibleTo',
-    ...(resource.externalDestination ? [resource.externalDestination.approvedByField] : []),
+    ...(resource?.externalDestination ? [resource.externalDestination.approvedByField] : []),
   ]
   for (const field of restored) {
     if (never.includes(field)) throw new Error(`${what}: "${field}" is stamped or scoped by the restore, never read from a bundle`)
   }
-  return { limit, fields: restored }
+  return {
+    limit,
+    fields: restored,
+    package: sitePackageRow(fields.package, `${what} package`, restored, packageKinds, `"${pluginId}" host collection "${collection}"`),
+    ...(fields.count !== undefined ? { count: siteExportCountRow(fields.count, `${what} count`) } : {}),
+  }
 }
 
 /**
@@ -1855,10 +1970,10 @@ function siteExportRow(siteExport, what, collection, resource) {
  */
 function siteBundleSectionRows() {
   const rows = []
-  const taken = new Map(
-    hostCollectionRows()
-      .filter((row) => row.siteExport)
-      .map((row) => [row.name, `"${row.pluginId}" host collection`]),
+  const carried = hostCollectionRows().filter((row) => row.siteExport)
+  const taken = new Map(carried.map((row) => [row.name, `"${row.pluginId}" host collection`]))
+  const packageKinds = new Map(
+    carried.map((row) => [row.siteExport.package.kind, `"${row.pluginId}" host collection "${row.name}"`]),
   )
   for (const plugin of config.plugins) {
     const declared = plugin.siteBundleSections
@@ -1877,7 +1992,7 @@ function siteBundleSectionRows() {
       const { $comment: _note, ...section } = entry ?? {}
       const { key, limit } = section
       const what = `${where} "${key ?? ''}"`
-      const unknown = Object.keys(section).filter((field) => !['key', 'limit'].includes(field))
+      const unknown = Object.keys(section).filter((field) => !['key', 'limit', 'package'].includes(field))
       if (unknown.length) throw new Error(`${what}: ${unknown.join(', ')} is not a section field`)
       if (typeof key !== 'string' || !PLAIN_FIELD.test(key)) throw new Error(`${where}: a section's "key" is a plain bundle key`)
       if (CORE_SITE_EXPORT_KEYS.includes(key)) throw new Error(`${what} is a key the platform's own bundle writes`)
@@ -1887,7 +2002,17 @@ function siteBundleSectionRows() {
       if (!Number.isInteger(limit) || limit < 1 || limit > SITE_EXPORT_MAX_LIMIT) {
         throw new Error(`${what}: "limit" is a whole number from 1 to ${SITE_EXPORT_MAX_LIMIT}`)
       }
-      rows.push({ pluginId: plugin.id, key, limit })
+      // A section's items are the plugin's own shape, so it answers for their
+      // references itself (registered `package` hooks) rather than naming
+      // reference fields here.
+      const pkg = sitePackageRow(section.package, `${what} package`, null, packageKinds, `"${plugin.id}" section "${key}"`, [
+        'kind',
+        'label',
+        'nameField',
+        'slugField',
+        'placements',
+      ])
+      rows.push({ pluginId: plugin.id, key, limit, package: pkg })
     }
   }
   return rows

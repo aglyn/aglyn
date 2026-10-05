@@ -5795,6 +5795,39 @@ describe('pre-release hardening guards', () => {
   })
 
   /**
+   * AGL-3533. `packageImports` is a site package import's record and its undo
+   * snapshot: the content every item it replaced held before the import, and
+   * the paths it wrote. Unreadable for the `mediaTombstones` reason — a copy of
+   * overwritten content nobody may browse — and unwritable because an undo
+   * writes the snapshot back with the Admin SDK. The import route is its only
+   * reader and writer. Owner too: a path question, not a role one.
+   */
+  it('package import records are invisible and unwritable to every client (AGL-3533)', async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'hosts', HOST, 'packageImports', 'i1'), {
+        status: 'applied',
+        snapshotPieces: 1,
+      })
+      await setDoc(doc(context.firestore(), 'hosts', HOST, 'packageImports', 'i1', 'snapshots', '0'), {
+        n: 0,
+        json: '{}',
+      })
+    })
+    for (const uid of [EDITOR, OWNER, VIEWER]) {
+      await assertFails(getDoc(doc(authed(uid), 'hosts', HOST, 'packageImports', 'i1')))
+      await assertFails(getDoc(doc(authed(uid), 'hosts', HOST, 'packageImports', 'i1', 'snapshots', '0')))
+      await assertFails(
+        setDoc(doc(authed(uid), 'hosts', HOST, 'packageImports', 'i1', 'snapshots', '0'), {
+          n: 0,
+          json: '{"page/home":{"content":{"displayName":"Forged"}}}',
+        }),
+      )
+      await assertFails(updateDoc(doc(authed(uid), 'hosts', HOST, 'packageImports', 'i1'), { status: 'applied' }))
+      await assertFails(deleteDoc(doc(authed(uid), 'hosts', HOST, 'packageImports', 'i1')))
+    }
+  })
+
+  /**
    * The org library's tombstones, which are the ones that actually exist in
    * production today — the org DAM is where the 2026-08-13 pass ran. There is
    * no catch-all under `match /orgs/{orgId}`, so this is default-deny rather
